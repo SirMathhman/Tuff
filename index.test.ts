@@ -69,9 +69,46 @@ test('executeTuff("let x = if (true) 3 else 5; x") returns 3', () => {
 test('executeTuff("let mut x = 0; if (true) x = 3; else x = 5; x") returns 3', () => {
   expect(executeTuff("let mut x = 0; if (true) x = 3; else x = 5; x")).toBe(3);
 });
-test('executeTuff("let x = 0; x += 1; x") returns 1', () => {
-  expect(executeTuff("let x = 0; x += 1; x")).toBe(1);
+// Compound assignment on non-mutable variable should throw error
+test('executeTuff("let x = 0; x += 1; x") throws error', () => {
+  expect(() => executeTuff("let x = 0; x += 1; x")).toThrow();
 });
+
+// Compound assignment on mutable variable works
+test('executeTuff("let mut x = 0; x += 1; x") returns 1', () => {
+  expect(executeTuff("let mut x = 0; x += 1; x")).toBe(1);
+});
+
+// Compound subtraction assignment (covers -= branch in evaluateAssignment)
+test('executeTuff("let mut x = 5; x -= 2; x") returns 3', () => {
+  expect(executeTuff("let mut x = 5; x -= 2; x")).toBe(3);
+});
+
+// false boolean literal (covers false branch in tokenize)
+test('executeTuff("let x = false; x") returns 0', () => {
+  expect(executeTuff("let x = false; x")).toBe(0);
+});
+
+// if/else with false condition taking else branch (covers parseIfExpr else path)
+test('executeTuff("let x = if (false) 3 else 5; x") returns 5', () => {
+  expect(executeTuff("let x = if (false) 3 else 5; x")).toBe(5);
+});
+
+// Division operator (covers / branch in parseTerm)
+test('executeTuff("10 / 2") returns 5', () => {
+  expect(executeTuff("10 / 2")).toBe(5);
+});
+
+// Unary minus on primary (covers unary handling path)
+test('executeTuff("-3 + 2") returns -1', () => {
+  expect(executeTuff("-3 + 2")).toBe(-1);
+});
+
+// Nested array index access (covers chained indexing in resolveIdentifier)
+test('executeTuff("let arr = [[1, 2], [3, 4]]; arr[0][1]") returns 2', () => {
+  expect(executeTuff("let arr = [[1, 2], [3, 4]]; arr[0][1]")).toBe(2);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

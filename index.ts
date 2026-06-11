@@ -335,6 +335,17 @@ function evaluateBlock(inner: string): number {
   return evaluateBlockWithScope(inner, scope);
 }
 
+/** WeakMap to track mutable variable names per scope instance. */
+const MUTABLE_VARS = new WeakMap<Map<string, ScopeValue>, Set<string>>();
+function getMutableSet(scope: Map<string, ScopeValue>): Set<string> {
+  let mutSet = MUTABLE_VARS.get(scope);
+  if (!mutSet) {
+    mutSet = new Set();
+    MUTABLE_VARS.set(scope, mutSet);
+  }
+  return mutSet;
+}
+
 /** Process a single statement in the given scope. */
 function processSingleStatement(
   part: string,
@@ -345,7 +356,13 @@ function processSingleStatement(
     /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
   );
   if (declMatch && declMatch[1] && declMatch[2]) {
+    const name = declMatch[1];
     const rhs = declMatch[2];
+    // Track mutability: check for 'mut' keyword
+    const isMutable = /^\s*(?:let|const|var)\s+mut\s+/.test(part);
+    if (isMutable) {
+      getMutableSet(scope).add(name);
+    }
     let value: unknown;
     if (/^\s*\[/.test(rhs)) {
       // Array literal - parse directly to preserve array structure
@@ -438,6 +455,8 @@ function processNestedBlock(
 
   // Child scope copies references from parent so lookups find inherited values
   const child = new Map(outerScope);
+  // Also copy mutable variable tracking to the child scope
+  MUTABLE_VARS.set(child, getMutableSet(outerScope));
   for (const ip of innerParts) {
     processSingleStatement(ip, child);
   }
@@ -497,6 +516,12 @@ function evaluateAssignment(
 
     if (idxMatch.length === 0) {
       // Plain or compound assignment: `x = value` or `x += value`
+      // Check mutability before allowing any assignment to a plain variable
+      const mutableSet = getMutableSet(scope);
+      if (!mutableSet.has(name)) {
+        throw new Error(`Cannot assign to immutable variable: ${name}`);
+      }
+
       if (!isCompoundOp) {
         scope.set(name, parseValue(match[3], scope));
         return;
@@ -533,7 +558,8 @@ function evaluateAssignment(
 
     // Compound indexed assignment: read current value and apply operator
     const rhsValue = resolveBlocksWithScope(match[3], scope);
-    const numCurrent = typeof current[finalIdx] === "number" ? current[finalIdx] : 0;
+    const numCurrent =
+      typeof current[finalIdx] === "number" ? current[finalIdx] : 0;
     if (compoundOp === "+=") {
       current[finalIdx] = numCurrent + rhsValue;
     } else if (compoundOp === "-=") {
