@@ -2,8 +2,9 @@
 type NumberToken = { type: "number"; value: number };
 type OpToken = { type: "op"; value: string };
 type IdToken = { type: "id"; value: string };
+type BooleanToken = { type: "boolean"; value: boolean };
 type ScopeValue = unknown | unknown[];
-type Token = NumberToken | OpToken | IdToken;
+type Token = NumberToken | OpToken | IdToken | BooleanToken;
 
 function isOp(token: Token): token is OpToken {
   return token.type === "op";
@@ -29,12 +30,18 @@ function tokenize(input: string): Token[] {
       tokens.push({ type: "op", value: ch });
       i++;
     } else if (/[a-zA-Z_$]/.test(ch)) {
-      // Identifier
+      // Identifier or boolean literal
       let name = "";
       while (i < input.length && /[a-zA-Z0-9_$]/.test(input.charAt(i))) {
         name += input.charAt(i++);
       }
-      tokens.push({ type: "id", value: name });
+      if (name === "true") {
+        tokens.push({ type: "boolean", value: true });
+      } else if (name === "false") {
+        tokens.push({ type: "boolean", value: false });
+      } else {
+        tokens.push({ type: "id", value: name });
+      }
     } else if (ch === "[") {
       tokens.push({ type: "op", value: "[" });
       i++;
@@ -121,6 +128,12 @@ function parseValuePrimary(
   if (token.type === "number") {
     consume(tokens, pos);
     return token.value;
+  }
+
+  // Boolean literal: true -> 1, false -> 0
+  if (token.type === "boolean") {
+    consume(tokens, pos);
+    return token.value ? 1 : 0;
   }
 
   // Array literal: [ expr , expr ]
