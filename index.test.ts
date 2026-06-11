@@ -66,6 +66,9 @@ test('executeTuff("let x = true; x") returns 1', () => {
 test('executeTuff("let x = if (true) 3 else 5; x") returns 3', () => {
   expect(executeTuff("let x = if (true) 3 else 5; x")).toBe(3);
 });
+test('executeTuff("let mut x = 0; if (true) x = 3; else x = 5; x") returns 3', () => {
+  expect(executeTuff("let mut x = 0; if (true) x = 3; else x = 5; x")).toBe(3);
+});
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

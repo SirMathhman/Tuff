@@ -248,7 +248,11 @@ function parseIfExpr(
 
     // Check for 'else' keyword and parse else branch if present
     const nextToken = peek(tokens, pos);
-    if (nextToken && nextToken.type === "keyword" && nextToken.value === "else") {
+    if (
+      nextToken &&
+      nextToken.type === "keyword" &&
+      nextToken.value === "else"
+    ) {
       consume(tokens, pos); // consume 'else'
       const elseValue = parseExpression(tokens, pos, scope);
       return cond !== 0 ? thenValue : elseValue;
@@ -363,10 +367,55 @@ function processSingleStatement(
   }
 }
 
+/** Check if a statement starts with an `if` keyword. */
+function isIfStatement(input: string): boolean {
+  return /^\s*if\s*\(/.test(input.trim());
+}
+
+/** Check if a statement starts with an `else` keyword. */
+function isElseStatement(input: string): boolean {
+  return /^\s*else\b/.test(input.trim());
+}
+
 /** Process statements in a block, updating the scope. */
 function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
-    processSingleStatement(parts[i]!, scope);
+    const part = parts[i]!;
+    if (isIfStatement(part)) {
+      // Check if next part is the matching `else` branch
+      const nextPart = parts[i + 1];
+      if (nextPart && isElseStatement(nextPart)) {
+        processSingleIfElseStatement(part, nextPart.trim(), scope);
+        i++; // skip else since we already consumed it
+      } else {
+        resolveBlocksWithScope(part, scope);
+      }
+    } else {
+      processSingleStatement(part, scope);
+    }
+  }
+}
+
+/** Process an if/else statement pair. */
+function processSingleIfElseStatement(
+  ifPart: string,
+  elsePart: string,
+  scope: Map<string, ScopeValue>,
+): void {
+  // Extract condition from `if (cond) body`
+  const match = ifPart.match(/^if\s*\((.+)\)\s*(.*)$/);
+  if (!match || !match[1] || typeof match[2] !== "string") return;
+
+  const condValue = resolveBlocksWithScope(match[1], scope);
+  const body = match[2].trim();
+
+  if (condValue !== 0) {
+    // Execute then branch
+    processSingleStatement(body, scope);
+  } else {
+    // Execute else branch: strip leading `else` keyword
+    const stripped = elsePart.replace(/^\s*else\s+/, "");
+    processSingleStatement(stripped.trim(), scope);
   }
 }
 
