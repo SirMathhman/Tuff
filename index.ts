@@ -154,11 +154,6 @@ function processBlock(scope: Map<string, number>, parts: string[]): void {
   }
 }
 
-/** Evaluate an expression that may contain nested blocks { ... }. */
-function resolveBlocks(input: string): number {
-  return resolveBlocksWithScope(input, new Map());
-}
-
 function evaluateExpressionWithScope(
   input: string,
   scope: Map<string, number>,
@@ -214,15 +209,7 @@ function evaluate(source: string): number {
   if (isStatement(trimmed)) {
     const scope = new Map<string, number>();
     const parts: string[] = splitStatements(trimmed);
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i]!;
-      const declMatch = part.match(/^(?:let|const|var)\s+(\w+)\s*=\s*(.+)$/);
-      if (declMatch && declMatch[1] && declMatch[2]) {
-        scope.set(declMatch[1], resolveBlocks(declMatch[2]));
-      } else {
-        resolveBlocks(part);
-      }
-    }
+    processBlock(scope, parts);
     return evaluateExpressionWithScope(parts[parts.length - 1]!, scope);
   }
 
