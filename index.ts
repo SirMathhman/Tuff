@@ -234,42 +234,10 @@ function isStatementBlock(inner: string): boolean {
   if (parts.length === 0) return false;
   // If every part is an assignment or declaration, it's a statement-only block
   for (const p of parts) {
-    if (!isAssignment(p.trim()) && !/^\s*(?:let|const|var)\s/.test(p)) return false;
+    if (!isAssignment(p.trim()) && !/^\s*(?:let|const|var)\s/.test(p))
+      return false;
   }
   return true;
-}
-
-/** Resolve blocks in an expression and evaluate with a given scope. */
-function resolveBlocksWithScope(
-  input: string,
-  scope: Map<string, ScopeValue>,
-): number {
-  let resolved = input;
-  // Recursively replace innermost blocks with their values (or empty if statement-only)
-  let prev: string;
-  do {
-    prev = resolved;
-    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) => {
-      const trimmed = blockInner.trim();
-      // If the block is purely statements (assignments/declarations), process for side effects only
-      if (isStatementBlock(trimmed)) {
-        const innerParts = splitStatements(trimmed);
-        for (const ip of innerParts) {
-          processSingleStatement(ip, scope);
-        }
-        return "";
-      }
-      return String(evaluateBlockWithScope(trimmed, scope));
-    });
-  } while (resolved !== prev && /\{/.test(resolved));
-
-  // Trim whitespace that may remain after block removal
-  resolved = resolved.trim();
-
-  return evaluateExpression(
-    resolved,
-    new Map(scope as unknown as Map<string, unknown>),
-  );
 }
 
 /** Evaluate a block's inner content with an existing scope. */
@@ -324,11 +292,9 @@ function processSingleStatement(
     }
     scope.set(declMatch[1], value);
   } else if (part.startsWith("{") && part.endsWith("}")) {
-    // Nested block statement: evaluate all parts for side effects
+    // Nested block: use child scope so declarations don't leak outward
     const innerParts = splitStatements(part.slice(1, -1));
-    for (const ip of innerParts) {
-      processSingleStatement(ip, scope);
-    }
+    processNestedBlock(innerParts, scope);
   } else if (isAssignment(part)) {
     // Assignment statement: `x = value`
     evaluateAssignment(part, scope);
@@ -342,6 +308,61 @@ function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
     processSingleStatement(parts[i]!, scope);
   }
+}
+
+/** Process a nested block with its own child scope.
+ * Declarations stay local, assignments to pre-existing vars propagate outward. */
+function processNestedBlock(
+  innerParts: string[],
+  outerScope: Map<string, ScopeValue>,
+): void {
+  // If the block has no declarations, just process directly on outer scope
+  const hasDeclarations = innerParts.some((p) =>
+    /^(?:let|const|var)\s+/.test(p.trim()),
+  );
+  if (!hasDeclarations) {
+    for (const ip of innerParts) {
+      processSingleStatement(ip, outerScope);
+    }
+    return;
+  }
+
+  // Child scope copies references from parent so lookups find inherited values
+  const child = new Map(outerScope);
+  for (const ip of innerParts) {
+    processSingleStatement(ip, child);
+  }
+}
+
+/** Resolve blocks in an expression and evaluate with a given scope. */
+function resolveBlocksWithScope(
+  input: string,
+  scope: Map<string, ScopeValue>,
+): number {
+  let resolved = input;
+  // Recursively replace innermost blocks with their values (or empty if statement-only)
+  let prev: string;
+  do {
+    prev = resolved;
+    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) => {
+      const trimmed = blockInner.trim();
+      // If the block is purely statements (assignments/declarations), process for side effects only
+      if (isStatementBlock(trimmed)) {
+        const innerParts = splitStatements(trimmed);
+        processNestedBlock(innerParts, scope);
+        return "";
+      }
+      return String(evaluateBlockWithScope(trimmed, scope));
+    });
+  } while (resolved !== prev && /\{/.test(resolved));
+
+  // Trim whitespace that may remain after block removal
+  resolved = resolved.trim();
+
+  return evaluateExpression(
+    resolved,
+    new Map(scope as unknown as Map<string, unknown>),
+  );
 }
 
 /** Check if a string is an assignment like `x = expr` or `arr[0] = expr`. */
