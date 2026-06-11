@@ -100,29 +100,63 @@ function evaluateExpression(input: string): number {
   return parseExpression(tokens, [0]);
 }
 
-/** Evaluate a block's inner content, handling both expressions and statements (let/const/var). */
-function evaluateBlock(inner: string): number {
-  const scope = new Map<string, number>();
-  // Split by semicolons; last part is the returned value
-  const parts: string[] = inner
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/** Resolve blocks in an expression and evaluate with a given scope. */
+function resolveBlocksWithScope(
+  input: string,
+  scope: Map<string, number>,
+): number {
+  let resolved = input;
+  // Recursively replace innermost blocks with their values
+  let prev: string;
+  do {
+    prev = resolved;
+    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) =>
+      String(evaluateBlockWithScope(blockInner, scope)),
+    );
+  } while (resolved !== prev && /\{/.test(resolved));
+
+  return evaluateExpressionWithScope(resolved, scope);
+}
+
+/** Evaluate a block's inner content with an existing scope. */
+function evaluateBlockWithScope(
+  inner: string,
+  scope: Map<string, number>,
+): number {
+  const parts = splitStatements(inner);
   if (parts.length === 0) throw new Error("Empty block");
 
+  processBlock(scope, parts);
+  return resolveBlocksWithScope(parts[parts.length - 1]!, scope);
+}
+
+/** Evaluate a block's inner content. */
+function evaluateBlock(inner: string): number {
+  const scope = new Map<string, number>();
+  return evaluateBlockWithScope(inner, scope);
+}
+
+/** Process statements in a block, updating the scope. */
+function processBlock(scope: Map<string, number>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
     // Handle let/const/var declarations: `let x = expr`
     const declMatch = part.match(/^(?:let|const|var)\s+(\w+)\s*=\s*(.+)$/);
     if (declMatch && declMatch[1] && declMatch[2]) {
-      scope.set(declMatch[1], evaluateExpressionWithScope(declMatch[2], scope));
+      scope.set(declMatch[1], resolveBlocksWithScope(declMatch[2], scope));
+    } else if (part.startsWith("{") && part.endsWith("}")) {
+      // Nested block statement: evaluate it for side effects
+      const innerParts = splitStatements(part.slice(1, -1));
+      processBlock(scope, innerParts);
     } else {
-      // Statement without declaration, just evaluate for side effects
-      evaluateExpressionWithScope(part, scope);
+      resolveBlocksWithScope(part, scope);
     }
   }
+}
 
-  return evaluateExpressionWithScope(parts[parts.length - 1]!, scope);
+/** Evaluate an expression that may contain nested blocks { ... }. */
+function resolveBlocks(input: string): number {
+  return resolveBlocksWithScope(input, new Map());
 }
 
 function evaluateExpressionWithScope(
@@ -138,6 +172,32 @@ function evaluateExpressionWithScope(
   return evaluateExpression(resolved);
 }
 
+/** Split input by semicolons, respecting brace nesting (don't split inside {}). */
+function splitStatements(input: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charAt(i);
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (ch === ";" && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  const last = current.trim();
+  if (last.length > 0) parts.push(last);
+  return parts.filter(Boolean);
+}
+
+/** Check if a string looks like it starts with a statement keyword. */
+function isStatement(input: string): boolean {
+  return /^(?:let|const|var)\s/.test(input.trim());
+}
+
 function evaluate(source: string): number {
   const trimmed = source.trim();
 
@@ -148,6 +208,22 @@ function evaluate(source: string): number {
     !trimmed.slice(1).includes("{")
   ) {
     return evaluateBlock(trimmed.slice(1, -1));
+  }
+
+  // Handle top-level statements: `let x = ...; expr`
+  if (isStatement(trimmed)) {
+    const scope = new Map<string, number>();
+    const parts: string[] = splitStatements(trimmed);
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i]!;
+      const declMatch = part.match(/^(?:let|const|var)\s+(\w+)\s*=\s*(.+)$/);
+      if (declMatch && declMatch[1] && declMatch[2]) {
+        scope.set(declMatch[1], resolveBlocks(declMatch[2]));
+      } else {
+        resolveBlocks(part);
+      }
+    }
+    return evaluateExpressionWithScope(parts[parts.length - 1]!, scope);
   }
 
   // Find any { ... } blocks in the expression and recursively resolve them

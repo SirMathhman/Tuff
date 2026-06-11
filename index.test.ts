@@ -37,7 +37,9 @@ test('executeTuff("{{ 1 } + { 2 }}") returns 3', () => {
 test('executeTuff("{ let x = 1 + 2; x }") returns 3', () => {
   expect(executeTuff("{ let x = 1 + 2; x }")).toBe(3);
 });
-
+test('executeTuff("let y = { let x = 1 + 2; x }; y") returns 3', () => {
+  expect(executeTuff("let y = { let x = 1 + 2; x }; y")).toBe(3);
+});
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });
