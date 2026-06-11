@@ -1,7 +1,9 @@
 /** Token types for our simple arithmetic language. */
 type NumberToken = { type: "number"; value: number };
 type OpToken = { type: "op"; value: string };
-type Token = NumberToken | OpToken;
+type IdToken = { type: "id"; value: string };
+type ScopeValue = unknown | unknown[];
+type Token = NumberToken | OpToken | IdToken;
 
 function isOp(token: Token): token is OpToken {
   return token.type === "op";
@@ -26,6 +28,22 @@ function tokenize(input: string): Token[] {
     } else if ("+-*/".includes(ch)) {
       tokens.push({ type: "op", value: ch });
       i++;
+    } else if (/[a-zA-Z_$]/.test(ch)) {
+      // Identifier
+      let name = "";
+      while (i < input.length && /[a-zA-Z0-9_$]/.test(input.charAt(i))) {
+        name += input.charAt(i++);
+      }
+      tokens.push({ type: "id", value: name });
+    } else if (ch === "[") {
+      tokens.push({ type: "op", value: "[" });
+      i++;
+    } else if (ch === "]") {
+      tokens.push({ type: "op", value: "]" });
+      i++;
+    } else if (ch === ",") {
+      // comma is ignored at token level; handled by parser context
+      i++;
     } else {
       throw new Error(`Unexpected character: ${ch}`);
     }
@@ -45,9 +63,94 @@ function consume(tokens: Token[], pos: [number]): Token {
   return token;
 }
 
+/** Parse a value expression that can be a number or an array. */
+function parseValue(input: string, scope: Map<string, ScopeValue>): unknown {
+  const tokens = tokenize(input);
+  if (tokens.length === 0) throw new Error("Empty expression");
+
+  // If the first token is an array literal start, parse as value (to get arrays)
+  if (isOp(tokens[0]!) && tokens[0].value === "[") {
+    return parseValuePrimary(tokens, [0], scope);
+  }
+
+  // Otherwise parse as arithmetic expression and return number
+  return parseExpression(tokens, [0], scope as unknown as Map<string, unknown>);
+}
+
+/** Resolve an identifier token, handling chained index access like arr[0][1]. */
+function resolveIdentifier(
+  tokens: Token[],
+  pos: [number],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope: Map<string, any>,
+): unknown {
+  const token = peek(tokens, pos);
+  if (!token || token.type !== "id") throw new Error("Expected identifier");
+  consume(tokens, pos);
+  let value = scope.get(token.value);
+  if (value === undefined)
+    throw new Error(`Undefined variable: ${token.value}`);
+
+  // Handle chained index access: arr[0][1]
+  while (true) {
+    const nextToken = peek(tokens, pos);
+    if (!nextToken || !isOp(nextToken) || nextToken.value !== "[") break;
+    consume(tokens, pos); // consume [
+    const idx = parseExpression(
+      tokens,
+      pos,
+      scope as unknown as Map<string, unknown>,
+    );
+    consume(tokens, pos); // consume ]
+    if (!Array.isArray(value)) throw new Error("Cannot index non-array");
+    value = (value as unknown[])[idx];
+  }
+
+  return value;
+}
+
+function parseValuePrimary(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, ScopeValue>,
+): unknown {
+  const token = peek(tokens, pos);
+  if (!token) throw new Error("Unexpected end of input");
+
+  // Number literal
+  if (token.type === "number") {
+    consume(tokens, pos);
+    return token.value;
+  }
+
+  // Array literal: [ expr , expr ]
+  if (isOp(token) && token.value === "[") {
+    consume(tokens, pos); // consume [
+    const arr: unknown[] = [];
+    while (true) {
+      const next = peek(tokens, pos);
+      if (!next || (isOp(next) && next.value === "]")) break;
+      arr.push(parseValuePrimary(tokens, pos, scope));
+    }
+    consume(tokens, pos); // consume ]
+    return arr;
+  }
+
+  // Identifier (possibly followed by index access)
+  if (token.type === "id") {
+    return resolveIdentifier(tokens, pos, scope);
+  }
+
+  throw new Error(`Unexpected token: ${token.type}`);
+}
+
 /** Recursive descent parser for arithmetic expressions. */
-function parseExpression(tokens: Token[], pos: [number]): number {
-  let left = parseTerm(tokens, pos);
+function parseExpression(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
+  let left = parseTerm(tokens, pos, scope);
   while (true) {
     const currentToken = peek(tokens, pos);
     if (
@@ -57,14 +160,18 @@ function parseExpression(tokens: Token[], pos: [number]): number {
     )
       break;
     consume(tokens, pos);
-    const right = parseTerm(tokens, pos);
+    const right = parseTerm(tokens, pos, scope);
     left = currentToken.value === "+" ? left + right : left - right;
   }
   return left;
 }
 
-function parseTerm(tokens: Token[], pos: [number]): number {
-  let left = parseUnary(tokens, pos);
+function parseTerm(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
+  let left = parseUnary(tokens, pos, scope);
   while (true) {
     const currentToken = peek(tokens, pos);
     if (
@@ -74,36 +181,57 @@ function parseTerm(tokens: Token[], pos: [number]): number {
     )
       break;
     consume(tokens, pos);
-    const right = parseUnary(tokens, pos);
+    const right = parseUnary(tokens, pos, scope);
     left = currentToken.value === "*" ? left * right : left / right;
   }
   return left;
 }
 
-function parseUnary(tokens: Token[], pos: [number]): number {
+function parseUnary(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
   while (true) {
     const currentToken = peek(tokens, pos);
     if (!currentToken || !isOp(currentToken)) break;
     consume(tokens, pos);
-    const operand = parseUnary(tokens, pos);
-    return currentToken.value === "-" ? -operand : operand;
+    const operand = parseUnary(tokens, pos, scope);
+    return typeof operand === "number"
+      ? currentToken.value === "-"
+        ? -operand
+        : operand
+      : operand;
   }
-  if (peek(tokens, pos)?.type === "number") {
-    return consume(tokens, pos).value as number;
-  }
-  throw new Error("Unexpected token");
+  return parsePrimary(tokens, pos, scope);
 }
 
-function evaluateExpression(input: string): number {
+function parsePrimary(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
+  const value = parseValuePrimary(
+    tokens,
+    pos,
+    scope as unknown as Map<string, ScopeValue>,
+  );
+  return typeof value === "number" ? value : 0;
+}
+
+function evaluateExpression(
+  input: string,
+  scope?: Map<string, unknown>,
+): number {
   const tokens = tokenize(input);
   if (tokens.length === 0) throw new Error("Empty expression");
-  return parseExpression(tokens, [0]);
+  return parseExpression(tokens, [0], scope ?? new Map());
 }
 
 /** Resolve blocks in an expression and evaluate with a given scope. */
 function resolveBlocksWithScope(
   input: string,
-  scope: Map<string, number>,
+  scope: Map<string, ScopeValue>,
 ): number {
   let resolved = input;
   // Recursively replace innermost blocks with their values
@@ -115,13 +243,16 @@ function resolveBlocksWithScope(
     );
   } while (resolved !== prev && /\{/.test(resolved));
 
-  return evaluateExpressionWithScope(resolved, scope);
+  return evaluateExpression(
+    resolved,
+    new Map(scope as unknown as Map<string, unknown>),
+  );
 }
 
 /** Evaluate a block's inner content with an existing scope. */
 function evaluateBlockWithScope(
   inner: string,
-  scope: Map<string, number>,
+  scope: Map<string, ScopeValue>,
 ): number {
   const parts = splitStatements(inner);
   if (parts.length === 0) throw new Error("Empty block");
@@ -132,12 +263,12 @@ function evaluateBlockWithScope(
 
 /** Evaluate a block's inner content. */
 function evaluateBlock(inner: string): number {
-  const scope = new Map<string, number>();
+  const scope = new Map<string, ScopeValue>();
   return evaluateBlockWithScope(inner, scope);
 }
 
 /** Process statements in a block, updating the scope. */
-function processBlock(scope: Map<string, number>, parts: string[]): void {
+function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
     // Handle let/const/var declarations: `let x = expr` or `let mut x = expr`
@@ -145,7 +276,16 @@ function processBlock(scope: Map<string, number>, parts: string[]): void {
       /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
     );
     if (declMatch && declMatch[1] && declMatch[2]) {
-      scope.set(declMatch[1], resolveBlocksWithScope(declMatch[2], scope));
+      const rhs = declMatch[2];
+      let value: unknown;
+      if (/^\s*\[/.test(rhs)) {
+        // Array literal - parse directly to preserve array structure
+        value = parseValue(rhs, scope);
+      } else {
+        // Expression or block - resolve blocks first then evaluate
+        value = resolveBlocksWithScope(rhs, scope);
+      }
+      scope.set(declMatch[1], value);
     } else if (part.startsWith("{") && part.endsWith("}")) {
       // Nested block statement: evaluate it for side effects
       const innerParts = splitStatements(part.slice(1, -1));
@@ -165,18 +305,21 @@ function isAssignment(input: string): boolean {
 }
 
 /** Evaluate an assignment statement like `x = 3` and update the scope. */
-function evaluateAssignment(input: string, scope: Map<string, number>): void {
+function evaluateAssignment(
+  input: string,
+  scope: Map<string, ScopeValue>,
+): void {
   const match = input.match(/^(\w+)\s*=\s*(.+)$/);
   if (match && match[1] && match[2]) {
     const name = match[1];
-    const value = resolveBlocksWithScope(match[2], scope);
+    const value = parseValue(match[2], scope);
     scope.set(name, value);
   }
 }
 
 function evaluateExpressionWithScope(
   input: string,
-  scope: Map<string, number>,
+  scope: Map<string, ScopeValue>,
 ): number {
   // Replace variable names with their values from the scope
   let resolved = input;
@@ -227,7 +370,7 @@ function evaluate(source: string): number {
 
   // Handle top-level statements: `let x = ...; expr`
   if (isStatement(trimmed)) {
-    const scope = new Map<string, number>();
+    const scope = new Map<string, ScopeValue>();
     const parts: string[] = splitStatements(trimmed);
     processBlock(scope, parts);
     return evaluateExpressionWithScope(parts[parts.length - 1]!, scope);
