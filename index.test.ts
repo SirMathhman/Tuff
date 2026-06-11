@@ -40,6 +40,9 @@ test('executeTuff("{ let x = 1 + 2; x }") returns 3', () => {
 test('executeTuff("let y = { let x = 1 + 2; x }; y") returns 3', () => {
   expect(executeTuff("let y = { let x = 1 + 2; x }; y")).toBe(3);
 });
+test('executeTuff("let mut x = 0; x = 3; x") returns 3', () => {
+  expect(executeTuff("let mut x = 0; x = 3; x")).toBe(3);
+});
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

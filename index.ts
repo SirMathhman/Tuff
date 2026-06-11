@@ -140,17 +140,37 @@ function evaluateBlock(inner: string): number {
 function processBlock(scope: Map<string, number>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
-    // Handle let/const/var declarations: `let x = expr`
-    const declMatch = part.match(/^(?:let|const|var)\s+(\w+)\s*=\s*(.+)$/);
+    // Handle let/const/var declarations: `let x = expr` or `let mut x = expr`
+    const declMatch = part.match(
+      /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
+    );
     if (declMatch && declMatch[1] && declMatch[2]) {
       scope.set(declMatch[1], resolveBlocksWithScope(declMatch[2], scope));
     } else if (part.startsWith("{") && part.endsWith("}")) {
       // Nested block statement: evaluate it for side effects
       const innerParts = splitStatements(part.slice(1, -1));
       processBlock(scope, innerParts);
+    } else if (isAssignment(part)) {
+      // Assignment statement: `x = value`
+      evaluateAssignment(part, scope);
     } else {
       resolveBlocksWithScope(part, scope);
     }
+  }
+}
+
+/** Check if a string is an assignment like `x = expr`. */
+function isAssignment(input: string): boolean {
+  return /^\w+\s*=/.test(input.trim());
+}
+
+/** Evaluate an assignment statement like `x = 3` and update the scope. */
+function evaluateAssignment(input: string, scope: Map<string, number>): void {
+  const match = input.match(/^(\w+)\s*=\s*(.+)$/);
+  if (match && match[1] && match[2]) {
+    const name = match[1];
+    const value = resolveBlocksWithScope(match[2], scope);
+    scope.set(name, value);
   }
 }
 
