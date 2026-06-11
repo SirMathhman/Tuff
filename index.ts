@@ -474,25 +474,43 @@ function resolveBlocksWithScope(
   );
 }
 
-/** Check if a string is an assignment like `x = expr` or `arr[0] = expr`. */
+/** Check if a string is an assignment like `x = expr`, `arr[0] = expr`, or `x += 1`. */
 function isAssignment(input: string): boolean {
-  return /^\w+(?:\s*\[[^\]]+\])*\s*=/.test(input.trim());
+  return /^\w+(?:\s*\[[^\]]+\])*\s*[+-]?=/.test(input.trim());
 }
 
-/** Evaluate an assignment statement like `x = 3` or `arr[0] = 100`. */
+/** Evaluate an assignment statement like `x = 3`, `arr[0] = 100`, or `x += 1`. */
 function evaluateAssignment(
   input: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  const match = input.match(/^(\w+)(.*)\s*=\s*(.+)$/);
+  const match = input.match(/^(\w+)(.*)\s*[+-]?=\s*(.+)$/);
   if (match && match[1] && typeof match[2] === "string" && match[3]) {
     const name = match[1];
+    // Detect compound assignment operator
+    const opMatch = input.match(/\s*([+-]=)\s*/);
+    const isCompoundOp = !!opMatch;
+    const compoundOp = isCompoundOp ? opMatch![1] : "";
+
     // Extract indices from the middle part like [0][1]
     const idxMatch = match[2].match(/\[(\d+)\]/g) ?? [];
 
     if (idxMatch.length === 0) {
-      // Plain assignment: `x = value`
-      scope.set(name, parseValue(match[3], scope));
+      // Plain or compound assignment: `x = value` or `x += value`
+      if (!isCompoundOp) {
+        scope.set(name, parseValue(match[3], scope));
+        return;
+      }
+
+      // Compound assignment: read current value and apply operator
+      const rhsValue = resolveBlocksWithScope(match[3], scope);
+      const currentValue = scope.get(name);
+      const numCurrent = typeof currentValue === "number" ? currentValue : 0;
+      if (compoundOp === "+=") {
+        scope.set(name, numCurrent + rhsValue);
+      } else if (compoundOp === "-=") {
+        scope.set(name, numCurrent - rhsValue);
+      }
       return;
     }
 
@@ -507,7 +525,20 @@ function evaluateAssignment(
       current = current[ci] as unknown[];
     }
     const finalIdx = parseInt(idxMatch.at(-1)!.slice(1, -1), 10);
-    current[finalIdx] = parseValue(match[3], scope);
+
+    if (!isCompoundOp) {
+      current[finalIdx] = parseValue(match[3], scope);
+      return;
+    }
+
+    // Compound indexed assignment: read current value and apply operator
+    const rhsValue = resolveBlocksWithScope(match[3], scope);
+    const numCurrent = typeof current[finalIdx] === "number" ? current[finalIdx] : 0;
+    if (compoundOp === "+=") {
+      current[finalIdx] = numCurrent + rhsValue;
+    } else if (compoundOp === "-=") {
+      current[finalIdx] = numCurrent - rhsValue;
+    }
   }
 }
 
