@@ -228,20 +228,43 @@ function evaluateExpression(
   return parseExpression(tokens, [0], scope ?? new Map());
 }
 
+/** Check if a block contains only statements (assignments/declarations) with no trailing expression. */
+function isStatementBlock(inner: string): boolean {
+  const parts = splitStatements(inner);
+  if (parts.length === 0) return false;
+  // If every part is an assignment or declaration, it's a statement-only block
+  for (const p of parts) {
+    if (!isAssignment(p.trim()) && !/^\s*(?:let|const|var)\s/.test(p)) return false;
+  }
+  return true;
+}
+
 /** Resolve blocks in an expression and evaluate with a given scope. */
 function resolveBlocksWithScope(
   input: string,
   scope: Map<string, ScopeValue>,
 ): number {
   let resolved = input;
-  // Recursively replace innermost blocks with their values
+  // Recursively replace innermost blocks with their values (or empty if statement-only)
   let prev: string;
   do {
     prev = resolved;
-    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) =>
-      String(evaluateBlockWithScope(blockInner, scope)),
-    );
+    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) => {
+      const trimmed = blockInner.trim();
+      // If the block is purely statements (assignments/declarations), process for side effects only
+      if (isStatementBlock(trimmed)) {
+        const innerParts = splitStatements(trimmed);
+        for (const ip of innerParts) {
+          processSingleStatement(ip, scope);
+        }
+        return "";
+      }
+      return String(evaluateBlockWithScope(trimmed, scope));
+    });
   } while (resolved !== prev && /\{/.test(resolved));
+
+  // Trim whitespace that may remain after block removal
+  resolved = resolved.trim();
 
   return evaluateExpression(
     resolved,
@@ -258,7 +281,20 @@ function evaluateBlockWithScope(
   if (parts.length === 0) throw new Error("Empty block");
 
   processBlock(scope, parts);
-  return resolveBlocksWithScope(parts[parts.length - 1]!, scope);
+  // If the last part is an assignment or declaration, return resolved value from scope instead of re-evaluating
+  const lastPart = parts[parts.length - 1]!;
+  if (isAssignment(lastPart) || /^\s*(?:let|const|var)\s/.test(lastPart)) {
+    // Extract identifier name and resolve its current value
+    const idMatch = lastPart.match(/^(\w+)/);
+    if (idMatch) {
+      const name = idMatch[1]!;
+      if (scope.has(name)) {
+        const val = scope.get(name);
+        return typeof val === "number" ? val : 0;
+      }
+    }
+  }
+  return resolveBlocksWithScope(lastPart, scope);
 }
 
 /** Evaluate a block's inner content. */
@@ -267,35 +303,44 @@ function evaluateBlock(inner: string): number {
   return evaluateBlockWithScope(inner, scope);
 }
 
+/** Process a single statement in the given scope. */
+function processSingleStatement(
+  part: string,
+  scope: Map<string, ScopeValue>,
+): void {
+  // Handle let/const/var declarations: `let x = expr` or `let mut x = expr`
+  const declMatch = part.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
+  );
+  if (declMatch && declMatch[1] && declMatch[2]) {
+    const rhs = declMatch[2];
+    let value: unknown;
+    if (/^\s*\[/.test(rhs)) {
+      // Array literal - parse directly to preserve array structure
+      value = parseValue(rhs, scope);
+    } else {
+      // Expression or block - resolve blocks first then evaluate
+      value = resolveBlocksWithScope(rhs, scope);
+    }
+    scope.set(declMatch[1], value);
+  } else if (part.startsWith("{") && part.endsWith("}")) {
+    // Nested block statement: evaluate all parts for side effects
+    const innerParts = splitStatements(part.slice(1, -1));
+    for (const ip of innerParts) {
+      processSingleStatement(ip, scope);
+    }
+  } else if (isAssignment(part)) {
+    // Assignment statement: `x = value`
+    evaluateAssignment(part, scope);
+  } else {
+    resolveBlocksWithScope(part, scope);
+  }
+}
+
 /** Process statements in a block, updating the scope. */
 function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i]!;
-    // Handle let/const/var declarations: `let x = expr` or `let mut x = expr`
-    const declMatch = part.match(
-      /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
-    );
-    if (declMatch && declMatch[1] && declMatch[2]) {
-      const rhs = declMatch[2];
-      let value: unknown;
-      if (/^\s*\[/.test(rhs)) {
-        // Array literal - parse directly to preserve array structure
-        value = parseValue(rhs, scope);
-      } else {
-        // Expression or block - resolve blocks first then evaluate
-        value = resolveBlocksWithScope(rhs, scope);
-      }
-      scope.set(declMatch[1], value);
-    } else if (part.startsWith("{") && part.endsWith("}")) {
-      // Nested block statement: evaluate it for side effects
-      const innerParts = splitStatements(part.slice(1, -1));
-      processBlock(scope, innerParts);
-    } else if (isAssignment(part)) {
-      // Assignment statement: `x = value`
-      evaluateAssignment(part, scope);
-    } else {
-      resolveBlocksWithScope(part, scope);
-    }
+    processSingleStatement(parts[i]!, scope);
   }
 }
 

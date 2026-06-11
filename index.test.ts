@@ -54,6 +54,9 @@ test('executeTuff("let mut array = [0]; array[0] = 100; array[0]") returns 100',
 test('executeTuff("let x = 0; let x = 100; x") returns 100', () => {
   expect(executeTuff("let x = 0; let x = 100; x")).toBe(100);
 });
+test('executeTuff("let mut x = 0; { x = 100; } x") returns 100', () => {
+  expect(executeTuff("let mut x = 0; { x = 100; } x")).toBe(100);
+});
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });
