@@ -159,6 +159,10 @@ test('executeTuff("fn add(first, second) => first + second; add(3, 4)") returns 
   ).toBe(7);
 });
 
+test('executeTuff("let temp = { value : 100 }; temp.value") returns 100', () => {
+  expect(executeTuff("let temp = { value : 100 }; temp.value")).toBe(100);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

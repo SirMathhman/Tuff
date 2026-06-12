@@ -20,6 +20,12 @@ function tokenize(input: string): Token[] {
       i++;
       continue;
     }
+    // Dot for property access (check BEFORE number, since . matches /[0-9.]/)
+    if (ch === "." && !/[0-9]/.test(input.charAt(i + 1) ?? "")) {
+      tokens.push({ type: "op", value: "." });
+      i++;
+      continue;
+    }
     // Number (integer or decimal, with optional leading minus handled by parser)
     if (/[0-9.]/.test(ch)) {
       let num = "";
@@ -89,14 +95,25 @@ function tokenize(input: string): Token[] {
     } else if (ch === "[") {
       tokens.push({ type: "op", value: "[" });
       i++;
-    } else if (ch === ")" || ch === "(") {
-      tokens.push({ type: "op", value: ch });
-      i++;
     } else if (ch === "]") {
       tokens.push({ type: "op", value: "]" });
       i++;
+    } else if (ch === "{" || ch === "}") {
+      tokens.push({ type: "op", value: ch });
+      i++;
+    } else if (ch === ")" || ch === "(") {
+      tokens.push({ type: "op", value: ch });
+      i++;
     } else if (ch === ",") {
       // comma is ignored at token level; handled by parser context
+      i++;
+    } else if (ch === "." && !/[0-9]/.test(input.charAt(i + 1) ?? "")) {
+      // Dot for property access (not part of a decimal number)
+      tokens.push({ type: "op", value: "." });
+      i++;
+    } else if (ch === ":") {
+      // Colon for object key-value pairs
+      tokens.push({ type: "op", value: ":" });
       i++;
     } else {
       throw new Error(`Unexpected character: ${ch}`);
@@ -117,14 +134,29 @@ function consume(tokens: Token[], pos: [number]): Token {
   return token;
 }
 
-/** Parse a value expression that can be a number or an array. */
+/** Parse a value expression that can be a number, array, or object. */
 function parseValue(input: string, scope: Map<string, ScopeValue>): unknown {
-  const tokens = tokenize(input);
+  const tokens = tokenize(input.trim());
   if (tokens.length === 0) throw new Error("Empty expression");
 
   // If the first token is an array literal start, parse as value (to get arrays)
   if (isOp(tokens[0]!) && tokens[0].value === "[") {
     return parseValuePrimary(tokens, [0], scope);
+  }
+
+  // Object literal: { key : expr } - detect by opening brace followed by identifier and colon
+  const third = peek(tokens, [2]);
+  if (
+    isOp(tokens[0]!) &&
+    tokens[0].value === "{" &&
+    peek(tokens, [1])?.type === "id" &&
+    third !== undefined &&
+    isOp(third) &&
+    third.value === ":"
+  ) {
+    consume(tokens, [0]); // consume {
+    const obj = parseObjectLiteral(tokens, [0], scope);
+    return obj;
   }
 
   // Otherwise parse as arithmetic expression and return number
@@ -148,7 +180,7 @@ function getFunction(
   return undefined;
 }
 
-/** Resolve an identifier token, handling function calls like fn() and chained index access like arr[0][1]. */
+/** Resolve an identifier token, handling function calls like fn(), chained index access like arr[0][1], and dot property access like obj.prop. */
 function resolveIdentifier(
   tokens: Token[],
   pos: [number],
@@ -200,19 +232,38 @@ function resolveIdentifier(
   if (value === undefined)
     throw new Error(`Undefined variable: ${token.value}`);
 
-  // Handle chained index access: arr[0][1]
+  // Handle chained access: arr[0][1] and obj.prop
   while (true) {
     const nextToken = peek(tokens, pos);
-    if (!nextToken || !isOp(nextToken) || nextToken.value !== "[") break;
-    consume(tokens, pos); // consume [
-    const idx = parseExpression(
-      tokens,
-      pos,
-      scope as unknown as Map<string, unknown>,
-    );
-    consume(tokens, pos); // consume ]
-    if (!Array.isArray(value)) throw new Error("Cannot index non-array");
-    value = (value as unknown[])[idx];
+    if (!nextToken || !isOp(nextToken)) break;
+
+    // Array index access: [expr]
+    if (nextToken.value === "[") {
+      consume(tokens, pos); // consume [
+      const idx = parseExpression(
+        tokens,
+        pos,
+        scope as unknown as Map<string, unknown>,
+      );
+      consume(tokens, pos); // consume ]
+      if (!Array.isArray(value)) throw new Error("Cannot index non-array");
+      value = (value as unknown[])[idx];
+    }
+    // Dot property access: .prop
+    else if (nextToken.value === ".") {
+      consume(tokens, pos); // consume .
+      const propToken = peek(tokens, pos);
+      if (!propToken || propToken.type !== "id")
+        throw new Error("Expected property name after dot");
+      consume(tokens, pos);
+      if (typeof value === "object" && value !== null) {
+        value = (value as Record<string, unknown>)[propToken.value];
+      } else {
+        throw new Error(
+          `Cannot access property on non-object: ${String(value)}`,
+        );
+      }
+    } else break;
   }
 
   return value;
@@ -434,8 +485,51 @@ function evaluateExpression(
   return parseExpression(tokens, [0], scope ?? new Map());
 }
 
+/** Check if a brace-enclosed string is an object literal (has key: value pairs). */
+function isObjectLiteral(inner: string): boolean {
+  // Object literals have the pattern `key : expr` with colons not part of range operators
+  const trimmed = inner.trim();
+  return /^\s*\w+\s*:/.test(trimmed) || /^\{[^}]*\s*:\s*/.test(inner);
+}
+
+/** Parse an object literal like `{ key1 : val1, key2 : val2 }`. */
+function parseObjectLiteral(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, ScopeValue>,
+): Record<string, unknown> {
+  const obj: Record<string, unknown> = {};
+  while (true) {
+    const next = peek(tokens, pos);
+    if (!next || (isOp(next) && next.value === "}")) break;
+
+    // Parse key
+    if (next.type !== "id") throw new Error("Expected object property name");
+    consume(tokens, pos);
+    const propName = next.value;
+
+    // Consume colon
+    const colonToken = peek(tokens, pos);
+    if (!colonToken || !isOp(colonToken) || colonToken.value !== ":") {
+      throw new Error("Expected ':' after object property name");
+    }
+    consume(tokens, pos);
+
+    // Parse value expression
+    const val = parseExpression(
+      tokens,
+      pos,
+      scope as unknown as Map<string, unknown>,
+    );
+    obj[propName] = val;
+  }
+  return obj;
+}
+
 /** Check if a block contains only statements (assignments/declarations) with no trailing expression. */
 function isStatementBlock(inner: string): boolean {
+  // If it looks like an object literal, don't treat as statement block
+  if (isObjectLiteral(inner)) return false;
   const parts = splitStatements(inner);
   if (parts.length === 0) return false;
   // If every part is an assignment or declaration, it's a statement-only block
@@ -509,6 +603,15 @@ function processSingleStatement(
     if (/^\s*\[/.test(rhs)) {
       // Array literal - parse directly to preserve array structure
       value = parseValue(rhs, scope);
+    } else if (isObjectLiteral(rhs) || /^\s*\{[^}]*\s*:\s*/.test(rhs)) {
+      // Object literal - strip outer braces and parse as object
+      const inner = rhs.trim();
+      const stripped =
+        inner.startsWith("{") && inner.endsWith("}")
+          ? inner.slice(1, -1)
+          : inner;
+      const tokens = tokenize(stripped);
+      value = parseObjectLiteral(tokens, [0], scope);
     } else {
       // Expression or block - resolve blocks first then evaluate
       value = resolveBlocksWithScope(rhs, scope);
@@ -703,11 +806,14 @@ function resolveBlocksWithScope(
 ): number {
   let resolved = input;
   // Recursively replace innermost blocks with their values (or empty if statement-only)
+  // But skip object literals which have key:value patterns
   let prev: string;
   do {
     prev = resolved;
     resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) => {
       const trimmed = blockInner.trim();
+      // Skip object literals (have `key : value` pattern, with optional spaces around colon)
+      if (/^\s*\w+\s*:\s*/.test(trimmed)) return _match;
       // If the block is purely statements (assignments/declarations), process for side effects only
       if (isStatementBlock(trimmed)) {
         const innerParts = splitStatements(trimmed);
