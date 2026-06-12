@@ -144,6 +144,11 @@ test('executeTuff("let x = 3; let y = 7; x != y") returns 1', () => {
   expect(executeTuff("let x = 3; let y = 7; x != y")).toBe(1);
 });
 
+// For loop with range (covers for statement support)
+test('executeTuff("let mut sum = 0; for (i in 0..4) sum += i; sum") returns 6', () => {
+  expect(executeTuff("let mut sum = 0; for (i in 0..4) sum += i; sum")).toBe(6);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

@@ -72,7 +72,12 @@ function tokenize(input: string): Token[] {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {
         tokens.push({ type: "boolean", value: false });
-      } else if (name === "if" || name === "else" || name === "while") {
+      } else if (
+        name === "if" ||
+        name === "else" ||
+        name === "while" ||
+        name === "for"
+      ) {
         tokens.push({ type: "keyword", value: name });
       } else {
         tokens.push({ type: "id", value: name });
@@ -214,7 +219,7 @@ function parseComparison(
     if (!currentToken || !isComparisonOp(currentToken)) break;
     consume(tokens, pos);
     const right = parseTerm(tokens, pos, scope);
-    left = evaluateComparison(left, currentToken.value, right);
+    left = evaluateComparison(left, currentToken.value as string, right);
   }
   return left;
 }
@@ -477,6 +482,11 @@ function isWhileStatement(input: string): boolean {
   return /^\s*while\s*\(/.test(input.trim());
 }
 
+/** Check if a statement starts with a `for` keyword. */
+function isForStatement(input: string): boolean {
+  return /^\s*for\s*\(.*in/.test(input.trim());
+}
+
 /** Maximum number of iterations for while loops to prevent infinite loops. */
 const MAX_WHILE_ITERATIONS = 1024;
 
@@ -500,6 +510,40 @@ function processWhileStatement(
   }
 }
 
+/** Process a `for (var in start..end) body` statement. */
+function processForStatement(
+  input: string,
+  scope: Map<string, ScopeValue>,
+): void {
+  const match = input.match(/^\s*for\s*\((.+?)\)\s*(.*)$/);
+  if (!match || !match[1]) return;
+
+  const header = match[1].trim();
+  const body = (match[2] ?? "").trim();
+
+  // Parse `var in start..end`
+  const rangeMatch = header.match(/^(\w+)\s+in\s+(.+?)\.\.(.+)$/);
+  if (!rangeMatch || !rangeMatch[1] || !rangeMatch[2] || !rangeMatch[3]) return;
+
+  const varName = rangeMatch[1].trim();
+  const startVal = parseValue(rangeMatch[2].trim(), scope);
+  const endVal = parseValue(rangeMatch[3].trim(), scope);
+
+  if (typeof startVal !== "number" || typeof endVal !== "number") return;
+
+  // Ensure the loop variable is tracked as mutable so compound assignments work
+  getMutableSet(scope).add(varName);
+
+  for (
+    let i = Math.floor(startVal);
+    i < Math.floor(endVal) && i - Math.floor(startVal) < MAX_WHILE_ITERATIONS;
+    i++
+  ) {
+    scope.set(varName, i);
+    processSingleStatement(body, scope);
+  }
+}
+
 /** Process statements in a block, updating the scope. */
 function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
@@ -515,6 +559,8 @@ function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
       }
     } else if (isWhileStatement(part)) {
       processWhileStatement(part, scope);
+    } else if (isForStatement(part)) {
+      processForStatement(part, scope);
     } else {
       processSingleStatement(part, scope);
     }
