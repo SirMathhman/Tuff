@@ -163,6 +163,18 @@ test('executeTuff("let temp = { value : 100 }; temp.value") returns 100', () => 
   expect(executeTuff("let temp = { value : 100 }; temp.value")).toBe(100);
 });
 
+test('executeTuff("100U8") returns 100', () => {
+  expect(executeTuff("100U8")).toBe(100);
+});
+
+test('executeTuff("-100U8") throws error', () => {
+  expect(() => executeTuff("-100U8")).toThrow();
+});
+
+test('executeTuff("-100I8") returns -100', () => {
+  expect(executeTuff("-100I8")).toBe(-100);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

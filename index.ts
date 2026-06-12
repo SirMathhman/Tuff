@@ -1,5 +1,9 @@
 /** Token types for our simple arithmetic language. */
-type NumberToken = { type: "number"; value: number };
+type NumberToken = {
+  type: "number";
+  value: number;
+  suffix?: string | undefined;
+};
 type OpToken = { type: "op"; value: string };
 type IdToken = { type: "id"; value: string };
 type BooleanToken = { type: "boolean"; value: boolean };
@@ -32,7 +36,20 @@ function tokenize(input: string): Token[] {
       while (i < input.length && /[0-9.]/.test(input.charAt(i))) {
         num += input.charAt(i++);
       }
-      tokens.push({ type: "number", value: parseFloat(num) });
+      // Optional type suffix: U8, I32, F64, etc.
+      let typeSuffix = undefined;
+      if (i < input.length && /[a-zA-Z_]/.test(input.charAt(i))) {
+        const beforeI = i;
+        while (i < input.length && /[a-zA-Z0-9_]/.test(input.charAt(i))) {
+          i++;
+        }
+        typeSuffix = input.slice(beforeI, i);
+      }
+      tokens.push({
+        type: "number",
+        value: parseFloat(num),
+        suffix: typeSuffix,
+      });
     } else if ("+-*/".includes(ch)) {
       tokens.push({ type: "op", value: ch });
       i++;
@@ -407,6 +424,19 @@ function parseUnary(
     if (!currentToken || !isOp(currentToken)) break;
     // Only treat `-` and `+` as unary operators, not comparison or other ops like `<`, `[`, etc.
     if (currentToken.value !== "-" && currentToken.value !== "+") break;
+
+    // Check if the operand (one token ahead) is a number with an unsigned type suffix — reject negative unsigned literals
+    const nextToken = tokens[pos[0] + 1];
+    if (
+      nextToken?.type === "number" &&
+      nextToken.suffix &&
+      /^[uU]/.test(nextToken.suffix)
+    ) {
+      throw new Error(
+        `Cannot apply unary minus to unsigned typed literal: -${nextToken.value}${nextToken.suffix}`,
+      );
+    }
+
     consume(tokens, pos);
     const operand = parseUnary(tokens, pos, scope);
     return typeof operand === "number"
