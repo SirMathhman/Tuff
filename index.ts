@@ -334,19 +334,81 @@ function isComparisonOp(token: Token): boolean {
   return isOp(token) && COMPARISON_OPS.has(token.value);
 }
 
-/** Parse comparison expressions like `a < b`, `x >= 4`. */
+/** Lightweight context to track type info during expression evaluation. */
+type EvalContext = { lastResultType: string | undefined };
+
+/** Extract bit width from a type name like U8, I32, F64 => 8, 32, 64. Returns 0 if unparseable. */
+function getTypeBitWidth(typeName: string): number {
+  const match = typeName.match(/(\d+)/);
+  return match && match[1] ? parseInt(match[1], 10) : 0;
+}
+
+/** Standard bit widths in ascending order. */
+const BIT_WIDTHS = [8, 16, 32, 64];
+
+/** Returns the next wider standard bit width, or falls back to doubling. */
+function nextWiderBitWidth(width: number): number {
+  const idx = BIT_WIDTHS.indexOf(width);
+  if (idx >= 0 && idx < BIT_WIDTHS.length - 1) return BIT_WIDTHS[idx + 1]!;
+  return width * 2;
+}
+
+/** I32 is the default type for plain numbers; treat it as neutral during promotion. */
+const DEFAULT_TYPE = "I32";
+
+/** Given two type names, return the promoted type, or undefined if incompatible. */
+function promoteTypes(
+  a: string | undefined,
+  b: string | undefined,
+): string | undefined {
+  if (!a || !b) return undefined;
+  const aWidth = getTypeBitWidth(a);
+  const bWidth = getTypeBitWidth(b);
+
+  // Unparseable types — only keep if identical.
+  if (aWidth === 0 && bWidth === 0) return a === b ? a : undefined;
+
+  // If one side is the default type and the other has an explicit narrower type, yield to it.
+  if (a === DEFAULT_TYPE && b !== DEFAULT_TYPE) return b;
+  if (b === DEFAULT_TYPE && a !== DEFAULT_TYPE) return a;
+
+  // Same bit width but different signedness (e.g. U8 + I8) → promote to next wider signed type.
+  if (aWidth === bWidth && a !== b) {
+    const wider = nextWiderBitWidth(aWidth);
+    return `I${wider}`;
+  }
+
+  // Different widths — wider wins, preserving its sign prefix.
+  if (bWidth <= aWidth) return a;
+  return b;
+}
+
+/** Parse comparison expressions like `a < b`, `x >= 4`, and `expr is Type`. */
 function parseComparison(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
-  let left = parseTerm(tokens, pos, scope);
+  let left = parseTerm(tokens, pos, scope, ctx);
   while (true) {
     const currentToken = peek(tokens, pos);
     if (!currentToken || !isComparisonOp(currentToken)) break;
     consume(tokens, pos);
-    const right = parseTerm(tokens, pos, scope);
+    const right = parseTerm(tokens, pos, scope, ctx);
     left = evaluateComparison(left, currentToken.value as string, right);
+  }
+  // Check for `is <Type>` operator
+  if (ctx) {
+    const isTok = peek(tokens, pos);
+    if (isTok && isTok.type === "id" && isTok.value.toLowerCase() === "is") {
+      consume(tokens, pos); // consume 'is'
+      const typeTok = peek(tokens, pos);
+      if (!typeTok || typeTok.type !== "id")
+        throw new Error("Expected type name after 'is'");
+      consume(tokens, pos);
+      left = ctx.lastResultType === typeTok.value ? 1 : 0;
+    }
   }
   return left;
 }
@@ -376,8 +438,9 @@ function parseExpression(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
-  let left = parseComparison(tokens, pos, scope);
+  let left = parseComparison(tokens, pos, scope, ctx);
   while (true) {
     const currentToken = peek(tokens, pos);
     if (
@@ -387,7 +450,15 @@ function parseExpression(
     )
       break;
     consume(tokens, pos);
-    const right = parseTerm(tokens, pos, scope);
+    // Save left operand type before parsing right
+    const savedLeftType = ctx?.lastResultType;
+    const right = parseTerm(tokens, pos, scope, ctx);
+    // Propagate type: promote to wider bit-width or clear if mismatched
+    if (ctx && savedLeftType && ctx.lastResultType) {
+      ctx.lastResultType = promoteTypes(savedLeftType, ctx.lastResultType);
+    } else if (ctx) {
+      ctx.lastResultType = undefined;
+    }
     left = currentToken.value === "+" ? left + right : left - right;
   }
   return left;
@@ -397,8 +468,9 @@ function parseTerm(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
-  let left = parseUnary(tokens, pos, scope);
+  let left = parseUnary(tokens, pos, scope, ctx);
   while (true) {
     const currentToken = peek(tokens, pos);
     if (
@@ -408,7 +480,7 @@ function parseTerm(
     )
       break;
     consume(tokens, pos);
-    const right = parseUnary(tokens, pos, scope);
+    const right = parseUnary(tokens, pos, scope, ctx);
     left = currentToken.value === "*" ? left * right : left / right;
   }
   return left;
@@ -418,6 +490,7 @@ function parseUnary(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
   while (true) {
     const currentToken = peek(tokens, pos);
@@ -438,14 +511,14 @@ function parseUnary(
     }
 
     consume(tokens, pos);
-    const operand = parseUnary(tokens, pos, scope);
+    const operand = parseUnary(tokens, pos, scope, ctx);
     return typeof operand === "number"
       ? currentToken.value === "-"
         ? -operand
         : operand
       : operand;
   }
-  return parsePrimary(tokens, pos, scope);
+  return parsePrimary(tokens, pos, scope, ctx);
 }
 
 function parseIfExpr(
@@ -491,11 +564,30 @@ function parsePrimary(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
   // Check for 'if' keyword at primary level
   const token = peek(tokens, pos);
   if (token && token.type === "keyword" && token.value === "if") {
     return parseIfExpr(tokens, pos, scope);
+  }
+
+  // Handle parenthesized expressions: ( expr )
+  if (token && isOp(token) && token.value === "(") {
+    consume(tokens, pos); // consume (
+    const result = parseExpression(tokens, pos, scope, ctx);
+    const closeParen = peek(tokens, pos);
+    if (!closeParen || !isOp(closeParen) || closeParen.value !== ")")
+      throw new Error("Expected closing parenthesis");
+    consume(tokens, pos); // consume )
+    return result;
+  }
+
+  // Capture type suffix from numeric literals before consuming; default to I32 for plain numbers
+  if (ctx && token?.type === "number") {
+    ctx.lastResultType = token.suffix ?? "I32";
+  } else if (ctx) {
+    ctx.lastResultType = undefined;
   }
 
   const value = parseValuePrimary(
@@ -512,7 +604,9 @@ function evaluateExpression(
 ): number {
   const tokens = tokenize(input);
   if (tokens.length === 0) throw new Error("Empty expression");
-  return parseExpression(tokens, [0], scope ?? new Map());
+  return parseExpression(tokens, [0], scope ?? new Map(), {
+    lastResultType: undefined,
+  });
 }
 
 /** Check if a brace-enclosed string is an object literal (has key: value pairs). */

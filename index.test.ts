@@ -175,6 +175,46 @@ test('executeTuff("-100I8") returns -100', () => {
   expect(executeTuff("-100I8")).toBe(-100);
 });
 
+test('executeTuff("-100I8 is I8") returns 1', () => {
+  expect(executeTuff("-100I8 is I8")).toBe(1);
+});
+
+test('executeTuff("100 is I32") returns 1', () => {
+  expect(executeTuff("100 is I32")).toBe(1);
+});
+
+test('executeTuff("100 is U32") returns 0', () => {
+  expect(executeTuff("100 is U32")).toBe(0);
+});
+
+test('executeTuff("100 is I8") returns 0', () => {
+  expect(executeTuff("100 is I8")).toBe(0);
+});
+
+test('executeTuff("(1U8 + 2U8) is U8") returns 1', () => {
+  expect(executeTuff("(1U8 + 2U8) is U8")).toBe(1);
+});
+
+test('executeTuff("(1U8 + 2U16) is U16") returns 1', () => {
+  expect(executeTuff("(1U8 + 2U16) is U16")).toBe(1);
+});
+
+test('executeTuff("(1U8 + 2I8) is I16") returns 1', () => {
+  expect(executeTuff("(1U8 + 2I8) is I16")).toBe(1);
+});
+
+test('executeTuff("(1 + 1U8) is U8") returns 1', () => {
+  expect(executeTuff("(1 + 1U8) is U8")).toBe(1);
+});
+
+test('executeTuff("(1 + 1I16) is I16") returns 1', () => {
+  expect(executeTuff("(1 + 1I16) is I16")).toBe(1);
+});
+
+test('executeTuff("(1 + (1U8 + 1I8)) is I16") returns 1', () => {
+  expect(executeTuff("(1 + (1U8 + 1I8)) is I16")).toBe(1);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });
