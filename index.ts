@@ -30,6 +30,9 @@ function tokenize(input: string): Token[] {
     } else if ("+-*/".includes(ch)) {
       tokens.push({ type: "op", value: ch });
       i++;
+    } else if (ch === "=" && input.charAt(i + 1) === ">") {
+      tokens.push({ type: "op", value: "=>" });
+      i += 2;
     } else if (
       "<>=!:".includes(ch) ||
       (ch === "<" && input.charAt(i + 1) === "=") ||
@@ -76,7 +79,8 @@ function tokenize(input: string): Token[] {
         name === "if" ||
         name === "else" ||
         name === "while" ||
-        name === "for"
+        name === "for" ||
+        name === "fn"
       ) {
         tokens.push({ type: "keyword", value: name });
       } else {
@@ -127,7 +131,24 @@ function parseValue(input: string, scope: Map<string, ScopeValue>): unknown {
   return parseExpression(tokens, [0], scope as unknown as Map<string, unknown>);
 }
 
-/** Resolve an identifier token, handling chained index access like arr[0][1]. */
+/** Function definition stored in scope. */
+type FnDef = { body: string; params: string[] };
+
+/** Get and delete a function definition from scope (functions are single-use). */
+function getFunction(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope: Map<string, any>,
+  name: string,
+): FnDef | undefined {
+  const fn = scope.get("__fn__" + name);
+  if (fn !== undefined) {
+    scope.delete("__fn__" + name);
+    return fn as FnDef;
+  }
+  return undefined;
+}
+
+/** Resolve an identifier token, handling function calls like fn() and chained index access like arr[0][1]. */
 function resolveIdentifier(
   tokens: Token[],
   pos: [number],
@@ -137,6 +158,44 @@ function resolveIdentifier(
   const token = peek(tokens, pos);
   if (!token || token.type !== "id") throw new Error("Expected identifier");
   consume(tokens, pos);
+
+  // Check if this is a function call: name(
+  const nextToken = peek(tokens, pos);
+  if (nextToken && isOp(nextToken) && nextToken.value === "(") {
+    // It's a function call - check for defined function
+    const fnDef = getFunction(scope, token.value);
+    if (fnDef !== undefined) {
+      consume(tokens, pos); // consume (
+      // Parse arguments: evaluate comma-separated expressions
+      const args: number[] = [];
+      while (true) {
+        const peekNext = peek(tokens, pos);
+        if (!peekNext || (isOp(peekNext) && peekNext.value === ")")) break;
+        const argValue = parseExpression(
+          tokens,
+          pos,
+          scope as unknown as Map<string, unknown>,
+        );
+        args.push(argValue);
+      }
+      const closeParen = peek(tokens, pos);
+      if (closeParen && isOp(closeParen) && closeParen.value === ")") {
+        consume(tokens, pos); // consume )
+      }
+      // Evaluate the function body in a new scope that inherits from parent
+      const fnScope = new Map(scope);
+      // Bind arguments to parameter names
+      for (let i = 0; i < fnDef.params.length; i++) {
+        const paramName = fnDef.params[i];
+        if (paramName !== undefined && args[i] !== undefined) {
+          fnScope.set(paramName, args[i]);
+        }
+      }
+      return resolveBlocksWithScope(fnDef.body, fnScope);
+    }
+    throw new Error(`Undefined function: ${token.value}`);
+  }
+
   let value = scope.get(token.value);
   if (value === undefined)
     throw new Error(`Undefined variable: ${token.value}`);
@@ -487,6 +546,25 @@ function isForStatement(input: string): boolean {
   return /^\s*for\s*\(.*in/.test(input.trim());
 }
 
+/** Check if a statement is a function definition like `fn name() => expr` or `fn name(a, b) => expr`. */
+function isFnDefinition(input: string): boolean {
+  return /^\s*fn\s+\w+\s*\(.*?\)\s*=>\s*/.test(input.trim());
+}
+
+/** Process a function definition statement and store it in scope with parameter names. */
+function processFnDefinition(
+  input: string,
+  scope: Map<string, ScopeValue>,
+): void {
+  const match = input.match(/^\s*fn\s+(\w+)\s*\(([^)]*)\)\s*=>\s*(.+)$/);
+  if (!match || !match[1] || typeof match[2] !== "string" || !match[3]) return;
+  const params = match[2].trim()
+    ? match[2].split(",").map((p) => p.trim())
+    : [];
+  // Store function as an object with body and parameters
+  scope.set("__fn__" + match[1], { body: match[3].trim(), params });
+}
+
 /** Maximum number of iterations for while loops to prevent infinite loops. */
 const MAX_WHILE_ITERATIONS = 1024;
 
@@ -561,6 +639,8 @@ function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
       processWhileStatement(part, scope);
     } else if (isForStatement(part)) {
       processForStatement(part, scope);
+    } else if (isFnDefinition(part)) {
+      processFnDefinition(part, scope);
     } else {
       processSingleStatement(part, scope);
     }
@@ -748,6 +828,11 @@ function isStatement(input: string): boolean {
   return /^(?:let|const|var)\s/.test(input.trim());
 }
 
+/** Check if input contains multiple statements (semicolon-separated). */
+function hasMultipleStatements(input: string): boolean {
+  return splitStatements(input).length > 1;
+}
+
 function evaluate(source: string): number {
   const trimmed = source.trim();
 
@@ -760,8 +845,8 @@ function evaluate(source: string): number {
     return evaluateBlock(trimmed.slice(1, -1));
   }
 
-  // Handle top-level statements: `let x = ...; expr`
-  if (isStatement(trimmed)) {
+  // Handle top-level statements with multiple parts: `let x = ...; expr` or `fn f() => ...; call()`
+  if (isStatement(trimmed) || hasMultipleStatements(trimmed)) {
     const scope = new Map<string, ScopeValue>();
     const parts: string[] = splitStatements(trimmed);
     processBlock(scope, parts);

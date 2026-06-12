@@ -149,6 +149,16 @@ test('executeTuff("let mut sum = 0; for (i in 0..4) sum += i; sum") returns 6', 
   expect(executeTuff("let mut sum = 0; for (i in 0..4) sum += i; sum")).toBe(6);
 });
 
+test('executeTuff("fn get() => 100; get()") returns 100', () => {
+  expect(executeTuff("fn get() => 100; get()")).toBe(100);
+});
+
+test('executeTuff("fn add(first, second) => first + second; add(3, 4)") returns 7', () => {
+  expect(
+    executeTuff("fn add(first, second) => first + second; add(3, 4)"),
+  ).toBe(7);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });
