@@ -30,6 +30,38 @@ function tokenize(input: string): Token[] {
     } else if ("+-*/".includes(ch)) {
       tokens.push({ type: "op", value: ch });
       i++;
+    } else if (
+      "<>=!:".includes(ch) ||
+      (ch === "<" && input.charAt(i + 1) === "=") ||
+      (ch === ">" && input.charAt(i + 1) === "=") ||
+      (ch === "=" && input.charAt(i + 1) === "=")
+    ) {
+      // Handle comparison operators: <, >, <=, >=, ==, !=
+      let op = ch;
+      if (
+        (ch === "<" || ch === ">") &&
+        i + 1 < input.length &&
+        input.charAt(i + 1) === "="
+      ) {
+        op += "=";
+        i++;
+      } else if (
+        ch === "=" &&
+        i + 1 < input.length &&
+        input.charAt(i + 1) === "="
+      ) {
+        op = "==";
+        i++;
+      } else if (
+        ch === "!" &&
+        i + 1 < input.length &&
+        input.charAt(i + 1) === "="
+      ) {
+        op = "!=";
+        i++;
+      }
+      tokens.push({ type: "op", value: op });
+      i++;
     } else if (/[a-zA-Z_$]/.test(ch)) {
       // Identifier or boolean literal
       let name = "";
@@ -40,7 +72,7 @@ function tokenize(input: string): Token[] {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {
         tokens.push({ type: "boolean", value: false });
-      } else if (name === "if" || name === "else") {
+      } else if (name === "if" || name === "else" || name === "while") {
         tokens.push({ type: "keyword", value: name });
       } else {
         tokens.push({ type: "id", value: name });
@@ -163,13 +195,57 @@ function parseValuePrimary(
   throw new Error(`Unexpected token: ${token.type}`);
 }
 
-/** Recursive descent parser for arithmetic expressions. */
-function parseExpression(
+const COMPARISON_OPS = new Set(["<", ">", "<=", ">=", "==", "!="]);
+
+/** Check if a token is a comparison operator. */
+function isComparisonOp(token: Token): boolean {
+  return isOp(token) && COMPARISON_OPS.has(token.value);
+}
+
+/** Parse comparison expressions like `a < b`, `x >= 4`. */
+function parseComparison(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
 ): number {
   let left = parseTerm(tokens, pos, scope);
+  while (true) {
+    const currentToken = peek(tokens, pos);
+    if (!currentToken || !isComparisonOp(currentToken)) break;
+    consume(tokens, pos);
+    const right = parseTerm(tokens, pos, scope);
+    left = evaluateComparison(left, currentToken.value, right);
+  }
+  return left;
+}
+
+/** Evaluate a comparison and return 1 for true, 0 for false. */
+function evaluateComparison(left: number, op: string, right: number): number {
+  switch (op) {
+    case "<":
+      return left < right ? 1 : 0;
+    case ">":
+      return left > right ? 1 : 0;
+    case "<=":
+      return left <= right ? 1 : 0;
+    case ">=":
+      return left >= right ? 1 : 0;
+    case "==":
+      return left === right ? 1 : 0;
+    case "!=":
+      return left !== right ? 1 : 0;
+    default:
+      throw new Error(`Unknown comparison operator: ${op}`);
+  }
+}
+
+/** Recursive descent parser for arithmetic expressions with comparison support. */
+function parseExpression(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
+  let left = parseComparison(tokens, pos, scope);
   while (true) {
     const currentToken = peek(tokens, pos);
     if (
@@ -214,6 +290,8 @@ function parseUnary(
   while (true) {
     const currentToken = peek(tokens, pos);
     if (!currentToken || !isOp(currentToken)) break;
+    // Only treat `-` and `+` as unary operators, not comparison or other ops like `<`, `[`, etc.
+    if (currentToken.value !== "-" && currentToken.value !== "+") break;
     consume(tokens, pos);
     const operand = parseUnary(tokens, pos, scope);
     return typeof operand === "number"
@@ -394,6 +472,34 @@ function isElseStatement(input: string): boolean {
   return /^\s*else\b/.test(input.trim());
 }
 
+/** Check if a statement starts with a `while` keyword. */
+function isWhileStatement(input: string): boolean {
+  return /^\s*while\s*\(/.test(input.trim());
+}
+
+/** Maximum number of iterations for while loops to prevent infinite loops. */
+const MAX_WHILE_ITERATIONS = 1024;
+
+/** Process a `while (cond) body` statement, executing the loop up to MAX_WHILE_ITERATIONS times. */
+function processWhileStatement(
+  input: string,
+  scope: Map<string, ScopeValue>,
+): void {
+  const match = input.match(/^\s*while\s*\((.+)\)\s*(.*)$/);
+  if (!match || !match[1] || typeof match[2] !== "string") return;
+
+  const condExpr = match[1].trim();
+  const body = match[2].trim();
+
+  let iterations = 0;
+  while (iterations < MAX_WHILE_ITERATIONS) {
+    const condValue = resolveBlocksWithScope(condExpr, scope);
+    if (condValue === 0) break; // false condition: exit loop
+    processSingleStatement(body, scope);
+    iterations++;
+  }
+}
+
 /** Process statements in a block, updating the scope. */
 function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   for (let i = 0; i < parts.length - 1; i++) {
@@ -407,6 +513,8 @@ function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
       } else {
         resolveBlocksWithScope(part, scope);
       }
+    } else if (isWhileStatement(part)) {
+      processWhileStatement(part, scope);
     } else {
       processSingleStatement(part, scope);
     }
@@ -495,7 +603,7 @@ function resolveBlocksWithScope(
 
 /** Check if a string is an assignment like `x = expr`, `arr[0] = expr`, or `x += 1`. */
 function isAssignment(input: string): boolean {
-  return /^\w+(?:\s*\[[^\]]+\])*\s*[+-]?=/.test(input.trim());
+  return /^\w+(?:\s*\[[^\]]+\])*\s*[+-]?\s*=/.test(input.trim());
 }
 
 /** Evaluate an assignment statement like `x = 3`, `arr[0] = 100`, or `x += 1`. */
@@ -503,13 +611,13 @@ function evaluateAssignment(
   input: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  const match = input.match(/^(\w+)(.*)\s*[+-]?=\s*(.+)$/);
+  const match = input.match(/^(\w+)(.*)\s*[+-]?\s*=\s*(.+)$/);
   if (match && match[1] && typeof match[2] === "string" && match[3]) {
     const name = match[1];
-    // Detect compound assignment operator
-    const opMatch = input.match(/\s*([+-]=)\s*/);
+    // Detect compound assignment operator, normalizing whitespace within the operator
+    const opMatch = input.match(/\s*([+-])\s*=\s*/);
     const isCompoundOp = !!opMatch;
-    const compoundOp = isCompoundOp ? opMatch![1] : "";
+    const compoundOp = isCompoundOp ? opMatch![1] + "=" : "";
 
     // Extract indices from the middle part like [0][1]
     const idxMatch = match[2].match(/\[(\d+)\]/g) ?? [];

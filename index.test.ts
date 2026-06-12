@@ -109,6 +109,41 @@ test('executeTuff("let arr = [[1, 2], [3, 4]]; arr[0][1]") returns 2', () => {
   expect(executeTuff("let arr = [[1, 2], [3, 4]]; arr[0][1]")).toBe(2);
 });
 
+// While loop with mutable variable (covers while statement support)
+test('executeTuff("let mut x = 0; while (x < 4) x += 1; x") returns 4', () => {
+  expect(executeTuff("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+});
+
+// Comparison operator between variables (covers comparison in evaluateExpression)
+test('executeTuff("let x = 0; let y = 1; x < y") returns 1', () => {
+  expect(executeTuff("let x = 0; let y = 1; x < y")).toBe(1);
+});
+
+// Greater than comparison between variables (covers > operator)
+test('executeTuff("let x = 0; let y = 1; x > y") returns 0', () => {
+  expect(executeTuff("let x = 0; let y = 1; x > y")).toBe(0);
+});
+
+// Less than or equal comparison (covers <= operator)
+test('executeTuff("let x = 1; let y = 1; x <= y") returns 1', () => {
+  expect(executeTuff("let x = 1; let y = 1; x <= y")).toBe(1);
+});
+
+// Greater than or equal comparison (covers >= operator)
+test('executeTuff("let x = 2; let y = 1; x >= y") returns 1', () => {
+  expect(executeTuff("let x = 2; let y = 1; x >= y")).toBe(1);
+});
+
+// Equal comparison (covers == operator)
+test('executeTuff("let x = 5; let y = 5; x == y") returns 1', () => {
+  expect(executeTuff("let x = 5; let y = 5; x == y")).toBe(1);
+});
+
+// Not equal comparison (covers != operator)
+test('executeTuff("let x = 3; let y = 7; x != y") returns 1', () => {
+  expect(executeTuff("let x = 3; let y = 7; x != y")).toBe(1);
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });
