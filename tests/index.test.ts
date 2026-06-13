@@ -388,6 +388,10 @@ test("triple chained refinements (!= 1 && != 2 && != 3) evaluates correctly", ()
   expect(executeTuff("let x : U8 != 1 && != 2 && != 3 = 0U8; x + 1")).toBe(1);
 });
 
+test("nested array assignment via intermediate variable", () => {
+  expect(executeTuff(`let mut array = [0]; let mut temp = [array]; temp[0][0] = 1; temp[0][0]`)).toBe(1);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {
