@@ -240,6 +240,10 @@ test("type alias for struct with typed variable declaration", () => {
   ).toBe(3);
 });
 
+test("pointer declaration with address-of and dereference", () => {
+  expect(executeTuff("let x = 100; let y : *I32 = &x; *y")).toBe(100);
+});
+
 test("function with Void return type", () => {
   expect(executeTuff("fn empty() : Void => {}")).toBe(0);
 });

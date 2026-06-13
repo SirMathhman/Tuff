@@ -50,7 +50,7 @@ function tokenize(input: string): Token[] {
         value: parseFloat(num),
         suffix: typeSuffix,
       });
-    } else if ("+-*/".includes(ch)) {
+    } else if ("+-*/&".includes(ch)) {
       tokens.push({ type: "op", value: ch });
       i++;
     } else if (ch === "=" && input.charAt(i + 1) === ">") {
@@ -511,7 +511,34 @@ function parseUnary(
   while (true) {
     const currentToken = peek(tokens, pos);
     if (!currentToken || !isOp(currentToken)) break;
-    // Only treat `-` and `+` as unary operators, not comparison or other ops like `<`, `[`, etc.
+
+    // Check for dereference operator `*` — only when followed by an identifier (not multiplication)
+    if (currentToken.value === "*") {
+      const nextToken = tokens[pos[0] + 1];
+      if (nextToken && nextToken.type === "id") {
+        consume(tokens, pos); // consume *
+        // Look up the pointer target from POINTER_TARGETS WeakMap
+        const ptrTargets = getPointerTargets(
+          scope as unknown as Map<string, ScopeValue>,
+        );
+        const targetName = ptrTargets.get(nextToken.value);
+        if (!targetName) {
+          throw new Error(
+            `Cannot dereference non-pointer variable: ${nextToken.value}`,
+          );
+        }
+        // Resolve the target variable's current value from scope
+        const resolved = resolveIdentifier(
+          tokens,
+          pos,
+          scope as unknown as Map<string, ScopeValue>,
+        );
+        return typeof resolved === "number" ? resolved : 0;
+      } else {
+        break; // Not dereference — let parseTerm handle * as multiplication
+      }
+    }
+
     if (currentToken.value !== "-" && currentToken.value !== "+") break;
 
     // Check if the operand (one token ahead) is a number with an unsigned type suffix — reject negative unsigned literals
@@ -758,19 +785,38 @@ function getTypeAnnotations(
   return annots;
 }
 
-/** Parse a declaration, supporting simple types (`I32`), type aliases (`Point`), and struct types (`{ x : I32 }`). */
+/** WeakMap to track pointer variable targets per scope instance. */
+const POINTER_TARGETS = new WeakMap<
+  Map<string, ScopeValue>,
+  Map<string, string>
+>();
+function getPointerTargets(
+  scope: Map<string, ScopeValue>,
+): Map<string, string> {
+  let ptrs = POINTER_TARGETS.get(scope);
+  if (!ptrs) {
+    ptrs = new Map();
+    POINTER_TARGETS.set(scope, ptrs);
+  }
+  return ptrs;
+}
+
+/** Parse a declaration, supporting simple types (`I32`), pointer types (`*I32`), type aliases (`Point`), and struct types (`{ x : I32 }`). */
 function parseDeclaration(
   input: string,
 ): { name: string; typeAnnot?: string; rhs: string } | null {
-  // Try pattern with a simple or alias type (any identifier) first
+  // Try pattern with a simple or alias type (any identifier), optionally prefixed with * for pointer types
+  // Groups: [1]=name, [2]=pointer prefix (* or empty), [3]=base type name, [4]=RHS expression
   const simpleMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*([A-Za-z]\w*))?\s*=\s*(.+)$/,
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*(\*?)([A-Za-z]\w*))?\s*=\s*(.+)$/,
   );
-  if (simpleMatch && simpleMatch[1] && simpleMatch[3]) {
+  if (simpleMatch && simpleMatch[1] && simpleMatch[4]) {
+    const pointerPrefix = simpleMatch[2]; // "*" or undefined
+    const baseType = simpleMatch[3]; // "I32", "Point", etc.
     return {
       name: simpleMatch[1],
-      typeAnnot: simpleMatch[2] || undefined,
-      rhs: simpleMatch[3],
+      typeAnnot: (pointerPrefix ?? "") + (baseType ?? ""),
+      rhs: simpleMatch[4],
     };
   }
 
@@ -835,8 +881,9 @@ function processSingleStatement(
     let typeAnnot =
       declResult.typeAnnot; /* captured type like "U8", or undefined */
 
-    // If the annotation is not a built-in primitive, check for user-defined type alias
-    const isBuiltInType = /^[A-Z][0-9]/.test(typeAnnot ?? "");
+    // Strip pointer prefix (*) before checking built-in vs alias types
+    const baseType = typeAnnot?.replace(/^\*/, "") ?? "";
+    const isBuiltInType = /^[A-Z][0-9]/.test(baseType);
     if (typeAnnot && !isBuiltInType) {
       const aliasValue = scope.get("__type__" + typeAnnot);
       // If it's a struct alias and RHS is an object literal, skip strict validation
@@ -856,7 +903,8 @@ function processSingleStatement(
     if (
       !/^\s*\[/.test(rhs) &&
       !isObjectLiteral(rhs) &&
-      !rhs.trim().startsWith("{")
+      !rhs.trim().startsWith("{") &&
+      !/^&\s*/.test(rhs)
     ) {
       inferredRhsType = inferExpressionType(
         rhs,
@@ -864,19 +912,21 @@ function processSingleStatement(
       );
     }
     // Store the effective type (annotation wins over inference for widening purposes)
-    if (typeAnnot) {
-      getTypeAnnotations(scope).set(name, typeAnnot);
+    // For pointer types, store base type without * prefix
+    const effectiveType = typeAnnot?.replace(/^\*/, "") ?? undefined;
+    if (effectiveType) {
+      getTypeAnnotations(scope).set(name, effectiveType);
     } else if (inferredRhsType) {
       getTypeAnnotations(scope).set(name, inferredRhsType);
     }
     // Validate RHS type matches annotation for non-array/object expressions
     if (
-      typeAnnot &&
+      effectiveType &&
       inferredRhsType &&
-      !isSafeWiden(inferredRhsType, typeAnnot)
+      !isSafeWiden(inferredRhsType, effectiveType)
     ) {
       throw new Error(
-        `Type mismatch: expected ${typeAnnot} but got ${inferredRhsType}`,
+        `Type mismatch: expected ${effectiveType} but got ${inferredRhsType}`,
       );
     }
     // Track mutability: check for 'mut' keyword
@@ -885,7 +935,18 @@ function processSingleStatement(
       getMutableSet(scope).add(name);
     }
     let value: unknown;
-    if (/^\s*\[/.test(rhs)) {
+    // Check for address-of expression (&<varname>) — store pointer target and resolve to current value
+    const addrOfMatch = rhs.trim().match(/^&\s*(\w+)\s*$/);
+    if (addrOfMatch) {
+      const targetVarName = addrOfMatch[1]!;
+      getPointerTargets(scope).set(name, targetVarName);
+      // Store the current value of the target variable
+      value = scope.get(targetVarName);
+      if (value === undefined)
+        throw new Error(
+          `Cannot take address of undefined variable: ${targetVarName}`,
+        );
+    } else if (/^\s*\[/.test(rhs)) {
       // Array literal - parse directly to preserve array structure
       value = parseValue(rhs, scope);
     } else if (isObjectLiteral(rhs) || /^\s*\{[^}]*\s*:\s*/.test(rhs)) {
@@ -1118,6 +1179,8 @@ function processNestedBlock(
   const child = new Map(outerScope);
   // Also copy mutable variable tracking to the child scope
   MUTABLE_VARS.set(child, getMutableSet(outerScope));
+  // Copy pointer target tracking to the child scope
+  POINTER_TARGETS.set(child, getPointerTargets(outerScope));
   for (const ip of innerParts) {
     processSingleStatement(ip, child);
   }
@@ -1154,9 +1217,12 @@ function resolveBlocksWithScope(
   // Empty expression (e.g. Void function body `{}`) returns 0
   if (!resolved) return 0;
 
+  const evalScope = new Map(scope as unknown as Map<string, ScopeValue>);
+  // Copy pointer target tracking to the evaluation scope
+  POINTER_TARGETS.set(evalScope, getPointerTargets(scope));
   return evaluateExpression(
     resolved,
-    new Map(scope as unknown as Map<string, unknown>),
+    evalScope as unknown as Map<string, unknown>,
   );
 }
 
