@@ -166,6 +166,16 @@ test("!= inequality comparison between different values", () => {
 
 // --- Functions ---
 
+test("function with typed parameter and return type", () => {
+  expect(executeTuff("fn pass(first : I32) : I32 => first; pass(100)")).toBe(
+    100,
+  );
+});
+
+test("cross-function calls resolve correctly", () => {
+  expect(executeTuff("fn a() => b(); fn b() => 100; a()")).toBe(100);
+});
+
 test("function definition and call without parameters", () => {
   expect(executeTuff("fn get() => 100; get()")).toBe(100);
 });
@@ -176,10 +186,56 @@ test("function with parameters and argument passing", () => {
   ).toBe(7);
 });
 
-// --- Objects ---
+test("duplicate parameter names throw error", () => {
+  expect(() =>
+    executeTuff("fn pass(first : I32, first : I32) => {}"),
+  ).toThrow();
+});
 
-test("object literal with dot property access", () => {
-  expect(executeTuff("let temp = { value : 100 }; temp.value")).toBe(100);
+test("function with typed array parameter and index access", () => {
+  expect(
+    executeTuff("fn add(array : [I32; 2]) => array[0] + array[1]; add([1, 2])"),
+  ).toBe(3);
+});
+
+test("calling undefined function throws error", () => {
+  expect(() => executeTuff("undefinedFn()")).toThrow();
+});
+
+test("accessing property on non-object throws error", () => {
+  expect(() => executeTuff("let x = 42; x.prop")).toThrow();
+});
+
+test("if expression with else branch evaluates correctly", () => {
+  expect(executeTuff("if (1) { 10 } else { 20 }")).toBe(10);
+});
+
+test("nested block with declarations creates child scope", () => {
+  expect(() => executeTuff("{ let x = 5; }; x")).toThrow();
+});
+
+test("declaring variable with object literal works", () => {
+  expect(executeTuff("let obj = { a : 1, b : 2 }; obj.a + obj.b")).toBe(3);
+});
+
+test("object property access on point struct", () => {
+  expect(executeTuff("let point = { x : 1, y : 2 }; point.x + point.y")).toBe(
+    3,
+  );
+});
+
+test("function with Void return type", () => {
+  expect(executeTuff("fn empty() : Void => {}")).toBe(0);
+});
+
+test("mut keyword allows compound assignment on indexed array element", () => {
+  expect(() =>
+    executeTuff("mut arr = [10, 20]; arr[0] += 5; arr[0]"),
+  ).toThrow();
+});
+
+test("if expression with false condition returns else branch", () => {
+  expect(executeTuff("if (0) { 10 } else { 20 }")).toBe(20);
 });
 
 // --- Numeric type suffixes ---

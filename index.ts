@@ -1,4 +1,4 @@
-/** Token types for our simple arithmetic language. */
+﻿/** Token types for our simple arithmetic language. */
 type NumberToken = {
   type: "number";
   value: number;
@@ -216,15 +216,21 @@ function resolveIdentifier(
     if (fnDef !== undefined) {
       consume(tokens, pos); // consume (
       // Parse arguments: evaluate comma-separated expressions
-      const args: number[] = [];
+      const args: unknown[] = [];
       while (true) {
         const peekNext = peek(tokens, pos);
         if (!peekNext || (isOp(peekNext) && peekNext.value === ")")) break;
-        const argValue = parseExpression(
-          tokens,
-          pos,
-          scope as unknown as Map<string, unknown>,
-        );
+        // If argument starts with [ it's an array literal — use parseValuePrimary
+        let argValue: unknown;
+        if (isOp(peekNext) && peekNext.value === "[") {
+          argValue = parseValuePrimary(tokens, pos, scope);
+        } else {
+          argValue = parseExpression(
+            tokens,
+            pos,
+            scope as unknown as Map<string, unknown>,
+          );
+        }
         args.push(argValue);
       }
       const closeParen = peek(tokens, pos);
@@ -854,7 +860,9 @@ function isForStatement(input: string): boolean {
 
 /** Check if a statement is a function definition like `fn name() => expr` or `fn name(a, b) => expr`. */
 function isFnDefinition(input: string): boolean {
-  return /^\s*fn\s+\w+\s*\(.*?\)\s*=>\s*/.test(input.trim());
+  return /^\s*fn\s+\w+\s*\([^)]*\)(?:\s*:\s*(?:[A-Za-z]\d*|Void))?\s*=>\s*/.test(
+    input.trim(),
+  );
 }
 
 /** Process a function definition statement and store it in scope with parameter names. */
@@ -862,11 +870,29 @@ function processFnDefinition(
   input: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  const match = input.match(/^\s*fn\s+(\w+)\s*\(([^)]*)\)\s*=>\s*(.+)$/);
+  const match = input.match(
+    /^\s*fn\s+(\w+)\s*\(([^)]*)\)(?:\s*:\s*(?:[A-Za-z]\d*|Void))?\s*=>\s*(.+)$/,
+  );
   if (!match || !match[1] || typeof match[2] !== "string" || !match[3]) return;
+  // Strip type annotations from params (e.g. "first : I32" -> "first", "[I32; 2]" array types handled)
   const params = match[2].trim()
-    ? match[2].split(",").map((p) => p.trim())
+    ? match[2]
+        .split(",")
+        .map((p) => p.trim())
+        .map((p) => {
+          // Handle typed array params like "array : [I32; 2]" -> extract just the name
+          const arrMatch = p.match(/^(\w+)\s*:\s*\[/);
+          if (arrMatch) return arrMatch[1];
+          // Regular typed param: "name : Type" -> "name"
+          const colonIdx = p.indexOf(":");
+          return colonIdx >= 0 ? p.substring(0, colonIdx).trim() : p;
+        })
     : [];
+  // Check for duplicate parameter names
+  const seenParams = new Set(params);
+  if (seenParams.size !== params.length) {
+    throw new Error("Duplicate parameter name");
+  }
   // Store function as an object with body and parameters
   scope.set("__fn__" + match[1], { body: match[3].trim(), params });
 }
@@ -1030,6 +1056,9 @@ function resolveBlocksWithScope(
   // Trim whitespace that may remain after block removal
   resolved = resolved.trim();
 
+  // Empty expression (e.g. Void function body `{}`) returns 0
+  if (!resolved) return 0;
+
   return evaluateExpression(
     resolved,
     new Map(scope as unknown as Map<string, unknown>),
@@ -1155,8 +1184,18 @@ function evaluate(source: string): number {
   }
 
   // Handle top-level statements with multiple parts: `let x = ...; expr` or `fn f() => ...; call()`
-  if (isStatement(trimmed) || hasMultipleStatements(trimmed)) {
+  // Also handle standalone fn definitions (e.g. `fn empty() : Void => {}`)
+  if (
+    isStatement(trimmed) ||
+    hasMultipleStatements(trimmed) ||
+    isFnDefinition(trimmed)
+  ) {
     const scope = new Map<string, ScopeValue>();
+    // Process ALL parts for standalone fn defs so validation runs; processBlock skips last part intentionally
+    if (isFnDefinition(trimmed) && !hasMultipleStatements(trimmed)) {
+      processFnDefinition(trimmed.trim(), scope);
+      return 0;
+    }
     const parts: string[] = splitStatements(trimmed);
     processBlock(scope, parts);
     const lastPart = parts[parts.length - 1]!;
@@ -1190,8 +1229,11 @@ function evaluate(source: string): number {
     return resolveBlocksWithScope(lastPart, scope);
   }
 
+  // Replace empty blocks {} with 0 (Void functions return 0)
+  const noEmptyBlocks = trimmed.replace(/\{\s*\}/g, "0");
+
   // Find any { ... } blocks in the expression and recursively resolve them
-  let resolved = trimmed;
+  let resolved = noEmptyBlocks;
   let prev: string;
   do {
     prev = resolved;
