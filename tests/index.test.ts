@@ -354,6 +354,14 @@ test("division by variable with !=0 refinement type is allowed", () => {
   expect(executeTuff("let x : U8 != 0 = 1U8; 2 / x")).toBe(2);
 });
 
+// --- Generic types ---
+
+test("generic type alias resolves correctly", () => {
+  expect(
+    executeTuff("type Temp<T> = T; let temp : Temp<I32> = 100; temp"),
+  ).toBe(100);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {

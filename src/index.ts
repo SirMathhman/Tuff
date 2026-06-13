@@ -12,6 +12,7 @@ import {
   resolveBlocksWithScope,
   evaluateBlockWithScope,
   isFnDefinition,
+  isTypeAlias,
 } from "./evaluator-statements.js";
 
 // Wire up the circular dependency: parser needs resolveBlocksWithScope at runtime.
@@ -62,7 +63,8 @@ function evaluate(source: string): number {
   if (
     isStatement(trimmed) ||
     hasMultipleStatements(trimmed) ||
-    isFnDefinition(trimmed)
+    isFnDefinition(trimmed) ||
+    isTypeAlias(trimmed)
   ) {
     const scope = new Map<string, ScopeValue>();
     // Standalone fn definition: validate params then return 0

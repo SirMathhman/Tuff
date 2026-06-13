@@ -56,13 +56,13 @@ export function evaluateBlockWithScope(
   return resolveBlocksWithScope(lastPart!, scope);
 }
 
-/** Parse a declaration, supporting simple types (`I32`), pointer types (`*I32`), type aliases (`Point`), refinement types (`5U8`, `U8 != 0`), and struct types. */
+/** Parse a declaration, supporting simple types (`I32`), pointer types (`*I32`), type aliases (`Point`, `Temp<I32>`), refinement types (`5U8`, `U8 != 0`), and struct types. */
 function parseDeclaration(
   input: string,
 ): { name: string; typeAnnot?: string; rhs: string } | null {
-  // Try non-zero refinement pattern: `let x : U8 != 0 = ...`
+  // Try non-zero refinement pattern: `let x : U8 != 0 = ...` (also supports generics like Temp<I32> != 0)
   const nzMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)\s*!=\s*0\s*=\s*(.+)$/,
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?\s*!=\s*0\s*=\s*(.+)$/,
   );
   if (nzMatch && nzMatch[1] && nzMatch[4]) {
     const pointerPrefix = nzMatch[2]; // "*" or undefined
@@ -74,9 +74,9 @@ function parseDeclaration(
     };
   }
 
-  // Try pattern with a simple or alias type (any identifier), optionally prefixed with * for pointer types
+  // Try pattern with a simple or alias type, optionally generic like Temp<I32>, and optionally prefixed with * for pointer types
   const simpleMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*(\*?)([A-Za-z]\w*))?\s*=\s*(.+)$/,
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?)?\s*=\s*(.+)$/,
   );
   if (simpleMatch && simpleMatch[1] && simpleMatch[4]) {
     const pointerPrefix = simpleMatch[2]; // "*" or undefined
@@ -220,23 +220,31 @@ function processSingleStatement(
     const isValueRefinementType = /^-?[0-9]/.test(typeAnnot ?? "");
 
     // Strip pointer prefix (*) and non-zero refinement (!= 0) before checking built-in vs alias types
-    const baseType =
+    let baseType =
       typeAnnot
         ?.replace(/^\*/, "")
         ?.replace(/!=\s*0$/, "")
         .trim() ?? "";
     const isBuiltInType = /^[A-Z][0-9]/.test(baseType);
     if (typeAnnot && !isBuiltInType) {
-      const aliasValue = scope.get("__type__" + typeAnnot);
-      // If it's a struct alias and RHS is an object literal, skip strict validation
-      if (aliasValue !== undefined) {
-        getTypeAnnotations(scope).set(name, "struct");
-        typeAnnot = undefined; /* treat as untyped for widening purposes */
+      // Try resolving generic type alias like Temp<I32> -> I32
+      const resolvedGeneric = resolveGenericType(typeAnnot, scope);
+      if (resolvedGeneric !== undefined) {
+        baseType = resolvedGeneric;
+        getTypeAnnotations(scope).set(name, baseType);
       } else {
-        getTypeAnnotations(scope).set(name, typeAnnot);
+        // Try regular alias lookup
+        const aliasValue = scope.get("__type__" + typeAnnot);
+        // If it's a struct alias and RHS is an object literal, skip strict validation
+        if (aliasValue !== undefined) {
+          getTypeAnnotations(scope).set(name, "struct");
+          typeAnnot = undefined; /* treat as untyped for widening purposes */
+        } else {
+          getTypeAnnotations(scope).set(name, typeAnnot);
+        }
       }
     } else if (typeAnnot) {
-      getTypeAnnotations(scope).set(name, typeAnnot);
+      getTypeAnnotations(scope).set(name, baseType);
     }
 
     const rhs = declResult.rhs;
@@ -382,21 +390,40 @@ export function isFnDefinition(input: string): boolean {
   );
 }
 
-/** Check if a statement is a type alias like `type Point = { x : I32, y : I32 }`. */
+/** Check if a statement is a type alias like `type Point = { x : I32, y : I32 }` or generic `type Temp<T> = T`. */
 export function isTypeAlias(input: string): boolean {
-  return /^\s*type\s+\w+\s*=/.test(input.trim());
+  return /^\s*type\s+\w+(?:<[^>]+>)?\s*=/.test(input.trim());
 }
 
-/** Process a type alias statement and store it in scope. */
+/** Process a type alias statement and store it in scope. Supports generic aliases like `type Temp<T> = T`. */
 function processTypeAlias(
   input: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scope: Map<string, any>,
 ): void {
-  const match = input.match(/^\s*type\s+(\w+)\s*=\s*(.+)$/);
-  if (!match || !match[1] || typeof match[2] !== "string") return;
+  const match = input.match(/^\s*type\s+(\w+)(?:<([^>]+)>)?\s*=\s*(.+)$/);
+  if (!match || !match[1] || typeof match[3] !== "string") return;
   // Store type alias as a string under __type__ prefix
-  scope.set("__type__" + match[1], match[2].trim());
+  scope.set("__type__" + match[1], match[3].trim());
+}
+
+/** Resolve a generic type annotation like `Temp<I32>` by looking up the base alias and substituting params. */
+function resolveGenericType(
+  typeAnnot: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope: Map<string, any>,
+): string | undefined {
+  const genericMatch = typeAnnot.match(/^(\w+)<([^>]+)>$/);
+  if (!genericMatch) return undefined;
+  const baseName = genericMatch[1]!;
+  const paramValue = genericMatch[2]?.trim() ?? "";
+  // Look up the alias body (e.g., "T" for `type Temp<T> = T`)
+  const aliasBody = scope.get("__type__" + baseName);
+  if (aliasBody === undefined) return undefined;
+  // Substitute generic param placeholder with actual type
+  // For simple aliases like `type Temp<T> = T`, the body is just "T"
+  const resolvedType = String(aliasBody).replace(/\bT\b/g, paramValue);
+  return resolvedType;
 }
 
 /** Process a function definition statement and store it in scope with parameter names. */
