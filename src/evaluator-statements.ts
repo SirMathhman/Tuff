@@ -142,20 +142,20 @@ function processSingleStatement(
     const name = declResult.name;
     let typeAnnot = declResult.typeAnnot;
 
-    // Detect non-zero refinement and value refinement types
-    const isNonZeroRefinement = /!=\s*0$/.test(typeAnnot ?? "");
+    // Detect refinement types: `!= N` (possibly chained with &&) and value refinements like `5U8`
+    const hasRefinement = /!=\s*-?[0-9]/.test(typeAnnot ?? "");
     const isValueRefinementType = /^-?[0-9]/.test(typeAnnot ?? "");
 
-    // Strip pointer prefix (*) and non-zero refinement (!= 0) before checking built-in vs alias types
-    let baseType =
-      typeAnnot
-        ?.replace(/^\*/, "")
-        ?.replace(/!=\s*0$/, "")
-        .trim() ?? "";
+    // Strip pointer prefix (*) and full refinement chain (!= N && != M...) before checking built-in vs alias types
+    let baseType = typeAnnot?.replace(/^\*/, "")?.trim() ?? "";
+    if (hasRefinement) {
+      const refineIdx = baseType.indexOf("!=");
+      if (refineIdx >= 0) baseType = baseType.substring(0, refineIdx).trim();
+    }
     const isBuiltInType = /^[A-Z][0-9]/.test(baseType);
     if (typeAnnot && !isBuiltInType) {
-      // Strip != 0 suffix before trying to resolve generics
-      const typeForResolve = baseType.replace(/!=\s*0$/, "").trim();
+      // Strip full refinement chain before trying to resolve generics
+      const typeForResolve = baseType;
       const resolvedGeneric = resolveGenericType(typeForResolve, scope);
       if (resolvedGeneric !== undefined) {
         baseType = resolvedGeneric;
@@ -191,11 +191,7 @@ function processSingleStatement(
       );
     }
     // Store effective type; annotation wins over inference for widening purposes
-    let effectiveType =
-      typeAnnot
-        ?.replace(/^\*/, "")
-        ?.replace(/!=\s*0$/, "")
-        .trim() ?? undefined;
+    let effectiveType = baseType || undefined;
     if (isValueRefinementType && effectiveType) {
       const refBaseMatch = effectiveType.match(
         /^-?[0-9]+(?:\.[0-9]+)?([A-Za-z]\w*)?$/,
@@ -248,9 +244,24 @@ function processSingleStatement(
       value = resolveBlocksWithScope(rhs, scope);
     }
 
-    // Track non-zero refined variables for division safety checks
-    if (isNonZeroRefinement) {
+    // Extract all != N values from annotation for runtime validation (handles chains like != 5 && != 7)
+    const excludedValues = [...(typeAnnot ?? "").matchAll(/!=\s*(-?[0-9]+(?:\.[0-9]+)?)/g)].map(
+      (m) => parseFloat(m[1]!),
+    );
+
+    // Track non-zero refined variables for division safety checks (backward compat)
+    if (excludedValues.includes(0)) {
       getNonZeroSet(scope).add(name);
+    }
+
+    // Validate that assigned value doesn't equal any excluded refinement value
+    if (
+      typeof value === "number" &&
+      excludedValues.some((v) => value === v)
+    ) {
+      throw new Error(
+        `Refinement type violation: ${name} cannot be ${excludedValues.find((v) => value === v)}`,
+      );
     }
 
     // Validate refinement type

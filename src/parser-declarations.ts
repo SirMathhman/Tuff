@@ -2,18 +2,22 @@
 export function parseDeclaration(
   input: string,
 ): { name: string; typeAnnot?: string; rhs: string } | null {
-  // Non-zero refinement: `let x : U8 != 0 = ...`
+  // Non-zero refinement: `let x : U8 != N = ...` or chained `!= N && != M = ...`
   const nzMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?\s*!=\s*0\s*=\s*(.+)$/,
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?(.*?)\s*=\s*(.+)$/,
   );
-  if (nzMatch && nzMatch[1] && nzMatch[4]) {
+  if (nzMatch && nzMatch[1] && typeof nzMatch[4] === "string" && typeof nzMatch[5] === "string") {
     const pointerPrefix = nzMatch[2]; // "*" or undefined
     const baseType = nzMatch[3]; // "U8", "I32", etc.
-    return {
-      name: nzMatch[1],
-      typeAnnot: `${(pointerPrefix ?? "") + (baseType ?? "")} != 0`,
-      rhs: nzMatch[4],
-    };
+    const middlePart = nzMatch[4].trim();
+    // Check if this is a refinement (starts with !=)
+    if (/^!=\s*-?[0-9]/.test(middlePart)) {
+      return {
+        name: nzMatch[1],
+        typeAnnot: `${(pointerPrefix ?? "") + (baseType ?? "")} ${middlePart}`,
+        rhs: nzMatch[5],
+      };
+    }
   }
 
   // Try pattern with a colon-prefixed type, optionally generic like Temp<I32>, and optionally prefixed with * for pointer types.
@@ -44,23 +48,41 @@ export function parseDeclaration(
         break;
       }
     }
-    // Skip whitespace and look for `!=` (non-zero refinement) or plain `=`
+    // Skip whitespace and look for `!=` (refinement) or plain `=`
     while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-    let isNonZero = false;
+    let refinementChain: string | undefined;
     if (input[pos] === "!" && input[pos + 1] === "=") {
-      // Skip past `!= 0`
-      isNonZero = true;
-      while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-      pos += 2; // skip `!=`
-      while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-      if (input[pos] === "0") pos++; // skip `0`
-      while (pos < input.length && /\s/.test(input[pos]!)) pos++;
+      // Collect full refinement chain, e.g. `!= 5 && != 7`
+      const refineStart = pos;
+      while (pos < input.length) {
+        // Skip past one `!= N` clause
+        while (pos < input.length && /\s/.test(input[pos]!)) pos++;
+        if (input[pos] === "!")
+          pos += 2; // skip `!=`
+        else break;
+        while (pos < input.length && /\s/.test(input[pos]!)) pos++;
+        if (/^-?[0-9]/.test(input[pos]!)) {
+          if (input[pos] === "-") pos++;
+          while (pos < input.length && /[0-9.]/.test(input[pos]!)) pos++;
+        }
+        // Check for `&&` to continue chain
+        while (pos < input.length && /\s/.test(input[pos]!)) pos++;
+        if (input[pos] === "&" && input[pos + 1] === "&") {
+          pos += 2; // skip `&&`
+        } else {
+          break;
+        }
+      }
+      refinementChain = input.slice(refineStart, pos).trim();
     }
     if (pos < input.length && input[pos] === "=") {
       const rhs = input.slice(pos + 1).trim();
       return {
         name,
-        typeAnnot: pointerPrefix + baseType + (isNonZero ? " != 0" : ""),
+        typeAnnot:
+          pointerPrefix +
+          baseType +
+          (refinementChain !== undefined ? ` ${refinementChain}` : ""),
         rhs,
       };
     }

@@ -376,6 +376,14 @@ test("nested generic with non-zero refinement resolves correctly", () => {
   ).toBe(100);
 });
 
+test("non-zero refinement with value != 5 evaluates correctly", () => {
+  expect(executeTuff("let x : U8 != 5 = 1U8; x + 1")).toBe(2);
+});
+
+test("chained refinements (!= 5 && != 7) evaluates correctly", () => {
+  expect(executeTuff("let x : U8 != 5 && != 7 = 1U8; x + 1")).toBe(2);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {
