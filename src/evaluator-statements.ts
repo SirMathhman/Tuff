@@ -245,9 +245,9 @@ function processSingleStatement(
     }
 
     // Extract all != N values from annotation for runtime validation (handles chains like != 5 && != 7)
-    const excludedValues = [...(typeAnnot ?? "").matchAll(/!=\s*(-?[0-9]+(?:\.[0-9]+)?)/g)].map(
-      (m) => parseFloat(m[1]!),
-    );
+    const excludedValues = [
+      ...(typeAnnot ?? "").matchAll(/!=\s*(-?[0-9]+(?:\.[0-9]+)?)/g),
+    ].map((m) => parseFloat(m[1]!));
 
     // Track non-zero refined variables for division safety checks (backward compat)
     if (excludedValues.includes(0)) {
@@ -255,10 +255,7 @@ function processSingleStatement(
     }
 
     // Validate that assigned value doesn't equal any excluded refinement value
-    if (
-      typeof value === "number" &&
-      excludedValues.some((v) => value === v)
-    ) {
+    if (typeof value === "number" && excludedValues.some((v) => value === v)) {
       throw new Error(
         `Refinement type violation: ${name} cannot be ${excludedValues.find((v) => value === v)}`,
       );

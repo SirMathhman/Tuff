@@ -6,7 +6,12 @@ export function parseDeclaration(
   const nzMatch = input.match(
     /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?(.*?)\s*=\s*(.+)$/,
   );
-  if (nzMatch && nzMatch[1] && typeof nzMatch[4] === "string" && typeof nzMatch[5] === "string") {
+  if (
+    nzMatch &&
+    nzMatch[1] &&
+    typeof nzMatch[4] === "string" &&
+    typeof nzMatch[5] === "string"
+  ) {
     const pointerPrefix = nzMatch[2]; // "*" or undefined
     const baseType = nzMatch[3]; // "U8", "I32", etc.
     const middlePart = nzMatch[4].trim();

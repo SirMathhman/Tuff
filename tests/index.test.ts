@@ -384,6 +384,10 @@ test("chained refinements (!= 5 && != 7) evaluates correctly", () => {
   expect(executeTuff("let x : U8 != 5 && != 7 = 1U8; x + 1")).toBe(2);
 });
 
+test("triple chained refinements (!= 1 && != 2 && != 3) evaluates correctly", () => {
+  expect(executeTuff("let x : U8 != 1 && != 2 && != 3 = 0U8; x + 1")).toBe(1);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {
