@@ -404,6 +404,10 @@ test("indirect array indexing: array[array[0]] assignment and read", () => {
   ).toBe(100);
 });
 
+test("value refinement type { 5U8 } evaluates correctly", () => {
+  expect(executeTuff(`let x : { 5U8 } = { 5U8 }; x`)).toBe(5);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {

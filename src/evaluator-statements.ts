@@ -65,7 +65,7 @@ export function isAssignment(input: string): boolean {
   if (!idMatch) return false;
 
   let pos = idMatch[1]!.length;
-  
+
   // Skip whitespace and balanced bracket segments [...]
   while (pos < trimmed.length) {
     if (trimmed[pos] === " ") pos++;
@@ -82,10 +82,10 @@ export function isAssignment(input: string): boolean {
 
   // Skip whitespace around operator
   while (pos < trimmed.length && trimmed[pos] === " ") pos++;
-  
+
   // Check for optional +/- before =
   if (pos < trimmed.length && "+-".includes(trimmed[pos]!)) pos++;
-  
+
   // Skip whitespace between op and =
   while (pos < trimmed.length && trimmed[pos] === " ") pos++;
 
