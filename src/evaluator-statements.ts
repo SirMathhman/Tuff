@@ -18,8 +18,9 @@ import {
   isSafeWiden,
   parseObjectLiteral,
 } from "./parser-expressions.js";
+import { parseDeclaration } from "./parser-declarations.js";
 
-/** Check if a block contains only statements (assignments/declarations). */
+/** Check for statement-only block. */
 function isStatementBlock(inner: string): boolean {
   if (isObjectLiteral(inner)) return false;
   const parts = splitStatements(inner);
@@ -31,7 +32,7 @@ function isStatementBlock(inner: string): boolean {
   return true;
 }
 
-/** Evaluate a block's inner content with an existing scope. */
+/** Evaluate block content with existing scope. */
 export function evaluateBlockWithScope(
   inner: string,
   scope: Map<string, ScopeValue>,
@@ -56,113 +57,12 @@ export function evaluateBlockWithScope(
   return resolveBlocksWithScope(lastPart!, scope);
 }
 
-/** Parse a declaration, supporting simple types (`I32`), pointer types (`*I32`), type aliases (`Point`, `Temp<I32>`), refinement types (`5U8`, `U8 != 0`), and struct types. */
-function parseDeclaration(
-  input: string,
-): { name: string; typeAnnot?: string; rhs: string } | null {
-  // Try non-zero refinement pattern: `let x : U8 != 0 = ...` (also supports generics like Temp<I32> != 0)
-  const nzMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?\s*!=\s*0\s*=\s*(.+)$/,
-  );
-  if (nzMatch && nzMatch[1] && nzMatch[4]) {
-    const pointerPrefix = nzMatch[2]; // "*" or undefined
-    const baseType = nzMatch[3]; // "U8", "I32", etc.
-    return {
-      name: nzMatch[1],
-      typeAnnot: `${(pointerPrefix ?? "") + (baseType ?? "")} != 0`,
-      rhs: nzMatch[4],
-    };
-  }
-
-  // Try pattern with a colon-prefixed type, optionally generic like Temp<I32>, and optionally prefixed with * for pointer types.
-  // Use balanced bracket tracking to handle nested generics like Temp<Temp<I32>>.
-  const declPrefix = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)/,
-  );
-  if (declPrefix && declPrefix[1]) {
-    const name = declPrefix[1];
-    const pointerPrefix = declPrefix[2] ?? "";
-    let baseType = declPrefix[3]!;
-    // Continue scanning after the matched prefix to capture any generic params with balanced < > tracking
-    let pos = declPrefix[0].length;
-    while (pos < input.length) {
-      const ch = input[pos];
-      if (ch === "<") {
-        // Collect everything inside balanced angle brackets, including the brackets themselves
-        const genericStart = pos;
-        let depth = 1;
-        pos++;
-        while (pos < input.length && depth > 0) {
-          if (input[pos] === "<") depth++;
-          else if (input[pos] === ">") depth--;
-          pos++;
-        }
-        baseType += input.slice(genericStart, pos);
-      } else {
-        break;
-      }
-    }
-    // Skip whitespace and look for `=`
-    while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-    if (pos < input.length && input[pos] === "=") {
-      const rhs = input.slice(pos + 1).trim();
-      return { name, typeAnnot: pointerPrefix + baseType, rhs };
-    }
-  }
-
-  // Try pattern without a colon-prefixed type (no explicit annotation)
-  const simpleMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
-  );
-  if (simpleMatch && simpleMatch[1] && simpleMatch[2]) {
-    return { name: simpleMatch[1], typeAnnot: undefined, rhs: simpleMatch[2] };
-  }
-
-  // Try refinement type: `let x : 5U8 = ...` (numeric literal with optional suffix as type annotation)
-  const refMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(-?[0-9]+(?:\.[0-9]+)?)([A-Za-z]\w*)?\s*=\s*(.+)$/,
-  );
-  if (refMatch && refMatch[1] && refMatch[4]) {
-    const numPart = refMatch[2]; // "5", "-3.14", etc.
-    const suffixPart = refMatch[3]; // "U8", "I32", or undefined
-    return {
-      name: refMatch[1],
-      typeAnnot: `${numPart}${suffixPart ?? ""}`,
-      rhs: refMatch[4],
-    };
-  }
-
-  // Fallback for struct-typed declarations like `let point : { x : I32, y : I32 } = ...`
-  const structPrefix = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*\{/,
-  );
-  if (!structPrefix) return null;
-
-  // Simpler approach: find first `=` outside of braces, starting after the prefix match
-  const remainder = input.slice(structPrefix[0].length);
-  let braceDepth = 1;
-  for (let i = 0; i < remainder.length; i++) {
-    if (remainder[i] === "{") braceDepth++;
-    else if (remainder[i] === "}") braceDepth--;
-    else if (remainder[i] === "=" && braceDepth === 0) {
-      const rhs = remainder.slice(i + 1).trim();
-      return {
-        name: structPrefix[1]!,
-        typeAnnot: undefined /* struct types not validated yet */,
-        rhs,
-      };
-    }
-  }
-
-  return null;
-}
-
-/** Check if a string is an assignment like `x = expr`, `arr[0] = expr`, or `x += 1`. */
+/** Check for assignment pattern. */
 export function isAssignment(input: string): boolean {
   return /^\w+(?:\s*\[[^\]]+\])*\s*[+-]?\s*=/.test(input.trim());
 }
 
-/** Evaluate an assignment statement like `x = 3`, `arr[0] = 100`, or `x += 1`. */
+/** Evaluate assignment statement. */
 function evaluateAssignment(
   input: string,
   scope: Map<string, ScopeValue>,
@@ -170,7 +70,7 @@ function evaluateAssignment(
   const match = input.match(/^(\w+)(.*)\s*[+-]?\s*=\s*(.+)$/);
   if (match && match[1] && typeof match[2] === "string" && match[3]) {
     const name = match[1];
-    // Detect compound assignment operator, normalizing whitespace within the operator
+    // Detect compound assignment
     const opMatch = input.match(/\s*([+-])\s*=\s*/);
     const isCompoundOp = !!opMatch;
     const compoundOp = isCompoundOp ? opMatch![1] + "=" : "";
@@ -237,7 +137,6 @@ function processSingleStatement(
   part: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  // Handle let/const/var declarations
   const declResult = parseDeclaration(part);
   if (declResult) {
     const name = declResult.name;
@@ -248,11 +147,16 @@ function processSingleStatement(
     const isValueRefinementType = /^-?[0-9]/.test(typeAnnot ?? "");
 
     // Strip pointer prefix (*) and non-zero refinement (!= 0) before checking built-in vs alias types
-    let baseType = typeAnnot?.replace(/^\*/, "")?.replace(/!=\s*0$/, "").trim() ?? "";
+    let baseType =
+      typeAnnot
+        ?.replace(/^\*/, "")
+        ?.replace(/!=\s*0$/, "")
+        .trim() ?? "";
     const isBuiltInType = /^[A-Z][0-9]/.test(baseType);
     if (typeAnnot && !isBuiltInType) {
-      // Try resolving generic type alias like Temp<I32> -> I32
-      const resolvedGeneric = resolveGenericType(typeAnnot, scope);
+      // Strip != 0 suffix before trying to resolve generics
+      const typeForResolve = baseType.replace(/!=\s*0$/, "").trim();
+      const resolvedGeneric = resolveGenericType(typeForResolve, scope);
       if (resolvedGeneric !== undefined) {
         baseType = resolvedGeneric;
         typeAnnot = resolvedGeneric; // update for downstream effectiveType
@@ -275,16 +179,27 @@ function processSingleStatement(
     const rhs = declResult.rhs;
     // Infer and store RHS type for simple numeric expressions so variable references carry types
     let inferredRhsType: string | undefined;
-    if (!/^\s*\[/.test(rhs) && !isObjectLiteral(rhs) && !rhs.trim().startsWith("{") && !/^&\s*/.test(rhs)) {
+    if (
+      !/^\s*\[/.test(rhs) &&
+      !isObjectLiteral(rhs) &&
+      !rhs.trim().startsWith("{") &&
+      !/^&\s*/.test(rhs)
+    ) {
       inferredRhsType = inferExpressionType(
         rhs,
         scope as unknown as Map<string, ScopeValue>,
       );
     }
     // Store effective type; annotation wins over inference for widening purposes
-    let effectiveType = typeAnnot?.replace(/^\*/, "")?.replace(/!=\s*0$/, "").trim() ?? undefined;
+    let effectiveType =
+      typeAnnot
+        ?.replace(/^\*/, "")
+        ?.replace(/!=\s*0$/, "")
+        .trim() ?? undefined;
     if (isValueRefinementType && effectiveType) {
-      const refBaseMatch = effectiveType.match(/^-?[0-9]+(?:\.[0-9]+)?([A-Za-z]\w*)?$/);
+      const refBaseMatch = effectiveType.match(
+        /^-?[0-9]+(?:\.[0-9]+)?([A-Za-z]\w*)?$/,
+      );
       effectiveType = refBaseMatch ? (refBaseMatch[1] ?? undefined) : undefined;
     }
     if (effectiveType) {
@@ -308,29 +223,26 @@ function processSingleStatement(
       getMutableSet(scope).add(name);
     }
     let value: unknown;
-    // Check for address-of expression (&<varname>) — store pointer target and resolve to current value
+    // Address-of, array literal, object literal, or expression
     const addrOfMatch = rhs.trim().match(/^&\s*(\w+)\s*$/);
     if (addrOfMatch) {
-      const targetVarName = addrOfMatch[1]!;
-      getPointerTargets(scope).set(name, targetVarName);
-      // Store the current value of the target variable
-      value = scope.get(targetVarName);
+      getPointerTargets(scope).set(name, addrOfMatch[1]!);
+      value = scope.get(addrOfMatch[1]!);
       if (value === undefined)
         throw new Error(
-          `Cannot take address of undefined variable: ${targetVarName}`,
+          `Cannot take address of undefined variable: ${addrOfMatch[1]}`,
         );
     } else if (/^\s*\[/.test(rhs)) {
       // Array literal - parse directly to preserve array structure
       value = parseValue(rhs, scope);
     } else if (isObjectLiteral(rhs) || /^\s*\{[^}]*\s*:\s*/.test(rhs)) {
-      // Object literal - strip outer braces and parse as object
-      const inner = rhs.trim();
-      const stripped =
-        inner.startsWith("{") && inner.endsWith("}")
-          ? inner.slice(1, -1)
-          : inner;
-      const tokens = tokenize(stripped);
-      value = parseObjectLiteral(tokens, [0], scope);
+      // Object literal
+      const stripped = rhs.trim();
+      const inner =
+        stripped.startsWith("{") && stripped.endsWith("}")
+          ? stripped.slice(1, -1)
+          : stripped;
+      value = parseObjectLiteral(tokenize(inner), [0], scope);
     } else {
       // Expression or block - resolve blocks first then evaluate
       value = resolveBlocksWithScope(rhs, scope);
@@ -341,7 +253,7 @@ function processSingleStatement(
       getNonZeroSet(scope).add(name);
     }
 
-    // Validate refinement type: the resolved value must match the exact expected value+type
+    // Validate refinement type
     if (isValueRefinementType && typeof value === "number") {
       const refNumMatch = typeAnnot!.match(
         /^(-?[0-9]+(?:\.[0-9]+)?)([A-Za-z]\w*)?$/,
@@ -394,7 +306,7 @@ export function isTypeAlias(input: string): boolean {
   return /^\s*type\s+\w+(?:<[^>]+>)?\s*=/.test(input.trim());
 }
 
-/** Process a type alias statement and store it in scope. Supports generic aliases like `type Temp<T> = T`. */
+/** Process and store a type alias. Supports generics like `type Temp<T> = T`. */
 function processTypeAlias(
   input: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -402,28 +314,23 @@ function processTypeAlias(
 ): void {
   const match = input.match(/^\s*type\s+(\w+)(?:<([^>]+)>)?\s*=\s*(.+)$/);
   if (!match || !match[1] || typeof match[3] !== "string") return;
-  // Store type alias as a string under __type__ prefix
   scope.set("__type__" + match[1], match[3].trim());
 }
 
-/** Resolve a generic type annotation like `Temp<I32>` by looking up the base alias and substituting params. */
+/** Resolve generic type like `Temp<I32>` by looking up alias and substituting params. */
 function resolveGenericType(
   typeAnnot: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scope: Map<string, any>,
 ): string | undefined {
-  // Match outermost generic pattern with balanced angle brackets (handles nesting)
   const outerMatch = typeAnnot.match(/^(\w+)<(.*)>$/s);
   if (!outerMatch) return undefined;
-  const baseName = outerMatch[1]!;
-  const paramValue = outerMatch[2]?.trim() ?? "";
-
-  // Look up the alias body (e.g., "T" for `type Temp<T> = T`)
-  const aliasBody = scope.get("__type__" + baseName);
+  const aliasBody = scope.get("__type__" + outerMatch[1]!);
   if (aliasBody === undefined) return undefined;
-
-  // Substitute generic param placeholder with actual type
-  const resolvedType = String(aliasBody).replace(/\bT\b/g, paramValue);
+  const resolvedType = String(aliasBody).replace(
+    /\bT\b/g,
+    outerMatch[2]?.trim() ?? "",
+  );
 
   // Recursively resolve if the result still contains generic patterns
   if (/\w+<[^>]*>/.test(resolvedType)) {
@@ -432,7 +339,7 @@ function resolveGenericType(
   return resolvedType;
 }
 
-/** Process a function definition statement and store it in scope with parameter names. */
+/** Process and store a function definition. */
 export function processFnDefinition(
   input: string,
   scope: Map<string, ScopeValue>,
@@ -441,48 +348,35 @@ export function processFnDefinition(
     /^\s*fn\s+(\w+)\s*\(([^)]*)\)(?:\s*:\s*(?:[A-Za-z]\d*|Void))?\s*=>\s*(.+)$/,
   );
   if (!match || !match[1] || typeof match[2] !== "string" || !match[3]) return;
-  // Strip type annotations from params (e.g. "first : I32" -> "first")
+  const extractName = (p: string) => {
+    const arrMatch = p.match(/^(\w+)\s*:\s*\[/);
+    if (arrMatch) return arrMatch[1];
+    const ci = p.indexOf(":");
+    return ci >= 0 ? p.substring(0, ci).trim() : p;
+  };
   const params = match[2].trim()
-    ? match[2]
-        .split(",")
-        .map((p) => p.trim())
-        .map((p) => {
-          // Handle typed array params like "array : [I32; 2]" -> extract just the name
-          const arrMatch = p.match(/^(\w+)\s*:\s*\[/);
-          if (arrMatch) return arrMatch[1];
-          // Regular typed param: "name : Type" -> "name"
-          const colonIdx = p.indexOf(":");
-          return colonIdx >= 0 ? p.substring(0, colonIdx).trim() : p;
-        })
+    ? match[2].split(",").map((p) => extractName(p.trim()))
     : [];
-  // Check for duplicate parameter names
-  const seenParams = new Set(params);
-  if (seenParams.size !== params.length) {
+  if (new Set(params).size !== params.length)
     throw new Error("Duplicate parameter name");
-  }
-  // Store function as an object with body and parameters
   scope.set("__fn__" + match[1], { body: match[3].trim(), params });
 }
 
 /** Maximum number of iterations for while loops to prevent infinite loops. */
 const MAX_WHILE_ITERATIONS = 1024;
 
-/** Process a `while (cond) body` statement, executing the loop up to MAX_WHILE_ITERATIONS times. */
+/** Process a `while (cond) body` statement. */
 function processWhileStatement(
   input: string,
   scope: Map<string, ScopeValue>,
 ): void {
   const match = input.match(/^\s*while\s*\((.+)\)\s*(.*)$/);
   if (!match || !match[1] || typeof match[2] !== "string") return;
-
-  const condExpr = match[1].trim();
-  const body = match[2].trim();
-
   let iterations = 0;
   while (iterations < MAX_WHILE_ITERATIONS) {
-    const condValue = resolveBlocksWithScope(condExpr, scope);
-    if (condValue === 0) break; // false condition: exit loop
-    processSingleStatement(body, scope);
+    const condValue = resolveBlocksWithScope(match[1].trim(), scope);
+    if (condValue === 0) break;
+    processSingleStatement(match[2].trim(), scope);
     iterations++;
   }
 }
@@ -494,21 +388,13 @@ function processForStatement(
 ): void {
   const match = input.match(/^\s*for\s*\((.+?)\)\s*(.*)$/);
   if (!match || !match[1]) return;
-
-  const header = match[1].trim();
+  const rangeMatch = match[1]!.trim().match(/^(\w+)\s+in\s+(.+?)\.\.(.+)$/);
+  if (!rangeMatch) return;
   const body = (match[2] ?? "").trim();
-
-  // Parse `var in start..end`
-  const rangeMatch = header.match(/^(\w+)\s+in\s+(.+?)\.\.(.+)$/);
-  if (!rangeMatch || !rangeMatch[1] || !rangeMatch[2] || !rangeMatch[3]) return;
-
-  const varName = rangeMatch[1].trim();
-  const startVal = parseValue(rangeMatch[2].trim(), scope);
-  const endVal = parseValue(rangeMatch[3].trim(), scope);
-
+  const varName = rangeMatch[1]!.trim();
+  const startVal = parseValue(rangeMatch[2]!.trim(), scope);
+  const endVal = parseValue(rangeMatch[3]!.trim(), scope);
   if (typeof startVal !== "number" || typeof endVal !== "number") return;
-
-  // Ensure the loop variable is tracked as mutable so compound assignments work
   getMutableSet(scope).add(varName);
 
   for (
@@ -521,7 +407,7 @@ function processForStatement(
   }
 }
 
-/** Process statements in a block, updating the scope. */
+/** Process statements in a block. */
 export function processBlock(
   scope: Map<string, ScopeValue>,
   parts: string[],
@@ -529,11 +415,10 @@ export function processBlock(
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
     if (IS_IF.test(part)) {
-      // Check if next part is the matching `else` branch
       const nextPart = parts[i + 1];
       if (nextPart && IS_ELSE.test(nextPart)) {
         processSingleIfElseStatement(part, nextPart.trim(), scope);
-        i++; // skip else since we already consumed it
+        i++;
       } else {
         resolveBlocksWithScope(part, scope);
       }
@@ -557,46 +442,34 @@ function processSingleIfElseStatement(
   elsePart: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  // Extract condition from `if (cond) body`
   const match = ifPart.match(/^if\s*\((.+)\)\s*(.*)$/);
   if (!match || !match[1] || typeof match[2] !== "string") return;
 
   const condValue = resolveBlocksWithScope(match[1], scope);
   const body = match[2].trim();
-
   if (condValue !== 0) {
-    // Execute then branch
     processSingleStatement(body, scope);
   } else {
-    // Execute else branch: strip leading `else` keyword
-    const stripped = elsePart.replace(/^\s*else\s+/, "");
-    processSingleStatement(stripped.trim(), scope);
+    processSingleStatement(elsePart.replace(/^\s*else\s+/, "").trim(), scope);
   }
 }
 
-/** Process a nested block with its own child scope. */
+/** Process nested block with child scope. */
 function processNestedBlock(
   innerParts: string[],
   outerScope: Map<string, ScopeValue>,
 ): void {
-  // If the block has no declarations, just process directly on outer scope
   const hasDeclarations = innerParts.some((p) =>
     /^(?:let|const|var)\s+/.test(p.trim()),
   );
   if (!hasDeclarations) {
-    for (const ip of innerParts) {
-      processSingleStatement(ip, outerScope);
-    }
+    for (const ip of innerParts) processSingleStatement(ip, outerScope);
     return;
   }
 
-  // Child scope copies references from parent so lookups find inherited values
   const child = new Map(outerScope);
-  // Also copy mutable variable tracking to the child scope
   MUTABLE_VARS.set(child, getMutableSet(outerScope));
-  // Copy pointer target tracking to the child scope
   POINTER_TARGETS.set(child, getPointerTargets(outerScope));
-  // Copy non-zero refinement tracking to the child scope
   NON_ZERO_VARS.set(child, getNonZeroSet(outerScope));
   for (const ip of innerParts) {
     processSingleStatement(ip, child);
@@ -609,35 +482,26 @@ export function resolveBlocksWithScope(
   scope: Map<string, ScopeValue>,
 ): number {
   let resolved = input;
-  // Recursively replace innermost blocks with their values (or empty if statement-only)
-  // But skip object literals which have key:value patterns
+  // Recursively replace innermost blocks
   let prev: string;
   do {
     prev = resolved;
-    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, blockInner) => {
-      const trimmed = blockInner.trim();
-      // Skip object literals (have `key : value` pattern, with optional spaces around colon)
-      if (/^\s*\w+\s*:\s*/.test(trimmed)) return _match;
-      // If the block is purely statements (assignments/declarations), process for side effects only
+    resolved = prev.replace(/\{([^{}]+)\}/g, (_m, bi) => {
+      const trimmed = bi.trim();
+      if (/^\s*\w+\s*:/.test(trimmed)) return _m;
       if (isStatementBlock(trimmed)) {
-        const innerParts = splitStatements(trimmed);
-        processNestedBlock(innerParts, scope);
+        processNestedBlock(splitStatements(trimmed), scope);
         return "";
       }
       return String(evaluateBlockWithScope(trimmed, scope));
     });
   } while (resolved !== prev && /\{/.test(resolved));
 
-  // Trim whitespace that may remain after block removal
   resolved = resolved.trim();
-
-  // Empty expression (e.g. Void function body `{}`) returns 0
-  if (!resolved) return 0;
+  if (!resolved) return 0; // empty expression returns 0
 
   const evalScope = new Map(scope as unknown as Map<string, ScopeValue>);
-  // Copy pointer target tracking to the evaluation scope
   POINTER_TARGETS.set(evalScope, getPointerTargets(scope));
-  // Copy non-zero refinement tracking to the evaluation scope
   NON_ZERO_VARS.set(evalScope, getNonZeroSet(scope));
   return evaluateExpression(
     resolved,
