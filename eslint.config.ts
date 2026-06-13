@@ -13,6 +13,10 @@ export default defineConfig([
       "no-new-func": "error",
       "no-eval": "error",
       "@typescript-eslint/no-explicit-any": "error",
+      "max-lines": [
+        "error",
+        { max: 500, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
   tseslint.configs.recommended,
