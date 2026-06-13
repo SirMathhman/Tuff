@@ -1,4 +1,4 @@
-import { executeTuff } from ".";
+import { executeTuff } from "../src/index.js";
 import { test, expect } from "bun:test";
 
 // --- Basic evaluation ---

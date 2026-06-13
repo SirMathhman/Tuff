@@ -3,15 +3,18 @@
     "Stop": [
       {
         "type": "command",
+        "comment": "Run tests with coverage (updated for new directory structure)",
         "command": "cmd /c \"bun test --coverage 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       },
       {
         "type": "command",
+        "comment": "Run linter checks",
         "command": "cmd /c \"npm run lint 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       },
       {
         "type": "command",
-        "command": "cmd /c \"pmd cpd index.ts --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "comment": "Check for code duplication with PMD CPD (src/index.ts)",
+        "command": "cmd /c \"pmd cpd C:/Users/mathm/Documents/Projects/Tuff/src/index.ts --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
