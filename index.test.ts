@@ -215,6 +215,26 @@ test('executeTuff("(1 + (1U8 + 1I8)) is I16") returns 1', () => {
   expect(executeTuff("(1 + (1U8 + 1I8)) is I16")).toBe(1);
 });
 
+test('executeTuff("let x = 100;") returns 0', () => {
+  expect(executeTuff("let x = 100;")).toBe(0);
+});
+
+test('executeTuff("let x : U8 = 100U8; x") returns 100', () => {
+  expect(executeTuff("let x : U8 = 100U8; x")).toBe(100);
+});
+
+test('executeTuff("let x : U8 = 100U16;") throws error', () => {
+  expect(() => executeTuff("let x : U8 = 100U16;")).toThrow();
+});
+
+test('executeTuff("let x : U16 = 100U8; x") returns 100', () => {
+  expect(executeTuff("let x : U16 = 100U8; x")).toBe(100);
+});
+
+test('executeTuff("let x = 100U16; let y : U8 = x;") throws error', () => {
+  expect(() => executeTuff("let x = 100U16; let y : U8 = x;")).toThrow();
+});
+
 test("executeTuff(invalid source) throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });

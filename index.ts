@@ -383,6 +383,16 @@ function promoteTypes(
   return b;
 }
 
+/** Check if inferred type can safely widen to the annotated type (same sign prefix, narrower or equal width). */
+function isSafeWiden(inferred: string, annotated: string): boolean {
+  const iWidth = getTypeBitWidth(inferred);
+  const aWidth = getTypeBitWidth(annotated);
+  if (iWidth === 0 || aWidth === 0) return inferred === annotated;
+  // Same sign prefix and narrower or equal bit width is safe to widen.
+  const sameSign = inferred[0]!.toLowerCase() === annotated[0]!.toLowerCase();
+  return sameSign && iWidth <= aWidth;
+}
+
 /** Parse comparison expressions like `a < b`, `x >= 4`, and `expr is Type`. */
 function parseComparison(
   tokens: Token[],
@@ -587,7 +597,15 @@ function parsePrimary(
   if (ctx && token?.type === "number") {
     ctx.lastResultType = token.suffix ?? "I32";
   } else if (ctx) {
-    ctx.lastResultType = undefined;
+    // For identifiers, look up stored type annotation/inference from scope
+    if (token?.type === "id") {
+      const annots = getTypeAnnotations(
+        scope as unknown as Map<string, ScopeValue>,
+      );
+      ctx.lastResultType = annots.get(token.value) ?? undefined;
+    } else {
+      ctx.lastResultType = undefined;
+    }
   }
 
   const value = parseValuePrimary(
@@ -607,6 +625,18 @@ function evaluateExpression(
   return parseExpression(tokens, [0], scope ?? new Map(), {
     lastResultType: undefined,
   });
+}
+
+/** Extract the inferred type of an expression without evaluating it. */
+function inferExpressionType(
+  input: string,
+  scope?: Map<string, unknown>,
+): string | undefined {
+  const tokens = tokenize(input);
+  if (tokens.length === 0) throw new Error("Empty expression");
+  const ctx: EvalContext = { lastResultType: undefined };
+  parseExpression(tokens, [0], scope ?? new Map(), ctx);
+  return ctx.lastResultType;
 }
 
 /** Check if a brace-enclosed string is an object literal (has key: value pairs). */
@@ -706,18 +736,67 @@ function getMutableSet(scope: Map<string, ScopeValue>): Set<string> {
   return mutSet;
 }
 
+/** WeakMap to track type-annotated variable names per scope instance. */
+const TYPE_ANNOTATIONS = new WeakMap<
+  Map<string, ScopeValue>,
+  Map<string, string>
+>();
+function getTypeAnnotations(
+  scope: Map<string, ScopeValue>,
+): Map<string, string> {
+  let annots = TYPE_ANNOTATIONS.get(scope);
+  if (!annots) {
+    annots = new Map();
+    TYPE_ANNOTATIONS.set(scope, annots);
+  }
+  return annots;
+}
+
 /** Process a single statement in the given scope. */
 function processSingleStatement(
   part: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  // Handle let/const/var declarations: `let x = expr` or `let mut x = expr`
+  // Handle let/const/var declarations: `let x = expr`, `let mut x = expr`, or `let x : U8 = expr`
   const declMatch = part.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*([A-Za-z]\d*))?\s*=\s*(.+)$/,
   );
-  if (declMatch && declMatch[1] && declMatch[2]) {
+  if (declMatch && declMatch[1] && declMatch[3]) {
     const name = declMatch[1];
-    const rhs = declMatch[2];
+    const typeAnnot =
+      declMatch[2] || undefined; /* captured type like "U8", or undefined */
+    if (typeAnnot) {
+      getTypeAnnotations(scope).set(name, typeAnnot);
+    }
+    const rhs = declMatch[3];
+    // Infer and store RHS type for simple numeric expressions so variable references carry types
+    let inferredRhsType: string | undefined;
+    if (
+      !/^\s*\[/.test(rhs) &&
+      !isObjectLiteral(rhs) &&
+      !rhs.trim().startsWith("{")
+    ) {
+      inferredRhsType = inferExpressionType(
+        rhs,
+        scope as unknown as Map<string, ScopeValue>,
+      );
+    }
+    // Store the effective type (annotation wins over inference for widening purposes)
+    if (typeAnnot) {
+      getTypeAnnotations(scope).set(name, typeAnnot);
+    } else if (inferredRhsType) {
+      getTypeAnnotations(scope).set(name, inferredRhsType);
+    }
+    // Validate RHS type matches annotation for non-array/object expressions
+    if (
+      typeAnnot &&
+      inferredRhsType &&
+      !isSafeWiden(inferredRhsType, typeAnnot)
+    ) {
+      throw new Error(
+        `Type mismatch: expected ${typeAnnot} but got ${inferredRhsType}`,
+      );
+    }
     // Track mutability: check for 'mut' keyword
     const isMutable = /^\s*(?:let|const|var)\s+mut\s+/.test(part);
     if (isMutable) {
@@ -1080,7 +1159,35 @@ function evaluate(source: string): number {
     const scope = new Map<string, ScopeValue>();
     const parts: string[] = splitStatements(trimmed);
     processBlock(scope, parts);
-    return resolveBlocksWithScope(parts[parts.length - 1]!, scope);
+    const lastPart = parts[parts.length - 1]!;
+    // If the last part is a declaration/definition (not an expression), validate types then return 0
+    if (
+      /^(?:let|const|var)\s/.test(lastPart.trim()) ||
+      /^(?:fn\s)/.test(lastPart.trim())
+    ) {
+      // Validate type annotations even for single-statement declarations
+      const declMatch = lastPart.match(
+        /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*([A-Za-z]\d*))?\s*=\s*(.+)$/,
+      );
+      if (
+        declMatch &&
+        declMatch[2] &&
+        typeof declMatch[3] === "string" &&
+        !/^\s*\[/.test(declMatch[3])
+      ) {
+        const inferredType = inferExpressionType(
+          declMatch[3],
+          scope as unknown as Map<string, ScopeValue>,
+        );
+        if (inferredType && !isSafeWiden(inferredType, declMatch[2])) {
+          throw new Error(
+            `Type mismatch: expected ${declMatch[2]} but got ${inferredType}`,
+          );
+        }
+      }
+      return 0;
+    }
+    return resolveBlocksWithScope(lastPart, scope);
   }
 
   // Find any { ... } blocks in the expression and recursively resolve them
