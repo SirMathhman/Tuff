@@ -18,6 +18,17 @@ import {
 // Wire up the circular dependency: parser needs resolveBlocksWithScope at runtime.
 setResolveBlocks(resolveBlocksWithScope);
 
+/** Reject unsupported declaration keywords (`var`, `const`). */
+function checkUnsupportedKeywords(input: string): void {
+  const trimmed = input.trim();
+  // Check each statement part for var/const usage
+  for (const part of splitStatements(trimmed)) {
+    if (/^var\s/.test(part) || /^const\s/.test(part)) {
+      throw new Error(`Unsupported keyword: ${part.match(/^(\w+)/)?.[1] ?? "unknown"}. Use 'let' instead.`);
+    }
+  }
+}
+
 /** Check if a string looks like it starts with a statement keyword. */
 function isStatement(input: string): boolean {
   return /^(?:let|const|var)\s/.test(input.trim());
@@ -66,6 +77,7 @@ function evaluate(source: string): number {
     isFnDefinition(trimmed) ||
     isTypeAlias(trimmed)
   ) {
+    checkUnsupportedKeywords(trimmed);
     const scope = new Map<string, ScopeValue>();
     // Standalone fn definition: validate params then return 0
     if (isFnDefinition(trimmed) && !hasMultipleStatements(trimmed)) {

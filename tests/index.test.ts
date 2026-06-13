@@ -416,6 +416,14 @@ test("block expression in value refinement with inner variable", () => {
 
 // --- Error handling ---
 
+test("var keyword is not supported and throws error", () => {
+  expect(() => executeTuff(`var x = 0`)).toThrow();
+});
+
+test("const keyword is not supported and throws error", () => {
+  expect(() => executeTuff(`const x = 0`)).toThrow();
+});
+
 test("invalid source throws error", () => {
   expect(() => executeTuff("invalid")).toThrow();
 });
