@@ -362,6 +362,12 @@ test("generic type alias resolves correctly", () => {
   ).toBe(100);
 });
 
+test("nested generic type alias resolves correctly", () => {
+  expect(
+    executeTuff("type Temp<T> = T; let temp : Temp<Temp<I32>> = 100; temp"),
+  ).toBe(100);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {

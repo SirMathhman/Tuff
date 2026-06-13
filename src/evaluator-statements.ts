@@ -74,18 +74,48 @@ function parseDeclaration(
     };
   }
 
-  // Try pattern with a simple or alias type, optionally generic like Temp<I32>, and optionally prefixed with * for pointer types
-  const simpleMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?)?\s*=\s*(.+)$/,
+  // Try pattern with a colon-prefixed type, optionally generic like Temp<I32>, and optionally prefixed with * for pointer types.
+  // Use balanced bracket tracking to handle nested generics like Temp<Temp<I32>>.
+  const declPrefix = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)/,
   );
-  if (simpleMatch && simpleMatch[1] && simpleMatch[4]) {
-    const pointerPrefix = simpleMatch[2]; // "*" or undefined
-    const baseType = simpleMatch[3]; // "I32", "Point", etc.
-    return {
-      name: simpleMatch[1],
-      typeAnnot: (pointerPrefix ?? "") + (baseType ?? ""),
-      rhs: simpleMatch[4],
-    };
+  if (declPrefix && declPrefix[1]) {
+    const name = declPrefix[1];
+    const pointerPrefix = declPrefix[2] ?? "";
+    let baseType = declPrefix[3]!;
+    // Continue scanning after the matched prefix to capture any generic params with balanced < > tracking
+    let pos = declPrefix[0].length;
+    while (pos < input.length) {
+      const ch = input[pos];
+      if (ch === "<") {
+        // Collect everything inside balanced angle brackets, including the brackets themselves
+        const genericStart = pos;
+        let depth = 1;
+        pos++;
+        while (pos < input.length && depth > 0) {
+          if (input[pos] === "<") depth++;
+          else if (input[pos] === ">") depth--;
+          pos++;
+        }
+        baseType += input.slice(genericStart, pos);
+      } else {
+        break;
+      }
+    }
+    // Skip whitespace and look for `=`
+    while (pos < input.length && /\s/.test(input[pos]!)) pos++;
+    if (pos < input.length && input[pos] === "=") {
+      const rhs = input.slice(pos + 1).trim();
+      return { name, typeAnnot: pointerPrefix + baseType, rhs };
+    }
+  }
+
+  // Try pattern without a colon-prefixed type (no explicit annotation)
+  const simpleMatch = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
+  );
+  if (simpleMatch && simpleMatch[1] && simpleMatch[2]) {
+    return { name: simpleMatch[1], typeAnnot: undefined, rhs: simpleMatch[2] };
   }
 
   // Try refinement type: `let x : 5U8 = ...` (numeric literal with optional suffix as type annotation)
@@ -213,24 +243,19 @@ function processSingleStatement(
     const name = declResult.name;
     let typeAnnot = declResult.typeAnnot;
 
-    // Detect non-zero refinement: `type != 0` annotations
+    // Detect non-zero refinement and value refinement types
     const isNonZeroRefinement = /!=\s*0$/.test(typeAnnot ?? "");
-
-    // Detect value refinement types: annotations starting with a digit or minus sign, e.g. "5U8", "-3I16"
     const isValueRefinementType = /^-?[0-9]/.test(typeAnnot ?? "");
 
     // Strip pointer prefix (*) and non-zero refinement (!= 0) before checking built-in vs alias types
-    let baseType =
-      typeAnnot
-        ?.replace(/^\*/, "")
-        ?.replace(/!=\s*0$/, "")
-        .trim() ?? "";
+    let baseType = typeAnnot?.replace(/^\*/, "")?.replace(/!=\s*0$/, "").trim() ?? "";
     const isBuiltInType = /^[A-Z][0-9]/.test(baseType);
     if (typeAnnot && !isBuiltInType) {
       // Try resolving generic type alias like Temp<I32> -> I32
       const resolvedGeneric = resolveGenericType(typeAnnot, scope);
       if (resolvedGeneric !== undefined) {
         baseType = resolvedGeneric;
+        typeAnnot = resolvedGeneric; // update for downstream effectiveType
         getTypeAnnotations(scope).set(name, baseType);
       } else {
         // Try regular alias lookup
@@ -250,28 +275,16 @@ function processSingleStatement(
     const rhs = declResult.rhs;
     // Infer and store RHS type for simple numeric expressions so variable references carry types
     let inferredRhsType: string | undefined;
-    if (
-      !/^\s*\[/.test(rhs) &&
-      !isObjectLiteral(rhs) &&
-      !rhs.trim().startsWith("{") &&
-      !/^&\s*/.test(rhs)
-    ) {
+    if (!/^\s*\[/.test(rhs) && !isObjectLiteral(rhs) && !rhs.trim().startsWith("{") && !/^&\s*/.test(rhs)) {
       inferredRhsType = inferExpressionType(
         rhs,
         scope as unknown as Map<string, ScopeValue>,
       );
     }
-    // Store the effective type (annotation wins over inference for widening purposes)
-    // For refinement types like "5U8" or "U8 != 0", extract just the base type ("U8") for widening checks
-    let effectiveType =
-      typeAnnot
-        ?.replace(/^\*/, "")
-        ?.replace(/!=\s*0$/, "")
-        .trim() ?? undefined;
+    // Store effective type; annotation wins over inference for widening purposes
+    let effectiveType = typeAnnot?.replace(/^\*/, "")?.replace(/!=\s*0$/, "").trim() ?? undefined;
     if (isValueRefinementType && effectiveType) {
-      const refBaseMatch = effectiveType.match(
-        /^-?[0-9]+(?:\.[0-9]+)?([A-Za-z]\w*)?$/,
-      );
+      const refBaseMatch = effectiveType.match(/^-?[0-9]+(?:\.[0-9]+)?([A-Za-z]\w*)?$/);
       effectiveType = refBaseMatch ? (refBaseMatch[1] ?? undefined) : undefined;
     }
     if (effectiveType) {
@@ -363,25 +376,11 @@ function processSingleStatement(
   }
 }
 
-/** Check if a statement starts with an `if` keyword. */
-function isIfStatement(input: string): boolean {
-  return /^\s*if\s*\(/.test(input.trim());
-}
-
-/** Check if a statement starts with an `else` keyword. */
-function isElseStatement(input: string): boolean {
-  return /^\s*else\b/.test(input.trim());
-}
-
-/** Check if a statement starts with a `while` keyword. */
-function isWhileStatement(input: string): boolean {
-  return /^\s*while\s*\(/.test(input.trim());
-}
-
-/** Check if a statement starts with a `for` keyword. */
-function isForStatement(input: string): boolean {
-  return /^\s*for\s*\(.*in/.test(input.trim());
-}
+/** Check if input matches various statement prefixes. */
+const IS_IF = /^\s*if\s*\(/;
+const IS_ELSE = /^\s*else\b/;
+const IS_WHILE = /^\s*while\s*\(/;
+const IS_FOR = /^\s*for\s*\(.*in/;
 
 /** Check if a statement is a function definition like `fn name() => expr`. */
 export function isFnDefinition(input: string): boolean {
@@ -413,16 +412,23 @@ function resolveGenericType(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scope: Map<string, any>,
 ): string | undefined {
-  const genericMatch = typeAnnot.match(/^(\w+)<([^>]+)>$/);
-  if (!genericMatch) return undefined;
-  const baseName = genericMatch[1]!;
-  const paramValue = genericMatch[2]?.trim() ?? "";
+  // Match outermost generic pattern with balanced angle brackets (handles nesting)
+  const outerMatch = typeAnnot.match(/^(\w+)<(.*)>$/s);
+  if (!outerMatch) return undefined;
+  const baseName = outerMatch[1]!;
+  const paramValue = outerMatch[2]?.trim() ?? "";
+
   // Look up the alias body (e.g., "T" for `type Temp<T> = T`)
   const aliasBody = scope.get("__type__" + baseName);
   if (aliasBody === undefined) return undefined;
+
   // Substitute generic param placeholder with actual type
-  // For simple aliases like `type Temp<T> = T`, the body is just "T"
   const resolvedType = String(aliasBody).replace(/\bT\b/g, paramValue);
+
+  // Recursively resolve if the result still contains generic patterns
+  if (/\w+<[^>]*>/.test(resolvedType)) {
+    return resolveGenericType(resolvedType, scope);
+  }
   return resolvedType;
 }
 
@@ -522,18 +528,18 @@ export function processBlock(
 ): void {
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
-    if (isIfStatement(part)) {
+    if (IS_IF.test(part)) {
       // Check if next part is the matching `else` branch
       const nextPart = parts[i + 1];
-      if (nextPart && isElseStatement(nextPart)) {
+      if (nextPart && IS_ELSE.test(nextPart)) {
         processSingleIfElseStatement(part, nextPart.trim(), scope);
         i++; // skip else since we already consumed it
       } else {
         resolveBlocksWithScope(part, scope);
       }
-    } else if (isWhileStatement(part)) {
+    } else if (IS_WHILE.test(part)) {
       processWhileStatement(part, scope);
-    } else if (isForStatement(part)) {
+    } else if (IS_FOR.test(part)) {
       processForStatement(part, scope);
     } else if (isFnDefinition(part)) {
       processFnDefinition(part, scope);
