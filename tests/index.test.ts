@@ -340,6 +340,20 @@ test("variable reference carries inferred type for annotation validation", () =>
   expect(() => executeTuff("let x = 100U16; let y : U8 = x;")).toThrow();
 });
 
+// --- Refinement types ---
+
+test("refinement type with exact value match evaluates correctly", () => {
+  expect(executeTuff("let x : 5U8 = 5U8; x")).toBe(5);
+});
+
+test("division by variable without non-zero refinement throws error", () => {
+  expect(() => executeTuff("let x : U8 = 1U8; 2 / x")).toThrow();
+});
+
+test("division by variable with !=0 refinement type is allowed", () => {
+  expect(executeTuff("let x : U8 != 0 = 1U8; 2 / x")).toBe(2);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {

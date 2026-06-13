@@ -46,6 +46,21 @@ export function getPointerTargets(
   return ptrs;
 }
 
+/** WeakMap to track variables with non-zero refinement (e.g., `let x : U8 != 0`). */
+export const NON_ZERO_VARS = new WeakMap<
+  Map<string, ScopeValue>,
+  Set<string>
+>();
+
+export function getNonZeroSet(scope: Map<string, ScopeValue>): Set<string> {
+  let nzSet = NON_ZERO_VARS.get(scope);
+  if (!nzSet) {
+    nzSet = new Set();
+    NON_ZERO_VARS.set(scope, nzSet);
+  }
+  return nzSet;
+}
+
 /** Split input by semicolons, respecting brace and bracket nesting. */
 export function splitStatements(input: string): string[] {
   const parts: string[] = [];

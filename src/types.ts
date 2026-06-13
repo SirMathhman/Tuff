@@ -24,5 +24,8 @@ export type Token =
 /** Function definition stored in scope. */
 export type FnDef = { body: string; params: string[] };
 
-/** Lightweight context to track type info during expression evaluation. */
-export type EvalContext = { lastResultType: string | undefined };
+/** Lightweight context to track type info and division tracking during expression evaluation. */
+export type EvalContext = {
+  lastResultType: string | undefined;
+  isDivisor: boolean; // true when evaluating the right-hand side of a / operator
+};

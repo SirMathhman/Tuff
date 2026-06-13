@@ -1,6 +1,10 @@
 import type { Token, ScopeValue, EvalContext } from "./types.js";
 import { isOp, peek, consume, tokenize } from "./tokenizer.js";
-import { getTypeAnnotations, getPointerTargets } from "./shared-state.js";
+import {
+  getTypeAnnotations,
+  getPointerTargets,
+  getNonZeroSet,
+} from "./shared-state.js";
 
 // Lazy reference to break circular dependency — assigned at runtime when first needed.
 let resolveBlocksWithScope: (
@@ -328,7 +332,14 @@ function parseTerm(
     )
       break;
     consume(tokens, pos);
+
+    // For division, mark context so identifier resolution can check non-zero guarantee
+    if (ctx && currentToken.value === "/") {
+      ctx.isDivisor = true;
+    }
     const right = parseUnary(tokens, pos, scope, ctx);
+    if (ctx) ctx.isDivisor = false; // reset after parsing divisor
+
     left = currentToken.value === "*" ? left * right : left / right;
   }
   return left;
@@ -460,6 +471,18 @@ function parsePrimary(
         scope as unknown as Map<string, ScopeValue>,
       );
       ctx.lastResultType = annots.get(token.value) ?? undefined;
+
+      // Division safety: when resolving an identifier as a divisor, check non-zero guarantee
+      if (ctx.isDivisor) {
+        const nzSet = getNonZeroSet(
+          scope as unknown as Map<string, ScopeValue>,
+        );
+        if (!nzSet.has(token.value)) {
+          throw new Error(
+            `Division by variable '${token.value}' without != 0 refinement is not allowed`,
+          );
+        }
+      }
     } else {
       ctx.lastResultType = undefined;
     }
@@ -482,6 +505,7 @@ export function evaluateExpression(
   if (tokens.length === 0) throw new Error("Empty expression");
   return parseExpression(tokens, [0], scope ?? new Map(), {
     lastResultType: undefined,
+    isDivisor: false,
   });
 }
 
@@ -492,7 +516,7 @@ export function inferExpressionType(
 ): string | undefined {
   const tokens = tokenize(input);
   if (tokens.length === 0) throw new Error("Empty expression");
-  const ctx: EvalContext = { lastResultType: undefined };
+  const ctx: EvalContext = { lastResultType: undefined, isDivisor: false };
   parseExpression(tokens, [0], scope ?? new Map(), ctx);
   return ctx.lastResultType;
 }

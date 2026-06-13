@@ -3,10 +3,12 @@ import { tokenize } from "./tokenizer.js";
 import {
   MUTABLE_VARS,
   POINTER_TARGETS,
+  NON_ZERO_VARS,
   splitStatements,
   getMutableSet,
   getTypeAnnotations,
   getPointerTargets,
+  getNonZeroSet,
   isObjectLiteral,
 } from "./shared-state.js";
 import {
@@ -54,10 +56,24 @@ export function evaluateBlockWithScope(
   return resolveBlocksWithScope(lastPart!, scope);
 }
 
-/** Parse a declaration, supporting simple types (`I32`), pointer types (`*I32`), type aliases (`Point`), and struct types. */
+/** Parse a declaration, supporting simple types (`I32`), pointer types (`*I32`), type aliases (`Point`), refinement types (`5U8`, `U8 != 0`), and struct types. */
 function parseDeclaration(
   input: string,
 ): { name: string; typeAnnot?: string; rhs: string } | null {
+  // Try non-zero refinement pattern: `let x : U8 != 0 = ...`
+  const nzMatch = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)\s*!=\s*0\s*=\s*(.+)$/,
+  );
+  if (nzMatch && nzMatch[1] && nzMatch[4]) {
+    const pointerPrefix = nzMatch[2]; // "*" or undefined
+    const baseType = nzMatch[3]; // "U8", "I32", etc.
+    return {
+      name: nzMatch[1],
+      typeAnnot: `${(pointerPrefix ?? "") + (baseType ?? "")} != 0`,
+      rhs: nzMatch[4],
+    };
+  }
+
   // Try pattern with a simple or alias type (any identifier), optionally prefixed with * for pointer types
   const simpleMatch = input.match(
     /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*(\*?)([A-Za-z]\w*))?\s*=\s*(.+)$/,
@@ -69,6 +85,20 @@ function parseDeclaration(
       name: simpleMatch[1],
       typeAnnot: (pointerPrefix ?? "") + (baseType ?? ""),
       rhs: simpleMatch[4],
+    };
+  }
+
+  // Try refinement type: `let x : 5U8 = ...` (numeric literal with optional suffix as type annotation)
+  const refMatch = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(-?[0-9]+(?:\.[0-9]+)?)([A-Za-z]\w*)?\s*=\s*(.+)$/,
+  );
+  if (refMatch && refMatch[1] && refMatch[4]) {
+    const numPart = refMatch[2]; // "5", "-3.14", etc.
+    const suffixPart = refMatch[3]; // "U8", "I32", or undefined
+    return {
+      name: refMatch[1],
+      typeAnnot: `${numPart}${suffixPart ?? ""}`,
+      rhs: refMatch[4],
     };
   }
 
@@ -183,8 +213,18 @@ function processSingleStatement(
     const name = declResult.name;
     let typeAnnot = declResult.typeAnnot;
 
-    // Strip pointer prefix (*) before checking built-in vs alias types
-    const baseType = typeAnnot?.replace(/^\*/, "") ?? "";
+    // Detect non-zero refinement: `type != 0` annotations
+    const isNonZeroRefinement = /!=\s*0$/.test(typeAnnot ?? "");
+
+    // Detect value refinement types: annotations starting with a digit or minus sign, e.g. "5U8", "-3I16"
+    const isValueRefinementType = /^-?[0-9]/.test(typeAnnot ?? "");
+
+    // Strip pointer prefix (*) and non-zero refinement (!= 0) before checking built-in vs alias types
+    const baseType =
+      typeAnnot
+        ?.replace(/^\*/, "")
+        ?.replace(/!=\s*0$/, "")
+        .trim() ?? "";
     const isBuiltInType = /^[A-Z][0-9]/.test(baseType);
     if (typeAnnot && !isBuiltInType) {
       const aliasValue = scope.get("__type__" + typeAnnot);
@@ -214,7 +254,18 @@ function processSingleStatement(
       );
     }
     // Store the effective type (annotation wins over inference for widening purposes)
-    const effectiveType = typeAnnot?.replace(/^\*/, "") ?? undefined;
+    // For refinement types like "5U8" or "U8 != 0", extract just the base type ("U8") for widening checks
+    let effectiveType =
+      typeAnnot
+        ?.replace(/^\*/, "")
+        ?.replace(/!=\s*0$/, "")
+        .trim() ?? undefined;
+    if (isValueRefinementType && effectiveType) {
+      const refBaseMatch = effectiveType.match(
+        /^-?[0-9]+(?:\.[0-9]+)?([A-Za-z]\w*)?$/,
+      );
+      effectiveType = refBaseMatch ? (refBaseMatch[1] ?? undefined) : undefined;
+    }
     if (effectiveType) {
       getTypeAnnotations(scope).set(name, effectiveType);
     } else if (inferredRhsType) {
@@ -224,7 +275,7 @@ function processSingleStatement(
     if (
       effectiveType &&
       inferredRhsType &&
-      !isSafeWiden(inferredRhsType, effectiveType)
+      !isSafeWiden(inferredRhsType, effectiveType as string)
     ) {
       throw new Error(
         `Type mismatch: expected ${effectiveType} but got ${inferredRhsType}`,
@@ -263,6 +314,35 @@ function processSingleStatement(
       // Expression or block - resolve blocks first then evaluate
       value = resolveBlocksWithScope(rhs, scope);
     }
+
+    // Track non-zero refined variables for division safety checks
+    if (isNonZeroRefinement) {
+      getNonZeroSet(scope).add(name);
+    }
+
+    // Validate refinement type: the resolved value must match the exact expected value+type
+    if (isValueRefinementType && typeof value === "number") {
+      const refNumMatch = typeAnnot!.match(
+        /^(-?[0-9]+(?:\.[0-9]+)?)([A-Za-z]\w*)?$/,
+      );
+      if (refNumMatch && refNumMatch[1]) {
+        const expectedValue = parseFloat(refNumMatch[1]);
+        const expectedType = refNumMatch[2] ?? "I32";
+        if (value !== expectedValue) {
+          throw new Error(
+            `Refinement type violation: expected ${expectedValue} but got ${value}`,
+          );
+        }
+        // Also validate the inferred type matches
+        const actualType = getTypeAnnotations(scope).get(name);
+        if (!isSafeWiden(actualType ?? "I32", expectedType)) {
+          throw new Error(
+            `Refinement type mismatch: expected ${expectedType} but got ${actualType}`,
+          );
+        }
+      }
+    }
+
     scope.set(name, value);
   } else if (part.startsWith("{") && part.endsWith("}")) {
     // Nested block: use child scope so declarations don't leak outward
@@ -483,6 +563,8 @@ function processNestedBlock(
   MUTABLE_VARS.set(child, getMutableSet(outerScope));
   // Copy pointer target tracking to the child scope
   POINTER_TARGETS.set(child, getPointerTargets(outerScope));
+  // Copy non-zero refinement tracking to the child scope
+  NON_ZERO_VARS.set(child, getNonZeroSet(outerScope));
   for (const ip of innerParts) {
     processSingleStatement(ip, child);
   }
@@ -522,6 +604,8 @@ export function resolveBlocksWithScope(
   const evalScope = new Map(scope as unknown as Map<string, ScopeValue>);
   // Copy pointer target tracking to the evaluation scope
   POINTER_TARGETS.set(evalScope, getPointerTargets(scope));
+  // Copy non-zero refinement tracking to the evaluation scope
+  NON_ZERO_VARS.set(evalScope, getNonZeroSet(scope));
   return evaluateExpression(
     resolved,
     evalScope as unknown as Map<string, unknown>,
