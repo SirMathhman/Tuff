@@ -59,7 +59,37 @@ export function evaluateBlockWithScope(
 
 /** Check for assignment pattern. */
 export function isAssignment(input: string): boolean {
-  return /^\w+(?:\s*\[[^\]]+\])*\s*[+-]?\s*=/.test(input.trim());
+  // Use balanced bracket scanning instead of regex to handle nested indices like arr[arr[0]] = v
+  const trimmed = input.trim();
+  const idMatch = trimmed.match(/^(\w+)/);
+  if (!idMatch) return false;
+
+  let pos = idMatch[1]!.length;
+  
+  // Skip whitespace and balanced bracket segments [...]
+  while (pos < trimmed.length) {
+    if (trimmed[pos] === " ") pos++;
+    else if (trimmed[pos] === "[") {
+      let depth = 1;
+      pos++;
+      while (pos < trimmed.length && depth > 0) {
+        if (trimmed[pos] === "[") depth++;
+        else if (trimmed[pos] === "]") depth--;
+        pos++;
+      }
+    } else break;
+  }
+
+  // Skip whitespace around operator
+  while (pos < trimmed.length && trimmed[pos] === " ") pos++;
+  
+  // Check for optional +/- before =
+  if (pos < trimmed.length && "+-".includes(trimmed[pos]!)) pos++;
+  
+  // Skip whitespace between op and =
+  while (pos < trimmed.length && trimmed[pos] === " ") pos++;
+
+  return pos < trimmed.length && trimmed[pos] === "=";
 }
 
 /** Evaluate assignment statement. */
@@ -107,13 +137,34 @@ function evaluateAssignment(
     const arr = scope.get(name);
     if (!Array.isArray(arr)) throw new Error("Cannot index non-array");
 
+    // Extract balanced bracket segments from match[2] (e.g. "[array[0]]" or "[0][1]")
+    const indices: number[] = [];
+    let idxPos = 0;
+    while (idxPos < match[2].length) {
+      if (match[2][idxPos] === "[") {
+        // Find matching ] by counting bracket depth
+        let depth = 1;
+        let end = idxPos + 1;
+        while (end < match[2].length && depth > 0) {
+          if (match[2][end] === "[") depth++;
+          else if (match[2][end] === "]") depth--;
+          end++;
+        }
+        // Evaluate the index expression
+        const idxExpr = match[2].substring(idxPos + 1, end - 1);
+        indices.push(resolveBlocksWithScope(idxExpr, scope));
+        idxPos = end;
+      } else {
+        idxPos++;
+      }
+    }
+
     // Walk to parent and set at final index
     let current: unknown[] = arr;
-    for (let i = 0; i < idxMatch.length - 1; i++) {
-      const ci = parseInt(idxMatch[i]!.slice(1, -1), 10);
-      current = current[ci] as unknown[];
+    for (let i = 0; i < indices.length - 1; i++) {
+      current = current[indices[i]!] as unknown[];
     }
-    const finalIdx = parseInt(idxMatch.at(-1)!.slice(1, -1), 10);
+    const finalIdx = indices.at(-1)!;
 
     if (!isCompoundOp) {
       current[finalIdx] = parseValue(match[3], scope);

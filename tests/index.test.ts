@@ -389,7 +389,19 @@ test("triple chained refinements (!= 1 && != 2 && != 3) evaluates correctly", ()
 });
 
 test("nested array assignment via intermediate variable", () => {
-  expect(executeTuff(`let mut array = [0]; let mut temp = [array]; temp[0][0] = 1; temp[0][0]`)).toBe(1);
+  expect(
+    executeTuff(
+      `let mut array = [0]; let mut temp = [array]; temp[0][0] = 1; temp[0][0]`,
+    ),
+  ).toBe(1);
+});
+
+test("indirect array indexing: array[array[0]] assignment and read", () => {
+  expect(
+    executeTuff(
+      `let mut array = [1, 0]; array[array[0]] = 100; array[array[0]]`,
+    ),
+  ).toBe(100);
 });
 
 // --- Error handling ---
