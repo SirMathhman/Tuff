@@ -224,6 +224,22 @@ test("object property access on point struct", () => {
   );
 });
 
+test("typed struct literal with object property access", () => {
+  expect(
+    executeTuff(
+      "let point : { x : I32, y : I32 } = { x : 1, y : 2 }; point.x + point.y",
+    ),
+  ).toBe(3);
+});
+
+test("type alias for struct with typed variable declaration", () => {
+  expect(
+    executeTuff(
+      "type Point = { x : I32, y : I32 }; let point : Point = { x : 1, y : 2 }; point.x + point.y",
+    ),
+  ).toBe(3);
+});
+
 test("function with Void return type", () => {
   expect(executeTuff("fn empty() : Void => {}")).toBe(0);
 });

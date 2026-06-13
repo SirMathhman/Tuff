@@ -758,23 +758,99 @@ function getTypeAnnotations(
   return annots;
 }
 
+/** Parse a declaration, supporting simple types (`I32`), type aliases (`Point`), and struct types (`{ x : I32 }`). */
+function parseDeclaration(
+  input: string,
+): { name: string; typeAnnot?: string; rhs: string } | null {
+  // Try pattern with a simple or alias type (any identifier) first
+  const simpleMatch = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*([A-Za-z]\w*))?\s*=\s*(.+)$/,
+  );
+  if (simpleMatch && simpleMatch[1] && simpleMatch[3]) {
+    return {
+      name: simpleMatch[1],
+      typeAnnot: simpleMatch[2] || undefined,
+      rhs: simpleMatch[3],
+    };
+  }
+
+  // Fallback for struct-typed declarations like `let point : { x : I32, y : I32 } = ...`
+  const structPrefix = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*\{/,
+  );
+  if (!structPrefix) return null;
+
+  // Find the `=` that separates type annotation from RHS, respecting brace depth
+  let depth = 0;
+  const name: string = structPrefix[1]!;
+  for (let i = structPrefix.index!; i < input.length; i++) {
+    const ch = input[i]!;
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (ch === "=" && depth === 0) {
+      // Find the actual `=` sign for assignment (skip past type annotation)
+      let eqDepth = 0;
+      for (let j = structPrefix.index!; j < input.length; j++) {
+        const c2 = input[j]!;
+        if (c2 === "{") eqDepth++;
+        else if (c2 === "}") eqDepth--;
+        else if (c2 === "=" && eqDepth === 0) {
+          // This is the assignment `=` — but we already consumed it above at depth 0 inside braces
+          break;
+        }
+      }
+    }
+  }
+
+  // Simpler approach: find first `=` outside of braces, starting after the prefix match
+  // Note: braceDepth starts at 1 because the opening `{` was consumed by the prefix regex
+  const remainder = input.slice(structPrefix[0].length);
+  let braceDepth = 1;
+  for (let i = 0; i < remainder.length; i++) {
+    if (remainder[i] === "{") braceDepth++;
+    else if (remainder[i] === "}") braceDepth--;
+    else if (remainder[i] === "=" && braceDepth === 0) {
+      const rhs = remainder.slice(i + 1).trim();
+      return {
+        name,
+        typeAnnot: undefined /* struct types not validated yet */,
+        rhs,
+      };
+    }
+  }
+
+  return null;
+}
+
 /** Process a single statement in the given scope. */
 function processSingleStatement(
   part: string,
   scope: Map<string, ScopeValue>,
 ): void {
   // Handle let/const/var declarations: `let x = expr`, `let mut x = expr`, or `let x : U8 = expr`
-  const declMatch = part.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*([A-Za-z]\d*))?\s*=\s*(.+)$/,
-  );
-  if (declMatch && declMatch[1] && declMatch[3]) {
-    const name = declMatch[1];
-    const typeAnnot =
-      declMatch[2] || undefined; /* captured type like "U8", or undefined */
-    if (typeAnnot) {
+  // Also supports type aliases like `type Point = { ... }; let p : Point = { ... }`
+  const declResult = parseDeclaration(part);
+  if (declResult) {
+    const name = declResult.name;
+    let typeAnnot =
+      declResult.typeAnnot; /* captured type like "U8", or undefined */
+
+    // If the annotation is not a built-in primitive, check for user-defined type alias
+    const isBuiltInType = /^[A-Z][0-9]/.test(typeAnnot ?? "");
+    if (typeAnnot && !isBuiltInType) {
+      const aliasValue = scope.get("__type__" + typeAnnot);
+      // If it's a struct alias and RHS is an object literal, skip strict validation
+      if (aliasValue !== undefined) {
+        getTypeAnnotations(scope).set(name, "struct");
+        typeAnnot = undefined; /* treat as untyped for widening purposes */
+      } else {
+        getTypeAnnotations(scope).set(name, typeAnnot);
+      }
+    } else if (typeAnnot) {
       getTypeAnnotations(scope).set(name, typeAnnot);
     }
-    const rhs = declMatch[3];
+
+    const rhs = declResult.rhs;
     // Infer and store RHS type for simple numeric expressions so variable references carry types
     let inferredRhsType: string | undefined;
     if (
@@ -825,7 +901,7 @@ function processSingleStatement(
       // Expression or block - resolve blocks first then evaluate
       value = resolveBlocksWithScope(rhs, scope);
     }
-    scope.set(declMatch[1], value);
+    scope.set(name, value);
   } else if (part.startsWith("{") && part.endsWith("}")) {
     // Nested block: use child scope so declarations don't leak outward
     const innerParts = splitStatements(part.slice(1, -1));
@@ -858,11 +934,28 @@ function isForStatement(input: string): boolean {
   return /^\s*for\s*\(.*in/.test(input.trim());
 }
 
-/** Check if a statement is a function definition like `fn name() => expr` or `fn name(a, b) => expr`. */
+/** Check if a statement is a function definition like `fn name() => expr` or `fn name(a, b) : I32 => expr`. */
 function isFnDefinition(input: string): boolean {
   return /^\s*fn\s+\w+\s*\([^)]*\)(?:\s*:\s*(?:[A-Za-z]\d*|Void))?\s*=>\s*/.test(
     input.trim(),
   );
+}
+
+/** Check if a statement is a type alias like `type Point = { x : I32, y : I32 }`. */
+function isTypeAlias(input: string): boolean {
+  return /^\s*type\s+\w+\s*=/.test(input.trim());
+}
+
+/** Process a type alias statement and store it in scope. */
+function processTypeAlias(
+  input: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope: Map<string, any>,
+): void {
+  const match = input.match(/^\s*type\s+(\w+)\s*=\s*(.+)$/);
+  if (!match || !match[1] || typeof match[2] !== "string") return;
+  // Store type alias as a string under __type__ prefix
+  scope.set("__type__" + match[1], match[2].trim());
 }
 
 /** Process a function definition statement and store it in scope with parameter names. */
@@ -973,6 +1066,8 @@ function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
       processForStatement(part, scope);
     } else if (isFnDefinition(part)) {
       processFnDefinition(part, scope);
+    } else if (isTypeAlias(part)) {
+      processTypeAlias(part, scope);
     } else {
       processSingleStatement(part, scope);
     }
@@ -1184,11 +1279,12 @@ function evaluate(source: string): number {
   }
 
   // Handle top-level statements with multiple parts: `let x = ...; expr` or `fn f() => ...; call()`
-  // Also handle standalone fn definitions (e.g. `fn empty() : Void => {}`)
+  // Also handle standalone fn definitions (e.g. `fn empty() : Void => {}`) and type aliases
   if (
     isStatement(trimmed) ||
     hasMultipleStatements(trimmed) ||
-    isFnDefinition(trimmed)
+    isFnDefinition(trimmed) ||
+    isTypeAlias(trimmed)
   ) {
     const scope = new Map<string, ScopeValue>();
     // Process ALL parts for standalone fn defs so validation runs; processBlock skips last part intentionally
@@ -1202,7 +1298,8 @@ function evaluate(source: string): number {
     // If the last part is a declaration/definition (not an expression), validate types then return 0
     if (
       /^(?:let|const|var)\s/.test(lastPart.trim()) ||
-      /^(?:fn\s)/.test(lastPart.trim())
+      /^(?:fn\s)/.test(lastPart.trim()) ||
+      /^(?:type\s)/.test(lastPart.trim())
     ) {
       // Validate type annotations even for single-statement declarations
       const declMatch = lastPart.match(
