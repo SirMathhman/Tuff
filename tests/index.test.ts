@@ -408,6 +408,12 @@ test("value refinement type { 5U8 } evaluates correctly", () => {
   expect(executeTuff(`let x : { 5U8 } = { 5U8 }; x`)).toBe(5);
 });
 
+test("block expression in value refinement with inner variable", () => {
+  expect(
+    executeTuff(`let x : { let y = 5U8; y } = { let y = 5U8; y }; x`),
+  ).toBe(5);
+});
+
 // --- Error handling ---
 
 test("invalid source throws error", () => {
