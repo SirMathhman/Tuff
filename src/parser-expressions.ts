@@ -6,7 +6,7 @@ import {
   getNonZeroSet,
 } from "./shared-state.js";
 
-// Lazy reference to break circular dependency — assigned at runtime when first needed.
+// Lazy reference to break circular dependency.
 let resolveBlocksWithScope: (
   input: string,
   scope: Map<string, ScopeValue>,
@@ -72,9 +72,7 @@ export function isSafeWiden(inferred: string, annotated: string): boolean {
 
 /** Parse an object literal like `{ key1 : val1, key2 : val2 }`. */
 export function parseObjectLiteral(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, ScopeValue>,
+  tokens: Token[], pos: [number], scope: Map<string, ScopeValue>,
 ): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   while (true) {
@@ -91,20 +89,14 @@ export function parseObjectLiteral(
     }
     consume(tokens, pos);
 
-    const val = parseExpression(
-      tokens,
-      pos,
-      scope as unknown as Map<string, unknown>,
-    );
-    obj[propName] = val;
+    obj[propName] = parseExpression(tokens, pos, scope as unknown as Map<string, unknown>);
   }
   return obj;
 }
 
-/** Get and delete a function definition from scope (functions are single-use). */
+/** Get and delete a function definition from scope. */
 export function getFunction(
-  scope: Map<string, ScopeValue>,
-  name: string,
+  scope: Map<string, ScopeValue>, name: string,
 ): { body: string; params: string[] } | undefined {
   const fn = scope.get("__fn__" + name);
   if (fn !== undefined) {
@@ -116,9 +108,7 @@ export function getFunction(
 
 /** Resolve an identifier token, handling function calls and chained access. */
 export function resolveIdentifier(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, ScopeValue>,
+  tokens: Token[], pos: [number], scope: Map<string, ScopeValue>,
 ): unknown {
   const token = peek(tokens, pos);
   if (!token || token.type !== "id") throw new Error("Expected identifier");
@@ -129,7 +119,7 @@ export function resolveIdentifier(
   if (nextToken && isOp(nextToken) && nextToken.value === "(") {
     const fnDef = getFunction(scope, token.value);
     if (fnDef !== undefined) {
-      consume(tokens, pos); // consume (
+      consume(tokens, pos);
       const args: unknown[] = [];
       while (true) {
         const peekNext = peek(tokens, pos);
@@ -148,7 +138,7 @@ export function resolveIdentifier(
       }
       const closeParen = peek(tokens, pos);
       if (closeParen && isOp(closeParen) && closeParen.value === ")") {
-        consume(tokens, pos); // consume )
+        consume(tokens, pos);
       }
       const fnScope = new Map(scope);
       for (let i = 0; i < fnDef.params.length; i++) {
@@ -172,21 +162,21 @@ export function resolveIdentifier(
     if (!nextToken || !isOp(nextToken)) break;
 
     if (nextToken.value === "[") {
-      consume(tokens, pos); // consume [
+      consume(tokens, pos);
       const idx = parseExpression(
         tokens,
         pos,
         scope as unknown as Map<string, unknown>,
       );
-      consume(tokens, pos); // consume ]
+      consume(tokens, pos);
       if (!Array.isArray(value)) throw new Error("Cannot index non-array");
       value = (value as unknown[])[idx];
     } else if (nextToken.value === ".") {
-      consume(tokens, pos); // consume .
+      consume(tokens, pos);
       const propToken = peek(tokens, pos);
       if (!propToken) throw new Error("Expected property name after dot");
 
-      // Handle tuple field access: `.0`, `.1` etc. (numeric index after dot)
+      // Tuple field access: `.0`, `.1` etc.
       if (propToken.type === "number") {
         consume(tokens, pos);
         const fieldIdx = propToken.value;
@@ -203,7 +193,6 @@ export function resolveIdentifier(
             `Cannot access tuple field on non-tuple: ${String(value)}`,
           );
         }
-        // Handle object property access: `.prop` (identifier after dot)
       } else if (propToken.type === "id") {
         consume(tokens, pos);
         if (typeof value === "object" && value !== null) {
@@ -223,9 +212,7 @@ export function resolveIdentifier(
 }
 
 function parseValuePrimary(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, ScopeValue>,
+  tokens: Token[], pos: [number], scope: Map<string, ScopeValue>,
 ): unknown {
   const token = peek(tokens, pos);
   if (!token) throw new Error("Unexpected end of input");
@@ -241,20 +228,20 @@ function parseValuePrimary(
   }
 
   if (isOp(token) && token.value === "[") {
-    consume(tokens, pos); // consume [
+    consume(tokens, pos);
     const arr: unknown[] = [];
     while (true) {
       const next = peek(tokens, pos);
       if (!next || (isOp(next) && next.value === "]")) break;
       arr.push(parseValuePrimary(tokens, pos, scope));
     }
-    consume(tokens, pos); // consume ]
+    consume(tokens, pos);
     return arr;
   }
 
   // Tuple literal: `(expr, expr)` - parse as array with tuple marker
   if (isOp(token) && token.value === "(") {
-    consume(tokens, pos); // consume (
+    consume(tokens, pos);
     const tupl: unknown[] = [];
     while (true) {
       const next = peek(tokens, pos);
@@ -263,10 +250,10 @@ function parseValuePrimary(
       if (!(isOp(next) && next.value === ",")) {
         tupl.push(parseValuePrimary(tokens, pos, scope));
       } else {
-        consume(tokens, pos); // skip ,
+        consume(tokens, pos);
       }
     }
-    consume(tokens, pos); // consume )
+    consume(tokens, pos);
     return { __tuple__: true, values: tupl };
   }
 
@@ -280,29 +267,19 @@ function parseValuePrimary(
 /** Evaluate a comparison and return 1 for true, 0 for false. */
 function evaluateComparison(left: number, op: string, right: number): number {
   switch (op) {
-    case "<":
-      return left < right ? 1 : 0;
-    case ">":
-      return left > right ? 1 : 0;
-    case "<=":
-      return left <= right ? 1 : 0;
-    case ">=":
-      return left >= right ? 1 : 0;
-    case "==":
-      return left === right ? 1 : 0;
-    case "!=":
-      return left !== right ? 1 : 0;
-    default:
-      throw new Error(`Unknown comparison operator: ${op}`);
+    case "<": return left < right ? 1 : 0;
+    case ">": return left > right ? 1 : 0;
+    case "<=": return left <= right ? 1 : 0;
+    case ">=": return left >= right ? 1 : 0;
+    case "==": return left === right ? 1 : 0;
+    case "!=": return left !== right ? 1 : 0;
+    default: throw new Error(`Unknown comparison operator: ${op}`);
   }
 }
 
 /** Parse comparison expressions like `a < b`, `x >= 4`, and `expr is Type`. */
 function parseComparison(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, unknown>,
-  ctx?: EvalContext,
+  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
 ): number {
   let left = parseTerm(tokens, pos, scope, ctx);
   while (true) {
@@ -329,10 +306,7 @@ function parseComparison(
 
 /** Recursive descent parser for arithmetic expressions. */
 export function parseExpression(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, unknown>,
-  ctx?: EvalContext,
+  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
 ): number {
   let left = parseComparison(tokens, pos, scope, ctx);
   while (true) {
@@ -357,19 +331,12 @@ export function parseExpression(
 }
 
 function parseTerm(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, unknown>,
-  ctx?: EvalContext,
+  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
 ): number {
   let left = parseUnary(tokens, pos, scope, ctx);
   while (true) {
     const currentToken = peek(tokens, pos);
-    if (
-      !currentToken ||
-      !isOp(currentToken) ||
-      !"*/".includes(currentToken.value)
-    )
+    if (!currentToken || !isOp(currentToken) || !"*/".includes(currentToken.value))
       break;
     consume(tokens, pos);
 
@@ -378,7 +345,7 @@ function parseTerm(
       ctx.isDivisor = true;
     }
     const right = parseUnary(tokens, pos, scope, ctx);
-    if (ctx) ctx.isDivisor = false; // reset after parsing divisor
+    if (ctx) ctx.isDivisor = false;
 
     left = currentToken.value === "*" ? left * right : left / right;
   }
@@ -386,10 +353,7 @@ function parseTerm(
 }
 
 function parseUnary(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, unknown>,
-  ctx?: EvalContext,
+  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
 ): number {
   while (true) {
     const currentToken = peek(tokens, pos);
@@ -399,22 +363,14 @@ function parseUnary(
     if (currentToken.value === "*") {
       const nextToken = tokens[pos[0] + 1];
       if (nextToken && nextToken.type === "id") {
-        consume(tokens, pos); // consume *
-        const ptrTargets = getPointerTargets(
-          scope as unknown as Map<string, ScopeValue>,
-        );
+        consume(tokens, pos);
+        const ptrTargets = getPointerTargets(scope as unknown as Map<string, ScopeValue>);
         const targetName = ptrTargets.get(nextToken.value);
         if (!targetName) {
-          throw new Error(
-            `Cannot dereference non-pointer variable: ${nextToken.value}`,
-          );
+          throw new Error(`Cannot dereference non-pointer variable: ${nextToken.value}`);
         }
         // Resolve the target variable's current value from scope
-        const resolved = resolveIdentifier(
-          tokens,
-          pos,
-          scope as unknown as Map<string, ScopeValue>,
-        );
+        const resolved = resolveIdentifier(tokens, pos, scope as unknown as Map<string, ScopeValue>);
         return typeof resolved === "number" ? resolved : 0;
       } else {
         break; // Not dereference — let parseTerm handle * as multiplication
@@ -445,20 +401,16 @@ function parseUnary(
   return parsePrimary(tokens, pos, scope, ctx);
 }
 
-function parseIfExpr(
-  tokens: Token[],
-  pos: [number],
-  scope: Map<string, unknown>,
-): number {
-  consume(tokens, pos); // Consume 'if' keyword
+function parseIfExpr(tokens: Token[], pos: [number], scope: Map<string, unknown>): number {
+  consume(tokens, pos);
 
   const parenToken = peek(tokens, pos);
   if (parenToken && isOp(parenToken) && parenToken.value === "(") {
-    consume(tokens, pos); // consume (
+    consume(tokens, pos);
     const cond = parseExpression(tokens, pos, scope);
     const closeParen = peek(tokens, pos);
     if (closeParen && isOp(closeParen) && closeParen.value === ")") {
-      consume(tokens, pos); // consume )
+      consume(tokens, pos);
     }
 
     const thenValue = parseExpression(tokens, pos, scope);
@@ -469,7 +421,7 @@ function parseIfExpr(
       nextToken.type === "keyword" &&
       nextToken.value === "else"
     ) {
-      consume(tokens, pos); // consume 'else'
+      consume(tokens, pos);
       const elseValue = parseExpression(tokens, pos, scope);
       return cond !== 0 ? thenValue : elseValue;
     }
@@ -493,29 +445,27 @@ function parsePrimary(
 
   // Handle parenthesized expressions: ( expr ) or tuple literals: (expr, expr)
   if (token && isOp(token) && token.value === "(") {
-    // Try parsing as a value primary first - this handles both tuples and grouped expressions
     const savedPos = pos[0];
     try {
       const valResult = parseValuePrimary(tokens, pos, scope as unknown as Map<string, ScopeValue>);
       if (typeof valResult === "object" && valResult !== null) {
-        // Successfully parsed a tuple or other value - return first element for expression context
+        // Tuple - return first element for expression context
         if ("__tuple__" in valResult) {
           const tValues = (valResult as Record<string, unknown>).values;
           return Array.isArray(tValues) ? Number(tValues[0] ?? 0) : 0;
         }
       }
     } catch {
-      // Not a value primary, fall through to parenthesized expression parsing
+      /* not a value primary */
     }
 
-    // Reset position and parse as regular parenthesized expression
     pos[0] = savedPos;
-    consume(tokens, pos); // consume (
+    consume(tokens, pos);
     const result = parseExpression(tokens, pos, scope, ctx);
     const closeParen = peek(tokens, pos);
     if (!closeParen || !isOp(closeParen) || closeParen.value !== ")")
       throw new Error("Expected closing parenthesis");
-    consume(tokens, pos); // consume )
+    consume(tokens, pos);
     return result;
   }
 
@@ -529,7 +479,7 @@ function parsePrimary(
       );
       ctx.lastResultType = annots.get(token.value) ?? undefined;
 
-      // Division safety: when resolving an identifier as a divisor, check non-zero guarantee
+      // Division safety: check non-zero guarantee for divisor
       if (ctx.isDivisor) {
         const nzSet = getNonZeroSet(
           scope as unknown as Map<string, ScopeValue>,
@@ -609,6 +559,5 @@ export function parseValue(
     return obj;
   }
 
-  // Otherwise parse as arithmetic expression and return number
   return parseExpression(tokens, [0], scope as unknown as Map<string, unknown>);
 }
