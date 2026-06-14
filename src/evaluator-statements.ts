@@ -15,9 +15,9 @@ import {
   evaluateExpression,
   inferExpressionType,
   parseValue,
-  isSafeWiden,
   parseObjectLiteral,
 } from "./parser-expressions.js";
+import { isSafeWiden } from "./type-utils.js";
 import { parseDeclaration } from "./parser-declarations.js";
 
 /** Check for statement-only block. */

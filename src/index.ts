@@ -3,8 +3,8 @@ import { splitStatements } from "./shared-state.js";
 import {
   evaluateExpression,
   inferExpressionType,
-  isSafeWiden,
 } from "./parser-expressions.js";
+import { isSafeWiden } from "./type-utils.js";
 import { setResolveBlocks } from "./parser-expressions.js";
 import {
   processBlock,

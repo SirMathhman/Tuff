@@ -1,5 +1,6 @@
 import type { Token, ScopeValue, EvalContext } from "./types.js";
 import { isOp, peek, consume, tokenize } from "./tokenizer.js";
+import { promoteTypes } from "./type-utils.js";
 import {
   getTypeAnnotations,
   getPointerTargets,
@@ -23,56 +24,11 @@ function isComparisonOp(token: Token): boolean {
   return isOp(token) && COMPARISON_OPS.has(token.value);
 }
 
-/** Extract bit width from a type name like U8, I32, F64 => 8, 32, 64. */
-export function getTypeBitWidth(typeName: string): number {
-  const match = typeName.match(/(\d+)/);
-  return match && match[1] ? parseInt(match[1], 10) : 0;
-}
-
-const BIT_WIDTHS = [8, 16, 32, 64];
-
-function nextWiderBitWidth(width: number): number {
-  const idx = BIT_WIDTHS.indexOf(width);
-  if (idx >= 0 && idx < BIT_WIDTHS.length - 1) return BIT_WIDTHS[idx + 1]!;
-  return width * 2;
-}
-
-const DEFAULT_TYPE = "I32";
-
-/** Given two type names, return the promoted type. */
-export function promoteTypes(
-  a: string | undefined,
-  b: string | undefined,
-): string | undefined {
-  if (!a || !b) return undefined;
-  const aWidth = getTypeBitWidth(a);
-  const bWidth = getTypeBitWidth(b);
-
-  if (aWidth === 0 && bWidth === 0) return a === b ? a : undefined;
-  if (a === DEFAULT_TYPE && b !== DEFAULT_TYPE) return b;
-  if (b === DEFAULT_TYPE && a !== DEFAULT_TYPE) return a;
-
-  if (aWidth === bWidth && a !== b) {
-    const wider = nextWiderBitWidth(aWidth);
-    return `I${wider}`;
-  }
-
-  if (bWidth <= aWidth) return a;
-  return b;
-}
-
-/** Check if inferred type can safely widen to the annotated type. */
-export function isSafeWiden(inferred: string, annotated: string): boolean {
-  const iWidth = getTypeBitWidth(inferred);
-  const aWidth = getTypeBitWidth(annotated);
-  if (iWidth === 0 || aWidth === 0) return inferred === annotated;
-  const sameSign = inferred[0]!.toLowerCase() === annotated[0]!.toLowerCase();
-  return sameSign && iWidth <= aWidth;
-}
-
 /** Parse an object literal like `{ key1 : val1, key2 : val2 }`. */
 export function parseObjectLiteral(
-  tokens: Token[], pos: [number], scope: Map<string, ScopeValue>,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, ScopeValue>,
 ): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   while (true) {
@@ -89,14 +45,19 @@ export function parseObjectLiteral(
     }
     consume(tokens, pos);
 
-    obj[propName] = parseExpression(tokens, pos, scope as unknown as Map<string, unknown>);
+    obj[propName] = parseExpression(
+      tokens,
+      pos,
+      scope as unknown as Map<string, unknown>,
+    );
   }
   return obj;
 }
 
 /** Get and delete a function definition from scope. */
 export function getFunction(
-  scope: Map<string, ScopeValue>, name: string,
+  scope: Map<string, ScopeValue>,
+  name: string,
 ): { body: string; params: string[] } | undefined {
   const fn = scope.get("__fn__" + name);
   if (fn !== undefined) {
@@ -108,7 +69,9 @@ export function getFunction(
 
 /** Resolve an identifier token, handling function calls and chained access. */
 export function resolveIdentifier(
-  tokens: Token[], pos: [number], scope: Map<string, ScopeValue>,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, ScopeValue>,
 ): unknown {
   const token = peek(tokens, pos);
   if (!token || token.type !== "id") throw new Error("Expected identifier");
@@ -212,7 +175,9 @@ export function resolveIdentifier(
 }
 
 function parseValuePrimary(
-  tokens: Token[], pos: [number], scope: Map<string, ScopeValue>,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, ScopeValue>,
 ): unknown {
   const token = peek(tokens, pos);
   if (!token) throw new Error("Unexpected end of input");
@@ -267,19 +232,29 @@ function parseValuePrimary(
 /** Evaluate a comparison and return 1 for true, 0 for false. */
 function evaluateComparison(left: number, op: string, right: number): number {
   switch (op) {
-    case "<": return left < right ? 1 : 0;
-    case ">": return left > right ? 1 : 0;
-    case "<=": return left <= right ? 1 : 0;
-    case ">=": return left >= right ? 1 : 0;
-    case "==": return left === right ? 1 : 0;
-    case "!=": return left !== right ? 1 : 0;
-    default: throw new Error(`Unknown comparison operator: ${op}`);
+    case "<":
+      return left < right ? 1 : 0;
+    case ">":
+      return left > right ? 1 : 0;
+    case "<=":
+      return left <= right ? 1 : 0;
+    case ">=":
+      return left >= right ? 1 : 0;
+    case "==":
+      return left === right ? 1 : 0;
+    case "!=":
+      return left !== right ? 1 : 0;
+    default:
+      throw new Error(`Unknown comparison operator: ${op}`);
   }
 }
 
 /** Parse comparison expressions like `a < b`, `x >= 4`, and `expr is Type`. */
 function parseComparison(
-  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
   let left = parseTerm(tokens, pos, scope, ctx);
   while (true) {
@@ -306,7 +281,10 @@ function parseComparison(
 
 /** Recursive descent parser for arithmetic expressions. */
 export function parseExpression(
-  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
   let left = parseComparison(tokens, pos, scope, ctx);
   while (true) {
@@ -331,12 +309,19 @@ export function parseExpression(
 }
 
 function parseTerm(
-  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
   let left = parseUnary(tokens, pos, scope, ctx);
   while (true) {
     const currentToken = peek(tokens, pos);
-    if (!currentToken || !isOp(currentToken) || !"*/".includes(currentToken.value))
+    if (
+      !currentToken ||
+      !isOp(currentToken) ||
+      !"*/".includes(currentToken.value)
+    )
       break;
     consume(tokens, pos);
 
@@ -353,7 +338,10 @@ function parseTerm(
 }
 
 function parseUnary(
-  tokens: Token[], pos: [number], scope: Map<string, unknown>, ctx?: EvalContext,
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+  ctx?: EvalContext,
 ): number {
   while (true) {
     const currentToken = peek(tokens, pos);
@@ -364,13 +352,21 @@ function parseUnary(
       const nextToken = tokens[pos[0] + 1];
       if (nextToken && nextToken.type === "id") {
         consume(tokens, pos);
-        const ptrTargets = getPointerTargets(scope as unknown as Map<string, ScopeValue>);
+        const ptrTargets = getPointerTargets(
+          scope as unknown as Map<string, ScopeValue>,
+        );
         const targetName = ptrTargets.get(nextToken.value);
         if (!targetName) {
-          throw new Error(`Cannot dereference non-pointer variable: ${nextToken.value}`);
+          throw new Error(
+            `Cannot dereference non-pointer variable: ${nextToken.value}`,
+          );
         }
         // Resolve the target variable's current value from scope
-        const resolved = resolveIdentifier(tokens, pos, scope as unknown as Map<string, ScopeValue>);
+        const resolved = resolveIdentifier(
+          tokens,
+          pos,
+          scope as unknown as Map<string, ScopeValue>,
+        );
         return typeof resolved === "number" ? resolved : 0;
       } else {
         break; // Not dereference — let parseTerm handle * as multiplication
@@ -401,7 +397,11 @@ function parseUnary(
   return parsePrimary(tokens, pos, scope, ctx);
 }
 
-function parseIfExpr(tokens: Token[], pos: [number], scope: Map<string, unknown>): number {
+function parseIfExpr(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
   consume(tokens, pos);
 
   const parenToken = peek(tokens, pos);
@@ -447,7 +447,11 @@ function parsePrimary(
   if (token && isOp(token) && token.value === "(") {
     const savedPos = pos[0];
     try {
-      const valResult = parseValuePrimary(tokens, pos, scope as unknown as Map<string, ScopeValue>);
+      const valResult = parseValuePrimary(
+        tokens,
+        pos,
+        scope as unknown as Map<string, ScopeValue>,
+      );
       if (typeof valResult === "object" && valResult !== null) {
         // Tuple - return first element for expression context
         if ("__tuple__" in valResult) {
