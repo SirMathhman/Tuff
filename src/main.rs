@@ -4,7 +4,8 @@ use std::io::{self, BufRead, Write};
 // --- Simple recursive-descent parser ---
 // Program  -> Statement* Expr
 // Block    -> '{' Statement* Expr '}'
-// Statement -> 'let' IDENT '=' Expr ';'
+// Statement -> 'let' ['mut'] IDENT '=' Expr ';'
+//            | IDENT '=' Expr ';'
 // Expr   -> Term (('+' | '-') Term)*
 // Term   -> Factor (('*' | '/') Factor)*
 // Factor -> '(' Expr ')' | Block | Identifier | Number
@@ -14,7 +15,8 @@ use std::io::{self, BufRead, Write};
 /// Scoped environment: innermost scope is the last entry.
 #[derive(Default)]
 struct Env {
-    scopes: Vec<HashMap<String, i64>>,
+    /// Each entry stores (value, is_mutable).
+    scopes: Vec<HashMap<String, (i64, bool)>>,
 }
 
 impl Env {
@@ -29,14 +31,28 @@ impl Env {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).copied())
+            .find_map(|scope| scope.get(name).map(|(v, _)| *v))
     }
 
     /// Insert into the current (innermost) scope.
-    fn insert(&mut self, name: String, val: i64) {
+    fn insert(&mut self, name: String, val: i64, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, val);
+            scope.insert(name, (val, mutable));
         }
+    }
+
+    /// Update a variable in any scope (for assignment).
+    fn update(&mut self, name: &str, val: i64) -> Result<(), String> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some((v, mutable)) = scope.get_mut(name) {
+                if !*mutable {
+                    return Err(format!("cannot assign to immutable variable: {}", name));
+                }
+                *v = val;
+                return Ok(());
+            }
+        }
+        Err(format!("undefined variable: {}", name))
     }
 
     /// Enter a new scope.
@@ -135,9 +151,21 @@ fn parse_block(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         if input.first().copied() == Some(b'}') {
             break;
         }
-        // Try parsing a statement (let ...) or fall back to an expression
+        // Try parsing a statement (let ... or assignment) or fall back to an expression
         if is_let_statement(input) {
             last_val = parse_let_statement(input, env)?;
+        } else if is_assignment_statement(input) {
+            let name = read_ident(input);
+            skip_spaces(input);
+            *input = &input[1..]; // consume '='
+            skip_spaces(input);
+            last_val = parse_expr(input, env)?;
+            skip_spaces(input);
+            if input.first().copied() != Some(b';') {
+                return Err("expected ';'".to_string());
+            }
+            *input = &input[1..]; // consume ';'
+            env.update(&name, last_val)?;
         } else {
             last_val = parse_expr(input, env)?;
         }
@@ -160,12 +188,41 @@ fn is_let_statement(input: &[u8]) -> bool {
     kw == b"let" && (i + 3 >= input.len() || !input[i + 3].is_ascii_alphanumeric())
 }
 
-/// Parse a `let` statement: 'let' IDENT '=' Expr ';'
+/// Check if the current input starts with an assignment statement: IDENT '=' Expr ';'
+fn is_assignment_statement(input: &[u8]) -> bool {
+    let mut i = 0;
+    while i < input.len() && (input[i] == b' ' || input[i] == b'\t') {
+        i += 1;
+    }
+    // Must start with an identifier
+    if i >= input.len() || !input[i].is_ascii_alphabetic() {
+        return false;
+    }
+    let mut j = i;
+    while j < input.len() && (input[j].is_ascii_alphanumeric() || input[j] == b'_') {
+        j += 1;
+    }
+    // After identifier, skip spaces and look for '='
+    while j < input.len() && (input[j] == b' ' || input[j] == b'\t') {
+        j += 1;
+    }
+    j < input.len() && input[j] == b'='
+}
+
+/// Parse a `let` statement: 'let' ['mut'] IDENT '=' Expr ';'
 fn parse_let_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     skip_spaces(input);
     // consume "let"
     *input = &input[3..];
     skip_spaces(input);
+    // Optionally consume 'mut' and track whether this variable is mutable
+    let mutable = if input.starts_with(b"mut ") || (input.len() >= 3 && &input[..3] == b"mut") {
+        *input = &input[3..];
+        skip_spaces(input);
+        true
+    } else {
+        false
+    };
     let name = read_ident(input);
     skip_spaces(input);
     if input.first().copied() != Some(b'=') {
@@ -179,7 +236,7 @@ fn parse_let_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         return Err("expected ';'".to_string());
     }
     *input = &input[1..]; // consume ';'
-    env.insert(name, val);
+    env.insert(name, val, mutable);
     Ok(val)
 }
 
@@ -230,6 +287,18 @@ fn parse_program(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         // Otherwise fall through to the final expression (which consumes everything).
         if is_let_statement(input) {
             last_val = parse_let_statement(input, env)?;
+        } else if is_assignment_statement(input) {
+            let name = read_ident(input);
+            skip_spaces(input);
+            *input = &input[1..]; // consume '='
+            skip_spaces(input);
+            last_val = parse_expr(input, env)?;
+            skip_spaces(input);
+            if input.first().copied() != Some(b';') {
+                return Err("expected ';'".to_string());
+            }
+            *input = &input[1..]; // consume ';'
+            env.update(&name, last_val)?;
         } else {
             break;
         }
@@ -329,6 +398,24 @@ mod tests {
             execute_tuff("let x = 100; let y = { let x = 0; x }; x"),
             Ok(100)
         );
+    }
+
+    #[test]
+    fn test_same_scope_reassignment() {
+        // Redeclaring in the same scope should update the value.
+        assert_eq!(execute_tuff("let x = 0; let x = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_mutable_variable_assignment() {
+        // `let mut` allows bare assignment (`x = ...`) to change the value.
+        assert_eq!(execute_tuff("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_immutable_variable_assignment_error() {
+        // Assigning to a non-mutable variable should fail.
+        assert!(execute_tuff("let x = 0; x = 1; x").is_err());
     }
 }
 
