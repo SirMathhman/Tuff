@@ -17,6 +17,29 @@ export default defineConfig([
         "error",
         { max: 500, skipBlankLines: true, skipComments: true },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TemplateLiteral",
+          message:
+            "Do not use template strings because they false-flag PMD CPD.",
+        },
+        {
+          selector: "Literal[regex]",
+          message:
+            "Regex literals are not allowed because this is an interpreter.",
+        },
+        {
+          selector: "NewExpression[callee.name='RegExp']",
+          message:
+            "new RegExp() is not allowed because this is an interpreter.",
+        },
+        {
+          selector: "CallExpression[callee.name='RegExp']",
+          message:
+            "RegExp() calls are not allowed because this is an interpreter.",
+        },
+      ],
     },
   },
   tseslint.configs.recommended,
