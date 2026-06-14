@@ -414,6 +414,12 @@ test("block expression in value refinement with inner variable", () => {
   ).toBe(5);
 });
 
+test("tuple type declaration and field access", () => {
+  expect(
+    executeTuff(`let tuple : (I32, I32) = (1, 2); tuple.0 + tuple.1`),
+  ).toBe(3);
+});
+
 // --- Error handling ---
 
 test("var keyword is not supported and throws error", () => {

@@ -184,15 +184,37 @@ export function resolveIdentifier(
     } else if (nextToken.value === ".") {
       consume(tokens, pos); // consume .
       const propToken = peek(tokens, pos);
-      if (!propToken || propToken.type !== "id")
-        throw new Error("Expected property name after dot");
-      consume(tokens, pos);
-      if (typeof value === "object" && value !== null) {
-        value = (value as Record<string, unknown>)[propToken.value];
+      if (!propToken) throw new Error("Expected property name after dot");
+
+      // Handle tuple field access: `.0`, `.1` etc. (numeric index after dot)
+      if (propToken.type === "number") {
+        consume(tokens, pos);
+        const fieldIdx = propToken.value;
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "__tuple__" in value
+        ) {
+          value = (
+            value as unknown as Record<string, unknown> & { values: unknown[] }
+          ).values[fieldIdx];
+        } else {
+          throw new Error(
+            `Cannot access tuple field on non-tuple: ${String(value)}`,
+          );
+        }
+        // Handle object property access: `.prop` (identifier after dot)
+      } else if (propToken.type === "id") {
+        consume(tokens, pos);
+        if (typeof value === "object" && value !== null) {
+          value = (value as Record<string, unknown>)[propToken.value];
+        } else {
+          throw new Error(
+            `Cannot access property on non-object: ${String(value)}`,
+          );
+        }
       } else {
-        throw new Error(
-          `Cannot access property on non-object: ${String(value)}`,
-        );
+        throw new Error("Expected property name or numeric field after dot");
       }
     } else break;
   }
@@ -228,6 +250,24 @@ function parseValuePrimary(
     }
     consume(tokens, pos); // consume ]
     return arr;
+  }
+
+  // Tuple literal: `(expr, expr)` - parse as array with tuple marker
+  if (isOp(token) && token.value === "(") {
+    consume(tokens, pos); // consume (
+    const tupl: unknown[] = [];
+    while (true) {
+      const next = peek(tokens, pos);
+      if (!next || (isOp(next) && next.value === ")")) break;
+      // Skip commas
+      if (!(isOp(next) && next.value === ",")) {
+        tupl.push(parseValuePrimary(tokens, pos, scope));
+      } else {
+        consume(tokens, pos); // skip ,
+      }
+    }
+    consume(tokens, pos); // consume )
+    return { __tuple__: true, values: tupl };
   }
 
   if (token.type === "id") {
@@ -451,8 +491,25 @@ function parsePrimary(
     return parseIfExpr(tokens, pos, scope);
   }
 
-  // Handle parenthesized expressions: ( expr )
+  // Handle parenthesized expressions: ( expr ) or tuple literals: (expr, expr)
   if (token && isOp(token) && token.value === "(") {
+    // Try parsing as a value primary first - this handles both tuples and grouped expressions
+    const savedPos = pos[0];
+    try {
+      const valResult = parseValuePrimary(tokens, pos, scope as unknown as Map<string, ScopeValue>);
+      if (typeof valResult === "object" && valResult !== null) {
+        // Successfully parsed a tuple or other value - return first element for expression context
+        if ("__tuple__" in valResult) {
+          const tValues = (valResult as Record<string, unknown>).values;
+          return Array.isArray(tValues) ? Number(tValues[0] ?? 0) : 0;
+        }
+      }
+    } catch {
+      // Not a value primary, fall through to parenthesized expression parsing
+    }
+
+    // Reset position and parse as regular parenthesized expression
+    pos[0] = savedPos;
     consume(tokens, pos); // consume (
     const result = parseExpression(tokens, pos, scope, ctx);
     const closeParen = peek(tokens, pos);
@@ -529,8 +586,11 @@ export function parseValue(
   const tokens = tokenize(input.trim());
   if (tokens.length === 0) throw new Error("Empty expression");
 
-  // If the first token is an array literal start, parse as value (to get arrays)
-  if (isOp(tokens[0]!) && tokens[0].value === "[") {
+  // If the first token is an array literal start or tuple literal start, parse as value
+  if (
+    isOp(tokens[0]!) &&
+    (tokens[0].value === "[" || tokens[0].value === "(")
+  ) {
     return parseValuePrimary(tokens, [0], scope);
   }
 

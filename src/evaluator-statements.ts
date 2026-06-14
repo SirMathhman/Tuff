@@ -279,8 +279,8 @@ function processSingleStatement(
         throw new Error(
           `Cannot take address of undefined variable: ${addrOfMatch[1]}`,
         );
-    } else if (/^\s*\[/.test(rhs)) {
-      // Array literal - parse directly to preserve array structure
+    } else if (/^\s*\[/.test(rhs) || /^\s*\(/.test(rhs)) {
+      // Array literal or tuple literal - parse directly to preserve structure
       value = parseValue(rhs, scope);
     } else if (isObjectLiteral(rhs) || /^\s*\{[^}]*\s*:\s*/.test(rhs)) {
       // Object literal

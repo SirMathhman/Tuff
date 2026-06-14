@@ -24,7 +24,9 @@ function checkUnsupportedKeywords(input: string): void {
   // Check each statement part for var/const usage
   for (const part of splitStatements(trimmed)) {
     if (/^var\s/.test(part) || /^const\s/.test(part)) {
-      throw new Error(`Unsupported keyword: ${part.match(/^(\w+)/)?.[1] ?? "unknown"}. Use 'let' instead.`);
+      throw new Error(
+        `Unsupported keyword: ${part.match(/^(\w+)/)?.[1] ?? "unknown"}. Use 'let' instead.`,
+      );
     }
   }
 }
@@ -98,7 +100,7 @@ function evaluate(source: string): number {
         declMatch &&
         declMatch[2] &&
         typeof declMatch[3] === "string" &&
-        !/^\s*\[/.test(declMatch[3])
+        !(/^\s*\[/.test(declMatch[3]) || /^\s*\(/.test(declMatch[3]))
       ) {
         const inferredType = inferExpressionType(
           declMatch[3],

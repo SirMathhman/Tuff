@@ -26,7 +26,7 @@ export function tokenize(input: string): Token[] {
       continue;
     }
     // Dot for property access (check BEFORE number, since . matches /[0-9.]/)
-    if (ch === "." && !/[0-9]/.test(input.charAt(i + 1) ?? "")) {
+    if (ch === ".") {
       tokens.push({ type: "op", value: "." });
       i++;
       continue;

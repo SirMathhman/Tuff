@@ -115,6 +115,28 @@ export function parseDeclaration(
     };
   }
 
+  // Fallback for tuple-typed declarations like `let tuple : (I32, I32) = ...`
+  const tuplePrefix = input.match(
+    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*\(/,
+  );
+  if (tuplePrefix) {
+    // Find first `=` outside of parentheses
+    const remainder = input.slice(tuplePrefix[0].length);
+    let parenDepth = 1;
+    for (let i = 0; i < remainder.length; i++) {
+      if (remainder[i] === "(") parenDepth++;
+      else if (remainder[i] === ")") parenDepth--;
+      else if (remainder[i] === "=" && parenDepth === 0) {
+        const rhs = remainder.slice(i + 1).trim();
+        return {
+          name: tuplePrefix[1]!,
+          typeAnnot: "tuple",
+          rhs,
+        };
+      }
+    }
+  }
+
   // Fallback for struct-typed declarations like `let point : { x : I32, y : I32 } = ...`
   const structPrefix = input.match(
     /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*\{/,
