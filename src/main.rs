@@ -417,6 +417,15 @@ mod tests {
         // Assigning to a non-mutable variable should fail.
         assert!(execute_tuff("let x = 0; x = 1; x").is_err());
     }
+
+    #[test]
+    fn test_mutable_outer_scope_from_inner_block() {
+        // Assignment inside inner block updates outer-scope mutable variable.
+        assert_eq!(
+            execute_tuff("let mut x = 0; let y = { x = 1; 0 }; x"),
+            Ok(1)
+        );
+    }
 }
 
 fn main() {
