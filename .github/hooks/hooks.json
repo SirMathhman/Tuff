@@ -4,7 +4,7 @@
       {
         "type": "command",
         "comment": "Run tests with coverage (updated for new directory structure)",
-        "command": "cmd /c \"bun test --coverage 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"bun test --coverage 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Either tests failed or there is insufficient code coverage.\"; exit 2 }"
       },
       {
         "type": "command",

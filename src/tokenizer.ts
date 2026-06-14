@@ -1,15 +1,20 @@
 import type { Token, OpToken } from "./types.js";
+import {
+  isSpace,
+  isDigit,
+  isDigitOrDot,
+  isAlpha,
+  isAlphaNum as isAlphaNumOrUnderscore,
+  isWordStart,
+  isWordCharFull as isWordChar,
+} from "./char-utils.js";
 
 export function isOp(token: Token): token is OpToken {
   return token.type === "op";
 }
-
-/** Helper to get the current token. */
 export function peek(tokens: Token[], pos: [number]): Token | undefined {
   return tokens[pos[0]];
 }
-
-/** Helper to consume and return the current token, advancing position. */
 export function consume(tokens: Token[], pos: [number]): Token {
   const token = tokens[pos[0]++];
   if (!token) throw new Error("Unexpected end of input");
@@ -21,27 +26,27 @@ export function tokenize(input: string): Token[] {
   let i = 0;
   while (i < input.length) {
     const ch = input.charAt(i);
-    if (/\s/.test(ch)) {
+    if (isSpace(ch)) {
       i++;
       continue;
     }
-    // Dot for property access (check BEFORE number, since . matches /[0-9.]/)
+    // Dot for property access (check BEFORE number)
     if (ch === ".") {
       tokens.push({ type: "op", value: "." });
       i++;
       continue;
     }
     // Number (integer or decimal, with optional leading minus handled by parser)
-    if (/[0-9.]/.test(ch)) {
+    if (isDigitOrDot(ch)) {
       let num = "";
-      while (i < input.length && /[0-9.]/.test(input.charAt(i))) {
+      while (i < input.length && isDigitOrDot(input.charAt(i))) {
         num += input.charAt(i++);
       }
       // Optional type suffix: U8, I32, F64, etc.
       let typeSuffix = undefined;
-      if (i < input.length && /[a-zA-Z_]/.test(input.charAt(i))) {
+      if (i < input.length && isAlpha(input.charAt(i))) {
         const beforeI = i;
-        while (i < input.length && /[a-zA-Z0-9_]/.test(input.charAt(i))) {
+        while (i < input.length && isAlphaNumOrUnderscore(input.charAt(i))) {
           i++;
         }
         typeSuffix = input.slice(beforeI, i);
@@ -88,9 +93,9 @@ export function tokenize(input: string): Token[] {
       }
       tokens.push({ type: "op", value: op });
       i++;
-    } else if (/[a-zA-Z_$]/.test(ch)) {
+    } else if (isWordStart(ch)) {
       let name = "";
-      while (i < input.length && /[a-zA-Z0-9_$]/.test(input.charAt(i))) {
+      while (i < input.length && isWordChar(input.charAt(i))) {
         name += input.charAt(i++);
       }
       if (name === "true") {
@@ -122,14 +127,14 @@ export function tokenize(input: string): Token[] {
       i++;
     } else if (ch === ",") {
       i++;
-    } else if (ch === "." && !/[0-9]/.test(input.charAt(i + 1) ?? "")) {
+    } else if (ch === "." && !isDigit(input.charAt(i + 1) ?? "")) {
       tokens.push({ type: "op", value: "." });
       i++;
     } else if (ch === ":") {
       tokens.push({ type: "op", value: ":" });
       i++;
     } else {
-      throw new Error(`Unexpected character: ${ch}`);
+      throw new Error("Unexpected character: " + ch);
     }
   }
   return tokens;

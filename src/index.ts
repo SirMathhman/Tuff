@@ -1,5 +1,6 @@
 import type { ScopeValue } from "./types.js";
 import { splitStatements } from "./shared-state.js";
+import { extractIdentifier, isDeclarationStart } from "./string-utils.js";
 import {
   evaluateExpression,
   inferExpressionType,
@@ -14,6 +15,8 @@ import {
   isFnDefinition,
   isTypeAlias,
 } from "./evaluator-statements.js";
+import { parseDeclaration } from "./parser-declarations.js";
+import { replaceInnermostBlocks } from "./char-utils.js";
 
 // Wire up the circular dependency: parser needs resolveBlocksWithScope at runtime.
 setResolveBlocks(resolveBlocksWithScope);
@@ -23,17 +26,11 @@ function checkUnsupportedKeywords(input: string): void {
   const trimmed = input.trim();
   // Check each statement part for var/const usage
   for (const part of splitStatements(trimmed)) {
-    if (/^var\s/.test(part) || /^const\s/.test(part)) {
-      throw new Error(
-        `Unsupported keyword: ${part.match(/^(\w+)/)?.[1] ?? "unknown"}. Use 'let' instead.`,
-      );
+    const kw = extractIdentifier(part);
+    if (kw === "var" || kw === "const") {
+      throw new Error("Unsupported keyword: " + kw + ". Use 'let' instead.");
     }
   }
-}
-
-/** Check if a string looks like it starts with a statement keyword. */
-function isStatement(input: string): boolean {
-  return /^(?:let|const|var)\s/.test(input.trim());
 }
 
 /** Check if input contains multiple statements (semicolon-separated). */
@@ -74,7 +71,7 @@ function evaluate(source: string): number {
 
   // Handle top-level statements: `let x = ...; expr`, standalone fn defs, type aliases
   if (
-    isStatement(trimmed) ||
+    isDeclarationStart(trimmed) ||
     hasMultipleStatements(trimmed) ||
     isFnDefinition(trimmed) ||
     isTypeAlias(trimmed)
@@ -83,32 +80,33 @@ function evaluate(source: string): number {
     const scope = new Map<string, ScopeValue>();
     // Standalone fn definition: validate params then return 0
     if (isFnDefinition(trimmed) && !hasMultipleStatements(trimmed)) {
-      const scope = new Map<string, ScopeValue>();
-      processFnDefinition(trimmed, scope);
+      const fnScope = new Map<string, ScopeValue>();
+      processFnDefinition(trimmed, fnScope);
       return 0;
     }
     const parts: string[] = splitStatements(trimmed);
     processBlock(scope, parts);
     const lastPart = parts[parts.length - 1]!;
     // If the last part is a declaration/definition (not an expression), validate types then return 0
-    if (isStatement(lastPart) || isFnDefinition(lastPart)) {
+    if (isDeclarationStart(lastPart) || isFnDefinition(lastPart)) {
       // Validate type annotations for declarations
-      const declMatch = lastPart.match(
-        /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*(?::\s*([A-Za-z]\d*))?\s*=\s*(.+)$/,
-      );
+      const declResult = parseDeclaration(lastPart);
       if (
-        declMatch &&
-        declMatch[2] &&
-        typeof declMatch[3] === "string" &&
-        !(/^\s*\[/.test(declMatch[3]) || /^\s*\(/.test(declMatch[3]))
+        declResult &&
+        declResult.typeAnnot &&
+        !declResult.rhs.trim().startsWith("[") &&
+        !declResult.rhs.trim().startsWith("(")
       ) {
         const inferredType = inferExpressionType(
-          declMatch[3],
+          declResult.rhs,
           scope as unknown as Map<string, ScopeValue>,
         );
-        if (inferredType && !isSafeWiden(inferredType, declMatch[2])) {
+        if (inferredType && !isSafeWiden(inferredType, declResult.typeAnnot)) {
           throw new Error(
-            `Type mismatch: expected ${declMatch[2]} but got ${inferredType}`,
+            "Type mismatch: expected " +
+              declResult.typeAnnot +
+              " but got " +
+              inferredType,
           );
         }
       }
@@ -118,18 +116,34 @@ function evaluate(source: string): number {
   }
 
   // Replace empty blocks {} with 0 (Void functions return 0)
-  const noEmptyBlocks = trimmed.replace(/\{\s*\}/g, "0");
+  const noEmptyBlocks = replaceEmptyBlocks(trimmed);
 
   // Find any { ... } blocks in the expression and recursively resolve them
   let resolved = noEmptyBlocks;
   let prev: string;
   do {
     prev = resolved;
-    resolved = prev.replace(/\{([^{}]+)\}/g, (_match, inner) =>
-      String(evaluateBlock(inner)),
-    );
-  } while (resolved !== prev && /\{/.test(resolved));
+    resolved = replaceInnermostBlocks(resolved, function (inner) {
+      return String(evaluateBlock(inner));
+    });
+  } while (resolved !== prev && resolved.indexOf("{") !== -1);
 
   // Evaluate the resulting expression
   return evaluateExpression(resolved);
+}
+
+/** Replace `{}` with `0` in a string. */
+function replaceEmptyBlocks(s: string): string {
+  let result = "";
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === "{" && i + 1 < s.length && s[i + 1] === "}") {
+      result += "0";
+      i += 2;
+    } else {
+      result += s[i];
+      i++;
+    }
+  }
+  return result;
 }

@@ -1,162 +1,191 @@
+import {
+  extractIdentifier,
+  isDeclarationStart,
+  skipSpace,
+} from "./string-utils.js";
+import { isSpace, isDigit, isDigitOrDot, isAlphaNum } from "./char-utils.js";
+
+/** Find the `=` after skipping a balanced delimited block, return rhs. */
+function skipBlockToEquals(
+  t: string,
+  start: number,
+  open: string,
+  close: string,
+): string | null {
+  let depth = 1,
+    end = start + 1;
+  while (end < t.length && depth > 0) {
+    if (t[end] === open) depth++;
+    else if (t[end] === close) depth--;
+    end++;
+  }
+  const p = skipSpace(t, end);
+  if (p < t.length && t[p] === "=") return t.slice(p + 1).trim();
+  return null;
+}
+
 /** Parse declaration with types, pointers, aliases, refinements. */
 export function parseDeclaration(
   input: string,
 ): { name: string; typeAnnot?: string; rhs: string } | null {
-  // Non-zero refinement: `let x : U8 != N = ...` or chained `!= N && != M = ...`
-  const nzMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)(?:<[^>]+>)?(.*?)\s*=\s*(.+)$/,
-  );
-  if (
-    nzMatch &&
-    nzMatch[1] &&
-    typeof nzMatch[4] === "string" &&
-    typeof nzMatch[5] === "string"
-  ) {
-    const pointerPrefix = nzMatch[2]; // "*" or undefined
-    const baseType = nzMatch[3]; // "U8", "I32", etc.
-    const middlePart = nzMatch[4].trim();
-    // Check if this is a refinement (starts with !=)
-    if (/^!=\s*-?[0-9]/.test(middlePart)) {
-      return {
-        name: nzMatch[1],
-        typeAnnot: `${(pointerPrefix ?? "") + (baseType ?? "")} ${middlePart}`,
-        rhs: nzMatch[5],
-      };
+  const trimmed = input.trim();
+  if (!isDeclarationStart(trimmed)) return null;
+
+  // Skip the declaration keyword (let/const/var)
+  let pos = skipSpace(trimmed);
+  const kw = extractIdentifier(trimmed.slice(pos));
+  pos += kw.length;
+  pos = skipSpace(trimmed, pos);
+
+  // Check for mut
+  if (trimmed.startsWith("mut", pos)) {
+    const afterMut = pos + 3;
+    if (afterMut >= trimmed.length || isSpace(trimmed[afterMut]!)) {
+      pos = skipSpace(trimmed, afterMut);
     }
   }
 
-  // Try pattern with a colon-prefixed type, optionally generic like Temp<I32>, and optionally prefixed with * for pointer types.
-  // Use balanced bracket tracking to handle nested generics like Temp<Temp<I32>>.
-  const declPrefix = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(\*?)?([A-Za-z]\w*)/,
-  );
-  if (declPrefix && declPrefix[1]) {
-    const name = declPrefix[1];
-    const pointerPrefix = declPrefix[2] ?? "";
-    let baseType = declPrefix[3]!;
-    // Continue scanning after the matched prefix to capture any generic params with balanced < > tracking
-    let pos = declPrefix[0].length;
-    while (pos < input.length) {
-      const ch = input[pos];
-      if (ch === "<") {
-        // Collect everything inside balanced angle brackets, including the brackets themselves
-        const genericStart = pos;
-        let depth = 1;
-        pos++;
-        while (pos < input.length && depth > 0) {
-          if (input[pos] === "<") depth++;
-          else if (input[pos] === ">") depth--;
-          pos++;
-        }
-        baseType += input.slice(genericStart, pos);
-      } else {
-        break;
-      }
+  // Extract variable name
+  const name = extractIdentifier(trimmed.slice(pos));
+  if (!name) return null;
+  pos += name.length;
+  pos = skipSpace(trimmed, pos);
+
+  // Check for type annotation (colon)
+  if (pos < trimmed.length && trimmed[pos] === ":") {
+    pos++; // skip colon
+    pos = skipSpace(trimmed, pos);
+
+    // Check for pointer prefix
+    let pointerPrefix = "";
+    if (pos < trimmed.length && trimmed[pos] === "*") {
+      pointerPrefix = "*";
+      pos++;
+      pos = skipSpace(trimmed, pos);
     }
-    // Skip whitespace and look for `!=` (refinement) or plain `=`
-    while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-    let refinementChain: string | undefined;
-    if (input[pos] === "!" && input[pos + 1] === "=") {
-      // Collect full refinement chain, e.g. `!= 5 && != 7`
+
+    // Check for refinement value type (e.g., 5U8)
+    if (
+      pos < trimmed.length &&
+      (isDigit(trimmed[pos]!) ||
+        (trimmed[pos] === "-" &&
+          pos + 1 < trimmed.length &&
+          isDigit(trimmed[pos + 1]!)))
+    ) {
+      let numStr = "";
+      if (trimmed[pos] === "-") {
+        numStr += "-";
+        pos++;
+      }
+      while (pos < trimmed.length && isDigitOrDot(trimmed[pos]!)) {
+        numStr += trimmed[pos];
+        pos++;
+      }
+      let suffix = "";
+      while (pos < trimmed.length && isAlphaNum(trimmed[pos]!)) {
+        suffix += trimmed[pos];
+        pos++;
+      }
+      pos = skipSpace(trimmed, pos);
+      if (pos < trimmed.length && trimmed[pos] === "=") {
+        const rhs = trimmed.slice(pos + 1).trim();
+        return { name, typeAnnot: numStr + suffix, rhs };
+      }
+      return null;
+    }
+
+    // Check for tuple type: (I32, I32)
+    if (pos < trimmed.length && trimmed[pos] === "(") {
+      const rhs = skipBlockToEquals(trimmed, pos, "(", ")");
+      if (rhs !== null) return { name, typeAnnot: "tuple", rhs };
+      return null;
+    }
+
+    // Check for struct type: { x : I32, y : I32 }
+    if (pos < trimmed.length && trimmed[pos] === "{") {
+      const rhs = skipBlockToEquals(trimmed, pos, "{", "}");
+      if (rhs !== null) return { name, typeAnnot: undefined, rhs };
+      return null;
+    }
+
+    // Parse type name (e.g., U8, I32, Temp<I32>)
+    let typeName = extractIdentifier(trimmed.slice(pos));
+    if (!typeName) return null;
+    pos += typeName.length;
+
+    // Parse generic params <...>
+    if (pos < trimmed.length && trimmed[pos] === "<") {
+      let depth = 1;
+      let end = pos + 1;
+      while (end < trimmed.length && depth > 0) {
+        if (trimmed[end] === "<") depth++;
+        else if (trimmed[end] === ">") depth--;
+        end++;
+      }
+      typeName += trimmed.slice(pos, end);
+      pos = end;
+    }
+
+    pos = skipSpace(trimmed, pos);
+
+    // Parse refinement chain (!= N && != M ...)
+    let refinementChain = "";
+    if (
+      pos < trimmed.length &&
+      trimmed[pos] === "!" &&
+      pos + 1 < trimmed.length &&
+      trimmed[pos + 1] === "="
+    ) {
       const refineStart = pos;
-      while (pos < input.length) {
-        // Skip past one `!= N` clause
-        while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-        if (input[pos] === "!")
-          pos += 2; // skip `!=`
-        else break;
-        while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-        if (/^-?[0-9]/.test(input[pos]!)) {
-          if (input[pos] === "-") pos++;
-          while (pos < input.length && /[0-9.]/.test(input[pos]!)) pos++;
-        }
-        // Check for `&&` to continue chain
-        while (pos < input.length && /\s/.test(input[pos]!)) pos++;
-        if (input[pos] === "&" && input[pos + 1] === "&") {
-          pos += 2; // skip `&&`
+      while (pos < trimmed.length) {
+        pos = skipSpace(trimmed, pos);
+        if (
+          pos < trimmed.length &&
+          trimmed[pos] === "!" &&
+          pos + 1 < trimmed.length &&
+          trimmed[pos + 1] === "="
+        ) {
+          pos += 2; // skip !=
+          pos = skipSpace(trimmed, pos);
+          // Parse number (optional minus)
+          if (pos < trimmed.length && trimmed[pos] === "-") pos++;
+          while (pos < trimmed.length && isDigitOrDot(trimmed[pos]!)) pos++;
+          pos = skipSpace(trimmed, pos);
+          // Check for &&
+          if (
+            pos < trimmed.length &&
+            trimmed[pos] === "&" &&
+            pos + 1 < trimmed.length &&
+            trimmed[pos + 1] === "&"
+          ) {
+            pos += 2;
+          } else {
+            break;
+          }
         } else {
           break;
         }
       }
-      refinementChain = input.slice(refineStart, pos).trim();
+      refinementChain = trimmed.slice(refineStart, pos).trim();
     }
-    if (pos < input.length && input[pos] === "=") {
-      const rhs = input.slice(pos + 1).trim();
-      return {
-        name,
-        typeAnnot:
-          pointerPrefix +
-          baseType +
-          (refinementChain !== undefined ? ` ${refinementChain}` : ""),
-        rhs,
-      };
+
+    pos = skipSpace(trimmed, pos);
+    if (pos < trimmed.length && trimmed[pos] === "=") {
+      const rhs = trimmed.slice(pos + 1).trim();
+      const typeAnnot =
+        pointerPrefix +
+        typeName +
+        (refinementChain ? " " + refinementChain : "");
+      return { name, typeAnnot, rhs };
     }
+
+    return null;
   }
 
-  // Try pattern without a colon-prefixed type (no explicit annotation)
-  const simpleMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*=\s*(.+)$/,
-  );
-  if (simpleMatch && simpleMatch[1] && simpleMatch[2]) {
-    return { name: simpleMatch[1], typeAnnot: undefined, rhs: simpleMatch[2] };
-  }
-
-  // Try refinement type: `let x : 5U8 = ...` (numeric literal with optional suffix as type annotation)
-  const refMatch = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*(-?[0-9]+(?:\.[0-9]+)?)([A-Za-z]\w*)?\s*=\s*(.+)$/,
-  );
-  if (refMatch && refMatch[1] && refMatch[4]) {
-    const numPart = refMatch[2]; // "5", "-3.14", etc.
-    const suffixPart = refMatch[3]; // "U8", "I32", or undefined
-    return {
-      name: refMatch[1],
-      typeAnnot: `${numPart}${suffixPart ?? ""}`,
-      rhs: refMatch[4],
-    };
-  }
-
-  // Fallback for tuple-typed declarations like `let tuple : (I32, I32) = ...`
-  const tuplePrefix = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*\(/,
-  );
-  if (tuplePrefix) {
-    // Find first `=` outside of parentheses
-    const remainder = input.slice(tuplePrefix[0].length);
-    let parenDepth = 1;
-    for (let i = 0; i < remainder.length; i++) {
-      if (remainder[i] === "(") parenDepth++;
-      else if (remainder[i] === ")") parenDepth--;
-      else if (remainder[i] === "=" && parenDepth === 0) {
-        const rhs = remainder.slice(i + 1).trim();
-        return {
-          name: tuplePrefix[1]!,
-          typeAnnot: "tuple",
-          rhs,
-        };
-      }
-    }
-  }
-
-  // Fallback for struct-typed declarations like `let point : { x : I32, y : I32 } = ...`
-  const structPrefix = input.match(
-    /^(?:let|const|var)\s+(?:(?:mut)\s+)?(\w+)\s*:\s*\{/,
-  );
-  if (!structPrefix) return null;
-
-  // Simpler approach: find first `=` outside of braces, starting after the prefix match
-  const remainder = input.slice(structPrefix[0].length);
-  let braceDepth = 1;
-  for (let i = 0; i < remainder.length; i++) {
-    if (remainder[i] === "{") braceDepth++;
-    else if (remainder[i] === "}") braceDepth--;
-    else if (remainder[i] === "=" && braceDepth === 0) {
-      const rhs = remainder.slice(i + 1).trim();
-      return {
-        name: structPrefix[1]!,
-        typeAnnot: undefined /* struct types not validated yet */,
-        rhs,
-      };
-    }
+  // Simple declaration: let x = value
+  if (pos < trimmed.length && trimmed[pos] === "=") {
+    const rhs = trimmed.slice(pos + 1).trim();
+    return { name, typeAnnot: undefined, rhs };
   }
 
   return null;

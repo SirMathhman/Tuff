@@ -22,7 +22,11 @@ export type Token =
   | KeywordToken;
 
 /** Function definition stored in scope. */
-export type FnDef = { body: string; params: string[] };
+export type FnDef = {
+  body: string;
+  params: string[];
+  paramTypes?: Map<string, string>;
+};
 
 /** Lightweight context to track type info and division tracking during expression evaluation. */
 export type EvalContext = {

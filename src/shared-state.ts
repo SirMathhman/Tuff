@@ -1,4 +1,5 @@
 import type { ScopeValue } from "./types.js";
+import { isWordChar, looksLikeKeyValue } from "./char-utils.js";
 
 /** WeakMap to track mutable variable names per scope instance. */
 export const MUTABLE_VARS = new WeakMap<Map<string, ScopeValue>, Set<string>>();
@@ -85,5 +86,19 @@ export function splitStatements(input: string): string[] {
 /** Check if a brace-enclosed string is an object literal (has key: value pairs). */
 export function isObjectLiteral(expr: string): boolean {
   const trimmed = expr.trim();
-  return /^\w+\s*:/.test(trimmed) || /^\{[^}]*\s*:\s*/.test(expr);
+  if (trimmed.length === 0) return false;
+  // Check for word followed by : (e.g., "key:")
+  let i = 0;
+  while (i < trimmed.length && isWordChar(trimmed[i]!)) i++;
+  if (i > 0 && i < trimmed.length) {
+    let j = i;
+    while (j < trimmed.length && (trimmed[j] === " " || trimmed[j] === "\t"))
+      j++;
+    if (j < trimmed.length && trimmed[j] === ":") return true;
+  }
+  // Check for { ... : ... } pattern
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return looksLikeKeyValue(trimmed.slice(1, -1));
+  }
+  return false;
 }

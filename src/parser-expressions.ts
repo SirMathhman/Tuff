@@ -18,12 +18,6 @@ export function setResolveBlocks(
   resolveBlocksWithScope = fn;
 }
 
-const COMPARISON_OPS = new Set(["<", ">", "<=", ">=", "==", "!="]);
-
-function isComparisonOp(token: Token): boolean {
-  return isOp(token) && COMPARISON_OPS.has(token.value);
-}
-
 /** Parse an object literal like `{ key1 : val1, key2 : val2 }`. */
 export function parseObjectLiteral(
   tokens: Token[],
@@ -32,20 +26,16 @@ export function parseObjectLiteral(
 ): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   while (true) {
-    const next = peek(tokens, pos);
-    if (!next || (isOp(next) && next.value === "}")) break;
-
-    if (next.type !== "id") throw new Error("Expected object property name");
+    const n = peek(tokens, pos);
+    if (!n || (isOp(n) && n.value === "}")) break;
+    if (n.type !== "id") throw new Error("Expected object property name");
     consume(tokens, pos);
-    const propName = next.value;
-
-    const colonToken = peek(tokens, pos);
-    if (!colonToken || !isOp(colonToken) || colonToken.value !== ":") {
+    const pn = n.value;
+    const ct = peek(tokens, pos);
+    if (!ct || !isOp(ct) || ct.value !== ":")
       throw new Error("Expected ':' after object property name");
-    }
     consume(tokens, pos);
-
-    obj[propName] = parseExpression(
+    obj[pn] = parseExpression(
       tokens,
       pos,
       scope as unknown as Map<string, unknown>,
@@ -58,13 +48,66 @@ export function parseObjectLiteral(
 export function getFunction(
   scope: Map<string, ScopeValue>,
   name: string,
-): { body: string; params: string[] } | undefined {
+):
+  | { body: string; params: string[]; paramTypes?: Map<string, string> }
+  | undefined {
   const fn = scope.get("__fn__" + name);
   if (fn !== undefined) {
     scope.delete("__fn__" + name);
-    return fn as unknown as { body: string; params: string[] };
+    return fn as {
+      body: string;
+      params: string[];
+      paramTypes?: Map<string, string>;
+    };
   }
   return undefined;
+}
+
+const e = "Type mismatch for parameter '";
+function validateArgType(a: unknown, t: string, n: string): void {
+  if (t.startsWith("[")) {
+    if (!Array.isArray(a))
+      throw new Error(e + n + "': expected " + t + ", but got non-array value");
+    return;
+  }
+  if (isNumericType(t)) {
+    if (typeof a !== "number")
+      throw new Error(
+        e + n + "': expected " + t + ", but got non-numeric value",
+      );
+    return;
+  }
+  if (t === "Bool" || t === "bool") {
+    if (typeof a !== "number" && typeof a !== "boolean")
+      throw new Error(
+        e + n + "': expected " + t + ", but got incompatible value",
+      );
+    return;
+  }
+  if (t === "Void")
+    throw new Error(e + n + "': expected Void, but got a value");
+}
+
+function isUnsignedSuffix(suffix: string): boolean {
+  return suffix.length > 0 && (suffix[0] === "u" || suffix[0] === "U");
+}
+function isNumericType(s: string): boolean {
+  if (s.length < 2) return false;
+  const f = s[0]!;
+  if (f !== "I" && f !== "U" && f !== "F") return false;
+  for (let i = 1; i < s.length; i++) {
+    if (s.charCodeAt(i) < 48 || s.charCodeAt(i) > 57) return false;
+  }
+  return true;
+}
+function isComparisonOp(t: Token): boolean {
+  return (
+    (isOp(t) && "<>".includes(t.value[0]!)) ||
+    t.value === "==" ||
+    t.value === "!=" ||
+    t.value === "<=" ||
+    t.value === ">="
+  );
 }
 
 /** Resolve an identifier token, handling function calls and chained access. */
@@ -76,55 +119,46 @@ export function resolveIdentifier(
   const token = peek(tokens, pos);
   if (!token || token.type !== "id") throw new Error("Expected identifier");
   consume(tokens, pos);
-
-  // Check for function call: name(
-  const nextToken = peek(tokens, pos);
-  if (nextToken && isOp(nextToken) && nextToken.value === "(") {
-    const fnDef = getFunction(scope, token.value);
-    if (fnDef !== undefined) {
-      consume(tokens, pos);
-      const args: unknown[] = [];
-      while (true) {
-        const peekNext = peek(tokens, pos);
-        if (!peekNext || (isOp(peekNext) && peekNext.value === ")")) break;
-        let argValue: unknown;
-        if (isOp(peekNext) && peekNext.value === "[") {
-          argValue = parseValuePrimary(tokens, pos, scope);
-        } else {
-          argValue = parseExpression(
-            tokens,
-            pos,
-            scope as unknown as Map<string, unknown>,
-          );
-        }
-        args.push(argValue);
-      }
-      const closeParen = peek(tokens, pos);
-      if (closeParen && isOp(closeParen) && closeParen.value === ")") {
-        consume(tokens, pos);
-      }
-      const fnScope = new Map(scope);
-      for (let i = 0; i < fnDef.params.length; i++) {
-        const paramName = fnDef.params[i];
-        if (paramName !== undefined && args[i] !== undefined) {
-          fnScope.set(paramName, args[i]);
-        }
-      }
-      return resolveBlocksWithScope(fnDef.body, fnScope);
+  const nt = peek(tokens, pos);
+  if (nt && isOp(nt) && nt.value === "(") {
+    const fd = getFunction(scope, token.value);
+    if (fd === undefined) throw new Error("Undefined function: " + token.value);
+    consume(tokens, pos);
+    const args: unknown[] = [];
+    while (true) {
+      const pn = peek(tokens, pos);
+      if (!pn || (isOp(pn) && pn.value === ")")) break;
+      args.push(
+        isOp(pn) && pn.value === "["
+          ? parseValuePrimary(tokens, pos, scope)
+          : parseExpression(
+              tokens,
+              pos,
+              scope as unknown as Map<string, unknown>,
+            ),
+      );
     }
-    throw new Error(`Undefined function: ${token.value}`);
+    const cp = peek(tokens, pos);
+    if (cp && isOp(cp) && cp.value === ")") consume(tokens, pos);
+    const fs = new Map(scope);
+    for (let i = 0; i < fd.params.length; i++) {
+      const pn = fd.params[i];
+      if (pn !== undefined && args[i] !== undefined) {
+        if (fd.paramTypes) {
+          const et = fd.paramTypes.get(pn);
+          if (et) validateArgType(args[i], et, pn);
+        }
+        fs.set(pn, args[i]);
+      }
+    }
+    return resolveBlocksWithScope(fd.body, fs);
   }
-
-  let value = scope.get(token.value);
-  if (value === undefined)
-    throw new Error(`Undefined variable: ${token.value}`);
-
-  // Handle chained access: arr[0][1] and obj.prop
+  let v = scope.get(token.value);
+  if (v === undefined) throw new Error("Undefined variable: " + token.value);
   while (true) {
-    const nextToken = peek(tokens, pos);
-    if (!nextToken || !isOp(nextToken)) break;
-
-    if (nextToken.value === "[") {
+    const nt = peek(tokens, pos);
+    if (!nt || !isOp(nt)) break;
+    if (nt.value === "[") {
       consume(tokens, pos);
       const idx = parseExpression(
         tokens,
@@ -132,46 +166,32 @@ export function resolveIdentifier(
         scope as unknown as Map<string, unknown>,
       );
       consume(tokens, pos);
-      if (!Array.isArray(value)) throw new Error("Cannot index non-array");
-      value = (value as unknown[])[idx];
-    } else if (nextToken.value === ".") {
+      if (!Array.isArray(v)) throw new Error("Cannot index non-array");
+      v = (v as unknown[])[idx];
+    } else if (nt.value === ".") {
       consume(tokens, pos);
-      const propToken = peek(tokens, pos);
-      if (!propToken) throw new Error("Expected property name after dot");
-
-      // Tuple field access: `.0`, `.1` etc.
-      if (propToken.type === "number") {
+      const pt = peek(tokens, pos);
+      if (!pt) throw new Error("Expected property name after dot");
+      if (pt.type === "number") {
         consume(tokens, pos);
-        const fieldIdx = propToken.value;
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "__tuple__" in value
-        ) {
-          value = (
-            value as unknown as Record<string, unknown> & { values: unknown[] }
-          ).values[fieldIdx];
-        } else {
+        if (typeof v === "object" && v !== null && "__tuple__" in v)
+          v = (v as unknown as Record<string, unknown> & { values: unknown[] })
+            .values[pt.value];
+        else
           throw new Error(
-            `Cannot access tuple field on non-tuple: ${String(value)}`,
+            "Cannot access tuple field on non-tuple: " + String(v),
           );
-        }
-      } else if (propToken.type === "id") {
+      } else if (pt.type === "id") {
         consume(tokens, pos);
-        if (typeof value === "object" && value !== null) {
-          value = (value as Record<string, unknown>)[propToken.value];
-        } else {
-          throw new Error(
-            `Cannot access property on non-object: ${String(value)}`,
-          );
-        }
-      } else {
+        if (typeof v === "object" && v !== null)
+          v = (v as Record<string, unknown>)[pt.value];
+        else
+          throw new Error("Cannot access property on non-object: " + String(v));
+      } else
         throw new Error("Expected property name or numeric field after dot");
-      }
     } else break;
   }
-
-  return value;
+  return v;
 }
 
 function parseValuePrimary(
@@ -179,133 +199,113 @@ function parseValuePrimary(
   pos: [number],
   scope: Map<string, ScopeValue>,
 ): unknown {
-  const token = peek(tokens, pos);
-  if (!token) throw new Error("Unexpected end of input");
-
-  if (token.type === "number") {
+  const t = peek(tokens, pos);
+  if (!t) throw new Error("Unexpected end of input");
+  if (t.type === "number") {
     consume(tokens, pos);
-    return token.value;
+    return t.value;
   }
-
-  if (token.type === "boolean") {
+  if (t.type === "boolean") {
     consume(tokens, pos);
-    return token.value ? 1 : 0;
+    return t.value ? 1 : 0;
   }
-
-  if (isOp(token) && token.value === "[") {
+  if (isOp(t) && t.value === "[") {
     consume(tokens, pos);
-    const arr: unknown[] = [];
+    const a: unknown[] = [];
     while (true) {
-      const next = peek(tokens, pos);
-      if (!next || (isOp(next) && next.value === "]")) break;
-      arr.push(parseValuePrimary(tokens, pos, scope));
+      const n = peek(tokens, pos);
+      if (!n || (isOp(n) && n.value === "]")) break;
+      a.push(parseValuePrimary(tokens, pos, scope));
     }
     consume(tokens, pos);
-    return arr;
+    return a;
   }
-
-  // Tuple literal: `(expr, expr)` - parse as array with tuple marker
-  if (isOp(token) && token.value === "(") {
+  if (isOp(t) && t.value === "(") {
     consume(tokens, pos);
-    const tupl: unknown[] = [];
+    const tu: unknown[] = [];
     while (true) {
-      const next = peek(tokens, pos);
-      if (!next || (isOp(next) && next.value === ")")) break;
-      // Skip commas
-      if (!(isOp(next) && next.value === ",")) {
-        tupl.push(parseValuePrimary(tokens, pos, scope));
-      } else {
-        consume(tokens, pos);
-      }
+      const n = peek(tokens, pos);
+      if (!n || (isOp(n) && n.value === ")")) break;
+      if (!(isOp(n) && n.value === ","))
+        tu.push(parseValuePrimary(tokens, pos, scope));
+      else consume(tokens, pos);
     }
     consume(tokens, pos);
-    return { __tuple__: true, values: tupl };
+    return { __tuple__: true, values: tu };
   }
-
-  if (token.type === "id") {
-    return resolveIdentifier(tokens, pos, scope);
-  }
-
-  throw new Error(`Unexpected token: ${token.type}`);
+  if (t.type === "id") return resolveIdentifier(tokens, pos, scope);
+  throw new Error("Unexpected token: " + t.type);
 }
 
-/** Evaluate a comparison and return 1 for true, 0 for false. */
-function evaluateComparison(left: number, op: string, right: number): number {
+function evaluateComparison(l: number, op: string, r: number): number {
   switch (op) {
     case "<":
-      return left < right ? 1 : 0;
+      return l < r ? 1 : 0;
     case ">":
-      return left > right ? 1 : 0;
+      return l > r ? 1 : 0;
     case "<=":
-      return left <= right ? 1 : 0;
+      return l <= r ? 1 : 0;
     case ">=":
-      return left >= right ? 1 : 0;
+      return l >= r ? 1 : 0;
     case "==":
-      return left === right ? 1 : 0;
+      return l === r ? 1 : 0;
     case "!=":
-      return left !== right ? 1 : 0;
+      return l !== r ? 1 : 0;
     default:
-      throw new Error(`Unknown comparison operator: ${op}`);
+      throw new Error("Unknown comparison operator: " + op);
   }
 }
 
-/** Parse comparison expressions like `a < b`, `x >= 4`, and `expr is Type`. */
 function parseComparison(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
   ctx?: EvalContext,
 ): number {
-  let left = parseTerm(tokens, pos, scope, ctx);
+  let l = parseTerm(tokens, pos, scope, ctx);
   while (true) {
-    const currentToken = peek(tokens, pos);
-    if (!currentToken || !isComparisonOp(currentToken)) break;
+    const ct = peek(tokens, pos);
+    if (!ct || !isComparisonOp(ct)) break;
     consume(tokens, pos);
-    const right = parseTerm(tokens, pos, scope, ctx);
-    left = evaluateComparison(left, currentToken.value as string, right);
+    l = evaluateComparison(
+      l,
+      ct.value as string,
+      parseTerm(tokens, pos, scope, ctx),
+    );
   }
-  // Check for `is <Type>` operator
   if (ctx) {
-    const isTok = peek(tokens, pos);
-    if (isTok && isTok.type === "id" && isTok.value.toLowerCase() === "is") {
-      consume(tokens, pos); // consume 'is'
-      const typeTok = peek(tokens, pos);
-      if (!typeTok || typeTok.type !== "id")
+    const it = peek(tokens, pos);
+    if (it && it.type === "id" && it.value.toLowerCase() === "is") {
+      consume(tokens, pos);
+      const tt = peek(tokens, pos);
+      if (!tt || tt.type !== "id")
         throw new Error("Expected type name after 'is'");
       consume(tokens, pos);
-      left = ctx.lastResultType === typeTok.value ? 1 : 0;
+      l = ctx.lastResultType === tt.value ? 1 : 0;
     }
   }
-  return left;
+  return l;
 }
 
-/** Recursive descent parser for arithmetic expressions. */
 export function parseExpression(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
   ctx?: EvalContext,
 ): number {
-  let left = parseComparison(tokens, pos, scope, ctx);
+  let l = parseComparison(tokens, pos, scope, ctx);
   while (true) {
-    const currentToken = peek(tokens, pos);
-    if (
-      !currentToken ||
-      !isOp(currentToken) ||
-      !"+-".includes(currentToken.value)
-    )
-      break;
+    const ct = peek(tokens, pos);
+    if (!ct || !isOp(ct) || !"+-".includes(ct.value)) break;
     consume(tokens, pos);
-    const savedLeftType = ctx?.lastResultType;
-    const right = parseTerm(tokens, pos, scope, ctx);
-    if (ctx && savedLeftType && ctx.lastResultType) {
-      ctx.lastResultType = promoteTypes(savedLeftType, ctx.lastResultType);
-    } else if (ctx) {
-      ctx.lastResultType = undefined;
-    }
-    left = currentToken.value === "+" ? left + right : left - right;
+    const sl = ctx?.lastResultType;
+    const r = parseTerm(tokens, pos, scope, ctx);
+    if (ctx && sl && ctx.lastResultType)
+      ctx.lastResultType = promoteTypes(sl, ctx.lastResultType);
+    else if (ctx) ctx.lastResultType = undefined;
+    l = ct.value === "+" ? l + r : l - r;
   }
-  return left;
+  return l;
 }
 
 function parseTerm(
@@ -314,27 +314,17 @@ function parseTerm(
   scope: Map<string, unknown>,
   ctx?: EvalContext,
 ): number {
-  let left = parseUnary(tokens, pos, scope, ctx);
+  let l = parseUnary(tokens, pos, scope, ctx);
   while (true) {
-    const currentToken = peek(tokens, pos);
-    if (
-      !currentToken ||
-      !isOp(currentToken) ||
-      !"*/".includes(currentToken.value)
-    )
-      break;
+    const ct = peek(tokens, pos);
+    if (!ct || !isOp(ct) || !"*/".includes(ct.value)) break;
     consume(tokens, pos);
-
-    // For division, mark context so identifier resolution can check non-zero guarantee
-    if (ctx && currentToken.value === "/") {
-      ctx.isDivisor = true;
-    }
-    const right = parseUnary(tokens, pos, scope, ctx);
+    if (ctx && ct.value === "/") ctx.isDivisor = true;
+    const r = parseUnary(tokens, pos, scope, ctx);
     if (ctx) ctx.isDivisor = false;
-
-    left = currentToken.value === "*" ? left * right : left / right;
+    l = ct.value === "*" ? l * r : l / r;
   }
-  return left;
+  return l;
 }
 
 function parseUnary(
@@ -344,55 +334,39 @@ function parseUnary(
   ctx?: EvalContext,
 ): number {
   while (true) {
-    const currentToken = peek(tokens, pos);
-    if (!currentToken || !isOp(currentToken)) break;
-
-    // Check for dereference operator `*` — only when followed by an identifier
-    if (currentToken.value === "*") {
-      const nextToken = tokens[pos[0] + 1];
-      if (nextToken && nextToken.type === "id") {
+    const ct = peek(tokens, pos);
+    if (!ct || !isOp(ct)) break;
+    if (ct.value === "*") {
+      const nxt = tokens[pos[0] + 1];
+      if (nxt && nxt.type === "id") {
         consume(tokens, pos);
-        const ptrTargets = getPointerTargets(
+        const ptr = getPointerTargets(
           scope as unknown as Map<string, ScopeValue>,
         );
-        const targetName = ptrTargets.get(nextToken.value);
-        if (!targetName) {
+        const tn = ptr.get(nxt.value);
+        if (!tn)
           throw new Error(
-            `Cannot dereference non-pointer variable: ${nextToken.value}`,
+            "Cannot dereference non-pointer variable: " + nxt.value,
           );
-        }
-        // Resolve the target variable's current value from scope
-        const resolved = resolveIdentifier(
+        const r = resolveIdentifier(
           tokens,
           pos,
           scope as unknown as Map<string, ScopeValue>,
         );
-        return typeof resolved === "number" ? resolved : 0;
-      } else {
-        break; // Not dereference — let parseTerm handle * as multiplication
-      }
+        return typeof r === "number" ? r : 0;
+      } else break;
     }
-
-    if (currentToken.value !== "-" && currentToken.value !== "+") break;
-
-    const nextToken = tokens[pos[0] + 1];
-    if (
-      nextToken?.type === "number" &&
-      nextToken.suffix &&
-      /^[uU]/.test(nextToken.suffix)
-    ) {
+    if (ct.value !== "-" && ct.value !== "+") break;
+    const nxt = tokens[pos[0] + 1];
+    if (nxt?.type === "number" && nxt.suffix && isUnsignedSuffix(nxt.suffix))
       throw new Error(
-        `Cannot apply unary minus to unsigned typed literal: -${nextToken.value}${nextToken.suffix}`,
+        "Cannot apply unary minus to unsigned typed literal: -" +
+          String(nxt.value) +
+          String(nxt.suffix),
       );
-    }
-
     consume(tokens, pos);
-    const operand = parseUnary(tokens, pos, scope, ctx);
-    return typeof operand === "number"
-      ? currentToken.value === "-"
-        ? -operand
-        : operand
-      : operand;
+    const op = parseUnary(tokens, pos, scope, ctx);
+    return typeof op === "number" ? (ct.value === "-" ? -op : op) : op;
   }
   return parsePrimary(tokens, pos, scope, ctx);
 }
@@ -403,32 +377,20 @@ function parseIfExpr(
   scope: Map<string, unknown>,
 ): number {
   consume(tokens, pos);
-
-  const parenToken = peek(tokens, pos);
-  if (parenToken && isOp(parenToken) && parenToken.value === "(") {
+  const pt = peek(tokens, pos);
+  if (pt && isOp(pt) && pt.value === "(") {
     consume(tokens, pos);
-    const cond = parseExpression(tokens, pos, scope);
-    const closeParen = peek(tokens, pos);
-    if (closeParen && isOp(closeParen) && closeParen.value === ")") {
+    const c = parseExpression(tokens, pos, scope);
+    const cp = peek(tokens, pos);
+    if (cp && isOp(cp) && cp.value === ")") consume(tokens, pos);
+    const tv = parseExpression(tokens, pos, scope);
+    const nt = peek(tokens, pos);
+    if (nt && nt.type === "keyword" && nt.value === "else") {
       consume(tokens, pos);
+      return c !== 0 ? tv : parseExpression(tokens, pos, scope);
     }
-
-    const thenValue = parseExpression(tokens, pos, scope);
-
-    const nextToken = peek(tokens, pos);
-    if (
-      nextToken &&
-      nextToken.type === "keyword" &&
-      nextToken.value === "else"
-    ) {
-      consume(tokens, pos);
-      const elseValue = parseExpression(tokens, pos, scope);
-      return cond !== 0 ? thenValue : elseValue;
-    }
-
-    return thenValue;
+    return tv;
   }
-
   throw new Error("Expected condition after if");
 }
 
@@ -438,73 +400,57 @@ function parsePrimary(
   scope: Map<string, unknown>,
   ctx?: EvalContext,
 ): number {
-  const token = peek(tokens, pos);
-  if (token && token.type === "keyword" && token.value === "if") {
+  const t = peek(tokens, pos);
+  if (t && t.type === "keyword" && t.value === "if")
     return parseIfExpr(tokens, pos, scope);
-  }
-
-  // Handle parenthesized expressions: ( expr ) or tuple literals: (expr, expr)
-  if (token && isOp(token) && token.value === "(") {
-    const savedPos = pos[0];
+  if (t && isOp(t) && t.value === "(") {
+    const sp = pos[0];
     try {
-      const valResult = parseValuePrimary(
+      const vr = parseValuePrimary(
         tokens,
         pos,
         scope as unknown as Map<string, ScopeValue>,
       );
-      if (typeof valResult === "object" && valResult !== null) {
-        // Tuple - return first element for expression context
-        if ("__tuple__" in valResult) {
-          const tValues = (valResult as Record<string, unknown>).values;
-          return Array.isArray(tValues) ? Number(tValues[0] ?? 0) : 0;
-        }
+      if (typeof vr === "object" && vr !== null && "__tuple__" in vr) {
+        const tvs = (vr as Record<string, unknown>).values;
+        return Array.isArray(tvs) ? Number(tvs[0] ?? 0) : 0;
       }
     } catch {
-      /* not a value primary */
+      /* not value */
     }
-
-    pos[0] = savedPos;
+    pos[0] = sp;
     consume(tokens, pos);
-    const result = parseExpression(tokens, pos, scope, ctx);
-    const closeParen = peek(tokens, pos);
-    if (!closeParen || !isOp(closeParen) || closeParen.value !== ")")
+    const r = parseExpression(tokens, pos, scope, ctx);
+    const cp = peek(tokens, pos);
+    if (!cp || !isOp(cp) || cp.value !== ")")
       throw new Error("Expected closing parenthesis");
     consume(tokens, pos);
-    return result;
+    return r;
   }
-
-  // Capture type suffix from numeric literals before consuming
-  if (ctx && token?.type === "number") {
-    ctx.lastResultType = token.suffix ?? "I32";
-  } else if (ctx) {
-    if (token?.type === "id") {
-      const annots = getTypeAnnotations(
-        scope as unknown as Map<string, ScopeValue>,
-      );
-      ctx.lastResultType = annots.get(token.value) ?? undefined;
-
-      // Division safety: check non-zero guarantee for divisor
-      if (ctx.isDivisor) {
-        const nzSet = getNonZeroSet(
-          scope as unknown as Map<string, ScopeValue>,
+  if (ctx && t?.type === "number") ctx.lastResultType = t.suffix ?? "I32";
+  else if (ctx) {
+    if (t?.type === "id") {
+      ctx.lastResultType =
+        getTypeAnnotations(scope as unknown as Map<string, ScopeValue>).get(
+          t.value,
+        ) ?? undefined;
+      if (
+        ctx.isDivisor &&
+        !getNonZeroSet(scope as unknown as Map<string, ScopeValue>).has(t.value)
+      )
+        throw new Error(
+          "Division by variable '" +
+            t.value +
+            "' without != 0 refinement is not allowed",
         );
-        if (!nzSet.has(token.value)) {
-          throw new Error(
-            `Division by variable '${token.value}' without != 0 refinement is not allowed`,
-          );
-        }
-      }
-    } else {
-      ctx.lastResultType = undefined;
-    }
+    } else ctx.lastResultType = undefined;
   }
-
-  const value = parseValuePrimary(
+  const v = parseValuePrimary(
     tokens,
     pos,
     scope as unknown as Map<string, ScopeValue>,
   );
-  return typeof value === "number" ? value : 0;
+  return typeof v === "number" ? v : 0;
 }
 
 /** Evaluate an expression string and return a number. */

@@ -1,7 +1,16 @@
 /** Extract bit width from a type name like U8, I32, F64 => 8, 32, 64. */
 export function getTypeBitWidth(typeName: string): number {
-  const match = typeName.match(/(\d+)/);
-  return match && match[1] ? parseInt(match[1], 10) : 0;
+  // Find digits in the type name
+  let numStr = "";
+  for (let i = 0; i < typeName.length; i++) {
+    const c = typeName[i]!;
+    if (c >= "0" && c <= "9") {
+      numStr += c;
+    } else if (numStr.length > 0) {
+      break;
+    }
+  }
+  return numStr.length > 0 ? parseInt(numStr, 10) : 0;
 }
 
 const BIT_WIDTHS = [8, 16, 32, 64];
@@ -29,7 +38,7 @@ export function promoteTypes(
 
   if (aWidth === bWidth && a !== b) {
     const wider = nextWiderBitWidth(aWidth);
-    return `I${wider}`;
+    return "I" + String(wider);
   }
 
   if (bWidth <= aWidth) return a;

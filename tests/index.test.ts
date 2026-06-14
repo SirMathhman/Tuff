@@ -44,6 +44,10 @@ test("block with variable declaration returns last expression", () => {
   expect(executeTuff("{ let x = 1 + 2; x }")).toBe(3);
 });
 
+test("block ending in assignment to an already-declared variable returns its value", () => {
+  expect(executeTuff("{ let mut y = 1; y = 10 }")).toBe(1);
+});
+
 test("variable assigned from block expression", () => {
   expect(executeTuff("let y = { let x = 1 + 2; x }; y")).toBe(3);
 });
@@ -86,6 +90,16 @@ test("if/else with true condition returns then-branch value", () => {
 
 test("mutable variable modified by if/else statement", () => {
   expect(executeTuff("let mut x = 0; if (true) x = 3; else x = 5; x")).toBe(3);
+});
+
+test("mutable variable modified by else branch when condition is false", () => {
+  expect(
+    executeTuff("let mut x = 0; if (0) { x = 1 }; else { x = 2 }; x"),
+  ).toBe(2);
+});
+
+test("if statement without else followed by another statement", () => {
+  expect(executeTuff("if (0) { 1 }; 5")).toBe(5);
 });
 
 // --- Compound assignment ---
@@ -202,6 +216,12 @@ test("calling undefined function throws error", () => {
   expect(() => executeTuff("undefinedFn()")).toThrow();
 });
 
+test("mismatched argument type throws error", () => {
+  expect(() =>
+    executeTuff("fn takeI32(x : I32) => x; takeI32([1, 2])"),
+  ).toThrow();
+});
+
 test("accessing property on non-object throws error", () => {
   expect(() => executeTuff("let x = 42; x.prop")).toThrow();
 });
@@ -244,6 +264,10 @@ test("pointer declaration with address-of and dereference", () => {
   expect(executeTuff("let x = 100; let y : *I32 = &x; *y")).toBe(100);
 });
 
+test("address-of an undefined variable throws error", () => {
+  expect(() => executeTuff("let p = &z; 0")).toThrow();
+});
+
 test("function with Void return type", () => {
   expect(executeTuff("fn empty() : Void => {}")).toBe(0);
 });
@@ -252,6 +276,10 @@ test("mut keyword allows compound assignment on indexed array element", () => {
   expect(() =>
     executeTuff("mut arr = [10, 20]; arr[0] += 5; arr[0]"),
   ).toThrow();
+});
+
+test("compound += on indexed array element works", () => {
+  expect(executeTuff("let mut arr = [0]; arr[0] += 5; arr[0]")).toBe(5);
 });
 
 test("if expression with false condition returns else branch", () => {
@@ -340,10 +368,22 @@ test("variable reference carries inferred type for annotation validation", () =>
   expect(() => executeTuff("let x = 100U16; let y : U8 = x;")).toThrow();
 });
 
+test("type mismatch from inferred variable type throws when declaration is not last statement", () => {
+  expect(() => executeTuff("let x = 100U16; let y : U8 = x; y")).toThrow();
+});
+
 // --- Refinement types ---
 
 test("refinement type with exact value match evaluates correctly", () => {
   expect(executeTuff("let x : 5U8 = 5U8; x")).toBe(5);
+});
+
+test("value refinement type mismatch throws error", () => {
+  expect(() => executeTuff("let x : 5U8 = 6U8; x")).toThrow();
+});
+
+test("assigning excluded refinement value throws error", () => {
+  expect(() => executeTuff("let x : U8 != 5 = 5U8; x")).toThrow();
 });
 
 test("division by variable without non-zero refinement throws error", () => {
@@ -388,10 +428,18 @@ test("triple chained refinements (!= 1 && != 2 && != 3) evaluates correctly", ()
   expect(executeTuff("let x : U8 != 1 && != 2 && != 3 = 0U8; x + 1")).toBe(1);
 });
 
+test("refinement with negative excluded value evaluates correctly", () => {
+  expect(executeTuff("let x : I32 != -5 = 0; x")).toBe(0);
+});
+
+test("refinement with decimal excluded value evaluates correctly", () => {
+  expect(executeTuff("let x : F32 != 1.5 = 0.0F32; x")).toBe(0);
+});
+
 test("nested array assignment via intermediate variable", () => {
   expect(
     executeTuff(
-      `let mut array = [0]; let mut temp = [array]; temp[0][0] = 1; temp[0][0]`,
+      "let mut array = [0]; let mut temp = [array]; temp[0][0] = 1; temp[0][0]",
     ),
   ).toBe(1);
 });
@@ -399,35 +447,43 @@ test("nested array assignment via intermediate variable", () => {
 test("indirect array indexing: array[array[0]] assignment and read", () => {
   expect(
     executeTuff(
-      `let mut array = [1, 0]; array[array[0]] = 100; array[array[0]]`,
+      "let mut array = [1, 0]; array[array[0]] = 100; array[array[0]]",
     ),
   ).toBe(100);
 });
 
 test("value refinement type { 5U8 } evaluates correctly", () => {
-  expect(executeTuff(`let x : { 5U8 } = { 5U8 }; x`)).toBe(5);
+  expect(executeTuff("let x : { 5U8 } = { 5U8 }; x")).toBe(5);
+});
+
+test("negative value refinement type evaluates correctly", () => {
+  expect(executeTuff("let x : -5I32 = -5I32; x")).toBe(-5);
+});
+
+test("decimal value refinement type evaluates correctly", () => {
+  expect(executeTuff("let x : 1.5F32 = 1.5F32; x")).toBe(1.5);
 });
 
 test("block expression in value refinement with inner variable", () => {
   expect(
-    executeTuff(`let x : { let y = 5U8; y } = { let y = 5U8; y }; x`),
+    executeTuff("let x : { let y = 5U8; y } = { let y = 5U8; y }; x"),
   ).toBe(5);
 });
 
 test("tuple type declaration and field access", () => {
   expect(
-    executeTuff(`let tuple : (I32, I32) = (1, 2); tuple.0 + tuple.1`),
+    executeTuff("let tuple : (I32, I32) = (1, 2); tuple.0 + tuple.1"),
   ).toBe(3);
 });
 
 // --- Error handling ---
 
 test("var keyword is not supported and throws error", () => {
-  expect(() => executeTuff(`var x = 0`)).toThrow();
+  expect(() => executeTuff("var x = 0")).toThrow();
 });
 
 test("const keyword is not supported and throws error", () => {
-  expect(() => executeTuff(`const x = 0`)).toThrow();
+  expect(() => executeTuff("const x = 0")).toThrow();
 });
 
 test("invalid source throws error", () => {
