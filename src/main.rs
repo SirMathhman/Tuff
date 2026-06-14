@@ -70,6 +70,40 @@ impl Env {
 
 type ParseResult = Result<i64, String>;
 
+/// Logical OR layer (lowest precedence): Expr ('||' Expr)*
+fn parse_logical_or(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    let mut result = parse_logical_and(input, env)?;
+    loop {
+        skip_spaces(input);
+        if input.starts_with(b"||") {
+            *input = &input[2..]; // consume '||'
+            skip_spaces(input);
+            let rhs = parse_logical_and(input, env)?;
+            result = if result != 0 || rhs != 0 { 1 } else { 0 };
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
+/// Logical AND layer: Expr ('&&' Expr)*
+fn parse_logical_and(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    let mut result = parse_expr(input, env)?;
+    loop {
+        skip_spaces(input);
+        if input.starts_with(b"&&") {
+            *input = &input[2..]; // consume '&&'
+            skip_spaces(input);
+            let rhs = parse_expr(input, env)?;
+            result = if result != 0 && rhs != 0 { 1 } else { 0 };
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
 fn parse_expr(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     let mut result = parse_term(input, env)?;
     loop {
@@ -132,9 +166,14 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         parse_block(input, env)
     } else if input.first().map_or(false, |&c| c.is_ascii_alphabetic()) {
         let ident = read_ident(input);
-        match env.get(&ident) {
-            Some(val) => Ok(val),
-            None => Err(format!("undefined variable: {}", ident)),
+        // Check for boolean literals first
+        match ident.as_str() {
+            "true" => Ok(1),
+            "false" => Ok(0),
+            _ => match env.get(&ident) {
+                Some(val) => Ok(val),
+                None => Err(format!("undefined variable: {}", ident)),
+            },
         }
     } else {
         parse_number(input)
@@ -167,7 +206,7 @@ fn parse_block(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
             *input = &input[1..]; // consume ';'
             env.update(&name, last_val)?;
         } else {
-            last_val = parse_expr(input, env)?;
+            last_val = parse_logical_or(input, env)?;
         }
     }
     env.exit_scope();
@@ -307,7 +346,7 @@ fn parse_program(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     if input.is_empty() {
         return Ok(last_val);
     }
-    let val = parse_expr(input, env)?;
+    let val = parse_logical_or(input, env)?;
     Ok(val)
 }
 
@@ -425,6 +464,24 @@ mod tests {
             execute_tuff("let mut x = 0; let y = { x = 1; 0 }; x"),
             Ok(1)
         );
+    }
+
+    #[test]
+    fn test_boolean_literal_true() {
+        // `true` literal should evaluate to 1.
+        assert_eq!(execute_tuff("let x = true; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_logical_or_expression() {
+        // || operator with boolean variables.
+        assert_eq!(execute_tuff("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
+    fn test_logical_and_expression() {
+        // && operator: true && false => 0.
+        assert_eq!(execute_tuff("let x = true; let y = false; x && y"), Ok(0));
     }
 }
 
