@@ -87,16 +87,90 @@ fn parse_logical_or(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     Ok(result)
 }
 
-/// Logical AND layer: Expr ('&&' Expr)*
+/// Logical AND layer: Comparison ('&&' Comparison)*
 fn parse_logical_and(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
-    let mut result = parse_expr(input, env)?;
+    let mut result = parse_comparison(input, env)?;
     loop {
         skip_spaces(input);
         if input.starts_with(b"&&") {
             *input = &input[2..]; // consume '&&'
             skip_spaces(input);
-            let rhs = parse_expr(input, env)?;
+            let rhs = parse_comparison(input, env)?;
             result = if result != 0 && rhs != 0 { 1 } else { 0 };
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
+/// Comparison layer: Expr (('<'|'>'|'<='|'>='|'=='|'!=') Expr)*
+fn parse_comparison(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    let mut result = parse_expr(input, env)?;
+    loop {
+        skip_spaces(input);
+        if input.starts_with(b"<=")
+            || input.starts_with(b">=")
+            || input.starts_with(b"==")
+            || input.starts_with(b"!=")
+        {
+            let op = (input[0] as char, input[1] as char);
+            *input = &input[2..]; // consume operator
+            skip_spaces(input);
+            let rhs = parse_comparison(input, env)?;
+            result = match op {
+                ('<', '=') => {
+                    if result <= rhs {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                ('>', '=') => {
+                    if result >= rhs {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                ('=', '=') => {
+                    if result == rhs {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                ('!', '=') => {
+                    if result != rhs {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                _ => unreachable!(),
+            };
+        } else if input.first().copied() == Some(b'<') || input.first().copied() == Some(b'>') {
+            let op = input[0];
+            *input = &input[1..]; // consume operator
+            skip_spaces(input);
+            let rhs = parse_comparison(input, env)?;
+            result = match op {
+                b'<' => {
+                    if result < rhs {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                b'>' => {
+                    if result > rhs {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                _ => unreachable!(),
+            };
         } else {
             break;
         }
@@ -155,7 +229,7 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     skip_spaces(input);
     if input.first().copied() == Some(b'(') {
         *input = &input[1..]; // consume '('
-        let val = parse_expr(input, env)?;
+        let val = parse_comparison(input, env)?;
         skip_spaces(input);
         if input.first().copied() != Some(b')') {
             return Err("expected ')'".to_string());
@@ -164,6 +238,21 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         Ok(val)
     } else if input.first().copied() == Some(b'{') {
         parse_block(input, env)
+    } else if input.starts_with(b"if") && (input.len() < 3 || !input[2].is_ascii_alphanumeric()) {
+        // Parse if/else expression: 'if' CONDITION CONSEQUENCE 'else' ALTERNATIVE
+        *input = &input[2..]; // consume "if"
+        skip_spaces(input);
+        let cond = parse_logical_or(input, env)?;
+        skip_spaces(input);
+        let consequence = parse_logical_or(input, env)?;
+        skip_spaces(input);
+        if !input.starts_with(b"else") {
+            return Err("expected 'else' in if expression".to_string());
+        }
+        *input = &input[4..]; // consume "else"
+        skip_spaces(input);
+        let alternative = parse_logical_or(input, env)?;
+        Ok(if cond != 0 { consequence } else { alternative })
     } else if input.first().map_or(false, |&c| c.is_ascii_alphabetic()) {
         let ident = read_ident(input);
         // Check for boolean literals first
@@ -190,15 +279,17 @@ fn parse_block(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         if input.first().copied() == Some(b'}') {
             break;
         }
-        // Try parsing a statement (let ... or assignment) or fall back to an expression
+        // Try parsing a statement (let ..., if/else, or assignment) or fall back to an expression
         if is_let_statement(input) {
             last_val = parse_let_statement(input, env)?;
+        } else if is_if_statement(input) {
+            last_val = parse_if_statement(input, env)?;
         } else if is_assignment_statement(input) {
             let name = read_ident(input);
             skip_spaces(input);
             *input = &input[1..]; // consume '='
             skip_spaces(input);
-            last_val = parse_expr(input, env)?;
+            last_val = parse_logical_or(input, env)?;
             skip_spaces(input);
             if input.first().copied() != Some(b';') {
                 return Err("expected ';'".to_string());
@@ -225,6 +316,158 @@ fn is_let_statement(input: &[u8]) -> bool {
     }
     let kw = &input[i..i + 3];
     kw == b"let" && (i + 3 >= input.len() || !input[i + 3].is_ascii_alphanumeric())
+}
+
+/// Check if the current input starts with an `if` statement.
+fn is_if_statement(input: &[u8]) -> bool {
+    let mut i = 0;
+    while i < input.len() && (input[i] == b' ' || input[i] == b'\t') {
+        i += 1;
+    }
+    if i + 2 > input.len() {
+        return false;
+    }
+    let kw = &input[i..i + 2];
+    kw == b"if" && (i + 2 >= input.len() || !input[i + 2].is_ascii_alphanumeric())
+}
+
+/// Skip over a block without executing it (for non-taken if/else branches).
+fn skip_block(input: &mut &[u8]) -> Result<(), String> {
+    *input = &input[1..]; // consume '{'
+    let mut depth = 1;
+    while !input.is_empty() && depth > 0 {
+        match input.first().copied() {
+            Some(b'{') => depth += 1,
+            Some(b'}') => depth -= 1,
+            _ => {}
+        }
+        *input = &input[1..];
+    }
+    if depth != 0 {
+        return Err("unmatched '{' in block".to_string());
+    }
+    Ok(())
+}
+
+/// Execute a block and return its last value.
+fn execute_block(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    *input = &input[1..]; // consume '{'
+    env.enter_scope();
+    let mut last_val = 0i64;
+    loop {
+        skip_spaces(input);
+        if input.first().copied() == Some(b'}') {
+            break;
+        }
+        if is_let_statement(input) {
+            last_val = parse_let_statement(input, env)?;
+        } else if is_assignment_statement(input) {
+            let name = read_ident(input);
+            skip_spaces(input);
+            *input = &input[1..]; // consume '='
+            skip_spaces(input);
+            last_val = parse_logical_or(input, env)?;
+            skip_spaces(input);
+            if input.first().copied() != Some(b';') {
+                return Err("expected ';'".to_string());
+            }
+            *input = &input[1..]; // consume ';'
+            env.update(&name, last_val)?;
+        } else {
+            last_val = parse_logical_or(input, env)?;
+        }
+    }
+    env.exit_scope();
+    *input = &input[1..]; // consume '}'
+    Ok(last_val)
+}
+
+/// Parse a single body item (let/assignment/expression-stmt or block).
+fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    if is_let_statement(input) {
+        parse_let_statement(input, env)
+    } else if is_assignment_statement(input) {
+        let name = read_ident(input);
+        skip_spaces(input);
+        *input = &input[1..]; // consume '='
+        skip_spaces(input);
+        let val = parse_logical_or(input, env)?;
+        skip_spaces(input);
+        if input.first().copied() != Some(b';') {
+            return Err("expected ';'".to_string());
+        }
+        *input = &input[1..]; // consume ';'
+        env.update(&name, val)?;
+        Ok(val)
+    } else if is_if_statement(input) {
+        parse_if_statement(input, env)
+    } else {
+        let val = parse_logical_or(input, env)?;
+        skip_spaces(input);
+        if input.first().copied() == Some(b';') {
+            *input = &input[1..]; // consume ';'
+        }
+        Ok(val)
+    }
+}
+
+/// Skip a single body item without executing it.
+fn skip_body_item(input: &mut &[u8]) -> Result<(), String> {
+    if input.first().copied() == Some(b'{') {
+        skip_block(input)?;
+    } else {
+        // Consume until we hit ';' or 'else' at the top level
+        let mut depth = 0usize;
+        while !input.is_empty()
+            && !(depth == 0 && input.first().copied() == Some(b';'))
+            && !(depth == 0 && input.starts_with(b"else"))
+        {
+            if input.first().copied() == Some(b'{') {
+                depth += 1;
+            } else if input.first().copied() == Some(b'}') {
+                depth -= 1;
+            }
+            *input = &input[1..];
+        }
+        // Consume the ';' if present (but not 'else')
+        skip_spaces(input);
+        if input.first().copied() == Some(b';') {
+            *input = &input[1..];
+        }
+    }
+    Ok(())
+}
+
+/// Parse an if/else statement: 'if' CONDITION body ['else' body]
+fn parse_if_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    skip_spaces(input);
+    *input = &input[2..]; // consume "if"
+    skip_spaces(input);
+    let cond = parse_logical_or(input, env)?;
+    skip_spaces(input);
+
+    if cond != 0 {
+        // Execute consequence body, skip else if present
+        let val = parse_body_item(input, env)?;
+        skip_spaces(input);
+        if input.starts_with(b"else") {
+            *input = &input[4..]; // consume "else"
+            skip_spaces(input);
+            skip_body_item(input)?; // discard non-taken branch
+        }
+        Ok(val)
+    } else {
+        // Skip consequence body, then execute else if present
+        let _ = parse_body_item(input, env);
+        skip_spaces(input);
+        if input.starts_with(b"else") {
+            *input = &input[4..]; // consume "else"
+            skip_spaces(input);
+            parse_body_item(input, env)
+        } else {
+            Ok(0)
+        }
+    }
 }
 
 /// Check if the current input starts with an assignment statement: IDENT '=' Expr ';'
@@ -269,7 +512,7 @@ fn parse_let_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     }
     *input = &input[1..]; // consume '='
     skip_spaces(input);
-    let val = parse_expr(input, env)?;
+    let val = parse_comparison(input, env)?;
     skip_spaces(input);
     if input.first().copied() != Some(b';') {
         return Err("expected ';'".to_string());
@@ -322,16 +565,18 @@ fn parse_program(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         if input.is_empty() {
             break;
         }
-        // If we see a `let` keyword, parse it as a statement.
+        // If we see a `let` keyword or `if`, parse it as a statement.
         // Otherwise fall through to the final expression (which consumes everything).
         if is_let_statement(input) {
             last_val = parse_let_statement(input, env)?;
+        } else if is_if_statement(input) {
+            last_val = parse_if_statement(input, env)?;
         } else if is_assignment_statement(input) {
             let name = read_ident(input);
             skip_spaces(input);
             *input = &input[1..]; // consume '='
             skip_spaces(input);
-            last_val = parse_expr(input, env)?;
+            last_val = parse_comparison(input, env)?;
             skip_spaces(input);
             if input.first().copied() != Some(b';') {
                 return Err("expected ';'".to_string());
@@ -482,6 +727,51 @@ mod tests {
     fn test_logical_and_expression() {
         // && operator: true && false => 0.
         assert_eq!(execute_tuff("let x = true; let y = false; x && y"), Ok(0));
+    }
+
+    #[test]
+    fn test_comparison_less_than() {
+        // < comparison: 0 < 1 => 1 (true).
+        assert_eq!(execute_tuff("let x = 0; let y = 1; x < y"), Ok(1));
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        // if/else expression: conditionally assigns a value.
+        assert_eq!(execute_tuff("let x = if (3 < 4) 2 else 5; x"), Ok(2));
+    }
+
+    #[test]
+    fn test_if_with_variable_condition() {
+        // Condition can be a variable holding the result of a comparison.
+        assert_eq!(
+            execute_tuff("let y = 3 < 4; let x = if (y) 2 else 5; x"),
+            Ok(2)
+        );
+    }
+
+    #[test]
+    fn test_mutable_assignment_in_block_persists() {
+        // Assignment to outer-scope mutable variable inside a block persists.
+        assert_eq!(execute_tuff("let mut x = 0; { x = 2; } x"), Ok(2));
+    }
+
+    #[test]
+    fn test_if_else_statement_with_blocks() {
+        // if/else as statement with block bodies, conditionally assigning to mutable var.
+        assert_eq!(
+            execute_tuff("let mut x = 0; if (true) { x = 2; } else { x = 3; } x"),
+            Ok(2)
+        );
+    }
+
+    #[test]
+    fn test_if_else_statement_bare_assignments() {
+        // if/else as statement with bare assignment bodies (no blocks).
+        assert_eq!(
+            execute_tuff("let mut x = 0; if (true) x = 2; else x = 3; x"),
+            Ok(2)
+        );
     }
 }
 
