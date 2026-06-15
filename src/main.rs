@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+#[cfg(not(test))]
 use std::io::{self, BufRead, Write};
 
 // --- Simple recursive-descent parser ---
@@ -403,18 +404,7 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
                     Err(format!("undefined function: {}", ident))
                 }
             }
-            _ if !input.is_empty() && input.first().copied() == Some(b'.') => {
-                // Property access on a struct-typed variable: IDENT.field
-                *input = &input[1..]; // consume '.'
-                let field_name = read_ident(input);
-                match env.get_struct(&ident) {
-                    Some(fields) => fields
-                        .get(&field_name)
-                        .copied()
-                        .ok_or_else(|| format!("undefined field: {}", field_name)),
-                    None => Err(format!("variable '{}' is not a struct", ident)),
-                }
-            }
+
             _ if !input.is_empty() && input.first().copied() == Some(b'.') => {
                 // Property access on a struct-typed variable: IDENT.field
                 *input = &input[1..]; // consume '.'
@@ -1455,8 +1445,339 @@ mod tests {
         // `let y = { x : 3 }; y.x` => 3
         assert_eq!(execute_tuff("let y = { x: 3 }; y.x"), Ok(3));
     }
+
+    #[test]
+    fn test_struct_variable_undefined_field_error() {
+        // Accessing a field not in the struct via variable is an error.
+        assert!(execute_tuff("let s = { x: 1; }; s.y").is_err());
+    }
+
+    #[test]
+    fn test_struct_property_on_non_struct_variable_error() {
+        // Accessing a property on a plain (non-struct) variable is an error.
+        assert!(execute_tuff("let x = 5; x.foo").is_err());
+    }
+
+    #[test]
+    fn test_comparison_less_equal_true() {
+        assert_eq!(execute_tuff("1 <= 2"), Ok(1));
+    }
+
+    #[test]
+    fn test_comparison_less_equal_false() {
+        assert_eq!(execute_tuff("3 <= 2"), Ok(0));
+    }
+
+    #[test]
+    fn test_comparison_greater_than_true() {
+        assert_eq!(execute_tuff("5 > 3"), Ok(1));
+    }
+
+    #[test]
+    fn test_comparison_greater_than_false() {
+        assert_eq!(execute_tuff("2 > 3"), Ok(0));
+    }
+
+    #[test]
+    fn test_comparison_greater_equal_true() {
+        assert_eq!(execute_tuff("5 >= 5"), Ok(1));
+    }
+
+    #[test]
+    fn test_comparison_greater_equal_false() {
+        assert_eq!(execute_tuff("3 >= 5"), Ok(0));
+    }
+
+    #[test]
+    fn test_comparison_equal_true() {
+        assert_eq!(execute_tuff("42 == 42"), Ok(1));
+    }
+
+    #[test]
+    fn test_comparison_equal_false() {
+        assert_eq!(execute_tuff("1 == 2"), Ok(0));
+    }
+
+    #[test]
+    fn test_comparison_not_equal_true() {
+        assert_eq!(execute_tuff("1 != 2"), Ok(1));
+    }
+
+    #[test]
+    fn test_comparison_not_equal_false() {
+        assert_eq!(execute_tuff("3 != 3"), Ok(0));
+    }
+
+    #[test]
+    fn test_function_wrong_arg_count_error() {
+        // Calling a function with wrong number of arguments is an error.
+        assert!(execute_tuff("fn f(a) => a; f(1, 2)").is_err());
+    }
+
+    #[test]
+    fn test_undefined_function_call_error() {
+        // Calling a non-existent function is an error.
+        assert!(execute_tuff("nope()").is_err());
+    }
+
+    #[test]
+    fn test_assignment_to_undefined_variable_error() {
+        // Assigning to a variable that doesn't exist is an error.
+        assert!(execute_tuff("x = 1; ").is_err());
+    }
+
+    #[test]
+    fn test_compound_division_by_zero_in_assignment() {
+        // Compound division by zero should fail.
+        assert!(execute_tuff("let mut x = 5; x /= 0; ").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_brace_error() {
+        // Match without opening brace is an error.
+        assert!(execute_tuff("match (1) case _ => 0;").is_err());
+    }
+
+    #[test]
+    fn test_for_loop_missing_in_keyword_error() {
+        // For loop missing 'in' keyword should fail.
+        assert!(execute_tuff("for (x .. 5) { 1 } ").is_err());
+    }
+
+    #[test]
+    fn test_if_else_false_branch_executes_else() {
+        // When condition is false, else branch should execute.
+        assert_eq!(
+            execute_tuff("let mut x = 0; if (false) { x = 1; } else { x = 99; } x"),
+            Ok(99)
+        );
+    }
+
+    #[test]
+    fn test_if_true_branch_skips_else() {
+        // When condition is true, else branch should be skipped.
+        assert_eq!(
+            execute_tuff("let mut x = 0; if (true) { x = 42; } else { x = 99; } x"),
+            Ok(42)
+        );
+    }
+
+    #[test]
+    fn test_while_skips_body_when_false() {
+        // While loop should skip body when condition is false from start.
+        assert_eq!(
+            execute_tuff("let mut x = 0; while (false) { x = 1; } x"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_nested_block_scopes() {
+        // Nested blocks should create and exit scopes properly.
+        assert_eq!(execute_tuff("{ let x = 1; { let y = x + 2; y } }"), Ok(3));
+    }
+
+    #[test]
+    fn test_expression_statement_with_semicolon() {
+        // Expression followed by semicolon should work as statement.
+        assert_eq!(execute_tuff("42; 99"), Ok(99));
+    }
+
+    #[test]
+    fn test_unclosed_paren_error() {
+        // Missing closing ')' should be an error.
+        assert!(execute_tuff("(1 + 2").is_err());
+    }
+
+    #[test]
+    fn test_if_expression_missing_else_error() {
+        // 'if' expression without 'else' should be an error.
+        assert!(execute_tuff("let x = if 1 2; x").is_err());
+    }
+
+    #[test]
+    fn test_match_expression_missing_case_keyword_error() {
+        // Match arm missing the 'case' keyword should be an error.
+        assert!(execute_tuff("match (1) { 1 => 1 }").is_err());
+    }
+
+    #[test]
+    fn test_undefined_variable_read_error() {
+        // Reading an undefined variable should be an error.
+        assert!(execute_tuff("undefinedVar").is_err());
+    }
+
+    #[test]
+    fn test_for_loop_missing_range_dots_error() {
+        // For loop range missing '..' should be an error.
+        assert!(execute_tuff("for (i in 0 5) { 1 }").is_err());
+    }
+
+    #[test]
+    fn test_match_case_missing_arrow_error() {
+        // Match case missing '=>' should be an error.
+        assert!(execute_tuff("match (1) { case 1 1 }").is_err());
+    }
+
+    #[test]
+    fn test_let_statement_missing_equals_error() {
+        // Let statement missing '=' should be an error.
+        assert!(execute_tuff("let x 5;").is_err());
+    }
+
+    #[test]
+    fn test_let_statement_missing_semicolon_error() {
+        // Let statement missing trailing ';' should be an error.
+        assert!(execute_tuff("let x = 5").is_err());
+    }
+
+    #[test]
+    fn test_fn_statement_missing_arrow_error() {
+        // Function definition missing '=>' should be an error.
+        assert!(execute_tuff("fn foo() 1;").is_err());
+    }
+
+    #[test]
+    fn test_fn_statement_missing_semicolon_error() {
+        // Function definition body without a terminating ';' should be an error.
+        assert!(execute_tuff("fn foo() => 1").is_err());
+    }
+
+    #[test]
+    fn test_expression_starting_with_invalid_character_error() {
+        // An expression that can't start a number/identifier/paren/block is an error.
+        assert!(execute_tuff("+5").is_err());
+    }
+
+    #[test]
+    fn test_integer_overflow_error() {
+        // A numeric literal too large for i64 should be an error.
+        assert!(execute_tuff("99999999999999999999").is_err());
+    }
+
+    #[test]
+    fn test_let_statement_alone_returns_zero() {
+        // A program consisting solely of a `let` statement with no trailing
+        // expression drains deferred bodies and returns 0.
+        assert_eq!(execute_tuff("let x = 5;"), Ok(0));
+    }
+
+    #[test]
+    fn test_starts_with_keyword_skips_leading_whitespace() {
+        // starts_with_keyword should skip leading spaces/tabs before matching.
+        assert!(starts_with_keyword(b"  let x = 1", b"let"));
+        assert!(starts_with_keyword(b"\tif (x)", b"if"));
+        assert!(!starts_with_keyword(b"  letx", b"let"));
+    }
+
+    #[test]
+    fn test_is_assignment_statement_skips_leading_whitespace() {
+        // is_assignment_statement should skip leading spaces/tabs before the identifier.
+        assert!(is_assignment_statement(b"  x = 5;"));
+        assert!(is_assignment_statement(b"\tx += 1;"));
+    }
+
+    #[test]
+    fn test_parse_assignment_missing_equals_error() {
+        // Direct call to parse_assignment without an '=' should error.
+        let mut env = Env::new();
+        let mut input: &[u8] = b"x 5;";
+        assert!(parse_assignment(&mut input, &mut env).is_err());
+    }
+
+    #[test]
+    fn test_skip_block_with_nested_braces() {
+        // skip_block should correctly track nested '{' / '}' depth.
+        let mut input: &[u8] = b"{ { 1 } 2 }rest";
+        assert!(skip_block(&mut input).is_ok());
+        assert_eq!(input, b"rest");
+    }
+
+    #[test]
+    fn test_skip_block_unmatched_brace_error() {
+        // skip_block should error if the input ends before the block closes.
+        let mut input: &[u8] = b"{ 1 ";
+        assert!(skip_block(&mut input).is_err());
+    }
+
+    #[test]
+    fn test_parse_body_item_fn_statement() {
+        // parse_body_item should dispatch to parse_fn_statement.
+        let mut env = Env::new();
+        let mut input: &[u8] = b"fn f() => 1; rest";
+        assert_eq!(parse_body_item(&mut input, &mut env), Ok(0));
+        assert!(env.functions.contains_key("f"));
+    }
+
+    #[test]
+    fn test_parse_body_item_let_statement() {
+        // parse_body_item should dispatch to parse_let_statement.
+        let mut env = Env::new();
+        let mut input: &[u8] = b"let x = 5; rest";
+        assert_eq!(parse_body_item(&mut input, &mut env), Ok(5));
+    }
+
+    #[test]
+    fn test_parse_body_item_if_statement() {
+        // parse_body_item should dispatch to parse_if_statement.
+        let mut env = Env::new();
+        let mut input: &[u8] = b"if (true) 1 else 2";
+        assert_eq!(parse_body_item(&mut input, &mut env), Ok(1));
+    }
+
+    #[test]
+    fn test_parse_body_item_for_statement() {
+        // parse_body_item should dispatch to parse_for_statement.
+        let mut env = Env::new();
+        let mut input: &[u8] = b"for (i in 0..3) {}";
+        assert_eq!(parse_body_item(&mut input, &mut env), Ok(0));
+    }
+
+    #[test]
+    fn test_parse_if_statement_true_with_else_skips_else_block() {
+        // When the condition is true, the else branch should be skipped (not executed).
+        let mut env = Env::new();
+        let mut input: &[u8] = b"if (true) 1 else { 2 } rest";
+        assert_eq!(parse_if_statement(&mut input, &mut env), Ok(1));
+        assert_eq!(input, b" rest");
+    }
+
+    #[test]
+    fn test_parse_if_statement_false_without_else_returns_zero() {
+        // When the condition is false and there's no else branch, the result is 0.
+        let mut env = Env::new();
+        let mut input: &[u8] = b"if (false) 1";
+        assert_eq!(parse_if_statement(&mut input, &mut env), Ok(0));
+    }
+
+    #[test]
+    fn test_skip_body_item_for_statement() {
+        // skip_body_item should skip over an entire 'for' loop body item.
+        let mut input: &[u8] = b"for (i in 0..5) { x = x + i; } rest";
+        assert!(skip_body_item(&mut input).is_ok());
+    }
+
+    #[test]
+    fn test_skip_body_item_tracks_nested_braces() {
+        // skip_body_item should track nested '{'/'}' depth for non-block items.
+        let mut input: &[u8] = b"if (a) { b } else { c }; rest";
+        assert!(skip_body_item(&mut input).is_ok());
+    }
+
+    #[test]
+    fn test_division_expression() {
+        // Plain division (non-zero divisor) should compute the result.
+        assert_eq!(execute_tuff("10 / 2"), Ok(5));
+    }
+
+    #[test]
+    fn test_if_statement_true_without_trailing_else() {
+        // 'if' statement with a true condition and no 'else' branch at all.
+        assert_eq!(execute_tuff("if (true) { 1 }"), Ok(0));
+    }
 }
 
+#[cfg(not(test))]
 fn main() {
     let stdin = io::stdin();
     let stdout = io::stdout();
