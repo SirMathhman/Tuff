@@ -1,7 +1,0 @@
-refactor: remove unsafe slice operations and elided lifetimes
-
-- Replace `unsafe { std::slice::from_raw_parts(...) }` with safe alternatives
-  using `Box<[u8]>` and proper slice references in while/for loops, function
-  bodies, and deferred body draining
-- Remove explicit `'_` lifetime annotations from parser functions, relying on
-  Rust's elision rules instead

@@ -1493,6 +1493,15 @@ mod tests {
     }
 
     #[test]
+    fn test_recursive_factorial() {
+        // Recursive factorial: fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5) => 120
+        assert_eq!(
+            execute_tuff("fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)"),
+            Ok(120)
+        );
+    }
+
+    #[test]
     fn test_struct_literal_property_access() {
         // `{ x : 3 }.x` => 3
         assert_eq!(execute_tuff("{ x: 3 }.x"), Ok(3));
