@@ -255,6 +255,63 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         skip_spaces(input);
         let alternative = parse_logical_or(input, env)?;
         Ok(if cond != 0 { consequence } else { alternative })
+    } else if input.starts_with(b"match") && (input.len() < 5 || !input[5].is_ascii_alphanumeric())
+    {
+        // Parse match expression: 'match' '(' EXPR ')' '{' case VAL => RESULT; ... case _ => DEFAULT; '}'
+        *input = &input[5..]; // consume "match"
+        skip_spaces(input);
+
+        expect_char(input, b'(')?;
+        let scrutinee = parse_logical_or(input, env)?;
+        skip_spaces(input);
+        expect_char(input, b')')?;
+        skip_spaces(input);
+
+        if input.first().copied() != Some(b'{') {
+            return Err("expected '{' in match expression".to_string());
+        }
+        *input = &input[1..]; // consume '{'
+
+        let mut result: Option<i64> = None;
+        let mut has_wildcard = false;
+        loop {
+            skip_spaces(input);
+            if input.first().copied() == Some(b'}') {
+                break;
+            }
+            if !input.starts_with(b"case") || (input.len() >= 4 && input[4].is_ascii_alphanumeric())
+            {
+                return Err("expected 'case' in match expression".to_string());
+            }
+            *input = &input[4..]; // consume "case"
+            skip_spaces(input);
+
+            let is_wildcard = input.first().copied() == Some(b'_');
+            if !is_wildcard {
+                let case_val = parse_logical_or(input, env)?;
+                let case_result = parse_case_arrow_expr(input, env)?;
+                if scrutinee == case_val && result.is_none() {
+                    result = Some(case_result);
+                }
+            } else {
+                *input = &input[1..]; // consume '_'
+                has_wildcard = true;
+                let case_result = parse_case_arrow_expr(input, env)?;
+                if result.is_none() {
+                    result = Some(case_result);
+                }
+            }
+        }
+
+        *input = &input[1..]; // consume '}'
+
+        if result.is_none() && !has_wildcard {
+            return Err(format!(
+                "non-exhaustive match: no case matched value {}",
+                scrutinee
+            ));
+        }
+        Ok(result.unwrap_or(0))
     } else if input.first().map_or(false, |&c| c.is_ascii_alphabetic()) {
         let ident = read_ident(input);
         // Check for boolean literals first
@@ -439,6 +496,18 @@ fn parse_for_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     Ok(0) // for loops don't produce a value themselves
 }
 
+/// Parse a match case result expression after '=>'.
+fn parse_case_arrow_expr(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    skip_spaces(input);
+    expect_arrow(input)?; // consume '=>'
+    let val = parse_logical_or(input, env)?;
+    skip_spaces(input);
+    if input.first().copied() == Some(b';') {
+        *input = &input[1..]; // consume ';'
+    }
+    Ok(val)
+}
+
 /// Expect and consume a specific character.
 fn expect_char(input: &mut &[u8], expected: u8) -> Result<(), String> {
     skip_spaces(input);
@@ -446,6 +515,16 @@ fn expect_char(input: &mut &[u8], expected: u8) -> Result<(), String> {
         return Err(format!("expected '{}'", expected as char));
     }
     *input = &input[1..]; // consume character
+    Ok(())
+}
+
+/// Expect and consume the '=>' arrow token.
+fn expect_arrow(input: &mut &[u8]) -> Result<(), String> {
+    skip_spaces(input);
+    if input.len() < 2 || input[0] != b'=' || input[1] != b'>' {
+        return Err("expected '=> in match case".to_string());
+    }
+    *input = &input[2..]; // consume "=>"
     Ok(())
 }
 
@@ -969,6 +1048,39 @@ mod tests {
             execute_tuff("let mut sum = 0; for (i in 1..4) { sum += i * 2; } sum"),
             Ok(12) // (1*2)+(2*2)+(3*2) = 2+4+6 = 12
         );
+    }
+
+    #[test]
+    fn test_match_expression_basic() {
+        // match expression: let x = match (100) { case 100 => 2; case _ => 3; }; x => 2
+        assert_eq!(
+            execute_tuff("let x = match (100) { case 100 => 2; case _ => 3; }; x"),
+            Ok(2)
+        );
+    }
+
+    #[test]
+    fn test_match_expression_wildcard() {
+        // match expression with wildcard fallback: let x = match (5) { case 1 => 99; case _ => 42; }; x => 42
+        assert_eq!(
+            execute_tuff("let x = match (5) { case 1 => 99; case _ => 42; }; x"),
+            Ok(42)
+        );
+    }
+
+    #[test]
+    fn test_match_expression_multiple_cases() {
+        // match with multiple cases: let x = match (3) { case 1 => 10; case 2 => 20; case 3 => 30; }; x => 30
+        assert_eq!(
+            execute_tuff("let x = match (3) { case 1 => 10; case 2 => 20; case 3 => 30; }; x"),
+            Ok(30)
+        );
+    }
+
+    #[test]
+    fn test_match_expression_non_exhaustive_error() {
+        // match without wildcard and no matching case should error
+        assert!(execute_tuff("let x = match (5) { case 1 => 99; case 2 => 42; }; x").is_err());
     }
 }
 
