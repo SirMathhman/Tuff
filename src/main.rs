@@ -40,6 +40,8 @@ struct Env {
     anonymous_structs: Vec<HashMap<String, i64>>,
     /// Registry of anonymous (nested) arrays by index. Negative array element values reference these.
     anonymous_arrays: Vec<Vec<i64>>,
+    /// Type suffix parsed on the most recent number literal (for `is` type checks).
+    pending_type: Option<&'static str>,
 }
 
 impl Env {
@@ -54,6 +56,7 @@ impl Env {
             pending_array: None,
             anonymous_structs: Vec::new(),
             anonymous_arrays: Vec::new(),
+            pending_type: None,
         }
     }
 
@@ -288,6 +291,22 @@ fn parse_comparison(input: &mut &[u8], env: &mut Env) -> ParseResult {
                 }
                 _ => unreachable!(),
             };
+        } else if input.starts_with(b"is") && (input.len() < 3 || !input[2].is_ascii_alphanumeric())
+        {
+            // Type check: `expr is TYPE` where TYPE is U8, U16, U32, I8, I16, I32
+            *input = &input[2..]; // consume "is"
+            skip_spaces(input);
+
+            let type_name: String = read_ident(input).to_ascii_uppercase();
+            result = if env
+                .pending_type
+                .map(|t| t.to_ascii_uppercase() == type_name)
+                == Some(true)
+            {
+                1
+            } else {
+                0
+            };
         } else {
             break;
         }
@@ -514,7 +533,7 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
             },
         }
     } else {
-        parse_number(input)
+        parse_number(input, env)
     }
 }
 
@@ -593,7 +612,7 @@ fn parse_array_literal(input: &mut &[u8], env: &mut Env) -> Result<Vec<i64>, Str
 }
 
 /// Expect and parse an index expression: '[' Expr ']'
-fn expect_index(input: &mut &[u8]) -> Result<i64, String> {
+fn expect_index(input: &mut &[u8], env: &mut Env) -> Result<i64, String> {
     if input.first().copied() != Some(b'[') {
         return Err("expected '['".to_string());
     }
@@ -601,7 +620,7 @@ fn expect_index(input: &mut &[u8]) -> Result<i64, String> {
     skip_spaces(input);
 
     // Index must be a non-negative number.
-    let idx = parse_number(input)?;
+    let idx = parse_number(input, env)?;
     if idx < 0 {
         return Err("negative array index".to_string());
     }
@@ -629,16 +648,19 @@ fn resolve_chained_index(
     input: &mut &[u8],
     env: &mut Env,
 ) -> Result<i64, String> {
-    let mut current = index_array(elements, expect_index(input)?)?;
+    let mut current = index_array(elements, expect_index(input, env)?)?;
 
     // If the indexed value is an anonymous array ID and followed by '[', keep resolving.
     loop {
         skip_spaces(input);
         if input.first().copied() == Some(b'[') && current.is_negative() {
-            let nested = env
+            let nested: Vec<i64> = env
                 .resolve_anonymous_array(current)
+                .cloned()
                 .ok_or_else(|| format!("invalid anonymous array reference: {}", current))?;
-            current = index_array(nested, expect_index(input)?)?;
+            // Clone before mutable borrow of env in expect_index.
+            let idx = expect_index(input, env)?;
+            current = index_array(&nested, idx)?;
         } else if input.first().copied() == Some(b'.') && current.is_negative() {
             // Indexed value is an anonymous struct — resolve field access.
             let nested_fields = env
@@ -1190,7 +1212,7 @@ fn parse_assignment(input: &mut &[u8], env: &mut Env) -> ParseResult {
 
     // Check for array index target: IDENT[...]
     if input.first().copied() == Some(b'[') {
-        let idx = expect_index(input)?;
+        let idx = expect_index(input, env)?;
         skip_spaces(input);
 
         // Expect '=' (array element assignment doesn't support compound ops yet)
@@ -1362,7 +1384,7 @@ fn read_ident(input: &mut &[u8]) -> String {
     String::from_utf8(bytes).unwrap_or_default()
 }
 
-fn parse_number(input: &mut &[u8]) -> ParseResult {
+fn parse_number(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut chars = Vec::new();
     while input.first().map_or(false, |&c| c.is_ascii_digit()) {
         chars.push(input[0]);
@@ -1392,6 +1414,7 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
             return Err(format!("value {} out of range for u8 (0..={})", n, u8::MAX));
         }
         *input = &input[2..];
+        env.pending_type = Some("U8");
     } else if is_u16 {
         if n < 0 || n > u16::MAX as i64 {
             return Err(format!(
@@ -1401,6 +1424,7 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
             ));
         }
         *input = &input[3..];
+        env.pending_type = Some("U16");
     } else if is_u32 {
         if n < 0 || n > u32::MAX as i64 {
             return Err(format!(
@@ -1410,6 +1434,7 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
             ));
         }
         *input = &input[3..];
+        env.pending_type = Some("U32");
     } else if is_i8 {
         if n < i8::MIN as i64 || n > i8::MAX as i64 {
             return Err(format!(
@@ -1420,6 +1445,7 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
             ));
         }
         *input = &input[2..];
+        env.pending_type = Some("I8");
     } else if is_i16 {
         if n < i16::MIN as i64 || n > i16::MAX as i64 {
             return Err(format!(
@@ -1430,6 +1456,7 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
             ));
         }
         *input = &input[3..];
+        env.pending_type = Some("I16");
     } else if is_i32 {
         if n < i32::MIN as i64 || n > i32::MAX as i64 {
             return Err(format!(
@@ -1440,6 +1467,10 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
             ));
         }
         *input = &input[3..];
+        env.pending_type = Some("I32");
+    } else {
+        // No suffix — defaults to i32.
+        env.pending_type = Some("I32");
     }
 
     Ok(n)
@@ -1498,6 +1529,14 @@ mod tests {
     fn test_u8_suffixed_literal() {
         // `100U8` => 100 (suffix parsed and accepted, value unchanged for now)
         assert_eq!(execute_tuff("100U8"), Ok(100));
+    }
+
+    #[test]
+    fn test_is_type_check_u8() {
+        // `0U8 is U8` => 1 (true), plain numbers default to i32 so `0 is I32` => 1, `0 is U8` => 0
+        assert_eq!(execute_tuff("0U8 is U8"), Ok(1));
+        assert_eq!(execute_tuff("0 is I32"), Ok(1));
+        assert_eq!(execute_tuff("0 is U8"), Ok(0));
     }
 
     #[test]
