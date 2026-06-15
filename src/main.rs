@@ -22,6 +22,8 @@ struct Env {
     scopes: Vec<HashMap<String, (i64, bool)>>,
     /// Function name -> (parameter names, body expression bytes to re-parse on each call).
     functions: HashMap<String, (Vec<String>, Vec<u8>)>,
+    /// Queue of zero-param function bodies deferred for execution after all fns are registered.
+    deferred_bodies: Vec<Vec<u8>>,
 }
 
 impl Env {
@@ -29,6 +31,7 @@ impl Env {
         Self {
             scopes: vec![HashMap::new()],
             functions: HashMap::new(),
+            deferred_bodies: Vec::new(),
         }
     }
 
@@ -350,7 +353,7 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
                     let body_slice: &[u8] = unsafe {
                         std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len())
                     };
-                    let result = parse_logical_or(&mut body_slice.as_ref(), env);
+                    let result = parse_fn_body(&mut body_slice.as_ref(), env);
                     env.exit_scope();
                     result
                 } else {
@@ -427,6 +430,16 @@ fn skip_block(input: &mut &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Parse an expression statement: evaluate expression, optionally consume trailing semicolon.
+fn parse_expression_stmt(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    let val = parse_logical_or(input, env)?;
+    skip_spaces(input);
+    if input.first().copied() == Some(b';') {
+        *input = &input[1..]; // consume ';'
+    }
+    Ok(val)
+}
+
 /// Parse a single body item (let/assignment/expression-stmt or block).
 fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     if is_fn_statement(input) {
@@ -440,12 +453,7 @@ fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     } else if is_for_statement(input) {
         parse_for_statement(input, env)
     } else {
-        let val = parse_logical_or(input, env)?;
-        skip_spaces(input);
-        if input.first().copied() == Some(b';') {
-            *input = &input[1..]; // consume ';'
-        }
-        Ok(val)
+        parse_expression_stmt(input, env)
     }
 }
 
@@ -736,13 +744,20 @@ fn parse_fn_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     // Find the semicolon that ends this expression to extract body bytes.
     if let Some(semi_pos) = find_semicolon(input) {
         let body_bytes = input[..semi_pos].to_vec();
-        env.functions.insert(name, (params, body_bytes));
-        *input = &input[semi_pos + 1..]; // consume past ';'
-    } else {
-        return Err("expected ';' after function body".to_string());
-    }
 
-    Ok(0)
+        env.functions
+            .insert(name, (params.clone(), body_bytes.clone()));
+
+        // Zero-param functions execute their bodies after all fns are registered.
+        if params.is_empty() {
+            env.deferred_bodies.push(body_bytes);
+        }
+
+        *input = &input[semi_pos + 1..]; // consume past ';'
+        Ok(0)
+    } else {
+        Err("expected ';' after function body".to_string())
+    }
 }
 
 /// Parse a while loop: 'while' CONDITION body
@@ -798,7 +813,11 @@ fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 
     skip_spaces(input);
     let val = parse_logical_or(input, env)?;
-    expect_semicolon(input)?;
+    // Semicolon is optional (fn body bytes may not include trailing ';')
+    skip_spaces(input);
+    if input.first().copied() == Some(b';') {
+        *input = &input[1..];
+    }
 
     if let Some(op) = op {
         // Compound assignment: read current value, apply op, write back
@@ -825,6 +844,34 @@ fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     }
 }
 
+/// Execute function body bytes using statement-level parsing.
+fn parse_fn_body(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    skip_spaces(input);
+    // Try to parse as a statement first (handles compound assignments, let, etc.)
+    if is_assignment_statement(input)
+        || is_let_statement(input)
+        || is_if_statement(input)
+        || is_while_statement(input)
+        || is_for_statement(input)
+    {
+        parse_body_item(input, env)
+    } else {
+        // Fall back to expression parsing
+        parse_expression_stmt(input, env)
+    }
+}
+
+/// Execute all deferred zero-param function bodies.
+fn drain_deferred_bodies(env: &mut Env) -> Result<i64, String> {
+    let mut last_val = 0i64;
+    while let Some(body_bytes) = env.deferred_bodies.pop() {
+        let body_slice: &[u8] =
+            unsafe { std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len()) };
+        last_val = parse_fn_body(&mut body_slice.as_ref(), env)?;
+    }
+    Ok(last_val)
+}
+
 /// Parse statements until we hit a terminator ('}' or EOF) and return the last value.
 fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) -> ParseResult {
     let mut last_val = 0i64;
@@ -834,6 +881,8 @@ fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) 
             break;
         }
         if !block_mode && input.is_empty() {
+            // Drain deferred zero-param function bodies before returning.
+            last_val = drain_deferred_bodies(env)?;
             break;
         }
         if is_fn_statement(input) {
@@ -899,6 +948,8 @@ fn parse_program(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     if input.is_empty() {
         return Ok(last_val);
     }
+    // Drain deferred zero-param function bodies before evaluating final expression.
+    drain_deferred_bodies(env)?;
     let val = parse_logical_or(input, env)?;
     Ok(val)
 }
@@ -1226,6 +1277,12 @@ mod tests {
     fn test_forward_function_call() {
         // Function a calls b which is defined after a: `fn a() => b(); fn b() => 7; a()` => 7
         assert_eq!(execute_tuff("fn a() => b(); fn b() => 7; a()"), Ok(7));
+    }
+
+    #[test]
+    fn test_function_mutates_outer_scope() {
+        // Function body can mutate outer-scope mutable variable: `let mut x = 0; fn add() => x += 1; x` => 1
+        assert_eq!(execute_tuff("let mut x = 0; fn add() => x += 1; x"), Ok(1));
     }
 }
 
