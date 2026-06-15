@@ -11,7 +11,9 @@ use std::io::{self, BufRead, Write};
 //            | 'if' CONDITION body ['else' body]
 // Expr   -> Term (('+' | '-') Term)*
 // Term   -> Factor (('*' | '/') Factor)*
-// Factor -> '(' Expr ')' | Block | IDENT '(' [Expr (',' Expr)*] ')' | Identifier | Number
+// Factor -> '(' Expr ')' | Block | StructLiteral '.' IDENT
+//         | IDENT '(' [Expr (',' Expr)*] ')' | Identifier | Number
+// StructLiteral -> '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
 // Identifier -> letter+digit*
 // Number -> digit+
 
@@ -246,7 +248,18 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         *input = &input[1..]; // consume ')'
         Ok(val)
     } else if input.first().copied() == Some(b'{') {
-        parse_block(input, env)
+        if looks_like_struct_literal(input) {
+            let fields = parse_struct_literal(input, env)?;
+            skip_spaces(input);
+            expect_char(input, b'.')?;
+            let field_name = read_ident(input);
+            fields
+                .get(&field_name)
+                .copied()
+                .ok_or_else(|| format!("undefined field: {}", field_name))
+        } else {
+            parse_block(input, env)
+        }
     } else if input.starts_with(b"if") && (input.len() < 3 || !input[2].is_ascii_alphanumeric()) {
         // Parse if/else expression: 'if' CONDITION CONSEQUENCE 'else' ALTERNATIVE
         *input = &input[2..]; // consume "if"
@@ -368,6 +381,41 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     } else {
         parse_number(input)
     }
+}
+
+/// Check whether a '{' begins a struct literal ('{' IDENT ':' ...) rather than a block.
+fn looks_like_struct_literal(input: &[u8]) -> bool {
+    let mut peek = &input[1..]; // look past '{'
+    skip_spaces(&mut peek);
+    if peek.first().map_or(false, |&c| c.is_ascii_alphabetic()) {
+        let _ = read_ident(&mut peek);
+        skip_spaces(&mut peek);
+        peek.first().copied() == Some(b':')
+    } else {
+        false
+    }
+}
+
+/// Parse a struct literal: '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
+fn parse_struct_literal(input: &mut &[u8], env: &'_ mut Env) -> Result<HashMap<String, i64>, String> {
+    *input = &input[1..]; // consume '{'
+    let mut fields = HashMap::new();
+    loop {
+        skip_spaces(input);
+        let name = read_ident(input);
+        expect_char(input, b':')?;
+        skip_spaces(input);
+        let val = parse_logical_or(input, env)?;
+        fields.insert(name, val);
+        skip_spaces(input);
+        if input.first().copied() == Some(b',') {
+            *input = &input[1..]; // consume ','
+        } else {
+            break;
+        }
+    }
+    expect_char(input, b'}')?;
+    Ok(fields)
 }
 
 /// Parse a block: '{' Statement* Expr '}'
@@ -1318,6 +1366,24 @@ mod tests {
             execute_tuff("let mut x = 0; fn add() => x += 1; add(); add(); x"),
             Ok(2)
         );
+    }
+
+    #[test]
+    fn test_struct_literal_property_access() {
+        // `{ x : 3 }.x` => 3
+        assert_eq!(execute_tuff("{ x: 3 }.x"), Ok(3));
+    }
+
+    #[test]
+    fn test_struct_literal_multiple_fields() {
+        // `{ x: 1, y: 2 }.y` => 2
+        assert_eq!(execute_tuff("{ x: 1, y: 2 }.y"), Ok(2));
+    }
+
+    #[test]
+    fn test_struct_literal_undefined_field_error() {
+        // Accessing a field that wasn't declared in the struct literal is an error.
+        assert!(execute_tuff("{ x: 1 }.y").is_err());
     }
 }
 
