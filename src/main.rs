@@ -334,15 +334,23 @@ fn parse_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
             Some(b'+') | Some(b'-') => {}
             _ => break,
         }
+        // Save LHS type before RHS overwrites pending_type
+        let lhs_type = env.pending_type.take();
+
         let op = input[0];
         *input = &input[1..]; // consume operator
         skip_spaces(input);
         let rhs = parse_term(input, env)?;
+        let rhs_type = env.pending_type.take();
+
         match op {
             b'+' => result += rhs,
             b'-' => result -= rhs,
             _ => unreachable!(),
         }
+
+        // Promote to wider of LHS/RHS types
+        env.pending_type = promote_types(lhs_type, rhs_type);
     }
     Ok(result)
 }
@@ -355,10 +363,15 @@ fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
             Some(b'*') | Some(b'/') => {}
             _ => break,
         }
+        // Save LHS type before RHS overwrites pending_type
+        let lhs_type = env.pending_type.take();
+
         let op = input[0];
         *input = &input[1..]; // consume operator
         skip_spaces(input);
         let rhs = parse_factor(input, env)?;
+        let rhs_type = env.pending_type.take();
+
         match op {
             b'*' => result *= rhs,
             b'/' => {
@@ -369,6 +382,9 @@ fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
             }
             _ => unreachable!(),
         }
+
+        // Promote to wider of LHS/RHS types
+        env.pending_type = promote_types(lhs_type, rhs_type);
     }
     Ok(result)
 }
@@ -1120,9 +1136,9 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
             None
         };
 
-        // If both annotation and explicit suffix present, they must agree.
+        // If both annotation and source type present, check widening compatibility.
         if let (Some(annot), Some(lit)) = (explicit_type, literal_type) {
-            if annot.to_ascii_uppercase() != lit.to_ascii_uppercase() {
+            if !can_widen(lit, annot) {
                 return Err(format!("type mismatch: expected {}, got {}", annot, lit));
             }
         }
@@ -1543,6 +1559,64 @@ fn skip_spaces(input: &mut &[u8]) {
     }
 }
 
+/// Return the "rank" of a type for widening checks. Higher rank = wider range.
+fn type_rank(ty: &str) -> u8 {
+    match ty.to_ascii_uppercase().as_str() {
+        "U8" | "I8" => 1,
+        "U16" | "I16" => 2,
+        "U32" | "I32" => 3,
+        _ => 0,
+    }
+}
+
+/// Check if a type is signed (I8, I16, I32).
+fn is_signed(ty: &str) -> bool {
+    ty.starts_with('I')
+}
+
+/// Check if source type can safely widen into target type.
+fn can_widen(source: &str, target: &str) -> bool {
+    let src_rank = type_rank(source);
+    let tgt_rank = type_rank(target);
+    src_rank <= tgt_rank && src_rank > 0 && tgt_rank > 0
+}
+
+/// Promote two operand types to the wider (higher rank) one.
+/// If same rank but different signedness (e.g., I8 + U8), promote to next wider signed type.
+/// If either is untyped, defaults to I32.
+fn promote_types(lhs: Option<&'static str>, rhs: Option<&'static str>) -> Option<&'static str> {
+    match (lhs, rhs) {
+        (Some(l), Some(r)) => {
+            let lr = type_rank(l);
+            let rr = type_rank(r);
+
+            if lr > rr {
+                Some(l)
+            } else if rr > lr {
+                Some(r)
+            } else {
+                // Same rank — check for mixed signedness (e.g., I8 + U8 => I16)
+                if is_signed(l) != is_signed(r) && lr < 3 {
+                    match lr {
+                        1 => Some("I16"),
+                        2 => Some("I32"),
+                        _ => None,
+                    }
+                } else {
+                    // Same rank, same signedness (or max rank with no wider type)
+                    if is_signed(l) != is_signed(r) && lr == 3 {
+                        Some("I32") // U32 + I32 at max rank → default to signed
+                    } else {
+                        Some(l)
+                    }
+                }
+            }
+        }
+        (Some(t), None) | (None, Some(t)) => Some(t),
+        (None, None) => Some("I32"),
+    }
+}
+
 /// Read a type name (U8, U16, U32, I8, I16, I32) from the current position.
 /// Returns `Some(&'static str)` and advances input past the type keyword on success.
 /// Returns `None` if no recognized type is found at this position.
@@ -1642,6 +1716,19 @@ mod tests {
     }
 
     #[test]
+    fn test_arithmetic_type_promotion() {
+        // Arithmetic promotes to wider type: `(0U8 + 0U16) is U16` => 1
+        assert_eq!(execute_tuff("(0U8 + 0U16) is U16"), Ok(1));
+        // Reverse order should also promote to U16 (not accidentally use RHS type)
+        assert_eq!(execute_tuff("(0U16 + 0U8) is U16"), Ok(1));
+
+        // Mixed signedness at same rank promotes to next wider signed type
+        assert_eq!(execute_tuff("(0I8 + 0U8) is I16"), Ok(1));
+        assert_eq!(execute_tuff("(0U8 + 0I8) is I16"), Ok(1));
+        assert_eq!(execute_tuff("(0I16 + 0U16) is I32"), Ok(1));
+    }
+
+    #[test]
     fn test_let_type_annotation() {
         // Explicit type annotation: `let x : I32 = 0; x is I32` => 1
         assert_eq!(execute_tuff("let x : I32 = 0; x is I32"), Ok(1));
@@ -1652,10 +1739,17 @@ mod tests {
 
     #[test]
     fn test_let_type_mismatch_error() {
-        // Annotation and literal suffix disagree: `let x : U8 = 100U16` => Err
+        // Annotation and literal suffix disagree: `let x : U8 = 100U16` => Err (narrowing)
         assert!(execute_tuff("let x : U8 = 100U16;").is_err());
         // Typed variable assigned to differently-annotated target
         assert!(execute_tuff("let x = 100U16; let y : U8 = x;").is_err());
+    }
+
+    #[test]
+    fn test_let_type_widening() {
+        // Smaller type fits in larger: `let x : U16 = 100U8` => OK, returns 100
+        assert_eq!(execute_tuff("let x : U16 = 100U8; x"), Ok(100));
+        assert_eq!(execute_tuff("let a : I32 = 5U8; a is I32"), Ok(1));
     }
 
     #[test]
