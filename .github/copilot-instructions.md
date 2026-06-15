@@ -42,4 +42,6 @@ cargo test --bin tuffc   # all unit tests (must pass before any commit)
 
 4. **Tests**: Every new feature gets at least one test in the `#[cfg(test)] mod tests` block, using `execute_tuff("...")`. Test both happy path and error paths. 100% coverage is the goal but edge-case branches that are genuinely hard to cover may be skipped.
 
-5. **No unsafe outside loops**: The only `unsafe` blocks should be raw-slice restoration in loop constructs. Everything else stays safe Rust.
+5. **Test-first development**: Always write the failing test case before considering any implementation. Every new feature gets at least one test in the `#[cfg(test)] mod tests` block, using `execute_tuff("...")`. Test both happy path and error paths.
+
+6. **No unsafe code**: Do not use `unsafe` blocks anywhere. All Rust code must be safe — never rely on raw pointers or manual memory management.
