@@ -390,7 +390,7 @@ fn parse_if_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     }
 }
 
-/// Check if the current input starts with an assignment statement: IDENT '=' Expr ';'
+/// Check if the current input starts with an assignment statement: IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
 fn is_assignment_statement(input: &[u8]) -> bool {
     let mut i = 0;
     while i < input.len() && (input[i] == b' ' || input[i] == b'\t') {
@@ -406,7 +406,18 @@ fn is_assignment_statement(input: &[u8]) -> bool {
     while j < input.len() && (input[j] == b' ' || input[j] == b'\t') {
         j += 1;
     }
-    j < input.len() && input[j] == b'='
+    if j >= input.len() {
+        return false;
+    }
+    // '=' or '+=' / '-=' / '*=' / '/='
+    if input[j] == b'=' {
+        return true;
+    }
+    if j + 1 < input.len() && input[j + 1] == b'=' {
+        matches!(input[j], b'+' | b'-' | b'*' | b'/')
+    } else {
+        false
+    }
 }
 
 /// Parse a `let` statement: 'let' ['mut'] IDENT '=' Expr ';'
@@ -444,16 +455,48 @@ fn expect_semicolon(input: &mut &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// Parse an assignment: IDENT '=' Expr ';'
+/// Parse an assignment: IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
 fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     let name = read_ident(input);
     skip_spaces(input);
-    *input = &input[1..]; // consume '='
+
+    // Check for compound assignment operators (+=, -= *=, /=) or plain (=)
+    let op = if input.starts_with(b"+=") || input.starts_with(b"-=") || input.starts_with(b"*=") || input.starts_with(b"/=") {
+        let char_op = input[0] as char; // capture the arithmetic op before consuming
+        *input = &input[2..]; // consume operator
+        Some(char_op)
+    } else if input.first().copied() == Some(b'=') {
+        *input = &input[1..]; // consume '='
+        None
+    } else {
+        return Err("expected '='" .to_string());
+    };
+
     skip_spaces(input);
     let val = parse_logical_or(input, env)?;
     expect_semicolon(input)?;
-    env.update(&name, val)?;
-    Ok(val)
+
+    if let Some(op) = op {
+        // Compound assignment: read current value, apply op, write back
+        let current = env.get(&name).ok_or_else(|| format!("undefined variable: {}", name))?;
+        let new_val = match op {
+            '+' => current + val,
+            '-' => current - val,
+            '*' => current * val,
+            '/' => {
+                if val == 0 {
+                    return Err("division by zero".to_string());
+                }
+                current / val
+            }
+            _ => unreachable!(),
+        };
+        env.update(&name, new_val)?;
+        Ok(new_val)
+    } else {
+        env.update(&name, val)?;
+        Ok(val)
+    }
 }
 
 /// Parse statements until we hit a terminator ('}' or EOF) and return the last value.
@@ -705,6 +748,42 @@ mod tests {
             execute_tuff("let mut x = 0; if (true) x = 2; else x = 3; x"),
             Ok(2)
         );
+    }
+
+    #[test]
+    fn test_compound_add_assignment() {
+        // += operator: let mut x = 0; x += 1; => 1
+        assert_eq!(execute_tuff("let mut x = 0; x += 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_compound_sub_assignment() {
+        // -= operator: let mut x = 5; x -= 3; => 2
+        assert_eq!(execute_tuff("let mut x = 5; x -= 3; x"), Ok(2));
+    }
+
+    #[test]
+    fn test_compound_mul_assignment() {
+        // *= operator: let mut x = 4; x *= 3; => 12
+        assert_eq!(execute_tuff("let mut x = 4; x *= 3; x"), Ok(12));
+    }
+
+    #[test]
+    fn test_compound_div_assignment() {
+        // /= operator: let mut x = 10; x /= 2; => 5
+        assert_eq!(execute_tuff("let mut x = 10; x /= 2; x"), Ok(5));
+    }
+
+    #[test]
+    fn test_compound_assignment_with_expression() {
+        // += with expression on RHS: let mut x = 1; x += 2 * 3; => 7
+        assert_eq!(execute_tuff("let mut x = 1; x += 2 * 3; x"), Ok(7));
+    }
+
+    #[test]
+    fn test_compound_assignment_immutable_error() {
+        // Compound assignment on immutable variable should fail.
+        assert!(execute_tuff("let x = 0; x += 1; x").is_err());
     }
 }
 
