@@ -866,6 +866,28 @@ fn drain_deferred_bodies(env: &mut Env) -> Result<i64, String> {
     Ok(last_val)
 }
 
+/// Check if the input looks like a statement rather than a bare expression.
+/// In non-block mode we need to distinguish:
+/// - `add();` -> expression STATEMENT (consume in loop)
+/// - `x` at EOF -> final EXPRESSION (leave for caller)
+fn looks_like_statement(input: &[u8]) -> bool {
+    // Recognized statement keywords are always statements
+    if is_let_statement(input)
+        || is_fn_statement(input)
+        || is_if_statement(input)
+        || is_while_statement(input)
+        || is_for_statement(input)
+        || is_assignment_statement(input)
+    {
+        return true;
+    }
+
+    // In block mode, anything goes (expressions are valid statements inside blocks).
+    // In non-block mode, only consume if there's a semicolon somewhere ahead.
+    // This lets us handle `add();` as a statement while leaving bare `x` for the caller.
+    find_semicolon(input).is_some()
+}
+
 /// Parse statements until we hit a terminator ('}' or EOF) and return the last value.
 fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) -> ParseResult {
     let mut last_val = 0i64;
@@ -879,6 +901,14 @@ fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) 
             last_val = drain_deferred_bodies(env)?;
             break;
         }
+
+        // In non-block mode, only consume items that look like statements.
+        // Bare expressions at EOF should be left for the caller (parse_program).
+        if !block_mode && !looks_like_statement(input) {
+            last_val = drain_deferred_bodies(env)?;
+            break;
+        }
+
         if is_fn_statement(input) {
             last_val = parse_fn_statement(input, env)?;
         } else if is_let_statement(input) {
@@ -891,10 +921,9 @@ fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) 
             last_val = parse_for_statement(input, env)?;
         } else if is_assignment_statement(input) {
             last_val = parse_assignment(input, env)?;
-        } else if block_mode {
-            last_val = parse_logical_or(input, env)?;
         } else {
-            break;
+            // Expression statement (includes function calls like `add();`)
+            last_val = parse_expression_stmt(input, env)?;
         }
     }
     Ok(last_val)
@@ -1279,6 +1308,15 @@ mod tests {
         assert_eq!(
             execute_tuff("let mut x = 0; fn add() => x += 1; add(); x"),
             Ok(1)
+        );
+    }
+
+    #[test]
+    fn test_function_multiple_calls_mutate_outer_scope() {
+        // Multiple calls accumulate mutations: `let mut x = 0; fn add() => x += 1; add(); add(); x` => 2
+        assert_eq!(
+            execute_tuff("let mut x = 0; fn add() => x += 1; add(); add(); x"),
+            Ok(2)
         );
     }
 }
