@@ -542,8 +542,11 @@ fn parse_struct_literal(input: &mut &[u8], env: &mut Env) -> Result<HashMap<Stri
         skip_spaces(input);
         let val = parse_logical_or(input, env)?;
         // If the RHS was a nested struct literal (pending_struct), register it anonymously.
+        // Same for pending_array — capture array literals as anonymous array references.
         if let Some(nested_fields) = env.pending_struct.take() {
             fields.insert(name, env.register_anonymous_struct(nested_fields));
+        } else if let Some(nested_array) = env.pending_array.take() {
+            fields.insert(name, env.register_anonymous_array(nested_array));
         } else {
             fields.insert(name, val);
         }
@@ -567,9 +570,11 @@ fn parse_array_literal(input: &mut &[u8], env: &mut Env) -> Result<Vec<i64>, Str
     if input.first().copied() != Some(b']') {
         loop {
             let val = parse_logical_or(input, env)?;
-            // If the element was a nested array literal, register it anonymously.
+            // If the element was a nested array literal or struct literal, register it anonymously.
             if let Some(nested) = env.pending_array.take() {
                 elements.push(env.register_anonymous_array(nested));
+            } else if let Some(nested_fields) = env.pending_struct.take() {
+                elements.push(env.register_anonymous_struct(nested_fields));
             } else {
                 elements.push(val);
             }
@@ -629,13 +634,20 @@ fn resolve_chained_index(
     // If the indexed value is an anonymous array ID and followed by '[', keep resolving.
     loop {
         skip_spaces(input);
-        if input.first().copied() != Some(b'[') || !current.is_negative() {
+        if input.first().copied() == Some(b'[') && current.is_negative() {
+            let nested = env
+                .resolve_anonymous_array(current)
+                .ok_or_else(|| format!("invalid anonymous array reference: {}", current))?;
+            current = index_array(nested, expect_index(input)?)?;
+        } else if input.first().copied() == Some(b'.') && current.is_negative() {
+            // Indexed value is an anonymous struct — resolve field access.
+            let nested_fields = env
+                .resolve_anonymous(current)
+                .ok_or_else(|| format!("invalid anonymous struct reference: {}", current))?;
+            return resolve_chained_fields(&mut nested_fields.clone(), input, env);
+        } else {
             break;
         }
-        let nested = env
-            .resolve_anonymous_array(current)
-            .ok_or_else(|| format!("invalid anonymous array reference: {}", current))?;
-        current = index_array(nested, expect_index(input)?)?;
     }
 
     Ok(current)
@@ -652,12 +664,17 @@ fn resolve_field(
         .get(field_name)
         .ok_or_else(|| format!("undefined field: {}", field_name))?;
     // If the field value is a negative anonymous struct ID, resolve it for chained access.
+    // Anonymous array IDs (negative) pass through as-is so bracket indexing can handle them.
     if val < 0 {
         if let Some(nested_fields) = env.resolve_anonymous(val) {
-            Ok((0, Some(nested_fields.clone())))
-        } else {
-            Err(format!("undefined field: {}", field_name))
+            return Ok((0, Some(nested_fields.clone())));
         }
+        // Check anonymous arrays — if found, the raw negative ID is returned
+        // so resolve_chained_index can handle it; otherwise fall through as a plain value.
+        if env.resolve_anonymous_array(val).is_some() {
+            return Ok((val, None));
+        }
+        Err(format!("undefined field: {}", field_name))
     } else {
         Ok((val, None))
     }
@@ -684,6 +701,14 @@ fn resolve_chained_fields(
                         return Ok(val);
                     }
                 } else {
+                    // If val is an anonymous array ID and followed by '[', resolve it inline.
+                    if val < 0
+                        && input.first().copied() == Some(b'[')
+                        && env.resolve_anonymous_array(val).is_some()
+                    {
+                        let elements = env.resolve_anonymous_array(val).unwrap().clone();
+                        return resolve_chained_index(&elements, input, env);
+                    }
                     return Ok(val);
                 }
             }
@@ -1767,6 +1792,21 @@ mod tests {
     fn test_struct_variable_property_access() {
         // `let y = { x : 3 }; y.x` => 3
         assert_eq!(execute_tuff("let y = { x: 3 }; y.x"), Ok(3));
+    }
+
+    #[test]
+    fn test_struct_with_array_field() {
+        // Struct with array field: `let s = { items: [10, 20] }; s.items[0]` => 10
+        assert_eq!(
+            execute_tuff("let s = { items: [10, 20] }; s.items[0]"),
+            Ok(10)
+        );
+    }
+
+    #[test]
+    fn test_array_containing_struct() {
+        // Array containing a struct: `let arr = [{ x: 42 }]; arr[0].x` => 42
+        assert_eq!(execute_tuff("let arr = [{ x: 42 }]; arr[0].x"), Ok(42));
     }
 
     #[test]
