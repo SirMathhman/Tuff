@@ -19,14 +19,22 @@ cargo test --bin tuffc   # all unit tests (must pass before any commit)
   Program   -> Statement* Expr
   Block     -> '{' Statement* Expr '}'
   Statement -> let ['mut'] IDENT '=' Expr ';'
+             | fn IDENT '(' [IDENT (',' IDENT)*] ')' '=>' Expr ';'
              | IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
              | while CONDITION body
              | for (IDENT in START..END) body
              | if CONDITION body ['else' body]
-  Expr      -> LogicalOr (('&&'|'||') LogicalOr)*
-  Factor    -> '(' Expr ')' | Block | 'if' COND CONS ALT
-             | match (EXPR) { case VAL => RESULT; ... }
-             | Identifier | Number | BooleanLiteral
+  LogicalOr   -> LogicalAnd ('||' LogicalAnd)*
+  LogicalAnd  -> Comparison ('&&' Comparison)*
+  Comparison  -> Expr ((''<''|'>''|'<=''|'>=''|'=='|'!='') Comparison)?
+  Expr        -> Term (('+'' | '-') Term)*
+  Term        -> Factor (('*' | '/') Factor)*
+  Factor      -> '(' Expr ')' | Block | StructLiteral '.' IDENT
+               | 'if' COND CONS 'else' ALT
+               | match (EXPR) { case VAL => RESULT; ... }
+               | IDENT '(' [Expr (',' Expr)*] ')'
+               | Identifier | Number | BooleanLiteral
+  StructLiteral -> '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
   ```
 
 ## Key Patterns to Follow
@@ -38,10 +46,10 @@ cargo test --bin tuffc   # all unit tests (must pass before any commit)
    - `skip_body_item` — skips one body item without executing
    - `parse_statements_loop` — top-level statement loop
 
-3. **Loop bodies**: When a control-flow construct needs to re-parse its body each iteration (e.g., `while`, `for`), save the remaining input bytes with `.to_vec()` and restore via raw pointers inside the loop. Always call `skip_body_item` after the loop exits so trailing code isn't silently dropped.
+3. **Loop bodies**: When a control-flow construct needs to re-parse its body each iteration (e.g., `while`, `for`), save the remaining input bytes with `.to_vec()` and restore via `unsafe { std::slice::from_raw_parts(...) }` inside the loop. Always call `skip_body_item` after the loop exits so trailing code isn't silently dropped.
 
 4. **Tests**: Every new feature gets at least one test in the `#[cfg(test)] mod tests` block, using `execute_tuff("...")`. Test both happy path and error paths. 100% coverage is the goal but edge-case branches that are genuinely hard to cover may be skipped.
 
 5. **Test-first development**: Always write the failing test case before considering any implementation. Every new feature gets at least one test in the `#[cfg(test)] mod tests` block, using `execute_tuff("...")`. Test both happy path and error paths.
 
-6. **No unsafe code**: Do not use `unsafe` blocks anywhere. All Rust code must be safe — never rely on raw pointers or manual memory management.
+6. **Debug by logging**: If you are stuck on an issue, you are required to add temporary `eprintln!` / `dbg!` logging statements to diagnose the problem. Do not guess—insert targeted logs at key parser/interpreter boundaries, run the tests, analyze the output, then remove the logs once resolved.
