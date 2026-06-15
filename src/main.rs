@@ -1377,13 +1377,46 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
         Err(_) => return Err(format!("invalid integer: {}", s)),
     };
 
-    // Check for type suffix (e.g. U8)
+   // Check for type suffix: U8, U16, U32, I8, I16, I32 (case-insensitive)
     skip_spaces(input);
-    if input.starts_with(b"U8") || input.starts_with(b"u8") {
-        if n < 0 || n > 255 {
-            return Err(format!("value {} out of range for u8 (0..=255)", n));
+
+    let is_u8 = input.starts_with(b"U8") || input.starts_with(b"u8");
+    let is_u16 = input.starts_with(b"U16") || input.starts_with(b"u16");
+    let is_u32 = input.starts_with(b"U32") || input.starts_with(b"u32");
+    let is_i8 = input.starts_with(b"I8") || input.starts_with(b"i8");
+    let is_i16 = input.starts_with(b"I16") || input.starts_with(b"i16");
+    let is_i32 = input.starts_with(b"I32") || input.starts_with(b"i32");
+
+    if is_u8 {
+        if n < 0 || n > u8::MAX as i64 {
+            return Err(format!("value {} out of range for u8 (0..={})", n, u8::MAX));
         }
-        *input = &input[2..]; // consume suffix
+        *input = &input[2..];
+    } else if is_u16 {
+        if n < 0 || n > u16::MAX as i64 {
+            return Err(format!("value {} out of range for u16 (0..={})", n, u16::MAX));
+        }
+        *input = &input[3..];
+    } else if is_u32 {
+        if n < 0 || n > u32::MAX as i64 {
+            return Err(format!("value {} out of range for u32 (0..={})", n, u32::MAX));
+        }
+        *input = &input[3..];
+    } else if is_i8 {
+        if n < i8::MIN as i64 || n > i8::MAX as i64 {
+            return Err(format!("value {} out of range for i8 ({}..={})", n, i8::MIN, i8::MAX));
+        }
+        *input = &input[2..];
+    } else if is_i16 {
+        if n < i16::MIN as i64 || n > i16::MAX as i64 {
+            return Err(format!("value {} out of range for i16 ({}..={})", n, i16::MIN, i16::MAX));
+        }
+        *input = &input[3..];
+    } else if is_i32 {
+        if n < i32::MIN as i64 || n > i32::MAX as i64 {
+            return Err(format!("value {} out of range for i32 ({}..={})", n, i32::MIN, i32::MAX));
+        }
+        *input = &input[3..];
     }
 
     Ok(n)
@@ -1454,6 +1487,61 @@ mod tests {
     fn test_u8_overflow_error() {
         // `256U8` => Err (exceeds u8 range 0..=255)
         assert!(execute_tuff("256U8").is_err());
+    }
+
+    #[test]
+    fn test_u16_literal() {
+        assert_eq!(execute_tuff("65535U16"), Ok(65535));
+    }
+
+    #[test]
+    fn test_u16_overflow_error() {
+        // 65536 exceeds u16 max (0..=65535)
+        assert!(execute_tuff("65536U16").is_err());
+    }
+
+    #[test]
+    fn test_u32_literal() {
+        assert_eq!(execute_tuff("4294967295U32"), Ok(4294967295));
+    }
+
+    #[test]
+    fn test_u32_overflow_error() {
+        // exceeds u32 max (0..=4294967295)
+        assert!(execute_tuff("4294967296U32").is_err());
+    }
+
+    #[test]
+    fn test_i8_literal() {
+        assert_eq!(execute_tuff("127I8"), Ok(127));
+    }
+
+    #[test]
+    fn test_i8_overflow_error() {
+        // 128 exceeds i8 max (-128..=127)
+        assert!(execute_tuff("128I8").is_err());
+    }
+
+    #[test]
+    fn test_i16_literal() {
+        assert_eq!(execute_tuff("32767I16"), Ok(32767));
+    }
+
+    #[test]
+    fn test_i16_overflow_error() {
+        // 32768 exceeds i16 max (-32768..=32767)
+        assert!(execute_tuff("32768I16").is_err());
+    }
+
+    #[test]
+    fn test_i32_literal() {
+        assert_eq!(execute_tuff("2147483647I32"), Ok(2147483647));
+    }
+
+    #[test]
+    fn test_i32_overflow_error() {
+        // exceeds i32 max (-2147483648..=2147483647)
+        assert!(execute_tuff("2147483648I32").is_err());
     }
 
     #[test]
