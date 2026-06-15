@@ -31,6 +31,8 @@ struct Env {
     deferred_bodies: Vec<Vec<u8>>,
     /// Temporary holder for a struct literal parsed in an expression context where we don't yet know the variable name.
     pending_struct: Option<HashMap<String, i64>>,
+    /// Registry of anonymous (nested) structs by index. Negative field values reference these.
+    anonymous_structs: Vec<HashMap<String, i64>>,
 }
 
 impl Env {
@@ -41,6 +43,7 @@ impl Env {
             functions: HashMap::new(),
             deferred_bodies: Vec::new(),
             pending_struct: None,
+            anonymous_structs: Vec::new(),
         }
     }
 
@@ -101,6 +104,23 @@ impl Env {
     /// Lookup a struct from innermost to outermost scope.
     fn get_struct(&self, name: &str) -> Option<&HashMap<String, i64>> {
         self.structs.iter().rev().find_map(|scope| scope.get(name))
+    }
+
+    /// Register an anonymous (nested) struct and return its negative ID.
+    fn register_anonymous_struct(&mut self, fields: HashMap<String, i64>) -> i64 {
+        let id = -(self.anonymous_structs.len() as i64 + 1);
+        self.anonymous_structs.push(fields);
+        id
+    }
+
+    /// Resolve a value that might be an anonymous struct ID into its fields map.
+    fn resolve_anonymous(&self, val: i64) -> Option<&HashMap<String, i64>> {
+        if val < 0 {
+            let idx = (-val - 1) as usize;
+            self.anonymous_structs.get(idx)
+        } else {
+            None
+        }
     }
 }
 
@@ -274,16 +294,11 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         Ok(val)
     } else if input.first().copied() == Some(b'{') {
         if looks_like_struct_literal(input) {
-            let fields = parse_struct_literal(input, env)?;
+            let mut fields = parse_struct_literal(input, env)?;
             skip_spaces(input);
             // If followed by '.', do inline property access; otherwise store for later binding.
             if input.first().copied() == Some(b'.') {
-                *input = &input[1..]; // consume '.'
-                let field_name = read_ident(input);
-                fields
-                    .get(&field_name)
-                    .copied()
-                    .ok_or_else(|| format!("undefined field: {}", field_name))
+                resolve_chained_fields(&mut fields, input, env)
             } else {
                 env.pending_struct = Some(fields);
                 Ok(0)
@@ -406,15 +421,11 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
             }
 
             _ if !input.is_empty() && input.first().copied() == Some(b'.') => {
-                // Property access on a struct-typed variable: IDENT.field
-                *input = &input[1..]; // consume '.'
-                let field_name = read_ident(input);
-                match env.get_struct(&ident) {
-                    Some(fields) => fields
-                        .get(&field_name)
-                        .copied()
-                        .ok_or_else(|| format!("undefined field: {}", field_name)),
+                // Property access on a struct-typed variable: IDENT.field (supports chained dots)
+                let fields_opt = env.get_struct(&ident).cloned();
+                match fields_opt {
                     None => Err(format!("variable '{}' is not a struct", ident)),
+                    Some(mut fields) => resolve_chained_fields(&mut fields, input, env),
                 }
             }
             _ => match env.get(&ident) {
@@ -453,7 +464,12 @@ fn parse_struct_literal(
         expect_char(input, b':')?;
         skip_spaces(input);
         let val = parse_logical_or(input, env)?;
-        fields.insert(name, val);
+        // If the RHS was a nested struct literal (pending_struct), register it anonymously.
+        if let Some(nested_fields) = env.pending_struct.take() {
+            fields.insert(name, env.register_anonymous_struct(nested_fields));
+        } else {
+            fields.insert(name, val);
+        }
         skip_spaces(input);
         if input.first().copied() == Some(b',') {
             *input = &input[1..]; // consume ','
@@ -463,6 +479,56 @@ fn parse_struct_literal(
     }
     expect_char(input, b'}')?;
     Ok(fields)
+}
+
+/// Resolve a field value from a struct's fields map.
+/// Returns (value, optional_nested_fields) so callers can chain dot notation through nested structs.
+fn resolve_field(
+    fields: &HashMap<String, i64>,
+    env: &'_ mut Env,
+    field_name: &str,
+) -> Result<(i64, Option<HashMap<String, i64>>), String> {
+    let val = *fields
+        .get(field_name)
+        .ok_or_else(|| format!("undefined field: {}", field_name))?;
+    // If the field value is a negative anonymous struct ID, resolve it for chained access.
+    if val < 0 {
+        if let Some(nested_fields) = env.resolve_anonymous(val) {
+            Ok((0, Some(nested_fields.clone())))
+        } else {
+            Err(format!("undefined field: {}", field_name))
+        }
+    } else {
+        Ok((val, None))
+    }
+}
+
+/// Consume chained `.field` accesses starting from current input (which must begin with '.').
+fn resolve_chained_fields(
+    fields: &mut HashMap<String, i64>,
+    input: &mut &[u8],
+    env: &'_ mut Env,
+) -> ParseResult {
+    loop {
+        *input = &input[1..]; // consume '.'
+        let field_name = read_ident(input);
+        match resolve_field(fields, env, &field_name)? {
+            (val, nested) => {
+                if let Some(nested_flds) = nested {
+                    *fields = nested_flds;
+                    skip_spaces(input);
+                    if input.first().copied() == Some(b'.') {
+                        continue;
+                    } else {
+                        env.pending_struct = Some(fields.clone());
+                        return Ok(val);
+                    }
+                } else {
+                    return Ok(val);
+                }
+            }
+        }
+    }
 }
 
 /// Parse a block: '{' Statement* Expr '}'
@@ -1456,6 +1522,15 @@ mod tests {
     fn test_struct_property_on_non_struct_variable_error() {
         // Accessing a property on a plain (non-struct) variable is an error.
         assert!(execute_tuff("let x = 5; x.foo").is_err());
+    }
+
+    #[test]
+    fn test_nested_struct_field_access() {
+        // Struct containing another struct: access nested field via chained dot notation.
+        assert_eq!(
+            execute_tuff("let outer = { inner: { x: 42 } }; outer.inner.x"),
+            Ok(42)
+        );
     }
 
     #[test]
