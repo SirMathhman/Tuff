@@ -12,9 +12,10 @@ use std::io::{self, BufRead, Write};
 //            | 'if' CONDITION body ['else' body]
 // Expr   -> Term (('+' | '-') Term)*
 // Term   -> Factor (('*' | '/') Factor)*
-// Factor -> '(' Expr ')' | Block | StructLiteral '.' IDENT
-//         | IDENT '(' [Expr (',' Expr)*] ')' | Identifier | Number
+// Factor -> '(' Expr ')' | Block | StructLiteral '.' IDENT | ArrayLiteral ['[' Expr ']']
+//         | IDENT ('.' IDENT | '[' Expr ']')* | Identifier | Number
 // StructLiteral -> '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
+// ArrayLiteral  -> '[' [Expr (',' Expr)*] ']'
 // Identifier -> letter+digit*
 // Number -> digit+
 
@@ -25,14 +26,20 @@ struct Env {
     scopes: Vec<HashMap<String, (i64, bool)>>,
     /// Parallel scopes for struct-typed variables: field_name -> value.
     structs: Vec<HashMap<String, HashMap<String, i64>>>,
+    /// Parallel scopes for array-typed variables: index -> value.
+    arrays: Vec<HashMap<String, Vec<i64>>>,
     /// Function name -> (parameter names, body expression bytes to re-parse on each call).
     functions: HashMap<String, (Vec<String>, Vec<u8>)>,
     /// Queue of zero-param function bodies deferred for execution after all fns are registered.
     deferred_bodies: Vec<Vec<u8>>,
     /// Temporary holder for a struct literal parsed in an expression context where we don't yet know the variable name.
     pending_struct: Option<HashMap<String, i64>>,
+    /// Temporary holder for an array literal parsed in an expression context where we don't yet know the variable name.
+    pending_array: Option<Vec<i64>>,
     /// Registry of anonymous (nested) structs by index. Negative field values reference these.
     anonymous_structs: Vec<HashMap<String, i64>>,
+    /// Registry of anonymous (nested) arrays by index. Negative array element values reference these.
+    anonymous_arrays: Vec<Vec<i64>>,
 }
 
 impl Env {
@@ -40,10 +47,13 @@ impl Env {
         Self {
             scopes: vec![HashMap::new()],
             structs: vec![HashMap::new()],
+            arrays: vec![HashMap::new()],
             functions: HashMap::new(),
             deferred_bodies: Vec::new(),
             pending_struct: None,
+            pending_array: None,
             anonymous_structs: Vec::new(),
+            anonymous_arrays: Vec::new(),
         }
     }
 
@@ -80,6 +90,7 @@ impl Env {
     fn enter_scope(&mut self) {
         self.scopes.push(HashMap::new());
         self.structs.push(HashMap::new());
+        self.arrays.push(HashMap::new());
     }
 
     /// Exit the current scope.
@@ -87,6 +98,7 @@ impl Env {
         if self.scopes.len() > 1 {
             self.scopes.pop();
             self.structs.pop();
+            self.arrays.pop();
         }
     }
 
@@ -106,6 +118,22 @@ impl Env {
         self.structs.iter().rev().find_map(|scope| scope.get(name))
     }
 
+    /// Insert an array value into the innermost scope.
+    fn insert_array(&mut self, name: String, elements: Vec<i64>, mutable: bool) {
+        if let Some(scope) = self.scopes.last_mut() {
+            // Store sentinel 0 for the plain value; real data lives in arrays map.
+            scope.insert(name.clone(), (0, mutable));
+        }
+        if let Some(arrays_scope) = self.arrays.last_mut() {
+            arrays_scope.insert(name, elements);
+        }
+    }
+
+    /// Lookup an array from innermost to outermost scope.
+    fn get_array(&self, name: &str) -> Option<&Vec<i64>> {
+        self.arrays.iter().rev().find_map(|scope| scope.get(name))
+    }
+
     /// Register an anonymous (nested) struct and return its negative ID.
     fn register_anonymous_struct(&mut self, fields: HashMap<String, i64>) -> i64 {
         let id = -(self.anonymous_structs.len() as i64 + 1);
@@ -118,6 +146,39 @@ impl Env {
         if val < 0 {
             let idx = (-val - 1) as usize;
             self.anonymous_structs.get(idx)
+        } else {
+            None
+        }
+    }
+
+    /// Register an anonymous (nested) array and return its negative ID.
+    fn register_anonymous_array(&mut self, elements: Vec<i64>) -> i64 {
+        let id = -(self.anonymous_arrays.len() as i64 + 1);
+        self.anonymous_arrays.push(elements);
+        id
+    }
+
+    /// Update an element at a given index in an array variable.
+    fn update_array_element(&mut self, name: &str, idx: i64, val: i64) -> Result<(), String> {
+        let pos = (idx as usize).try_into().unwrap_or(usize::MAX);
+        for scope in self.arrays.iter_mut().rev() {
+            if let Some(elements) = scope.get_mut(name) {
+                let len = elements.len();
+                *elements
+                    .get_mut(pos)
+                    .ok_or_else(|| format!("array index out of bounds: {} (len={})", idx, len))? =
+                    val;
+                return Ok(());
+            }
+        }
+        Err(format!("undefined array: {}", name))
+    }
+
+    /// Resolve a value that might be an anonymous array ID into its elements.
+    fn resolve_anonymous_array(&self, val: i64) -> Option<&Vec<i64>> {
+        if val < 0 {
+            let idx = (-val - 1) as usize;
+            self.anonymous_arrays.get(idx)
         } else {
             None
         }
@@ -306,6 +367,17 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
         } else {
             parse_block(input, env)
         }
+    } else if input.first().copied() == Some(b'[') {
+        // Array literal: '[' [Expr (',' Expr)*] ']'
+        let elements = parse_array_literal(input, env)?;
+        skip_spaces(input);
+        // If followed by '[', do inline index access; otherwise store for later binding.
+        if input.first().copied() == Some(b'[') {
+            resolve_chained_index(&elements, input, env)
+        } else {
+            env.pending_array = Some(elements);
+            Ok(0)
+        }
     } else if input.starts_with(b"if") && (input.len() < 3 || !input[2].is_ascii_alphanumeric()) {
         // Parse if/else expression: 'if' CONDITION CONSEQUENCE 'else' ALTERNATIVE
         *input = &input[2..]; // consume "if"
@@ -426,6 +498,16 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
                     Some(mut fields) => resolve_chained_fields(&mut fields, input, env),
                 }
             }
+
+            _ if !input.is_empty() && input.first().copied() == Some(b'[') => {
+                // Array index access: IDENT[Expr] (supports chained brackets)
+                if let Some(elements) = env.get_array(&ident).cloned() {
+                    resolve_chained_index(&elements, input, env)
+                } else {
+                    Err(format!("variable '{}' is not an array", ident))
+                }
+            }
+
             _ => match env.get(&ident) {
                 Some(val) => Ok(val),
                 None => Err(format!("undefined variable: {}", ident)),
@@ -474,6 +556,89 @@ fn parse_struct_literal(input: &mut &[u8], env: &mut Env) -> Result<HashMap<Stri
     }
     expect_char(input, b'}')?;
     Ok(fields)
+}
+
+/// Parse an array literal: '[' [Expr (',' Expr)*] ']'
+fn parse_array_literal(input: &mut &[u8], env: &mut Env) -> Result<Vec<i64>, String> {
+    *input = &input[1..]; // consume '['
+    skip_spaces(input);
+
+    let mut elements = Vec::new();
+    if input.first().copied() != Some(b']') {
+        loop {
+            let val = parse_logical_or(input, env)?;
+            // If the element was a nested array literal, register it anonymously.
+            if let Some(nested) = env.pending_array.take() {
+                elements.push(env.register_anonymous_array(nested));
+            } else {
+                elements.push(val);
+            }
+            skip_spaces(input);
+            if input.first().copied() == Some(b',') {
+                *input = &input[1..]; // consume ','
+                skip_spaces(input);
+            } else {
+                break;
+            }
+        }
+    }
+
+    expect_char(input, b']')?;
+    Ok(elements)
+}
+
+/// Expect and parse an index expression: '[' Expr ']'
+fn expect_index(input: &mut &[u8]) -> Result<i64, String> {
+    if input.first().copied() != Some(b'[') {
+        return Err("expected '['".to_string());
+    }
+    *input = &input[1..]; // consume '['
+    skip_spaces(input);
+
+    // Index must be a non-negative number.
+    let idx = parse_number(input)?;
+    if idx < 0 {
+        return Err("negative array index".to_string());
+    }
+
+    skip_spaces(input);
+    expect_char(input, b']')?;
+    Ok(idx)
+}
+
+/// Index into an array, returning the element at the given position.
+fn index_array(elements: &[i64], idx: i64) -> Result<i64, String> {
+    let pos = idx as usize;
+    elements.get(pos).copied().ok_or_else(|| {
+        format!(
+            "array index out of bounds: {} (len={})",
+            idx,
+            elements.len()
+        )
+    })
+}
+
+/// Consume chained `[idx]` accesses, resolving through anonymous nested arrays.
+fn resolve_chained_index(
+    elements: &[i64],
+    input: &mut &[u8],
+    env: &mut Env,
+) -> Result<i64, String> {
+    let mut current = index_array(elements, expect_index(input)?)?;
+
+    // If the indexed value is an anonymous array ID and followed by '[', keep resolving.
+    loop {
+        skip_spaces(input);
+        if input.first().copied() != Some(b'[') || !current.is_negative() {
+            break;
+        }
+        let nested = env
+            .resolve_anonymous_array(current)
+            .ok_or_else(|| format!("invalid anonymous array reference: {}", current))?;
+        current = index_array(nested, expect_index(input)?)?;
+    }
+
+    Ok(current)
 }
 
 /// Resolve a field value from a struct's fields map.
@@ -789,6 +954,19 @@ fn is_assignment_statement(input: &[u8]) -> bool {
     while j < input.len() && (input[j].is_ascii_alphanumeric() || input[j] == b'_') {
         j += 1;
     }
+    // Skip optional bracket index: [ Expr ]
+    if j < input.len() && input[j] == b'[' {
+        let mut depth = 1usize;
+        j += 1; // consume '['
+        while j < input.len() && depth > 0 {
+            match input[j] {
+                b'[' => depth += 1,
+                b']' => depth -= 1,
+                _ => {}
+            }
+            j += 1;
+        }
+    }
     while j < input.len() && (input[j] == b' ' || input[j] == b'\t') {
         j += 1;
     }
@@ -819,17 +997,17 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         false
     };
     let name = read_ident(input);
-    skip_spaces(input);
-    if input.first().copied() != Some(b'=') {
-        return Err("expected '='".to_string());
-    }
-    *input = &input[1..]; // consume '='
-    skip_spaces(input);
+    expect_equals(input)?;
     let val = parse_comparison(input, env)?;
     // If the RHS was a struct literal without inline field access, capture it.
     if let Some(fields) = env.pending_struct.take() {
         expect_semicolon(input)?;
         env.insert_struct(name, fields, mutable);
+        Ok(0)
+    } else if let Some(elements) = env.pending_array.take() {
+        // If the RHS was an array literal without inline index access, capture it.
+        expect_semicolon(input)?;
+        env.insert_array(name, elements, mutable);
         Ok(0)
     } else {
         expect_semicolon(input)?;
@@ -845,6 +1023,16 @@ fn expect_semicolon(input: &mut &[u8]) -> Result<(), String> {
         return Err("expected ';'".to_string());
     }
     *input = &input[1..]; // consume ';'
+    Ok(())
+}
+
+/// Expect and consume an '=' character.
+fn expect_equals(input: &mut &[u8]) -> Result<(), String> {
+    skip_spaces(input);
+    if input.first().copied() != Some(b'=') {
+        return Err("expected '='".to_string());
+    }
+    *input = &input[1..]; // consume '='
     Ok(())
 }
 
@@ -867,13 +1055,17 @@ fn find_semicolon(input: &[u8]) -> Option<usize> {
     None
 }
 
-/// Parse comma-separated items inside parentheses, calling `parse_item` for each.
-fn parse_comma_separated<T, F>(input: &mut &[u8], mut parse_item: F) -> Result<Vec<T>, String>
+/// Parse comma-separated items until `end_char`, calling `parse_item` for each.
+fn parse_comma_separated_bracketed<T, F>(
+    input: &mut &[u8],
+    end_char: u8,
+    mut parse_item: F,
+) -> Result<Vec<T>, String>
 where
     F: FnMut(&mut &[u8]) -> Result<T, String>,
 {
     let mut items = Vec::new();
-    if input.first().copied() != Some(b')') {
+    if input.first().copied() != Some(end_char) {
         loop {
             let item = parse_item(input)?;
             items.push(item);
@@ -886,6 +1078,15 @@ where
             }
         }
     }
+    Ok(items)
+}
+
+/// Parse comma-separated items inside parentheses, calling `parse_item` for each.
+fn parse_comma_separated<T, F>(input: &mut &[u8], parse_item: F) -> Result<Vec<T>, String>
+where
+    F: FnMut(&mut &[u8]) -> Result<T, String>,
+{
+    let items = parse_comma_separated_bracketed(input, b')', parse_item)?;
     expect_char(input, b')')?;
     Ok(items)
 }
@@ -957,57 +1158,79 @@ fn parse_while_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
     Ok(0) // while loops don't produce a value themselves
 }
 
-/// Parse an assignment: IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
+/// Parse an assignment: IDENT ('+'|'-'|'*'|'/')? '=' Expr ';' or IDENT[Idx] = Expr ';'
 fn parse_assignment(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let name = read_ident(input);
     skip_spaces(input);
 
-    // Check for compound assignment operators (+=, -= *=, /=) or plain (=)
-    let op = if input.starts_with(b"+=")
-        || input.starts_with(b"-=")
-        || input.starts_with(b"*=")
-        || input.starts_with(b"/=")
-    {
-        let char_op = input[0] as char; // capture the arithmetic op before consuming
-        *input = &input[2..]; // consume operator
-        Some(char_op)
-    } else if input.first().copied() == Some(b'=') {
+    // Check for array index target: IDENT[...]
+    if input.first().copied() == Some(b'[') {
+        let idx = expect_index(input)?;
+        skip_spaces(input);
+
+        // Expect '=' (array element assignment doesn't support compound ops yet)
+        if input.first().copied() != Some(b'=') {
+            return Err("expected '='".to_string());
+        }
         *input = &input[1..]; // consume '='
-        None
-    } else {
-        return Err("expected '='".to_string());
-    };
+        skip_spaces(input);
 
-    skip_spaces(input);
-    let val = parse_logical_or(input, env)?;
-    // Semicolon is optional (fn body bytes may not include trailing ';')
-    skip_spaces(input);
-    if input.first().copied() == Some(b';') {
-        *input = &input[1..];
-    }
+        let val = parse_logical_or(input, env)?;
+        skip_spaces(input);
+        if input.first().copied() == Some(b';') {
+            *input = &input[1..];
+        }
 
-    if let Some(op) = op {
-        // Compound assignment: read current value, apply op, write back
-        let current = env
-            .get(&name)
-            .ok_or_else(|| format!("undefined variable: {}", name))?;
-        let new_val = match op {
-            '+' => current + val,
-            '-' => current - val,
-            '*' => current * val,
-            '/' => {
-                if val == 0 {
-                    return Err("division by zero".to_string());
-                }
-                current / val
-            }
-            _ => unreachable!(),
-        };
-        env.update(&name, new_val)?;
-        Ok(new_val)
-    } else {
-        env.update(&name, val)?;
+        env.update_array_element(&name, idx, val)?;
         Ok(val)
+    } else {
+        // Plain variable assignment (existing logic)
+        let op = if input.starts_with(b"+=")
+            || input.starts_with(b"-=")
+            || input.starts_with(b"*=")
+            || input.starts_with(b"/=")
+        {
+            let char_op = input[0] as char; // capture the arithmetic op before consuming
+            *input = &input[2..]; // consume operator
+            Some(char_op)
+        } else if input.first().copied() == Some(b'=') {
+            *input = &input[1..]; // consume '='
+            None
+        } else {
+            return Err("expected '='".to_string());
+        };
+
+        skip_spaces(input);
+        let val = parse_logical_or(input, env)?;
+        // Semicolon is optional (fn body bytes may not include trailing ';')
+        skip_spaces(input);
+        if input.first().copied() == Some(b';') {
+            *input = &input[1..];
+        }
+
+        if let Some(op) = op {
+            // Compound assignment: read current value, apply op, write back
+            let current = env
+                .get(&name)
+                .ok_or_else(|| format!("undefined variable: {}", name))?;
+            let new_val = match op {
+                '+' => current + val,
+                '-' => current - val,
+                '*' => current * val,
+                '/' => {
+                    if val == 0 {
+                        return Err("division by zero".to_string());
+                    }
+                    current / val
+                }
+                _ => unreachable!(),
+            };
+            env.update(&name, new_val)?;
+            Ok(new_val)
+        } else {
+            env.update(&name, val)?;
+            Ok(val)
+        }
     }
 }
 
@@ -1498,6 +1721,27 @@ mod tests {
         assert_eq!(
             execute_tuff("fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)"),
             Ok(120)
+        );
+    }
+
+    #[test]
+    fn test_array_literal_index_access() {
+        // Array literal with bracket indexing: `let array = [1, 2, 3]; array[0]` => 1
+        assert_eq!(execute_tuff("let array = [1, 2, 3]; array[0]"), Ok(1));
+    }
+
+    #[test]
+    fn test_nested_array_index_access() {
+        // Array containing an array: `let arr = [[1, 2], [3, 4]]; arr[0][1]` => 2
+        assert_eq!(execute_tuff("let arr = [[1, 2], [3, 4]]; arr[0][1]"), Ok(2));
+    }
+
+    #[test]
+    fn test_array_element_assignment() {
+        // Mutable array element assignment: `let mut array = [1, 2, 3]; array[0] = 4; array[0]` => 4
+        assert_eq!(
+            execute_tuff("let mut array = [1, 2, 3]; array[0] = 4; array[0]"),
+            Ok(4)
         );
     }
 
