@@ -5,12 +5,13 @@ use std::io::{self, BufRead, Write};
 // Program   -> Statement* Expr
 // Block     -> '{' Statement* Expr '}'
 // Statement -> 'let' ['mut'] IDENT '=' Expr ';'
+//            | 'fn' IDENT '(' [IDENT (',' IDENT)*] ')' '=>' Expr ';'
 //            | IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
 //            | 'while' CONDITION body
 //            | 'if' CONDITION body ['else' body]
 // Expr   -> Term (('+' | '-') Term)*
 // Term   -> Factor (('*' | '/') Factor)*
-// Factor -> '(' Expr ')' | Block | Identifier | Number
+// Factor -> '(' Expr ')' | Block | IDENT '(' [Expr (',' Expr)*] ')' | Identifier | Number
 // Identifier -> letter+digit*
 // Number -> digit+
 
@@ -19,12 +20,15 @@ use std::io::{self, BufRead, Write};
 struct Env {
     /// Each entry stores (value, is_mutable).
     scopes: Vec<HashMap<String, (i64, bool)>>,
+    /// Function name -> (parameter names, body expression bytes to re-parse on each call).
+    functions: HashMap<String, (Vec<String>, Vec<u8>)>,
 }
 
 impl Env {
     fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()],
+            functions: HashMap::new(),
         }
     }
 
@@ -318,6 +322,41 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         match ident.as_str() {
             "true" => Ok(1),
             "false" => Ok(0),
+            _ if !input.is_empty() && input.first().copied() == Some(b'(') => {
+                // Function call: IDENT ( [Expr (',' Expr)*] )
+                *input = &input[1..]; // consume '('
+                skip_spaces(input);
+
+                // Evaluate comma-separated argument expressions
+                let args: Vec<i64> =
+                    parse_comma_separated(input, |inner| parse_logical_or(inner, env))?;
+
+                if let Some((params, body_bytes)) = env.functions.get(&ident).cloned() {
+                    if params.len() != args.len() {
+                        return Err(format!(
+                            "function {} expects {} arguments, got {}",
+                            ident,
+                            params.len(),
+                            args.len()
+                        ));
+                    }
+
+                    // Create new scope and bind parameters to argument values
+                    env.enter_scope();
+                    for (param_name, arg_val) in params.iter().zip(args.into_iter()) {
+                        env.insert(param_name.clone(), arg_val, true);
+                    }
+
+                    let body_slice: &[u8] = unsafe {
+                        std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len())
+                    };
+                    let result = parse_logical_or(&mut body_slice.as_ref(), env);
+                    env.exit_scope();
+                    result
+                } else {
+                    Err(format!("undefined function: {}", ident))
+                }
+            }
             _ => match env.get(&ident) {
                 Some(val) => Ok(val),
                 None => Err(format!("undefined variable: {}", ident)),
@@ -365,6 +404,11 @@ fn is_for_statement(input: &[u8]) -> bool {
     starts_with_keyword(input, b"for")
 }
 
+/// Check if the current input starts with a function definition statement.
+fn is_fn_statement(input: &[u8]) -> bool {
+    starts_with_keyword(input, b"fn")
+}
+
 /// Skip over a block without executing it (for non-taken if/else branches).
 fn skip_block(input: &mut &[u8]) -> Result<(), String> {
     *input = &input[1..]; // consume '{'
@@ -385,7 +429,9 @@ fn skip_block(input: &mut &[u8]) -> Result<(), String> {
 
 /// Parse a single body item (let/assignment/expression-stmt or block).
 fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
-    if is_let_statement(input) {
+    if is_fn_statement(input) {
+        parse_fn_statement(input, env)
+    } else if is_let_statement(input) {
         parse_let_statement(input, env)
     } else if is_assignment_statement(input) {
         parse_assignment(input, env)
@@ -623,6 +669,82 @@ fn expect_semicolon(input: &mut &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Find the position of a semicolon at depth 0 (accounting for nested parens/braces).
+fn find_semicolon(input: &[u8]) -> Option<usize> {
+    let mut i = 0;
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    while i < input.len() {
+        match input[i] {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth -= 1,
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth -= 1,
+            b';' if paren_depth == 0 && brace_depth == 0 => return Some(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Parse comma-separated items inside parentheses, calling `parse_item` for each.
+fn parse_comma_separated<T, F>(input: &mut &[u8], mut parse_item: F) -> Result<Vec<T>, String>
+where
+    F: FnMut(&mut &[u8]) -> Result<T, String>,
+{
+    let mut items = Vec::new();
+    if input.first().copied() != Some(b')') {
+        loop {
+            let item = parse_item(input)?;
+            items.push(item);
+            skip_spaces(input);
+            if input.first().copied() == Some(b',') {
+                *input = &input[1..]; // consume ','
+                skip_spaces(input);
+            } else {
+                break;
+            }
+        }
+    }
+    expect_char(input, b')')?;
+    Ok(items)
+}
+
+/// Parse a function definition: 'fn' IDENT '(' [IDENT (',' IDENT)*] ')' '=>' Expr ';'
+fn parse_fn_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    skip_spaces(input);
+    *input = &input[2..]; // consume "fn"
+    skip_spaces(input);
+
+    let name = read_ident(input);
+    skip_spaces(input);
+
+    expect_char(input, b'(')?;
+    skip_spaces(input);
+
+    // Parse comma-separated parameter names (or empty)
+    let params: Vec<String> = parse_comma_separated(input, |input| Ok(read_ident(input)))?;
+    skip_spaces(input);
+
+    if input.len() < 2 || input[0] != b'=' || input[1] != b'>' {
+        return Err("expected '=>' in function definition".to_string());
+    }
+    *input = &input[2..]; // consume "=>"
+    skip_spaces(input);
+
+    // Find the semicolon that ends this expression to extract body bytes.
+    if let Some(semi_pos) = find_semicolon(input) {
+        let body_bytes = input[..semi_pos].to_vec();
+        env.functions.insert(name, (params, body_bytes));
+        *input = &input[semi_pos + 1..]; // consume past ';'
+    } else {
+        return Err("expected ';' after function body".to_string());
+    }
+
+    Ok(0)
+}
+
 /// Parse a while loop: 'while' CONDITION body
 fn parse_while_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     skip_spaces(input);
@@ -714,7 +836,9 @@ fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) 
         if !block_mode && input.is_empty() {
             break;
         }
-        if is_let_statement(input) {
+        if is_fn_statement(input) {
+            last_val = parse_fn_statement(input, env)?;
+        } else if is_let_statement(input) {
             last_val = parse_let_statement(input, env)?;
         } else if is_if_statement(input) {
             last_val = parse_if_statement(input, env)?;
@@ -1081,6 +1205,27 @@ mod tests {
     fn test_match_expression_non_exhaustive_error() {
         // match without wildcard and no matching case should error
         assert!(execute_tuff("let x = match (5) { case 1 => 99; case 2 => 42; }; x").is_err());
+    }
+
+    #[test]
+    fn test_function_definition_and_call() {
+        // Define a function with `fn` and call it: `fn get() => 100; get()` => 100
+        assert_eq!(execute_tuff("fn get() => 100; get()"), Ok(100));
+    }
+
+    #[test]
+    fn test_function_with_parameters() {
+        // Function with parameters: `fn add(first, second) => first + second; add(3, 4)` => 7
+        assert_eq!(
+            execute_tuff("fn add(first, second) => first + second; add(3, 4)"),
+            Ok(7)
+        );
+    }
+
+    #[test]
+    fn test_forward_function_call() {
+        // Function a calls b which is defined after a: `fn a() => b(); fn b() => 7; a()` => 7
+        assert_eq!(execute_tuff("fn a() => b(); fn b() => 7; a()"), Ok(7));
     }
 }
 
