@@ -1372,10 +1372,21 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
         return Err("expected number".to_string());
     }
     let s: String = chars.into_iter().map(|b| b as char).collect();
-    match s.parse::<i64>() {
-        Ok(n) => Ok(n),
-        Err(_) => Err(format!("invalid integer: {}", s)),
+    let n = match s.parse::<i64>() {
+        Ok(val) => val,
+        Err(_) => return Err(format!("invalid integer: {}", s)),
+    };
+
+    // Check for type suffix (e.g. U8)
+    skip_spaces(input);
+    if input.starts_with(b"U8") || input.starts_with(b"u8") {
+        if n < 0 || n > 255 {
+            return Err(format!("value {} out of range for u8 (0..=255)", n));
+        }
+        *input = &input[2..]; // consume suffix
     }
+
+    Ok(n)
 }
 
 fn skip_spaces(input: &mut &[u8]) {
@@ -1425,6 +1436,24 @@ mod tests {
     #[test]
     fn test_numeric_literal() {
         assert_eq!(execute_tuff("100"), Ok(100));
+    }
+
+    #[test]
+    fn test_u8_suffixed_literal() {
+        // `100U8` => 100 (suffix parsed and accepted, value unchanged for now)
+        assert_eq!(execute_tuff("100U8"), Ok(100));
+    }
+
+    #[test]
+    fn test_negative_u8_literal_error() {
+        // `-100U8` => Err (negative typed literals not supported yet)
+        assert!(execute_tuff("-100U8").is_err());
+    }
+
+    #[test]
+    fn test_u8_overflow_error() {
+        // `256U8` => Err (exceeds u8 range 0..=255)
+        assert!(execute_tuff("256U8").is_err());
     }
 
     #[test]
