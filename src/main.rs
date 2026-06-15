@@ -22,8 +22,8 @@ use std::io::{self, BufRead, Write};
 /// Scoped environment: innermost scope is the last entry.
 #[derive(Default)]
 struct Env {
-    /// Each entry stores (value, is_mutable).
-    scopes: Vec<HashMap<String, (i64, bool)>>,
+    /// Each entry stores (value, is_mutable, type_name_or_none).
+    scopes: Vec<HashMap<String, (i64, bool, Option<&'static str>)>>,
     /// Parallel scopes for struct-typed variables: field_name -> value.
     structs: Vec<HashMap<String, HashMap<String, i64>>>,
     /// Parallel scopes for array-typed variables: index -> value.
@@ -65,28 +65,40 @@ impl Env {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).map(|(v, _)| *v))
+            .find_map(|scope| scope.get(name).map(|(v, _, _)| *v))
     }
 
-    /// Insert into the current (innermost) scope.
-    fn insert(&mut self, name: String, val: i64, mutable: bool) {
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, (val, mutable));
-        }
+    /// Lookup the type of a variable from innermost to outermost scope.
+    fn get_type(&self, name: &str) -> Option<Option<&'static str>> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).map(|(_, _, t)| *t))
     }
 
     /// Update a variable in any scope (for assignment).
     fn update(&mut self, name: &str, val: i64) -> Result<(), String> {
         for scope in self.scopes.iter_mut().rev() {
-            if let Some((v, mutable)) = scope.get_mut(name) {
+            if let Some((v, mutable, type_name)) = scope.get_mut(name) {
                 if !*mutable {
                     return Err(format!("cannot assign to immutable variable: {}", name));
                 }
                 *v = val;
+                // Update type from pending_type if set
+                if let Some(t) = self.pending_type.take() {
+                    *type_name = Some(t);
+                }
                 return Ok(());
             }
         }
         Err(format!("undefined variable: {}", name))
+    }
+
+    /// Insert into the current (innermost) scope.
+    fn insert(&mut self, name: String, val: i64, mutable: bool, type_name: Option<&'static str>) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, (val, mutable, type_name));
+        }
     }
 
     /// Enter a new scope.
@@ -109,7 +121,7 @@ impl Env {
     fn insert_struct(&mut self, name: String, fields: HashMap<String, i64>, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             // Store sentinel 0 for the plain value; real data lives in structs map.
-            scope.insert(name.clone(), (0, mutable));
+            scope.insert(name.clone(), (0, mutable, None));
         }
         if let Some(sstructs_scope) = self.structs.last_mut() {
             sstructs_scope.insert(name, fields);
@@ -125,7 +137,7 @@ impl Env {
     fn insert_array(&mut self, name: String, elements: Vec<i64>, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             // Store sentinel 0 for the plain value; real data lives in arrays map.
-            scope.insert(name.clone(), (0, mutable));
+            scope.insert(name.clone(), (0, mutable, None));
         }
         if let Some(arrays_scope) = self.arrays.last_mut() {
             arrays_scope.insert(name, elements);
@@ -497,7 +509,7 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
                     // Create new scope and bind parameters to argument values
                     env.enter_scope();
                     for (param_name, arg_val) in params.iter().zip(args.into_iter()) {
-                        env.insert(param_name.clone(), arg_val, true);
+                        env.insert(param_name.clone(), arg_val, true, None);
                     }
 
                     let mut body_slice = body_bytes.as_slice();
@@ -527,8 +539,29 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
                 }
             }
 
+            _ if starts_with_keyword(input, b"is") => {
+                // Type check on a variable: `x is TYPE`
+                skip_spaces(input);
+                *input = &input[2..]; // consume "is"
+                skip_spaces(input);
+
+                let type_name: String = read_ident(input).to_ascii_uppercase();
+                match env.get_type(&ident) {
+                    Some(Some(stored)) if stored.to_ascii_uppercase() == type_name => Ok(1),
+                    _ => Ok(0),
+                }
+            }
+
             _ => match env.get(&ident) {
-                Some(val) => Ok(val),
+                Some(val) => {
+                    // Propagate stored type for 'is' checks and annotation mismatch detection
+                    if let Some(Some(t)) = env.get_type(&ident) {
+                        env.pending_type = Some(t);
+                    } else {
+                        env.pending_type = None;
+                    }
+                    Ok(val)
+                }
                 None => Err(format!("undefined variable: {}", ident)),
             },
         }
@@ -913,7 +946,7 @@ fn parse_for_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         let mut consumed = 0;
         for i in start_val..end_val {
             let mut iter_input: &[u8] = &body_bytes;
-            env.insert(ident.clone(), i, true);
+            env.insert(ident.clone(), i, true, None);
             let _ = parse_body_item(&mut iter_input, env)?;
             consumed = body_bytes.len() - iter_input.len();
         }
@@ -1044,6 +1077,24 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         false
     };
     let name = read_ident(input);
+    // Optional explicit type annotation: `let x : I32 = ...`
+    skip_spaces(input);
+    // Optional explicit type annotation: `let x : I32 = ...`
+    skip_spaces(input);
+    let mut explicit_type: Option<&'static str> = None;
+    if input.first().copied() == Some(b':') {
+        *input = &input[1..]; // consume ':'
+        skip_spaces(input);
+
+        match read_type_name(input) {
+            Some(tn) => explicit_type = Some(tn),
+            None => {
+                let bad_name = read_ident(input);
+                return Err(format!("unknown type: {}", bad_name));
+            }
+        }
+    }
+
     expect_equals(input)?;
     let val = parse_comparison(input, env)?;
     // If the RHS was a struct literal without inline field access, capture it.
@@ -1058,7 +1109,26 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         Ok(0)
     } else {
         expect_semicolon(input)?;
-        env.insert(name, val, mutable);
+        // Capture whether the literal had an EXPLICIT suffix (not just I32 default).
+        // We check if pending_type differs from "I32" — plain numbers always get I32 as default,
+        // so a non-I32 type means there was an explicit suffix.
+        let has_explicit_suffix = env.pending_type.map_or(false, |t| t != "I32");
+        let literal_type = if has_explicit_suffix {
+            env.pending_type.take()
+        } else {
+            // Plain number with no annotation — keep I32 default for 'is' checks.
+            None
+        };
+
+        // If both annotation and explicit suffix present, they must agree.
+        if let (Some(annot), Some(lit)) = (explicit_type, literal_type) {
+            if annot.to_ascii_uppercase() != lit.to_ascii_uppercase() {
+                return Err(format!("type mismatch: expected {}, got {}", annot, lit));
+            }
+        }
+
+        let type_name = explicit_type.or(literal_type).or(env.pending_type.take());
+        env.insert(name, val, mutable, type_name);
         Ok(val)
     }
 }
@@ -1402,72 +1472,63 @@ fn parse_number(input: &mut &[u8], env: &mut Env) -> ParseResult {
     // Check for type suffix: U8, U16, U32, I8, I16, I32 (case-insensitive)
     skip_spaces(input);
 
-    let is_u8 = input.starts_with(b"U8") || input.starts_with(b"u8");
-    let is_u16 = input.starts_with(b"U16") || input.starts_with(b"u16");
-    let is_u32 = input.starts_with(b"U32") || input.starts_with(b"u32");
-    let is_i8 = input.starts_with(b"I8") || input.starts_with(b"i8");
-    let is_i16 = input.starts_with(b"I16") || input.starts_with(b"i16");
-    let is_i32 = input.starts_with(b"I32") || input.starts_with(b"i32");
-
-    if is_u8 {
-        if n < 0 || n > u8::MAX as i64 {
-            return Err(format!("value {} out of range for u8 (0..={})", n, u8::MAX));
+    if let Some(type_name) = read_type_name(input) {
+        match type_name {
+            "U8" => {
+                if n < 0 || n > u8::MAX as i64 {
+                    return Err(format!("value {} out of range for u8 (0..={})", n, u8::MAX));
+                }
+            }
+            "U16" => {
+                if n < 0 || n > u16::MAX as i64 {
+                    return Err(format!(
+                        "value {} out of range for u16 (0..={})",
+                        n,
+                        u16::MAX
+                    ));
+                }
+            }
+            "U32" => {
+                if n < 0 || n > u32::MAX as i64 {
+                    return Err(format!(
+                        "value {} out of range for u32 (0..={})",
+                        n,
+                        u32::MAX
+                    ));
+                }
+            }
+            "I8" => {
+                if n < i8::MIN as i64 || n > i8::MAX as i64 {
+                    return Err(format!(
+                        "value {} out of range for i8 ({}..={})",
+                        n,
+                        i8::MIN,
+                        i8::MAX
+                    ));
+                }
+            }
+            "I16" => {
+                if n < i16::MIN as i64 || n > i16::MAX as i64 {
+                    return Err(format!(
+                        "value {} out of range for i16 ({}..={})",
+                        n,
+                        i16::MIN,
+                        i16::MAX
+                    ));
+                }
+            }
+            "I32" | _ => {
+                if n < i32::MIN as i64 || n > i32::MAX as i64 {
+                    return Err(format!(
+                        "value {} out of range for i32 ({}..={})",
+                        n,
+                        i32::MIN,
+                        i32::MAX
+                    ));
+                }
+            }
         }
-        *input = &input[2..];
-        env.pending_type = Some("U8");
-    } else if is_u16 {
-        if n < 0 || n > u16::MAX as i64 {
-            return Err(format!(
-                "value {} out of range for u16 (0..={})",
-                n,
-                u16::MAX
-            ));
-        }
-        *input = &input[3..];
-        env.pending_type = Some("U16");
-    } else if is_u32 {
-        if n < 0 || n > u32::MAX as i64 {
-            return Err(format!(
-                "value {} out of range for u32 (0..={})",
-                n,
-                u32::MAX
-            ));
-        }
-        *input = &input[3..];
-        env.pending_type = Some("U32");
-    } else if is_i8 {
-        if n < i8::MIN as i64 || n > i8::MAX as i64 {
-            return Err(format!(
-                "value {} out of range for i8 ({}..={})",
-                n,
-                i8::MIN,
-                i8::MAX
-            ));
-        }
-        *input = &input[2..];
-        env.pending_type = Some("I8");
-    } else if is_i16 {
-        if n < i16::MIN as i64 || n > i16::MAX as i64 {
-            return Err(format!(
-                "value {} out of range for i16 ({}..={})",
-                n,
-                i16::MIN,
-                i16::MAX
-            ));
-        }
-        *input = &input[3..];
-        env.pending_type = Some("I16");
-    } else if is_i32 {
-        if n < i32::MIN as i64 || n > i32::MAX as i64 {
-            return Err(format!(
-                "value {} out of range for i32 ({}..={})",
-                n,
-                i32::MIN,
-                i32::MAX
-            ));
-        }
-        *input = &input[3..];
-        env.pending_type = Some("I32");
+        env.pending_type = Some(type_name);
     } else {
         // No suffix — defaults to i32.
         env.pending_type = Some("I32");
@@ -1479,6 +1540,40 @@ fn parse_number(input: &mut &[u8], env: &mut Env) -> ParseResult {
 fn skip_spaces(input: &mut &[u8]) {
     while input.first().copied() == Some(b' ') || input.first().copied() == Some(b'\t') {
         *input = &input[1..];
+    }
+}
+
+/// Read a type name (U8, U16, U32, I8, I16, I32) from the current position.
+/// Returns `Some(&'static str)` and advances input past the type keyword on success.
+/// Returns `None` if no recognized type is found at this position.
+fn read_type_name(input: &mut &[u8]) -> Option<&'static str> {
+    let is_u8 = input.starts_with(b"U8") || input.starts_with(b"u8");
+    let is_u16 = input.starts_with(b"U16") || input.starts_with(b"u16");
+    let is_u32 = input.starts_with(b"U32") || input.starts_with(b"u32");
+    let is_i8 = input.starts_with(b"I8") || input.starts_with(b"i8");
+    let is_i16 = input.starts_with(b"I16") || input.starts_with(b"i16");
+    let is_i32 = input.starts_with(b"I32") || input.starts_with(b"i32");
+
+    if is_u8 {
+        *input = &input[2..];
+        Some("U8")
+    } else if is_u16 {
+        *input = &input[3..];
+        Some("U16")
+    } else if is_u32 {
+        *input = &input[3..];
+        Some("U32")
+    } else if is_i8 {
+        *input = &input[2..];
+        Some("I8")
+    } else if is_i16 {
+        *input = &input[3..];
+        Some("I16")
+    } else if is_i32 {
+        *input = &input[3..];
+        Some("I32")
+    } else {
+        None
     }
 }
 
@@ -1537,6 +1632,30 @@ mod tests {
         assert_eq!(execute_tuff("0U8 is U8"), Ok(1));
         assert_eq!(execute_tuff("0 is I32"), Ok(1));
         assert_eq!(execute_tuff("0 is U8"), Ok(0));
+    }
+
+    #[test]
+    fn test_is_type_check_variable() {
+        // Variable type tracking: `let x = 0; x is I32` => 1, `x is U8` => 0
+        assert_eq!(execute_tuff("let x = 0; x is I32"), Ok(1));
+        assert_eq!(execute_tuff("let y = 5U8; y is U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_let_type_annotation() {
+        // Explicit type annotation: `let x : I32 = 0; x is I32` => 1
+        assert_eq!(execute_tuff("let x : I32 = 0; x is I32"), Ok(1));
+        assert_eq!(execute_tuff("let z : U8 = 5U8; z is U8"), Ok(1));
+        // Annotation overrides literal type: `let a : U8 = 0; a is U8` => 1 (not I32)
+        assert_eq!(execute_tuff("let a : U8 = 0; a is U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_let_type_mismatch_error() {
+        // Annotation and literal suffix disagree: `let x : U8 = 100U16` => Err
+        assert!(execute_tuff("let x : U8 = 100U16;").is_err());
+        // Typed variable assigned to differently-annotated target
+        assert!(execute_tuff("let x = 100U16; let y : U8 = x;").is_err());
     }
 
     #[test]
