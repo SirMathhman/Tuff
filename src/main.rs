@@ -745,13 +745,7 @@ fn parse_fn_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     if let Some(semi_pos) = find_semicolon(input) {
         let body_bytes = input[..semi_pos].to_vec();
 
-        env.functions
-            .insert(name, (params.clone(), body_bytes.clone()));
-
-        // Zero-param functions execute their bodies after all fns are registered.
-        if params.is_empty() {
-            env.deferred_bodies.push(body_bytes);
-        }
+        env.functions.insert(name, (params.clone(), body_bytes));
 
         *input = &input[semi_pos + 1..]; // consume past ';'
         Ok(0)
@@ -1281,8 +1275,11 @@ mod tests {
 
     #[test]
     fn test_function_mutates_outer_scope() {
-        // Function body can mutate outer-scope mutable variable: `let mut x = 0; fn add() => x += 1; x` => 1
-        assert_eq!(execute_tuff("let mut x = 0; fn add() => x += 1; x"), Ok(1));
+        // Function body can mutate outer-scope mutable variable: `let mut x = 0; fn add() => x += 1; add(); x` => 1
+        assert_eq!(
+            execute_tuff("let mut x = 0; fn add() => x += 1; add(); x"),
+            Ok(1)
+        );
     }
 }
 
