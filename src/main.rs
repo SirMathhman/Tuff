@@ -304,6 +304,9 @@ fn is_if_statement(input: &[u8]) -> bool {
 fn is_while_statement(input: &[u8]) -> bool {
     starts_with_keyword(input, b"while")
 }
+fn is_for_statement(input: &[u8]) -> bool {
+    starts_with_keyword(input, b"for")
+}
 
 /// Skip over a block without executing it (for non-taken if/else branches).
 fn skip_block(input: &mut &[u8]) -> Result<(), String> {
@@ -331,6 +334,8 @@ fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         parse_assignment(input, env)
     } else if is_if_statement(input) {
         parse_if_statement(input, env)
+    } else if is_for_statement(input) {
+        parse_for_statement(input, env)
     } else {
         let val = parse_logical_or(input, env)?;
         skip_spaces(input);
@@ -341,9 +346,31 @@ fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     }
 }
 
+/// Skip a for-loop header (up to and including the closing ')').
+fn skip_for_header(input: &mut &[u8]) -> Result<(), String> {
+    // We are right after "for", find matching ')' then skip body.
+    let mut depth = 1usize;
+    while !input.is_empty() && depth > 0 {
+        if input.first().copied() == Some(b'(') {
+            depth += 1;
+        } else if input.first().copied() == Some(b')') {
+            depth -= 1;
+        }
+        *input = &input[1..];
+    }
+    skip_spaces(input);
+    Ok(())
+}
+
 /// Skip a single body item without executing it.
 fn skip_body_item(input: &mut &[u8]) -> Result<(), String> {
-    if input.first().copied() == Some(b'{') {
+    if is_for_statement(input) {
+        // Consume "for"
+        *input = &input[3..];
+        skip_spaces(input);
+        skip_for_header(input)?;
+        skip_body_item(input)?; // skip the body
+    } else if input.first().copied() == Some(b'{') {
         skip_block(input)?;
     } else {
         // Consume until we hit ';' or 'else' at the top level
@@ -365,6 +392,60 @@ fn skip_body_item(input: &mut &[u8]) -> Result<(), String> {
             *input = &input[1..];
         }
     }
+    Ok(())
+}
+
+/// Parse a for loop: 'for' '(' IDENT 'in' Expr '..' Expr ')' body
+fn parse_for_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    skip_spaces(input);
+    *input = &input[3..]; // consume "for"
+    skip_spaces(input);
+
+    expect_char(input, b'(')?;
+    let ident = read_ident(input);
+    skip_spaces(input);
+
+    if !input.starts_with(b"in") {
+        return Err("expected 'in' in for loop".to_string());
+    }
+    *input = &input[2..]; // consume "in"
+    skip_spaces(input);
+
+    let start_val = parse_logical_or(input, env)?;
+    skip_spaces(input);
+
+    if input.len() < 2 || input[0] != b'.' || input[1] != b'.' {
+        return Err("expected '..' in for loop range".to_string());
+    }
+    *input = &input[2..]; // consume ".."
+    skip_spaces(input);
+
+    let end_val = parse_logical_or(input, env)?;
+    skip_spaces(input);
+
+    expect_char(input, b')')?;
+    skip_spaces(input);
+
+    // Save body bytes so we can re-parse them each iteration.
+    // This captures the body + any trailing code (parse_body_item only consumes one item).
+    let body_bytes = input.to_vec();
+
+    for i in start_val..end_val {
+        *input = unsafe { std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len()) };
+        env.insert(ident.clone(), i, true);
+        let _ = parse_body_item(input, env)?;
+    }
+
+    Ok(0) // for loops don't produce a value themselves
+}
+
+/// Expect and consume a specific character.
+fn expect_char(input: &mut &[u8], expected: u8) -> Result<(), String> {
+    skip_spaces(input);
+    if input.first().copied() != Some(expected) {
+        return Err(format!("expected '{}'", expected as char));
+    }
+    *input = &input[1..]; // consume character
     Ok(())
 }
 
@@ -560,6 +641,8 @@ fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) 
             last_val = parse_if_statement(input, env)?;
         } else if is_while_statement(input) {
             last_val = parse_while_statement(input, env)?;
+        } else if is_for_statement(input) {
+            last_val = parse_for_statement(input, env)?;
         } else if is_assignment_statement(input) {
             last_val = parse_assignment(input, env)?;
         } else if block_mode {
@@ -867,6 +950,24 @@ mod tests {
                 "let mut i = 0; let mut sum = 0; while (i < 3) { sum += i + 1; i += 1; } sum"
             ),
             Ok(6)
+        );
+    }
+
+    #[test]
+    fn test_for_loop_basic() {
+        // for loop with range: let mut x = 0; for (i in 0..4) x += i; x => 0+1+2+3 = 6
+        assert_eq!(
+            execute_tuff("let mut x = 0; for (i in 0..4) x += i; x"),
+            Ok(6)
+        );
+    }
+
+    #[test]
+    fn test_for_loop_block_body() {
+        // for loop with block body
+        assert_eq!(
+            execute_tuff("let mut sum = 0; for (i in 1..4) { sum += i * 2; } sum"),
+            Ok(12) // (1*2)+(2*2)+(3*2) = 2+4+6 = 12
         );
     }
 }
