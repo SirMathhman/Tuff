@@ -22,18 +22,24 @@ use std::io::{self, BufRead, Write};
 struct Env {
     /// Each entry stores (value, is_mutable).
     scopes: Vec<HashMap<String, (i64, bool)>>,
+    /// Parallel scopes for struct-typed variables: field_name -> value.
+    structs: Vec<HashMap<String, HashMap<String, i64>>>,
     /// Function name -> (parameter names, body expression bytes to re-parse on each call).
     functions: HashMap<String, (Vec<String>, Vec<u8>)>,
     /// Queue of zero-param function bodies deferred for execution after all fns are registered.
     deferred_bodies: Vec<Vec<u8>>,
+    /// Temporary holder for a struct literal parsed in an expression context where we don't yet know the variable name.
+    pending_struct: Option<HashMap<String, i64>>,
 }
 
 impl Env {
     fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()],
+            structs: vec![HashMap::new()],
             functions: HashMap::new(),
             deferred_bodies: Vec::new(),
+            pending_struct: None,
         }
     }
 
@@ -69,13 +75,31 @@ impl Env {
     /// Enter a new scope.
     fn enter_scope(&mut self) {
         self.scopes.push(HashMap::new());
+        self.structs.push(HashMap::new());
     }
 
     /// Exit the current scope.
     fn exit_scope(&mut self) {
         if self.scopes.len() > 1 {
             self.scopes.pop();
+            self.structs.pop();
         }
+    }
+
+    /// Insert a struct value into the innermost scope.
+    fn insert_struct(&mut self, name: String, fields: HashMap<String, i64>, mutable: bool) {
+        if let Some(scope) = self.scopes.last_mut() {
+            // Store sentinel 0 for the plain value; real data lives in structs map.
+            scope.insert(name.clone(), (0, mutable));
+        }
+        if let Some(sstructs_scope) = self.structs.last_mut() {
+            sstructs_scope.insert(name, fields);
+        }
+    }
+
+    /// Lookup a struct from innermost to outermost scope.
+    fn get_struct(&self, name: &str) -> Option<&HashMap<String, i64>> {
+        self.structs.iter().rev().find_map(|scope| scope.get(name))
     }
 }
 
@@ -251,12 +275,18 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         if looks_like_struct_literal(input) {
             let fields = parse_struct_literal(input, env)?;
             skip_spaces(input);
-            expect_char(input, b'.')?;
-            let field_name = read_ident(input);
-            fields
-                .get(&field_name)
-                .copied()
-                .ok_or_else(|| format!("undefined field: {}", field_name))
+            // If followed by '.', do inline property access; otherwise store for later binding.
+            if input.first().copied() == Some(b'.') {
+                *input = &input[1..]; // consume '.'
+                let field_name = read_ident(input);
+                fields
+                    .get(&field_name)
+                    .copied()
+                    .ok_or_else(|| format!("undefined field: {}", field_name))
+            } else {
+                env.pending_struct = Some(fields);
+                Ok(0)
+            }
         } else {
             parse_block(input, env)
         }
@@ -373,6 +403,30 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
                     Err(format!("undefined function: {}", ident))
                 }
             }
+            _ if !input.is_empty() && input.first().copied() == Some(b'.') => {
+                // Property access on a struct-typed variable: IDENT.field
+                *input = &input[1..]; // consume '.'
+                let field_name = read_ident(input);
+                match env.get_struct(&ident) {
+                    Some(fields) => fields
+                        .get(&field_name)
+                        .copied()
+                        .ok_or_else(|| format!("undefined field: {}", field_name)),
+                    None => Err(format!("variable '{}' is not a struct", ident)),
+                }
+            }
+            _ if !input.is_empty() && input.first().copied() == Some(b'.') => {
+                // Property access on a struct-typed variable: IDENT.field
+                *input = &input[1..]; // consume '.'
+                let field_name = read_ident(input);
+                match env.get_struct(&ident) {
+                    Some(fields) => fields
+                        .get(&field_name)
+                        .copied()
+                        .ok_or_else(|| format!("undefined field: {}", field_name)),
+                    None => Err(format!("variable '{}' is not a struct", ident)),
+                }
+            }
             _ => match env.get(&ident) {
                 Some(val) => Ok(val),
                 None => Err(format!("undefined variable: {}", ident)),
@@ -397,7 +451,10 @@ fn looks_like_struct_literal(input: &[u8]) -> bool {
 }
 
 /// Parse a struct literal: '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
-fn parse_struct_literal(input: &mut &[u8], env: &'_ mut Env) -> Result<HashMap<String, i64>, String> {
+fn parse_struct_literal(
+    input: &mut &[u8],
+    env: &'_ mut Env,
+) -> Result<HashMap<String, i64>, String> {
     *input = &input[1..]; // consume '{'
     let mut fields = HashMap::new();
     loop {
@@ -710,9 +767,16 @@ fn parse_let_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     *input = &input[1..]; // consume '='
     skip_spaces(input);
     let val = parse_comparison(input, env)?;
-    expect_semicolon(input)?;
-    env.insert(name, val, mutable);
-    Ok(val)
+    // If the RHS was a struct literal without inline field access, capture it.
+    if let Some(fields) = env.pending_struct.take() {
+        expect_semicolon(input)?;
+        env.insert_struct(name, fields, mutable);
+        Ok(0)
+    } else {
+        expect_semicolon(input)?;
+        env.insert(name, val, mutable);
+        Ok(val)
+    }
 }
 
 /// Expect and consume a semicolon.
@@ -1384,6 +1448,12 @@ mod tests {
     fn test_struct_literal_undefined_field_error() {
         // Accessing a field that wasn't declared in the struct literal is an error.
         assert!(execute_tuff("{ x: 1 }.y").is_err());
+    }
+
+    #[test]
+    fn test_struct_variable_property_access() {
+        // `let y = { x : 3 }; y.x` => 3
+        assert_eq!(execute_tuff("let y = { x: 3 }; y.x"), Ok(3));
     }
 }
 
