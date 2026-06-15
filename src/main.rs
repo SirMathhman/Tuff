@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 
 // --- Simple recursive-descent parser ---
-// Program  -> Statement* Expr
-// Block    -> '{' Statement* Expr '}'
+// Program   -> Statement* Expr
+// Block     -> '{' Statement* Expr '}'
 // Statement -> 'let' ['mut'] IDENT '=' Expr ';'
-//            | IDENT '=' Expr ';'
+//            | IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
+//            | 'while' CONDITION body
+//            | 'if' CONDITION body ['else' body]
 // Expr   -> Term (('+' | '-') Term)*
 // Term   -> Factor (('*' | '/') Factor)*
 // Factor -> '(' Expr ')' | Block | Identifier | Number
@@ -289,11 +291,19 @@ fn starts_with_keyword(input: &[u8], keyword: &[u8]) -> bool {
         return false;
     }
     let kw = &input[i..i + keyword.len()];
-    kw == keyword && (i + keyword.len() >= input.len() || !input[i + keyword.len()].is_ascii_alphanumeric())
+    kw == keyword
+        && (i + keyword.len() >= input.len() || !input[i + keyword.len()].is_ascii_alphanumeric())
 }
 
-fn is_let_statement(input: &[u8]) -> bool { starts_with_keyword(input, b"let") }
-fn is_if_statement(input: &[u8]) -> bool { starts_with_keyword(input, b"if") }
+fn is_let_statement(input: &[u8]) -> bool {
+    starts_with_keyword(input, b"let")
+}
+fn is_if_statement(input: &[u8]) -> bool {
+    starts_with_keyword(input, b"if")
+}
+fn is_while_statement(input: &[u8]) -> bool {
+    starts_with_keyword(input, b"while")
+}
 
 /// Skip over a block without executing it (for non-taken if/else branches).
 fn skip_block(input: &mut &[u8]) -> Result<(), String> {
@@ -312,8 +322,6 @@ fn skip_block(input: &mut &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
-
-
 
 /// Parse a single body item (let/assignment/expression-stmt or block).
 fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
@@ -455,13 +463,47 @@ fn expect_semicolon(input: &mut &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Parse a while loop: 'while' CONDITION body
+fn parse_while_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+    skip_spaces(input);
+    *input = &input[5..]; // consume "while"
+    skip_spaces(input);
+
+    // Save the condition bytes so we can re-parse them each iteration.
+    let cond_bytes = input.to_vec();
+
+    loop {
+        // Restore condition for re-parsing (environment state carries mutations)
+        *input = unsafe { std::slice::from_raw_parts(cond_bytes.as_ptr(), cond_bytes.len()) };
+
+        let cond = parse_logical_or(input, env)?;
+        skip_spaces(input);
+
+        if cond != 0 {
+            // Execute body
+            let _ = parse_body_item(input, env)?;
+        } else {
+            // Condition is false — skip past the body without executing it,
+            // so that outer statement parsing doesn't re-execute those bytes.
+            skip_body_item(input)?;
+            break;
+        }
+    }
+
+    Ok(0) // while loops don't produce a value themselves
+}
+
 /// Parse an assignment: IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
 fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     let name = read_ident(input);
     skip_spaces(input);
 
     // Check for compound assignment operators (+=, -= *=, /=) or plain (=)
-    let op = if input.starts_with(b"+=") || input.starts_with(b"-=") || input.starts_with(b"*=") || input.starts_with(b"/=") {
+    let op = if input.starts_with(b"+=")
+        || input.starts_with(b"-=")
+        || input.starts_with(b"*=")
+        || input.starts_with(b"/=")
+    {
         let char_op = input[0] as char; // capture the arithmetic op before consuming
         *input = &input[2..]; // consume operator
         Some(char_op)
@@ -469,7 +511,7 @@ fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
         *input = &input[1..]; // consume '='
         None
     } else {
-        return Err("expected '='" .to_string());
+        return Err("expected '='".to_string());
     };
 
     skip_spaces(input);
@@ -478,7 +520,9 @@ fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 
     if let Some(op) = op {
         // Compound assignment: read current value, apply op, write back
-        let current = env.get(&name).ok_or_else(|| format!("undefined variable: {}", name))?;
+        let current = env
+            .get(&name)
+            .ok_or_else(|| format!("undefined variable: {}", name))?;
         let new_val = match op {
             '+' => current + val,
             '-' => current - val,
@@ -514,6 +558,8 @@ fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) 
             last_val = parse_let_statement(input, env)?;
         } else if is_if_statement(input) {
             last_val = parse_if_statement(input, env)?;
+        } else if is_while_statement(input) {
+            last_val = parse_while_statement(input, env)?;
         } else if is_assignment_statement(input) {
             last_val = parse_assignment(input, env)?;
         } else if block_mode {
@@ -784,6 +830,44 @@ mod tests {
     fn test_compound_assignment_immutable_error() {
         // Compound assignment on immutable variable should fail.
         assert!(execute_tuff("let x = 0; x += 1; x").is_err());
+    }
+
+    #[test]
+    fn test_while_loop_basic() {
+        // while loop: let mut x = 0; while (x < 4) x += 1; x => 4
+        assert_eq!(
+            execute_tuff("let mut x = 0; while (x < 4) x += 1; x"),
+            Ok(4)
+        );
+    }
+
+    #[test]
+    fn test_while_loop_block_body() {
+        // while loop with block body
+        assert_eq!(
+            execute_tuff("let mut x = 0; let mut y = 0; while (x < 3) { x += 1; y += 2; } y"),
+            Ok(6)
+        );
+    }
+
+    #[test]
+    fn test_while_loop_false_condition() {
+        // while loop that never executes because condition is false
+        assert_eq!(
+            execute_tuff("let mut x = 0; while (x > 5) x += 1; x"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_nested_while_loop() {
+        // nested while loops
+        assert_eq!(
+            execute_tuff(
+                "let mut i = 0; let mut sum = 0; while (i < 3) { sum += i + 1; i += 1; } sum"
+            ),
+            Ok(6)
+        );
     }
 }
 
