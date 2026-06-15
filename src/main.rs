@@ -127,7 +127,7 @@ impl Env {
 type ParseResult = Result<i64, String>;
 
 /// Logical OR layer (lowest precedence): Expr ('||' Expr)*
-fn parse_logical_or(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_logical_or(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut result = parse_logical_and(input, env)?;
     loop {
         skip_spaces(input);
@@ -144,7 +144,7 @@ fn parse_logical_or(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 }
 
 /// Logical AND layer: Comparison ('&&' Comparison)*
-fn parse_logical_and(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_logical_and(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut result = parse_comparison(input, env)?;
     loop {
         skip_spaces(input);
@@ -161,7 +161,7 @@ fn parse_logical_and(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 }
 
 /// Comparison layer: Expr (('<'|'>'|'<='|'>='|'=='|'!=') Expr)*
-fn parse_comparison(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_comparison(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut result = parse_expr(input, env)?;
     loop {
         skip_spaces(input);
@@ -234,7 +234,7 @@ fn parse_comparison(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     Ok(result)
 }
 
-fn parse_expr(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut result = parse_term(input, env)?;
     loop {
         skip_spaces(input);
@@ -255,7 +255,7 @@ fn parse_expr(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     Ok(result)
 }
 
-fn parse_term(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut result = parse_factor(input, env)?;
     loop {
         skip_spaces(input);
@@ -281,7 +281,7 @@ fn parse_term(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
     Ok(result)
 }
 
-fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     if input.first().copied() == Some(b'(') {
         *input = &input[1..]; // consume '('
@@ -409,10 +409,8 @@ fn parse_factor(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
                         env.insert(param_name.clone(), arg_val, true);
                     }
 
-                    let body_slice: &[u8] = unsafe {
-                        std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len())
-                    };
-                    let result = parse_fn_body(&mut body_slice.as_ref(), env);
+                    let mut body_slice = body_bytes.as_slice();
+                    let result = parse_fn_body(&mut body_slice, env);
                     env.exit_scope();
                     result
                 } else {
@@ -452,10 +450,7 @@ fn looks_like_struct_literal(input: &[u8]) -> bool {
 }
 
 /// Parse a struct literal: '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
-fn parse_struct_literal(
-    input: &mut &[u8],
-    env: &'_ mut Env,
-) -> Result<HashMap<String, i64>, String> {
+fn parse_struct_literal(input: &mut &[u8], env: &mut Env) -> Result<HashMap<String, i64>, String> {
     *input = &input[1..]; // consume '{'
     let mut fields = HashMap::new();
     loop {
@@ -485,7 +480,7 @@ fn parse_struct_literal(
 /// Returns (value, optional_nested_fields) so callers can chain dot notation through nested structs.
 fn resolve_field(
     fields: &HashMap<String, i64>,
-    env: &'_ mut Env,
+    env: &mut Env,
     field_name: &str,
 ) -> Result<(i64, Option<HashMap<String, i64>>), String> {
     let val = *fields
@@ -507,7 +502,7 @@ fn resolve_field(
 fn resolve_chained_fields(
     fields: &mut HashMap<String, i64>,
     input: &mut &[u8],
-    env: &'_ mut Env,
+    env: &mut Env,
 ) -> ParseResult {
     loop {
         *input = &input[1..]; // consume '.'
@@ -532,7 +527,7 @@ fn resolve_chained_fields(
 }
 
 /// Parse a block: '{' Statement* Expr '}'
-fn parse_block(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_block(input: &mut &[u8], env: &mut Env) -> ParseResult {
     *input = &input[1..]; // consume '{'
     env.enter_scope();
     let last_val = parse_statements_loop(input, env, true)?;
@@ -592,7 +587,7 @@ fn skip_block(input: &mut &[u8]) -> Result<(), String> {
 }
 
 /// Parse an expression statement: evaluate expression, optionally consume trailing semicolon.
-fn parse_expression_stmt(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_expression_stmt(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let val = parse_logical_or(input, env)?;
     skip_spaces(input);
     if input.first().copied() == Some(b';') {
@@ -602,7 +597,7 @@ fn parse_expression_stmt(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 }
 
 /// Parse a single body item (let/assignment/expression-stmt or block).
-fn parse_body_item(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_body_item(input: &mut &[u8], env: &mut Env) -> ParseResult {
     if is_fn_statement(input) {
         parse_fn_statement(input, env)
     } else if is_let_statement(input) {
@@ -668,7 +663,7 @@ fn skip_body_item(input: &mut &[u8]) -> Result<(), String> {
 }
 
 /// Parse a for loop: 'for' '(' IDENT 'in' Expr '..' Expr ')' body
-fn parse_for_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_for_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     *input = &input[3..]; // consume "for"
     skip_spaces(input);
@@ -700,19 +695,27 @@ fn parse_for_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 
     // Save body bytes so we can re-parse them each iteration.
     // This captures the body + any trailing code (parse_body_item only consumes one item).
-    let body_bytes = input.to_vec();
+    let body_bytes: Box<[u8]> = input.to_vec().into_boxed_slice();
 
-    for i in start_val..end_val {
-        *input = unsafe { std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len()) };
-        env.insert(ident.clone(), i, true);
-        let _ = parse_body_item(input, env)?;
+    if start_val < end_val {
+        let mut consumed = 0;
+        for i in start_val..end_val {
+            let mut iter_input: &[u8] = &body_bytes;
+            env.insert(ident.clone(), i, true);
+            let _ = parse_body_item(&mut iter_input, env)?;
+            consumed = body_bytes.len() - iter_input.len();
+        }
+        *input = &input[consumed..];
+    } else {
+        // No iterations: just skip past the body without executing it.
+        skip_body_item(input)?;
     }
 
     Ok(0) // for loops don't produce a value themselves
 }
 
 /// Parse a match case result expression after '=>'.
-fn parse_case_arrow_expr(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_case_arrow_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     expect_arrow(input)?; // consume '=>'
     let val = parse_logical_or(input, env)?;
@@ -744,7 +747,7 @@ fn expect_arrow(input: &mut &[u8]) -> Result<(), String> {
 }
 
 /// Parse an if/else statement: 'if' CONDITION body ['else' body]
-fn parse_if_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_if_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     *input = &input[2..]; // consume "if"
     skip_spaces(input);
@@ -804,7 +807,7 @@ fn is_assignment_statement(input: &[u8]) -> bool {
 }
 
 /// Parse a `let` statement: 'let' ['mut'] IDENT '=' Expr ';'
-fn parse_let_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     *input = &input[3..]; // consume "let"
     skip_spaces(input);
@@ -888,7 +891,7 @@ where
 }
 
 /// Parse a function definition: 'fn' IDENT '(' [IDENT (',' IDENT)*] ')' '=>' Expr ';'
-fn parse_fn_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_fn_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     *input = &input[2..]; // consume "fn"
     skip_spaces(input);
@@ -923,28 +926,30 @@ fn parse_fn_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 }
 
 /// Parse a while loop: 'while' CONDITION body
-fn parse_while_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_while_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     *input = &input[5..]; // consume "while"
     skip_spaces(input);
 
     // Save the condition bytes so we can re-parse them each iteration.
-    let cond_bytes = input.to_vec();
+    let cond_bytes: Box<[u8]> = input.to_vec().into_boxed_slice();
 
     loop {
         // Restore condition for re-parsing (environment state carries mutations)
-        *input = unsafe { std::slice::from_raw_parts(cond_bytes.as_ptr(), cond_bytes.len()) };
+        let mut iter_input: &[u8] = &cond_bytes;
 
-        let cond = parse_logical_or(input, env)?;
-        skip_spaces(input);
+        let cond = parse_logical_or(&mut iter_input, env)?;
+        skip_spaces(&mut iter_input);
 
         if cond != 0 {
             // Execute body
-            let _ = parse_body_item(input, env)?;
+            let _ = parse_body_item(&mut iter_input, env)?;
         } else {
             // Condition is false — skip past the body without executing it,
             // so that outer statement parsing doesn't re-execute those bytes.
-            skip_body_item(input)?;
+            skip_body_item(&mut iter_input)?;
+            let consumed = cond_bytes.len() - iter_input.len();
+            *input = &input[consumed..];
             break;
         }
     }
@@ -953,7 +958,7 @@ fn parse_while_statement(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 }
 
 /// Parse an assignment: IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
-fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_assignment(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let name = read_ident(input);
     skip_spaces(input);
 
@@ -1007,7 +1012,7 @@ fn parse_assignment(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 }
 
 /// Execute function body bytes using statement-level parsing.
-fn parse_fn_body(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_fn_body(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
     // Try to parse as a statement first (handles compound assignments, let, etc.)
     if is_assignment_statement(input)
@@ -1027,9 +1032,8 @@ fn parse_fn_body(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
 fn drain_deferred_bodies(env: &mut Env) -> Result<i64, String> {
     let mut last_val = 0i64;
     while let Some(body_bytes) = env.deferred_bodies.pop() {
-        let body_slice: &[u8] =
-            unsafe { std::slice::from_raw_parts(body_bytes.as_ptr(), body_bytes.len()) };
-        last_val = parse_fn_body(&mut body_slice.as_ref(), env)?;
+        let mut body_slice = body_bytes.as_slice();
+        last_val = parse_fn_body(&mut body_slice, env)?;
     }
     Ok(last_val)
 }
@@ -1057,7 +1061,7 @@ fn looks_like_statement(input: &[u8]) -> bool {
 }
 
 /// Parse statements until we hit a terminator ('}' or EOF) and return the last value.
-fn parse_statements_loop(input: &mut &[u8], env: &'_ mut Env, block_mode: bool) -> ParseResult {
+fn parse_statements_loop(input: &mut &[u8], env: &mut Env, block_mode: bool) -> ParseResult {
     let mut last_val = 0i64;
     loop {
         skip_spaces(input);
@@ -1133,7 +1137,7 @@ fn skip_spaces(input: &mut &[u8]) {
 }
 
 /// Parse a program: zero or more statements followed by a final expression.
-fn parse_program(input: &mut &[u8], env: &'_ mut Env) -> ParseResult {
+fn parse_program(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let last_val = parse_statements_loop(input, env, false)?;
     skip_spaces(input);
     if input.is_empty() {
