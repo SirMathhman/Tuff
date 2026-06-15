@@ -1377,7 +1377,7 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
         Err(_) => return Err(format!("invalid integer: {}", s)),
     };
 
-   // Check for type suffix: U8, U16, U32, I8, I16, I32 (case-insensitive)
+    // Check for type suffix: U8, U16, U32, I8, I16, I32 (case-insensitive)
     skip_spaces(input);
 
     let is_u8 = input.starts_with(b"U8") || input.starts_with(b"u8");
@@ -1394,27 +1394,50 @@ fn parse_number(input: &mut &[u8]) -> ParseResult {
         *input = &input[2..];
     } else if is_u16 {
         if n < 0 || n > u16::MAX as i64 {
-            return Err(format!("value {} out of range for u16 (0..={})", n, u16::MAX));
+            return Err(format!(
+                "value {} out of range for u16 (0..={})",
+                n,
+                u16::MAX
+            ));
         }
         *input = &input[3..];
     } else if is_u32 {
         if n < 0 || n > u32::MAX as i64 {
-            return Err(format!("value {} out of range for u32 (0..={})", n, u32::MAX));
+            return Err(format!(
+                "value {} out of range for u32 (0..={})",
+                n,
+                u32::MAX
+            ));
         }
         *input = &input[3..];
     } else if is_i8 {
         if n < i8::MIN as i64 || n > i8::MAX as i64 {
-            return Err(format!("value {} out of range for i8 ({}..={})", n, i8::MIN, i8::MAX));
+            return Err(format!(
+                "value {} out of range for i8 ({}..={})",
+                n,
+                i8::MIN,
+                i8::MAX
+            ));
         }
         *input = &input[2..];
     } else if is_i16 {
         if n < i16::MIN as i64 || n > i16::MAX as i64 {
-            return Err(format!("value {} out of range for i16 ({}..={})", n, i16::MIN, i16::MAX));
+            return Err(format!(
+                "value {} out of range for i16 ({}..={})",
+                n,
+                i16::MIN,
+                i16::MAX
+            ));
         }
         *input = &input[3..];
     } else if is_i32 {
         if n < i32::MIN as i64 || n > i32::MAX as i64 {
-            return Err(format!("value {} out of range for i32 ({}..={})", n, i32::MIN, i32::MAX));
+            return Err(format!(
+                "value {} out of range for i32 ({}..={})",
+                n,
+                i32::MIN,
+                i32::MAX
+            ));
         }
         *input = &input[3..];
     }
