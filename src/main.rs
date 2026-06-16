@@ -22,8 +22,9 @@ use std::io::{self, BufRead, Write};
 /// Scoped environment: innermost scope is the last entry.
 #[derive(Default)]
 struct Env {
-    /// Each entry stores (value, is_mutable, type_name_or_none).
-    scopes: Vec<HashMap<String, (i64, bool, Option<&'static str>)>>,
+    /// Each entry stores (value, is_mutable, type_name_or_none, neq_constraint_value).
+    /// neq_constraint = Some(V) means the variable was declared with != V constraint.
+    scopes: Vec<HashMap<String, (i64, bool, Option<&'static str>, Option<i64>)>>,
     /// Parallel scopes for struct-typed variables: field_name -> value.
     structs: Vec<HashMap<String, HashMap<String, i64>>>,
     /// Parallel scopes for array-typed variables: index -> value.
@@ -36,6 +37,14 @@ struct Env {
     pending_struct: Option<HashMap<String, i64>>,
     /// Temporary holder for an array literal parsed in an expression context where we don't yet know the variable name.
     pending_array: Option<Vec<i64>>,
+    /// True when the most recently evaluated factor read its value from a named variable (for division safety).
+    rhs_was_variable: bool,
+    /// True when the most recently evaluated factor was proven non-zero (via != 0 or via subtraction analysis).
+    proven_nonzero: bool,
+    /// Name of the variable that was the LHS of the most recent factor/subtraction (for subtraction tracking).
+    rhs_variable_name: Option<String>,
+    /// The != V constraint value for the most recently evaluated variable.
+    rhs_neq_value: Option<i64>,
     /// Registry of anonymous (nested) structs by index. Negative field values reference these.
     anonymous_structs: Vec<HashMap<String, i64>>,
     /// Registry of anonymous (nested) arrays by index. Negative array element values reference these.
@@ -57,6 +66,10 @@ impl Env {
             anonymous_structs: Vec::new(),
             anonymous_arrays: Vec::new(),
             pending_type: None,
+            rhs_was_variable: false,
+            proven_nonzero: false,
+            rhs_variable_name: None,
+            rhs_neq_value: None,
         }
     }
 
@@ -65,7 +78,7 @@ impl Env {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).map(|(v, _, _)| *v))
+            .find_map(|scope| scope.get(name).map(|(v, _, _, _)| *v))
     }
 
     /// Lookup the type of a variable from innermost to outermost scope.
@@ -73,13 +86,13 @@ impl Env {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).map(|(_, _, t)| *t))
+            .find_map(|scope| scope.get(name).map(|(_, _, t, _)| *t))
     }
 
     /// Update a variable in any scope (for assignment).
     fn update(&mut self, name: &str, val: i64) -> Result<(), String> {
         for scope in self.scopes.iter_mut().rev() {
-            if let Some((v, mutable, type_name)) = scope.get_mut(name) {
+            if let Some((v, mutable, type_name, _)) = scope.get_mut(name) {
                 if !*mutable {
                     return Err(format!("cannot assign to immutable variable: {}", name));
                 }
@@ -95,9 +108,16 @@ impl Env {
     }
 
     /// Insert into the current (innermost) scope.
-    fn insert(&mut self, name: String, val: i64, mutable: bool, type_name: Option<&'static str>) {
+    fn insert(
+        &mut self,
+        name: String,
+        val: i64,
+        mutable: bool,
+        type_name: Option<&'static str>,
+        neq_constraint: Option<i64>,
+    ) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, (val, mutable, type_name));
+            scope.insert(name, (val, mutable, type_name, neq_constraint));
         }
     }
 
@@ -121,7 +141,7 @@ impl Env {
     fn insert_struct(&mut self, name: String, fields: HashMap<String, i64>, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             // Store sentinel 0 for the plain value; real data lives in structs map.
-            scope.insert(name.clone(), (0, mutable, None));
+            scope.insert(name.clone(), (0, mutable, None, None));
         }
         if let Some(sstructs_scope) = self.structs.last_mut() {
             sstructs_scope.insert(name, fields);
@@ -137,7 +157,7 @@ impl Env {
     fn insert_array(&mut self, name: String, elements: Vec<i64>, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             // Store sentinel 0 for the plain value; real data lives in arrays map.
-            scope.insert(name.clone(), (0, mutable, None));
+            scope.insert(name.clone(), (0, mutable, None, None));
         }
         if let Some(arrays_scope) = self.arrays.last_mut() {
             arrays_scope.insert(name, elements);
@@ -344,8 +364,25 @@ fn parse_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
         let rhs_type = env.pending_type.take();
 
         match op {
-            b'+' => result += rhs,
-            b'-' => result -= rhs,
+            b'+' => {
+                result += rhs;
+                env.proven_nonzero = false;
+            }
+            b'-' => {
+                // If LHS was a variable with != V constraint and RHS equals that V, proven non-zero
+                if let (Some(neq_val), Some(_var_name)) =
+                    (env.rhs_neq_value, &env.rhs_variable_name)
+                {
+                    if neq_val == rhs {
+                        env.proven_nonzero = true;
+                    } else {
+                        env.proven_nonzero = false;
+                    }
+                } else {
+                    env.proven_nonzero = false;
+                }
+                result -= rhs;
+            }
             _ => unreachable!(),
         }
 
@@ -375,6 +412,10 @@ fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
         match op {
             b'*' => result *= rhs,
             b'/' => {
+                // If RHS came from a variable (or expression) without proven_nonzero, reject at compile time
+                if env.rhs_was_variable && !env.proven_nonzero {
+                    return Err("division by zero: denominator not proven non-zero".to_string());
+                }
                 if rhs == 0 {
                     return Err("division by zero".to_string());
                 }
@@ -525,7 +566,7 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
                     // Create new scope and bind parameters to argument values
                     env.enter_scope();
                     for (param_name, arg_val) in params.iter().zip(args.into_iter()) {
-                        env.insert(param_name.clone(), arg_val, true, None);
+                        env.insert(param_name.clone(), arg_val, true, None, None);
                     }
 
                     let mut body_slice = body_bytes.as_slice();
@@ -576,6 +617,18 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
                     } else {
                         env.pending_type = None;
                     }
+                    // Mark that this factor read from a variable (for division safety)
+                    env.rhs_was_variable = true;
+                    // Propagate neq constraint & name for subtraction analysis
+                    env.rhs_variable_name = Some(ident.clone());
+                    env.rhs_neq_value = env
+                        .scopes
+                        .iter()
+                        .rev()
+                        .find_map(|scope| scope.get(&ident).map(|(_, _, _, neq)| *neq))
+                        .unwrap_or(None);
+                    // If the variable has != 0 constraint, it's proven non-zero
+                    env.proven_nonzero = env.rhs_neq_value == Some(0);
                     Ok(val)
                 }
                 None => Err(format!("undefined variable: {}", ident)),
@@ -962,7 +1015,7 @@ fn parse_for_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         let mut consumed = 0;
         for i in start_val..end_val {
             let mut iter_input: &[u8] = &body_bytes;
-            env.insert(ident.clone(), i, true, None);
+            env.insert(ident.clone(), i, true, None, None);
             let _ = parse_body_item(&mut iter_input, env)?;
             consumed = body_bytes.len() - iter_input.len();
         }
@@ -1093,11 +1146,10 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         false
     };
     let name = read_ident(input);
-    // Optional explicit type annotation: `let x : I32 = ...`
-    skip_spaces(input);
-    // Optional explicit type annotation: `let x : I32 = ...`
+    // Optional explicit type annotation: `let x : I32 [!= CONST] = ...`
     skip_spaces(input);
     let mut explicit_type: Option<&'static str> = None;
+    let mut neq_constraint: Option<i64> = None;
     if input.first().copied() == Some(b':') {
         *input = &input[1..]; // consume ':'
         skip_spaces(input);
@@ -1109,6 +1161,34 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
                 return Err(format!("unknown type: {}", bad_name));
             }
         }
+
+        // Optional value constraint: `!= CONST` before the final '='
+        skip_spaces(input);
+        if input.starts_with(b"!=") {
+            *input = &input[2..]; // consume "!="
+            skip_spaces(input);
+            let constraint_val = parse_comparison(input, env)?;
+
+            expect_equals(input)?;
+            let val = parse_comparison(input, env)?;
+
+            // Check constraint before assigning
+            if val == constraint_val {
+                return Err(format!(
+                    "value constraint violated: value {} must not equal {}",
+                    val, constraint_val
+                ));
+            }
+
+            neq_constraint = Some(constraint_val);
+
+            expect_semicolon(input)?;
+            let type_name = explicit_type.or(env.pending_type.take());
+            env.insert(name, val, mutable, type_name, neq_constraint);
+            return Ok(val);
+        }
+    } else {
+        // No ':' — skip the duplicate call above
     }
 
     expect_equals(input)?;
@@ -1144,7 +1224,7 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         }
 
         let type_name = explicit_type.or(literal_type).or(env.pending_type.take());
-        env.insert(name, val, mutable, type_name);
+        env.insert(name, val, mutable, type_name, neq_constraint);
         Ok(val)
     }
 }
@@ -1852,6 +1932,14 @@ mod tests {
     #[test]
     fn test_division_by_zero_error() {
         assert!(execute_tuff("1 / (1 - 1)").is_err());
+    }
+
+    #[test]
+    fn test_division_via_subtraction_neq_constraint() {
+        // `x != 1` means `(x - 1) != 0`, so dividing by (x-1) is safe
+        assert_eq!(execute_tuff("let x : U8 != 1U8 = 3U8; 10 / (x - 1)"), Ok(5));
+        // Without the constraint, no proof that denominator is non-zero => error
+        assert!(execute_tuff("let x : U8 = 3U8; 10 / (x - 1)").is_err());
     }
 
     #[test]
