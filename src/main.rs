@@ -1146,49 +1146,98 @@ fn parse_let_statement(input: &mut &[u8], env: &mut Env) -> ParseResult {
         false
     };
     let name = read_ident(input);
-    // Optional explicit type annotation: `let x : I32 [!= CONST] = ...`
+    // Optional explicit type annotation: `let x : I32 [!= CONST] = ...` or `let a : [I32; 3] = [...]`
     skip_spaces(input);
     let mut explicit_type: Option<&'static str> = None;
     let mut neq_constraint: Option<i64> = None;
+
     if input.first().copied() == Some(b':') {
         *input = &input[1..]; // consume ':'
         skip_spaces(input);
 
-        match read_type_name(input) {
-            Some(tn) => explicit_type = Some(tn),
-            None => {
-                let bad_name = read_ident(input);
-                return Err(format!("unknown type: {}", bad_name));
-            }
-        }
-
-        // Optional value constraint: `!= CONST` before the final '='
-        skip_spaces(input);
-        if input.starts_with(b"!=") {
-            *input = &input[2..]; // consume "!="
+        // Check for array type annotation: `[TypeName; Number]`
+        if input.first().copied() == Some(b'[') {
+            *input = &input[1..]; // consume '['
             skip_spaces(input);
-            let constraint_val = parse_comparison(input, env)?;
 
+            let _element_type = match read_type_name(input) {
+                Some(tn) => tn,
+                None => {
+                    let bad_name = read_ident(input);
+                    return Err(format!("unknown type in array annotation: {}", bad_name));
+                }
+            };
+
+            skip_spaces(input);
+            expect_char(input, b';')?;
+            skip_spaces(input);
+            let count = parse_number(input, env)?;
+            skip_spaces(input);
+            expect_char(input, b']')?;
+
+            // Parse the RHS expression (should be an array literal)
             expect_equals(input)?;
-            let val = parse_comparison(input, env)?;
+            skip_spaces(input);
 
-            // Check constraint before assigning
-            if val == constraint_val {
+            if input.first().copied() != Some(b'[') {
+                return Err("expected array literal for typed array declaration".to_string());
+            }
+
+            let elements = parse_array_literal(input, env)?;
+
+            // Validate length matches declared size
+            if (elements.len() as i64) != count {
                 return Err(format!(
-                    "value constraint violated: value {} must not equal {}",
-                    val, constraint_val
+                    "array length mismatch: expected {}, got {}",
+                    count,
+                    elements.len()
                 ));
             }
 
-            neq_constraint = Some(constraint_val);
-
             expect_semicolon(input)?;
-            let type_name = explicit_type.or(env.pending_type.take());
-            env.insert(name, val, mutable, type_name, neq_constraint);
-            return Ok(val);
+            env.insert_array(name, elements, mutable);
+            return Ok(0);
+        } else {
+            // Regular scalar type annotation
+            match read_type_name(input) {
+                Some(tn) => explicit_type = Some(tn),
+                None => {
+                    let bad_name = read_ident(input);
+                    return Err(format!("unknown type: {}", bad_name));
+                }
+            }
+
+            // Optional value constraint: `!= CONST` before the final '='
+            skip_spaces(input);
         }
     } else {
-        // No ':' — skip the duplicate call above
+        // No ':' — no annotation at all
+    }
+
+    if explicit_type.is_some() && input.starts_with(b"!=") {
+        *input = &input[2..]; // consume "!="
+        skip_spaces(input);
+        let constraint_val = parse_comparison(input, env)?;
+
+        expect_equals(input)?;
+        let val = parse_comparison(input, env)?;
+
+        // Check constraint before assigning
+        if val == constraint_val {
+            return Err(format!(
+                "value constraint violated: value {} must not equal {}",
+                val, constraint_val
+            ));
+        }
+
+        neq_constraint = Some(constraint_val);
+
+        expect_semicolon(input)?;
+        let type_name = explicit_type.or(env.pending_type.take());
+        env.insert(name, val, mutable, type_name, neq_constraint);
+        return Ok(val);
+    } else if explicit_type.is_some() {
+        // Had annotation but no constraint — fall through to normal parsing below
     }
 
     expect_equals(input)?;
@@ -1940,6 +1989,12 @@ mod tests {
         assert_eq!(execute_tuff("let x : U8 != 1U8 = 3U8; 10 / (x - 1)"), Ok(5));
         // Without the constraint, no proof that denominator is non-zero => error
         assert!(execute_tuff("let x : U8 = 3U8; 10 / (x - 1)").is_err());
+    }
+
+    #[test]
+    fn test_typed_array_declaration() {
+        // `let array : [I32; 3] = [1, 2, 3]; array[1]` => 2
+        assert_eq!(execute_tuff("let a : [I32; 3] = [1, 2, 3]; a[1]"), Ok(2));
     }
 
     #[test]
