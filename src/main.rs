@@ -579,6 +579,26 @@ fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
             }
 
             _ if !input.is_empty() && input.first().copied() == Some(b'.') => {
+                // Property access: IDENT.field (structs) or IDENT.length (arrays)
+                // Peek ahead to check for .length on arrays without consuming input yet.
+                let is_array_length = {
+                    let mut peek = &input[1..]; // skip '.'
+                    skip_spaces(&mut peek);
+                    if peek.starts_with(b"length")
+                        && (peek.len() <= 6 || !peek[6].is_ascii_alphanumeric())
+                    {
+                        env.get_array(&ident).is_some()
+                    } else {
+                        false
+                    }
+                };
+                if is_array_length {
+                    *input = &input[1..]; // consume '.'
+                    skip_spaces(input);
+                    let _ = read_ident(input); // consume "length"
+                    return Ok(env.get_array(&ident).map(|e| e.len() as i64).unwrap_or(0));
+                }
+
                 // Property access on a struct-typed variable: IDENT.field (supports chained dots)
                 let fields_opt = env.get_struct(&ident).cloned();
                 match fields_opt {
@@ -1642,6 +1662,15 @@ fn parse_number(input: &mut &[u8], env: &mut Env) -> ParseResult {
                     ));
                 }
             }
+            "U64" => {
+                if n < 0 || n > i64::MAX {
+                    return Err(format!(
+                        "value {} out of range for u64 (0..={})",
+                        n,
+                        i64::MAX
+                    ));
+                }
+            }
             "I8" => {
                 if n < i8::MIN as i64 || n > i8::MAX as i64 {
                     return Err(format!(
@@ -1694,6 +1723,7 @@ fn type_rank(ty: &str) -> u8 {
         "U8" | "I8" => 1,
         "U16" | "I16" => 2,
         "U32" | "I32" => 3,
+        "U64" => 4,
         _ => 0,
     }
 }
@@ -1753,6 +1783,9 @@ fn read_type_name(input: &mut &[u8]) -> Option<&'static str> {
     let is_u8 = input.starts_with(b"U8") || input.starts_with(b"u8");
     let is_u16 = input.starts_with(b"U16") || input.starts_with(b"u16");
     let is_u32 = input.starts_with(b"U32") || input.starts_with(b"u32");
+    // USize is an alias for U64
+    let is_usize = input.starts_with(b"USize") || input.starts_with(b"usize");
+    let is_u64 = input.starts_with(b"U64") || input.starts_with(b"u64");
     let is_i8 = input.starts_with(b"I8") || input.starts_with(b"i8");
     let is_i16 = input.starts_with(b"I16") || input.starts_with(b"i16");
     let is_i32 = input.starts_with(b"I32") || input.starts_with(b"i32");
@@ -1766,6 +1799,11 @@ fn read_type_name(input: &mut &[u8]) -> Option<&'static str> {
     } else if is_u32 {
         *input = &input[3..];
         Some("U32")
+    } else if is_usize || is_u64 {
+        // USize and U64 both map to "U64" internally
+        let skip = if is_usize { 5 } else { 3 };
+        *input = &input[skip..];
+        Some("U64")
     } else if is_i8 {
         *input = &input[2..];
         Some("I8")
@@ -1995,6 +2033,19 @@ mod tests {
     fn test_typed_array_declaration() {
         // `let array : [I32; 3] = [1, 2, 3]; array[1]` => 2
         assert_eq!(execute_tuff("let a : [I32; 3] = [1, 2, 3]; a[1]"), Ok(2));
+    }
+
+    #[test]
+    fn test_array_length_property() {
+        // `let array = [1, 2, 3]; array.length` => 3
+        assert_eq!(execute_tuff("let arr = [1, 2, 3]; arr.length"), Ok(3));
+    }
+
+    #[test]
+    fn test_usize_type_alias() {
+        // USize is an alias for U64: `let temp : USize = 100USize; temp` => 100
+        assert_eq!(execute_tuff("let temp : USize = 100USize;"), Ok(0));
+        assert_eq!(execute_tuff("let temp : USize = 100USize; temp"), Ok(100));
     }
 
     #[test]
