@@ -10,9 +10,14 @@ use std::io::{self, BufRead, Write};
 //            | IDENT ('+'|'-'|'*'|'/')? '=' Expr ';'
 //            | 'while' CONDITION body
 //            | 'if' CONDITION body ['else' body]
-// Expr   -> Term (('+' | '-') Term)*
-// Term   -> Factor (('*' | '/') Factor)*
-// Factor -> '(' Expr ')' | Block | StructLiteral '.' IDENT | ArrayLiteral ['[' Expr ']']
+// Expr      -> Shifts (('+' | '-') Shifts)*
+// Shifts    -> BitwiseOr ('<<'|'>>' BitwiseOr)*
+// BitwiseOr  -> BitwiseXor ('|' BitwiseXor)*
+// BitwiseXor -> BitwiseAnd ('^' BitwiseAnd)*
+// BitwiseAnd -> Term ('&' Term)*
+// Term       -> Factor (('*' | '/' | '%') Factor)*
+// Factor -> ('-' | '+' | '!')* Primary
+// Primary-> '(' Expr ')' | Block | StructLiteral '.' IDENT | ArrayLiteral ['[' Expr ']']
 //         | IDENT ('.' IDENT | '[' Expr ']')* | Identifier | Number
 // StructLiteral -> '{' IDENT ':' Expr (',' IDENT ':' Expr)* '}'
 // ArrayLiteral  -> '[' [Expr (',' Expr)*] ']'
@@ -258,7 +263,7 @@ fn parse_logical_and(input: &mut &[u8], env: &mut Env) -> ParseResult {
 
 /// Comparison layer: Expr (('<'|'>'|'<='|'>='|'=='|'!=') Expr)*
 fn parse_comparison(input: &mut &[u8], env: &mut Env) -> ParseResult {
-    let mut result = parse_expr(input, env)?;
+    let mut result = parse_expr_addsub(input, env)?;
     loop {
         skip_spaces(input);
         if input.starts_with(b"<=")
@@ -346,8 +351,10 @@ fn parse_comparison(input: &mut &[u8], env: &mut Env) -> ParseResult {
     Ok(result)
 }
 
-fn parse_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
-    let mut result = parse_term(input, env)?;
+/// Addition/subtraction layer
+fn parse_expr_addsub(input: &mut &[u8], env: &mut Env) -> ParseResult {
+    let mut result = parse_shifts(input, env)?;
+
     loop {
         skip_spaces(input);
         match input.first().copied() {
@@ -360,7 +367,7 @@ fn parse_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
         let op = input[0];
         *input = &input[1..]; // consume operator
         skip_spaces(input);
-        let rhs = parse_term(input, env)?;
+        let rhs = parse_shifts(input, env)?;
         let rhs_type = env.pending_type.take();
 
         match op {
@@ -392,12 +399,101 @@ fn parse_expr(input: &mut &[u8], env: &mut Env) -> ParseResult {
     Ok(result)
 }
 
+/// Shift layer: BitwiseOr ('<<' | '>>')* BitwiseOr
+fn parse_shifts(input: &mut &[u8], env: &mut Env) -> ParseResult {
+    let mut result = parse_bitwise_or(input, env)?;
+    loop {
+        skip_spaces(input);
+        if input.starts_with(b">>") || input.starts_with(b"<<") {
+            let lhs_type = env.pending_type.take();
+            // Capture direction before consuming operator
+            let is_right_shift = input.starts_with(b">>");
+            *input = &input[2..]; // consume '<<' or '>>'
+            skip_spaces(input);
+            let rhs = parse_bitwise_or(input, env)?;
+            let rhs_type = env.pending_type.take();
+
+            if is_right_shift {
+                result >>= rhs;
+            } else {
+                result <<= rhs;
+            }
+            env.pending_type = promote_types(lhs_type, rhs_type);
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
+/// Bitwise OR layer (single `|`, not to be confused with logical `||`)
+fn parse_bitwise_or(input: &mut &[u8], env: &mut Env) -> ParseResult {
+    let mut result = parse_bitwise_xor(input, env)?;
+    loop {
+        skip_spaces(input);
+        // Match single '|' but NOT '||' (which is logical OR at a higher level)
+        if input.first().copied() == Some(b'|') && (!input.get(1).is_some_and(|&c| c == b'|')) {
+            let lhs_type = env.pending_type.take();
+            *input = &input[1..]; // consume '|'
+            skip_spaces(input);
+            let rhs = parse_bitwise_xor(input, env)?;
+            let rhs_type = env.pending_type.take();
+            result |= rhs;
+            env.pending_type = promote_types(lhs_type, rhs_type);
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
+/// Bitwise XOR layer
+fn parse_bitwise_xor(input: &mut &[u8], env: &mut Env) -> ParseResult {
+    let mut result = parse_bitwise_and(input, env)?;
+    loop {
+        skip_spaces(input);
+        if input.first().copied() == Some(b'^') {
+            let lhs_type = env.pending_type.take();
+            *input = &input[1..]; // consume '^'
+            skip_spaces(input);
+            let rhs = parse_bitwise_and(input, env)?;
+            let rhs_type = env.pending_type.take();
+            result ^= rhs;
+            env.pending_type = promote_types(lhs_type, rhs_type);
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
+/// Bitwise AND layer (single `&`, not to be confused with logical `&&`)
+fn parse_bitwise_and(input: &mut &[u8], env: &mut Env) -> ParseResult {
+    let mut result = parse_term(input, env)?;
+    loop {
+        skip_spaces(input);
+        // Match single '&' but NOT '&&' (which is logical AND at a higher level)
+        if input.first().copied() == Some(b'&') && (!input.get(1).is_some_and(|&c| c == b'&')) {
+            let lhs_type = env.pending_type.take();
+            *input = &input[1..]; // consume '&'
+            skip_spaces(input);
+            let rhs = parse_term(input, env)?;
+            let rhs_type = env.pending_type.take();
+            result &= rhs;
+            env.pending_type = promote_types(lhs_type, rhs_type);
+        } else {
+            break;
+        }
+    }
+    Ok(result)
+}
+
 fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
     let mut result = parse_factor(input, env)?;
     loop {
         skip_spaces(input);
         match input.first().copied() {
-            Some(b'*') | Some(b'/') => {}
+            Some(b'*') | Some(b'/') | Some(b'%') => {}
             _ => break,
         }
         // Save LHS type before RHS overwrites pending_type
@@ -411,15 +507,24 @@ fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
 
         match op {
             b'*' => result *= rhs,
-            b'/' => {
+            b'/' | b'%' => {
                 // If RHS came from a variable (or expression) without proven_nonzero, reject at compile time
                 if env.rhs_was_variable && !env.proven_nonzero {
                     return Err("division by zero: denominator not proven non-zero".to_string());
                 }
                 if rhs == 0 {
-                    return Err("division by zero".to_string());
+                    return Err((if op == b'/' {
+                        "division by zero"
+                    } else {
+                        "modulo by zero"
+                    })
+                    .to_string());
                 }
-                result /= rhs;
+                result = if op == b'%' {
+                    result % rhs
+                } else {
+                    result / rhs
+                };
             }
             _ => unreachable!(),
         }
@@ -432,6 +537,20 @@ fn parse_term(input: &mut &[u8], env: &mut Env) -> ParseResult {
 
 fn parse_factor(input: &mut &[u8], env: &mut Env) -> ParseResult {
     skip_spaces(input);
+    // Unary prefix operators: '-', '+', '!'
+    if input.first().copied() == Some(b'-') {
+        *input = &input[1..]; // consume '-'
+        let val = parse_factor(input, env)?;
+        return Ok(-val);
+    } else if input.first().copied() == Some(b'+') {
+        *input = &input[1..]; // consume '+'
+        return parse_factor(input, env);
+    } else if input.first().copied() == Some(b'!') {
+        *input = &input[1..]; // consume '!'
+        let val = parse_factor(input, env)?;
+        return Ok(if val != 0 { 0 } else { 1 });
+    }
+
     if input.first().copied() == Some(b'(') {
         *input = &input[1..]; // consume '('
         let val = parse_comparison(input, env)?;
@@ -1920,9 +2039,17 @@ mod tests {
     }
 
     #[test]
-    fn test_negative_u8_literal_error() {
-        // `-100U8` => Err (negative typed literals not supported yet)
-        assert!(execute_tuff("-100U8").is_err());
+    fn test_double_negation() {
+        // `--5` => 5 (double negation cancels out)
+        assert_eq!(execute_tuff("--5"), Ok(5));
+    }
+
+    #[test]
+    fn test_logical_not() {
+        // `!true` => 0, `!false` => 1, `!!true` => 1
+        assert_eq!(execute_tuff("!true"), Ok(0));
+        assert_eq!(execute_tuff("!false"), Ok(1));
+        assert_eq!(execute_tuff("!!true"), Ok(1));
     }
 
     #[test]
@@ -2604,7 +2731,7 @@ mod tests {
     #[test]
     fn test_expression_starting_with_invalid_character_error() {
         // An expression that can't start a number/identifier/paren/block is an error.
-        assert!(execute_tuff("+5").is_err());
+        assert!(execute_tuff("@5").is_err());
     }
 
     #[test]
@@ -2726,6 +2853,48 @@ mod tests {
     fn test_division_expression() {
         // Plain division (non-zero divisor) should compute the result.
         assert_eq!(execute_tuff("10 / 2"), Ok(5));
+    }
+
+    #[test]
+    fn test_modulo_expression() {
+        // `10 % 3` => 1, negative modulo works as Rust defines it
+        assert_eq!(execute_tuff("10 % 3"), Ok(1));
+        assert_eq!(execute_tuff("7 % 2"), Ok(1));
+    }
+
+    #[test]
+    fn test_bitwise_or_expression() {
+        // `4 | 2` => 6 (bitwise OR)
+        assert_eq!(execute_tuff("4 | 2"), Ok(6));
+        assert_eq!(execute_tuff("1 | 2"), Ok(3));
+    }
+
+    #[test]
+    fn test_bitwise_and_expression() {
+        // `4 & 6` => 4 (bitwise AND)
+        assert_eq!(execute_tuff("4 & 6"), Ok(4));
+        assert_eq!(execute_tuff("5 & 3"), Ok(1));
+    }
+
+    #[test]
+    fn test_bitwise_xor_expression() {
+        // `5 ^ 3` => 6 (bitwise XOR)
+        assert_eq!(execute_tuff("5 ^ 3"), Ok(6));
+        assert_eq!(execute_tuff("7 ^ 1"), Ok(6));
+    }
+
+    #[test]
+    fn test_left_shift() {
+        // `4 << 2` => 16 (left shift)
+        assert_eq!(execute_tuff("4 << 2"), Ok(16));
+        assert_eq!(execute_tuff("1 << 3"), Ok(8));
+    }
+
+    #[test]
+    fn test_right_shift() {
+        // `16 >> 2` => 4 (right shift)
+        assert_eq!(execute_tuff("16 >> 2"), Ok(4));
+        assert_eq!(execute_tuff("8 >> 1"), Ok(4));
     }
 
     #[test]
