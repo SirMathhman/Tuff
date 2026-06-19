@@ -1,5 +1,5 @@
 // Statement parsing + validation (let, if/else, while, for, fn_def, out_*, extern_, assignments).
-import state from "./parser_state";
+import state, { parseBraceIdentList } from "./parser_state";
 import { parseExpr, parsePrimary, parseIndexAccess } from "./expr_parser";
 
 export function validateRefs(node, declaredVars, mutableVars) {
@@ -409,19 +409,5 @@ export function parseStatement() {
 }
 
 export function parseDestructuringPattern() {
-  state.pos++; // skip '{'
-  const fields = [];
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type !== "brace_close") {
-    if (state.tokens[state.pos].type !== "identifier") {
-      throw new Error("Expected identifier in destructuring pattern");
-    }
-    fields.push(state.tokens[state.pos++].value);
-    // Skip optional comma separator
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "comma") state.pos++;
-  }
-  if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "brace_close") {
-    throw new Error("Expected '}' to close destructuring pattern");
-  }
-  state.pos++; // skip '}'
-  return fields;
+  return parseBraceIdentList((v) => v);
 }

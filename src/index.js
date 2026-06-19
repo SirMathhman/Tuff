@@ -5,6 +5,18 @@ import { init, emitExpr, emitStmt } from "./emitter";
 export default compileTuffToJS;
 export { compileAllTuffToJSBundled, compileAllTuffWithExtern };
 
+// Helper: tokenize source text then parse all statements until EOF.
+function _parseStatements(source) {
+  parser.tokens = tokenize(source);
+  parser.pos = 0;
+
+  const stmts = [];
+  while (parser.pos < parser.tokens.length) {
+    stmts.push(parser.parseStatement());
+  }
+  return stmts;
+}
+
 // Shared utility: collect declared variable names and mutability for validation.
 function collectVars(stmts, declSet, mutSet) {
   for (const s of stmts) {
@@ -144,14 +156,7 @@ function emitTop(stmts) {
 function compileTuffToJS(source) {
   if (source.trim() === "") return "return 0;";
 
-  parser.tokens = tokenize(source);
-  parser.pos = 0;
-
-  // Parse a sequence of statements separated by ;
-  const stmts = [];
-  while (parser.pos < parser.tokens.length) {
-    stmts.push(parser.parseStatement());
-  }
+  const stmts = _parseStatements(source);
 
   // Collect and validate variables using shared utilities
   const declaredVars = new Set();
@@ -196,13 +201,7 @@ function compileAllTuffToJSBundled(sources, entryName) {
       continue;
     }
 
-    parser.tokens = tokenize(source);
-    parser.pos = 0;
-
-    const stmts = [];
-    while (parser.pos < parser.tokens.length) {
-      stmts.push(parser.parseStatement());
-    }
+    const stmts = _parseStatements(source);
 
     // Collect exports from this module
     const exports_ = [];
@@ -289,13 +288,7 @@ function compileAllTuffToJSBundled(sources, entryName) {
   const entrySource = sources[entryName];
   if (entrySource.trim() === "") return "return 0;";
 
-  parser.tokens = tokenize(entrySource);
-  parser.pos = 0;
-
-  const stmts = [];
-  while (parser.pos < parser.tokens.length) {
-    stmts.push(parser.parseStatement());
-  }
+  const stmts = _parseStatements(entrySource);
 
   // Validate module refs resolve to known exports
   function validateModuleRefs(node, allExports) {

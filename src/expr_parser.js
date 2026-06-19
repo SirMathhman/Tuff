@@ -1,5 +1,5 @@
 // Expression parsing — recursive descent (comparison → add/sub → primary).
-import state from "./parser_state";
+import state, { parseBraceIdentList } from "./parser_state";
 
 export function parseExpr() {
   let left = parseComparison();
@@ -187,33 +187,14 @@ export function parseIndexAccess(base) {
 }
 
 function parseObjectLiteral() {
-  state.pos++; // skip '{'
-  const fields = [];
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type !== "brace_close") {
-    if (state.tokens[state.pos].type === "identifier") {
-      const key = state.tokens[state.pos++].value;
-
-      // Expect ':' separator
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "colon") {
-        throw new Error("Expected ':' after object field name");
-      }
-      state.pos++; // skip ':'
-
-      const value = parseExpr();
-      fields.push({ key, value });
-
-      // Skip optional comma separator
-      if (state.pos < state.tokens.length && state.tokens[state.pos].type === "comma") {
-        state.pos++;
-      }
-    } else {
-      throw new Error("Expected field name in object literal");
+  const fields = parseBraceIdentList((key) => {
+    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "colon") {
+      throw new Error("Expected ':' after object field name");
     }
-  }
+    state.pos++; // skip ':'
 
-  if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "brace_close") {
-    throw new Error("Expected '}' to close object literal");
-  }
-  state.pos++; // skip '}'
+    const value = parseExpr();
+    return { key, value };
+  });
   return { type: "object", fields };
 }
