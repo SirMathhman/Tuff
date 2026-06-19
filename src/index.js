@@ -79,6 +79,8 @@ function compileTuffToJS(source) {
   const refTargetArrayVars = new Set();
   // Track holders that point to arrays — these don't need .v unwrap since the underlying target is a raw array
   const arrayRefHolders = new Set();
+  // Track slice view holders: { baseVar, startOffset } for &mut array[start..end]
+  const sliceViewHolders = new Map();
 
   function collectRefTargets(node) {
     if (!node || typeof node !== "object") return;
@@ -101,6 +103,23 @@ function compileTuffToJS(source) {
       ) {
         arrayRefHolders.add(node.name);
       }
+      // If the inner expr is a slice (array[start..end]), record base var and start offset
+      if (
+        node.init.expr?.type === "slice" &&
+        node.init.expr.target?.type === "varref"
+      ) {
+        const baseName = node.init.expr.target.name;
+        // Use the 'from' literal value as the slice's starting index
+        const startOffset =
+          node.init.expr.from?.type === "numlit"
+            ? Number(node.init.expr.from.value)
+            : 0;
+        arrayRefHolders.add(node.name);
+        sliceViewHolders.set(node.name, {
+          baseVar: baseName,
+          startOffset,
+        });
+      }
     }
     for (const key of Object.keys(node)) {
       const child = node[key];
@@ -116,6 +135,7 @@ function compileTuffToJS(source) {
     refHolderVars,
     refTargetArrayVars,
     arrayRefHolders,
+    sliceViewHolders,
   );
 
   // Emit JS for each statement, last one is returned

@@ -113,6 +113,15 @@ test('executeTuff("let mut array = [0, 0]; let slice = &mut array; *(slice + 1) 
   ).toBe(1);
 });
 
+test('executeTuff("let mut array = [0, 0, 0]; let slice = &mut array[1..3]; *(slice + 1) = read(); array[2]", "1") => 1', () => {
+  expect(
+    executeTuff(
+      "let mut array = [0, 0, 0]; let slice = &mut array[1..3]; *(slice + 1) = read(); array[2]",
+      "1",
+    ),
+  ).toBe(1);
+});
+
 test('executeTuff("let x = 1; &x == &x") => 1', () => {
   expect(executeTuff("let x = 1; &x == &x")).toBe(1);
 });

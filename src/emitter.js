@@ -1,12 +1,17 @@
 // Module-level state shared with compileTuffToJS
-let refTargetVars, refHolderVars, refTargetArrayVars, arrayRefHolders;
+let refTargetVars,
+  refHolderVars,
+  refTargetArrayVars,
+  arrayRefHolders,
+  sliceViewHolders;
 
 module.exports = {
-  init(refTV, rhv, rtaV, arh) {
+  init(refTV, rhv, rtaV, arh, svh) {
     refTargetVars = refTV;
     refHolderVars = rhv;
     refTargetArrayVars = rtaV;
     arrayRefHolders = arh;
+    sliceViewHolders = svh || new Map();
   },
 
   emitExpr(node, insideDeref = false) {
@@ -50,6 +55,10 @@ module.exports = {
     if (node.type === "ref" && node.expr?.type === "varref") {
       return node.expr.name;
     }
+    // &mut array[start..end] slice view — no data to hold, just a compile-time offset
+    if (node.type === "ref" && node.expr?.type === "slice") {
+      return "0"; // Placeholder: the var itself is meaningless at runtime
+    }
     // *(base + offset) for array holders → base[offset]
     if (
       node.type === "deref" &&
@@ -57,9 +66,15 @@ module.exports = {
       node.expr.op === "+" &&
       node.expr.left?.type === "varref"
     ) {
-      const baseName = node.expr.left.name;
-      if (arrayRefHolders.has(baseName)) {
-        return `${baseName}[${this.emitExpr(node.expr.right)}]`;
+      const holderName = node.expr.left.name;
+      // Check for slice view holders first
+      if (sliceViewHolders.has(holderName)) {
+        const { baseVar, startOffset } = sliceViewHolders.get(holderName);
+        return `${baseVar}[${startOffset}+${this.emitExpr(node.expr.right)}]`;
+      }
+      // Regular array ref holder
+      if (arrayRefHolders.has(holderName)) {
+        return `${holderName}[${this.emitExpr(node.expr.right)}]`;
       }
     }
     // *expr — dereference: unwrap .v from a ref/slot
@@ -99,10 +114,15 @@ module.exports = {
         targetNode.op === "+" &&
         targetNode.left?.type === "varref"
       ) {
-        const baseName = targetNode.left.name;
+        const holderName = targetNode.left.name;
+        // Check for slice view holders first
+        if (sliceViewHolders.has(holderName)) {
+          const { baseVar, startOffset } = sliceViewHolders.get(holderName);
+          return `${baseVar}[${startOffset}+${this.emitExpr(targetNode.right)}]=${this.emitExpr(stmt.value)}`;
+        }
         // If the base is an array ref holder, emit base[offset] directly
-        if (arrayRefHolders.has(baseName)) {
-          return `${baseName}[${this.emitExpr(targetNode.right)}]=${this.emitExpr(stmt.value)}`;
+        if (arrayRefHolders.has(holderName)) {
+          return `${holderName}[${this.emitExpr(targetNode.right)}]=${this.emitExpr(stmt.value)}`;
         }
       }
       const targetName = targetNode?.name;

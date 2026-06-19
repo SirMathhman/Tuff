@@ -367,11 +367,23 @@ module.exports = {
   parseIndexAccess(base) {
     while (pos < tokens.length && tokens[pos].type === "bracket_open") {
       pos++; // skip '['
-      const index = this.parseExpr();
-      if (pos >= tokens.length || tokens[pos].type !== "bracket_close")
-        throw new Error("Expected ']'");
-      pos++; // skip ']'
-      base = { type: "index", target: base, index };
+      const from = this.parseExpr();
+
+      // Check for range slice: [start..end]
+      if (pos < tokens.length && tokens[pos].type === "range") {
+        pos++; // skip '..'
+        const to = this.parseExpr();
+        if (pos >= tokens.length || tokens[pos].type !== "bracket_close")
+          throw new Error("Expected ']'");
+        pos++; // skip ']'
+        base = { type: "slice", target: base, from, to };
+      } else {
+        // Regular index access
+        if (pos >= tokens.length || tokens[pos].type !== "bracket_close")
+          throw new Error("Expected ']'");
+        pos++; // skip ']'
+        base = { type: "index", target: base, index: from };
+      }
     }
     return base;
   },
