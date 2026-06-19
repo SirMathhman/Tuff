@@ -229,7 +229,7 @@ function emitExpr(node) {
     return `parseInt(stdIn.split(/\\s+/)[ri++],10)`;
   }
   if (node.type === "call" && node.name === "readBool") {
-    return `+(stdIn.split(/\\s+/)[ri++]===\"true\")`;
+    return `+(stdIn.split(/\\s+/)[ri++]==="true")`;
   }
   if (node.type === "numlit") {
     return String(node.value);
