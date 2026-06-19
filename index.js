@@ -1,3 +1,5 @@
+import { tokenize } from "./tokenizer.js";
+
 let tokens, pos;
 
 export function compileTuffToJS(source) {
@@ -100,11 +102,20 @@ function validateRefs(node, declaredVars, mutableVars) {
   }
   // Compound assignment statement (x += expr): target must be a declared mutable var
   if (node.type === "compound_assign_stmt") {
-    if (!mutableVars.has(node.name)) {
-      throw new Error(
-        `Cannot reassign immutable or undeclared variable: ${node.name}`,
-      );
+    if (node.name) {
+      if (!mutableVars.has(node.name)) {
+        throw new Error(
+          `Cannot reassign immutable or undeclared variable: ${node.name}`,
+        );
+      }
+    } else if (node.target) {
+      validateRefs(node.target, declaredVars, mutableVars);
     }
+    validateRefs(node.value, declaredVars, mutableVars);
+  }
+  // Index assignment statement (array[idx] = expr)
+  if (node.type === "index_assign_stmt") {
+    validateRefs(node.target, declaredVars, mutableVars);
     validateRefs(node.value, declaredVars, mutableVars);
   }
   // Array literal: validate each element
@@ -228,6 +239,29 @@ function parseStatement() {
 
     const exprAst = parseExpr();
     return { type: "let", name, mutable, init: exprAst };
+  }
+
+  // array[idx] += expr ; (compound index assignment statement) or bare array access expression
+  if (
+    token.type === "identifier" &&
+    pos + 1 < tokens.length &&
+    tokens[pos + 1].type === "bracket_open"
+  ) {
+    const name = tokens[pos++].value;
+    // Parse index access chain
+    let target = parseIndexAccess({ type: "varref", name });
+    if (pos < tokens.length && tokens[pos].type === "assign_add") {
+      pos++; // skip '+='
+      const exprAst = parseExpr();
+      return { type: "compound_assign_stmt", target, op: "+=", value: exprAst };
+    }
+    if (pos < tokens.length && tokens[pos].type === "assign") {
+      pos++; // skip '='
+      const exprAst = parseExpr();
+      return { type: "index_assign_stmt", target, value: exprAst };
+    }
+    // Bare array access expression (e.g., array[0])
+    return target;
   }
 
   // x += expr ; (compound assignment statement)
@@ -386,7 +420,12 @@ function emitStmt(stmt) {
   }
   // x += expr compound assignment statement
   if (stmt.type === "compound_assign_stmt") {
-    return `${stmt.name}${stmt.op}${emitExpr(stmt.value)}`;
+    const lhs = stmt.target ? emitExpr(stmt.target) : stmt.name;
+    return `${lhs}${stmt.op}${emitExpr(stmt.value)}`;
+  }
+  // array[idx] = expr index assignment statement
+  if (stmt.type === "index_assign_stmt") {
+    return `${emitExpr(stmt.target)}=${emitExpr(stmt.value)}`;
   }
   // x = expr assignment statement
   if (stmt.type === "assign_stmt") {
@@ -436,161 +475,4 @@ function emitStmt(stmt) {
     return js;
   } // Bare expression statement
   return emitExpr(stmt);
-}
-
-function tokenize(source) {
-  const result = [];
-  let i = 0;
-  while (i < source.length) {
-    if (/\s/.test(source[i])) {
-      i++;
-      continue;
-    }
-
-    // Match '..' range operator
-    if (source[i] === "." && i + 1 < source.length && source[i + 1] === ".") {
-      result.push({ type: "range" });
-      i += 2;
-      continue;
-    }
-
-    // Match '+=', '-=', '*=', '/=' compound-assignment operators (must come before single-char ops)
-    if (source[i] === "+" && i + 1 < source.length && source[i + 1] === "=") {
-      result.push({ type: "assign_add" });
-      i += 2;
-      continue;
-    }
-
-    // Match comparison operators <= and >= (must come before single-char < and >)
-    if (
-      (source[i] === "<" || source[i] === ">") &&
-      i + 1 < source.length &&
-      source[i + 1] === "="
-    ) {
-      result.push({ type: "cmp", value: source.slice(i, i + 2) });
-      i += 2;
-      continue;
-    }
-
-    // Match comparison operators < and >
-    if (source[i] === "<" || source[i] === ">") {
-      result.push({ type: "cmp", value: source[i] });
-      i++;
-      continue;
-    }
-
-    // Match == and !=
-    if (
-      (source[i] === "=" && i + 1 < source.length && source[i + 1] === "=") ||
-      (source[i] === "!" && i + 1 < source.length && source[i + 1] === "=")
-    ) {
-      result.push({ type: "cmp", value: source.slice(i, i + 2) });
-      i += 2;
-      continue;
-    }
-
-    // Match operators like +, -, *, /
-    if ("+-*/".includes(source[i])) {
-      result.push({ type: "op", value: source[i] });
-      i++;
-      continue;
-    }
-
-    // Match '=' assignment operator
-    if (source[i] === "=") {
-      result.push({ type: "assign" });
-      i++;
-      continue;
-    }
-
-    // Match ';' statement separator
-    if (source[i] === ";") {
-      result.push({ type: "semi" });
-      i++;
-      continue;
-    }
-
-    // Match '(' paren open
-    if (source[i] === "(") {
-      result.push({ type: "paren_open" });
-      i++;
-      continue;
-    }
-
-    // Match ')' paren close
-    if (source[i] === ")") {
-      result.push({ type: "paren_close" });
-      i++;
-      continue;
-    }
-
-    // Match '[' bracket open
-    if (source[i] === "[") {
-      result.push({ type: "bracket_open" });
-      i++;
-      continue;
-    }
-
-    // Match ']' bracket close
-    if (source[i] === "]") {
-      result.push({ type: "bracket_close" });
-      i++;
-      continue;
-    }
-
-    // Match '{' block open
-    if (source[i] === "{") {
-      result.push({ type: "brace_open" });
-      i++;
-      continue;
-    }
-
-    // Match '}' block close
-    if (source[i] === "}") {
-      result.push({ type: "brace_close" });
-      i++;
-      continue;
-    }
-
-    // Match numeric literals like 0, 42, -3.14
-    const numMatch = source.slice(i).match(/^(-?\d+(\.\d+)?)/);
-    if (numMatch) {
-      result.push({ type: "number", value: parseFloat(numMatch[1]) });
-      i += numMatch[1].length;
-      continue;
-    }
-
-    // Match identifiers and keywords like let, read
-    const idMatch = source.slice(i).match(/^([a-zA-Z_]\w*)/);
-    if (idMatch) {
-      const name = idMatch[1];
-      i += name.length;
-
-      // Check for function call: identifier followed by ()
-      if (i < source.length && source[i] === "(") {
-        i++; // skip '('
-        if (i >= source.length || source[i] !== ")")
-          throw new Error("Expected ')'");
-        i++; // skip ')'
-        result.push({ type: "call", name });
-      } else if (name === "let" || name === "mut") {
-        result.push({ type: "keyword", value: name });
-      } else if (
-        name === "if" ||
-        name === "else" ||
-        name === "while" ||
-        name === "for"
-      ) {
-        result.push({ type: "keyword", value: name });
-      } else if (name === "in") {
-        result.push({ type: "keyword", value: name });
-      } else {
-        result.push({ type: "identifier", value: name });
-      }
-      continue;
-    }
-
-    throw new Error(`Unexpected character at ${i}: ${source[i]}`);
-  }
-  return result;
 }
