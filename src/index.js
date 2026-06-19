@@ -3,6 +3,79 @@ import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
 
 export default compileTuffToJS;
+export { compileAllTuffToJSBundled };
+
+// Shared utility: collect ref-related info from AST nodes into provided sets/map.
+function collectRefInfo(stmts) {
+  const refTargetVars = new Set();
+  const refHolderVars = new Set();
+  const refTargetArrayVars = new Set();
+  const arrayRefHolders = new Set();
+  const sliceViewHolders = new Map();
+
+  function walk(node) {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "ref" && node.expr?.type === "varref") {
+      refTargetVars.add(node.expr.name);
+    }
+    const isLetLike = node.type === "let" || node.type === "out_let";
+    if (
+      isLetLike &&
+      (node.init?.type === "array" || node.init?.type === "index")
+    ) {
+      refTargetArrayVars.add(node.name);
+    }
+    if (isLetLike && node.init?.type === "ref") {
+      refHolderVars.add(node.name);
+      if (
+        node.init.expr?.type === "varref" &&
+        refTargetArrayVars.has(node.init.expr.name)
+      ) {
+        arrayRefHolders.add(node.name);
+      }
+      if (
+        node.init.expr?.type === "slice" &&
+        node.init.expr.target?.type === "varref"
+      ) {
+        const baseName = node.init.expr.target.name;
+        const startOffset =
+          node.init.expr.from?.type === "numlit"
+            ? Number(node.init.expr.from.value)
+            : 0;
+        arrayRefHolders.add(node.name);
+        sliceViewHolders.set(node.name, { baseVar: baseName, startOffset });
+      }
+    }
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (Array.isArray(child)) child.forEach(walk);
+      else if (child && typeof child === "object") walk(child);
+    }
+  }
+
+  stmts.forEach(walk);
+  return {
+    refTargetVars,
+    refHolderVars,
+    refTargetArrayVars,
+    arrayRefHolders,
+    sliceViewHolders,
+  };
+}
+
+// Shared utility: emit JS for a list of statements; last non-block is returned.
+function emitTop(stmts) {
+  let js = "";
+  for (let i = 0; i < stmts.length; i++) {
+    const s = stmts[i];
+    if (i === stmts.length - 1 && s.type !== "block" && s.type !== "fn_def") {
+      js += `return(${emitExpr(s)});\n`;
+    } else {
+      js += `${emitStmt(s)};\n`;
+    }
+  }
+  return js;
+}
 
 function compileTuffToJS(source) {
   if (source.trim() === "") return "return 0;";
@@ -75,65 +148,15 @@ function compileTuffToJS(source) {
 
   validateStmts(stmts, declaredVars, mutableVars);
 
-  // Collect variables that are referenced with & — these need unique slot objects for identity tracking
-  const refTargetVars = new Set();
-  // Collect variables initialized with &expr — they hold slot objects and need .v unwrapping on access
-  const refHolderVars = new Set();
-  // Track which ref targets are arrays (JS already has reference semantics, no slot needed)
-  const refTargetArrayVars = new Set();
-  // Track holders that point to arrays — these don't need .v unwrap since the underlying target is a raw array
-  const arrayRefHolders = new Set();
-  // Track slice view holders: { baseVar, startOffset } for &mut array[start..end]
-  const sliceViewHolders = new Map();
+  // Collect ref info and initialize emitter
+  const {
+    refTargetVars,
+    refHolderVars,
+    refTargetArrayVars,
+    arrayRefHolders,
+    sliceViewHolders,
+  } = collectRefInfo(stmts);
 
-  function collectRefTargets(node) {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "ref" && node.expr?.type === "varref") {
-      refTargetVars.add(node.expr.name);
-    }
-    // If a let statement initializes with an array literal, mark it as an array var
-    if (
-      node.type === "let" &&
-      (node.init?.type === "array" || node.init?.type === "index")
-    ) {
-      refTargetArrayVars.add(node.name);
-    }
-    if (node.type === "let" && node.init?.type === "ref") {
-      refHolderVars.add(node.name);
-      // If the inner expr of a &init points to an array var, this holder holds a raw array reference
-      if (
-        node.init.expr?.type === "varref" &&
-        refTargetArrayVars.has(node.init.expr.name)
-      ) {
-        arrayRefHolders.add(node.name);
-      }
-      // If the inner expr is a slice (array[start..end]), record base var and start offset
-      if (
-        node.init.expr?.type === "slice" &&
-        node.init.expr.target?.type === "varref"
-      ) {
-        const baseName = node.init.expr.target.name;
-        // Use the 'from' literal value as the slice's starting index
-        const startOffset =
-          node.init.expr.from?.type === "numlit"
-            ? Number(node.init.expr.from.value)
-            : 0;
-        arrayRefHolders.add(node.name);
-        sliceViewHolders.set(node.name, {
-          baseVar: baseName,
-          startOffset,
-        });
-      }
-    }
-    for (const key of Object.keys(node)) {
-      const child = node[key];
-      if (Array.isArray(child)) child.forEach(collectRefTargets);
-      else if (child && typeof child === "object") collectRefTargets(child);
-    }
-  }
-  stmts.forEach(collectRefTargets);
-
-  // Initialize emitter with collected ref state
   init(
     refTargetVars,
     refHolderVars,
@@ -142,21 +165,151 @@ function compileTuffToJS(source) {
     sliceViewHolders,
   );
 
-  // Emit JS for each statement, last one is returned
-  function emitTop(stmts) {
-    let js = "";
-    for (let i = 0; i < stmts.length; i++) {
-      const s = stmts[i];
-      if (i === stmts.length - 1 && s.type !== "block" && s.type !== "fn_def") {
-        // Last non-block statement: return its value
-        js += `return(${emitExpr(s)});\n`;
-      } else {
-        js += `${emitStmt(s)};\n`;
-      }
-    }
-    return js;
-  }
-
   let js = "let ri=0;\n" + emitTop(stmts);
   return js;
+}
+
+// Compile multiple modules, collect exports from non-entry modules as globals, then bundle everything.
+function compileAllTuffToJSBundled(sources, entryName) {
+  if (!(entryName in sources))
+    throw new Error(`Missing source for "${entryName}"`);
+
+  // Phase 1: Parse all modules and collect exports (out let / out fn)
+  const moduleExports = {}; // moduleName -> [{name, mutable}, ...]
+  const moduleStmts = {}; // moduleName -> [stmt, ...]
+
+  for (const [modName, source] of Object.entries(sources)) {
+    if (source.trim() === "") {
+      moduleStmts[modName] = [];
+      continue;
+    }
+
+    parser.tokens = tokenize(source);
+    parser.pos = 0;
+
+    const stmts = [];
+    while (parser.pos < parser.tokens.length) {
+      stmts.push(parser.parseStatement());
+    }
+
+    // Collect exports from this module
+    const exports_ = [];
+    for (const s of stmts) {
+      if (s.type === "out_let") {
+        exports_.push({ name: s.name, mutable: s.mutable ?? false });
+      } else if (s.type === "out_fn") {
+        exports_.push({ name: s.name, isFn: true });
+      }
+    }
+
+    moduleExports[modName] = exports_;
+    moduleStmts[modName] = stmts;
+  }
+
+  // Phase 2: Build preamble — declare all cross-module exports as globals (__mod_module_name)
+  let preamble = "";
+  for (const [modName, exports_] of Object.entries(moduleExports)) {
+    for (const exp of exports_) {
+      const globalName = `__mod_${modName}_${exp.name}`;
+      if (exp.isFn) {
+        // We'll emit the function body inline later; just declare a placeholder here.
+        preamble += `${globalName}=undefined;\n`;
+      } else {
+        preamble += `${globalName}=undefined;\n`;
+      }
+    }
+  }
+
+  // Phase 3: For each non-entry module, compile its export statements into the preamble
+  for (const [modName, stmts] of Object.entries(moduleStmts)) {
+    if (modName === entryName) continue;
+
+    const {
+      refTargetVars,
+      refHolderVars,
+      refTargetArrayVars,
+      arrayRefHolders,
+      sliceViewHolders,
+    } = collectRefInfo(stmts);
+
+    init(
+      refTargetVars,
+      refHolderVars,
+      refTargetArrayVars,
+      arrayRefHolders,
+      sliceViewHolders,
+    );
+
+    // Emit export statements into preamble globals
+    for (const s of stmts) {
+      if (s.type === "out_let") {
+        const globalName = `__mod_${modName}_${s.name}`;
+        const initVal = emitExpr(s.init);
+        preamble += `${globalName}=${initVal};\n`;
+      } else if (s.type === "out_fn") {
+        const params = s.params.join(",");
+        const bodyJs = emitExpr(s.body);
+        const globalName = `__mod_${modName}_${s.name}`;
+        preamble += `${globalName}=function(${params}){return(${bodyJs})};\n`;
+      } else if (s.type === "let" || s.type === "fn_def") {
+        // Internal declarations needed by exports — emit them too
+        preamble += `${emitStmt(s)};\n`;
+      }
+    }
+  }
+
+  // Phase 4: Compile the entry module normally, but replace __mod_ globals in emitted code
+  const entrySource = sources[entryName];
+  if (entrySource.trim() === "") return "return 0;";
+
+  parser.tokens = tokenize(entrySource);
+  parser.pos = 0;
+
+  const stmts = [];
+  while (parser.pos < parser.tokens.length) {
+    stmts.push(parser.parseStatement());
+  }
+
+  // Validate module refs resolve to known exports
+  function validateModuleRefs(node, allExports) {
+    if (!node || typeof node !== "object") return;
+    if (
+      (node.type === "module_ref" || node.type === "call") &&
+      node.name?.includes("::")
+    ) {
+      const [modName] = node.name.split("::");
+      if (!(modName in allExports)) {
+        throw new Error(`Unknown module: ${modName}`);
+      }
+    }
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (Array.isArray(child)) child.forEach(validateModuleRefs, [allExports]);
+      else if (child && typeof child === "object")
+        validateModuleRefs(child, allExports);
+    }
+  }
+
+  stmts.forEach((s) => validateModuleRefs(s, moduleExports));
+
+  // Collect ref info for entry module (reuse shared utility)
+  const {
+    refTargetVars,
+    refHolderVars,
+    refTargetArrayVars,
+    arrayRefHolders,
+    sliceViewHolders,
+  } = collectRefInfo(stmts);
+
+  init(
+    refTargetVars,
+    refHolderVars,
+    refTargetArrayVars,
+    arrayRefHolders,
+    sliceViewHolders,
+  );
+
+  // Emit entry module — last non-block statement is returned
+  let entryJs = emitTop(stmts);
+  return "let ri=0;\n" + preamble + entryJs;
 }

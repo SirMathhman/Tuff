@@ -1,4 +1,4 @@
-import compileTuffToJS from "../src/index.js";
+import compileTuffToJS, { compileAllTuffToJSBundled } from "../src/index.js";
 
 function executeTuff(source, stdIn = "") {
   // Don't change this!
@@ -167,4 +167,63 @@ test("compileTuffToJS throws on unclosed parenthesis", () => {
 
 test("compileTuffToJS throws on bare identifier", () => {
   expect(() => compileTuffToJS("foo")).toThrow();
+});
+
+function executeAllTuff(entryPoints, sources, stdIn = "") {
+  for (const entry of entryPoints) {
+    if (!(entry in sources)) throw new Error(`Missing source for "${entry}"`);
+    const compiled = compileAllTuffToJSBundled(sources, entry);
+    return new Function("stdIn", compiled)(stdIn);
+  }
+}
+
+test('executeAllTuff(["index"], {"index": "read()"}, "1") => 1', () => {
+  expect(executeAllTuff(["index"], { index: "read()" }, "1")).toBe(1);
+});
+
+test('executeAllTuff(["index"], {"index": "lib::x", "lib": "out let x = read();"}, "1") => 1', () => {
+  expect(
+    executeAllTuff(
+      ["index"],
+      { index: "lib::x", lib: "out let x = read();" },
+      "1",
+    ),
+  ).toBe(1);
+});
+
+test('executeAllTuff(["index"], {"index": "lib::add(read(),read())", "lib": "let mut y = 0; out fn add(a,b) => a + b;"}, "3 4") => 7', () => {
+  expect(
+    executeAllTuff(
+      ["index"],
+      { index: "lib::add(read(),read())", lib: "out fn add(a,b) => a + b;" },
+      "3 4",
+    ),
+  ).toBe(7);
+});
+
+test('executeAllTuff(["index"], {"index": "", "lib": ""})', () => {
+  expect(executeAllTuff(["index"], { index: "", lib: "" })).toBe(0);
+});
+
+test("compileAllTuffToJSBundled throws on missing entry", () => {
+  expect(() => compileAllTuffToJSBundled({ foo: "1" }, "bar")).toThrow();
+});
+
+test('executeAllTuff(["index"], {"index": "lib::x + lib::y", "lib": "out let x = read(); out let y = read();"}, "2 3") => 5', () => {
+  expect(
+    executeAllTuff(
+      ["index"],
+      {
+        index: "lib::x + lib::y",
+        lib: "out let x = read(); out let y = read();",
+      },
+      "2 3",
+    ),
+  ).toBe(5);
+});
+
+test('executeAllTuff(["index"], {"index": "unknown::z"}) throws', () => {
+  expect(() =>
+    compileAllTuffToJSBundled({ index: "unknown::z" }, "index"),
+  ).toThrow();
 });

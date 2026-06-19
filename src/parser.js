@@ -78,6 +78,31 @@ export default {
     if (node.init) this.validateRefs(node.init, declaredVars, mutableVars);
   },
 
+  // Shared helper: consume optional 'mut' keyword, returns true if present
+  consumeMut() {
+    const mutable =
+      pos < tokens.length &&
+      tokens[pos].type === "keyword" &&
+      tokens[pos].value === "mut";
+    if (mutable) pos++;
+    return mutable;
+  },
+
+  // Shared helper: parse comma-separated params inside parens
+  parseParams() {
+    const params = [];
+    while (pos < tokens.length && tokens[pos].type !== "paren_close") {
+      if (tokens[pos].type === "identifier") {
+        params.push(tokens[pos++].value);
+      } else {
+        throw new Error("Expected parameter name in function definition");
+      }
+      // Skip optional comma
+      if (pos < tokens.length && tokens[pos].type === "comma") pos++;
+    }
+    return params;
+  },
+
   parseStatement() {
     if (pos >= tokens.length) throw new Error("Unexpected end");
     const token = tokens[pos];
@@ -98,19 +123,7 @@ export default {
       }
       pos++; // skip '('
 
-      // Parse optional comma-separated param names
-      const params = [];
-      while (pos < tokens.length && tokens[pos].type !== "paren_close") {
-        if (tokens[pos].type === "identifier") {
-          params.push(tokens[pos++].value);
-        } else {
-          throw new Error("Expected parameter name in function definition");
-        }
-        // Skip optional comma
-        if (pos < tokens.length && tokens[pos].type === "comma") {
-          pos++;
-        }
-      }
+      const params = this.parseParams();
 
       if (pos >= tokens.length || tokens[pos].type !== "paren_close") {
         throw new Error("Expected ')' after function params");
@@ -207,16 +220,70 @@ export default {
       return { type: "if_stmt", cond, thenBranch, elseBranch };
     }
 
+    // out let x = expr ; or out fn name(params) => expr ; (export declarations)
+    if (token.type === "keyword" && token.value === "out") {
+      pos++; // skip 'out'
+
+      if (pos >= tokens.length)
+        throw new Error("Expected 'let' or 'fn' after 'out'");
+
+      // out fn name(params) => expr ;
+      if (tokens[pos].type === "keyword" && tokens[pos].value === "fn") {
+        pos++; // skip 'fn'
+        if (pos >= tokens.length || tokens[pos].type !== "identifier") {
+          throw new Error("Expected function name after 'out fn'");
+        }
+        const name = tokens[pos++].value;
+
+        if (pos >= tokens.length || tokens[pos].type !== "paren_open") {
+          throw new Error("Expected '(' after exported function name");
+        }
+        pos++; // skip '('
+
+        const params = this.parseParams();
+
+        if (pos >= tokens.length || tokens[pos].type !== "paren_close") {
+          throw new Error("Expected ')' after exported function params");
+        }
+        pos++; // skip ')'
+
+        if (pos >= tokens.length || tokens[pos].type !== "fat_arrow") {
+          throw new Error("Expected '=>' in exported function definition");
+        }
+        pos++; // skip '=>'
+
+        const body = this.parseExpr();
+        return { type: "out_fn", name, params, body };
+      }
+
+      // out let x = expr ; or out mut x = expr ;
+      if (tokens[pos].type === "keyword" && tokens[pos].value === "let") {
+        pos++; // skip 'let'
+
+        const mutable = this.consumeMut();
+
+        if (pos >= tokens.length || tokens[pos].type !== "identifier") {
+          throw new Error("Expected identifier after 'out let'");
+        }
+        const name = tokens[pos++].value;
+
+        if (pos >= tokens.length || tokens[pos].type !== "assign") {
+          throw new Error("Expected '=' after exported variable name");
+        }
+        pos++; // skip '='
+
+        const exprAst = this.parseExpr();
+        return { type: "out_let", name, mutable, init: exprAst };
+      }
+
+      throw new Error("Expected 'let' or 'fn' after 'out'");
+    }
+
     // let x = expr ; or let mut x = expr ;
     if (token.type === "keyword" && token.value === "let") {
       pos++; // skip 'let'
 
-      // Optionally consume 'mut' keyword
-      const mutable =
-        pos < tokens.length &&
-        tokens[pos].type === "keyword" &&
-        tokens[pos].value === "mut";
-      if (mutable) pos++;
+      const mutable = this.consumeMut();
 
       if (pos >= tokens.length || tokens[pos].type !== "identifier")
         throw new Error("Expected identifier after 'let'");
@@ -389,9 +456,21 @@ export default {
       return { type: "deref", expr: inner };
     }
 
-    // Function call with args: read(arg1, arg2) or bare identifier
+    // Function call with args: read(arg1, arg2) or bare identifier; also module::name references
     if (token.type === "identifier") {
-      const name = tokens[pos++].value;
+      const moduleName = tokens[pos++].value;
+
+      // Check for module path: identifier :: identifier
+      let isModuleRef = false;
+      let name = moduleName;
+      if (pos < tokens.length && tokens[pos].type === "module_sep") {
+        pos++; // skip '::'
+        if (pos >= tokens.length || tokens[pos].type !== "identifier") {
+          throw new Error("Expected identifier after '::'");
+        }
+        name = `${moduleName}::${tokens[pos++].value}`;
+        isModuleRef = true;
+      }
 
       // Check for function call: identifier followed by '('
       if (pos < tokens.length && tokens[pos].type === "paren_open") {
@@ -415,7 +494,10 @@ export default {
         return this.parseIndexAccess({ type: "call", name, args });
       }
 
-      return this.parseIndexAccess({ type: "varref", name });
+      return this.parseIndexAccess({
+        type: isModuleRef ? "module_ref" : "varref",
+        name,
+      });
     }
 
     // Numeric literal

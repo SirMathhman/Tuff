@@ -14,6 +14,13 @@ function tokenize(source) {
       continue;
     }
 
+    // Match '::' module separator
+    if (source[i] === ":" && i + 1 < source.length && source[i + 1] === ":") {
+      result.push({ type: "module_sep" });
+      i += 2;
+      continue;
+    }
+
     // Match '+=', '-=', '*=', '/=' compound-assignment operators (must come before single-char ops)
     if (source[i] === "+" && i + 1 < source.length && source[i + 1] === "=") {
       result.push({ type: "assign_add" });
@@ -162,6 +169,8 @@ function tokenize(source) {
       i += name.length;
 
       if (name === "let" || name === "mut") {
+        result.push({ type: "keyword", value: name });
+      } else if (name === "out") {
         result.push({ type: "keyword", value: name });
       } else if (
         name === "if" ||

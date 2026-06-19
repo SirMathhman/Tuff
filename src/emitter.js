@@ -23,10 +23,13 @@ export function emitExpr(node, insideDeref = false) {
   if (node.type === "call" && node.name === "readBool") {
     return `+(stdIn.split(/\\s+/)[ri++]==="true")`;
   }
-  // Generic function call: name(args) — emits name(arg1, arg2)
+  // Generic function call: name(args) — emits name(arg1, arg2); also handles module::name calls
   if (node.type === "call") {
     const args = node.args ? node.args.map((a) => emitExpr(a)).join(",") : "";
-    return `${node.name}(${args})`;
+    const resolvedName = node.name.includes("::")
+      ? `__mod_${node.name.replace("::", "_")}`
+      : node.name;
+    return `${resolvedName}(${args})`;
   }
   if (node.type === "numlit") {
     return String(node.value);
@@ -37,6 +40,10 @@ export function emitExpr(node, insideDeref = false) {
     return isCmp
       ? `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`
       : `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
+  }
+  if (node.type === "module_ref") {
+    // Cross-module reference: module::name → __mod_module_name
+    return `__mod_${node.name.replace("::", "_")}`;
   }
   if (node.type === "varref") {
     // Arrays already have JS reference semantics — no slot wrapping needed
