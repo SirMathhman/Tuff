@@ -1,7 +1,7 @@
 // Module-level state shared with emitter via compileTuffToJS
 let tokens, pos;
 
-module.exports = {
+export default {
   get tokens() {
     return tokens;
   },

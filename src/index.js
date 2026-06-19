@@ -1,8 +1,8 @@
-const { tokenize } = require("./tokenizer");
-const parser = require("./parser");
-const emitter = require("./emitter");
+import { tokenize } from "./tokenizer";
+import parser from "./parser";
+import { init, emitExpr, emitStmt } from "./emitter";
 
-module.exports = { compileTuffToJS };
+export default compileTuffToJS;
 
 function compileTuffToJS(source) {
   if (source.trim() === "") return "return 0;";
@@ -134,7 +134,7 @@ function compileTuffToJS(source) {
   stmts.forEach(collectRefTargets);
 
   // Initialize emitter with collected ref state
-  emitter.init(
+  init(
     refTargetVars,
     refHolderVars,
     refTargetArrayVars,
@@ -149,9 +149,9 @@ function compileTuffToJS(source) {
       const s = stmts[i];
       if (i === stmts.length - 1 && s.type !== "block" && s.type !== "fn_def") {
         // Last non-block statement: return its value
-        js += `return(${emitter.emitExpr(s)});\n`;
+        js += `return(${emitExpr(s)});\n`;
       } else {
-        js += `${emitter.emitStmt(s)};\n`;
+        js += `${emitStmt(s)};\n`;
       }
     }
     return js;

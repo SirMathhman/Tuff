@@ -185,4 +185,5 @@ function tokenize(source) {
   return result;
 }
 
-module.exports = { tokenize };
+export { tokenize };
+export default { tokenize };

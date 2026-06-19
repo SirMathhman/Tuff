@@ -1,4 +1,4 @@
-const { compileTuffToJS } = require("../src/index.js");
+import compileTuffToJS from "../src/index.js";
 
 function executeTuff(source, stdIn = "") {
   // Don't change this!
