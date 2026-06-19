@@ -45,6 +45,10 @@ test('executeTuff("let x = read(); { let x = read(); } x", "1 2") => 1', () => {
   expect(executeTuff("let x = read(); { let x = read(); } x", "1 2")).toBe(1);
 });
 
+test('executeTuff("let x = readBool(); x", "true") => 1', () => {
+  expect(executeTuff("let x = readBool(); x", "true")).toBe(1);
+});
+
 test("compileTuffToJS throws on unexpected character", () => {
   expect(() => compileTuffToJS("@foo")).toThrow();
 });

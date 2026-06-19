@@ -38,12 +38,16 @@ export function compileTuffToJS(source) {
   }
 
   function validateStmts(stmts, declSet, mutSet) {
-    forEachStmt(stmts, declSet, mutSet, (s) => validateRefs(s, declSet, mutSet));
+    forEachStmt(stmts, declSet, mutSet, (s) =>
+      validateRefs(s, declSet, mutSet),
+    );
   }
 
   function validateBlock(stmts, declSet, mutSet) {
     collectVars(stmts, declSet, mutSet);
-    forEachStmt(stmts, declSet, mutSet, (s) => validateRefs(s, declSet, mutSet));
+    forEachStmt(stmts, declSet, mutSet, (s) =>
+      validateRefs(s, declSet, mutSet),
+    );
   }
 
   validateStmts(stmts, declaredVars, mutableVars);
@@ -184,6 +188,9 @@ function emitExpr(node) {
   if (!node || typeof node !== "object") return "";
   if (node.type === "call" && node.name === "read") {
     return `parseInt(stdIn.split(/\\s+/)[ri++],10)`;
+  }
+  if (node.type === "call" && node.name === "readBool") {
+    return `+(stdIn.split(/\\s+/)[ri++]===\"true\")`;
   }
   if (node.type === "binop") {
     return `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`;
