@@ -16,7 +16,7 @@
   "main": "./src/index.js",
   "scripts": {
     "test": "bun test 1>&2",
-    "cpd": "pmd cpd src/index.js tests/index.test.js --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2",
+    "cpd": "pmd cpd --dir src,tests --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2",
     "lint": "eslint . 1>&2"
   },
   "devDependencies": {
