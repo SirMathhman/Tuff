@@ -5,6 +5,56 @@ import { init, emitExpr, emitStmt } from "./emitter";
 export default compileTuffToJS;
 export { compileAllTuffToJSBundled };
 
+// Shared utility: collect declared variable names and mutability for validation.
+function collectVars(stmts, declSet, mutSet) {
+  for (const s of stmts) {
+    if (s.type === "let") {
+      declSet.add(s.name);
+      if (s.mutable) mutSet.add(s.name);
+    }
+    // Function definitions declare a callable name
+    if (s.type === "fn_def") {
+      declSet.add(s.name);
+    }
+    if (s.type === "block") collectVars(s.stmts, declSet, mutSet);
+  }
+}
+
+// Shared utility: validate all varrefs are declared and assignments only to mutable vars.
+function validateEach(stmts, declSet, mutSet) {
+  for (const s of stmts) {
+    if (s.type === "block") {
+      const childDecl = new Set(declSet);
+      const childMut = new Set(mutSet);
+      collectVars(s.stmts, childDecl, childMut);
+      validateEach(s.stmts, childDecl, childMut);
+    } else if (s.type === "if_stmt") {
+      const thenScope = { decl: new Set(declSet), mut: new Set(mutSet) };
+      validateEach(s.thenBranch, thenScope.decl, thenScope.mut);
+      if (s.elseBranch) {
+        const elseScope = { decl: new Set(declSet), mut: new Set(mutSet) };
+        validateEach(s.elseBranch, elseScope.decl, elseScope.mut);
+      }
+    } else if (s.type === "while_stmt") {
+      const childDecl = new Set(declSet);
+      const childMut = new Set(mutSet);
+      validateEach(s.body, childDecl, childMut);
+    } else if (s.type === "for_stmt") {
+      // Validate range expressions against parent scope
+      parser.validateRefs(s.from, declSet, mutSet);
+      parser.validateRefs(s.to, declSet, mutSet);
+      // The loop variable is implicitly declared and mutable within the for scope
+      const childDecl = new Set(declSet);
+      const childMut = new Set(mutSet);
+      childDecl.add(s.variable);
+      childMut.add(s.variable);
+      validateEach(s.body, childDecl, childMut);
+    } else {
+      parser.validateRefs(s, declSet, mutSet);
+    }
+  }
+}
+
 // Shared utility: collect ref-related info from AST nodes into provided sets/map.
 function collectRefInfo(stmts) {
   const refTargetVars = new Set();
@@ -89,64 +139,11 @@ function compileTuffToJS(source) {
     stmts.push(parser.parseStatement());
   }
 
-  // Collect declared variable names and mutability for validation
-  function collectVars(stmts, declSet, mutSet) {
-    for (const s of stmts) {
-      if (s.type === "let") {
-        declSet.add(s.name);
-        if (s.mutable) mutSet.add(s.name);
-      }
-      // Function definitions declare a callable name
-      if (s.type === "fn_def") {
-        declSet.add(s.name);
-      }
-      if (s.type === "block") collectVars(s.stmts, declSet, mutSet);
-    }
-  }
+  // Collect and validate variables using shared utilities
   const declaredVars = new Set();
   const mutableVars = new Set();
   collectVars(stmts, declaredVars, mutableVars);
-
-  // Validate all varrefs are declared and assignments only to mut vars
-  function validateEach(stmts, declSet, mutSet) {
-    for (const s of stmts) {
-      if (s.type === "block") {
-        const childDecl = new Set(declSet);
-        const childMut = new Set(mutSet);
-        collectVars(s.stmts, childDecl, childMut);
-        validateEach(s.stmts, childDecl, childMut);
-      } else if (s.type === "if_stmt") {
-        const thenScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-        validateEach(s.thenBranch, thenScope.decl, thenScope.mut);
-        if (s.elseBranch) {
-          const elseScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-          validateEach(s.elseBranch, elseScope.decl, elseScope.mut);
-        }
-      } else if (s.type === "while_stmt") {
-        const childDecl = new Set(declSet);
-        const childMut = new Set(mutSet);
-        validateEach(s.body, childDecl, childMut);
-      } else if (s.type === "for_stmt") {
-        // Validate range expressions against parent scope
-        parser.validateRefs(s.from, declSet, mutSet);
-        parser.validateRefs(s.to, declSet, mutSet);
-        // The loop variable is implicitly declared and mutable within the for scope
-        const childDecl = new Set(declSet);
-        const childMut = new Set(mutSet);
-        childDecl.add(s.variable);
-        childMut.add(s.variable);
-        validateEach(s.body, childDecl, childMut);
-      } else {
-        parser.validateRefs(s, declSet, mutSet);
-      }
-    }
-  }
-
-  function validateStmts(stmts, declSet, mutSet) {
-    validateEach(stmts, declSet, mutSet);
-  }
-
-  validateStmts(stmts, declaredVars, mutableVars);
+  validateEach(stmts, declaredVars, mutableVars);
 
   // Collect ref info and initialize emitter
   const {
@@ -180,6 +177,7 @@ function compileAllTuffToJSBundled(sources, entryName) {
 
   for (const [modName, source] of Object.entries(sources)) {
     if (source.trim() === "") {
+      moduleExports[modName] = [];
       moduleStmts[modName] = [];
       continue;
     }
@@ -220,6 +218,14 @@ function compileAllTuffToJSBundled(sources, entryName) {
     }
   }
 
+  // Also create module objects for bare module references (e.g., `let temp = lib; temp.x`)
+  const moduleObjectNames = new Set();
+  for (const modName of Object.keys(moduleExports)) {
+    if (modName === entryName) continue;
+    preamble += `${modName}={};\n`;
+    moduleObjectNames.add(modName);
+  }
+
   // Phase 3: For each non-entry module, compile its export statements into the preamble
   for (const [modName, stmts] of Object.entries(moduleStmts)) {
     if (modName === entryName) continue;
@@ -256,6 +262,13 @@ function compileAllTuffToJSBundled(sources, entryName) {
         preamble += `${emitStmt(s)};\n`;
       }
     }
+
+    // Populate module object with export properties so bare module refs work: `lib.x`
+    const modExports = moduleExports[modName];
+    for (const exp of modExports) {
+      const globalName = `__mod_${modName}_${exp.name}`;
+      preamble += `${modName}.${exp.name}=${globalName};\n`;
+    }
   }
 
   // Phase 4: Compile the entry module normally, but replace __mod_ globals in emitted code
@@ -290,7 +303,18 @@ function compileAllTuffToJSBundled(sources, entryName) {
     }
   }
 
+  // Collect and validate variables using shared utilities (including bare module refs)
+  const declaredVars = new Set();
+  const mutableVars = new Set();
+  collectVars(stmts, declaredVars, mutableVars);
+
+  // Add bare module names as valid variables so `let temp = lib` passes validation
+  for (const modName of moduleObjectNames) {
+    declaredVars.add(modName);
+  }
+
   stmts.forEach((s) => validateModuleRefs(s, moduleExports));
+  validateEach(stmts, declaredVars, mutableVars);
 
   // Collect ref info for entry module (reuse shared utility)
   const {
