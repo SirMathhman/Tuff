@@ -1,6 +1,6 @@
 const { tokenize } = require("./tokenizer");
 
-let tokens, pos, refTargetVars;
+let tokens, pos, refTargetVars, refHolderVars;
 
 function compileTuffToJS(source) {
   if (source.trim() === "") return "return 0;";
@@ -71,10 +71,15 @@ function compileTuffToJS(source) {
 
   // Collect variables that are referenced with & — these need unique slot objects for identity tracking
   refTargetVars = new Set();
+  // Collect variables initialized with &expr — they hold slot objects and need .v unwrapping on access
+  refHolderVars = new Set();
   function collectRefTargets(node) {
     if (!node || typeof node !== "object") return;
     if (node.type === "ref" && node.expr?.type === "varref") {
       refTargetVars.add(node.expr.name);
+    }
+    if (node.type === "let" && node.init?.type === "ref") {
+      refHolderVars.add(node.name);
     }
     for (const key of Object.keys(node)) {
       const child = node[key];
@@ -441,7 +446,7 @@ function parseIndexAccess(base) {
   return base;
 }
 
-function emitExpr(node) {
+function emitExpr(node, insideDeref = false) {
   if (!node || typeof node !== "object") return "";
   if (node.type === "call" && node.name === "read") {
     return `parseInt(stdIn.split(/\\s+/)[ri++],10)`;
@@ -460,11 +465,14 @@ function emitExpr(node) {
       : `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
   }
   if (node.type === "varref") {
-    // If this var is a ref target, unwrap .v from its slot object
-    return refTargetVars.has(node.name) ? `${node.name}.v` : node.name;
+    // Unwrap .v for ref targets; skip holder unwrap when inside deref (deref adds .v itself)
+    const needsUnwrap =
+      refTargetVars.has(node.name) ||
+      (!insideDeref && refHolderVars.has(node.name));
+    return needsUnwrap ? `${node.name}.v` : node.name;
   }
   if (node.type === "array") {
-    const elems = node.elements.map(emitExpr).join(",");
+    const elems = node.elements.map((e) => emitExpr(e)).join(",");
     return `[${elems}]`;
   }
   if (node.type === "index") {
@@ -476,7 +484,7 @@ function emitExpr(node) {
   }
   // *expr — dereference: unwrap .v from a ref/slot
   if (node.type === "deref") {
-    const inner = emitExpr(node.expr);
+    const inner = emitExpr(node.expr, true);
     return `${inner}.v`;
   }
   throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
@@ -503,7 +511,10 @@ function emitStmt(stmt) {
   }
   // *target = value deref assignment statement
   if (stmt.type === "deref_assign_stmt") {
-    const targetPath = emitExpr({ type: "varref", name: stmt.target?.name });
+    const targetPath = emitExpr(
+      { type: "varref", name: stmt.target?.name },
+      true,
+    );
     return `${targetPath}.v=${emitExpr(stmt.value)}`;
   }
   // x = expr assignment statement

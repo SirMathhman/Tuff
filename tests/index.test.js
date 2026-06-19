@@ -86,6 +86,15 @@ test('executeTuff("let mut x = 0; let y = &mut x; *y = read(); x", "1") => 1', (
   ).toBe(1);
 });
 
+test('executeTuff("let mut array = [0]; let slice = &array; slice[0] = read(); array[0]", "1") => 1', () => {
+  expect(
+    executeTuff(
+      "let mut array = [0]; let slice = &array; slice[0] = read(); array[0]",
+      "1",
+    ),
+  ).toBe(1);
+});
+
 test('executeTuff("let x = 1; &x == &x") => 1', () => {
   expect(executeTuff("let x = 1; &x == &x")).toBe(1);
 });
