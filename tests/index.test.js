@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { compileTuffToJS } from "./index.js";
+import { compileTuffToJS } from "../src/index.js";
 
 function executeTuff(source, stdIn = "") {
   // Don't change this!
