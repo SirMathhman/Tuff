@@ -27,37 +27,42 @@ export function compileTuffToJS(source) {
   collectVars(stmts, declaredVars, mutableVars);
 
   // Validate all varrefs are declared and assignments only to mut vars
-  function forEachStmt(stmts, declSet, mutSet, fn) {
+  function validateEach(stmts, declSet, mutSet) {
     for (const s of stmts) {
       if (s.type === "block") {
-        validateBlock(s.stmts, new Set(declSet), new Set(mutSet));
+        const childDecl = new Set(declSet);
+        const childMut = new Set(mutSet);
+        collectVars(s.stmts, childDecl, childMut);
+        validateEach(s.stmts, childDecl, childMut);
       } else if (s.type === "if_stmt") {
-        const childScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-        forEachStmt(s.thenBranch, childScope.decl, childScope.mut, fn);
+        const thenScope = { decl: new Set(declSet), mut: new Set(mutSet) };
+        validateEach(s.thenBranch, thenScope.decl, thenScope.mut);
         if (s.elseBranch) {
           const elseScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-          forEachStmt(s.elseBranch, elseScope.decl, elseScope.mut, fn);
+          validateEach(s.elseBranch, elseScope.decl, elseScope.mut);
         }
       } else if (s.type === "while_stmt") {
-        const childScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-        forEachStmt(s.body, childScope.decl, childScope.mut, fn);
+        const childDecl = new Set(declSet);
+        const childMut = new Set(mutSet);
+        validateEach(s.body, childDecl, childMut);
+      } else if (s.type === "for_stmt") {
+        // Validate range expressions against parent scope
+        validateRefs(s.from, declSet, mutSet);
+        validateRefs(s.to, declSet, mutSet);
+        // The loop variable is implicitly declared and mutable within the for scope
+        const childDecl = new Set(declSet);
+        const childMut = new Set(mutSet);
+        childDecl.add(s.variable);
+        childMut.add(s.variable);
+        validateEach(s.body, childDecl, childMut);
       } else {
-        fn(s);
+        validateRefs(s, declSet, mutSet);
       }
     }
   }
 
   function validateStmts(stmts, declSet, mutSet) {
-    forEachStmt(stmts, declSet, mutSet, (s) =>
-      validateRefs(s, declSet, mutSet),
-    );
-  }
-
-  function validateBlock(stmts, declSet, mutSet) {
-    collectVars(stmts, declSet, mutSet);
-    forEachStmt(stmts, declSet, mutSet, (s) =>
-      validateRefs(s, declSet, mutSet),
-    );
+    validateEach(stmts, declSet, mutSet);
   }
 
   validateStmts(stmts, declaredVars, mutableVars);
@@ -110,6 +115,45 @@ function validateRefs(node, declaredVars, mutableVars) {
 function parseStatement() {
   if (pos >= tokens.length) throw new Error("Unexpected end");
   const token = tokens[pos];
+
+  // for (i in start..end) stmt;
+  if (token.type === "keyword" && token.value === "for") {
+    pos++; // skip 'for'
+    if (pos >= tokens.length || tokens[pos].type !== "paren_open")
+      throw new Error("Expected '(' after 'for'");
+    pos++; // skip '('
+
+    // Expect identifier for loop variable
+    if (pos >= tokens.length || tokens[pos].type !== "identifier") {
+      throw new Error("Expected identifier in for loop");
+    }
+    const variable = tokens[pos++].value;
+
+    // Expect 'in' keyword
+    if (
+      pos >= tokens.length ||
+      tokens[pos].type !== "keyword" ||
+      tokens[pos].value !== "in"
+    ) {
+      throw new Error("Expected 'in' in for loop");
+    }
+    pos++; // skip 'in'
+
+    // Parse range: expr .. expr
+    const from = parseExpr();
+    if (pos >= tokens.length || tokens[pos].type !== "range") {
+      throw new Error("Expected '..' in for loop range");
+    }
+    pos++; // skip '..'
+    const to = parseExpr();
+
+    if (pos >= tokens.length || tokens[pos].type !== "paren_close")
+      throw new Error("Expected ')' after for loop range");
+    pos++; // skip ')'
+
+    const body = [parseStatement()];
+    return { type: "for_stmt", variable, from, to, body };
+  }
 
   // while (cond) stmt;
   if (token.type === "keyword" && token.value === "while") {
@@ -337,6 +381,17 @@ function emitStmt(stmt) {
     }
     js += `}`;
     return js;
+  }
+  // for (i in start..end) { ... }
+  if (stmt.type === "for_stmt") {
+    let js = `var ${stmt.variable}=${emitExpr(stmt.from)};`;
+    js += `while(${stmt.variable}<${emitExpr(stmt.to)}){\n`;
+    for (const s of stmt.body) {
+      js += `${emitStmt(s)};\n`;
+    }
+    js += `${stmt.variable}+=1;`;
+    js += `}`;
+    return js;
   } // Bare expression statement
   return emitExpr(stmt);
 }
@@ -347,6 +402,13 @@ function tokenize(source) {
   while (i < source.length) {
     if (/\s/.test(source[i])) {
       i++;
+      continue;
+    }
+
+    // Match '..' range operator
+    if (source[i] === "." && i + 1 < source.length && source[i + 1] === ".") {
+      result.push({ type: "range" });
+      i += 2;
       continue;
     }
 
@@ -457,7 +519,14 @@ function tokenize(source) {
         result.push({ type: "call", name });
       } else if (name === "let" || name === "mut") {
         result.push({ type: "keyword", value: name });
-      } else if (name === "if" || name === "else" || name === "while") {
+      } else if (
+        name === "if" ||
+        name === "else" ||
+        name === "while" ||
+        name === "for"
+      ) {
+        result.push({ type: "keyword", value: name });
+      } else if (name === "in") {
         result.push({ type: "keyword", value: name });
       } else {
         result.push({ type: "identifier", value: name });

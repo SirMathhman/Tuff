@@ -54,6 +54,15 @@ test('executeTuff("let mut total = 0; let count = read(); while (total < count) 
   ).toBe(4);
 });
 
+test('executeTuff("let count = read(); let mut sum = 0; for (i in 0..count) sum += i; sum", "4") => 6', () => {
+  expect(
+    executeTuff(
+      "let count = read(); let mut sum = 0; for (i in 0..count) sum += i; sum",
+      "4",
+    ),
+  ).toBe(6);
+});
+
 test('executeTuff("let x = read(); { let x = read(); } x", "1 2") => 1', () => {
   expect(executeTuff("let x = read(); { let x = read(); } x", "1 2")).toBe(1);
 });
