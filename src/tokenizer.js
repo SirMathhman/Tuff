@@ -168,7 +168,7 @@ function tokenize(source) {
       const name = idMatch[1];
       i += name.length;
 
-      if (name === "let" || name === "mut") {
+      if (name === "let" || name === "mut" || name === "extern") {
         result.push({ type: "keyword", value: name });
       } else if (name === "out") {
         result.push({ type: "keyword", value: name });

@@ -1,4 +1,7 @@
-import compileTuffToJS, { compileAllTuffToJSBundled } from "../src/index.js";
+import compileTuffToJS, {
+  compileAllTuffToJSBundled,
+  compileAllTuffWithExtern,
+} from "../src/index.js";
 
 function executeTuff(source, stdIn = "") {
   // Don't change this!
@@ -169,6 +172,14 @@ test("compileTuffToJS throws on bare identifier", () => {
   expect(() => compileTuffToJS("foo")).toThrow();
 });
 
+function executeAllTuffWithExtern(entryPoints, sources, externs, stdIn = "") {
+  for (const entry of entryPoints) {
+    if (!(entry in sources)) throw new Error(`Missing source for "${entry}"`);
+    const compiled = compileAllTuffWithExtern(sources, externs, entry);
+    return new Function("stdIn", compiled)(stdIn);
+  }
+}
+
 function executeAllTuff(entryPoints, sources, stdIn = "") {
   for (const entry of entryPoints) {
     if (!(entry in sources)) throw new Error(`Missing source for "${entry}"`);
@@ -250,6 +261,19 @@ test('executeAllTuff(["index"], {"index": "lib.x", "lib": "out let x = read();"}
       "1",
     ),
   ).toBe(1);
+});
+
+test('executeAllTuffWithExtern(["index"], {"index": "extern let { add } = native; add(read(), read())"}, {"native": "export function add(first, second) { return first + second; }"}, "1 2") => 3', () => {
+  expect(
+    executeAllTuffWithExtern(
+      ["index"],
+      { index: "extern let { add } = native; add(read(), read())" },
+      {
+        native: "export function add(first, second) { return first + second; }",
+      },
+      "1 2",
+    ),
+  ).toBe(3);
 });
 
 test('executeAllTuff(["index"], {"index": "unknown::z"}) throws', () => {
