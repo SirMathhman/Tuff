@@ -147,14 +147,7 @@ function tokenize(source) {
       const name = idMatch[1];
       i += name.length;
 
-      // Check for function call: identifier followed by ()
-      if (i < source.length && source[i] === "(") {
-        i++; // skip '('
-        if (i >= source.length || source[i] !== ")")
-          throw new Error("Expected ')'");
-        i++; // skip ')'
-        result.push({ type: "call", name });
-      } else if (name === "let" || name === "mut") {
+      if (name === "let" || name === "mut") {
         result.push({ type: "keyword", value: name });
       } else if (
         name === "if" ||

@@ -144,6 +144,10 @@ test('executeTuff("fn get() => read(); get()", "1") => 1', () => {
   expect(executeTuff("fn get() => read(); get()", "1")).toBe(1);
 });
 
+test('executeTuff("fn add(first, second) => first + second; add(read(), read())", "1 2") => 3', () => {
+  expect(executeTuff("fn add(first, second) => first + second; add(read(), read())", "1 2")).toBe(3);
+});
+
 test("compileTuffToJS throws on unexpected character", () => {
   expect(() => compileTuffToJS("@foo")).toThrow();
 });

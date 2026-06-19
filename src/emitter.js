@@ -24,9 +24,12 @@ module.exports = {
     if (node.type === "call" && node.name === "readBool") {
       return `+(stdIn.split(/\\s+/)[ri++]==="true")`;
     }
-    // Generic function call: name() — emits name() for user-defined functions
+    // Generic function call: name(args) — emits name(arg1, arg2)
     if (node.type === "call") {
-      return `${node.name}()`;
+      const args = node.args
+        ? node.args.map((a) => this.emitExpr(a)).join(",")
+        : "";
+      return `${node.name}(${args})`;
     }
     if (node.type === "numlit") {
       return String(node.value);
@@ -92,9 +95,10 @@ module.exports = {
   },
 
   emitStmt(stmt) {
-    // fn name() => expr — function definition
+    // fn name(params) => expr — function definition
     if (stmt.type === "fn_def") {
-      return `function ${stmt.name}(){return(${this.emitExpr(stmt.body)})}`;
+      const params = stmt.params ? stmt.params.join(",") : "";
+      return `function ${stmt.name}(${params}){return(${this.emitExpr(stmt.body)})}`;
     }
     // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
     if (stmt.type === "let") {

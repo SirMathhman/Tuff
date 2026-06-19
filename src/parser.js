@@ -17,9 +17,15 @@ module.exports = {
 
   validateRefs(node, declaredVars, mutableVars) {
     if (!node || typeof node !== "object") return;
-    // Function definition body references are validated against parent scope
+    // Function definition body references are validated against parent scope + params
     if (node.type === "fn_def") {
-      this.validateRefs(node.body, declaredVars, mutableVars);
+      const fnDeclared = new Set(declaredVars);
+      const fnMutable = new Set(mutableVars);
+      for (const p of node.params || []) {
+        fnDeclared.add(p);
+        fnMutable.add(p);
+      }
+      this.validateRefs(node.body, fnDeclared, fnMutable);
       return;
     }
     if (node.type === "varref" && !declaredVars.has(node.name)) {
@@ -76,15 +82,46 @@ module.exports = {
     if (pos >= tokens.length) throw new Error("Unexpected end");
     const token = tokens[pos];
 
-    // fn name() => expr ; (function definition)
+    // fn name(params) => expr ; (function definition)
     if (token.type === "keyword" && token.value === "fn") {
       pos++; // skip 'fn'
 
-      // Function name is in a call token since tokenizer greedily matches identifier()
-      if (pos >= tokens.length || tokens[pos].type !== "call") {
+      // Function name is an identifier
+      if (pos >= tokens.length || tokens[pos].type !== "identifier") {
         throw new Error("Expected function name after 'fn'");
       }
-      const name = tokens[pos++].name;
+      const name = tokens[pos++].value;
+
+      // Expect '(' for params list
+      if (pos >= tokens.length || tokens[pos].type !== "paren_open") {
+        throw new Error("Expected '(' after function name");
+      }
+      pos++; // skip '('
+
+      // Parse optional comma-separated param names
+      const params = [];
+      while (
+        pos < tokens.length &&
+        tokens[pos].type !== "paren_close"
+      ) {
+        if (tokens[pos].type === "identifier") {
+          params.push(tokens[pos++].value);
+        } else {
+          throw new Error("Expected parameter name in function definition");
+        }
+        // Skip optional comma
+        if (
+          pos < tokens.length &&
+          tokens[pos].type === "comma"
+        ) {
+          pos++;
+        }
+      }
+
+      if (pos >= tokens.length || tokens[pos].type !== "paren_close") {
+        throw new Error("Expected ')' after function params");
+      }
+      pos++; // skip ')'
 
       // Expect fat arrow '=>'
       if (pos >= tokens.length || tokens[pos].type !== "fat_arrow") {
@@ -93,7 +130,7 @@ module.exports = {
       pos++; // skip '=>'
 
       const body = this.parseExpr();
-      return { type: "fn_def", name, body };
+      return { type: "fn_def", name, params, body };
     }
 
     // for (i in start..end) stmt;
@@ -348,16 +385,42 @@ module.exports = {
       return { type: "deref", expr: inner };
     }
 
-    // Function call: read()
-    if (token.type === "call") {
-      pos++;
-      return this.parseIndexAccess({ type: "call", name: token.name });
-    }
-
-    // Variable reference or bare identifier, possibly followed by [index]
+    // Function call with args: read(arg1, arg2) or bare identifier
     if (token.type === "identifier") {
-      pos++;
-      return this.parseIndexAccess({ type: "varref", name: token.value });
+      const name = tokens[pos++].value;
+
+      // Check for function call: identifier followed by '('
+      if (
+        pos < tokens.length &&
+        tokens[pos].type === "paren_open"
+      ) {
+        pos++; // skip '('
+
+        // Parse optional comma-separated argument expressions
+        const args = [];
+        while (
+          pos < tokens.length &&
+          tokens[pos].type !== "paren_close"
+        ) {
+          args.push(this.parseExpr());
+          // Skip optional comma
+          if (
+            pos < tokens.length &&
+            tokens[pos].type === "comma"
+          ) {
+            pos++;
+          }
+        }
+
+        if (pos >= tokens.length || tokens[pos].type !== "paren_close") {
+          throw new Error("Expected ')'");
+        }
+        pos++; // skip ')'
+
+        return this.parseIndexAccess({ type: "call", name, args });
+      }
+
+      return this.parseIndexAccess({ type: "varref", name });
     }
 
     // Numeric literal
