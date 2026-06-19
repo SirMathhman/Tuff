@@ -31,6 +31,13 @@ export function compileTuffToJS(source) {
     for (const s of stmts) {
       if (s.type === "block") {
         validateBlock(s.stmts, new Set(declSet), new Set(mutSet));
+      } else if (s.type === "if_stmt") {
+        const childScope = { decl: new Set(declSet), mut: new Set(mutSet) };
+        forEachStmt(s.thenBranch, childScope.decl, childScope.mut, fn);
+        if (s.elseBranch) {
+          const elseScope = { decl: new Set(declSet), mut: new Set(mutSet) };
+          forEachStmt(s.elseBranch, elseScope.decl, elseScope.mut, fn);
+        }
       } else {
         fn(s);
       }
@@ -91,6 +98,32 @@ function validateRefs(node, declaredVars, mutableVars) {
 function parseStatement() {
   if (pos >= tokens.length) throw new Error("Unexpected end");
   const token = tokens[pos];
+
+  // if (expr) stmt; else stmt;
+  if (token.type === "keyword" && token.value === "if") {
+    pos++; // skip 'if'
+    if (pos >= tokens.length || tokens[pos].type !== "paren_open")
+      throw new Error("Expected '(' after 'if'");
+    pos++; // skip '('
+    const cond = parseExpr();
+    if (pos >= tokens.length || tokens[pos].type !== "paren_close")
+      throw new Error("Expected ')' after condition");
+    pos++; // skip ')'
+
+    const thenBranch = [parseStatement()];
+
+    let elseBranch;
+    if (
+      pos < tokens.length &&
+      tokens[pos].type === "keyword" &&
+      tokens[pos].value === "else"
+    ) {
+      pos++; // skip 'else'
+      elseBranch = [parseStatement()];
+    }
+
+    return { type: "if_stmt", cond, thenBranch, elseBranch };
+  }
 
   // let x = expr ; or let mut x = expr ;
   if (token.type === "keyword" && token.value === "let") {
@@ -181,6 +214,12 @@ function parsePrimary() {
     return { type: "varref", name: token.value };
   }
 
+  // Numeric literal
+  if (token.type === "number") {
+    pos++;
+    return { type: "numlit", value: token.value };
+  }
+
   throw new Error(`Unsupported token at ${pos}: ${JSON.stringify(token)}`);
 }
 
@@ -191,8 +230,9 @@ function emitExpr(node) {
   }
   if (node.type === "call" && node.name === "readBool") {
     return `+(stdIn.split(/\\s+/)[ri++]===\"true\")`;
-  }
-  if (node.type === "binop") {
+  }  if (node.type === "numlit") {
+    return String(node.value);
+  }  if (node.type === "binop") {
     return `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`;
   }
   if (node.type === "varref") {
@@ -218,8 +258,22 @@ function emitStmt(stmt) {
       blockJs += `${emitStmt(s)};\n`;
     }
     return blockJs + "}";
-  }
-  // Bare expression statement
+  }	// if (...) { ... } else { ... }
+  if (stmt.type === "if_stmt") {
+    let js = `if(${emitExpr(stmt.cond)}){\n`;
+    for (const s of stmt.thenBranch) {
+      js += `${emitStmt(s)};\n`;
+    }
+    js += `}`;
+    if (stmt.elseBranch) {
+      js += ` else {\n`;
+      for (const s of stmt.elseBranch) {
+        js += `${emitStmt(s)};\n`;
+      }
+      js += ` }`;
+    }
+    return js;
+  }  // Bare expression statement
   return emitExpr(stmt);
 }
 
@@ -253,7 +307,21 @@ function tokenize(source) {
       continue;
     }
 
-    // Match '{' block open
+// Match '(' paren open
+	if (source[i] === "(") {
+		result.push({ type: "paren_open" });
+		i++;
+		continue;
+	}
+
+	// Match ')' paren close
+	if (source[i] === ")") {
+		result.push({ type: "paren_close" });
+		i++;
+		continue;
+	}
+
+	// Match '{' block open
     if (source[i] === "{") {
       result.push({ type: "brace_open" });
       i++;
@@ -264,6 +332,14 @@ function tokenize(source) {
     if (source[i] === "}") {
       result.push({ type: "brace_close" });
       i++;
+      continue;
+    }
+
+    // Match numeric literals like 0, 42, -3.14
+    const numMatch = source.slice(i).match(/^(-?\d+(\.\d+)?)/);
+    if (numMatch) {
+      result.push({ type: "number", value: parseFloat(numMatch[1]) });
+      i += numMatch[1].length;
       continue;
     }
 
@@ -281,6 +357,8 @@ function tokenize(source) {
         i++; // skip ')'
         result.push({ type: "call", name });
       } else if (name === "let" || name === "mut") {
+        result.push({ type: "keyword", value: name });
+      } else if (name === "if" || name === "else") {
         result.push({ type: "keyword", value: name });
       } else {
         result.push({ type: "identifier", value: name });
