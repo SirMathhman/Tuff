@@ -38,6 +38,9 @@ export function compileTuffToJS(source) {
           const elseScope = { decl: new Set(declSet), mut: new Set(mutSet) };
           forEachStmt(s.elseBranch, elseScope.decl, elseScope.mut, fn);
         }
+      } else if (s.type === "while_stmt") {
+        const childScope = { decl: new Set(declSet), mut: new Set(mutSet) };
+        forEachStmt(s.body, childScope.decl, childScope.mut, fn);
       } else {
         fn(s);
       }
@@ -107,6 +110,21 @@ function validateRefs(node, declaredVars, mutableVars) {
 function parseStatement() {
   if (pos >= tokens.length) throw new Error("Unexpected end");
   const token = tokens[pos];
+
+  // while (cond) stmt;
+  if (token.type === "keyword" && token.value === "while") {
+    pos++; // skip 'while'
+    if (pos >= tokens.length || tokens[pos].type !== "paren_open")
+      throw new Error("Expected '(' after 'while'");
+    pos++; // skip '('
+    const cond = parseExpr();
+    if (pos >= tokens.length || tokens[pos].type !== "paren_close")
+      throw new Error("Expected ')' after while condition");
+    pos++; // skip ')'
+
+    const body = [parseStatement()];
+    return { type: "while_stmt", cond, body };
+  }
 
   // if (expr) stmt; else stmt;
   if (token.type === "keyword" && token.value === "if") {
@@ -198,9 +216,19 @@ function parseStatement() {
 }
 
 function parseExpr() {
-  let left = parseAddSub();
+  let left = parseComparison();
   while (pos < tokens.length && tokens[pos].type === "semi") {
     pos++; // skip ';'
+  }
+  return left;
+}
+
+function parseComparison() {
+  let left = parseAddSub();
+  while (pos < tokens.length && tokens[pos].type === "cmp") {
+    const opVal = tokens[pos++].value;
+    const right = parseAddSub();
+    left = { type: "binop", op: opVal, left, right };
   }
   return left;
 }
@@ -300,6 +328,15 @@ function emitStmt(stmt) {
       js += ` }`;
     }
     return js;
+  }
+  // while (...) { ... }
+  if (stmt.type === "while_stmt") {
+    let js = `while(${emitExpr(stmt.cond)}){\n`;
+    for (const s of stmt.body) {
+      js += `${emitStmt(s)};\n`;
+    }
+    js += `}`;
+    return js;
   } // Bare expression statement
   return emitExpr(stmt);
 }
@@ -316,6 +353,34 @@ function tokenize(source) {
     // Match '+=', '-=', '*=', '/=' compound-assignment operators (must come before single-char ops)
     if (source[i] === "+" && i + 1 < source.length && source[i + 1] === "=") {
       result.push({ type: "assign_add" });
+      i += 2;
+      continue;
+    }
+
+    // Match comparison operators <= and >= (must come before single-char < and >)
+    if (
+      (source[i] === "<" || source[i] === ">") &&
+      i + 1 < source.length &&
+      source[i + 1] === "="
+    ) {
+      result.push({ type: "cmp", value: source.slice(i, i + 2) });
+      i += 2;
+      continue;
+    }
+
+    // Match comparison operators < and >
+    if (source[i] === "<" || source[i] === ">") {
+      result.push({ type: "cmp", value: source[i] });
+      i++;
+      continue;
+    }
+
+    // Match == and !=
+    if (
+      (source[i] === "=" && i + 1 < source.length && source[i + 1] === "=") ||
+      (source[i] === "!" && i + 1 < source.length && source[i + 1] === "=")
+    ) {
+      result.push({ type: "cmp", value: source.slice(i, i + 2) });
       i += 2;
       continue;
     }
@@ -392,7 +457,7 @@ function tokenize(source) {
         result.push({ type: "call", name });
       } else if (name === "let" || name === "mut") {
         result.push({ type: "keyword", value: name });
-      } else if (name === "if" || name === "else") {
+      } else if (name === "if" || name === "else" || name === "while") {
         result.push({ type: "keyword", value: name });
       } else {
         result.push({ type: "identifier", value: name });
