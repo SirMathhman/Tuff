@@ -49,6 +49,13 @@ export function tokenize(source) {
       continue;
     }
 
+    // Match '&' reference operator
+    if (source[i] === "&") {
+      result.push({ type: "ref" });
+      i++;
+      continue;
+    }
+
     // Match operators like +, -, *, /
     if ("+-*/".includes(source[i])) {
       result.push({ type: "op", value: source[i] });

@@ -77,6 +77,14 @@ test('executeTuff("let x = read(); { let x = read(); } x", "1 2") => 1', () => {
   expect(executeTuff("let x = read(); { let x = read(); } x", "1 2")).toBe(1);
 });
 
+test('executeTuff("let x = 1; let y = &x; *y") => 1', () => {
+  expect(executeTuff("let x = 1; let y = &x; *y")).toBe(1);
+});
+
+test('executeTuff("let x = 1; &x == &x") => 1', () => {
+  expect(executeTuff("let x = 1; &x == &x")).toBe(1);
+});
+
 test('executeTuff("let x = readBool(); x", "true") => 1', () => {
   expect(executeTuff("let x = readBool(); x", "true")).toBe(1);
 });

@@ -340,6 +340,20 @@ function parsePrimary() {
   if (pos >= tokens.length) throw new Error("Unexpected end");
   const token = tokens[pos];
 
+  // '&' reference operator — pass-through
+  if (token.type === "ref") {
+    pos++;
+    const inner = parsePrimary();
+    return { type: "ref", expr: inner };
+  }
+
+  // '*' dereference operator — pass-through
+  if (token.type === "op" && token.value === "*") {
+    pos++;
+    const inner = parsePrimary();
+    return { type: "deref", expr: inner };
+  }
+
   // Function call: read()
   if (token.type === "call") {
     pos++;
@@ -397,7 +411,11 @@ function emitExpr(node) {
     return String(node.value);
   }
   if (node.type === "binop") {
-    return `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`;
+    // Coerce comparison results to numbers (+true => 1, +false => 0)
+    const isCmp = "+-*/".includes(node.op);
+    return isCmp
+      ? `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`
+      : `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
   }
   if (node.type === "varref") {
     return node.name;
@@ -408,6 +426,10 @@ function emitExpr(node) {
   }
   if (node.type === "index") {
     return `${emitExpr(node.target)}[${emitExpr(node.index)}]`;
+  }
+  // ref/deref — pass-through, emit inner expression
+  if (node.type === "ref" || node.type === "deref") {
+    return emitExpr(node.expr);
   }
   throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
 }
