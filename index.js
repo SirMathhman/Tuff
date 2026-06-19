@@ -107,6 +107,17 @@ function validateRefs(node, declaredVars, mutableVars) {
     }
     validateRefs(node.value, declaredVars, mutableVars);
   }
+  // Array literal: validate each element
+  if (node.type === "array") {
+    for (const elem of node.elements) {
+      validateRefs(elem, declaredVars, mutableVars);
+    }
+  }
+  // Index access: validate target and index expressions
+  if (node.type === "index") {
+    validateRefs(node.target, declaredVars, mutableVars);
+    validateRefs(node.index, declaredVars, mutableVars);
+  }
   if (node.left) validateRefs(node.left, declaredVars, mutableVars);
   if (node.right) validateRefs(node.right, declaredVars, mutableVars);
   if (node.init) validateRefs(node.init, declaredVars, mutableVars);
@@ -298,13 +309,13 @@ function parsePrimary() {
   // Function call: read()
   if (token.type === "call") {
     pos++;
-    return { type: "call", name: token.name };
+    return parseIndexAccess({ type: "call", name: token.name });
   }
 
-  // Variable reference or bare identifier
+  // Variable reference or bare identifier, possibly followed by [index]
   if (token.type === "identifier") {
     pos++;
-    return { type: "varref", name: token.value };
+    return parseIndexAccess({ type: "varref", name: token.value });
   }
 
   // Numeric literal
@@ -313,7 +324,31 @@ function parsePrimary() {
     return { type: "numlit", value: token.value };
   }
 
+  // Array literal: [ expr ; expr ]
+  if (token.type === "bracket_open") {
+    pos++; // skip '['
+    const elements = [];
+    while (pos < tokens.length && tokens[pos].type !== "bracket_close") {
+      elements.push(parseExpr());
+    }
+    if (pos >= tokens.length) throw new Error("Expected ']'");
+    pos++; // skip ']'
+    return { type: "array", elements };
+  }
+
   throw new Error(`Unsupported token at ${pos}: ${JSON.stringify(token)}`);
+}
+
+function parseIndexAccess(base) {
+  while (pos < tokens.length && tokens[pos].type === "bracket_open") {
+    pos++; // skip '['
+    const index = parseExpr();
+    if (pos >= tokens.length || tokens[pos].type !== "bracket_close")
+      throw new Error("Expected ']'");
+    pos++; // skip ']'
+    base = { type: "index", target: base, index };
+  }
+  return base;
 }
 
 function emitExpr(node) {
@@ -332,6 +367,13 @@ function emitExpr(node) {
   }
   if (node.type === "varref") {
     return node.name;
+  }
+  if (node.type === "array") {
+    const elems = node.elements.map(emitExpr).join(",");
+    return `[${elems}]`;
+  }
+  if (node.type === "index") {
+    return `${emitExpr(node.target)}[${emitExpr(node.index)}]`;
   }
   throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
 }
@@ -478,6 +520,20 @@ function tokenize(source) {
     // Match ')' paren close
     if (source[i] === ")") {
       result.push({ type: "paren_close" });
+      i++;
+      continue;
+    }
+
+    // Match '[' bracket open
+    if (source[i] === "[") {
+      result.push({ type: "bracket_open" });
+      i++;
+      continue;
+    }
+
+    // Match ']' bracket close
+    if (source[i] === "]") {
+      result.push({ type: "bracket_close" });
       i++;
       continue;
     }

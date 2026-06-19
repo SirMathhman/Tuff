@@ -63,6 +63,10 @@ test('executeTuff("let count = read(); let mut sum = 0; for (i in 0..count) sum 
   ).toBe(6);
 });
 
+test('executeTuff("let array = [read()]; array[0]", "6") => 6', () => {
+  expect(executeTuff("let array = [read()]; array[0]", "6")).toBe(6);
+});
+
 test('executeTuff("let x = read(); { let x = read(); } x", "1 2") => 1', () => {
   expect(executeTuff("let x = read(); { let x = read(); } x", "1 2")).toBe(1);
 });
