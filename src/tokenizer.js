@@ -70,6 +70,13 @@ function tokenize(source) {
       continue;
     }
 
+    // Match ',' array element separator
+    if (source[i] === ",") {
+      result.push({ type: "comma" });
+      i++;
+      continue;
+    }
+
     // Match ';' statement separator
     if (source[i] === ";") {
       result.push({ type: "semi" });

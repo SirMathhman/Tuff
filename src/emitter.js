@@ -1,0 +1,170 @@
+// Module-level state shared with compileTuffToJS
+let refTargetVars, refHolderVars, refTargetArrayVars, arrayRefHolders;
+
+module.exports = {
+  init(refTV, rhv, rtaV, arh) {
+    refTargetVars = refTV;
+    refHolderVars = rhv;
+    refTargetArrayVars = rtaV;
+    arrayRefHolders = arh;
+  },
+
+  emitExpr(node, insideDeref = false) {
+    if (!node || typeof node !== "object") return "";
+    if (node.type === "call" && node.name === "read") {
+      return `parseInt(stdIn.split(/\\s+/)[ri++],10)`;
+    }
+    if (node.type === "call" && node.name === "readBool") {
+      return `+(stdIn.split(/\\s+/)[ri++]==="true")`;
+    }
+    if (node.type === "numlit") {
+      return String(node.value);
+    }
+    if (node.type === "binop") {
+      // Coerce comparison results to numbers (+true => 1, +false => 0)
+      const isCmp = "+-*/".includes(node.op);
+      return isCmp
+        ? `${this.emitExpr(node.left)}${node.op}${this.emitExpr(node.right)}`
+        : `+(${this.emitExpr(node.left)}${node.op}${this.emitExpr(node.right)})`;
+    }
+    if (node.type === "varref") {
+      // Arrays already have JS reference semantics — no slot wrapping needed
+      const isArrayRef = refTargetArrayVars.has(node.name);
+      const isHolderToArray = arrayRefHolders.has(node.name);
+      const needsUnwrap =
+        (!isArrayRef && !isHolderToArray && refTargetVars.has(node.name)) ||
+        (!insideDeref &&
+          !isArrayRef &&
+          !isHolderToArray &&
+          refHolderVars.has(node.name));
+      return needsUnwrap ? `${node.name}.v` : node.name;
+    }
+    if (node.type === "array") {
+      const elems = node.elements.map((e) => this.emitExpr(e)).join(",");
+      return `[${elems}]`;
+    }
+    if (node.type === "index") {
+      return `${this.emitExpr(node.target)}[${this.emitExpr(node.index)}]`;
+    }
+    // &varref — emit the whole slot object for identity comparison via JS ===
+    if (node.type === "ref" && node.expr?.type === "varref") {
+      return node.expr.name;
+    }
+    // *(base + offset) for array holders → base[offset]
+    if (
+      node.type === "deref" &&
+      node.expr?.type === "binop" &&
+      node.expr.op === "+" &&
+      node.expr.left?.type === "varref"
+    ) {
+      const baseName = node.expr.left.name;
+      if (arrayRefHolders.has(baseName)) {
+        return `${baseName}[${this.emitExpr(node.expr.right)}]`;
+      }
+    }
+    // *expr — dereference: unwrap .v from a ref/slot
+    if (node.type === "deref") {
+      const inner = this.emitExpr(node.expr, true);
+      return `${inner}.v`;
+    }
+    throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
+  },
+
+  emitStmt(stmt) {
+    // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
+    if (stmt.type === "let") {
+      const keyword = stmt.mutable ? "var" : "const";
+      const initVal = this.emitExpr(stmt.init);
+      const isRefInit = stmt.init?.type === "ref";
+      const isArrayVar = refTargetArrayVars.has(stmt.name);
+      return refTargetVars.has(stmt.name) && !isRefInit && !isArrayVar
+        ? `${keyword} ${stmt.name}={v:${initVal}}`
+        : `${keyword} ${stmt.name}=${initVal}`;
+    }
+    // x += expr compound assignment statement
+    if (stmt.type === "compound_assign_stmt") {
+      const lhs = stmt.target ? this.emitExpr(stmt.target) : stmt.name;
+      return `${lhs}${stmt.op}${this.emitExpr(stmt.value)}`;
+    }
+    // array[idx] = expr index assignment statement
+    if (stmt.type === "index_assign_stmt") {
+      return `${this.emitExpr(stmt.target)}=${this.emitExpr(stmt.value)}`;
+    }
+    // *target = value deref assignment statement
+    if (stmt.type === "deref_assign_stmt") {
+      const targetNode = stmt.target;
+      // Check for pointer arithmetic: *(base + offset)
+      if (
+        targetNode?.type === "binop" &&
+        targetNode.op === "+" &&
+        targetNode.left?.type === "varref"
+      ) {
+        const baseName = targetNode.left.name;
+        // If the base is an array ref holder, emit base[offset] directly
+        if (arrayRefHolders.has(baseName)) {
+          return `${baseName}[${this.emitExpr(targetNode.right)}]=${this.emitExpr(stmt.value)}`;
+        }
+      }
+      const targetName = targetNode?.name;
+      // For holders pointing to arrays, the ref holds a raw array — use index [0] instead of .v
+      const isHolderToArray = targetName && arrayRefHolders.has(targetName);
+      if (isHolderToArray) {
+        return `${targetName}[0]=${this.emitExpr(stmt.value)}`;
+      }
+      // For scalar holders, use .v to write through the slot
+      const targetPath = this.emitExpr(
+        { type: "varref", name: targetName },
+        true,
+      );
+      return `${targetPath}.v=${this.emitExpr(stmt.value)}`;
+    }
+    // x = expr assignment statement
+    if (stmt.type === "assign_stmt") {
+      return `${stmt.name}=${this.emitExpr(stmt.value)}`;
+    }
+    // { ... } block statement
+    if (stmt.type === "block") {
+      let blockJs = "{\n";
+      for (const s of stmt.stmts) {
+        blockJs += `${this.emitStmt(s)};\n`;
+      }
+      return blockJs + "}";
+    } // if (...) { ... } else { ... }
+    if (stmt.type === "if_stmt") {
+      let js = `if(${this.emitExpr(stmt.cond)}){\n`;
+      for (const s of stmt.thenBranch) {
+        js += `${this.emitStmt(s)};\n`;
+      }
+      js += `}`;
+      if (stmt.elseBranch) {
+        js += ` else {\n`;
+        for (const s of stmt.elseBranch) {
+          js += `${this.emitStmt(s)};\n`;
+        }
+        js += ` }`;
+      }
+      return js;
+    }
+    // while (...) { ... }
+    if (stmt.type === "while_stmt") {
+      let js = `while(${this.emitExpr(stmt.cond)}){\n`;
+      for (const s of stmt.body) {
+        js += `${this.emitStmt(s)};\n`;
+      }
+      js += `}`;
+      return js;
+    }
+    // for (i in start..end) { ... }
+    if (stmt.type === "for_stmt") {
+      let js = `var ${stmt.variable}=${this.emitExpr(stmt.from)};`;
+      js += `while(${stmt.variable}<${this.emitExpr(stmt.to)}){\n`;
+      for (const s of stmt.body) {
+        js += `${this.emitStmt(s)};\n`;
+      }
+      js += `${stmt.variable}+=1;`;
+      js += `}`;
+      return js;
+    } // Bare expression statement
+    return this.emitExpr(stmt);
+  },
+};

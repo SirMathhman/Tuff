@@ -95,6 +95,24 @@ test('executeTuff("let mut array = [0]; let slice = &array; slice[0] = read(); a
   ).toBe(1);
 });
 
+test('executeTuff("let mut array = [0]; let slice = &mut array; *slice = read(); array[0]", "1") => 1', () => {
+  expect(
+    executeTuff(
+      "let mut array = [0]; let slice = &mut array; *slice = read(); array[0]",
+      "1",
+    ),
+  ).toBe(1);
+});
+
+test('executeTuff("let mut array = [0, 0]; let slice = &mut array; *(slice + 1) = read(); array[1]", "1") => 1', () => {
+  expect(
+    executeTuff(
+      "let mut array = [0, 0]; let slice = &mut array; *(slice + 1) = read(); array[1]",
+      "1",
+    ),
+  ).toBe(1);
+});
+
 test('executeTuff("let x = 1; &x == &x") => 1', () => {
   expect(executeTuff("let x = 1; &x == &x")).toBe(1);
 });
