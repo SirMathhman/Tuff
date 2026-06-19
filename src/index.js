@@ -129,6 +129,11 @@ function validateRefs(node, declaredVars, mutableVars) {
     }
     validateRefs(node.value, declaredVars, mutableVars);
   }
+  // Deref assignment statement (*expr = value)
+  if (node.type === "deref_assign_stmt") {
+    validateRefs(node.target, declaredVars, mutableVars);
+    validateRefs(node.value, declaredVars, mutableVars);
+  }
   // Index assignment statement (array[idx] = expr)
   if (node.type === "index_assign_stmt") {
     validateRefs(node.target, declaredVars, mutableVars);
@@ -304,6 +309,19 @@ function parseStatement() {
     return { type: "assign_stmt", name, value: exprAst };
   }
 
+  // *expr = value ; (deref assignment statement) or bare *expr expression
+  if (token.type === "op" && token.value === "*") {
+    pos++; // skip '*'
+    const target = parsePrimary();
+    if (pos < tokens.length && tokens[pos].type === "assign") {
+      pos++; // skip '='
+      const exprAst = parseExpr();
+      return { type: "deref_assign_stmt", target, value: exprAst };
+    }
+    // Bare deref expression (e.g., *y)
+    return { type: "deref", expr: target };
+  }
+
   // { stmt; stmt; ... } (block statement)
   if (token.type === "brace_open") {
     pos++; // skip '{'
@@ -356,9 +374,17 @@ function parsePrimary() {
   if (pos >= tokens.length) throw new Error("Unexpected end");
   const token = tokens[pos];
 
-  // '&' reference operator — pass-through
+  // '&' reference operator — optional 'mut' keyword for &mut syntax
   if (token.type === "ref") {
     pos++;
+    // Consume optional 'mut' after '&' (&mut x)
+    if (
+      pos < tokens.length &&
+      tokens[pos].type === "keyword" &&
+      tokens[pos].value === "mut"
+    ) {
+      pos++;
+    }
     const inner = parsePrimary();
     return { type: "ref", expr: inner };
   }
@@ -474,6 +500,11 @@ function emitStmt(stmt) {
   // array[idx] = expr index assignment statement
   if (stmt.type === "index_assign_stmt") {
     return `${emitExpr(stmt.target)}=${emitExpr(stmt.value)}`;
+  }
+  // *target = value deref assignment statement
+  if (stmt.type === "deref_assign_stmt") {
+    const targetPath = emitExpr({ type: "varref", name: stmt.target?.name });
+    return `${targetPath}.v=${emitExpr(stmt.value)}`;
   }
   // x = expr assignment statement
   if (stmt.type === "assign_stmt") {
