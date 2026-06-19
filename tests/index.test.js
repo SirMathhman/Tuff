@@ -1,5 +1,4 @@
-import { test, expect } from "bun:test";
-import { compileTuffToJS } from "../src/index.js";
+const { compileTuffToJS } = require("../src/index.js");
 
 function executeTuff(source, stdIn = "") {
   // Don't change this!

@@ -1,8 +1,8 @@
-import { tokenize } from "./tokenizer.js";
+const { tokenize } = require("./tokenizer");
 
 let tokens, pos, refTargetVars;
 
-export function compileTuffToJS(source) {
+function compileTuffToJS(source) {
   if (source.trim() === "") return "return 0;";
 
   tokens = tokenize(source);
@@ -524,3 +524,5 @@ function emitStmt(stmt) {
   } // Bare expression statement
   return emitExpr(stmt);
 }
+
+module.exports = { compileTuffToJS };

@@ -1,4 +1,4 @@
-export function tokenize(source) {
+function tokenize(source) {
   const result = [];
   let i = 0;
   while (i < source.length) {
@@ -161,3 +161,5 @@ export function tokenize(source) {
   }
   return result;
 }
+
+module.exports = { tokenize };
