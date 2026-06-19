@@ -12,15 +12,19 @@ export function compileTuffToJS(source) {
     stmts.push(parseStatement());
   }
 
-  // Collect declared variable names for validation
+  // Collect declared variable names and mutability for validation
   const declaredVars = new Set();
+  const mutableVars = new Set();
   for (const s of stmts) {
-    if (s.type === "let") declaredVars.add(s.name);
+    if (s.type === "let") {
+      declaredVars.add(s.name);
+      if (s.mutable) mutableVars.add(s.name);
+    }
   }
 
-  // Validate all varrefs are declared
+  // Validate all varrefs are declared and assignments only to mut vars
   for (const s of stmts) {
-    validateRefs(s, declaredVars);
+    validateRefs(s, declaredVars, mutableVars);
   }
 
   // Emit JS for each statement, last one is returned
@@ -38,23 +42,40 @@ export function compileTuffToJS(source) {
   return js;
 }
 
-function validateRefs(node, declaredVars) {
+function validateRefs(node, declaredVars, mutableVars) {
   if (!node || typeof node !== "object") return;
   if (node.type === "varref" && !declaredVars.has(node.name)) {
     throw new Error(`Undefined variable: ${node.name}`);
   }
-  if (node.left) validateRefs(node.left, declaredVars);
-  if (node.right) validateRefs(node.right, declaredVars);
-  if (node.init) validateRefs(node.init, declaredVars);
+  // Assignment statement: target must be a declared mutable var
+  if (node.type === "assign_stmt") {
+    if (!mutableVars.has(node.name)) {
+      throw new Error(
+        `Cannot reassign immutable or undeclared variable: ${node.name}`,
+      );
+    }
+    validateRefs(node.value, declaredVars, mutableVars);
+  }
+  if (node.left) validateRefs(node.left, declaredVars, mutableVars);
+  if (node.right) validateRefs(node.right, declaredVars, mutableVars);
+  if (node.init) validateRefs(node.init, declaredVars, mutableVars);
 }
 
 function parseStatement() {
   if (pos >= tokens.length) throw new Error("Unexpected end");
   const token = tokens[pos];
 
-  // let x = expr ;
+  // let x = expr ; or let mut x = expr ;
   if (token.type === "keyword" && token.value === "let") {
     pos++; // skip 'let'
+
+    // Optionally consume 'mut' keyword
+    const mutable =
+      pos < tokens.length &&
+      tokens[pos].type === "keyword" &&
+      tokens[pos].value === "mut";
+    if (mutable) pos++;
+
     if (pos >= tokens.length || tokens[pos].type !== "identifier")
       throw new Error("Expected identifier after 'let'");
     const name = tokens[pos++].value;
@@ -64,7 +85,19 @@ function parseStatement() {
     pos++; // skip '='
 
     const exprAst = parseExpr();
-    return { type: "let", name, init: exprAst };
+    return { type: "let", name, mutable, init: exprAst };
+  }
+
+  // x = expr ; (assignment statement)
+  if (
+    token.type === "identifier" &&
+    pos + 1 < tokens.length &&
+    tokens[pos + 1].type === "assign"
+  ) {
+    const name = tokens[pos++].value;
+    pos++; // skip '='
+    const exprAst = parseExpr();
+    return { type: "assign_stmt", name, value: exprAst };
   }
 
   // Bare expression (also the last statement)
@@ -127,9 +160,14 @@ function emitExpr(node) {
 }
 
 function emitStmt(stmt) {
-  // let x = expr
+  // let/var declaration
   if (stmt.type === "let") {
-    return `let ${stmt.name}=${emitExpr(stmt.init)}`;
+    const keyword = stmt.mutable ? "var" : "const";
+    return `${keyword} ${stmt.name}=${emitExpr(stmt.init)}`;
+  }
+  // x = expr assignment statement
+  if (stmt.type === "assign_stmt") {
+    return `${stmt.name}=${emitExpr(stmt.value)}`;
   }
   // Bare expression statement
   return emitExpr(stmt);
@@ -178,7 +216,7 @@ function tokenize(source) {
           throw new Error("Expected ')'");
         i++; // skip ')'
         result.push({ type: "call", name });
-      } else if (name === "let") {
+      } else if (name === "let" || name === "mut") {
         result.push({ type: "keyword", value: name });
       } else {
         result.push({ type: "identifier", value: name });

@@ -15,6 +15,7 @@
   "type": "commonjs",
   "main": "./index.js",
   "scripts": {
-    "test": "bun test 1>&2"
+    "test": "bun test 1>&2",
+    "cpd" : "pmd cpd index.js index.test.js --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2"
   }
 }
