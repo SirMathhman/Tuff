@@ -60,6 +60,17 @@ module.exports = {
     if (node.type === "index") {
       return `${this.emitExpr(node.target)}[${this.emitExpr(node.index)}]`;
     }
+    // Property access: obj.key
+    if (node.type === "prop") {
+      return `${this.emitExpr(node.target)}.${node.key}`;
+    }
+    // Object literal: { key : expr , ... }
+    if (node.type === "object") {
+      const pairs = node.fields.map(
+        (f) => `"${f.key}":${this.emitExpr(f.value)}`,
+      );
+      return `{${pairs.join(",")}}`;
+    }
     // &varref — emit the whole slot object for identity comparison via JS ===
     if (node.type === "ref" && node.expr?.type === "varref") {
       return node.expr.name;

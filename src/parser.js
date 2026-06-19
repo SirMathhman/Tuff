@@ -100,20 +100,14 @@ module.exports = {
 
       // Parse optional comma-separated param names
       const params = [];
-      while (
-        pos < tokens.length &&
-        tokens[pos].type !== "paren_close"
-      ) {
+      while (pos < tokens.length && tokens[pos].type !== "paren_close") {
         if (tokens[pos].type === "identifier") {
           params.push(tokens[pos++].value);
         } else {
           throw new Error("Expected parameter name in function definition");
         }
         // Skip optional comma
-        if (
-          pos < tokens.length &&
-          tokens[pos].type === "comma"
-        ) {
+        if (pos < tokens.length && tokens[pos].type === "comma") {
           pos++;
         }
       }
@@ -353,6 +347,16 @@ module.exports = {
     if (pos >= tokens.length) throw new Error("Unexpected end");
     const token = tokens[pos];
 
+    // Object literal: { key : expr , key : expr }
+    if (
+      token.type === "brace_open" &&
+      pos + 1 < tokens.length &&
+      (tokens[pos + 1].type === "identifier" ||
+        tokens[pos + 1].type === "brace_close")
+    ) {
+      return this.parseObjectLiteral();
+    }
+
     // '&' reference operator — optional 'mut' keyword for &mut syntax
     if (token.type === "ref") {
       pos++;
@@ -390,24 +394,15 @@ module.exports = {
       const name = tokens[pos++].value;
 
       // Check for function call: identifier followed by '('
-      if (
-        pos < tokens.length &&
-        tokens[pos].type === "paren_open"
-      ) {
+      if (pos < tokens.length && tokens[pos].type === "paren_open") {
         pos++; // skip '('
 
         // Parse optional comma-separated argument expressions
         const args = [];
-        while (
-          pos < tokens.length &&
-          tokens[pos].type !== "paren_close"
-        ) {
+        while (pos < tokens.length && tokens[pos].type !== "paren_close") {
           args.push(this.parseExpr());
           // Skip optional comma
-          if (
-            pos < tokens.length &&
-            tokens[pos].type === "comma"
-          ) {
+          if (pos < tokens.length && tokens[pos].type === "comma") {
             pos++;
           }
         }
@@ -472,6 +467,49 @@ module.exports = {
         base = { type: "index", target: base, index: from };
       }
     }
+
+    // Chain property access via dot notation: .key
+    while (pos < tokens.length && tokens[pos].type === "dot") {
+      pos++;
+      if (pos >= tokens.length || tokens[pos].type !== "identifier") {
+        throw new Error("Expected property name after '.'");
+      }
+      const prop = tokens[pos++].value;
+      base = { type: "prop", target: base, key: prop };
+    }
+
     return base;
+  },
+
+  parseObjectLiteral() {
+    pos++; // skip '{'
+    const fields = [];
+    while (pos < tokens.length && tokens[pos].type !== "brace_close") {
+      if (tokens[pos].type === "identifier") {
+        const key = tokens[pos++].value;
+
+        // Expect ':' separator
+        if (pos >= tokens.length || tokens[pos].type !== "colon") {
+          throw new Error("Expected ':' after object field name");
+        }
+        pos++; // skip ':'
+
+        const value = this.parseExpr();
+        fields.push({ key, value });
+
+        // Skip optional comma separator
+        if (pos < tokens.length && tokens[pos].type === "comma") {
+          pos++;
+        }
+      } else {
+        throw new Error("Expected field name in object literal");
+      }
+    }
+
+    if (pos >= tokens.length || tokens[pos].type !== "brace_close") {
+      throw new Error("Expected '}' to close object literal");
+    }
+    pos++; // skip '}'
+    return { type: "object", fields };
   },
 };

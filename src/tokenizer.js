@@ -77,6 +77,20 @@ function tokenize(source) {
       continue;
     }
 
+    // Match ':' object field separator
+    if (source[i] === ":") {
+      result.push({ type: "colon" });
+      i++;
+      continue;
+    }
+
+    // Match '.' property access operator
+    if (source[i] === ".") {
+      result.push({ type: "dot" });
+      i++;
+      continue;
+    }
+
     // Match ',' array element separator
     if (source[i] === ",") {
       result.push({ type: "comma" });
