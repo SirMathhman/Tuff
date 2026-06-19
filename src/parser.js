@@ -17,10 +17,14 @@ module.exports = {
 
   validateRefs(node, declaredVars, mutableVars) {
     if (!node || typeof node !== "object") return;
+    // Function definition body references are validated against parent scope
+    if (node.type === "fn_def") {
+      this.validateRefs(node.body, declaredVars, mutableVars);
+      return;
+    }
     if (node.type === "varref" && !declaredVars.has(node.name)) {
       throw new Error(`Undefined variable: ${node.name}`);
-    }
-    // Assignment statement: target must be a declared mutable var
+    } // Assignment statement: target must be a declared mutable var
     if (node.type === "assign_stmt") {
       if (!mutableVars.has(node.name)) {
         throw new Error(
@@ -71,6 +75,26 @@ module.exports = {
   parseStatement() {
     if (pos >= tokens.length) throw new Error("Unexpected end");
     const token = tokens[pos];
+
+    // fn name() => expr ; (function definition)
+    if (token.type === "keyword" && token.value === "fn") {
+      pos++; // skip 'fn'
+
+      // Function name is in a call token since tokenizer greedily matches identifier()
+      if (pos >= tokens.length || tokens[pos].type !== "call") {
+        throw new Error("Expected function name after 'fn'");
+      }
+      const name = tokens[pos++].name;
+
+      // Expect fat arrow '=>'
+      if (pos >= tokens.length || tokens[pos].type !== "fat_arrow") {
+        throw new Error("Expected '=>' after function name");
+      }
+      pos++; // skip '=>'
+
+      const body = this.parseExpr();
+      return { type: "fn_def", name, body };
+    }
 
     // for (i in start..end) stmt;
     if (token.type === "keyword" && token.value === "for") {

@@ -63,6 +63,13 @@ function tokenize(source) {
       continue;
     }
 
+    // Match '=>' fat arrow (must come before single '=')
+    if (source[i] === "=" && i + 1 < source.length && source[i + 1] === ">") {
+      result.push({ type: "fat_arrow" });
+      i += 2;
+      continue;
+    }
+
     // Match '=' assignment operator
     if (source[i] === "=") {
       result.push({ type: "assign" });
@@ -155,6 +162,8 @@ function tokenize(source) {
         name === "while" ||
         name === "for"
       ) {
+        result.push({ type: "keyword", value: name });
+      } else if (name === "fn") {
         result.push({ type: "keyword", value: name });
       } else if (name === "in") {
         result.push({ type: "keyword", value: name });

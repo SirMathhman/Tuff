@@ -16,11 +16,17 @@ module.exports = {
 
   emitExpr(node, insideDeref = false) {
     if (!node || typeof node !== "object") return "";
+    // read() built-in
     if (node.type === "call" && node.name === "read") {
       return `parseInt(stdIn.split(/\\s+/)[ri++],10)`;
     }
+    // readBool() built-in
     if (node.type === "call" && node.name === "readBool") {
       return `+(stdIn.split(/\\s+/)[ri++]==="true")`;
+    }
+    // Generic function call: name() — emits name() for user-defined functions
+    if (node.type === "call") {
+      return `${node.name}()`;
     }
     if (node.type === "numlit") {
       return String(node.value);
@@ -86,6 +92,10 @@ module.exports = {
   },
 
   emitStmt(stmt) {
+    // fn name() => expr — function definition
+    if (stmt.type === "fn_def") {
+      return `function ${stmt.name}(){return(${this.emitExpr(stmt.body)})}`;
+    }
     // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
     if (stmt.type === "let") {
       const keyword = stmt.mutable ? "var" : "const";

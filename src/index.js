@@ -23,6 +23,10 @@ function compileTuffToJS(source) {
         declSet.add(s.name);
         if (s.mutable) mutSet.add(s.name);
       }
+      // Function definitions declare a callable name
+      if (s.type === "fn_def") {
+        declSet.add(s.name);
+      }
       if (s.type === "block") collectVars(s.stmts, declSet, mutSet);
     }
   }
@@ -143,7 +147,7 @@ function compileTuffToJS(source) {
     let js = "";
     for (let i = 0; i < stmts.length; i++) {
       const s = stmts[i];
-      if (i === stmts.length - 1 && s.type !== "block") {
+      if (i === stmts.length - 1 && s.type !== "block" && s.type !== "fn_def") {
         // Last non-block statement: return its value
         js += `return(${emitter.emitExpr(s)});\n`;
       } else {
