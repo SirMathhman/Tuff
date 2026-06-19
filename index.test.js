@@ -41,6 +41,10 @@ test('executeTuff("let mut x = read(); x = read(); x", "1 2") => 2', () => {
   expect(executeTuff("let mut x = read(); x = read(); x", "1 2")).toBe(2);
 });
 
+test('executeTuff("let mut x = read(); x += read(); x", "1 2") => 3', () => {
+  expect(executeTuff("let mut x = read(); x += read(); x", "1 2")).toBe(3);
+});
+
 test('executeTuff("let x = read(); { let x = read(); } x", "1 2") => 1', () => {
   expect(executeTuff("let x = read(); { let x = read(); } x", "1 2")).toBe(1);
 });

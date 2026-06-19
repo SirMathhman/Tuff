@@ -90,6 +90,15 @@ function validateRefs(node, declaredVars, mutableVars) {
     }
     validateRefs(node.value, declaredVars, mutableVars);
   }
+  // Compound assignment statement (x += expr): target must be a declared mutable var
+  if (node.type === "compound_assign_stmt") {
+    if (!mutableVars.has(node.name)) {
+      throw new Error(
+        `Cannot reassign immutable or undeclared variable: ${node.name}`,
+      );
+    }
+    validateRefs(node.value, declaredVars, mutableVars);
+  }
   if (node.left) validateRefs(node.left, declaredVars, mutableVars);
   if (node.right) validateRefs(node.right, declaredVars, mutableVars);
   if (node.init) validateRefs(node.init, declaredVars, mutableVars);
@@ -146,6 +155,18 @@ function parseStatement() {
 
     const exprAst = parseExpr();
     return { type: "let", name, mutable, init: exprAst };
+  }
+
+  // x += expr ; (compound assignment statement)
+  if (
+    token.type === "identifier" &&
+    pos + 1 < tokens.length &&
+    tokens[pos + 1].type === "assign_add"
+  ) {
+    const name = tokens[pos++].value;
+    pos++; // skip '+='
+    const exprAst = parseExpr();
+    return { type: "compound_assign_stmt", name, op: "+=", value: exprAst };
   }
 
   // x = expr ; (assignment statement)
@@ -249,6 +270,10 @@ function emitStmt(stmt) {
     const keyword = stmt.mutable ? "var" : "const";
     return `${keyword} ${stmt.name}=${emitExpr(stmt.init)}`;
   }
+  // x += expr compound assignment statement
+  if (stmt.type === "compound_assign_stmt") {
+    return `${stmt.name}${stmt.op}${emitExpr(stmt.value)}`;
+  }
   // x = expr assignment statement
   if (stmt.type === "assign_stmt") {
     return `${stmt.name}=${emitExpr(stmt.value)}`;
@@ -285,6 +310,13 @@ function tokenize(source) {
   while (i < source.length) {
     if (/\s/.test(source[i])) {
       i++;
+      continue;
+    }
+
+    // Match '+=', '-=', '*=', '/=' compound-assignment operators (must come before single-char ops)
+    if (source[i] === "+" && i + 1 < source.length && source[i + 1] === "=") {
+      result.push({ type: "assign_add" });
+      i += 2;
       continue;
     }
 
