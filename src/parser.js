@@ -285,6 +285,33 @@ export default {
 
       const mutable = this.consumeMut();
 
+      // Check for object destructuring pattern: let { x, y } = expr
+      if (pos < tokens.length && tokens[pos].type === "brace_open") {
+        pos++; // skip '{'
+        const fields = [];
+        while (pos < tokens.length && tokens[pos].type !== "brace_close") {
+          if (tokens[pos].type !== "identifier") {
+            throw new Error("Expected identifier in destructuring pattern");
+          }
+          fields.push(tokens[pos++].value);
+          // Skip optional comma separator
+          if (pos < tokens.length && tokens[pos].type === "comma") {
+            pos++;
+          }
+        }
+        if (pos >= tokens.length || tokens[pos].type !== "brace_close") {
+          throw new Error("Expected '}' to close destructuring pattern");
+        }
+        pos++; // skip '}'
+
+        if (pos >= tokens.length || tokens[pos].type !== "assign")
+          throw new Error("Expected '=' after destructuring pattern");
+        pos++; // skip '='
+
+        const exprAst = this.parseExpr();
+        return { type: "let", mutable, init: exprAst, fields };
+      }
+
       if (pos >= tokens.length || tokens[pos].type !== "identifier")
         throw new Error("Expected identifier after 'let'");
       const name = tokens[pos++].value;

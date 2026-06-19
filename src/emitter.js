@@ -115,6 +115,11 @@ export function emitStmt(stmt) {
   // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
   if (stmt.type === "let") {
     const keyword = stmt.mutable ? "var" : "const";
+    // Object destructuring: let { x, y } = expr → const{x,y}=expr
+    if (stmt.fields) {
+      const initVal = emitExpr(stmt.init);
+      return `${keyword}{${stmt.fields.join(",")}}=${initVal}`;
+    }
     const initVal = emitExpr(stmt.init);
     const isRefInit = stmt.init?.type === "ref";
     const isArrayVar = refTargetArrayVars.has(stmt.name);

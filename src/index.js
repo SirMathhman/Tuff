@@ -9,8 +9,16 @@ export { compileAllTuffToJSBundled };
 function collectVars(stmts, declSet, mutSet) {
   for (const s of stmts) {
     if (s.type === "let") {
-      declSet.add(s.name);
-      if (s.mutable) mutSet.add(s.name);
+      // Destructuring pattern: let { x, y } = expr → declare each field
+      if (s.fields) {
+        for (const f of s.fields) {
+          declSet.add(f);
+          if (s.mutable) mutSet.add(f);
+        }
+      } else {
+        declSet.add(s.name);
+        if (s.mutable) mutSet.add(s.name);
+      }
     }
     // Function definitions declare a callable name
     if (s.type === "fn_def") {
