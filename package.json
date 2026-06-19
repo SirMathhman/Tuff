@@ -15,6 +15,6 @@
   "type": "commonjs",
   "main": "./index.js",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test 1>&2"
   }
 }
