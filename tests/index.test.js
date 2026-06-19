@@ -242,6 +242,16 @@ test('executeAllTuff(["index"], {"index": "let { x } = lib; x", "lib": "out let 
   ).toBe(1);
 });
 
+test('executeAllTuff(["index"], {"index": "lib.x", "lib": "out let x = read();"}, "1") => 1', () => {
+  expect(
+    executeAllTuff(
+      ["index"],
+      { index: "lib.x", lib: "out let x = read();" },
+      "1",
+    ),
+  ).toBe(1);
+});
+
 test('executeAllTuff(["index"], {"index": "unknown::z"}) throws', () => {
   expect(() =>
     compileAllTuffToJSBundled({ index: "unknown::z" }, "index"),
