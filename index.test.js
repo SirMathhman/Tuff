@@ -16,6 +16,7 @@ test("executeTuff(whitespace) => 0", () => {
   expect(executeTuff("\t\n\r")).toBe(0);
   expect(executeTuff(" \n\t ")).toBe(0);
 });
+
 test('executeTuff("read()", "1") => 1', () => {
   expect(executeTuff("read()", "1")).toBe(1);
 });
@@ -38,6 +39,10 @@ test('executeTuff("let x = read(); x", "1") => 1', () => {
 
 test('executeTuff("let mut x = read(); x = read(); x", "1 2") => 2', () => {
   expect(executeTuff("let mut x = read(); x = read(); x", "1 2")).toBe(2);
+});
+
+test('executeTuff("let x = read(); { let x = read(); } x", "1 2") => 1', () => {
+  expect(executeTuff("let x = read(); { let x = read(); } x", "1 2")).toBe(1);
 });
 
 test("compileTuffToJS throws on unexpected character", () => {

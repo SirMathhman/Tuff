@@ -13,32 +13,55 @@ export function compileTuffToJS(source) {
   }
 
   // Collect declared variable names and mutability for validation
+  function collectVars(stmts, declSet, mutSet) {
+    for (const s of stmts) {
+      if (s.type === "let") {
+        declSet.add(s.name);
+        if (s.mutable) mutSet.add(s.name);
+      }
+      if (s.type === "block") collectVars(s.stmts, declSet, mutSet);
+    }
+  }
   const declaredVars = new Set();
   const mutableVars = new Set();
-  for (const s of stmts) {
-    if (s.type === "let") {
-      declaredVars.add(s.name);
-      if (s.mutable) mutableVars.add(s.name);
-    }
-  }
+  collectVars(stmts, declaredVars, mutableVars);
 
   // Validate all varrefs are declared and assignments only to mut vars
-  for (const s of stmts) {
-    validateRefs(s, declaredVars, mutableVars);
-  }
-
-  // Emit JS for each statement, last one is returned
-  let js = "let ri=0;\n";
-  for (let i = 0; i < stmts.length; i++) {
-    const s = stmts[i];
-    if (i === stmts.length - 1) {
-      // Last statement: return its value
-      js += `return(${emitExpr(s)});\n`;
-    } else {
-      js += `${emitStmt(s)};\n`;
+  function forEachStmt(stmts, declSet, mutSet, fn) {
+    for (const s of stmts) {
+      if (s.type === "block") {
+        validateBlock(s.stmts, new Set(declSet), new Set(mutSet));
+      } else {
+        fn(s);
+      }
     }
   }
 
+  function validateStmts(stmts, declSet, mutSet) {
+    forEachStmt(stmts, declSet, mutSet, (s) => validateRefs(s, declSet, mutSet));
+  }
+
+  function validateBlock(stmts, declSet, mutSet) {
+    collectVars(stmts, declSet, mutSet);
+    forEachStmt(stmts, declSet, mutSet, (s) => validateRefs(s, declSet, mutSet));
+  }
+
+  validateStmts(stmts, declaredVars, mutableVars);
+  // Emit JS for each statement, last one is returned
+  function emitTop(stmts) {
+    let js = "";
+    for (let i = 0; i < stmts.length; i++) {
+      const s = stmts[i];
+      if (i === stmts.length - 1 && s.type !== "block") {
+        // Last non-block statement: return its value
+        js += `return(${emitExpr(s)});\n`;
+      } else {
+        js += `${emitStmt(s)};\n`;
+      }
+    }
+    return js;
+  }
+  let js = "let ri=0;\n" + emitTop(stmts);
   return js;
 }
 
@@ -98,6 +121,18 @@ function parseStatement() {
     pos++; // skip '='
     const exprAst = parseExpr();
     return { type: "assign_stmt", name, value: exprAst };
+  }
+
+  // { stmt; stmt; ... } (block statement)
+  if (token.type === "brace_open") {
+    pos++; // skip '{'
+    const blockStmts = [];
+    while (pos < tokens.length && tokens[pos].type !== "brace_close") {
+      blockStmts.push(parseStatement());
+    }
+    if (pos >= tokens.length) throw new Error("Expected '}'");
+    pos++; // skip '}'
+    return { type: "block", stmts: blockStmts };
   }
 
   // Bare expression (also the last statement)
@@ -169,6 +204,14 @@ function emitStmt(stmt) {
   if (stmt.type === "assign_stmt") {
     return `${stmt.name}=${emitExpr(stmt.value)}`;
   }
+  // { ... } block statement
+  if (stmt.type === "block") {
+    let blockJs = "{\n";
+    for (const s of stmt.stmts) {
+      blockJs += `${emitStmt(s)};\n`;
+    }
+    return blockJs + "}";
+  }
   // Bare expression statement
   return emitExpr(stmt);
 }
@@ -199,6 +242,20 @@ function tokenize(source) {
     // Match ';' statement separator
     if (source[i] === ";") {
       result.push({ type: "semi" });
+      i++;
+      continue;
+    }
+
+    // Match '{' block open
+    if (source[i] === "{") {
+      result.push({ type: "brace_open" });
+      i++;
+      continue;
+    }
+
+    // Match '}' block close
+    if (source[i] === "}") {
+      result.push({ type: "brace_close" });
       i++;
       continue;
     }
