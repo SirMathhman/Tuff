@@ -1,6 +1,6 @@
 import { tokenize } from "./tokenizer.js";
 
-let tokens, pos;
+let tokens, pos, refTargetVars;
 
 export function compileTuffToJS(source) {
   if (source.trim() === "") return "return 0;";
@@ -68,6 +68,22 @@ export function compileTuffToJS(source) {
   }
 
   validateStmts(stmts, declaredVars, mutableVars);
+
+  // Collect variables that are referenced with & — these need unique slot objects for identity tracking
+  refTargetVars = new Set();
+  function collectRefTargets(node) {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "ref" && node.expr?.type === "varref") {
+      refTargetVars.add(node.expr.name);
+    }
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (Array.isArray(child)) child.forEach(collectRefTargets);
+      else if (child && typeof child === "object") collectRefTargets(child);
+    }
+  }
+  stmts.forEach(collectRefTargets);
+
   // Emit JS for each statement, last one is returned
   function emitTop(stmts) {
     let js = "";
@@ -418,7 +434,8 @@ function emitExpr(node) {
       : `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
   }
   if (node.type === "varref") {
-    return node.name;
+    // If this var is a ref target, unwrap .v from its slot object
+    return refTargetVars.has(node.name) ? `${node.name}.v` : node.name;
   }
   if (node.type === "array") {
     const elems = node.elements.map(emitExpr).join(",");
@@ -427,18 +444,27 @@ function emitExpr(node) {
   if (node.type === "index") {
     return `${emitExpr(node.target)}[${emitExpr(node.index)}]`;
   }
-  // ref/deref — pass-through, emit inner expression
-  if (node.type === "ref" || node.type === "deref") {
-    return emitExpr(node.expr);
+  // &varref — emit the whole slot object for identity comparison via JS ===
+  if (node.type === "ref" && node.expr?.type === "varref") {
+    return node.expr.name;
+  }
+  // *expr — dereference: unwrap .v from a ref/slot
+  if (node.type === "deref") {
+    const inner = emitExpr(node.expr);
+    return `${inner}.v`;
   }
   throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
 }
 
 function emitStmt(stmt) {
-  // let/var declaration
+  // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly)
   if (stmt.type === "let") {
     const keyword = stmt.mutable ? "var" : "const";
-    return `${keyword} ${stmt.name}=${emitExpr(stmt.init)}`;
+    const initVal = emitExpr(stmt.init);
+    const isRefInit = stmt.init?.type === "ref";
+    return refTargetVars.has(stmt.name) && !isRefInit
+      ? `${keyword} ${stmt.name}={v:${initVal}}`
+      : `${keyword} ${stmt.name}=${initVal}`;
   }
   // x += expr compound assignment statement
   if (stmt.type === "compound_assign_stmt") {
