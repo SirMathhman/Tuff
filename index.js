@@ -230,9 +230,11 @@ function emitExpr(node) {
   }
   if (node.type === "call" && node.name === "readBool") {
     return `+(stdIn.split(/\\s+/)[ri++]===\"true\")`;
-  }  if (node.type === "numlit") {
+  }
+  if (node.type === "numlit") {
     return String(node.value);
-  }  if (node.type === "binop") {
+  }
+  if (node.type === "binop") {
     return `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`;
   }
   if (node.type === "varref") {
@@ -258,7 +260,7 @@ function emitStmt(stmt) {
       blockJs += `${emitStmt(s)};\n`;
     }
     return blockJs + "}";
-  }	// if (...) { ... } else { ... }
+  } // if (...) { ... } else { ... }
   if (stmt.type === "if_stmt") {
     let js = `if(${emitExpr(stmt.cond)}){\n`;
     for (const s of stmt.thenBranch) {
@@ -273,7 +275,7 @@ function emitStmt(stmt) {
       js += ` }`;
     }
     return js;
-  }  // Bare expression statement
+  } // Bare expression statement
   return emitExpr(stmt);
 }
 
@@ -307,21 +309,21 @@ function tokenize(source) {
       continue;
     }
 
-// Match '(' paren open
-	if (source[i] === "(") {
-		result.push({ type: "paren_open" });
-		i++;
-		continue;
-	}
+    // Match '(' paren open
+    if (source[i] === "(") {
+      result.push({ type: "paren_open" });
+      i++;
+      continue;
+    }
 
-	// Match ')' paren close
-	if (source[i] === ")") {
-		result.push({ type: "paren_close" });
-		i++;
-		continue;
-	}
+    // Match ')' paren close
+    if (source[i] === ")") {
+      result.push({ type: "paren_close" });
+      i++;
+      continue;
+    }
 
-	// Match '{' block open
+    // Match '{' block open
     if (source[i] === "{") {
       result.push({ type: "brace_open" });
       i++;

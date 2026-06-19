@@ -50,7 +50,9 @@ test('executeTuff("let x = readBool(); x", "true") => 1', () => {
 });
 
 test('executeTuff("let mut x = 0; if (readBool()) x = 1; else x = 2; x", "true") => 1', () => {
-  expect(executeTuff("let mut x = 0; if (readBool()) x = 1; else x = 2; x", "true")).toBe(1);
+  expect(
+    executeTuff("let mut x = 0; if (readBool()) x = 1; else x = 2; x", "true"),
+  ).toBe(1);
 });
 
 test("compileTuffToJS throws on unexpected character", () => {
