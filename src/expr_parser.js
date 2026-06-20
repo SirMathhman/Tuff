@@ -150,6 +150,12 @@ export function parsePrimary() {
     });
   }
 
+  // String literal — chain into index/property access for `"hello".length` etc.
+  if (token.type === "string") {
+    state.pos++;
+    return parseIndexAccess({ type: "strlit", value: token.value });
+  }
+
   // Numeric literal
   if (token.type === "number") {
     state.pos++;

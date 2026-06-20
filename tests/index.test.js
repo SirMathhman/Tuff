@@ -160,6 +160,14 @@ test('executeTuff("let temp = { value : read() }; temp.value", "1") => 1', () =>
   expect(executeTuff("let temp = { value : read() }; temp.value", "1")).toBe(1);
 });
 
+test('executeTuff("readString().length", "test foo") => 4', () => {
+  expect(executeTuff("readString().length", "test foo")).toBe(4);
+});
+
+test('executeTuff("test".length, "test foo") => 4', () => {
+  expect(executeTuff('"test".length', "test foo")).toBe(4);
+});
+
 test("compileTuffToJS throws on unexpected character", () => {
   expect(() => compileTuffToJS("@foo")).toThrow();
 });

@@ -154,6 +154,15 @@ function tokenize(source) {
       continue;
     }
 
+    // Match double-quoted string literals like "hello"
+    if (source[i] === '"') {
+      const endQuote = source.indexOf('"', i + 1);
+      if (endQuote === -1) throw new Error(`Unterminated string at ${i}`);
+      result.push({ type: "string", value: source.slice(i + 1, endQuote) });
+      i = endQuote + 1;
+      continue;
+    }
+
     // Match numeric literals like 0, 42, -3.14
     const numMatch = source.slice(i).match(/^(-?\d+(\.\d+)?)/);
     if (numMatch) {

@@ -23,6 +23,10 @@ export function emitExpr(node, insideDeref = false) {
   if (node.type === "call" && node.name === "readBool") {
     return `+(stdIn.split(/\\s+/)[ri++]==="true")`;
   }
+  // readString() built-in — reads next whitespace-separated token as a string
+  if (node.type === "call" && node.name === "readString") {
+    return `(stdIn.split(/\\s+/)[ri++])`;
+  }
   // Generic function call: name(args) — emits name(arg1, arg2); also handles module::name calls
   if (node.type === "call") {
     const args = node.args ? node.args.map((a) => emitExpr(a)).join(",") : "";
@@ -30,6 +34,9 @@ export function emitExpr(node, insideDeref = false) {
       ? `__mod_${node.name.replace("::", "_")}`
       : node.name;
     return `${resolvedName}(${args})`;
+  }
+  if (node.type === "strlit") {
+    return JSON.stringify(node.value);
   }
   if (node.type === "numlit") {
     return String(node.value);
