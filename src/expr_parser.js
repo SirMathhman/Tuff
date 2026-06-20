@@ -3,7 +3,10 @@ import state, { parseBraceIdentList } from "./parser_state";
 
 export function parseExpr() {
   let left = parseComparison();
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type === "semi") {
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "semi"
+  ) {
     state.pos++; // skip ';'
   }
   return left;
@@ -11,7 +14,10 @@ export function parseExpr() {
 
 function parseComparison() {
   let left = parseAddSub();
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type === "cmp") {
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "cmp"
+  ) {
     const opVal = state.tokens[state.pos++].value;
     const right = parseAddSub();
     left = { type: "binop", op: opVal, left, right };
@@ -66,7 +72,10 @@ export function parsePrimary() {
   if (token.type === "paren_open") {
     state.pos++; // skip '('
     const inner = parseExpr();
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_close"
+    )
       throw new Error("Expected ')'");
     state.pos++; // skip ')'
     return inner;
@@ -86,9 +95,15 @@ export function parsePrimary() {
     // Check for module path: identifier :: identifier
     let isModuleRef = false;
     let name = moduleName;
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "module_sep") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "module_sep"
+    ) {
       state.pos++; // skip '::'
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "identifier"
+      ) {
         throw new Error("Expected identifier after '::'");
       }
       name = `${moduleName}::${state.tokens[state.pos++].value}`;
@@ -96,20 +111,32 @@ export function parsePrimary() {
     }
 
     // Check for function call: identifier followed by '('
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "paren_open") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "paren_open"
+    ) {
       state.pos++; // skip '('
 
       // Parse optional comma-separated argument expressions
       const args = [];
-      while (state.pos < state.tokens.length && state.tokens[state.pos].type !== "paren_close") {
+      while (
+        state.pos < state.tokens.length &&
+        state.tokens[state.pos].type !== "paren_close"
+      ) {
         args.push(parseExpr());
         // Skip optional comma
-        if (state.pos < state.tokens.length && state.tokens[state.pos].type === "comma") {
+        if (
+          state.pos < state.tokens.length &&
+          state.tokens[state.pos].type === "comma"
+        ) {
           state.pos++;
         }
       }
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "paren_close"
+      ) {
         throw new Error("Expected ')'");
       }
       state.pos++; // skip ')'
@@ -133,12 +160,16 @@ export function parsePrimary() {
   if (token.type === "bracket_open") {
     state.pos++; // skip '['
     const elements = [];
-    while (state.pos < state.tokens.length && state.tokens[state.pos].type !== "bracket_close") {
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type !== "bracket_close"
+    ) {
       elements.push(parseExpr());
       // Skip optional comma or semicolon separators
       if (
         state.pos < state.tokens.length &&
-        (state.tokens[state.pos].type === "comma" || state.tokens[state.pos].type === "semi")
+        (state.tokens[state.pos].type === "comma" ||
+          state.tokens[state.pos].type === "semi")
       ) {
         state.pos++;
       }
@@ -148,25 +179,39 @@ export function parsePrimary() {
     return { type: "array", elements };
   }
 
-  throw new Error(`Unsupported token at ${state.pos}: ${JSON.stringify(token)}`);
+  throw new Error(
+    `Unsupported token at ${state.pos}: ${JSON.stringify(token)}`,
+  );
 }
 
 export function parseIndexAccess(base) {
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type === "bracket_open") {
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "bracket_open"
+  ) {
     state.pos++; // skip '['
     const from = parseExpr();
 
     // Check for range slice: [start..end]
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "range") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "range"
+    ) {
       state.pos++; // skip '..'
       const to = parseExpr();
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "bracket_close")
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "bracket_close"
+      )
         throw new Error("Expected ']'");
       state.pos++; // skip ']'
       base = { type: "slice", target: base, from, to };
     } else {
       // Regular index access
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "bracket_close")
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "bracket_close"
+      )
         throw new Error("Expected ']'");
       state.pos++; // skip ']'
       base = { type: "index", target: base, index: from };
@@ -174,9 +219,15 @@ export function parseIndexAccess(base) {
   }
 
   // Chain property access via dot notation: .key
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type === "dot") {
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "dot"
+  ) {
     state.pos++;
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    ) {
       throw new Error("Expected property name after '.'");
     }
     const prop = state.tokens[state.pos++].value;
@@ -188,7 +239,10 @@ export function parseIndexAccess(base) {
 
 function parseObjectLiteral() {
   const fields = parseBraceIdentList((key) => {
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "colon") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "colon"
+    ) {
       throw new Error("Expected ':' after object field name");
     }
     state.pos++; // skip ':'

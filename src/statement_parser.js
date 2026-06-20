@@ -78,20 +78,31 @@ function consumeMut() {
 // Shared helper: parse comma-separated params inside parens
 function parseParams() {
   const params = [];
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type !== "paren_close") {
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type !== "paren_close"
+  ) {
     if (state.tokens[state.pos].type === "identifier") {
       params.push(state.tokens[state.pos++].value);
     } else {
       throw new Error("Expected parameter name in function definition");
     }
     // Skip optional comma
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "comma") state.pos++;
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "comma"
+    )
+      state.pos++;
   }
   return params;
 }
 
 export function parseStatement() {
-  while (state.pos < state.tokens.length && state.tokens[state.pos].type === "semi") state.pos++; // skip trailing ';' from previous statement
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "semi"
+  )
+    state.pos++; // skip trailing ';' from previous statement
   if (state.pos >= state.tokens.length) throw new Error("Unexpected end");
   const token = state.tokens[state.pos];
 
@@ -100,26 +111,38 @@ export function parseStatement() {
     state.pos++; // skip 'fn'
 
     // Function name is an identifier
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    ) {
       throw new Error("Expected function name after 'fn'");
     }
     const name = state.tokens[state.pos++].value;
 
     // Expect '(' for params list
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_open") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_open"
+    ) {
       throw new Error("Expected '(' after function name");
     }
     state.pos++; // skip '('
 
     const params = parseParams();
 
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_close"
+    ) {
       throw new Error("Expected ')' after function params");
     }
     state.pos++; // skip ')'
 
     // Expect fat arrow '=>'
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "fat_arrow") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "fat_arrow"
+    ) {
       throw new Error("Expected '=>' after function name");
     }
     state.pos++; // skip '=>'
@@ -131,12 +154,18 @@ export function parseStatement() {
   // for (i in start..end) stmt;
   if (token.type === "keyword" && token.value === "for") {
     state.pos++; // skip 'for'
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_open")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_open"
+    )
       throw new Error("Expected '(' after 'for'");
     state.pos++; // skip '('
 
     // Expect identifier for loop variable
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    ) {
       throw new Error("Expected identifier in for loop");
     }
     const variable = state.tokens[state.pos++].value;
@@ -153,13 +182,19 @@ export function parseStatement() {
 
     // Parse range: expr .. expr
     const from = parseExpr();
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "range") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "range"
+    ) {
       throw new Error("Expected '..' in for loop range");
     }
     state.pos++; // skip '..'
     const to = parseExpr();
 
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_close"
+    )
       throw new Error("Expected ')' after for loop range");
     state.pos++; // skip ')'
 
@@ -170,11 +205,17 @@ export function parseStatement() {
   // while (cond) stmt;
   if (token.type === "keyword" && token.value === "while") {
     state.pos++; // skip 'while'
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_open")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_open"
+    )
       throw new Error("Expected '(' after 'while'");
     state.pos++; // skip '('
     const cond = parseExpr();
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_close"
+    )
       throw new Error("Expected ')' after while condition");
     state.pos++; // skip ')'
 
@@ -185,11 +226,17 @@ export function parseStatement() {
   // if (expr) stmt; else stmt;
   if (token.type === "keyword" && token.value === "if") {
     state.pos++; // skip 'if'
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_open")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_open"
+    )
       throw new Error("Expected '(' after 'if'");
     state.pos++; // skip '('
     const cond = parseExpr();
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_close"
+    )
       throw new Error("Expected ')' after condition");
     state.pos++; // skip ')'
 
@@ -221,16 +268,25 @@ export function parseStatement() {
     state.pos++; // skip 'let'
 
     // Expect destructuring pattern: { x, y }
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "brace_open") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "brace_open"
+    ) {
       throw new Error("Expected '{' in extern import pattern");
     }
     const fields = parseDestructuringPattern();
 
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "assign")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "assign"
+    )
       throw new Error("Expected '=' after extern import pattern");
     state.pos++; // skip '='
 
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    ) {
       throw new Error("Expected module name in extern import");
     }
     const moduleName = state.tokens[state.pos++].value;
@@ -246,26 +302,41 @@ export function parseStatement() {
       throw new Error("Expected 'let' or 'fn' after 'out'");
 
     // out fn name(params) => expr ;
-    if (state.tokens[state.pos].type === "keyword" && state.tokens[state.pos].value === "fn") {
+    if (
+      state.tokens[state.pos].type === "keyword" &&
+      state.tokens[state.pos].value === "fn"
+    ) {
       state.pos++; // skip 'fn'
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "identifier"
+      ) {
         throw new Error("Expected function name after 'out fn'");
       }
       const name = state.tokens[state.pos++].value;
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_open") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "paren_open"
+      ) {
         throw new Error("Expected '(' after exported function name");
       }
       state.pos++; // skip '('
 
       const params = parseParams();
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "paren_close") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "paren_close"
+      ) {
         throw new Error("Expected ')' after exported function params");
       }
       state.pos++; // skip ')'
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "fat_arrow") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "fat_arrow"
+      ) {
         throw new Error("Expected '=>' in exported function definition");
       }
       state.pos++; // skip '=>'
@@ -275,17 +346,26 @@ export function parseStatement() {
     }
 
     // out let x = expr ; or out mut x = expr ;
-    if (state.tokens[state.pos].type === "keyword" && state.tokens[state.pos].value === "let") {
+    if (
+      state.tokens[state.pos].type === "keyword" &&
+      state.tokens[state.pos].value === "let"
+    ) {
       state.pos++; // skip 'let'
 
       const mutable = consumeMut();
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "identifier"
+      ) {
         throw new Error("Expected identifier after 'out let'");
       }
       const name = state.tokens[state.pos++].value;
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "assign") {
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "assign"
+      ) {
         throw new Error("Expected '=' after exported variable name");
       }
       state.pos++; // skip '='
@@ -304,10 +384,16 @@ export function parseStatement() {
     const mutable = consumeMut();
 
     // Check for object destructuring pattern: let { x, y } = expr
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "brace_open") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "brace_open"
+    ) {
       const fields = parseDestructuringPattern();
 
-      if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "assign")
+      if (
+        state.pos >= state.tokens.length ||
+        state.tokens[state.pos].type !== "assign"
+      )
         throw new Error("Expected '=' after destructuring pattern");
       state.pos++; // skip '='
 
@@ -315,11 +401,17 @@ export function parseStatement() {
       return { type: "let", mutable, init: exprAst, fields };
     }
 
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    )
       throw new Error("Expected identifier after 'let'");
     const name = state.tokens[state.pos++].value;
 
-    if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "assign")
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "assign"
+    )
       throw new Error("Expected '=' after variable name");
     state.pos++; // skip '='
 
@@ -336,7 +428,10 @@ export function parseStatement() {
     const name = state.tokens[state.pos++].value;
     // Parse index access chain
     let target = parseIndexAccess({ type: "varref", name });
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "assign_add") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "assign_add"
+    ) {
       state.pos++; // skip '+='
       const exprAst = parseExpr();
       return {
@@ -346,7 +441,10 @@ export function parseStatement() {
         value: exprAst,
       };
     }
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "assign") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "assign"
+    ) {
       state.pos++; // skip '='
       const exprAst = parseExpr();
       return { type: "index_assign_stmt", target, value: exprAst };
@@ -383,7 +481,10 @@ export function parseStatement() {
   if (token.type === "op" && token.value === "*") {
     state.pos++; // skip '*'
     const target = parsePrimary();
-    if (state.pos < state.tokens.length && state.tokens[state.pos].type === "assign") {
+    if (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "assign"
+    ) {
       state.pos++; // skip '='
       const exprAst = parseExpr();
       return { type: "deref_assign_stmt", target, value: exprAst };
@@ -396,7 +497,10 @@ export function parseStatement() {
   if (token.type === "brace_open") {
     state.pos++; // skip '{'
     const blockStmts = [];
-    while (state.pos < state.tokens.length && state.tokens[state.pos].type !== "brace_close") {
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type !== "brace_close"
+    ) {
       blockStmts.push(parseStatement());
     }
     if (state.pos >= state.tokens.length) throw new Error("Expected '}'");
