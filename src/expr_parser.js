@@ -1,6 +1,42 @@
 // Expression parsing — recursive descent (comparison → add/sub → primary).
 import state, { parseBraceIdentList } from "./parser_state";
 
+// Shared helper: try to parse '(' args ')' at current position.
+// Returns the parsed args array if found, null otherwise.
+function tryParseCallArgs() {
+  if (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "paren_open"
+  ) {
+    state.pos++; // skip '('
+
+    const args = [];
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type !== "paren_close"
+    ) {
+      args.push(parseExpr());
+      if (
+        state.pos < state.tokens.length &&
+        state.tokens[state.pos].type === "comma"
+      ) {
+        state.pos++;
+      }
+    }
+
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "paren_close"
+    ) {
+      throw new Error("Expected ')'");
+    }
+    state.pos++; // skip ')'
+
+    return args;
+  }
+  return null;
+}
+
 // Logical OR — lowest precedence, short-circuit via JS ||
 function parseLogicalOr() {
   let left = parseLogicalAnd();
@@ -159,37 +195,9 @@ export function parsePrimary() {
     }
 
     // Check for function call: identifier followed by '('
-    if (
-      state.pos < state.tokens.length &&
-      state.tokens[state.pos].type === "paren_open"
-    ) {
-      state.pos++; // skip '('
-
-      // Parse optional comma-separated argument expressions
-      const args = [];
-      while (
-        state.pos < state.tokens.length &&
-        state.tokens[state.pos].type !== "paren_close"
-      ) {
-        args.push(parseExpr());
-        // Skip optional comma
-        if (
-          state.pos < state.tokens.length &&
-          state.tokens[state.pos].type === "comma"
-        ) {
-          state.pos++;
-        }
-      }
-
-      if (
-        state.pos >= state.tokens.length ||
-        state.tokens[state.pos].type !== "paren_close"
-      ) {
-        throw new Error("Expected ')'");
-      }
-      state.pos++; // skip ')'
-
-      return parseIndexAccess({ type: "call", name, args });
+    const callArgs = tryParseCallArgs();
+    if (callArgs !== null) {
+      return parseIndexAccess({ type: "call", name, args: callArgs });
     }
 
     return parseIndexAccess({
@@ -272,7 +280,7 @@ export function parseIndexAccess(base) {
     }
   }
 
-  // Chain property access via dot notation: .key
+  // Chain property access via dot notation: .key or method calls .method(args)
   while (
     state.pos < state.tokens.length &&
     state.tokens[state.pos].type === "dot"
@@ -280,12 +288,20 @@ export function parseIndexAccess(base) {
     state.pos++;
     if (
       state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "identifier"
+      (state.tokens[state.pos].type !== "identifier" &&
+        state.tokens[state.pos].type !== "keyword")
     ) {
       throw new Error("Expected property name after '.'");
     }
     const prop = state.tokens[state.pos++].value;
-    base = { type: "prop", target: base, key: prop };
+
+    // Check for method call: .method(args)
+    const methodArgs = tryParseCallArgs();
+    if (methodArgs !== null) {
+      base = { type: "method", target: base, name: prop, args: methodArgs };
+    } else {
+      base = { type: "prop", target: base, key: prop };
+    }
   }
 
   return base;

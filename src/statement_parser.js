@@ -12,7 +12,11 @@ export function validateRefs(node, declaredVars, mutableVars) {
       fnDeclared.add(p);
       fnMutable.add(p);
     }
-    validateRefs(node.body, fnDeclared, fnMutable);
+    if (node.blockStmts) {
+      for (const s of node.blockStmts) validateRefs(s, fnDeclared, fnMutable);
+    } else {
+      validateRefs(node.body, fnDeclared, fnMutable);
+    }
     return;
   }
   if (node.type === "varref" && !declaredVars.has(node.name)) {
@@ -73,6 +77,26 @@ function consumeMut() {
     state.tokens[state.pos].value === "mut";
   if (mutable) state.pos++;
   return mutable;
+}
+
+// Shared helper: parse statements inside braces, advancing past '{' and '}'
+function _parseBlockStmts() {
+  const blockStmts = [];
+  state.pos++; // skip '{'
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type !== "brace_close"
+  ) {
+    if (state.tokens[state.pos].type === "semi") {
+      state.pos++;
+      continue;
+    }
+    blockStmts.push(parseStatement());
+  }
+  if (state.pos >= state.tokens.length)
+    throw new Error("Expected '}' to close block");
+  state.pos++; // skip '}'
+  return blockStmts;
 }
 
 // Shared helper: parse comma-separated params inside parens
@@ -147,7 +171,14 @@ export function parseStatement() {
     }
     state.pos++; // skip '=>'
 
-    const body = parseExpr();
+    // Check for block body: fn name(params) => { stmts; }
+    if (state.tokens[state.pos]?.type === "brace_open") {
+      const blockStmts = _parseBlockStmts();
+      return { type: "fn_def", name, params, body: null, blockStmts };
+    }
+
+    // Single-statement body after => (supports compound assignment, etc.)
+    const body = parseStatement();
     return { type: "fn_def", name, params, body };
   }
 
@@ -419,38 +450,67 @@ export function parseStatement() {
     return { type: "let", name, mutable, init: exprAst };
   }
 
-  // array[idx] += expr ; (compound index assignment statement) or bare array access expression
-  if (
-    token.type === "identifier" &&
-    state.pos + 1 < state.tokens.length &&
-    state.tokens[state.pos + 1].type === "bracket_open"
-  ) {
-    const name = state.tokens[state.pos++].value;
-    // Parse index access chain
-    let target = parseIndexAccess({ type: "varref", name });
+  // Helper: parse identifier or 'this' followed by index/property chain; check for assignment operators.
+  function _parseTargetAccess(nextTokenType) {
+    if (
+      state.pos + 1 >= state.tokens.length ||
+      state.tokens[state.pos + 1].type !== nextTokenType
+    ) {
+      return null;
+    }
+    // Handle 'this' keyword as base target
+    let target;
+    if (token.type === "keyword" && token.value === "this") {
+      state.pos++;
+      target = parseIndexAccess({ type: "this" });
+    } else if (token.type === "identifier") {
+      const name = state.tokens[state.pos++].value;
+      target = parseIndexAccess({ type: "varref", name });
+    } else {
+      return null;
+    }
+
+    // Compound assignment: +=
     if (
       state.pos < state.tokens.length &&
       state.tokens[state.pos].type === "assign_add"
     ) {
       state.pos++; // skip '+='
       const exprAst = parseExpr();
-      return {
-        type: "compound_assign_stmt",
-        target,
-        op: "+=",
-        value: exprAst,
-      };
+      return { type: "compound_assign_stmt", target, op: "+=", value: exprAst };
     }
+
+    // Regular assignment: =
     if (
       state.pos < state.tokens.length &&
       state.tokens[state.pos].type === "assign"
     ) {
       state.pos++; // skip '='
       const exprAst = parseExpr();
-      return { type: "index_assign_stmt", target, value: exprAst };
+      return {
+        type:
+          nextTokenType === "bracket_open"
+            ? "index_assign_stmt"
+            : "prop_assign_stmt",
+        target,
+        value: exprAst,
+      };
     }
-    // Bare array access expression (e.g., array[0])
+
+    // Bare access expression (e.g., array[0] or temp.x)
     return target;
+  }
+
+  // array[idx] +=/= expr ; or bare array access expression
+  const bracketResult = _parseTargetAccess("bracket_open");
+  if (bracketResult) {
+    return bracketResult;
+  }
+
+  // temp.x = expr ; or bare property access expression
+  const dotResult = _parseTargetAccess("dot");
+  if (dotResult) {
+    return dotResult;
   }
 
   // x += expr ; (compound assignment statement)
@@ -495,16 +555,7 @@ export function parseStatement() {
 
   // { stmt; stmt; ... } (block statement)
   if (token.type === "brace_open") {
-    state.pos++; // skip '{'
-    const blockStmts = [];
-    while (
-      state.pos < state.tokens.length &&
-      state.tokens[state.pos].type !== "brace_close"
-    ) {
-      blockStmts.push(parseStatement());
-    }
-    if (state.pos >= state.tokens.length) throw new Error("Expected '}'");
-    state.pos++; // skip '}'
+    const blockStmts = _parseBlockStmts();
     return { type: "block", stmts: blockStmts };
   }
 

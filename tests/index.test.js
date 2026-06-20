@@ -157,6 +157,25 @@ test('executeTuff("let x = read(); let temp = this; temp.x", "100") => 100', () 
   );
 });
 
+test('executeTuff("let mut x = read(); let mut temp = this; temp.x = read(); x", "25 75") => 25', () => {
+  expect(
+    executeTuff(
+      "let mut x = read(); let mut temp = this; temp.x = read(); x",
+      "25 75",
+    ),
+  ).toBe(25);
+});
+
+test('executeTuff("fn Wrapper(x) => this; Wrapper(read()).x", "25") => 25', () => {
+  expect(executeTuff("fn Wrapper(x) => this; Wrapper(read()).x", "25")).toBe(
+    25,
+  );
+});
+
+test('executeTuff("let mut x = 0; this.x = read(); x", "100") => 100', () => {
+  expect(executeTuff("let mut x = 0; this.x = read(); x", "100")).toBe(100);
+});
+
 test('executeTuff("fn get() => read(); get()", "1") => 1', () => {
   expect(executeTuff("fn get() => read(); get()", "1")).toBe(1);
 });
@@ -168,6 +187,27 @@ test('executeTuff("fn add(first, second) => first + second; add(read(), read())"
       "1 2",
     ),
   ).toBe(3);
+});
+
+test('executeTuff("let mut x = 0; fn add() => x += read(); add(); x", "100") => 100', () => {
+  expect(
+    executeTuff("let mut x = 0; fn add() => x += read(); add(); x", "100"),
+  ).toBe(100);
+});
+
+test('executeTuff("let x = read(); fn get() => this.x; get()", "100") => 100', () => {
+  expect(executeTuff("let x = read(); fn get() => this.x; get()", "100")).toBe(
+    100,
+  );
+});
+
+test(`executeTuff("let x = read(); fn Getter() => { fn get() => this.this.x; this } Getter().get()", "100") => 100`, () => {
+  expect(
+    executeTuff(
+      `let x = read(); fn Getter() => { fn get() => this.this.x; this } Getter().get()`,
+      "100",
+    ),
+  ).toBe(100);
 });
 
 test('executeTuff("let temp = { value : read() }; temp.value", "1") => 1', () => {

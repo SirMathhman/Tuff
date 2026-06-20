@@ -109,6 +109,11 @@ export function emitExpr(node, insideDeref = false) {
   if (node.type === "prop") {
     return `${emitExpr(node.target)}.${node.key}`;
   }
+  // Method call: target.method(args)
+  if (node.type === "method") {
+    const args = node.args.map((a) => emitExpr(a)).join(",");
+    return `(${emitExpr(node.target)})[${JSON.stringify(node.name)}](${args})`;
+  }
   // Object literal: { key : expr , ... }
   if (node.type === "object") {
     const pairs = node.fields.map((f) => `"${f.key}":${emitExpr(f.value)}`);
@@ -152,7 +157,57 @@ export function emitStmt(stmt) {
   if (stmt.type === "fn_def") {
     const params = stmt.params ? stmt.params.join(",") : "";
     emittedVars.add(stmt.name);
-    return `function ${stmt.name}(${params}){return(${emitExpr(stmt.body)})}`;
+    // Temporarily add params to emittedVars so bare 'this' inside the body captures them
+    for (const p of stmt.params || []) emittedVars.add(p);
+    // Block body: fn name(params) => { stmts; }
+    if (stmt.blockStmts && stmt.blockStmts.length > 0) {
+      const stmtTypes = new Set([
+        "let",
+        "assign_stmt",
+        "compound_assign_stmt",
+        "index_assign_stmt",
+        "deref_assign_stmt",
+        "prop_assign_stmt",
+        "block",
+        "if_stmt",
+        "while_stmt",
+        "for_stmt",
+      ]);
+      // Last statement in block: if it's an expression node, wrap in return; otherwise emit as-is
+      const lastStmt = stmt.blockStmts[stmt.blockStmts.length - 1];
+      const isExprReturn = !stmtTypes.has(lastStmt.type);
+      const bodyParts = [];
+      for (let i = 0; i < stmt.blockStmts.length - 1; i++) {
+        bodyParts.push(emitStmt(stmt.blockStmts[i]));
+      }
+      if (isExprReturn) {
+        bodyParts.push(`return(${emitExpr(lastStmt)})`);
+      } else {
+        bodyParts.push(emitStmt(lastStmt));
+      }
+      return `function ${stmt.name}(${params}){${bodyParts.join(";")}}`;
+    }
+    // Single-statement body: fn name(params) => statement
+    // If the body is an expression node (not a statement type), wrap in return
+    const stmtTypes = new Set([
+      "let",
+      "assign_stmt",
+      "compound_assign_stmt",
+      "index_assign_stmt",
+      "deref_assign_stmt",
+      "prop_assign_stmt",
+      "block",
+      "if_stmt",
+      "while_stmt",
+      "for_stmt",
+    ]);
+    if (stmtTypes.has(stmt.body.type)) {
+      const bodyJs = emitStmt(stmt.body);
+      return `function ${stmt.name}(${params}){${bodyJs}}`;
+    }
+    // Expression body — wrap in return
+    const bodyJs = emitExpr(stmt.body);
+    return `function ${stmt.name}(${params}){return(${bodyJs})}`;
   }
   // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
   if (stmt.type === "let") {
@@ -209,6 +264,10 @@ export function emitStmt(stmt) {
     // For scalar holders, use .v to write through the slot
     const targetPath = emitExpr({ type: "varref", name: targetName }, true);
     return `${targetPath}.v=${emitExpr(stmt.value)}`;
+  }
+  // temp.x = value property assignment statement
+  if (stmt.type === "prop_assign_stmt") {
+    return `${emitExpr(stmt.target)}=${emitExpr(stmt.value)}`;
   }
   // x = expr assignment statement
   if (stmt.type === "assign_stmt") {
