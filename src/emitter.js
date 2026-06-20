@@ -15,6 +15,84 @@ export function init(refTV, rhv, rtaV, arh, svh) {
   sliceViewHolders = svh || new Map();
 }
 
+// Emit a block expression's statements, handling yield as early-return.
+function emitBlockStmt(stmts) {
+  const stmtTypes = new Set([
+    "let",
+    "assign_stmt",
+    "compound_assign_stmt",
+    "index_assign_stmt",
+    "deref_assign_stmt",
+    "prop_assign_stmt",
+    "block",
+    "if_stmt",
+    "while_stmt",
+    "for_stmt",
+  ]);
+
+  if (!stmts || stmts.length === 0) return "";
+
+  const lastStmt = stmts[stmts.length - 1];
+  const isExprReturn = !stmtTypes.has(lastStmt.type);
+
+  const bodyParts = [];
+  for (let i = 0; i < stmts.length - 1; i++) {
+    if (stmts[i].type === "yield") {
+      bodyParts.push(`return(${emitExpr(stmts[i].value)})`);
+    } else {
+      bodyParts.push(emitStmtBlock(stmts[i]));
+    }
+  }
+
+  // Handle last statement
+  if (lastStmt.type === "yield") {
+    bodyParts.push(`return(${emitExpr(lastStmt.value)})`);
+  } else if (isExprReturn) {
+    bodyParts.push(`return(${emitExpr(lastStmt)})`);
+  } else {
+    bodyParts.push(emitStmtBlock(lastStmt));
+    bodyParts.push("return(undefined)");
+  }
+
+  return bodyParts.join(";");
+}
+
+// Like emitStmt but handles control flow branches recursively for yield support.
+function emitStmtBlock(stmt) {
+  if (stmt.type === "if_stmt") {
+    const thenJs = emitBlockStmt([stmt.thenBranch[0]]);
+    let elseJs;
+    if (stmt.elseBranch && stmt.elseBranch.length > 0) {
+      elseJs = emitBlockStmt(stmt.elseBranch).replace(/^return\(/, ""); // Remove leading return from else branch since it's in an else block
+    }
+    const condJs = emitExpr(stmt.cond);
+    if (elseJs !== undefined && elseJs !== "") {
+      return `if(${condJs}){${thenJs}}else{${elseJs}}`;
+    }
+    return `if(${condJs}){${thenJs}}`;
+  }
+
+  // Fall through to regular emitStmt for everything else.
+  if (stmt.type === "while_stmt") {
+    const bodyJs = emitBlockStmt([stmt.body[0]]);
+    return `while(${emitExpr(stmt.cond)}){${bodyJs}}`;
+  }
+
+  if (stmt.type === "for_stmt") {
+    const fromJs = emitExpr(stmt.from);
+    const toJs = emitExpr(stmt.to);
+    const bodyJs = emitBlockStmt([stmt.body[0]]);
+    return `var ${stmt.variable};for(${stmt.variable}=${fromJs};${stmt.variable}<${toJs};${stmt.variable}++){${bodyJs}}`;
+  }
+
+  // Regular statement — delegate to emitStmt.
+  const result = emitStmt(stmt);
+  if (result === undefined || result === null) {
+    throw new Error(`Unsupported AST node: ${JSON.stringify(stmt)}`);
+  }
+  return result;
+}
+
 export function emitExpr(node, insideDeref = false) {
   if (!node || typeof node !== "object") return "";
   // read() built-in
@@ -119,39 +197,10 @@ export function emitExpr(node, insideDeref = false) {
     const pairs = node.fields.map((f) => `"${f.key}":${emitExpr(f.value)}`);
     return `{${pairs.join(",")}}`;
   }
-  // Block expression: { stmts; lastExpr } — evaluates to the value of the last statement
+  // Block expression: { stmts; lastExpr } — evaluates to the value of the last statement or a yield
   if (node.type === "block_expr") {
-    const stmtTypes = new Set([
-      "let",
-      "assign_stmt",
-      "compound_assign_stmt",
-      "index_assign_stmt",
-      "deref_assign_stmt",
-      "prop_assign_stmt",
-      "block",
-      "if_stmt",
-      "while_stmt",
-      "for_stmt",
-    ]);
-    const stmts = node.stmts;
-    if (!stmts || stmts.length === 0) return "undefined";
-
-    // Last statement: if it's an expression, wrap in return; otherwise emit as-is and add a dummy return
-    const lastStmt = stmts[stmts.length - 1];
-    const isExprReturn = !stmtTypes.has(lastStmt.type);
-
-    const bodyParts = [];
-    for (let i = 0; i < stmts.length - 1; i++) {
-      bodyParts.push(emitStmt(stmts[i]));
-    }
-    if (isExprReturn) {
-      bodyParts.push(`return(${emitExpr(lastStmt)})`);
-    } else {
-      bodyParts.push(emitStmt(lastStmt));
-      bodyParts.push("return(undefined)");
-    }
-
-    return `(function(){${bodyParts.join(";")}}())`;
+    const bodyJs = emitBlockStmt(node.stmts);
+    return `(function(){${bodyJs}}())`;
   }
   // &varref — emit the whole slot object for identity comparison via JS ===
   if (node.type === "ref" && node.expr?.type === "varref") {

@@ -1,5 +1,10 @@
 // Expression parsing — recursive descent (comparison → add/sub → primary).
 import state, { parseBraceIdentList, parseBraceBlock } from "./parser_state";
+import {
+  parseIfStmt,
+  parseWhileStmt,
+  parseForStmt,
+} from "./control_flow_parser";
 
 // Shared helper: try to parse '(' args ')' at current position.
 // Returns the parsed args array if found, null otherwise.
@@ -35,6 +40,62 @@ function tryParseCallArgs() {
     return args;
   }
   return null;
+}
+
+// Inline statement parser for block expressions — handles let, yield, if/while/for, and bare expr.
+function _parseInlineStatement() {
+  const token = state.tokens[state.pos];
+
+  // let x = expr ; or let mut x = expr ;
+  if (token.type === "keyword" && token.value === "let") {
+    state.pos++; // skip 'let'
+    const mutable =
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "keyword" &&
+      state.tokens[state.pos].value === "mut";
+    if (mutable) state.pos++;
+
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    ) {
+      throw new Error("Expected identifier after 'let'");
+    }
+    const name = state.tokens[state.pos++].value;
+
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "assign"
+    ) {
+      throw new Error("Expected '=' after variable name");
+    }
+    state.pos++; // skip '='
+    return { type: "let", name, mutable, init: parseExpr() };
+  }
+
+  // yield expr — early-return from block expression
+  if (token.type === "keyword" && token.value === "yield") {
+    state.pos++; // skip 'yield'
+    return { type: "yield", value: parseExpr() };
+  }
+
+  // if (cond) stmt; else stmt;
+  if (token.type === "keyword" && token.value === "if") {
+    return parseIfStmt(_parseInlineStatement);
+  }
+
+  // while (cond) stmt;
+  if (token.type === "keyword" && token.value === "while") {
+    return parseWhileStmt(_parseInlineStatement);
+  }
+
+  // for (i in start..end) stmt;
+  if (token.type === "keyword" && token.value === "for") {
+    return parseForStmt(_parseInlineStatement);
+  }
+
+  // Bare expression (also the last statement)
+  return parseExpr();
 }
 
 // Logical OR — lowest precedence, short-circuit via JS ||
@@ -113,42 +174,17 @@ export function parsePrimary() {
     // - identifier → object literal ({ key : value })
     // - keyword/other → block expression ({ let y = ...; expr })
     const nextToken = state.tokens[state.pos + 1];
-    const isObjectLiteral = !nextToken || (nextToken.type === "identifier" || nextToken.type === "brace_close");
+    const isObjectLiteral =
+      !nextToken ||
+      nextToken.type === "identifier" ||
+      nextToken.type === "brace_close";
 
     if (isObjectLiteral) {
       return parseObjectLiteral();
     }
 
-    // Block expression: { stmts; lastExpr } — evaluates to the value of the last statement
-    const blockStmts = parseBraceBlock(() => {
-      // Inline minimal statement parsing for block expressions:
-      // let/var, or bare expression
-      const stmtToken = state.tokens[state.pos];
-
-      // let x = expr ; or let mut x = expr ;
-      if (stmtToken.type === "keyword" && stmtToken.value === "let") {
-        state.pos++; // skip 'let'
-        const mutable =
-          state.pos < state.tokens.length &&
-          state.tokens[state.pos].type === "keyword" &&
-          state.tokens[state.pos].value === "mut";
-        if (mutable) state.pos++;
-
-        if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
-          throw new Error("Expected identifier after 'let'");
-        }
-        const name = state.tokens[state.pos++].value;
-
-        if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "assign") {
-          throw new Error("Expected '=' after variable name");
-        }
-        state.pos++; // skip '='
-        return { type: "let", name, mutable, init: parseExpr() };
-      }
-
-      // Bare expression (also the last statement)
-      return parseExpr();
-    });
+    // Block expression: { stmts; lastExpr } — evaluates to the value of the last statement or a yield
+    const blockStmts = parseBraceBlock(() => _parseInlineStatement());
 
     return { type: "block_expr", stmts: blockStmts };
   }

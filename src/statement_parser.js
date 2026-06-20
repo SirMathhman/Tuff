@@ -1,6 +1,11 @@
 // Statement parsing + validation (let, if/else, while, for, fn_def, out_*, extern_, assignments).
 import state, { parseBraceIdentList, parseBraceBlock } from "./parser_state";
 import { parseExpr, parsePrimary, parseIndexAccess } from "./expr_parser";
+import {
+  parseIfStmt,
+  parseWhileStmt,
+  parseForStmt,
+} from "./control_flow_parser";
 
 export function validateRefs(node, declaredVars, mutableVars) {
   if (!node || typeof node !== "object") return;
@@ -169,106 +174,17 @@ export function parseStatement() {
 
   // for (i in start..end) stmt;
   if (token.type === "keyword" && token.value === "for") {
-    state.pos++; // skip 'for'
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "paren_open"
-    )
-      throw new Error("Expected '(' after 'for'");
-    state.pos++; // skip '('
-
-    // Expect identifier for loop variable
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "identifier"
-    ) {
-      throw new Error("Expected identifier in for loop");
-    }
-    const variable = state.tokens[state.pos++].value;
-
-    // Expect 'in' keyword
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "keyword" ||
-      state.tokens[state.pos].value !== "in"
-    ) {
-      throw new Error("Expected 'in' in for loop");
-    }
-    state.pos++; // skip 'in'
-
-    // Parse range: expr .. expr
-    const from = parseExpr();
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "range"
-    ) {
-      throw new Error("Expected '..' in for loop range");
-    }
-    state.pos++; // skip '..'
-    const to = parseExpr();
-
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "paren_close"
-    )
-      throw new Error("Expected ')' after for loop range");
-    state.pos++; // skip ')'
-
-    const body = [parseStatement()];
-    return { type: "for_stmt", variable, from, to, body };
+    return parseForStmt(parseStatement);
   }
 
   // while (cond) stmt;
   if (token.type === "keyword" && token.value === "while") {
-    state.pos++; // skip 'while'
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "paren_open"
-    )
-      throw new Error("Expected '(' after 'while'");
-    state.pos++; // skip '('
-    const cond = parseExpr();
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "paren_close"
-    )
-      throw new Error("Expected ')' after while condition");
-    state.pos++; // skip ')'
-
-    const body = [parseStatement()];
-    return { type: "while_stmt", cond, body };
+    return parseWhileStmt(parseStatement);
   }
 
   // if (expr) stmt; else stmt;
   if (token.type === "keyword" && token.value === "if") {
-    state.pos++; // skip 'if'
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "paren_open"
-    )
-      throw new Error("Expected '(' after 'if'");
-    state.pos++; // skip '('
-    const cond = parseExpr();
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "paren_close"
-    )
-      throw new Error("Expected ')' after condition");
-    state.pos++; // skip ')'
-
-    const thenBranch = [parseStatement()];
-
-    let elseBranch;
-    if (
-      state.pos < state.tokens.length &&
-      state.tokens[state.pos].type === "keyword" &&
-      state.tokens[state.pos].value === "else"
-    ) {
-      state.pos++; // skip 'else'
-      elseBranch = [parseStatement()];
-    }
-
-    return { type: "if_stmt", cond, thenBranch, elseBranch };
+    return parseIfStmt(parseStatement);
   }
 
   // extern let { x, y } = moduleName ; — import from raw JS module

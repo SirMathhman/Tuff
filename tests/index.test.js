@@ -214,6 +214,14 @@ test('executeTuff("let x = { let y = 100; y }; x") => 100', () => {
   expect(executeTuff(`let x = { let y = 100; y }; x`)).toBe(100);
 });
 
+test('executeTuff("let x = { if (true) yield 3; 5 }; x") => 3', () => {
+  expect(executeTuff(`let x = { if (true) yield 3; 5 }; x`)).toBe(3);
+});
+
+test('executeTuff("let x = { if (true) yield 3; 5 } + 1; x") => 4', () => {
+  expect(executeTuff(`let x = { if (true) yield 3; 5 } + 1; x`)).toBe(4);
+});
+
 test('executeTuff("let temp = { value : read() }; temp.value", "1") => 1', () => {
   expect(executeTuff("let temp = { value : read() }; temp.value", "1")).toBe(1);
 });
