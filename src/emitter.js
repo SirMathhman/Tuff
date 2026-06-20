@@ -39,6 +39,11 @@ function emitBlockStmt(stmts) {
   for (let i = 0; i < stmts.length - 1; i++) {
     if (stmts[i].type === "yield") {
       bodyParts.push(`return(${emitExpr(stmts[i].value)})`);
+    } else if (stmts[i].type === "fn_return") {
+      // Use throw to escape IIFE boundaries and propagate fn_return outward
+      bodyParts.push(
+        `throw{__tuffReturn:true,value:${emitExpr(stmts[i].value)}}`,
+      );
     } else {
       bodyParts.push(emitStmtBlock(stmts[i]));
     }
@@ -47,6 +52,11 @@ function emitBlockStmt(stmts) {
   // Handle last statement
   if (lastStmt.type === "yield") {
     bodyParts.push(`return(${emitExpr(lastStmt.value)})`);
+  } else if (lastStmt.type === "fn_return") {
+    // Use throw to escape IIFE boundaries and propagate fn_return outward
+    bodyParts.push(
+      `throw{__tuffReturn:true,value:${emitExpr(lastStmt.value)}}`,
+    );
   } else if (isExprReturn) {
     bodyParts.push(`return(${emitExpr(lastStmt)})`);
   } else {
@@ -202,6 +212,7 @@ export function emitExpr(node, insideDeref = false) {
     const bodyJs = emitBlockStmt(node.stmts);
     return `(function(){${bodyJs}}())`;
   }
+
   // &varref — emit the whole slot object for identity comparison via JS ===
   if (node.type === "ref" && node.expr?.type === "varref") {
     return node.expr.name;
@@ -268,7 +279,8 @@ export function emitStmt(stmt) {
       } else {
         bodyParts.push(emitStmt(lastStmt));
       }
-      return `function ${stmt.name}(${params}){${bodyParts.join(";")}}`;
+      // Wrap in try/catch to catch fn_return sentinel thrown from nested block_expr IIFEs
+      return `function ${stmt.name}(${params}){try{${bodyParts.join(";")}}catch(e){if(e.__tuffReturn)return e.value;throw e}}`;
     }
     // Single-statement body: fn name(params) => statement
     // If the body is an expression node (not a statement type), wrap in return
@@ -286,11 +298,12 @@ export function emitStmt(stmt) {
     ]);
     if (stmtTypes.has(stmt.body.type)) {
       const bodyJs = emitStmt(stmt.body);
-      return `function ${stmt.name}(${params}){${bodyJs}}`;
+      // Wrap in try/catch to catch fn_return sentinel thrown from nested block_expr IIFEs
+      return `function ${stmt.name}(${params}){try{${bodyJs}}catch(e){if(e.__tuffReturn)return e.value;throw e}}`;
     }
-    // Expression body — wrap in return
-    const bodyJs = emitExpr(stmt.body);
-    return `function ${stmt.name}(${params}){return(${bodyJs})}`;
+    // Expression body — wrap in return, with try/catch for fn_return sentinel from nested block_expr IIFEs
+    const exprBody = emitExpr(stmt.body);
+    return `function ${stmt.name}(${params}){try{return(${exprBody})}catch(e){if(e.__tuffReturn)return e.value;throw e}}`;
   }
   // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
   if (stmt.type === "let") {

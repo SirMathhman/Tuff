@@ -1,5 +1,9 @@
 // Statement parsing + validation (let, if/else, while, for, fn_def, out_*, extern_, assignments).
-import state, { parseBraceIdentList, parseBraceBlock } from "./parser_state";
+import state, {
+  parseBraceIdentList,
+  parseBraceBlock,
+  parseYieldOrReturn,
+} from "./parser_state";
 import { parseExpr, parsePrimary, parseIndexAccess } from "./expr_parser";
 import {
   parseIfStmt,
@@ -89,6 +93,39 @@ function _parseBlockStmts() {
   return parseBraceBlock(() => parseStatement());
 }
 
+// Helper: scan ahead from a '{' to find the matching '}', then check if an operator follows.
+function _hasOperatorAfterBrace(startPos) {
+  let depth = 0;
+  for (let i = startPos; i < state.tokens.length; i++) {
+    const t = state.tokens[i];
+    if (t.type === "brace_open") depth++;
+    else if (t.type === "brace_close") {
+      depth--;
+      if (depth === 0) {
+        // Check what follows the closing brace
+        const next = i + 1;
+        if (next < state.tokens.length) {
+          const n = state.tokens[next];
+          return (
+            n.type === "op" ||
+            n.type === "assign_add" ||
+            n.type === "range" ||
+            n.type === "keyword" ||
+            n.type === "paren_open" ||
+            n.type === "bracket_open" ||
+            n.type === "dot"
+          );
+        }
+      }
+    } else if (t.type === "paren_open") {
+      depth++; // treat parens as nested for brace counting safety
+    } else if (t.type === "paren_close") {
+      depth--;
+    }
+  }
+  return false;
+}
+
 // Shared helper: parse comma-separated params inside parens
 function parseParams() {
   const params = [];
@@ -119,6 +156,12 @@ export function parseStatement() {
     state.pos++; // skip trailing ';' from previous statement
   if (state.pos >= state.tokens.length) throw new Error("Unexpected end");
   const token = state.tokens[state.pos];
+
+  // yield/return expr — early-return from block expression or enclosing function
+  const yieldOrReturn = parseYieldOrReturn(parseExpr);
+  if (yieldOrReturn) {
+    return yieldOrReturn;
+  }
 
   // fn name(params) => expr ; (function definition)
   if (token.type === "keyword" && token.value === "fn") {
@@ -162,12 +205,16 @@ export function parseStatement() {
     state.pos++; // skip '=>'
 
     // Check for block body: fn name(params) => { stmts; }
+    // But only if the closing brace isn't followed by an operator (which would make it a block expression)
     if (state.tokens[state.pos]?.type === "brace_open") {
-      const blockStmts = _parseBlockStmts();
-      return { type: "fn_def", name, params, body: null, blockStmts };
+      const hasOperatorAfterBrace = _hasOperatorAfterBrace(state.pos);
+      if (!hasOperatorAfterBrace) {
+        const blockStmts = _parseBlockStmts();
+        return { type: "fn_def", name, params, body: null, blockStmts };
+      }
     }
 
-    // Single-statement body after => (supports compound assignment, etc.)
+    // Single-statement/expression body (supports compound assignment, block expressions, etc.)
     const body = parseStatement();
     return { type: "fn_def", name, params, body };
   }
@@ -454,8 +501,9 @@ export function parseStatement() {
     return { type: "deref", expr: target };
   }
 
-  // { stmt; stmt; ... } (block statement)
-  if (token.type === "brace_open") {
+  // { expr; ... } — if followed by an operator, let parseExpr handle it as a block_expr
+  // otherwise treat as a plain block statement
+  if (token.type === "brace_open" && !_hasOperatorAfterBrace(state.pos)) {
     const blockStmts = _parseBlockStmts();
     return { type: "block", stmts: blockStmts };
   }

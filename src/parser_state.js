@@ -36,6 +36,25 @@ export function parseBraceIdentList(mapFn) {
   return fields;
 }
 
+// Parse yield or return keyword + expression.
+// Takes a parseExpr callback to avoid circular dependencies.
+// Returns null if current token is not yield/return.
+export function parseYieldOrReturn(parseExpr) {
+  if (
+    _pos >= _tokens.length ||
+    _tokens[_pos].type !== "keyword" ||
+    (_tokens[_pos].value !== "yield" && _tokens[_pos].value !== "return")
+  ) {
+    return null;
+  }
+  const keyword = _tokens[_pos].value;
+  _pos++; // skip keyword
+  return {
+    type: keyword === "yield" ? "yield" : "fn_return",
+    value: parseExpr(),
+  };
+}
+
 // Helper: parse brace-enclosed block of statements/expressions.
 // Expects cursor at '{', advances past matching '}'.
 // The `parseItem` callback is called for each non-semi token and should return the parsed item (or null to skip).

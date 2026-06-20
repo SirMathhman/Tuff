@@ -222,6 +222,18 @@ test('executeTuff("let x = { if (true) yield 3; 5 } + 1; x") => 4', () => {
   expect(executeTuff(`let x = { if (true) yield 3; 5 } + 1; x`)).toBe(4);
 });
 
+test('executeTuff("fn get() => { if (true) yield 3; 5 } + 1; get()") => 4', () => {
+  expect(executeTuff(`fn get() => { if (true) yield 3; 5 } + 1; get()`)).toBe(
+    4,
+  );
+});
+
+test('executeTuff("fn get() => { if (true) return 3; 5 } + 1; get()") => 3', () => {
+  expect(executeTuff(`fn get() => { if (true) return 3; 5 } + 1; get()`)).toBe(
+    3,
+  );
+});
+
 test('executeTuff("let temp = { value : read() }; temp.value", "1") => 1', () => {
   expect(executeTuff("let temp = { value : read() }; temp.value", "1")).toBe(1);
 });

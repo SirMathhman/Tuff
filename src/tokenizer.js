@@ -213,7 +213,7 @@ function tokenize(source) {
         result.push({ type: "keyword", value: name });
       } else if (name === "in") {
         result.push({ type: "keyword", value: name });
-      } else if (name === "this" || name === "yield") {
+      } else if (name === "this" || name === "yield" || name === "return") {
         result.push({ type: "keyword", value: name });
       } else {
         result.push({ type: "identifier", value: name });

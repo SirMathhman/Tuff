@@ -1,5 +1,9 @@
 // Expression parsing — recursive descent (comparison → add/sub → primary).
-import state, { parseBraceIdentList, parseBraceBlock } from "./parser_state";
+import state, {
+  parseBraceIdentList,
+  parseBraceBlock,
+  parseYieldOrReturn,
+} from "./parser_state";
 import {
   parseIfStmt,
   parseWhileStmt,
@@ -73,10 +77,10 @@ function _parseInlineStatement() {
     return { type: "let", name, mutable, init: parseExpr() };
   }
 
-  // yield expr — early-return from block expression
-  if (token.type === "keyword" && token.value === "yield") {
-    state.pos++; // skip 'yield'
-    return { type: "yield", value: parseExpr() };
+  // yield/return expr — early-return from block expression or enclosing function
+  const yieldOrReturn = parseYieldOrReturn(parseExpr);
+  if (yieldOrReturn) {
+    return yieldOrReturn;
   }
 
   // if (cond) stmt; else stmt;
