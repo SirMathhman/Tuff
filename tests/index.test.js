@@ -210,6 +210,10 @@ test(`executeTuff("let x = read(); fn Getter() => { fn get() => this.this.x; thi
   ).toBe(100);
 });
 
+test('executeTuff("let x = { let y = 100; y }; x") => 100', () => {
+  expect(executeTuff(`let x = { let y = 100; y }; x`)).toBe(100);
+});
+
 test('executeTuff("let temp = { value : read() }; temp.value", "1") => 1', () => {
   expect(executeTuff("let temp = { value : read() }; temp.value", "1")).toBe(1);
 });

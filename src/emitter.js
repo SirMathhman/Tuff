@@ -119,6 +119,40 @@ export function emitExpr(node, insideDeref = false) {
     const pairs = node.fields.map((f) => `"${f.key}":${emitExpr(f.value)}`);
     return `{${pairs.join(",")}}`;
   }
+  // Block expression: { stmts; lastExpr } — evaluates to the value of the last statement
+  if (node.type === "block_expr") {
+    const stmtTypes = new Set([
+      "let",
+      "assign_stmt",
+      "compound_assign_stmt",
+      "index_assign_stmt",
+      "deref_assign_stmt",
+      "prop_assign_stmt",
+      "block",
+      "if_stmt",
+      "while_stmt",
+      "for_stmt",
+    ]);
+    const stmts = node.stmts;
+    if (!stmts || stmts.length === 0) return "undefined";
+
+    // Last statement: if it's an expression, wrap in return; otherwise emit as-is and add a dummy return
+    const lastStmt = stmts[stmts.length - 1];
+    const isExprReturn = !stmtTypes.has(lastStmt.type);
+
+    const bodyParts = [];
+    for (let i = 0; i < stmts.length - 1; i++) {
+      bodyParts.push(emitStmt(stmts[i]));
+    }
+    if (isExprReturn) {
+      bodyParts.push(`return(${emitExpr(lastStmt)})`);
+    } else {
+      bodyParts.push(emitStmt(lastStmt));
+      bodyParts.push("return(undefined)");
+    }
+
+    return `(function(){${bodyParts.join(";")}}())`;
+  }
   // &varref — emit the whole slot object for identity comparison via JS ===
   if (node.type === "ref" && node.expr?.type === "varref") {
     return node.expr.name;

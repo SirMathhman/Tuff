@@ -1,5 +1,5 @@
 // Expression parsing — recursive descent (comparison → add/sub → primary).
-import state, { parseBraceIdentList } from "./parser_state";
+import state, { parseBraceIdentList, parseBraceBlock } from "./parser_state";
 
 // Shared helper: try to parse '(' args ')' at current position.
 // Returns the parsed args array if found, null otherwise.
@@ -107,14 +107,50 @@ export function parsePrimary() {
   if (state.pos >= state.tokens.length) throw new Error("Unexpected end");
   const token = state.tokens[state.pos];
 
-  // Object literal: { key : expr , key : expr }
-  if (
-    token.type === "brace_open" &&
-    state.pos + 1 < state.tokens.length &&
-    (state.tokens[state.pos + 1].type === "identifier" ||
-      state.tokens[state.pos + 1].type === "brace_close")
-  ) {
-    return parseObjectLiteral();
+  // Object literal: { key : expr , key : expr } or block expression: { stmts; lastExpr }
+  if (token.type === "brace_open") {
+    // Peek ahead to disambiguate object vs block without consuming the brace yet:
+    // - identifier → object literal ({ key : value })
+    // - keyword/other → block expression ({ let y = ...; expr })
+    const nextToken = state.tokens[state.pos + 1];
+    const isObjectLiteral = !nextToken || (nextToken.type === "identifier" || nextToken.type === "brace_close");
+
+    if (isObjectLiteral) {
+      return parseObjectLiteral();
+    }
+
+    // Block expression: { stmts; lastExpr } — evaluates to the value of the last statement
+    const blockStmts = parseBraceBlock(() => {
+      // Inline minimal statement parsing for block expressions:
+      // let/var, or bare expression
+      const stmtToken = state.tokens[state.pos];
+
+      // let x = expr ; or let mut x = expr ;
+      if (stmtToken.type === "keyword" && stmtToken.value === "let") {
+        state.pos++; // skip 'let'
+        const mutable =
+          state.pos < state.tokens.length &&
+          state.tokens[state.pos].type === "keyword" &&
+          state.tokens[state.pos].value === "mut";
+        if (mutable) state.pos++;
+
+        if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "identifier") {
+          throw new Error("Expected identifier after 'let'");
+        }
+        const name = state.tokens[state.pos++].value;
+
+        if (state.pos >= state.tokens.length || state.tokens[state.pos].type !== "assign") {
+          throw new Error("Expected '=' after variable name");
+        }
+        state.pos++; // skip '='
+        return { type: "let", name, mutable, init: parseExpr() };
+      }
+
+      // Bare expression (also the last statement)
+      return parseExpr();
+    });
+
+    return { type: "block_expr", stmts: blockStmts };
   }
 
   // '&' reference operator — optional 'mut' keyword for &mut syntax

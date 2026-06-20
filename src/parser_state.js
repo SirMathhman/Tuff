@@ -35,3 +35,24 @@ export function parseBraceIdentList(mapFn) {
   _pos++; // skip '}'
   return fields;
 }
+
+// Helper: parse brace-enclosed block of statements/expressions.
+// Expects cursor at '{', advances past matching '}'.
+// The `parseItem` callback is called for each non-semi token and should return the parsed item (or null to skip).
+export function parseBraceBlock(parseItem) {
+  _pos++; // skip '{'
+  const items = [];
+  while (_pos < _tokens.length && _tokens[_pos].type !== "brace_close") {
+    if (_tokens[_pos].type === "semi") {
+      _pos++;
+      continue;
+    }
+    const item = parseItem();
+    if (item !== null) items.push(item);
+  }
+  if (_pos >= _tokens.length || _tokens[_pos].type !== "brace_close") {
+    throw new Error("Expected '}' to close block");
+  }
+  _pos++; // skip '}'
+  return items;
+}

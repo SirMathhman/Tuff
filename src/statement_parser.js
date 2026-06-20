@@ -1,5 +1,5 @@
 // Statement parsing + validation (let, if/else, while, for, fn_def, out_*, extern_, assignments).
-import state, { parseBraceIdentList } from "./parser_state";
+import state, { parseBraceIdentList, parseBraceBlock } from "./parser_state";
 import { parseExpr, parsePrimary, parseIndexAccess } from "./expr_parser";
 
 export function validateRefs(node, declaredVars, mutableVars) {
@@ -81,22 +81,7 @@ function consumeMut() {
 
 // Shared helper: parse statements inside braces, advancing past '{' and '}'
 function _parseBlockStmts() {
-  const blockStmts = [];
-  state.pos++; // skip '{'
-  while (
-    state.pos < state.tokens.length &&
-    state.tokens[state.pos].type !== "brace_close"
-  ) {
-    if (state.tokens[state.pos].type === "semi") {
-      state.pos++;
-      continue;
-    }
-    blockStmts.push(parseStatement());
-  }
-  if (state.pos >= state.tokens.length)
-    throw new Error("Expected '}' to close block");
-  state.pos++; // skip '}'
-  return blockStmts;
+  return parseBraceBlock(() => parseStatement());
 }
 
 // Shared helper: parse comma-separated params inside parens
