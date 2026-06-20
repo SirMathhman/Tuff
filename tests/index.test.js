@@ -143,6 +143,10 @@ test('executeTuff("let mut x = 0; if (readBool()) x = 1; else x = 2; x", "true")
   ).toBe(1);
 });
 
+test('executeTuff("readBool() || false", "true") => 1', () => {
+  expect(executeTuff("readBool() || false", "true")).toBe(1);
+});
+
 test('executeTuff("fn get() => read(); get()", "1") => 1', () => {
   expect(executeTuff("fn get() => read(); get()", "1")).toBe(1);
 });

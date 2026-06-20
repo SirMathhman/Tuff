@@ -46,6 +46,25 @@ function tokenize(source) {
       continue;
     }
 
+    // Match '||' logical OR operator (must come before standalone '!')
+    if (
+      (source[i] === "|" && i + 1 < source.length && source[i + 1] === "|") ||
+      (source[i] === "&" && i + 1 < source.length && source[i + 1] === "&")
+    ) {
+      result.push({
+        type: source[i] === "|" ? "logical_or" : "logical_and",
+      });
+      i += 2;
+      continue;
+    }
+
+    // Match '!' logical NOT operator (must come before '!=')
+    if (source[i] === "!") {
+      result.push({ type: "op", value: "!" });
+      i++;
+      continue;
+    }
+
     // Match == and !=
     if (
       (source[i] === "=" && i + 1 < source.length && source[i + 1] === "=") ||
@@ -179,6 +198,8 @@ function tokenize(source) {
 
       if (name === "let" || name === "mut" || name === "extern") {
         result.push({ type: "keyword", value: name });
+      } else if (name === "true" || name === "false") {
+        result.push({ type: "bool", value: name === "true" });
       } else if (name === "out") {
         result.push({ type: "keyword", value: name });
       } else if (

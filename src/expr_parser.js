@@ -1,8 +1,36 @@
 // Expression parsing — recursive descent (comparison → add/sub → primary).
 import state, { parseBraceIdentList } from "./parser_state";
 
-export function parseExpr() {
+// Logical OR — lowest precedence, short-circuit via JS ||
+function parseLogicalOr() {
+  let left = parseLogicalAnd();
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "logical_or"
+  ) {
+    state.pos++; // skip '||'
+    const right = parseLogicalAnd();
+    left = { type: "binop", op: "||", left, right };
+  }
+  return left;
+}
+
+// Logical AND — higher than OR, short-circuit via JS &&
+function parseLogicalAnd() {
   let left = parseComparison();
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "logical_and"
+  ) {
+    state.pos++; // skip '&&'
+    const right = parseComparison();
+    left = { type: "binop", op: "&&", left, right };
+  }
+  return left;
+}
+
+export function parseExpr() {
+  let left = parseLogicalOr();
   while (
     state.pos < state.tokens.length &&
     state.tokens[state.pos].type === "semi"
@@ -86,6 +114,19 @@ export function parsePrimary() {
     state.pos++;
     const inner = parsePrimary();
     return { type: "deref", expr: inner };
+  }
+
+  // '!' unary logical NOT operator
+  if (token.type === "op" && token.value === "!") {
+    state.pos++;
+    const operand = parsePrimary();
+    return { type: "unary", op: "!", operand };
+  }
+
+  // Boolean literal — true / false → number coercion in emitter
+  if (token.type === "bool") {
+    state.pos++;
+    return { type: "boollit", value: token.value };
   }
 
   // Function call with args: read(arg1, arg2) or bare identifier; also module::name references

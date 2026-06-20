@@ -41,12 +41,25 @@ export function emitExpr(node, insideDeref = false) {
   if (node.type === "numlit") {
     return String(node.value);
   }
+  // Boolean literal — coerce to number: true → 1, false → 0
+  if (node.type === "boollit") {
+    return `+(${JSON.stringify(node.value)})`;
+  }
   if (node.type === "binop") {
+    // Logical operators — short-circuit, coerce to 0/1
+    if (node.op === "||" || node.op === "&&") {
+      return `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
+    }
     // Coerce comparison results to numbers (+true => 1, +false => 0)
-    const isCmp = "+-*/".includes(node.op);
-    return isCmp
+    const isArith = "+-*/".includes(node.op);
+    return isArith
       ? `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`
       : `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
+  }
+  // Unary logical NOT: !expr → +(!expr)
+  if (node.type === "unary" && node.op === "!") {
+    const operand = emitExpr(node.operand);
+    return `+(${String.fromCharCode(33)}${operand})`;
   }
   if (node.type === "module_ref") {
     // Cross-module reference: module::name → __mod_module_name
