@@ -213,6 +213,8 @@ function tokenize(source) {
         result.push({ type: "keyword", value: name });
       } else if (name === "in") {
         result.push({ type: "keyword", value: name });
+      } else if (name === "this") {
+        result.push({ type: "keyword", value: name });
       } else {
         result.push({ type: "identifier", value: name });
       }

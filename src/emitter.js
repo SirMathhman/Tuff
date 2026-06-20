@@ -1,11 +1,13 @@
 // Module-level state shared with compileTuffToJS
-let refTargetVars,
+let emittedVars,
+  refTargetVars,
   refHolderVars,
   refTargetArrayVars,
   arrayRefHolders,
   sliceViewHolders;
 
 export function init(refTV, rhv, rtaV, arh, svh) {
+  emittedVars = new Set();
   refTargetVars = refTV;
   refHolderVars = rhv;
   refTargetArrayVars = rtaV;
@@ -77,6 +79,25 @@ export function emitExpr(node, insideDeref = false) {
         refHolderVars.has(node.name));
     return needsUnwrap ? `${node.name}.v` : node.name;
   }
+  // this.key — access scope variable by property name
+  if (node.type === "prop" && node.target?.type === "this") {
+    const varName = node.key;
+    const isArrayRef = refTargetArrayVars.has(varName);
+    const isHolderToArray = arrayRefHolders.has(varName);
+    const needsUnwrap =
+      (!isArrayRef && !isHolderToArray && refTargetVars.has(varName)) ||
+      (!insideDeref &&
+        !isArrayRef &&
+        !isHolderToArray &&
+        refHolderVars.has(varName));
+    return needsUnwrap ? `${varName}.v` : varName;
+  }
+  // Bare 'this' — emit as object literal capturing only variables emitted so far
+  if (node.type === "this") {
+    const vars = Array.from(emittedVars);
+    const entries = vars.map((name) => `"${name}":${name}`);
+    return `{${entries.join(",")}}`;
+  }
   if (node.type === "array") {
     const elems = node.elements.map((e) => emitExpr(e)).join(",");
     return `[${elems}]`;
@@ -130,6 +151,7 @@ export function emitStmt(stmt) {
   // fn name(params) => expr — function definition
   if (stmt.type === "fn_def") {
     const params = stmt.params ? stmt.params.join(",") : "";
+    emittedVars.add(stmt.name);
     return `function ${stmt.name}(${params}){return(${emitExpr(stmt.body)})}`;
   }
   // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
@@ -138,11 +160,13 @@ export function emitStmt(stmt) {
     // Object destructuring: let { x, y } = expr → const{x,y}=expr
     if (stmt.fields) {
       const initVal = emitExpr(stmt.init);
+      for (const f of stmt.fields) emittedVars.add(f);
       return `${keyword}{${stmt.fields.join(",")}}=${initVal}`;
     }
     const initVal = emitExpr(stmt.init);
     const isRefInit = stmt.init?.type === "ref";
     const isArrayVar = refTargetArrayVars.has(stmt.name);
+    emittedVars.add(stmt.name);
     return refTargetVars.has(stmt.name) && !isRefInit && !isArrayVar
       ? `${keyword} ${stmt.name}={v:${initVal}}`
       : `${keyword} ${stmt.name}=${initVal}`;

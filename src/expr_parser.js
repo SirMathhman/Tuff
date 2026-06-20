@@ -129,6 +129,13 @@ export function parsePrimary() {
     return { type: "boollit", value: token.value };
   }
 
+  // 'this' keyword — scope variable access via this.x syntax
+  if (token.type === "keyword" && token.value === "this") {
+    state.pos++;
+    const base = { type: "this" };
+    return parseIndexAccess(base);
+  }
+
   // Function call with args: read(arg1, arg2) or bare identifier; also module::name references
   if (token.type === "identifier") {
     const moduleName = state.tokens[state.pos++].value;

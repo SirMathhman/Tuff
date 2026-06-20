@@ -147,6 +147,16 @@ test('executeTuff("readBool() || false", "true") => 1', () => {
   expect(executeTuff("readBool() || false", "true")).toBe(1);
 });
 
+test('executeTuff("let x = read(); this.x", "100") => 100', () => {
+  expect(executeTuff("let x = read(); this.x", "100")).toBe(100);
+});
+
+test('executeTuff("let x = read(); let temp = this; temp.x", "100") => 100', () => {
+  expect(executeTuff("let x = read(); let temp = this; temp.x", "100")).toBe(
+    100,
+  );
+});
+
 test('executeTuff("fn get() => read(); get()", "1") => 1', () => {
   expect(executeTuff("fn get() => read(); get()", "1")).toBe(1);
 });
