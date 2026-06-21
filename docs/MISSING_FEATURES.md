@@ -6,12 +6,15 @@ A language is _usable_ when a programmer can write non-trivial programs without 
 
 ## 1. Type System & Literals (Critical)
 
-| Feature                 | Status     | Why It Matters                                                                                                                               |
-| ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **String literals**     | ✅ Done    | `"hello"` tokenized as `string` type, emitted via `strlit`. Property access chains work (`"test".length`).                                   |
-| **Boolean literals**    | ✅ Done    | `true` / `false` are recognized by the tokenizer as keywords (type: `bool`), parsed into `boollit` AST nodes. Coerced to numbers in emitter. |
-| **Null / void literal** | ❌ Missing | No concept of absence or intentional non-return. Functions that don't produce a value have no explicit type marker.                          |
-| **Type annotations**    | ❌ Missing | No way to declare expected types on variables, parameters, or return values. Hinders tooling and self-documentation.                         |
+| Feature                                   | Status     | Why It Matters                                                                                                                                |
+| ----------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Integer literal suffixes**              | ✅ Done    | `U8`, `U16`, `U32`, `I8`, `I16`, `I32` with range validation (e.g., `100U8`). Negative unsigned (`-100U8`) rejected at compile time.          |
+| **Type annotations**                      | ✅ Done    | Variables (`let x : U8 = 100U8`), function return types (`fn get() : Bool => true`), typed params (`fn pass(p : I32)`).                       |
+| **Compile-time type checking**            | ⚠️ Partial | Widening allowed (U8→U16, I8→I32), narrowing rejected, Bool-to-int mismatch caught. Call argument types validated against param declarations. |
+| **String literals**                       | ✅ Done    | `"hello"` tokenized as `string` type, emitted via `strlit`. Property access chains work (`"test".length`).                                    |
+| **Boolean literals**                      | ✅ Done    | `true` / `false` are recognized by the tokenizer as keywords (type: `bool`), parsed into `boollit` AST nodes. Coerced to numbers in emitter.  |
+| **Null / void literal**                   | ❌ Missing | No concept of absence or intentional non-return. Functions that don't produce a value have no explicit type marker.                           |
+| **Full integer width coverage (U64/I64)** | ❌ Missing | Only up to 32-bit types implemented; larger widths would require BigInt in generated JS.                                                      |
 
 ## 2. I/O & Built-ins (Critical)
 
@@ -78,12 +81,12 @@ A language is _usable_ when a programmer can write non-trivial programs without 
 
 ## 9. Tooling & Developer Experience (Low-Medium)
 
-| Feature                            | Status     | Why It Matters                                                                                                                                                        |
-| ---------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Comments**                       | ⚠️ Partial | Single-line comments (`//`) are not tokenized — the tokenizer will throw on `@` and likely on `/` in unexpected positions. Multi-line comments (`/* */`) also absent. |
-| **Meaningful error messages**      | ⚠️ Minimal | Parser errors say "Unexpected end" or "Expected identifier" without line/column information. Hard to debug source files.                                              |
-| **Type checking / inference**      | ❌ Missing | Runtime-only type system (inherited from JS). No compile-time validation of type mismatches.                                                                          |
-| **Standard library documentation** | ❌ Missing | Only two built-ins exist, and they are undocumented in the repo itself.                                                                                               |
+| Feature                            | Status     | Why It Matters                                                                                                                                                                                     |
+| ---------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Comments**                       | ⚠️ Partial | Single-line comments (`//`) are not tokenized — the tokenizer will throw on `@` and likely on `/` in unexpected positions. Multi-line comments (`/* */`) also absent.                              |
+| **Meaningful error messages**      | ⚠️ Minimal | Parser errors say "Unexpected end" or "Expected identifier" without line/column information. Hard to debug source files.                                                                           |
+| **Type checking / inference**      | ⚠️ Partial | Compile-time type system for integer types (U8/U16/U32/I8/I16/I32/Bool) with widening rules, call argument validation, and cross-variable inference. String types not yet included in the checker. |
+| **Standard library documentation** | ❌ Missing | Only two built-ins exist, and they are undocumented in the repo itself.                                                                                                                            |
 
 ## 10. Memory & Performance (Low)
 
@@ -102,6 +105,8 @@ To reach "usable" status, address these in order:
 2. ~~**String literals + concatenation**~~ — ✅ Implemented (`"hello"` tokenized, `strlit` emitted)
 3. ~~**Boolean literals**~~ — ✅ Implemented (`true`/`false` as keywords → `boollit`)
 4. ~~**Logical operators**~~ — ✅ Implemented (`&&`, `||`, `!` with short-circuit evaluation)
-5. **Break / continue** — control flow completeness (return is already done via throw/catch IIFE escape)
-6. **Comments** — any real program needs documentation inline
-7. **Array length + push** — dynamic collections are a basic building block
+5. ~~**Integer literal suffixes + type annotations**~~ — ✅ Done (U8/U16/U32/I8/I16/I32, variable/param/return annotations)
+6. ~~**Compile-time type checking**~~ — ⚠️ Partial (widening rules, call arg validation, cross-variable inference; strings not yet covered)
+7. **Break / continue** — control flow completeness (return is already done via throw/catch IIFE escape)
+8. **Comments** — any real program needs documentation inline
+9. **Array length + push** — dynamic collections are a basic building block
