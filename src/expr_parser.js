@@ -154,15 +154,32 @@ function parseComparison() {
   return left;
 }
 
-function parseAddSub() {
+// Multiplication / division / modulo level (higher precedence than add/sub)
+function parseMulDivMod() {
   let left = parsePrimary();
+  while (
+    state.pos < state.tokens.length &&
+    ((state.tokens[state.pos].type === "op" &&
+      "*/".includes(state.tokens[state.pos].value)) ||
+      state.tokens[state.pos].type === "mod")
+  ) {
+    const token = state.tokens[state.pos++];
+    const opVal = token.type === "mod" ? "%" : token.value;
+    const right = parsePrimary();
+    left = { type: "binop", op: opVal, left, right };
+  }
+  return left;
+}
+
+function parseAddSub() {
+  let left = parseMulDivMod();
   while (
     state.pos < state.tokens.length &&
     state.tokens[state.pos].type === "op" &&
     "+-".includes(state.tokens[state.pos].value)
   ) {
     const opVal = state.tokens[state.pos++].value;
-    const right = parsePrimary();
+    const right = parseMulDivMod();
     left = { type: "binop", op: opVal, left, right };
   }
   return left;

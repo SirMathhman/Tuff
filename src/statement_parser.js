@@ -418,14 +418,14 @@ export function parseStatement() {
       return null;
     }
 
-    // Compound assignment: +=
+    // Compound assignment: +=, -=, *=, /=
     if (
       state.pos < state.tokens.length &&
-      state.tokens[state.pos].type === "assign_add"
+      state.tokens[state.pos].type === "compound_assign"
     ) {
-      state.pos++; // skip '+='
+      const op = state.tokens[state.pos++].value;
       const exprAst = parseExpr();
-      return { type: "compound_assign_stmt", target, op: "+=", value: exprAst };
+      return { type: "compound_assign_stmt", target, op, value: exprAst };
     }
 
     // Regular assignment: =
@@ -465,12 +465,12 @@ export function parseStatement() {
   if (
     token.type === "identifier" &&
     state.pos + 1 < state.tokens.length &&
-    state.tokens[state.pos + 1].type === "assign_add"
+    state.tokens[state.pos + 1].type === "compound_assign"
   ) {
     const name = state.tokens[state.pos++].value;
-    state.pos++; // skip '+='
+    const op = state.tokens[state.pos++].value; // skip '+=', '-=', '*=', '/='
     const exprAst = parseExpr();
-    return { type: "compound_assign_stmt", name, op: "+=", value: exprAst };
+    return { type: "compound_assign_stmt", name, op, value: exprAst };
   }
 
   // x = expr ; (assignment statement)

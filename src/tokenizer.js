@@ -22,8 +22,12 @@ function tokenize(source) {
     }
 
     // Match '+=', '-=', '*=', '/=' compound-assignment operators (must come before single-char ops)
-    if (source[i] === "+" && i + 1 < source.length && source[i + 1] === "=") {
-      result.push({ type: "assign_add" });
+    if (
+      "+-*/".includes(source[i]) &&
+      i + 1 < source.length &&
+      source[i + 1] === "="
+    ) {
+      result.push({ type: "compound_assign", value: source.slice(i, i + 2) });
       i += 2;
       continue;
     }
@@ -78,6 +82,13 @@ function tokenize(source) {
     // Match '&' reference operator
     if (source[i] === "&") {
       result.push({ type: "ref" });
+      i++;
+      continue;
+    }
+
+    // Match '%' modulo operator
+    if (source[i] === "%") {
+      result.push({ type: "mod" });
       i++;
       continue;
     }

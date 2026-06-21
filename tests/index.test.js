@@ -250,6 +250,22 @@ test('executeTuff("-(read() + 1)", "2") => -3', () => {
   expect(executeTuff("-(read() + 1)", "2")).toBe(-3);
 });
 
+test('executeTuff("read() % read()", "10 3") => 1', () => {
+  expect(executeTuff("read() % read()", "10 3")).toBe(1);
+});
+
+test('executeTuff("let mut x = read(); x -= read(); x", "10 3") => 7', () => {
+  expect(executeTuff("let mut x = read(); x -= read(); x", "10 3")).toBe(7);
+});
+
+test('executeTuff("let mut x = read(); x *= read(); x", "4 5") => 20', () => {
+  expect(executeTuff("let mut x = read(); x *= read(); x", "4 5")).toBe(20);
+});
+
+test('executeTuff("let mut x = read(); x /= read(); x", "12 3") => 4', () => {
+  expect(executeTuff("let mut x = read(); x /= read(); x", "12 3")).toBe(4);
+});
+
 test("compileTuffToJS throws on unexpected character", () => {
   expect(() => compileTuffToJS("@foo")).toThrow();
 });

@@ -141,7 +141,7 @@ export function emitExpr(node, insideDeref = false) {
       return `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
     }
     // Coerce comparison results to numbers (+true => 1, +false => 0)
-    const isArith = "+-*/".includes(node.op);
+    const isArith = "+-*/%".includes(node.op);
     return isArith
       ? `${emitExpr(node.left)}${node.op}${emitExpr(node.right)}`
       : `+(${emitExpr(node.left)}${node.op}${emitExpr(node.right)})`;
