@@ -228,11 +228,11 @@ export function parsePrimary() {
     return { type: "deref", expr: inner };
   }
 
-  // '!' unary logical NOT operator
-  if (token.type === "op" && token.value === "!") {
+  // '!' unary logical NOT operator or '-' unary negation
+  if (token.type === "op" && (token.value === "!" || token.value === "-")) {
     state.pos++;
     const operand = parsePrimary();
-    return { type: "unary", op: "!", operand };
+    return { type: "unary", op: token.value, operand };
   }
 
   // Boolean literal — true / false → number coercion in emitter

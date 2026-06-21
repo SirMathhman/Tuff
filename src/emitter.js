@@ -151,6 +151,11 @@ export function emitExpr(node, insideDeref = false) {
     const operand = emitExpr(node.operand);
     return `+(${String.fromCharCode(33)}${operand})`;
   }
+  // Unary minus: -expr → -(expr)
+  if (node.type === "unary" && node.op === "-") {
+    const operand = emitExpr(node.operand);
+    return `-(${operand})`;
+  }
   if (node.type === "module_ref") {
     // Cross-module reference: module::name → __mod_module_name
     return `__mod_${node.name.replace("::", "_")}`;

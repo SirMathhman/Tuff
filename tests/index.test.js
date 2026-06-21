@@ -246,6 +246,10 @@ test('executeTuff("test".length, "test foo") => 4', () => {
   expect(executeTuff('"test".length', "test foo")).toBe(4);
 });
 
+test('executeTuff("-(read() + 1)", "2") => -3', () => {
+  expect(executeTuff("-(read() + 1)", "2")).toBe(-3);
+});
+
 test("compileTuffToJS throws on unexpected character", () => {
   expect(() => compileTuffToJS("@foo")).toThrow();
 });
