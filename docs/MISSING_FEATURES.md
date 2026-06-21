@@ -6,35 +6,35 @@ A language is _usable_ when a programmer can write non-trivial programs without 
 
 ## 1. Type System & Literals (Critical)
 
-| Feature                 | Status     | Why It Matters                                                                                                                                                     |
-| ----------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **String literals**     | ✅ Done    | `"hello"` tokenized as `string` type, emitted via `strlit`. Property access chains work (`"test".length`).                                                         |
-| **Boolean literals**    | ✅ Done    | `true` / `false` are recognized by the tokenizer as keywords (type: `bool`), parsed into `boollit` AST nodes. Coerced to numbers in emitter.                      |
-| **Null / void literal** | ❌ Missing | No concept of absence or intentional non-return. Functions that don't produce a value have no explicit type marker.                                                |
-| **Type annotations**    | ❌ Missing | No way to declare expected types on variables, parameters, or return values. Hinders tooling and self-documentation.                                               |
+| Feature                 | Status     | Why It Matters                                                                                                                               |
+| ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **String literals**     | ✅ Done    | `"hello"` tokenized as `string` type, emitted via `strlit`. Property access chains work (`"test".length`).                                   |
+| **Boolean literals**    | ✅ Done    | `true` / `false` are recognized by the tokenizer as keywords (type: `bool`), parsed into `boollit` AST nodes. Coerced to numbers in emitter. |
+| **Null / void literal** | ❌ Missing | No concept of absence or intentional non-return. Functions that don't produce a value have no explicit type marker.                          |
+| **Type annotations**    | ❌ Missing | No way to declare expected types on variables, parameters, or return values. Hinders tooling and self-documentation.                         |
 
 ## 2. I/O & Built-ins (Critical)
 
-| Feature                        | Status     | Why It Matters                                                                                                                                                    |
-| ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Print / output**             | ❌ Missing | The language can `read()` but cannot _write_. A usable language needs at least one way to produce visible output (`print()`, `println()`, or similar).            |
-| **String concatenation**       | ⚠️ Partial | String literals exist, so `+` on strings is possible in principle. Actual string concat behavior depends on generated JS coercion.                                  |
+| Feature                        | Status     | Why It Matters                                                                                                                                                                                             |
+| ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Print / output**             | ❌ Missing | The language can `read()` but cannot _write_. A usable language needs at least one way to produce visible output (`print()`, `println()`, or similar).                                                     |
+| **String concatenation**       | ⚠️ Partial | String literals exist, so `+` on strings is possible in principle. Actual string concat behavior depends on generated JS coercion.                                                                         |
 | **Standard library functions** | ⚠️ Minimal | Built-ins now include: `read()`, `readBool()`, and `readString()` (reads next whitespace-separated token as a string). Still missing: length, min/max, abs, type conversion (`toString` equivalents), etc. |
 
 ## 3. Control Flow (High)
 
-| Feature                        | Status         | Why It Matters                                                                                                                          |
-| ------------------------------ | -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Return / break / continue**  | ⚠️ Partial     | `return` keyword is implemented via the throw/catch IIFE-escape mechanism (`fn_return`). `break` and `continue` are still missing.       |
-| **Yield**                      | ✅ Done    | `yield` keyword allows early-return from block expressions, emitted as direct `return(...)` in generated JS.                            |
-| **Match / switch expressions** | ❌ Missing     | Multi-way branching requires nested `if/else`. A pattern match or switch on values would significantly reduce boilerplate.              |
-| **Do-until loops**             | ⚠️ Not present | Only `while` (pre-condition) and `for` (range). No post-condition loop for "run at least once" patterns.                                |
+| Feature                        | Status         | Why It Matters                                                                                                                     |
+| ------------------------------ | -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Return / break / continue**  | ⚠️ Partial     | `return` keyword is implemented via the throw/catch IIFE-escape mechanism (`fn_return`). `break` and `continue` are still missing. |
+| **Yield**                      | ✅ Done        | `yield` keyword allows early-return from block expressions, emitted as direct `return(...)` in generated JS.                       |
+| **Match / switch expressions** | ❌ Missing     | Multi-way branching requires nested `if/else`. A pattern match or switch on values would significantly reduce boilerplate.         |
+| **Do-until loops**             | ⚠️ Not present | Only `while` (pre-condition) and `for` (range). No post-condition loop for "run at least once" patterns.                           |
 
 ## 4. Expressions & Operators (High)
 
 | Feature                                   | Status     | Why It Matters                                                                                                                                                                           |
 | ----------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Logical operators (`&&`, `\|\|`, `!`)** | ✅ Done    | Tokenized as `logical_or`, `logical_and`, and unary `op: "!"`. Parsed via `parseLogicalOr`/`parseLogicalAnd` in the expression parser. Short-circuit evaluation supported.             |
+| **Logical operators (`&&`, `\|\|`, `!`)** | ✅ Done    | Tokenized as `logical_or`, `logical_and`, and unary `op: "!"`. Parsed via `parseLogicalOr`/`parseLogicalAnd` in the expression parser. Short-circuit evaluation supported.               |
 | **Ternary / inline if**                   | ❌ Missing | No `cond ? a : b`. Must use full `if/else` statement even in expression contexts (e.g., inside function arguments).                                                                      |
 | **Unary minus / negation**                | ⚠️ Partial | Unary `-` works for numbers via tokenizer (`-3.14`). But explicit unary negation of an expression like `-(x + y)` is not parsed — the parser treats `-` as binary only in `parseAddSub`. |
 | **Modulo / remainder**                    | ❌ Missing | Only `+`, `-`, `*`, `/`. No `%` operator. Common need for indexing, parity checks, etc.                                                                                                  |
