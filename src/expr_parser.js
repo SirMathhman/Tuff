@@ -249,6 +249,16 @@ export function parsePrimary() {
   if (token.type === "op" && (token.value === "!" || token.value === "-")) {
     state.pos++;
     const operand = parsePrimary();
+    // Reject negating unsigned-typed literals (e.g., -100U8)
+    if (
+      token.value === "-" &&
+      operand.type === "numlit" &&
+      /^u/i.test(operand.suffix || "")
+    ) {
+      throw new Error(
+        `Negative value not allowed for unsigned type: -${operand.value}${operand.suffix}`,
+      );
+    }
     return { type: "unary", op: token.value, operand };
   }
 
@@ -308,7 +318,9 @@ export function parsePrimary() {
   // Numeric literal
   if (token.type === "number") {
     state.pos++;
-    return { type: "numlit", value: token.value };
+    const ast = { type: "numlit", value: token.value };
+    if (token.suffix) ast.suffix = token.suffix;
+    return ast;
   }
 
   // Array literal: [ expr , expr ] or [ expr ; expr ]

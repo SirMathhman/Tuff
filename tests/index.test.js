@@ -393,3 +393,47 @@ test('executeAllTuff(["index"], {"index": "unknown::z"}) throws', () => {
     compileAllTuffToJSBundled({ index: "unknown::z" }, "index"),
   ).toThrow();
 });
+
+test('executeTuff("100U8", "") => 100', () => {
+  expect(executeTuff("100U8", "")).toBe(100);
+});
+
+test('executeTuff("-100U8") throws', () => {
+  expect(() => executeTuff("-100U8")).toThrow();
+});
+
+test('executeTuff("256U8") throws', () => {
+  expect(() => executeTuff("256U8")).toThrow();
+});
+
+test('executeTuff("let x : U8 = 100U8; x", "") => 100', () => {
+  expect(executeTuff("let x : U8 = 100U8; x", "")).toBe(100);
+});
+
+test('executeTuff("let x : U8 = 0U16") throws', () => {
+  expect(() => executeTuff("let x : U8 = 0U16")).toThrow();
+});
+
+test('executeTuff("let x : U16 = 100U8; x", "") => 100', () => {
+  expect(executeTuff("let x : U16 = 100U8; x", "")).toBe(100);
+});
+
+test('executeTuff("let x = 0U16; let y : U8 = x") throws', () => {
+  expect(() => executeTuff("let x = 0U16; let y : U8 = x")).toThrow();
+});
+
+test('executeTuff("let x : Bool = true; x", "") => 1', () => {
+  expect(executeTuff("let x : Bool = true; x", "")).toBe(1);
+});
+
+test('executeTuff("let x : Bool = true; let y : U8 = x") throws', () => {
+  expect(() => executeTuff("let x : Bool = true; let y : U8 = x")).toThrow();
+});
+
+test('executeTuff("let mut x = 0U8; x = true") throws', () => {
+  expect(() => executeTuff("let mut x = 0U8; x = true")).toThrow();
+});
+
+test('executeTuff("fn get() : Bool => true; get()", "") => 1', () => {
+  expect(executeTuff("fn get() : Bool => true; get()", "")).toBe(1);
+});

@@ -17,10 +17,65 @@ function _parseStatements(source) {
   return stmts;
 }
 
-// Shared utility: collect declared variable names and mutability for validation.
-function collectVars(stmts, declSet, mutSet) {
+// Check if source type can be widened to target type.
+function isWideningOk(source, target) {
+  // Exact match is always fine
+  if (source === target) return true;
+
+  const decl = target.toUpperCase();
+  const init = source.toUpperCase();
+
+  // Widening unsigned: U8 → U16, U8 → U32, U16 → U32
+  const widenOk = new Set(["U8_U16", "U8_U32", "U16_U32"]);
+  if (widenOk.has(`${init}_${decl}`)) return true;
+
+  // Widening signed: I8 → I16, I8 → I32, I16 → I32
+  const widenSigned = new Set(["I8_I16", "I8_I32", "I16_I32"]);
+  if (widenSigned.has(`${init}_${decl}`)) return true;
+
+  return false;
+}
+
+// Check type compatibility between declared type and initializer literal suffix.
+function checkTypeCompatibility(stmt, varTypes) {
+  const decl = stmt.typeName?.toUpperCase();
+  // Determine the source type from the initializer
+  let initType = null;
+  if (stmt.init?.suffix) {
+    initType = stmt.init.suffix.toUpperCase();
+  } else if (stmt.init?.type === "varref" && varTypes.has(stmt.init.name)) {
+    initType = varTypes.get(stmt.init.name);
+  }
+
+  // No annotation or no known source type → OK
+  if (!decl || !initType) return;
+
+  if (!isWideningOk(initType, decl)) {
+    const srcLabel =
+      stmt.init?.suffix ?? `${stmt.init.name}:${varTypes.get(stmt.init.name)}`;
+    throw new Error(
+      `Type mismatch: cannot assign ${srcLabel} to variable of type ${stmt.typeName}`,
+    );
+  }
+}
+
+// Infer the type of an initializer expression (returns uppercase type string or null).
+function inferInitType(init, varTypes) {
+  if (!init) return null;
+  if (init.suffix) return init.suffix.toUpperCase();
+  if (init.type === "varref" && varTypes.has(init.name))
+    return varTypes.get(init.name);
+  // Default: untyped number → treat as generic, no constraint
+  return null;
+}
+
+// Shared utility: collect declared variable names, mutability, and inferred types for validation.
+function collectVars(stmts, declSet, mutSet, varTypes = new Map()) {
   for (const s of stmts) {
     if (s.type === "let") {
+      // Type compatibility check — uses current varTypes which includes prior declarations
+      checkTypeCompatibility(s, varTypes);
+
       // Destructuring pattern: let { x, y } = expr → declare each field
       if (s.fields) {
         for (const f of s.fields) {
@@ -30,6 +85,11 @@ function collectVars(stmts, declSet, mutSet) {
       } else {
         declSet.add(s.name);
         if (s.mutable) mutSet.add(s.name);
+        // Track inferred type: explicit annotation wins, otherwise infer from initializer
+        const varType = s.typeName
+          ? s.typeName.toUpperCase()
+          : inferInitType(s.init, varTypes);
+        varTypes.set(s.name, varType);
       }
     }
     // extern let { x, y } = moduleName → declare each field
@@ -42,7 +102,7 @@ function collectVars(stmts, declSet, mutSet) {
     if (s.type === "fn_def") {
       declSet.add(s.name);
     }
-    if (s.type === "block") collectVars(s.stmts, declSet, mutSet);
+    if (s.type === "block") collectVars(s.stmts, declSet, mutSet, varTypes);
   }
 }
 

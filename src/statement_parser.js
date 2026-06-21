@@ -11,6 +11,24 @@ import {
   parseForStmt,
 } from "./control_flow_parser";
 
+// Parse optional type annotation: ':' followed by a type identifier. Returns null if no annotation present.
+function _parseTypeAnnotation() {
+  let typeName = null;
+  if (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "colon"
+  ) {
+    state.pos++; // skip ':'
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    )
+      throw new Error("Expected type name after ':'");
+    typeName = state.tokens[state.pos++].value;
+  }
+  return typeName;
+}
+
 export function validateRefs(node, declaredVars, mutableVars) {
   if (!node || typeof node !== "object") return;
   // Function definition body references are validated against parent scope + params
@@ -195,6 +213,9 @@ export function parseStatement() {
     }
     state.pos++; // skip ')'
 
+    // Optional return type annotation: ':' followed by a type identifier
+    const returnType = _parseTypeAnnotation();
+
     // Expect fat arrow '=>'
     if (
       state.pos >= state.tokens.length ||
@@ -210,13 +231,26 @@ export function parseStatement() {
       const hasOperatorAfterBrace = _hasOperatorAfterBrace(state.pos);
       if (!hasOperatorAfterBrace) {
         const blockStmts = _parseBlockStmts();
-        return { type: "fn_def", name, params, body: null, blockStmts };
+        return {
+          type: "fn_def",
+          name,
+          params,
+          body: null,
+          blockStmts,
+          ...(returnType ? { returnType } : {}),
+        };
       }
     }
 
     // Single-statement/expression body (supports compound assignment, block expressions, etc.)
     const body = parseStatement();
-    return { type: "fn_def", name, params, body };
+    return {
+      type: "fn_def",
+      name,
+      params,
+      body,
+      ...(returnType ? { returnType } : {}),
+    };
   }
 
   // for (i in start..end) stmt;
@@ -387,6 +421,9 @@ export function parseStatement() {
       throw new Error("Expected identifier after 'let'");
     const name = state.tokens[state.pos++].value;
 
+    // Optional type annotation: ':' followed by a type identifier
+    const typeName = _parseTypeAnnotation();
+
     if (
       state.pos >= state.tokens.length ||
       state.tokens[state.pos].type !== "assign"
@@ -395,7 +432,13 @@ export function parseStatement() {
     state.pos++; // skip '='
 
     const exprAst = parseExpr();
-    return { type: "let", name, mutable, init: exprAst };
+    return {
+      type: "let",
+      name,
+      mutable,
+      init: exprAst,
+      ...(typeName ? { typeName } : {}),
+    };
   }
 
   // Helper: parse identifier or 'this' followed by index/property chain; check for assignment operators.

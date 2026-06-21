@@ -193,11 +193,59 @@ function tokenize(source) {
       continue;
     }
 
-    // Match numeric literals like 0, 42, -3.14
-    const numMatch = source.slice(i).match(/^(-?\d+(\.\d+)?)/);
+    // Match numeric literals like 0, 42, -3.14, with optional type suffix (e.g., 100U8)
+    const numMatch = source.slice(i).match(/^(-?\d+(\.\d+)?)([A-Za-z]\w*)?/);
     if (numMatch) {
-      result.push({ type: "number", value: parseFloat(numMatch[1]) });
-      i += numMatch[1].length;
+      const value = parseFloat(numMatch[1]);
+      // Validate range for unsigned integer types
+      if (/^u8$/i.test(numMatch[3] || "")) {
+        if (!Number.isInteger(value) || value < 0 || value > 255) {
+          throw new Error(
+            `Value ${value} out of range for U8 (must be 0-255): ${numMatch[0]}`,
+          );
+        }
+      } else if (/^u16$/i.test(numMatch[3] || "")) {
+        if (!Number.isInteger(value) || value < 0 || value > 65535) {
+          throw new Error(
+            `Value ${value} out of range for U16 (must be 0-65535): ${numMatch[0]}`,
+          );
+        }
+      } else if (/^u32$/i.test(numMatch[3] || "")) {
+        if (!Number.isInteger(value) || value < 0 || value > 4294967295) {
+          throw new Error(
+            `Value ${value} out of range for U32 (must be 0-4294967295): ${numMatch[0]}`,
+          );
+        }
+      } else if (/^i8$/i.test(numMatch[3] || "")) {
+        if (!Number.isInteger(value) || value < -128 || value > 127) {
+          throw new Error(
+            `Value ${value} out of range for I8 (must be -128 to 127): ${numMatch[0]}`,
+          );
+        }
+      } else if (/^i16$/i.test(numMatch[3] || "")) {
+        if (!Number.isInteger(value) || value < -32768 || value > 32767) {
+          throw new Error(
+            `Value ${value} out of range for I16 (must be -32768 to 32767): ${numMatch[0]}`,
+          );
+        }
+      } else if (/^i32$/i.test(numMatch[3] || "")) {
+        if (
+          !Number.isInteger(value) ||
+          value < -2147483648 ||
+          value > 2147483647
+        ) {
+          throw new Error(
+            `Value ${value} out of range for I32 (must be -2147483648 to 2147483647): ${numMatch[0]}`,
+          );
+        }
+      }
+
+      result.push({
+        type: "number",
+        value,
+        ...(numMatch[3] ? { suffix: numMatch[3] } : {}),
+      });
+      i += numMatch[0].length;
       continue;
     }
 
