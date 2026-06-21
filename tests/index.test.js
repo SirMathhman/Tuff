@@ -266,6 +266,12 @@ test('executeTuff("let mut x = read(); x /= read(); x", "12 3") => 4', () => {
   expect(executeTuff("let mut x = read(); x /= read(); x", "12 3")).toBe(4);
 });
 
+test('executeTuff("let array = [read(), read()]; array.length", "1 3") => 2', () => {
+  expect(executeTuff("let array = [read(), read()]; array.length", "1 3")).toBe(
+    2,
+  );
+});
+
 test("compileTuffToJS throws on unexpected character", () => {
   expect(() => compileTuffToJS("@foo")).toThrow();
 });
