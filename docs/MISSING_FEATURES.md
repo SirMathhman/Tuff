@@ -36,10 +36,10 @@ A language is _usable_ when a programmer can write non-trivial programs without 
 | ----------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Logical operators (`&&`, `\|\|`, `!`)** | ✅ Done    | Tokenized as `logical_or`, `logical_and`, and unary `op: "!"`. Parsed via `parseLogicalOr`/`parseLogicalAnd` in the expression parser. Short-circuit evaluation supported.               |
 | **Ternary / inline if**                   | ❌ Missing | No `cond ? a : b`. Must use full `if/else` statement even in expression contexts (e.g., inside function arguments).                                                                      |
-| **Unary minus / negation**                | ⚠️ Partial | Unary `-` works for numbers via tokenizer (`-3.14`). But explicit unary negation of an expression like `-(x + y)` is not parsed — the parser treats `-` as binary only in `parseAddSub`. |
-| **Modulo / remainder**                    | ❌ Missing | Only `+`, `-`, `*`, `/`. No `%` operator. Common need for indexing, parity checks, etc.                                                                                                  |
+| **Unary minus / negation**                | ✅ Done    | Unary `-` works for numbers via tokenizer (`-3.14`) and explicit unary negation of expressions like `-(x + y)` is now parsed as `{ type: "unary", op: "-" }`.                              |
+| **Modulo / remainder**                    | ✅ Done    | `%` operator tokenized, parsed at mul/div/mod precedence level between add/sub and primary.                                                                                               |
 | **Power / exponentiation**                | ❌ Missing | No `**` or equivalent.                                                                                                                                                                   |
-| **Assignment expressions**                | ⚠️ Partial | Only `+=` is supported as compound assignment. `-=` , `*=`, `/=` are tokenized but not parsed by the statement parser.                                                                   |
+| **Assignment expressions**                | ✅ Done    | All four compound assignments (`+=`, `-=` , `*=`, `/=`) are tokenized, parsed into `compound_assign_stmt`, and emitted generically via the `op` field.                                    |
 
 ## 5. Data Structures (Medium)
 
