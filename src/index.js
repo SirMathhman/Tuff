@@ -69,8 +69,50 @@ function inferInitType(init, varTypes) {
   return null;
 }
 
+// Built-in function return types
+const builtinReturnTypes = new Map([
+  ["read", null], // untyped int
+  ["readBool", "BOOL"],
+]);
+
+// Infer the type of an arbitrary expression node (returns uppercase type string or null).
+function inferExprType(node, varTypes, fnSignatures) {
+  if (!node || typeof node !== "object") return null;
+  // Literal with suffix
+  if (node.suffix) return node.suffix.toUpperCase();
+  // Variable reference
+  if (node.type === "varref" && varTypes.has(node.name))
+    return varTypes.get(node.name);
+  // Boolean literal
+  if (node.type === "boolit") return "BOOL";
+  // Built-in call
+  if (node.type === "call" && builtinReturnTypes.has(node.name)) {
+    return builtinReturnTypes.get(node.name);
+  }
+  // User function call — use declared return type
+  if (
+    node.type === "call" &&
+    !node.name.includes("::") &&
+    fnSignatures.has(node.name)
+  ) {
+    const sig = fnSignatures.get(node.name);
+    return sig.returnType ? sig.returnType.toUpperCase() : null;
+  }
+  // Negation of a typed expression preserves the inner type
+  if (node.type === "negate")
+    return inferExprType(node.operand, varTypes, fnSignatures);
+  // Default: untyped → no constraint
+  return null;
+}
+
 // Shared utility: collect declared variable names, mutability, and inferred types for validation.
-function collectVars(stmts, declSet, mutSet, varTypes = new Map()) {
+function collectVars(
+  stmts,
+  declSet,
+  mutSet,
+  varTypes = new Map(),
+  fnSignatures = new Map(),
+) {
   for (const s of stmts) {
     if (s.type === "let") {
       // Type compatibility check — uses current varTypes which includes prior declarations
@@ -98,47 +140,119 @@ function collectVars(stmts, declSet, mutSet, varTypes = new Map()) {
         declSet.add(f);
       }
     }
-    // Function definitions declare a callable name
+    // Function definitions declare a callable name + track param types
     if (s.type === "fn_def") {
       declSet.add(s.name);
+      const paramTypes = [];
+      for (const p of s.params || []) {
+        if (typeof p === "string" && p.includes(":")) {
+          paramTypes.push(p.split(":")[1].toUpperCase());
+        } else {
+          paramTypes.push(null);
+        }
+      }
+      fnSignatures.set(s.name, {
+        paramTypes,
+        returnType: s.returnType || null,
+      });
     }
-    if (s.type === "block") collectVars(s.stmts, declSet, mutSet, varTypes);
+    if (s.type === "block")
+      collectVars(s.stmts, declSet, mutSet, varTypes, fnSignatures);
   }
 }
 
 // Shared utility: validate all varrefs are declared and assignments only to mutable vars.
-function validateEach(stmts, declSet, mutSet) {
+function validateEach(
+  stmts,
+  declSet,
+  mutSet,
+  fnSignatures = new Map(),
+  varTypes = new Map(),
+) {
   for (const s of stmts) {
     if (s.type === "block") {
       const childDecl = new Set(declSet);
       const childMut = new Set(mutSet);
-      collectVars(s.stmts, childDecl, childMut);
-      validateEach(s.stmts, childDecl, childMut);
+      collectVars(s.stmts, childDecl, childMut, varTypes, fnSignatures);
+      validateEach(s.stmts, childDecl, childMut, fnSignatures, varTypes);
     } else if (s.type === "if_stmt") {
-      const thenScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-      validateEach(s.thenBranch, thenScope.decl, thenScope.mut);
+      const thenDecl = new Set(declSet);
+      const thenMut = new Set(mutSet);
+      validateEach(s.thenBranch, thenDecl, thenMut, fnSignatures, varTypes);
       if (s.elseBranch) {
-        const elseScope = { decl: new Set(declSet), mut: new Set(mutSet) };
-        validateEach(s.elseBranch, elseScope.decl, elseScope.mut);
+        const elseDecl = new Set(declSet);
+        const elseMut = new Set(mutSet);
+        validateEach(s.elseBranch, elseDecl, elseMut, fnSignatures, varTypes);
       }
     } else if (s.type === "while_stmt") {
-      const childDecl = new Set(declSet);
-      const childMut = new Set(mutSet);
-      validateEach(s.body, childDecl, childMut);
+      const whileDecl = new Set(declSet);
+      const whileMut = new Set(mutSet);
+      validateEach(s.body, whileDecl, whileMut, fnSignatures, varTypes);
     } else if (s.type === "for_stmt") {
       // Validate range expressions against parent scope
       parser.validateRefs(s.from, declSet, mutSet);
       parser.validateRefs(s.to, declSet, mutSet);
       // The loop variable is implicitly declared and mutable within the for scope
-      const childDecl = new Set(declSet);
-      const childMut = new Set(mutSet);
-      childDecl.add(s.variable);
-      childMut.add(s.variable);
-      validateEach(s.body, childDecl, childMut);
+      const forDecl = new Set(declSet);
+      const forMut = new Set(mutSet);
+      forDecl.add(s.variable);
+      forMut.add(s.variable);
+      validateEach(s.body, forDecl, forMut, fnSignatures, varTypes);
     } else {
       parser.validateRefs(s, declSet, mutSet);
     }
   }
+}
+
+// Validate function call arguments against declared parameter types.
+function _validateCallArgs(node, varTypes, fnSignatures) {
+  if (!node || typeof node !== "object") return;
+
+  // Check this node if it's a call with typed params
+  if (node.type === "call" && !node.name.includes("::")) {
+    const sig = fnSignatures.get(node.name);
+    if (sig && sig.paramTypes) {
+      for (
+        let i = 0;
+        i < Math.min(sig.paramTypes.length, node.args?.length);
+        i++
+      ) {
+        const paramType = sig.paramTypes[i];
+        if (!paramType) continue;
+        const argExpr = node.args[i];
+        const argType = inferExprType(argExpr, varTypes, fnSignatures);
+        // If argument has a known type and it's incompatible with the parameter
+        if (argType && !isWideningOk(argType, paramType)) {
+          throw new Error(
+            `Type mismatch: cannot pass ${argType} to parameter of type ${paramType}`,
+          );
+        }
+      }
+    }
+  }
+
+  // Recurse into children
+  for (const key of Object.keys(node)) {
+    const child = node[key];
+    if (Array.isArray(child))
+      child.forEach((c) => _validateCallArgs(c, varTypes, fnSignatures));
+    else if (child && typeof child === "object")
+      _validateCallArgs(child, varTypes, fnSignatures);
+  }
+}
+
+// Top-level compile entry — collects vars then validates
+function _compileValidate(stmts, extraDecl = new Set()) {
+  const declaredVars = new Set();
+  const mutableVars = new Set();
+  const varTypes = new Map();
+  const fnSignatures = new Map();
+  for (const n of extraDecl) declaredVars.add(n);
+  collectVars(stmts, declaredVars, mutableVars, varTypes, fnSignatures);
+  validateEach(stmts, declaredVars, mutableVars, fnSignatures, varTypes);
+
+  // Validate function call arguments against parameter types
+  stmts.forEach((s) => _validateCallArgs(s, varTypes, fnSignatures));
 }
 
 // Shared utility: collect ref-related info from AST nodes into provided sets/map.
@@ -219,10 +333,7 @@ function compileTuffToJS(source) {
   const stmts = _parseStatements(source);
 
   // Collect and validate variables using shared utilities
-  const declaredVars = new Set();
-  const mutableVars = new Set();
-  collectVars(stmts, declaredVars, mutableVars);
-  validateEach(stmts, declaredVars, mutableVars);
+  _compileValidate(stmts);
 
   // Collect ref info and initialize emitter
   const {
@@ -371,17 +482,10 @@ function compileAllTuffToJSBundled(sources, entryName) {
   }
 
   // Collect and validate variables using shared utilities (including bare module refs)
-  const declaredVars = new Set();
-  const mutableVars = new Set();
-  collectVars(stmts, declaredVars, mutableVars);
+  _compileValidate(stmts, new Set(moduleObjectNames));
 
   // Add bare module names as valid variables so `let temp = lib` passes validation
-  for (const modName of moduleObjectNames) {
-    declaredVars.add(modName);
-  }
-
   stmts.forEach((s) => validateModuleRefs(s, moduleExports));
-  validateEach(stmts, declaredVars, mutableVars);
 
   // Collect ref info for entry module (reuse shared utility)
   const {
@@ -431,18 +535,8 @@ function compileAllTuffWithExtern(sources, externs, entryName) {
     stmts.push(parser.parseStatement());
   }
 
-  // Phase 3: Collect declared vars — include destructured names from extern imports
-  const declaredVars = new Set();
-  const mutableVars = new Set();
-  collectVars(stmts, declaredVars, mutableVars);
-
-  // Add extern module names as valid variables so `extern let { x } = native` resolves
-  for (const modName of externModuleNames) {
-    declaredVars.add(modName);
-  }
-
-  // Validate variable references
-  validateEach(stmts, declaredVars, mutableVars);
+  // Phase 3: Collect and validate variables using shared utilities
+  _compileValidate(stmts, externModuleNames);
 
   // Collect ref info and initialize emitter
   const {

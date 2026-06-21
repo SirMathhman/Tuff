@@ -254,10 +254,13 @@ export function emitExpr(node, insideDeref = false) {
 export function emitStmt(stmt) {
   // fn name(params) => expr — function definition
   if (stmt.type === "fn_def") {
-    const params = stmt.params ? stmt.params.join(",") : "";
+    const paramNames = (stmt.params || []).map((p) =>
+      typeof p === "string" ? p.split(":")[0] : p,
+    );
+    const params = paramNames.join(",");
     emittedVars.add(stmt.name);
     // Temporarily add params to emittedVars so bare 'this' inside the body captures them
-    for (const p of stmt.params || []) emittedVars.add(p);
+    for (const p of paramNames) emittedVars.add(p);
     // Block body: fn name(params) => { stmts; }
     if (stmt.blockStmts && stmt.blockStmts.length > 0) {
       const stmtTypes = new Set([

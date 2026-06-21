@@ -36,8 +36,10 @@ export function validateRefs(node, declaredVars, mutableVars) {
     const fnDeclared = new Set(declaredVars);
     const fnMutable = new Set(mutableVars);
     for (const p of node.params || []) {
-      fnDeclared.add(p);
-      fnMutable.add(p);
+      // Strip type annotation from param name (e.g., "param:I32" → "param")
+      const paramName = typeof p === "string" ? p.split(":")[0] : p;
+      fnDeclared.add(paramName);
+      fnMutable.add(paramName);
     }
     if (node.blockStmts) {
       for (const s of node.blockStmts) validateRefs(s, fnDeclared, fnMutable);
@@ -144,7 +146,7 @@ function _hasOperatorAfterBrace(startPos) {
   return false;
 }
 
-// Shared helper: parse comma-separated params inside parens
+// Shared helper: parse comma-separated params inside parens, with optional type annotations.
 function parseParams() {
   const params = [];
   while (
@@ -152,7 +154,10 @@ function parseParams() {
     state.tokens[state.pos].type !== "paren_close"
   ) {
     if (state.tokens[state.pos].type === "identifier") {
-      params.push(state.tokens[state.pos++].value);
+      const name = state.tokens[state.pos++].value;
+      // Optional type annotation on parameter: ':' followed by a type identifier
+      const paramType = _parseTypeAnnotation();
+      params.push(paramType ? `${name}:${paramType}` : name);
     } else {
       throw new Error("Expected parameter name in function definition");
     }

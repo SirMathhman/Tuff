@@ -437,3 +437,19 @@ test('executeTuff("let mut x = 0U8; x = true") throws', () => {
 test('executeTuff("fn get() : Bool => true; get()", "") => 1', () => {
   expect(executeTuff("fn get() : Bool => true; get()", "")).toBe(1);
 });
+
+test('executeTuff("fn get() => true; let x : U8 = get()") throws', () => {
+  expect(() => executeTuff("fn get() => true; let x : U8 = get()")).toThrow();
+});
+
+test('executeTuff("fn pass(param : I32) => param; pass(read())", "100") => 100', () => {
+  expect(
+    executeTuff("fn pass(param : I32) => param; pass(read())", "100"),
+  ).toBe(100);
+});
+
+test('executeTuff("fn pass(param : I32) => param; pass(readBool())") throws', () => {
+  expect(() =>
+    executeTuff("fn pass(param : I32) => param; pass(readBool())"),
+  ).toThrow();
+});
