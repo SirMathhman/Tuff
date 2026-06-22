@@ -10,80 +10,7 @@ import {
   parseWhileStmt,
   parseForStmt,
 } from "./control_flow_parser";
-
-// Parse a single type component (with optional leading '*' for pointer).
-// Returns the uppercase type string, e.g. "I32" or "*I32".
-function _parseTypeComponent() {
-  let isPointer = false;
-
-  // Optional leading '*' for pointer types (*T)
-  const tok0 = state.tokens[state.pos];
-  if (tok0?.type === "ref" || (tok0?.type === "op" && tok0.value === "*")) {
-    isPointer = true;
-    state.pos++;
-  }
-
-  // Object/struct type annotation: { field : Type, ... }
-  const tok1 = state.tokens[state.pos];
-  if (tok1?.type === "brace_open") {
-    state.pos++; // skip '{'
-    const fields = [];
-    while (
-      state.pos < state.tokens.length &&
-      state.tokens[state.pos].type !== "brace_close"
-    ) {
-      if (state.tokens[state.pos]?.type !== "identifier")
-        throw new Error("Expected field name in struct type");
-      const fieldName = state.tokens[state.pos++].value;
-      if (state.tokens[state.pos]?.type !== "colon")
-        throw new Error("Expected ':' after field name in struct type");
-      state.pos++; // skip ':'
-      fields.push({ name: fieldName, type: _parseTypeComponent() });
-    }
-    if (state.tokens[state.pos]?.type !== "brace_close")
-      throw new Error("Expected '}' to close struct type");
-    state.pos++; // skip '}'
-    return isPointer ? `*STRUCT` : "STRUCT";
-  }
-
-  const tok = state.tokens[state.pos];
-  if (!tok || (tok.type !== "identifier" && tok.type !== "null"))
-    throw new Error("Expected type name after ':' or '*'");
-  let typeName = (tok.value ?? "null").toUpperCase();
-  state.pos++;
-
-  return isPointer ? `*${typeName}` : typeName;
-}
-
-// Parse optional type annotation: ':' followed by a type identifier or 'null', optionally joined with '|' for unions.
-// Returns null if no annotation present, otherwise an array of uppercase type strings (single-element for non-unions).
-function _parseTypeAnnotation() {
-  let typeName = null;
-  if (
-    state.pos < state.tokens.length &&
-    state.tokens[state.pos].type === "colon"
-  ) {
-    state.pos++; // skip ':'
-
-    const types = [];
-
-    // First type component (may have leading '*')
-    types.push(_parseTypeComponent());
-
-    // Additional union members separated by '|'
-    while (
-      state.pos < state.tokens.length &&
-      state.tokens[state.pos].type === "pipe"
-    ) {
-      state.pos++; // skip '|'
-      types.push(_parseTypeComponent());
-    }
-
-    // Return single string for non-union, array for union
-    typeName = types.length === 1 ? types[0] : types;
-  }
-  return typeName;
-}
+import { parseTypeAnnotation } from "./types_parser";
 
 export function validateRefs(node, declaredVars, mutableVars) {
   if (!node || typeof node !== "object") return;
@@ -212,7 +139,7 @@ function parseParams() {
     if (state.tokens[state.pos].type === "identifier") {
       const name = state.tokens[state.pos++].value;
       // Optional type annotation on parameter: ':' followed by a type identifier
-      const paramType = _parseTypeAnnotation();
+      const paramType = parseTypeAnnotation();
       params.push(paramType ? `${name}:${paramType}` : name);
     } else {
       throw new Error("Expected parameter name in function definition");
@@ -275,7 +202,7 @@ export function parseStatement() {
     state.pos++; // skip ')'
 
     // Optional return type annotation: ':' followed by a type identifier
-    const returnType = _parseTypeAnnotation();
+    const returnType = parseTypeAnnotation();
 
     // Expect fat arrow '=>'
     if (
@@ -524,7 +451,7 @@ export function parseStatement() {
     const name = state.tokens[state.pos++].value;
 
     // Optional type annotation: ':' followed by a type identifier
-    const typeName = _parseTypeAnnotation();
+    const typeName = parseTypeAnnotation();
 
     if (
       state.pos >= state.tokens.length ||
