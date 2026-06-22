@@ -127,7 +127,7 @@ export function inferInitType(init, varTypes) {
 }
 
 // Integer type bounds for overflow checking.
-const intBounds = new Map([
+export const intBounds = new Map([
   ["U8", { min: 0, max: 255 }],
   ["U16", { min: 0, max: 65535 }],
   ["U32", { min: 0, max: 4294967295 }],
@@ -154,11 +154,61 @@ function isIntType(type) {
   return intBounds.has(type);
 }
 
-// Get the literal value from an expression node (only for compile-time constants).
-function getLiteralValue(node) {
+// Compute the range {min, max} for an expression based on varTypes and varRanges.
+// If we can determine exact bounds, returns {min, max}. Otherwise returns null.
+function getExprRange(node, varTypes, varRanges) {
   if (!node || typeof node !== "object") return null;
-  // Number literal with optional suffix: { type: "numlit", value: ..., suffix: ... }
-  if (typeof node.value === "number" && !isNaN(node.value)) return node.value;
+
+  // Literal number: exact value
+  if (typeof node.value === "number" && !isNaN(node.value)) {
+    const val = Math.floor(node.value);
+    return { min: val, max: val };
+  }
+
+  // Variable reference: use tracked range or fall back to type bounds
+  if (node.type === "varref") {
+    if (varRanges && varRanges.has(node.name)) {
+      const r = varRanges.get(node.name);
+      return { min: r.min, max: r.max };
+    }
+    // Fall back to type bounds
+    const t = varTypes.get(node.name);
+    if (t && isIntType(t)) {
+      const b = intBounds.get(t);
+      return { min: b.min, max: b.max };
+    }
+  }
+
+  // Negation preserves range structure (flips and negates)
+  if (node.type === "negate") {
+    const innerRange = getExprRange(node.operand, varTypes, varRanges);
+    if (innerRange) return { min: -innerRange.max, max: -innerRange.min };
+  }
+
+  // Binary arithmetic operation — propagate ranges through the op
+  if (node.type === "binop" && ["+", "-", "*"].includes(node.op)) {
+    const leftR = getExprRange(node.left, varTypes, varRanges);
+    const rightR = getExprRange(node.right, varTypes, varRanges);
+    if (!leftR || !rightR) return null;
+
+    switch (node.op) {
+      case "+":
+        return { min: leftR.min + rightR.min, max: leftR.max + rightR.max };
+      case "-":
+        return { min: leftR.min - rightR.max, max: leftR.max - rightR.min };
+      case "*": {
+        // Multiplication range is the min/max of all corner products
+        const corners = [
+          leftR.min * rightR.min,
+          leftR.min * rightR.max,
+          leftR.max * rightR.min,
+          leftR.max * rightR.max,
+        ];
+        return { min: Math.min(...corners), max: Math.max(...corners) };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -227,10 +277,11 @@ export function inferExprType(node, varTypes, fnSignatures) {
   return null;
 }
 
-// Check if a binary operation on two compile-time constant integers would overflow the result type.
-export function checkOverflow(node, varTypes, fnSignatures) {
+// Check if a binary operation would overflow the result type, using range analysis.
+// varRanges tracks {min, max} per variable (from narrowing or type bounds).
+export function checkOverflow(node, varTypes, fnSignatures, varRanges) {
   walkAstPostOrder(node, (childNode) => {
-    // Only check arithmetic binops with typed integer literals
+    // Only check arithmetic binops
     if (
       !(
         childNode.type === "binop" &&
@@ -238,11 +289,6 @@ export function checkOverflow(node, varTypes, fnSignatures) {
       )
     )
       return;
-
-    const leftVal = getLiteralValue(childNode.left);
-    const rightVal = getLiteralValue(childNode.right);
-    // Only check when both operands are compile-time constants with known int types
-    if (leftVal === null || rightVal === null) return;
 
     let resultType =
       inferExprType(childNode.left, varTypes, fnSignatures) ??
@@ -262,25 +308,42 @@ export function checkOverflow(node, varTypes, fnSignatures) {
 
     if (!(resultType && isIntType(resultType))) return;
 
-    let result;
+    // Get ranges for both operands
+    const leftRange = getExprRange(childNode.left, varTypes, varRanges);
+    const rightRange = getExprRange(childNode.right, varTypes, varRanges);
+
+    // If we can't determine ranges for both, skip (conservative)
+    if (!leftRange || !rightRange) return;
+
+    let resultMin, resultMax;
     switch (childNode.op) {
       case "+":
-        result = leftVal + rightVal;
+        resultMin = leftRange.min + rightRange.min;
+        resultMax = leftRange.max + rightRange.max;
         break;
       case "-":
-        result = leftVal - rightVal;
+        resultMin = leftRange.min - rightRange.max;
+        resultMax = leftRange.max - rightRange.min;
         break;
-      case "*":
-        result = leftVal * rightVal;
+      case "*": {
+        const corners = [
+          leftRange.min * rightRange.min,
+          leftRange.min * rightRange.max,
+          leftRange.max * rightRange.min,
+          leftRange.max * rightRange.max,
+        ];
+        resultMin = Math.min(...corners);
+        resultMax = Math.max(...corners);
         break;
+      }
       default:
         return; // Division overflow is rare (only I32.MIN / -1), skip for now
     }
 
     const bounds = intBounds.get(resultType);
-    if (result < bounds.min || result > bounds.max) {
+    if (resultMin < bounds.min || resultMax > bounds.max) {
       throw new Error(
-        `Integer overflow: ${leftVal} ${childNode.op} ${rightVal} = ${result} does not fit in ${resultType}`,
+        `Integer overflow: operation may produce range [${resultMin}, ${resultMax}] which does not fit in ${resultType} [${bounds.min}, ${bounds.max}]`,
       );
     }
   });

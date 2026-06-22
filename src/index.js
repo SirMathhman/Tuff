@@ -1,12 +1,22 @@
 import { tokenize } from "./tokenizer";
 import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
-import { checkTypeCompatibility, inferInitType, checkOverflow } from "./types";
+import {
+  checkTypeCompatibility,
+  inferInitType,
+  checkOverflow,
+  intBounds,
+} from "./types";
 import {
   extractIsNarrowings,
   lowerIsCheck,
   validateCallArgs,
+  extractRangeNarrowings,
 } from "./ischeck_lowering";
+import {
+  buildRanges,
+  collectRefInfo as _collectRefInfo,
+} from "./scope_validator";
 
 // Struct definitions: Map<ALIAS_NAME, [{ name, type }, ...]>
 const structDefs = new Map();
@@ -168,13 +178,23 @@ function validateEach(
   mutSet,
   fnSignatures = new Map(),
   varTypes = new Map(),
+  varRanges = new Map(),
 ) {
   for (const s of stmts) {
     if (s.type === "block") {
       const childDecl = new Set(declSet);
       const childMut = new Set(mutSet);
       collectVars(s.stmts, childDecl, childMut, varTypes, fnSignatures);
-      validateEach(s.stmts, childDecl, childMut, fnSignatures, varTypes);
+      // Rebuild ranges from updated varTypes for this scope
+      const childRanges = buildRanges(varTypes);
+      validateEach(
+        s.stmts,
+        childDecl,
+        childMut,
+        fnSignatures,
+        varTypes,
+        childRanges,
+      );
     } else if (s.type === "if_stmt") {
       // Extract narrowing info from 'is' checks in the condition
       const narrowings = extractIsNarrowings(s.cond);
@@ -183,19 +203,87 @@ function validateEach(
       for (const [name, type] of narrowings) {
         thenVarTypes.set(name, type);
       }
+
+      // Extract range narrowing from comparison guards in condition
+      const rangeNarrowings = extractRangeNarrowings(s.cond, varTypes);
+
+      // Build then-branch ranges: start with parent ranges, apply narrowings
+      const thenRanges = new Map(varRanges);
+      for (const [name, range] of rangeNarrowings) {
+        thenRanges.set(name, { min: range.min, max: range.max });
+      }
+
+      // Build else-branch ranges: inverse of narrowing
+      const elseRanges = new Map(varRanges);
+      for (const [name, range] of rangeNarrowings) {
+        const vType = varTypes.get(name);
+        if (!vType || !intBounds.has(vType)) continue;
+        const bounds = intBounds.get(vType);
+        // Invert the narrowing: if then-branch narrowed max to N,
+        // else branch knows NOT(x <= N) → x >= N+1
+        switch (true) {
+          case range.max < bounds.max:
+            {
+              // Then narrowed max, so else min = range.max + 1
+              const existingElseRange = elseRanges.get(name) ?? {
+                min: bounds.min,
+                max: bounds.max,
+              };
+              elseRanges.set(name, {
+                min: Math.max(existingElseRange.min, range.max + 1),
+                max: existingElseRange.max,
+              });
+            }
+            break;
+          case range.min > bounds.min:
+            {
+              // Then narrowed min, so else max = range.min - 1
+              const existingElseRange2 = elseRanges.get(name) ?? {
+                min: bounds.min,
+                max: bounds.max,
+              };
+              elseRanges.set(name, {
+                min: existingElseRange2.min,
+                max: Math.min(existingElseRange2.max, range.min - 1),
+              });
+            }
+            break;
+        }
+      }
+
       const thenDecl = new Set(declSet);
       const thenMut = new Set(mutSet);
-      validateEach(s.thenBranch, thenDecl, thenMut, fnSignatures, thenVarTypes);
+      validateEach(
+        s.thenBranch,
+        thenDecl,
+        thenMut,
+        fnSignatures,
+        thenVarTypes,
+        thenRanges,
+      );
       if (s.elseBranch) {
         const elseDecl = new Set(declSet);
         const elseMut = new Set(mutSet);
-        // Use original varTypes for else branch (no narrowing)
-        validateEach(s.elseBranch, elseDecl, elseMut, fnSignatures, varTypes);
+        validateEach(
+          s.elseBranch,
+          elseDecl,
+          elseMut,
+          fnSignatures,
+          varTypes,
+          elseRanges,
+        );
       }
     } else if (s.type === "while_stmt") {
       const whileDecl = new Set(declSet);
       const whileMut = new Set(mutSet);
-      validateEach(s.body, whileDecl, whileMut, fnSignatures, varTypes);
+      validateEach(
+        s.body,
+        whileDecl,
+        whileMut,
+        fnSignatures,
+        varTypes,
+        varRanges,
+      );
     } else if (s.type === "for_stmt") {
       // Validate range expressions against parent scope
       parser.validateRefs(s.from, declSet, mutSet);
@@ -205,9 +293,11 @@ function validateEach(
       const forMut = new Set(mutSet);
       forDecl.add(s.variable);
       forMut.add(s.variable);
-      validateEach(s.body, forDecl, forMut, fnSignatures, varTypes);
+      validateEach(s.body, forDecl, forMut, fnSignatures, varTypes, varRanges);
     } else {
       parser.validateRefs(s, declSet, mutSet);
+      // Check overflow on this statement with current ranges
+      checkOverflow(s, varTypes, fnSignatures, varRanges);
     }
   }
 }
@@ -232,71 +322,20 @@ function _compileValidate(stmts, extraDecl = new Set()) {
   // Lower 'is_check' nodes to boolean literals based on compile-time type info
   stmts.forEach((s) => lowerIsCheck(s, varTypes, fnSignatures, typeAliases));
 
-  validateEach(stmts, declaredVars, mutableVars, fnSignatures, varTypes);
+  // Build initial ranges from varTypes (each typed variable gets its type bounds)
+  const initRanges = buildRanges(varTypes);
+
+  validateEach(
+    stmts,
+    declaredVars,
+    mutableVars,
+    fnSignatures,
+    varTypes,
+    initRanges,
+  );
 
   // Validate function call arguments against parameter types
   stmts.forEach((s) => validateCallArgs(s, varTypes, fnSignatures));
-
-  // Check for integer overflow on compile-time constant expressions
-  stmts.forEach((s) => checkOverflow(s, varTypes, fnSignatures));
-}
-
-// Shared utility: collect ref-related info from AST nodes into provided sets/map.
-function collectRefInfo(stmts) {
-  const refTargetVars = new Set();
-  const refHolderVars = new Set();
-  const refTargetArrayVars = new Set();
-  const arrayRefHolders = new Set();
-  const sliceViewHolders = new Map();
-
-  function walk(node) {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "ref" && node.expr?.type === "varref") {
-      refTargetVars.add(node.expr.name);
-    }
-    const isLetLike = node.type === "let" || node.type === "out_let";
-    if (
-      isLetLike &&
-      (node.init?.type === "array" || node.init?.type === "index")
-    ) {
-      refTargetArrayVars.add(node.name);
-    }
-    if (isLetLike && node.init?.type === "ref") {
-      refHolderVars.add(node.name);
-      if (
-        node.init.expr?.type === "varref" &&
-        refTargetArrayVars.has(node.init.expr.name)
-      ) {
-        arrayRefHolders.add(node.name);
-      }
-      if (
-        node.init.expr?.type === "slice" &&
-        node.init.expr.target?.type === "varref"
-      ) {
-        const baseName = node.init.expr.target.name;
-        const startOffset =
-          node.init.expr.from?.type === "numlit"
-            ? Number(node.init.expr.from.value)
-            : 0;
-        arrayRefHolders.add(node.name);
-        sliceViewHolders.set(node.name, { baseVar: baseName, startOffset });
-      }
-    }
-    for (const key of Object.keys(node)) {
-      const child = node[key];
-      if (Array.isArray(child)) child.forEach(walk);
-      else if (child && typeof child === "object") walk(child);
-    }
-  }
-
-  stmts.forEach(walk);
-  return {
-    refTargetVars,
-    refHolderVars,
-    refTargetArrayVars,
-    arrayRefHolders,
-    sliceViewHolders,
-  };
 }
 
 // Shared utility: emit JS for a list of statements; last non-block is returned.
@@ -333,7 +372,7 @@ function compileTuffToJS(source) {
     refTargetArrayVars,
     arrayRefHolders,
     sliceViewHolders,
-  } = collectRefInfo(stmts);
+  } = _collectRefInfo(stmts);
 
   init(
     refTargetVars,
@@ -414,7 +453,7 @@ function compileAllTuffToJSBundled(sources, entryName) {
       refTargetArrayVars,
       arrayRefHolders,
       sliceViewHolders,
-    } = collectRefInfo(stmts);
+    } = _collectRefInfo(stmts);
 
     init(
       refTargetVars,
@@ -488,7 +527,7 @@ function compileAllTuffToJSBundled(sources, entryName) {
     refTargetArrayVars,
     arrayRefHolders,
     sliceViewHolders,
-  } = collectRefInfo(stmts);
+  } = _collectRefInfo(stmts);
 
   init(
     refTargetVars,
@@ -542,7 +581,7 @@ function compileAllTuffWithExtern(sources, externs, entryName) {
     refTargetArrayVars,
     arrayRefHolders,
     sliceViewHolders,
-  } = collectRefInfo(stmts);
+  } = _collectRefInfo(stmts);
 
   init(
     refTargetVars,

@@ -4,8 +4,10 @@ import {
   resolveAlias,
   isWideningOk,
   walkAstPostOrder,
+  intBounds,
 } from "./types";
 
+// Extract type narrowing from 'is' checks in condition expressions.
 export function extractIsNarrowings(node) {
   const narrowings = new Map();
   if (!node || typeof node !== "object") return narrowings;
@@ -24,6 +26,66 @@ export function extractIsNarrowings(node) {
       : node.targetType;
     narrowings.set(node.expr.name, targetType);
   }
+
+  return narrowings;
+}
+
+// Extract range narrowing from comparison expressions in if-conditions.
+// e.g., "x <= 254U8" narrows x.max to 254 in the then branch, and x.min to 255 in the else branch.
+export function extractRangeNarrowings(node, varTypes) {
+  const narrowings = new Map();
+  if (!node || typeof node !== "object") return narrowings;
+
+  walkAstPostOrder(node, (childNode) => {
+    // Match: varref cmp literal  (e.g., x <= 254U8 or x >= 10U8)
+    if (
+      childNode.type === "binop" &&
+      childNode.op !== "==" &&
+      childNode.op !== "!="
+    ) {
+      const leftIsVar = childNode.left?.type === "varref";
+      const rightIsVar = childNode.right?.type === "varref";
+
+      // Get the varref side and literal side
+      let varName, litVal;
+      if (leftIsVar && typeof childNode.right?.value === "number") {
+        varName = childNode.left.name;
+        litVal = Math.floor(childNode.right.value);
+      } else if (rightIsVar && typeof childNode.left?.value === "number") {
+        varName = childNode.right.name;
+        litVal = Math.floor(childNode.left.value);
+      }
+
+      // Only narrow typed integer variables
+      const vType = varTypes.get(varName);
+      if (!vType || !intBounds.has(vType)) return;
+
+      const bounds = intBounds.get(vType);
+      let newMin = bounds.min,
+        newMax = bounds.max;
+
+      switch (childNode.op) {
+        case "<=":
+          // Then branch: var <= lit → max = min(max, lit)
+          newMax = Math.min(bounds.max, litVal);
+          break;
+        case ">=":
+          // Then branch: var >= lit → min = max(min, lit)
+          newMin = Math.max(bounds.min, litVal);
+          break;
+        case "<":
+          // Then branch: var < lit → max = min(max, lit-1)
+          newMax = Math.min(bounds.max, litVal - 1);
+          break;
+        case ">":
+          // Then branch: var > lit → min = max(min, lit+1)
+          newMin = Math.max(bounds.min, litVal + 1);
+          break;
+      }
+
+      narrowings.set(varName, { min: newMin, max: newMax });
+    }
+  });
 
   return narrowings;
 }
