@@ -9,6 +9,7 @@ import {
   parseWhileStmt,
   parseForStmt,
 } from "./control_flow_parser";
+import { parseStructFields } from "./types_parser";
 
 // Shared helper: try to parse '(' args ')' at current position.
 // Returns the parsed args array if found, null otherwise.
@@ -141,8 +142,18 @@ export function parseExpr() {
   return left;
 }
 
-// Parse a type reference for the 'is' operator — supports single types and parenthesized unions
+// Parse a type reference for the 'is' operator — supports single types, parenthesized unions, and struct literals
 function parseTypeRef() {
+  // Struct literal: { x : I32 } → return fields array (used by _lowerIsCheck to match against STRUCT)
+  if (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "brace_open"
+  ) {
+    state.pos++; // skip '{'
+    const fields = parseStructFields();
+    return { type: "__struct_literal__", fields };
+  }
+
   // Parenthesized union: (U8 | U16)
   if (
     state.pos < state.tokens.length &&

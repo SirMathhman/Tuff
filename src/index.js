@@ -200,10 +200,16 @@ function _lowerIsCheck(node, varTypes, fnSignatures, typeAliases = new Map()) {
   // If this node is an 'is_check', replace with boolean literal
   if (node.type === "is_check") {
     const exprType = inferExprType(node.expr, varTypes, fnSignatures);
-    // targetType may be a string or array (union) from parseTypeRef
-    let targetType = Array.isArray(node.targetType)
-      ? node.targetType
-      : node.targetType.toUpperCase();
+    // targetType may be a string, array (union), or struct literal marker from parseTypeRef
+    let targetType;
+    if (typeof node.targetType === "object" && node.targetType.type === "__struct_literal__") {
+      // Inline struct type check: `expr is { x : I32 }` → match against STRUCT
+      targetType = "STRUCT";
+    } else if (Array.isArray(node.targetType)) {
+      targetType = node.targetType;
+    } else {
+      targetType = node.targetType.toUpperCase();
+    }
     // Resolve alias in target type
     targetType = resolveAlias(targetType, typeAliases);
     let matches;
