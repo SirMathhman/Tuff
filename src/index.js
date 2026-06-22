@@ -127,7 +127,9 @@ function collectVars(
       let typeName = s.typeName;
       if (Array.isArray(typeName)) {
         // Union type: resolve each element individually
-        const resolvedTypes = typeName.map((t) => _resolveParameterizedStruct(t, typeAliases));
+        const resolvedTypes = typeName.map((t) =>
+          _resolveParameterizedStruct(t, typeAliases),
+        );
         varTypes.set(s.name, resolvedTypes);
       } else {
         const resolved = _resolveParameterizedStruct(typeName, typeAliases);
