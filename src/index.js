@@ -1,7 +1,7 @@
 import { tokenize } from "./tokenizer";
 import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
-import { checkTypeCompatibility, inferInitType } from "./types";
+import { checkTypeCompatibility, inferInitType, checkOverflow } from "./types";
 import {
   extractIsNarrowings,
   lowerIsCheck,
@@ -236,6 +236,9 @@ function _compileValidate(stmts, extraDecl = new Set()) {
 
   // Validate function call arguments against parameter types
   stmts.forEach((s) => validateCallArgs(s, varTypes, fnSignatures));
+
+  // Check for integer overflow on compile-time constant expressions
+  stmts.forEach((s) => checkOverflow(s, varTypes, fnSignatures));
 }
 
 // Shared utility: collect ref-related info from AST nodes into provided sets/map.

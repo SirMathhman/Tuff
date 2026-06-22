@@ -1,5 +1,10 @@
 // is_check lowering and validation utilities — extracted from index.js to reduce line count.
-import { inferExprType, resolveAlias, isWideningOk } from "./types";
+import {
+  inferExprType,
+  resolveAlias,
+  isWideningOk,
+  walkAstPostOrder,
+} from "./types";
 
 export function extractIsNarrowings(node) {
   const narrowings = new Map();
@@ -30,22 +35,11 @@ export function lowerIsCheck(
   fnSignatures,
   typeAliases = new Map(),
 ) {
-  if (!node || typeof node !== "object") return;
+  walkAstPostOrder(node, (childNode) => {
+    // If this node is an 'is_check', replace with boolean literal
+    if (childNode.type !== "is_check") return;
 
-  // Recurse into children first (post-order)
-  for (const key of Object.keys(node)) {
-    const child = node[key];
-    if (Array.isArray(child))
-      child.forEach((c) =>
-        lowerIsCheck(c, varTypes, fnSignatures, typeAliases),
-      );
-    else if (child && typeof child === "object")
-      lowerIsCheck(child, varTypes, fnSignatures, typeAliases);
-  }
-
-  // If this node is an 'is_check', replace with boolean literal
-  if (node.type === "is_check") {
-    let exprType = inferExprType(node.expr, varTypes, fnSignatures);
+    let exprType = inferExprType(childNode.expr, varTypes, fnSignatures);
     // Resolve aliases in expression type so we get STRUCT_NAME for named structs
     if (exprType) {
       exprType = resolveAlias(exprType, typeAliases);
@@ -54,17 +48,18 @@ export function lowerIsCheck(
     let targetType;
     let targetIsInlineStruct = false;
     if (
-      typeof node.targetType === "object" &&
-      node.targetType.type === "__struct_literal__"
+      typeof childNode.targetType === "object" &&
+      childNode.targetType.type === "__struct_literal__"
     ) {
       // Inline struct type check: `expr is { x : I32 }` → any named struct matches
       targetIsInlineStruct = true;
       targetType = "STRUCT"; // Placeholder, handled below
-    } else if (Array.isArray(node.targetType)) {
-      targetType = node.targetType;
+    } else if (Array.isArray(childNode.targetType)) {
+      targetType = childNode.targetType;
     } else {
-      targetType = node.targetType.toUpperCase();
+      targetType = childNode.targetType.toUpperCase();
     }
+
     let matches;
     if (exprType) {
       // Handle struct type checking with proper named vs anonymous distinction
@@ -93,44 +88,36 @@ export function lowerIsCheck(
       // Unknown expression type → default to false at compile time
       matches = false;
     }
+
     // Replace with boolean literal node (same as 'true'/'false')
-    Object.assign(node, { type: "boollit", value: matches });
-  }
+    Object.assign(childNode, { type: "boollit", value: matches });
+  });
 }
 
 // Validate function call arguments against declared parameter types.
 export function validateCallArgs(node, varTypes, fnSignatures) {
-  if (!node || typeof node !== "object") return;
+  walkAstPostOrder(node, (childNode) => {
+    // Check this node if it's a call with typed params
+    if (!(childNode.type === "call" && !childNode.name.includes("::"))) return;
 
-  // Check this node if it's a call with typed params
-  if (node.type === "call" && !node.name.includes("::")) {
-    const sig = fnSignatures.get(node.name);
-    if (sig && sig.paramTypes) {
-      for (
-        let i = 0;
-        i < Math.min(sig.paramTypes.length, node.args?.length);
-        i++
-      ) {
-        const paramType = sig.paramTypes[i];
-        if (!paramType) continue;
-        const argExpr = node.args[i];
-        const argType = inferExprType(argExpr, varTypes, fnSignatures);
-        // If argument has a known type and it's incompatible with the parameter
-        if (argType && !isWideningOk(argType, paramType)) {
-          throw new Error(
-            `Type mismatch: cannot pass ${argType} to parameter of type ${paramType}`,
-          );
-        }
+    const sig = fnSignatures.get(childNode.name);
+    if (!sig || !sig.paramTypes) return;
+
+    for (
+      let i = 0;
+      i < Math.min(sig.paramTypes.length, childNode.args?.length ?? 0);
+      i++
+    ) {
+      const paramType = sig.paramTypes[i];
+      if (!paramType) continue;
+      const argExpr = childNode.args[i];
+      const argType = inferExprType(argExpr, varTypes, fnSignatures);
+      // If argument has a known type and it's incompatible with the parameter
+      if (argType && !isWideningOk(argType, paramType)) {
+        throw new Error(
+          `Type mismatch: cannot pass ${argType} to parameter of type ${paramType}`,
+        );
       }
     }
-  }
-
-  // Recurse into children
-  for (const key of Object.keys(node)) {
-    const child = node[key];
-    if (Array.isArray(child))
-      child.forEach((c) => validateCallArgs(c, varTypes, fnSignatures));
-    else if (child && typeof child === "object")
-      validateCallArgs(child, varTypes, fnSignatures);
-  }
+  });
 }

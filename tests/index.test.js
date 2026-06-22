@@ -432,6 +432,8 @@ test('executeTuff("256U8") throws', () => {
   expect(() => executeTuff("256U8")).toThrow();
 });
 
+// Overflow tests moved to overflow.test.js for file size limits.
+
 test('executeTuff("let x : U8 = 100U8; x", "") => 100', () => {
   expect(executeTuff("let x : U8 = 100U8; x", "")).toBe(100);
 });

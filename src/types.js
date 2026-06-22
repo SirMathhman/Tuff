@@ -75,7 +75,7 @@ function _isWideningOk(source, target) {
   ]);
   if (widenOk.has(`${init}_${decl}`)) return true;
 
-  // Widening signed: I8 → I16, I8 → I32, I16 → I32, I8 → I64, I16 → I64, I32 → I64
+  // Widening signed: I8 → I16, I8 → I32, I16 → I32, I8 → U64, I16 → U64, I32 → U64
   const widenSigned = new Set([
     "I8_I16",
     "I8_I32",
@@ -126,6 +126,55 @@ export function inferInitType(init, varTypes) {
   return null;
 }
 
+// Integer type bounds for overflow checking.
+const intBounds = new Map([
+  ["U8", { min: 0, max: 255 }],
+  ["U16", { min: 0, max: 65535 }],
+  ["U32", { min: 0, max: 4294967295 }],
+  ["I8", { min: -128, max: 127 }],
+  ["I16", { min: -32768, max: 32767 }],
+  ["I32", { min: -2147483648, max: 2147483647 }],
+]);
+
+// Walk AST in post-order (children before parent), calling callback on each node.
+export function walkAstPostOrder(node, callback) {
+  if (!node || typeof node !== "object") return;
+  for (const key of Object.keys(node)) {
+    const child = node[key];
+    if (Array.isArray(child))
+      child.forEach((c) => walkAstPostOrder(c, callback));
+    else if (child && typeof child === "object")
+      walkAstPostOrder(child, callback);
+  }
+  callback(node);
+}
+
+// Check if a type is a known integer width.
+function isIntType(type) {
+  return intBounds.has(type);
+}
+
+// Get the literal value from an expression node (only for compile-time constants).
+function getLiteralValue(node) {
+  if (!node || typeof node !== "object") return null;
+  // Number literal with optional suffix: { type: "numlit", value: ..., suffix: ... }
+  if (typeof node.value === "number" && !isNaN(node.value)) return node.value;
+  return null;
+}
+
+// Infer the result type of a binary operation.
+function inferBinopType(op, leftType, rightType) {
+  // Arithmetic ops on same int type keep that type
+  if (["+", "-", "*", "/"].includes(op)) {
+    if (leftType && isIntType(leftType)) return leftType;
+    if (rightType && isIntType(rightType)) return rightType;
+  }
+  // Comparison / logical ops → BOOL
+  if (op === "==" || op === "!=") return "BOOL";
+  // Default: unknown
+  return null;
+}
+
 // Infer the type of an arbitrary expression node (returns uppercase type string or null).
 export function inferExprType(node, varTypes, fnSignatures) {
   if (!node || typeof node !== "object") return null;
@@ -159,6 +208,12 @@ export function inferExprType(node, varTypes, fnSignatures) {
   // Negation of a typed expression preserves the inner type
   if (node.type === "negate")
     return inferExprType(node.operand, varTypes, fnSignatures);
+  // Binary operation — infer result type from operands
+  if (node.type === "binop" && ["+", "-", "*", "/"].includes(node.op)) {
+    const leftType = inferExprType(node.left, varTypes, fnSignatures);
+    const rightType = inferExprType(node.right, varTypes, fnSignatures);
+    return inferBinopType(node.op, leftType, rightType);
+  }
   // is_check node: resolve at compile time → emit boolean literal
   if (node.type === "is_check") {
     const exprType = inferExprType(node.expr, varTypes, fnSignatures);
@@ -170,4 +225,63 @@ export function inferExprType(node, varTypes, fnSignatures) {
   }
   // Default: untyped → no constraint
   return null;
+}
+
+// Check if a binary operation on two compile-time constant integers would overflow the result type.
+export function checkOverflow(node, varTypes, fnSignatures) {
+  walkAstPostOrder(node, (childNode) => {
+    // Only check arithmetic binops with typed integer literals
+    if (
+      !(
+        childNode.type === "binop" &&
+        ["+", "-", "*", "/"].includes(childNode.op)
+      )
+    )
+      return;
+
+    const leftVal = getLiteralValue(childNode.left);
+    const rightVal = getLiteralValue(childNode.right);
+    // Only check when both operands are compile-time constants with known int types
+    if (leftVal === null || rightVal === null) return;
+
+    let resultType =
+      inferExprType(childNode.left, varTypes, fnSignatures) ??
+      inferExprType(childNode.right, varTypes, fnSignatures);
+
+    // If left and right have different int types, widen to the larger one
+    const leftType = inferExprType(childNode.left, varTypes, fnSignatures);
+    const rightType = inferExprType(childNode.right, varTypes, fnSignatures);
+    if (leftType && rightType) {
+      // Pick the wider type as result type
+      if (isIntType(leftType) && isWideningOk(rightType, leftType)) {
+        resultType = leftType;
+      } else if (isIntType(rightType) && isWideningOk(leftType, rightType)) {
+        resultType = rightType;
+      }
+    }
+
+    if (!(resultType && isIntType(resultType))) return;
+
+    let result;
+    switch (childNode.op) {
+      case "+":
+        result = leftVal + rightVal;
+        break;
+      case "-":
+        result = leftVal - rightVal;
+        break;
+      case "*":
+        result = leftVal * rightVal;
+        break;
+      default:
+        return; // Division overflow is rare (only I32.MIN / -1), skip for now
+    }
+
+    const bounds = intBounds.get(resultType);
+    if (result < bounds.min || result > bounds.max) {
+      throw new Error(
+        `Integer overflow: ${leftVal} ${childNode.op} ${rightVal} = ${result} does not fit in ${resultType}`,
+      );
+    }
+  });
 }
