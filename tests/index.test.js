@@ -254,6 +254,12 @@ test('executeTuff("let temp = { value : read() }; temp.value", "1") => 1', () =>
   expect(executeTuff("let temp = { value : read() }; temp.value", "1")).toBe(1);
 });
 
+test('executeTuff("let temp : { x : I32 } = { x : 100 }; temp.x") => 100', () => {
+  expect(executeTuff("let temp : { x : I32 } = { x : 100 }; temp.x", "")).toBe(
+    100,
+  );
+});
+
 test('executeTuff("readString().length", "test foo") => 4', () => {
   expect(executeTuff("readString().length", "test foo")).toBe(4);
 });
@@ -576,6 +582,12 @@ test("executeTuff is_check with widening on variable", () => {
 test("executeTuff is_check union target second member", () => {
   // (U8Var is (I32 | U16)) — exercises the array branch in is_check targetType resolution
   expect(executeTuff("let x : U8 = 5; x is (I32 | U16)", "")).toBe(1);
+});
+
+test('executeTuff type alias: "type Temp = I32; let x : Temp = 0; x is Temp && x is I32" => 1', () => {
+  expect(
+    executeTuff("type Temp = I32; let x : Temp = 0; x is Temp && x is I32", ""),
+  ).toBe(1);
 });
 
 test("executeTuff call with untyped return to typed var", () => {

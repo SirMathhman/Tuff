@@ -3,6 +3,7 @@ import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
 import {
   isWideningOk,
+  resolveAlias,
   checkTypeCompatibility,
   inferInitType,
   inferExprType,
@@ -30,6 +31,7 @@ function collectVars(
   mutSet,
   varTypes = new Map(),
   fnSignatures = new Map(),
+  typeAliases = new Map(),
 ) {
   for (const s of stmts) {
     if (s.type === "let") {
@@ -73,8 +75,19 @@ function collectVars(
         returnType: s.returnType || null,
       });
     }
+    // Type alias: type AliasName = BaseType
+    if (s.type === "type_alias") {
+      typeAliases.set(s.name.toUpperCase(), s.baseType);
+    }
     if (s.type === "block")
-      collectVars(s.stmts, declSet, mutSet, varTypes, fnSignatures);
+      collectVars(
+        s.stmts,
+        declSet,
+        mutSet,
+        varTypes,
+        fnSignatures,
+        typeAliases,
+      );
   }
 }
 
@@ -154,29 +167,33 @@ function extractIsNarrowings(node) {
 }
 
 // Lower 'is_check' nodes to boolean literals at compile time based on inferred types.
-function _lowerIsCheck(node, varTypes, fnSignatures) {
+function _lowerIsCheck(node, varTypes, fnSignatures, typeAliases = new Map()) {
   if (!node || typeof node !== "object") return;
 
   // Recurse into children first (post-order)
   for (const key of Object.keys(node)) {
     const child = node[key];
     if (Array.isArray(child))
-      child.forEach((c) => _lowerIsCheck(c, varTypes, fnSignatures));
+      child.forEach((c) =>
+        _lowerIsCheck(c, varTypes, fnSignatures, typeAliases),
+      );
     else if (child && typeof child === "object")
-      _lowerIsCheck(child, varTypes, fnSignatures);
+      _lowerIsCheck(child, varTypes, fnSignatures, typeAliases);
   }
 
   // If this node is an 'is_check', replace with boolean literal
   if (node.type === "is_check") {
     const exprType = inferExprType(node.expr, varTypes, fnSignatures);
     // targetType may be a string or array (union) from parseTypeRef
-    const targetType = Array.isArray(node.targetType)
+    let targetType = Array.isArray(node.targetType)
       ? node.targetType
       : node.targetType.toUpperCase();
+    // Resolve alias in target type
+    targetType = resolveAlias(targetType, typeAliases);
     let matches;
     if (exprType) {
       // Check type compatibility: exact match, widening, or union member match
-      matches = isWideningOk(exprType, targetType);
+      matches = isWideningOk(exprType, targetType, typeAliases);
     } else {
       // Unknown expression type → default to false at compile time
       matches = false;
@@ -229,11 +246,19 @@ function _compileValidate(stmts, extraDecl = new Set()) {
   const mutableVars = new Set();
   const varTypes = new Map();
   const fnSignatures = new Map();
+  const typeAliases = new Map();
   for (const n of extraDecl) declaredVars.add(n);
-  collectVars(stmts, declaredVars, mutableVars, varTypes, fnSignatures);
+  collectVars(
+    stmts,
+    declaredVars,
+    mutableVars,
+    varTypes,
+    fnSignatures,
+    typeAliases,
+  );
 
   // Lower 'is_check' nodes to boolean literals based on compile-time type info
-  stmts.forEach((s) => _lowerIsCheck(s, varTypes, fnSignatures));
+  stmts.forEach((s) => _lowerIsCheck(s, varTypes, fnSignatures, typeAliases));
 
   validateEach(stmts, declaredVars, mutableVars, fnSignatures, varTypes);
 
@@ -304,6 +329,8 @@ function emitTop(stmts) {
   let js = "";
   for (let i = 0; i < stmts.length; i++) {
     const s = stmts[i];
+    // type_alias is compile-time only — skip emission entirely
+    if (s.type === "type_alias") continue;
     if (i === stmts.length - 1 && s.type !== "block" && s.type !== "fn_def") {
       js += `return(${emitExpr(s)});\n`;
     } else {

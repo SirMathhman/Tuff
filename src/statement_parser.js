@@ -23,6 +23,29 @@ function _parseTypeComponent() {
     state.pos++;
   }
 
+  // Object/struct type annotation: { field : Type, ... }
+  const tok1 = state.tokens[state.pos];
+  if (tok1?.type === "brace_open") {
+    state.pos++; // skip '{'
+    const fields = [];
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type !== "brace_close"
+    ) {
+      if (state.tokens[state.pos]?.type !== "identifier")
+        throw new Error("Expected field name in struct type");
+      const fieldName = state.tokens[state.pos++].value;
+      if (state.tokens[state.pos]?.type !== "colon")
+        throw new Error("Expected ':' after field name in struct type");
+      state.pos++; // skip ':'
+      fields.push({ name: fieldName, type: _parseTypeComponent() });
+    }
+    if (state.tokens[state.pos]?.type !== "brace_close")
+      throw new Error("Expected '}' to close struct type");
+    state.pos++; // skip '}'
+    return isPointer ? `*STRUCT` : "STRUCT";
+  }
+
   const tok = state.tokens[state.pos];
   if (!tok || (tok.type !== "identifier" && tok.type !== "null"))
     throw new Error("Expected type name after ':' or '*'");
@@ -438,6 +461,35 @@ export function parseStatement() {
     }
 
     throw new Error("Expected 'let' or 'fn' after 'out'");
+  }
+
+  // type AliasName = BaseType ; (type alias declaration)
+  if (token.type === "keyword" && token.value === "type") {
+    state.pos++; // skip 'type'
+
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    )
+      throw new Error("Expected alias name after 'type'");
+    const aliasName = state.tokens[state.pos++].value;
+
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "assign"
+    )
+      throw new Error("Expected '=' after type alias name");
+    state.pos++; // skip '='
+
+    // Parse base type directly (no leading ':' unlike variable annotations)
+    if (
+      !state.tokens[state.pos] ||
+      state.tokens[state.pos].type !== "identifier"
+    )
+      throw new Error("Expected type name after '=' in type alias");
+    const baseType = state.tokens[state.pos++].value.toUpperCase();
+
+    return { type: "type_alias", name: aliasName, baseType };
   }
 
   // let x = expr ; or let mut x = expr ;

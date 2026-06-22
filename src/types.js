@@ -8,10 +8,46 @@ const builtinReturnTypes = new Map([
   ["readBool", "BOOL"],
 ]);
 
+// Resolve a type name through aliases to its concrete base type.
+// If typeName is an alias, returns the resolved base type (recursively).
+// If not an alias or aliases map empty, returns typeName unchanged.
+export function resolveAlias(typeName, aliases) {
+  if (!aliases || !typeName) return typeName;
+  const upper = Array.isArray(typeName)
+    ? typeName.map((t) => t.toUpperCase())
+    : typeName.toUpperCase();
+
+  // Single type — resolve recursively up to avoid infinite loops
+  if (typeof upper === "string") {
+    let current = upper;
+    let seen = new Set();
+    while (aliases.has(current) && !seen.has(current)) {
+      seen.add(current);
+      const resolved = aliases.get(current);
+      // Alias may resolve to a union array or single string
+      if (Array.isArray(resolved)) return resolved.map((t) => t.toUpperCase());
+      current = String(resolved).toUpperCase();
+    }
+    return current;
+  }
+
+  // Union — resolve each member
+  if (Array.isArray(upper)) {
+    const resolved = upper.map((t) => resolveAlias(t, aliases));
+    // Flatten any nested arrays from union alias resolution
+    return resolved.flat();
+  }
+
+  return typeName;
+}
+
 // Check if source type can be widened to target type.
 // Source may be a string or an array of strings (union).
 // Target may be a single string or an array of strings (union).
-export function isWideningOk(source, target) {
+export function isWideningOk(source, target, aliases = new Map()) {
+  // Resolve aliases first
+  source = resolveAlias(source, aliases);
+  target = resolveAlias(target, aliases);
   // If source is a union, succeed if any member matches the target
   if (Array.isArray(source))
     return source.some((s) => _isWideningOk(s, target));

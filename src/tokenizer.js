@@ -279,7 +279,12 @@ function tokenize(source) {
       const name = idMatch[1];
       i += name.length;
 
-      if (name === "let" || name === "mut" || name === "extern") {
+      if (
+        name === "let" ||
+        name === "mut" ||
+        name === "extern" ||
+        name === "type"
+      ) {
         result.push({ type: "keyword", value: name });
       } else if (name === "true" || name === "false") {
         result.push({ type: "bool", value: name === "true" });
