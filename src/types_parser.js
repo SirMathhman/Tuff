@@ -17,22 +17,7 @@ export function parseTypeComponent() {
   const tok1 = state.tokens[state.pos];
   if (tok1?.type === "brace_open") {
     state.pos++; // skip '{'
-    const fields = [];
-    while (
-      state.pos < state.tokens.length &&
-      state.tokens[state.pos].type !== "brace_close"
-    ) {
-      if (state.tokens[state.pos]?.type !== "identifier")
-        throw new Error("Expected field name in struct type");
-      const fieldName = state.tokens[state.pos++].value;
-      if (state.tokens[state.pos]?.type !== "colon")
-        throw new Error("Expected ':' after field name in struct type");
-      state.pos++; // skip ':'
-      fields.push({ name: fieldName, type: parseTypeComponent() });
-    }
-    if (state.tokens[state.pos]?.type !== "brace_close")
-      throw new Error("Expected '}' to close struct type");
-    state.pos++; // skip '}'
+    parseStructFields(); // consume and discard fields for inline annotations
     return isPointer ? `*STRUCT` : "STRUCT";
   }
 
@@ -43,6 +28,28 @@ export function parseTypeComponent() {
   state.pos++;
 
   return isPointer ? `*${typeName}` : typeName;
+}
+
+// Parse struct fields from '{' to matching '}', returning the parsed fields array.
+// Each field is { name: string, type: string }.
+export function parseStructFields() {
+  const fields = [];
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type !== "brace_close"
+  ) {
+    if (state.tokens[state.pos]?.type !== "identifier")
+      throw new Error("Expected field name in struct type");
+    const fieldName = state.tokens[state.pos++].value;
+    if (state.tokens[state.pos]?.type !== "colon")
+      throw new Error("Expected ':' after field name in struct type");
+    state.pos++; // skip ':'
+    fields.push({ name: fieldName, type: parseTypeComponent() });
+  }
+  if (state.tokens[state.pos]?.type !== "brace_close")
+    throw new Error("Expected '}' to close struct type");
+  state.pos++; // skip '}'
+  return fields;
 }
 
 // Parse optional type annotation: ':' followed by a type identifier or 'null', optionally joined with '|' for unions.

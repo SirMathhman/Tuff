@@ -9,6 +9,9 @@ import {
   inferExprType,
 } from "./types";
 
+// Struct definitions: Map<ALIAS_NAME, [{ name, type }, ...]>
+const structDefs = new Map();
+
 export default compileTuffToJS;
 export { compileAllTuffToJSBundled, compileAllTuffWithExtern };
 
@@ -75,9 +78,15 @@ function collectVars(
         returnType: s.returnType || null,
       });
     }
-    // Type alias: type AliasName = BaseType
+    // Type alias: type AliasName = BaseType or { field : Type, ... }
     if (s.type === "type_alias") {
-      typeAliases.set(s.name.toUpperCase(), s.baseType);
+      const key = s.name.toUpperCase();
+      if (s.structFields) {
+        structDefs.set(key, s.structFields);
+        typeAliases.set(key, "STRUCT");
+      } else {
+        typeAliases.set(key, s.baseType);
+      }
     }
     if (s.type === "block")
       collectVars(
@@ -345,6 +354,9 @@ function compileTuffToJS(source) {
 
   const stmts = _parseStatements(source);
 
+  // Reset struct definitions for each compilation
+  structDefs.clear();
+
   // Collect and validate variables using shared utilities
   _compileValidate(stmts);
 
@@ -373,6 +385,9 @@ function compileTuffToJS(source) {
 function compileAllTuffToJSBundled(sources, entryName) {
   if (!(entryName in sources))
     throw new Error(`Missing source for "${entryName}"`);
+
+  // Reset struct definitions for each compilation
+  structDefs.clear();
 
   // Phase 1: Parse all modules and collect exports (out let / out fn)
   const moduleExports = {}; // moduleName -> [{name, mutable}, ...]
@@ -527,6 +542,9 @@ function compileAllTuffToJSBundled(sources, entryName) {
 function compileAllTuffWithExtern(sources, externs, entryName) {
   if (!(entryName in sources))
     throw new Error(`Missing source for "${entryName}"`);
+
+  // Reset struct definitions for each compilation
+  structDefs.clear();
 
   // Phase 1: Inject raw JS extern modules into preamble (strip 'export' for script context)
   let preamble = "";

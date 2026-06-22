@@ -10,7 +10,7 @@ import {
   parseWhileStmt,
   parseForStmt,
 } from "./control_flow_parser";
-import { parseTypeAnnotation } from "./types_parser";
+import { parseTypeAnnotation, parseStructFields } from "./types_parser";
 
 export function validateRefs(node, declaredVars, mutableVars) {
   if (!node || typeof node !== "object") return;
@@ -409,6 +409,16 @@ export function parseStatement() {
     state.pos++; // skip '='
 
     // Parse base type directly (no leading ':' unlike variable annotations)
+    // Can be a simple identifier (e.g., I32) or a struct literal ({ field : Type, ... })
+    if (
+      state.tokens[state.pos]?.type === "brace_open"
+    ) {
+      // Struct type alias: type Wrapper = { x : I32 }
+      state.pos++; // skip '{'
+      const fields = parseStructFields();
+      return { type: "type_alias", name: aliasName, structFields: fields };
+    }
+
     if (
       !state.tokens[state.pos] ||
       state.tokens[state.pos].type !== "identifier"
