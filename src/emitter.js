@@ -135,6 +135,10 @@ export function emitExpr(node, insideDeref = false) {
   if (node.type === "boollit") {
     return `+(${JSON.stringify(node.value)})`;
   }
+  // Null literal — coerce to 0
+  if (node.type === "nulllit") {
+    return "0";
+  }
   if (node.type === "binop") {
     // Logical operators — short-circuit, coerce to 0/1
     if (node.op === "||" || node.op === "&&") {

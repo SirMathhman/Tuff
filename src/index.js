@@ -18,7 +18,15 @@ function _parseStatements(source) {
 }
 
 // Check if source type can be widened to target type.
+// Target may be a single string or an array of strings (union).
 function isWideningOk(source, target) {
+  // If target is a union, succeed if any member matches
+  if (Array.isArray(target))
+    return target.some((t) => _isWideningOk(source, t));
+  return _isWideningOk(source, target);
+}
+
+function _isWideningOk(source, target) {
   // Exact match is always fine
   if (source === target) return true;
 
@@ -37,14 +45,17 @@ function isWideningOk(source, target) {
 }
 
 // Check type compatibility between declared type and initializer literal suffix.
+// typeName may be a string (single type) or an array (union).
 function checkTypeCompatibility(stmt, varTypes) {
-  const decl = stmt.typeName?.toUpperCase();
+  const decl = stmt.typeName; // already uppercase from _parseTypeAnnotation
   // Determine the source type from the initializer
   let initType = null;
   if (stmt.init?.suffix) {
     initType = stmt.init.suffix.toUpperCase();
   } else if (stmt.init?.type === "varref" && varTypes.has(stmt.init.name)) {
     initType = varTypes.get(stmt.init.name);
+  } else if (stmt.init?.type === "nulllit") {
+    initType = TYPE_NULL;
   }
 
   // No annotation or no known source type → OK
@@ -54,7 +65,7 @@ function checkTypeCompatibility(stmt, varTypes) {
     const srcLabel =
       stmt.init?.suffix ?? `${stmt.init.name}:${varTypes.get(stmt.init.name)}`;
     throw new Error(
-      `Type mismatch: cannot assign ${srcLabel} to variable of type ${stmt.typeName}`,
+      `Type mismatch: cannot assign ${srcLabel} to variable of type ${Array.isArray(decl) ? decl.join(" | ") : decl}`,
     );
   }
 }
@@ -65,6 +76,7 @@ function inferInitType(init, varTypes) {
   if (init.suffix) return init.suffix.toUpperCase();
   if (init.type === "varref" && varTypes.has(init.name))
     return varTypes.get(init.name);
+  if (init.type === "nulllit") return TYPE_NULL;
   // Default: untyped number → treat as generic, no constraint
   return null;
 }
@@ -74,6 +86,9 @@ const builtinReturnTypes = new Map([
   ["read", null], // untyped int
   ["readBool", "BOOL"],
 ]);
+
+// Canonical type names used by the checker (uppercase)
+const TYPE_NULL = "NULL";
 
 // Infer the type of an arbitrary expression node (returns uppercase type string or null).
 function inferExprType(node, varTypes, fnSignatures) {
@@ -85,6 +100,13 @@ function inferExprType(node, varTypes, fnSignatures) {
     return varTypes.get(node.name);
   // Boolean literal
   if (node.type === "boolit") return "BOOL";
+  // Null literal
+  if (node.type === "nulllit") return TYPE_NULL;
+  // Ref expression: &x → *T where T is the type of x
+  if (node.type === "ref") {
+    const innerType = inferExprType(node.expr, varTypes, fnSignatures);
+    return innerType ? `*${innerType}` : null;
+  }
   // Built-in call
   if (node.type === "call" && builtinReturnTypes.has(node.name)) {
     return builtinReturnTypes.get(node.name);
@@ -128,9 +150,8 @@ function collectVars(
         declSet.add(s.name);
         if (s.mutable) mutSet.add(s.name);
         // Track inferred type: explicit annotation wins, otherwise infer from initializer
-        const varType = s.typeName
-          ? s.typeName.toUpperCase()
-          : inferInitType(s.init, varTypes);
+        // typeName is already uppercase from _parseTypeAnnotation (string or array)
+        const varType = s.typeName ?? inferInitType(s.init, varTypes);
         varTypes.set(s.name, varType);
       }
     }

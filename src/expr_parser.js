@@ -268,6 +268,12 @@ export function parsePrimary() {
     return { type: "boollit", value: token.value };
   }
 
+  // Null literal — null → 0 in emitter
+  if (token.type === "null") {
+    state.pos++;
+    return { type: "nulllit" };
+  }
+
   // 'this' keyword — scope variable access via this.x syntax
   if (token.type === "keyword" && token.value === "this") {
     state.pos++;

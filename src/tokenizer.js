@@ -93,6 +93,13 @@ function tokenize(source) {
       continue;
     }
 
+    // Match '|' union separator in type annotations
+    if (source[i] === "|") {
+      result.push({ type: "pipe" });
+      i++;
+      continue;
+    }
+
     // Match operators like +, -, *, /
     if ("+-*/".includes(source[i])) {
       result.push({ type: "op", value: source[i] });
@@ -259,6 +266,8 @@ function tokenize(source) {
         result.push({ type: "keyword", value: name });
       } else if (name === "true" || name === "false") {
         result.push({ type: "bool", value: name === "true" });
+      } else if (name === "null") {
+        result.push({ type: "null" });
       } else if (name === "out") {
         result.push({ type: "keyword", value: name });
       } else if (

@@ -453,3 +453,15 @@ test('executeTuff("fn pass(param : I32) => param; pass(readBool())") throws', ()
     executeTuff("fn pass(param : I32) => param; pass(readBool())"),
   ).toThrow();
 });
+
+test('executeTuff("let x : null = null; x", "") => 0', () => {
+  expect(executeTuff("let x : null = null; x", "")).toBe(0);
+});
+
+test('executeTuff("let x : U8 | U16 = 100U8; x", "") => 100', () => {
+  expect(executeTuff("let x : U8 | U16 = 100U8; x", "")).toBe(100);
+});
+
+test('executeTuff("let x : I32 = 100; let y : *I32 = &x; *y", "") => 100', () => {
+  expect(executeTuff("let x : I32 = 100; let y : *I32 = &x; *y", "")).toBe(100);
+});

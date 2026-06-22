@@ -11,7 +11,29 @@ import {
   parseForStmt,
 } from "./control_flow_parser";
 
-// Parse optional type annotation: ':' followed by a type identifier. Returns null if no annotation present.
+// Parse a single type component (with optional leading '*' for pointer).
+// Returns the uppercase type string, e.g. "I32" or "*I32".
+function _parseTypeComponent() {
+  let isPointer = false;
+
+  // Optional leading '*' for pointer types (*T)
+  const tok0 = state.tokens[state.pos];
+  if (tok0?.type === "ref" || (tok0?.type === "op" && tok0.value === "*")) {
+    isPointer = true;
+    state.pos++;
+  }
+
+  const tok = state.tokens[state.pos];
+  if (!tok || (tok.type !== "identifier" && tok.type !== "null"))
+    throw new Error("Expected type name after ':' or '*'");
+  let typeName = (tok.value ?? "null").toUpperCase();
+  state.pos++;
+
+  return isPointer ? `*${typeName}` : typeName;
+}
+
+// Parse optional type annotation: ':' followed by a type identifier or 'null', optionally joined with '|' for unions.
+// Returns null if no annotation present, otherwise an array of uppercase type strings (single-element for non-unions).
 function _parseTypeAnnotation() {
   let typeName = null;
   if (
@@ -19,12 +41,23 @@ function _parseTypeAnnotation() {
     state.tokens[state.pos].type === "colon"
   ) {
     state.pos++; // skip ':'
-    if (
-      state.pos >= state.tokens.length ||
-      state.tokens[state.pos].type !== "identifier"
-    )
-      throw new Error("Expected type name after ':'");
-    typeName = state.tokens[state.pos++].value;
+
+    const types = [];
+
+    // First type component (may have leading '*')
+    types.push(_parseTypeComponent());
+
+    // Additional union members separated by '|'
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type === "pipe"
+    ) {
+      state.pos++; // skip '|'
+      types.push(_parseTypeComponent());
+    }
+
+    // Return single string for non-union, array for union
+    typeName = types.length === 1 ? types[0] : types;
   }
   return typeName;
 }
