@@ -269,8 +269,8 @@ export function emitExpr(node, insideDeref = false) {
   throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
 }
 export function emitStmt(stmt) {
-  // type_alias — compile-time only, emits no JS code
-  if (stmt.type === "type_alias") return "";
+  // type_alias and struct_def — compile-time only, emit no JS code
+  if (stmt.type === "type_alias" || stmt.type === "struct_def") return "";
 
   // fn name(params) => expr — function definition
   if (stmt.type === "fn_def") {

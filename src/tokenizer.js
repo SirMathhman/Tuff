@@ -283,7 +283,8 @@ function tokenize(source) {
         name === "let" ||
         name === "mut" ||
         name === "extern" ||
-        name === "type"
+        name === "type" ||
+        name === "struct"
       ) {
         result.push({ type: "keyword", value: name });
       } else if (name === "true" || name === "false") {

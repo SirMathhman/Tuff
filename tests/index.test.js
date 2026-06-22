@@ -262,7 +262,19 @@ test('executeTuff("let temp : { x : I32 } = { x : 100 }; temp.x") => 100', () =>
 
 test('executeTuff struct type alias: "type Wrapper = { x : I32 }; let temp : Wrapper = { x : 100 }; temp.x" => 100', () => {
   expect(
-    executeTuff("type Wrapper = { x : I32 }; let temp : Wrapper = { x : 100 }; temp.x", ""),
+    executeTuff(
+      "type Wrapper = { x : I32 }; let temp : Wrapper = { x : 100 }; temp.x",
+      "",
+    ),
+  ).toBe(100);
+});
+
+test('executeTuff struct keyword: "struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp.x" => 100', () => {
+  expect(
+    executeTuff(
+      "struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp.x",
+      "",
+    ),
   ).toBe(100);
 });
 

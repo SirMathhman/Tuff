@@ -78,6 +78,13 @@ function collectVars(
         returnType: s.returnType || null,
       });
     }
+    // Struct definition: struct Name { field : Type, ... }
+    if (s.type === "struct_def") {
+      const key = s.name.toUpperCase();
+      structDefs.set(key, s.fields);
+      typeAliases.set(key, "STRUCT");
+    }
+
     // Type alias: type AliasName = BaseType or { field : Type, ... }
     if (s.type === "type_alias") {
       const key = s.name.toUpperCase();
@@ -338,8 +345,8 @@ function emitTop(stmts) {
   let js = "";
   for (let i = 0; i < stmts.length; i++) {
     const s = stmts[i];
-    // type_alias is compile-time only — skip emission entirely
-    if (s.type === "type_alias") continue;
+    // type_alias and struct_def are compile-time only — skip emission entirely
+    if (s.type === "type_alias" || s.type === "struct_def") continue;
     if (i === stmts.length - 1 && s.type !== "block" && s.type !== "fn_def") {
       js += `return(${emitExpr(s)});\n`;
     } else {

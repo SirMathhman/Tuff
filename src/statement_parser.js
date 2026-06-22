@@ -390,6 +390,30 @@ export function parseStatement() {
     throw new Error("Expected 'let' or 'fn' after 'out'");
   }
 
+  // struct StructName { field : Type, ... } (struct definition)
+  if (token.type === "keyword" && token.value === "struct") {
+    state.pos++; // skip 'struct'
+
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "identifier"
+    )
+      throw new Error("Expected struct name after 'struct'");
+    const structName = state.tokens[state.pos++].value;
+
+    // Expect '{' for field definitions
+    if (
+      state.pos >= state.tokens.length ||
+      state.tokens[state.pos].type !== "brace_open"
+    ) {
+      throw new Error("Expected '{' after struct name");
+    }
+    state.pos++; // skip '{'
+
+    const fields = parseStructFields();
+    return { type: "struct_def", name: structName, fields };
+  }
+
   // type AliasName = BaseType ; (type alias declaration)
   if (token.type === "keyword" && token.value === "type") {
     state.pos++; // skip 'type'
@@ -410,9 +434,7 @@ export function parseStatement() {
 
     // Parse base type directly (no leading ':' unlike variable annotations)
     // Can be a simple identifier (e.g., I32) or a struct literal ({ field : Type, ... })
-    if (
-      state.tokens[state.pos]?.type === "brace_open"
-    ) {
+    if (state.tokens[state.pos]?.type === "brace_open") {
       // Struct type alias: type Wrapper = { x : I32 }
       state.pos++; // skip '{'
       const fields = parseStructFields();
