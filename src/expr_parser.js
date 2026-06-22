@@ -386,6 +386,7 @@ export function parsePrimary() {
     state.pos++;
     const ast = { type: "numlit", value: token.value };
     if (token.suffix) ast.suffix = token.suffix;
+    if (token.rawValue !== undefined) ast.rawValue = token.rawValue;
     return ast;
   }
 

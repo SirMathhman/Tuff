@@ -414,6 +414,10 @@ test('executeTuff("100U8", "") => 100', () => {
   expect(executeTuff("100U8", "")).toBe(100);
 });
 
+test('executeTuff("100U64", "") => 100n (bigint)', () => {
+  expect(executeTuff("100U64", "")).toBe(BigInt(100));
+});
+
 test('executeTuff("-100U8") throws', () => {
   expect(() => executeTuff("-100U8")).toThrow();
 });

@@ -245,11 +245,28 @@ function tokenize(source) {
             `Value ${value} out of range for I32 (must be -2147483648 to 2147483647): ${numMatch[0]}`,
           );
         }
+      } else if (/^u64$/i.test(numMatch[3] || "")) {
+        const bigVal = BigInt(numMatch[1]);
+        if (bigVal < 0n || bigVal > 18446744073709551615n) {
+          throw new Error(
+            `Value ${numMatch[1]} out of range for U64 (must be 0 to 18446744073709551615): ${numMatch[0]}`,
+          );
+        }
+      } else if (/^i64$/i.test(numMatch[3] || "")) {
+        const bigVal = BigInt(numMatch[1]);
+        if (bigVal < -9223372036854775808n || bigVal > 9223372036854775807n) {
+          throw new Error(
+            `Value ${numMatch[1]} out of range for I64 (must be -9223372036854775808 to 9223372036854775807): ${numMatch[0]}`,
+          );
+        }
       }
 
+      const is64Bit =
+        /^u64$/i.test(numMatch[3] || "") || /^i64$/i.test(numMatch[3] || "");
       result.push({
         type: "number",
         value,
+        ...(is64Bit ? { rawValue: numMatch[1] } : {}),
         ...(numMatch[3] ? { suffix: numMatch[3] } : {}),
       });
       i += numMatch[0].length;

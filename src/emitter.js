@@ -137,6 +137,11 @@ export function emitExpr(node, insideDeref = false) {
     return JSON.stringify(node.value);
   }
   if (node.type === "numlit") {
+    // U64/I64 suffixes use BigInt in generated JS
+    const upperSuffix = node.suffix ? node.suffix.toUpperCase() : null;
+    if (upperSuffix === "U64" || upperSuffix === "I64") {
+      return `BigInt(${node.rawValue ?? String(node.value)})`;
+    }
     return String(node.value);
   }
   // Boolean literal — coerce to number: true → 1, false → 0

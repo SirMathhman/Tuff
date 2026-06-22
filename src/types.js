@@ -28,12 +28,26 @@ function _isWideningOk(source, target) {
   const decl = target.toUpperCase();
   const init = source.toUpperCase();
 
-  // Widening unsigned: U8 → U16, U8 → U32, U16 → U32
-  const widenOk = new Set(["U8_U16", "U8_U32", "U16_U32"]);
+  // Widening unsigned: U8 → U16, U8 → U32, U16 → U32, U8 → U64, U16 → U64, U32 → U64
+  const widenOk = new Set([
+    "U8_U16",
+    "U8_U32",
+    "U16_U32",
+    "U8_U64",
+    "U16_U64",
+    "U32_U64",
+  ]);
   if (widenOk.has(`${init}_${decl}`)) return true;
 
-  // Widening signed: I8 → I16, I8 → I32, I16 → I32
-  const widenSigned = new Set(["I8_I16", "I8_I32", "I16_I32"]);
+  // Widening signed: I8 → I16, I8 → I32, I16 → I32, I8 → I64, I16 → I64, I32 → I64
+  const widenSigned = new Set([
+    "I8_I16",
+    "I8_I32",
+    "I16_I32",
+    "I8_I64",
+    "I16_I64",
+    "I32_I64",
+  ]);
   if (widenSigned.has(`${init}_${decl}`)) return true;
 
   return false;
