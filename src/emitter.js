@@ -248,10 +248,10 @@ export function emitExpr(node, insideDeref = false) {
       return `${holderName}[${emitExpr(node.expr.right)}]`;
     }
   }
-  // *expr — dereference: unwrap .v from a ref/slot
+  // *expr — dereference: unwrap .v from a ref/slot; throw on null/0
   if (node.type === "deref") {
     const inner = emitExpr(node.expr, true);
-    return `${inner}.v`;
+    return `(!${inner}?(function(){throw new Error("dereferencing null")})():${inner}.v)`;
   }
   throw new Error(`Unsupported AST node: ${JSON.stringify(node)}`);
 }

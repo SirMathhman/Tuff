@@ -1,6 +1,12 @@
 import { tokenize } from "./tokenizer";
 import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
+import {
+  isWideningOk,
+  checkTypeCompatibility,
+  inferInitType,
+  inferExprType,
+} from "./types";
 
 export default compileTuffToJS;
 export { compileAllTuffToJSBundled, compileAllTuffWithExtern };
@@ -15,123 +21,6 @@ function _parseStatements(source) {
     stmts.push(parser.parseStatement());
   }
   return stmts;
-}
-
-// Check if source type can be widened to target type.
-// Target may be a single string or an array of strings (union).
-function isWideningOk(source, target) {
-  // If target is a union, succeed if any member matches
-  if (Array.isArray(target))
-    return target.some((t) => _isWideningOk(source, t));
-  return _isWideningOk(source, target);
-}
-
-function _isWideningOk(source, target) {
-  // Exact match is always fine
-  if (source === target) return true;
-
-  const decl = target.toUpperCase();
-  const init = source.toUpperCase();
-
-  // Widening unsigned: U8 → U16, U8 → U32, U16 → U32
-  const widenOk = new Set(["U8_U16", "U8_U32", "U16_U32"]);
-  if (widenOk.has(`${init}_${decl}`)) return true;
-
-  // Widening signed: I8 → I16, I8 → I32, I16 → I32
-  const widenSigned = new Set(["I8_I16", "I8_I32", "I16_I32"]);
-  if (widenSigned.has(`${init}_${decl}`)) return true;
-
-  return false;
-}
-
-// Check type compatibility between declared type and initializer literal suffix.
-// typeName may be a string (single type) or an array (union).
-function checkTypeCompatibility(stmt, varTypes) {
-  const decl = stmt.typeName; // already uppercase from _parseTypeAnnotation
-  // Determine the source type from the initializer
-  let initType = null;
-  if (stmt.init?.suffix) {
-    initType = stmt.init.suffix.toUpperCase();
-  } else if (stmt.init?.type === "varref" && varTypes.has(stmt.init.name)) {
-    initType = varTypes.get(stmt.init.name);
-  } else if (stmt.init?.type === "nulllit") {
-    initType = TYPE_NULL;
-  }
-
-  // No annotation or no known source type → OK
-  if (!decl || !initType) return;
-
-  if (!isWideningOk(initType, decl)) {
-    const srcLabel =
-      stmt.init?.suffix ?? `${stmt.init.name}:${varTypes.get(stmt.init.name)}`;
-    throw new Error(
-      `Type mismatch: cannot assign ${srcLabel} to variable of type ${Array.isArray(decl) ? decl.join(" | ") : decl}`,
-    );
-  }
-}
-
-// Infer the type of an initializer expression (returns uppercase type string or null).
-function inferInitType(init, varTypes) {
-  if (!init) return null;
-  if (init.suffix) return init.suffix.toUpperCase();
-  if (init.type === "varref" && varTypes.has(init.name))
-    return varTypes.get(init.name);
-  if (init.type === "nulllit") return TYPE_NULL;
-  // Default: untyped number → treat as generic, no constraint
-  return null;
-}
-
-// Built-in function return types
-const builtinReturnTypes = new Map([
-  ["read", null], // untyped int
-  ["readBool", "BOOL"],
-]);
-
-// Canonical type names used by the checker (uppercase)
-const TYPE_NULL = "NULL";
-
-// Infer the type of an arbitrary expression node (returns uppercase type string or null).
-function inferExprType(node, varTypes, fnSignatures) {
-  if (!node || typeof node !== "object") return null;
-  // Literal with suffix
-  if (node.suffix) return node.suffix.toUpperCase();
-  // Variable reference
-  if (node.type === "varref" && varTypes.has(node.name))
-    return varTypes.get(node.name);
-  // Boolean literal
-  if (node.type === "boolit") return "BOOL";
-  // Null literal
-  if (node.type === "nulllit") return TYPE_NULL;
-  // Ref expression: &x → *T where T is the type of x
-  if (node.type === "ref") {
-    const innerType = inferExprType(node.expr, varTypes, fnSignatures);
-    return innerType ? `*${innerType}` : null;
-  }
-  // Built-in call
-  if (node.type === "call" && builtinReturnTypes.has(node.name)) {
-    return builtinReturnTypes.get(node.name);
-  }
-  // User function call — use declared return type
-  if (
-    node.type === "call" &&
-    !node.name.includes("::") &&
-    fnSignatures.has(node.name)
-  ) {
-    const sig = fnSignatures.get(node.name);
-    return sig.returnType ? sig.returnType.toUpperCase() : null;
-  }
-  // Negation of a typed expression preserves the inner type
-  if (node.type === "negate")
-    return inferExprType(node.operand, varTypes, fnSignatures);
-  // is_check node: resolve at compile time → emit boolean literal
-  if (node.type === "is_check") {
-    const exprType = inferExprType(node.expr, varTypes, fnSignatures);
-    const targetType = node.targetType.toUpperCase();
-    const matches = exprType && _isWideningOk(exprType, targetType);
-    return matches ? "BOOL" : null;
-  }
-  // Default: untyped → no constraint
-  return null;
 }
 
 // Shared utility: collect declared variable names, mutability, and inferred types for validation.
@@ -204,12 +93,20 @@ function validateEach(
       collectVars(s.stmts, childDecl, childMut, varTypes, fnSignatures);
       validateEach(s.stmts, childDecl, childMut, fnSignatures, varTypes);
     } else if (s.type === "if_stmt") {
+      // Extract narrowing info from 'is' checks in the condition
+      const narrowings = extractIsNarrowings(s.cond);
+      // Apply narrowed types to a copy of varTypes for the then branch
+      const thenVarTypes = new Map(varTypes);
+      for (const [name, type] of narrowings) {
+        thenVarTypes.set(name, type);
+      }
       const thenDecl = new Set(declSet);
       const thenMut = new Set(mutSet);
-      validateEach(s.thenBranch, thenDecl, thenMut, fnSignatures, varTypes);
+      validateEach(s.thenBranch, thenDecl, thenMut, fnSignatures, thenVarTypes);
       if (s.elseBranch) {
         const elseDecl = new Set(declSet);
         const elseMut = new Set(mutSet);
+        // Use original varTypes for else branch (no narrowing)
         validateEach(s.elseBranch, elseDecl, elseMut, fnSignatures, varTypes);
       }
     } else if (s.type === "while_stmt") {
@@ -230,6 +127,30 @@ function validateEach(
       parser.validateRefs(s, declSet, mutSet);
     }
   }
+}
+
+// Extract variable narrowing info from 'is_check' nodes in a condition expression.
+// Returns Map<varName, narrowedType> for variables that were checked with 'is'.
+function extractIsNarrowings(node) {
+  const narrowings = new Map();
+  if (!node || typeof node !== "object") return narrowings;
+
+  // Recurse into children first (post-order)
+  for (const key of Object.keys(node)) {
+    const child = node[key];
+    if (Array.isArray(child)) child.forEach((c) => extractIsNarrowings(c));
+    else if (child && typeof child === "object") extractIsNarrowings(child);
+  }
+
+  // If this is an 'is_check' with a varref on the left, record narrowing
+  if (node.type === "is_check" && node.expr?.type === "varref") {
+    const targetType = Array.isArray(node.targetType)
+      ? node.targetType[0] // Narrow to first member of union target
+      : node.targetType;
+    narrowings.set(node.expr.name, targetType);
+  }
+
+  return narrowings;
 }
 
 // Lower 'is_check' nodes to boolean literals at compile time based on inferred types.

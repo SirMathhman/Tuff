@@ -488,3 +488,87 @@ test('executeTuff("100U8 is (U8 | U16)", "") => 1', () => {
   // U8 matches first member of union → true
   expect(executeTuff("100U8 is (U8 | U16)", "")).toBe(1);
 });
+
+test('executeTuff("let x = null; *x") throws', () => {
+  // Dereferencing a null pointer should throw at runtime
+  expect(() => executeTuff("let x = null; *x")).toThrow();
+});
+
+test('executeTuff("let x : U8 | I8 = 100U8; let y : U8 = x") throws', () => {
+  // Union type can't be narrowed to a single member when assigning
+  expect(() =>
+    executeTuff("let x : U8 | I8 = 100U8; let y : U8 = x"),
+  ).toThrow();
+});
+
+test('executeTuff("let x : U8 | I8 = 100; let mut y = 0; if (x is U8) { let w : U8 = x; y = 1; } y", "") => 1', () => {
+  // After narrowing with 'is', union-typed variable can be used as the narrowed type within that branch
+  expect(
+    executeTuff(
+      "let x : U8 | I8 = 100; let mut y = 0; if (x is U8) { let w : U8 = x; y = 1; } y",
+      "",
+    ),
+  ).toBe(1);
+});
+
+test('executeTuff("-(-5)", "") => 5', () => {
+  // Double negation exercises negate type inference path
+  expect(executeTuff("-(-5)", "")).toBe(5);
+});
+
+test('executeTuff("true is Bool", "") => 1', () => {
+  // Boolean literal 'is' check covers boolit + is_check union target paths
+  expect(executeTuff("true is Bool", "")).toBe(1);
+});
+
+test("executeTuff typed varref in inferInitType", () => {
+  // let x : U8 = 1; let y : U8 = x — exercises varref path in inferInitType (line 73)
+  expect(executeTuff("let x : U8 = 1; let y : U8 = x; y", "")).toBe(1);
+});
+
+test("executeTuff negate typed variable", () => {
+  // -(typedVar) exercises negate path with known type in inferExprType (lines 109-111)
+  expect(executeTuff("let x : I32 = -5; -x", "")).toBe(5);
+});
+
+test("executeTuff user function call return type inference", () => {
+  // fn returns typed value, used to assign another typed var — exercises lines 101-108
+  expect(executeTuff("fn get() : U8 => 42; let x : U8 = get(); x", "")).toBe(
+    42,
+  );
+});
+
+test("executeTuff is_check on variable reference", () => {
+  // (typedVar is Type) exercises is_check path with varref expression in inferExprType (lines 113-120)
+  expect(executeTuff("let x : U8 = 5; x is U8", "")).toBe(1);
+});
+
+test("executeTuff ref of typed variable", () => {
+  // &typedVar exercises ref path in inferExprType (lines 93-94)
+  expect(executeTuff("let x : I32 = 5; let y : *I32 = &x; *y", "")).toBe(5);
+});
+
+test("executeTuff is_check with widening on variable", () => {
+  // (U8Var is U16) should succeed via widening — exercises is_check + varref inference together
+  expect(executeTuff("let x : U8 = 5; x is U16", "")).toBe(1);
+});
+
+test("executeTuff is_check union target second member", () => {
+  // (U8Var is (I32 | U16)) — exercises the array branch in is_check targetType resolution
+  expect(executeTuff("let x : U8 = 5; x is (I32 | U16)", "")).toBe(1);
+});
+
+test("executeTuff call with untyped return to typed var", () => {
+  // fn without explicit return type, assigned to typed var — exercises sig.returnType null path
+  expect(executeTuff("fn get() => 42; let x = get(); x", "")).toBe(42);
+});
+
+test("executeTuff readBool call type inference", () => {
+  // readBool returns BOOL, used in typed context — exercises builtinReturnTypes path (lines 97-99)
+  expect(executeTuff("let x : Bool = readBool(); x", "true")).toBe(1);
+});
+
+test("executeTuff null literal type inference", () => {
+  // let x : null = null — exercises nulllit path in inferExprType (line 90)
+  expect(executeTuff("let x : null = null; x", "")).toBe(0);
+});
