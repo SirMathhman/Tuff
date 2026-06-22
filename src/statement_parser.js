@@ -1,5 +1,6 @@
 // Statement parsing + validation (let, if/else, while, for, fn_def, out_*, extern_, assignments).
 import state, {
+  consumeGenericParams,
   parseBraceIdentList,
   parseBraceBlock,
   parseYieldOrReturn,
@@ -116,32 +117,7 @@ export function parseStatement() {
     const name = state.tokens[state.pos++].value;
 
     // Optional generic type parameters: <T> or <T, U>
-    let generics = [];
-    if (
-      state.tokens[state.pos]?.type === "cmp" &&
-      state.tokens[state.pos]?.value === "<"
-    ) {
-      state.pos++; // skip '<'
-      while (
-        state.pos < state.tokens.length &&
-        state.tokens[state.pos].type !== "cmp"
-      ) {
-        const tok = state.tokens[state.pos];
-        if (!tok || tok.type !== "identifier") break;
-        generics.push(tok.value);
-        state.pos++;
-        // Skip optional ',' between type params
-        if (state.tokens[state.pos]?.type === "comma") state.pos++;
-      }
-      if (
-        state.tokens[state.pos]?.type === "cmp" &&
-        state.tokens[state.pos]?.value === ">"
-      ) {
-        state.pos++; // skip '>'
-      } else if (generics.length > 0) {
-        throw new Error("Expected '>' to close generic type parameters");
-      }
-    }
+    const generics = consumeGenericParams();
 
     // Expect '(' for params list
     if (
@@ -176,30 +152,27 @@ export function parseStatement() {
 
     // Check for block body: fn name(params) => { stmts; }
     // But only if the closing brace isn't followed by an operator (which would make it a block expression)
+    const fnDef = {
+      type: "fn_def",
+      name,
+      params,
+      ...(generics.length > 0 ? { generics } : {}),
+      ...(returnType ? { returnType } : {}),
+    };
+
     if (state.tokens[state.pos]?.type === "brace_open") {
       const hasOperatorAfterBrace = _hasOperatorAfterBrace(state.pos);
       if (!hasOperatorAfterBrace) {
         const blockStmts = _parseBlockStmts();
-        return {
-          type: "fn_def",
-          name,
-          params,
-          body: null,
-          blockStmts,
-          ...(returnType ? { returnType } : {}),
-        };
+        fnDef.body = null;
+        fnDef.blockStmts = blockStmts;
+        return fnDef;
       }
     }
 
     // Single-statement/expression body (supports compound assignment, block expressions, etc.)
-    const body = parseStatement();
-    return {
-      type: "fn_def",
-      name,
-      params,
-      body,
-      ...(returnType ? { returnType } : {}),
-    };
+    fnDef.body = parseStatement();
+    return fnDef;
   }
 
   // for (i in start..end) stmt;
@@ -351,7 +324,7 @@ export function parseStatement() {
     throw new Error("Expected 'let' or 'fn' after 'out'");
   }
 
-  // struct StructName { field : Type, ... } (struct definition)
+  // struct StructName<T> { field : Type, ... } (struct definition)
   if (token.type === "keyword" && token.value === "struct") {
     state.pos++; // skip 'struct'
 
@@ -361,6 +334,9 @@ export function parseStatement() {
     )
       throw new Error("Expected struct name after 'struct'");
     const structName = state.tokens[state.pos++].value;
+
+    // Optional generic type parameters: <T> or <T, U>
+    const generics = consumeGenericParams();
 
     // Expect '{' for field definitions
     if (
@@ -372,7 +348,22 @@ export function parseStatement() {
     state.pos++; // skip '{'
 
     const fields = parseStructFields();
-    return { type: "struct_def", name: structName, fields };
+
+    // Store generic params for later resolution
+    if (generics && generics.length > 0) {
+      return {
+        type: "struct_def",
+        name: structName,
+        fields,
+        generics,
+      };
+    }
+
+    return {
+      type: "struct_def",
+      name: structName,
+      fields,
+    };
   }
 
   // type AliasName = BaseType ; (type alias declaration)

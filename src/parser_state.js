@@ -75,3 +75,25 @@ export function parseBraceBlock(parseItem) {
   _pos++; // skip '}'
   return items;
 }
+// Helper: consume optional generic type parameters <T> or <T, U>, returns array of identifiers.
+export function consumeGenericParams() {
+  if (_tokens[_pos]?.type === "cmp" && _tokens[_pos]?.value === "<") {
+    _pos++; // skip '<'
+    const generics = [];
+    while (_pos < _tokens.length && _tokens[_pos].type !== "cmp") {
+      const tok = _tokens[_pos];
+      if (!tok || tok.type !== "identifier") break;
+      generics.push(tok.value);
+      _pos++;
+      // Skip optional ',' between type params
+      if (_tokens[_pos]?.type === "comma") _pos++;
+    }
+    if (_tokens[_pos]?.type === "cmp" && _tokens[_pos]?.value === ">") {
+      _pos++; // skip '>'
+    } else if (generics.length > 0) {
+      throw new Error("Expected '>' to close generic type parameters");
+    }
+    return generics;
+  }
+  return [];
+}

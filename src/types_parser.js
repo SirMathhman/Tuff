@@ -27,6 +27,34 @@ export function parseTypeComponent() {
   let typeName = (tok.value ?? "null").toUpperCase();
   state.pos++;
 
+  // Optional type arguments: Wrapper<I32> → consume <I32>
+  if (
+    state.tokens[state.pos]?.type === "cmp" &&
+    state.tokens[state.pos]?.value === "<"
+  ) {
+    state.pos++; // skip '<'
+    const args = [];
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type !== "cmp"
+    ) {
+      const argTok = state.tokens[state.pos];
+      if (!argTok || argTok.type !== "identifier") break;
+      args.push(argTok.value.toUpperCase());
+      state.pos++;
+      if (state.tokens[state.pos]?.type === "comma") state.pos++;
+    }
+    if (
+      state.tokens[state.pos]?.type === "cmp" &&
+      state.tokens[state.pos]?.value === ">"
+    ) {
+      state.pos++; // skip '>'
+    } else if (args.length > 0) {
+      throw new Error("Expected '>' to close type arguments");
+    }
+    typeName = `${typeName}<${args.join(",")}>`;
+  }
+
   return isPointer ? `*${typeName}` : typeName;
 }
 

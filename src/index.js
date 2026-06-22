@@ -10,9 +10,40 @@ import {
 
 // Struct definitions: Map<ALIAS_NAME, [{ name, type }, ...]>
 const structDefs = new Map();
+// Generic struct templates: Map<BaseName_Upper, { generics: string[], fields: [{name, type}] }>
+const genericStructs = new Map();
 
 export default compileTuffToJS;
 export { compileAllTuffToJSBundled, compileAllTuffWithExtern };
+
+// Helper: resolve parameterized struct reference (e.g., "WRAPPER<I32>") to a concrete type alias.
+function _resolveParameterizedStruct(typeName, typeAliases) {
+  // Match pattern BASE<ARG1,ARG2,...>
+  const match = typeName.match(/^(.+)<(.+)>$/);
+  if (!match) return typeName;
+
+  const [, baseType, argsStr] = match;
+  const template = genericStructs.get(baseType.toUpperCase());
+  if (!template) {
+    // Not a known generic struct, treat as opaque type name
+    return typeName;
+  }
+
+  const args = argsStr.split(",");
+  // Build concrete fields by substituting T -> I32 etc.
+  const concreteFields = template.fields.map((field) => ({
+    name: field.name,
+    type: template.generics.includes(field.type)
+      ? args[template.generics.indexOf(field.type)] || field.type
+      : field.type,
+  }));
+
+  // Create unique key for this concrete instantiation
+  const concreteKey = `STRUCT_${baseType.toUpperCase()}_${args.join("_")}`;
+  structDefs.set(concreteKey, concreteFields);
+  typeAliases.set(typeName.toUpperCase(), concreteKey);
+  return concreteKey;
+}
 
 // Helper: tokenize source text then parse all statements until EOF.
 function _parseStatements(source) {
@@ -77,11 +108,33 @@ function collectVars(
         returnType: s.returnType || null,
       });
     }
-    // Struct definition: struct Name { field : Type, ... }
+    // Struct definition: struct Name<T> { field : Type, ... }
     if (s.type === "struct_def") {
       const key = s.name.toUpperCase();
-      structDefs.set(key, s.fields);
-      typeAliases.set(key, `STRUCT_${key}`); // Unique identity per named struct
+      if (s.generics && s.generics.length > 0) {
+        genericStructs.set(key, {
+          generics: s.generics.map((g) => g.toUpperCase()),
+          fields: s.fields,
+        });
+      } else {
+        structDefs.set(key, s.fields);
+        typeAliases.set(key, `STRUCT_${key}`); // Unique identity per named struct
+      }
+    }
+
+    // Resolve parameterized types (e.g., Wrapper<I32>) for variable declarations
+    if (s.type === "let" && !s.fields && s.typeName) {
+      let typeName = s.typeName;
+      if (Array.isArray(typeName)) {
+        // Union type: resolve each element individually
+        const resolvedTypes = typeName.map((t) => _resolveParameterizedStruct(t, typeAliases));
+        varTypes.set(s.name, resolvedTypes);
+      } else {
+        const resolved = _resolveParameterizedStruct(typeName, typeAliases);
+        if (resolved !== typeName) {
+          varTypes.set(s.name, resolved);
+        }
+      }
     }
 
     // Type alias: type AliasName = BaseType or { field : Type, ... }
