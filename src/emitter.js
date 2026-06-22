@@ -26,6 +26,8 @@ function emitBlockStmt(stmts) {
     "prop_assign_stmt",
     "block",
     "if_stmt",
+    "break_stmt",
+    "continue_stmt",
     "while_stmt",
     "for_stmt",
   ]);
@@ -84,14 +86,20 @@ function emitStmtBlock(stmt) {
 
   // Fall through to regular emitStmt for everything else.
   if (stmt.type === "while_stmt") {
-    const bodyJs = emitBlockStmt([stmt.body[0]]);
+    let bodyJs = "";
+    for (const item of stmt.body) {
+      bodyJs += emitBlockStmt([item]);
+    }
     return `while(${emitExpr(stmt.cond)}){${bodyJs}}`;
   }
 
   if (stmt.type === "for_stmt") {
     const fromJs = emitExpr(stmt.from);
     const toJs = emitExpr(stmt.to);
-    const bodyJs = emitBlockStmt([stmt.body[0]]);
+    let bodyJs = "";
+    for (const item of stmt.body) {
+      bodyJs += emitBlockStmt([item]);
+    }
     return `var ${stmt.variable};for(${stmt.variable}=${fromJs};${stmt.variable}<${toJs};${stmt.variable}++){${bodyJs}}`;
   }
 
@@ -276,6 +284,8 @@ export function emitStmt(stmt) {
         "prop_assign_stmt",
         "block",
         "if_stmt",
+        "break_stmt",
+        "continue_stmt",
         "while_stmt",
         "for_stmt",
       ]);
@@ -305,6 +315,8 @@ export function emitStmt(stmt) {
       "prop_assign_stmt",
       "block",
       "if_stmt",
+      "break_stmt",
+      "continue_stmt",
       "while_stmt",
       "for_stmt",
     ]);
@@ -316,6 +328,14 @@ export function emitStmt(stmt) {
     // Expression body — wrap in return, with try/catch for fn_return sentinel from nested block_expr IIFEs
     const exprBody = emitExpr(stmt.body);
     return `function ${stmt.name}(${params}){try{return(${exprBody})}catch(e){if(e.__tuffReturn)return e.value;throw e}}`;
+  }
+  // break statement — exit enclosing loop
+  if (stmt.type === "break_stmt") {
+    return `break`;
+  }
+  // continue statement — skip to next iteration of enclosing loop
+  if (stmt.type === "continue_stmt") {
+    return `continue`;
   }
   // let/var declaration — wrap in slot {v: value} if this var is a ref target, unless init is already a &expr (which emits a slot directly) or it's an array (JS has native reference semantics)
   if (stmt.type === "let") {

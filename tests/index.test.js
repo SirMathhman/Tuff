@@ -56,6 +56,22 @@ test('executeTuff("let mut total = 0; let count = read(); while (total < count) 
   ).toBe(4);
 });
 
+test('executeTuff("let mut x = 0; while (true) { x = 1; break; } x") => 1', () => {
+  expect(executeTuff("let mut x = 0; while (true) { x = 1; break; } x")).toBe(
+    1,
+  );
+});
+
+test('executeTuff("let mut i = 0; let mut sum = 0; while (i < 5) { i += 1; if (i == 3) continue; sum += i; } sum") => 12', () => {
+  // skip iteration when i==3 → sums 1+2+4+5=12
+  expect(
+    executeTuff(
+      "let mut i = 0; let mut sum = 0; while (i < 5) { i += 1; if (i == 3) continue; sum += i; } sum",
+      "",
+    ),
+  ).toBe(12);
+});
+
 test('executeTuff("let count = read(); let mut sum = 0; for (i in 0..count) sum += i; sum", "4") => 6', () => {
   expect(
     executeTuff(

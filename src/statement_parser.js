@@ -301,6 +301,18 @@ export function parseStatement() {
     return parseWhileStmt(parseStatement);
   }
 
+  // break statement
+  if (token.type === "keyword" && token.value === "break") {
+    state.pos++; // skip 'break'
+    return { type: "break_stmt" };
+  }
+
+  // continue statement
+  if (token.type === "keyword" && token.value === "continue") {
+    state.pos++; // skip 'continue'
+    return { type: "continue_stmt" };
+  }
+
   // if (expr) stmt; else stmt;
   if (token.type === "keyword" && token.value === "if") {
     return parseIfStmt(parseStatement);
