@@ -1,13 +1,8 @@
 import { tokenize } from "./tokenizer";
 import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
-import {
-  isWideningOk,
-  resolveAlias,
-  checkTypeCompatibility,
-  inferInitType,
-  inferExprType,
-} from "./types";
+import { checkTypeCompatibility, inferInitType } from "./types";
+import { extractIsNarrowings, lowerIsCheck, validateCallArgs } from "./ischeck_lowering";
 
 // Struct definitions: Map<ALIAS_NAME, [{ name, type }, ...]>
 const structDefs = new Map();
@@ -82,7 +77,7 @@ function collectVars(
     if (s.type === "struct_def") {
       const key = s.name.toUpperCase();
       structDefs.set(key, s.fields);
-      typeAliases.set(key, "STRUCT");
+      typeAliases.set(key, `STRUCT_${key}`); // Unique identity per named struct
     }
 
     // Type alias: type AliasName = BaseType or { field : Type, ... }
@@ -90,7 +85,7 @@ function collectVars(
       const key = s.name.toUpperCase();
       if (s.structFields) {
         structDefs.set(key, s.structFields);
-        typeAliases.set(key, "STRUCT");
+        typeAliases.set(key, `STRUCT_${key}`); // Unique identity per named struct
       } else {
         typeAliases.set(key, s.baseType);
       }
@@ -158,110 +153,6 @@ function validateEach(
   }
 }
 
-// Extract variable narrowing info from 'is_check' nodes in a condition expression.
-// Returns Map<varName, narrowedType> for variables that were checked with 'is'.
-function extractIsNarrowings(node) {
-  const narrowings = new Map();
-  if (!node || typeof node !== "object") return narrowings;
-
-  // Recurse into children first (post-order)
-  for (const key of Object.keys(node)) {
-    const child = node[key];
-    if (Array.isArray(child)) child.forEach((c) => extractIsNarrowings(c));
-    else if (child && typeof child === "object") extractIsNarrowings(child);
-  }
-
-  // If this is an 'is_check' with a varref on the left, record narrowing
-  if (node.type === "is_check" && node.expr?.type === "varref") {
-    const targetType = Array.isArray(node.targetType)
-      ? node.targetType[0] // Narrow to first member of union target
-      : node.targetType;
-    narrowings.set(node.expr.name, targetType);
-  }
-
-  return narrowings;
-}
-
-// Lower 'is_check' nodes to boolean literals at compile time based on inferred types.
-function _lowerIsCheck(node, varTypes, fnSignatures, typeAliases = new Map()) {
-  if (!node || typeof node !== "object") return;
-
-  // Recurse into children first (post-order)
-  for (const key of Object.keys(node)) {
-    const child = node[key];
-    if (Array.isArray(child))
-      child.forEach((c) =>
-        _lowerIsCheck(c, varTypes, fnSignatures, typeAliases),
-      );
-    else if (child && typeof child === "object")
-      _lowerIsCheck(child, varTypes, fnSignatures, typeAliases);
-  }
-
-  // If this node is an 'is_check', replace with boolean literal
-  if (node.type === "is_check") {
-    const exprType = inferExprType(node.expr, varTypes, fnSignatures);
-    // targetType may be a string, array (union), or struct literal marker from parseTypeRef
-    let targetType;
-    if (typeof node.targetType === "object" && node.targetType.type === "__struct_literal__") {
-      // Inline struct type check: `expr is { x : I32 }` → match against STRUCT
-      targetType = "STRUCT";
-    } else if (Array.isArray(node.targetType)) {
-      targetType = node.targetType;
-    } else {
-      targetType = node.targetType.toUpperCase();
-    }
-    // Resolve alias in target type
-    targetType = resolveAlias(targetType, typeAliases);
-    let matches;
-    if (exprType) {
-      // Check type compatibility: exact match, widening, or union member match
-      matches = isWideningOk(exprType, targetType, typeAliases);
-    } else {
-      // Unknown expression type → default to false at compile time
-      matches = false;
-    }
-    // Replace with boolean literal node (same as 'true'/'false')
-    Object.assign(node, { type: "boollit", value: matches });
-  }
-}
-
-// Validate function call arguments against declared parameter types.
-function _validateCallArgs(node, varTypes, fnSignatures) {
-  if (!node || typeof node !== "object") return;
-
-  // Check this node if it's a call with typed params
-  if (node.type === "call" && !node.name.includes("::")) {
-    const sig = fnSignatures.get(node.name);
-    if (sig && sig.paramTypes) {
-      for (
-        let i = 0;
-        i < Math.min(sig.paramTypes.length, node.args?.length);
-        i++
-      ) {
-        const paramType = sig.paramTypes[i];
-        if (!paramType) continue;
-        const argExpr = node.args[i];
-        const argType = inferExprType(argExpr, varTypes, fnSignatures);
-        // If argument has a known type and it's incompatible with the parameter
-        if (argType && !isWideningOk(argType, paramType)) {
-          throw new Error(
-            `Type mismatch: cannot pass ${argType} to parameter of type ${paramType}`,
-          );
-        }
-      }
-    }
-  }
-
-  // Recurse into children
-  for (const key of Object.keys(node)) {
-    const child = node[key];
-    if (Array.isArray(child))
-      child.forEach((c) => _validateCallArgs(c, varTypes, fnSignatures));
-    else if (child && typeof child === "object")
-      _validateCallArgs(child, varTypes, fnSignatures);
-  }
-}
-
 // Top-level compile entry — collects vars then validates
 function _compileValidate(stmts, extraDecl = new Set()) {
   const declaredVars = new Set();
@@ -280,12 +171,12 @@ function _compileValidate(stmts, extraDecl = new Set()) {
   );
 
   // Lower 'is_check' nodes to boolean literals based on compile-time type info
-  stmts.forEach((s) => _lowerIsCheck(s, varTypes, fnSignatures, typeAliases));
+  stmts.forEach((s) => lowerIsCheck(s, varTypes, fnSignatures, typeAliases));
 
   validateEach(stmts, declaredVars, mutableVars, fnSignatures, varTypes);
 
   // Validate function call arguments against parameter types
-  stmts.forEach((s) => _validateCallArgs(s, varTypes, fnSignatures));
+  stmts.forEach((s) => validateCallArgs(s, varTypes, fnSignatures));
 }
 
 // Shared utility: collect ref-related info from AST nodes into provided sets/map.
