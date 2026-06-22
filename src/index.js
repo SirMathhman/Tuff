@@ -2,7 +2,11 @@ import { tokenize } from "./tokenizer";
 import parser from "./parser";
 import { init, emitExpr, emitStmt } from "./emitter";
 import { checkTypeCompatibility, inferInitType } from "./types";
-import { extractIsNarrowings, lowerIsCheck, validateCallArgs } from "./ischeck_lowering";
+import {
+  extractIsNarrowings,
+  lowerIsCheck,
+  validateCallArgs,
+} from "./ischeck_lowering";
 
 // Struct definitions: Map<ALIAS_NAME, [{ name, type }, ...]>
 const structDefs = new Map();

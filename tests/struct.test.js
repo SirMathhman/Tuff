@@ -40,24 +40,36 @@ test('executeTuff anon struct not assignable to named struct: "struct Wrapper { 
 
 test('executeTuff anon struct matches inline struct: "let temp : { x : I32 } = { x : 100 }; temp is { x : I32 }" => 1', () => {
   expect(
-    executeTuff("let temp : { x : I32 } = { x : 100 }; temp is { x : I32 }", ""),
+    executeTuff(
+      "let temp : { x : I32 } = { x : 100 }; temp is { x : I32 }",
+      "",
+    ),
   ).toBe(1);
 });
 
 test('executeTuff named struct matches inline struct: "struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp is { x : I32 }" => 1', () => {
   expect(
-    executeTuff("struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp is { x : I32 }", ""),
+    executeTuff(
+      "struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp is { x : I32 }",
+      "",
+    ),
   ).toBe(1);
 });
 
 test('executeTuff named struct matches same named struct: "struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp is Wrapper" => 1', () => {
   expect(
-    executeTuff("struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp is Wrapper", ""),
+    executeTuff(
+      "struct Wrapper { x : I32 } let temp : Wrapper = { x : 100 }; temp is Wrapper",
+      "",
+    ),
   ).toBe(1);
 });
 
 test('executeTuff different named structs do not match: "struct A { x : I32 } struct B { y : I32 } let temp : A = { x : 100 }; temp is B" => 0', () => {
   expect(
-    executeTuff("struct A { x : I32 } struct B { y : I32 } let temp : A = { x : 100 }; temp is B", ""),
+    executeTuff(
+      "struct A { x : I32 } struct B { y : I32 } let temp : A = { x : 100 }; temp is B",
+      "",
+    ),
   ).toBe(0);
 });

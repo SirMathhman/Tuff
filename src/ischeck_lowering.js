@@ -36,7 +36,9 @@ export function lowerIsCheck(
   for (const key of Object.keys(node)) {
     const child = node[key];
     if (Array.isArray(child))
-      child.forEach((c) => lowerIsCheck(c, varTypes, fnSignatures, typeAliases));
+      child.forEach((c) =>
+        lowerIsCheck(c, varTypes, fnSignatures, typeAliases),
+      );
     else if (child && typeof child === "object")
       lowerIsCheck(child, varTypes, fnSignatures, typeAliases);
   }
