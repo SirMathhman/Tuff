@@ -6,16 +6,16 @@ A language is _usable_ when a programmer can write non-trivial programs without 
 
 ## 1. Type System & Literals (Critical)
 
-| Feature                                   | Status     | Why It Matters                                                                                                                                |
-| ----------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Compile-time type checking**            | ⚠️ Partial | Widening allowed (U8→U16, I8→I32), narrowing rejected, Bool-to-int mismatch caught. Call argument types validated against param declarations. |
-| **Full integer width coverage (U64/I64)** | ❌ Missing | Only up to 32-bit types implemented; larger widths would require BigInt in generated JS.                                                      |
-| **Float / decimal literals**              | ❌ Missing | No `f32`/`f64` or floating-point suffixes (`1.5F32`). All arithmetic is integer-only, blocking any fractional math.                           |
-| **Enum types**                            | ❌ Missing | Named sets of values (e.g., `enum Color { Red, Green, Blue }`) for readable constants and exhaustive matching.                                |
-| **Struct / named tuple types**            | ❌ Missing | No way to define reusable composite types with typed fields beyond inline object literals.                                                    |
-| **Type aliases**                          | ❌ Missing | Cannot write `type Id = U32` — repeated union annotations (`U8 \| I32`) are verbose and error-prone.                                          |
-| **Generic type parameters**               | ❌ Missing | Functions cannot be parameterized by type (e.g., `fn identity<T>(x : T) => x`). Generic utilities require code duplication.                   |
-| **Overflow checking**                     | ❌ Missing | No compile-time or runtime guard against integer overflow/underflow on typed values (`255U8 + 1U8` silently wraps).                           |
+| Feature                                   | Status     | Why It Matters                                                                                                                                                                                                 |
+| ----------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Compile-time type checking**            | ⚠️ Partial | Widening allowed (U8→U16, I8→I32), narrowing rejected, Bool-to-int mismatch caught. Call argument types validated against param declarations. Struct identity checked at compile time (`temp is { x : I32 }`). |
+| **Full integer width coverage (U64/I64)** | ❌ Missing | Only up to 32-bit types implemented; larger widths would require BigInt in generated JS.                                                                                                                       |
+| **Float / decimal literals**              | ❌ Missing | No `f32`/`f64` or floating-point suffixes (`1.5F32`). All arithmetic is integer-only, blocking any fractional math.                                                                                            |
+| **Enum types**                            | ❌ Missing | Named sets of values (e.g., `enum Color { Red, Green, Blue }`) for readable constants and exhaustive matching.                                                                                                 |
+| **Struct / named tuple types**            | ✅ Done    | Named structs (`struct Wrapper { x : I32 }`), inline struct literals (`{ key : value }`), property access (`obj.field`), compile-time `is` checks with proper named vs anonymous distinction.                  |
+| **Type aliases**                          | ⚠️ Partial | Simple aliases work (`type Id = U32`) and struct-based aliases (`type Wrapper = { x : I32 }`). Parameterized type resolution for generic structs supported.                                                    |
+| **Generic type parameters**               | ✅ Done    | Functions support `<T>` syntax (e.g., `fn pass<T>(value : T) => value`). Structs support generics with compile-time substitution (`struct Wrapper<T> { x : T }` + `let temp : Wrapper<I32>`).                  |
+| **Overflow checking**                     | ❌ Missing | No compile-time or runtime guard against integer overflow/underflow on typed values (`255U8 + 1U8` silently wraps).                                                                                            |
 
 ## 2. I/O & Built-ins (Critical)
 
