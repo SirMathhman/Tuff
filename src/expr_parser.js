@@ -141,14 +141,74 @@ export function parseExpr() {
   return left;
 }
 
-function parseComparison() {
+// Parse a type reference for the 'is' operator — supports single types and parenthesized unions
+function parseTypeRef() {
+  // Parenthesized union: (U8 | U16)
+  if (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "paren_open"
+  ) {
+    state.pos++; // skip '('
+    const types = [];
+
+    while (
+      state.pos < state.tokens.length &&
+      state.tokens[state.pos].type !== "paren_close"
+    ) {
+      if (state.tokens[state.pos].type === "identifier") {
+        types.push(state.tokens[state.pos++].value.toUpperCase());
+      } else {
+        throw new Error("Expected type name in union");
+      }
+
+      // Skip pipe separator between union members
+      if (
+        state.pos < state.tokens.length &&
+        state.tokens[state.pos].type === "pipe"
+      ) {
+        state.pos++;
+      }
+    }
+
+    if (state.pos >= state.tokens.length) throw new Error("Expected ')'");
+    state.pos++; // skip ')'
+
+    return types.length === 1 ? types[0] : types;
+  }
+
+  // Single type: U8, I32, etc.
+  if (
+    state.pos >= state.tokens.length ||
+    state.tokens[state.pos].type !== "identifier"
+  ) {
+    throw new Error("Expected type name after 'is'");
+  }
+  return state.tokens[state.pos++].value.toUpperCase();
+}
+
+// 'expr is Type' type-checking operator — resolved at compile time
+function parseIsCheck() {
   let left = parseAddSub();
+  while (
+    state.pos < state.tokens.length &&
+    state.tokens[state.pos].type === "keyword" &&
+    state.tokens[state.pos].value === "is"
+  ) {
+    state.pos++; // skip 'is'
+    const targetType = parseTypeRef();
+    left = { type: "is_check", expr: left, targetType };
+  }
+  return left;
+}
+
+function parseComparison() {
+  let left = parseIsCheck();
   while (
     state.pos < state.tokens.length &&
     state.tokens[state.pos].type === "cmp"
   ) {
     const opVal = state.tokens[state.pos++].value;
-    const right = parseAddSub();
+    const right = parseIsCheck();
     left = { type: "binop", op: opVal, left, right };
   }
   return left;

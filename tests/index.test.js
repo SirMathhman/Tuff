@@ -465,3 +465,26 @@ test('executeTuff("let x : U8 | U16 = 100U8; x", "") => 100', () => {
 test('executeTuff("let x : I32 = 100; let y : *I32 = &x; *y", "") => 100', () => {
   expect(executeTuff("let x : I32 = 100; let y : *I32 = &x; *y", "")).toBe(100);
 });
+
+test('executeTuff("100U8 is U8", "") => 1', () => {
+  expect(executeTuff("100U8 is U8", "")).toBe(1);
+});
+
+test('executeTuff("100U8 is I32", "") => 0', () => {
+  expect(executeTuff("100U8 is I32", "")).toBe(0);
+});
+
+test('executeTuff("let x = read(); x is U8") => 0 (unknown type)', () => {
+  // Untyped variable → unknown type at compile time → defaults to false
+  expect(executeTuff("let x = read(); x is U8", "")).toBe(0);
+});
+
+test('executeTuff("100U8 is U16", "") => 1 (widening)', () => {
+  // U8 widens to U16 → true
+  expect(executeTuff("100U8 is U16", "")).toBe(1);
+});
+
+test('executeTuff("100U8 is (U8 | U16)", "") => 1', () => {
+  // U8 matches first member of union → true
+  expect(executeTuff("100U8 is (U8 | U16)", "")).toBe(1);
+});

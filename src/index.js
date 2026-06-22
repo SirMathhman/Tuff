@@ -123,6 +123,13 @@ function inferExprType(node, varTypes, fnSignatures) {
   // Negation of a typed expression preserves the inner type
   if (node.type === "negate")
     return inferExprType(node.operand, varTypes, fnSignatures);
+  // is_check node: resolve at compile time → emit boolean literal
+  if (node.type === "is_check") {
+    const exprType = inferExprType(node.expr, varTypes, fnSignatures);
+    const targetType = node.targetType.toUpperCase();
+    const matches = exprType && _isWideningOk(exprType, targetType);
+    return matches ? "BOOL" : null;
+  }
   // Default: untyped → no constraint
   return null;
 }
@@ -225,6 +232,39 @@ function validateEach(
   }
 }
 
+// Lower 'is_check' nodes to boolean literals at compile time based on inferred types.
+function _lowerIsCheck(node, varTypes, fnSignatures) {
+  if (!node || typeof node !== "object") return;
+
+  // Recurse into children first (post-order)
+  for (const key of Object.keys(node)) {
+    const child = node[key];
+    if (Array.isArray(child))
+      child.forEach((c) => _lowerIsCheck(c, varTypes, fnSignatures));
+    else if (child && typeof child === "object")
+      _lowerIsCheck(child, varTypes, fnSignatures);
+  }
+
+  // If this node is an 'is_check', replace with boolean literal
+  if (node.type === "is_check") {
+    const exprType = inferExprType(node.expr, varTypes, fnSignatures);
+    // targetType may be a string or array (union) from parseTypeRef
+    const targetType = Array.isArray(node.targetType)
+      ? node.targetType
+      : node.targetType.toUpperCase();
+    let matches;
+    if (exprType) {
+      // Check type compatibility: exact match, widening, or union member match
+      matches = isWideningOk(exprType, targetType);
+    } else {
+      // Unknown expression type → default to false at compile time
+      matches = false;
+    }
+    // Replace with boolean literal node (same as 'true'/'false')
+    Object.assign(node, { type: "boollit", value: matches });
+  }
+}
+
 // Validate function call arguments against declared parameter types.
 function _validateCallArgs(node, varTypes, fnSignatures) {
   if (!node || typeof node !== "object") return;
@@ -270,6 +310,10 @@ function _compileValidate(stmts, extraDecl = new Set()) {
   const fnSignatures = new Map();
   for (const n of extraDecl) declaredVars.add(n);
   collectVars(stmts, declaredVars, mutableVars, varTypes, fnSignatures);
+
+  // Lower 'is_check' nodes to boolean literals based on compile-time type info
+  stmts.forEach((s) => _lowerIsCheck(s, varTypes, fnSignatures));
+
   validateEach(stmts, declaredVars, mutableVars, fnSignatures, varTypes);
 
   // Validate function call arguments against parameter types
