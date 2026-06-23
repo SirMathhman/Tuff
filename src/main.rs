@@ -296,8 +296,9 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
 
     if !compile_output.status.success() {
         panic!(
-            "clang failed: {}",
-            String::from_utf8_lossy(&compile_output.stderr)
+            "clang failed: {} generated code {}",
+            String::from_utf8_lossy(&compile_output.stderr),
+            generated_c
         );
     }
 
@@ -318,7 +319,13 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
         .expect("Failed to wait for compiled binary");
 
     let actual_exit_code = run_output.status.code().unwrap_or(-1);
-    assert_eq!(expected_exit_code, actual_exit_code);
+
+    if (expected_exit_code != actual_exit_code) {
+        panic!(
+            "expected exit code: {} but was actually: {}, generated code {}",
+            expected_exit_code, actual_exit_code, generated_c
+        )
+    }
 
     // Clean up temp files
     std::fs::remove_file(&c_path).ok();
