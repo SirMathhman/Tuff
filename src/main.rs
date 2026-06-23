@@ -6,8 +6,10 @@ use std::{
 /// AST nodes for the Tuff language.
 enum AstExpr {
     Read,
+    ReadBool,
     Var(String),
     Add(Box<AstExpr>, Box<AstExpr>),
+    Bool(bool),
 }
 
 struct Parser<'a> {
@@ -21,6 +23,8 @@ enum Token<'a> {
     Mut,
     Ident(&'a str),
     Read,
+    ReadBool,
+    Bool(bool),
     LParen,
     RParen,
     Plus,
@@ -75,6 +79,9 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                     "let" => tokens.push(Token::Let),
                     "mut" => tokens.push(Token::Mut),
                     "read" => tokens.push(Token::Read),
+                    "readBool" => tokens.push(Token::ReadBool),
+                    "true" => tokens.push(Token::Bool(true)),
+                    "false" => tokens.push(Token::Bool(false)),
                     _ => tokens.push(Token::Ident(ident.leak())),
                 }
             }
@@ -222,12 +229,11 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    /// term → "read" ["(" ")"] | IDENT
+    /// term → "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | BOOL
     fn parse_term(&mut self) -> Result<AstExpr, std::fmt::Error> {
         match &self.tokens[self.pos] {
             Token::Read => {
                 self.eat(); // consume 'read'
-                // Optionally skip parentheses: read()
                 if matches!(self.peek(), Token::LParen) {
                     self.eat(); // '('
                     if !matches!(self.peek(), Token::RParen) {
@@ -237,10 +243,26 @@ impl<'a> Parser<'a> {
                 }
                 Ok(AstExpr::Read)
             }
+            Token::ReadBool => {
+                self.eat(); // consume 'readBool'
+                if matches!(self.peek(), Token::LParen) {
+                    self.eat(); // '('
+                    if !matches!(self.peek(), Token::RParen) {
+                        return Err(std::fmt::Error);
+                    }
+                    self.eat(); // ')'
+                }
+                Ok(AstExpr::ReadBool)
+            }
             Token::Ident(name) => {
                 let name = *name;
                 self.eat();
                 Ok(AstExpr::Var(name.to_string()))
+            }
+            Token::Bool(val) => {
+                let val = *val;
+                self.eat();
+                Ok(AstExpr::Bool(val))
             }
             _ => Err(std::fmt::Error),
         }
@@ -253,6 +275,9 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
         AstExpr::Read => {
             write!(buf, "read_val()")?;
         }
+        AstExpr::ReadBool => {
+            write!(buf, "read_bool()")?;
+        }
         AstExpr::Var(name) => {
             write!(buf, "{}", name)?;
         }
@@ -262,6 +287,13 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             write!(buf, " + ")?;
             emit_expr(right, buf)?;
             write!(buf, ")")?;
+        }
+        AstExpr::Bool(val) => {
+            if *val {
+                write!(buf, "1")?;
+            } else {
+                write!(buf, "0")?;
+            }
         }
     }
     Ok(())
@@ -286,8 +318,10 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     };
 
     // Build C source
-    let mut c = String::from("#include <stdio.h>\n\n");
+    let mut c = String::from("#include <stdio.h>\n#include <string.h>\n\n");
     c.push_str("int read_val(void) {\n  int n;\n  scanf(\"%d\", &n);\n  return n;\n}\n\n");
+    c.push_str("int read_bool(void) {\n  char s[10];\n  scanf(\"%s\", s);");
+    c.push_str("\n  if (strcmp(s, \"true\") == 0) return 1;\n  return 0;\n}\n");
     c.push_str("int main() {\n");
 
     // Emit variable declarations for let statements
@@ -452,5 +486,15 @@ mod tests {
     #[test]
     fn mutable_variable_reassignment() {
         assert_valid("let mut x = read(); x = read(); x", "1 2", 2);
+    }
+
+    #[test]
+    fn boolean_literal_true() {
+        assert_valid("let x = true; x", "", 1);
+    }
+
+    #[test]
+    fn read_bool_from_stdin() {
+        assert_valid("let x = readBool(); x", "true", 1);
     }
 }
