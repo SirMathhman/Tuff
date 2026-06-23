@@ -9,7 +9,9 @@ enum AstExpr {
     ReadBool,
     Var(String),
     Add(Box<AstExpr>, Box<AstExpr>),
+    Num(i64),
     Bool(bool),
+    If(Box<AstExpr>, Box<AstExpr>, Box<AstExpr>), // condition, then_expr, else_expr
 }
 
 struct Parser<'a> {
@@ -21,9 +23,12 @@ struct Parser<'a> {
 enum Token<'a> {
     Let,
     Mut,
+    If,
+    Else,
     Ident(&'a str),
     Read,
     ReadBool,
+    Num(i64),
     Bool(bool),
     LParen,
     RParen,
@@ -64,6 +69,18 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                 chars.next();
                 tokens.push(Token::RParen);
             }
+            _ if c.is_ascii_digit() => {
+                let mut num = String::new();
+                while let Some(&ch) = chars.peek() {
+                    if ch.is_ascii_digit() {
+                        num.push(ch);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(Token::Num(num.parse().unwrap()));
+            }
             _ if c.is_alphabetic() || c == '_' => {
                 let mut ident = String::new();
                 while let Some(&ch) = chars.peek() {
@@ -78,6 +95,8 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                 match ident.as_str() {
                     "let" => tokens.push(Token::Let),
                     "mut" => tokens.push(Token::Mut),
+                    "if" => tokens.push(Token::If),
+                    "else" => tokens.push(Token::Else),
                     "read" => tokens.push(Token::Read),
                     "readBool" => tokens.push(Token::ReadBool),
                     "true" => tokens.push(Token::Bool(true)),
@@ -229,8 +248,44 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    /// term → "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | BOOL
+    /// if_expr → "if" ( expr ) expr "else" expr
+    fn parse_if(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        self.eat(); // consume 'if'
+
+        if !matches!(self.peek(), Token::LParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '('
+
+        let condition = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::RParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume ')'
+
+        let then_expr = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::Else) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume 'else'
+
+        let else_expr = self.parse_expr()?;
+
+        Ok(AstExpr::If(
+            Box::new(condition),
+            Box::new(then_expr),
+            Box::new(else_expr),
+        ))
+    }
+
+    /// term → "if" expr ")" expr "else" expr | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
     fn parse_term(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        if matches!(self.peek(), Token::If) {
+            return self.parse_if();
+        }
+
         match &self.tokens[self.pos] {
             Token::Read => {
                 self.eat(); // consume 'read'
@@ -253,6 +308,11 @@ impl<'a> Parser<'a> {
                     self.eat(); // ')'
                 }
                 Ok(AstExpr::ReadBool)
+            }
+            Token::Num(val) => {
+                let val = *val;
+                self.eat();
+                Ok(AstExpr::Num(val))
             }
             Token::Ident(name) => {
                 let name = *name;
@@ -278,6 +338,9 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
         AstExpr::ReadBool => {
             write!(buf, "read_bool()")?;
         }
+        AstExpr::Num(val) => {
+            write!(buf, "{}", val)?;
+        }
         AstExpr::Var(name) => {
             write!(buf, "{}", name)?;
         }
@@ -294,6 +357,15 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             } else {
                 write!(buf, "0")?;
             }
+        }
+        AstExpr::If(condition, then_expr, else_expr) => {
+            write!(buf, "(")?;
+            emit_expr(condition, buf)?;
+            write!(buf, " ? ")?;
+            emit_expr(then_expr, buf)?;
+            write!(buf, " : ")?;
+            emit_expr(else_expr, buf)?;
+            write!(buf, ")")?;
         }
     }
     Ok(())
@@ -496,5 +568,20 @@ mod tests {
     #[test]
     fn read_bool_from_stdin() {
         assert_valid("let x = readBool(); x", "true", 1);
+    }
+
+    #[test]
+    fn read_plus_literal() {
+        assert_valid("read() + 1", "1", 2);
+    }
+
+    #[test]
+    fn if_else_expression() {
+        assert_valid("if (readBool()) 3 else 5", "true", 3);
+    }
+
+    #[test]
+    fn let_with_if_else() {
+        assert_valid("let x = if (readBool()) 3 else 5; x", "true", 3);
     }
 }
