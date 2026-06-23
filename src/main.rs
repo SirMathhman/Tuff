@@ -18,6 +18,7 @@ struct Parser<'a> {
 #[derive(Debug, Clone)]
 enum Token<'a> {
     Let,
+    Mut,
     Ident(&'a str),
     Read,
     LParen,
@@ -72,6 +73,7 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
 
                 match ident.as_str() {
                     "let" => tokens.push(Token::Let),
+                    "mut" => tokens.push(Token::Mut),
                     "read" => tokens.push(Token::Read),
                     _ => tokens.push(Token::Ident(ident.leak())),
                 }
@@ -101,11 +103,19 @@ impl<'a> Parser<'a> {
         tok
     }
 
-    /// program → ( "let" IDENT "=" expr ";" )* expr?
+    /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" )* expr?
     fn parse_program(
         &mut self,
-    ) -> Result<(Vec<(&'a str, AstExpr)>, Option<AstExpr>), std::fmt::Error> {
+    ) -> Result<
+        (
+            Vec<(&'a str, AstExpr)>,
+            Vec<(&'a str, AstExpr)>,
+            Option<AstExpr>,
+        ),
+        std::fmt::Error,
+    > {
         let mut lets: Vec<(&'a str, AstExpr)> = Vec::new();
+        let mut assigns: Vec<(&'a str, AstExpr)> = Vec::new();
         let mut final_expr: Option<AstExpr> = None;
 
         loop {
@@ -114,6 +124,19 @@ impl<'a> Parser<'a> {
                 Token::Let => {
                     let (name, expr) = self.parse_let()?;
                     lets.push((name, expr));
+                }
+                Token::Ident(_) => {
+                    // Could be an assignment: IDENT "=" expr ";"
+                    if matches!(self.tokens.get(self.pos + 1), Some(Token::Equals)) {
+                        let (name, expr) = self.parse_assign()?;
+                        assigns.push((name, expr));
+                    } else {
+                        // Final expression
+                        if final_expr.is_some() {
+                            return Err(std::fmt::Error);
+                        }
+                        final_expr = Some(self.parse_expr()?);
+                    }
                 }
                 _ => {
                     if final_expr.is_some() {
@@ -124,13 +147,44 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok((lets, final_expr))
+        Ok((lets, assigns, final_expr))
     }
 
-    /// let_statement → "let" IDENT "=" expr ";"
+    /// let_statement → "let" ["mut"] IDENT "=" expr ";"
     fn parse_let(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
         self.eat(); // consume 'let'
 
+        // Optionally skip 'mut'
+        if matches!(self.peek(), Token::Mut) {
+            self.eat();
+        }
+
+        if !matches!(self.peek(), Token::Ident(_)) {
+            return Err(std::fmt::Error);
+        }
+        let name = match &self.tokens[self.pos] {
+            Token::Ident(n) => *n,
+            _ => unreachable!(),
+        };
+        self.eat(); // consume ident
+
+        if !matches!(self.peek(), Token::Equals) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '='
+
+        let expr = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::Semicolon) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume ';'
+
+        Ok((name, expr))
+    }
+
+    /// assign_statement → IDENT "=" expr ";"
+    fn parse_assign(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
         if !matches!(self.peek(), Token::Ident(_)) {
             return Err(std::fmt::Error);
         }
@@ -226,7 +280,7 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     }
 
     let mut parser = Parser::new(tokens);
-    let (lets, final_expr) = match parser.parse_program() {
+    let (lets, assigns, final_expr) = match parser.parse_program() {
         Ok(ast) => ast,
         Err(_) => return Err(std::fmt::Error),
     };
@@ -236,9 +290,16 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     c.push_str("int read_val(void) {\n  int n;\n  scanf(\"%d\", &n);\n  return n;\n}\n\n");
     c.push_str("int main() {\n");
 
-    // Emit variable declarations and assignments for let statements
+    // Emit variable declarations for let statements
     for (name, expr) in &lets {
         write!(c, " int {} = ", name).map_err(|_| std::fmt::Error)?;
+        emit_expr(expr, &mut c).map_err(|_| std::fmt::Error)?;
+        writeln!(c, ";").map_err(|_| std::fmt::Error)?;
+    }
+
+    // Emit assignment statements (for mutable variables)
+    for (name, expr) in &assigns {
+        write!(c, " {} = ", name).map_err(|_| std::fmt::Error)?;
         emit_expr(expr, &mut c).map_err(|_| std::fmt::Error)?;
         writeln!(c, ";").map_err(|_| std::fmt::Error)?;
     }
@@ -381,5 +442,15 @@ mod tests {
     #[test]
     fn let_variable_from_read() {
         assert_valid("let x = read(); x", "1", 1);
+    }
+
+    #[test]
+    fn let_variable_used_twice() {
+        assert_valid("let x = read(); x + x", "1", 2);
+    }
+
+    #[test]
+    fn mutable_variable_reassignment() {
+        assert_valid("let mut x = read(); x = read(); x", "1 2", 2);
     }
 }
