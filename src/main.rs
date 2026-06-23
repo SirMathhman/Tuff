@@ -13,7 +13,8 @@ enum AstExpr {
     Num(i64),
     Bool(bool),
     If(Box<AstExpr>, Box<AstExpr>, Box<AstExpr>), // condition, then_expr, else_expr
-    Block(Vec<(String, AstExpr)>, Option<Box<AstExpr>>), // block: { let ...; expr }
+    Assign(String, Box<AstExpr>),                 // x = expr (assignment statement)
+    Block(Vec<(String, AstExpr)>, Vec<AstExpr>, Option<Box<AstExpr>>), // block: { lets; stmts; expr }
     Loop(Box<AstExpr>), // loop { break expr; } — evaluates to the break expression
 }
 
@@ -236,11 +237,17 @@ impl<'a> Parser<'a> {
                         final_expr = Some(self.parse_expr()?);
                     }
                 }
+                Token::LBrace => {
+                    // Block as a statement — parse it and populate lets/assigns accordingly.
+                    self.parse_block_stmts(&mut lets, &mut assigns)?;
+                }
                 _ => {
-                    if final_expr.is_some() {
-                        return Err(std::fmt::Error); // multiple top-level expressions
+                    let parsed_expr = self.parse_expr()?;
+                    if let Some(prev) = final_expr.take() {
+                        // Previous expression becomes a statement (side effect).
+                        assigns.push(("_", prev, false));
                     }
-                    final_expr = Some(self.parse_expr()?);
+                    final_expr = Some(parsed_expr);
                 }
             }
         }
@@ -337,19 +344,25 @@ impl<'a> Parser<'a> {
     }
 
     /// block → "{" ("let" ["mut"] IDENT "=" expr ";")* expr? "}"
-    fn parse_block(&mut self) -> Result<AstExpr, std::fmt::Error> {
-        self.eat(); // consume '{'
-
+    /// Shared helper: parse block contents into lets, assignments, and optional final expression.
+    fn parse_block_inner(
+        &mut self,
+    ) -> Result<
+        (
+            Vec<(String, AstExpr)>,
+            Vec<(&'a str, AstExpr)>,
+            Option<AstExpr>,
+        ),
+        std::fmt::Error,
+    > {
         let mut lets: Vec<(String, AstExpr)> = Vec::new();
+        let mut assign_pairs: Vec<(&'a str, AstExpr)> = Vec::new();
 
         loop {
             match self.peek() {
-                Token::RBrace => {
-                    self.eat(); // consume '}'
-                    return Ok(AstExpr::Block(lets, None));
-                }
+                Token::RBrace => return Ok((lets, assign_pairs, None)),
                 Token::Let => {
-                    self.eat(); // 'let'
+                    self.eat();
                     if matches!(self.peek(), Token::Mut) {
                         self.eat();
                     }
@@ -361,15 +374,65 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Final expression in the block
-        let final_expr = Some(Box::new(self.parse_expr()?));
+        loop {
+            match self.peek() {
+                Token::RBrace => return Ok((lets, assign_pairs, None)),
+                Token::Ident(_) if matches!(self.tokens.get(self.pos + 1), Some(Token::Equals)) => {
+                    let (name, expr) = self.parse_assign()?;
+                    assign_pairs.push((name, expr));
+                }
+                _ => break,
+            }
+        }
+
+        // Final expression — if present.
+        let final_expr = if !matches!(self.peek(), Token::RBrace) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        Ok((lets, assign_pairs, final_expr))
+    }
+
+    /// Parse block contents as statements (for top-level blocks).
+    fn parse_block_stmts(
+        &mut self,
+        lets: &mut Vec<(&'a str, AstExpr)>,
+        assigns: &mut Vec<(&'a str, AstExpr, bool)>,
+    ) -> Result<(), std::fmt::Error> {
+        self.eat(); // consume '{'
+
+        let (block_lets, assign_pairs, _) = self.parse_block_inner()?;
+        for (name, expr) in block_lets {
+            lets.push((name.leak(), expr));
+        }
+        for (name, expr) in assign_pairs {
+            assigns.push((name, expr, false));
+        }
+
+        if !matches!(self.peek(), Token::RBrace) {
+            return Err(std::fmt::Error);
+        }
+        self.eat();
+        Ok(())
+    }
+
+    fn parse_block(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        self.eat(); // consume '{'
+
+        let (block_lets, assign_pairs, final_expr) = self.parse_block_inner()?;
+        let stmts: Vec<AstExpr> = assign_pairs
+            .into_iter()
+            .map(|(name, expr)| AstExpr::Assign(name.to_string(), Box::new(expr)))
+            .collect();
 
         if !matches!(self.peek(), Token::RBrace) {
             return Err(std::fmt::Error);
         }
         self.eat(); // consume '}'
 
-        Ok(AstExpr::Block(lets, final_expr))
+        Ok(AstExpr::Block(block_lets, stmts, final_expr.map(Box::new)))
     }
 
     /// loop_expr → "loop" { "break" expr ";" }
@@ -461,8 +524,8 @@ fn emit_loop_expr(break_expr: &AstExpr, decls: &mut String) -> Result<String, st
     write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
 
     match break_expr {
-        AstExpr::Block(nested_lets, nested_final) => {
-            let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+        AstExpr::Block(nested_lets, _nested_stmts, nested_final) => {
+            let (nested_decl, nested_val) = flatten_block(nested_lets, &Vec::new(), nested_final)?;
             decls.push_str(&nested_decl);
             writeln!(
                 decls,
@@ -488,16 +551,18 @@ fn emit_loop_expr(break_expr: &AstExpr, decls: &mut String) -> Result<String, st
  */
 fn flatten_block(
     lets: &[(String, AstExpr)],
+    stmts: &[AstExpr],
     final_expr: &Option<Box<AstExpr>>,
 ) -> Result<(String, String), std::fmt::Error> {
     let mut decls = String::new();
 
     for (name, expr) in lets {
         match expr {
-            AstExpr::Block(nested_lets, nested_final) => {
-                let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
-                write!(decls, "int {} = {};\n", name, nested_val).map_err(|_| std::fmt::Error)?;
+            AstExpr::Block(nested_lets, nested_stmts, nested_final) => {
+                let (nested_decl, nested_val) =
+                    flatten_block(nested_lets, nested_stmts, nested_final)?;
                 decls.push_str(&nested_decl);
+                write!(decls, "int {} = {};\n", name, nested_val).map_err(|_| std::fmt::Error)?;
             }
             AstExpr::Loop(break_expr) => {
                 let val_name = emit_loop_expr(break_expr, &mut decls)?;
@@ -511,10 +576,23 @@ fn flatten_block(
         }
     }
 
+    // Emit assignment statements within the block
+    for stmt in stmts {
+        match stmt {
+            AstExpr::Assign(var_name, value_expr) => {
+                let mut val_buf = String::new();
+                emit_expr(value_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                write!(decls, " {} = {};\n", var_name, val_buf).map_err(|_| std::fmt::Error)?;
+            }
+            _ => {}
+        }
+    }
+
     let value = match final_expr {
         Some(expr) => match expr.as_ref() {
-            AstExpr::Block(nested_lets, nested_final) => {
-                let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+            AstExpr::Block(nested_lets, nested_stmts, nested_final) => {
+                let (nested_decl, nested_val) =
+                    flatten_block(nested_lets, nested_stmts, nested_final)?;
                 decls.push_str(&nested_decl);
                 nested_val
             }
@@ -576,7 +654,11 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             emit_expr(else_expr, buf)?;
             write!(buf, ")")?;
         }
-        AstExpr::Block(_, _) => {
+        AstExpr::Assign(var_name, value_expr) => {
+            write!(buf, "{} = ", var_name)?;
+            emit_expr(value_expr, buf)?;
+        }
+        AstExpr::Block(_, _, _) => {
             // Blocks are handled during compile() by flattening into outer scope.
             // This variant should not reach emit_expr directly.
             return Err(std::fmt::Error);
@@ -618,7 +700,9 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     // Helper: flatten blocks and loops into (declarations, value_expression).
     let flatten = |expr: &AstExpr| -> Result<(String, String), std::fmt::Error> {
         match expr {
-            AstExpr::Block(lets_inner, final_inner) => flatten_block(lets_inner, final_inner),
+            AstExpr::Block(lets_inner, stmts_inner, final_inner) => {
+                flatten_block(lets_inner, stmts_inner, final_inner)
+            }
             AstExpr::Loop(break_expr) => {
                 let mut decls = String::new();
                 let val_name = emit_loop_expr(break_expr, &mut decls)?;
@@ -843,5 +927,10 @@ mod tests {
     #[test]
     fn less_than_comparison() {
         assert_valid("read() < read()", "3 4", 1);
+    }
+
+    #[test]
+    fn block_assignment_statement() {
+        assert_valid("let mut x = read(); { x = read(); } x", "2 3", 3);
     }
 }
