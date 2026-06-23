@@ -12,6 +12,7 @@ enum AstExpr {
     Num(i64),
     Bool(bool),
     If(Box<AstExpr>, Box<AstExpr>, Box<AstExpr>), // condition, then_expr, else_expr
+    Block(Vec<(String, AstExpr)>, Option<Box<AstExpr>>), // block: { let ...; expr }
 }
 
 struct Parser<'a> {
@@ -32,6 +33,8 @@ enum Token<'a> {
     Bool(bool),
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     Plus,
     Equals,
     Semicolon,
@@ -68,6 +71,14 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
             ')' => {
                 chars.next();
                 tokens.push(Token::RParen);
+            }
+            '{' => {
+                chars.next();
+                tokens.push(Token::LBrace);
+            }
+            '}' => {
+                chars.next();
+                tokens.push(Token::RBrace);
             }
             _ if c.is_ascii_digit() => {
                 let mut num = String::new();
@@ -280,10 +291,68 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    /// term → "if" expr ")" expr "else" expr | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
+    /// block → "{" ("let" ["mut"] IDENT "=" expr ";")* expr? "}"
+    fn parse_block(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        self.eat(); // consume '{'
+
+        let mut lets: Vec<(String, AstExpr)> = Vec::new();
+
+        loop {
+            match self.peek() {
+                Token::RBrace => {
+                    self.eat(); // consume '}'
+                    return Ok(AstExpr::Block(lets, None));
+                }
+                Token::Let => {
+                    self.eat(); // consume 'let'
+
+                    // Optionally skip 'mut'
+                    if matches!(self.peek(), Token::Mut) {
+                        self.eat();
+                    }
+
+                    let name = match &self.tokens[self.pos] {
+                        Token::Ident(n) => (*n).to_string(),
+                        _ => return Err(std::fmt::Error),
+                    };
+                    self.eat(); // consume ident
+
+                    if !matches!(self.peek(), Token::Equals) {
+                        return Err(std::fmt::Error);
+                    }
+                    self.eat(); // consume '='
+
+                    let expr = self.parse_expr()?;
+
+                    if !matches!(self.peek(), Token::Semicolon) {
+                        return Err(std::fmt::Error);
+                    }
+                    self.eat(); // consume ';'
+
+                    lets.push((name, expr));
+                }
+                _ => break,
+            }
+        }
+
+        // Final expression in the block
+        let final_expr = Some(Box::new(self.parse_expr()?));
+
+        if !matches!(self.peek(), Token::RBrace) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '}'
+
+        Ok(AstExpr::Block(lets, final_expr))
+    }
+
+    /// term → "if" expr ")" expr "else" expr | "{" ... } | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
     fn parse_term(&mut self) -> Result<AstExpr, std::fmt::Error> {
         if matches!(self.peek(), Token::If) {
             return self.parse_if();
+        }
+        if matches!(self.peek(), Token::LBrace) {
+            return self.parse_block();
         }
 
         match &self.tokens[self.pos] {
@@ -329,7 +398,51 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Emit C code for an AST expression.
+/**
+ * Flatten a block into (declarations_code, value_expression).
+ * Declarations are emitted before the expression context.
+ */
+fn flatten_block(
+    lets: &[(String, AstExpr)],
+    final_expr: &Option<Box<AstExpr>>,
+) -> Result<(String, String), std::fmt::Error> {
+    let mut decls = String::new();
+
+    for (name, expr) in lets {
+        match expr {
+            AstExpr::Block(nested_lets, nested_final) => {
+                let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+                write!(decls, "int {} = {};\n", name, nested_val).map_err(|_| std::fmt::Error)?;
+                decls.push_str(&nested_decl);
+            }
+            _ => {
+                let mut val_buf = String::new();
+                emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                write!(decls, "int {} = {};\n", name, val_buf).map_err(|_| std::fmt::Error)?;
+            }
+        }
+    }
+
+    let value = match final_expr {
+        Some(expr) => match expr.as_ref() {
+            AstExpr::Block(nested_lets, nested_final) => {
+                let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+                decls.push_str(&nested_decl);
+                nested_val
+            }
+            _ => {
+                let mut val_buf = String::new();
+                emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                val_buf
+            }
+        },
+        None => "0".to_string(),
+    };
+
+    Ok((decls, value))
+}
+
+/// Emit C code for an AST expression (non-block expressions only).
 fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
     match expr {
         AstExpr::Read => {
@@ -367,6 +480,11 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             emit_expr(else_expr, buf)?;
             write!(buf, ")")?;
         }
+        AstExpr::Block(_, _) => {
+            // Blocks are handled during compile() by flattening into outer scope.
+            // This variant should not reach emit_expr directly.
+            return Err(std::fmt::Error);
+        }
     }
     Ok(())
 }
@@ -396,26 +514,39 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     c.push_str("\n  if (strcmp(s, \"true\") == 0) return 1;\n  return 0;\n}\n");
     c.push_str("int main() {\n");
 
+    // Helper: emit an expression that may contain blocks.
+    // Returns (declarations_to_emit_before_context, value_expression).
+    let flatten = |expr: &AstExpr| -> Result<(String, String), std::fmt::Error> {
+        match expr {
+            AstExpr::Block(lets_inner, final_inner) => flatten_block(lets_inner, final_inner),
+            _ => {
+                let mut val_buf = String::new();
+                emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                Ok((String::new(), val_buf))
+            }
+        }
+    };
+
     // Emit variable declarations for let statements
     for (name, expr) in &lets {
-        write!(c, " int {} = ", name).map_err(|_| std::fmt::Error)?;
-        emit_expr(expr, &mut c).map_err(|_| std::fmt::Error)?;
-        writeln!(c, ";").map_err(|_| std::fmt::Error)?;
+        let (decls, value) = flatten(expr)?;
+        write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
+        write!(c, " int {} = {};", name, value).map_err(|_| std::fmt::Error)?;
     }
 
     // Emit assignment statements (for mutable variables)
     for (name, expr) in &assigns {
-        write!(c, " {} = ", name).map_err(|_| std::fmt::Error)?;
-        emit_expr(expr, &mut c).map_err(|_| std::fmt::Error)?;
-        writeln!(c, ";").map_err(|_| std::fmt::Error)?;
+        let (decls, value) = flatten(expr)?;
+        write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
+        writeln!(c, " {} = {};", name, value).map_err(|_| std::fmt::Error)?;
     }
 
     // Emit final expression as return value (or 0 if none)
     match final_expr {
         Some(ref expr) => {
-            write!(c, " return ").map_err(|_| std::fmt::Error)?;
-            emit_expr(expr, &mut c).map_err(|_| std::fmt::Error)?;
-            writeln!(c, ";").map_err(|_| std::fmt::Error)?;
+            let (decls, value) = flatten(expr)?;
+            write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
+            writeln!(c, " return {};", value).map_err(|_| std::fmt::Error)?;
         }
         None => {
             writeln!(c, " return 0;").map_err(|_| std::fmt::Error)?;
@@ -583,5 +714,10 @@ mod tests {
     #[test]
     fn let_with_if_else() {
         assert_valid("let x = if (readBool()) 3 else 5; x", "true", 3);
+    }
+
+    #[test]
+    fn block_expression_nested_let() {
+        assert_valid("let x = { let y = read(); y }; x", "3", 3);
     }
 }
