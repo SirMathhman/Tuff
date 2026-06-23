@@ -3,7 +3,17 @@ use std::{
     fs::{read_to_string, write},
 };
 
-fn compile(_source: &str) -> Result<String, Error> {
+fn compile(source: &str) -> Result<String, Error> {
+    let trimmed = source.trim();
+
+    if trimmed == "read()" {
+        return Ok(r#"
+#include <stdio.h>
+int main() { int n; scanf("%d", &n); return n; }
+"#
+        .to_string());
+    }
+
     Ok("int main() { return 0; }".to_string())
 }
 
@@ -23,7 +33,7 @@ fn main() {
 }
 
 #[cfg(test)]
-fn assert_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
+fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
     let result = compile(source);
     if result.is_err() {
         panic!("{}", result.unwrap_err());
@@ -51,10 +61,21 @@ fn assert_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
         );
     }
 
-    // Execute the generated executable
-    let run_output = std::process::Command::new(&exe_path)
-        .output()
-        .expect("Failed to run compiled binary");
+    // Execute the generated executable with stdin piped in
+    let mut child = std::process::Command::new(&exe_path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .expect("Failed to spawn compiled binary");
+
+    if !stdin.is_empty() {
+        use std::io::Write;
+        child.stdin.take().unwrap().write_all(stdin.as_bytes()).ok();
+    }
+
+    let run_output = child
+        .wait_with_output()
+        .expect("Failed to wait for compiled binary");
 
     let actual_exit_code = run_output.status.code().unwrap_or(-1);
     assert_eq!(expected_exit_code, actual_exit_code);
@@ -88,5 +109,15 @@ mod tests {
     #[test]
     fn empty_program_exits_zero() {
         assert_valid("", "", 0);
+    }
+
+    #[test]
+    fn read_returns_stdin_value() {
+        assert_valid("read()", "1", 1);
+    }
+
+    #[test]
+    fn read_ignores_extra_input() {
+        assert_valid("read()", "1 2", 1);
     }
 }
