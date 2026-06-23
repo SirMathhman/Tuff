@@ -13,6 +13,7 @@ enum AstExpr {
     Bool(bool),
     If(Box<AstExpr>, Box<AstExpr>, Box<AstExpr>), // condition, then_expr, else_expr
     Block(Vec<(String, AstExpr)>, Option<Box<AstExpr>>), // block: { let ...; expr }
+    Loop(Box<AstExpr>), // loop { break expr; } — evaluates to the break expression
 }
 
 struct Parser<'a> {
@@ -26,6 +27,8 @@ enum Token<'a> {
     Mut,
     If,
     Else,
+    Loop,
+    Break,
     Ident(&'a str),
     Read,
     ReadBool,
@@ -108,6 +111,8 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                     "mut" => tokens.push(Token::Mut),
                     "if" => tokens.push(Token::If),
                     "else" => tokens.push(Token::Else),
+                    "loop" => tokens.push(Token::Loop),
+                    "break" => tokens.push(Token::Break),
                     "read" => tokens.push(Token::Read),
                     "readBool" => tokens.push(Token::ReadBool),
                     "true" => tokens.push(Token::Bool(true)),
@@ -140,19 +145,19 @@ impl<'a> Parser<'a> {
         tok
     }
 
-    /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" )* expr?
+    /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" | IDENT "+=" expr ";" )* expr?
     fn parse_program(
         &mut self,
     ) -> Result<
         (
             Vec<(&'a str, AstExpr)>,
-            Vec<(&'a str, AstExpr)>,
+            Vec<(&'a str, AstExpr, bool)>, // name, expr, is_compound
             Option<AstExpr>,
         ),
         std::fmt::Error,
     > {
         let mut lets: Vec<(&'a str, AstExpr)> = Vec::new();
-        let mut assigns: Vec<(&'a str, AstExpr)> = Vec::new();
+        let mut assigns: Vec<(&'a str, AstExpr, bool)> = Vec::new();
         let mut final_expr: Option<AstExpr> = None;
 
         loop {
@@ -163,10 +168,17 @@ impl<'a> Parser<'a> {
                     lets.push((name, expr));
                 }
                 Token::Ident(_) => {
-                    // Could be an assignment: IDENT "=" expr ";"
+                    // Could be assignment: IDENT "=" expr ";"
                     if matches!(self.tokens.get(self.pos + 1), Some(Token::Equals)) {
                         let (name, expr) = self.parse_assign()?;
-                        assigns.push((name, expr));
+                        assigns.push((name, expr, false));
+                    }
+                    // Could be compound assignment: IDENT "+=" expr ";"
+                    else if matches!(self.tokens.get(self.pos + 1), Some(Token::Plus))
+                        && matches!(self.tokens.get(self.pos + 2), Some(Token::Equals))
+                    {
+                        let (name, expr) = self.parse_compound_assign()?;
+                        assigns.push((name, expr, true));
                     } else {
                         // Final expression
                         if final_expr.is_some() {
@@ -230,6 +242,37 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
         self.eat(); // consume ident
+
+        if !matches!(self.peek(), Token::Equals) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '='
+
+        let expr = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::Semicolon) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume ';'
+
+        Ok((name, expr))
+    }
+
+    /// compound_assign_statement → IDENT "+=" expr ";"
+    fn parse_compound_assign(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
+        if !matches!(self.peek(), Token::Ident(_)) {
+            return Err(std::fmt::Error);
+        }
+        let name = match &self.tokens[self.pos] {
+            Token::Ident(n) => *n,
+            _ => unreachable!(),
+        };
+        self.eat(); // consume ident
+
+        if !matches!(self.peek(), Token::Plus) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '+'
 
         if !matches!(self.peek(), Token::Equals) {
             return Err(std::fmt::Error);
@@ -346,10 +389,42 @@ impl<'a> Parser<'a> {
         Ok(AstExpr::Block(lets, final_expr))
     }
 
-    /// term → "if" expr ")" expr "else" expr | "{" ... } | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
+    /// loop_expr → "loop" { "break" expr ";" }
+    fn parse_loop(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        self.eat(); // consume 'loop'
+
+        if !matches!(self.peek(), Token::LBrace) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '{'
+
+        if !matches!(self.peek(), Token::Break) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume 'break'
+
+        let break_expr = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::Semicolon) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume ';'
+
+        if !matches!(self.peek(), Token::RBrace) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // consume '}'
+
+        Ok(AstExpr::Loop(Box::new(break_expr)))
+    }
+
+    /// term → "if" expr ")" expr "else" expr | "loop" { break expr; } | "{" ... } | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
     fn parse_term(&mut self) -> Result<AstExpr, std::fmt::Error> {
         if matches!(self.peek(), Token::If) {
             return self.parse_if();
+        }
+        if matches!(self.peek(), Token::Loop) {
+            return self.parse_loop();
         }
         if matches!(self.peek(), Token::LBrace) {
             return self.parse_block();
@@ -399,6 +474,16 @@ impl<'a> Parser<'a> {
 }
 
 /**
+ * Global counter for unique loop temp variable names.
+ */
+static LOOP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn next_loop_id() -> u64 {
+    use std::sync::atomic::Ordering;
+    LOOP_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+/**
  * Flatten a block into (declarations_code, value_expression).
  * Declarations are emitted before the expression context.
  */
@@ -415,6 +500,29 @@ fn flatten_block(
                 write!(decls, "int {} = {};\n", name, nested_val).map_err(|_| std::fmt::Error)?;
                 decls.push_str(&nested_decl);
             }
+            AstExpr::Loop(break_expr) => {
+                let id = next_loop_id();
+                write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
+                // Recursively handle break expression
+                match break_expr.as_ref() {
+                    AstExpr::Block(nested_lets, nested_final) => {
+                        let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+                        decls.push_str(&nested_decl);
+                        writeln!(
+                            decls,
+                            "while(1) {{ __loop_{} = {}; break; }}",
+                            id, nested_val
+                        )
+                        .map_err(|_| std::fmt::Error)?;
+                    }
+                    _ => {
+                        let mut val_buf = String::new();
+                        emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                        writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
+                            .map_err(|_| std::fmt::Error)?;
+                    }
+                }
+            }
             _ => {
                 let mut val_buf = String::new();
                 emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
@@ -429,6 +537,29 @@ fn flatten_block(
                 let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
                 decls.push_str(&nested_decl);
                 nested_val
+            }
+            AstExpr::Loop(break_expr) => {
+                let id = next_loop_id();
+                write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
+                match break_expr.as_ref() {
+                    AstExpr::Block(nested_lets, nested_final) => {
+                        let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+                        decls.push_str(&nested_decl);
+                        writeln!(
+                            decls,
+                            "while(1) {{ __loop_{} = {}; break; }}",
+                            id, nested_val
+                        )
+                        .map_err(|_| std::fmt::Error)?;
+                    }
+                    _ => {
+                        let mut val_buf = String::new();
+                        emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                        writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
+                            .map_err(|_| std::fmt::Error)?;
+                    }
+                }
+                format!("__loop_{}", id)
             }
             _ => {
                 let mut val_buf = String::new();
@@ -485,6 +616,11 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             // This variant should not reach emit_expr directly.
             return Err(std::fmt::Error);
         }
+        AstExpr::Loop(_) => {
+            // Loops are handled during compile() by flatten_block.
+            // This variant should not reach emit_expr directly.
+            return Err(std::fmt::Error);
+        }
     }
     Ok(())
 }
@@ -514,11 +650,38 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     c.push_str("\n  if (strcmp(s, \"true\") == 0) return 1;\n  return 0;\n}\n");
     c.push_str("int main() {\n");
 
-    // Helper: emit an expression that may contain blocks.
+    // Helper: emit an expression that may contain blocks or loops.
     // Returns (declarations_to_emit_before_context, value_expression).
     let flatten = |expr: &AstExpr| -> Result<(String, String), std::fmt::Error> {
         match expr {
             AstExpr::Block(lets_inner, final_inner) => flatten_block(lets_inner, final_inner),
+            AstExpr::Loop(break_expr) => {
+                // Emit while(1)/break pattern with unique temp variable
+                let id = next_loop_id();
+                let mut decls = String::new();
+                write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
+
+                match break_expr.as_ref() {
+                    AstExpr::Block(nested_lets, nested_final) => {
+                        let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+                        decls.push_str(&nested_decl);
+                        writeln!(
+                            decls,
+                            "while(1) {{ __loop_{} = {}; break; }}",
+                            id, nested_val
+                        )
+                        .map_err(|_| std::fmt::Error)?;
+                    }
+                    _ => {
+                        let mut val_buf = String::new();
+                        emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                        writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
+                            .map_err(|_| std::fmt::Error)?;
+                    }
+                }
+
+                Ok((decls, format!("__loop_{}", id)))
+            }
             _ => {
                 let mut val_buf = String::new();
                 emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
@@ -535,10 +698,14 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     }
 
     // Emit assignment statements (for mutable variables)
-    for (name, expr) in &assigns {
+    for (name, expr, is_compound) in &assigns {
         let (decls, value) = flatten(expr)?;
         write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
-        writeln!(c, " {} = {};", name, value).map_err(|_| std::fmt::Error)?;
+        if *is_compound {
+            writeln!(c, " {} += {};", name, value).map_err(|_| std::fmt::Error)?;
+        } else {
+            writeln!(c, " {} = {};", name, value).map_err(|_| std::fmt::Error)?;
+        }
     }
 
     // Emit final expression as return value (or 0 if none)
@@ -717,7 +884,17 @@ mod tests {
     }
 
     #[test]
+    fn compound_assignment_plus_equals() {
+        assert_valid("let mut x = read(); x += read(); x", "3 4", 7);
+    }
+
+    #[test]
     fn block_expression_nested_let() {
         assert_valid("let x = { let y = read(); y }; x", "3", 3);
+    }
+
+    #[test]
+    fn loop_break_with_read() {
+        assert_valid("let x = loop { break read(); }; x", "3", 3);
     }
 }
