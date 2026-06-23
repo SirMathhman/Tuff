@@ -9,6 +9,7 @@ enum AstExpr {
     ReadBool,
     Var(String),
     Add(Box<AstExpr>, Box<AstExpr>),
+    Less(Box<AstExpr>, Box<AstExpr>), // left < right
     Num(i64),
     Bool(bool),
     If(Box<AstExpr>, Box<AstExpr>, Box<AstExpr>), // condition, then_expr, else_expr
@@ -39,6 +40,7 @@ enum Token<'a> {
     LBrace,
     RBrace,
     Plus,
+    Less,
     Equals,
     Semicolon,
     Eof,
@@ -66,6 +68,10 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
             '+' => {
                 chars.next();
                 tokens.push(Token::Plus);
+            }
+            '<' => {
+                chars.next();
+                tokens.push(Token::Less);
             }
             '(' => {
                 chars.next();
@@ -145,6 +151,49 @@ impl<'a> Parser<'a> {
         tok
     }
 
+    /// Consume an IDENT token and return its name.
+    fn expect_ident(&mut self) -> Result<&'a str, std::fmt::Error> {
+        match &self.tokens[self.pos] {
+            Token::Ident(n) => {
+                let name = *n;
+                self.eat();
+                Ok(name)
+            }
+            _ => Err(std::fmt::Error),
+        }
+    }
+
+    /// Consume '=' then parse expr then consume ';'.
+    fn eat_equals_expr_semicolon(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        if !matches!(self.peek(), Token::Equals) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '='
+        self.parse_expr_semicolon()
+    }
+
+    /// Parse expr then consume ';'.
+    fn parse_expr_semicolon(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        let expr = self.parse_expr()?;
+        if !matches!(self.peek(), Token::Semicolon) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // ';'
+        Ok(expr)
+    }
+
+    /// Consume optional '()' after a function name.
+    fn eat_optional_parens(&mut self) -> Result<(), std::fmt::Error> {
+        if matches!(self.peek(), Token::LParen) {
+            self.eat(); // '('
+            if !matches!(self.peek(), Token::RParen) {
+                return Err(std::fmt::Error);
+            }
+            self.eat(); // ')'
+        }
+        Ok(())
+    }
+
     /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" | IDENT "+=" expr ";" )* expr?
     fn parse_program(
         &mut self,
@@ -201,102 +250,55 @@ impl<'a> Parser<'a> {
 
     /// let_statement → "let" ["mut"] IDENT "=" expr ";"
     fn parse_let(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
-        self.eat(); // consume 'let'
-
-        // Optionally skip 'mut'
+        self.eat(); // 'let'
         if matches!(self.peek(), Token::Mut) {
             self.eat();
         }
-
-        if !matches!(self.peek(), Token::Ident(_)) {
-            return Err(std::fmt::Error);
-        }
-        let name = match &self.tokens[self.pos] {
-            Token::Ident(n) => *n,
-            _ => unreachable!(),
-        };
-        self.eat(); // consume ident
-
-        if !matches!(self.peek(), Token::Equals) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // consume '='
-
-        let expr = self.parse_expr()?;
-
-        if !matches!(self.peek(), Token::Semicolon) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // consume ';'
-
+        let name = self.expect_ident()?;
+        let expr = self.eat_equals_expr_semicolon()?;
         Ok((name, expr))
     }
 
     /// assign_statement → IDENT "=" expr ";"
     fn parse_assign(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
-        if !matches!(self.peek(), Token::Ident(_)) {
-            return Err(std::fmt::Error);
-        }
-        let name = match &self.tokens[self.pos] {
-            Token::Ident(n) => *n,
-            _ => unreachable!(),
-        };
-        self.eat(); // consume ident
-
-        if !matches!(self.peek(), Token::Equals) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // consume '='
-
-        let expr = self.parse_expr()?;
-
-        if !matches!(self.peek(), Token::Semicolon) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // consume ';'
-
+        let name = self.expect_ident()?;
+        let expr = self.eat_equals_expr_semicolon()?;
         Ok((name, expr))
     }
 
     /// compound_assign_statement → IDENT "+=" expr ";"
     fn parse_compound_assign(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
-        if !matches!(self.peek(), Token::Ident(_)) {
-            return Err(std::fmt::Error);
-        }
-        let name = match &self.tokens[self.pos] {
-            Token::Ident(n) => *n,
-            _ => unreachable!(),
-        };
-        self.eat(); // consume ident
-
+        let name = self.expect_ident()?;
         if !matches!(self.peek(), Token::Plus) {
             return Err(std::fmt::Error);
         }
-        self.eat(); // consume '+'
-
+        self.eat(); // '+'
         if !matches!(self.peek(), Token::Equals) {
             return Err(std::fmt::Error);
         }
-        self.eat(); // consume '='
-
-        let expr = self.parse_expr()?;
-
-        if !matches!(self.peek(), Token::Semicolon) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // consume ';'
-
+        self.eat(); // '='
+        let expr = self.parse_expr_semicolon()?;
         Ok((name, expr))
     }
 
-    /// expr → term ("+" term)*
+    /// expr → term (("+" | "<") term)*
     fn parse_expr(&mut self) -> Result<AstExpr, std::fmt::Error> {
         let mut left = self.parse_term()?;
 
-        while matches!(self.peek(), Token::Plus) {
-            self.eat(); // consume '+'
-            let right = self.parse_term()?;
-            left = AstExpr::Add(Box::new(left), Box::new(right));
+        loop {
+            match self.peek() {
+                Token::Plus => {
+                    self.eat(); // consume '+'
+                    let right = self.parse_term()?;
+                    left = AstExpr::Add(Box::new(left), Box::new(right));
+                }
+                Token::Less => {
+                    self.eat(); // consume '<'
+                    let right = self.parse_term()?;
+                    left = AstExpr::Less(Box::new(left), Box::new(right));
+                }
+                _ => break,
+            }
         }
 
         Ok(left)
@@ -347,31 +349,12 @@ impl<'a> Parser<'a> {
                     return Ok(AstExpr::Block(lets, None));
                 }
                 Token::Let => {
-                    self.eat(); // consume 'let'
-
-                    // Optionally skip 'mut'
+                    self.eat(); // 'let'
                     if matches!(self.peek(), Token::Mut) {
                         self.eat();
                     }
-
-                    let name = match &self.tokens[self.pos] {
-                        Token::Ident(n) => (*n).to_string(),
-                        _ => return Err(std::fmt::Error),
-                    };
-                    self.eat(); // consume ident
-
-                    if !matches!(self.peek(), Token::Equals) {
-                        return Err(std::fmt::Error);
-                    }
-                    self.eat(); // consume '='
-
-                    let expr = self.parse_expr()?;
-
-                    if !matches!(self.peek(), Token::Semicolon) {
-                        return Err(std::fmt::Error);
-                    }
-                    self.eat(); // consume ';'
-
+                    let name = (*self.expect_ident()?).to_string();
+                    let expr = self.eat_equals_expr_semicolon()?;
                     lets.push((name, expr));
                 }
                 _ => break,
@@ -432,25 +415,13 @@ impl<'a> Parser<'a> {
 
         match &self.tokens[self.pos] {
             Token::Read => {
-                self.eat(); // consume 'read'
-                if matches!(self.peek(), Token::LParen) {
-                    self.eat(); // '('
-                    if !matches!(self.peek(), Token::RParen) {
-                        return Err(std::fmt::Error);
-                    }
-                    self.eat(); // ')'
-                }
+                self.eat();
+                self.eat_optional_parens()?;
                 Ok(AstExpr::Read)
             }
             Token::ReadBool => {
-                self.eat(); // consume 'readBool'
-                if matches!(self.peek(), Token::LParen) {
-                    self.eat(); // '('
-                    if !matches!(self.peek(), Token::RParen) {
-                        return Err(std::fmt::Error);
-                    }
-                    self.eat(); // ')'
-                }
+                self.eat();
+                self.eat_optional_parens()?;
                 Ok(AstExpr::ReadBool)
             }
             Token::Num(val) => {
@@ -483,6 +454,34 @@ fn next_loop_id() -> u64 {
     LOOP_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Emit C code for a loop expression: while(1) { __loop_N = <break_expr>; break; }
+/// Returns the temp variable name to reference.
+fn emit_loop_expr(break_expr: &AstExpr, decls: &mut String) -> Result<String, std::fmt::Error> {
+    let id = next_loop_id();
+    write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
+
+    match break_expr {
+        AstExpr::Block(nested_lets, nested_final) => {
+            let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
+            decls.push_str(&nested_decl);
+            writeln!(
+                decls,
+                "while(1) {{ __loop_{} = {}; break; }}",
+                id, nested_val
+            )
+            .map_err(|_| std::fmt::Error)?;
+        }
+        _ => {
+            let mut val_buf = String::new();
+            emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+            writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
+                .map_err(|_| std::fmt::Error)?;
+        }
+    }
+
+    Ok(format!("__loop_{}", id))
+}
+
 /**
  * Flatten a block into (declarations_code, value_expression).
  * Declarations are emitted before the expression context.
@@ -501,27 +500,8 @@ fn flatten_block(
                 decls.push_str(&nested_decl);
             }
             AstExpr::Loop(break_expr) => {
-                let id = next_loop_id();
-                write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
-                // Recursively handle break expression
-                match break_expr.as_ref() {
-                    AstExpr::Block(nested_lets, nested_final) => {
-                        let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
-                        decls.push_str(&nested_decl);
-                        writeln!(
-                            decls,
-                            "while(1) {{ __loop_{} = {}; break; }}",
-                            id, nested_val
-                        )
-                        .map_err(|_| std::fmt::Error)?;
-                    }
-                    _ => {
-                        let mut val_buf = String::new();
-                        emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
-                        writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
-                            .map_err(|_| std::fmt::Error)?;
-                    }
-                }
+                let val_name = emit_loop_expr(break_expr, &mut decls)?;
+                write!(decls, "int {} = {};\n", name, val_name).map_err(|_| std::fmt::Error)?;
             }
             _ => {
                 let mut val_buf = String::new();
@@ -538,29 +518,7 @@ fn flatten_block(
                 decls.push_str(&nested_decl);
                 nested_val
             }
-            AstExpr::Loop(break_expr) => {
-                let id = next_loop_id();
-                write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
-                match break_expr.as_ref() {
-                    AstExpr::Block(nested_lets, nested_final) => {
-                        let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
-                        decls.push_str(&nested_decl);
-                        writeln!(
-                            decls,
-                            "while(1) {{ __loop_{} = {}; break; }}",
-                            id, nested_val
-                        )
-                        .map_err(|_| std::fmt::Error)?;
-                    }
-                    _ => {
-                        let mut val_buf = String::new();
-                        emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
-                        writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
-                            .map_err(|_| std::fmt::Error)?;
-                    }
-                }
-                format!("__loop_{}", id)
-            }
+            AstExpr::Loop(break_expr) => emit_loop_expr(break_expr, &mut decls)?,
             _ => {
                 let mut val_buf = String::new();
                 emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
@@ -592,6 +550,13 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             write!(buf, "(")?;
             emit_expr(left, buf)?;
             write!(buf, " + ")?;
+            emit_expr(right, buf)?;
+            write!(buf, ")")?;
+        }
+        AstExpr::Less(left, right) => {
+            write!(buf, "(")?;
+            emit_expr(left, buf)?;
+            write!(buf, " < ")?;
             emit_expr(right, buf)?;
             write!(buf, ")")?;
         }
@@ -650,37 +615,14 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     c.push_str("\n  if (strcmp(s, \"true\") == 0) return 1;\n  return 0;\n}\n");
     c.push_str("int main() {\n");
 
-    // Helper: emit an expression that may contain blocks or loops.
-    // Returns (declarations_to_emit_before_context, value_expression).
+    // Helper: flatten blocks and loops into (declarations, value_expression).
     let flatten = |expr: &AstExpr| -> Result<(String, String), std::fmt::Error> {
         match expr {
             AstExpr::Block(lets_inner, final_inner) => flatten_block(lets_inner, final_inner),
             AstExpr::Loop(break_expr) => {
-                // Emit while(1)/break pattern with unique temp variable
-                let id = next_loop_id();
                 let mut decls = String::new();
-                write!(decls, "int __loop_{};\n", id).map_err(|_| std::fmt::Error)?;
-
-                match break_expr.as_ref() {
-                    AstExpr::Block(nested_lets, nested_final) => {
-                        let (nested_decl, nested_val) = flatten_block(nested_lets, nested_final)?;
-                        decls.push_str(&nested_decl);
-                        writeln!(
-                            decls,
-                            "while(1) {{ __loop_{} = {}; break; }}",
-                            id, nested_val
-                        )
-                        .map_err(|_| std::fmt::Error)?;
-                    }
-                    _ => {
-                        let mut val_buf = String::new();
-                        emit_expr(break_expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
-                        writeln!(decls, "while(1) {{ __loop_{} = {}; break; }}", id, val_buf)
-                            .map_err(|_| std::fmt::Error)?;
-                    }
-                }
-
-                Ok((decls, format!("__loop_{}", id)))
+                let val_name = emit_loop_expr(break_expr, &mut decls)?;
+                Ok((decls, val_name))
             }
             _ => {
                 let mut val_buf = String::new();
@@ -741,7 +683,7 @@ fn main() {
 fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
     let result = compile(source);
     if result.is_err() {
-        panic!("{}", result.unwrap_err());
+        panic!("Compilation failed with error: {}", result.unwrap_err());
     }
 
     let generated_c = result.unwrap();
@@ -896,5 +838,10 @@ mod tests {
     #[test]
     fn loop_break_with_read() {
         assert_valid("let x = loop { break read(); }; x", "3", 3);
+    }
+
+    #[test]
+    fn less_than_comparison() {
+        assert_valid("read() < read()", "3 4", 1);
     }
 }
