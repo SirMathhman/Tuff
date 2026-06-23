@@ -6,15 +6,29 @@ use std::{
 fn compile(source: &str) -> Result<String, Error> {
     let trimmed = source.trim();
 
-    if trimmed == "read()" {
-        return Ok(r#"
-#include <stdio.h>
-int main() { int n; scanf("%d", &n); return n; }
-"#
-        .to_string());
+    if trimmed.is_empty() {
+        return Ok("int main() { return 0; }".to_string());
     }
 
-    Ok("int main() { return 0; }".to_string())
+    // Parse addition expressions by splitting on " + "
+    let operands: Vec<&str> = trimmed.split(" + ").collect();
+
+    if operands.iter().all(|op| *op == "read()") {
+        let mut body = String::from("#include <stdio.h>\nint main() {");
+        for (i, _) in operands.iter().enumerate() {
+            let var = format!("v{}", i);
+            body.push_str(&format!(" int {}; scanf(\"%d\", &{});", var, var));
+        }
+        let expr: Vec<String> = operands
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("v{}", i))
+            .collect();
+        body.push_str(&format!(" return {}; }}", expr.join(" + ")));
+        return Ok(body);
+    }
+
+    Err(std::fmt::Error)
 }
 
 fn main() {
@@ -119,5 +133,15 @@ mod tests {
     #[test]
     fn read_ignores_extra_input() {
         assert_valid("read()", "1 2", 1);
+    }
+
+    #[test]
+    fn read_addition() {
+        assert_valid("read() + read()", "1 2", 3);
+    }
+
+    #[test]
+    fn triple_read_addition() {
+        assert_valid("read() + read() + read()", "1 2 3", 6);
     }
 }
