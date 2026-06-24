@@ -13,6 +13,8 @@ export const TokenType = {
   RPAREN: ")",
   LBRACE: "{",
   RBRACE: "}",
+  LBRACKET: "[",
+  RBRACKET: "]",
   LT: "<",
   GT: ">",
   COLON: ":",
@@ -61,6 +63,18 @@ export function tokenize(source) {
     }
     if (source[pos] === "}") {
       tokens.push({ type: TokenType.RBRACE, value: "}" });
+      pos++;
+      continue;
+    }
+
+    // Brackets (slice/array types)
+    if (source[pos] === "[") {
+      tokens.push({ type: TokenType.LBRACKET, value: "[" });
+      pos++;
+      continue;
+    }
+    if (source[pos] === "]") {
+      tokens.push({ type: TokenType.RBRACKET, value: "]" });
       pos++;
       continue;
     }
