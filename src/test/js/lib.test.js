@@ -1,5 +1,5 @@
 import { test, expect } from "@jest/globals";
-import { compileTuffToJS } from "../src/lib.js";
+import { compileTuffToJS } from "../../main/js/lib.js";
 
 function expectValid(source, stdIn, expectedExitCode) {
   const result = compileTuffToJS(source);
@@ -154,7 +154,10 @@ test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
 
-import { compileModulesToJS, compileModulesWithNative } from "../src/lib.js";
+import {
+  compileModulesToJS,
+  compileModulesWithNative,
+} from "../../main/js/lib.js";
 
 function expectValidWithModules(
   moduleNames,
