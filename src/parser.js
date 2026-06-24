@@ -22,7 +22,10 @@ export const NodeType = {
 // Helper to produce a parser error with line:col and surrounding token context
 function err(message, tokens, pos) {
   const token = tokens[pos];
-  const loc = token?.line && token?.col !== undefined ? `${token.line}:${token.col}` : `pos ${pos}`;
+  const loc =
+    token?.line && token?.col !== undefined
+      ? `${token.line}:${token.col}`
+      : `pos ${pos}`;
   return { variant: "err", error: `${message} at ${loc}` };
 }
 
@@ -148,7 +151,11 @@ function parseFunctionDeclaration(tokens, pos) {
     pos++;
   }
   if (!tokens[pos])
-    return err(`Expected ')' to close parameter list for function '${name}'`, tokens, pos);
+    return err(
+      `Expected ')' to close parameter list for function '${name}'`,
+      tokens,
+      pos,
+    );
   pos++; // consume ')'
 
   // Optional return type annotation : Type
@@ -225,8 +232,7 @@ function parseBlock(tokens, pos) {
     }
   }
 
-  if (!tokens[pos])
-    return err("Expected '}' to close block", tokens, pos);
+  if (!tokens[pos]) return err("Expected '}' to close block", tokens, pos);
   pos++;
 
   return {
@@ -250,13 +256,21 @@ function parseTypeAlias(tokens, pos) {
   if (tokens[pos]?.type === TokenType.LT) {
     pos = skipGenerics(tokens, pos);
     if (!tokens[pos])
-      return err(`Expected '>' to close generic parameters for type alias '${name}'`, tokens, pos);
+      return err(
+        `Expected '>' to close generic parameters for type alias '${name}'`,
+        tokens,
+        pos,
+      );
   }
 
   // Consume '='
   if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS) {
     const found = tokens[pos]?.value ?? "end of input";
-    return err(`Expected '=' for type alias '${name}', but found '${found}'`, tokens, pos);
+    return err(
+      `Expected '=' for type alias '${name}', but found '${found}'`,
+      tokens,
+      pos,
+    );
   }
   pos++;
 
@@ -399,8 +413,7 @@ function parseExpression(tokens, pos) {
 
 function parsePrimary(tokens, pos) {
   // Number literal
-  if (!tokens[pos])
-    return err("Unexpected end of input", tokens, pos);
+  if (!tokens[pos]) return err("Unexpected end of input", tokens, pos);
 
   if (tokens[pos].type === TokenType.STRING_LITERAL) {
     const value = tokens[pos].value;
