@@ -1,4 +1,4 @@
-import { NodeType } from "./parser.js";
+import { NodeType } from "../../parser.js";
 
 export function generate(ast, options = {}) {
   const opts = Object.assign(
