@@ -100,7 +100,10 @@ function parseStructDeclaration(tokens, pos) {
       pos++;
     }
     if (!tokens[pos])
-      return { variant: "err", error: `Expected '>' to close generic parameters` };
+      return {
+        variant: "err",
+        error: `Expected '>' to close generic parameters`,
+      };
     pos++; // consume '>'
   }
 

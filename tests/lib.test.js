@@ -52,6 +52,10 @@ test("struct Two<T> { a : T, b : T } compiles and exits with code 0", () => {
   expectValid("struct Two<T> { a : T, b : T }", "", 0);
 });
 
+test("multiple struct declarations compile and exit with code 0", () => {
+  expectValid("struct A {} struct B {}", "", 0);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

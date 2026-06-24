@@ -72,14 +72,14 @@ export function tokenize(source) {
     if (source[pos] === ">") {
       tokens.push({ type: TokenType.GT, value: ">" });
       pos++;
-     
 
-    // Colon (type annotation)
-    if (source[pos] === ":") {
-      tokens.push({ type: TokenType.COLON, value: ":" });
-      pos++;
+      // Colon (type annotation)
+      if (source[pos] === ":") {
+        tokens.push({ type: TokenType.COLON, value: ":" });
+        pos++;
+        continue;
+      }
       continue;
-    } continue;
     }
 
     // Colon (type annotation)
