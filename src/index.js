@@ -8,5 +8,5 @@ if (target.variant === "err") {
   process.exit(1);
 }
 
-const wrapInExit = "process.exit(" + target.value + ");";
+const wrapInExit = "process.exit((() => {" + target.value + "})());";
 fs.writeFileSync("./main.js", wrapInExit, "utf-8");
