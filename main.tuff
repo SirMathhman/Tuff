@@ -5,11 +5,7 @@ type Result<T, X> = Ok<T> | Err<X>;
 
 type Str = *[U8]; 
 
-fn get() => 100;
-fn compileTuffToJS() => get("foo");
-/*
-
-out fn compileTuffToJS(source : Str) : Result<Str, Str> => {
+fn compileTuffToJS(source : Str) : Result<Str, Str> => {
     Err("Invalid source: " + source)
 }
 
@@ -25,6 +21,7 @@ extern let console : Console;
 extern fn error(this : Console, message : Str) : Void;
 
 let source = fs.readFileSync("./main.tuff", "utf-8");
+/*
 let target = compileTuffToJS(source);
 if (target is Err { error : e }) {
     console.error(e);

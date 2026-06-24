@@ -36,6 +36,18 @@ test("expression with two reads sums the values", () => {
   expectValid("read() + read()", "100 20", 120);
 });
 
+test("extern type declaration compiles and exits with code 0", () => {
+  expectValid("extern type Foo;", "", 0);
+});
+
+test("extern let declaration compiles and exits with code 0", () => {
+  expectValid("extern let fs : FileSystem = extern fs;", "", 0);
+});
+
+test("extern fn declaration compiles and exits with code 0", () => {
+  expectValid("extern fn doNothing() : Void;", "", 0);
+});
+
 test("struct Empty {} compiles and exits with code 0", () => {
   expectValid("struct Empty {}", "", 0);
 });
@@ -46,6 +58,14 @@ test("struct Empty<T> {} compiles and exits with code 0", () => {
 
 test("struct Wrapper<T> { field : T } compiles and exits with code 0", () => {
   expectValid("struct Wrapper<T> { field : T }", "", 0);
+});
+
+test("struct instantiation with fields, dot access returns field value", () => {
+  expectValid(
+    "struct Wrapper { x : I32} let temp : Wrapper = Wrapper { x : 100 }; temp.x",
+    "",
+    100,
+  );
 });
 
 test("struct Two<T> { a : T, b : T } compiles and exits with code 0", () => {
@@ -91,12 +111,15 @@ test("function declaration and call returns expression value", () => {
 test("block comment is ignored, empty program exits with code 0", () => {
   expectValid("/* let x = 100; x */", "", 0);
 });
+
 test("function declaration with return type annotation compiles and calls correctly", () => {
   expectValid("fn get() : I32 => 100; get()", "", 100);
 });
+
 test("struct declaration with typed let and empty object literal compiles to 0", () => {
   expectValid("struct Empty {} let empty : Empty = {};", "", 0);
 });
+
 test("function with block body, generic return type, and struct instantiation returns 0", () => {
   expectValid(
     "struct Empty<T> {} fn get() : Empty<I32> => { return {}; }",

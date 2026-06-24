@@ -84,10 +84,20 @@ function generateExpression(node) {
     }
     case NodeType.NumberLiteral:
       return { node: String(node.value) };
-    case NodeType.ObjectLiteral:
-      // Empty struct instantiation → empty JS object (no runtime semantics yet)
-      return { node: "{}" };
-    case NodeType.DotExpression:
+    case NodeType.ObjectLiteral: {
+      if (!node.fields || node.fields.length === 0) {
+        return { node: "{}" };
+      }
+      // Struct instantiation with fields
+      const fieldEntries = [];
+      for (const f of node.fields) {
+        const valResult = generateExpression(f.value);
+        if (valResult.variant === "err") return valResult;
+        fieldEntries.push(`${f.key}: ${valResult.node}`);
+      }
+      return { node: `{${fieldEntries.join(", ")}}` };
+    }
+    case NodeType.DotExpression: {
       if (node.property === "length") {
         const objResult = generateExpression(node.object);
         if (objResult.variant === "err") return objResult;
@@ -101,10 +111,11 @@ function generateExpression(node) {
         // Fallback for runtime (shouldn't happen with current tests)
         return { node: `${objResult.node}.length` };
       }
-      return {
-        variant: "err",
-        error: `Unsupported dot property: ${node.property}`,
-      };
+      // General dot property access
+      const objResult = generateExpression(node.object);
+      if (objResult.variant === "err") return objResult;
+      return { node: `${objResult.node}.${node.property}` };
+    }
     case NodeType.Identifier:
       return { node: node.name };
     case NodeType.CallExpression: {

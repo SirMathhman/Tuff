@@ -105,6 +105,38 @@ function parseStatement(tokens, pos) {
     };
   }
 
+  // Extern type declaration: extern type IDENT ;
+  if (tokens[pos].type === TokenType.EXTERN_TYPE) {
+    return {
+      statement: { type: NodeType.StructDeclaration, name: "extern" },
+      nextPos: pos + 1,
+    };
+  }
+
+  // Extern type declaration: extern type IDENT ;
+  if (tokens[pos].type === TokenType.EXTERN_TYPE_DECLARATION) {
+    return {
+      statement: { type: NodeType.StructDeclaration, name: "extern" },
+      nextPos: pos + 1,
+    };
+  }
+
+  // Extern let declaration: extern let IDENT : Type = extern ... ;
+  if (tokens[pos].type === TokenType.EXTERN_LET_DECLARATION) {
+    return {
+      statement: { type: NodeType.StructDeclaration, name: "extern_let" },
+      nextPos: pos + 1,
+    };
+  }
+
+  // Extern fn declaration: extern fn NAME(...) : Type ;
+  if (tokens[pos].type === TokenType.EXTERN_FN_DECLARATION) {
+    return {
+      statement: { type: NodeType.StructDeclaration, name: "extern_fn" },
+      nextPos: pos + 1,
+    };
+  }
+
   // Let statement
   if (tokens[pos].type === TokenType.LET) {
     const result = parseLetStatement(tokens, pos);
@@ -469,7 +501,7 @@ function parsePrimary(tokens, pos) {
     const name = tokens[pos].value;
     pos++;
 
-    // Check for function call
+    // Check for function call or struct instantiation
     if (tokens[pos]?.type === TokenType.LPAREN) {
       pos++; // consume '('
       const args = [];
@@ -496,6 +528,57 @@ function parsePrimary(tokens, pos) {
 
       return {
         node: { type: NodeType.CallExpression, name, arguments: args },
+        nextPos: pos,
+      };
+    }
+
+    // Check for struct instantiation: NAME { field : expr , ... }
+    if (tokens[pos]?.type === TokenType.LBRACE) {
+      const fields = [];
+      pos++; // consume '{'
+
+      while (pos < tokens.length && tokens[pos].type !== TokenType.RBRACE) {
+        // Parse field name: IDENT
+        if (tokens[pos]?.type !== TokenType.IDENT)
+          return err(
+            `Expected field name in struct instantiation`,
+            tokens,
+            pos,
+          );
+        const fieldName = tokens[pos].value;
+        pos++;
+
+        // Consume ':'
+        if (!tokens[pos] || tokens[pos].type !== TokenType.COLON)
+          return err(
+            `Expected ':' after field name '${fieldName}'`,
+            tokens,
+            pos,
+          );
+        pos++;
+
+        // Parse field value expression
+        const exprResult = parseExpression(tokens, pos);
+        if (exprResult.variant === "err") return exprResult;
+        fields.push({ key: fieldName, value: exprResult.node });
+        pos = exprResult.nextPos;
+
+        // Optional comma separator
+        if (tokens[pos]?.type === TokenType.COMMA) {
+          pos++;
+        }
+      }
+
+      if (!tokens[pos])
+        return err(
+          `Expected '}' to close struct instantiation for '${name}'`,
+          tokens,
+          pos,
+        );
+      pos++; // consume '}'
+
+      return {
+        node: { type: NodeType.ObjectLiteral, name, fields },
         nextPos: pos,
       };
     }

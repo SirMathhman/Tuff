@@ -3,6 +3,9 @@ export const TokenType = {
   LET: "LET",
   STRUCT: "STRUCT",
   TYPE_ALIAS: "TYPE_ALIAS",
+  EXTERN_TYPE_DECLARATION: "EXTERN_TYPE_DECLARATION",
+  EXTERN_LET_DECLARATION: "EXTERN_LET_DECLARATION",
+  EXTERN_FN_DECLARATION: "EXTERN_FN_DECLARATION",
   FN_DECLARATION: "FN_DECLARATION",
   IDENT: "IDENT",
   NUMBER: "NUMBER",
@@ -34,6 +37,24 @@ export function tokenize(source) {
   let pos = 0;
   let line = 1; // 1-indexed
   let col = 0; // 0-indexed
+
+  // Helper to skip characters until a semicolon is found, tracking position.
+  function skipToSemicolon() {
+    while (pos < source.length && !/;/.test(source[pos])) {
+      if (source[pos] === "\n") {
+        line++;
+        col = 0;
+      } else {
+        col++;
+      }
+      pos++;
+    }
+    // Consume semicolon
+    if (pos < source.length) {
+      pos++;
+      col++;
+    }
+  }
 
   while (pos < source.length) {
     // Skip whitespace — track newlines for accurate positions
@@ -320,6 +341,43 @@ export function tokenize(source) {
           line: startLine,
           col: startCol,
         });
+      } else if (name === "extern") {
+        const rest = source.slice(pos);
+        // Check for extern type declaration: extern type IDENT ;
+        if (/^[\s]*type/.test(rest)) {
+          tokens.push({
+            type: TokenType.EXTERN_TYPE_DECLARATION,
+            value: "extern",
+            line: startLine,
+            col: startCol,
+          });
+          skipToSemicolon();
+        } else if (/^[\s]*let/.test(rest)) {
+          // Check for extern let declaration: extern let IDENT : Type = extern ... ;
+          tokens.push({
+            type: TokenType.EXTERN_LET_DECLARATION,
+            value: "extern",
+            line: startLine,
+            col: startCol,
+          });
+          skipToSemicolon();
+        } else if (/^[\s]*fn/.test(rest)) {
+          // Check for extern fn declaration: extern fn NAME(...) : Type ;
+          tokens.push({
+            type: TokenType.EXTERN_FN_DECLARATION,
+            value: "extern",
+            line: startLine,
+            col: startCol,
+          });
+          skipToSemicolon();
+        } else {
+          tokens.push({
+            type: TokenType.IDENT,
+            value: name,
+            line: startLine,
+            col: startCol,
+          });
+        }
       } else {
         tokens.push({
           type: TokenType.IDENT,
