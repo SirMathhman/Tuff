@@ -60,6 +60,10 @@ test("type alias compiles and exits with code 0", () => {
   expectValid("type Temp = I32;", "", 0);
 });
 
+test("struct + type alias referencing struct compiles and exits with code 0", () => {
+  expectValid("struct A {} type Temp = A;", "", 0);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
