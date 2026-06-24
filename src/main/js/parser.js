@@ -832,12 +832,50 @@ function parsePrefix(tokens, pos) {
   return { node: result, nextPos: p };
 }
 
-// Expression parsing with operator precedence (simple left-to-right for now)
+// Expression parsing with operator precedence levels
 function parseExpression(tokens, pos) {
+  // Level 1: Arithmetic (+, -, *, /) — higher precedence
+  let result = parseArithmetic(tokens, pos);
+  if (result.variant === "err") return result;
+
+  let p = result.nextPos;
+
+  // Level 2: Comparison (<, >, <=, >=, ==, !=) — lower precedence
+  while (
+    tokens[p]?.type === TokenType.LT ||
+    tokens[p]?.type === TokenType.GT ||
+    tokens[p]?.type === TokenType.LE ||
+    tokens[p]?.type === TokenType.GE ||
+    tokens[p]?.type === TokenType.EQ ||
+    tokens[p]?.type === TokenType.NE
+  ) {
+    const op = tokens[p].value;
+    p++;
+    const rightArith = parseArithmetic(tokens, p);
+    if (rightArith.variant === "err") return rightArith;
+
+    p = rightArith.nextPos;
+
+    result = {
+      variant: "ok",
+      node: {
+        type: NodeType.BinaryExpression,
+        operator: op,
+        left: result.node,
+        right: rightArith.node,
+      },
+    };
+  }
+
+  return { node: result.node, nextPos: p };
+}
+
+// Parse arithmetic expressions (+, -, *, /) with higher precedence than comparisons
+function parseArithmetic(tokens, pos) {
   const prefix = parsePrefix(tokens, pos);
   if (prefix.variant === "err") return prefix;
 
-  let result = prefix.node; // unwrap to get actual AST node
+  let result = prefix.node;
   let p = prefix.nextPos;
 
   while (

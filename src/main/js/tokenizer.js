@@ -26,6 +26,10 @@ export const TokenType = {
   RBRACKET: "]",
   LT: "<",
   GT: ">",
+  LE: "<=",
+  GE: ">=",
+  EQ: "==",
+  NE: "!=",
   COLON: ":",
   COMMA: ",",
   PIPE: "|",
@@ -144,24 +148,32 @@ export function tokenize(source) {
       continue;
     }
 
-    // Angle brackets (generics)
+    // Angle brackets / comparison operators
     if (source[pos] === "<") {
-      tokens.push({ type: TokenType.LT, value: "<", line, col });
-      pos++;
-      col++;
+      const startLine = line;
+      const startCol = col;
+      if (pos + 1 < source.length && source[pos + 1] === "=") {
+        tokens.push({ type: TokenType.LE, value: "<=", line: startLine, col: startCol });
+        pos += 2;
+        col += 2;
+      } else {
+        tokens.push({ type: TokenType.LT, value: "<", line: startLine, col: startCol });
+        pos++;
+        col++;
+      }
       continue;
     }
     if (source[pos] === ">") {
-      tokens.push({ type: TokenType.GT, value: ">", line, col });
-      pos++;
-      col++;
-
-      // Colon (type annotation)
-      if (source[pos] === ":") {
-        tokens.push({ type: TokenType.COLON, value: ":", line, col });
+      const startLine = line;
+      const startCol = col;
+      if (pos + 1 < source.length && source[pos + 1] === "=") {
+        tokens.push({ type: TokenType.GE, value: ">=", line: startLine, col: startCol });
+        pos += 2;
+        col += 2;
+      } else {
+        tokens.push({ type: TokenType.GT, value: ">", line: startLine, col: startCol });
         pos++;
         col++;
-        continue;
       }
       continue;
     }
@@ -198,7 +210,7 @@ export function tokenize(source) {
       continue;
     }
 
-    // Fat arrow '=>' or equals '='
+    // Fat arrow '=>' or equals '=' or double equals '=='
     if (source[pos] === "=") {
       const startLine = line;
       const startCol = col;
@@ -206,6 +218,15 @@ export function tokenize(source) {
         tokens.push({
           type: TokenType.FAT_ARROW,
           value: "=>",
+          line: startLine,
+          col: startCol,
+        });
+        pos += 2;
+        col += 2;
+      } else if (pos + 1 < source.length && source[pos + 1] === "=") {
+        tokens.push({
+          type: TokenType.EQ,
+          value: "==",
           line: startLine,
           col: startCol,
         });
@@ -220,6 +241,25 @@ export function tokenize(source) {
         });
         pos++;
         col++;
+      }
+      continue;
+    }
+
+    // Not equal '!='
+    if (source[pos] === "!") {
+      const startLine = line;
+      const startCol = col;
+      if (pos + 1 < source.length && source[pos + 1] === "=") {
+        tokens.push({
+          type: TokenType.NE,
+          value: "!=",
+          line: startLine,
+          col: startCol,
+        });
+        pos += 2;
+        col += 2;
+      } else {
+        return { variant: "err", error: `Unexpected character '!' at ${startLine}:${startCol}` };
       }
       continue;
     }

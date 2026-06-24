@@ -282,3 +282,70 @@ test("native module extern fn with receiver invokes method on struct instance", 
     7,
   );
 });
+
+/* Comparison operators */
+
+test("less than comparison returns true", () => {
+  expectValid("3 < 5", "", true);
+});
+
+test("less than comparison returns false", () => {
+  expectValid("5 < 3", "", false);
+});
+
+test("greater than comparison returns true", () => {
+  expectValid("5 > 3", "", true);
+});
+
+test("greater than comparison returns false", () => {
+  expectValid("3 > 5", "", false);
+});
+
+test("less or equal comparison with smaller value", () => {
+  expectValid("3 <= 5", "", true);
+});
+
+test("less or equal comparison with equal value", () => {
+  expectValid("5 <= 5", "", true);
+});
+
+test("less or equal comparison returns false", () => {
+  expectValid("6 <= 5", "", false);
+});
+
+test("greater or equal comparison with larger value", () => {
+  expectValid("5 >= 3", "", true);
+});
+
+test("greater or equal comparison with equal value", () => {
+  expectValid("5 >= 5", "", true);
+});
+
+test("greater or equal comparison returns false", () => {
+  expectValid("4 >= 5", "", false);
+});
+
+test("equal comparison returns true", () => {
+  expectValid("5 == 5", "", true);
+});
+
+test("equal comparison returns false", () => {
+  expectValid("3 == 5", "", false);
+});
+
+test("not equal comparison returns true", () => {
+  expectValid("3 != 5", "", true);
+});
+
+test("not equal comparison returns false", () => {
+  expectValid("5 != 5", "", false);
+});
+
+test("comparison with variables works correctly", () => {
+  expectValid("let a = 10; let b = 20; a < b", "", true);
+});
+
+test("comparison in arithmetic expression respects precedence", () => {
+  // (3 + 2) < 10 → 5 < 10 → true
+  expectValid("3 + 2 < 10", "", true);
+});
