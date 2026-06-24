@@ -48,6 +48,10 @@ test("struct Wrapper<T> { field : T } compiles and exits with code 0", () => {
   expectValid("struct Wrapper<T> { field : T }", "", 0);
 });
 
+test("struct Wrapper<T> { field : T } compiles and exits with code 0", () => {
+  expectValid("struct Wrapper<T> { field : T }", "", 0);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
