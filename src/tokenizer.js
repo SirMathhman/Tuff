@@ -17,6 +17,7 @@ export const TokenType = {
   GT: ">",
   COLON: ":",
   COMMA: ",",
+  PIPE: "|",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -93,6 +94,13 @@ export function tokenize(source) {
     // Comma (field separator)
     if (source[pos] === ",") {
       tokens.push({ type: TokenType.COMMA, value: "," });
+      pos++;
+      continue;
+    }
+
+    // Pipe (union types)
+    if (source[pos] === "|") {
+      tokens.push({ type: TokenType.PIPE, value: "|" });
       pos++;
       continue;
     }
