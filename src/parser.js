@@ -14,6 +14,7 @@ export const NodeType = {
   NumberLiteral: "NumberLiteral",
   StringLiteral: "StringLiteral",
   Identifier: "Identifier",
+  ObjectLiteral: "ObjectLiteral",
 };
 
 // Helper to consume an optional trailing semicolon and advance position
@@ -252,7 +253,7 @@ function parseStructDeclaration(tokens, pos) {
 }
 
 function parseLetStatement(tokens, pos) {
-  // let IDENT = expr ;
+  // let IDENT : Type? = expr ;
   if (tokens[pos].type !== TokenType.LET)
     return { variant: "err", error: `Expected 'let' at position ${pos}` };
   pos++;
@@ -264,6 +265,19 @@ function parseLetStatement(tokens, pos) {
       error: `Expected identifier after 'let' at position ${pos}`,
     };
   pos++;
+
+  // Optional type annotation : Type
+  if (tokens[pos]?.type === TokenType.COLON) {
+    pos++; // consume ':'
+    while (
+      pos < tokens.length &&
+      tokens[pos].type !== TokenType.EQUALS &&
+      tokens[pos].type !== TokenType.SEMICOLON &&
+      tokens[pos].type !== TokenType.EOF
+    ) {
+      pos++;
+    }
+  }
 
   // Consume '=' if present
   if (tokens[pos]?.type === TokenType.EQUALS) {
@@ -339,6 +353,18 @@ function parsePrimary(tokens, pos) {
     const value = tokens[pos].value;
     pos++;
     return { node: { type: NodeType.NumberLiteral, value }, nextPos: pos };
+  }
+
+  // Object literal / struct instantiation {}
+  if (tokens[pos]?.type === TokenType.LBRACE) {
+    pos++; // consume '{'
+    while (pos < tokens.length && tokens[pos].type !== TokenType.RBRACE) {
+      pos++;
+    }
+    if (!tokens[pos])
+      return { variant: "err", error: `Expected '}' to close object literal` };
+    pos++; // consume '}'
+    return { node: { type: NodeType.ObjectLiteral }, nextPos: pos };
   }
 
   // Identifier or function call

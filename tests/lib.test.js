@@ -81,6 +81,9 @@ test("function declaration and call returns expression value", () => {
 test("function declaration with return type annotation compiles and calls correctly", () => {
   expectValid("fn get() : I32 => 100; get()", "", 100);
 });
+test("struct declaration with typed let and empty object literal compiles to 0", () => {
+  expectValid("struct Empty {} let empty : Empty = {};", "", 0);
+});
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

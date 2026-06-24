@@ -2,6 +2,7 @@ import { NodeType } from "./parser.js";
 
 export function generate(ast) {
   const lines = [];
+  let hasReturn = false;
 
   for (const stmt of ast.body) {
     switch (stmt.type) {
@@ -25,8 +26,9 @@ export function generate(ast) {
         // Last expression becomes return, others are just statements
         const exprResult = generateExpression(stmt.expression);
         if (exprResult.variant === "err") return exprResult;
-        if (isLastStatement(ast, stmt)) {
+        if (isLastRuntimeStatement(ast, stmt)) {
           lines.push(`return ${exprResult.node};`);
+          hasReturn = true;
         } else {
           lines.push(`${exprResult.node};`);
         }
@@ -35,9 +37,9 @@ export function generate(ast) {
     }
   }
 
-  // If no statements, return 0
-  if (lines.length === 0) {
-    return { node: "return 0;" };
+  // If no statements or no return was emitted, default to returning 0
+  if (lines.length === 0 || !hasReturn) {
+    lines.push("return 0;");
   }
 
   const body =
@@ -55,6 +57,9 @@ function generateExpression(node) {
     }
     case NodeType.NumberLiteral:
       return { node: String(node.value) };
+    case NodeType.ObjectLiteral:
+      // Empty struct instantiation → empty JS object (no runtime semantics yet)
+      return { node: "{}" };
     case NodeType.DotExpression:
       if (node.property === "length") {
         const objResult = generateExpression(node.object);
@@ -104,15 +109,12 @@ function generateExpression(node) {
   }
 }
 
-function isLastStatement(ast, stmt) {
+function isLastRuntimeStatement(ast, stmt) {
   const body = ast.body;
-  // Skip compile-time declarations — they don't produce runtime code
+  // Only ExpressionStatements can produce a runtime return value.
+  // Declarations (struct/type/fn/let) never count as the last statement for returning.
   for (let i = body.length - 1; i >= 0; i--) {
-    if (
-      body[i].type !== NodeType.StructDeclaration &&
-      body[i].type !== NodeType.TypeAlias &&
-      body[i].type !== NodeType.FunctionDeclaration
-    )
+    if (body[i].type === NodeType.ExpressionStatement)
       return body[i] === stmt;
   }
   return false;
