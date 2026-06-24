@@ -1,9 +1,23 @@
-import * as fs from "fs/promises";
+import * as fs from "fs";
 
-export function compileTuffToJS(source) {
-  throw new Error("Invalid source: " + source);
+function Ok(value) {
+  return { variant: "ok", value };
 }
 
-const source = await fs.readFile("./main.tuff", "utf-8");
+function Err(error) {
+  return { variant: "err", error };
+}
+
+export function compileTuffToJS(source) {
+  return Err("Invalid source: " + source);
+}
+
+const source = fs.readFileSync("./main.tuff", "utf-8");
 const target = compileTuffToJS(source);
-await fs.writeFile("./main.js", target, "utf-8");
+if (target.variant === "err") {
+  console.log(target.error);
+  process.exit(1);
+}
+
+const wrapInExit = "process.exit(" + target.value + ");";
+fs.writeFileSync("./main.js", wrapInExit, "utf-8");
