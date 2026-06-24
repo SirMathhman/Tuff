@@ -15,8 +15,8 @@ extern fn writeFileSync(this : FileSystem, targetPath : Str, data : Str, encodin
 extern type Console;
 extern let console : Console;
 extern fn error(this : Console, message : Str) : Void;
-let source = fs.readFileSync("./main.tuff", "utf-8");
-let target = compileTuffToJS(source);
+var source = fs.readFileSync("./main.tuff", "utf-8");
+var target = compileTuffToJS(source);
 if (target is Err { error : e }) {
     console.error(e);
 return 1;

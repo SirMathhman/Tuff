@@ -28,6 +28,14 @@ test("multiple read() calls consume tokens sequentially, last value wins", () =>
   expectValid("read(); read()", "100 20", 20);
 });
 
+test("let variable assignment with expression return", () => {
+  expectValid("let x = read(); x", "100 20", 100);
+});
+
 test("expression with two reads sums the values", () => {
   expectValid("read() + read()", "100 20", 120);
+});
+
+test("unknown identifier is rejected", () => {
+  expectInvalid("foo");
 });
