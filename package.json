@@ -18,10 +18,11 @@
     "start": "node ./index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest",
     "watch": "nodemon -e js,tuff",
-    "lint": "eslint .",
+    "lint": "eslint . && npx madge --circular ./src",
     "cpd": "pmd cpd --dir src --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers"
   },
   "dependencies": {
+    "madge": "^8.0.0",
     "nodemon": "^3.1.14"
   },
   "devDependencies": {
