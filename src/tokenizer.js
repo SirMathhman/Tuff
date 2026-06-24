@@ -5,6 +5,7 @@ export const TokenType = {
   TYPE_ALIAS: "TYPE_ALIAS",
   IDENT: "IDENT",
   NUMBER: "NUMBER",
+  STRING_LITERAL: "STRING_LITERAL",
   PLUS: "+",
   MINUS: "-",
   STAR: "*",
@@ -20,6 +21,7 @@ export const TokenType = {
   COLON: ":",
   COMMA: ",",
   PIPE: "|",
+  DOT: ".",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -119,6 +121,13 @@ export function tokenize(source) {
       continue;
     }
 
+    // Dot (property access)
+    if (source[pos] === ".") {
+      tokens.push({ type: TokenType.DOT, value: "." });
+      pos++;
+      continue;
+    }
+
     // Equals sign
     if (source[pos] === "=") {
       tokens.push({ type: TokenType.EQUALS, value: "=" });
@@ -148,6 +157,40 @@ export function tokenize(source) {
         pos++;
       }
       tokens.push({ type: TokenType.NUMBER, value: parseInt(num, 10) });
+      continue;
+    }
+
+    // String literals (double-quoted)
+    if (source[pos] === '"') {
+      let str = "";
+      pos++; // consume opening quote
+      while (
+        pos < source.length &&
+        source[pos] !== '"' &&
+        source[pos] !== "\n"
+      ) {
+        if (source[pos] === "\\") {
+          pos++;
+          switch (source[pos]) {
+            case "n":
+              str += "\n";
+              break;
+            case "t":
+              str += "\t";
+              break;
+            case '"':
+              str += '"';
+              break;
+            default:
+              str += source[pos];
+          }
+        } else {
+          str += source[pos];
+        }
+        pos++;
+      }
+      if (pos < source.length) pos++; // consume closing quote
+      tokens.push({ type: TokenType.STRING_LITERAL, value: str });
       continue;
     }
 

@@ -42,8 +42,31 @@ export function generate(ast) {
 
 function generateExpression(node) {
   switch (node.type) {
+    case NodeType.StringLiteral: {
+      // Escape backslashes and quotes for JS string literal
+      const escaped = node.value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      return { node: `"${escaped}"` };
+    }
     case NodeType.NumberLiteral:
       return { node: String(node.value) };
+    case NodeType.DotExpression:
+      if (node.property === "length") {
+        const objResult = generateExpression(node.object);
+        if (objResult.variant === "err") return objResult;
+        // .length on string literal → compile-time length
+        if (
+          node.object.type === NodeType.StringLiteral &&
+          typeof node.object.value === "string"
+        ) {
+          return { node: String(node.object.value.length) };
+        }
+        // Fallback for runtime (shouldn't happen with current tests)
+        return { node: `${objResult.node}.length` };
+      }
+      return {
+        variant: "err",
+        error: `Unsupported dot property: ${node.property}`,
+      };
     case NodeType.Identifier:
       return { node: node.name };
     case NodeType.CallExpression:

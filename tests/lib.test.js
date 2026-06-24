@@ -72,6 +72,10 @@ test("type alias with slice referencing struct compiles and exits with code 0", 
   expectValid("struct A {} type ASlice = *[A];", "", 0);
 });
 
+test("string literal .length returns character count", () => {
+  expectValid('"test".length', "", 4);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

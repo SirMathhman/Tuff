@@ -8,8 +8,10 @@ export const NodeType = {
   TypeAlias: "TypeAlias",
   ExpressionStatement: "ExpressionStatement",
   CallExpression: "CallExpression",
+  DotExpression: "DotExpression",
   BinaryExpression: "BinaryExpression",
   NumberLiteral: "NumberLiteral",
+  StringLiteral: "StringLiteral",
   Identifier: "Identifier",
 };
 
@@ -199,6 +201,17 @@ function parseExpression(tokens, pos) {
   let result = primary.node; // unwrap to get actual AST node
   let p = primary.nextPos;
 
+  // Dot access: expr.property
+  while (
+    tokens[p]?.type === TokenType.DOT &&
+    tokens[p + 1]?.type === TokenType.IDENT
+  ) {
+    p++; // consume '.'
+    const property = tokens[p].value;
+    p++;
+    result = { type: NodeType.DotExpression, object: result, property };
+  }
+
   while (
     tokens[p]?.type === TokenType.PLUS ||
     tokens[p]?.type === TokenType.MINUS ||
@@ -230,6 +243,12 @@ function parsePrimary(tokens, pos) {
       variant: "err",
       error: `Unexpected end of input at position ${pos}`,
     };
+
+  if (tokens[pos].type === TokenType.STRING_LITERAL) {
+    const value = tokens[pos].value;
+    pos++;
+    return { node: { type: NodeType.StringLiteral, value }, nextPos: pos };
+  }
 
   if (tokens[pos].type === TokenType.NUMBER) {
     const value = tokens[pos].value;
