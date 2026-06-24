@@ -45,10 +45,54 @@ export function generate(ast, options = {}) {
         break;
       }
       case NodeType.ExportStatement: {
-        const exportResult = generateExpression(stmt.value);
-        if (exportResult.variant === "err") return exportResult;
-        // Exports go into _ctx.__exports, then compileModulesToJS wires them to module namespace
-        lines.push(`_ctx.__exports.${stmt.name} = ${exportResult.node};`);
+        if (stmt.isFunctionExport) {
+          // out fn NAME(params) => body ; — generate function declaration + register on _ctx
+          const fnBodyNode = stmt.value.body;
+          const jsParams = stmt.value.params.map((p) => String(p)).join(", ");
+          // Pass params as locals so they resolve to bare names, not _ctx lookups
+          const paramLocals = new Set(stmt.value.params);
+          const linesForFn = [];
+          if (fnBodyNode.type === NodeType.BlockStatement) {
+            for (const child of fnBodyNode.body) {
+              if (child.type === NodeType.ReturnStatement) {
+                const retResult = generateExpression(
+                  child.expression,
+                  paramLocals,
+                  false,
+                );
+                if (retResult.variant === "err") return retResult;
+                linesForFn.push(`return ${retResult.node};`);
+              } else {
+                const exprRes = generateExpression(child, paramLocals, false);
+                if (exprRes.variant === "err") return exprRes;
+                linesForFn.push(exprRes.node);
+              }
+            }
+          } else {
+            // ExpressionStatement
+            const bodyResult = generateExpression(
+              fnBodyNode.expression,
+              paramLocals,
+              false,
+            );
+            if (bodyResult.variant === "err") return bodyResult;
+            linesForFn.push(`return ${bodyResult.node};`);
+          }
+          lines.push(
+            `function ${stmt.name}(${jsParams}) { ${linesForFn.join(" ")} }`,
+          );
+          // Register function on _ctx so it can be called
+          lines.push(`_ctx.${stmt.name} = ${stmt.name};`);
+          // Also register in __exports for cross-module wiring (if __exists exists)
+          lines.push(
+            `if (_ctx.__exports) { _ctx.__exports.${stmt.name} = ${stmt.name}; }`,
+          );
+        } else {
+          const exportResult = generateExpression(stmt.value);
+          if (exportResult.variant === "err") return exportResult;
+          // Exports go into _ctx.__exports, then compileModulesToJS wires them to module namespace
+          lines.push(`_ctx.__exports.${stmt.name} = ${exportResult.node};`);
+        }
         break;
       }
       case NodeType.LetStatement: {
@@ -162,6 +206,24 @@ function generateExpression(node, locals, hasReceiver) {
       }
       return { node: `{${fieldEntries.join(", ")}}` };
     }
+    case NodeType.QualifiedPathExpression: {
+      // parent::child -> _ctx.parent.child
+      // Recursively build the full path, adding _ctx. only at the root identifier level
+      let baseCode;
+      if (node.object.type === NodeType.Identifier) {
+        baseCode = `_ctx.${node.object.name}`;
+      } else if (node.object.type === NodeType.QualifiedPathExpression) {
+        // Recurse into nested FQN — it already has _ctx. prefix
+        const objResult = generateExpression(node.object, locals, hasReceiver);
+        if (objResult.variant === "err") return objResult;
+        baseCode = objResult.node;
+      } else {
+        const objResult = generateExpression(node.object, locals, hasReceiver);
+        if (objResult.variant === "err") return objResult;
+        baseCode = objResult.node;
+      }
+      return { node: `${baseCode}.${node.property}` };
+    }
     case NodeType.DotExpression: {
       if (node.property === "length") {
         const objResult = generateExpression(node.object, locals, hasReceiver);
@@ -207,18 +269,27 @@ function generateExpression(node, locals, hasReceiver) {
       }
       return { node: `_ctx.${node.name}` };
     case NodeType.CallExpression: {
-      // Special builtin
-      if (node.name === "read") {
-        return { node: "tokens.shift()" };
-      }
-      // Generate call for any identifier — validation ensures it's known
       const args = [];
       for (const arg of node.arguments) {
         const result = generateExpression(arg, locals, hasReceiver);
         if (result.variant === "err") return result;
         args.push(result.node);
       }
-      // Look up on _ctx so extern functions from native modules work correctly
+      // Special builtin
+      if (node.name === "read") {
+        return { node: `tokens.shift()` };
+      }
+      // Call on FQN path or dot expression: callee(args)
+      if (node.callee) {
+        const calleeResult = generateExpression(
+          node.callee,
+          locals,
+          hasReceiver,
+        );
+        if (calleeResult.variant === "err") return calleeResult;
+        return { node: `${calleeResult.node}(${args.join(", ")})` };
+      }
+      // Generate call for any identifier — validation ensures it's known
       return { node: `_ctx.${node.name}(${args.join(", ")})` };
     }
     case NodeType.BinaryExpression: {

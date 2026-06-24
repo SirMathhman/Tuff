@@ -154,6 +154,10 @@ test("struct method with receiver parameter and method call syntax returns sum o
   );
 });
 
+test("out fn exports function that can be called and returns result", () => {
+  expectValid("out fn double(n : I32) => n * 2; let x = double(21); x", "", 42);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
@@ -207,6 +211,18 @@ test("destructuring imports from module exports returns extracted value", () => 
     { index: "let { x } = lib; x", lib: "out let x = 1;" },
     "",
     1,
+  );
+});
+
+test("exported function via out fn can be called from another module", () => {
+  expectValidWithModules(
+    ["index", "math"],
+    {
+      index: "let result = math::double(21); result",
+      math: "out fn double(n : I32) => n * 2;",
+    },
+    "",
+    42,
   );
 });
 

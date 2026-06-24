@@ -211,6 +211,29 @@ function validateIdentifiers(node, knownIds) {
       }
       return validateIdentifiers(node.value, knownIds);
     }
+    case NodeType.ExportStatement: {
+      // Register exported function names as known identifiers
+      if (node.isFunctionExport) {
+        knownIds.add(node.name);
+      }
+      // For value exports, still validate the expression
+      if (!node.isFunctionExport && node.value) {
+        return validateIdentifiers(node.value, knownIds);
+      }
+      // Validate function body for function exports
+      if (node.isFunctionExport && node.value?.body) {
+        const fnScope = new Set(knownIds);
+        if (node.value.params) {
+          for (const param of node.value.params) {
+            if (param !== "this") {
+              fnScope.add(param);
+            }
+          }
+        }
+        return validateIdentifiers(node.value.body, fnScope);
+      }
+      return { ok: true };
+    }
     case NodeType.ExpressionStatement:
       return validateIdentifiers(node.expression, knownIds);
     case NodeType.Identifier:
@@ -219,9 +242,15 @@ function validateIdentifiers(node, knownIds) {
       }
       return { ok: true };
     case NodeType.CallExpression:
-      // Builtins or user-declared functions
-      if (!knownIds.has(node.name)) {
-        return { ok: false, error: `Unknown function: ${node.name}` };
+      // Call on FQN path or dot expression: callee(args)
+      if (node.callee) {
+        const calleeResult = validateIdentifiers(node.callee, knownIds);
+        if (!calleeResult.ok) return calleeResult;
+      } else {
+        // Builtins or user-declared functions
+        if (!knownIds.has(node.name)) {
+          return { ok: false, error: `Unknown function: ${node.name}` };
+        }
       }
       for (const arg of node.arguments) {
         const result = validateIdentifiers(arg, knownIds);
@@ -244,6 +273,9 @@ function validateIdentifiers(node, knownIds) {
       if (!leftResult.ok) return leftResult;
       return validateIdentifiers(node.right, knownIds);
     }
+    case NodeType.QualifiedPathExpression:
+      // Validate the object part and property access (property is just a string)
+      return validateIdentifiers(node.object, knownIds);
     case NodeType.ThisExpression:
       // "this" is always valid — resolves to _ctx at runtime
       return { ok: true };

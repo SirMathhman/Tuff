@@ -23,6 +23,7 @@ export const NodeType = {
   ObjectLiteral: "ObjectLiteral",
   BlockStatement: "BlockStatement",
   ReturnStatement: "ReturnStatement",
+  QualifiedPathExpression: "QualifiedPathExpression",
 };
 
 // Helper to produce a parser error with line:col and surrounding token context
@@ -164,6 +165,7 @@ function parseStatement(tokens, pos) {
         type: NodeType.ExportStatement,
         name: result.name,
         value: result.value,
+        isFunctionExport: result.isFunctionExport || false,
       },
       nextPos: result.nextPos,
     };
@@ -575,10 +577,31 @@ function parseLetTail(tokens, pos) {
 }
 
 // out let IDENT : Type? = expr ;
+// out fn NAME(params) => body ;
 function parseExportStatement(tokens, pos) {
   if (tokens[pos].type !== TokenType.OUT)
     return { variant: "err", error: `Expected 'out' at position ${pos}` };
   pos++;
+
+  // Check for 'fn' keyword — out fn NAME(params) => body ;
+  if (tokens[pos]?.type === TokenType.FN_DECLARATION) {
+    const fnResult = parseFunctionDeclaration(tokens, pos);
+    if (fnResult.variant === "err") return fnResult;
+
+    // Build an expression that represents the function for export wiring
+    // The codegen will handle registering this as both a _ctx function and an export
+    return {
+      name: fnResult.name,
+      value: {
+        type: NodeType.FunctionDeclaration,
+        name: fnResult.name,
+        params: fnResult.params,
+        body: fnResult.body,
+      },
+      nextPos: fnResult.nextPos,
+      isFunctionExport: true,
+    };
+  }
 
   // Consume 'let'
   if (!tokens[pos] || tokens[pos].type !== TokenType.LET)
@@ -707,6 +730,30 @@ function parseGeneralAssignmentStatement(tokens, pos) {
   };
 }
 
+// Shared helper: parse argument list from current position (after '(').
+// Returns { args, nextPos } or error variant.
+function parseArgumentsList(tokens, pos) {
+  const args = [];
+
+  while (pos < tokens.length && tokens[pos].type !== TokenType.RPAREN) {
+    const argResult = parseExpression(tokens, pos);
+    if (argResult.variant === "err") return argResult;
+    args.push(argResult.node);
+    pos = argResult.nextPos;
+
+    // Optional comma separator
+    if (tokens[pos]?.type === TokenType.COMMA) {
+      pos++;
+    }
+  }
+
+  if (!tokens[pos])
+    return err(`Expected ')' to close call expression`, tokens, pos);
+  pos++; // consume ')'
+
+  return { args, nextPos: pos };
+}
+
 // Parse a primary expression followed by any dot/method chain.
 // Used for both left and right sides of binary operators so dot access is always applied.
 function parsePrefix(tokens, pos) {
@@ -715,6 +762,41 @@ function parsePrefix(tokens, pos) {
 
   let result = primary.node; // unwrap to get actual AST node
   let p = primary.nextPos;
+
+  // FQN access: parent::child or parent::child::grandchild
+  while (
+    tokens[p]?.type === TokenType.COLON &&
+    tokens[p + 1]?.type === TokenType.COLON &&
+    tokens[p + 2]?.type === TokenType.IDENT
+  ) {
+    p += 2; // consume '::'
+    const segment = tokens[p].value;
+    p++;
+
+    result = {
+      type: NodeType.QualifiedPathExpression,
+      object: result,
+      property: segment,
+    };
+  }
+
+  // Call on FQN path: parent::child(args)
+  if (
+    tokens[p]?.type === TokenType.LPAREN &&
+    (result.type === NodeType.QualifiedPathExpression ||
+      result.type === NodeType.DotExpression)
+  ) {
+    p++; // consume '('
+    const argResult = parseArgumentsList(tokens, p);
+    if (argResult.variant === "err") return argResult;
+    p = argResult.nextPos;
+
+    result = {
+      type: NodeType.CallExpression,
+      callee: result,
+      arguments: argResult.args,
+    };
+  }
 
   // Dot access and method calls: expr.property or obj.method()
   while (
@@ -728,33 +810,15 @@ function parsePrefix(tokens, pos) {
     // Check if this is a method call: obj.method()
     if (tokens[p]?.type === TokenType.LPAREN) {
       p++; // consume '('
-      const args = [];
-
-      while (p < tokens.length && tokens[p].type !== TokenType.RPAREN) {
-        const argResult = parseExpression(tokens, p);
-        if (argResult.variant === "err") return argResult;
-        args.push(argResult.node);
-        p = argResult.nextPos;
-
-        // Optional comma separator
-        if (tokens[p]?.type === TokenType.COMMA) {
-          p++;
-        }
-      }
-
-      if (!tokens[p])
-        return err(
-          `Expected ')' to close method call '${property}'`,
-          tokens,
-          p,
-        );
-      p++; // consume ')'
+      const argResult = parseArgumentsList(tokens, p);
+      if (argResult.variant === "err") return argResult;
+      p = argResult.nextPos;
 
       result = {
         type: NodeType.MethodCallExpression,
         object: result,
         methodName: property,
-        arguments: args,
+        arguments: argResult.args,
       };
     } else {
       result = { type: NodeType.DotExpression, object: result, property };
@@ -838,30 +902,16 @@ function parsePrimary(tokens, pos) {
     // Check for function call or struct instantiation
     if (tokens[pos]?.type === TokenType.LPAREN) {
       pos++; // consume '('
-      const args = [];
-
-      while (pos < tokens.length && tokens[pos].type !== TokenType.RPAREN) {
-        const argResult = parseExpression(tokens, pos);
-        if (argResult.variant === "err") return argResult;
-        args.push(argResult.node);
-        pos = argResult.nextPos;
-
-        // Optional comma separator
-        if (tokens[pos]?.type === TokenType.COMMA) {
-          pos++;
-        }
-      }
-
-      if (!tokens[pos])
-        return err(
-          `Expected ')' to close call expression for '${name}'`,
-          tokens,
-          pos,
-        );
-      pos++; // consume ')'
+      const argResult = parseArgumentsList(tokens, pos);
+      if (argResult.variant === "err") return argResult;
+      pos = argResult.nextPos;
 
       return {
-        node: { type: NodeType.CallExpression, name, arguments: args },
+        node: {
+          type: NodeType.CallExpression,
+          name,
+          arguments: argResult.args,
+        },
         nextPos: pos,
       };
     }
