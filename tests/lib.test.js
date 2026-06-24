@@ -206,7 +206,11 @@ function expectValidWithNativeModules(
   stdIn,
   expectedExitCode,
 ) {
-  const result = compileModulesWithNative(tuffModuleNames, tuffSources, nativeModules);
+  const result = compileModulesWithNative(
+    tuffModuleNames,
+    tuffSources,
+    nativeModules,
+  );
   if (result.variant === "err") throw new Error(result.error);
   const actualExitCode = new Function("stdIn", result.value)(stdIn);
   expect(expectedExitCode).toBe(actualExitCode);
