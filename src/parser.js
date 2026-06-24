@@ -19,6 +19,13 @@ export const NodeType = {
   ReturnStatement: "ReturnStatement",
 };
 
+// Helper to produce a parser error with line:col and surrounding token context
+function err(message, tokens, pos) {
+  const token = tokens[pos];
+  const loc = token?.line && token?.col !== undefined ? `${token.line}:${token.col}` : `pos ${pos}`;
+  return { variant: "err", error: `${message} at ${loc}` };
+}
+
 // Helper to consume an optional trailing semicolon and advance position
 function maybeConsumeSemicolon(tokens, pos) {
   if (tokens[pos]?.type === TokenType.SEMICOLON) {
@@ -123,20 +130,17 @@ function parseStatement(tokens, pos) {
 // fn NAME() => expr ;
 function parseFunctionDeclaration(tokens, pos) {
   if (tokens[pos].type !== TokenType.FN_DECLARATION)
-    return { variant: "err", error: `Expected 'fn' at position ${pos}` };
+    return err(`Expected 'fn'`, tokens, pos);
   pos++;
 
   const name = tokens[pos]?.value;
   if (tokens[pos]?.type !== TokenType.IDENT)
-    return {
-      variant: "err",
-      error: `Expected function name after 'fn' at position ${pos}`,
-    };
+    return err(`Expected function name after 'fn'`, tokens, pos);
   pos++;
 
   // Consume '('
   if (!tokens[pos] || tokens[pos].type !== TokenType.LPAREN)
-    return { variant: "err", error: `Expected '(' for parameter list` };
+    return err("Expected '(' for parameter list", tokens, pos);
   pos++;
 
   // Consume ')'
@@ -144,7 +148,7 @@ function parseFunctionDeclaration(tokens, pos) {
     pos++;
   }
   if (!tokens[pos])
-    return { variant: "err", error: `Expected ')' to close parameter list` };
+    return err(`Expected ')' to close parameter list for function '${name}'`, tokens, pos);
   pos++; // consume ')'
 
   // Optional return type annotation : Type
@@ -161,10 +165,7 @@ function parseFunctionDeclaration(tokens, pos) {
 
   // Consume '=>'
   if (!tokens[pos] || tokens[pos].type !== TokenType.FAT_ARROW)
-    return {
-      variant: "err",
-      error: `Expected '=>' for function body at position ${pos}`,
-    };
+    return err(`Expected '=>' for function body of '${name}'`, tokens, pos);
   pos++;
 
   // Function body: either { ... } block or a single expression
@@ -194,7 +195,7 @@ function parseFunctionDeclaration(tokens, pos) {
 function parseBlock(tokens, pos) {
   const statements = [];
   if (tokens[pos]?.type !== TokenType.LBRACE)
-    return { variant: "err", error: `Expected '{' at position ${pos}` };
+    return err("Expected '{'", tokens, pos);
   pos++;
 
   while (
@@ -225,7 +226,7 @@ function parseBlock(tokens, pos) {
   }
 
   if (!tokens[pos])
-    return { variant: "err", error: `Expected '}' to close block` };
+    return err("Expected '}' to close block", tokens, pos);
   pos++;
 
   return {
@@ -237,34 +238,25 @@ function parseBlock(tokens, pos) {
 // type IDENT <T, U>? = TYPE ;
 function parseTypeAlias(tokens, pos) {
   if (tokens[pos].type !== TokenType.TYPE_ALIAS)
-    return { variant: "err", error: `Expected 'type' at position ${pos}` };
+    return err(`Expected 'type'`, tokens, pos);
   pos++;
 
   const name = tokens[pos]?.value;
   if (tokens[pos]?.type !== TokenType.IDENT)
-    return {
-      variant: "err",
-      error: `Expected alias name after 'type' at position ${pos}`,
-    };
+    return err("Expected alias name after 'type'", tokens, pos);
   pos++;
 
   // Optional generic parameters <T, U>
   if (tokens[pos]?.type === TokenType.LT) {
     pos = skipGenerics(tokens, pos);
     if (!tokens[pos])
-      return {
-        variant: "err",
-        error: `Expected '>' to close generic parameters for type alias '${name}'`,
-      };
+      return err(`Expected '>' to close generic parameters for type alias '${name}'`, tokens, pos);
   }
 
   // Consume '='
   if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS) {
     const found = tokens[pos]?.value ?? "end of input";
-    return {
-      variant: "err",
-      error: `Expected '=' for type alias '${name}', but found '${found}' at position ${pos}`,
-    };
+    return err(`Expected '=' for type alias '${name}', but found '${found}'`, tokens, pos);
   }
   pos++;
 
@@ -273,10 +265,7 @@ function parseTypeAlias(tokens, pos) {
     pos++;
   }
   if (!tokens[pos])
-    return {
-      variant: "err",
-      error: `Expected ';' to end type alias '${name}'`,
-    };
+    return err(`Expected ';' to end type alias '${name}'`, tokens, pos);
   pos++; // consume ';'
 
   return { name, nextPos: pos };
@@ -411,10 +400,7 @@ function parseExpression(tokens, pos) {
 function parsePrimary(tokens, pos) {
   // Number literal
   if (!tokens[pos])
-    return {
-      variant: "err",
-      error: `Unexpected end of input at position ${pos}`,
-    };
+    return err("Unexpected end of input", tokens, pos);
 
   if (tokens[pos].type === TokenType.STRING_LITERAL) {
     const value = tokens[pos].value;
@@ -435,7 +421,7 @@ function parsePrimary(tokens, pos) {
       pos++;
     }
     if (!tokens[pos])
-      return { variant: "err", error: `Expected '}' to close object literal` };
+      return err("Expected '}' to close object literal", tokens, pos);
     pos++; // consume '}'
     return { node: { type: NodeType.ObjectLiteral }, nextPos: pos };
   }
@@ -467,8 +453,9 @@ function parsePrimary(tokens, pos) {
     snippet.push(`${tokens[i].value ?? tokens[i].type}${marker}`);
   }
 
-  return {
-    variant: "err",
-    error: `Unexpected token at position ${pos}: '${tokens[pos]?.value}' (${tokens[pos]?.type}). Context: [${snippet.join(", ")}]`,
-  };
+  return err(
+    `Unexpected token '${tokens[pos]?.value}' (${tokens[pos]?.type}). Context: [${snippet.join(", ")}]`,
+    tokens,
+    pos,
+  );
 }

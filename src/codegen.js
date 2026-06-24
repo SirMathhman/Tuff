@@ -140,8 +140,7 @@ function isLastRuntimeStatement(ast, stmt) {
   // Only ExpressionStatements can produce a runtime return value.
   // Declarations (struct/type/fn/let) never count as the last statement for returning.
   for (let i = body.length - 1; i >= 0; i--) {
-    if (body[i].type === NodeType.ExpressionStatement)
-      return body[i] === stmt;
+    if (body[i].type === NodeType.ExpressionStatement) return body[i] === stmt;
   }
   return false;
 }
