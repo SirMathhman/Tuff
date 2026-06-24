@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "cmd /c \"npm run test 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      }
+    ]
+  }
+}
