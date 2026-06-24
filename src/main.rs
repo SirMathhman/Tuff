@@ -16,6 +16,14 @@ enum AstExpr {
     Assign(String, Box<AstExpr>),                 // x = expr (assignment statement)
     Block(Vec<(String, AstExpr)>, Vec<AstExpr>, Option<Box<AstExpr>>), // block: { lets; stmts; expr }
     Loop(Box<AstExpr>), // loop { break expr; } — evaluates to the break expression
+    ForLoop(
+        String,
+        Box<AstExpr>,
+        Box<AstExpr>,
+        String,
+        Box<AstExpr>,
+        bool,
+    ), // for (var in start..end) body_var +=? body_expr;
 }
 
 struct Parser<'a> {
@@ -31,6 +39,8 @@ enum Token<'a> {
     Else,
     Loop,
     Break,
+    For,
+    In,
     Ident(&'a str),
     Read,
     ReadBool,
@@ -42,6 +52,7 @@ enum Token<'a> {
     RBrace,
     Plus,
     Less,
+    DotDot, // .. for range
     Equals,
     Semicolon,
     Eof,
@@ -73,6 +84,15 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
             '<' => {
                 chars.next();
                 tokens.push(Token::Less);
+            }
+            '.' => {
+                chars.next();
+                if matches!(chars.peek(), Some('.')) {
+                    chars.next();
+                    tokens.push(Token::DotDot);
+                } else {
+                    return vec![]; // invalid lone dot
+                }
             }
             '(' => {
                 chars.next();
@@ -120,6 +140,8 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                     "else" => tokens.push(Token::Else),
                     "loop" => tokens.push(Token::Loop),
                     "break" => tokens.push(Token::Break),
+                    "for" => tokens.push(Token::For),
+                    "in" => tokens.push(Token::In),
                     "read" => tokens.push(Token::Read),
                     "readBool" => tokens.push(Token::ReadBool),
                     "true" => tokens.push(Token::Bool(true)),
@@ -186,7 +208,7 @@ impl<'a> Parser<'a> {
     /// Consume optional '()' after a function name.
     fn eat_optional_parens(&mut self) -> Result<(), std::fmt::Error> {
         if matches!(self.peek(), Token::LParen) {
-            self.eat(); // '('
+            self.expect_open_paren()?;
             if !matches!(self.peek(), Token::RParen) {
                 return Err(std::fmt::Error);
             }
@@ -195,7 +217,16 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" | IDENT "+=" expr ";" )* expr?
+    /// Consume '(' or error.
+    fn expect_open_paren(&mut self) -> Result<(), std::fmt::Error> {
+        if !matches!(self.peek(), Token::LParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '('
+        Ok(())
+    }
+
+    /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" | IDENT "+=" expr ";" | for_stmt )* expr?
     fn parse_program(
         &mut self,
     ) -> Result<
@@ -216,6 +247,11 @@ impl<'a> Parser<'a> {
                 Token::Let => {
                     let (name, expr) = self.parse_let()?;
                     lets.push((name, expr));
+                }
+                Token::For => {
+                    // For-loop statement — store as side-effect expression.
+                    let for_expr = self.parse_for()?;
+                    assigns.push(("_", for_expr, false));
                 }
                 Token::Ident(_) => {
                     // Could be assignment: IDENT "=" expr ";"
@@ -288,6 +324,60 @@ impl<'a> Parser<'a> {
         Ok((name, expr))
     }
 
+    /// for_statement → "for" ( IDENT "in" expr ".." expr ")" body_var "+="? expr ";"
+    fn parse_for(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        self.eat(); // 'for'
+
+        self.expect_open_paren()?;
+
+        let var_name = self.expect_ident()?.to_string();
+
+        if !matches!(self.peek(), Token::In) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // 'in'
+
+        let start_expr = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::DotDot) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '..'
+
+        let end_expr = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::RParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // ')'
+
+        // Parse body: IDENT "+="? expr ";"
+        let body_var = self.expect_ident()?.to_string();
+
+        let is_compound = matches!(self.peek(), Token::Plus)
+            && matches!(self.tokens.get(self.pos + 1), Some(Token::Equals));
+
+        if is_compound {
+            self.eat(); // '+'
+            self.eat(); // '='
+        } else if !matches!(self.peek(), Token::Equals) {
+            return Err(std::fmt::Error);
+        } else {
+            self.eat(); // '='
+        }
+
+        let body_expr = self.parse_expr_semicolon()?;
+
+        Ok(AstExpr::ForLoop(
+            var_name,
+            Box::new(start_expr),
+            Box::new(end_expr),
+            body_var,
+            Box::new(body_expr),
+            is_compound,
+        ))
+    }
+
     /// expr → term (("+" | "<") term)*
     fn parse_expr(&mut self) -> Result<AstExpr, std::fmt::Error> {
         let mut left = self.parse_term()?;
@@ -315,10 +405,7 @@ impl<'a> Parser<'a> {
     fn parse_if(&mut self) -> Result<AstExpr, std::fmt::Error> {
         self.eat(); // consume 'if'
 
-        if !matches!(self.peek(), Token::LParen) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // consume '('
+        self.expect_open_paren()?;
 
         let condition = self.parse_expr()?;
 
@@ -558,7 +645,7 @@ fn emit_loop_expr(break_expr: &AstExpr, decls: &mut String) -> Result<String, st
 
 /**
  * Recursively flatten an expression into (declarations_code, value_expression).
- * Handles blocks, loops, and if-statements with proper C code generation.
+ * Handles blocks, loops, if-statements, and for-loops with proper C code generation.
  */
 fn emit_flatten(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
     match expr {
@@ -569,6 +656,33 @@ fn emit_flatten(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
             let mut decls = String::new();
             let val_name = emit_loop_expr(break_expr, &mut decls)?;
             Ok((decls, val_name))
+        }
+        AstExpr::ForLoop(var_name, start_expr, end_expr, body_var, body_expr, is_compound) => {
+            // Emit: for (int var = <start>; var < <end>; var++) { body_var +=? <body_expr>; }
+            let mut decls = String::new();
+
+            let (_, start_val) = emit_flatten(start_expr)?;
+            let (_, end_val) = emit_flatten(end_expr)?;
+            let mut body_buf = String::new();
+            emit_expr(body_expr, &mut body_buf).map_err(|_| std::fmt::Error)?;
+
+            if *is_compound {
+                writeln!(
+                    decls,
+                    "for (int {} = {}; {} < {}; {}++) {{ {} += {}; }}",
+                    var_name, start_val, var_name, end_val, var_name, body_var, body_buf
+                )
+                .map_err(|_| std::fmt::Error)?;
+            } else {
+                writeln!(
+                    decls,
+                    "for (int {} = {}; {} < {}; {}++) {{ {} = {}; }}",
+                    var_name, start_val, var_name, end_val, var_name, body_var, body_buf
+                )
+                .map_err(|_| std::fmt::Error)?;
+            }
+
+            Ok((decls, "0".to_string()))
         }
         AstExpr::If(cond, then_br, else_br) => {
             // Emit as a proper C if-statement with temp variable.
@@ -734,6 +848,11 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             // This variant should not reach emit_expr directly.
             return Err(std::fmt::Error);
         }
+        AstExpr::ForLoop(_, _, _, _, _, _) => {
+            // For-loops are handled during compile() by emit_flatten.
+            // This variant should not reach emit_expr directly.
+            return Err(std::fmt::Error);
+        }
     }
     Ok(())
 }
@@ -843,7 +962,9 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
         );
     }
 
-    // Execute the generated executable with stdin piped in
+    // Execute the generated executable with stdin piped in (with 10s timeout)
+    const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
     let mut child = std::process::Command::new(&exe_path)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
@@ -855,11 +976,22 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
         child.stdin.take().unwrap().write_all(stdin.as_bytes()).ok();
     }
 
-    let run_output = child
-        .wait_with_output()
-        .expect("Failed to wait for compiled binary");
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if start.elapsed() >= TIMEOUT {
+                    let _ = child.kill();
+                    panic!("Test timed out after 10s for source: {}", source);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(e) => panic!("Failed to wait for compiled binary: {}", e),
+        }
+    };
 
-    let actual_exit_code = run_output.status.code().unwrap_or(-1);
+    let actual_exit_code = child.wait().expect("Failed to reap process").code().unwrap_or(-1);
 
     if expected_exit_code != actual_exit_code {
         panic!(
@@ -987,5 +1119,14 @@ mod tests {
     #[test]
     fn if_without_else_block_then() {
         assert_valid("let mut x = read(); if (true) { x = read(); } x", "2 3", 3);
+    }
+
+    #[test]
+    fn for_loop_range_sum() {
+        assert_valid(
+            "let mut sum = 0; for (i in 0..read()) sum += i; sum",
+            "4",
+            6,
+        )
     }
 }
