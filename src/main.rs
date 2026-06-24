@@ -25,6 +25,8 @@ enum AstExpr {
         bool,
     ), // for (var in start..end) body_var +=? body_expr;
     Match(Box<AstExpr>, Vec<(AstExpr, AstExpr)>), // scrutinee, vec of (pattern, result)
+    FnDef(String, Box<AstExpr>), // fn name() => expr
+    Call(String, Vec<AstExpr>), // funcName(args)
 }
 
 struct Parser<'a> {
@@ -36,6 +38,7 @@ struct Parser<'a> {
 enum Token<'a> {
     Let,
     Mut,
+    Fn,
     If,
     Else,
     Loop,
@@ -146,6 +149,7 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                 match ident.as_str() {
                     "let" => tokens.push(Token::Let),
                     "mut" => tokens.push(Token::Mut),
+                    "fn" => tokens.push(Token::Fn),
                     "if" => tokens.push(Token::If),
                     "else" => tokens.push(Token::Else),
                     "loop" => tokens.push(Token::Loop),
@@ -238,6 +242,16 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Consume empty parens: '(' ')'
+    fn expect_parens(&mut self) -> Result<(), std::fmt::Error> {
+        self.expect_open_paren()?;
+        if !matches!(self.peek(), Token::RParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // ')'
+        Ok(())
+    }
+
     /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" | IDENT "+=" expr ";" | for_stmt )* expr?
     fn parse_program(
         &mut self,
@@ -259,6 +273,11 @@ impl<'a> Parser<'a> {
                 Token::Let => {
                     let (name, expr) = self.parse_let()?;
                     lets.push((name, expr));
+                }
+                Token::Fn => {
+                    // Function definition: fn name() => expr;
+                    let (name, body) = self.parse_fn()?;
+                    lets.push((name, body));
                 }
                 Token::For => {
                     // For-loop statement — store as side-effect expression.
@@ -301,6 +320,21 @@ impl<'a> Parser<'a> {
         }
 
         Ok((lets, assigns, final_expr))
+    }
+
+    /// fn_statement → "fn" IDENT () "=>" expr ";"
+    fn parse_fn(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
+        self.eat(); // 'fn'
+        let name = self.expect_ident()?;
+        self.expect_parens()?;
+
+        if !matches!(self.peek(), Token::FatArrow) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '=>'
+
+        let body = self.parse_expr_semicolon()?;
+        Ok((name, AstExpr::FnDef(name.to_string(), Box::new(body))))
     }
 
     /// let_statement → "let" ["mut"] IDENT "=" expr ";"
@@ -646,7 +680,13 @@ impl<'a> Parser<'a> {
             Token::Ident(name) => {
                 let name = *name;
                 self.eat();
-                Ok(AstExpr::Var(name.to_string()))
+                // Check if this is a function call: IDENT ( )
+                if matches!(self.peek(), Token::LParen) {
+                    self.expect_parens()?;
+                    Ok(AstExpr::Call(name.to_string(), Vec::new()))
+                } else {
+                    Ok(AstExpr::Var(name.to_string()))
+                }
             }
             Token::Bool(val) => {
                 let val = *val;
@@ -826,12 +866,19 @@ fn emit_flatten(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
 
             Ok((decls, format!("__if_{}", id)))
         }
-        _ => {
-            let mut val_buf = String::new();
-            emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
-            Ok((String::new(), val_buf))
+        AstExpr::FnDef(_, _) => {
+            // Function definitions are handled at the top level of compile().
+            return Err(std::fmt::Error);
         }
+        _ => flatten_to_expr(expr),
     }
+}
+
+/// Helper: emit a simple expression (no declarations needed).
+fn flatten_to_expr(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
+    let mut val_buf = String::new();
+    emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+    Ok((String::new(), val_buf))
 }
 
 /**
@@ -857,9 +904,12 @@ fn flatten_block(
                 let val_name = emit_loop_expr(break_expr, &mut decls)?;
                 write!(decls, "int {} = {};\n", name, val_name).map_err(|_| std::fmt::Error)?;
             }
+            AstExpr::FnDef(_, _) => {
+                // Function definitions shouldn't appear inside blocks.
+                return Err(std::fmt::Error);
+            }
             _ => {
-                let mut val_buf = String::new();
-                emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+                let (_, val_buf) = flatten_to_expr(expr)?;
                 write!(decls, "int {} = {};\n", name, val_buf).map_err(|_| std::fmt::Error)?;
             }
         }
@@ -967,6 +1017,13 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             // This variant should not reach emit_expr directly.
             return Err(std::fmt::Error);
         }
+        AstExpr::FnDef(_, _) => {
+            // Function definitions are handled at the top level of compile().
+            return Err(std::fmt::Error);
+        }
+        AstExpr::Call(func_name, _args) => {
+            write!(buf, "{}()", func_name)?;
+        }
     }
     Ok(())
 }
@@ -994,10 +1051,26 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     c.push_str("int read_val(void) {\n  int n;\n  scanf(\"%d\", &n);\n  return n;\n}\n\n");
     c.push_str("int read_bool(void) {\n  char s[10];\n  scanf(\"%s\", s);");
     c.push_str("\n  if (strcmp(s, \"true\") == 0) return 1;\n  return 0;\n}\n");
+
+    // Emit function definitions before main()
+    for (_, expr) in &lets {
+        if let AstExpr::FnDef(ref name, ref body_expr) = *expr {
+            let mut body_buf = String::new();
+            emit_expr(body_expr.as_ref(), &mut body_buf).map_err(|_| std::fmt::Error)?;
+            c.push_str(&format!(
+                "int {}(void) {{\n  return {};\n}}\n",
+                name, body_buf
+            ));
+        }
+    }
+
     c.push_str("int main() {\n");
 
-    // Emit variable declarations for let statements
+    // Emit variable declarations for let statements (skip function definitions)
     for (name, expr) in &lets {
+        if matches!(*expr, AstExpr::FnDef(_, _)) {
+            continue; // Already emitted as C function above
+        }
         let (decls, value) = emit_flatten(expr)?;
         write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
         write!(c, " int {} = {};", name, value).map_err(|_| std::fmt::Error)?;
@@ -1260,5 +1333,10 @@ mod tests {
             "2",
             5,
         )
+    }
+
+    #[test]
+    fn function_definition_and_call() {
+        assert_valid("fn get() => read(); get()", "2", 2)
     }
 }
