@@ -33,6 +33,8 @@ export function generate(ast, options = {}) {
         );
         if (bodyResult.variant === "err") return bodyResult;
         lines.push(`function ${stmt.name}(${jsParams}) { ${bodyResult.node} }`);
+        // Register function on _ctx so call expressions can look it up consistently
+        lines.push(`_ctx.${stmt.name} = ${stmt.name};`);
         break;
       }
       case NodeType.ExternImportStatement: {
@@ -215,7 +217,8 @@ function generateExpression(node, locals, hasReceiver) {
         if (result.variant === "err") return result;
         args.push(result.node);
       }
-      return { node: `${node.name}(${args.join(", ")})` };
+      // Look up on _ctx so extern functions from native modules work correctly
+      return { node: `_ctx.${node.name}(${args.join(", ")})` };
     }
     case NodeType.BinaryExpression: {
       const left = generateExpression(node.left, locals, hasReceiver);

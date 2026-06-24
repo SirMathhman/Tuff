@@ -4,8 +4,12 @@ import { compileTuffToJS } from "../../main/js/lib.js";
 function expectValid(source, stdIn, expectedExitCode) {
   const result = compileTuffToJS(source);
   if (result.variant === "err") throw new Error(result.error);
-  const actualExitCode = new Function("stdIn", result.value)(stdIn);
-  expect(expectedExitCode).toBe(actualExitCode);
+  try {
+    const actualExitCode = new Function("stdIn", result.value)(stdIn);
+    expect(expectedExitCode).toBe(actualExitCode);
+  } catch (e) {
+    throw new Error("Generated: '" + result.value + "'", e);
+  }
 }
 
 function expectInvalid(source) {
@@ -167,8 +171,12 @@ function expectValidWithModules(
 ) {
   const result = compileModulesToJS(moduleNames, moduleSources);
   if (result.variant === "err") throw new Error(result.error);
-  const actualExitCode = new Function("stdIn", result.value)(stdIn);
-  expect(expectedExitCode).toBe(actualExitCode);
+  try {
+    const actualExitCode = new Function("stdIn", result.value)(stdIn);
+    expect(expectedExitCode).toBe(actualExitCode);
+  } catch (e) {
+    throw new Error("Generated: '" + result.value + "'", e);
+  }
 }
 
 test("multi-module compilation returns value from single module", () => {
@@ -215,8 +223,12 @@ function expectValidWithNativeModules(
     nativeModules,
   );
   if (result.variant === "err") throw new Error(result.error);
-  const actualExitCode = new Function("stdIn", result.value)(stdIn);
-  expect(expectedExitCode).toBe(actualExitCode);
+  try {
+    const actualExitCode = new Function("stdIn", result.value)(stdIn);
+    expect(expectedExitCode).toBe(actualExitCode);
+  } catch (e) {
+    throw new Error("Generated: '" + result.value + "'", e);
+  }
 }
 
 test("native module import via extern let destructuring returns exported value", () => {
@@ -226,5 +238,18 @@ test("native module import via extern let destructuring returns exported value",
     { lib: "export const x = 1;" },
     "",
     1,
+  );
+});
+
+test("native module extern fn invocation returns function result", () => {
+  expectValidWithNativeModules(
+    ["index"],
+    {
+      index:
+        "extern let { add } = extern lib; extern fn add(first : I32, second : I32) : I32; add(3, 4)",
+    },
+    { lib: "export function add(first, second) { return first + second; }" },
+    "",
+    7,
   );
 });

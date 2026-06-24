@@ -77,9 +77,14 @@ export function compileModulesWithNative(
     // Initialize _ctx[name] so transformed export statements can write directly to it
     jsParts.push(`_ctx.${name} = {};`);
     // Transform "export const/let/var X = ..." into "_ctx.NAME.X = ..." so it runs in a function body
-    const transformedJs = js.replace(
+    let transformedJs = js.replace(
       /export\s+(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/g,
       `_ctx.${name}["$1"]`,
+    );
+    // Transform "export function NAME(..." into "_ctx.NAME['NAME'] = function NAME(..." so it runs in a function body
+    transformedJs = transformedJs.replace(
+      /export\s+function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g,
+      `_ctx.${name}["$1"] = function $1(`,
     );
     jsParts.push(transformedJs);
   }
