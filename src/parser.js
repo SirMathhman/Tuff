@@ -15,7 +15,9 @@ export const NodeType = {
   StringLiteral: "StringLiteral",
   Identifier: "Identifier",
   ObjectLiteral: "ObjectLiteral",
-};
+  BlockStatement: "BlockStatement",
+  ReturnStatement: "ReturnStatement",
+}
 
 // Helper to consume an optional trailing semicolon and advance position
 function maybeConsumeSemicolon(tokens, pos) {
@@ -155,16 +157,68 @@ function parseFunctionDeclaration(tokens, pos) {
     };
   pos++;
 
-  // Parse expression body
-  const expr = parseExpression(tokens, pos);
-  if (expr.variant === "err") return expr;
+  // Function body: either { ... } block or a single expression
+  let body;
+  let p;
+  if (tokens[pos]?.type === TokenType.LBRACE) {
+    const result = parseBlock(tokens, pos);
+    if (result.variant === "err") return result;
+    body = result.node;
+    p = result.nextPos;
+  } else {
+    const expr = parseExpression(tokens, pos);
+    if (expr.variant === "err") return expr;
+    body = { type: NodeType.ExpressionStatement, expression: expr.node };
+    p = expr.nextPos;
+  }
 
-  let p = expr.nextPos;
+  // Consume trailing semicolon if present
 
   // Consume trailing semicolon if present
   p = maybeConsumeSemicolon(tokens, p);
 
-  return { name, body: expr.node, nextPos: p };
+  return { name, body, nextPos: p };
+}
+
+// Parse a block statement: { stmt; stmt; ... }
+function parseBlock(tokens, pos) {
+  const statements = [];
+  if (tokens[pos]?.type !== TokenType.LBRACE)
+    return { variant: "err", error: `Expected '{' at position ${pos}` };
+  pos++;
+
+  while (
+    pos < tokens.length &&
+    tokens[pos].type !== TokenType.RBRACE &&
+    tokens[pos].type !== TokenType.EOF
+  ) {
+    // Return statement inside block: return expr ;
+    if (tokens[pos]?.value === "return" && tokens[pos]?.type === TokenType.IDENT) {
+      pos++; // consume 'return'
+      const expr = parseExpression(tokens, pos);
+      if (expr.variant === "err") return expr;
+      statements.push({
+        type: NodeType.ReturnStatement,
+        expression: expr.node,
+      });
+      pos = expr.nextPos;
+      pos = maybeConsumeSemicolon(tokens, pos);
+    } else {
+      const stmt = parseStatement(tokens, pos);
+      if (stmt.variant === "err") return stmt;
+      statements.push(stmt.statement);
+      pos = stmt.nextPos;
+    }
+  }
+
+  if (!tokens[pos])
+    return { variant: "err", error: `Expected '}' to close block` };
+  pos++;
+
+  return {
+    node: { type: NodeType.BlockStatement, body: statements },
+    nextPos: pos,
+  };
 }
 
 // type IDENT = TYPE ;

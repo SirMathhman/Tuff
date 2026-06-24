@@ -84,6 +84,13 @@ test("function declaration with return type annotation compiles and calls correc
 test("struct declaration with typed let and empty object literal compiles to 0", () => {
   expectValid("struct Empty {} let empty : Empty = {};", "", 0);
 });
+test("function with block body, generic return type, and struct instantiation returns 0", () => {
+  expectValid(
+    "struct Empty<T> {} fn get() : Empty<I32> => { return {}; }",
+    "",
+    0,
+  );
+});
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

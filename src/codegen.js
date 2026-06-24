@@ -11,9 +11,9 @@ export function generate(ast) {
         // Compile-time only declarations, no runtime code
         break;
       case NodeType.FunctionDeclaration: {
-        const bodyResult = generateExpression(stmt.body);
+        const bodyResult = generateFunctionBody(stmt.body);
         if (bodyResult.variant === "err") return bodyResult;
-        lines.push(`function ${stmt.name}() { return ${bodyResult.node}; }`);
+        lines.push(`function ${stmt.name}() { ${bodyResult.node} }`);
         break;
       }
       case NodeType.LetStatement: {
@@ -46,6 +46,32 @@ export function generate(ast) {
     `const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));\n` +
     lines.join("\n");
   return { node: body };
+}
+
+// Generate function body — handles both BlockStatement and single expression statement
+function generateFunctionBody(bodyNode) {
+  if (bodyNode.type === NodeType.BlockStatement) {
+    const blockLines = [];
+    for (const stmt of bodyNode.body) {
+      switch (stmt.type) {
+        case NodeType.ReturnStatement: {
+          const exprResult = generateExpression(stmt.expression);
+          if (exprResult.variant === "err") return exprResult;
+          blockLines.push(`return ${exprResult.node};`);
+          break;
+        }
+        default:
+          // Ignore non-return statements inside function blocks for now
+          break;
+      }
+    }
+    return { node: blockLines.join("\n") };
+  }
+
+  // Single expression body (fat arrow style)
+  const result = generateExpression(bodyNode.expression);
+  if (result.variant === "err") return result;
+  return { node: `return ${result.node};` };
 }
 
 function generateExpression(node) {
