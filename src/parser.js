@@ -27,6 +27,16 @@ function maybeConsumeSemicolon(tokens, pos) {
   return pos;
 }
 
+// Skip optional generic parameters <T, U> and return new position
+function skipGenerics(tokens, pos) {
+  if (tokens[pos]?.type !== TokenType.LT) return pos;
+  pos++; // consume '<'
+  while (pos < tokens.length && tokens[pos]?.type !== TokenType.GT) {
+    pos++;
+  }
+  return pos + 1; // consume '>'
+}
+
 export function parse(tokens) {
   const ast = [];
   let pos = 0;
@@ -240,16 +250,12 @@ function parseTypeAlias(tokens, pos) {
 
   // Optional generic parameters <T, U>
   if (tokens[pos]?.type === TokenType.LT) {
-    pos++; // consume '<'
-    while (pos < tokens.length && tokens[pos]?.type !== TokenType.GT) {
-      pos++;
-    }
+    pos = skipGenerics(tokens, pos);
     if (!tokens[pos])
       return {
         variant: "err",
         error: `Expected '>' to close generic parameters for type alias '${name}'`,
       };
-    pos++; // consume '>'
   }
 
   // Consume '='
@@ -292,16 +298,12 @@ function parseStructDeclaration(tokens, pos) {
 
   // Optional generic parameters <T, U>
   if (tokens[pos]?.type === TokenType.LT) {
-    pos++; // consume '<'
-    while (pos < tokens.length && tokens[pos]?.type !== TokenType.GT) {
-      pos++;
-    }
+    pos = skipGenerics(tokens, pos);
     if (!tokens[pos])
       return {
         variant: "err",
         error: `Expected '>' to close generic parameters for struct '${name}'`,
       };
-    pos++; // consume '>'
   }
 
   // Consume opening brace
