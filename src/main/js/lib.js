@@ -128,10 +128,16 @@ function compileSourceToJS(source, options = {}) {
 
   // Validate identifiers against builtins and declared variables
   const knownIdentifiers = new Set(["read"]);
+  // Module names that are native JS bindings — allow any method call on them
+  const externModuleNames = new Set(options.extraKnownIds || []);
   for (const id of options.extraKnownIds || []) {
     knownIdentifiers.add(id);
   }
-  const validateResult = validateIdentifiers(astResult.node, knownIdentifiers);
+  const validateResult = validateIdentifiers(
+    astResult.node,
+    knownIdentifiers,
+    externModuleNames,
+  );
   if (!validateResult.ok) return Err(validateResult.error);
 
   const jsResult = generate(astResult.node, { includePreamble, isEntryPoint });
@@ -141,11 +147,18 @@ function compileSourceToJS(source, options = {}) {
 }
 
 // Validate that all identifiers in the AST are known builtins or declared variables
-function validateIdentifiers(node, knownIds) {
+// externModuleNames: set of module names bound to native JS — allow any method call on them
+function validateIdentifiers(node, knownIds, externModuleNames = new Set()) {
   if (!node.type) return { ok: true };
 
   switch (node.type) {
     case NodeType.StructDeclaration:
+      // extern let bindings register a known identifier + allow arbitrary method calls
+      if (node.name === "extern_let" && node.bindingName) {
+        knownIds.add(node.bindingName);
+        externModuleNames.add(node.bindingName);
+      }
+      return { ok: true };
     case NodeType.TypeAlias:
       // Compile-time declarations don't reference unknown identifiers at runtime
       return { ok: true };
@@ -161,11 +174,11 @@ function validateIdentifiers(node, knownIds) {
           }
         }
       }
-      return validateIdentifiers(node.body, fnScope);
+      return validateIdentifiers(node.body, fnScope, externModuleNames);
     }
     case NodeType.Program:
       for (const child of node.body) {
-        const result = validateIdentifiers(child, knownIds);
+        const result = validateIdentifiers(child, knownIds, externModuleNames);
         if (!result.ok) return result;
       }
       return { ok: true };
@@ -186,7 +199,7 @@ function validateIdentifiers(node, knownIds) {
           knownIds.add(`__mutable_${node.name}`);
         }
       }
-      return validateIdentifiers(node.value, knownIds);
+      return validateIdentifiers(node.value, knownIds, externModuleNames);
     case NodeType.ExternImportStatement:
       // Register each imported binding as a known identifier
       for (const b of node.bindings) {
@@ -206,10 +219,14 @@ function validateIdentifiers(node, knownIds) {
       }
       // General expression-based assignment — validate target and value
       if (node.targetExpr) {
-        const targetResult = validateIdentifiers(node.targetExpr, knownIds);
+        const targetResult = validateIdentifiers(
+          node.targetExpr,
+          knownIds,
+          externModuleNames,
+        );
         if (!targetResult.ok) return targetResult;
       }
-      return validateIdentifiers(node.value, knownIds);
+      return validateIdentifiers(node.value, knownIds, externModuleNames);
     }
     case NodeType.ExportStatement: {
       // Register exported function names as known identifiers
@@ -218,7 +235,7 @@ function validateIdentifiers(node, knownIds) {
       }
       // For value exports, still validate the expression
       if (!node.isFunctionExport && node.value) {
-        return validateIdentifiers(node.value, knownIds);
+        return validateIdentifiers(node.value, knownIds, externModuleNames);
       }
       // Validate function body for function exports
       if (node.isFunctionExport && node.value?.body) {
@@ -230,12 +247,12 @@ function validateIdentifiers(node, knownIds) {
             }
           }
         }
-        return validateIdentifiers(node.value.body, fnScope);
+        return validateIdentifiers(node.value.body, fnScope, externModuleNames);
       }
       return { ok: true };
     }
     case NodeType.ExpressionStatement:
-      return validateIdentifiers(node.expression, knownIds);
+      return validateIdentifiers(node.expression, knownIds, externModuleNames);
     case NodeType.Identifier:
       if (!knownIds.has(node.name)) {
         return { ok: false, error: `Unknown identifier: ${node.name}` };
@@ -244,7 +261,11 @@ function validateIdentifiers(node, knownIds) {
     case NodeType.CallExpression:
       // Call on FQN path or dot expression: callee(args)
       if (node.callee) {
-        const calleeResult = validateIdentifiers(node.callee, knownIds);
+        const calleeResult = validateIdentifiers(
+          node.callee,
+          knownIds,
+          externModuleNames,
+        );
         if (!calleeResult.ok) return calleeResult;
       } else {
         // Builtins or user-declared functions
@@ -253,29 +274,45 @@ function validateIdentifiers(node, knownIds) {
         }
       }
       for (const arg of node.arguments) {
-        const result = validateIdentifiers(arg, knownIds);
+        const result = validateIdentifiers(arg, knownIds, externModuleNames);
         if (!result.ok) return result;
       }
       return { ok: true };
-    case NodeType.MethodCallExpression:
-      // Validate the method name is a known function
-      if (!knownIds.has(node.methodName)) {
-        return { ok: false, error: `Unknown method: ${node.methodName}` };
-      }
+    case NodeType.MethodCallExpression: {
+      // Validate arguments and object expression regardless.
       for (const arg of node.arguments) {
-        const result = validateIdentifiers(arg, knownIds);
+        const result = validateIdentifiers(arg, knownIds, externModuleNames);
         if (!result.ok) return result;
       }
-      // Also validate the object expression
-      return validateIdentifiers(node.object, knownIds);
+      const objResult = validateIdentifiers(
+        node.object,
+        knownIds,
+        externModuleNames,
+      );
+      if (!objResult.ok) return objResult;
+
+      // Only check method name against known IDs if the object is NOT an extern-bound module.
+      // Extern modules (native JS bindings) can have arbitrary methods we can't statically know about.
+      const isExternModule =
+        node.object.type === NodeType.Identifier &&
+        externModuleNames.has(node.object.name);
+      if (!isExternModule && !knownIds.has(node.methodName)) {
+        return { ok: false, error: `Unknown method: ${node.methodName}` };
+      }
+      return { ok: true };
+    }
     case NodeType.BinaryExpression: {
-      const leftResult = validateIdentifiers(node.left, knownIds);
+      const leftResult = validateIdentifiers(
+        node.left,
+        knownIds,
+        externModuleNames,
+      );
       if (!leftResult.ok) return leftResult;
-      return validateIdentifiers(node.right, knownIds);
+      return validateIdentifiers(node.right, knownIds, externModuleNames);
     }
     case NodeType.QualifiedPathExpression:
       // Validate the object part and property access (property is just a string)
-      return validateIdentifiers(node.object, knownIds);
+      return validateIdentifiers(node.object, knownIds, externModuleNames);
     case NodeType.ThisExpression:
       // "this" is always valid — resolves to _ctx at runtime
       return { ok: true };

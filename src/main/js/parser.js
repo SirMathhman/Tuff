@@ -131,7 +131,11 @@ function parseStatement(tokens, pos) {
   // Extern let declaration: extern let IDENT : Type = extern ... ;
   if (tokens[pos].type === TokenType.EXTERN_LET_DECLARATION) {
     return {
-      statement: { type: NodeType.StructDeclaration, name: "extern_let" },
+      statement: {
+        type: NodeType.StructDeclaration,
+        name: "extern_let",
+        bindingName: tokens[pos]?.value?.bindingName || null,
+      },
       nextPos: pos + 1,
     };
   }

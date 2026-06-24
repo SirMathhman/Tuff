@@ -396,9 +396,14 @@ export function tokenize(source) {
             skipToSemicolon();
           } else {
             // Check for extern let declaration: extern let IDENT : Type = extern ... ;
+            const bindingMatch = rest.match(
+              /^[ \t]+let[ \t]+([a-zA-Z_][a-zA-Z0-9_]*)/,
+            );
             tokens.push({
               type: TokenType.EXTERN_LET_DECLARATION,
-              value: "extern",
+              value: {
+                bindingName: bindingMatch ? bindingMatch[1] : "unknown",
+              },
               line: startLine,
               col: startCol,
             });
