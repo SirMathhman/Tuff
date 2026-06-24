@@ -78,6 +78,7 @@ function parseStatement(tokens, pos) {
       statement: {
         type: NodeType.FunctionDeclaration,
         name: result.name,
+        params: result.params,
         body: result.body,
       },
       nextPos: result.nextPos,
@@ -141,15 +142,39 @@ function parseFunctionDeclaration(tokens, pos) {
     return err(`Expected function name after 'fn'`, tokens, pos);
   pos++;
 
-  // Consume '('
+  // Consume '(' and parse parameters
   if (!tokens[pos] || tokens[pos].type !== TokenType.LPAREN)
     return err("Expected '(' for parameter list", tokens, pos);
   pos++;
 
-  // Consume ')'
+  const params = [];
   while (pos < tokens.length && tokens[pos]?.type !== TokenType.RPAREN) {
-    pos++;
+    if (tokens[pos]?.type === TokenType.IDENT) {
+      params.push(tokens[pos].value);
+      pos++;
+    } else {
+      return err(`Expected parameter name in function '${name}'`, tokens, pos);
+    }
+
+    // Optional type annotation : Type
+    if (tokens[pos]?.type === TokenType.COLON) {
+      pos++; // consume ':'
+      while (
+        pos < tokens.length &&
+        tokens[pos].type !== TokenType.COMMA &&
+        tokens[pos].type !== TokenType.RPAREN &&
+        tokens[pos].type !== TokenType.EOF
+      ) {
+        pos++;
+      }
+    }
+
+    // Optional comma separator
+    if (tokens[pos]?.type === TokenType.COMMA) {
+      pos++;
+    }
   }
+
   if (!tokens[pos])
     return err(
       `Expected ')' to close parameter list for function '${name}'`,
@@ -195,7 +220,7 @@ function parseFunctionDeclaration(tokens, pos) {
   // Consume trailing semicolon if present
   p = maybeConsumeSemicolon(tokens, p);
 
-  return { name, body, nextPos: p };
+  return { name, params, body, nextPos: p };
 }
 
 // Parse a block statement: { stmt; stmt; ... }
@@ -447,9 +472,30 @@ function parsePrimary(tokens, pos) {
     // Check for function call
     if (tokens[pos]?.type === TokenType.LPAREN) {
       pos++; // consume '('
-      pos++; // consume ')' — no args yet, just expect closing paren
+      const args = [];
+
+      while (pos < tokens.length && tokens[pos].type !== TokenType.RPAREN) {
+        const argResult = parseExpression(tokens, pos);
+        if (argResult.variant === "err") return argResult;
+        args.push(argResult.node);
+        pos = argResult.nextPos;
+
+        // Optional comma separator
+        if (tokens[pos]?.type === TokenType.COMMA) {
+          pos++;
+        }
+      }
+
+      if (!tokens[pos])
+        return err(
+          `Expected ')' to close call expression for '${name}'`,
+          tokens,
+          pos,
+        );
+      pos++; // consume ')'
+
       return {
-        node: { type: NodeType.CallExpression, name, arguments: [] },
+        node: { type: NodeType.CallExpression, name, arguments: args },
         nextPos: pos,
       };
     }

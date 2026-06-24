@@ -11,9 +11,10 @@ export function generate(ast) {
         // Compile-time only declarations, no runtime code
         break;
       case NodeType.FunctionDeclaration: {
+        const params = stmt.params ? stmt.params.join(", ") : "";
         const bodyResult = generateFunctionBody(stmt.body);
         if (bodyResult.variant === "err") return bodyResult;
-        lines.push(`function ${stmt.name}() { ${bodyResult.node} }`);
+        lines.push(`function ${stmt.name}(${params}) { ${bodyResult.node} }`);
         break;
       }
       case NodeType.LetStatement: {

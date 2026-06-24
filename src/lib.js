@@ -19,9 +19,16 @@ function validateIdentifiers(node, knownIds) {
     case NodeType.TypeAlias:
       // Compile-time declarations don't reference unknown identifiers at runtime
       return { ok: true };
-    case NodeType.FunctionDeclaration:
+    case NodeType.FunctionDeclaration: {
       knownIds.add(node.name);
-      return validateIdentifiers(node.body, knownIds);
+      const fnScope = new Set(knownIds);
+      if (node.params) {
+        for (const param of node.params) {
+          fnScope.add(param);
+        }
+      }
+      return validateIdentifiers(node.body, fnScope);
+    }
     case NodeType.Program:
       for (const child of node.body) {
         const result = validateIdentifiers(child, knownIds);

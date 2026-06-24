@@ -1,13 +1,16 @@
-/*
 struct Ok<T> { value : T }
 struct Err<X> { error : X }
 
 type Result<T, X> = Ok<T> | Err<X>;
 
-type Str = *[U8];
+type Str = *[U8]; 
+
+fn get() => 100;
+fn compileTuffToJS() => get("foo");
+/*
 
 out fn compileTuffToJS(source : Str) : Result<Str, Str> => {
-    Err("Invalid source: " + source);
+    Err("Invalid source: " + source)
 }
 
 extern type FileSystem;

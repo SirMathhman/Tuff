@@ -75,6 +75,15 @@ test("type alias with slice referencing struct compiles and exits with code 0", 
 test("string literal .length returns character count", () => {
   expectValid('"test".length', "", 4);
 });
+
+test("typed let with string variable, .length on identifier returns length", () => {
+  expectValid('type Str = *[U8]; let x : Str = "test"; x.length', "", 4);
+});
+
+test("string literal as argument to call expression, .length on parameter returns length", () => {
+  expectValid('fn len(s : *[U8]) => s.length; len("hello")', "", 5);
+});
+
 test("function declaration and call returns expression value", () => {
   expectValid("fn get() => 100; get()", "", 100);
 });
