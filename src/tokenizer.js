@@ -93,9 +93,12 @@ export function tokenize(source) {
       continue;
     }
 
-    throw new Error(`Unexpected character '${source[pos]}' at position ${pos}`);
+    return {
+      variant: "err",
+      error: `Unexpected character '${source[pos]}' at position ${pos}`,
+    };
   }
 
   tokens.push({ type: TokenType.EOF, value: null });
-  return tokens;
+  return { variant: "ok", value: tokens };
 }

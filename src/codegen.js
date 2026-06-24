@@ -5,16 +5,20 @@ export function generate(ast) {
 
   for (const stmt of ast.body) {
     switch (stmt.type) {
-      case NodeType.LetStatement:
-        lines.push(`var ${stmt.name} = ${generateExpression(stmt.value)};`);
+      case NodeType.LetStatement: {
+        const result = generateExpression(stmt.value);
+        if (result.variant === "err") return result;
+        lines.push(`var ${stmt.name} = ${result.node};`);
         break;
+      }
       case NodeType.ExpressionStatement: {
         // Last expression becomes return, others are just statements
-        const exprJS = generateExpression(stmt.expression);
+        const exprResult = generateExpression(stmt.expression);
+        if (exprResult.variant === "err") return exprResult;
         if (isLastStatement(ast, stmt)) {
-          lines.push(`return ${exprJS};`);
+          lines.push(`return ${exprResult.node};`);
         } else {
-          lines.push(`${exprJS};`);
+          lines.push(`${exprResult.node};`);
         }
         break;
       }
@@ -23,30 +27,38 @@ export function generate(ast) {
 
   // If no statements, return 0
   if (lines.length === 0) {
-    return "return 0;";
+    return { node: "return 0;" };
   }
 
   const body =
     `const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));\n` +
     lines.join("\n");
-  return body;
+  return { node: body };
 }
 
 function generateExpression(node) {
   switch (node.type) {
     case NodeType.NumberLiteral:
-      return String(node.value);
+      return { node: String(node.value) };
     case NodeType.Identifier:
-      return node.name;
+      return { node: node.name };
     case NodeType.CallExpression:
       if (node.name === "read") {
-        return "tokens.shift()";
+        return { node: "tokens.shift()" };
       }
-      throw new Error(`Unknown function: ${node.name}`);
-    case NodeType.BinaryExpression:
-      return `${generateExpression(node.left)} ${node.operator} ${generateExpression(node.right)}`;
+      return { variant: "err", error: `Unknown function: ${node.name}` };
+    case NodeType.BinaryExpression: {
+      const left = generateExpression(node.left);
+      if (left.variant === "err") return left;
+      const right = generateExpression(node.right);
+      if (right.variant === "err") return right;
+      return { node: `${left.node} ${node.operator} ${right.node}` };
+    }
     default:
-      throw new Error(`Unsupported expression type: ${node.type}`);
+      return {
+        variant: "err",
+        error: `Unsupported expression type: ${node.type}`,
+      };
   }
 }
 

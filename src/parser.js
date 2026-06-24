@@ -11,6 +11,14 @@ export const NodeType = {
   Identifier: "Identifier",
 };
 
+// Helper to consume an optional trailing semicolon and advance position
+function maybeConsumeSemicolon(tokens, pos) {
+  if (tokens[pos]?.type === TokenType.SEMICOLON) {
+    return pos + 1;
+  }
+  return pos;
+}
+
 export function parse(tokens) {
   const ast = [];
   let pos = 0;
@@ -25,42 +33,53 @@ export function parse(tokens) {
     }
 
     const stmt = parseStatement(tokens, pos);
+    if (stmt.variant === "err") return stmt;
     ast.push(stmt.statement);
     pos = stmt.nextPos;
   }
 
-  return { type: NodeType.Program, body: ast };
+  return { variant: "ok", node: { type: NodeType.Program, body: ast } };
 }
 
 function parseStatement(tokens, pos) {
   // Let statement
   if (tokens[pos].type === TokenType.LET) {
-    return parseLetStatement(tokens, pos);
+    const result = parseLetStatement(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: {
+        type: NodeType.LetStatement,
+        name: result.name,
+        value: result.value,
+      },
+      nextPos: result.nextPos,
+    };
   }
 
   // Expression statement
   const expr = parseExpression(tokens, pos);
-  pos = expr.nextPos;
+  if (expr.variant === "err") return expr;
 
-  // Consume trailing semicolon if present
-  if (tokens[pos]?.type === TokenType.SEMICOLON) {
-    pos++;
-  }
+  let p = maybeConsumeSemicolon(tokens, expr.nextPos);
 
   return {
     statement: { type: NodeType.ExpressionStatement, expression: expr.node },
-    nextPos: pos,
+    nextPos: p,
   };
 }
 
 function parseLetStatement(tokens, pos) {
   // let IDENT = expr ;
-  if (tokens[pos].type !== TokenType.LET) throw new Error("Expected 'let'");
+  if (tokens[pos].type !== TokenType.LET)
+    return { variant: "err", error: `Expected 'let' at position ${pos}` };
   pos++;
 
   const name = tokens[pos].value;
   if (tokens[pos].type !== TokenType.IDENT)
-    throw new Error("Expected identifier after 'let'");
+    return {
+      variant: "err",
+      error: `Expected identifier after 'let' at position ${pos}`,
+    };
   pos++;
 
   // Consume '=' if present
@@ -69,35 +88,33 @@ function parseLetStatement(tokens, pos) {
   }
 
   const expr = parseExpression(tokens, pos);
-  pos = expr.nextPos;
+  if (expr.variant === "err") return expr;
 
-  // Consume trailing semicolon if present
-  if (tokens[pos]?.type === TokenType.SEMICOLON) {
-    pos++;
-  }
+  let p = maybeConsumeSemicolon(tokens, expr.nextPos);
 
-  return {
-    statement: { type: NodeType.LetStatement, name, value: expr.node },
-    nextPos: pos,
-  };
+  return { name, value: expr.node, nextPos: p };
 }
 
 // Expression parsing with operator precedence (simple left-to-right for now)
 function parseExpression(tokens, pos) {
   const primary = parsePrimary(tokens, pos);
+  if (primary.variant === "err") return primary;
+
   let result = primary.node; // unwrap to get actual AST node
-  pos = primary.nextPos;
+  let p = primary.nextPos;
 
   while (
-    tokens[pos]?.type === TokenType.PLUS ||
-    tokens[pos]?.type === TokenType.MINUS ||
-    tokens[pos]?.type === TokenType.STAR ||
-    tokens[pos]?.type === TokenType.SLASH
+    tokens[p]?.type === TokenType.PLUS ||
+    tokens[p]?.type === TokenType.MINUS ||
+    tokens[p]?.type === TokenType.STAR ||
+    tokens[p]?.type === TokenType.SLASH
   ) {
-    const op = tokens[pos].value;
-    pos++;
-    const rightPrimary = parsePrimary(tokens, pos);
-    pos = rightPrimary.nextPos;
+    const op = tokens[p].value;
+    p++;
+    const rightPrimary = parsePrimary(tokens, p);
+    if (rightPrimary.variant === "err") return rightPrimary;
+
+    p = rightPrimary.nextPos;
 
     result = {
       type: NodeType.BinaryExpression,
@@ -107,11 +124,17 @@ function parseExpression(tokens, pos) {
     };
   }
 
-  return { node: result, nextPos: pos };
+  return { node: result, nextPos: p };
 }
 
 function parsePrimary(tokens, pos) {
   // Number literal
+  if (!tokens[pos])
+    return {
+      variant: "err",
+      error: `Unexpected end of input at position ${pos}`,
+    };
+
   if (tokens[pos].type === TokenType.NUMBER) {
     const value = tokens[pos].value;
     pos++;
@@ -136,5 +159,8 @@ function parsePrimary(tokens, pos) {
     return { node: { type: NodeType.Identifier, name }, nextPos: pos };
   }
 
-  throw new Error(`Unexpected token at position ${pos}: ${tokens[pos]?.type}`);
+  return {
+    variant: "err",
+    error: `Unexpected token at position ${pos}: ${tokens[pos]?.type}`,
+  };
 }
