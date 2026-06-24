@@ -25,7 +25,7 @@ enum AstExpr {
         bool,
     ), // for (var in start..end) body_var +=? body_expr;
     Match(Box<AstExpr>, Vec<(AstExpr, AstExpr)>), // scrutinee, vec of (pattern, result)
-    FnDef(String, Box<AstExpr>), // fn name() => expr
+    FnDef(String, Vec<String>, Box<AstExpr>), // fn name(params) => expr
     Call(String, Vec<AstExpr>), // funcName(args)
 }
 
@@ -242,16 +242,6 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// Consume empty parens: '(' ')'
-    fn expect_parens(&mut self) -> Result<(), std::fmt::Error> {
-        self.expect_open_paren()?;
-        if !matches!(self.peek(), Token::RParen) {
-            return Err(std::fmt::Error);
-        }
-        self.eat(); // ')'
-        Ok(())
-    }
-
     /// program → ( "let" ["mut"] IDENT "=" expr ";" | IDENT "=" expr ";" | IDENT "+=" expr ";" | for_stmt )* expr?
     fn parse_program(
         &mut self,
@@ -322,11 +312,30 @@ impl<'a> Parser<'a> {
         Ok((lets, assigns, final_expr))
     }
 
-    /// fn_statement → "fn" IDENT () "=>" expr ";"
+    /// fn_statement → "fn" IDENT ( params ) "=>" expr ";"
     fn parse_fn(&mut self) -> Result<(&'a str, AstExpr), std::fmt::Error> {
         self.eat(); // 'fn'
         let name = self.expect_ident()?;
-        self.expect_parens()?;
+
+        if !matches!(self.peek(), Token::LParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '('
+
+        // Parse comma-separated parameter names
+        let mut params: Vec<String> = Vec::new();
+        while !matches!(self.peek(), Token::RParen) {
+            if !params.is_empty() {
+                return Err(std::fmt::Error); // expected ',' or ')'
+            }
+            let param_name = self.expect_ident()?.to_string();
+            params.push(param_name);
+        }
+
+        if !matches!(self.peek(), Token::RParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // ')'
 
         if !matches!(self.peek(), Token::FatArrow) {
             return Err(std::fmt::Error);
@@ -334,7 +343,10 @@ impl<'a> Parser<'a> {
         self.eat(); // '=>'
 
         let body = self.parse_expr_semicolon()?;
-        Ok((name, AstExpr::FnDef(name.to_string(), Box::new(body))))
+        Ok((
+            name,
+            AstExpr::FnDef(name.to_string(), params, Box::new(body)),
+        ))
     }
 
     /// let_statement → "let" ["mut"] IDENT "=" expr ";"
@@ -682,8 +694,22 @@ impl<'a> Parser<'a> {
                 self.eat();
                 // Check if this is a function call: IDENT ( )
                 if matches!(self.peek(), Token::LParen) {
-                    self.expect_parens()?;
-                    Ok(AstExpr::Call(name.to_string(), Vec::new()))
+                    self.expect_open_paren()?;
+
+                    let mut args: Vec<AstExpr> = Vec::new();
+                    while !matches!(self.peek(), Token::RParen) {
+                        if !args.is_empty() {
+                            return Err(std::fmt::Error); // expected ',' or ')'
+                        }
+                        let arg_expr = self.parse_expr()?;
+                        args.push(arg_expr);
+                    }
+
+                    if !matches!(self.peek(), Token::RParen) {
+                        return Err(std::fmt::Error);
+                    }
+                    self.eat(); // ')'
+                    Ok(AstExpr::Call(name.to_string(), args))
                 } else {
                     Ok(AstExpr::Var(name.to_string()))
                 }
@@ -866,7 +892,7 @@ fn emit_flatten(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
 
             Ok((decls, format!("__if_{}", id)))
         }
-        AstExpr::FnDef(_, _) => {
+        AstExpr::FnDef(_, _, _) => {
             // Function definitions are handled at the top level of compile().
             return Err(std::fmt::Error);
         }
@@ -904,7 +930,7 @@ fn flatten_block(
                 let val_name = emit_loop_expr(break_expr, &mut decls)?;
                 write!(decls, "int {} = {};\n", name, val_name).map_err(|_| std::fmt::Error)?;
             }
-            AstExpr::FnDef(_, _) => {
+            AstExpr::FnDef(_, _, _) => {
                 // Function definitions shouldn't appear inside blocks.
                 return Err(std::fmt::Error);
             }
@@ -1017,12 +1043,20 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             // This variant should not reach emit_expr directly.
             return Err(std::fmt::Error);
         }
-        AstExpr::FnDef(_, _) => {
+        AstExpr::FnDef(_, _, _) => {
             // Function definitions are handled at the top level of compile().
             return Err(std::fmt::Error);
         }
-        AstExpr::Call(func_name, _args) => {
-            write!(buf, "{}()", func_name)?;
+        AstExpr::Call(func_name, args) => {
+            write!(buf, "{}", func_name)?;
+            write!(buf, "(")?;
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    write!(buf, ", ")?;
+                }
+                emit_expr(arg, buf)?;
+            }
+            write!(buf, ")")?;
         }
     }
     Ok(())
@@ -1054,12 +1088,21 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
 
     // Emit function definitions before main()
     for (_, expr) in &lets {
-        if let AstExpr::FnDef(ref name, ref body_expr) = *expr {
+        if let AstExpr::FnDef(ref name, ref params, ref body_expr) = *expr {
             let mut body_buf = String::new();
             emit_expr(body_expr.as_ref(), &mut body_buf).map_err(|_| std::fmt::Error)?;
+
+            // Build C parameter list: "int p1, int p2"
+            let param_list: Vec<String> = params.iter().map(|p| format!("int {}", p)).collect();
             c.push_str(&format!(
-                "int {}(void) {{\n  return {};\n}}\n",
-                name, body_buf
+                "int {}({}) {{\n  return {};\n}}\n",
+                name,
+                if param_list.is_empty() {
+                    "void".to_string()
+                } else {
+                    param_list.join(", ")
+                },
+                body_buf
             ));
         }
     }
@@ -1068,7 +1111,7 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
 
     // Emit variable declarations for let statements (skip function definitions)
     for (name, expr) in &lets {
-        if matches!(*expr, AstExpr::FnDef(_, _)) {
+        if matches!(*expr, AstExpr::FnDef(_, _, _)) {
             continue; // Already emitted as C function above
         }
         let (decls, value) = emit_flatten(expr)?;
@@ -1338,5 +1381,10 @@ mod tests {
     #[test]
     fn function_definition_and_call() {
         assert_valid("fn get() => read(); get()", "2", 2)
+    }
+
+    #[test]
+    fn function_with_parameter() {
+        assert_valid("fn add(first) => first + read(); add(1)", "2", 3)
     }
 }
