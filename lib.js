@@ -22,15 +22,13 @@ export function compileTuffToJS(source) {
   let jsLines = [];
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
-    if (stmt === "read()") {
-      // Last statement's value is returned, earlier ones just consume tokens
-      if (i === statements.length - 1) {
-        jsLines.push("return tokens.shift();");
-      } else {
-        jsLines.push("tokens.shift();");
-      }
+    // Replace all read() calls with tokens.shift() to consume stdin sequentially
+    const compiledStmt = stmt.replace(/read\(\)/g, "tokens.shift()");
+
+    if (i === statements.length - 1) {
+      jsLines.push(`return ${compiledStmt};`);
     } else {
-      return Err(`Unsupported statement: ${stmt}`);
+      jsLines.push(compiledStmt + ";");
     }
   }
 
