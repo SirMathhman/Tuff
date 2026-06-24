@@ -5,6 +5,9 @@ export function generate(ast) {
 
   for (const stmt of ast.body) {
     switch (stmt.type) {
+      case NodeType.StructDeclaration:
+        // Struct declarations compile to no-op; if last statement, return 0
+        break;
       case NodeType.LetStatement: {
         const result = generateExpression(stmt.value);
         if (result.variant === "err") return result;
@@ -64,6 +67,9 @@ function generateExpression(node) {
 
 function isLastStatement(ast, stmt) {
   const body = ast.body;
-  // Filter out empty-like nodes and find the last real statement
-  return body[body.length - 1] === stmt;
+  // Skip struct declarations — they don't produce runtime code
+  for (let i = body.length - 1; i >= 0; i--) {
+    if (body[i].type !== NodeType.StructDeclaration) return body[i] === stmt;
+  }
+  return false;
 }

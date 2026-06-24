@@ -1,6 +1,7 @@
 // Token types
 export const TokenType = {
   LET: "LET",
+  STRUCT: "STRUCT",
   IDENT: "IDENT",
   NUMBER: "NUMBER",
   PLUS: "+",
@@ -9,6 +10,8 @@ export const TokenType = {
   SLASH: "/",
   LPAREN: "(",
   RPAREN: ")",
+  LBRACE: "{",
+  RBRACE: "}",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -40,6 +43,18 @@ export function tokenize(source) {
     }
     if (source[pos] === ")") {
       tokens.push({ type: TokenType.RPAREN, value: ")" });
+      pos++;
+      continue;
+    }
+
+    // Braces
+    if (source[pos] === "{") {
+      tokens.push({ type: TokenType.LBRACE, value: "{" });
+      pos++;
+      continue;
+    }
+    if (source[pos] === "}") {
+      tokens.push({ type: TokenType.RBRACE, value: "}" });
       pos++;
       continue;
     }
@@ -87,6 +102,8 @@ export function tokenize(source) {
       // Check for keyword
       if (name === "let") {
         tokens.push({ type: TokenType.LET, value: "let" });
+      } else if (name === "struct") {
+        tokens.push({ type: TokenType.STRUCT, value: "struct" });
       } else {
         tokens.push({ type: TokenType.IDENT, value: name });
       }

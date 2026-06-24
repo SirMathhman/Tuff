@@ -15,6 +15,9 @@ function validateIdentifiers(node, knownIds) {
   if (!node.type) return { ok: true };
 
   switch (node.type) {
+    case NodeType.StructDeclaration:
+      // Struct declarations don't reference unknown identifiers
+      return { ok: true };
     case NodeType.Program:
       for (const child of node.body) {
         const result = validateIdentifiers(child, knownIds);

@@ -36,6 +36,10 @@ test("expression with two reads sums the values", () => {
   expectValid("read() + read()", "100 20", 120);
 });
 
+test("struct Empty {} compiles and exits with code 0", () => {
+  expectValid("struct Empty {}", "", 0);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

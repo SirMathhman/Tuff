@@ -4,6 +4,7 @@ import { TokenType } from "./tokenizer.js";
 export const NodeType = {
   Program: "Program",
   LetStatement: "LetStatement",
+  StructDeclaration: "StructDeclaration",
   ExpressionStatement: "ExpressionStatement",
   CallExpression: "CallExpression",
   BinaryExpression: "BinaryExpression",
@@ -42,6 +43,16 @@ export function parse(tokens) {
 }
 
 function parseStatement(tokens, pos) {
+  // Struct declaration
+  if (tokens[pos].type === TokenType.STRUCT) {
+    const result = parseStructDeclaration(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: { type: NodeType.StructDeclaration, name: result.name },
+      nextPos: result.nextPos,
+    };
+  }
+
   // Let statement
   if (tokens[pos].type === TokenType.LET) {
     const result = parseLetStatement(tokens, pos);
@@ -66,6 +77,36 @@ function parseStatement(tokens, pos) {
     statement: { type: NodeType.ExpressionStatement, expression: expr.node },
     nextPos: p,
   };
+}
+
+// struct IDENT { ... }
+function parseStructDeclaration(tokens, pos) {
+  if (tokens[pos].type !== TokenType.STRUCT)
+    return { variant: "err", error: `Expected 'struct' at position ${pos}` };
+  pos++;
+
+  const name = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return {
+      variant: "err",
+      error: `Expected struct name after 'struct' at position ${pos}`,
+    };
+  pos++;
+
+  // Consume opening brace
+  if (!tokens[pos] || tokens[pos].type !== TokenType.LBRACE)
+    return { variant: "err", error: `Expected '{' for struct body` };
+  pos++;
+
+  // Skip to closing brace (empty body for now — no field parsing yet)
+  while (pos < tokens.length && tokens[pos]?.type !== TokenType.RBRACE) {
+    pos++;
+  }
+  if (!tokens[pos])
+    return { variant: "err", error: `Expected '}' to close struct` };
+  pos++; // consume '}'
+
+  return { name, nextPos: pos };
 }
 
 function parseLetStatement(tokens, pos) {
