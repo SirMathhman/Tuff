@@ -230,9 +230,9 @@ impl<'a> Parser<'a> {
                         let (name, expr) = self.parse_compound_assign()?;
                         assigns.push((name, expr, true));
                     } else {
-                        // Final expression
-                        if final_expr.is_some() {
-                            return Err(std::fmt::Error);
+                        // Final expression — allow multiple; last one wins.
+                        if let Some(prev) = final_expr.take() {
+                            assigns.push(("_", prev, false));
                         }
                         final_expr = Some(self.parse_expr()?);
                     }
@@ -329,18 +329,22 @@ impl<'a> Parser<'a> {
 
         let then_expr = self.parse_expr()?;
 
-        if !matches!(self.peek(), Token::Else) {
-            return Err(std::fmt::Error);
+        // else is optional — if absent, treat as if-then with 0 for the else branch.
+        if matches!(self.peek(), Token::Else) {
+            self.eat(); // consume 'else'
+            let else_expr = self.parse_expr()?;
+            Ok(AstExpr::If(
+                Box::new(condition),
+                Box::new(then_expr),
+                Box::new(else_expr),
+            ))
+        } else {
+            Ok(AstExpr::If(
+                Box::new(condition),
+                Box::new(then_expr),
+                Box::new(AstExpr::Num(0)),
+            ))
         }
-        self.eat(); // consume 'else'
-
-        let else_expr = self.parse_expr()?;
-
-        Ok(AstExpr::If(
-            Box::new(condition),
-            Box::new(then_expr),
-            Box::new(else_expr),
-        ))
     }
 
     /// block → "{" ("let" ["mut"] IDENT "=" expr ";")* expr? "}"
@@ -517,6 +521,13 @@ fn next_loop_id() -> u64 {
     LOOP_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
+static IF_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn next_if_id() -> u64 {
+    use std::sync::atomic::Ordering;
+    IF_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
 /// Emit C code for a loop expression: while(1) { __loop_N = <break_expr>; break; }
 /// Returns the temp variable name to reference.
 fn emit_loop_expr(break_expr: &AstExpr, decls: &mut String) -> Result<String, std::fmt::Error> {
@@ -543,6 +554,61 @@ fn emit_loop_expr(break_expr: &AstExpr, decls: &mut String) -> Result<String, st
     }
 
     Ok(format!("__loop_{}", id))
+}
+
+/**
+ * Recursively flatten an expression into (declarations_code, value_expression).
+ * Handles blocks, loops, and if-statements with proper C code generation.
+ */
+fn emit_flatten(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
+    match expr {
+        AstExpr::Block(lets_inner, stmts_inner, final_inner) => {
+            flatten_block(lets_inner, stmts_inner, final_inner)
+        }
+        AstExpr::Loop(break_expr) => {
+            let mut decls = String::new();
+            let val_name = emit_loop_expr(break_expr, &mut decls)?;
+            Ok((decls, val_name))
+        }
+        AstExpr::If(cond, then_br, else_br) => {
+            // Emit as a proper C if-statement with temp variable.
+            let id = next_if_id();
+            let mut decls = String::new();
+
+            write!(decls, "int __if_{};\n", id).map_err(|_| std::fmt::Error)?;
+
+            // Flatten condition.
+            let (_, cond_val) = emit_flatten(cond)?;
+
+            // Flatten then and else branches.
+            let (then_decl, then_val) = emit_flatten(then_br)?;
+            let (else_decl, else_val) = emit_flatten(else_br)?;
+
+            writeln!(
+                decls,
+                "if ({}) {{ {} __if_{} = {}; }}",
+                cond_val, then_decl, id, then_val
+            )
+            .map_err(|_| std::fmt::Error)?;
+
+            // Only emit else if it's not the default 0.
+            if !matches!(else_br.as_ref(), AstExpr::Num(0)) {
+                writeln!(
+                    decls,
+                    "else {{ {} __if_{} = {}; }}",
+                    else_decl, id, else_val
+                )
+                .map_err(|_| std::fmt::Error)?;
+            }
+
+            Ok((decls, format!("__if_{}", id)))
+        }
+        _ => {
+            let mut val_buf = String::new();
+            emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
+            Ok((String::new(), val_buf))
+        }
+    }
 }
 
 /**
@@ -697,38 +763,22 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     c.push_str("\n  if (strcmp(s, \"true\") == 0) return 1;\n  return 0;\n}\n");
     c.push_str("int main() {\n");
 
-    // Helper: flatten blocks and loops into (declarations, value_expression).
-    let flatten = |expr: &AstExpr| -> Result<(String, String), std::fmt::Error> {
-        match expr {
-            AstExpr::Block(lets_inner, stmts_inner, final_inner) => {
-                flatten_block(lets_inner, stmts_inner, final_inner)
-            }
-            AstExpr::Loop(break_expr) => {
-                let mut decls = String::new();
-                let val_name = emit_loop_expr(break_expr, &mut decls)?;
-                Ok((decls, val_name))
-            }
-            _ => {
-                let mut val_buf = String::new();
-                emit_expr(expr, &mut val_buf).map_err(|_| std::fmt::Error)?;
-                Ok((String::new(), val_buf))
-            }
-        }
-    };
-
     // Emit variable declarations for let statements
     for (name, expr) in &lets {
-        let (decls, value) = flatten(expr)?;
+        let (decls, value) = emit_flatten(expr)?;
         write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
         write!(c, " int {} = {};", name, value).map_err(|_| std::fmt::Error)?;
     }
 
     // Emit assignment statements (for mutable variables)
     for (name, expr, is_compound) in &assigns {
-        let (decls, value) = flatten(expr)?;
+        let (decls, value) = emit_flatten(expr)?;
         write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
         if *is_compound {
             writeln!(c, " {} += {};", name, value).map_err(|_| std::fmt::Error)?;
+        } else if *name == "_" {
+            // Side-effect expression — only emit declarations, no assignment.
+            let _ = value;
         } else {
             writeln!(c, " {} = {};", name, value).map_err(|_| std::fmt::Error)?;
         }
@@ -737,7 +787,7 @@ fn compile(source: &str) -> Result<String, std::fmt::Error> {
     // Emit final expression as return value (or 0 if none)
     match final_expr {
         Some(ref expr) => {
-            let (decls, value) = flatten(expr)?;
+            let (decls, value) = emit_flatten(expr)?;
             write!(c, "{}", decls).map_err(|_| std::fmt::Error)?;
             writeln!(c, " return {};", value).map_err(|_| std::fmt::Error)?;
         }
@@ -767,7 +817,7 @@ fn main() {
 fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
     let result = compile(source);
     if result.is_err() {
-        panic!("Compilation failed with error: {}", result.unwrap_err());
+        panic!("Compilation failed for source: {}", source);
     }
 
     let generated_c = result.unwrap();
@@ -811,7 +861,7 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
 
     let actual_exit_code = run_output.status.code().unwrap_or(-1);
 
-    if (expected_exit_code != actual_exit_code) {
+    if expected_exit_code != actual_exit_code {
         panic!(
             "expected exit code: {} but was actually: {}, generated code '{}'",
             expected_exit_code, actual_exit_code, generated_c
@@ -932,5 +982,10 @@ mod tests {
     #[test]
     fn block_assignment_statement() {
         assert_valid("let mut x = read(); { x = read(); } x", "2 3", 3);
+    }
+
+    #[test]
+    fn if_without_else_block_then() {
+        assert_valid("let mut x = read(); if (true) { x = read(); } x", "2 3", 3);
     }
 }

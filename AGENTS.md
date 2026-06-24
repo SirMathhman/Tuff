@@ -7,14 +7,43 @@ Tuff is a compiler written in Rust that translates `.tuff` source files into C c
 - **Language**: Rust (edition 2024)
 - **Build**: `cargo build`, `cargo run`
 - **Test**: `cargo test`
+- **Single-file codebase**: Everything lives in `src/main.rs` (~850 lines). No modules or external dependencies.
+
+## Tuff Language Grammar
+
+The language supports these constructs (all values are integers):
+
+| Construct       | Syntax Example                  | Description                    |
+| --------------- | ------------------------------- | ------------------------------ |
+| Literals        | `42`, `true`, `false`           | Integer and boolean literals   |
+| Variables       | `let x = 5;` / `let mut x = 1;` | Immutable or mutable binding   |
+| Assignment      | `x = read();`                   | Reassign a mutable variable    |
+| Compound assign | `x += read();`                  | Add-and-assign                 |
+| Addition        | `a + b`                         | Integer addition               |
+| Comparison      | `a < b`                         | Less-than (returns 0 or 1)     |
+| If/else         | `if (cond) then else otherwise` | Ternary conditional            |
+| Blocks          | `{ let y = x; y }`              | Scoped let + statements        |
+| Loops           | `loop { break expr; }`          | Infinite loop with break value |
+| I/O             | `read()`, `readBool()`          | Read int / bool from stdin     |
+
+Programs are a sequence of declarations and assignments followed by an optional final expression. The final expression's value becomes the program's exit code.
 
 ## Key Conventions
 
-- Source files use the `.tuff` extension. The compiler reads a `.tuff` file, generates C code, and writes it to a `.c` file.
 - Test helpers live in `src/main.rs`:
-  - `assert_valid(source, stdin, expected_exit_code)` — compiles Tuff → C → executable, runs it, and asserts the exit code matches.
+  - `assert_valid(source, stdin, expected_exit_code)` — compiles Tuff → C → executable via `clang`, runs it with piped stdin, and asserts the exit code matches.
   - `assert_invalid(source)` — asserts that compilation fails for malformed input.
-- When implementing new language features, add test cases using these helpers before writing the compiler logic (TDD).
+- **TDD workflow**: When implementing new language features, add test cases using these helpers _before_ writing compiler logic.
+
+## Architecture (top to bottom in `src/main.rs`)
+
+1. **`AstExpr`** — enum of AST nodes (`Read`, `Var`, `Add`, `If`, `Block`, etc.)
+2. **Lexer** — `tokenize()` produces a flat `Vec<Token>` from source text
+3. **Parser** — `Parser::parse_program()` builds the AST; recursive descent with `parse_expr() → parse_term()` precedence
+4. **Codegen** — `compile()` flattens blocks/loops/if-statements into C declarations, then emits `main()` with a `return <final_expr>;`
+5. **Tests** — integration tests that invoke `clang` as an external subprocess
+
+Generated C always includes two runtime helpers: `read_val()` (integer input) and `read_bool()` (string-to-bool).
 
 ## Build / Test Commands
 
@@ -25,8 +54,3 @@ Tuff is a compiler written in Rust that translates `.tuff` source files into C c
 | `cargo test`   | Run unit tests                               |
 | `cargo fmt`    | Format Rust source code                      |
 | `cargo clippy` | Lint for common mistakes                     |
-
-## Architecture Notes
-
-- The main entry point is `compile(source: &str) -> Result<&str, Error>` which takes Tuff source and returns generated C code as a string.
-- Generated C output is written to disk so it can be compiled externally (e.g., with `clang`).
