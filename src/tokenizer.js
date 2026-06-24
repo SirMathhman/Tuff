@@ -14,6 +14,7 @@ export const TokenType = {
   RBRACE: "}",
   LT: "<",
   GT: ">",
+  COLON: ":",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -69,6 +70,13 @@ export function tokenize(source) {
     }
     if (source[pos] === ">") {
       tokens.push({ type: TokenType.GT, value: ">" });
+      pos++;
+      continue;
+    }
+
+    // Colon (type annotation)
+    if (source[pos] === ":") {
+      tokens.push({ type: TokenType.COLON, value: ":" });
       pos++;
       continue;
     }
