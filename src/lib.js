@@ -16,7 +16,8 @@ function validateIdentifiers(node, knownIds) {
 
   switch (node.type) {
     case NodeType.StructDeclaration:
-      // Struct declarations don't reference unknown identifiers
+    case NodeType.TypeAlias:
+      // Compile-time declarations don't reference unknown identifiers at runtime
       return { ok: true };
     case NodeType.Program:
       for (const child of node.body) {

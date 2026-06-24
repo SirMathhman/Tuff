@@ -2,6 +2,7 @@
 export const TokenType = {
   LET: "LET",
   STRUCT: "STRUCT",
+  TYPE_ALIAS: "TYPE_ALIAS",
   IDENT: "IDENT",
   NUMBER: "NUMBER",
   PLUS: "+",
@@ -141,6 +142,8 @@ export function tokenize(source) {
         tokens.push({ type: TokenType.LET, value: "let" });
       } else if (name === "struct") {
         tokens.push({ type: TokenType.STRUCT, value: "struct" });
+      } else if (name === "type") {
+        tokens.push({ type: TokenType.TYPE_ALIAS, value: "type" });
       } else {
         tokens.push({ type: TokenType.IDENT, value: name });
       }

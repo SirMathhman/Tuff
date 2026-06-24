@@ -5,6 +5,7 @@ export const NodeType = {
   Program: "Program",
   LetStatement: "LetStatement",
   StructDeclaration: "StructDeclaration",
+  TypeAlias: "TypeAlias",
   ExpressionStatement: "ExpressionStatement",
   CallExpression: "CallExpression",
   BinaryExpression: "BinaryExpression",
@@ -43,6 +44,16 @@ export function parse(tokens) {
 }
 
 function parseStatement(tokens, pos) {
+  // Type alias: type IDENT = TYPE ;
+  if (tokens[pos].type === TokenType.TYPE_ALIAS) {
+    const result = parseTypeAlias(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: { type: NodeType.TypeAlias, name: result.name },
+      nextPos: result.nextPos,
+    };
+  }
+
   // Struct declaration
   if (tokens[pos].type === TokenType.STRUCT) {
     const result = parseStructDeclaration(tokens, pos);
@@ -77,6 +88,36 @@ function parseStatement(tokens, pos) {
     statement: { type: NodeType.ExpressionStatement, expression: expr.node },
     nextPos: p,
   };
+}
+
+// type IDENT = TYPE ;
+function parseTypeAlias(tokens, pos) {
+  if (tokens[pos].type !== TokenType.TYPE_ALIAS)
+    return { variant: "err", error: `Expected 'type' at position ${pos}` };
+  pos++;
+
+  const name = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return {
+      variant: "err",
+      error: `Expected alias name after 'type' at position ${pos}`,
+    };
+  pos++;
+
+  // Consume '='
+  if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS)
+    return { variant: "err", error: `Expected '=' for type alias` };
+  pos++;
+
+  // Skip to semicolon (consume the RHS type expression — no validation needed)
+  while (pos < tokens.length && tokens[pos]?.type !== TokenType.SEMICOLON) {
+    pos++;
+  }
+  if (!tokens[pos])
+    return { variant: "err", error: `Expected ';' to end type alias` };
+  pos++; // consume ';'
+
+  return { name, nextPos: pos };
 }
 
 // struct IDENT <T, U> { ... }

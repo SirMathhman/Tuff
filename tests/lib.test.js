@@ -56,6 +56,10 @@ test("multiple struct declarations compile and exit with code 0", () => {
   expectValid("struct A {} struct B {}", "", 0);
 });
 
+test("type alias compiles and exits with code 0", () => {
+  expectValid("type Temp = I32;", "", 0);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
