@@ -253,3 +253,16 @@ test("native module extern fn invocation returns function result", () => {
     7,
   );
 });
+
+test("native module extern fn with receiver invokes method on struct instance", () => {
+  expectValidWithNativeModules(
+    ["index"],
+    {
+      index:
+        "extern let { manhattan } = extern lib; struct Point { x : I32, y : I32 } extern fn manhattan(this : Point) : I32; let point = Point { x : 3, y : 4 }; point.manhattan()",
+    },
+    { lib: "export function manhattan(point) { return point.x + point.y; }" },
+    "",
+    7,
+  );
+});

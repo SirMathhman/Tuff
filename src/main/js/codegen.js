@@ -182,7 +182,7 @@ function generateExpression(node, locals, hasReceiver) {
       return { node: `${objResult.node}.${node.property}` };
     }
     case NodeType.MethodCallExpression: {
-      // Method call: obj.method() → methodName(obj, ...args)
+      // Method call: obj.method() → _ctx.methodName(obj, ...args)
       const objResult = generateExpression(node.object, locals, hasReceiver);
       if (objResult.variant === "err") return objResult;
       const args = [objResult.node];
@@ -191,7 +191,8 @@ function generateExpression(node, locals, hasReceiver) {
         if (result.variant === "err") return result;
         args.push(result.node);
       }
-      return { node: `${node.methodName}(${args.join(", ")})` };
+      // Look up on _ctx so extern methods from native modules work correctly
+      return { node: `_ctx.${node.methodName}(${args.join(", ")})` };
     }
     case NodeType.ThisExpression:
       // Inside a method with receiver, 'this' refers to the renamed '_self' param
