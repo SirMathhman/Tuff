@@ -1,5 +1,6 @@
 // Token types
 export const TokenType = {
+  OUT: "OUT",
   LET: "LET",
   MUT: "MUT",
   STRUCT: "STRUCT",
@@ -315,7 +316,14 @@ export function tokenize(source) {
       }
 
       // Check for keyword
-      if (name === "this") {
+      if (name === "out") {
+        tokens.push({
+          type: TokenType.OUT,
+          value: "out",
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "this") {
         tokens.push({
           type: TokenType.THIS,
           value: "this",

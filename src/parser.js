@@ -3,6 +3,8 @@ import { TokenType } from "./tokenizer.js";
 // AST Node Types
 export const NodeType = {
   Program: "Program",
+  ExportStatement: "ExportStatement",
+  DestructureBinding: "DestructureBinding",
   LetStatement: "LetStatement",
   StructDeclaration: "StructDeclaration",
   TypeAlias: "TypeAlias",
@@ -140,10 +142,38 @@ function parseStatement(tokens, pos) {
     };
   }
 
+  // Export statement: out let IDENT = expr ;
+  if (tokens[pos].type === TokenType.OUT) {
+    const result = parseExportStatement(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: {
+        type: NodeType.ExportStatement,
+        name: result.name,
+        value: result.value,
+      },
+      nextPos: result.nextPos,
+    };
+  }
+
   // Let statement (let mut? IDENT : Type? = expr ;)
   if (tokens[pos].type === TokenType.LET) {
     const result = parseLetStatement(tokens, pos);
     if (result.variant === "err") return result;
+
+    // Destructuring: let { x , y } = expr ;
+    if (Array.isArray(result.name)) {
+      return {
+        statement: {
+          type: NodeType.LetStatement,
+          bindings: result.name,
+          value: result.value,
+          mutable: result.mutable || false,
+        },
+        nextPos: result.nextPos,
+      };
+    }
+
     return {
       statement: {
         type: NodeType.LetStatement,
@@ -431,24 +461,82 @@ function parseStructDeclaration(tokens, pos) {
   return { name, nextPos: pos };
 }
 
-function parseLetStatement(tokens, pos) {
-  // let mut? IDENT : Type? = expr ;
-  if (tokens[pos].type !== TokenType.LET)
-    return { variant: "err", error: `Expected 'let' at position ${pos}` };
-  pos++;
+// Shared helper: parse IDENT : Type? = expr ; and return parsed parts.
+class LetParseResult {
+  constructor(name, expressionNode, nextPosition) {
+    this.name = name;
+    this.expressionNode = expressionNode;
+    this.nextPos = nextPosition;
+  }
+}
 
-  // Optional 'mut' keyword
-  const mutable = tokens[pos]?.type === TokenType.MUT;
-  if (mutable) {
-    pos++; // consume 'mut'
+// Shared helper: consume optional '=' and then an expression
+class ExpressionAfterEqualsResult {
+  constructor(expressionNode, nextPosition) {
+    this.node = expressionNode;
+    this.nextPos = nextPosition;
+  }
+}
+
+function parseExpressionAfterEquals(tokens, pos) {
+  // Consume '=' if present
+  if (tokens[pos]?.type === TokenType.EQUALS) {
+    pos++;
   }
 
-  const name = tokens[pos].value;
-  if (tokens[pos].type !== TokenType.IDENT)
-    return {
-      variant: "err",
-      error: `Expected identifier after 'let' at position ${pos}`,
-    };
+  const expr = parseExpression(tokens, pos);
+  if (expr.variant === "err")
+    return err("Failed to parse expression", tokens, pos);
+
+  return new ExpressionAfterEqualsResult(expr.node, expr.nextPos);
+}
+
+// Parse destructuring pattern: { x , y } and return list of binding names.
+class DestructureParseResult {
+  constructor(names, expressionNode, nextPosition) {
+    this.names = names;
+    this.expressionNode = expressionNode;
+    this.nextPos = nextPosition;
+  }
+}
+
+function parseDestructuringTail(tokens, pos) {
+  // Consume '{'
+  if (!tokens[pos] || tokens[pos].type !== TokenType.LBRACE)
+    return err("Expected '{' for destructuring pattern", tokens, pos);
+  pos++;
+
+  const names = [];
+  while (pos < tokens.length && tokens[pos]?.type !== TokenType.RBRACE) {
+    if (tokens[pos]?.type === TokenType.IDENT) {
+      names.push(tokens[pos].value);
+      pos++;
+    } else {
+      return err("Expected identifier in destructuring pattern", tokens, pos);
+    }
+
+    // Optional comma separator
+    if (tokens[pos]?.type === TokenType.COMMA) {
+      pos++;
+    }
+  }
+
+  if (!tokens[pos])
+    return err("Expected '}' to close destructuring pattern", tokens, pos);
+  pos++; // consume '}'
+
+  const exprResult = parseExpressionAfterEquals(tokens, pos);
+  if (exprResult.variant === "err") return exprResult;
+
+  let p = maybeConsumeSemicolon(tokens, exprResult.nextPos);
+
+  return new DestructureParseResult(names, exprResult.node, p);
+}
+
+function parseLetTail(tokens, pos) {
+  const name = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return err("Expected identifier after 'let'", tokens, pos);
   pos++;
 
   // Optional type annotation : Type
@@ -464,22 +552,70 @@ function parseLetStatement(tokens, pos) {
     }
   }
 
-  // Consume '=' if present
-  if (tokens[pos]?.type === TokenType.EQUALS) {
-    pos++;
+  const exprResult = parseExpressionAfterEquals(tokens, pos);
+  if (exprResult.variant === "err")
+    return err("Failed to parse expression", tokens, pos);
+
+  let p = maybeConsumeSemicolon(tokens, exprResult.nextPos);
+
+  return new LetParseResult(name, exprResult.node, p);
+}
+
+// out let IDENT : Type? = expr ;
+function parseExportStatement(tokens, pos) {
+  if (tokens[pos].type !== TokenType.OUT)
+    return { variant: "err", error: `Expected 'out' at position ${pos}` };
+  pos++;
+
+  // Consume 'let'
+  if (!tokens[pos] || tokens[pos].type !== TokenType.LET)
+    return err("Expected 'let' after 'out'", tokens, pos);
+  pos++;
+
+  const tailResult = parseLetTail(tokens, pos);
+  if (tailResult.variant === "err") return tailResult;
+
+  return {
+    name: tailResult.name,
+    value: tailResult.expressionNode,
+    nextPos: tailResult.nextPos,
+  };
+}
+
+function parseLetStatement(tokens, pos) {
+  // let mut? IDENT : Type? = expr ;
+  if (tokens[pos].type !== TokenType.LET)
+    return { variant: "err", error: `Expected 'let' at position ${pos}` };
+  pos++;
+
+  // Optional 'mut' keyword
+  const mutable = tokens[pos]?.type === TokenType.MUT;
+  if (mutable) {
+    pos++; // consume 'mut'
   }
 
-  // Consume '=' if present
-  if (tokens[pos]?.type === TokenType.EQUALS) {
-    pos++;
+  // Check for destructuring pattern: let { x , y } = expr ;
+  if (tokens[pos]?.type === TokenType.LBRACE) {
+    const tailResult = parseDestructuringTail(tokens, pos);
+    if (tailResult.variant === "err") return tailResult;
+
+    return {
+      name: tailResult.names,
+      value: tailResult.expressionNode,
+      mutable,
+      nextPos: tailResult.nextPos,
+    };
   }
 
-  const expr = parseExpression(tokens, pos);
-  if (expr.variant === "err") return expr;
+  const tailResult = parseLetTail(tokens, pos);
+  if (tailResult.variant === "err") return tailResult;
 
-  let p = maybeConsumeSemicolon(tokens, expr.nextPos);
-
-  return { name, value: expr.node, mutable, nextPos: p };
+  return {
+    name: tailResult.name,
+    value: tailResult.expressionNode,
+    mutable,
+    nextPos: tailResult.nextPos,
+  };
 }
 
 // Shared helper: consume '. IDENT = expr ;' and return parsed parts.

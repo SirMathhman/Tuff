@@ -10,6 +10,50 @@ import { tokenize } from "./tokenizer.js";
 import { parse, NodeType } from "./parser.js";
 import { generate } from "./codegen.js";
 
+// Collect exported names from an AST node
+function collectExports(node) {
+  const exports = [];
+  if (!node.type) return exports;
+  switch (node.type) {
+    case NodeType.Program:
+      for (const child of node.body) {
+        exports.push(...collectExports(child));
+      }
+      break;
+    case NodeType.ExportStatement:
+      exports.push(node.name);
+      break;
+  }
+  return exports;
+}
+
+// Compile a single Tuff source to JS body (no preamble).
+function compileSourceToJS(source, options = {}) {
+  const { includePreamble = true, isEntryPoint } = Object.assign(
+    { isEntryPoint: true },
+    options,
+  );
+
+  const tokensResult = tokenize(source);
+  if (tokensResult.variant === "err") return Err(tokensResult.error);
+
+  const astResult = parse(tokensResult.value);
+  if (astResult.variant === "err") return Err(astResult.error);
+
+  // Validate identifiers against builtins and declared variables
+  const knownIdentifiers = new Set(["read"]);
+  for (const id of options.extraKnownIds || []) {
+    knownIdentifiers.add(id);
+  }
+  const validateResult = validateIdentifiers(astResult.node, knownIdentifiers);
+  if (!validateResult.ok) return Err(validateResult.error);
+
+  const jsResult = generate(astResult.node, { includePreamble, isEntryPoint });
+  if (jsResult.variant === "err") return Err(jsResult.error);
+
+  return Ok({ code: jsResult.node, exports: collectExports(astResult.node) });
+}
+
 // Validate that all identifiers in the AST are known builtins or declared variables
 function validateIdentifiers(node, knownIds) {
   if (!node.type) return { ok: true };
@@ -40,10 +84,21 @@ function validateIdentifiers(node, knownIds) {
       }
       return { ok: true };
     case NodeType.LetStatement:
-      knownIds.add(node.name);
-      // Track mutable variables for assignment validation
-      if (node.mutable) {
-        knownIds.add(`__mutable_${node.name}`);
+      // Destructuring: register each binding name as a known identifier
+      if (node.bindings) {
+        for (const b of node.bindings) {
+          knownIds.add(b);
+          // Track mutable destructured variables for assignment validation
+          if (node.mutable) {
+            knownIds.add(`__mutable_${b}`);
+          }
+        }
+      } else {
+        knownIds.add(node.name);
+        // Track mutable variables for assignment validation
+        if (node.mutable) {
+          knownIds.add(`__mutable_${node.name}`);
+        }
       }
       return validateIdentifiers(node.value, knownIds);
     case NodeType.AssignmentStatement: {
@@ -106,19 +161,73 @@ function validateIdentifiers(node, knownIds) {
 }
 
 export function compileTuffToJS(source) {
-  const tokensResult = tokenize(source);
-  if (tokensResult.variant === "err") return Err(tokensResult.error);
+  const result = compileSourceToJS(source, true);
+  if (result.variant === "err") return Err(result.error);
+  return Ok(result.value.code);
+}
 
-  const astResult = parse(tokensResult.value);
-  if (astResult.variant === "err") return Err(astResult.error);
+// Compile multiple modules and concatenate their generated JS.
+export function compileModulesToJS(moduleNames, moduleSources) {
+  // Collect all other module names so they're valid identifiers during validation
+  const extraKnownIds = Object.keys(moduleSources);
 
-  // Validate identifiers against builtins and declared variables
-  const knownIdentifiers = new Set(["read"]);
-  const validateResult = validateIdentifiers(astResult.node, knownIdentifiers);
-  if (!validateResult.ok) return Err(validateResult.error);
+  // First pass: compile all known sources (entry + implicit dependencies)
+  const compiled = {};
+  for (const [name, source] of Object.entries(moduleSources)) {
+    if (!source && source !== "")
+      return Err(`Missing source for module '${name}'`);
 
-  const jsResult = generate(astResult.node);
-  if (jsResult.variant === "err") return Err(jsResult.error);
+    // Only the first entry in moduleNames is the true entry point.
+    const entryPoint = name === moduleNames[0];
+    const result = compileSourceToJS(source, {
+      includePreamble: false,
+      isEntryPoint: entryPoint,
+      extraKnownIds,
+    });
+    if (result.variant === "err") return Err(result.error);
 
-  return Ok(jsResult.node);
+    compiled[name] = result.value;
+  }
+
+  // Build wiring lines that copy exports from __exports into module namespace
+  const exportWiringLines = [];
+  for (const [name, info] of Object.entries(compiled)) {
+    if (info.exports.length > 0) {
+      exportWiringLines.push(`_ctx.${name} = {};`);
+      for (const expName of info.exports) {
+        exportWiringLines.push(
+          `_ctx.${name}.${expName} = _ctx.__exports.${expName};`,
+        );
+      }
+    }
+  }
+
+  // Collect all non-entry module names (explicit + implicit dependencies)
+  const entryModule = moduleNames[0];
+  const depModules = Object.keys(compiled).filter(
+    (name) => name !== entryModule,
+  );
+
+  // Run dependency modules first, wire exports, then run entry module last
+  const jsParts = [];
+  for (const name of depModules) {
+    jsParts.push(compiled[name].code);
+  }
+  if (exportWiringLines.length > 0) {
+    jsParts.push(exportWiringLines.join("\n"));
+  }
+  // Run entry module last
+  for (const name of moduleNames) {
+    if (!compiled[name]) return Err(`Unknown module '${name}'`);
+    jsParts.push(compiled[name].code);
+  }
+
+  // Check if any module has exports — need __exports namespace
+  const hasExports = Object.values(compiled).some(
+    (info) => info.exports.length > 0,
+  );
+
+  const preamble = `var _ctx = ${hasExports ? "{ __exports: {} }" : "{}"};
+const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));`;
+  return Ok([preamble, ...jsParts].join("\n"));
 }

@@ -1,6 +1,11 @@
 import { NodeType } from "./parser.js";
 
-export function generate(ast) {
+export function generate(ast, options = {}) {
+  const opts = Object.assign(
+    { includePreamble: true, isEntryPoint: true },
+    options,
+  );
+  const { includePreamble, isEntryPoint } = opts;
   const lines = [];
   let hasReturn = false;
 
@@ -30,10 +35,26 @@ export function generate(ast) {
         lines.push(`function ${stmt.name}(${jsParams}) { ${bodyResult.node} }`);
         break;
       }
+      case NodeType.ExportStatement: {
+        const exportResult = generateExpression(stmt.value);
+        if (exportResult.variant === "err") return exportResult;
+        // Exports go into _ctx.__exports, then compileModulesToJS wires them to module namespace
+        lines.push(`_ctx.__exports.${stmt.name} = ${exportResult.node};`);
+        break;
+      }
       case NodeType.LetStatement: {
         const letResult = generateExpression(stmt.value);
         if (letResult.variant === "err") return letResult;
-        lines.push(`_ctx.${stmt.name} = ${letResult.node};`);
+
+        // Destructuring: let { x , y } = expr ;
+        if (stmt.bindings) {
+          for (const binding of stmt.bindings) {
+            lines.push(`_ctx.${binding} = ${letResult.node}.${binding};`);
+          }
+        } else {
+          lines.push(`_ctx.${stmt.name} = ${letResult.node};`);
+        }
+
         break;
       }
       case NodeType.AssignmentStatement: {
@@ -65,16 +86,19 @@ export function generate(ast) {
     }
   }
 
-  // If no statements or no return was emitted, default to returning 0
-  if (lines.length === 0 || !hasReturn) {
+  // Only add a default return for the entry point module — dependency modules should not exit early
+  if (isEntryPoint && (lines.length === 0 || !hasReturn)) {
     lines.push("return 0;");
   }
 
-  const body =
-    `var _ctx = {};
-const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));\n` +
-    lines.join("\n");
-  return { node: body };
+  const code = lines.join("\n");
+  if (includePreamble) {
+    const body =
+      `var _ctx = {};
+const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));\n` + code;
+    return { node: body };
+  }
+  return { node: code };
 }
 
 // Generate function body — handles both BlockStatement and single expression statement

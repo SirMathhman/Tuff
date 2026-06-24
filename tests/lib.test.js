@@ -153,3 +153,48 @@ test("struct method with receiver parameter and method call syntax returns sum o
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
+
+import { compileModulesToJS } from "../src/lib.js";
+
+function expectValidWithModules(
+  moduleNames,
+  moduleSources,
+  stdIn,
+  expectedExitCode,
+) {
+  const result = compileModulesToJS(moduleNames, moduleSources);
+  if (result.variant === "err") throw new Error(result.error);
+  const actualExitCode = new Function("stdIn", result.value)(stdIn);
+  expect(expectedExitCode).toBe(actualExitCode);
+}
+
+test("multi-module compilation returns value from single module", () => {
+  expectValidWithModules(["index"], { index: "1" }, "", 1);
+});
+
+test("cross-module export access via lib.x returns exported value", () => {
+  expectValidWithModules(
+    ["index", "lib"],
+    { index: "lib.x", lib: "out let x = 1;" },
+    "",
+    1,
+  );
+});
+
+test("cross-module export access via variable assignment returns exported value with implicit dependency", () => {
+  expectValidWithModules(
+    ["index"],
+    { index: "let temp = lib; temp.x", lib: "out let x = 1;" },
+    "",
+    1,
+  );
+});
+
+test("destructuring imports from module exports returns extracted value", () => {
+  expectValidWithModules(
+    ["index"],
+    { index: "let { x } = lib; x", lib: "out let x = 1;" },
+    "",
+    1,
+  );
+});
