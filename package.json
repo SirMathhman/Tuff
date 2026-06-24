@@ -17,7 +17,7 @@
   "scripts": {
     "start": "node ./src/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest",
-    "watch": "nodemon -e js,tuff",
+    "watch": "nodemon -e js,tuff --ignore main.js",
     "lint": "eslint . && npx madge --circular ./src",
     "cpd": "pmd cpd --dir src --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers"
   },
