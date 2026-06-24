@@ -107,8 +107,10 @@ function parseTypeAlias(tokens, pos) {
   pos++;
 
   // Consume '='
-  if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS)
-    return { variant: "err", error: `Expected '=' for type alias` };
+  if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS) {
+    const found = tokens[pos]?.value ?? "end of input";
+    return { variant: "err", error: `Expected '=' for type alias, but found '${found}' at position ${pos}` };
+  }
   pos++;
 
   // Skip to semicolon (consume the RHS type expression — no validation needed)
