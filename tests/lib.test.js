@@ -75,7 +75,9 @@ test("type alias with slice referencing struct compiles and exits with code 0", 
 test("string literal .length returns character count", () => {
   expectValid('"test".length', "", 4);
 });
-
+test("function declaration and call returns expression value", () => {
+  expectValid("fn get() => 100; get()", "", 100);
+});
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

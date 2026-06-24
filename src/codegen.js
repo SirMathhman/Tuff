@@ -9,6 +9,12 @@ export function generate(ast) {
       case NodeType.TypeAlias:
         // Compile-time only declarations, no runtime code
         break;
+      case NodeType.FunctionDeclaration: {
+        const bodyResult = generateExpression(stmt.body);
+        if (bodyResult.variant === "err") return bodyResult;
+        lines.push(`function ${stmt.name}() { return ${bodyResult.node}; }`);
+        break;
+      }
       case NodeType.LetStatement: {
         const result = generateExpression(stmt.value);
         if (result.variant === "err") return result;
@@ -69,11 +75,20 @@ function generateExpression(node) {
       };
     case NodeType.Identifier:
       return { node: node.name };
-    case NodeType.CallExpression:
+    case NodeType.CallExpression: {
+      // Special builtin
       if (node.name === "read") {
         return { node: "tokens.shift()" };
       }
-      return { variant: "err", error: `Unknown function: ${node.name}` };
+      // Generate call for any identifier — validation ensures it's known
+      const args = [];
+      for (const arg of node.arguments) {
+        const result = generateExpression(arg);
+        if (result.variant === "err") return result;
+        args.push(result.node);
+      }
+      return { node: `${node.name}(${args.join(", ")})` };
+    }
     case NodeType.BinaryExpression: {
       const left = generateExpression(node.left);
       if (left.variant === "err") return left;
@@ -95,7 +110,8 @@ function isLastStatement(ast, stmt) {
   for (let i = body.length - 1; i >= 0; i--) {
     if (
       body[i].type !== NodeType.StructDeclaration &&
-      body[i].type !== NodeType.TypeAlias
+      body[i].type !== NodeType.TypeAlias &&
+      body[i].type !== NodeType.FunctionDeclaration
     )
       return body[i] === stmt;
   }

@@ -6,6 +6,7 @@ export const NodeType = {
   LetStatement: "LetStatement",
   StructDeclaration: "StructDeclaration",
   TypeAlias: "TypeAlias",
+  FunctionDeclaration: "FunctionDeclaration",
   ExpressionStatement: "ExpressionStatement",
   CallExpression: "CallExpression",
   DotExpression: "DotExpression",
@@ -46,6 +47,20 @@ export function parse(tokens) {
 }
 
 function parseStatement(tokens, pos) {
+  // Function declaration: fn NAME() => expr ;
+  if (tokens[pos].type === TokenType.FN_DECLARATION) {
+    const result = parseFunctionDeclaration(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: {
+        type: NodeType.FunctionDeclaration,
+        name: result.name,
+        body: result.body,
+      },
+      nextPos: result.nextPos,
+    };
+  }
+
   // Type alias: type IDENT = TYPE ;
   if (tokens[pos].type === TokenType.TYPE_ALIAS) {
     const result = parseTypeAlias(tokens, pos);
@@ -92,6 +107,53 @@ function parseStatement(tokens, pos) {
   };
 }
 
+// fn NAME() => expr ;
+function parseFunctionDeclaration(tokens, pos) {
+  if (tokens[pos].type !== TokenType.FN_DECLARATION)
+    return { variant: "err", error: `Expected 'fn' at position ${pos}` };
+  pos++;
+
+  const name = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return {
+      variant: "err",
+      error: `Expected function name after 'fn' at position ${pos}`,
+    };
+  pos++;
+
+  // Consume '('
+  if (!tokens[pos] || tokens[pos].type !== TokenType.LPAREN)
+    return { variant: "err", error: `Expected '(' for parameter list` };
+  pos++;
+
+  // Consume ')'
+  while (pos < tokens.length && tokens[pos]?.type !== TokenType.RPAREN) {
+    pos++;
+  }
+  if (!tokens[pos])
+    return { variant: "err", error: `Expected ')' to close parameter list` };
+  pos++; // consume ')'
+
+  // Consume '=>'
+  if (!tokens[pos] || tokens[pos].type !== TokenType.FAT_ARROW)
+    return {
+      variant: "err",
+      error: `Expected '=>' for function body at position ${pos}`,
+    };
+  pos++;
+
+  // Parse expression body
+  const expr = parseExpression(tokens, pos);
+  if (expr.variant === "err") return expr;
+
+  let p = expr.nextPos;
+
+  // Consume trailing semicolon if present
+  p = maybeConsumeSemicolon(tokens, p);
+
+  return { name, body: expr.node, nextPos: p };
+}
+
 // type IDENT = TYPE ;
 function parseTypeAlias(tokens, pos) {
   if (tokens[pos].type !== TokenType.TYPE_ALIAS)
@@ -109,7 +171,10 @@ function parseTypeAlias(tokens, pos) {
   // Consume '='
   if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS) {
     const found = tokens[pos]?.value ?? "end of input";
-    return { variant: "err", error: `Expected '=' for type alias, but found '${found}' at position ${pos}` };
+    return {
+      variant: "err",
+      error: `Expected '=' for type alias, but found '${found}' at position ${pos}`,
+    };
   }
   pos++;
 

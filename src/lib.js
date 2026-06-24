@@ -19,6 +19,9 @@ function validateIdentifiers(node, knownIds) {
     case NodeType.TypeAlias:
       // Compile-time declarations don't reference unknown identifiers at runtime
       return { ok: true };
+    case NodeType.FunctionDeclaration:
+      knownIds.add(node.name);
+      return validateIdentifiers(node.body, knownIds);
     case NodeType.Program:
       for (const child of node.body) {
         const result = validateIdentifiers(child, knownIds);
@@ -36,8 +39,8 @@ function validateIdentifiers(node, knownIds) {
       }
       return { ok: true };
     case NodeType.CallExpression:
-      // Builtins
-      if (node.name !== "read") {
+      // Builtins or user-declared functions
+      if (!knownIds.has(node.name)) {
         return { ok: false, error: `Unknown function: ${node.name}` };
       }
       for (const arg of node.arguments) {

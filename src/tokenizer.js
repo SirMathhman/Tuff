@@ -3,6 +3,7 @@ export const TokenType = {
   LET: "LET",
   STRUCT: "STRUCT",
   TYPE_ALIAS: "TYPE_ALIAS",
+  FN_DECLARATION: "FN_DECLARATION",
   IDENT: "IDENT",
   NUMBER: "NUMBER",
   STRING_LITERAL: "STRING_LITERAL",
@@ -22,6 +23,7 @@ export const TokenType = {
   COMMA: ",",
   PIPE: "|",
   DOT: ".",
+  FAT_ARROW: "=>",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -128,10 +130,15 @@ export function tokenize(source) {
       continue;
     }
 
-    // Equals sign
+    // Fat arrow '=>' or equals '='
     if (source[pos] === "=") {
-      tokens.push({ type: TokenType.EQUALS, value: "=" });
-      pos++;
+      if (pos + 1 < source.length && source[pos + 1] === ">") {
+        tokens.push({ type: TokenType.FAT_ARROW, value: "=>" });
+        pos += 2;
+      } else {
+        tokens.push({ type: TokenType.EQUALS, value: "=" });
+        pos++;
+      }
       continue;
     }
 
@@ -209,6 +216,8 @@ export function tokenize(source) {
         tokens.push({ type: TokenType.STRUCT, value: "struct" });
       } else if (name === "type") {
         tokens.push({ type: TokenType.TYPE_ALIAS, value: "type" });
+      } else if (name === "fn") {
+        tokens.push({ type: TokenType.FN_DECLARATION, value: "fn" });
       } else {
         tokens.push({ type: TokenType.IDENT, value: name });
       }
