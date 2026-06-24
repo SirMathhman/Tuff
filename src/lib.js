@@ -24,7 +24,11 @@ function validateIdentifiers(node, knownIds) {
       const fnScope = new Set(knownIds);
       if (node.params) {
         for (const param of node.params) {
-          fnScope.add(param);
+          // 'this' as a receiver is always valid, don't add it to knownIds
+          // since codegen handles it specially
+          if (param !== "this") {
+            fnScope.add(param);
+          }
         }
       }
       return validateIdentifiers(node.body, fnScope);
@@ -37,7 +41,29 @@ function validateIdentifiers(node, knownIds) {
       return { ok: true };
     case NodeType.LetStatement:
       knownIds.add(node.name);
+      // Track mutable variables for assignment validation
+      if (node.mutable) {
+        knownIds.add(`__mutable_${node.name}`);
+      }
       return validateIdentifiers(node.value, knownIds);
+    case NodeType.AssignmentStatement: {
+      // Direct this.x assignment — target must be a known mutable variable
+      if (node.target) {
+        const mutableKey = `__mutable_${node.target}`;
+        if (!knownIds.has(mutableKey)) {
+          return {
+            ok: false,
+            error: `Cannot assign to '${node.target}' (not declared as mutable)`,
+          };
+        }
+      }
+      // General expression-based assignment — validate target and value
+      if (node.targetExpr) {
+        const targetResult = validateIdentifiers(node.targetExpr, knownIds);
+        if (!targetResult.ok) return targetResult;
+      }
+      return validateIdentifiers(node.value, knownIds);
+    }
     case NodeType.ExpressionStatement:
       return validateIdentifiers(node.expression, knownIds);
     case NodeType.Identifier:
@@ -55,11 +81,25 @@ function validateIdentifiers(node, knownIds) {
         if (!result.ok) return result;
       }
       return { ok: true };
+    case NodeType.MethodCallExpression:
+      // Validate the method name is a known function
+      if (!knownIds.has(node.methodName)) {
+        return { ok: false, error: `Unknown method: ${node.methodName}` };
+      }
+      for (const arg of node.arguments) {
+        const result = validateIdentifiers(arg, knownIds);
+        if (!result.ok) return result;
+      }
+      // Also validate the object expression
+      return validateIdentifiers(node.object, knownIds);
     case NodeType.BinaryExpression: {
       const leftResult = validateIdentifiers(node.left, knownIds);
       if (!leftResult.ok) return leftResult;
       return validateIdentifiers(node.right, knownIds);
     }
+    case NodeType.ThisExpression:
+      // "this" is always valid — resolves to _ctx at runtime
+      return { ok: true };
   }
 
   return { ok: true };

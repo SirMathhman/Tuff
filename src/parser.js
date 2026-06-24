@@ -8,12 +8,15 @@ export const NodeType = {
   TypeAlias: "TypeAlias",
   FunctionDeclaration: "FunctionDeclaration",
   ExpressionStatement: "ExpressionStatement",
+  AssignmentStatement: "AssignmentStatement",
   CallExpression: "CallExpression",
+  MethodCallExpression: "MethodCallExpression",
   DotExpression: "DotExpression",
   BinaryExpression: "BinaryExpression",
   NumberLiteral: "NumberLiteral",
   StringLiteral: "StringLiteral",
   Identifier: "Identifier",
+  ThisExpression: "ThisExpression",
   ObjectLiteral: "ObjectLiteral",
   BlockStatement: "BlockStatement",
   ReturnStatement: "ReturnStatement",
@@ -137,7 +140,7 @@ function parseStatement(tokens, pos) {
     };
   }
 
-  // Let statement
+  // Let statement (let mut? IDENT : Type? = expr ;)
   if (tokens[pos].type === TokenType.LET) {
     const result = parseLetStatement(tokens, pos);
     if (result.variant === "err") return result;
@@ -145,6 +148,45 @@ function parseStatement(tokens, pos) {
       statement: {
         type: NodeType.LetStatement,
         name: result.name,
+        value: result.value,
+        mutable: result.mutable || false,
+      },
+      nextPos: result.nextPos,
+    };
+  }
+
+  // Assignment statement (expr = expr ;)
+  if (
+    tokens[pos]?.type === TokenType.THIS &&
+    tokens[pos + 1]?.type === TokenType.DOT &&
+    tokens[pos + 2]?.type === TokenType.IDENT &&
+    tokens[pos + 3]?.type === TokenType.EQUALS
+  ) {
+    const result = parseAssignmentStatement(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: {
+        type: NodeType.AssignmentStatement,
+        target: result.target,
+        value: result.value,
+      },
+      nextPos: result.nextPos,
+    };
+  }
+
+  // Assignment on general dot expression (e.g. temp.x = expr ;)
+  if (
+    tokens[pos]?.type === TokenType.IDENT &&
+    tokens[pos + 1]?.type === TokenType.DOT &&
+    tokens[pos + 2]?.type === TokenType.IDENT &&
+    tokens[pos + 3]?.type === TokenType.EQUALS
+  ) {
+    const result = parseGeneralAssignmentStatement(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: {
+        type: NodeType.AssignmentStatement,
+        targetExpr: result.targetExpr,
         value: result.value,
       },
       nextPos: result.nextPos,
@@ -181,7 +223,11 @@ function parseFunctionDeclaration(tokens, pos) {
 
   const params = [];
   while (pos < tokens.length && tokens[pos]?.type !== TokenType.RPAREN) {
-    if (tokens[pos]?.type === TokenType.IDENT) {
+    if (
+      tokens[pos]?.type === TokenType.IDENT ||
+      tokens[pos]?.type === TokenType.THIS
+    ) {
+      // Allow 'this' as a parameter name for method receivers
       params.push(tokens[pos].value);
       pos++;
     } else {
@@ -386,10 +432,16 @@ function parseStructDeclaration(tokens, pos) {
 }
 
 function parseLetStatement(tokens, pos) {
-  // let IDENT : Type? = expr ;
+  // let mut? IDENT : Type? = expr ;
   if (tokens[pos].type !== TokenType.LET)
     return { variant: "err", error: `Expected 'let' at position ${pos}` };
   pos++;
+
+  // Optional 'mut' keyword
+  const mutable = tokens[pos]?.type === TokenType.MUT;
+  if (mutable) {
+    pos++; // consume 'mut'
+  }
 
   const name = tokens[pos].value;
   if (tokens[pos].type !== TokenType.IDENT)
@@ -417,23 +469,105 @@ function parseLetStatement(tokens, pos) {
     pos++;
   }
 
+  // Consume '=' if present
+  if (tokens[pos]?.type === TokenType.EQUALS) {
+    pos++;
+  }
+
   const expr = parseExpression(tokens, pos);
   if (expr.variant === "err") return expr;
 
   let p = maybeConsumeSemicolon(tokens, expr.nextPos);
 
-  return { name, value: expr.node, nextPos: p };
+  return { name, value: expr.node, mutable, nextPos: p };
 }
 
-// Expression parsing with operator precedence (simple left-to-right for now)
-function parseExpression(tokens, pos) {
+// Shared helper: consume '. IDENT = expr ;' and return parsed parts.
+class AssignmentParseResult {
+  constructor(propertyName, expressionNode, nextPosition) {
+    this.propertyName = propertyName;
+    this.expressionNode = expressionNode;
+    this.nextPos = nextPosition;
+  }
+}
+
+function parseAssignmentTail(tokens, pos) {
+  // Consume '.'
+  if (!tokens[pos] || tokens[pos].type !== TokenType.DOT)
+    return err("Expected '.' for assignment", tokens, pos);
+  pos++;
+
+  // Get property/target identifier
+  const propertyName = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return err("Expected identifier after '.'", tokens, pos);
+  pos++;
+
+  // Consume '='
+  if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS)
+    return err("Expected '=' for assignment", tokens, pos);
+  pos++;
+
+  const expr = parseExpression(tokens, pos);
+  if (expr.variant === "err") return expr;
+
+  let p = maybeConsumeSemicolon(tokens, expr.nextPos);
+
+  return new AssignmentParseResult(propertyName, expr.node, p);
+}
+
+// Parse assignment statement: this.IDENT = expr ;
+function parseAssignmentStatement(tokens, pos) {
+  // Consume 'this'
+  if (tokens[pos].type !== TokenType.THIS)
+    return err("Expected 'this' for assignment", tokens, pos);
+  pos++;
+
+  const tailResult = parseAssignmentTail(tokens, pos);
+  if (tailResult.variant === "err") return tailResult;
+
+  return {
+    target: tailResult.propertyName,
+    value: tailResult.expressionNode,
+    nextPos: tailResult.nextPos,
+  };
+}
+
+// Parse general assignment statement: IDENT.property = expr ;
+function parseGeneralAssignmentStatement(tokens, pos) {
+  // Get base identifier
+  const baseName = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return err("Expected identifier for assignment", tokens, pos);
+  pos++;
+
+  const tailResult = parseAssignmentTail(tokens, pos);
+  if (tailResult.variant === "err") return tailResult;
+
+  // Build the target expression as a DotExpression AST node
+  const targetExpr = {
+    type: NodeType.DotExpression,
+    object: { type: NodeType.Identifier, name: baseName },
+    property: tailResult.propertyName,
+  };
+
+  return {
+    targetExpr,
+    value: tailResult.expressionNode,
+    nextPos: tailResult.nextPos,
+  };
+}
+
+// Parse a primary expression followed by any dot/method chain.
+// Used for both left and right sides of binary operators so dot access is always applied.
+function parsePrefix(tokens, pos) {
   const primary = parsePrimary(tokens, pos);
   if (primary.variant === "err") return primary;
 
   let result = primary.node; // unwrap to get actual AST node
   let p = primary.nextPos;
 
-  // Dot access: expr.property
+  // Dot access and method calls: expr.property or obj.method()
   while (
     tokens[p]?.type === TokenType.DOT &&
     tokens[p + 1]?.type === TokenType.IDENT
@@ -441,8 +575,53 @@ function parseExpression(tokens, pos) {
     p++; // consume '.'
     const property = tokens[p].value;
     p++;
-    result = { type: NodeType.DotExpression, object: result, property };
+
+    // Check if this is a method call: obj.method()
+    if (tokens[p]?.type === TokenType.LPAREN) {
+      p++; // consume '('
+      const args = [];
+
+      while (p < tokens.length && tokens[p].type !== TokenType.RPAREN) {
+        const argResult = parseExpression(tokens, p);
+        if (argResult.variant === "err") return argResult;
+        args.push(argResult.node);
+        p = argResult.nextPos;
+
+        // Optional comma separator
+        if (tokens[p]?.type === TokenType.COMMA) {
+          p++;
+        }
+      }
+
+      if (!tokens[p])
+        return err(
+          `Expected ')' to close method call '${property}'`,
+          tokens,
+          p,
+        );
+      p++; // consume ')'
+
+      result = {
+        type: NodeType.MethodCallExpression,
+        object: result,
+        methodName: property,
+        arguments: args,
+      };
+    } else {
+      result = { type: NodeType.DotExpression, object: result, property };
+    }
   }
+
+  return { node: result, nextPos: p };
+}
+
+// Expression parsing with operator precedence (simple left-to-right for now)
+function parseExpression(tokens, pos) {
+  const prefix = parsePrefix(tokens, pos);
+  if (prefix.variant === "err") return prefix;
+
+  let result = prefix.node; // unwrap to get actual AST node
+  let p = prefix.nextPos;
 
   while (
     tokens[p]?.type === TokenType.PLUS ||
@@ -452,16 +631,16 @@ function parseExpression(tokens, pos) {
   ) {
     const op = tokens[p].value;
     p++;
-    const rightPrimary = parsePrimary(tokens, p);
-    if (rightPrimary.variant === "err") return rightPrimary;
+    const rightPrefix = parsePrefix(tokens, p);
+    if (rightPrefix.variant === "err") return rightPrefix;
 
-    p = rightPrimary.nextPos;
+    p = rightPrefix.nextPos;
 
     result = {
       type: NodeType.BinaryExpression,
       operator: op,
       left: result,
-      right: rightPrimary.node,
+      right: rightPrefix.node,
     };
   }
 
@@ -494,6 +673,12 @@ function parsePrimary(tokens, pos) {
       return err("Expected '}' to close object literal", tokens, pos);
     pos++; // consume '}'
     return { node: { type: NodeType.ObjectLiteral }, nextPos: pos };
+  }
+
+  // "this" keyword as expression value — resolves to _ctx at runtime
+  if (tokens[pos]?.type === TokenType.THIS) {
+    pos++; // consume 'this'
+    return { node: { type: NodeType.ThisExpression }, nextPos: pos };
   }
 
   // Identifier or function call

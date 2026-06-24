@@ -1,12 +1,14 @@
 // Token types
 export const TokenType = {
   LET: "LET",
+  MUT: "MUT",
   STRUCT: "STRUCT",
   TYPE_ALIAS: "TYPE_ALIAS",
   EXTERN_TYPE_DECLARATION: "EXTERN_TYPE_DECLARATION",
   EXTERN_LET_DECLARATION: "EXTERN_LET_DECLARATION",
   EXTERN_FN_DECLARATION: "EXTERN_FN_DECLARATION",
   FN_DECLARATION: "FN_DECLARATION",
+  THIS: "THIS",
   IDENT: "IDENT",
   NUMBER: "NUMBER",
   STRING_LITERAL: "STRING_LITERAL",
@@ -313,7 +315,21 @@ export function tokenize(source) {
       }
 
       // Check for keyword
-      if (name === "let") {
+      if (name === "this") {
+        tokens.push({
+          type: TokenType.THIS,
+          value: "this",
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "mut") {
+        tokens.push({
+          type: TokenType.MUT,
+          value: "mut",
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "let") {
         tokens.push({
           type: TokenType.LET,
           value: "let",

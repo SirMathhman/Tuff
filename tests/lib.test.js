@@ -130,6 +130,26 @@ test("function with block body, generic return type, and struct instantiation re
 test("type alias with generic parameters compiles and exits with code 0", () => {
   expectValid("struct A<K> {} type Temp<U> = A<U>;", "", 0);
 });
+test("mutable variable assignment via this.x returns new value", () => {
+  expectValid("let mut x = 0; this.x = 100; x", "", 100);
+});
+
+test("this assigned to variable, dot access on variable returns mutable field value", () => {
+  expectValid("let mut x = 100; let temp = this; temp.x", "", 100);
+});
+
+test("assignment through snapshot of this does not affect original context", () => {
+  expectValid("let mut x = 100; let mut temp = this; temp.x = 200; x", "", 100);
+});
+
+test("struct method with receiver parameter and method call syntax returns sum of fields", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 } fn manhattan(this : Point) => this.x + this.y; let point = Point { x : 3, y : 4 }; point.manhattan()",
+    "",
+    7,
+  );
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

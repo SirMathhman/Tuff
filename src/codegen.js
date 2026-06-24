@@ -11,16 +11,43 @@ export function generate(ast) {
         // Compile-time only declarations, no runtime code
         break;
       case NodeType.FunctionDeclaration: {
-        const params = stmt.params ? stmt.params.join(", ") : "";
-        const bodyResult = generateFunctionBody(stmt.body);
+        // Check if first param is a receiver (named 'this')
+        const hasReceiver = stmt.params && stmt.params[0] === "this";
+        // Rename 'this' to '_self' in generated JS since 'this' can't be a variable name
+        const jsParams = (
+          hasReceiver
+            ? ["_self", ...(stmt.params || []).slice(1)]
+            : stmt.params || []
+        ).join(", ");
+        // Build locals set with renamed receiver for codegen lookup
+        const localsSet = new Set(jsParams.split(", ").filter(Boolean));
+        const bodyResult = generateFunctionBody(
+          stmt.body,
+          localsSet,
+          hasReceiver,
+        );
         if (bodyResult.variant === "err") return bodyResult;
-        lines.push(`function ${stmt.name}(${params}) { ${bodyResult.node} }`);
+        lines.push(`function ${stmt.name}(${jsParams}) { ${bodyResult.node} }`);
         break;
       }
       case NodeType.LetStatement: {
-        const result = generateExpression(stmt.value);
-        if (result.variant === "err") return result;
-        lines.push(`var ${stmt.name} = ${result.node};`);
+        const letResult = generateExpression(stmt.value);
+        if (letResult.variant === "err") return letResult;
+        lines.push(`_ctx.${stmt.name} = ${letResult.node};`);
+        break;
+      }
+      case NodeType.AssignmentStatement: {
+        const assignResult = generateExpression(stmt.value);
+        if (assignResult.variant === "err") return assignResult;
+        // Direct this.x assignment
+        if (stmt.target) {
+          lines.push(`_ctx.${stmt.target} = ${assignResult.node};`);
+        }
+        // General expression-based assignment (e.g. temp.x = 200)
+        else if (stmt.targetExpr) {
+          const targetCode = generateExpression(stmt.targetExpr).node;
+          lines.push(`${targetCode} = ${assignResult.node};`);
+        }
         break;
       }
       case NodeType.ExpressionStatement: {
@@ -44,19 +71,24 @@ export function generate(ast) {
   }
 
   const body =
-    `const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));\n` +
+    `var _ctx = {};
+const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));\n` +
     lines.join("\n");
   return { node: body };
 }
 
 // Generate function body — handles both BlockStatement and single expression statement
-function generateFunctionBody(bodyNode) {
+function generateFunctionBody(bodyNode, locals, hasReceiver) {
   if (bodyNode.type === NodeType.BlockStatement) {
     const blockLines = [];
     for (const stmt of bodyNode.body) {
       switch (stmt.type) {
         case NodeType.ReturnStatement: {
-          const exprResult = generateExpression(stmt.expression);
+          const exprResult = generateExpression(
+            stmt.expression,
+            locals,
+            hasReceiver,
+          );
           if (exprResult.variant === "err") return exprResult;
           blockLines.push(`return ${exprResult.node};`);
           break;
@@ -70,12 +102,12 @@ function generateFunctionBody(bodyNode) {
   }
 
   // Single expression body (fat arrow style)
-  const result = generateExpression(bodyNode.expression);
+  const result = generateExpression(bodyNode.expression, locals, hasReceiver);
   if (result.variant === "err") return result;
   return { node: `return ${result.node};` };
 }
 
-function generateExpression(node) {
+function generateExpression(node, locals, hasReceiver) {
   switch (node.type) {
     case NodeType.StringLiteral: {
       // Escape backslashes and quotes for JS string literal
@@ -91,7 +123,7 @@ function generateExpression(node) {
       // Struct instantiation with fields
       const fieldEntries = [];
       for (const f of node.fields) {
-        const valResult = generateExpression(f.value);
+        const valResult = generateExpression(f.value, locals, hasReceiver);
         if (valResult.variant === "err") return valResult;
         fieldEntries.push(`${f.key}: ${valResult.node}`);
       }
@@ -99,7 +131,7 @@ function generateExpression(node) {
     }
     case NodeType.DotExpression: {
       if (node.property === "length") {
-        const objResult = generateExpression(node.object);
+        const objResult = generateExpression(node.object, locals, hasReceiver);
         if (objResult.variant === "err") return objResult;
         // .length on string literal → compile-time length
         if (
@@ -112,12 +144,34 @@ function generateExpression(node) {
         return { node: `${objResult.node}.length` };
       }
       // General dot property access
-      const objResult = generateExpression(node.object);
+      const objResult = generateExpression(node.object, locals, hasReceiver);
       if (objResult.variant === "err") return objResult;
       return { node: `${objResult.node}.${node.property}` };
     }
+    case NodeType.MethodCallExpression: {
+      // Method call: obj.method() → methodName(obj, ...args)
+      const objResult = generateExpression(node.object, locals, hasReceiver);
+      if (objResult.variant === "err") return objResult;
+      const args = [objResult.node];
+      for (const arg of node.arguments) {
+        const result = generateExpression(arg, locals, hasReceiver);
+        if (result.variant === "err") return result;
+        args.push(result.node);
+      }
+      return { node: `${node.methodName}(${args.join(", ")})` };
+    }
+    case NodeType.ThisExpression:
+      // Inside a method with receiver, 'this' refers to the renamed '_self' param
+      if (hasReceiver) {
+        return { node: "_self" };
+      }
+      // Otherwise return a shallow snapshot of global context
+      return { node: "{..._ctx}" };
     case NodeType.Identifier:
-      return { node: node.name };
+      if (locals && locals.has(node.name)) {
+        return { node: node.name };
+      }
+      return { node: `_ctx.${node.name}` };
     case NodeType.CallExpression: {
       // Special builtin
       if (node.name === "read") {
@@ -126,16 +180,16 @@ function generateExpression(node) {
       // Generate call for any identifier — validation ensures it's known
       const args = [];
       for (const arg of node.arguments) {
-        const result = generateExpression(arg);
+        const result = generateExpression(arg, locals, hasReceiver);
         if (result.variant === "err") return result;
         args.push(result.node);
       }
       return { node: `${node.name}(${args.join(", ")})` };
     }
     case NodeType.BinaryExpression: {
-      const left = generateExpression(node.left);
+      const left = generateExpression(node.left, locals, hasReceiver);
       if (left.variant === "err") return left;
-      const right = generateExpression(node.right);
+      const right = generateExpression(node.right, locals, hasReceiver);
       if (right.variant === "err") return right;
       return { node: `${left.node} ${node.operator} ${right.node}` };
     }
@@ -150,7 +204,7 @@ function generateExpression(node) {
 function isLastRuntimeStatement(ast, stmt) {
   const body = ast.body;
   // Only ExpressionStatements can produce a runtime return value.
-  // Declarations (struct/type/fn/let) never count as the last statement for returning.
+  // Declarations and assignments (struct/type/fn/let/assignment) never count as the last statement for returning.
   for (let i = body.length - 1; i >= 0; i--) {
     if (body[i].type === NodeType.ExpressionStatement) return body[i] === stmt;
   }
