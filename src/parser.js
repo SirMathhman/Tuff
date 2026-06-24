@@ -79,7 +79,7 @@ function parseStatement(tokens, pos) {
   };
 }
 
-// struct IDENT { ... }
+// struct IDENT <T, U> { ... }
 function parseStructDeclaration(tokens, pos) {
   if (tokens[pos].type !== TokenType.STRUCT)
     return { variant: "err", error: `Expected 'struct' at position ${pos}` };
@@ -92,6 +92,17 @@ function parseStructDeclaration(tokens, pos) {
       error: `Expected struct name after 'struct' at position ${pos}`,
     };
   pos++;
+
+  // Optional generic parameters <T, U>
+  if (tokens[pos]?.type === TokenType.LT) {
+    pos++; // consume '<'
+    while (pos < tokens.length && tokens[pos]?.type !== TokenType.GT) {
+      pos++;
+    }
+    if (!tokens[pos])
+      return { variant: "err", error: `Expected '>' to close generic parameters` };
+    pos++; // consume '>'
+  }
 
   // Consume opening brace
   if (!tokens[pos] || tokens[pos].type !== TokenType.LBRACE)

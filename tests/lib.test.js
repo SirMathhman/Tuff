@@ -40,6 +40,10 @@ test("struct Empty {} compiles and exits with code 0", () => {
   expectValid("struct Empty {}", "", 0);
 });
 
+test("struct Empty<T> {} compiles and exits with code 0", () => {
+  expectValid("struct Empty<T> {}", "", 0);
+});
+
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

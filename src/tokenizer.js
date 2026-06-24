@@ -12,6 +12,8 @@ export const TokenType = {
   RPAREN: ")",
   LBRACE: "{",
   RBRACE: "}",
+  LT: "<",
+  GT: ">",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -55,6 +57,18 @@ export function tokenize(source) {
     }
     if (source[pos] === "}") {
       tokens.push({ type: TokenType.RBRACE, value: "}" });
+      pos++;
+      continue;
+    }
+
+    // Angle brackets (generics)
+    if (source[pos] === "<") {
+      tokens.push({ type: TokenType.LT, value: "<" });
+      pos++;
+      continue;
+    }
+    if (source[pos] === ">") {
+      tokens.push({ type: TokenType.GT, value: ">" });
       pos++;
       continue;
     }
