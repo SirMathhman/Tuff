@@ -15,6 +15,7 @@ export const TokenType = {
   LT: "<",
   GT: ">",
   COLON: ":",
+  COMMA: ",",
   SEMICOLON: ";",
   EQUALS: "=",
   EOF: "<EOF>",
@@ -84,6 +85,13 @@ export function tokenize(source) {
     // Colon (type annotation)
     if (source[pos] === ":") {
       tokens.push({ type: TokenType.COLON, value: ":" });
+      pos++;
+      continue;
+    }
+
+    // Comma (field separator)
+    if (source[pos] === ",") {
+      tokens.push({ type: TokenType.COMMA, value: "," });
       pos++;
       continue;
     }
