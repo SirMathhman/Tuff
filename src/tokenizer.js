@@ -48,6 +48,27 @@ export function tokenize(source) {
       continue;
     }
 
+    // Skip block comments /* ... */
+    if (source[pos] === "/" && source[pos + 1] === "*") {
+      pos += 2; // skip '/*'
+      while (
+        pos < source.length - 1 &&
+        !(source[pos] === "*" && source[pos + 1] === "/")
+      ) {
+        if (source[pos] === "\n") {
+          line++;
+          col = 0;
+        } else {
+          col++;
+        }
+        pos++;
+      }
+      if (pos < source.length) {
+        pos += 2; // skip '*/'
+      }
+      continue;
+    }
+
     // Semicolon
     if (source[pos] === ";") {
       tokens.push({ type: TokenType.SEMICOLON, value: ";", line, col });

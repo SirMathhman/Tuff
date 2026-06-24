@@ -1,3 +1,4 @@
+/*
 struct Ok<T> { value : T }
 struct Err<X> { error : X }
 
@@ -28,3 +29,4 @@ if (target is Err { error : e }) {
 }
 
 fs.writeFileSync("./main.js", target.value, "utf-8");
+*/
