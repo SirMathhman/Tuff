@@ -27,6 +27,87 @@ function collectExports(node) {
   return exports;
 }
 
+// Compile Tuff entry module with native JS modules included verbatim.
+export function compileModulesWithNative(
+  tuffModuleNames,
+  tuffSources,
+  nativeModules,
+) {
+  // Collect all known identifiers for validation (tuff + native module names)
+  const extraKnownIds = [
+    ...Object.keys(tuffSources),
+    ...Object.keys(nativeModules || {}),
+  ];
+
+  // Compile Tuff sources
+  const compiledTuff = {};
+  for (const [name, source] of Object.entries(tuffSources)) {
+    if (!source && source !== "")
+      return Err(`Missing source for module '${name}'`);
+
+    const entryPoint = name === tuffModuleNames[0];
+    const result = compileSourceToJS(source, {
+      includePreamble: false,
+      isEntryPoint: entryPoint,
+      extraKnownIds,
+    });
+    if (result.variant === "err") return Err(result.error);
+
+    compiledTuff[name] = result.value;
+  }
+
+  // Build wiring lines for Tuff module exports
+  const exportWiringLines = [];
+  for (const [name, info] of Object.entries(compiledTuff)) {
+    if (info.exports.length > 0) {
+      exportWiringLines.push(`_ctx.${name} = {};`);
+      for (const expName of info.exports) {
+        exportWiringLines.push(
+          `_ctx.${name}.${expName} = _ctx.__exports.${expName};`,
+        );
+      }
+    }
+  }
+
+  // Assemble final output: preamble → native modules → Tuff deps → wiring → entry module
+  const jsParts = [];
+
+  // Include native JS verbatim first (wrapped to register exports)
+  for (const [name, js] of Object.entries(nativeModules || {})) {
+    // Initialize _ctx[name] so transformed export statements can write directly to it
+    jsParts.push(`_ctx.${name} = {};`);
+    // Transform "export const/let/var X = ..." into "_ctx.NAME.X = ..." so it runs in a function body
+    const transformedJs = js.replace(
+      /export\s+(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/g,
+      `_ctx.${name}["$1"]`,
+    );
+    jsParts.push(transformedJs);
+  }
+
+  // Run Tuff dependency modules (non-entry)
+  const entryModule = tuffModuleNames[0];
+  for (const name of Object.keys(compiledTuff)) {
+    if (name !== entryModule) {
+      jsParts.push(compiledTuff[name].code);
+    }
+  }
+
+  // Wire exports after dependencies have run
+  if (exportWiringLines.length > 0) {
+    jsParts.push(exportWiringLines.join("\n"));
+  }
+
+  // Run entry module last
+  for (const name of tuffModuleNames) {
+    if (!compiledTuff[name]) return Err(`Unknown Tuff module '${name}'`);
+    jsParts.push(compiledTuff[name].code);
+  }
+
+  const preamble = `var _ctx = {};
+const tokens = stdIn.split(/\\s+/).map(t => parseInt(t, 10));`;
+  return Ok([preamble, ...jsParts].join("\n"));
+}
+
 // Compile a single Tuff source to JS body (no preamble).
 function compileSourceToJS(source, options = {}) {
   const { includePreamble = true, isEntryPoint } = Object.assign(
@@ -101,6 +182,12 @@ function validateIdentifiers(node, knownIds) {
         }
       }
       return validateIdentifiers(node.value, knownIds);
+    case NodeType.ExternImportStatement:
+      // Register each imported binding as a known identifier
+      for (const b of node.bindings) {
+        knownIds.add(b);
+      }
+      return { ok: true };
     case NodeType.AssignmentStatement: {
       // Direct this.x assignment — target must be a known mutable variable
       if (node.target) {

@@ -1,5 +1,6 @@
 // Token types
 export const TokenType = {
+  EXTERN_LET_IMPORT_DECLARATION: "EXTERN_LET_IMPORT_DECLARATION",
   OUT: "OUT",
   LET: "LET",
   MUT: "MUT",
@@ -377,14 +378,32 @@ export function tokenize(source) {
           });
           skipToSemicolon();
         } else if (/^[\s]*let/.test(rest)) {
-          // Check for extern let declaration: extern let IDENT : Type = extern ... ;
-          tokens.push({
-            type: TokenType.EXTERN_LET_DECLARATION,
-            value: "extern",
-            line: startLine,
-            col: startCol,
-          });
-          skipToSemicolon();
+          // Check for extern let import with destructuring: extern let { x , y } = extern IDENT ;
+          const match = rest.match(
+            /^[ \t]+let[ \t]+\{([^}]+)\}[ \t]*=[ \t]*extern[ \t]+([a-zA-Z_][a-zA-Z0-9_]*)/,
+          );
+          if (match) {
+            const bindings = match[1]
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            tokens.push({
+              type: TokenType.EXTERN_LET_IMPORT_DECLARATION,
+              value: { bindings, moduleName: match[2] },
+              line: startLine,
+              col: startCol,
+            });
+            skipToSemicolon();
+          } else {
+            // Check for extern let declaration: extern let IDENT : Type = extern ... ;
+            tokens.push({
+              type: TokenType.EXTERN_LET_DECLARATION,
+              value: "extern",
+              line: startLine,
+              col: startCol,
+            });
+            skipToSemicolon();
+          }
         } else if (/^[\s]*fn/.test(rest)) {
           // Check for extern fn declaration: extern fn NAME(...) : Type ;
           tokens.push({

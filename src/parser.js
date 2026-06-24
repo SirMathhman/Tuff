@@ -3,6 +3,7 @@ import { TokenType } from "./tokenizer.js";
 // AST Node Types
 export const NodeType = {
   Program: "Program",
+  ExternImportStatement: "ExternImportStatement",
   ExportStatement: "ExportStatement",
   DestructureBinding: "DestructureBinding",
   LetStatement: "LetStatement",
@@ -138,6 +139,18 @@ function parseStatement(tokens, pos) {
   if (tokens[pos].type === TokenType.EXTERN_FN_DECLARATION) {
     return {
       statement: { type: NodeType.StructDeclaration, name: "extern_fn" },
+      nextPos: pos + 1,
+    };
+  }
+
+  // Extern let import with destructuring: extern let { x , y } = extern IDENT ;
+  if (tokens[pos].type === TokenType.EXTERN_LET_IMPORT_DECLARATION) {
+    return {
+      statement: {
+        type: NodeType.ExternImportStatement,
+        bindings: tokens[pos].value.bindings,
+        moduleName: tokens[pos].value.moduleName,
+      },
       nextPos: pos + 1,
     };
   }

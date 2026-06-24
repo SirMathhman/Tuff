@@ -35,6 +35,13 @@ export function generate(ast, options = {}) {
         lines.push(`function ${stmt.name}(${jsParams}) { ${bodyResult.node} }`);
         break;
       }
+      case NodeType.ExternImportStatement: {
+        // extern let { x , y } = extern lib; → _ctx.x = _ctx.lib.x;
+        for (const binding of stmt.bindings) {
+          lines.push(`_ctx.${binding} = _ctx.${stmt.moduleName}.${binding};`);
+        }
+        break;
+      }
       case NodeType.ExportStatement: {
         const exportResult = generateExpression(stmt.value);
         if (exportResult.variant === "err") return exportResult;

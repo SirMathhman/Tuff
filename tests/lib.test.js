@@ -154,7 +154,7 @@ test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
 
-import { compileModulesToJS } from "../src/lib.js";
+import { compileModulesToJS, compileModulesWithNative } from "../src/lib.js";
 
 function expectValidWithModules(
   moduleNames,
@@ -194,6 +194,29 @@ test("destructuring imports from module exports returns extracted value", () => 
   expectValidWithModules(
     ["index"],
     { index: "let { x } = lib; x", lib: "out let x = 1;" },
+    "",
+    1,
+  );
+});
+
+function expectValidWithNativeModules(
+  tuffModuleNames,
+  tuffSources,
+  nativeModules,
+  stdIn,
+  expectedExitCode,
+) {
+  const result = compileModulesWithNative(tuffModuleNames, tuffSources, nativeModules);
+  if (result.variant === "err") throw new Error(result.error);
+  const actualExitCode = new Function("stdIn", result.value)(stdIn);
+  expect(expectedExitCode).toBe(actualExitCode);
+}
+
+test("native module import via extern let destructuring returns exported value", () => {
+  expectValidWithNativeModules(
+    ["index"],
+    { index: "extern let { x } = extern lib; extern let x : I32; x" },
+    { lib: "export const x = 1;" },
     "",
     1,
   );
