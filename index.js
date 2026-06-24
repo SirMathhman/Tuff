@@ -15,7 +15,7 @@ export function compileTuffToJS(source) {
 const source = fs.readFileSync("./main.tuff", "utf-8");
 const target = compileTuffToJS(source);
 if (target.variant === "err") {
-  console.log(target.error);
+  console.error(target.error);
   process.exit(1);
 }
 
