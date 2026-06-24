@@ -9,4 +9,6 @@ function expectValid(source, stdIn, expectedExitCode) {
   expect(expectedExitCode).toBe(actualExitCode);
 }
 
-
+function expectInvalid(source) {
+  expect(compileTuffToJS(source).variant).toBe("err");
+}
