@@ -91,6 +91,9 @@ test("function with block body, generic return type, and struct instantiation re
     0,
   );
 });
+test("type alias with generic parameters compiles and exits with code 0", () => {
+  expectValid("struct A<K> {} type Temp<U> = A<U>;", "", 0);
+});
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });

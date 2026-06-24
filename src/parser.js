@@ -17,7 +17,7 @@ export const NodeType = {
   ObjectLiteral: "ObjectLiteral",
   BlockStatement: "BlockStatement",
   ReturnStatement: "ReturnStatement",
-}
+};
 
 // Helper to consume an optional trailing semicolon and advance position
 function maybeConsumeSemicolon(tokens, pos) {
@@ -193,7 +193,10 @@ function parseBlock(tokens, pos) {
     tokens[pos].type !== TokenType.EOF
   ) {
     // Return statement inside block: return expr ;
-    if (tokens[pos]?.value === "return" && tokens[pos]?.type === TokenType.IDENT) {
+    if (
+      tokens[pos]?.value === "return" &&
+      tokens[pos]?.type === TokenType.IDENT
+    ) {
       pos++; // consume 'return'
       const expr = parseExpression(tokens, pos);
       if (expr.variant === "err") return expr;
@@ -221,7 +224,7 @@ function parseBlock(tokens, pos) {
   };
 }
 
-// type IDENT = TYPE ;
+// type IDENT <T, U>? = TYPE ;
 function parseTypeAlias(tokens, pos) {
   if (tokens[pos].type !== TokenType.TYPE_ALIAS)
     return { variant: "err", error: `Expected 'type' at position ${pos}` };
@@ -234,6 +237,20 @@ function parseTypeAlias(tokens, pos) {
       error: `Expected alias name after 'type' at position ${pos}`,
     };
   pos++;
+
+  // Optional generic parameters <T, U>
+  if (tokens[pos]?.type === TokenType.LT) {
+    pos++; // consume '<'
+    while (pos < tokens.length && tokens[pos]?.type !== TokenType.GT) {
+      pos++;
+    }
+    if (!tokens[pos])
+      return {
+        variant: "err",
+        error: `Expected '>' to close generic parameters for type alias '${name}'`,
+      };
+    pos++; // consume '>'
+  }
 
   // Consume '='
   if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS) {
