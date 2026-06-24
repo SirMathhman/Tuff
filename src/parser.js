@@ -458,8 +458,17 @@ function parsePrimary(tokens, pos) {
     return { node: { type: NodeType.Identifier, name }, nextPos: pos };
   }
 
+  // Build context snippet from surrounding tokens for better diagnostics
+  const start = Math.max(0, pos - 3);
+  const end = Math.min(tokens.length, pos + 4);
+  const snippet = [];
+  for (let i = start; i < end; i++) {
+    const marker = i === pos ? " <--" : "";
+    snippet.push(`${tokens[i].value ?? tokens[i].type}${marker}`);
+  }
+
   return {
     variant: "err",
-    error: `Unexpected token at position ${pos}: ${tokens[pos]?.type}`,
+    error: `Unexpected token at position ${pos}: '${tokens[pos]?.value}' (${tokens[pos]?.type}). Context: [${snippet.join(", ")}]`,
   };
 }
