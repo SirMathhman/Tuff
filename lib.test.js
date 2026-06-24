@@ -15,3 +15,15 @@ function expectInvalid(source) {
 test("empty source compiles and exits with code 0", () => {
   expectValid("", "", 0);
 });
+
+test("read() returns parsed stdin as exit code", () => {
+  expectValid("read()", "100", 100);
+});
+
+test("read() parses first token from multi-token stdin", () => {
+  expectValid("read()", "100 20", 100);
+});
+
+test("multiple read() calls consume tokens sequentially, last value wins", () => {
+  expectValid("read(); read()", "100 20", 20);
+});
