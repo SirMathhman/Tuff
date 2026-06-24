@@ -185,7 +185,7 @@ function parseTypeAlias(tokens, pos) {
     const found = tokens[pos]?.value ?? "end of input";
     return {
       variant: "err",
-      error: `Expected '=' for type alias, but found '${found}' at position ${pos}`,
+      error: `Expected '=' for type alias '${name}', but found '${found}' at position ${pos}`,
     };
   }
   pos++;
@@ -195,7 +195,10 @@ function parseTypeAlias(tokens, pos) {
     pos++;
   }
   if (!tokens[pos])
-    return { variant: "err", error: `Expected ';' to end type alias` };
+    return {
+      variant: "err",
+      error: `Expected ';' to end type alias '${name}'`,
+    };
   pos++; // consume ';'
 
   return { name, nextPos: pos };
@@ -224,14 +227,17 @@ function parseStructDeclaration(tokens, pos) {
     if (!tokens[pos])
       return {
         variant: "err",
-        error: `Expected '>' to close generic parameters`,
+        error: `Expected '>' to close generic parameters for struct '${name}'`,
       };
     pos++; // consume '>'
   }
 
   // Consume opening brace
   if (!tokens[pos] || tokens[pos].type !== TokenType.LBRACE)
-    return { variant: "err", error: `Expected '{' for struct body` };
+    return {
+      variant: "err",
+      error: `Expected '{' for struct body of '${name}'`,
+    };
   pos++;
 
   // Skip to closing brace (empty body for now — no field parsing yet)
@@ -239,7 +245,7 @@ function parseStructDeclaration(tokens, pos) {
     pos++;
   }
   if (!tokens[pos])
-    return { variant: "err", error: `Expected '}' to close struct` };
+    return { variant: "err", error: `Expected '}' to close struct '${name}'` };
   pos++; // consume '}'
 
   return { name, nextPos: pos };
