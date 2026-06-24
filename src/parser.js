@@ -134,6 +134,18 @@ function parseFunctionDeclaration(tokens, pos) {
     return { variant: "err", error: `Expected ')' to close parameter list` };
   pos++; // consume ')'
 
+  // Optional return type annotation : Type
+  if (tokens[pos]?.type === TokenType.COLON) {
+    pos++; // consume ':'
+    while (
+      pos < tokens.length &&
+      tokens[pos].type !== TokenType.FAT_ARROW &&
+      tokens[pos].type !== TokenType.EOF
+    ) {
+      pos++;
+    }
+  }
+
   // Consume '=>'
   if (!tokens[pos] || tokens[pos].type !== TokenType.FAT_ARROW)
     return {

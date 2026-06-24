@@ -78,6 +78,9 @@ test("string literal .length returns character count", () => {
 test("function declaration and call returns expression value", () => {
   expectValid("fn get() => 100; get()", "", 100);
 });
+test("function declaration with return type annotation compiles and calls correctly", () => {
+  expectValid("fn get() : I32 => 100; get()", "", 100);
+});
 test("unknown identifier is rejected", () => {
   expectInvalid("foo");
 });
