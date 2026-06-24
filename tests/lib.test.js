@@ -1,5 +1,5 @@
 import { test, expect } from "@jest/globals";
-import { compileTuffToJS } from "./lib";
+import { compileTuffToJS } from "../src/lib.js";
 
 function expectValid(source, stdIn, expectedExitCode) {
   const result = compileTuffToJS(source);
