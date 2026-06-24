@@ -989,9 +989,13 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
             }
             Err(e) => panic!("Failed to wait for compiled binary: {}", e),
         }
-    };
+    }
 
-    let actual_exit_code = child.wait().expect("Failed to reap process").code().unwrap_or(-1);
+    let actual_exit_code = child
+        .wait()
+        .expect("Failed to reap process")
+        .code()
+        .unwrap_or(-1);
 
     if expected_exit_code != actual_exit_code {
         panic!(
