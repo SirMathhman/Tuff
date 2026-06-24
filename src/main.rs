@@ -24,6 +24,7 @@ enum AstExpr {
         Box<AstExpr>,
         bool,
     ), // for (var in start..end) body_var +=? body_expr;
+    Match(Box<AstExpr>, Vec<(AstExpr, AstExpr)>), // scrutinee, vec of (pattern, result)
 }
 
 struct Parser<'a> {
@@ -41,6 +42,8 @@ enum Token<'a> {
     Break,
     For,
     In,
+    Match,
+    Case,
     Ident(&'a str),
     Read,
     ReadBool,
@@ -52,7 +55,8 @@ enum Token<'a> {
     RBrace,
     Plus,
     Less,
-    DotDot, // .. for range
+    DotDot,   // .. for range
+    FatArrow, // => for match cases
     Equals,
     Semicolon,
     Eof,
@@ -74,8 +78,14 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                 tokens.push(Token::Semicolon);
             }
             '=' => {
+                // Check for '=>' (fat arrow) — consume '=', then peek for '>'
                 chars.next();
-                tokens.push(Token::Equals);
+                if matches!(chars.peek(), Some('>')) {
+                    chars.next();
+                    tokens.push(Token::FatArrow);
+                } else {
+                    tokens.push(Token::Equals);
+                }
             }
             '+' => {
                 chars.next();
@@ -142,6 +152,8 @@ fn tokenize(source: &str) -> Vec<Token<'_>> {
                     "break" => tokens.push(Token::Break),
                     "for" => tokens.push(Token::For),
                     "in" => tokens.push(Token::In),
+                    "match" => tokens.push(Token::Match),
+                    "case" => tokens.push(Token::Case),
                     "read" => tokens.push(Token::Read),
                     "readBool" => tokens.push(Token::ReadBool),
                     "true" => tokens.push(Token::Bool(true)),
@@ -526,6 +538,51 @@ impl<'a> Parser<'a> {
         Ok(AstExpr::Block(block_lets, stmts, final_expr.map(Box::new)))
     }
 
+    /// match_expr → "match" ( expr ) { "case" pattern ">=" value ";" ... }
+    fn parse_match(&mut self) -> Result<AstExpr, std::fmt::Error> {
+        self.eat(); // 'match'
+
+        self.expect_open_paren()?;
+        let scrutinee = self.parse_expr()?;
+
+        if !matches!(self.peek(), Token::RParen) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // ')'
+
+        if !matches!(self.peek(), Token::LBrace) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '{'
+
+        let mut cases: Vec<(AstExpr, AstExpr)> = Vec::new();
+        loop {
+            match self.peek() {
+                Token::RBrace => break,
+                Token::Case => {
+                    self.eat(); // 'case'
+                    let pattern = self.parse_expr()?;
+
+                    if !matches!(self.peek(), Token::FatArrow) {
+                        return Err(std::fmt::Error);
+                    }
+                    self.eat(); // '=>'
+
+                    let value = self.parse_expr_semicolon()?;
+                    cases.push((pattern, value));
+                }
+                _ => return Err(std::fmt::Error),
+            }
+        }
+
+        if !matches!(self.peek(), Token::RBrace) {
+            return Err(std::fmt::Error);
+        }
+        self.eat(); // '}'
+
+        Ok(AstExpr::Match(Box::new(scrutinee), cases))
+    }
+
     /// loop_expr → "loop" { "break" expr ";" }
     fn parse_loop(&mut self) -> Result<AstExpr, std::fmt::Error> {
         self.eat(); // consume 'loop'
@@ -555,13 +612,16 @@ impl<'a> Parser<'a> {
         Ok(AstExpr::Loop(Box::new(break_expr)))
     }
 
-    /// term → "if" expr ")" expr "else" expr | "loop" { break expr; } | "{" ... } | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
+    /// term → "if" expr ")" expr "else" expr | "loop" { break expr; } | "match" (expr) { case pat => val; ... } | "{" ... } | "read" ["(" ")"] | "readBool" ["(" ")"] | IDENT | NUM | BOOL
     fn parse_term(&mut self) -> Result<AstExpr, std::fmt::Error> {
         if matches!(self.peek(), Token::If) {
             return self.parse_if();
         }
         if matches!(self.peek(), Token::Loop) {
             return self.parse_loop();
+        }
+        if matches!(self.peek(), Token::Match) {
+            return self.parse_match();
         }
         if matches!(self.peek(), Token::LBrace) {
             return self.parse_block();
@@ -683,6 +743,55 @@ fn emit_flatten(expr: &AstExpr) -> Result<(String, String), std::fmt::Error> {
             }
 
             Ok((decls, "0".to_string()))
+        }
+        AstExpr::Match(scrutinee, cases) => {
+            // Emit as a chain of if/else-if with temp variable.
+            let id = next_if_id();
+            let mut decls = String::new();
+
+            write!(decls, "int __match_{};\n", id).map_err(|_| std::fmt::Error)?;
+
+            // Flatten scrutinee once into a temp.
+            let (scrut_decl, scrut_val) = emit_flatten(scrutinee)?;
+            decls.push_str(&scrut_decl);
+
+            if cases.is_empty() {
+                return Ok((decls, format!("__match_{}", id)));
+            }
+
+            for (i, (pattern, value_expr)) in cases.iter().enumerate() {
+                let is_wildcard = matches!(pattern, AstExpr::Var(name) if name == "_");
+
+                let (_, pattern_val) = emit_flatten(pattern)?;
+                let (val_decl, val_result) = emit_flatten(value_expr)?;
+
+                if i == 0 && !is_wildcard {
+                    let cond = format!("({} == {})", scrut_val, pattern_val);
+                    writeln!(
+                        decls,
+                        "if ({}) {{ {} __match_{} = {}; }}",
+                        cond, val_decl, id, val_result
+                    )
+                    .map_err(|_| std::fmt::Error)?;
+                } else if is_wildcard {
+                    writeln!(
+                        decls,
+                        "else {{ {} __match_{} = {}; }}",
+                        val_decl, id, val_result
+                    )
+                    .map_err(|_| std::fmt::Error)?;
+                } else {
+                    let cond = format!("({} == {})", scrut_val, pattern_val);
+                    writeln!(
+                        decls,
+                        "else if ({}) {{ {} __match_{} = {}; }}",
+                        cond, val_decl, id, val_result
+                    )
+                    .map_err(|_| std::fmt::Error)?;
+                }
+            }
+
+            Ok((decls, format!("__match_{}", id)))
         }
         AstExpr::If(cond, then_br, else_br) => {
             // Emit as a proper C if-statement with temp variable.
@@ -853,6 +962,11 @@ fn emit_expr(expr: &AstExpr, buf: &mut String) -> std::fmt::Result {
             // This variant should not reach emit_expr directly.
             return Err(std::fmt::Error);
         }
+        AstExpr::Match(_, _) => {
+            // Match expressions are handled during compile() by emit_flatten.
+            // This variant should not reach emit_expr directly.
+            return Err(std::fmt::Error);
+        }
     }
     Ok(())
 }
@@ -977,9 +1091,9 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
     }
 
     let start = std::time::Instant::now();
-    loop {
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break status,
+            Ok(Some(s)) => break s,
             Ok(None) => {
                 if start.elapsed() >= TIMEOUT {
                     let _ = child.kill();
@@ -989,13 +1103,9 @@ fn assert_valid(source: &str, stdin: &str, expected_exit_code: i32) {
             }
             Err(e) => panic!("Failed to wait for compiled binary: {}", e),
         }
-    }
+    };
 
-    let actual_exit_code = child
-        .wait()
-        .expect("Failed to reap process")
-        .code()
-        .unwrap_or(-1);
+    let actual_exit_code = status.code().unwrap_or(-1);
 
     if expected_exit_code != actual_exit_code {
         panic!(
@@ -1131,6 +1241,24 @@ mod tests {
             "let mut sum = 0; for (i in 0..read()) sum += i; sum",
             "4",
             6,
+        )
+    }
+
+    #[test]
+    fn match_expression_bool_cases() {
+        assert_valid(
+            "let x = match (readBool()) { case true => 4; case false => 5; }; x",
+            "true",
+            4,
+        )
+    }
+
+    #[test]
+    fn match_with_wildcard() {
+        assert_valid(
+            "let x = match (read()) { case 1 => 4; case _ => 5; }; x",
+            "2",
+            5,
         )
     }
 }
