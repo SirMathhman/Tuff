@@ -375,3 +375,30 @@ test("if expression with comparison in condition", () => {
 test("if expression returns correct value for false comparison", () => {
   expectValid("let a = 10; let b = 5; if (a < b) 1 else 0", "", 0);
 });
+
+/* Block expressions */
+
+test("block expression with variable declaration and return value", () => {
+  // let x = { let y = 42; y }; x → 42
+  expectValid("let x = { let y = 42; y }; x", "", 42);
+});
+
+test("block expression evaluates last expression as result", () => {
+  expectValid("{ let a = 10; let b = 20; a + b }", "", 30);
+});
+
+test("block expression with multiple statements and if inside", () => {
+  expectValid(
+    "{ let x = 5; let y = 10; if (x < y) x else y }",
+    "",
+    5,
+  );
+});
+
+test("struct instantiation still works alongside block expressions", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let p = Point { x : 3, y : 4 }; p.x + p.y",
+    "",
+    7,
+  );
+});

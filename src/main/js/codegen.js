@@ -310,6 +310,37 @@ function generateExpression(node, locals, hasReceiver) {
     }
     case NodeType.BooleanLiteral:
       return { node: String(node.value) };
+    case NodeType.BlockExpression: {
+      // Generate an IIFE that executes statements and returns the last expression's value
+      const lines = [];
+      // Track block-local variables so they resolve as bare identifiers, not _ctx lookups
+      const blockLocals = new Set(locals);
+      for (const stmt of node.body) {
+        if (stmt.type === NodeType.LetStatement) {
+          blockLocals.add(stmt.name);
+          if (stmt.value) {
+            const exprResult = generateExpression(
+              stmt.value,
+              blockLocals,
+              hasReceiver,
+            );
+            if (exprResult.variant === "err") return exprResult;
+            lines.push(`let ${stmt.name} = ${exprResult.node};`);
+          } else {
+            lines.push(`let ${stmt.name};`);
+          }
+        } else if (stmt.type === NodeType.ExpressionStatement) {
+          const exprStmtResult = generateExpression(
+            stmt.expression,
+            blockLocals,
+            hasReceiver,
+          );
+          if (exprStmtResult.variant === "err") return exprStmtResult;
+          lines.push(`__block_result = ${exprStmtResult.node};`);
+        }
+      }
+      return { node: `(function() { let __block_result; ${lines.join(" ")} return __block_result; })()` };
+    }
     default:
       return {
         variant: "err",

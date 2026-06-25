@@ -26,6 +26,7 @@ export const NodeType = {
   QualifiedPathExpression: "QualifiedPathExpression",
   IfExpression: "IfExpression",
   BooleanLiteral: "BooleanLiteral",
+  BlockExpression: "BlockExpression",
 };
 
 // Helper to produce a parser error with line:col and surrounding token context
@@ -62,11 +63,9 @@ export function parse(tokens) {
 
   while (tokens[pos].type !== TokenType.EOF) {
     // Empty statement (just semicolon or EOF with no content)
-    if (
-      tokens[pos].type === TokenType.SEMICOLON ||
-      tokens[pos].type === TokenType.EOF
-    ) {
-      break;
+    if (tokens[pos].type === TokenType.SEMICOLON) {
+      pos++;
+      continue;
     }
 
     const stmt = parseStatement(tokens, pos);
@@ -962,7 +961,10 @@ function parsePrimary(tokens, pos) {
   // Number literal
   if (!tokens[pos]) return err("Unexpected end of input", tokens, pos);
 
-  if (tokens[pos].type === TokenType.TRUE || tokens[pos].type === TokenType.FALSE) {
+  if (
+    tokens[pos].type === TokenType.TRUE ||
+    tokens[pos].type === TokenType.FALSE
+  ) {
     const value = tokens[pos].value;
     pos++;
     return { node: { type: NodeType.BooleanLiteral, value }, nextPos: pos };
@@ -980,8 +982,27 @@ function parsePrimary(tokens, pos) {
     return { node: { type: NodeType.NumberLiteral, value }, nextPos: pos };
   }
 
-  // Object literal / struct instantiation {}
+  // Block expression or object literal {}
   if (tokens[pos]?.type === TokenType.LBRACE) {
+    // Peek ahead to determine block vs object:
+    // If first meaningful token is a statement keyword, treat as block expression.
+    const peek = pos + 1;
+    const isBlock = tokens[peek] && (
+      tokens[peek].type === TokenType.LET ||
+      (tokens[peek]?.value === "return" && tokens[peek]?.type === TokenType.IDENT)
+    );
+
+    if (isBlock) {
+      // Parse as block expression — reuse parseBlock logic but return as BlockExpression
+      const blockResult = parseBlock(tokens, pos);
+      if (blockResult.variant === "err") return blockResult;
+      return {
+        node: { type: NodeType.BlockExpression, body: blockResult.node.body },
+        nextPos: blockResult.nextPos,
+      };
+    }
+
+    // Object literal / struct instantiation — skip to closing brace
     pos++; // consume '{'
     while (pos < tokens.length && tokens[pos].type !== TokenType.RBRACE) {
       pos++;

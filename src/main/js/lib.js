@@ -224,6 +224,14 @@ function validateIdentifiers(node, knownIds, externModuleNames = new Set()) {
     case NodeType.BooleanLiteral:
       // Boolean literals are builtins, nothing to validate
       return { ok: true };
+    case NodeType.BlockExpression: {
+      let scope = new Set(knownIds);
+      for (const stmt of node.body) {
+        const result = validateIdentifiers(stmt, scope, externModuleNames);
+        if (!result.ok) return result;
+      }
+      return { ok: true };
+    }
     case NodeType.ExternImportStatement:
       // Register each imported binding as a known identifier
       for (const b of node.bindings) {

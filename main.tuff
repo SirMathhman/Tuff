@@ -21,12 +21,12 @@ extern let console : Console;
 extern fn error(this : Console, message : Str) : Void;
 
 let source = fs.readFileSync("./main.tuff", "utf-8");
-/*
 let target = compileTuffToJS(source);
 if (target is Err { error : e }) {
     console.error(e);
     return 1;
 }
+/*
 
 fs.writeFileSync("./main.js", target.value, "utf-8");
 */
