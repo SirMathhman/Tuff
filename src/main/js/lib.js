@@ -257,6 +257,26 @@ function validateIdentifiers(node, knownIds, externModuleNames = new Set()) {
           externModuleNames,
         );
         if (!targetResult.ok) return targetResult;
+
+        // If compound assignment, check mutability of the target
+        if (node.operator) {
+          let baseName;
+          if (node.targetExpr.type === NodeType.Identifier) {
+            baseName = node.targetExpr.name;
+          } else if (
+            node.targetExpr.type === NodeType.DotExpression &&
+            node.targetExpr.object.type === NodeType.Identifier
+          ) {
+            // p.x += 5 → check that 'p' is mutable
+            baseName = node.targetExpr.object.name;
+          }
+          if (baseName && !knownIds.has(`__mutable_${baseName}`)) {
+            return {
+              ok: false,
+              error: `Cannot use '${node.operator}' on '${baseName}' (not declared as mutable)`,
+            };
+          }
+        }
       }
       return validateIdentifiers(node.value, knownIds, externModuleNames);
     }

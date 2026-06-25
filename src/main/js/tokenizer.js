@@ -41,6 +41,10 @@ export const TokenType = {
   FAT_ARROW: "=>",
   SEMICOLON: ";",
   EQUALS: "=",
+  PLUS_EQ: "+=",
+  MINUS_EQ: "-=",
+  STAR_EQ: "*=",
+  SLASH_EQ: "/=",
   EOF: "<EOF>",
 };
 
@@ -291,16 +295,44 @@ export function tokenize(source) {
       continue;
     }
 
-    // Operators
+    // Operators (with lookahead for compound assignment)
     if ("+-*/".includes(source[pos])) {
+      const startLine = line;
+      const startCol = col;
       const op = source[pos];
+
+      // Check for compound assignment operators: +=, -=, *=, /=
+      if (pos + 1 < source.length && source[pos + 1] === "=") {
+        const compoundMap = {
+          "+": { type: TokenType.PLUS_EQ, value: "+=" },
+          "-": { type: TokenType.MINUS_EQ, value: "-=" },
+          "*": { type: TokenType.STAR_EQ, value: "*=" },
+          "/": { type: TokenType.SLASH_EQ, value: "/=" },
+        };
+        if (compoundMap[op]) {
+          tokens.push({
+            ...compoundMap[op],
+            line: startLine,
+            col: startCol,
+          });
+          pos += 2;
+          col += 2;
+          continue;
+        }
+      }
+
       const operatorMap = {
         "+": "PLUS",
         "-": "MINUS",
         "*": "STAR",
         "/": "SLASH",
       };
-      tokens.push({ type: TokenType[operatorMap[op]], value: op, line, col });
+      tokens.push({
+        type: TokenType[operatorMap[op]],
+        value: op,
+        line: startLine,
+        col: startCol,
+      });
       pos++;
       col++;
       continue;

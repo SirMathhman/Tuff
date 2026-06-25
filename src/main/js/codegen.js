@@ -113,14 +113,30 @@ export function generate(ast, options = {}) {
       case NodeType.AssignmentStatement: {
         const assignResult = generateExpression(stmt.value);
         if (assignResult.variant === "err") return assignResult;
+
+        // Determine the operator symbol for compound assignment, or default to '='
+        let opSymbol = stmt.operator ? stmt.operator.replace("=", "") : undefined;
+
         // Direct this.x assignment
         if (stmt.target) {
-          lines.push(`_ctx.${stmt.target} = ${assignResult.node};`);
+          if (opSymbol) {
+            lines.push(
+              `_ctx.${stmt.target} = _ctx.${stmt.target} ${opSymbol} ${assignResult.node};`,
+            );
+          } else {
+            lines.push(`_ctx.${stmt.target} = ${assignResult.node};`);
+          }
         }
-        // General expression-based assignment (e.g. temp.x = 200)
+        // General expression-based assignment (e.g. temp.x = 200 or temp.x += 5)
         else if (stmt.targetExpr) {
           const targetCode = generateExpression(stmt.targetExpr).node;
-          lines.push(`${targetCode} = ${assignResult.node};`);
+          if (opSymbol) {
+            lines.push(
+              `${targetCode} = ${targetCode} ${opSymbol} ${assignResult.node};`,
+            );
+          } else {
+            lines.push(`${targetCode} = ${assignResult.node};`);
+          }
         }
         break;
       }
@@ -339,7 +355,9 @@ function generateExpression(node, locals, hasReceiver) {
           lines.push(`__block_result = ${exprStmtResult.node};`);
         }
       }
-      return { node: `(function() { let __block_result; ${lines.join(" ")} return __block_result; })()` };
+      return {
+        node: `(function() { let __block_result; ${lines.join(" ")} return __block_result; })()`,
+      };
     }
     default:
       return {

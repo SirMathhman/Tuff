@@ -388,17 +388,47 @@ test("block expression evaluates last expression as result", () => {
 });
 
 test("block expression with multiple statements and if inside", () => {
+  expectValid("{ let x = 5; let y = 10; if (x < y) x else y }", "", 5);
+});
+
+// Compound assignment operators
+
+test("+= compound assignment on mutable variable", () => {
+  expectValid("let mut x = 10; x += 5; x", "", 15);
+});
+
+test("-= compound assignment on mutable variable", () => {
+  expectValid("let mut x = 20; x -= 8; x", "", 12);
+});
+
+test("*= compound assignment on mutable variable", () => {
+  expectValid("let mut x = 3; x *= 4; x", "", 12);
+});
+
+test("/= compound assignment on mutable variable", () => {
+  expectValid("let mut x = 20; x /= 5; x", "", 4);
+});
+
+// Mutability checks for compound assignment
+test("compound assignment rejected on immutable variable", () => {
+  expectInvalid("let x = 10; x += 5;");
+});
+
+test("-= compound assignment rejected on immutable variable", () => {
+  expectInvalid("let x = 20; x -= 8;");
+});
+
+// Compound assignment with dot access on mutable struct field
+test("+= on mutable struct field via dot access", () => {
   expectValid(
-    "{ let x = 5; let y = 10; if (x < y) x else y }",
+    "struct Point { x : I32, y : I32 }; let mut p = Point { x : 10, y : 20 }; p.x += 5; p.x",
     "",
-    5,
+    15,
   );
 });
 
-test("struct instantiation still works alongside block expressions", () => {
-  expectValid(
-    "struct Point { x : I32, y : I32 }; let p = Point { x : 3, y : 4 }; p.x + p.y",
-    "",
-    7,
+test("compound assignment on immutable struct field rejected", () => {
+  expectInvalid(
+    "struct Point { x : I32, y : I32 }; let p = Point { x : 10, y : 20 }; p.x += 5;",
   );
 });

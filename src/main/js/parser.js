@@ -205,12 +205,41 @@ function parseStatement(tokens, pos) {
     };
   }
 
+  // Helper to check if current position has a compound assignment operator
+  const isCompoundOp = (t) =>
+    t === TokenType.PLUS_EQ ||
+    t === TokenType.MINUS_EQ ||
+    t === TokenType.STAR_EQ ||
+    t === TokenType.SLASH_EQ;
+
+  // Compound assignment on simple identifier: x += expr ;
+  if (
+    tokens[pos]?.type === TokenType.IDENT &&
+    isCompoundOp(tokens[pos + 1]?.type)
+  ) {
+    const result = parseSimpleCompoundAssignmentStatement(tokens, pos);
+    if (result.variant === "err") return result;
+    return {
+      statement: {
+        type: NodeType.AssignmentStatement,
+        targetExpr: { type: NodeType.Identifier, name: result.targetName },
+        value: result.value,
+        operator: result.operator,
+      },
+      nextPos: result.nextPos,
+    };
+  }
+
   // Assignment statement (expr = expr ;)
   if (
-    tokens[pos]?.type === TokenType.THIS &&
-    tokens[pos + 1]?.type === TokenType.DOT &&
-    tokens[pos + 2]?.type === TokenType.IDENT &&
-    tokens[pos + 3]?.type === TokenType.EQUALS
+    (tokens[pos]?.type === TokenType.THIS &&
+      tokens[pos + 1]?.type === TokenType.DOT &&
+      tokens[pos + 2]?.type === TokenType.IDENT &&
+      isCompoundOp(tokens[pos + 3]?.type)) ||
+    (tokens[pos]?.type === TokenType.THIS &&
+      tokens[pos + 1]?.type === TokenType.DOT &&
+      tokens[pos + 2]?.type === TokenType.IDENT &&
+      tokens[pos + 3]?.type === TokenType.EQUALS)
   ) {
     const result = parseAssignmentStatement(tokens, pos);
     if (result.variant === "err") return result;
@@ -219,17 +248,19 @@ function parseStatement(tokens, pos) {
         type: NodeType.AssignmentStatement,
         target: result.target,
         value: result.value,
+        operator: result.operator || undefined,
       },
       nextPos: result.nextPos,
     };
   }
 
-  // Assignment on general dot expression (e.g. temp.x = expr ;)
+  // Assignment on general dot expression (e.g. temp.x = expr ; or temp.x += expr ;)
   if (
     tokens[pos]?.type === TokenType.IDENT &&
     tokens[pos + 1]?.type === TokenType.DOT &&
     tokens[pos + 2]?.type === TokenType.IDENT &&
-    tokens[pos + 3]?.type === TokenType.EQUALS
+    (isCompoundOp(tokens[pos + 3]?.type) ||
+      tokens[pos + 3]?.type === TokenType.EQUALS)
   ) {
     const result = parseGeneralAssignmentStatement(tokens, pos);
     if (result.variant === "err") return result;
@@ -238,6 +269,7 @@ function parseStatement(tokens, pos) {
         type: NodeType.AssignmentStatement,
         targetExpr: result.targetExpr,
         value: result.value,
+        operator: result.operator || undefined,
       },
       nextPos: result.nextPos,
     };
@@ -659,12 +691,23 @@ function parseLetStatement(tokens, pos) {
   };
 }
 
-// Shared helper: consume '. IDENT = expr ;' and return parsed parts.
+// Shared helper: check if a token type is a compound assignment operator
+function isCompoundOp(t) {
+  return (
+    t === TokenType.PLUS_EQ ||
+    t === TokenType.MINUS_EQ ||
+    t === TokenType.STAR_EQ ||
+    t === TokenType.SLASH_EQ
+  );
+}
+
+// Shared helper: consume '. IDENT (=|+=|-=|*=|/=) expr ;' and return parsed parts.
 class AssignmentParseResult {
-  constructor(propertyName, expressionNode, nextPosition) {
+  constructor(propertyName, expressionNode, nextPosition, operator) {
     this.propertyName = propertyName;
     this.expressionNode = expressionNode;
     this.nextPos = nextPosition;
+    this.operator = operator || undefined;
   }
 }
 
@@ -680,20 +723,54 @@ function parseAssignmentTail(tokens, pos) {
     return err("Expected identifier after '.'", tokens, pos);
   pos++;
 
-  // Consume '='
-  if (!tokens[pos] || tokens[pos].type !== TokenType.EQUALS)
-    return err("Expected '=' for assignment", tokens, pos);
-  pos++;
+  // Check for compound assignment operator or regular '='
+  let operator;
+  if (isCompoundOp(tokens[pos]?.type)) {
+    operator = tokens[pos].value;
+    pos++;
+  } else if (tokens[pos]?.type === TokenType.EQUALS) {
+    pos++;
+  } else {
+    return err(
+      "Expected '=' or compound assignment for assignment",
+      tokens,
+      pos,
+    );
+  }
 
   const expr = parseExpression(tokens, pos);
   if (expr.variant === "err") return expr;
 
   let p = maybeConsumeSemicolon(tokens, expr.nextPos);
 
-  return new AssignmentParseResult(propertyName, expr.node, p);
+  return new AssignmentParseResult(propertyName, expr.node, p, operator);
 }
 
-// Parse assignment statement: this.IDENT = expr ;
+// Parse simple compound assignment: IDENT += expr ;
+function parseSimpleCompoundAssignmentStatement(tokens, pos) {
+  const targetName = tokens[pos]?.value;
+  if (tokens[pos]?.type !== TokenType.IDENT)
+    return err("Expected identifier for compound assignment", tokens, pos);
+  pos++;
+
+  // Consume compound operator
+  let operator;
+  if (isCompoundOp(tokens[pos]?.type)) {
+    operator = tokens[pos].value;
+    pos++;
+  } else {
+    return err("Expected compound assignment operator", tokens, pos);
+  }
+
+  const expr = parseExpression(tokens, pos);
+  if (expr.variant === "err") return expr;
+
+  let p = maybeConsumeSemicolon(tokens, expr.nextPos);
+
+  return { targetName, value: expr.node, operator, nextPos: p };
+}
+
+// Parse assignment statement: this.IDENT (=|+=) expr ;
 function parseAssignmentStatement(tokens, pos) {
   // Consume 'this'
   if (tokens[pos].type !== TokenType.THIS)
@@ -706,11 +783,12 @@ function parseAssignmentStatement(tokens, pos) {
   return {
     target: tailResult.propertyName,
     value: tailResult.expressionNode,
+    operator: tailResult.operator,
     nextPos: tailResult.nextPos,
   };
 }
 
-// Parse general assignment statement: IDENT.property = expr ;
+// Parse general assignment statement: IDENT.property (=|+=) expr ;
 function parseGeneralAssignmentStatement(tokens, pos) {
   // Get base identifier
   const baseName = tokens[pos]?.value;
@@ -731,6 +809,7 @@ function parseGeneralAssignmentStatement(tokens, pos) {
   return {
     targetExpr,
     value: tailResult.expressionNode,
+    operator: tailResult.operator,
     nextPos: tailResult.nextPos,
   };
 }
@@ -987,10 +1066,11 @@ function parsePrimary(tokens, pos) {
     // Peek ahead to determine block vs object:
     // If first meaningful token is a statement keyword, treat as block expression.
     const peek = pos + 1;
-    const isBlock = tokens[peek] && (
-      tokens[peek].type === TokenType.LET ||
-      (tokens[peek]?.value === "return" && tokens[peek]?.type === TokenType.IDENT)
-    );
+    const isBlock =
+      tokens[peek] &&
+      (tokens[peek].type === TokenType.LET ||
+        (tokens[peek]?.value === "return" &&
+          tokens[peek]?.type === TokenType.IDENT));
 
     if (isBlock) {
       // Parse as block expression — reuse parseBlock logic but return as BlockExpression
