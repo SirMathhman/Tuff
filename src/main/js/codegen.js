@@ -299,6 +299,17 @@ function generateExpression(node, locals, hasReceiver) {
       if (right.variant === "err") return right;
       return { node: `${left.node} ${node.operator} ${right.node}` };
     }
+    case NodeType.IfExpression: {
+      const cond = generateExpression(node.condition, locals, hasReceiver);
+      if (cond.variant === "err") return cond;
+      const thenExpr = generateExpression(node.thenBranch, locals, hasReceiver);
+      if (thenExpr.variant === "err") return thenExpr;
+      const elseExpr = generateExpression(node.elseBranch, locals, hasReceiver);
+      if (elseExpr.variant === "err") return elseExpr;
+      return { node: `(${cond.node} ? ${thenExpr.node} : ${elseExpr.node})` };
+    }
+    case NodeType.BooleanLiteral:
+      return { node: String(node.value) };
     default:
       return {
         variant: "err",

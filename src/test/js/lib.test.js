@@ -349,3 +349,29 @@ test("comparison in arithmetic expression respects precedence", () => {
   // (3 + 2) < 10 → 5 < 10 → true
   expectValid("3 + 2 < 10", "", true);
 });
+
+/* If expressions */
+
+test("if expression with true condition returns then-branch value", () => {
+  expectValid("let x = if (true) 42 else 99; x", "", 42);
+});
+
+test("if expression with false condition returns else-branch value", () => {
+  expectValid("let x = if (false) 42 else 99; x", "", 99);
+});
+
+test("if expression used directly as entry expression", () => {
+  expectValid("if (true) 10 else 20", "", 10);
+});
+
+test("nested if-else chain works correctly", () => {
+  expectValid("let x = if (false) 1 else if (true) 2 else 3; x", "", 2);
+});
+
+test("if expression with comparison in condition", () => {
+  expectValid("let a = 5; let b = 10; if (a < b) 1 else 0", "", 1);
+});
+
+test("if expression returns correct value for false comparison", () => {
+  expectValid("let a = 10; let b = 5; if (a < b) 1 else 0", "", 0);
+});

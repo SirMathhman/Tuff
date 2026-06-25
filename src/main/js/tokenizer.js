@@ -30,6 +30,10 @@ export const TokenType = {
   GE: ">=",
   EQ: "==",
   NE: "!=",
+  TRUE: "true",
+  FALSE: "false",
+  IF: "if",
+  ELSE: "else",
   COLON: ":",
   COMMA: ",",
   PIPE: "|",
@@ -153,11 +157,21 @@ export function tokenize(source) {
       const startLine = line;
       const startCol = col;
       if (pos + 1 < source.length && source[pos + 1] === "=") {
-        tokens.push({ type: TokenType.LE, value: "<=", line: startLine, col: startCol });
+        tokens.push({
+          type: TokenType.LE,
+          value: "<=",
+          line: startLine,
+          col: startCol,
+        });
         pos += 2;
         col += 2;
       } else {
-        tokens.push({ type: TokenType.LT, value: "<", line: startLine, col: startCol });
+        tokens.push({
+          type: TokenType.LT,
+          value: "<",
+          line: startLine,
+          col: startCol,
+        });
         pos++;
         col++;
       }
@@ -167,11 +181,21 @@ export function tokenize(source) {
       const startLine = line;
       const startCol = col;
       if (pos + 1 < source.length && source[pos + 1] === "=") {
-        tokens.push({ type: TokenType.GE, value: ">=", line: startLine, col: startCol });
+        tokens.push({
+          type: TokenType.GE,
+          value: ">=",
+          line: startLine,
+          col: startCol,
+        });
         pos += 2;
         col += 2;
       } else {
-        tokens.push({ type: TokenType.GT, value: ">", line: startLine, col: startCol });
+        tokens.push({
+          type: TokenType.GT,
+          value: ">",
+          line: startLine,
+          col: startCol,
+        });
         pos++;
         col++;
       }
@@ -259,7 +283,10 @@ export function tokenize(source) {
         pos += 2;
         col += 2;
       } else {
-        return { variant: "err", error: `Unexpected character '!' at ${startLine}:${startCol}` };
+        return {
+          variant: "err",
+          error: `Unexpected character '!' at ${startLine}:${startCol}`,
+        };
       }
       continue;
     }
@@ -368,6 +395,34 @@ export function tokenize(source) {
         tokens.push({
           type: TokenType.THIS,
           value: "this",
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "true") {
+        tokens.push({
+          type: TokenType.TRUE,
+          value: true,
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "false") {
+        tokens.push({
+          type: TokenType.FALSE,
+          value: false,
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "if") {
+        tokens.push({
+          type: TokenType.IF,
+          value: "if",
+          line: startLine,
+          col: startCol,
+        });
+      } else if (name === "else") {
+        tokens.push({
+          type: TokenType.ELSE,
+          value: "else",
           line: startLine,
           col: startCol,
         });

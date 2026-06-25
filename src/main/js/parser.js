@@ -24,6 +24,8 @@ export const NodeType = {
   BlockStatement: "BlockStatement",
   ReturnStatement: "ReturnStatement",
   QualifiedPathExpression: "QualifiedPathExpression",
+  IfExpression: "IfExpression",
+  BooleanLiteral: "BooleanLiteral",
 };
 
 // Helper to produce a parser error with line:col and surrounding token context
@@ -760,7 +762,14 @@ function parseArgumentsList(tokens, pos) {
 
 // Parse a primary expression followed by any dot/method chain.
 // Used for both left and right sides of binary operators so dot access is always applied.
+// If expression: if (condition) then_expr else else_expr
+// Must be checked before parsePrimary since 'if' is now a keyword token.
 function parsePrefix(tokens, pos) {
+  // Handle if expressions as prefix nodes
+  if (tokens[pos]?.type === TokenType.IF) {
+    return parseIfExpression(tokens, pos);
+  }
+
   const primary = parsePrimary(tokens, pos);
   if (primary.variant === "err") return primary;
 
@@ -870,6 +879,53 @@ function parseExpression(tokens, pos) {
   return { node: result.node, nextPos: p };
 }
 
+// Parse if expression: if (condition) then_expr else else_expr
+// Supports chaining: if (...) ... else if (...) ... else ...
+function parseIfExpression(tokens, pos) {
+  // Consume 'if'
+  pos++;
+
+  // Expect '('
+  if (!tokens[pos] || tokens[pos].type !== TokenType.LPAREN)
+    return err("Expected '(' after 'if'", tokens, pos);
+  pos++;
+
+  // Parse condition expression
+  const condResult = parseExpression(tokens, pos);
+  if (condResult.variant === "err") return condResult;
+  pos = condResult.nextPos;
+
+  // Expect ')'
+  if (!tokens[pos] || tokens[pos].type !== TokenType.RPAREN)
+    return err("Expected ')' to close condition", tokens, pos);
+  pos++;
+
+  // Parse then branch expression
+  const thenResult = parseExpression(tokens, pos);
+  if (thenResult.variant === "err") return thenResult;
+  pos = thenResult.nextPos;
+
+  // Expect 'else'
+  if (!tokens[pos] || tokens[pos].type !== TokenType.ELSE)
+    return err("Expected 'else' after then branch", tokens, pos);
+  pos++;
+
+  // Parse else branch expression (may be another if for chaining)
+  const elseResult = parseExpression(tokens, pos);
+  if (elseResult.variant === "err") return elseResult;
+  pos = elseResult.nextPos;
+
+  return {
+    node: {
+      type: NodeType.IfExpression,
+      condition: condResult.node,
+      thenBranch: thenResult.node,
+      elseBranch: elseResult.node,
+    },
+    nextPos: pos,
+  };
+}
+
 // Parse arithmetic expressions (+, -, *, /) with higher precedence than comparisons
 function parseArithmetic(tokens, pos) {
   const prefix = parsePrefix(tokens, pos);
@@ -905,6 +961,12 @@ function parseArithmetic(tokens, pos) {
 function parsePrimary(tokens, pos) {
   // Number literal
   if (!tokens[pos]) return err("Unexpected end of input", tokens, pos);
+
+  if (tokens[pos].type === TokenType.TRUE || tokens[pos].type === TokenType.FALSE) {
+    const value = tokens[pos].value;
+    pos++;
+    return { node: { type: NodeType.BooleanLiteral, value }, nextPos: pos };
+  }
 
   if (tokens[pos].type === TokenType.STRING_LITERAL) {
     const value = tokens[pos].value;

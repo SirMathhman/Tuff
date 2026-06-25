@@ -200,6 +200,30 @@ function validateIdentifiers(node, knownIds, externModuleNames = new Set()) {
         }
       }
       return validateIdentifiers(node.value, knownIds, externModuleNames);
+    case NodeType.IfExpression: {
+      const condResult = validateIdentifiers(
+        node.condition,
+        knownIds,
+        externModuleNames,
+      );
+      if (!condResult.ok) return condResult;
+      const thenResult = validateIdentifiers(
+        node.thenBranch,
+        knownIds,
+        externModuleNames,
+      );
+      if (!thenResult.ok) return thenResult;
+      const elseResult = validateIdentifiers(
+        node.elseBranch,
+        knownIds,
+        externModuleNames,
+      );
+      if (!elseResult.ok) return elseResult;
+      return { ok: true };
+    }
+    case NodeType.BooleanLiteral:
+      // Boolean literals are builtins, nothing to validate
+      return { ok: true };
     case NodeType.ExternImportStatement:
       // Register each imported binding as a known identifier
       for (const b of node.bindings) {
