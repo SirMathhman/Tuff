@@ -432,3 +432,73 @@ test("compound assignment on immutable struct field rejected", () => {
     "struct Point { x : I32, y : I32 }; let p = Point { x : 10, y : 20 }; p.x += 5;",
   );
 });
+
+/* If statements */
+
+test("if statement with true condition executes then-branch", () => {
+  expectValid("let mut x = 0; if (true) { x = 1; } else { x = 2; } x", "", 1);
+});
+
+test("if statement with false condition executes else-branch", () => {
+  expectValid("let mut x = 0; if (false) { x = 1; } else { x = 2; } x", "", 2);
+});
+
+test("if statement without else branch skips when condition is false", () => {
+  expectValid("let mut x = 5; if (false) { x = 10; } x", "", 5);
+});
+
+test("if statement executes then-branch when no else and condition is true", () => {
+  expectValid("let mut x = 5; if (true) { x = 10; } x", "", 10);
+});
+
+test("if statement with multiple statements in block body", () => {
+  expectValid(
+    "let mut a = 0; let mut b = 0; if (true) { a = 3; b = 4; } a + b",
+    "",
+    7,
+  );
+});
+
+test("if statement with comparison in condition", () => {
+  expectValid(
+    "let x = 5; let mut y = 0; if (x > 3) { y = 1; } else { y = -1; } y",
+    "",
+    1,
+  );
+});
+
+test("else-if chain works correctly for first branch", () => {
+  expectValid(
+    "let mut x = 0; if (true) { x = 1; } else if (true) { x = 2; } else { x = 3; } x",
+    "",
+    1,
+  );
+});
+
+test("else-if chain works correctly for second branch", () => {
+  expectValid(
+    "let mut x = 0; if (false) { x = 1; } else if (true) { x = 2; } else { x = 3; } x",
+    "",
+    2,
+  );
+});
+
+test("else-if chain works correctly for final else branch", () => {
+  expectValid(
+    "let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else { x = 3; } x",
+    "",
+    3,
+  );
+});
+
+test("if statement with nested if inside block body", () => {
+  expectValid(
+    "let mut result = 0; if (true) { let mut inner = 5; if (inner > 3) { result = inner * 2; } } result",
+    "",
+    10,
+  );
+});
+
+test("if statement rejected on immutable variable modification in block", () => {
+  expectInvalid("let x = 0; if (true) { x = 1; } else { x = 2; }");
+});

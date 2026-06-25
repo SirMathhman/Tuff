@@ -221,6 +221,49 @@ function validateIdentifiers(node, knownIds, externModuleNames = new Set()) {
       if (!elseResult.ok) return elseResult;
       return { ok: true };
     }
+    case NodeType.IfStatement: {
+      // Validate condition expression
+      const condResult = validateIdentifiers(
+        node.condition,
+        knownIds,
+        externModuleNames,
+      );
+      if (!condResult.ok) return condResult;
+
+      // Validate then-branch body (BlockStatement) — each statement validates in its own scope
+      let thenScope = new Set(knownIds);
+      for (const stmt of node.thenBranch.body) {
+        const result = validateIdentifiers(stmt, thenScope, externModuleNames);
+        if (!result.ok) return result;
+      }
+
+      // Validate else-branch if present (may be IfStatement or BlockStatement)
+      if (node.elseBranch) {
+        let elseResult;
+        if (node.elseBranch.type === NodeType.IfStatement) {
+          elseResult = validateIdentifiers(
+            node.elseBranch,
+            knownIds,
+            externModuleNames,
+          );
+        } else {
+          // BlockStatement — validate each statement in its own scope
+          let elseScope = new Set(knownIds);
+          for (const stmt of node.elseBranch.body) {
+            const result = validateIdentifiers(
+              stmt,
+              elseScope,
+              externModuleNames,
+            );
+            if (!result.ok) return result;
+          }
+          elseResult = { ok: true };
+        }
+        if (!elseResult.ok) return elseResult;
+      }
+
+      return { ok: true };
+    }
     case NodeType.BooleanLiteral:
       // Boolean literals are builtins, nothing to validate
       return { ok: true };

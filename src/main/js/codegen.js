@@ -1,5 +1,96 @@
 import { NodeType } from "./parser.js";
 
+// Generate code for an else-branch body (may be IfStatement or BlockStatement)
+function generateBlockBody(branchNode, isLastForReturn) {
+  if (branchNode.type === NodeType.IfStatement) {
+    const result = generateStatementLine(branchNode, isLastForReturn);
+    // Ensure space before nested 'if' so we get "else if" not "elseif"
+    return { node: ` ${result.node}` };
+  }
+  // BlockStatement — generate each statement
+  const elseLines = [];
+  for (const s of branchNode.body) {
+    const lineResult = generateStatementLine(s, false);
+    if (lineResult.variant === "err") return lineResult;
+    elseLines.push(lineResult.node);
+  }
+  return { node: `{ ${elseLines.join("\n")} }` };
+}
+
+// Generate a single statement line (used by both top-level loop and if-statement block bodies)
+function generateStatementLine(stmt, isLastForReturn) {
+  switch (stmt.type) {
+    case NodeType.LetStatement: {
+      const letResult = generateExpression(stmt.value);
+      if (letResult.variant === "err") return letResult;
+      // If the statement has an initializer that's a function expression, register it on _ctx
+      if (stmt.isFunctionDeclaration) {
+        return {
+          node:
+            `function ${stmt.name}(${(stmt.params || []).join(", ")}) { ${letResult.node} }` +
+            `\n_ctx.${stmt.name} = ${stmt.name};`,
+        };
+      }
+      // Destructuring: let { x , y } = expr ;
+      if (stmt.bindings) {
+        const destructLines = [];
+        for (const binding of stmt.bindings) {
+          destructLines.push(`_ctx.${binding} = ${letResult.node}.${binding};`);
+        }
+        return { node: destructLines.join("\n") };
+      }
+      return { node: `_ctx.${stmt.name} = ${letResult.node};` };
+    }
+    case NodeType.AssignmentStatement: {
+      const assignResult = generateExpression(stmt.value);
+      if (assignResult.variant === "err") return assignResult;
+      let opSymbol = stmt.operator ? stmt.operator.replace("=", "") : undefined;
+      if (stmt.target) {
+        if (opSymbol) {
+          return {
+            node: `_ctx.${stmt.target} = _ctx.${stmt.target} ${opSymbol} ${assignResult.node};`,
+          };
+        }
+        return { node: `_ctx.${stmt.target} = ${assignResult.node};` };
+      } else if (stmt.targetExpr) {
+        const targetCode = generateExpression(stmt.targetExpr).node;
+        if (opSymbol) {
+          return {
+            node: `${targetCode} = ${targetCode} ${opSymbol} ${assignResult.node};`,
+          };
+        }
+        return { node: `${targetCode} = ${assignResult.node};` };
+      }
+      break;
+    }
+    case NodeType.ExpressionStatement: {
+      const exprResult = generateExpression(stmt.expression);
+      if (exprResult.variant === "err") return exprResult;
+      if (isLastForReturn) {
+        return { node: `return ${exprResult.node};` };
+      }
+      return { node: `${exprResult.node};` };
+    }
+    case NodeType.IfStatement: {
+      const condResult = generateExpression(stmt.condition);
+      if (condResult.variant === "err") return condResult;
+      const thenBodyResult = generateBlockBody(stmt.thenBranch, false);
+      if (thenBodyResult.variant === "err") return thenBodyResult;
+      // Remove outer braces from then body for cleaner output
+      let jsCode = `if (${condResult.node})${thenBodyResult.node}`;
+      if (stmt.elseBranch) {
+        const elseJs = generateBlockBody(stmt.elseBranch, false);
+        if (elseJs.variant === "err") return elseJs;
+        jsCode += ` else${elseJs.node}`;
+      }
+      return { node: jsCode };
+    }
+    default:
+      break;
+  }
+  return { node: "" };
+}
+
 export function generate(ast, options = {}) {
   const opts = Object.assign(
     { includePreamble: true, isEntryPoint: true },
@@ -96,60 +187,51 @@ export function generate(ast, options = {}) {
         break;
       }
       case NodeType.LetStatement: {
-        const letResult = generateExpression(stmt.value);
-        if (letResult.variant === "err") return letResult;
-
-        // Destructuring: let { x , y } = expr ;
-        if (stmt.bindings) {
-          for (const binding of stmt.bindings) {
-            lines.push(`_ctx.${binding} = ${letResult.node}.${binding};`);
-          }
-        } else {
-          lines.push(`_ctx.${stmt.name} = ${letResult.node};`);
-        }
-
+        const letLineResult = generateStatementLine(
+          stmt,
+          isLastRuntimeStatement(ast, stmt),
+        );
+        if (letLineResult.variant === "err") return letLineResult;
+        lines.push(letLineResult.node);
         break;
       }
       case NodeType.AssignmentStatement: {
-        const assignResult = generateExpression(stmt.value);
-        if (assignResult.variant === "err") return assignResult;
-
-        // Determine the operator symbol for compound assignment, or default to '='
-        let opSymbol = stmt.operator ? stmt.operator.replace("=", "") : undefined;
-
-        // Direct this.x assignment
-        if (stmt.target) {
-          if (opSymbol) {
-            lines.push(
-              `_ctx.${stmt.target} = _ctx.${stmt.target} ${opSymbol} ${assignResult.node};`,
-            );
-          } else {
-            lines.push(`_ctx.${stmt.target} = ${assignResult.node};`);
-          }
-        }
-        // General expression-based assignment (e.g. temp.x = 200 or temp.x += 5)
-        else if (stmt.targetExpr) {
-          const targetCode = generateExpression(stmt.targetExpr).node;
-          if (opSymbol) {
-            lines.push(
-              `${targetCode} = ${targetCode} ${opSymbol} ${assignResult.node};`,
-            );
-          } else {
-            lines.push(`${targetCode} = ${assignResult.node};`);
-          }
-        }
+        const assignLineResult = generateStatementLine(stmt, false);
+        if (assignLineResult.variant === "err") return assignLineResult;
+        lines.push(assignLineResult.node);
         break;
       }
       case NodeType.ExpressionStatement: {
-        // Last expression becomes return, others are just statements
-        const exprResult = generateExpression(stmt.expression);
-        if (exprResult.variant === "err") return exprResult;
-        if (isLastRuntimeStatement(ast, stmt)) {
-          lines.push(`return ${exprResult.node};`);
-          hasReturn = true;
-        } else {
-          lines.push(`${exprResult.node};`);
+        const isLastStmt = isLastRuntimeStatement(ast, stmt);
+        const exprLineResult = generateStatementLine(stmt, isLastStmt);
+        if (exprLineResult.variant === "err") return exprLineResult;
+        lines.push(exprLineResult.node);
+        if (isLastStmt) hasReturn = true;
+        break;
+      }
+      case NodeType.IfStatement: {
+        // if (cond) { ... } [else ...]
+        const condResult = generateExpression(stmt.condition);
+        if (condResult.variant === "err") return condResult;
+
+        // Generate then-branch body from block statements
+        const thenLines = [];
+        for (const s of stmt.thenBranch.body) {
+          const lineResult = generateStatementLine(s, false);
+          if (lineResult.variant === "err") return lineResult;
+          thenLines.push(lineResult.node);
         }
+
+        let jsCode = `if (${condResult.node}) { ${thenLines.join("\n")} }`;
+
+        // Handle else branch (may be another IfStatement or a BlockStatement)
+        if (stmt.elseBranch) {
+          const elseJs = generateBlockBody(stmt.elseBranch, false);
+          if (elseJs.variant === "err") return elseJs;
+          jsCode += ` else${elseJs.node}`;
+        }
+
+        lines.push(jsCode);
         break;
       }
     }
@@ -209,6 +291,15 @@ function generateExpression(node, locals, hasReceiver) {
     }
     case NodeType.NumberLiteral:
       return { node: String(node.value) };
+    case NodeType.UnaryExpression: {
+      const operandResult = generateExpression(
+        node.operand,
+        locals,
+        hasReceiver,
+      );
+      if (operandResult.variant === "err") return operandResult;
+      return { node: `(${node.operator}${operandResult.node})` };
+    }
     case NodeType.ObjectLiteral: {
       if (!node.fields || node.fields.length === 0) {
         return { node: "{}" };

@@ -25,6 +25,7 @@ export const NodeType = {
   ReturnStatement: "ReturnStatement",
   QualifiedPathExpression: "QualifiedPathExpression",
   IfExpression: "IfExpression",
+  IfStatement: "IfStatement",
   BooleanLiteral: "BooleanLiteral",
   BlockExpression: "BlockExpression",
 };
@@ -205,12 +206,29 @@ function parseStatement(tokens, pos) {
     };
   }
 
+  // Helper to build an AssignmentStatement parse result
+  function buildAssignmentResult(target, targetExpr, value, operator, nextPos) {
+    return {
+      statement: {
+        type: NodeType.AssignmentStatement,
+        ...(target ? { target } : {}),
+        ...(targetExpr ? { targetExpr } : {}),
+        value,
+        ...(operator ? { operator } : {}),
+      },
+      nextPos,
+    };
+  }
+
   // Helper to check if current position has a compound assignment operator
-  const isCompoundOp = (t) =>
-    t === TokenType.PLUS_EQ ||
-    t === TokenType.MINUS_EQ ||
-    t === TokenType.STAR_EQ ||
-    t === TokenType.SLASH_EQ;
+  function isCompoundOp(t) {
+    return (
+      t === TokenType.PLUS_EQ ||
+      t === TokenType.MINUS_EQ ||
+      t === TokenType.STAR_EQ ||
+      t === TokenType.SLASH_EQ
+    );
+  }
 
   // Compound assignment on simple identifier: x += expr ;
   if (
@@ -219,15 +237,13 @@ function parseStatement(tokens, pos) {
   ) {
     const result = parseSimpleCompoundAssignmentStatement(tokens, pos);
     if (result.variant === "err") return result;
-    return {
-      statement: {
-        type: NodeType.AssignmentStatement,
-        targetExpr: { type: NodeType.Identifier, name: result.targetName },
-        value: result.value,
-        operator: result.operator,
-      },
-      nextPos: result.nextPos,
-    };
+    return buildAssignmentResult(
+      null,
+      { type: NodeType.Identifier, name: result.targetName },
+      result.value,
+      result.operator,
+      result.nextPos,
+    );
   }
 
   // Assignment statement (expr = expr ;)
@@ -243,15 +259,13 @@ function parseStatement(tokens, pos) {
   ) {
     const result = parseAssignmentStatement(tokens, pos);
     if (result.variant === "err") return result;
-    return {
-      statement: {
-        type: NodeType.AssignmentStatement,
-        target: result.target,
-        value: result.value,
-        operator: result.operator || undefined,
-      },
-      nextPos: result.nextPos,
-    };
+    return buildAssignmentResult(
+      result.target,
+      null,
+      result.value,
+      result.operator || undefined,
+      result.nextPos,
+    );
   }
 
   // Assignment on general dot expression (e.g. temp.x = expr ; or temp.x += expr ;)
@@ -264,15 +278,46 @@ function parseStatement(tokens, pos) {
   ) {
     const result = parseGeneralAssignmentStatement(tokens, pos);
     if (result.variant === "err") return result;
-    return {
-      statement: {
-        type: NodeType.AssignmentStatement,
-        targetExpr: result.targetExpr,
-        value: result.value,
-        operator: result.operator || undefined,
-      },
-      nextPos: result.nextPos,
-    };
+    return buildAssignmentResult(
+      null,
+      result.targetExpr,
+      result.value,
+      result.operator || undefined,
+      result.nextPos,
+    );
+  }
+
+  // Simple variable assignment (e.g. x = expr ;) — common inside block bodies
+  if (
+    tokens[pos]?.type === TokenType.IDENT &&
+    tokens[pos + 1]?.type === TokenType.EQUALS
+  ) {
+    const targetName = tokens[pos].value;
+    let p = pos + 1; // skip identifier
+    p++; // consume '='
+    const expr = parseExpression(tokens, p);
+    if (expr.variant === "err") return expr;
+    let semicolonPos = maybeConsumeSemicolon(tokens, expr.nextPos);
+    return buildAssignmentResult(
+      targetName,
+      null,
+      expr.node,
+      undefined,
+      semicolonPos,
+    );
+  }
+
+  // If statement at top level (if-expr is handled via parseExpression below)
+  if (
+    tokens[pos]?.type === TokenType.IF &&
+    tokens[pos + 1]?.type === TokenType.LPAREN
+  ) {
+    const result = parseIfExpression(tokens, pos);
+    if (result.variant === "err") return result;
+    // If it produced an IfStatement node, handle as statement; otherwise fall through to expression handling
+    if (result.node.type === NodeType.IfStatement) {
+      return { statement: result.node, nextPos: result.nextPos };
+    }
   }
 
   // Expression statement
@@ -843,9 +888,25 @@ function parseArgumentsList(tokens, pos) {
 // If expression: if (condition) then_expr else else_expr
 // Must be checked before parsePrimary since 'if' is now a keyword token.
 function parsePrefix(tokens, pos) {
-  // Handle if expressions as prefix nodes
+  // Handle if expressions/statements — only as prefix when inside expression context
+  // If-statements at top level are handled by parseStatement directly.
   if (tokens[pos]?.type === TokenType.IF) {
     return parseIfExpression(tokens, pos);
+  }
+
+  // Unary minus: -expr
+  if (tokens[pos]?.type === TokenType.MINUS) {
+    pos++;
+    const innerResult = parsePrefix(tokens, pos);
+    if (innerResult.variant === "err") return innerResult;
+    return {
+      node: {
+        type: NodeType.UnaryExpression,
+        operator: "-",
+        operand: innerResult.node,
+      },
+      nextPos: innerResult.nextPos,
+    };
   }
 
   const primary = parsePrimary(tokens, pos);
@@ -957,8 +1018,8 @@ function parseExpression(tokens, pos) {
   return { node: result.node, nextPos: p };
 }
 
-// Parse if expression: if (condition) then_expr else else_expr
-// Supports chaining: if (...) ... else if (...) ... else ...
+// Parse if expression/statement dispatcher
+// Detects whether this is an if-statement (block body) or if-expression (single expr)
 function parseIfExpression(tokens, pos) {
   // Consume 'if'
   pos++;
@@ -978,7 +1039,12 @@ function parseIfExpression(tokens, pos) {
     return err("Expected ')' to close condition", tokens, pos);
   pos++;
 
-  // Parse then branch expression
+  // Check if then-branch is a block { ... } → if-statement form
+  if (tokens[pos]?.type === TokenType.LBRACE) {
+    return parseIfStatement(tokens, condResult.node, pos);
+  }
+
+  // Otherwise it's an if-expression — single expression branches, mandatory else
   const thenResult = parseExpression(tokens, pos);
   if (thenResult.variant === "err") return thenResult;
   pos = thenResult.nextPos;
@@ -1002,6 +1068,54 @@ function parseIfExpression(tokens, pos) {
     },
     nextPos: pos,
   };
+}
+
+// If statement: if (cond) { stmts... } [else ...]
+function parseIfStatement(tokens, conditionNode, pos) {
+  // Parse then-branch block body
+  const blockResult = parseBlock(tokens, pos);
+  if (blockResult.variant === "err") return blockResult;
+  pos = blockResult.nextPos;
+
+  // Check for else branch (optional)
+  let elseBranch;
+  if (tokens[pos]?.type === TokenType.ELSE) {
+    pos++;
+    // Else can be another if-statement or a block body
+    if (
+      tokens[pos]?.type === TokenType.IF ||
+      tokens[pos]?.type === TokenType.LBRACE
+    ) {
+      const elseResult = parseIfStatementBranch(tokens, pos);
+      if (elseResult.variant === "err") return elseResult;
+      elseBranch = elseResult.node;
+      pos = elseResult.nextPos;
+    } else {
+      return err("Expected 'if' or '{' after 'else'", tokens, pos);
+    }
+  }
+
+  return {
+    node: {
+      type: NodeType.IfStatement,
+      condition: conditionNode,
+      thenBranch: blockResult.node,
+      elseBranch: elseBranch || null,
+    },
+    nextPos: pos,
+  };
+}
+
+// Parse the branch after 'else' — either another if-statement or a block body
+function parseIfStatementBranch(tokens, pos) {
+  // If it's an else-if chain
+  if (tokens[pos]?.type === TokenType.IF) {
+    return parseIfExpression(tokens, pos);
+  }
+  // Otherwise expect a block body
+  const blockResult = parseBlock(tokens, pos);
+  if (blockResult.variant === "err") return blockResult;
+  return { node: blockResult.node, nextPos: blockResult.nextPos };
 }
 
 // Parse arithmetic expressions (+, -, *, /) with higher precedence than comparisons
