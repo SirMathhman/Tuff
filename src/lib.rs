@@ -2,10 +2,20 @@ use std::collections::HashMap;
 
 /// Evaluate a Tuff expression string and return the integer result.
 pub fn interpret_tuff(source: &str) -> i64 {
-    let mut trimmed = source.trim().to_string();
+    let trimmed = source.trim();
     if trimmed.is_empty() {
         return 0;
     }
+
+    // Handle boolean literals
+    if trimmed == "true" {
+        return 1;
+    }
+    if trimmed == "false" {
+        return 0;
+    }
+
+    let mut trimmed = trimmed.to_string();
 
     // Handle top-level `let` / `let mut` bindings with sequential statement evaluation
     if is_top_level_statement_block(&trimmed) {
@@ -26,14 +36,21 @@ pub fn interpret_tuff(source: &str) -> i64 {
         trimmed = format!("{} {} {}", &trimmed[..open], val, &trimmed[close + 1..]);
     }
 
+    // Handle logical operators first (lowest precedence among non-arithmetic ops)
+    if trimmed.contains("||") || trimmed.contains("&&") {
+        return evaluate_logical(&trimmed);
+    }
+
+    // Handle comparison operators (<, >, ==, !=, <=, >=) before arithmetic
+    if has_comparison_operator(&trimmed) {
+        return evaluate_comparison(&trimmed);
+    }
+
     // Split into operands and operators, preserving order
     let operands: Vec<&str> = trimmed.split(|c| "+-*/".contains(c)).collect();
     let ops: Vec<char> = trimmed.chars().filter(|&c| "+-*/".contains(c)).collect();
 
-    let values: Vec<i64> = operands
-        .iter()
-        .map(|s| s.trim().parse::<i64>().unwrap_or(0))
-        .collect();
+    let values: Vec<i64> = operands.iter().map(|s| parse_operand(s.trim())).collect();
 
     // Pass 1: resolve * and / (higher precedence) in-place
     let mut resolved: Vec<i64> = vec![values[0]];
@@ -62,6 +79,162 @@ pub fn interpret_tuff(source: &str) -> i64 {
     }
 
     result
+}
+
+/// Represents a detected comparison operator.
+enum ComparisonOp {
+    TwoChar(String), // ==, !=, <=, >=
+    Single(char),    // < or >
+}
+
+/// Find the first comparison operator in the string, returning its position and kind.
+fn find_comparison_op(s: &str) -> Option<(usize, ComparisonOp)> {
+    let chars = s.chars().collect::<Vec<char>>();
+    for i in 0..chars.len() {
+        // Two-char operators take priority (to avoid matching single char within them)
+        if i + 1 < chars.len() {
+            match (chars[i], chars[i + 1]) {
+                ('<', '=') | ('>', '=') | ('!', '=') | ('=', '=') => {
+                    let op_str = format!("{}{}", chars[i], chars[i + 1]);
+                    return Some((i, ComparisonOp::TwoChar(op_str)));
+                }
+                _ => {}
+            }
+        }
+        // Single-char comparison operators (< and >) — exclude '-' which is arithmetic
+        match chars[i] {
+            '<' | '>' => return Some((i, ComparisonOp::Single(chars[i]))),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Check if the string contains any comparison operator.
+fn has_comparison_operator(s: &str) -> bool {
+    find_comparison_op(s).is_some()
+}
+
+/// Evaluate comparison expressions containing <, >, ==, !=, <=, >=.
+fn evaluate_comparison(s: &str) -> i64 {
+    if let Some((pos, op)) = find_comparison_op(s) {
+        match op {
+            ComparisonOp::TwoChar(op_str) => {
+                let left_str: String = s.chars().take(pos).collect();
+                let right_start = pos + 2;
+                let right_str: String = s.chars().skip(right_start).collect();
+
+                let left_val = interpret_tuff(&left_str);
+                let right_val = interpret_tuff(&right_str);
+
+                match op_str.as_str() {
+                    "==" => {
+                        if left_val == right_val {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    "!=" => {
+                        if left_val != right_val {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    "<=" => {
+                        if left_val <= right_val {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    ">=" => {
+                        if left_val >= right_val {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            ComparisonOp::Single(c) => {
+                let chars = s.chars().collect::<Vec<char>>();
+                let left_str: String = chars[..pos].iter().collect();
+                let right_start = pos + 1;
+                let right_str: String = chars[right_start..].iter().collect();
+
+                let left_val = interpret_tuff(&left_str);
+                let right_val = interpret_tuff(&right_str);
+
+                match c {
+                    '<' => {
+                        if left_val < right_val {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    '>' => {
+                        if left_val > right_val {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+    } else {
+        // Fallback: no comparison operator found, evaluate normally
+        interpret_tuff(s)
+    }
+}
+
+/// Evaluate logical expressions containing `||` and `&&`, left-to-right.
+fn evaluate_logical(s: &str) -> i64 {
+    let chars: Vec<char> = s.chars().collect();
+    let op_or_target: Vec<char> = "||".chars().collect();
+    let op_and_target: Vec<char> = "&&".chars().collect();
+
+    // Find the first `||` at brace depth 0 (lowest precedence among logical ops)
+    for i in 0..chars.len() {
+        if can_match_at(&chars, i, &op_or_target) {
+            let left_str: String = chars[..i].iter().collect();
+            let right_start = i + op_or_target.len();
+            let right_str: String = chars[right_start..].iter().collect();
+
+            // Short-circuit OR: if left is truthy, return 1 immediately
+            let left_val = interpret_tuff(&left_str);
+            if left_val != 0 {
+                return 1;
+            }
+            let right_val = interpret_tuff(&right_str);
+            return if right_val != 0 { 1 } else { 0 };
+        }
+    }
+
+    // Find the first `&&` at brace depth 0 (higher precedence than ||)
+    for i in 0..chars.len() {
+        if can_match_at(&chars, i, &op_and_target) {
+            let left_str: String = chars[..i].iter().collect();
+            let right_start = i + op_and_target.len();
+            let right_str: String = chars[right_start..].iter().collect();
+
+            // Short-circuit AND: if left is falsy, return 0 immediately
+            let left_val = interpret_tuff(&left_str);
+            if left_val == 0 {
+                return 0;
+            }
+            let right_val = interpret_tuff(&right_str);
+            return if right_val != 0 { 1 } else { 0 };
+        }
+    }
+
+    // Fallback: no logical operator found, evaluate normally
+    interpret_tuff(s)
 }
 
 /// Find the innermost matching pair of grouping delimiters (parentheses or braces).
@@ -257,14 +430,26 @@ fn parse_reassignment(s: &str, scope: &HashMap<String, (i64, bool)>) -> Option<(
     Some((var_name, val))
 }
 
-/// Find the position of '=' at brace depth 0.
+/// Find the position of a single `=` at brace depth 0, skipping two-char operators (==, !=).
 fn find_eq_at_depth_zero(s: &str) -> Option<usize> {
+    let chars = s.chars().collect::<Vec<char>>();
     let mut depth = 0;
     for (i, c) in s.char_indices() {
         match c {
             '{' => depth += 1,
             '}' => depth -= 1,
-            '=' if depth == 0 => return Some(i),
+            '=' if depth == 0 => {
+                // Skip if this is part of a two-char operator (== or !=)
+                let next_char = chars.get(i + 1).copied();
+                if matches!(next_char, Some('=')) {
+                    continue; // skip '=='
+                }
+                // Check if preceded by '!' (part of '!=')
+                if i > 0 && chars[i - 1] == '!' {
+                    continue; // skip '!='
+                }
+                return Some(i);
+            }
             _ => {}
         }
     }
@@ -280,6 +465,15 @@ fn is_identifier(s: &str) -> bool {
             .chars()
             .next()
             .map_or(false, |c| c.is_alphabetic() || c == '_'))
+}
+
+/// Parse a single operand, handling both integer literals and boolean keywords.
+fn parse_operand(s: &str) -> i64 {
+    match s {
+        "true" => 1,
+        "false" => 0,
+        _ => s.parse::<i64>().unwrap_or(0),
+    }
 }
 
 /// Substitute all variable references in an expression with their values from scope.
@@ -578,5 +772,110 @@ mod tests {
     #[test]
     fn deeply_nested_braces_without_let() {
         assert_eq!(interpret_tuff("{ { { 7 } } }"), 7);
+    }
+
+    #[test]
+    fn let_binding_with_true_boolean() {
+        // let x = true; x => true maps to 1
+        assert_eq!(interpret_tuff("let x = true; x"), 1);
+    }
+
+    #[test]
+    fn logical_or_with_booleans() {
+        // let x = true; let y = false; x || y => 1 (true OR false is true)
+        assert_eq!(interpret_tuff("let x = true; let y = false; x || y"), 1);
+    }
+
+    #[test]
+    fn logical_or_false_false() {
+        // false || false => 0
+        assert_eq!(interpret_tuff("false || false"), 0);
+    }
+
+    #[test]
+    fn logical_and_true_true() {
+        // true && true => 1
+        assert_eq!(interpret_tuff("true && true"), 1);
+    }
+
+    #[test]
+    fn logical_and_false_true() {
+        // false && true => 0 (short-circuit)
+        assert_eq!(interpret_tuff("false && true"), 0);
+    }
+
+    #[test]
+    fn mixed_logical_or_and() {
+        // true || false && false => 1 (|| evaluated first, short-circuits on truthy left)
+        assert_eq!(interpret_tuff("true || false && false"), 1);
+    }
+
+    #[test]
+    fn logical_with_variables() {
+        // let x = true; let y = true; x && y => 1
+        assert_eq!(interpret_tuff("let x = true; let y = true; x && y"), 1);
+    }
+
+    #[test]
+    fn logical_and_true_false() {
+        // let x = true; let y = false; x && y => 0 (true AND false is false)
+        assert_eq!(interpret_tuff("let x = true; let y = false; x && y"), 0);
+    }
+
+    #[test]
+    fn comparison_less_than() {
+        // let x = 0; let y = 1; x < y => 1 (0 is less than 1)
+        assert_eq!(interpret_tuff("let x = 0; let y = 1; x < y"), 1);
+    }
+
+    #[test]
+    fn comparison_greater_than() {
+        // let x = 5; let y = 3; x > y => 1 (5 is greater than 3)
+        assert_eq!(interpret_tuff("let x = 5; let y = 3; x > y"), 1);
+    }
+
+    #[test]
+    fn comparison_equal() {
+        // let x = 42; let y = 42; x == y => 1 (equal)
+        assert_eq!(interpret_tuff("let x = 42; let y = 42; x == y"), 1);
+    }
+
+    #[test]
+    fn comparison_not_equal() {
+        // let x = 1; let y = 2; x != y => 1 (not equal)
+        assert_eq!(interpret_tuff("let x = 1; let y = 2; x != y"), 1);
+    }
+
+    #[test]
+    fn comparison_less_equal() {
+        // let x = 3; let y = 3; x <= y => 1 (equal satisfies less-or-equal)
+        assert_eq!(interpret_tuff("let x = 3; let y = 3; x <= y"), 1);
+    }
+
+    #[test]
+    fn comparison_greater_equal() {
+        // let x = 7; let y = 5; x >= y => 1 (greater satisfies greater-or-equal)
+        assert_eq!(interpret_tuff("let x = 7; let y = 5; x >= y"), 1);
+    }
+
+    #[test]
+    fn comparison_false_result() {
+        // let x = 2; let y = 1; x < y => 0 (false)
+        assert_eq!(interpret_tuff("let x = 2; let y = 1; x < y"), 0);
+    }
+
+    #[test]
+    fn comparison_greater_than_false() {
+        // let x = 0; let y = 1; x > y => 0 (0 is not greater than 1)
+        assert_eq!(interpret_tuff("let x = 0; let y = 1; x > y"), 0);
+    }
+
+    #[test]
+    fn comparison_with_logical_and() {
+        // true && false => 0, combining comparison with logical operator
+        assert_eq!(
+            interpret_tuff("let a = 1; let b = 2; let c = 3; a < b && b < c"),
+            1
+        );
     }
 }
