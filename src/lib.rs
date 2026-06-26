@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 /// Evaluate a Tuff expression string and return the integer result.
 pub fn interpret_tuff(source: &str) -> i64 {
     let mut trimmed = source.trim().to_string();
@@ -5,11 +7,9 @@ pub fn interpret_tuff(source: &str) -> i64 {
         return 0;
     }
 
-    // Handle top-level `let` bindings: `let x = expr; body` → evaluate expr, substitute into body
-    if let Some((var_name, var_val)) = parse_top_level_let(&trimmed) {
-        if let Some(substituted) = replace_var_in_body_strict(&trimmed, &var_name, var_val) {
-            return interpret_tuff(&substituted);
-        }
+    // Handle top-level `let` / `let mut` bindings with sequential statement evaluation
+    if is_top_level_statement_block(&trimmed) {
+        return evaluate_with_scope(&trimmed);
     }
 
     // Recursively evaluate parenthesized sub-expressions first, handling `let` bindings in braces
@@ -134,34 +134,168 @@ pub fn find_semicolon_at_top_level(s: &str) -> Option<usize> {
     None
 }
 
-/// Parse a top-level `let` binding and return the variable name and its evaluated value.
-fn parse_top_level_let(s: &str) -> Option<(String, i64)> {
-    let semi_pos = find_semicolon_at_top_level(s)?;
-    let assign_part = &s[4..semi_pos]; // skip "let ", get "x = expr"
+/// Check if the string is a block of top-level statements (let/let mut + reassignments).
+fn is_top_level_statement_block(s: &str) -> bool {
+    let trimmed = s.trim();
+    // Must start with `let` or `let mut`, and contain at least one semicolon at depth 0
+    (trimmed.starts_with("let ") || trimmed.starts_with("let mut "))
+        && find_semicolon_at_top_level(trimmed).is_some()
+}
 
-    let eq_parts: Vec<&str> = assign_part.splitn(2, '=').collect();
-    if eq_parts.len() != 2 {
+/// Split a string into top-level statements separated by semicolons at brace depth 0.
+fn split_statements(s: &str) -> Vec<String> {
+    let mut stmts = Vec::new();
+    // Find all top-level semicolons and split on them
+    if let Some(semi_pos) = find_semicolon_at_top_level(s) {
+        stmts.push(s[..semi_pos].trim().to_string());
+
+        // Recursively process the rest, but we need to handle multiple statements
+        let remaining = &s[semi_pos + 1..];
+        if !remaining.trim().is_empty() {
+            // Check if there are more top-level semicolons in the remainder
+            if find_semicolon_at_top_level(remaining).is_some() {
+                stmts.extend(split_statements(remaining));
+            } else {
+                stmts.push(remaining.trim().to_string());
+            }
+        }
+    } else if !s.trim().is_empty() {
+        stmts.push(s.trim().to_string());
+    }
+
+    stmts
+}
+
+/// Evaluate a block of statements with variable scope, returning the value of the last expression.
+fn evaluate_with_scope(source: &str) -> i64 {
+    use std::collections::HashMap;
+
+    let mut scope: HashMap<String, (i64, bool)> = HashMap::new(); // (value, is_mutable)
+    let statements = split_statements(source);
+
+    let mut last_value = 0i64;
+
+    for stmt in &statements {
+        let trimmed_stmt = stmt.trim().to_string();
+
+        if let Some((var_name, val)) = parse_let_statement(&trimmed_stmt) {
+            // `let x = expr` or `let mut x = expr`
+            scope.insert(var_name.clone(), (val, false));
+            last_value = val;
+        } else if let Some((var_name, val)) = parse_mut_let_statement(&trimmed_stmt) {
+            // `let mut x = expr`
+            scope.insert(var_name.clone(), (val, true));
+            last_value = val;
+        } else if let Some((var_name, val)) = parse_reassignment(&trimmed_stmt, &scope) {
+            // `x = expr` — reassign existing variable
+            if let Some(entry) = scope.get_mut(var_name.as_str()) {
+                entry.0 = val;
+                last_value = val;
+            }
+        } else {
+            // Plain expression (possibly with variable references)
+            let substituted = substitute_vars(&trimmed_stmt, &scope);
+            last_value = interpret_tuff(&substituted);
+        }
+    }
+
+    last_value
+}
+
+/// Parse a `let x = expr` statement. Returns None if it's not this pattern.
+fn parse_let_statement(s: &str) -> Option<(String, i64)> {
+    let trimmed = s.trim();
+    if !trimmed.starts_with("let ") || trimmed.starts_with("let mut") {
         return None;
     }
 
-    let var_name = eq_parts[0].trim().to_string();
-    let expr_str = eq_parts[1].trim();
+    // Find '=' in the statement (not inside braces — but for simplicity we split on first '=')
+    let eq_pos = find_eq_at_depth_zero(trimmed)?;
+    let var_part = &trimmed[4..eq_pos]; // skip "let ", get "x"
+    let expr_str = trimmed[eq_pos + 1..].trim();
 
-    // Evaluate the assigned expression (which may contain nested braces with their own `let` bindings)
+    let val = interpret_tuff(expr_str);
+    Some((var_part.trim().to_string(), val))
+}
+
+/// Parse a `let mut x = expr` statement. Returns None if it's not this pattern.
+fn parse_mut_let_statement(s: &str) -> Option<(String, i64)> {
+    let trimmed = s.trim();
+    if !trimmed.starts_with("let mut ") {
+        return None;
+    }
+
+    // Find '=' in the statement (not inside braces — but for simplicity we split on first '=')
+    let eq_pos = find_eq_at_depth_zero(trimmed)?;
+    let var_part = &trimmed[8..eq_pos]; // skip "let mut ", get "x"
+    let expr_str = trimmed[eq_pos + 1..].trim();
+
+    let val = interpret_tuff(expr_str);
+    Some((var_part.trim().to_string(), val))
+}
+
+/// Parse a reassignment `x = expr`. Returns None if it's not this pattern.
+fn parse_reassignment(s: &str, scope: &HashMap<String, (i64, bool)>) -> Option<(String, i64)> {
+    let trimmed = s.trim();
+
+    // Must be an identifier followed by '=' at depth 0
+    if !is_identifier(trimmed.split('=').next()?.trim()) {
+        return None;
+    }
+
+    let eq_pos = find_eq_at_depth_zero(trimmed)?;
+    let var_name = trimmed[..eq_pos].trim().to_string();
+
+    // Variable must exist in scope and be mutable (or we allow reassignment for simplicity)
+    if !scope.contains_key(var_name.as_str()) {
+        return None;
+    }
+
+    let expr_str = trimmed[eq_pos + 1..].trim();
     let val = interpret_tuff(expr_str);
 
     Some((var_name, val))
 }
 
-/// Replace variable references in a top-level `let x = expr; body` string.
-fn replace_var_in_body_strict(s: &str, var_name: &str, var_val: i64) -> Option<String> {
-    let semi_pos = find_semicolon_at_top_level(s)?;
-    let body = &s[semi_pos + 1..].trim_start();
+/// Find the position of '=' at brace depth 0.
+fn find_eq_at_depth_zero(s: &str) -> Option<usize> {
+    let mut depth = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            '=' if depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
 
-    // Replace all whole-word occurrences of the variable name with its value
-    let substituted = replace_whole_word(body, var_name, &var_val.to_string());
+/// Check if a string is a valid identifier.
+fn is_identifier(s: &str) -> bool {
+    let trimmed = s.trim();
+    !trimmed.is_empty()
+        && trimmed.chars().all(|c| c.is_alphanumeric() || c == '_')
+        && (trimmed
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_alphabetic() || c == '_'))
+}
 
-    Some(substituted.trim().to_string())
+/// Substitute all variable references in an expression with their values from scope.
+fn substitute_vars(s: &str, scope: &HashMap<String, (i64, bool)>) -> String {
+    let mut result = s.to_string();
+
+    // Sort by length descending to avoid partial replacements (e.g., "xy" before "x")
+    let mut vars: Vec<_> = scope.iter().collect();
+    vars.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+    for (var_name, (val, _)) in vars.iter() {
+        let replacement: String = (*val).to_string();
+        result = replace_whole_word(&result, *var_name, &replacement);
+    }
+
+    result
 }
 
 /// Replace a word in a string only when it appears as a complete identifier (not part of another word).
@@ -326,6 +460,12 @@ mod tests {
     fn top_level_let_binding() {
         // let y = 3 * { let x = 4 + 5; x }; y => inner block → 9, then 3*9=27, so y=27
         assert_eq!(interpret_tuff("let y = 3 * { let x = 4 + 5; x }; y"), 27);
+    }
+
+    #[test]
+    fn mutable_let_with_reassignment() {
+        // let mut x = 0; x = 1; x => reassigns x to 1, then evaluates to 1
+        assert_eq!(interpret_tuff("let mut x = 0; x = 1; x"), 1);
     }
 
     #[test]
