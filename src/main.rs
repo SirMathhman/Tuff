@@ -1,3 +1,7 @@
 fn main() {
-    println!("Hello, world!");
+    // TODO: REPL for interpret_tuff
+}
+
+fn interpret_tuff(source : &str) {
+    todo!()
 }
