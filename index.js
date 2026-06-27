@@ -396,6 +396,44 @@ export function execute(source) {
       return value;
     }
 
+    // Lookahead: only treat as indexed assignment/compound-assignment if there's '=' or '+=' after the closing ']'
+    function isIndexedAssignment() {
+      if (!/^[a-zA-Z_]\w*$/.test(tokens[pos]) || tokens[pos + 1] !== "[")
+        return false;
+      let scan = pos + 2; // skip identifier and '['
+      while (scan < tokens.length && tokens[scan] !== "]") scan++;
+      if (scan >= tokens.length) return false;
+      const nextToken = tokens[scan + 1];
+      return nextToken === "=" || nextToken === "+=";
+    }
+
+    if (isIndexedAssignment()) {
+      const name = tokens[pos];
+      pos++; // consume variable name
+      pos++; // consume '['
+      const idx = parseOrExpr();
+      if (pos >= tokens.length || tokens[pos] !== "]")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume ']'
+      const op = tokens[pos];
+      if (op !== "=" && op !== "+=")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume '=' or '+='
+      const value = parseOrExpr();
+      const entry = lookup(name);
+      if (!entry.mutable) throw new Error("Cannot reassign immutable variable");
+      if (op === "=") {
+        entry.value[idx] = value;
+      } else {
+        // += compound assignment on array element
+        entry.value[idx] = entry.value[idx] + value;
+      }
+      if (pos < tokens.length && tokens[pos] === ";") {
+        pos++; // consume ';'
+      }
+      return value;
+    }
+
     // Parse `for (i in start..end) bodyStmt` range-based for-loop
     if (tokens[pos] === "for") {
       pos++; // consume 'for'
@@ -506,7 +544,9 @@ export function execute(source) {
 
   // Parse top-level statements, returning the last value
   let lastResult = 0;
+  let iterations = 0;
   while (pos < tokens.length) {
+    if (++iterations > 1024) throw new Error("Execution limit exceeded");
     lastResult = parseStatement();
   }
   return lastResult;

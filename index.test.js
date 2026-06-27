@@ -220,3 +220,11 @@ test('execute("@") should throw error (unrecognized token)', () => {
 test('execute("fn get() => 100; get()") => 100', () => {
   expect(execute("fn get() => 100; get()")).toBe(100);
 });
+
+test('execute("let mut array = [0]; array[0] = 7; array[0]") => 7', () => {
+  expect(execute("let mut array = [0]; array[0] = 7; array[0]")).toBe(7);
+});
+
+test('execute("let mut array = [1]; array[0] += 7; array[0]") => 8', () => {
+  expect(execute("let mut array = [1]; array[0] += 7; array[0]")).toBe(8);
+});
