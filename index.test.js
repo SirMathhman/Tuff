@@ -28,3 +28,27 @@ test('executeTuff("1 + { 2 )") throws Error', () => {
 test('executeTuff("1 + { let x = 2; x }") returns 3', () => {
   expect(executeTuff("1 + { let x = 2; x }")).toBe(3);
 });
+
+test('executeTuff("1 + 2 + 3") returns 6', () => {
+  expect(executeTuff("1 + 2 + 3")).toBe(6);
+});
+
+test('executeTuff("2 + 3 - 4") returns 1', () => {
+  expect(executeTuff("2 + 3 - 4")).toBe(1);
+});
+
+test('executeTuff("2 * 3 - 4") returns 2', () => {
+  expect(executeTuff("2 * 3 - 4")).toBe(2);
+});
+
+test('executeTuff("2 * (3 - 4)") returns -2', () => {
+  expect(executeTuff("2 * (3 - 4)")).toBe(-2);
+});
+
+test('executeTuff("let x = 2 * (3 - 4); x") returns -2', () => {
+  expect(executeTuff("let x = 2 * (3 - 4); x")).toBe(-2);
+});
+
+test('executeTuff("let x = 0; let x = 1; x") returns 1', () => {
+  expect(executeTuff("let x = 0; let x = 1; x")).toBe(1);
+});

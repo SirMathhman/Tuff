@@ -67,11 +67,45 @@ class Parser {
   }
 
   parse() {
-    const expr = this.parseExpression();
-    if (this.pos < this.tokens.length) {
-      throw new Error(`Unexpected token: ${this.peek().value}`);
+    // Parse top-level as a sequence of let statements followed by an expression (implicit block)
+    const result = this.parseStatementsAndExpr(
+      () => this.pos < this.tokens.length,
+    );
+    return { type: "block", ...result };
+  }
+
+  /**
+   * Common helper: parse a series of `let` declarations and/or expressions,
+   * returning { statements, lastExpr }.  The `shouldContinue` callback is called
+   * each iteration to decide whether there are more tokens (top-level) or until
+   * the closing delimiter (block).
+   */
+  parseStatementsAndExpr(shouldContinue) {
+    const statements = [];
+    let lastExpr;
+
+    while (shouldContinue()) {
+      if (this.peek()?.type === "ident" && this.peek()?.value === "let") {
+        this.consume("ident", "let");
+        const name = this.consume("ident").value;
+        this.consume("op", "=");
+        const value = this.parseExpression();
+
+        if (this.peek().value === ";") {
+          this.consume("op", ";");
+        }
+
+        statements.push({ type: "let", name, value });
+      } else {
+        lastExpr = this.parseExpression();
+
+        if (this.peek()?.value === ";") {
+          this.consume("op", ";");
+        }
+      }
     }
-    return expr;
+
+    return { statements, lastExpr };
   }
 
   parseExpression() {
@@ -161,36 +195,11 @@ class Parser {
   parseBlock() {
     this.consume("op", "{");
 
-    const statements = [];
-    let lastExpr;
-
-    while (this.peek().value !== "}") {
-      // Check for `let` declaration
-      if (this.peek()?.type === "ident" && this.peek()?.value === "let") {
-        this.consume("ident", "let");
-        const name = this.consume("ident").value;
-        this.consume("op", "=");
-        const value = this.parseExpression();
-
-        // Expect semicolon after let statement
-        if (this.peek().value === ";") {
-          this.consume("op", ";");
-        }
-
-        statements.push({ type: "let", name, value });
-      } else {
-        lastExpr = this.parseExpression();
-
-        // Optional semicolon between expressions
-        if (this.peek()?.value === ";") {
-          this.consume("op", ";");
-        }
-      }
-    }
+    const result = this.parseStatementsAndExpr(() => this.peek().value !== "}");
 
     this.consume("op", "}");
 
-    return { type: "block", statements, lastExpr };
+    return { type: "block", ...result };
   }
 }
 
