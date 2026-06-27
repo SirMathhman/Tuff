@@ -285,15 +285,14 @@ class Scope {
   }
 
   findAndAssign(name, value) {
-    // Walk up to the outermost scope that defines it, then assign there
-    let current = null;
+    // Walk up the chain to find where name was defined.
     let scope = this;
-    while (scope && name in scope.bindings) {
-      current = scope;
+    while (scope && !(name in scope.bindings)) {
       scope = scope.parent;
     }
-    if (!current) throw new Error(`Cannot find binding for: ${name}`);
-    current.bindings[name] = value;
+    if (!scope || !(name in scope.bindings))
+      throw new Error(`Cannot find binding for: ${name}`);
+    scope.bindings[name] = value;
   }
 }
 
@@ -367,21 +366,24 @@ class Evaluator {
   }
 
   evaluateBlockInScope(node, scope) {
-    const evaluator = new Evaluator(scope);
+    // Create a child scope so inner `let` declarations shadow without overwriting parent bindings.
+    const blockScope = new Scope(scope);
+    const evaluator = new Evaluator(blockScope);
 
     for (const stmt of node.statements) {
       if (stmt.type === "let") {
         const value = evaluator.evaluate(stmt.value);
-        scope.define(stmt.name, value, stmt.mutable || false);
+        blockScope.define(stmt.name, value, stmt.mutable || false);
       } else if (stmt.type === "assign") {
         const newValue = evaluator.evaluate(stmt.value);
-        scope.assign(stmt.name, newValue);
+        // Assign walks up the scope chain to find & update the original binding.
+        blockScope.assign(stmt.name, newValue);
       }
     }
 
     for (const expr of node.intermediateExprs || []) {
       if (expr.type === "block") {
-        this.evaluateBlockInScope(expr, scope);
+        this.evaluateBlockInScope(expr, blockScope);
       } else {
         evaluator.evaluate(expr);
       }
