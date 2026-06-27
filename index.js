@@ -74,33 +74,60 @@ class Parser {
     return { type: "block", ...result };
   }
 
-  /**
-   * Common helper: parse a series of `let` declarations and/or expressions,
-   * returning { statements, lastExpr }.  The `shouldContinue` callback is called
-   * each iteration to decide whether there are more tokens (top-level) or until
-   * the closing delimiter (block).
-   */
+  /** Parse `name = expr;` and return { name, value }. */
+  parseAssignmentRhs() {
+    const name = this.consume("ident").value;
+    this.consume("op", "=");
+    const value = this.parseExpression();
+
+    if (this.peek().value === ";") {
+      this.consume("op", ";");
+    }
+
+    return { name, value };
+  }
+
   parseStatementsAndExpr(shouldContinue) {
     const statements = [];
     let lastExpr;
 
     while (shouldContinue()) {
+      // Check for `let` declaration (with optional `mut`)
       if (this.peek()?.type === "ident" && this.peek()?.value === "let") {
         this.consume("ident", "let");
-        const name = this.consume("ident").value;
-        this.consume("op", "=");
-        const value = this.parseExpression();
 
-        if (this.peek().value === ";") {
-          this.consume("op", ";");
+        let mutable = false;
+        if (this.peek()?.type === "ident" && this.peek()?.value === "mut") {
+          mutable = true;
+          this.consume("ident", "mut");
         }
 
-        statements.push({ type: "let", name, value });
+        const { name, value } = this.parseAssignmentRhs();
+        statements.push({ type: "let", name, mutable, value });
       } else {
-        lastExpr = this.parseExpression();
+        // Check for assignment statement (`ident = expr`)
+        const tok = this.peek();
+        if (
+          tok &&
+          tok.type === "ident" &&
+          this.tokens[this.pos + 1]?.value === "="
+        ) {
+          const name = tok.value;
+          this.consume("ident");
+          this.consume("op", "=");
+          const value = this.parseExpression();
 
-        if (this.peek()?.value === ";") {
-          this.consume("op", ";");
+          if (this.peek().value === ";") {
+            this.consume("op", ";");
+          }
+
+          statements.push({ type: "assign", name, value });
+        } else {
+          lastExpr = this.parseExpression();
+
+          if (this.peek()?.value === ";") {
+            this.consume("op", ";");
+          }
         }
       }
     }
@@ -250,6 +277,23 @@ class Evaluator {
     for (const stmt of node.statements) {
       if (stmt.type === "let") {
         childScope[stmt.name] = this.evaluate(stmt.value);
+        // Track mutability on the scope object itself
+        Object.defineProperty(childScope, `__${stmt.name}__mutable`, {
+          value: stmt.mutable || false,
+          configurable: true,
+        });
+      } else if (stmt.type === "assign") {
+        const targetName = stmt.name;
+        // Check variable exists and is mutable
+        if (!(targetName in childScope)) {
+          throw new Error(`Undefined variable: ${targetName}`);
+        }
+        const isMutable = childScope[`__${targetName}__mutable`] === true;
+        if (!isMutable) {
+          throw new Error(`Cannot assign to immutable variable: ${targetName}`);
+        }
+        const evaluator = new Evaluator(childScope);
+        childScope[targetName] = evaluator.evaluate(stmt.value);
       }
     }
 

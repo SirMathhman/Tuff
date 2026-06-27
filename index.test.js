@@ -52,3 +52,11 @@ test('executeTuff("let x = 2 * (3 - 4); x") returns -2', () => {
 test('executeTuff("let x = 0; let x = 1; x") returns 1', () => {
   expect(executeTuff("let x = 0; let x = 1; x")).toBe(1);
 });
+
+test('executeTuff("let mut x = 0; x = 1; x") returns 1', () => {
+  expect(executeTuff("let mut x = 0; x = 1; x")).toBe(1);
+});
+
+test('executeTuff("let x = 0; x = 1; x") throws Error', () => {
+  expect(() => executeTuff("let x = 0; x = 1; x")).toThrow();
+});
