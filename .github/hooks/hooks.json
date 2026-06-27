@@ -3,7 +3,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "powershell -ExecutionPolicy Bypass -File test.ps1"
+        "command": "powershell -ExecutionPolicy Bypass -File .github\\hooks\\test.ps1"
       }
     ]
   }

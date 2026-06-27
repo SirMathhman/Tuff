@@ -91,7 +91,7 @@ export function execute(source) {
   }
 
   function parseStatement() {
-    // Parse `let x = expr` or a plain expression statement
+    // Parse `let x = expr` declarations
     if (tokens[pos] === "let") {
       pos++; // consume 'let'
       const name = tokens[pos];
@@ -108,13 +108,17 @@ export function execute(source) {
       return value;
     }
 
+    // Plain expression — only valid as the last statement without trailing ;
     const result = parseExpr();
-    if (pos < tokens.length && tokens[pos] === ";") {
-      pos++; // consume trailing ';'
-    }
+    if (pos < tokens.length && tokens[pos] === ";")
+      throw new Error("Invalid source: " + source);
     return result;
   }
 
-  const result = parseExpr();
-  return result;
+  // Parse top-level statements, returning the last value
+  let lastResult = 0;
+  while (pos < tokens.length) {
+    lastResult = parseStatement();
+  }
+  return lastResult;
 }
