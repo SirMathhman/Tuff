@@ -31,6 +31,17 @@ export function execute(source) {
     throw new Error("Invalid source: " + source);
   }
 
+  function parseIfCondition() {
+    // Shared: consume `if (` and evaluate condition, expect `)`
+    if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
+    pos++; // consume '('
+    const condition = parseOrExpr();
+    if (pos >= tokens.length || tokens[pos] !== ")")
+      throw new Error("Invalid source: " + source);
+    pos++; // consume ')'
+    return condition;
+  }
+
   function parseComparisonExpr() {
     // Parse comparison operators (<, >, <=, >=, ==, !=) between logical AND and arithmetic
     let result = parseExpr();
@@ -178,12 +189,7 @@ export function execute(source) {
     // if/else expression: if (condition) thenExpr else elseExpr
     if (token === "if") {
       pos++; // consume 'if'
-      if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
-      pos++; // consume '('
-      const condition = parseOrExpr();
-      if (pos >= tokens.length || tokens[pos] !== ")")
-        throw new Error("Invalid source: " + source);
-      pos++; // consume ')'
+      const condition = parseIfCondition();
       const thenResult = parseFactor();
       if (tokens[pos] !== "else") throw new Error("Invalid source: " + source);
       pos++; // consume 'else'
@@ -238,6 +244,51 @@ export function execute(source) {
         pos++; // consume ';'
       }
       return value;
+    }
+
+    // Parse `if (condition) thenStmt else elseStmt` statement
+    if (tokens[pos] === "if") {
+      pos++; // consume 'if'
+      const condition = parseIfCondition();
+
+      let lastResult;
+      scopeStack.push({});
+      lastResult = parseStatement();
+      scopeStack.pop();
+
+      const condVal = condition ? 1 : 0;
+
+      function deepCloneScopes() {
+        return scopeStack.map((s) => {
+          const clone = {};
+          for (const key in s) {
+            clone[key] = { value: s[key].value, mutable: s[key].mutable };
+          }
+          return clone;
+        });
+      }
+
+      if (condVal === 1 && pos < tokens.length && tokens[pos] === "else") {
+        // Execute else branch but restore scope to discard side effects
+        const savedScopes = deepCloneScopes();
+        pos++; // consume 'else'
+        scopeStack.push({});
+        parseStatement();
+        scopeStack.pop();
+        Object.assign(scopeStack, savedScopes);
+      } else if (
+        condVal === 0 &&
+        pos < tokens.length &&
+        tokens[pos] === "else"
+      ) {
+        // Execute else branch when condition is false
+        pos++; // consume 'else'
+        scopeStack.push({});
+        lastResult = parseStatement();
+        scopeStack.pop();
+      }
+
+      return lastResult;
     }
 
     // Plain expression — only valid as the last statement without trailing ;

@@ -108,6 +108,14 @@ test('execute("let x = if (false) 1 else if (false) 2 else 3; x") => 3', () => {
   expect(execute("let x = if (false) 1 else if (false) 2 else 3; x")).toBe(3);
 });
 
+test('execute("let mut x = 0; if (true) x = 3 else x = 5; x") => 3', () => {
+  expect(execute("let mut x = 0; if (true) x = 3 else x = 5; x")).toBe(3);
+});
+
+test('execute("let mut x = 0; if (false) x = 1 else x = 2; x") => 2', () => {
+  expect(execute("let mut x = 0; if (false) x = 1 else x = 2; x")).toBe(2);
+});
+
 test('execute("let mut x = 0; x = 1; x") => 1', () => {
   expect(execute("let mut x = 0; x = 1; x")).toBe(1);
 });
@@ -130,4 +138,8 @@ test('execute("z = 5") should throw error (undefined variable)', () => {
 
 test('execute("abc") throws error', () => {
   expect(() => execute("abc")).toThrow();
+});
+
+test('execute("{ let mut x = 0; if (true) x = 3 else x = 5; x }") => 3', () => {
+  expect(execute("{ let mut x = 0; if (true) x = 3 else x = 5; x }")).toBe(3);
 });

@@ -1,5 +1,5 @@
 # check-coverage.ps1
-$result = cmd /c "bun test --coverage 2>&1"
+$result = cmd /c "bun test --coverage --coverage-reporter=lcov 2>&1"
 $result | Write-Host
 if ($LASTEXITCODE -ne 0) {
     $sf = ''
