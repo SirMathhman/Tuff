@@ -90,6 +90,7 @@ class Parser {
   parseStatementsAndExpr(shouldContinue) {
     const statements = [];
     let lastExpr;
+    const intermediateExprs = [];
 
     while (shouldContinue()) {
       // Check for `let` declaration (with optional `mut`)
@@ -123,16 +124,26 @@ class Parser {
 
           statements.push({ type: "assign", name, value });
         } else {
-          lastExpr = this.parseExpression();
+          // Parse expression — check if there's a semicolon after it.
+          const expr = this.parseExpression();
 
           if (this.peek()?.value === ";") {
+            // Semicolon means intermediate expression for side effects only
             this.consume("op", ";");
+            intermediateExprs.push(expr);
+          } else {
+            // No semicolon — this is the final expression whose value matters.
+            // If we already had a lastExpr, it becomes an intermediate one now.
+            if (lastExpr !== undefined) {
+              intermediateExprs.push(lastExpr);
+            }
+            lastExpr = expr;
           }
         }
       }
     }
 
-    return { statements, lastExpr };
+    return { statements, intermediateExprs, lastExpr };
   }
 
   parseExpression() {
@@ -230,9 +241,65 @@ class Parser {
   }
 }
 
+class Scope {
+  constructor(parent) {
+    this.parent = parent || null;
+    this.bindings = {}; // name -> value
+    this.mutableFlags = {}; // name -> boolean
+  }
+
+  lookup(name) {
+    if (name in this.bindings) return this.bindings[name];
+    if (this.parent) return this.parent.lookup(name);
+    throw new Error(`Undefined variable: ${name}`);
+  }
+
+  isMutable(name) {
+    if (name in this.mutableFlags) return this.mutableFlags[name] === true;
+    if (this.parent) return this.parent.isMutable(name);
+    return false;
+  }
+
+  define(name, value, mutable = false) {
+    this.bindings[name] = value;
+    this.mutableFlags[name] = mutable;
+  }
+
+  assign(name, newValue) {
+    // Check variable exists somewhere in the chain
+    if (!this.hasBinding(name)) {
+      throw new Error(`Undefined variable: ${name}`);
+    }
+    // Check mutability
+    if (!this.isMutable(name)) {
+      throw new Error(`Cannot assign to immutable variable: ${name}`);
+    }
+    // Find the scope where it was defined and update there
+    this.findAndAssign(name, newValue);
+  }
+
+  hasBinding(name) {
+    if (name in this.bindings) return true;
+    if (this.parent) return this.parent.hasBinding(name);
+    return false;
+  }
+
+  findAndAssign(name, value) {
+    // Walk up to the outermost scope that defines it, then assign there
+    let current = null;
+    let scope = this;
+    while (scope && name in scope.bindings) {
+      current = scope;
+      scope = scope.parent;
+    }
+    if (!current) throw new Error(`Cannot find binding for: ${name}`);
+    current.bindings[name] = value;
+  }
+}
+
 class Evaluator {
   constructor(scope) {
-    this.scope = scope || {};
+    this.scope = scope || new Scope();
   }
 
   evaluate(node) {
@@ -240,10 +307,7 @@ class Evaluator {
       case "literal":
         return node.value;
       case "variable":
-        if (!(node.name in this.scope)) {
-          throw new Error(`Undefined variable: ${node.name}`);
-        }
-        return this.scope[node.name];
+        return this.scope.lookup(node.name);
       case "binary":
         return this.evaluateBinary(node);
       case "block":
@@ -272,34 +336,60 @@ class Evaluator {
   }
 
   evaluateBlock(node) {
-    const childScope = Object.create(this.scope);
+    const childScope = new Scope(this.scope);
+    const blockEvaluator = new Evaluator(childScope);
 
     for (const stmt of node.statements) {
       if (stmt.type === "let") {
-        childScope[stmt.name] = this.evaluate(stmt.value);
-        // Track mutability on the scope object itself
-        Object.defineProperty(childScope, `__${stmt.name}__mutable`, {
-          value: stmt.mutable || false,
-          configurable: true,
-        });
+        const value = this.evaluate(stmt.value);
+        childScope.define(stmt.name, value, stmt.mutable || false);
       } else if (stmt.type === "assign") {
-        const targetName = stmt.name;
-        // Check variable exists and is mutable
-        if (!(targetName in childScope)) {
-          throw new Error(`Undefined variable: ${targetName}`);
-        }
-        const isMutable = childScope[`__${targetName}__mutable`] === true;
-        if (!isMutable) {
-          throw new Error(`Cannot assign to immutable variable: ${targetName}`);
-        }
-        const evaluator = new Evaluator(childScope);
-        childScope[targetName] = evaluator.evaluate(stmt.value);
+        const newValue = blockEvaluator.evaluate(stmt.value);
+        childScope.assign(stmt.name, newValue);
       }
     }
 
-    // Evaluate the last expression in a new scope with let bindings
-    const evaluator = new Evaluator(childScope);
-    return evaluator.evaluate(node.lastExpr);
+    // Execute intermediate expressions for side effects.
+    // If an intermediate expression is itself a block, evaluate it in the same scope
+    // (not a nested one) so mutations propagate correctly to outer scopes.
+    for (const expr of node.intermediateExprs || []) {
+      if (expr.type === "block") {
+        this.evaluateBlockInScope(expr, childScope);
+      } else {
+        blockEvaluator.evaluate(expr);
+      }
+    }
+
+    // Evaluate the last expression (if any) in a scope with let bindings
+    if (node.lastExpr !== undefined && node.lastExpr !== null) {
+      return blockEvaluator.evaluate(node.lastExpr);
+    }
+  }
+
+  evaluateBlockInScope(node, scope) {
+    const evaluator = new Evaluator(scope);
+
+    for (const stmt of node.statements) {
+      if (stmt.type === "let") {
+        const value = evaluator.evaluate(stmt.value);
+        scope.define(stmt.name, value, stmt.mutable || false);
+      } else if (stmt.type === "assign") {
+        const newValue = evaluator.evaluate(stmt.value);
+        scope.assign(stmt.name, newValue);
+      }
+    }
+
+    for (const expr of node.intermediateExprs || []) {
+      if (expr.type === "block") {
+        this.evaluateBlockInScope(expr, scope);
+      } else {
+        evaluator.evaluate(expr);
+      }
+    }
+
+    if (node.lastExpr !== undefined && node.lastExpr !== null) {
+      return evaluator.evaluate(node.lastExpr);
+    }
   }
 }
 
@@ -310,7 +400,7 @@ export function executeTuff(source) {
   const parser = new Parser(tokens);
   const ast = parser.parse();
 
-  const evaluator = new Evaluator({});
+  const evaluator = new Evaluator(new Scope());
   const result = evaluator.evaluate(ast);
 
   return typeof result === "number" ? result : Number(result);
