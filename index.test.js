@@ -27,3 +27,11 @@ test('execute("2 + 3 - 4") => 1', () => {
 test('execute("2 * 3 - 4") => 2', () => {
   expect(execute("2 * 3 - 4")).toBe(2);
 });
+
+test('execute("2 + 3 * 4") => 14', () => {
+  expect(execute("2 + 3 * 4")).toBe(14);
+});
+
+test('execute("8 / 4") => 2', () => {
+  expect(execute("8 / 4")).toBe(2);
+});

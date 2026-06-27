@@ -28,8 +28,6 @@ export function execute(source) {
     } else if (op === "+" || op === "-") {
       stack.push(op);
       stack.push(num);
-    } else {
-      throw new Error("Invalid source: " + source);
     }
   }
 
@@ -42,8 +40,6 @@ export function execute(source) {
       result += num;
     } else if (op === "-") {
       result -= num;
-    } else {
-      throw new Error("Invalid source: " + source);
     }
   }
 
