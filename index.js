@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { } [ ] , identifiers/keywords, ; = ..
+  // Tokenize: numbers, strings ("..."), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { } [ ] , . identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;,\[\]]|[a-zA-Z_]\w*/g,
+    /\d+|"[^"]*"|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;,\[\].]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -28,6 +28,11 @@ export function execute(source) {
         return;
       }
     }
+    throw new Error("Invalid source: " + source);
+  }
+
+  function resolveProperty(value, prop) {
+    if (typeof value === "string" && prop === "length") return value.length;
     throw new Error("Invalid source: " + source);
   }
 
@@ -212,17 +217,35 @@ export function execute(source) {
       return arr;
     }
 
-    // Variable reference with optional index access array[expr]
+    // String literal
+    if (/^"[^"]*"$/.test(token)) {
+      pos++;
+      return token.slice(1, -1); // strip quotes
+    }
+
+    // Variable reference with optional index access array[expr] and dot property .prop
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
       let value = lookup(token).value;
-      while (pos < tokens.length && tokens[pos] === "[") {
-        pos++; // consume '['
-        const idx = parseOrExpr();
-        if (pos >= tokens.length || tokens[pos] !== "]")
-          throw new Error("Invalid source: " + source);
-        pos++; // consume ']'
-        value = value[idx];
+      while (
+        pos < tokens.length &&
+        (tokens[pos] === "[" || tokens[pos] === ".")
+      ) {
+        if (tokens[pos] === "[") {
+          pos++; // consume '['
+          const idx = parseOrExpr();
+          if (pos >= tokens.length || tokens[pos] !== "]")
+            throw new Error("Invalid source: " + source);
+          pos++; // consume ']'
+          value = value[idx];
+        } else {
+          pos++; // consume '.'
+          const prop = tokens[pos];
+          if (!prop || !/^[a-zA-Z_]\w*$/.test(prop))
+            throw new Error("Invalid source: " + source);
+          pos++; // consume property name
+          value = resolveProperty(value, prop);
+        }
       }
       return value;
     }
