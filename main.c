@@ -19,19 +19,38 @@ CompileError get_compile_error()
 }
 
 static char generated_code[4096];
+static char translated[4096];
 
-static int is_number(const char *s)
+static int starts_with(const char *s, const char *prefix)
 {
-    if (s[0] == '\0')
-        return 0;
-    int i = s[0] == '-' || s[0] == '+' ? 1 : 0;
-    while (s[i])
+    while (*prefix && *s == *prefix)
     {
-        if (s[i] < '0' || s[i] > '9')
-            return 0;
-        i++;
+        s++;
+        prefix++;
     }
-    return 1;
+    return *prefix == '\0';
+}
+
+// Translate a Tuff expression to C by replacing each read() with (scanf("%d", &ni), ni)
+static void translate(const char *src, char *dst)
+{
+    int i = 0;
+    while (*src)
+    {
+        if (starts_with(src, "read("))
+        {
+            // Append: (scanf("%d", &n0), n0) — use %% to produce literal % in output
+            sprintf(dst + strlen(dst), "(scanf(\"%%d\", &n%d), n%d)", i, i);
+            src += 6; // skip past "read()"
+            i++;
+        }
+        else
+        {
+            *dst = *src;
+            dst++;
+            src++;
+        }
+    }
 }
 
 char *compile(char *source)
@@ -45,20 +64,11 @@ char *compile(char *source)
         return generated_code;
     }
 
-    // If source is a plain number, generate code that returns it
-    if (is_number(source))
-    {
-        sprintf(generated_code, "#include <stdio.h>\nint main() { return %s; }\n", source);
-        return generated_code;
-    }
-
-    // TODO: the rest - parse Tuff source and generate C code
-
-    has_compile_error_bool = true;
-    error.message[0] = '\0';
-    strcat(error.message, "Invalid source: '");
-    strcat(error.message, source);
-    strcat(error.message, "'");
-
+    // Translate Tuff expression to C and generate code
+    translated[0] = '\0';
+    translate(source, translated);
+    strcpy(generated_code, "#include <stdio.h>\nint main() { int n0; return (");
+    strcat(generated_code, translated);
+    strcat(generated_code, "); }\n");
     return generated_code;
 }

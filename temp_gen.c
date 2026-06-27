@@ -1,2 +1,2 @@
 #include <stdio.h>
-int main() { return 100; }
+int main() { int n0; return ((scanf("%d", &n0), n0)); }

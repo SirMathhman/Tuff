@@ -9,7 +9,7 @@ int passed_tests = 0;
 
 void assert_valid(char *test_name, char *source, char *std_in, int expected_exit_code)
 {
-    (void)std_in;
+    // (std_in is used below when running the exe)
     total_tests += 1;
 
     char *generated = compile(source);
@@ -35,8 +35,13 @@ void assert_valid(char *test_name, char *source, char *std_in, int expected_exit
         return;
     }
 
-    // Run the generated .exe and capture exit code
-    sprintf(cmd, ".\\temp_gen.exe");
+    // Write stdin to a temp file if provided
+    FILE *stdin_file = fopen("temp_stdin.txt", "w");
+    fprintf(stdin_file, "%s", std_in);
+    fclose(stdin_file);
+
+    // Run the generated .exe and capture exit code (pipe stdin from file)
+    sprintf(cmd, ".\\temp_gen.exe < temp_stdin.txt");
     int raw_status = system(cmd);
     int actual_exit_code = (raw_status >= 0 && raw_status <= 255) ? raw_status : (raw_status >> 8);
     if (actual_exit_code == expected_exit_code)
@@ -70,6 +75,8 @@ int main()
     // Test cases go here
     assert_valid("empty source", "", "", 0);
     assert_valid("returns 100", "100", "", 100);
+    assert_valid("read from stdin", "read()", "100", 100);
+    assert_valid("read first int only", "read()", "100 20", 100);
 
     printf("Total tests: %d\n", total_tests);
     printf("Passed tests: %d\n", passed_tests);
