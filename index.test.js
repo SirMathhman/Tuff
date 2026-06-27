@@ -24,3 +24,7 @@ test('executeTuff("1 + { 2 }") returns 3', () => {
 test('executeTuff("1 + { 2 )") throws Error', () => {
   expect(() => executeTuff("1 + { 2 )")).toThrow();
 });
+
+test('executeTuff("1 + { let x = 2; x }") returns 3', () => {
+  expect(executeTuff("1 + { let x = 2; x }")).toBe(3);
+});
