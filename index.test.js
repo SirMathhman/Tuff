@@ -179,3 +179,7 @@ test('execute("let mut sum = 0; for (i in 0..4) sum += i; sum") => 6', () => {
 test('execute("let mut sum = 0; for (i in 0..4) { sum += i; } sum") => 6', () => {
   expect(execute("let mut sum = 0; for (i in 0..4) { sum += i; } sum")).toBe(6);
 });
+
+test('execute("let array = [1, 2, 3]; array[0]") => 1', () => {
+  expect(execute("let array = [1, 2, 3]; array[0]")).toBe(1);
+});

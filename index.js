@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { }, identifiers/keywords, ; = ..
+  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { } [ ] , identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;]|[a-zA-Z_]\w*/g,
+    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;,\[\]]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -198,11 +198,33 @@ export function execute(source) {
       return condVal === 1 ? thenResult : elseResult;
     }
 
-    // Variable reference (identifier that's not a keyword)
+    // Array literal [expr, expr, ...]
+    if (token === "[") {
+      pos++; // consume '['
+      const arr = [];
+      while (pos < tokens.length && tokens[pos] !== "]") {
+        arr.push(parseOrExpr());
+        if (tokens[pos] === ",") pos++; // optionally consume ','
+      }
+      if (pos >= tokens.length || tokens[pos] !== "]")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume ']'
+      return arr;
+    }
+
+    // Variable reference with optional index access array[expr]
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
-      const entry = lookup(token);
-      return entry.value;
+      let value = lookup(token).value;
+      while (pos < tokens.length && tokens[pos] === "[") {
+        pos++; // consume '['
+        const idx = parseOrExpr();
+        if (pos >= tokens.length || tokens[pos] !== "]")
+          throw new Error("Invalid source: " + source);
+        pos++; // consume ']'
+        value = value[idx];
+      }
+      return value;
     }
 
     if (/^\d+$/.test(token)) {
