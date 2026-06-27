@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
 #include "main.h"
 
 int total_tests = 0;
@@ -5,9 +7,10 @@ int passed_tests = 0;
 
 void assert_valid(char *test_name, char *source, char *std_in, int expected_exit_code)
 {
+    (void)std_in;
     total_tests += 1;
 
-    int generated = compile(source);
+    compile(source);
     if (has_compile_error())
     {
         CompileError error = get_compile_error();
@@ -30,9 +33,8 @@ void assert_valid(char *test_name, char *source, char *std_in, int expected_exit
 
 void assert_invalid(char *test_name, char *source)
 {
+    (void)test_name;
     total_tests += 1;
-
-    char *generated = compile(source);
     if (has_compile_error())
     {
         passed_tests += 1;
@@ -46,6 +48,7 @@ void assert_invalid(char *test_name, char *source)
 int main()
 {
     // Test cases go here
+    assert_valid("", "", "", 0);
 
     return 0;
 }

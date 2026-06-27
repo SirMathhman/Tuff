@@ -1,13 +1,20 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <string.h>
 #include "main.h"
 
 // TODO: the rest
 
-bool has_compile_error_bool;
-CompileError error;
+static bool has_compile_error_bool;
+static CompileError error;
 
 bool has_compile_error()
 {
     return has_compile_error_bool;
+}
+
+CompileError get_compile_error()
+{
+    return error;
 }
 
 char *compile(char *source)
@@ -18,9 +25,4 @@ char *compile(char *source)
     strcat(error.message, source);
 
     return source;
-}
-
-int main()
-{
-    return 0;
 }
