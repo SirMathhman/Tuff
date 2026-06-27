@@ -1,5 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "main.h"
 
 int total_tests = 0;
@@ -18,10 +20,25 @@ void assert_valid(char *test_name, char *source, char *std_in, int expected_exit
         return;
     }
 
-    // Compile 'generated' using clang to a temp .exe
-    // Run the generated .exe, and actual_exit_code should be that exe
+    // Write generated code to a temp file
+    FILE *f = fopen("temp_gen.c", "w");
+    fprintf(f, "%s", generated);
+    fclose(f);
 
-    int actual_exit_code = -1;
+    // Compile using clang
+    char cmd[512];
+    sprintf(cmd, "clang -o temp_gen.exe temp_gen.c 2>compile_err.txt");
+    int ret = system(cmd);
+    if (ret != 0)
+    {
+        printf("FAIL - %s: Failed to compile generated code.\n", test_name);
+        return;
+    }
+
+    // Run the generated .exe and capture exit code
+    sprintf(cmd, ".\\temp_gen.exe");
+    int raw_status = system(cmd);
+    int actual_exit_code = (raw_status >= 0 && raw_status <= 255) ? raw_status : (raw_status >> 8);
     if (actual_exit_code == expected_exit_code)
     {
         passed_tests += 1;
