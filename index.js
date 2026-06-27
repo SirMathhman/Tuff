@@ -6,7 +6,28 @@ export function execute(source) {
   if (!tokens) throw new Error("Invalid source: " + source);
 
   let pos = 0;
-  const scope = {}; // variable store for `let` declarations
+  // Scope stack for block scoping — inner blocks shadow outer declarations
+  const scopeStack = [{}];
+
+  function lookup(name) {
+    for (let i = scopeStack.length - 1; i >= 0; i--) {
+      if (name in scopeStack[i]) return scopeStack[i][name];
+    }
+    throw new Error("Invalid source: " + source);
+  }
+
+  function assign(name, value) {
+    for (let i = scopeStack.length - 1; i >= 0; i--) {
+      if (name in scopeStack[i]) {
+        const entry = scopeStack[i][name];
+        if (!entry.mutable)
+          throw new Error("Cannot reassign immutable variable");
+        entry.value = value;
+        return;
+      }
+    }
+    throw new Error("Invalid source: " + source);
+  }
 
   function parseExpr() {
     // Parse addition/subtraction (lowest precedence)
@@ -63,6 +84,7 @@ export function execute(source) {
 
     if (token === "{") {
       pos++; // consume '{'
+      scopeStack.push({}); // push new block scope
       let lastResult = 0;
       // Parse statements separated by ; until closing }
       while (pos < tokens.length && tokens[pos] !== "}") {
@@ -72,14 +94,15 @@ export function execute(source) {
       if (pos >= tokens.length || tokens[pos] !== "}")
         throw new Error("Invalid source: " + source);
       pos++; // consume '}'
+      scopeStack.pop(); // pop block scope
       return lastResult;
     }
 
     // Variable reference (identifier that's not a keyword)
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
-      if (!(token in scope)) throw new Error("Invalid source: " + source);
-      return scope[token];
+      const entry = lookup(token);
+      return entry.value;
     }
 
     if (/^\d+$/.test(token)) {
@@ -91,9 +114,11 @@ export function execute(source) {
   }
 
   function parseStatement() {
-    // Parse `let x = expr` declarations
+    // Parse `let x = expr` or `let mut x = expr` declarations
     if (tokens[pos] === "let") {
       pos++; // consume 'let'
+      const mutable = tokens[pos] === "mut";
+      if (mutable) pos++; // optionally consume 'mut'
       const name = tokens[pos];
       if (!name || !/^[a-zA-Z_]\w*$/.test(name))
         throw new Error("Invalid source: " + source);
@@ -101,7 +126,20 @@ export function execute(source) {
       if (tokens[pos] !== "=") throw new Error("Invalid source: " + source);
       pos++; // consume '='
       const value = parseExpr();
-      scope[name] = value;
+      scopeStack[scopeStack.length - 1][name] = { value, mutable };
+      if (pos < tokens.length && tokens[pos] === ";") {
+        pos++; // consume ';'
+      }
+      return value;
+    }
+
+    // Parse assignment `x = expr` for mutable variables
+    if (/^[a-zA-Z_]\w*$/.test(tokens[pos]) && tokens[pos + 1] === "=") {
+      const name = tokens[pos];
+      pos++; // consume variable name
+      pos++; // consume '='
+      const value = parseExpr();
+      assign(name, value);
       if (pos < tokens.length && tokens[pos] === ";") {
         pos++; // consume ';'
       }

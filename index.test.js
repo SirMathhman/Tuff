@@ -56,6 +56,30 @@ test('execute("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   expect(execute("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
 
+test('execute("let x = 0; let x = 1; x") => 1', () => {
+  expect(execute("let x = 0; let x = 1; x")).toBe(1);
+});
+
+test('execute("let mut x = 0; x = 1; x") => 1', () => {
+  expect(execute("let mut x = 0; x = 1; x")).toBe(1);
+});
+
+test('execute("let x = 0; x = 1; x") should throw error', () => {
+  expect(() => execute("let x = 0; x = 1; x")).toThrow();
+});
+
+test('execute("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(execute("let mut x = 0; { x = 1; } x")).toBe(1);
+});
+
+test('execute("let x = 0; { let x = 1; } x") => 0', () => {
+  expect(execute("let x = 0; { let x = 1; } x")).toBe(0);
+});
+
+test('execute("z = 5") should throw error (undefined variable)', () => {
+  expect(() => execute("z = 5")).toThrow();
+});
+
 test('execute("abc") throws error', () => {
   expect(() => execute("abc")).toThrow();
 });
