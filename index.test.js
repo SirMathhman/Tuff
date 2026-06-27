@@ -68,3 +68,43 @@ test('executeTuff("let mut x = 0; { x = 1; } x") returns 1', () => {
 test('executeTuff("let x = 0; { let x = 1; } x") returns 0', () => {
   expect(executeTuff("let x = 0; { let x = 1; } x")).toBe(0);
 });
+
+test('executeTuff("x = 0;") throws Error', () => {
+  expect(() => executeTuff("x = 0;")).toThrow();
+});
+
+test('executeTuff("let x = true; x") returns 1', () => {
+  expect(executeTuff("let x = true; x")).toBe(1);
+});
+
+test('executeTuff("let x = true; let y = false; x || y") returns 1', () => {
+  expect(executeTuff("let x = true; let y = false; x || y")).toBe(1);
+});
+
+test('executeTuff("let x = true; let y = false; x && y") returns 0', () => {
+  expect(executeTuff("let x = true; let y = false; x && y")).toBe(0);
+});
+
+test('executeTuff("let x = 0; let y = 1; x < y") returns 1', () => {
+  expect(executeTuff("let x = 0; let y = 1; x < y")).toBe(1);
+});
+
+test('executeTuff("let x = 2; let y = 1; x > y") returns 1', () => {
+  expect(executeTuff("let x = 2; let y = 1; x > y")).toBe(1);
+});
+
+test('executeTuff("let x = 1; let y = 1; x <= y") returns 1', () => {
+  expect(executeTuff("let x = 1; let y = 1; x <= y")).toBe(1);
+});
+
+test('executeTuff("let x = 2; let y = 1; x >= y") returns 1', () => {
+  expect(executeTuff("let x = 2; let y = 1; x >= y")).toBe(1);
+});
+
+test('executeTuff("let x = 1; let y = 1; x == y") returns 1', () => {
+  expect(executeTuff("let x = 1; let y = 1; x == y")).toBe(1);
+});
+
+test('executeTuff("let x = 0; let y = 1; x != y") returns 1', () => {
+  expect(executeTuff("let x = 0; let y = 1; x != y")).toBe(1);
+});

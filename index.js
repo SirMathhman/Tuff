@@ -29,6 +29,23 @@ function tokenize(source) {
       continue;
     }
 
+    // Multi-char operators (e.g. ||, &&, <=, >=, ==, !=)
+    if (i + 1 < source.length) {
+      const two = source[i] + source[i + 1];
+      if (
+        two === "||" ||
+        two === "&&" ||
+        two === "<=" ||
+        two === ">=" ||
+        two === "==" ||
+        two === "!="
+      ) {
+        tokens.push({ type: "op", value: two });
+        i += 2;
+        continue;
+      }
+    }
+
     // Single-char operators and delimiters
     const single = "+-*/=(){};,<>!";
     if (single.includes(source[i])) {
@@ -147,13 +164,52 @@ class Parser {
   }
 
   parseExpression() {
+    let left = this.parseLogicalOr();
+    while (true) {
+      const tok = this.peek();
+      if (
+        tok &&
+        tok.type === "op" &&
+        (tok.value === "<" ||
+          tok.value === ">" ||
+          tok.value === "<=" ||
+          tok.value === ">=" ||
+          tok.value === "==" ||
+          tok.value === "!=")
+      ) {
+        this.consume("op");
+        const right = this.parseLogicalOr();
+        left = { type: "binary", op: tok.value, left, right };
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  parseLogicalOr() {
+    let left = this.parseLogicalAnd();
+    while (true) {
+      const tok = this.peek();
+      if (tok && tok.type === "op" && tok.value === "||") {
+        this.consume("op");
+        const right = this.parseLogicalAnd();
+        left = { type: "binary", op: "||", left, right };
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  parseLogicalAnd() {
     let left = this.parseAdditive();
     while (true) {
       const tok = this.peek();
-      if (tok && tok.type === "op" && "<>!=".includes(tok.value)) {
+      if (tok && tok.type === "op" && tok.value === "&&") {
         this.consume("op");
         const right = this.parseAdditive();
-        left = { type: "binary", op: tok.value, left, right };
+        left = { type: "binary", op: "&&", left, right };
       } else {
         break;
       }
@@ -219,6 +275,16 @@ class Parser {
     // Block expression
     if (tok && tok.type === "op" && tok.value === "{") {
       return this.parseBlock();
+    }
+
+    // Boolean literal
+    if (
+      tok &&
+      tok.type === "ident" &&
+      (tok.value === "true" || tok.value === "false")
+    ) {
+      this.consume("ident");
+      return { type: "literal", value: tok.value === "true" ? 1 : 0 };
     }
 
     // Identifier / variable reference
@@ -318,6 +384,17 @@ class Evaluator {
 
   evaluateBinary(node) {
     const left = this.evaluate(node.left);
+
+    // Short-circuit OR: if left is truthy, return 1 without evaluating right
+    if (node.op === "||") {
+      return left ? 1 : Number(this.evaluate(node.right));
+    }
+
+    // Short-circuit AND: if left is falsy, return 0 without evaluating right
+    if (node.op === "&&") {
+      return !left ? 0 : Number(this.evaluate(node.right));
+    }
+
     const right = this.evaluate(node.right);
 
     switch (node.op) {
@@ -329,6 +406,18 @@ class Evaluator {
         return left * right;
       case "/":
         return left / right;
+      case "<":
+        return left < right ? 1 : 0;
+      case ">":
+        return left > right ? 1 : 0;
+      case "<=":
+        return left <= right ? 1 : 0;
+      case ">=":
+        return left >= right ? 1 : 0;
+      case "==":
+        return left == right ? 1 : 0;
+      case "!=":
+        return left != right ? 1 : 0;
       default:
         throw new Error(`Unknown operator: ${node.op}`);
     }
