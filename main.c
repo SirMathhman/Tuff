@@ -29,15 +29,35 @@ void parse_expr(void);
 void parse_atom(void);
 void parse_block(void);
 static void append_char(char c);
+static void append_str(const char *s);
+static void append_decl(const char *s);
 void parse_top_level(void);
 void parse_block_at_top_level(void);
 
-// Append a single character to generated_code safely
+// Buffer for hoisted declarations (let bindings at any nesting level)
+static char decl_buffer[2048];
+
+// Pre-declarations buffer: nested block lets go here so they appear BEFORE outer assignments
+static char pre_decl[1024];
+
+// Body buffer: holds the return expression and other non-declaration code
+static char body[2048];
+
+// Current target buffer — points to either decl_buffer or body depending on context
+static char *target = NULL;
+
+// Append a string to current target buffer
+static void append_str(const char *s)
+{
+    strcat(target, s);
+}
+
+// Append a single character to current target buffer
 static void append_char(char c)
 {
-    int len = strlen(generated_code);
-    generated_code[len] = c;
-    generated_code[len + 1] = '\0';
+    int len = strlen(target);
+    target[len] = c;
+    target[len + 1] = '\0';
 }
 
 // Skip whitespace
@@ -74,7 +94,7 @@ void parse_atom(void)
     if (starts_with(input, "read("))
     {
         int idx = parse_var_count++;
-        sprintf(generated_code + strlen(generated_code), "(scanf(\"%%d\", &n%d), n%d)", idx, idx);
+        sprintf(target + strlen(target), "(scanf(\"%%d\", &n%d), n%d)", idx, idx);
         input += 6; // skip past "read()"
         return;
     }
@@ -114,7 +134,7 @@ void parse_atom(void)
     sprintf(error.message, "Unexpected character: '%c'", *input ? *input : '\0');
 }
 
-// Parse a block: { stmt* expr } - generates let-decls + wraps final expr in parens (for use as atom)
+// Parse a block: { stmt* expr } - hoists let-decls to pre_decl, wraps final expr in parens
 void parse_block(void)
 {
     input++; // skip '{'
@@ -135,7 +155,13 @@ void parse_block(void)
                 varname[vi++] = (char)*input++;
             varname[vi] = '\0';
 
-            sprintf(generated_code + strlen(generated_code), "int %s=", varname);
+            // Switch target to pre_decl for nested let bindings so they appear BEFORE outer code
+            char *saved_target = target;
+            int decl_len = strlen(pre_decl);
+            if (decl_len > 0)
+                strcat(pre_decl, "\n");
+            sprintf(pre_decl + strlen(pre_decl), "int %s=", varname);
+            target = pre_decl;
 
             skip_ws();
             if (*input == '=')
@@ -143,7 +169,10 @@ void parse_block(void)
             skip_ws();
 
             parse_expr();
-            append_char(';');
+            strcat(target, ";");
+
+            // Restore original target
+            target = saved_target;
 
             skip_ws();
             if (*input == ';')
@@ -156,7 +185,7 @@ void parse_block(void)
     }
 
     // Wrap final expr in parens so it works as part of larger expressions
-    strcat(generated_code, "(");
+    append_str("(");
     parse_expr();
     append_char(')');
 
@@ -206,6 +235,12 @@ char *compile(char *source)
     input = source;
     parse_var_count = 0;
 
+    // Clear buffers for this compilation and set target to body
+    pre_decl[0] = '\0';
+    decl_buffer[0] = '\0';
+    body[0] = '\0';
+    target = body;
+
     // Count how many read() calls there are so we can declare all variables
     int total_vars = 0;
     const char *p = source;
@@ -221,32 +256,78 @@ char *compile(char *source)
     for (int j = 0; j < total_vars; j++)
         sprintf(generated_code + strlen(generated_code), "int n%d; ", j);
 
-    // Parse and translate - block statements go before return expr
+    // Parse and translate - let-decls go to decl_buffer, expressions to body
     parse_top_level();
+
+    // Merge: header + pre-declarations (nested lets) + declarations (outer lets) + body
+    if (strlen(pre_decl) > 0)
+        strcat(generated_code, pre_decl);
+    if (strlen(decl_buffer) > 0)
+        strcat(generated_code, decl_buffer);
+    strcat(generated_code, "\n");
+    strcat(generated_code, body);
+    strcat(generated_code, "}\n");
+
     return generated_code;
 }
 
-// Top-level: handle blocks (let-decls first), then return final expression
+// Top-level: handle let-decls (hoisted), then return final expression in body buffer
 void parse_top_level(void)
 {
     skip_ws();
 
-    // If we start with a block, process let-statements BEFORE the return
+    // Handle top-level let statements — hoist to decl_buffer
+    while (starts_with(input, "let "))
+    {
+        input += 4;
+        skip_ws();
+
+        char varname[64];
+        int vi = 0;
+        while ((*input >= 'a' && *input <= 'z') || (*input >= 'A' && *input <= 'Z') ||
+               (*input >= '0' && *input <= '9') || *input == '_')
+            varname[vi++] = (char)*input++;
+        varname[vi] = '\0';
+
+        // Switch target to decl_buffer for this let binding, add newline separator if needed
+        char *saved_target = target;
+        int decl_len = strlen(decl_buffer);
+        if (decl_len > 0)
+            strcat(decl_buffer, "\n");
+        sprintf(decl_buffer + strlen(decl_buffer), "int %s=", varname);
+        target = decl_buffer;
+
+        skip_ws();
+        if (*input == '=')
+            input++;
+        skip_ws();
+
+        parse_expr();
+        strcat(target, ";");
+
+        // Restore original target
+        target = saved_target;
+
+        // Skip optional ';' in source (Tuff syntax)
+        skip_ws();
+        if (*input == ';')
+            input++;
+    }
+
+    // If we start with a block at top level, process it specially
     if (*input == '{')
     {
         parse_block_at_top_level();
     }
     else
     {
-        strcat(generated_code, "return ");
+        append_str("return ");
         parse_expr();
         append_char(';');
     }
-
-    strcat(generated_code, "\n}\n");
 }
 
-// Parse block at top level: let-decls on their own lines, then return final expr
+// Parse block at top level: hoist let-decls to pre_decl (so they appear before outer code)
 void parse_block_at_top_level(void)
 {
     input++; // skip '{'
@@ -267,7 +348,13 @@ void parse_block_at_top_level(void)
                 varname[vi++] = (char)*input++;
             varname[vi] = '\0';
 
-            sprintf(generated_code + strlen(generated_code), "int %s=", varname);
+            // Switch target to pre_decl for let bindings, add newline separator if needed
+            char *saved_target = target;
+            int decl_len = strlen(pre_decl);
+            if (decl_len > 0)
+                strcat(pre_decl, "\n");
+            sprintf(pre_decl + strlen(pre_decl), "int %s=", varname);
+            target = pre_decl;
 
             skip_ws();
             if (*input == '=')
@@ -275,7 +362,10 @@ void parse_block_at_top_level(void)
             skip_ws();
 
             parse_expr();
-            append_char(';');
+            strcat(target, ";");
+
+            // Restore original target
+            target = saved_target;
 
             skip_ws();
             if (*input == ';')
@@ -287,8 +377,7 @@ void parse_block_at_top_level(void)
         break; // final expression
     }
 
-    // Now return the final expression in the block
-    strcat(generated_code, "return ");
+    append_str("return ");
     parse_expr();
     append_char(';');
 

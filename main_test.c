@@ -89,6 +89,7 @@ int main()
     assert_valid("read first int only", "read()", "100 20", 100);
     assert_valid("read with braces", "read() + { read() }", "100 20", 120);
     assert_valid("let binding in block", "{ let x = read(); x }", "42", 42);
+    assert_valid("top-level let with nested block", "let y = read() + { let x = read(); x }; y", "100 20", 120);
 
     printf("Total tests: %d\n", total_tests);
     printf("Passed tests: %d\n", passed_tests);
