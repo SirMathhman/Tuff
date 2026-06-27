@@ -248,19 +248,30 @@ export function execute(source) {
       return applyChains(value, source);
     }
 
-    // Variable reference or function call: name() with optional index access array[expr] and dot property .prop
+    // Variable reference or function call: name(args) with optional index access array[expr] and dot property .prop
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
       const entry = lookup(token);
-      let value =
-        entry.type === "fn"
-          ? evalBody(entry.bodyStart, entry.bodyEnd)
-          : entry.value;
-      // Consume trailing ( ) for function calls
+      let value;
       if (entry.type === "fn") {
-        if (tokens[pos] !== "(" || tokens[pos + 1] !== ")")
-          throw new Error("Invalid source: " + source);
-        pos += 2; // consume '(' and ')'
+        // Parse arguments: name(arg1, arg2)
+        if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
+        pos++; // consume '('
+        const args = [];
+        while (pos < tokens.length && tokens[pos] !== ")") {
+          args.push(parseOrExpr());
+          if (tokens[pos] === ",") pos++; // consume ','
+        }
+        if (tokens[pos] !== ")") throw new Error("Invalid source: " + source);
+        pos++; // consume ')'
+        value = evalBody(
+          entry.bodyStart,
+          entry.bodyEnd,
+          entry.params || [],
+          args,
+        );
+      } else {
+        value = entry.value;
       }
       return applyChains(value, source);
     }
@@ -274,11 +285,16 @@ export function execute(source) {
   }
 
   // Evaluate a saved body token range [bodyStart, bodyEnd) in an isolated scope
-  function evalBody(bodyStart, bodyEnd) {
+  function evalBody(bodyStart, bodyEnd, params = [], args = []) {
     const savedPos = pos;
     const savedScopeStackLen = scopeStack.length;
     pos = bodyStart;
-    scopeStack.push({});
+    // Create new scope with parameter bindings
+    const paramScope = {};
+    for (let i = 0; i < params.length; i++) {
+      paramScope[params[i]] = { value: args[i] || 0, mutable: false };
+    }
+    scopeStack.push(paramScope);
     let lastResult = 0;
     while (pos < bodyEnd) {
       lastResult = parseOrExpr();
@@ -300,17 +316,34 @@ export function execute(source) {
       pos++; // consume function name
       if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
       pos++; // consume '('
+      const params = [];
+      while (pos < tokens.length && tokens[pos] !== ")") {
+        const paramName = tokens[pos];
+        if (!paramName || !/^[a-zA-Z_]\w*$/.test(paramName))
+          throw new Error("Invalid source: " + source);
+        params.push(paramName);
+        pos++;
+        if (tokens[pos] === ",") pos++; // consume ','
+      }
       if (tokens[pos] !== ")") throw new Error("Invalid source: " + source);
       pos++; // consume ')'
       if (tokens[pos] !== "=>") throw new Error("Invalid source: " + source);
       pos++; // consume '=>'
       const bodyStart = pos;
+      // Push dummy parameter values so parseOrExpr doesn't fail on unknown identifiers
+      scopeStack.push(
+        Object.fromEntries(
+          params.map((p) => [p, { value: 0, mutable: false }]),
+        ),
+      );
       parseOrExpr();
+      scopeStack.pop();
       const bodyEnd = pos;
       scopeStack[scopeStack.length - 1][name] = {
         type: "fn",
         bodyStart,
         bodyEnd,
+        params,
       };
       if (pos < tokens.length && tokens[pos] === ";") {
         pos++; // consume ';'

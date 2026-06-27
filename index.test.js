@@ -198,6 +198,10 @@ test('execute("\"ab\".length") => 2', () => {
 test('execute(""".length") => 0', () => {
   expect(execute('"".length')).toBe(0);
 });
+
+test('execute("fn add(first, second) => first + second; add(3, 4)") => 7', () => {
+  expect(execute("fn add(first, second) => first + second; add(3, 4)")).toBe(7);
+});
 test('execute("let temp = \"\\\"; temp.length") => 1', () => {
   expect(execute(`let temp = "\\""; temp.length`)).toBe(1);
 });
