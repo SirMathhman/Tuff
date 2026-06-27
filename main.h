@@ -4,7 +4,7 @@
 
 typedef struct
 {
-    char *message;
+    char message[256];
 } CompileError;
 
 CompileError get_compile_error();
