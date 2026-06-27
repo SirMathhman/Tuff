@@ -143,3 +143,19 @@ test('execute("abc") throws error', () => {
 test('execute("{ let mut x = 0; if (true) x = 3 else x = 5; x }") => 3', () => {
   expect(execute("{ let mut x = 0; if (true) x = 3 else x = 5; x }")).toBe(3);
 });
+
+test('execute("let mut x = 0; if (false) x = 3; else x = 5; x") => 5', () => {
+  expect(execute("let mut x = 0; if (false) x = 3; else x = 5; x")).toBe(5);
+});
+
+test('execute("let mut x = 0; if (false) x = 3; else if (false) x = 4; else x = 5; x") => 5', () => {
+  expect(
+    execute(
+      "let mut x = 0; if (false) x = 3; else if (false) x = 4; else x = 5; x",
+    ),
+  ).toBe(5);
+});
+
+test('execute("let mut x = 0; if (true) { x = 3; } x") => 3', () => {
+  expect(execute("let mut x = 0; if (true) { x = 3; } x")).toBe(3);
+});
