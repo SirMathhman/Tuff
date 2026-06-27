@@ -100,6 +100,14 @@ test('execute("let x = 1; let y = 2; x != y") => 1', () => {
   expect(execute("let x = 1; let y = 2; x != y")).toBe(1);
 });
 
+test('execute("let x = if (true) 3 else 5; x") => 3', () => {
+  expect(execute("let x = if (true) 3 else 5; x")).toBe(3);
+});
+
+test('execute("let x = if (false) 1 else if (false) 2 else 3; x") => 3', () => {
+  expect(execute("let x = if (false) 1 else if (false) 2 else 3; x")).toBe(3);
+});
+
 test('execute("let mut x = 0; x = 1; x") => 1', () => {
   expect(execute("let mut x = 0; x = 1; x")).toBe(1);
 });

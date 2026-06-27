@@ -175,6 +175,23 @@ export function execute(source) {
       return 0;
     }
 
+    // if/else expression: if (condition) thenExpr else elseExpr
+    if (token === "if") {
+      pos++; // consume 'if'
+      if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
+      pos++; // consume '('
+      const condition = parseOrExpr();
+      if (pos >= tokens.length || tokens[pos] !== ")")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume ')'
+      const thenResult = parseFactor();
+      if (tokens[pos] !== "else") throw new Error("Invalid source: " + source);
+      pos++; // consume 'else'
+      const elseResult = parseFactor();
+      const condVal = condition ? 1 : 0;
+      return condVal === 1 ? thenResult : elseResult;
+    }
+
     // Variable reference (identifier that's not a keyword)
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
