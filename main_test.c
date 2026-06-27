@@ -16,7 +16,7 @@ void assert_valid(char *test_name, char *source, char *std_in, int expected_exit
     if (has_compile_error())
     {
         CompileError error = get_compile_error();
-        printf("FAIL - %s: %s\n", test_name, error.message);
+        printf("FAIL - %s: Failed to compile: %s\n", test_name, error.message);
         return;
     }
 
@@ -31,7 +31,17 @@ void assert_valid(char *test_name, char *source, char *std_in, int expected_exit
     int ret = system(cmd);
     if (ret != 0)
     {
-        printf("FAIL - %s: Failed to compile generated code.\n", test_name);
+        FILE *ptr = fopen("./compile_err.txt", "r");
+        fseek(ptr, 0L, SEEK_END);
+        long sz = ftell(ptr);
+        rewind(ptr);
+
+        char *buffer = malloc(sizeof(char) * (sz + 1));
+        fread(buffer, sizeof(char), sz, ptr);
+        buffer[sz] = '\0';
+
+        printf("FAIL - %s: Failed to compile generated C code: %s. Clang Error: %s\n", test_name, generated, buffer);
+        free(buffer);
         return;
     }
 
@@ -50,14 +60,14 @@ void assert_valid(char *test_name, char *source, char *std_in, int expected_exit
     }
     else
     {
-        printf("FAIL - %s: Expected exit code %d but was actually %d.\n", test_name, expected_exit_code, actual_exit_code);
+        printf("FAIL - %s: Expected exit code %d but was actually %d. Generated: %s\n", test_name, expected_exit_code, actual_exit_code, generated);
     }
 }
 
 void assert_invalid(char *test_name, char *source)
 {
     (void)test_name;
-    compile(source);
+    char *actual = compile(source);
 
     total_tests += 1;
     if (has_compile_error())
@@ -66,7 +76,7 @@ void assert_invalid(char *test_name, char *source)
     }
     else
     {
-        printf("FAIL - %s: Expected an error to be returned.\n", test_name);
+        printf("FAIL - %s: Expected an error to be returned, but actually compiled to: \n", test_name, actual);
     }
 }
 
