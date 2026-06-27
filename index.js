@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, strings ("..."), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { } [ ] , . identifiers/keywords, ; = ..
+  // Tokenize: numbers, strings ("...", with \" escapes), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { } [ ] , . identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|"[^"]*"|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;,\[\].]|[a-zA-Z_]\w*/g,
+    /\d+|"(?:[^\\"]*|(?:\\.))*"|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;,\[\].]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -34,6 +34,30 @@ export function execute(source) {
   function resolveProperty(value, prop) {
     if (typeof value === "string" && prop === "length") return value.length;
     throw new Error("Invalid source: " + source);
+  }
+
+  function applyChains(value, src) {
+    while (
+      pos < tokens.length &&
+      (tokens[pos] === "[" || tokens[pos] === ".")
+    ) {
+      if (tokens[pos] === "[") {
+        pos++; // consume '['
+        const idx = parseOrExpr();
+        if (pos >= tokens.length || tokens[pos] !== "]")
+          throw new Error("Invalid source: " + src);
+        pos++; // consume ']'
+        value = value[idx];
+      } else {
+        pos++; // consume '.'
+        const prop = tokens[pos];
+        if (!prop || !/^[a-zA-Z_]\w*$/.test(prop))
+          throw new Error("Invalid source: " + src);
+        pos++; // consume property name
+        value = resolveProperty(value, prop);
+      }
+    }
+    return value;
   }
 
   function parseIfCondition() {
@@ -162,7 +186,7 @@ export function execute(source) {
       if (pos >= tokens.length || tokens[pos] !== ")")
         throw new Error("Invalid source: " + source);
       pos++; // consume ')'
-      return result;
+      return applyChains(result, source);
     }
 
     if (token === "{") {
@@ -178,7 +202,7 @@ export function execute(source) {
         throw new Error("Invalid source: " + source);
       pos++; // consume '}'
       scopeStack.pop(); // pop block scope
-      return lastResult;
+      return applyChains(lastResult, source);
     }
 
     // Boolean literals
@@ -214,40 +238,21 @@ export function execute(source) {
       if (pos >= tokens.length || tokens[pos] !== "]")
         throw new Error("Invalid source: " + source);
       pos++; // consume ']'
-      return arr;
+      return applyChains(arr, source);
     }
 
-    // String literal
-    if (/^"[^"]*"$/.test(token)) {
+    // String literal — check for trailing .prop or [idx] chains
+    if (/^".*"$/.test(token)) {
       pos++;
-      return token.slice(1, -1); // strip quotes
+      const value = token.slice(1, -1).replace(/\\"/g, '"'); // strip quotes + unescape \"
+      return applyChains(value, source);
     }
 
     // Variable reference with optional index access array[expr] and dot property .prop
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
       let value = lookup(token).value;
-      while (
-        pos < tokens.length &&
-        (tokens[pos] === "[" || tokens[pos] === ".")
-      ) {
-        if (tokens[pos] === "[") {
-          pos++; // consume '['
-          const idx = parseOrExpr();
-          if (pos >= tokens.length || tokens[pos] !== "]")
-            throw new Error("Invalid source: " + source);
-          pos++; // consume ']'
-          value = value[idx];
-        } else {
-          pos++; // consume '.'
-          const prop = tokens[pos];
-          if (!prop || !/^[a-zA-Z_]\w*$/.test(prop))
-            throw new Error("Invalid source: " + source);
-          pos++; // consume property name
-          value = resolveProperty(value, prop);
-        }
-      }
-      return value;
+      return applyChains(value, source);
     }
 
     if (/^\d+$/.test(token)) {

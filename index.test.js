@@ -187,3 +187,28 @@ test('execute("let array = [1, 2, 3]; array[0]") => 1', () => {
 test('execute("let temp = \\"test\\"; temp.length") => 4', () => {
   expect(execute('let temp = "test"; temp.length')).toBe(4);
 });
+
+test('execute("let temp = \\"<=\\\"; temp.length") => 2', () => {
+  expect(execute('let temp = "<="; temp.length')).toBe(2);
+});
+test('execute("\"ab\".length") => 2', () => {
+  expect(execute('"ab".length')).toBe(2);
+});
+
+test('execute(""".length") => 0', () => {
+  expect(execute('"".length')).toBe(0);
+});
+test('execute("let temp = \"\\\"; temp.length") => 1', () => {
+  expect(execute(`let temp = "\\""; temp.length`)).toBe(1);
+});
+test('execute("let arr = [10, 20]; arr[1]") => 20', () => {
+  expect(execute("let arr = [10, 20]; arr[1]")).toBe(20);
+});
+
+test('execute("([7, 8])[0]") => 7', () => {
+  expect(execute("([7, 8])[0]")).toBe(7);
+});
+
+test('execute("@") should throw error (unrecognized token)', () => {
+  expect(() => execute("@")).toThrow();
+});
