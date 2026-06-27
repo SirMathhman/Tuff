@@ -21,8 +21,9 @@ char *compile(char *source)
 {
     has_compile_error_bool = true;
     error.message[0] = '\0';
-    strcat(error.message, "Invalid source: ");
+    strcat(error.message, "Invalid source: '");
     strcat(error.message, source);
+    strcat(error.message, "'");
 
     return source;
 }
