@@ -212,3 +212,7 @@ test('execute("([7, 8])[0]") => 7', () => {
 test('execute("@") should throw error (unrecognized token)', () => {
   expect(() => execute("@")).toThrow();
 });
+
+test('execute("fn get() => 100; get()") => 100', () => {
+  expect(execute("fn get() => 100; get()")).toBe(100);
+});

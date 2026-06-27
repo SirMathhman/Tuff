@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, strings ("...", with \" escapes), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { } [ ] , . identifiers/keywords, ; = ..
+  // Tokenize: numbers, strings ("...", with \" escapes), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=, =>), delimiters ( ) { } [ ] , . identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|"(?:[^\\"]*|(?:\\.))*"|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;,\[\].]|[a-zA-Z_]\w*/g,
+    /\d+|"(?:[^\\"]*|(?:\\.))*"|[|]{2}|[&]{2}|<=|>=|==|!=|=>|\+=|\.\.|[+\-*/(){}<>=;,\[\].]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -248,10 +248,20 @@ export function execute(source) {
       return applyChains(value, source);
     }
 
-    // Variable reference with optional index access array[expr] and dot property .prop
+    // Variable reference or function call: name() with optional index access array[expr] and dot property .prop
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
-      let value = lookup(token).value;
+      const entry = lookup(token);
+      let value =
+        entry.type === "fn"
+          ? evalBody(entry.bodyStart, entry.bodyEnd)
+          : entry.value;
+      // Consume trailing ( ) for function calls
+      if (entry.type === "fn") {
+        if (tokens[pos] !== "(" || tokens[pos + 1] !== ")")
+          throw new Error("Invalid source: " + source);
+        pos += 2; // consume '(' and ')'
+      }
       return applyChains(value, source);
     }
 
@@ -263,7 +273,51 @@ export function execute(source) {
     // Should not reach here — all token types are handled above
   }
 
+  // Evaluate a saved body token range [bodyStart, bodyEnd) in an isolated scope
+  function evalBody(bodyStart, bodyEnd) {
+    const savedPos = pos;
+    const savedScopeStackLen = scopeStack.length;
+    pos = bodyStart;
+    scopeStack.push({});
+    let lastResult = 0;
+    while (pos < bodyEnd) {
+      lastResult = parseOrExpr();
+    }
+    scopeStack.pop();
+    if (scopeStack.length > savedScopeStackLen)
+      scopeStack.length = savedScopeStackLen;
+    pos = savedPos;
+    return lastResult;
+  }
+
   function parseStatement() {
+    // Parse `fn name() => expr` function declarations
+    if (tokens[pos] === "fn") {
+      pos++; // consume 'fn'
+      const name = tokens[pos];
+      if (!name || !/^[a-zA-Z_]\w*$/.test(name))
+        throw new Error("Invalid source: " + source);
+      pos++; // consume function name
+      if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
+      pos++; // consume '('
+      if (tokens[pos] !== ")") throw new Error("Invalid source: " + source);
+      pos++; // consume ')'
+      if (tokens[pos] !== "=>") throw new Error("Invalid source: " + source);
+      pos++; // consume '=>'
+      const bodyStart = pos;
+      parseOrExpr();
+      const bodyEnd = pos;
+      scopeStack[scopeStack.length - 1][name] = {
+        type: "fn",
+        bodyStart,
+        bodyEnd,
+      };
+      if (pos < tokens.length && tokens[pos] === ";") {
+        pos++; // consume ';'
+      }
+      return 0;
+    }
+
     // Parse `let x = expr` or `let mut x = expr` declarations
     if (tokens[pos] === "let") {
       pos++; // consume 'let'
