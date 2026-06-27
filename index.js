@@ -1,8 +1,10 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /, ||, &&), delimiters ( ) { }, identifiers/keywords, ; =
-  const tokens = source.match(/\d+|[|]{2}|[&]{2}|[+\-*/(){}=;]|[a-zA-Z_]\w*/g);
+  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=), delimiters ( ) { }, identifiers/keywords, ; =
+  const tokens = source.match(
+    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|[+\-*/(){}<>=;]|[a-zA-Z_]\w*/g,
+  );
   if (!tokens) throw new Error("Invalid source: " + source);
 
   let pos = 0;
@@ -29,14 +31,49 @@ export function execute(source) {
     throw new Error("Invalid source: " + source);
   }
 
-  function parseAndExpr() {
-    // Parse logical AND (higher precedence than ||, lower than arithmetic)
+  function parseComparisonExpr() {
+    // Parse comparison operators (<, >, <=, >=, ==, !=) between logical AND and arithmetic
     let result = parseExpr();
+    let hasComparison = false;
+
+    while (
+      pos < tokens.length &&
+      (tokens[pos] === "<" ||
+        tokens[pos] === ">" ||
+        tokens[pos] === "<=" ||
+        tokens[pos] === ">=" ||
+        tokens[pos] === "==" ||
+        tokens[pos] === "!=")
+    ) {
+      const op = tokens[pos++];
+      const right = parseExpr();
+      if (op === "<") {
+        result = result < right;
+      } else if (op === ">") {
+        result = result > right;
+      } else if (op === "<=") {
+        result = result <= right;
+      } else if (op === ">=") {
+        result = result >= right;
+      } else if (op === "==") {
+        result = result == right;
+      } else {
+        result = result != right;
+      }
+      hasComparison = true;
+    }
+
+    return hasComparison ? (result ? 1 : 0) : result;
+  }
+
+  function parseAndExpr() {
+    // Parse logical AND (higher precedence than ||, lower than comparisons)
+    let result = parseComparisonExpr();
     let hasAnd = false;
 
     while (pos < tokens.length && tokens[pos] === "&&") {
       pos++; // consume '&&'
-      const right = parseExpr();
+      const right = parseComparisonExpr();
       result = result && right;
       hasAnd = true;
     }

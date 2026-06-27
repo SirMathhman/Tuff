@@ -3,7 +3,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "powershell -ExecutionPolicy Bypass -File .github\\hooks\\test.ps1"
+        "command": "cmd /c \"powershell -ExecutionPolicy Bypass -File .github\\hooks\\test.ps1 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       },
       {
         "type": "command",
