@@ -60,6 +60,22 @@ test('execute("let x = 0; let x = 1; x") => 1', () => {
   expect(execute("let x = 0; let x = 1; x")).toBe(1);
 });
 
+test('execute("let x = true; x") => 1', () => {
+  expect(execute("let x = true; x")).toBe(1);
+});
+
+test('execute("let x = false; x") => 0', () => {
+  expect(execute("let x = false; x")).toBe(0);
+});
+
+test('execute("let x = true; let y = false; x || y") => 1', () => {
+  expect(execute("let x = true; let y = false; x || y")).toBe(1);
+});
+
+test('execute("let x = true; let y = false; x && y") => 0', () => {
+  expect(execute("let x = true; let y = false; x && y")).toBe(0);
+});
+
 test('execute("let mut x = 0; x = 1; x") => 1', () => {
   expect(execute("let mut x = 0; x = 1; x")).toBe(1);
 });

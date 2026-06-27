@@ -1,8 +1,8 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /), delimiters ( ) { }, identifiers/keywords, ; =
-  const tokens = source.match(/\d+|[+\-*/(){}=;]|[a-zA-Z_]\w*/g);
+  // Tokenize: numbers, operators (+, -, *, /, ||, &&), delimiters ( ) { }, identifiers/keywords, ; =
+  const tokens = source.match(/\d+|[|]{2}|[&]{2}|[+\-*/(){}=;]|[a-zA-Z_]\w*/g);
   if (!tokens) throw new Error("Invalid source: " + source);
 
   let pos = 0;
@@ -29,8 +29,38 @@ export function execute(source) {
     throw new Error("Invalid source: " + source);
   }
 
+  function parseAndExpr() {
+    // Parse logical AND (higher precedence than ||, lower than arithmetic)
+    let result = parseExpr();
+    let hasAnd = false;
+
+    while (pos < tokens.length && tokens[pos] === "&&") {
+      pos++; // consume '&&'
+      const right = parseExpr();
+      result = result && right;
+      hasAnd = true;
+    }
+
+    return hasAnd ? (result ? 1 : 0) : result;
+  }
+
+  function parseOrExpr() {
+    // Parse logical OR (lowest precedence)
+    let result = parseAndExpr();
+    let hasOr = false;
+
+    while (pos < tokens.length && tokens[pos] === "||") {
+      pos++; // consume '||'
+      const right = parseAndExpr();
+      result = result || right;
+      hasOr = true;
+    }
+
+    return hasOr ? (result ? 1 : 0) : result;
+  }
+
   function parseExpr() {
-    // Parse addition/subtraction (lowest precedence)
+    // Parse addition/subtraction
     let result = parseTerm();
 
     while (
@@ -98,6 +128,16 @@ export function execute(source) {
       return lastResult;
     }
 
+    // Boolean literals
+    if (token === "true") {
+      pos++;
+      return 1;
+    }
+    if (token === "false") {
+      pos++;
+      return 0;
+    }
+
     // Variable reference (identifier that's not a keyword)
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
@@ -125,7 +165,7 @@ export function execute(source) {
       pos++; // consume variable name
       if (tokens[pos] !== "=") throw new Error("Invalid source: " + source);
       pos++; // consume '='
-      const value = parseExpr();
+      const value = parseOrExpr();
       scopeStack[scopeStack.length - 1][name] = { value, mutable };
       if (pos < tokens.length && tokens[pos] === ";") {
         pos++; // consume ';'
@@ -138,7 +178,7 @@ export function execute(source) {
       const name = tokens[pos];
       pos++; // consume variable name
       pos++; // consume '='
-      const value = parseExpr();
+      const value = parseOrExpr();
       assign(name, value);
       if (pos < tokens.length && tokens[pos] === ";") {
         pos++; // consume ';'
@@ -147,7 +187,7 @@ export function execute(source) {
     }
 
     // Plain expression — only valid as the last statement without trailing ;
-    const result = parseExpr();
+    const result = parseOrExpr();
     if (pos < tokens.length && tokens[pos] === ";")
       throw new Error("Invalid source: " + source);
     return result;
