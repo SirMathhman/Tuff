@@ -1,6 +1,6 @@
-temp_gen.c:2:31: warning: 'scanf' is deprecated: This function or variable may be unsafe. Consider using scanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-    2 | int main() { int n0; return ((scanf("%d", &n0), n0)); }
-      |                               ^
+temp_gen.c:2:29: warning: 'scanf' is deprecated: This function or variable may be unsafe. Consider using scanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+    2 | int main() { int n0; int x=(scanf("%d", &n0), n0);return x;
+      |                             ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\stdio.h:1275:20: note: 'scanf' has been explicitly marked deprecated here
  1275 |     _Check_return_ _CRT_INSECURE_DEPRECATE(scanf_s)
       |                    ^

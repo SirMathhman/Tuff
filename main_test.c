@@ -77,6 +77,8 @@ int main()
     assert_valid("returns 100", "100", "", 100);
     assert_valid("read from stdin", "read()", "100", 100);
     assert_valid("read first int only", "read()", "100 20", 100);
+    assert_valid("read with braces", "read() + { read() }", "100 20", 120);
+    assert_valid("let binding in block", "{ let x = read(); x }", "42", 42);
 
     printf("Total tests: %d\n", total_tests);
     printf("Passed tests: %d\n", passed_tests);
