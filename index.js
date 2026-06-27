@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, strings ("...", with \" escapes), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=, =>), delimiters ( ) { } [ ] , . : identifiers/keywords, ; = ..
+  // Tokenize: numbers, strings ("...", '...', with escape sequences), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=, =>), delimiters ( ) { } [ ] , . : identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|"(?:[^\\"]*|(?:\\.))*"|[|]{2}|[&]{2}|<=|>=|==|!=|=>|\+=|\.\.|[+\-*/(){}<>=;,\[\].:]|[a-zA-Z_]\w*/g,
+    /\d+|"(?:[^\\"]*|(?:\\.))*"|'(?:[^\\']*|(?:\\.))*'|[|]{2}|[&]{2}|<=|>=|==|!=|=>|\+=|\.\.|[+\-*/(){}<>=;,\[\].:]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -278,9 +278,12 @@ export function execute(source) {
     }
 
     // String literal — check for trailing .prop or [idx] chains
-    if (/^".*"$/.test(token)) {
+    if (/^".*"$/.test(token) || /^'.*'$/.test(token)) {
       pos++;
-      const value = token.slice(1, -1).replace(/\\"/g, '"'); // strip quotes + unescape \"
+      const value = token
+        .slice(1, -1)
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'"); // strip quotes + unescape
       return applyChains(value, source);
     }
 

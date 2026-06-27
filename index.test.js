@@ -232,3 +232,15 @@ test('execute("let mut array = [1]; array[0] += 7; array[0]") => 8', () => {
 test('execute("let temp = { value : 8 }; temp.value") => 8', () => {
   expect(execute("let temp = { value: 8 }; temp.value")).toBe(8);
 });
+
+test(`execute("'a' == 'a'") => 1`, () => {
+  expect(execute("'a' == 'a'")).toBe(1);
+});
+
+test('execute("let temp = { a : 1, b : 2 }; temp.b") => 2', () => {
+  expect(execute("let temp = { a: 1, b: 2 }; temp.b")).toBe(2);
+});
+
+test('execute("let obj = { x : 5 }; obj.y") should throw error (unknown property)', () => {
+  expect(() => execute("let obj = { x: 5 }; obj.y")).toThrow();
+});
