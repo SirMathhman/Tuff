@@ -1,47 +1,73 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
-  const trimmed = source.trim();
 
-  // Try simple integer first
-  if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+  // Tokenize: numbers, operators (+, -, *, /), and parentheses ( )
+  const tokens = source.match(/\d+|[+\-*/()]/g);
+  if (!tokens) throw new Error("Invalid source: " + source);
 
-  // Tokenize: numbers and operators (+, -, *, /)
-  const tokens = trimmed.match(/\d+|[+\-*/]/g);
-  if (!tokens || !/^\d+$/.test(tokens[0]))
+  let pos = 0;
+
+  function parseExpr() {
+    // Parse addition/subtraction (lowest precedence)
+    let result = parseTerm();
+
+    while (
+      pos < tokens.length &&
+      (tokens[pos] === "+" || tokens[pos] === "-")
+    ) {
+      const op = tokens[pos++];
+      const right = parseTerm();
+      if (op === "+") {
+        result += right;
+      } else {
+        result -= right;
+      }
+    }
+
+    return result;
+  }
+
+  function parseTerm() {
+    // Parse multiplication/division (higher precedence)
+    let result = parseFactor();
+
+    while (
+      pos < tokens.length &&
+      (tokens[pos] === "*" || tokens[pos] === "/")
+    ) {
+      const op = tokens[pos++];
+      const right = parseFactor();
+      if (op === "*") {
+        result *= right;
+      } else {
+        result /= right;
+      }
+    }
+
+    return result;
+  }
+
+  function parseFactor() {
+    // Parse numbers and parenthesized expressions
+    const token = tokens[pos];
+
+    if (token === "(") {
+      pos++; // consume '('
+      const result = parseExpr();
+      if (pos >= tokens.length || tokens[pos] !== ")")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume ')'
+      return result;
+    }
+
+    if (/^\d+$/.test(token)) {
+      pos++;
+      return parseInt(token, 10);
+    }
+
     throw new Error("Invalid source: " + source);
-
-  // Build list of {value, op} for evaluation with precedence
-  // First pass: handle * and / (higher precedence)
-  const stack = [parseInt(tokens[0], 10)];
-
-  for (let i = 1; i < tokens.length; i += 2) {
-    const op = tokens[i];
-    const numStr = tokens[i + 1];
-    if (!numStr || !/^\d+$/.test(numStr))
-      throw new Error("Invalid source: " + source);
-    const num = parseInt(numStr, 10);
-
-    if (op === "*") {
-      stack.push(stack.pop() * num);
-    } else if (op === "/") {
-      stack.push(stack.pop() / num);
-    } else if (op === "+" || op === "-") {
-      stack.push(op);
-      stack.push(num);
-    }
   }
 
-  // Second pass: handle + and - (left to right)
-  let result = stack[0];
-  for (let i = 1; i < stack.length; i += 2) {
-    const op = stack[i];
-    const num = stack[i + 1];
-    if (op === "+") {
-      result += num;
-    } else if (op === "-") {
-      result -= num;
-    }
-  }
-
+  const result = parseExpr();
   return result;
 }

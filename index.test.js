@@ -35,3 +35,11 @@ test('execute("2 + 3 * 4") => 14', () => {
 test('execute("8 / 4") => 2', () => {
   expect(execute("8 / 4")).toBe(2);
 });
+
+test('execute("(2 + 3) * 4") => 20', () => {
+  expect(execute("(2 + 3) * 4")).toBe(20);
+});
+
+test('execute("abc") throws error', () => {
+  expect(() => execute("abc")).toThrow();
+});
