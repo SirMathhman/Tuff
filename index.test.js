@@ -167,3 +167,11 @@ test('execute("let mut x = 0; x += 1; x") => 1', () => {
 test('execute("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
   expect(execute("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
 });
+
+test('execute("let mut x = 0; while (x < 4) { x += 1; } x") => 4', () => {
+  expect(execute("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
+});
+
+test('execute("let mut sum = 0; for (i in 0..4) sum += i; sum") => 6', () => {
+  expect(execute("let mut sum = 0; for (i in 0..4) sum += i; sum")).toBe(6);
+});

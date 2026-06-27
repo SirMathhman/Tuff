@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { }, identifiers/keywords, ; =
+  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { }, identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|[+\-*/(){}<>=;]|[a-zA-Z_]\w*/g,
+    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|\.\.|[+\-*/(){}<>=;]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -257,6 +257,42 @@ export function execute(source) {
         pos++; // consume ';'
       }
       return value;
+    }
+
+    // Parse `for (i in start..end) bodyStmt` range-based for-loop
+    if (tokens[pos] === "for") {
+      pos++; // consume 'for'
+      if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
+      pos++; // consume '('
+      const loopVar = tokens[pos];
+      if (!loopVar || !/^[a-zA-Z_]\w*$/.test(loopVar))
+        throw new Error("Invalid source: " + source);
+      pos++; // consume identifier
+      if (tokens[pos] !== "in") throw new Error("Invalid source: " + source);
+      pos++; // consume 'in'
+      const start = parseOrExpr();
+      if (tokens[pos] !== "..") throw new Error("Invalid source: " + source);
+      pos++; // consume '..'
+      const end = parseOrExpr();
+      if (pos >= tokens.length || tokens[pos] !== ")")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume ')'
+
+      const bodyStartPos = pos; // position of the first body statement token
+      scopeStack[scopeStack.length - 1][loopVar] = {
+        value: start,
+        mutable: true,
+      };
+      let lastResult;
+      for (let v = start; v < end; v++) {
+        pos = bodyStartPos; // re-parse same body statement with updated scope values
+        assign(loopVar, v);
+        scopeStack.push({});
+        lastResult = parseStatement();
+        scopeStack.pop();
+      }
+
+      return lastResult;
     }
 
     // Parse `while (condition) bodyStmt` loop — re-evaluate condition each iteration by saving/restoring token positions
