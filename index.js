@@ -259,6 +259,26 @@ export function execute(source) {
       return value;
     }
 
+    // Parse `while (condition) bodyStmt` loop — re-evaluate condition each iteration by saving/restoring token positions
+    if (tokens[pos] === "while") {
+      pos++; // consume 'while'
+      const condStart = pos; // position of '('
+      parseIfCondition(); // first evaluation to find end of condition tokens
+      let lastResult;
+      let bodyEndPos = pos; // track where the last successful iteration ended
+      while (true) {
+        pos = condStart; // re-parse condition with current scope values
+        const condition = parseIfCondition();
+        if ((condition ? 1 : 0) === 0) break;
+        scopeStack.push({});
+        lastResult = parseStatement();
+        scopeStack.pop();
+        bodyEndPos = pos; // remember position after successful iteration
+      }
+      pos = bodyEndPos; // restore to end of last executed body (or condEnd if no iterations ran)
+      return lastResult;
+    }
+
     // Parse `if (condition) thenStmt else elseStmt` statement
     if (tokens[pos] === "if") {
       pos++; // consume 'if'
