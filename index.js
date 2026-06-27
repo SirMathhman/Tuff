@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, strings ("...", with \" escapes), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=, =>), delimiters ( ) { } [ ] , . identifiers/keywords, ; = ..
+  // Tokenize: numbers, strings ("...", with \" escapes), operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=, =>), delimiters ( ) { } [ ] , . : identifiers/keywords, ; = ..
   const tokens = source.match(
-    /\d+|"(?:[^\\"]*|(?:\\.))*"|[|]{2}|[&]{2}|<=|>=|==|!=|=>|\+=|\.\.|[+\-*/(){}<>=;,\[\].]|[a-zA-Z_]\w*/g,
+    /\d+|"(?:[^\\"]*|(?:\\.))*"|[|]{2}|[&]{2}|<=|>=|==|!=|=>|\+=|\.\.|[+\-*/(){}<>=;,\[\].:]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -33,6 +33,10 @@ export function execute(source) {
 
   function resolveProperty(value, prop) {
     if (typeof value === "string" && prop === "length") return value.length;
+    // Object property access
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      if (prop in value) return value[prop];
+    }
     throw new Error("Invalid source: " + source);
   }
 
@@ -190,19 +194,51 @@ export function execute(source) {
     }
 
     if (token === "{") {
-      pos++; // consume '{'
-      scopeStack.push({}); // push new block scope
-      let lastResult = 0;
-      // Parse statements separated by ; until closing }
-      while (pos < tokens.length && tokens[pos] !== "}") {
-        const val = parseStatement();
-        lastResult = val;
+      // Lookahead to distinguish object literals from block scopes:
+      // Object literal: { identifier : expr , ... }
+      // Block scope:   { stmt ; stmt ; ... }
+      const isObjectLiteral =
+        pos + 1 < tokens.length &&
+        /^[a-zA-Z_]\w*$/.test(tokens[pos + 1]) &&
+        pos + 2 < tokens.length &&
+        tokens[pos + 2] === ":";
+
+      if (isObjectLiteral) {
+        // Parse object literal { key: expr, ... }
+        pos++; // consume '{'
+        const obj = {};
+        while (pos < tokens.length && tokens[pos] !== "}") {
+          const key = tokens[pos];
+          if (!key || !/^[a-zA-Z_]\w*$/.test(key))
+            throw new Error("Invalid source: " + source);
+          pos++; // consume key
+          if (tokens[pos] !== ":") throw new Error("Invalid source: " + source);
+          pos++; // consume ':'
+          const val = parseOrExpr();
+          obj[key] = val;
+          if (pos < tokens.length && tokens[pos] === ",") {
+            pos++; // optionally consume ','
+          }
+        }
+        if (pos >= tokens.length || tokens[pos] !== "}")
+          throw new Error("Invalid source: " + source);
+        pos++; // consume '}'
+        return applyChains(obj, source);
+      } else {
+        // Parse block scope { stmts... }
+        pos++; // consume '{'
+        scopeStack.push({}); // push new block scope
+        let lastResult = 0;
+        while (pos < tokens.length && tokens[pos] !== "}") {
+          const val = parseStatement();
+          lastResult = val;
+        }
+        if (pos >= tokens.length || tokens[pos] !== "}")
+          throw new Error("Invalid source: " + source);
+        pos++; // consume '}'
+        scopeStack.pop(); // pop block scope
+        return applyChains(lastResult, source);
       }
-      if (pos >= tokens.length || tokens[pos] !== "}")
-        throw new Error("Invalid source: " + source);
-      pos++; // consume '}'
-      scopeStack.pop(); // pop block scope
-      return applyChains(lastResult, source);
     }
 
     // Boolean literals

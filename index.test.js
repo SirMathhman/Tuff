@@ -228,3 +228,7 @@ test('execute("let mut array = [0]; array[0] = 7; array[0]") => 7', () => {
 test('execute("let mut array = [1]; array[0] += 7; array[0]") => 8', () => {
   expect(execute("let mut array = [1]; array[0] += 7; array[0]")).toBe(8);
 });
+
+test('execute("let temp = { value : 8 }; temp.value") => 8', () => {
+  expect(execute("let temp = { value: 8 }; temp.value")).toBe(8);
+});
