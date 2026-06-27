@@ -1,11 +1,12 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /), and parentheses ( )
-  const tokens = source.match(/\d+|[+\-*/()]/g);
+  // Tokenize: numbers, operators (+, -, *, /), delimiters ( ) { }, identifiers/keywords, ; =
+  const tokens = source.match(/\d+|[+\-*/(){}=;]|[a-zA-Z_]\w*/g);
   if (!tokens) throw new Error("Invalid source: " + source);
 
   let pos = 0;
+  const scope = {}; // variable store for `let` declarations
 
   function parseExpr() {
     // Parse addition/subtraction (lowest precedence)
@@ -48,7 +49,7 @@ export function execute(source) {
   }
 
   function parseFactor() {
-    // Parse numbers and parenthesized expressions
+    // Parse numbers, grouped expressions: (...) or {...}, and variable references
     const token = tokens[pos];
 
     if (token === "(") {
@@ -60,12 +61,58 @@ export function execute(source) {
       return result;
     }
 
+    if (token === "{") {
+      pos++; // consume '{'
+      let lastResult = 0;
+      // Parse statements separated by ; until closing }
+      while (pos < tokens.length && tokens[pos] !== "}") {
+        const val = parseStatement();
+        lastResult = val;
+      }
+      if (pos >= tokens.length || tokens[pos] !== "}")
+        throw new Error("Invalid source: " + source);
+      pos++; // consume '}'
+      return lastResult;
+    }
+
+    // Variable reference (identifier that's not a keyword)
+    if (/^[a-zA-Z_]\w*$/.test(token)) {
+      pos++;
+      if (!(token in scope)) throw new Error("Invalid source: " + source);
+      return scope[token];
+    }
+
     if (/^\d+$/.test(token)) {
       pos++;
       return parseInt(token, 10);
     }
 
-    throw new Error("Invalid source: " + source);
+    // Should not reach here — all token types are handled above
+  }
+
+  function parseStatement() {
+    // Parse `let x = expr` or a plain expression statement
+    if (tokens[pos] === "let") {
+      pos++; // consume 'let'
+      const name = tokens[pos];
+      if (!name || !/^[a-zA-Z_]\w*$/.test(name))
+        throw new Error("Invalid source: " + source);
+      pos++; // consume variable name
+      if (tokens[pos] !== "=") throw new Error("Invalid source: " + source);
+      pos++; // consume '='
+      const value = parseExpr();
+      scope[name] = value;
+      if (pos < tokens.length && tokens[pos] === ";") {
+        pos++; // consume ';'
+      }
+      return value;
+    }
+
+    const result = parseExpr();
+    if (pos < tokens.length && tokens[pos] === ";") {
+      pos++; // consume trailing ';'
+    }
+    return result;
   }
 
   const result = parseExpr();

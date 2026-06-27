@@ -40,6 +40,14 @@ test('execute("(2 + 3) * 4") => 20', () => {
   expect(execute("(2 + 3) * 4")).toBe(20);
 });
 
+test('execute("{ 2 + 3 } * 4") => 20', () => {
+  expect(execute("{ 2 + 3 } * 4")).toBe(20);
+});
+
+test('execute("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(execute("{ let x = 2 + 3; x } * 4")).toBe(20);
+});
+
 test('execute("abc") throws error', () => {
   expect(() => execute("abc")).toThrow();
 });
