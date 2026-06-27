@@ -159,3 +159,7 @@ test('execute("let mut x = 0; if (false) x = 3; else if (false) x = 4; else x = 
 test('execute("let mut x = 0; if (true) { x = 3; } x") => 3', () => {
   expect(execute("let mut x = 0; if (true) { x = 3; } x")).toBe(3);
 });
+
+test('execute("let mut x = 0; x += 1; x") => 1', () => {
+  expect(execute("let mut x = 0; x += 1; x")).toBe(1);
+});

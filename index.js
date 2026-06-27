@@ -1,9 +1,9 @@
 export function execute(source) {
   if (!source || source.trim().length === 0) return 0;
 
-  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=), delimiters ( ) { }, identifiers/keywords, ; =
+  // Tokenize: numbers, operators (+, -, *, /, ||, &&, <=, >=, ==, !=, +=), delimiters ( ) { }, identifiers/keywords, ; =
   const tokens = source.match(
-    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|[+\-*/(){}<>=;]|[a-zA-Z_]\w*/g,
+    /\d+|[|]{2}|[&]{2}|<=|>=|==|!=|\+=|[+\-*/(){}<>=;]|[a-zA-Z_]\w*/g,
   );
   if (!tokens) throw new Error("Invalid source: " + source);
 
@@ -233,13 +233,26 @@ export function execute(source) {
       return value;
     }
 
-    // Parse assignment `x = expr` for mutable variables
+    // Parse assignment `x = expr` or compound assignment `x += expr` for mutable variables
     if (/^[a-zA-Z_]\w*$/.test(tokens[pos]) && tokens[pos + 1] === "=") {
       const name = tokens[pos];
       pos++; // consume variable name
       pos++; // consume '='
       const value = parseOrExpr();
       assign(name, value);
+      if (pos < tokens.length && tokens[pos] === ";") {
+        pos++; // consume ';'
+      }
+      return value;
+    }
+
+    // Parse compound assignment `x += expr` for mutable variables
+    if (/^[a-zA-Z_]\w*$/.test(tokens[pos]) && tokens[pos + 1] === "+=") {
+      const name = tokens[pos];
+      pos++; // consume variable name
+      pos++; // consume '+='
+      const value = parseOrExpr();
+      assign(name, lookup(name).value + value);
       if (pos < tokens.length && tokens[pos] === ";") {
         pos++; // consume ';'
       }
