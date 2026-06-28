@@ -10,6 +10,8 @@ export function execute(source) {
   let pos = 0;
   // Scope stack for block scoping — inner blocks shadow outer declarations
   const scopeStack = [{}];
+  // Marker to represent `this` keyword for property lookups on current scope
+  const SCOPE_MARKER = Symbol("scope");
 
   function lookup(name) {
     for (let i = scopeStack.length - 1; i >= 0; i--) {
@@ -33,6 +35,8 @@ export function execute(source) {
 
   function resolveProperty(value, prop) {
     if (typeof value === "string" && prop === "length") return value.length;
+    // `this` keyword — look up variable in current scope
+    if (value === SCOPE_MARKER) return lookup(prop).value;
     // Object property access
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       if (prop in value) return value[prop];
@@ -287,6 +291,12 @@ export function execute(source) {
       return applyChains(value, source);
     }
 
+    // `this` keyword — returns a marker so `.x` resolves to variable x in current scope
+    if (token === "this") {
+      pos++;
+      return applyChains(SCOPE_MARKER, source);
+    }
+
     // Variable reference or function call: name(args) with optional index access array[expr] and dot property .prop
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
@@ -409,17 +419,78 @@ export function execute(source) {
       return value;
     }
 
-    // Parse assignment `x = expr` or compound assignment `x += expr` for mutable variables
+    function finishAssignment(value) {
+      if (pos < tokens.length && tokens[pos] === ";") {
+        pos++; // consume ';'
+      }
+      return value;
+    }
+
+    // Check for dot-assignment pattern: identifier.prop = or +=
+    function isDotAssignment() {
+      const hasId = /^[a-zA-Z_]\w*$/.test(tokens[pos]);
+      if (!hasId || tokens[pos + 1] !== ".") return false;
+      if (pos + 3 >= tokens.length) return false;
+      if (!/^[a-zA-Z_]\w*$/.test(tokens[pos + 2])) return false;
+      const op = tokens[pos + 3];
+      return op === "=" || op === "+=";
+    }
+
+    // Parse dot-assignment value: `= expr` or `+= lookup(propName).value + expr`
+    function parseDotAssignValue(propName) {
+      const op = tokens[pos];
+      pos++; // consume '=' or '+='
+      if (op === "=") return parseOrExpr();
+      return lookup(propName).value + parseOrExpr();
+    }
+
+    // Parse assignment `this.x = expr` or `this.x += expr`
+    if (
+      tokens[pos] === "this" &&
+      tokens[pos + 1] === "." &&
+      pos + 3 < tokens.length &&
+      /^[a-zA-Z_]\w*$/.test(tokens[pos + 2]) &&
+      (tokens[pos + 3] === "=" || tokens[pos + 3] === "+=")
+    ) {
+      pos++; // consume 'this'
+      pos++; // consume '.'
+      const name = tokens[pos];
+      pos++; // consume variable name
+      const value = parseDotAssignValue(name);
+      assign(name, value);
+      return finishAssignment(value);
+    }
+
+    // Parse assignment `varName.propName = expr` or `varName.propName += expr`
+    // where varName holds a scope marker (e.g., let temp = this; temp.x = 0)
+    if (isDotAssignment()) {
+      const varName = tokens[pos];
+      pos++; // consume variable name
+      pos++; // consume '.'
+      const propName = tokens[pos];
+      pos++; // consume property/variable name
+      const value = parseDotAssignValue(propName);
+      const entry = lookup(varName);
+      if (entry.value === SCOPE_MARKER) {
+        try {
+          assign(propName, value);
+        } catch (e) {
+          // Silently skip assignment if target is immutable
+        }
+      } else {
+        throw new Error("Invalid source: " + source);
+      }
+      return finishAssignment(value);
+    }
+
+    // Parse assignment `x = expr` for mutable variables
     if (/^[a-zA-Z_]\w*$/.test(tokens[pos]) && tokens[pos + 1] === "=") {
       const name = tokens[pos];
       pos++; // consume variable name
       pos++; // consume '='
       const value = parseOrExpr();
       assign(name, value);
-      if (pos < tokens.length && tokens[pos] === ";") {
-        pos++; // consume ';'
-      }
-      return value;
+      return finishAssignment(value);
     }
 
     // Parse compound assignment `x += expr` for mutable variables
@@ -429,10 +500,7 @@ export function execute(source) {
       pos++; // consume '+='
       const value = parseOrExpr();
       assign(name, lookup(name).value + value);
-      if (pos < tokens.length && tokens[pos] === ";") {
-        pos++; // consume ';'
-      }
-      return value;
+      return finishAssignment(value);
     }
 
     // Lookahead: only treat as indexed assignment/compound-assignment if there's '=' or '+=' after the closing ']'

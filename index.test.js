@@ -248,3 +248,29 @@ test('execute("let obj = { x : 5 }; obj.y") should throw error (unknown property
 test('execute("let x = 100; this.x") => 100', () => {
   expect(execute("let x = 100; this.x")).toBe(100);
 });
+
+test('execute("let mut x = 0; this.x = 100; x") => 100', () => {
+  expect(execute("let mut x = 0; this.x = 100; x")).toBe(100);
+});
+
+test('execute("let mut x = 5; this.x += 10; x") => 15', () => {
+  expect(execute("let mut x = 5; this.x += 10; x")).toBe(15);
+});
+
+test('execute("let x = 100; let temp = this; temp.x") => 100', () => {
+  expect(execute("let x = 100; let temp = this; temp.x")).toBe(100);
+});
+
+test('execute("let x = 100; let mut temp = this; temp.x = 0; x") => 100', () => {
+  expect(execute("let x = 100; let mut temp = this; temp.x = 0; x")).toBe(100);
+});
+
+test('execute("let mut x = 5; let mut temp = this; temp.x += 10; x") => 15', () => {
+  expect(execute("let mut x = 5; let mut temp = this; temp.x += 10; x")).toBe(
+    15,
+  );
+});
+
+test('execute("let temp = 42; let x = 5; temp.x = 0") should throw error (non-scope reference)', () => {
+  expect(() => execute("let temp = 42; let x = 5; temp.x = 0")).toThrow();
+});

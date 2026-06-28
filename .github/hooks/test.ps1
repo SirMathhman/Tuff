@@ -1,8 +1,7 @@
 # check-coverage.ps1
 $result = cmd /c "bun test --coverage --coverage-reporter=lcov 2>&1"
-$result | Write-Host
-
 if ($LASTEXITCODE -ne 0) {
+    $result | Write-Host
     exit 2
 }
 
@@ -19,5 +18,6 @@ Select-String 'SF:|DA:.*,0' coverage/lcov.info | ForEach-Object {
     }
 }
 if ($seen) {
+    Write-Host "Insufficient coverage. Add more test cases or remove dead code."
     exit 2
 }
