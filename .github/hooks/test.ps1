@@ -2,6 +2,10 @@
 $result = cmd /c "bun test --coverage --coverage-reporter=lcov 2>&1"
 $result | Write-Host
 
+if ($LASTEXITCODE -ne 0) {
+    exit 2
+}
+
 $seen = $false
 $sf = ''
 Select-String 'SF:|DA:.*,0' coverage/lcov.info | ForEach-Object {

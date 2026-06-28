@@ -486,8 +486,8 @@ LH:479
 end_of_record
 TN:
 SF:index.test.js
-FNF:67
-FNH:67
+FNF:68
+FNH:68
 DA:1,28
 DA:3,32
 DA:4,29
@@ -675,7 +675,10 @@ DA:241,62
 DA:242,3
 DA:244,91
 DA:245,60
-DA:246,2
-LF:188
-LH:188
+DA:246,3
+DA:248,53
+DA:249,50
+DA:250,2
+LF:191
+LH:191
 end_of_record

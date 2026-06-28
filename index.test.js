@@ -244,3 +244,7 @@ test('execute("let temp = { a : 1, b : 2 }; temp.b") => 2', () => {
 test('execute("let obj = { x : 5 }; obj.y") should throw error (unknown property)', () => {
   expect(() => execute("let obj = { x: 5 }; obj.y")).toThrow();
 });
+
+test('execute("let x = 100; this.x") => 100', () => {
+  expect(execute("let x = 100; this.x")).toBe(100);
+});
