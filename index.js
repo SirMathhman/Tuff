@@ -10,8 +10,8 @@ export function execute(source) {
   let pos = 0;
   // Scope stack for block scoping — inner blocks shadow outer declarations
   const scopeStack = [{}];
-  // Marker to represent `this` keyword for property lookups on current scope
-  const SCOPE_MARKER = Symbol("scope");
+  // Marker to identify captured-scope objects (created by `this`)
+  const CAPTURED_SCOPE_KEY = Symbol("capturedScope");
 
   function lookup(name) {
     for (let i = scopeStack.length - 1; i >= 0; i--) {
@@ -33,10 +33,32 @@ export function execute(source) {
     throw new Error("Invalid source: " + source);
   }
 
+  function isCapturedScope(value) {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      CAPTURED_SCOPE_KEY in value
+    );
+  }
+
+  // Capture current scope variables into a snapshot object that survives scope pops
+  function captureScope() {
+    const snapshot = { [CAPTURED_SCOPE_KEY]: true };
+    for (let i = scopeStack.length - 1; i >= 0; i--) {
+      for (const key in scopeStack[i]) {
+        if (!(key in snapshot)) {
+          snapshot[key] = scopeStack[i][key];
+        }
+      }
+    }
+    return snapshot;
+  }
+
   function resolveProperty(value, prop) {
     if (typeof value === "string" && prop === "length") return value.length;
-    // `this` keyword — look up variable in current scope
-    if (value === SCOPE_MARKER) return lookup(prop).value;
+    // Captured scope object — look up variable by name
+    if (isCapturedScope(value)) return value[prop].value;
     // Object property access
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       if (prop in value) return value[prop];
@@ -291,10 +313,10 @@ export function execute(source) {
       return applyChains(value, source);
     }
 
-    // `this` keyword — returns a marker so `.x` resolves to variable x in current scope
+    // `this` keyword — captures current scope into a snapshot object for property access
     if (token === "this") {
       pos++;
-      return applyChains(SCOPE_MARKER, source);
+      return applyChains(captureScope(), source);
     }
 
     // Variable reference or function call: name(args) with optional index access array[expr] and dot property .prop
@@ -471,9 +493,14 @@ export function execute(source) {
       pos++; // consume property/variable name
       const value = parseDotAssignValue(propName);
       const entry = lookup(varName);
-      if (entry.value === SCOPE_MARKER) {
+      const captured = entry.value;
+      if (isCapturedScope(captured)) {
+        // Scope reference: assign to the named variable in captured scope
         try {
-          assign(propName, value);
+          const varEntry = captured[propName];
+          if (!varEntry.mutable)
+            throw new Error("Cannot reassign immutable variable");
+          varEntry.value = value;
         } catch (e) {
           // Silently skip assignment if target is immutable
         }

@@ -1,7 +1,14 @@
 # check-coverage.ps1
 $result = cmd /c "bun test --coverage --coverage-reporter=lcov 2>&1"
+
+# Filter to only failing test lines
+$failures = $result | Where-Object {
+    $_ -match '^\s*(✗|×|FAIL|fail|✕|●|rerun|expected|received|error|Error)' -or
+    $_ -match 'tests? failed'
+}
+
 if ($LASTEXITCODE -ne 0) {
-    $result | Write-Host
+    $failures | Write-Host
     exit 2
 }
 

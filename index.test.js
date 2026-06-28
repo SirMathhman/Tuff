@@ -274,3 +274,9 @@ test('execute("let mut x = 5; let mut temp = this; temp.x += 10; x") => 15', () 
 test('execute("let temp = 42; let x = 5; temp.x = 0") should throw error (non-scope reference)', () => {
   expect(() => execute("let temp = 42; let x = 5; temp.x = 0")).toThrow();
 });
+
+test('execute("fn Wrapper(value) => this; let temp = Wrapper(100); temp.value") => 100', () => {
+  expect(
+    execute("fn Wrapper(value) => this; let temp = Wrapper(100); temp.value"),
+  ).toBe(100);
+});
