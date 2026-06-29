@@ -304,3 +304,11 @@ test('execute("fn a() => { fn b(c, d) => c * d; this } a().b(4, 7)") => 28', () 
     28,
   );
 });
+
+test('execute("fn a() => { let x = 100; this } a().x") => 100', () => {
+  expect(execute("fn a() => { let x = 100; this } a().x")).toBe(100);
+});
+
+test('execute("let x = 100; fn a() => { this } a().super.x") => 100', () => {
+  expect(execute("let x = 100; fn a() => { this } a().super.x")).toBe(100);
+});

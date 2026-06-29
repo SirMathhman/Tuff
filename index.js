@@ -42,17 +42,24 @@ export function execute(source) {
     );
   }
 
-  // Capture current scope variables into a snapshot object that survives scope pops
+  // Capture current scope variables into a hierarchical snapshot that survives scope pops
   function captureScope() {
-    const snapshot = { [CAPTURED_SCOPE_KEY]: true };
-    for (let i = scopeStack.length - 1; i >= 0; i--) {
+    const levels = [];
+    for (let i = 0; i < scopeStack.length; i++) {
+      const levelEntries = {};
       for (const key in scopeStack[i]) {
-        if (!(key in snapshot)) {
-          snapshot[key] = scopeStack[i][key];
+        if (!(key in levelEntries)) {
+          levelEntries[key] = scopeStack[i][key];
         }
       }
+      levels.push(levelEntries);
     }
-    return snapshot;
+    // depth starts at innermost scope; .super decrements toward outer scopes
+    return {
+      [CAPTURED_SCOPE_KEY]: true,
+      _scopes: levels,
+      depth: levels.length - 1,
+    };
   }
 
   // Parse function call arguments: name(arg1, arg2)
@@ -71,9 +78,17 @@ export function execute(source) {
 
   function resolveProperty(value, prop) {
     if (typeof value === "string" && prop === "length") return value.length;
-    // Captured scope object — look up variable entry by name
+    // Captured scope object — search upward from current depth for variable entry by name
     if (isCapturedScope(value)) {
-      const entry = value[prop];
+      let entry = undefined;
+      for (let d = value.depth; d >= 0; d--) {
+        const level = value._scopes[d];
+        if (level && prop in level) {
+          entry = level[prop];
+          break;
+        }
+      }
+      if (!entry) throw new Error("Invalid source: " + source);
       // Return the full entry so applyChains can handle fn calls, or just .value for plain vars
       if (entry.type === "fn")
         return {
@@ -110,6 +125,11 @@ export function execute(source) {
         if (!prop || !/^[a-zA-Z_]\w*$/.test(prop))
           throw new Error("Invalid source: " + src);
         pos++; // consume property name
+        // Handle .super — traverse outward to parent scope level
+        if (prop === "super" && isCapturedScope(value)) {
+          value.depth--;
+          continue; // Continue chain processing with updated depth
+        }
         value = resolveProperty(value, prop);
       }
       // Handle function call chains on captured-scope entries (e.g., a().b())
@@ -123,14 +143,21 @@ export function execute(source) {
         const args = parseCallArgs(src);
         // Save _ctx before evalBody overwrites `value`
         const ctx = value._ctx;
-        if (ctx) scopeStack.push(ctx);
+        let pushedScopes = 0;
+        if (ctx && ctx._scopes) {
+          for (const level of ctx._scopes) scopeStack.push(level);
+          pushedScopes = ctx._scopes.length;
+        }
         value = evalBody(
           value.bodyStart,
           value.bodyEnd,
           value.params || [],
           args,
         );
-        if (ctx) scopeStack.pop();
+        while (pushedScopes > 0) {
+          scopeStack.pop();
+          pushedScopes--;
+        }
       }
     }
     return value;
@@ -532,9 +559,9 @@ export function execute(source) {
       const entry = lookup(varName);
       const captured = entry.value;
       if (isCapturedScope(captured)) {
-        // Scope reference: assign to the named variable in captured scope
+        // Scope reference: assign to the named variable in captured scope at current depth level
         try {
-          const varEntry = captured[propName];
+          const varEntry = captured._scopes[captured.depth][propName];
           if (!varEntry.mutable)
             throw new Error("Cannot reassign immutable variable");
           varEntry.value = value;
