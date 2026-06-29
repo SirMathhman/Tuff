@@ -312,3 +312,19 @@ test('execute("fn a() => { let x = 100; this } a().x") => 100', () => {
 test('execute("let x = 100; fn a() => { this } a().super.x") => 100', () => {
   expect(execute("let x = 100; fn a() => { this } a().super.x")).toBe(100);
 });
+
+test('execute("fn Counter() => { let mut total = 0; fn add() => { total += 1; } this } let counter = Counter(); counter.add(); counter.total") => 1', () => {
+  expect(
+    execute(
+      "fn Counter() => { let mut total = 0; fn add() => { total += 1; } this } let counter = Counter(); counter.add(); counter.total",
+    ),
+  ).toBe(1);
+});
+
+test('execute("fn double(x) => x * 2; fn wrapper(n) => double(n + 1); wrapper(5)") => 12', () => {
+  expect(
+    execute(
+      "fn double(x) => x * 2; fn wrapper(n) => double(n + 1); wrapper(5)",
+    ),
+  ).toBe(12);
+});

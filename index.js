@@ -143,10 +143,17 @@ export function execute(source) {
         const args = parseCallArgs(src);
         // Save _ctx before evalBody overwrites `value`
         const ctx = value._ctx;
-        let pushedScopes = 0;
+        let pushedScope = false;
         if (ctx && ctx._scopes) {
-          for (const level of ctx._scopes) scopeStack.push(level);
-          pushedScopes = ctx._scopes.length;
+          // Merge all captured-scope levels into a single consolidated snapshot so assign() finds each variable only once
+          const merged = {};
+          for (let i = 0; i < ctx._scopes.length; i++) {
+            for (const key in ctx._scopes[i]) {
+              if (!(key in merged)) merged[key] = ctx._scopes[i][key];
+            }
+          }
+          scopeStack.push(merged);
+          pushedScope = true;
         }
         value = evalBody(
           value.bodyStart,
@@ -154,10 +161,7 @@ export function execute(source) {
           value.params || [],
           args,
         );
-        while (pushedScopes > 0) {
-          scopeStack.pop();
-          pushedScopes--;
-        }
+        if (pushedScope) scopeStack.pop();
       }
     }
     return value;
@@ -433,10 +437,15 @@ export function execute(source) {
     let lastResult = 0;
     while (pos < bodyEnd) {
       lastResult = parseOrExpr();
+      // Consume trailing ; if present (e.g., from compound assignments inside blocks)
+      if (tokens[pos] === ";") pos++;
     }
-    scopeStack.pop();
-    if (scopeStack.length > savedScopeStackLen)
-      scopeStack.length = savedScopeStackLen;
+    // Pop only the param scope we pushed — don't truncate captured-scope levels that were already on stack before evalBody was called
+    let extraScopes = savedScopeStackLen - scopeStack.length;
+    while (extraScopes < 0) {
+      scopeStack.pop();
+      extraScopes++;
+    }
     pos = savedPos;
     return lastResult;
   }
@@ -465,14 +474,45 @@ export function execute(source) {
       if (tokens[pos] !== "=>") throw new Error("Invalid source: " + source);
       pos++; // consume '=>'
       const bodyStart = pos;
-      // Push dummy parameter values so parseOrExpr doesn't fail on unknown identifiers
-      scopeStack.push(
-        Object.fromEntries(
-          params.map((p) => [p, { value: 0, mutable: false }]),
-        ),
-      );
-      parseOrExpr();
-      scopeStack.pop();
+      // Determine body range without executing code (avoids side effects during declaration)
+      if (tokens[pos] === "{") {
+        // Block body: skip to matching closing brace using depth tracking
+        let depth = 0;
+        while (pos < tokens.length) {
+          if (tokens[pos] === "{" || tokens[pos] === "(" || tokens[pos] === "[")
+            depth++;
+          else if (
+            tokens[pos] === "}" ||
+            tokens[pos] === ")" ||
+            tokens[pos] === "]"
+          ) {
+            depth--;
+            if (depth === 0) {
+              pos++; // include '}' in body range
+              break;
+            }
+          }
+          pos++;
+        }
+      } else {
+        // Expression body: skip until ';' or statement-level keyword at top level
+        while (pos < tokens.length && tokens[pos] !== ";") {
+          if (
+            /^[a-zA-Z_]\w*$/.test(tokens[pos]) &&
+            (tokens[pos + 1] === "(" || tokens[pos + 1] === ",")
+          ) {
+            // Skip over function call arguments to avoid stopping at '('
+            while (pos < tokens.length && tokens[pos] !== ")") pos++;
+          } else if (
+            /^[a-zA-Z_]\w*$/.test(tokens[pos]) &&
+            (tokens[pos + 1] === "=" || tokens[pos + 1] === "+=")
+          ) {
+            // Assignment-like pattern, stop here as it's likely a new statement
+            break;
+          }
+          pos++;
+        }
+      }
       const bodyEnd = pos;
       scopeStack[scopeStack.length - 1][name] = {
         type: "fn",
@@ -745,6 +785,30 @@ export function execute(source) {
   let iterations = 0;
   while (pos < tokens.length) {
     if (++iterations > 1024) throw new Error("Execution limit exceeded");
+
+    // Handle expression statement with trailing ; at top level (e.g., counter.add();)
+    // Only trigger when we see identifier. followed eventually by ; — peek ahead first
+    const savedPos = pos;
+    if (
+      /^[a-zA-Z_]\w*$/.test(tokens[pos]) &&
+      pos + 1 < tokens.length &&
+      tokens[pos + 1] === "."
+    ) {
+      try {
+        const result = parseOrExpr();
+        if (pos < tokens.length && tokens[pos] === ";") {
+          pos++; // consume ';'
+          lastResult = result;
+          continue;
+        } else {
+          // No trailing ; — restore position and let parseStatement handle it normally
+          pos = savedPos;
+        }
+      } catch (_) {
+        pos = savedPos;
+      }
+    }
+
     lastResult = parseStatement();
   }
   return lastResult;
