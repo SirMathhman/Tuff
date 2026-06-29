@@ -280,3 +280,27 @@ test('execute("fn Wrapper(value) => this; let temp = Wrapper(100); temp.value") 
     execute("fn Wrapper(value) => this; let temp = Wrapper(100); temp.value"),
   ).toBe(100);
 });
+
+test('execute("fn get() => { 100 } get()") => 100', () => {
+  expect(execute("fn get() => { 100 } get()")).toBe(100);
+});
+
+test('execute("fn a() => { fn b() => 100; b() } a()") => 100', () => {
+  expect(execute("fn a() => { fn b() => 100; b() } a()")).toBe(100);
+});
+
+test('execute("fn a() => { fn b() => 100; this } a().b()") => 100', () => {
+  expect(execute("fn a() => { fn b() => 100; this } a().b()")).toBe(100);
+});
+
+test('execute("fn outer(x) => { fn inner(y) => x + y; this } outer(5).inner(3)") => 8', () => {
+  expect(
+    execute("fn outer(x) => { fn inner(y) => x + y; this } outer(5).inner(3)"),
+  ).toBe(8);
+});
+
+test('execute("fn a() => { fn b(c, d) => c * d; this } a().b(4, 7)") => 28', () => {
+  expect(execute("fn a() => { fn b(c, d) => c * d; this } a().b(4, 7)")).toBe(
+    28,
+  );
+});

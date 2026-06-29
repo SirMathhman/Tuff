@@ -55,10 +55,36 @@ export function execute(source) {
     return snapshot;
   }
 
+  // Parse function call arguments: name(arg1, arg2)
+  function parseCallArgs(src) {
+    if (tokens[pos] !== "(") throw new Error("Invalid source: " + src);
+    pos++; // consume '('
+    const args = [];
+    while (pos < tokens.length && tokens[pos] !== ")") {
+      args.push(parseOrExpr());
+      if (tokens[pos] === ",") pos++;
+    }
+    if (tokens[pos] !== ")") throw new Error("Invalid source: " + src);
+    pos++; // consume ')'
+    return args;
+  }
+
   function resolveProperty(value, prop) {
     if (typeof value === "string" && prop === "length") return value.length;
-    // Captured scope object — look up variable by name
-    if (isCapturedScope(value)) return value[prop].value;
+    // Captured scope object — look up variable entry by name
+    if (isCapturedScope(value)) {
+      const entry = value[prop];
+      // Return the full entry so applyChains can handle fn calls, or just .value for plain vars
+      if (entry.type === "fn")
+        return {
+          type: "fn",
+          bodyStart: entry.bodyStart,
+          bodyEnd: entry.bodyEnd,
+          params: entry.params,
+          _ctx: value,
+        };
+      return entry.value;
+    }
     // Object property access
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       if (prop in value) return value[prop];
@@ -85,6 +111,26 @@ export function execute(source) {
           throw new Error("Invalid source: " + src);
         pos++; // consume property name
         value = resolveProperty(value, prop);
+      }
+      // Handle function call chains on captured-scope entries (e.g., a().b())
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        value.type === "fn" &&
+        tokens[pos] === "("
+      ) {
+        const args = parseCallArgs(src);
+        // Save _ctx before evalBody overwrites `value`
+        const ctx = value._ctx;
+        if (ctx) scopeStack.push(ctx);
+        value = evalBody(
+          value.bodyStart,
+          value.bodyEnd,
+          value.params || [],
+          args,
+        );
+        if (ctx) scopeStack.pop();
       }
     }
     return value;
@@ -325,16 +371,7 @@ export function execute(source) {
       const entry = lookup(token);
       let value;
       if (entry.type === "fn") {
-        // Parse arguments: name(arg1, arg2)
-        if (tokens[pos] !== "(") throw new Error("Invalid source: " + source);
-        pos++; // consume '('
-        const args = [];
-        while (pos < tokens.length && tokens[pos] !== ")") {
-          args.push(parseOrExpr());
-          if (tokens[pos] === ",") pos++; // consume ','
-        }
-        if (tokens[pos] !== ")") throw new Error("Invalid source: " + source);
-        pos++; // consume ')'
+        const args = parseCallArgs(source);
         value = evalBody(
           entry.bodyStart,
           entry.bodyEnd,
