@@ -44,9 +44,27 @@ All boolean results normalize to `1` (true) / `0` (false). This applies in:
 
 **Gotcha**: If you expect a function to return the raw boolean value, it will be converted. Test with `'execute("let x = true; x") => 1'` not `=> true`.
 
+### Function Bodies: Expression vs Block
+
+Functions support two body styles:
+- **Expression body**: `fn add(a, b) => a + b` — single expression, no semicolons in body range detection
+- **Block body**: `fn get() => { 100 }` — uses depth tracking to find matching closing brace/paren/bracket
+
+When modifying function parsing, remember that block bodies use nested bracket counting (`{`, `(`, `[`) to determine the end position.
+
 ### Division Truncation
 
 Integer division truncates toward zero: `8 / 3 === 2`, NOT `2.66...`. This is consistent throughout the interpreter — there's no floating-point arithmetic in this language.
+
+### Scope Traversal with `.super`
+
+When working with captured scopes (`this`), you can traverse outward through scope levels using `.super`:
+
+```tuff
+let x = 100; let temp = this; temp.super.x  // accesses outer scope's x
+```
+
+Each `.super` decrements the depth counter, moving from innermost to outer scopes. This is used in chained calls like `fn a() => { fn b() => 100; this } a().b()`.
 
 ## Test Writing Patterns
 

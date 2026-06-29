@@ -328,3 +328,11 @@ test('execute("fn double(x) => x * 2; fn wrapper(n) => double(n + 1); wrapper(5)
     ),
   ).toBe(12);
 });
+
+test('execute("fn Counter() => { let mut total = 0; fn add() => { total += 1; super } this } Counter().add().add().add().total") => 3', () => {
+  expect(
+    execute(
+      "fn Counter() => { let mut total = 0; fn add() => { total += 1; super } this } Counter().add().add().add().total",
+    ),
+  ).toBe(3);
+});

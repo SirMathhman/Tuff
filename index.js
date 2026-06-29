@@ -12,6 +12,8 @@ export function execute(source) {
   const scopeStack = [{}];
   // Marker to identify captured-scope objects (created by `this`)
   const CAPTURED_SCOPE_KEY = Symbol("capturedScope");
+  // Current captured-scope context during evalBody, so bare 'super' can reference it
+  let currentCtx = null;
 
   function lookup(name) {
     for (let i = scopeStack.length - 1; i >= 0; i--) {
@@ -143,6 +145,8 @@ export function execute(source) {
         const args = parseCallArgs(src);
         // Save _ctx before evalBody overwrites `value`
         const ctx = value._ctx;
+        currentCtx = ctx; // make captured-scope context available for bare 'super' keyword
+        const savedDepth = ctx ? ctx.depth : null; // save depth so nested calls don't corrupt it
         let pushedScope = false;
         if (ctx && ctx._scopes) {
           // Merge all captured-scope levels into a single consolidated snapshot so assign() finds each variable only once
@@ -162,6 +166,8 @@ export function execute(source) {
           args,
         );
         if (pushedScope) scopeStack.pop();
+        // Restore depth so repeated calls don't keep decrementing it
+        if (savedDepth !== null && ctx) ctx.depth = savedDepth;
       }
     }
     return value;
@@ -396,6 +402,13 @@ export function execute(source) {
       return applyChains(captureScope(), source);
     }
 
+    // Bare 'super' keyword — returns the captured-scope context with decremented depth, enabling chained calls like Counter().add().total
+    if (token === "super" && currentCtx) {
+      pos++;
+      currentCtx.depth--;
+      return applyChains(currentCtx, source);
+    }
+
     // Variable reference or function call: name(args) with optional index access array[expr] and dot property .prop
     if (/^[a-zA-Z_]\w*$/.test(token)) {
       pos++;
@@ -427,6 +440,7 @@ export function execute(source) {
   function evalBody(bodyStart, bodyEnd, params = [], args = []) {
     const savedPos = pos;
     const savedScopeStackLen = scopeStack.length;
+    const savedCurrentCtx = currentCtx;
     pos = bodyStart;
     // Create new scope with parameter bindings
     const paramScope = {};
@@ -446,6 +460,7 @@ export function execute(source) {
       scopeStack.pop();
       extraScopes++;
     }
+    currentCtx = savedCurrentCtx; // restore captured-scope context for caller chain
     pos = savedPos;
     return lastResult;
   }
