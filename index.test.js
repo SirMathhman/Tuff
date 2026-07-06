@@ -122,6 +122,18 @@ test("fn declaration stored in object and called as method", () => {
   assertValid(source, "", 100);
 });
 
+test("redeclaring variable with let overwrites previous value", () => {
+  assertValid("let x = 0; let x = 1; x", "", 1);
+});
+
+test("mut variable can be reassigned and returns new value", () => {
+  assertValid("let mut x = 0; x = 1; x", "", 1);
+});
+
+test("reassigning inside block affects outer scope", () => {
+  assertValid("let mut x = 0; { x = 1; } x", "", 1);
+});
+
 test("invalid source fails compilation", () => {
   assertInvalid("invalid");
 });

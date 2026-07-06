@@ -118,7 +118,8 @@ function validateExpression(expr, declaredVars = []) {
 
   // Reject method calls on unknown identifiers — only allow .word() when the base is a known var
   const methodCallMatch = expr.match(/(\\w+)\\.\\w+\\(\\)/);
-  if (methodCallMatch && !declaredVars.includes(methodCallMatch[1])) return false;
+  if (methodCallMatch && !declaredVars.includes(methodCallMatch[1]))
+    return false;
 
   // First strip out any nested {} blocks — they're validated recursively
   let cleaned = "";
@@ -153,6 +154,7 @@ function validateExpression(expr, declaredVars = []) {
   cleaned = cleaned.replace(/["'][^"']*["']/g, ""); // string literals
   cleaned = cleaned.replace(/=>/g, ""); // arrow syntax for fn declarations
   cleaned = cleaned.replace(/fn\b/g, ""); // function keyword
+  cleaned = cleaned.replace(/mut\b/g, ""); // mut keyword
   // Allow property access on declared variables (e.g., dummy.x)
   for (const v of declaredVars) {
     cleaned = cleaned.split(v).join("");
@@ -202,11 +204,16 @@ function compileExpression(expr, declaredVars = []) {
     if (expr[i] === "{") {
       const end = findMatchingBrace(expr, i);
       const inner = expr.slice(i + 1, end);
+      // Check if there's more content after this block that needs a separator
+      const trailingText = expr.slice(end + 1).trim();
+      const hasTrailingContent = /\w/.test(trailingText[0]);
       if (isObjectLiteral(inner)) {
         result += "({" + compileObjectInner(inner) + "})";
       } else {
         result += compileBlock(inner, [...declaredVars]);
       }
+      // Insert newline separator so IIFE doesn't run into adjacent identifiers
+      if (hasTrailingContent) result += "\n";
       i = end + 1;
     } else if (expr[i] === '"' || expr[i] === "'") {
       // Start of a string literal — collect until closing quote and pass through as-is
@@ -255,9 +262,14 @@ function compileBlock(text, declaredVars) {
     if (fnMatch) {
       localDeclaredVars.push(fnMatch[1]);
     } else {
-      const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
-      if (letMatch) {
-        localDeclaredVars.push(letMatch[1]);
+      const letMutMatch = stmt.match(/^\s*let\s+mut\s+(\w+)\s*=\s*(.+)$/);
+      if (letMutMatch) {
+        localDeclaredVars.push(letMutMatch[1]);
+      } else {
+        const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
+        if (letMatch) {
+          localDeclaredVars.push(letMatch[1]);
+        }
       }
     }
 
@@ -286,6 +298,17 @@ function compileStatement(stmt, declaredVars) {
     return `var ${fnName} = () => ${compiledBody}`;
   }
 
+  // Match 'let mut x = expr' — mutable variable declaration
+  const letMutMatch = stmt.match(/^\s*let\s+mut\s+(\w+)\s*=\s*(.+)$/);
+  if (letMutMatch) {
+    const varName = letMutMatch[1];
+    const compiledExpr = compileExpression(letMutMatch[2], declaredVars);
+    if (compiledExpr === null) return null;
+    // Add new variable to the scope for subsequent statements
+    const updatedVars = [...declaredVars, varName];
+    return `var ${varName} = ${compiledExpr}`;
+  }
+
   // Match 'let x = expr' — capture everything after '=' as the expression,
   // including any nested blocks
   const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
@@ -296,6 +319,15 @@ function compileStatement(stmt, declaredVars) {
     // Add new variable to the scope for subsequent statements
     const updatedVars = [...declaredVars, varName];
     return `var ${varName} = ${compiledExpr}`;
+  }
+
+  // Match 'x = expr' — plain assignment (requires x to be declared)
+  const assignMatch = stmt.match(/^\s*(\w+)\s*=\s*([^=].+)$/);
+  if (assignMatch && declaredVars.includes(assignMatch[1])) {
+    const varName = assignMatch[1];
+    const compiledExpr = compileExpression(assignMatch[2], declaredVars);
+    if (compiledExpr === null) return null;
+    return `${varName} = ${compiledExpr}`;
   }
 
   // Plain expression
@@ -324,9 +356,14 @@ export function compileTuffToJS(source) {
     if (fnMatch) {
       declaredVars.push(fnMatch[1]);
     } else {
-      const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
-      if (letMatch) {
-        declaredVars.push(letMatch[1]);
+      const letMutMatch = stmt.match(/^\s*let\s+mut\s+(\w+)\s*=\s*(.+)$/);
+      if (letMutMatch) {
+        declaredVars.push(letMutMatch[1]);
+      } else {
+        const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
+        if (letMatch) {
+          declaredVars.push(letMatch[1]);
+        }
       }
     }
 
