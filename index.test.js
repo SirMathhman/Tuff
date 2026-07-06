@@ -117,6 +117,11 @@ test("object literal with multiple properties returns correct value", () => {
   assertValid("let o = { a : 10, b : 20 }; o.b", "", 20);
 });
 
+test("fn declaration stored in object and called as method", () => {
+  const source = "fn get() => 100; let dummy = { x : get }; dummy.get()";
+  assertValid(source, "", 100);
+});
+
 test("invalid source fails compilation", () => {
   assertInvalid("invalid");
 });

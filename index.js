@@ -101,16 +101,24 @@ function compileObjectInner(text) {
     const key = part.slice(0, colonIdx).trim();
     const valExpr = part.slice(colonIdx + 1).trim();
     result += `${key}: ${valExpr}, `;
+    // If the value is a known function name, also store it under that name for method calls
+    if (/^\w+$/.test(valExpr)) {
+      result += `${valExpr}: ${valExpr}, `;
+    }
   }
   return result;
 }
 
 // Validate that an expression only contains allowed Tuff constructs:
-// numbers, arithmetic operators (+ - * /), parentheses, whitespace, read(), readString(), blocks,
-// and known variable names (declaredVars).
+// numbers, arithmetic operators (+ - * /), parentheses, whitespace, read(), readString(), fn,
+// arrow (=>), blocks, and known variable names (declaredVars).
 function validateExpression(expr, declaredVars = []) {
-  // Reject method calls on any identifier (e.g., dummy.read())
-  if (/\w+\.\w+\(\)/.test(expr)) return false;
+  // Reject .read() and .readString() as method calls — these are built-ins only
+  if (/\.read\(\)/.test(expr) || /\.readString\(\)/.test(expr)) return false;
+
+  // Reject method calls on unknown identifiers — only allow .word() when the base is a known var
+  const methodCallMatch = expr.match(/(\\w+)\\.\\w+\\(\\)/);
+  if (methodCallMatch && !declaredVars.includes(methodCallMatch[1])) return false;
 
   // First strip out any nested {} blocks — they're validated recursively
   let cleaned = "";
@@ -143,7 +151,8 @@ function validateExpression(expr, declaredVars = []) {
   cleaned = cleaned.replace(/(?<!\.)readString\(\)/g, "");
   cleaned = cleaned.replace(/(?<!\.)read\(\)/g, "");
   cleaned = cleaned.replace(/["'][^"']*["']/g, ""); // string literals
-  cleaned = cleaned.replace(/\.(length|toFixed|toString)\b/g, "");
+  cleaned = cleaned.replace(/=>/g, ""); // arrow syntax for fn declarations
+  cleaned = cleaned.replace(/fn\b/g, ""); // function keyword
   // Allow property access on declared variables (e.g., dummy.x)
   for (const v of declaredVars) {
     cleaned = cleaned.split(v).join("");
@@ -241,10 +250,15 @@ function compileBlock(text, declaredVars) {
     const compiled = compileStatement(stmt, localDeclaredVars);
     if (compiled === null) return null;
 
-    // Track newly declared variables for subsequent statements in this block
-    const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
-    if (letMatch) {
-      localDeclaredVars.push(letMatch[1]);
+    // Track newly declared functions and variables for subsequent statements in this block
+    const fnMatch = stmt.match(/^\s*fn\s+(\w+)\(\)\s*=>\s*(.+)$/);
+    if (fnMatch) {
+      localDeclaredVars.push(fnMatch[1]);
+    } else {
+      const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
+      if (letMatch) {
+        localDeclaredVars.push(letMatch[1]);
+      }
     }
 
     if (isLast) {
@@ -260,6 +274,17 @@ function compileBlock(text, declaredVars) {
 // Compile a single statement, returns JS code (without semicolon) or null on error.
 function compileStatement(stmt, declaredVars) {
   stmt = stmt.trim();
+
+  // Match 'fn name() => expr' — function declaration
+  const fnMatch = stmt.match(/^\s*fn\s+(\w+)\(\)\s*=>\s*(.+)$/);
+  if (fnMatch) {
+    const fnName = fnMatch[1];
+    const compiledBody = compileExpression(fnMatch[2], declaredVars);
+    if (compiledBody === null) return null;
+    // Add new function to the scope for subsequent statements
+    const updatedVars = [...declaredVars, fnName];
+    return `var ${fnName} = () => ${compiledBody}`;
+  }
 
   // Match 'let x = expr' — capture everything after '=' as the expression,
   // including any nested blocks
@@ -294,10 +319,15 @@ export function compileTuffToJS(source) {
     const compiled = compileStatement(stmt, declaredVars);
     if (compiled === null) return err("Invalid source code: " + source);
 
-    // Track newly declared variables for subsequent iterations
-    const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
-    if (letMatch) {
-      declaredVars.push(letMatch[1]);
+    // Track newly declared functions and variables for subsequent iterations
+    const fnMatch = stmt.match(/^\s*fn\s+(\w+)\(\)\s*=>\s*(.+)$/);
+    if (fnMatch) {
+      declaredVars.push(fnMatch[1]);
+    } else {
+      const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
+      if (letMatch) {
+        declaredVars.push(letMatch[1]);
+      }
     }
 
     if (isLast) {
