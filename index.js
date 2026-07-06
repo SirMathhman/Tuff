@@ -425,11 +425,17 @@ export function compileTuffToJS(source) {
     const compiled = compileStatement(stmt, declaredVars, mutableVars);
     if (compiled === null) return err("Invalid source code: " + source);
 
-    if (isLast) {
+    // If the last statement is a declaration, don't wrap in 'return' — just emit it.
+    if (isLast && !isDeclaration(stmt)) {
       body += `return ${compiled};`;
     } else {
       body += `${compiled};\n`;
     }
+  }
+
+  // If the last statement was a declaration, add default return so function doesn't return undefined
+  if (statements.length > 0 && isDeclaration(statements[statements.length - 1])) {
+    body += `return 0;`;
   }
 
   return ok(
