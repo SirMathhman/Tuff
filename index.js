@@ -74,10 +74,44 @@ function findMatchingBrace(expr, pos) {
   }
 }
 
+// Compile the inner content of an object literal: key1 : val1, key2 : val2
+function compileObjectInner(text) {
+  // Split by commas (not inside nested braces)
+  const parts = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") depth--;
+    else if (text[i] === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += text[i];
+  }
+  const last = current.trim();
+  if (last.length > 0) parts.push(last);
+
+  let result = "";
+  for (const part of parts) {
+    // Split by first colon: key : value
+    const colonIdx = part.indexOf(":");
+    if (colonIdx === -1) continue; // skip malformed entries
+    const key = part.slice(0, colonIdx).trim();
+    const valExpr = part.slice(colonIdx + 1).trim();
+    result += `${key}: ${valExpr}, `;
+  }
+  return result;
+}
+
 // Validate that an expression only contains allowed Tuff constructs:
 // numbers, arithmetic operators (+ - * /), parentheses, whitespace, read(), readString(), blocks,
 // and known variable names (declaredVars).
 function validateExpression(expr, declaredVars = []) {
+  // Reject method calls on any identifier (e.g., dummy.read())
+  if (/\w+\.\w+\(\)/.test(expr)) return false;
+
   // First strip out any nested {} blocks — they're validated recursively
   let cleaned = "";
   let depth = 0;
@@ -106,12 +140,17 @@ function validateExpression(expr, declaredVars = []) {
   }
 
   // Remove known-good tokens to check if anything suspicious remains
-  cleaned = cleaned.replace(/readString\(\)/g, "");
-  cleaned = cleaned.replace(/read\(\)/g, "");
+  cleaned = cleaned.replace(/(?<!\.)readString\(\)/g, "");
+  cleaned = cleaned.replace(/(?<!\.)read\(\)/g, "");
   cleaned = cleaned.replace(/["'][^"']*["']/g, ""); // string literals
   cleaned = cleaned.replace(/\.(length|toFixed|toString)\b/g, "");
+  // Allow property access on declared variables (e.g., dummy.x)
+  for (const v of declaredVars) {
+    cleaned = cleaned.split(v).join("");
+  }
+  cleaned = cleaned.replace(/\.\w+/g, ""); // .propertyAccess
   cleaned = cleaned.replace(/[0-9.]/g, "");
-  cleaned = cleaned.replace(/[+\-*\/() \t\n\r;]/g, "");
+  cleaned = cleaned.replace(/[+\-*\/() \t\n\r;,]/g, "");
   // Remove known variable names
   for (const v of declaredVars) {
     cleaned = cleaned.split(v).join("");
@@ -123,19 +162,30 @@ function validateExpression(expr, declaredVars = []) {
   return true;
 }
 
+// Check if braces contain object literal syntax (key: value pairs with commas)
+function isObjectLiteral(content) {
+  // Object literals have colons for key-value mapping and use commas as separators
+  const hasColon = content.includes(":");
+  return hasColon && !content.includes(";");
+}
+
 // Compile a single Tuff expression to JavaScript code string.
 function compileExpression(expr, declaredVars = []) {
   expr = expr.trim();
 
   if (!validateExpression(expr, declaredVars)) return null;
 
-  // Handle top-level block: { stmts }
+  // Handle top-level block or object literal: { ... }
   if (expr.startsWith("{") && expr.endsWith("}")) {
     const inner = expr.slice(1, -1);
+    if (isObjectLiteral(inner)) {
+      // Compile as JS object literal
+      return "({" + compileObjectInner(inner) + "})";
+    }
     return compileBlock(inner, [...declaredVars]);
   }
 
-  // Scan for embedded blocks and compile them recursively.
+  // Scan for embedded blocks/object-literals and compile them recursively.
   // Skip over string literals so braces/semicolons inside them don't affect parsing.
   let result = "";
   let i = 0;
@@ -143,7 +193,11 @@ function compileExpression(expr, declaredVars = []) {
     if (expr[i] === "{") {
       const end = findMatchingBrace(expr, i);
       const inner = expr.slice(i + 1, end);
-      result += compileBlock(inner, [...declaredVars]);
+      if (isObjectLiteral(inner)) {
+        result += "({" + compileObjectInner(inner) + "})";
+      } else {
+        result += compileBlock(inner, [...declaredVars]);
+      }
       i = end + 1;
     } else if (expr[i] === '"' || expr[i] === "'") {
       // Start of a string literal — collect until closing quote and pass through as-is
@@ -165,8 +219,8 @@ function compileExpression(expr, declaredVars = []) {
         i++;
       const segment = expr.slice(segStart, i);
       result += segment
-        .replace(/readString\(\)/g, "__readStr()")
-        .replace(/read\(\)/g, "__read()");
+        .replace(/(?<!\.)readString\(\)/g, "__readStr()")
+        .replace(/(?<!\.)read\(\)/g, "__read()");
     }
   }
 

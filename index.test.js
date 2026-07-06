@@ -89,12 +89,32 @@ test("string literal containing brace does not break parsing", () => {
   assertValid(source, "", 1);
 });
 
+test("string literal with parentheses returns correct length", () => {
+  assertValid('"read()".length', "", 6);
+});
+
 test("block with string inside and nested braces covers findMatchingBrace paths", () => {
   assertValid("{ let x = read(); x }", "5", 5);
 });
 
 test("top-level block expression evaluates correctly", () => {
   assertValid("{ 3 + 4 }", "", 7);
+});
+
+test("unknown identifier with method call fails validation", () => {
+  assertInvalid("dummy.read()");
+});
+
+test("method call on declared variable fails validation", () => {
+  assertInvalid("let dummy = 0; dummy.read()");
+});
+
+test("object literal with property access returns value", () => {
+  assertValid("let dummy = { x : 100 }; dummy.x", "", 100);
+});
+
+test("object literal with multiple properties returns correct value", () => {
+  assertValid("let o = { a : 10, b : 20 }; o.b", "", 20);
 });
 
 test("invalid source fails compilation", () => {
