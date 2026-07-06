@@ -44,3 +44,35 @@ test("empty source compiles and exits with code 0", () => {
 test("whitespace-only source compiles and exits with code 0", () => {
   assertValid(" ", "", 0);
 });
+
+test("read() reads input and returns it as exit code", () => {
+  assertValid("read()", "1", 1);
+});
+
+test("read() handles space-separated input", () => {
+  assertValid("read()", "1 2", 1);
+});
+
+test("read() + read() sums two inputs", () => {
+  assertValid("read() + read()", "1 2", 3);
+});
+
+test("read() with spaces around parentheses works", () => {
+  assertValid("read() + ( read() )", "1 2", 3);
+});
+
+test("{ expr } block evaluates to expression value", () => {
+  assertValid("read() + { read() }", "1 2", 3);
+});
+
+test("let variable with read and block, then use it as exit code", () => {
+  assertValid("let x = read() + { read() }; x", "1 2", 3);
+});
+
+test("nested let inside block expression", () => {
+  assertValid("let x = read() + { let y = read(); y }; x", "1 2", 3);
+});
+
+test("invalid source fails compilation", () => {
+  assertInvalid("invalid");
+});
