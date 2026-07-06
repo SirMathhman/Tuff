@@ -7,5 +7,8 @@ export function err(error) {
 }
 
 export function compileTuffToJS(source) {
+  if (source.trim() === "") {
+    return ok("return 0;");
+  }
   return err("Invalid source code: " + source);
 }

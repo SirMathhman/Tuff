@@ -1,6 +1,5 @@
-import { test, expect } from "bun";
+import { test, expect } from "bun:test";
 import { compileTuffToJS } from ".";
-import { act } from "react";
 
 function throwWithoutUsingThrows(message) {
   // Using expect to avoid using 'throws'
@@ -18,11 +17,11 @@ function assertValid(source, stdIn, expectedExitCode) {
   const value = generated.value;
 
   try {
-    const actualExitCode = new Function("stdIn", source)(stdIn);
+    const actualExitCode = new Function("stdIn", value)(stdIn);
     expect(actualExitCode).toBe(expectedExitCode);
   } catch (e) {
     throwWithoutUsingThrows(
-      "Failed to execute generated code: '" + generated.error + "'",
+      "Failed to execute generated code: '" + value + "', Error: " + e.message,
     );
   }
 }
@@ -37,3 +36,11 @@ function assertInvalid(source) {
     );
   }
 }
+
+test("empty source compiles and exits with code 0", () => {
+  assertValid("", "", 0);
+});
+
+test("whitespace-only source compiles and exits with code 0", () => {
+  assertValid(" ", "", 0);
+});
