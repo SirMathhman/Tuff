@@ -134,6 +134,10 @@ test("reassigning inside block affects outer scope", () => {
   assertValid("let mut x = 0; { x = 1; } x", "", 1);
 });
 
+test("block-scoped let does not leak to outer scope", () => {
+  assertValid("let x = 0; { let x = 1; } x", "", 0);
+});
+
 test("invalid source fails compilation", () => {
   assertInvalid("invalid");
 });

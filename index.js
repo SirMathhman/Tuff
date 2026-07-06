@@ -273,14 +273,27 @@ function compileBlock(text, declaredVars) {
       }
     }
 
-    if (isLast) {
+    // If the last statement is a declaration, don't wrap in 'return' — just emit it.
+    if (isLast && !isDeclaration(stmt)) {
       body += `return ${compiled};`;
     } else {
       body += `${compiled};\n`;
     }
   }
 
+  // If block ends with a declaration, return 0 as neutral value so the IIFE doesn't
+  // return undefined when used in expressions like `{ let x = 1; } outer`
+  if (isDeclaration(statements[statements.length - 1])) {
+    body += `return 0;`;
+  }
+
   return `(function() { ${body} })()`;
+}
+
+// Check if a statement is a declaration (let/let mut/fn)
+function isDeclaration(stmt) {
+  const s = stmt.trim();
+  return /^\s*(fn|let)\b/.test(s);
 }
 
 // Compile a single statement, returns JS code (without semicolon) or null on error.
