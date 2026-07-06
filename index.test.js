@@ -147,6 +147,10 @@ test("block-scoped let does not leak to outer scope", () => {
   assertValid("let x = 0; { let x = 1; } x", "", 0);
 });
 
+test("top-level block with only declarations returns 0", () => {
+  assertValid("{ let x = 100; }", "", 0);
+});
+
 test("invalid source fails compilation", () => {
   assertInvalid("invalid");
 });
