@@ -73,6 +73,30 @@ test("nested let inside block expression", () => {
   assertValid("let x = read() + { let y = read(); y }; x", "1 2", 3);
 });
 
+test("readString() reads full input as string and .length returns its length", () => {
+  assertValid("readString().length", "test", 4);
+});
+
+test("readString() reads a single string token and .length returns its length", () => {
+  assertValid("readString().length", "test\nfoo", 4);
+});
+
+test("string literal with .length", () => {
+  assertValid('"test".length', "", 4);
+});
+test("string literal containing brace does not break parsing", () => {
+  const source = '"{".length'; // Tuff: "{" . length → 1
+  assertValid(source, "", 1);
+});
+
+test("block with string inside and nested braces covers findMatchingBrace paths", () => {
+  assertValid("{ let x = read(); x }", "5", 5);
+});
+
+test("top-level block expression evaluates correctly", () => {
+  assertValid("{ 3 + 4 }", "", 7);
+});
+
 test("invalid source fails compilation", () => {
   assertInvalid("invalid");
 });
