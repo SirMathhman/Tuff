@@ -161,7 +161,7 @@ function validateExpression(expr, declaredVars = []) {
   }
   cleaned = cleaned.replace(/\.\w+/g, ""); // .propertyAccess
   cleaned = cleaned.replace(/[0-9.]/g, "");
-  cleaned = cleaned.replace(/[+\-*\/() \t\n\r;,]/g, "");
+  cleaned = cleaned.replace(/[+\-*\/() \t\n\r;,=]/g, "");
   // Remove known variable names
   for (const v of declaredVars) {
     cleaned = cleaned.split(v).join("");
@@ -181,7 +181,7 @@ function isObjectLiteral(content) {
 }
 
 // Compile a single Tuff expression to JavaScript code string.
-function compileExpression(expr, declaredVars = []) {
+function compileExpression(expr, declaredVars = [], mutableVars = []) {
   expr = expr.trim();
 
   if (!validateExpression(expr, declaredVars)) return null;
@@ -193,7 +193,7 @@ function compileExpression(expr, declaredVars = []) {
       // Compile as JS object literal
       return "({" + compileObjectInner(inner) + "})";
     }
-    return compileBlock(inner, [...declaredVars]);
+    return compileBlock(inner, [...declaredVars], [...mutableVars]);
   }
 
   // Scan for embedded blocks/object-literals and compile them recursively.
@@ -210,7 +210,7 @@ function compileExpression(expr, declaredVars = []) {
       if (isObjectLiteral(inner)) {
         result += "({" + compileObjectInner(inner) + "})";
       } else {
-        result += compileBlock(inner, [...declaredVars]);
+        result += compileBlock(inner, [...declaredVars], [...mutableVars]);
       }
       // Insert newline separator so IIFE doesn't run into adjacent identifiers
       if (hasTrailingContent) result += "\n";
@@ -245,19 +245,17 @@ function compileExpression(expr, declaredVars = []) {
 
 // Compile a block of statements to an IIFE that returns the last value.
 // Returns null if any statement is invalid.
-function compileBlock(text, declaredVars) {
+function compileBlock(text, declaredVars, mutableVars) {
   const statements = splitStatements(text);
   let body = "";
   // Make mutable copy so new lets inside this block are visible to later stmts
   const localDeclaredVars = [...declaredVars];
+  const localMutableVars = [...(mutableVars || [])];
 
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
-    const isLast = i === statements.length - 1;
-    const compiled = compileStatement(stmt, localDeclaredVars);
-    if (compiled === null) return null;
 
-    // Track newly declared functions and variables for subsequent statements in this block
+    // Track newly declared functions and variables BEFORE compiling so nested blocks see them
     const fnMatch = stmt.match(/^\s*fn\s+(\w+)\(\)\s*=>\s*(.+)$/);
     if (fnMatch) {
       localDeclaredVars.push(fnMatch[1]);
@@ -265,6 +263,7 @@ function compileBlock(text, declaredVars) {
       const letMutMatch = stmt.match(/^\s*let\s+mut\s+(\w+)\s*=\s*(.+)$/);
       if (letMutMatch) {
         localDeclaredVars.push(letMutMatch[1]);
+        localMutableVars.push(letMutMatch[1]);
       } else {
         const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
         if (letMatch) {
@@ -272,6 +271,18 @@ function compileBlock(text, declaredVars) {
         }
       }
     }
+    // Check for assignment to mutable var BEFORE compiling so nested blocks see it
+    const assignCheck = stmt.match(/^\s*(\w+)\s*=\s*([^=].+)$/);
+    if (assignCheck && localMutableVars.includes(assignCheck[1])) {
+      // Assignment is valid, proceed with compilation
+    }
+    const isLast = i === statements.length - 1;
+    const compiled = compileStatement(
+      stmt,
+      localDeclaredVars,
+      localMutableVars,
+    );
+    if (compiled === null) return null;
 
     // If the last statement is a declaration, don't wrap in 'return' — just emit it.
     if (isLast && !isDeclaration(stmt)) {
@@ -297,14 +308,18 @@ function isDeclaration(stmt) {
 }
 
 // Compile a single statement, returns JS code (without semicolon) or null on error.
-function compileStatement(stmt, declaredVars) {
+function compileStatement(stmt, declaredVars, mutableVars = []) {
   stmt = stmt.trim();
 
   // Match 'fn name() => expr' — function declaration
   const fnMatch = stmt.match(/^\s*fn\s+(\w+)\(\)\s*=>\s*(.+)$/);
   if (fnMatch) {
     const fnName = fnMatch[1];
-    const compiledBody = compileExpression(fnMatch[2], declaredVars);
+    const compiledBody = compileExpression(
+      fnMatch[2],
+      declaredVars,
+      mutableVars,
+    );
     if (compiledBody === null) return null;
     // Add new function to the scope for subsequent statements
     const updatedVars = [...declaredVars, fnName];
@@ -315,7 +330,11 @@ function compileStatement(stmt, declaredVars) {
   const letMutMatch = stmt.match(/^\s*let\s+mut\s+(\w+)\s*=\s*(.+)$/);
   if (letMutMatch) {
     const varName = letMutMatch[1];
-    const compiledExpr = compileExpression(letMutMatch[2], declaredVars);
+    const compiledExpr = compileExpression(
+      letMutMatch[2],
+      declaredVars,
+      mutableVars,
+    );
     if (compiledExpr === null) return null;
     // Add new variable to the scope for subsequent statements
     const updatedVars = [...declaredVars, varName];
@@ -327,24 +346,37 @@ function compileStatement(stmt, declaredVars) {
   const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
   if (letMatch) {
     const varName = letMatch[1];
-    const compiledExpr = compileExpression(letMatch[2], declaredVars);
+    const compiledExpr = compileExpression(
+      letMatch[2],
+      declaredVars,
+      mutableVars,
+    );
     if (compiledExpr === null) return null;
     // Add new variable to the scope for subsequent statements
     const updatedVars = [...declaredVars, varName];
     return `var ${varName} = ${compiledExpr}`;
   }
 
-  // Match 'x = expr' — plain assignment (requires x to be declared)
+  // Match 'x = expr' — plain assignment (requires x to be declared as mutable)
   const assignMatch = stmt.match(/^\s*(\w+)\s*=\s*([^=].+)$/);
-  if (assignMatch && declaredVars.includes(assignMatch[1])) {
+  if (assignMatch && mutableVars.includes(assignMatch[1])) {
     const varName = assignMatch[1];
-    const compiledExpr = compileExpression(assignMatch[2], declaredVars);
+    const compiledExpr = compileExpression(
+      assignMatch[2],
+      declaredVars,
+      mutableVars,
+    );
     if (compiledExpr === null) return null;
     return `${varName} = ${compiledExpr}`;
   }
 
+  // Reject assignment to non-mutable variable
+  if (assignMatch && !mutableVars.includes(assignMatch[1])) {
+    return null;
+  }
+
   // Plain expression
-  return compileExpression(stmt, declaredVars);
+  return compileExpression(stmt, declaredVars, mutableVars);
 }
 
 export function compileTuffToJS(source) {
@@ -357,14 +389,12 @@ export function compileTuffToJS(source) {
   const statements = splitStatements(trimmed);
   let body = "";
   const declaredVars = [];
+  const mutableVars = [];
 
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
-    const isLast = i === statements.length - 1;
-    const compiled = compileStatement(stmt, declaredVars);
-    if (compiled === null) return err("Invalid source code: " + source);
 
-    // Track newly declared functions and variables for subsequent iterations
+    // Track newly declared functions and variables BEFORE compiling so nested blocks see them
     const fnMatch = stmt.match(/^\s*fn\s+(\w+)\(\)\s*=>\s*(.+)$/);
     if (fnMatch) {
       declaredVars.push(fnMatch[1]);
@@ -372,6 +402,7 @@ export function compileTuffToJS(source) {
       const letMutMatch = stmt.match(/^\s*let\s+mut\s+(\w+)\s*=\s*(.+)$/);
       if (letMutMatch) {
         declaredVars.push(letMutMatch[1]);
+        mutableVars.push(letMutMatch[1]);
       } else {
         const letMatch = stmt.match(/^\s*let\s+(\w+)\s*=\s*(.+)$/);
         if (letMatch) {
@@ -379,6 +410,20 @@ export function compileTuffToJS(source) {
         }
       }
     }
+
+    // Check for assignment to mutable var BEFORE compiling so nested blocks see it
+    const assignCheck = stmt.match(/^\s*(\w+)\s*=\s*([^=].+)$/);
+    if (
+      assignCheck &&
+      declaredVars.includes(assignCheck[1]) &&
+      !mutableVars.includes(assignCheck[1])
+    ) {
+      // Assignment to non-mutable var — will fail compilation, skip tracking
+    }
+
+    const isLast = i === statements.length - 1;
+    const compiled = compileStatement(stmt, declaredVars, mutableVars);
+    if (compiled === null) return err("Invalid source code: " + source);
 
     if (isLast) {
       body += `return ${compiled};`;

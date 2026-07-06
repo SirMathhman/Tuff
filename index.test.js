@@ -130,8 +130,17 @@ test("mut variable can be reassigned and returns new value", () => {
   assertValid("let mut x = 0; x = 1; x", "", 1);
 });
 
+test("reassigning immutable let without mut fails validation", () => {
+  assertInvalid("let x = 0; x = 1");
+});
+
 test("reassigning inside block affects outer scope", () => {
   assertValid("let mut x = 0; { x = 1; } x", "", 1);
+});
+
+test("embedded block with trailing expression covers hasEmbeddedBlocks path", () => {
+  const source = "read() + { let y = read(); y }";
+  assertValid(source, "1 2", 3);
 });
 
 test("block-scoped let does not leak to outer scope", () => {
