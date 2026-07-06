@@ -434,7 +434,10 @@ export function compileTuffToJS(source) {
   }
 
   // If the last statement was a declaration, add default return so function doesn't return undefined
-  if (statements.length > 0 && isDeclaration(statements[statements.length - 1])) {
+  if (
+    statements.length > 0 &&
+    isDeclaration(statements[statements.length - 1])
+  ) {
     body += `return 0;`;
   }
 
