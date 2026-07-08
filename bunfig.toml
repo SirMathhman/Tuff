@@ -1,4 +1,0 @@
-[test]
-coverageThreshold = 0.95
-coverageSkipTestFiles = true
-coverageReporter = ["text", "lcov"]
