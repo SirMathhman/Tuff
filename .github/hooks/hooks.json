@@ -3,7 +3,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "cmd /c \"cargo llvm-cov report --lcov --fail-under-lines 95 --show-missing-lines 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"cargo +nightly llvm-cov --lcov --fail-under-lines 100 --show-missing-lines 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       },
       {
         "type": "command",
@@ -11,7 +11,7 @@
       },
       {
         "type": "command",
-        "command": "cmd /c \"powershell -NoProfile -File ./check-file-length.ps1 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"powershell -NoProfile -File ./.github/hooks/check-file-length.ps1 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
