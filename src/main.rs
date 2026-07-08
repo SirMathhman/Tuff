@@ -39,7 +39,7 @@ fn tokenize(input: &str) -> Vec<String> {
     while let Some(&ch) = chars.peek() {
         if ch.is_whitespace() {
             chars.next();
-        } else if matches!(ch, '(' | ')' | '+' | '*') {
+        } else if matches!(ch, '(' | ')' | '+' | '*' | '/' | '%') {
             tokens.push(ch.to_string());
             chars.next();
         } else if ch == '-'
@@ -91,10 +91,17 @@ fn parse_expression(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
 fn parse_term(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
     let mut left = parse_factor(tokens, pos)?;
 
-    while *pos < tokens.len() && tokens[*pos] == "*" {
+    while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%") {
+        let op = tokens[*pos].clone();
         *pos += 1;
         let right = parse_factor(tokens, pos)?;
-        left *= right;
+        left = if op == "*" {
+            left * right
+        } else if op == "/" {
+            left / right
+        } else {
+            left % right
+        };
     }
 
     Ok(left)
@@ -192,8 +199,8 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_operator_skipped() {
-        assert_eq!(interpret("5 / 3"), Ok(5));
+    fn test_division_truncates() {
+        assert_eq!(interpret("5 / 3"), Ok(1));
     }
 
     #[test]
@@ -219,5 +226,15 @@ mod tests {
     #[test]
     fn test_unrecognized_token_in_factor() {
         assert!(interpret(")").is_err());
+    }
+
+    #[test]
+    fn test_division_expression() {
+        assert_eq!(interpret("6 / 2"), Ok(3));
+    }
+
+    #[test]
+    fn test_modulo_expression() {
+        assert_eq!(interpret("5 % 3"), Ok(2));
     }
 }
