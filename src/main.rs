@@ -178,6 +178,11 @@ fn tokenize(input: &str) -> Vec<String> {
         ) {
             tokens.push(ch.to_string());
             chars.next();
+        } else if ch == '|' && *chars.peek().unwrap_or(&' ') == '|' {
+            // Handle || as a single token
+            chars.next();
+            chars.next();
+            tokens.push("||".to_string());
         } else if ch == '-'
             && !tokens.is_empty()
             && !matches!(&*tokens[tokens.len() - 1], "(" | "+" | "-" | "*")
@@ -219,6 +224,23 @@ fn tokenize(input: &str) -> Vec<String> {
 }
 
 fn parse_expression(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut Scope,
+) -> Result<i64, ParseError> {
+    let mut left = parse_additive(tokens, pos, scope)?;
+
+    while *pos < tokens.len() && tokens[*pos] == "||" {
+        *pos += 1;
+        let right = parse_additive(tokens, pos, scope)?;
+        // Logical OR: result is 1 if either operand is non-zero, else 0
+        left = if left != 0 || right != 0 { 1 } else { 0 };
+    }
+
+    Ok(left)
+}
+
+fn parse_additive(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
@@ -506,5 +528,10 @@ mod tests {
     #[test]
     fn test_boolean_false_returns_zero() {
         assert_eq!(interpret("let x = false; x"), Ok(0));
+    }
+
+    #[test]
+    fn test_logical_or_with_booleans() {
+        assert_eq!(interpret("let x = true; let y = false; x || y"), Ok(1));
     }
 }
