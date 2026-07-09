@@ -58,6 +58,11 @@ mod tests {
     }
 
     #[test]
+    fn test_integer_u16_suffix_stripped() {
+        assert_eq!(interpret("let x = 100U16;"), Ok(0));
+    }
+
+    #[test]
     fn test_integer_single_letter_suffix() {
         assert_eq!(interpret("5U + 3"), Ok(8));
     }
@@ -80,6 +85,26 @@ mod tests {
     #[test]
     fn test_let_type_mismatch_errors() {
         assert!(interpret("let x : U8 = 100U16; x").is_err());
+    }
+
+    #[test]
+    fn test_let_assign_u16_var_to_u8_typed_var_errors() {
+        assert!(interpret("let x = 100U16; let y : U8 = x;").is_err());
+    }
+
+    #[test]
+    fn test_let_assign_u8_var_to_u16_typed_var_ok() {
+        assert_eq!(interpret("let x = 50U8; let y : U16 = x; y"), Ok(50));
+    }
+
+    #[test]
+    fn test_let_untyped_with_suffix_infers_type() {
+        assert_eq!(interpret("let x = 42U8; x"), Ok(42));
+    }
+
+    #[test]
+    fn test_let_untyped_plain_literal_ok() {
+        assert_eq!(interpret("let x = 7; x"), Ok(7));
     }
 
     #[test]

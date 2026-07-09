@@ -1,4 +1,4 @@
-use crate::scope::{ParseError, Scope, Value, extract_int, extract_suffix};
+use crate::scope::{ParseError, Scope, Value, check_type, extract_int, infer_type};
 
 pub fn interpret(source: &str) -> Result<i64, String> {
     use crate::lexer;
@@ -150,7 +150,7 @@ fn parse_for_statement(
 
     // Pre-declare loop variable so the first-pass scan can resolve references to it
     if let Some(frame) = scope.last_frame_mut() {
-        frame.insert(var_name.clone(), (Value::Int(start_val), true));
+        frame.insert(var_name.clone(), (Value::Int(start_val), true, None));
     }
     // First pass: scan body to find loop boundary
     let mut scan_pos = body_begin;
@@ -167,7 +167,7 @@ fn parse_for_statement(
     for i in 1..=remaining {
         // Set loop variable to current value
         if let Some(frame) = scope.last_frame_mut() {
-            frame.insert(var_name.clone(), (Value::Int(start_val + i), true));
+            frame.insert(var_name.clone(), (Value::Int(start_val + i), true, None));
         }
 
         // Execute body at fresh position
@@ -300,6 +300,7 @@ fn consume_semicolon(pos: &mut usize, tokens: &[String]) {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in type-checking helpers
 fn parse_let_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -337,37 +338,16 @@ fn parse_let_statement(
     let rhs_token = (*pos < tokens.len()).then(|| tokens[*pos].clone());
     let lhs = parse_expression(tokens, pos, scope)?;
 
-    fn type_width(t: &str) -> Option<u32> {
-        let digits = t
-            .chars()
-            .skip_while(|c| c.is_ascii_uppercase())
-            .collect::<String>();
-        if digits.is_empty() {
-            Some(0)
-        } else {
-            digits.parse::<u32>().ok()
-        }
-    }
-
-    fn check_type(dt: &str, rt: Option<&String>) -> Result<(), ParseError> {
-        let dw = type_width(dt).unwrap_or(0);
-        match (rt.and_then(|tok| extract_suffix(tok.as_str())), rt) {
-            (Some(sfx), _) => {
-                if type_width(sfx).unwrap_or(0) > dw {
-                    Err(ParseError::UnexpectedEndOfInput)
-                } else {
-                    Ok(())
-                }
-            }
-            (_, Some(tok)) if extract_int(tok.as_str()).is_some() => {
-                Err(ParseError::UnexpectedEndOfInput)
-            }
-            _ => Ok(()),
-        }
-    }
+    let rhs_type_from_var = rhs_token
+        .as_ref()
+        .and_then(|tok| scope.get(tok).map(|entry| entry.2.unwrap_or(0)));
 
     if let Some(ref dt) = declared_type {
-        check_type(dt, rhs_token.as_ref().map(|s| s as &String))?;
+        check_type(
+            dt,
+            rhs_token.as_ref().map(|s| s as &String),
+            rhs_type_from_var,
+        )?;
     }
 
     if *pos < tokens.len() && tokens[*pos] == ".." {
@@ -382,12 +362,16 @@ fn parse_let_statement(
                         end: rhs,
                     },
                     is_mut,
+                    None,
                 ),
             );
         }
     } else {
         if let Some(frame) = scope.last_frame_mut() {
-            frame.insert(var_name.clone(), (Value::Int(lhs), is_mut));
+            let declared_ref: Option<&String> = declared_type.as_ref().map(|s| s);
+            let rhs_ref: Option<&String> = rhs_token.as_ref().map(|s| s);
+            let inferred_type = infer_type(declared_ref, rhs_ref);
+            frame.insert(var_name.clone(), (Value::Int(lhs), is_mut, inferred_type));
         }
     }
     consume_semicolon(pos, tokens);

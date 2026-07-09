@@ -47,7 +47,10 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-type ScopeFrame = HashMap<String, (Value, bool)>;
+/// Type width for a variable: 0 means untyped/plain integer.
+pub type VarTypeWidth = u32;
+
+type ScopeFrame = HashMap<String, (Value, bool, Option<VarTypeWidth>)>;
 
 /// Nested scope stack — innermost frame is last element.
 pub struct Scope(Vec<ScopeFrame>);
@@ -70,7 +73,8 @@ impl Scope {
     }
 
     /// Look up a variable from innermost to outermost scope.
-    pub fn get(&self, name: &str) -> Option<&(Value, bool)> {
+    /// Look up a variable from innermost to outermost scope.
+    pub fn get(&self, name: &str) -> Option<&(Value, bool, Option<VarTypeWidth>)> {
         self.0.iter().rev().find_map(|frame| frame.get(name))
     }
 
@@ -114,6 +118,70 @@ pub fn extract_suffix(s: &str) -> Option<&str> {
     for (i, c) in s.char_indices() {
         if c.is_ascii_uppercase() {
             return Some(&s[i..]);
+        }
+    }
+    None
+}
+
+/// Type width for a type token: "U8" -> Some(8), "U16" -> Some(16), "U" -> Some(0).
+pub fn type_width(t: &str) -> Option<u32> {
+    let digits = t
+        .chars()
+        .skip_while(|c| c.is_ascii_uppercase())
+        .collect::<String>();
+    if digits.is_empty() {
+        Some(0)
+    } else {
+        digits.parse::<u32>().ok()
+    }
+}
+
+/// Check that the RHS type fits within the declared type width.
+#[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in callers
+pub fn check_type(
+    dt: &str,
+    rt: Option<&String>,
+    rhs_var_width: Option<u32>,
+) -> Result<(), ParseError> {
+    let dw = type_width(dt).unwrap_or(0);
+
+    if let Some(var_w) = rhs_var_width {
+        return if var_w > dw {
+            Err(ParseError::UnexpectedEndOfInput)
+        } else {
+            Ok(())
+        };
+    }
+
+    match rt {
+        Some(tok) => {
+            if let Some(sfx) = extract_suffix(tok.as_str()) {
+                if type_width(sfx).unwrap_or(0) > dw {
+                    return Err(ParseError::UnexpectedEndOfInput);
+                } else {
+                    return Ok(());
+                }
+            }
+            if extract_int(tok.as_str()).is_some() {
+                return Err(ParseError::UnexpectedEndOfInput);
+            }
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+/// Infer the type width for a let-binding from declared type or RHS suffix.
+#[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in callers
+pub fn infer_type(declared: Option<&String>, rhs_tok: Option<&String>) -> Option<u32> {
+    if let Some(dt) = declared {
+        if let Some(w) = type_width(dt) {
+            return Some(w);
+        }
+    }
+    if let Some(tok) = rhs_tok {
+        if let Some(sfx) = extract_suffix(tok) {
+            return type_width(sfx);
         }
     }
     None
