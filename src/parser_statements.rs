@@ -299,6 +299,18 @@ pub fn do_assignment(
     Ok(val)
 }
 
+/// Skip an optional `:` TypeToken annotation if present.
+fn skip_optional_type(pos: &mut usize, tokens: &[String]) -> Result<(), ParseError> {
+    if *pos < tokens.len() && tokens[*pos] == ":" {
+        *pos += 1; // skip ":"
+        if *pos >= tokens.len() {
+            return Err(ParseError::UnexpectedEndOfInput);
+        }
+        *pos += 1; // skip type token
+    }
+    Ok(())
+}
+
 #[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in type-checking helpers
 fn parse_fn_statement(
     tokens: &[String],
@@ -330,14 +342,7 @@ fn parse_fn_statement(
         loop {
             let param_name = tokens[*pos].clone();
             *pos += 1;
-            // Optional type annotation: `:` TypeToken
-            if *pos < tokens.len() && tokens[*pos] == ":" {
-                *pos += 1; // skip ":"
-                if *pos >= tokens.len() {
-                    return Err(ParseError::UnexpectedEndOfInput);
-                }
-                *pos += 1; // skip type token
-            }
+            skip_optional_type(pos, tokens)?;
             params.push(param_name);
             if *pos < tokens.len() && tokens[*pos] == "," {
                 *pos += 1;
@@ -352,6 +357,9 @@ fn parse_fn_statement(
         return Err(ParseError::UnexpectedEndOfInput);
     }
     *pos += 1;
+
+    // Optional return type annotation: `:` ReturnTypeToken
+    skip_optional_type(pos, tokens)?;
 
     // Expect "=>"
     if *pos >= tokens.len() || tokens[*pos] != "=>" {
