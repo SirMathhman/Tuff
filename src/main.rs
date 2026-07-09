@@ -626,4 +626,17 @@ mod tests {
     fn test_fn_define_and_call() {
         assert_eq!(interpret("fn get() => 100; get()"), Ok(100));
     }
+
+    #[test]
+    fn test_fn_with_params_and_args() {
+        assert_eq!(
+            interpret("fn add(first : I32, second : I32) => first + second; add(25, 75)"),
+            Ok(100)
+        );
+    }
+
+    #[test]
+    fn test_fn_with_one_param() {
+        assert_eq!(interpret("fn double(x : I32) => x * 2; double(49)"), Ok(98));
+    }
 }

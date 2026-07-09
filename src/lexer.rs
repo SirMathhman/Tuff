@@ -18,7 +18,7 @@ pub fn tokenize(input: &str) -> Vec<String> {
             tokens.push("=>".to_string());
         } else if matches!(
             ch,
-            ':' | '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
+            ',' | ':' | '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
         ) {
             tokens.push(ch.to_string());
             chars.next();

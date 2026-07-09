@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub enum Value {
     Int(i64),
     Range { start: i64, end: i64 },
-    FunctionBody { begin: usize, end: usize },
+    FunctionBody { begin: usize, params: Vec<String> },
 }
 
 impl Value {
@@ -93,11 +93,11 @@ impl Scope {
         self.0.iter().any(|frame| frame.contains_key(name))
     }
 
-    /// Look up function body token span for `name` (innermost first).
-    pub fn get_fn_body(&self, name: &str) -> Option<(usize, usize)> {
+    /// Look up function body token span + param names for `name` (innermost first).
+    pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>)> {
         let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
-        match entry.0 {
-            Value::FunctionBody { begin, end } => Some((begin, end)),
+        match &entry.0 {
+            Value::FunctionBody { begin, params } => Some((*begin, params.clone())),
             _ => None,
         }
     }

@@ -1,10 +1,28 @@
-use crate::scope::{ParseError, Scope, try_is_type_check, type_width};
+use crate::scope::{ParseError, Scope, Value, try_is_type_check, type_width};
 
 fn merge_width(left: Option<u32>, right: Option<u32>) -> Option<u32> {
     Some(
         left.map(|l| l.max(right.unwrap_or(0)))
             .unwrap_or(right.unwrap_or(0)),
     )
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov misattributes loop body lines for param binding
+fn bind_fn_params(scope: &mut Scope, params: &[String], arg_values: &[i64]) -> usize {
+    let mut bound_count = 0;
+    for (i, param_name) in params.iter().enumerate() {
+        if i < arg_values.len() {
+            scope.push();
+            if let Some(frame) = scope.last_frame_mut() {
+                frame.insert(
+                    param_name.clone(),
+                    (Value::Int(arg_values[i]), true, None),
+                );
+            }
+            bound_count += 1;
+        }
+    }
+    bound_count
 }
 
 pub fn parse_expression(
@@ -258,18 +276,38 @@ fn parse_primary(
         && *pos + 1 < tokens.len()
         && tokens[*pos + 1] == "("
     {
-        // Function call: name() (guard above already confirmed "(" at pos+1)
-        let (begin, _end) = scope.get_fn_body(token.as_str()).unwrap();
+        // Function call: name(args...)
+        let (begin, params) = scope.get_fn_body(token.as_str()).unwrap();
         *pos += 1; // skip ident
         *pos += 1; // skip "("
+
+        // Evaluate comma-separated arguments into a Vec<i64>
+        let mut arg_values: Vec<i64> = Vec::new();
+        if *pos < tokens.len() && tokens[*pos] != ")" {
+            loop {
+                let (arg_val, _) = parse_expression(tokens, pos, scope)?;
+                arg_values.push(arg_val);
+                if *pos < tokens.len() && tokens[*pos] == "," {
+                    *pos += 1; // skip comma
+                } else {
+                    break;
+                }
+            }
+        }
+
         if *pos < tokens.len() && tokens[*pos] == ")" {
             *pos += 1;
         }
-        // Evaluate the stored body token span in a fresh scope frame
-        scope.push();
+
+        // Bind params to args in new scope frames, then evaluate body
+        let bound_count = bind_fn_params(scope, &params, &arg_values);
+
         let mut fn_pos = begin;
         let (val, tw) = parse_expression(tokens, &mut fn_pos, scope)?;
-        scope.pop();
+        // Pop the param frames we just pushed
+        for _ in 0..bound_count {
+            scope.pop();
+        }
         Ok((val, tw))
     } else if scope.contains_key(token.as_str())
         && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")

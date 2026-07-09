@@ -324,6 +324,29 @@ fn parse_fn_statement(
     }
     *pos += 1;
 
+    // Parse optional parameters: name : Type, ...
+    let mut params = Vec::<String>::new();
+    if *pos < tokens.len() && tokens[*pos] != ")" {
+        loop {
+            let param_name = tokens[*pos].clone();
+            *pos += 1;
+            // Optional type annotation: `:` TypeToken
+            if *pos < tokens.len() && tokens[*pos] == ":" {
+                *pos += 1; // skip ":"
+                if *pos >= tokens.len() {
+                    return Err(ParseError::UnexpectedEndOfInput);
+                }
+                *pos += 1; // skip type token
+            }
+            params.push(param_name);
+            if *pos < tokens.len() && tokens[*pos] == "," {
+                *pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+
     // Skip ")"
     if *pos >= tokens.len() || tokens[*pos] != ")" {
         return Err(ParseError::UnexpectedEndOfInput);
@@ -339,15 +362,26 @@ fn parse_fn_statement(
     // Record body start (the expression token position)
     let begin = *pos;
 
+    // Bind params as dummy values so the body evaluation doesn't fail on unknown identifiers
+    for param_name in &params {
+        scope.push();
+        if let Some(frame) = scope.last_frame_mut() {
+            frame.insert(param_name.clone(), (Value::Int(0), true, None));
+        }
+    }
+
     // Evaluate the body once to advance pos past it
     crate::parser_expressions::parse_expression(tokens, pos, scope)?;
     consume_semicolon(pos, tokens);
 
-    let end = *pos;
+    // Clean up dummy param frames
+    for _ in 0..params.len() {
+        scope.pop();
+    }
 
-    // Store function body token span in outermost (global) frame
+    // Store function body token span + params in outermost (global) frame
     if !scope.0.is_empty() {
-        scope.0[0].insert(fn_name, (Value::FunctionBody { begin, end }, true, None));
+        scope.0[0].insert(fn_name, (Value::FunctionBody { begin, params }, true, None));
     }
 
     Ok(Some(()))
