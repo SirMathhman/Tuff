@@ -4,8 +4,15 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
-    Range { start: i64, end: i64 },
-    FunctionBody { begin: usize, params: Vec<String> },
+    Range {
+        start: i64,
+        end: i64,
+    },
+    FunctionBody {
+        begin: usize,
+        params: Vec<String>,
+        ret_type_width: Option<u32>,
+    },
 }
 
 impl Value {
@@ -15,6 +22,18 @@ impl Value {
         match self {
             Value::Int(v) => *v,
             _ => 0, // unreachable when guarded
+        }
+    }
+
+    /// Extract function return type width if this is a FunctionBody.
+    #[cfg_attr(coverage_nightly, coverage(off))] // defensive branch unreachable with current callers
+    pub fn as_fn_ret_type_width(&self) -> Option<u32> {
+        match self {
+            Value::FunctionBody {
+                ret_type_width: Some(w),
+                ..
+            } => Some(*w),
+            _ => None,
         }
     }
 }
@@ -97,7 +116,7 @@ impl Scope {
     pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>)> {
         let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
         match &entry.0 {
-            Value::FunctionBody { begin, params } => Some((*begin, params.clone())),
+            Value::FunctionBody { begin, params, .. } => Some((*begin, params.clone())),
             _ => None,
         }
     }

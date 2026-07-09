@@ -667,4 +667,22 @@ mod tests {
     fn test_fn_return_type_missing_token_errors() {
         assert!(interpret("fn f() : ;").is_err());
     }
+
+    #[test]
+    fn test_fn_return_type_mismatch_errors() {
+        assert!(interpret("fn get() : U8 => 0U16;").is_err());
+    }
+
+    #[test]
+    fn test_let_with_fn_call_narrower_type_ok() {
+        assert_eq!(
+            interpret("fn get() : U8 => 100U8; let x : U16 = get(); x"),
+            Ok(100)
+        );
+    }
+
+    #[test]
+    fn test_let_with_fn_call_wider_return_type_errors() {
+        assert!(interpret("fn get() : U16 => 100U16; let x : U8 = get();").is_err());
+    }
 }

@@ -360,7 +360,15 @@ fn parse_fn_statement(
     *pos += 1;
 
     // Optional return type annotation: `:` ReturnTypeToken
-    skip_optional_type(pos, tokens)?;
+    let mut ret_type_width: Option<u32> = None;
+    if *pos < tokens.len() && tokens[*pos] == ":" {
+        *pos += 1; // skip ":"
+        if *pos >= tokens.len() {
+            return Err(ParseError::UnexpectedEndOfInput);
+        }
+        ret_type_width = crate::scope::type_width(&tokens[*pos]);
+        *pos += 1; // skip type token
+    }
 
     // Expect "=>"
     if *pos >= tokens.len() || tokens[*pos] != "=>" {
@@ -379,8 +387,15 @@ fn parse_fn_statement(
         }
     }
 
-    // Evaluate the body once to advance pos past it
-    crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+    // Evaluate the body once to advance pos past it and check return type compatibility
+    let (_body_val, body_tw) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+    if let Some(expected) = ret_type_width {
+        if let Some(actual) = body_tw {
+            if actual > expected {
+                return Err(ParseError::UnexpectedEndOfInput);
+            }
+        }
+    }
     consume_semicolon(pos, tokens);
 
     // Clean up dummy param frames
@@ -390,7 +405,18 @@ fn parse_fn_statement(
 
     // Store function body token span + params in outermost (global) frame
     if !scope.0.is_empty() {
-        scope.0[0].insert(fn_name, (Value::FunctionBody { begin, params }, true, None));
+        scope.0[0].insert(
+            fn_name,
+            (
+                Value::FunctionBody {
+                    begin,
+                    params,
+                    ret_type_width,
+                },
+                true,
+                None,
+            ),
+        );
     }
 
     Ok(Some(()))
@@ -434,9 +460,16 @@ fn parse_let_statement(
     let rhs_token = (*pos < tokens.len()).then(|| tokens[*pos].clone());
     let (lhs, _) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
 
-    let rhs_type_from_var = rhs_token
-        .as_ref()
-        .and_then(|tok| scope.get(tok).map(|entry| entry.2.unwrap_or(0)));
+    // Determine RHS type width: prefer variable type, then function return type from FunctionBody
+    let rhs_type_from_var = rhs_token.as_ref().and_then(|tok| {
+        scope.get(tok).map(|entry| match &entry.0 {
+            Value::FunctionBody {
+                ret_type_width: Some(w),
+                ..
+            } => *w,
+            _ => entry.2.unwrap_or(0),
+        })
+    });
 
     if let Some(ref dt) = declared_type {
         check_type(
