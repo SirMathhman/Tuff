@@ -105,6 +105,21 @@ mod tests {
     }
 
     #[test]
+    fn test_is_type_check_bool_ok() {
+        assert_eq!(interpret("true is Bool"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_var_bool_is_bool_ok() {
+        assert_eq!(interpret("let x = true; x is Bool"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_var_bool_not_u8_fail() {
+        assert_eq!(interpret("let x = true; x is U8"), Ok(0));
+    }
+
+    #[test]
     fn test_is_type_check_var_u8_is_u8_ok() {
         assert_eq!(interpret("let x = 5U8; x is U8"), Ok(1));
     }
@@ -646,5 +661,10 @@ mod tests {
     #[test]
     fn test_fn_with_one_param() {
         assert_eq!(interpret("fn double(x : I32) => x * 2; double(49)"), Ok(98));
+    }
+
+    #[test]
+    fn test_fn_return_type_missing_token_errors() {
+        assert!(interpret("fn f() : ;").is_err());
     }
 }

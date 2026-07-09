@@ -174,11 +174,11 @@ fn parse_factor(
         }
         "true" => {
             *pos += 1;
-            Ok((1, None))
+            Ok((1, Some(u32::MAX)))
         }
         "false" => {
             *pos += 1;
-            Ok((0, None))
+            Ok((0, Some(u32::MAX)))
         }
         "if" => {
             *pos += 1;

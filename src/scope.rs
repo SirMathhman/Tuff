@@ -190,6 +190,10 @@ pub fn infer_type(declared: Option<&String>, rhs_tok: Option<&String>) -> Option
         }
     }
     if let Some(tok) = rhs_tok {
+        // Boolean literals get the same width as "Bool" (u32::MAX)
+        if tok == "true" || tok == "false" {
+            return Some(u32::MAX);
+        }
         if let Some(sfx) = extract_suffix(tok) {
             return type_width(sfx);
         }
