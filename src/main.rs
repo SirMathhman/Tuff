@@ -2,6 +2,7 @@
 
 mod lexer;
 pub(crate) mod parser;
+pub(crate) mod scope;
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn main() {
