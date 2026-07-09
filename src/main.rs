@@ -56,7 +56,15 @@ fn parse_statement_list(
             continue;
         }
         // Handle bare assignment statement: x = expr ;
-        if try_parse_assignment(tokens, pos, scope)?.is_some() {
+        let is_assignment = *pos < tokens.len()
+            && scope.contains_key(tokens[*pos].as_str())
+            && *pos + 1 < tokens.len()
+            && tokens[*pos + 1] == "=";
+        if is_assignment {
+            let var_name = tokens[*pos].clone();
+            *pos += 1; // skip ident
+            do_assignment(tokens, pos, scope, &var_name)?;
+            consume_semicolon(pos, tokens);
             continue;
         }
         if tokens[*pos] == ";" {
@@ -67,26 +75,6 @@ fn parse_statement_list(
     }
 
     Ok(result)
-}
-
-/// Try to parse an assignment statement (ident = expr ;). Returns Some(()) if consumed.
-fn try_parse_assignment(
-    tokens: &[String],
-    pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
-) -> Result<Option<()>, ()> {
-    if *pos >= tokens.len()
-        || !scope.contains_key(tokens[*pos].as_str())
-        || *pos + 1 >= tokens.len()
-        || tokens[*pos + 1] != "="
-    {
-        return Ok(None);
-    }
-    let var_name = tokens[*pos].clone();
-    *pos += 1; // skip ident
-    do_assignment(tokens, pos, scope, &var_name)?;
-    consume_semicolon(pos, tokens);
-    Ok(Some(()))
 }
 
 /// Perform the core assignment: skip "=", evaluate RHS expression, store in scope.
