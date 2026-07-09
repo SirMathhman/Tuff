@@ -163,7 +163,6 @@ fn parse_for_statement(
         return Err(ParseError::MaxIterationsExceeded);
     }
 
-
     let remaining = if range_len > 0 { range_len - 1 } else { 0 };
     for i in 1..=remaining {
         // Set loop variable to current value
