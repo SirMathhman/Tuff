@@ -85,11 +85,16 @@ fn try_parse_assignment(
     let var_name = tokens[*pos].clone();
     *pos += 2; // skip ident and "="
     let val = parse_expression(tokens, pos, scope)?;
+    consume_semicolon(pos, tokens);
+    scope.insert(var_name, val);
+    Ok(Some(()))
+}
+
+/// Helper to optionally consume a trailing semicolon.
+fn consume_semicolon(pos: &mut usize, tokens: &[String]) {
     if *pos < tokens.len() && tokens[*pos] == ";" {
         *pos += 1;
     }
-    scope.insert(var_name, val);
-    Ok(Some(()))
 }
 
 /// Parse a `let [mut] x = expr ;` statement. Returns Some(()) if it consumed tokens, None otherwise.
@@ -102,23 +107,21 @@ fn parse_let_statement(
         return Ok(None);
     }
     *pos += 1; // skip "let"
+    // Skip optional "mut" keyword
+    if *pos < tokens.len() && tokens[*pos] == "mut" {
+        *pos += 1;
+    }
     if *pos >= tokens.len() {
         return Err(());
     }
     let var_name = tokens[*pos].clone();
     *pos += 1;
-    // Skip optional "mut" keyword
-    if *pos < tokens.len() && tokens[*pos] == "mut" {
-        *pos += 1;
-    }
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(());
     }
     *pos += 1; // skip "="
     let val = parse_expression(tokens, pos, scope)?;
-    if *pos < tokens.len() && tokens[*pos] == ";" {
-        *pos += 1; // skip ";"
-    }
+    consume_semicolon(pos, tokens);
     scope.insert(var_name, val);
     Ok(Some(()))
 }
@@ -268,9 +271,7 @@ fn parse_factor(
                 let var_name = token.clone();
                 *pos += 2; // skip ident and "="
                 let val = parse_expression(tokens, pos, scope)?;
-                if *pos < tokens.len() && tokens[*pos] == ";" {
-                    *pos += 1;
-                }
+                consume_semicolon(pos, tokens);
                 scope.insert(var_name, val);
                 Ok(val)
             } else {
