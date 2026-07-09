@@ -283,6 +283,14 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
             }
             Ok(val)
         }
+        "true" => {
+            *pos += 1;
+            Ok(1)
+        }
+        "false" => {
+            *pos += 1;
+            Ok(0)
+        }
         _ => {
             if let Ok(n) = token.parse::<i64>() {
                 *pos += 1;
@@ -488,5 +496,15 @@ mod tests {
     fn test_assignment_in_expression_context() {
         // Assignment inside parens exercises the parse_factor assignment path
         assert_eq!(interpret("let mut x = 0; (x = 5) + 3"), Ok(8));
+    }
+
+    #[test]
+    fn test_boolean_true_returns_one() {
+        assert_eq!(interpret("let x = true; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_boolean_false_returns_zero() {
+        assert_eq!(interpret("let x = false; x"), Ok(0));
     }
 }
