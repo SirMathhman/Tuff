@@ -1,5 +1,23 @@
 use std::collections::HashMap;
 
+/// Runtime value — integer or range (for `let r = 0..4` semantics).
+#[derive(Debug, Clone, Copy)]
+pub enum Value {
+    Int(i64),
+    Range { start: i64, end: i64 },
+}
+
+impl Value {
+    /// Extract integer value (returns 0 on Range — callers guard with type).
+    #[cfg_attr(coverage_nightly, coverage(off))] // defensive branch unreachable with current callers
+    pub fn as_int(&self) -> i64 {
+        match self {
+            Value::Int(v) => *v,
+            _ => 0, // unreachable when guarded
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedEndOfInput,
@@ -9,7 +27,6 @@ pub enum ParseError {
     UnknownIdentifier(String),
     MaxIterationsExceeded,
 }
-
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -29,7 +46,7 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-type ScopeFrame = HashMap<String, (i64, bool)>;
+type ScopeFrame = HashMap<String, (Value, bool)>;
 
 /// Nested scope stack — innermost frame is last element.
 pub struct Scope(Vec<ScopeFrame>);
@@ -52,8 +69,17 @@ impl Scope {
     }
 
     /// Look up a variable from innermost to outermost scope.
-    pub fn get(&self, name: &str) -> Option<&(i64, bool)> {
+    pub fn get(&self, name: &str) -> Option<&(Value, bool)> {
         self.0.iter().rev().find_map(|frame| frame.get(name))
+    }
+
+    /// Look up range bounds if the variable holds a Range value.
+    pub fn get_range(&self, name: &str) -> Option<(i64, i64)> {
+        let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
+        match entry.0 {
+            Value::Range { start, end } => Some((start, end)),
+            _ => None,
+        }
     }
 
     /// Check if a variable exists in any scope level.
@@ -205,17 +231,21 @@ fn parse_for_statement(
     }
     *pos += 1; // skip "in"
 
-    // Parse start expression
-    let start_val = parse_expression(tokens, pos, scope)?;
-
-    // Skip range operator `..`
-    if *pos >= tokens.len() || tokens[*pos] != ".." {
-        return Err(ParseError::UnexpectedEndOfInput);
-    }
-    *pos += 1; // skip ".."
-
-    // Parse end expression
-    let end_val = parse_expression(tokens, pos, scope)?;
+    let (start_val, end_val) = if scope.get_range(&tokens[*pos]).is_some() && *pos < tokens.len() {
+        // Range variable: `for (i in range_var)` — resolve bounds from scope
+        let (s, e) = scope.get_range(&tokens[*pos]).unwrap();
+        *pos += 1; // skip ident
+        (s, e)
+    } else {
+        // Inline range: `for (i in start..end)`
+        let s = parse_expression(tokens, pos, scope)?;
+        if *pos >= tokens.len() || tokens[*pos] != ".." {
+            return Err(ParseError::UnexpectedEndOfInput);
+        }
+        *pos += 1; // skip ".."
+        let e = parse_expression(tokens, pos, scope)?;
+        (s, e)
+    };
 
     // Skip closing paren: `)`
     if *pos >= tokens.len() || tokens[*pos] != ")" {
@@ -227,9 +257,8 @@ fn parse_for_statement(
 
     // Pre-declare loop variable so the first-pass scan can resolve references to it
     if let Some(frame) = scope.0.last_mut() {
-        frame.insert(var_name.clone(), (start_val, true));
+        frame.insert(var_name.clone(), (Value::Int(start_val), true));
     }
-
     // First pass: scan body to find loop boundary
     let mut scan_pos = body_begin;
     eval_loop_body_stmt(tokens, &mut scan_pos, scope)?;
@@ -247,7 +276,7 @@ fn parse_for_statement(
     for i in 1..=remaining {
         // Set loop variable to current value
         if let Some(frame) = scope.0.last_mut() {
-            frame.insert(var_name.clone(), (start_val + i, true));
+            frame.insert(var_name.clone(), (Value::Int(start_val + i), true));
         }
 
         // Execute body at fresh position
@@ -362,7 +391,11 @@ fn do_assignment(
             if !entry.1 {
                 return Err(ParseError::ImmutableReassignment(var_name.to_string()));
             }
-            entry.0 = if op == "+=" { entry.0 + val } else { val };
+            entry.0 = Value::Int(if op == "+=" {
+                entry.0.as_int() + val
+            } else {
+                val
+            });
         } else {
             unreachable!("variable was found but get_mut returned None");
         }
@@ -404,12 +437,30 @@ fn parse_let_statement(
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(ParseError::MissingEqualsSign);
     }
-    // Evaluate RHS
+    // Evaluate RHS — check for range literal `expr .. expr`
     *pos += 1; // skip "="
-    let val = parse_expression(tokens, pos, scope)?;
-    // Insert directly into current (innermost) frame — shadows outer bindings
-    if let Some(frame) = scope.0.last_mut() {
-        frame.insert(var_name.clone(), (val, is_mut));
+    let lhs = parse_expression(tokens, pos, scope)?;
+    if *pos < tokens.len() && tokens[*pos] == ".." {
+        *pos += 1; // skip ".."
+        let rhs = parse_expression(tokens, pos, scope)?;
+        // Insert directly into current (innermost) frame — shadows outer bindings
+        if let Some(frame) = scope.0.last_mut() {
+            frame.insert(
+                var_name.clone(),
+                (
+                    Value::Range {
+                        start: lhs,
+                        end: rhs,
+                    },
+                    is_mut,
+                ),
+            );
+        }
+    } else {
+        // Insert directly into current (innermost) frame — shadows outer bindings
+        if let Some(frame) = scope.0.last_mut() {
+            frame.insert(var_name.clone(), (Value::Int(lhs), is_mut));
+        }
     }
     consume_semicolon(pos, tokens);
     Ok(Some(()))
@@ -562,7 +613,11 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
                 && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")
             {
                 // Variable reference (not an assignment)
-                let val = scope.get(token.as_str()).map(|e| e.0).unwrap_or(0);
+                let val = scope
+                    .get(token.as_str())
+                    .map(|e| e.0)
+                    .unwrap_or(Value::Int(0))
+                    .as_int();
                 *pos += 1;
                 Ok(val)
             } else if scope.contains_key(token.as_str())

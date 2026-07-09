@@ -387,4 +387,41 @@ mod tests {
     fn test_for_missing_close_paren_errors() {
         assert!(interpret("for (i in 0..4 i").is_err());
     }
+
+    #[test]
+    fn test_for_loop_range_variable() {
+        // Range stored in a variable and reused in for-loop
+        assert_eq!(
+            interpret("let mut sum = 0; let range = 0..4; for (i in range) sum += i; sum"),
+            Ok(6)
+        );
+    }
+
+    #[test]
+    fn test_for_loop_range_variable_max_iterations() {
+        // Range variable with huge span should still hit max-iterations guard
+        assert!(interpret("let mut x = 0; let r = 0..2000; for (i in r) x += 1; x").is_err());
+    }
+
+    #[test]
+    fn test_let_range_literal_stored() {
+        // Range literal is stored as Value::Range and can be used later;
+        // for-loop discards body result so trailing expression gives final value
+        assert_eq!(
+            interpret("let range = 2..5; for (i in range) i + 1; 9"),
+            Ok(9)
+        );
+    }
+
+    #[test]
+    fn test_let_range_shadowed_by_int() {
+        // Range variable can be shadowed by a plain int via let
+        assert_eq!(interpret("let r = 0..3; let r = 7; r"), Ok(7));
+    }
+
+    #[test]
+    fn test_for_loop_int_variable_not_range_errors() {
+        // Using an integer variable as range should fail (get_range returns None)
+        assert!(interpret("let x = 5; for (i in x) i").is_err());
+    }
 }
