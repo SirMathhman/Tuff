@@ -1,3 +1,10 @@
+$build = cargo build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Failed to build"
+    $build | Out-Host
+    exit 2
+}
+
 $coverage = cargo +nightly llvm-cov --fail-under-lines 100 --show-missing-lines 2>&1 | Select-String -Pattern "panic|assertion|failed|Uncovered Lines|\.rs"
 
 if ($LASTEXITCODE -ne 0) {
