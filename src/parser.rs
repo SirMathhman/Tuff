@@ -152,12 +152,12 @@ fn parse_statement_list(
         if parse_let_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
-        // Handle bare assignment statement: x = expr ;
-        let is_assignment = *pos < tokens.len()
+        // Handle assignment statement: x = expr ; or compound x += expr ;
+        let is_assign_stmt = *pos < tokens.len()
             && scope.contains_key(tokens[*pos].as_str())
             && *pos + 1 < tokens.len()
-            && tokens[*pos + 1] == "=";
-        if is_assignment {
+            && matches!(tokens[*pos + 1].as_str(), "=" | "+=");
+        if is_assign_stmt {
             let var_name = tokens[*pos].clone();
             *pos += 1; // skip ident
             do_assignment(tokens, pos, scope, &var_name)?;
@@ -177,7 +177,7 @@ fn parse_statement_list(
     Ok(result)
 }
 
-/// Perform the core assignment: skip "=", evaluate RHS expression, store in scope.
+/// Perform the core assignment: skip op ("=" or "+="), evaluate RHS expression, store in scope.
 #[cfg_attr(coverage_nightly, coverage(off))] // defensive branches unreachable with current callers
 fn do_assignment(
     tokens: &[String],
@@ -185,7 +185,8 @@ fn do_assignment(
     scope: &mut Scope,
     var_name: &str,
 ) -> Result<i64, ParseError> {
-    *pos += 1; // skip "="
+    let op = tokens[*pos].clone();
+    *pos += 1; // skip "=" or "+="
     let val = parse_expression(tokens, pos, scope)?;
     // Search all frames innermost-first for the variable (reassignment path)
     if let Some(frame) = scope.0.iter_mut().rev().find(|f| f.contains_key(var_name)) {
@@ -194,7 +195,7 @@ fn do_assignment(
             if !entry.1 {
                 return Err(ParseError::ImmutableReassignment(var_name.to_string()));
             }
-            entry.0 = val;
+            entry.0 = if op == "+=" { entry.0 + val } else { val };
         } else {
             unreachable!("variable was found but get_mut returned None");
         }

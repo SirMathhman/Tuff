@@ -294,6 +294,14 @@ mod tests {
     #[test]
     fn test_if_block_else_single_statement() {
         // Block body for `if`, single-statement body for `else`
-        assert_eq!(interpret("let mut x = 0; if (false) { x = 3; } else x = 5; x"), Ok(5));
+        assert_eq!(
+            interpret("let mut x = 0; if (false) { x = 3; } else x = 5; x"),
+            Ok(5)
+        );
+    }
+
+    #[test]
+    fn test_compound_add_assignment() {
+        assert_eq!(interpret("let mut x = 0; x += 1; x"), Ok(1));
     }
 }

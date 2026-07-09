@@ -6,6 +6,11 @@ pub fn tokenize(input: &str) -> Vec<String> {
     while let Some(&ch) = chars.peek() {
         if ch.is_whitespace() {
             chars.next();
+        } else if ch == '+' && chars.clone().nth(1) == Some('=') {
+            // Handle += as a single token (must come before single-char handling)
+            chars.next();
+            chars.next();
+            tokens.push("+=".to_string());
         } else if matches!(
             ch,
             '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
