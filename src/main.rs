@@ -215,7 +215,7 @@ fn tokenize(input: &str) -> Vec<String> {
             chars.next();
         } else if matches!(
             ch,
-            '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
+            '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';' | '<' | '>'
         ) {
             tokens.push(ch.to_string());
             chars.next();
@@ -286,12 +286,26 @@ fn parse_expression(
     Ok(left)
 }
 
-fn parse_and(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
+fn parse_comparison(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
     let mut left = parse_additive(tokens, pos, scope)?;
+
+    while *pos < tokens.len() && (tokens[*pos] == "<" || tokens[*pos] == ">") {
+        let op = tokens[*pos].clone();
+        *pos += 1;
+        let right = parse_additive(tokens, pos, scope)?;
+        left = if op == "<" && left < right
+            || op == ">" && left > right { 1 } else { 0 };
+    }
+
+    Ok(left)
+}
+
+fn parse_and(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
+    let mut left = parse_comparison(tokens, pos, scope)?;
 
     while *pos < tokens.len() && tokens[*pos] == "&&" {
         *pos += 1;
-        let right = parse_additive(tokens, pos, scope)?;
+        let right = parse_comparison(tokens, pos, scope)?;
         // Logical AND: result is 1 if both operands are non-zero, else 0
         left = if left != 0 && right != 0 { 1 } else { 0 };
     }
@@ -620,5 +634,10 @@ mod tests {
     fn test_block_shadow_does_not_affect_outer() {
         // let inside a block shadows outer variable but does not modify it on exit
         assert_eq!(interpret("let x = 1; { let x = 0; } x"), Ok(1));
+    }
+
+    #[test]
+    fn test_less_than_comparison() {
+        assert_eq!(interpret("let x = 0; let y = 1; x < y"), Ok(1));
     }
 }
