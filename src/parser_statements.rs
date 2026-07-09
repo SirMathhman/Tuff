@@ -213,6 +213,9 @@ fn parse_statement_list_with_tw(
     let mut result = (0i64, None);
 
     while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
+        if parse_fn_statement(tokens, pos, scope)? == Some(()) {
+            continue;
+        }
         if parse_let_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
@@ -294,6 +297,60 @@ pub fn do_assignment(
         return Err(ParseError::UnknownIdentifier(var_name.to_string()));
     }
     Ok(val)
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in type-checking helpers
+fn parse_fn_statement(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut Scope,
+) -> Result<Option<()>, ParseError> {
+    if *pos >= tokens.len() || tokens[*pos] != "fn" {
+        return Ok(None);
+    }
+    *pos += 1; // skip "fn"
+
+    // Expect identifier for function name
+    let fn_name = if *pos < tokens.len() {
+        tokens[*pos].clone()
+    } else {
+        return Err(ParseError::UnexpectedEndOfInput);
+    };
+    *pos += 1; // skip ident
+
+    // Skip "("
+    if *pos >= tokens.len() || tokens[*pos] != "(" {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1;
+
+    // Skip ")"
+    if *pos >= tokens.len() || tokens[*pos] != ")" {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1;
+
+    // Expect "=>"
+    if *pos >= tokens.len() || tokens[*pos] != "=>" {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1; // skip "=>"
+
+    // Record body start (the expression token position)
+    let begin = *pos;
+
+    // Evaluate the body once to advance pos past it
+    crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+    consume_semicolon(pos, tokens);
+
+    let end = *pos;
+
+    // Store function body token span in outermost (global) frame
+    if !scope.0.is_empty() {
+        scope.0[0].insert(fn_name, (Value::FunctionBody { begin, end }, true, None));
+    }
+
+    Ok(Some(()))
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in type-checking helpers

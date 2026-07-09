@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
-/// Runtime value — integer or range (for `let r = 0..4` semantics).
-#[derive(Debug, Clone, Copy)]
+/// Runtime value — integer, range (for `let r = 0..4`), or function body token span.
+#[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
     Range { start: i64, end: i64 },
+    FunctionBody { begin: usize, end: usize },
 }
 
 impl Value {
-    /// Extract integer value (returns 0 on Range — callers guard with type).
+    /// Extract integer value (returns 0 on non-Int — callers guard with type).
     #[cfg_attr(coverage_nightly, coverage(off))] // defensive branch unreachable with current callers
     pub fn as_int(&self) -> i64 {
         match self {
@@ -53,7 +54,7 @@ pub type VarTypeWidth = u32;
 type ScopeFrame = HashMap<String, (Value, bool, Option<VarTypeWidth>)>;
 
 /// Nested scope stack — innermost frame is last element.
-pub struct Scope(Vec<ScopeFrame>);
+pub struct Scope(pub Vec<ScopeFrame>);
 
 impl Scope {
     pub fn new() -> Self {
@@ -90,6 +91,15 @@ impl Scope {
     /// Check if a variable exists in any scope level.
     pub fn contains_key(&self, name: &str) -> bool {
         self.0.iter().any(|frame| frame.contains_key(name))
+    }
+
+    /// Look up function body token span for `name` (innermost first).
+    pub fn get_fn_body(&self, name: &str) -> Option<(usize, usize)> {
+        let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
+        match entry.0 {
+            Value::FunctionBody { begin, end } => Some((begin, end)),
+            _ => None,
+        }
     }
 
     /// Get mutable access to the innermost (last) scope frame.

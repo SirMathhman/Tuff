@@ -621,4 +621,9 @@ mod tests {
     fn test_match_wildcard_missing_arrow_errors() {
         assert!(interpret("match (1) { case _ ; }").is_err());
     }
+
+    #[test]
+    fn test_fn_define_and_call() {
+        assert_eq!(interpret("fn get() => 100; get()"), Ok(100));
+    }
 }

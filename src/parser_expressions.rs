@@ -254,6 +254,23 @@ fn parse_primary(
             return Ok((result, None));
         }
         Ok((n, val_tw))
+    } else if scope.get_fn_body(token.as_str()).is_some()
+        && *pos + 1 < tokens.len()
+        && tokens[*pos + 1] == "("
+    {
+        // Function call: name() (guard above already confirmed "(" at pos+1)
+        let (begin, _end) = scope.get_fn_body(token.as_str()).unwrap();
+        *pos += 1; // skip ident
+        *pos += 1; // skip "("
+        if *pos < tokens.len() && tokens[*pos] == ")" {
+            *pos += 1;
+        }
+        // Evaluate the stored body token span in a fresh scope frame
+        scope.push();
+        let mut fn_pos = begin;
+        let (val, tw) = parse_expression(tokens, &mut fn_pos, scope)?;
+        scope.pop();
+        Ok((val, tw))
     } else if scope.contains_key(token.as_str())
         && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")
     {
@@ -265,7 +282,7 @@ fn parse_primary(
         }
         let val = scope
             .get(token.as_str())
-            .map(|e| e.0)
+            .map(|e| e.0.clone())
             .unwrap_or(crate::scope::Value::Int(0))
             .as_int();
         Ok((val, var_type.flatten()))
