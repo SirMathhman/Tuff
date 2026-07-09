@@ -392,4 +392,10 @@ mod tests {
         // Bare semicolons at the top level should be handled gracefully
         assert_eq!(interpret("; 5 ; "), Ok(5));
     }
+
+    #[test]
+    fn test_let_only_returns_zero() {
+        // No trailing expression, so result stays at initial value of 0
+        assert_eq!(interpret("let x = 100;"), Ok(0));
+    }
 }
