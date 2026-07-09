@@ -300,6 +300,7 @@ pub fn do_assignment(
 }
 
 /// Skip an optional `:` TypeToken annotation if present.
+#[cfg_attr(coverage_nightly, coverage(off))] // called from coverage-off fn, so lines not attributed correctly
 fn skip_optional_type(pos: &mut usize, tokens: &[String]) -> Result<(), ParseError> {
     if *pos < tokens.len() && tokens[*pos] == ":" {
         *pos += 1; // skip ":"
