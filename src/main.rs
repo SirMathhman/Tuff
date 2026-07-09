@@ -277,8 +277,17 @@ mod tests {
     }
 
     #[test]
+    fn test_if_block_without_trailing_semicolon() {
+        // Block body followed by expression without semicolon separator
+        assert_eq!(interpret("let mut x = 0; if (true) { x = 3; } x"), Ok(3));
+    }
+
+    #[test]
     fn test_if_else_with_blocks() {
         // Exercises the else branch of parse_if_statement with block bodies
-        assert_eq!(interpret("let mut x = 0; if (0) { x = 1; } else { x = 42; }; x"), Ok(42));
+        assert_eq!(
+            interpret("let mut x = 0; if (0) { x = 1; } else { x = 42; }; x"),
+            Ok(42)
+        );
     }
 }

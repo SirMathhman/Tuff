@@ -96,11 +96,7 @@ fn parse_if_condition(
 }
 
 /// Parse the body of an if/else branch (block or single statement).
-fn parse_if_body(
-    tokens: &[String],
-    pos: &mut usize,
-    scope: &mut Scope,
-) -> Result<i64, ParseError> {
+fn parse_if_body(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
     if *pos < tokens.len() && tokens[*pos] == "{" {
         // Block body — consume delimiters like parse_factor does
         *pos += 1; // skip "{"
@@ -426,4 +422,3 @@ fn parse_block(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<
     scope.pop();
     result
 }
-
