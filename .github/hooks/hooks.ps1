@@ -1,7 +1,8 @@
-$coverage = cargo +nightly llvm-cov --fail-under-lines 100 --show-missing-lines 2>&1
+$coverage = cargo +nightly llvm-cov --fail-under-lines 100 --show-missing-lines 2>&1 | Select-String -Pattern "panic|assertion|failed|Uncovered Lines|\.rs"
+
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Found test or coverage issues."
-    Write-Host $coverage
+    $coverage| Out-Host
     exit 2
 } else {
     Write-Host "No test or coverage issues found."
@@ -10,7 +11,7 @@ if ($LASTEXITCODE -ne 0) {
 $duplication = pmd cpd --dir src --language rust --minimum-tokens 50 --ignore-literals --ignore-identifiers 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Found duplication."
-    Write-Host $duplication
+    $duplication | Out-Host
     exit 2
 } else {
     Write-Host "No duplication found."
