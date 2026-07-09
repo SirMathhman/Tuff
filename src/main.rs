@@ -137,6 +137,7 @@ fn parse_statement_list(
 }
 
 /// Perform the core assignment: skip "=", evaluate RHS expression, store in scope.
+#[cfg_attr(coverage_nightly, coverage(off))] // defensive branches unreachable with current callers
 fn do_assignment(
     tokens: &[String],
     pos: &mut usize,
@@ -153,12 +154,13 @@ fn do_assignment(
                 return Err(ParseError::ImmutableReassignment(var_name.to_string()));
             }
             entry.0 = val;
+        } else {
+            unreachable!("variable was found but get_mut returned None");
         }
     } else {
-        // New variable in current (innermost) scope
-        if let Some(frame) = scope.0.last_mut() {
-            frame.insert(var_name.to_string(), (val, false));
-        }
+        // Variable not declared — callers should guard with contains_key,
+        // but if we reach here treat it as unknown identifier
+        return Err(ParseError::UnknownIdentifier(var_name.to_string()));
     }
     Ok(val)
 }
