@@ -25,7 +25,38 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-type Scope = std::collections::HashMap<String, (i64, bool)>;
+type ScopeFrame = std::collections::HashMap<String, (i64, bool)>;
+
+/// Nested scope stack — innermost frame is last element.
+struct Scope(Vec<ScopeFrame>);
+
+impl Scope {
+    fn new() -> Self {
+        Scope(vec![ScopeFrame::new()])
+    }
+
+    /// Push a new local scope (for blocks).
+    fn push(&mut self) {
+        self.0.push(ScopeFrame::new());
+    }
+
+    /// Pop the innermost scope.
+    fn pop(&mut self) {
+        if self.0.len() > 1 {
+            self.0.pop();
+        }
+    }
+
+    /// Look up a variable from innermost to outermost scope.
+    fn get(&self, name: &str) -> Option<&(i64, bool)> {
+        self.0.iter().rev().find_map(|frame| frame.get(name))
+    }
+
+    /// Check if a variable exists in any scope level.
+    fn contains_key(&self, name: &str) -> bool {
+        self.0.iter().any(|frame| frame.contains_key(name))
+    }
+}
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn main() {
@@ -114,14 +145,20 @@ fn do_assignment(
 ) -> Result<i64, ParseError> {
     *pos += 1; // skip "="
     let val = parse_expression(tokens, pos, scope)?;
-    if let Some(entry) = scope.get_mut(var_name) {
-        // Reassignment — check mutability
-        if !entry.1 {
-            return Err(ParseError::ImmutableReassignment(var_name.to_string()));
+    // Search all frames innermost-first for the variable (reassignment path)
+    if let Some(frame) = scope.0.iter_mut().rev().find(|f| f.contains_key(var_name)) {
+        if let Some(entry) = frame.get_mut(var_name) {
+            // Reassignment — check mutability
+            if !entry.1 {
+                return Err(ParseError::ImmutableReassignment(var_name.to_string()));
+            }
+            entry.0 = val;
         }
-        entry.0 = val;
     } else {
-        scope.insert(var_name.to_string(), (val, false));
+        // New variable in current (innermost) scope
+        if let Some(frame) = scope.0.last_mut() {
+            frame.insert(var_name.to_string(), (val, false));
+        }
     }
     Ok(val)
 }
@@ -156,12 +193,12 @@ fn parse_let_statement(
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(ParseError::MissingEqualsSign);
     }
-    // Allow shadowing: remove existing binding so it's treated as a fresh declaration
-    scope.remove(&var_name);
-    do_assignment(tokens, pos, scope, &var_name)?;
-    // Mark mutability
-    if let Some(entry) = scope.get_mut(&var_name) {
-        entry.1 = is_mut;
+    // Evaluate RHS
+    *pos += 1; // skip "="
+    let val = parse_expression(tokens, pos, scope)?;
+    // Insert directly into current (innermost) frame — shadows outer bindings
+    if let Some(frame) = scope.0.last_mut() {
+        frame.insert(var_name.clone(), (val, is_mut));
     }
     consume_semicolon(pos, tokens);
     Ok(Some(()))
@@ -341,7 +378,7 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
                 && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")
             {
                 // Variable reference (not an assignment)
-                let val = scope[token.as_str()].0;
+                let val = scope.get(token.as_str()).map(|e| e.0).unwrap_or(0);
                 *pos += 1;
                 Ok(val)
             } else if scope.contains_key(token.as_str())
@@ -362,7 +399,12 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
 }
 
 fn parse_block(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
-    parse_statement_list(tokens, pos, scope, Some("}"))
+    // Push a new local scope for the block
+    scope.push();
+    let result = parse_statement_list(tokens, pos, scope, Some("}"));
+    // Pop the block scope when done
+    scope.pop();
+    result
 }
 
 #[cfg(test)]
@@ -570,5 +612,11 @@ mod tests {
     fn test_let_shadowing_allows_rebind() {
         // let x = ... followed by another let x = ... should shadow the first binding
         assert_eq!(interpret("let x = 0; let x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_block_shadow_does_not_affect_outer() {
+        // let inside a block shadows outer variable but does not modify it on exit
+        assert_eq!(interpret("let x = 1; { let x = 0; } x"), Ok(1));
     }
 }
