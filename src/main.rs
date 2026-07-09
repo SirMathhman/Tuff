@@ -2,6 +2,8 @@
 
 mod lexer;
 pub(crate) mod parser;
+mod parser_expressions;
+pub(crate) mod parser_statements;
 pub(crate) mod scope;
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -115,6 +117,26 @@ mod tests {
     #[test]
     fn test_is_type_check_literal_narrow_fail() {
         assert_eq!(interpret("100U16 is U8"), Ok(0));
+    }
+
+    #[test]
+    fn test_is_type_check_plain_int_ok() {
+        assert_eq!(interpret("100 is I32"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_paren_expr_widened() {
+        assert_eq!(interpret("(1U8 + 1U16) is U16"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_paren_expr_i16() {
+        assert_eq!(interpret("(1U8 + 1U16) is I16"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_wider_than_target_false() {
+        assert_eq!(interpret("(1U8 + 1U16) is U8"), Ok(0));
     }
 
     #[test]
@@ -316,6 +338,16 @@ mod tests {
     #[test]
     fn test_logical_or_with_booleans() {
         assert_eq!(interpret("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
+    fn test_logical_or_both_false() {
+        assert_eq!(interpret("false || false"), Ok(0));
+    }
+
+    #[test]
+    fn test_logical_and_both_true() {
+        assert_eq!(interpret("true && true"), Ok(1));
     }
 
     #[test]

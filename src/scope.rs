@@ -201,7 +201,7 @@ pub fn try_is_type_check(pos: &mut usize, tokens: &[String], val_tw: Option<u32>
         *pos += 1; // skip "is"
         let target = type_width(&tokens[*pos]).unwrap_or(0);
         *pos += 1; // skip target type token
-        Some(if val_tw.map(|w| w <= target).unwrap_or(false) {
+        Some(if val_tw.map(|w| w <= target).unwrap_or(true) {
             1
         } else {
             0
