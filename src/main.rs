@@ -1,5 +1,7 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
+type Scope = std::collections::HashMap<String, (i64, bool)>;
+
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn main() {
     use std::io::{self, BufRead};
@@ -29,7 +31,8 @@ fn interpret(source: &str) -> Result<i64, &'static str> {
     if tokens.is_empty() {
         return Ok(0);
     }
-    let mut scope = std::collections::HashMap::new();
+    // Scope maps variable name to (value, is_mut)
+    let mut scope = Scope::new();
     parse_statements(&tokens, &mut 0, &mut scope).map_err(|_| "parse error")
 }
 
@@ -37,7 +40,7 @@ fn interpret(source: &str) -> Result<i64, &'static str> {
 fn parse_statements(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
 ) -> Result<i64, ()> {
     parse_statement_list(tokens, pos, scope, None)
 }
@@ -46,7 +49,7 @@ fn parse_statements(
 fn parse_statement_list(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
     terminator: Option<&'static str>,
 ) -> Result<i64, ()> {
     let mut result = 0i64;
@@ -81,12 +84,20 @@ fn parse_statement_list(
 fn do_assignment(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
     var_name: &str,
 ) -> Result<i64, ()> {
     *pos += 1; // skip "="
     let val = parse_expression(tokens, pos, scope)?;
-    scope.insert(var_name.to_string(), val);
+    if let Some(entry) = scope.get_mut(var_name) {
+        // Reassignment — check mutability
+        if !entry.1 {
+            return Err(());
+        }
+        entry.0 = val;
+    } else {
+        scope.insert(var_name.to_string(), (val, false));
+    }
     Ok(val)
 }
 
@@ -101,14 +112,15 @@ fn consume_semicolon(pos: &mut usize, tokens: &[String]) {
 fn parse_let_statement(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
 ) -> Result<Option<()>, ()> {
     if *pos >= tokens.len() || tokens[*pos] != "let" {
         return Ok(None);
     }
     *pos += 1; // skip "let"
     // Skip optional "mut" keyword
-    if *pos < tokens.len() && tokens[*pos] == "mut" {
+    let is_mut = *pos < tokens.len() && tokens[*pos] == "mut";
+    if is_mut {
         *pos += 1;
     }
     if *pos >= tokens.len() {
@@ -120,6 +132,10 @@ fn parse_let_statement(
         return Err(());
     }
     do_assignment(tokens, pos, scope, &var_name)?;
+    // Mark mutability
+    if let Some(entry) = scope.get_mut(&var_name) {
+        entry.1 = is_mut;
+    }
     consume_semicolon(pos, tokens);
     Ok(Some(()))
 }
@@ -180,7 +196,7 @@ fn tokenize(input: &str) -> Vec<String> {
 fn parse_expression(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
 ) -> Result<i64, ()> {
     let mut left = parse_term(tokens, pos, scope)?;
 
@@ -201,7 +217,7 @@ fn parse_expression(
 fn parse_term(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
 ) -> Result<i64, ()> {
     let mut left = parse_factor(tokens, pos, scope)?;
 
@@ -225,7 +241,7 @@ fn parse_term(
 fn parse_factor(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
 ) -> Result<i64, ()> {
     if *pos >= tokens.len() {
         return Err(());
@@ -258,7 +274,7 @@ fn parse_factor(
                 && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")
             {
                 // Variable reference (not an assignment)
-                let val = scope[token.as_str()];
+                let val = scope[token.as_str()].0;
                 *pos += 1;
                 Ok(val)
             } else if scope.contains_key(token.as_str())
@@ -281,7 +297,7 @@ fn parse_factor(
 fn parse_block(
     tokens: &[String],
     pos: &mut usize,
-    scope: &mut std::collections::HashMap<String, i64>,
+    scope: &mut Scope,
 ) -> Result<i64, ()> {
     parse_statement_list(tokens, pos, scope, Some("}"))
 }
@@ -436,6 +452,12 @@ mod tests {
     fn test_top_level_semicolon() {
         // Bare semicolons at the top level should be handled gracefully
         assert_eq!(interpret("; 5 ; "), Ok(5));
+    }
+
+    #[test]
+    fn test_reassign_immutable_errors() {
+        // Reassigning a non-mut variable should fail
+        assert!(interpret("let x = 0; x = 1; x").is_err());
     }
 
     #[test]
