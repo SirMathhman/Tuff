@@ -83,11 +83,23 @@ fn try_parse_assignment(
         return Ok(None);
     }
     let var_name = tokens[*pos].clone();
-    *pos += 2; // skip ident and "="
-    let val = parse_expression(tokens, pos, scope)?;
+    *pos += 1; // skip ident
+    do_assignment(tokens, pos, scope, &var_name)?;
     consume_semicolon(pos, tokens);
-    scope.insert(var_name, val);
     Ok(Some(()))
+}
+
+/// Perform the core assignment: skip "=", evaluate RHS expression, store in scope.
+fn do_assignment(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+    var_name: &str,
+) -> Result<i64, ()> {
+    *pos += 1; // skip "="
+    let val = parse_expression(tokens, pos, scope)?;
+    scope.insert(var_name.to_string(), val);
+    Ok(val)
 }
 
 /// Helper to optionally consume a trailing semicolon.
@@ -119,10 +131,8 @@ fn parse_let_statement(
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(());
     }
-    *pos += 1; // skip "="
-    let val = parse_expression(tokens, pos, scope)?;
+    do_assignment(tokens, pos, scope, &var_name)?;
     consume_semicolon(pos, tokens);
-    scope.insert(var_name, val);
     Ok(Some(()))
 }
 
@@ -269,10 +279,9 @@ fn parse_factor(
             {
                 // Assignment expression: x = expr
                 let var_name = token.clone();
-                *pos += 2; // skip ident and "="
-                let val = parse_expression(tokens, pos, scope)?;
+                *pos += 1; // skip ident ("=" skipped by do_assignment)
+                let val = do_assignment(tokens, pos, scope, &var_name)?;
                 consume_semicolon(pos, tokens);
-                scope.insert(var_name, val);
                 Ok(val)
             } else {
                 Err(())
@@ -450,5 +459,11 @@ mod tests {
     #[test]
     fn test_mut_and_reassignment() {
         assert_eq!(interpret("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_assignment_in_expression_context() {
+        // Assignment inside parens exercises the parse_factor assignment path
+        assert_eq!(interpret("let mut x = 0; (x = 5) + 3"), Ok(8));
     }
 }
