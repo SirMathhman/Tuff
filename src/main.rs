@@ -178,6 +178,11 @@ fn tokenize(input: &str) -> Vec<String> {
         ) {
             tokens.push(ch.to_string());
             chars.next();
+        } else if ch == '&' && *chars.peek().unwrap_or(&' ') == '&' {
+            // Handle && as a single token
+            chars.next();
+            chars.next();
+            tokens.push("&&".to_string());
         } else if ch == '|' && *chars.peek().unwrap_or(&' ') == '|' {
             // Handle || as a single token
             chars.next();
@@ -228,13 +233,26 @@ fn parse_expression(
     pos: &mut usize,
     scope: &mut Scope,
 ) -> Result<i64, ParseError> {
-    let mut left = parse_additive(tokens, pos, scope)?;
+    let mut left = parse_and(tokens, pos, scope)?;
 
     while *pos < tokens.len() && tokens[*pos] == "||" {
         *pos += 1;
-        let right = parse_additive(tokens, pos, scope)?;
+        let right = parse_and(tokens, pos, scope)?;
         // Logical OR: result is 1 if either operand is non-zero, else 0
         left = if left != 0 || right != 0 { 1 } else { 0 };
+    }
+
+    Ok(left)
+}
+
+fn parse_and(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
+    let mut left = parse_additive(tokens, pos, scope)?;
+
+    while *pos < tokens.len() && tokens[*pos] == "&&" {
+        *pos += 1;
+        let right = parse_additive(tokens, pos, scope)?;
+        // Logical AND: result is 1 if both operands are non-zero, else 0
+        left = if left != 0 && right != 0 { 1 } else { 0 };
     }
 
     Ok(left)
@@ -533,5 +551,10 @@ mod tests {
     #[test]
     fn test_logical_or_with_booleans() {
         assert_eq!(interpret("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
+    fn test_logical_and_with_booleans() {
+        assert_eq!(interpret("let x = true; let y = false; x && y"), Ok(0));
     }
 }
