@@ -29,7 +29,67 @@ fn interpret(source: &str) -> Result<i64, &'static str> {
     if tokens.is_empty() {
         return Ok(0);
     }
-    parse_expression(&tokens, &mut 0).map_err(|_| "parse error")
+    let mut scope = std::collections::HashMap::new();
+    parse_statements(&tokens, &mut 0, &mut scope).map_err(|_| "parse error")
+}
+
+/// Parse a sequence of statements (let-declarations or expressions), returning the last expression value.
+fn parse_statements(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<i64, ()> {
+    parse_statement_list(tokens, pos, scope, None)
+}
+
+/// Generic helper to parse a list of statements until an optional terminator token.
+fn parse_statement_list(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+    terminator: Option<&'static str>,
+) -> Result<i64, ()> {
+    let mut result = 0i64;
+
+    while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
+        if parse_let_statement(tokens, pos, scope)? == Some(()) {
+            continue;
+        }
+        if tokens[*pos] == ";" {
+            *pos += 1;
+        } else {
+            result = parse_expression(tokens, pos, scope)?;
+        }
+    }
+
+    Ok(result)
+}
+
+/// Parse a `let x = expr ;` statement. Returns Some(()) if it consumed tokens, None otherwise.
+fn parse_let_statement(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<Option<()>, ()> {
+    if *pos >= tokens.len() || tokens[*pos] != "let" {
+        return Ok(None);
+    }
+    *pos += 1; // skip "let"
+    if *pos >= tokens.len() {
+        return Err(());
+    }
+    let var_name = tokens[*pos].clone();
+    *pos += 1;
+    if *pos >= tokens.len() || tokens[*pos] != "=" {
+        return Err(());
+    }
+    *pos += 1; // skip "="
+    let val = parse_expression(tokens, pos, scope)?;
+    if *pos < tokens.len() && tokens[*pos] == ";" {
+        *pos += 1; // skip ";"
+    }
+    scope.insert(var_name, val);
+    Ok(Some(()))
 }
 
 fn tokenize(input: &str) -> Vec<String> {
@@ -39,7 +99,10 @@ fn tokenize(input: &str) -> Vec<String> {
     while let Some(&ch) = chars.peek() {
         if ch.is_whitespace() {
             chars.next();
-        } else if matches!(ch, '(' | ')' | '+' | '*' | '/' | '%') {
+        } else if matches!(
+            ch,
+            '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
+        ) {
             tokens.push(ch.to_string());
             chars.next();
         } else if ch == '-'
@@ -63,6 +126,17 @@ fn tokenize(input: &str) -> Vec<String> {
                 }
             }
             tokens.push(num);
+        } else if ch.is_alphabetic() || ch == '_' {
+            let mut ident = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_alphanumeric() || c == '_' {
+                    ident.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            tokens.push(ident);
         } else {
             chars.next();
         }
@@ -71,13 +145,17 @@ fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
-fn parse_expression(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
-    let mut left = parse_term(tokens, pos)?;
+fn parse_expression(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<i64, ()> {
+    let mut left = parse_term(tokens, pos, scope)?;
 
     while *pos < tokens.len() && (tokens[*pos] == "+" || tokens[*pos] == "-") {
         let op = tokens[*pos].clone();
         *pos += 1;
-        let right = parse_term(tokens, pos)?;
+        let right = parse_term(tokens, pos, scope)?;
         left = if op == "+" {
             left + right
         } else {
@@ -88,13 +166,18 @@ fn parse_expression(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
     Ok(left)
 }
 
-fn parse_term(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
-    let mut left = parse_factor(tokens, pos)?;
+fn parse_term(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<i64, ()> {
+    let mut left = parse_factor(tokens, pos, scope)?;
 
-    while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%") {
+    while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%")
+    {
         let op = tokens[*pos].clone();
         *pos += 1;
-        let right = parse_factor(tokens, pos)?;
+        let right = parse_factor(tokens, pos, scope)?;
         left = if op == "*" {
             left * right
         } else if op == "/" {
@@ -107,26 +190,55 @@ fn parse_term(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
     Ok(left)
 }
 
-fn parse_factor(tokens: &[String], pos: &mut usize) -> Result<i64, ()> {
+fn parse_factor(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<i64, ()> {
     if *pos >= tokens.len() {
         return Err(());
     }
 
     let token = &tokens[*pos];
 
-    if token == "(" {
-        *pos += 1;
-        let val = parse_expression(tokens, pos)?;
-        if *pos < tokens.len() && tokens[*pos] == ")" {
+    match token.as_str() {
+        "(" => {
             *pos += 1;
+            let val = parse_expression(tokens, pos, scope)?;
+            if *pos < tokens.len() && tokens[*pos] == ")" {
+                *pos += 1;
+            }
+            Ok(val)
         }
-        Ok(val)
-    } else if let Ok(n) = token.parse::<i64>() {
-        *pos += 1;
-        Ok(n)
-    } else {
-        Err(())
+        "{" => {
+            *pos += 1;
+            let val = parse_block(tokens, pos, scope)?;
+            if *pos < tokens.len() && tokens[*pos] == "}" {
+                *pos += 1;
+            }
+            Ok(val)
+        }
+        _ => {
+            if let Ok(n) = token.parse::<i64>() {
+                *pos += 1;
+                Ok(n)
+            } else if scope.contains_key(token.as_str()) {
+                let val = scope[token.as_str()];
+                *pos += 1;
+                Ok(val)
+            } else {
+                Err(())
+            }
+        }
     }
+}
+
+fn parse_block(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<i64, ()> {
+    parse_statement_list(tokens, pos, scope, Some("}"))
 }
 
 #[cfg(test)]
@@ -159,8 +271,8 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_expression_returns_ok_zero() {
-        assert_eq!(interpret("abc"), Ok(0));
+    fn test_undefined_variable_returns_err() {
+        assert!(interpret("abc").is_err());
     }
 
     #[test]
@@ -236,5 +348,48 @@ mod tests {
     #[test]
     fn test_modulo_expression() {
         assert_eq!(interpret("5 % 3"), Ok(2));
+    }
+
+    #[test]
+    fn test_braced_expression() {
+        assert_eq!(interpret("{ 3 + 2 } * 4"), Ok(20));
+    }
+
+    #[test]
+    fn test_let_binding_in_block() {
+        assert_eq!(interpret("{ let x = 3 + 2; x } * 4"), Ok(20));
+    }
+
+    #[test]
+    fn test_unrecognized_char_skipped() {
+        // Characters like '@' are silently skipped by the tokenizer
+        assert_eq!(interpret("1 @+ 2"), Ok(3));
+    }
+
+    #[test]
+    fn test_let_without_var_name_errors() {
+        // No tokens at all after "let" — hits the pos >= tokens.len() guard
+        assert!(interpret("{ let").is_err());
+    }
+
+    #[test]
+    fn test_let_without_equals_errors() {
+        assert!(interpret("{ let x; } ").is_err());
+    }
+
+    #[test]
+    fn test_standalone_semicolon_in_block() {
+        assert_eq!(interpret("{ ; 3 + 2 }"), Ok(5));
+    }
+
+    #[test]
+    fn test_top_level_let_with_nested_block() {
+        assert_eq!(interpret("let y = { let x = 3 + 2; x } * 4; y"), Ok(20));
+    }
+
+    #[test]
+    fn test_top_level_semicolon() {
+        // Bare semicolons at the top level should be handled gracefully
+        assert_eq!(interpret("; 5 ; "), Ok(5));
     }
 }
