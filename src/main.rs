@@ -55,6 +55,10 @@ fn parse_statement_list(
         if parse_let_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
+        // Handle bare assignment statement: x = expr ;
+        if try_parse_assignment(tokens, pos, scope)?.is_some() {
+            continue;
+        }
         if tokens[*pos] == ";" {
             *pos += 1;
         } else {
@@ -65,7 +69,30 @@ fn parse_statement_list(
     Ok(result)
 }
 
-/// Parse a `let x = expr ;` statement. Returns Some(()) if it consumed tokens, None otherwise.
+/// Try to parse an assignment statement (ident = expr ;). Returns Some(()) if consumed.
+fn try_parse_assignment(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut std::collections::HashMap<String, i64>,
+) -> Result<Option<()>, ()> {
+    if *pos >= tokens.len()
+        || !scope.contains_key(tokens[*pos].as_str())
+        || *pos + 1 >= tokens.len()
+        || tokens[*pos + 1] != "="
+    {
+        return Ok(None);
+    }
+    let var_name = tokens[*pos].clone();
+    *pos += 2; // skip ident and "="
+    let val = parse_expression(tokens, pos, scope)?;
+    if *pos < tokens.len() && tokens[*pos] == ";" {
+        *pos += 1;
+    }
+    scope.insert(var_name, val);
+    Ok(Some(()))
+}
+
+/// Parse a `let [mut] x = expr ;` statement. Returns Some(()) if it consumed tokens, None otherwise.
 fn parse_let_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -80,6 +107,10 @@ fn parse_let_statement(
     }
     let var_name = tokens[*pos].clone();
     *pos += 1;
+    // Skip optional "mut" keyword
+    if *pos < tokens.len() && tokens[*pos] == "mut" {
+        *pos += 1;
+    }
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(());
     }
@@ -222,9 +253,25 @@ fn parse_factor(
             if let Ok(n) = token.parse::<i64>() {
                 *pos += 1;
                 Ok(n)
-            } else if scope.contains_key(token.as_str()) {
+            } else if scope.contains_key(token.as_str())
+                && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")
+            {
+                // Variable reference (not an assignment)
                 let val = scope[token.as_str()];
                 *pos += 1;
+                Ok(val)
+            } else if scope.contains_key(token.as_str())
+                && (*pos + 1 < tokens.len())
+                && tokens[*pos + 1] == "="
+            {
+                // Assignment expression: x = expr
+                let var_name = token.clone();
+                *pos += 2; // skip ident and "="
+                let val = parse_expression(tokens, pos, scope)?;
+                if *pos < tokens.len() && tokens[*pos] == ";" {
+                    *pos += 1;
+                }
+                scope.insert(var_name, val);
                 Ok(val)
             } else {
                 Err(())
@@ -397,5 +444,10 @@ mod tests {
     fn test_let_only_returns_zero() {
         // No trailing expression, so result stays at initial value of 0
         assert_eq!(interpret("let x = 100;"), Ok(0));
+    }
+
+    #[test]
+    fn test_mut_and_reassignment() {
+        assert_eq!(interpret("let mut x = 0; x = 1; x"), Ok(1));
     }
 }
