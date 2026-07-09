@@ -310,4 +310,32 @@ mod tests {
         // Compound assignment on an immutable variable should fail like regular reassignment
         assert!(interpret("let x = 0; x += 1; x").is_err());
     }
+
+    #[test]
+    fn test_while_loop_basic() {
+        assert_eq!(interpret("let mut x = 0; while (x < 4) x += 1; x"), Ok(4));
+    }
+
+    #[test]
+    fn test_while_loop_max_iterations_exceeded() {
+        // Infinite loop should error after 1024 iterations
+        assert!(interpret("let mut x = 0; while (1) x += 1; x").is_err());
+    }
+
+    #[test]
+    fn test_while_block_body() {
+        // Block body exercises parse_block path in eval_while_body_stmt
+        assert_eq!(
+            interpret("let mut x = 0; while (x < 3) { x += 1; }; x"),
+            Ok(3)
+        );
+    }
+
+    #[test]
+    fn test_while_non_assignment_expression_body() {
+        // Non-assignment expression body exercises the plain-expression fallback
+        // path in eval_while_body_stmt; the condition itself drives termination
+        // via an embedded assignment expression.
+        assert!(interpret("let mut x = 3; while (x = x - 1) 1; x").is_ok());
+    }
 }

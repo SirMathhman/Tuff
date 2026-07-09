@@ -7,6 +7,7 @@ pub enum ParseError {
     MissingEqualsSign,
     ImmutableReassignment(String),
     UnknownIdentifier(String),
+    MaxIterationsExceeded,
 }
 
 impl std::fmt::Display for ParseError {
@@ -20,6 +21,9 @@ impl std::fmt::Display for ParseError {
             }
             ParseError::UnknownIdentifier(name) => {
                 write!(f, "unknown identifier '{}'", name)
+            }
+            ParseError::MaxIterationsExceeded => {
+                write!(f, "max loop iterations (1024) exceeded")
             }
         }
     }
@@ -139,6 +143,83 @@ fn parse_if_statement(
     Ok(Some(()))
 }
 
+/// Check whether the token at `pos` begins an assignment (`x =` or `x +=`).
+fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
+    pos < tokens.len()
+        && scope.contains_key(tokens[pos].as_str())
+        && pos + 1 < tokens.len()
+        && matches!(tokens[pos + 1].as_str(), "=" | "+=")
+}
+
+/// Execute one while-body iteration using statement-level parsing.
+fn eval_while_body_stmt(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut Scope,
+) -> Result<(), ParseError> {
+    if *pos < tokens.len() && tokens[*pos] == "{" {
+        *pos += 1; // skip "{"
+        parse_block(tokens, pos, scope)?;
+        if *pos < tokens.len() && tokens[*pos] == "}" {
+            *pos += 1; // skip "}"
+        }
+    } else if is_assignment_start(tokens, *pos, scope) {
+        let var_name = tokens[*pos].clone();
+        *pos += 1;
+        do_assignment(tokens, pos, scope, &var_name)?;
+        consume_semicolon(pos, tokens);
+    } else {
+        parse_expression(tokens, pos, scope)?;
+        consume_semicolon(pos, tokens);
+    }
+    Ok(())
+}
+
+/// Parse a `while (condition) stmt` statement. Returns Some(()) if it consumed tokens.
+fn parse_while_statement(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut Scope,
+) -> Result<Option<()>, ParseError> {
+    const MAX_ITERATIONS: u32 = 1024;
+
+    if *pos >= tokens.len() || tokens[*pos] != "while" {
+        return Ok(None);
+    }
+    let while_start = *pos + 1; // token after "while"
+
+    // First pass: scan condition then body to find loop boundary
+    let mut scan_pos = while_start;
+    parse_if_condition(tokens, &mut scan_pos, scope)?;
+    let body_begin = scan_pos;
+    eval_while_body_stmt(tokens, &mut scan_pos, scope)?;
+    let loop_end = scan_pos;
+
+    // Replay: evaluate condition + body up to MAX_ITERATIONS times using fresh positions
+    let mut exhausted = true;
+    for _ in 0..MAX_ITERATIONS {
+        let mut iter_cond_pos = while_start;
+        let cond_val = parse_if_condition(tokens, &mut iter_cond_pos, scope)?;
+
+        if cond_val == 0 {
+            exhausted = false;
+            break;
+        }
+
+        // Execute body at fresh position starting from body_begin
+        let mut body_pos = body_begin;
+        eval_while_body_stmt(tokens, &mut body_pos, scope)
+            .map_err(|_| ParseError::MaxIterationsExceeded)?;
+    }
+
+    if exhausted {
+        return Err(ParseError::MaxIterationsExceeded);
+    }
+
+    *pos = loop_end;
+    Ok(Some(()))
+}
+
 /// Generic helper to parse a list of statements until an optional terminator token.
 fn parse_statement_list(
     tokens: &[String],
@@ -153,11 +234,7 @@ fn parse_statement_list(
             continue;
         }
         // Handle assignment statement: x = expr ; or compound x += expr ;
-        let is_assign_stmt = *pos < tokens.len()
-            && scope.contains_key(tokens[*pos].as_str())
-            && *pos + 1 < tokens.len()
-            && matches!(tokens[*pos + 1].as_str(), "=" | "+=");
-        if is_assign_stmt {
+        if is_assignment_start(tokens, *pos, scope) {
             let var_name = tokens[*pos].clone();
             *pos += 1; // skip ident
             do_assignment(tokens, pos, scope, &var_name)?;
@@ -165,6 +242,9 @@ fn parse_statement_list(
             continue;
         }
         if parse_if_statement(tokens, pos, scope)? == Some(()) {
+            continue;
+        }
+        if parse_while_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
         if tokens[*pos] == ";" {
