@@ -156,6 +156,8 @@ fn parse_let_statement(
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(ParseError::MissingEqualsSign);
     }
+    // Allow shadowing: remove existing binding so it's treated as a fresh declaration
+    scope.remove(&var_name);
     do_assignment(tokens, pos, scope, &var_name)?;
     // Mark mutability
     if let Some(entry) = scope.get_mut(&var_name) {
@@ -562,5 +564,11 @@ mod tests {
     fn test_reassign_in_block_persists() {
         // Block shares scope with parent, so assignment inside persists after block ends
         assert_eq!(interpret("let mut x = 0; { x = 1; } x"), Ok(1));
+    }
+
+    #[test]
+    fn test_let_shadowing_allows_rebind() {
+        // let x = ... followed by another let x = ... should shadow the first binding
+        assert_eq!(interpret("let x = 0; let x = 1; x"), Ok(1));
     }
 }
