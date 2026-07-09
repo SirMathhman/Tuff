@@ -304,4 +304,10 @@ mod tests {
     fn test_compound_add_assignment() {
         assert_eq!(interpret("let mut x = 0; x += 1; x"), Ok(1));
     }
+
+    #[test]
+    fn test_compound_add_immutable_errors() {
+        // Compound assignment on an immutable variable should fail like regular reassignment
+        assert!(interpret("let x = 0; x += 1; x").is_err());
+    }
 }
