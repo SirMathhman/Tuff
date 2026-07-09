@@ -1,21 +1,27 @@
-<#
-.SYNOPSIS
-    Checks whether any file within ./src exceeds 20,000 characters.
+$coverage = cargo +nightly llvm-cov --fail-under-lines 100 --show-missing-lines 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Found test or coverage issues."
+    Write-Host $coverage
+    exit 2
+} else {
+    Write-Host "No test or coverage issues found."
+}
 
-.DESCRIPTION
-    Recursively scans ./src for files. Checks total character count rather
-    than line count, so the check can't be gamed by compacting multiple
-    statements onto fewer lines. If any file exceeds the character limit,
-    prints a message saying that file must be split into parts, and exits
-    with code 2. If all files are within the limit, exits with code 0.
-#>
+$duplication = pmd cpd --dir src --language rust --minimum-tokens 50 --ignore-literals --ignore-identifiers 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Found duplication."
+    Write-Host $duplication
+    exit 2
+} else {
+    Write-Host "No duplication found."
+}
 
 $maxChars = 20000
 $srcPath = Join-Path -Path $PWD -ChildPath "src"
 
 if (-not (Test-Path -Path $srcPath)) {
     Write-Error "Path '$srcPath' does not exist."
-    exit 1
+    exit 2
 }
 
 $files = Get-ChildItem -Path $srcPath -Recurse -File
