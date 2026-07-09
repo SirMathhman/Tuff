@@ -14,10 +14,7 @@ fn bind_fn_params(scope: &mut Scope, params: &[String], arg_values: &[i64]) -> u
         if i < arg_values.len() {
             scope.push();
             if let Some(frame) = scope.last_frame_mut() {
-                frame.insert(
-                    param_name.clone(),
-                    (Value::Int(arg_values[i]), true, None),
-                );
+                frame.insert(param_name.clone(), (Value::Int(arg_values[i]), true, None));
             }
             bound_count += 1;
         }
