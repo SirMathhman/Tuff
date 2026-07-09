@@ -53,6 +53,56 @@ mod tests {
     }
 
     #[test]
+    fn test_integer_uppercase_suffix_stripped() {
+        assert_eq!(interpret("100U8"), Ok(100));
+    }
+
+    #[test]
+    fn test_integer_single_letter_suffix() {
+        assert_eq!(interpret("5U + 3"), Ok(8));
+    }
+
+    #[test]
+    fn test_integer_lowercase_suffix_errors() {
+        assert!(interpret("100i32").is_err());
+    }
+
+    #[test]
+    fn test_let_with_type_annotation() {
+        assert_eq!(interpret("let x : U8 = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_let_type_compat_u16_from_u8() {
+        assert_eq!(interpret("let x : U16 = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_let_type_mismatch_errors() {
+        assert!(interpret("let x : U8 = 100U16; x").is_err());
+    }
+
+    #[test]
+    fn test_let_plain_literal_to_typed_var_errors() {
+        assert!(interpret("let x : U8 = 5; x").is_err());
+    }
+
+    #[test]
+    fn test_let_typed_with_no_rhs_token_ok() {
+        assert_eq!(interpret("let x : U8 = (10U8); x"), Ok(10));
+    }
+
+    #[test]
+    fn test_let_single_letter_type_suffix() {
+        assert_eq!(interpret("let x : U = 5U; x"), Ok(5));
+    }
+
+    #[test]
+    fn test_let_missing_type_after_colon_errors() {
+        assert!(interpret("let x :").is_err());
+    }
+
+    #[test]
     fn test_addition_expression() {
         assert_eq!(interpret("1 + 2"), Ok(3));
     }
@@ -424,5 +474,69 @@ mod tests {
     fn test_for_loop_int_variable_not_range_errors() {
         // Using an integer variable as range should fail (get_range returns None)
         assert!(interpret("let x = 5; for (i in x) i").is_err());
+    }
+
+    #[test]
+    fn test_match_basic_hit_first_arm() {
+        assert_eq!(
+            interpret("let x = match (100) { case 100 => 2; case _ => 3; }; x"),
+            Ok(2)
+        );
+    }
+
+    #[test]
+    fn test_match_falls_through_to_wildcard() {
+        assert_eq!(
+            interpret("match (99) { case 100 => 2; case _ => 3; }"),
+            Ok(3)
+        );
+    }
+
+    #[test]
+    fn test_match_multiple_arms_hits_second() {
+        assert_eq!(
+            interpret("match (2) { case 1 => 10; case 2 => 20; case _ => 99; }"),
+            Ok(20)
+        );
+    }
+
+    #[test]
+    fn test_match_no_wildcard_unmatched_errors() {
+        assert!(interpret("match (5) { case 1 => 10; case 2 => 20; }").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_open_paren_errors() {
+        assert!(interpret("match 5 { case _ => 1; }").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_close_paren_errors() {
+        assert!(interpret("match (5 { case _ => 1; }").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_open_brace_errors() {
+        assert!(interpret("match (5) case _ => 1;").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_arrow_in_non_wildcard_arm_errors() {
+        assert!(interpret("match (1) { case 1; }").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_arrow_in_case_errors() {
+        assert!(interpret("match (5) { case ; case _ => 1; }").is_err());
+    }
+
+    #[test]
+    fn test_match_missing_close_brace_errors() {
+        assert!(interpret("match (5) { case _ => 1").is_err());
+    }
+
+    #[test]
+    fn test_match_wildcard_missing_arrow_errors() {
+        assert!(interpret("match (1) { case _ ; }").is_err());
     }
 }

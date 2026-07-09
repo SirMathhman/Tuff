@@ -98,3 +98,23 @@ impl Scope {
         self.0.iter_mut().rev().find(|f| f.contains_key(name))
     }
 }
+
+pub fn extract_int(s: &str) -> Option<i64> {
+    let mut end = s.len();
+    for (i, c) in s.char_indices() {
+        if c.is_ascii_uppercase() {
+            end = i;
+            break;
+        }
+    }
+    (&s[..end]).parse::<i64>().ok()
+}
+
+pub fn extract_suffix(s: &str) -> Option<&str> {
+    for (i, c) in s.char_indices() {
+        if c.is_ascii_uppercase() {
+            return Some(&s[i..]);
+        }
+    }
+    None
+}

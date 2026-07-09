@@ -11,9 +11,14 @@ pub fn tokenize(input: &str) -> Vec<String> {
             chars.next();
             chars.next();
             tokens.push("+=".to_string());
+        } else if ch == '=' && chars.clone().nth(1) == Some('>') {
+            // Handle => arrow (must come before single = handling)
+            chars.next();
+            chars.next();
+            tokens.push("=>".to_string());
         } else if matches!(
             ch,
-            '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
+            ':' | '(' | ')' | '{' | '}' | '+' | '*' | '/' | '%' | '=' | ';'
         ) {
             tokens.push(ch.to_string());
             chars.next();
@@ -65,6 +70,16 @@ pub fn tokenize(input: &str) -> Vec<String> {
                     break;
                 }
             }
+            // Include uppercase type suffix in the token (e.g. "100U8")
+            while let Some(&c) = chars.peek() {
+                if c.is_ascii_uppercase() || c.is_ascii_digit() {
+                    num.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+
             tokens.push(num);
         } else if ch.is_alphabetic() || ch == '_' {
             let mut ident = String::new();

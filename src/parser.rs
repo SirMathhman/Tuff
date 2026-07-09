@@ -1,4 +1,4 @@
-use crate::scope::{ParseError, Scope, Value};
+use crate::scope::{ParseError, Scope, Value, extract_int, extract_suffix};
 
 pub fn interpret(source: &str) -> Result<i64, String> {
     use crate::lexer;
@@ -6,12 +6,10 @@ pub fn interpret(source: &str) -> Result<i64, String> {
     if tokens.is_empty() {
         return Ok(0);
     }
-    // Scope maps variable name to (value, is_mut)
     let mut scope = Scope::new();
     parse_statements(&tokens, &mut 0, &mut scope).map_err(|e| e.to_string())
 }
 
-/// Parse a sequence of statements (let-declarations or expressions), returning the last expression value.
 fn parse_statements(
     tokens: &[String],
     pos: &mut usize,
@@ -20,41 +18,36 @@ fn parse_statements(
     parse_statement_list(tokens, pos, scope, None)
 }
 
-/// Parse the condition inside `if (...)` — skips optional parens and evaluates expression.
 fn parse_if_condition(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
 ) -> Result<i64, ParseError> {
     if *pos < tokens.len() && tokens[*pos] == "(" {
-        *pos += 1; // skip "("
+        *pos += 1;
     }
     let cond = parse_expression(tokens, pos, scope)?;
     if *pos < tokens.len() && tokens[*pos] == ")" {
-        *pos += 1; // skip ")"
+        *pos += 1;
     }
     Ok(cond)
 }
 
-/// Parse the body of an if/else branch (block or single statement).
 fn parse_if_body(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
     if *pos < tokens.len() && tokens[*pos] == "{" {
-        // Block body — consume delimiters like parse_factor does
-        *pos += 1; // skip "{"
+        *pos += 1;
         let val = parse_block(tokens, pos, scope)?;
         if *pos < tokens.len() && tokens[*pos] == "}" {
-            *pos += 1; // skip "}"
+            *pos += 1;
         }
         Ok(val)
     } else {
-        // Single-statement body — shares parent scope
         let result = parse_expression(tokens, pos, scope)?;
         consume_semicolon(pos, tokens);
         Ok(result)
     }
 }
 
-/// Parse an `if (condition) stmt [else stmt]` statement. Returns Some(()) if it consumed tokens, None otherwise.
 fn parse_if_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -63,27 +56,22 @@ fn parse_if_statement(
     if *pos >= tokens.len() || tokens[*pos] != "if" {
         return Ok(None);
     }
-    *pos += 1; // skip "if"
+    *pos += 1;
     let cond = parse_if_condition(tokens, pos, scope)?;
 
-    // Parse then-body (always parsed to advance position)
     let _then_val = parse_if_body(tokens, pos, scope)?;
 
-    // Handle optional `else` branch
     if *pos < tokens.len() && tokens[*pos] == "else" {
-        *pos += 1; // skip "else"
+        *pos += 1;
         let _else_val = parse_if_body(tokens, pos, scope)?;
     } else if cond != 0 {
-        // No else — then-body was already evaluated above (side effects applied)
     }
 
     Ok(Some(()))
 }
 
-/// Maximum number of iterations for any loop construct.
 const MAX_LOOP_ITERATIONS: u32 = 1024;
 
-/// Check whether the token at `pos` begins an assignment (`x =` or `x +=`).
 fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
     pos < tokens.len()
         && scope.contains_key(tokens[pos].as_str())
@@ -91,17 +79,16 @@ fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
         && matches!(tokens[pos + 1].as_str(), "=" | "+=")
 }
 
-/// Execute one loop-body iteration using statement-level parsing (shared by while/for).
 fn eval_loop_body_stmt(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
 ) -> Result<(), ParseError> {
     if *pos < tokens.len() && tokens[*pos] == "{" {
-        *pos += 1; // skip "{"
+        *pos += 1;
         parse_block(tokens, pos, scope)?;
         if *pos < tokens.len() && tokens[*pos] == "}" {
-            *pos += 1; // skip "}"
+            *pos += 1;
         }
     } else if is_assignment_start(tokens, *pos, scope) {
         let var_name = tokens[*pos].clone();
@@ -115,7 +102,6 @@ fn eval_loop_body_stmt(
     Ok(())
 }
 
-/// Parse a `for (i in start..end) stmt` statement. Returns Some(()) if it consumed tokens.
 fn parse_for_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -125,23 +111,19 @@ fn parse_for_statement(
         return Ok(None);
     }
 
-    // Skip opening paren: `for (
     *pos += 1;
     if *pos >= tokens.len() || tokens[*pos] != "(" {
         return Err(ParseError::UnexpectedEndOfInput);
     }
-    *pos += 1; // skip "("
+    *pos += 1;
 
-    // Parse loop variable name: `i`
     let var_name = tokens[*pos].clone();
     *pos += 1;
 
-    // Skip "in" keyword
     if *pos >= tokens.len() || tokens[*pos] != "in" {
         return Err(ParseError::UnexpectedEndOfInput);
     }
-    *pos += 1; // skip "in"
-
+    *pos += 1;
     let (start_val, end_val) = if scope.get_range(&tokens[*pos]).is_some() && *pos < tokens.len() {
         // Range variable: `for (i in range_var)` — resolve bounds from scope
         let (s, e) = scope.get_range(&tokens[*pos]).unwrap();
@@ -181,8 +163,7 @@ fn parse_for_statement(
         return Err(ParseError::MaxIterationsExceeded);
     }
 
-    // The first-pass scan already executed the body once with i == start_val,
-    // so we only need to replay for remaining iterations (range_len - 1).
+
     let remaining = if range_len > 0 { range_len - 1 } else { 0 };
     for i in 1..=remaining {
         // Set loop variable to current value
@@ -200,7 +181,6 @@ fn parse_for_statement(
     Ok(Some(()))
 }
 
-/// Parse a `while (condition) stmt` statement. Returns Some(()) if it consumed tokens.
 fn parse_while_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -210,9 +190,8 @@ fn parse_while_statement(
         return Ok(None);
     }
 
-    let while_start = *pos + 1; // token after "while"
+    let while_start = *pos + 1;
 
-    // First pass: scan condition then body to find loop boundary
     let mut scan_pos = while_start;
     parse_if_condition(tokens, &mut scan_pos, scope)?;
     let body_begin = scan_pos;
@@ -244,7 +223,6 @@ fn parse_while_statement(
     Ok(Some(()))
 }
 
-/// Generic helper to parse a list of statements until an optional terminator token.
 fn parse_statement_list(
     tokens: &[String],
     pos: &mut usize,
@@ -284,8 +262,7 @@ fn parse_statement_list(
     Ok(result)
 }
 
-/// Perform the core assignment: skip op ("=" or "+="), evaluate RHS expression, store in scope.
-#[cfg_attr(coverage_nightly, coverage(off))] // defensive branches unreachable with current callers
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn do_assignment(
     tokens: &[String],
     pos: &mut usize,
@@ -318,14 +295,12 @@ fn do_assignment(
     Ok(val)
 }
 
-/// Helper to optionally consume a trailing semicolon.
 fn consume_semicolon(pos: &mut usize, tokens: &[String]) {
     if *pos < tokens.len() && tokens[*pos] == ";" {
         *pos += 1;
     }
 }
 
-/// Parse a `let [mut] x = expr ;` statement. Returns Some(()) if it consumed tokens, None otherwise.
 fn parse_let_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -334,8 +309,7 @@ fn parse_let_statement(
     if *pos >= tokens.len() || tokens[*pos] != "let" {
         return Ok(None);
     }
-    *pos += 1; // skip "let"
-    // Skip optional "mut" keyword
+    *pos += 1;
     let is_mut = *pos < tokens.len() && tokens[*pos] == "mut";
     if is_mut {
         *pos += 1;
@@ -345,16 +319,61 @@ fn parse_let_statement(
     }
     let var_name = tokens[*pos].clone();
     *pos += 1;
+    let declared_type = if *pos < tokens.len() && tokens[*pos] == ":" {
+        *pos += 1;
+        if *pos >= tokens.len() {
+            return Err(ParseError::UnexpectedEndOfInput);
+        }
+        Some(tokens[*pos].clone())
+    } else {
+        None
+    };
+    for _ in declared_type.iter() {
+        *pos += 1;
+    }
     if *pos >= tokens.len() || tokens[*pos] != "=" {
         return Err(ParseError::MissingEqualsSign);
     }
-    // Evaluate RHS — check for range literal `expr .. expr`
-    *pos += 1; // skip "="
+    *pos += 1;
+    let rhs_token = (*pos < tokens.len()).then(|| tokens[*pos].clone());
     let lhs = parse_expression(tokens, pos, scope)?;
+
+    fn type_width(t: &str) -> Option<u32> {
+        let digits = t
+            .chars()
+            .skip_while(|c| c.is_ascii_uppercase())
+            .collect::<String>();
+        if digits.is_empty() {
+            Some(0)
+        } else {
+            digits.parse::<u32>().ok()
+        }
+    }
+
+    fn check_type(dt: &str, rt: Option<&String>) -> Result<(), ParseError> {
+        let dw = type_width(dt).unwrap_or(0);
+        match (rt.and_then(|tok| extract_suffix(tok.as_str())), rt) {
+            (Some(sfx), _) => {
+                if type_width(sfx).unwrap_or(0) > dw {
+                    Err(ParseError::UnexpectedEndOfInput)
+                } else {
+                    Ok(())
+                }
+            }
+            (_, Some(tok)) if extract_int(tok.as_str()).is_some() => {
+                Err(ParseError::UnexpectedEndOfInput)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    if let Some(ref dt) = declared_type {
+        check_type(dt, rhs_token.as_ref().map(|s| s as &String))?;
+    }
+
     if *pos < tokens.len() && tokens[*pos] == ".." {
-        *pos += 1; // skip ".."
+        *pos += 1;
         let rhs = parse_expression(tokens, pos, scope)?;
-        // Insert directly into current (innermost) frame — shadows outer bindings
         if let Some(frame) = scope.last_frame_mut() {
             frame.insert(
                 var_name.clone(),
@@ -368,7 +387,6 @@ fn parse_let_statement(
             );
         }
     } else {
-        // Insert directly into current (innermost) frame — shadows outer bindings
         if let Some(frame) = scope.last_frame_mut() {
             frame.insert(var_name.clone(), (Value::Int(lhs), is_mut));
         }
@@ -387,7 +405,6 @@ fn parse_expression(
     while *pos < tokens.len() && tokens[*pos] == "||" {
         *pos += 1;
         let right = parse_and(tokens, pos, scope)?;
-        // Logical OR: result is 1 if either operand is non-zero, else 0
         left = if left != 0 || right != 0 { 1 } else { 0 };
     }
 
@@ -506,18 +523,78 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
             Ok(0)
         }
         "if" => {
-            // if (condition) expr else expr
-            *pos += 1; // skip "if"
+            *pos += 1;
             let cond = parse_if_condition(tokens, pos, scope)?;
             let then_val = parse_expression(tokens, pos, scope)?;
             if *pos < tokens.len() && tokens[*pos] == "else" {
-                *pos += 1; // skip "else"
+                *pos += 1;
             }
             let else_val = parse_expression(tokens, pos, scope)?;
             Ok(if cond != 0 { then_val } else { else_val })
         }
+        "match" => {
+            *pos += 1;
+            if *pos >= tokens.len() || tokens[*pos] != "(" {
+                return Err(ParseError::UnexpectedEndOfInput);
+            }
+            *pos += 1;
+            let scrutinee = parse_expression(tokens, pos, scope)?;
+
+            if *pos >= tokens.len() || tokens[*pos] != ")" {
+                return Err(ParseError::UnexpectedEndOfInput);
+            }
+            *pos += 1;
+            if *pos >= tokens.len() || tokens[*pos] != "{" {
+                return Err(ParseError::UnexpectedEndOfInput);
+            }
+            *pos += 1;
+
+            let mut result = None;
+            loop {
+                if *pos >= tokens.len() || tokens[*pos] != "case" {
+                    break;
+                }
+                *pos += 1;
+
+                let is_wildcard = *pos < tokens.len() && tokens[*pos] == "_";
+                if !is_wildcard {
+                    let pat_val = parse_expression(tokens, pos, scope)?;
+                    if *pos >= tokens.len() || tokens[*pos] != "=>" {
+                        return Err(ParseError::UnexpectedEndOfInput);
+                    }
+                    *pos += 1;
+                    let arm_val = parse_expression(tokens, pos, scope)?;
+                    if scrutinee == pat_val && result.is_none() {
+                        result = Some(arm_val);
+                    }
+                } else {
+                    *pos += 1;
+                    if *pos >= tokens.len() || tokens[*pos] != "=>" {
+                        return Err(ParseError::UnexpectedEndOfInput);
+                    }
+                    *pos += 1;
+                    let arm_val = parse_expression(tokens, pos, scope)?;
+                    if result.is_none() {
+                        result = Some(arm_val);
+                    }
+                }
+
+                consume_semicolon(pos, tokens);
+            }
+
+            if *pos >= tokens.len() || tokens[*pos] != "}" {
+                return Err(ParseError::UnexpectedEndOfInput);
+            }
+            *pos += 1;
+
+            match result {
+                Some(v) => Ok(v),
+                None => Err(ParseError::UnexpectedEndOfInput),
+            }
+        }
         _ => {
-            if let Ok(n) = token.parse::<i64>() {
+            // Try to parse as integer literal, optionally with uppercase type suffix (e.g. "100U8")
+            if let Some(n) = extract_int(token.as_str()) {
                 *pos += 1;
                 Ok(n)
             } else if scope.contains_key(token.as_str())
@@ -537,7 +614,7 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
             {
                 // Assignment expression: x = expr
                 let var_name = token.clone();
-                *pos += 1; // skip ident ("=" skipped by do_assignment)
+                *pos += 1;
                 let val = do_assignment(tokens, pos, scope, &var_name)?;
                 consume_semicolon(pos, tokens);
                 Ok(val)
@@ -549,10 +626,8 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
 }
 
 fn parse_block(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
-    // Push a new local scope for the block
     scope.push();
     let result = parse_statement_list(tokens, pos, scope, Some("}"));
-    // Pop the block scope when done
     scope.pop();
     result
 }
