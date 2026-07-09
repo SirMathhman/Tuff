@@ -1,5 +1,30 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
+#[derive(Debug)]
+enum ParseError {
+    UnexpectedEndOfInput,
+    MissingVariableName,
+    MissingEqualsSign,
+    ImmutableReassignment(String),
+    UnknownIdentifier(String),
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::UnexpectedEndOfInput => write!(f, "unexpected end of input"),
+            ParseError::MissingVariableName => write!(f, "missing variable name after 'let'"),
+            ParseError::MissingEqualsSign => write!(f, "expected '=' after variable name"),
+            ParseError::ImmutableReassignment(name) => {
+                write!(f, "cannot reassign immutable variable '{}'", name)
+            }
+            ParseError::UnknownIdentifier(name) => {
+                write!(f, "unknown identifier '{}'", name)
+            }
+        }
+    }
+}
+
 type Scope = std::collections::HashMap<String, (i64, bool)>;
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -26,14 +51,14 @@ fn main() {
     }
 }
 
-fn interpret(source: &str) -> Result<i64, &'static str> {
+fn interpret(source: &str) -> Result<i64, String> {
     let tokens = tokenize(source);
     if tokens.is_empty() {
         return Ok(0);
     }
     // Scope maps variable name to (value, is_mut)
     let mut scope = Scope::new();
-    parse_statements(&tokens, &mut 0, &mut scope).map_err(|_| "parse error")
+    parse_statements(&tokens, &mut 0, &mut scope).map_err(|e| e.to_string())
 }
 
 /// Parse a sequence of statements (let-declarations or expressions), returning the last expression value.
@@ -41,7 +66,7 @@ fn parse_statements(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
-) -> Result<i64, ()> {
+) -> Result<i64, ParseError> {
     parse_statement_list(tokens, pos, scope, None)
 }
 
@@ -51,7 +76,7 @@ fn parse_statement_list(
     pos: &mut usize,
     scope: &mut Scope,
     terminator: Option<&'static str>,
-) -> Result<i64, ()> {
+) -> Result<i64, ParseError> {
     let mut result = 0i64;
 
     while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
@@ -86,13 +111,13 @@ fn do_assignment(
     pos: &mut usize,
     scope: &mut Scope,
     var_name: &str,
-) -> Result<i64, ()> {
+) -> Result<i64, ParseError> {
     *pos += 1; // skip "="
     let val = parse_expression(tokens, pos, scope)?;
     if let Some(entry) = scope.get_mut(var_name) {
         // Reassignment — check mutability
         if !entry.1 {
-            return Err(());
+            return Err(ParseError::ImmutableReassignment(var_name.to_string()));
         }
         entry.0 = val;
     } else {
@@ -113,7 +138,7 @@ fn parse_let_statement(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
-) -> Result<Option<()>, ()> {
+) -> Result<Option<()>, ParseError> {
     if *pos >= tokens.len() || tokens[*pos] != "let" {
         return Ok(None);
     }
@@ -124,12 +149,12 @@ fn parse_let_statement(
         *pos += 1;
     }
     if *pos >= tokens.len() {
-        return Err(());
+        return Err(ParseError::MissingVariableName);
     }
     let var_name = tokens[*pos].clone();
     *pos += 1;
     if *pos >= tokens.len() || tokens[*pos] != "=" {
-        return Err(());
+        return Err(ParseError::MissingEqualsSign);
     }
     do_assignment(tokens, pos, scope, &var_name)?;
     // Mark mutability
@@ -197,7 +222,7 @@ fn parse_expression(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
-) -> Result<i64, ()> {
+) -> Result<i64, ParseError> {
     let mut left = parse_term(tokens, pos, scope)?;
 
     while *pos < tokens.len() && (tokens[*pos] == "+" || tokens[*pos] == "-") {
@@ -214,11 +239,7 @@ fn parse_expression(
     Ok(left)
 }
 
-fn parse_term(
-    tokens: &[String],
-    pos: &mut usize,
-    scope: &mut Scope,
-) -> Result<i64, ()> {
+fn parse_term(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
     let mut left = parse_factor(tokens, pos, scope)?;
 
     while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%")
@@ -238,13 +259,9 @@ fn parse_term(
     Ok(left)
 }
 
-fn parse_factor(
-    tokens: &[String],
-    pos: &mut usize,
-    scope: &mut Scope,
-) -> Result<i64, ()> {
+fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
     if *pos >= tokens.len() {
-        return Err(());
+        return Err(ParseError::UnexpectedEndOfInput);
     }
 
     let token = &tokens[*pos];
@@ -288,17 +305,13 @@ fn parse_factor(
                 consume_semicolon(pos, tokens);
                 Ok(val)
             } else {
-                Err(())
+                Err(ParseError::UnknownIdentifier(token.clone()))
             }
         }
     }
 }
 
-fn parse_block(
-    tokens: &[String],
-    pos: &mut usize,
-    scope: &mut Scope,
-) -> Result<i64, ()> {
+fn parse_block(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
     parse_statement_list(tokens, pos, scope, Some("}"))
 }
 
