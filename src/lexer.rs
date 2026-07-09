@@ -40,6 +40,11 @@ pub fn tokenize(input: &str) -> Vec<String> {
             chars.next();
             chars.next();
             tokens.push("||".to_string());
+        } else if ch == '.' && chars.clone().nth(1) == Some('.') {
+            // Handle .. range operator
+            chars.next();
+            chars.next();
+            tokens.push("..".to_string());
         } else if ch == '-'
             && !tokens.is_empty()
             && !matches!(&*tokens[tokens.len() - 1], "(" | "+" | "-" | "*")

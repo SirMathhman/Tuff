@@ -143,6 +143,9 @@ fn parse_if_statement(
     Ok(Some(()))
 }
 
+/// Maximum number of iterations for any loop construct.
+const MAX_LOOP_ITERATIONS: u32 = 1024;
+
 /// Check whether the token at `pos` begins an assignment (`x =` or `x +=`).
 fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
     pos < tokens.len()
@@ -151,8 +154,8 @@ fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
         && matches!(tokens[pos + 1].as_str(), "=" | "+=")
 }
 
-/// Execute one while-body iteration using statement-level parsing.
-fn eval_while_body_stmt(
+/// Execute one loop-body iteration using statement-level parsing (shared by while/for).
+fn eval_loop_body_stmt(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
@@ -175,29 +178,110 @@ fn eval_while_body_stmt(
     Ok(())
 }
 
+/// Parse a `for (i in start..end) stmt` statement. Returns Some(()) if it consumed tokens.
+fn parse_for_statement(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut Scope,
+) -> Result<Option<()>, ParseError> {
+    if *pos >= tokens.len() || tokens[*pos] != "for" {
+        return Ok(None);
+    }
+
+    // Skip opening paren: `for (
+    *pos += 1;
+    if *pos >= tokens.len() || tokens[*pos] != "(" {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1; // skip "("
+
+    // Parse loop variable name: `i`
+    let var_name = tokens[*pos].clone();
+    *pos += 1;
+
+    // Skip "in" keyword
+    if *pos >= tokens.len() || tokens[*pos] != "in" {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1; // skip "in"
+
+    // Parse start expression
+    let start_val = parse_expression(tokens, pos, scope)?;
+
+    // Skip range operator `..`
+    if *pos >= tokens.len() || tokens[*pos] != ".." {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1; // skip ".."
+
+    // Parse end expression
+    let end_val = parse_expression(tokens, pos, scope)?;
+
+    // Skip closing paren: `)`
+    if *pos >= tokens.len() || tokens[*pos] != ")" {
+        return Err(ParseError::UnexpectedEndOfInput);
+    }
+    *pos += 1; // skip ")"
+
+    let body_begin = *pos;
+
+    // Pre-declare loop variable so the first-pass scan can resolve references to it
+    if let Some(frame) = scope.0.last_mut() {
+        frame.insert(var_name.clone(), (start_val, true));
+    }
+
+    // First pass: scan body to find loop boundary
+    let mut scan_pos = body_begin;
+    eval_loop_body_stmt(tokens, &mut scan_pos, scope)?;
+    let loop_end = scan_pos;
+
+    // Replay: iterate from start_val to end_val (exclusive)
+    let range_len = end_val - start_val;
+    if range_len < 0 || range_len > MAX_LOOP_ITERATIONS as i64 {
+        return Err(ParseError::MaxIterationsExceeded);
+    }
+
+    // The first-pass scan already executed the body once with i == start_val,
+    // so we only need to replay for remaining iterations (range_len - 1).
+    let remaining = if range_len > 0 { range_len - 1 } else { 0 };
+    for i in 1..=remaining {
+        // Set loop variable to current value
+        if let Some(frame) = scope.0.last_mut() {
+            frame.insert(var_name.clone(), (start_val + i, true));
+        }
+
+        // Execute body at fresh position
+        let mut body_pos = body_begin;
+        eval_loop_body_stmt(tokens, &mut body_pos, scope)
+            .map_err(|_| ParseError::MaxIterationsExceeded)?;
+    }
+
+    *pos = loop_end;
+    Ok(Some(()))
+}
+
 /// Parse a `while (condition) stmt` statement. Returns Some(()) if it consumed tokens.
 fn parse_while_statement(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
 ) -> Result<Option<()>, ParseError> {
-    const MAX_ITERATIONS: u32 = 1024;
-
     if *pos >= tokens.len() || tokens[*pos] != "while" {
         return Ok(None);
     }
+
     let while_start = *pos + 1; // token after "while"
 
     // First pass: scan condition then body to find loop boundary
     let mut scan_pos = while_start;
     parse_if_condition(tokens, &mut scan_pos, scope)?;
     let body_begin = scan_pos;
-    eval_while_body_stmt(tokens, &mut scan_pos, scope)?;
+    eval_loop_body_stmt(tokens, &mut scan_pos, scope)?;
     let loop_end = scan_pos;
 
     // Replay: evaluate condition + body up to MAX_ITERATIONS times using fresh positions
     let mut exhausted = true;
-    for _ in 0..MAX_ITERATIONS {
+    for _ in 0..MAX_LOOP_ITERATIONS {
         let mut iter_cond_pos = while_start;
         let cond_val = parse_if_condition(tokens, &mut iter_cond_pos, scope)?;
 
@@ -208,7 +292,7 @@ fn parse_while_statement(
 
         // Execute body at fresh position starting from body_begin
         let mut body_pos = body_begin;
-        eval_while_body_stmt(tokens, &mut body_pos, scope)
+        eval_loop_body_stmt(tokens, &mut body_pos, scope)
             .map_err(|_| ParseError::MaxIterationsExceeded)?;
     }
 
@@ -239,6 +323,9 @@ fn parse_statement_list(
             *pos += 1; // skip ident
             do_assignment(tokens, pos, scope, &var_name)?;
             consume_semicolon(pos, tokens);
+            continue;
+        }
+        if parse_for_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
         if parse_if_statement(tokens, pos, scope)? == Some(()) {

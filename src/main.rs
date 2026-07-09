@@ -338,4 +338,53 @@ mod tests {
         // via an embedded assignment expression.
         assert!(interpret("let mut x = 3; while (x = x - 1) 1; x").is_ok());
     }
+
+    #[test]
+    fn test_for_loop_basic() {
+        assert_eq!(
+            interpret("let mut sum = 0; for (i in 0..4) sum += i; sum"),
+            Ok(6)
+        );
+    }
+
+    #[test]
+    fn test_for_loop_block_body() {
+        // Block body exercises parse_block path in eval_for_body_stmt
+        assert_eq!(
+            interpret("let mut s = 0; for (i in 1..3) { s += i * 2; }; s"),
+            Ok(6)
+        );
+    }
+
+    #[test]
+    fn test_for_loop_max_iterations_exceeded() {
+        // Range exceeding 1024 iterations should error
+        assert!(interpret("let mut x = 0; for (i in 0..2000) x += 1; x").is_err());
+    }
+
+    #[test]
+    fn test_for_loop_expression_body() {
+        // Plain expression body exercises the parse_expression fallback path
+        assert_eq!(interpret("for (i in 1..3) i + 1; 5"), Ok(5));
+    }
+
+    #[test]
+    fn test_for_missing_open_paren_errors() {
+        assert!(interpret("for").is_err());
+    }
+
+    #[test]
+    fn test_for_missing_in_keyword_errors() {
+        assert!(interpret("for (i 0..4)").is_err());
+    }
+
+    #[test]
+    fn test_for_missing_range_operator_errors() {
+        assert!(interpret("for (i in 0 4) i").is_err());
+    }
+
+    #[test]
+    fn test_for_missing_close_paren_errors() {
+        assert!(interpret("for (i in 0..4 i").is_err());
+    }
 }
