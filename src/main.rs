@@ -557,4 +557,10 @@ mod tests {
     fn test_logical_and_with_booleans() {
         assert_eq!(interpret("let x = true; let y = false; x && y"), Ok(0));
     }
+
+    #[test]
+    fn test_reassign_in_block_persists() {
+        // Block shares scope with parent, so assignment inside persists after block ends
+        assert_eq!(interpret("let mut x = 0; { x = 1; } x"), Ok(1));
+    }
 }
