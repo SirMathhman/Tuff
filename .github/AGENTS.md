@@ -52,7 +52,8 @@ cargo test
 ## Interpreter Language Features
 
 - **Literals**: integers (`i64`) with optional uppercase type suffixes like `U8`, `I32` (suffix is validated at parse time, value stored as i64). Lowercase suffixes cause errors.
-- **Variables**: `let x = expr;`, typed via `let x : U8 = 100U8;`. Mutable via `let mut x = ...` or bare assignment `x = val`. Type widening allowed (e.g., `U8 → U16`), narrowing rejected.
+- **Variables**: `let x = expr;`, typed via `let x : U8 = 100U8;`. Mutable via `let mut x = ...` or bare assignment `x = val`. Type widening allowed (e.g., `U8 → U16`), narrowing rejected. Non-numeric types (e.g., `Bool`) are incompatible with numeric type widths.
+- **Type-check operator**: `expr is TYPE` returns 1 if the value's type width fits within `TYPE`, 0 otherwise. Works on literals (`100U8 is U8`) and typed variables (`let x : U8; x is U8`).
 - **Blocks**: `{ stmts }` with lexical scoping and shadowing
 - **Arithmetic**: `+ - * / %` with standard precedence (integer division truncates toward zero)
 - **Comparisons**: `< > <= >=` → returns 1 (true) or 0 (false)

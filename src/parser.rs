@@ -1,4 +1,7 @@
-use crate::scope::{ParseError, Scope, Value, check_type, extract_int, infer_type};
+use crate::scope::{
+    ParseError, Scope, Value, check_type, consume_semicolon, extract_int, infer_type,
+    try_is_type_check, type_width,
+};
 
 pub fn interpret(source: &str) -> Result<i64, String> {
     use crate::lexer;
@@ -294,12 +297,6 @@ fn do_assignment(
     Ok(val)
 }
 
-fn consume_semicolon(pos: &mut usize, tokens: &[String]) {
-    if *pos < tokens.len() && tokens[*pos] == ";" {
-        *pos += 1;
-    }
-}
-
 #[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in type-checking helpers
 fn parse_let_statement(
     tokens: &[String],
@@ -579,17 +576,28 @@ fn parse_factor(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result
             // Try to parse as integer literal, optionally with uppercase type suffix (e.g. "100U8")
             if let Some(n) = extract_int(token.as_str()) {
                 *pos += 1;
+                let val_tw =
+                    crate::scope::extract_suffix(token.as_str()).and_then(|sfx| type_width(sfx));
+                if let Some(result) = try_is_type_check(pos, tokens, val_tw) {
+                    return Ok(result);
+                }
                 Ok(n)
             } else if scope.contains_key(token.as_str())
                 && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")
             {
                 // Variable reference (not an assignment)
+                let var_type = scope.get(token.as_str()).map(|e| e.2);
+                *pos += 1;
+                if let Some(result) =
+                    try_is_type_check(pos, tokens, var_type.map(|w| w.unwrap_or(0)))
+                {
+                    return Ok(result);
+                }
                 let val = scope
                     .get(token.as_str())
                     .map(|e| e.0)
                     .unwrap_or(Value::Int(0))
                     .as_int();
-                *pos += 1;
                 Ok(val)
             } else if scope.contains_key(token.as_str())
                 && (*pos + 1 < tokens.len())

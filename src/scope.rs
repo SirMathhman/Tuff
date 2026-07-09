@@ -130,9 +130,9 @@ pub fn type_width(t: &str) -> Option<u32> {
         .skip_while(|c| c.is_ascii_uppercase())
         .collect::<String>();
     if digits.is_empty() {
-        Some(0)
+        Some(u32::MAX)
     } else {
-        digits.parse::<u32>().ok()
+        digits.parse::<u32>().ok().or(Some(u32::MAX))
     }
 }
 
@@ -185,4 +185,28 @@ pub fn infer_type(declared: Option<&String>, rhs_tok: Option<&String>) -> Option
         }
     }
     None
+}
+
+/// Consume a trailing semicolon token (if present).
+pub fn consume_semicolon(pos: &mut usize, tokens: &[String]) {
+    if *pos < tokens.len() && tokens[*pos] == ";" {
+        *pos += 1;
+    }
+}
+
+/// Handle `is TYPE` type-check operator after evaluating a factor.
+/// Returns Some(result) when "is" is found and consumed, None otherwise.
+pub fn try_is_type_check(pos: &mut usize, tokens: &[String], val_tw: Option<u32>) -> Option<i64> {
+    if *pos < tokens.len() && tokens[*pos] == "is" {
+        *pos += 1; // skip "is"
+        let target = type_width(&tokens[*pos]).unwrap_or(0);
+        *pos += 1; // skip target type token
+        Some(if val_tw.map(|w| w <= target).unwrap_or(false) {
+            1
+        } else {
+            0
+        })
+    } else {
+        None
+    }
 }

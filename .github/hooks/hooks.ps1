@@ -24,6 +24,8 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "No duplication found."
 }
 
+cargo fmt
+
 $maxChars = 20000
 $srcPath = Join-Path -Path $PWD -ChildPath "src"
 
@@ -49,7 +51,7 @@ foreach ($file in $files) {
 
 if ($violations.Count -gt 0) {
     foreach ($v in $violations) {
-        Write-Host "MUST be split into parts: '$($v.Path)' has $($v.CharCount) characters (limit: $maxChars)." -ForegroundColor Red
+        Write-Host "MUST be split into parts: '$($v.Path)' has $($v.CharCount) characters (limit: $maxChars). Do not adjust whitespace or comments because these are ALWAYS auto-formatted prior to counting characters. " -ForegroundColor Red
     }
     exit 2
 }

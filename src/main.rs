@@ -93,6 +93,31 @@ mod tests {
     }
 
     #[test]
+    fn test_let_bool_var_to_u8_typed_var_errors() {
+        assert!(interpret("let x : Bool = true; let y : U8 = x;").is_err());
+    }
+
+    #[test]
+    fn test_is_type_check_literal_ok() {
+        assert_eq!(interpret("100U8 is U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_var_u8_is_u8_ok() {
+        assert_eq!(interpret("let x = 5U8; x is U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_type_check_var_u16_not_u8_fail() {
+        assert_eq!(interpret("let x = 5U16; x is U8"), Ok(0));
+    }
+
+    #[test]
+    fn test_is_type_check_literal_narrow_fail() {
+        assert_eq!(interpret("100U16 is U8"), Ok(0));
+    }
+
+    #[test]
     fn test_let_assign_u8_var_to_u16_typed_var_ok() {
         assert_eq!(interpret("let x = 50U8; let y : U16 = x; y"), Ok(50));
     }
