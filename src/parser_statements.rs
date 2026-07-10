@@ -17,7 +17,7 @@ pub fn parse_if_condition(
     Ok(cond)
 }
 
-/// Returns (value, yielded) — `yielded` is true if a yield was encountered and should terminate the enclosing block.
+/// Returns (value, returned) — `returned` is true if a return was encountered and should terminate the enclosing function.
 fn parse_if_body(
     tokens: &[String],
     pos: &mut usize,
@@ -25,11 +25,27 @@ fn parse_if_body(
 ) -> Result<(i64, bool), ParseError> {
     if *pos < tokens.len() && tokens[*pos] == "{" {
         *pos += 1;
-        let (val, _) = parse_block(tokens, pos, scope)?;
-        if *pos < tokens.len() && tokens[*pos] == "}" {
-            *pos += 1;
+        let (val, returned) = parse_block(tokens, pos, scope)?;
+        if !returned {
+            // Only consume closing brace if we didn't return
+            if *pos < tokens.len() && tokens[*pos] == "}" {
+                *pos += 1;
+            }
+        } else {
+            // Skip to end of block on return
+            while *pos < tokens.len() && tokens[*pos] != "}" {
+                *pos += 1;
+            }
+            if *pos < tokens.len() {
+                *pos += 1; // skip "}"
+            }
         }
-        Ok((val, false))
+        Ok((val, returned))
+    } else if *pos < tokens.len() && tokens[*pos] == "return" {
+        *pos += 1;
+        let (val, _) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+        consume_semicolon(pos, tokens);
+        Ok((val, true))
     } else if *pos < tokens.len() && tokens[*pos] == "yield" {
         // Handle `if (cond) yield expr;` — propagate the yielded value up through control flow
         *pos += 1; // skip "yield"
@@ -43,7 +59,7 @@ fn parse_if_body(
     }
 }
 
-/// Returns Some((value, yielded)) — `yielded` is true if a yield was triggered and the caller should break with `value`.
+/// Returns Some((value, returned)) — `returned` is true if a return was triggered and the caller should terminate.
 pub fn parse_if_statement(
     tokens: &[String],
     pos: &mut usize,
@@ -69,7 +85,7 @@ pub fn parse_if_statement(
     } else if cond != 0 {
     }
 
-    Ok(Some((then_val, false)))
+    Ok(Some((0i64, false)))
 }
 
 fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
@@ -227,16 +243,24 @@ fn parse_statement_list_with_tw(
     pos: &mut usize,
     scope: &mut Scope,
     terminator: Option<&'static str>,
-) -> Result<(i64, Option<u32>), ParseError> {
-    let mut result = (0i64, None);
+) -> Result<(i64, bool), ParseError> {
+    let mut result = (0i64, false);
 
     while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
         // Handle yield: `yield expr;` — sets block return value and exits the block immediately
         if tokens[*pos] == "yield" {
             *pos += 1; // skip "yield"
-            result = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+            let (val, _) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+            result.0 = val;
             consume_semicolon(pos, tokens);
             break;
+        }
+        // Handle return: `return expr;` — terminates the entire function with that value
+        if tokens[*pos] == "return" {
+            *pos += 1; // skip "return"
+            let val = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+            consume_semicolon(pos, tokens);
+            return Ok((val.0, true));
         }
         if parse_fn_statement(tokens, pos, scope)? == Some(()) {
             continue;
@@ -255,8 +279,13 @@ fn parse_statement_list_with_tw(
         if parse_for_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
-        let (if_val, yielded) = if let Some(r) = parse_if_statement(tokens, pos, scope)? { r } else { (0i64, false) };
-        if yielded {
+        let (if_val, returned_or_yielded) = if let Some(r) = parse_if_statement(tokens, pos, scope)?
+        {
+            r
+        } else {
+            (0i64, false)
+        };
+        if returned_or_yielded {
             result.0 = if_val;
             // Skip remaining tokens in the block until terminator — don't overwrite yield value
             while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
@@ -270,7 +299,8 @@ fn parse_statement_list_with_tw(
         if tokens[*pos] == ";" {
             *pos += 1;
         } else {
-            result = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+            let (val, _) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+            result.0 = val;
         }
     }
 
@@ -281,11 +311,13 @@ pub fn parse_block(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
-) -> Result<(i64, Option<u32>), ParseError> {
+) -> Result<(i64, bool), ParseError> {
     scope.push();
-    let (val, tw) = parse_statement_list_with_tw(tokens, pos, scope, Some("}"))?;
-    scope.pop();
-    Ok((val, tw))
+    let (val, returned) = parse_statement_list_with_tw(tokens, pos, scope, Some("}"))?;
+    if !returned {
+        // Only pop if we didn't return — on return the block boundary is irrelevant
+    }
+    Ok((val, returned))
 }
 
 pub fn parse_statements(
@@ -441,8 +473,8 @@ fn parse_fn_statement(
     }
 
     // Store function body token span + params in outermost (global) frame
-    if !scope.0.is_empty() {
-        scope.0[0].insert(
+    if scope.has_global_frame() {
+        scope.insert_global(
             fn_name,
             (
                 Value::FunctionBody {

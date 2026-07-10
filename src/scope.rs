@@ -75,34 +75,37 @@ pub type VarTypeWidth = u32;
 type ScopeFrame = HashMap<String, (Value, bool, Option<VarTypeWidth>)>;
 
 /// Nested scope stack — innermost frame is last element.
-pub struct Scope(pub Vec<ScopeFrame>);
+pub struct Scope {
+    frames: Vec<ScopeFrame>,
+    /// When true, a `return` was triggered and the current function call should terminate immediately.
+    returned: bool,
+}
 
 impl Scope {
     pub fn new() -> Self {
-        Scope(vec![ScopeFrame::new()])
+        Scope { frames: vec![ScopeFrame::new()], returned: false }
     }
 
     /// Push a new local scope (for blocks).
     pub fn push(&mut self) {
-        self.0.push(ScopeFrame::new());
+        self.frames.push(ScopeFrame::new());
     }
 
     /// Pop the innermost scope.
     pub fn pop(&mut self) {
-        if self.0.len() > 1 {
-            self.0.pop();
+        if self.frames.len() > 1 {
+            self.frames.pop();
         }
     }
 
     /// Look up a variable from innermost to outermost scope.
-    /// Look up a variable from innermost to outermost scope.
     pub fn get(&self, name: &str) -> Option<&(Value, bool, Option<VarTypeWidth>)> {
-        self.0.iter().rev().find_map(|frame| frame.get(name))
+        self.frames.iter().rev().find_map(|frame| frame.get(name))
     }
 
     /// Look up range bounds if the variable holds a Range value.
     pub fn get_range(&self, name: &str) -> Option<(i64, i64)> {
-        let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
+        let entry = self.frames.iter().rev().find_map(|frame| frame.get(name))?;
         match entry.0 {
             Value::Range { start, end } => Some((start, end)),
             _ => None,
@@ -111,12 +114,27 @@ impl Scope {
 
     /// Check if a variable exists in any scope level.
     pub fn contains_key(&self, name: &str) -> bool {
-        self.0.iter().any(|frame| frame.contains_key(name))
+        self.frames.iter().any(|frame| frame.contains_key(name))
+    }
+
+    /// Mark that a return was triggered (for propagating `return` through expression parsing).
+    pub fn mark_returned(&mut self) {
+        self.returned = true;
+    }
+
+    /// Check if a return was triggered.
+    pub fn is_returned(&self) -> bool {
+        self.returned
+    }
+
+    /// Reset the returned flag (called after each function call completes).
+    pub fn clear_returned(&mut self) {
+        self.returned = false;
     }
 
     /// Look up function body token span + param names + param types for `name` (innermost first).
     pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>, Vec<Option<u32>>)> {
-        let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
+        let entry = self.frames.iter().rev().find_map(|frame| frame.get(name))?;
         match &entry.0 {
             Value::FunctionBody {
                 begin,
@@ -130,12 +148,28 @@ impl Scope {
 
     /// Get mutable access to the innermost (last) scope frame.
     pub fn last_frame_mut(&mut self) -> Option<&mut ScopeFrame> {
-        self.0.last_mut()
+        self.frames.last_mut()
     }
 
     /// Find and return mutable reference to the innermost frame containing `name`.
     pub fn find_frame_mut(&mut self, name: &str) -> Option<&mut ScopeFrame> {
-        self.0.iter_mut().rev().find(|f| f.contains_key(name))
+        self.frames.iter_mut().rev().find(|f| f.contains_key(name))
+    }
+
+    /// Insert a value into the outermost (global) scope frame.
+    pub fn insert_global(
+        &mut self,
+        name: String,
+        entry: (Value, bool, Option<VarTypeWidth>),
+    ) {
+        if !self.frames.is_empty() {
+            self.frames[0].insert(name, entry);
+        }
+    }
+
+    /// Check if the global frame is non-empty.
+    pub fn has_global_frame(&self) -> bool {
+        !self.frames.is_empty()
     }
 }
 
