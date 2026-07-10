@@ -339,6 +339,8 @@ fn parse_primary(
         let arg_values: Vec<i64> = arg_results.iter().map(|(v, _)| *v).collect();
 
         // Bind params to args in new scope frames, then evaluate body
+        // Clear returned flag before evaluating fn body so each call starts fresh
+        scope.clear_returned();
         let bound_count = bind_fn_params(scope, &params, &arg_values);
 
         let mut fn_pos = begin;
@@ -347,8 +349,6 @@ fn parse_primary(
         for _ in 0..bound_count {
             scope.pop();
         }
-        // Clear returned flag so subsequent function calls start fresh
-        scope.clear_returned();
         Ok((val, tw))
     } else if scope.contains_key(token.as_str())
         && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")

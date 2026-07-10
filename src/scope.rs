@@ -85,7 +85,11 @@ pub struct Scope {
 
 impl Scope {
     pub fn new() -> Self {
-        Scope { frames: vec![ScopeFrame::new()], returned: false, return_value: 0 }
+        Scope {
+            frames: vec![ScopeFrame::new()],
+            returned: false,
+            return_value: 0,
+        }
     }
 
     /// Push a new local scope (for blocks).
@@ -141,11 +145,6 @@ impl Scope {
         self.return_value = 0;
     }
 
-    /// Get current number of scope frames.
-    pub fn frame_count(&self) -> usize {
-        self.frames.len()
-    }
-
     /// Look up function body token span + param names + param types for `name` (innermost first).
     pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>, Vec<Option<u32>>)> {
         let entry = self.frames.iter().rev().find_map(|frame| frame.get(name))?;
@@ -171,11 +170,7 @@ impl Scope {
     }
 
     /// Insert a value into the outermost (global) scope frame.
-    pub fn insert_global(
-        &mut self,
-        name: String,
-        entry: (Value, bool, Option<VarTypeWidth>),
-    ) {
+    pub fn insert_global(&mut self, name: String, entry: (Value, bool, Option<VarTypeWidth>)) {
         if !self.frames.is_empty() {
             self.frames[0].insert(name, entry);
         }
