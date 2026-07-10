@@ -22,3 +22,15 @@ test("empty source compiles and returns 0", () => {
 test("whitespace-only source compiles and returns 0", () => {
   expectValid(" ", [], 0);
 });
+
+test("__args__.length with no args returns 1", () => {
+  expectValid("__args__.length", [], 1);
+});
+
+test("__args__[1].length accesses first argument length", () => {
+  expectValid("__args__[1].length", ["foo"], 3);
+});
+
+test("let variable assignment and property access works", () => {
+  expectValid("let temp = __args__; temp.length", [], 1);
+});
