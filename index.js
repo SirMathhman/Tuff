@@ -12,17 +12,34 @@ export function compileTuffToJS(source) {
   // Create __args__ as [null, ...args] so index 1 maps to args[0], etc.
   jsLines.push("var _tuff_args = [null].concat(args);");
 
+  // Track which variables are mutable (declared with `let mut`)
+  const mutableVars = new Set();
+
   for (let i = 0; i < rawStatements.length; i++) {
     const stmt = rawStatements[i];
     const isLast = i === rawStatements.length - 1;
 
-    // Match let declarations: "let varname = expr"
-    const letMatch = /^let\s+(\w+)\s*=\s*(.+)$/.exec(stmt);
+    // Match let declarations: "let varname = expr" or "let mut varname = expr"
+    const letMatch = /^let\s+(?:mut\s+)?(\w+)\s*=\s*(.+)$/.exec(stmt);
     if (letMatch) {
       const varName = letMatch[1];
+      const isMut = stmt.startsWith("let mut");
+      if (isMut) mutableVars.add(varName);
       const expr = translateExpr(letMatch[2]);
       jsLines.push("var " + varName + " = " + expr + ";");
       continue;
+    }
+
+    // Check for assignment: "varname = expr"
+    const assignMatch = /^(\w+)\s*=\s*(.+)$/.exec(stmt);
+    if (assignMatch && !isLast) {
+      const targetVar = assignMatch[1];
+      // If variable is not declared as mutable, reassignment is an error
+      if (!mutableVars.has(targetVar)) {
+        throw new Error(
+          "cannot assign to immutable variable `" + targetVar + "`",
+        );
+      }
     }
 
     // Expression statement - last one is returned, others are evaluated for side effects

@@ -34,3 +34,15 @@ test("__args__[1].length accesses first argument length", () => {
 test("let variable assignment and property access works", () => {
   expectValid("let temp = __args__; temp.length", [], 1);
 });
+
+test("mut variables can be reassigned", () => {
+  expectValid(
+    "let mut a = __args__[1].length; a = __args__[2].length; a",
+    ["a", "ab"],
+    2,
+  );
+});
+
+test("reassigning immutable variable is invalid", () => {
+  expectInvalid("let a = __args__[1].length; a = __args__[2].length; a");
+});
