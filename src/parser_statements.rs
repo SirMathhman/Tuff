@@ -17,47 +17,59 @@ pub fn parse_if_condition(
     Ok(cond)
 }
 
-fn parse_if_body(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Result<i64, ParseError> {
+/// Returns (value, yielded) — `yielded` is true if a yield was encountered and should terminate the enclosing block.
+fn parse_if_body(
+    tokens: &[String],
+    pos: &mut usize,
+    scope: &mut Scope,
+) -> Result<(i64, bool), ParseError> {
     if *pos < tokens.len() && tokens[*pos] == "{" {
         *pos += 1;
         let (val, _) = parse_block(tokens, pos, scope)?;
         if *pos < tokens.len() && tokens[*pos] == "}" {
             *pos += 1;
         }
-        Ok(val)
+        Ok((val, false))
     } else if *pos < tokens.len() && tokens[*pos] == "yield" {
         // Handle `if (cond) yield expr;` — propagate the yielded value up through control flow
         *pos += 1; // skip "yield"
         let result = crate::parser_expressions::parse_expression(tokens, pos, scope)?.0;
         consume_semicolon(pos, tokens);
-        Ok(result)
+        Ok((result, true))
     } else {
         let result = crate::parser_expressions::parse_expression(tokens, pos, scope)?.0;
         consume_semicolon(pos, tokens);
-        Ok(result)
+        Ok((result, false))
     }
 }
 
+/// Returns Some(true) if a yield was triggered (caller should break), Some(false) otherwise.
 pub fn parse_if_statement(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
-) -> Result<Option<()>, ParseError> {
+) -> Result<Option<bool>, ParseError> {
     if *pos >= tokens.len() || tokens[*pos] != "if" {
         return Ok(None);
     }
     *pos += 1;
     let cond = parse_if_condition(tokens, pos, scope)?;
 
-    let _then_val = parse_if_body(tokens, pos, scope)?;
+    let (_then_val, then_yielded) = parse_if_body(tokens, pos, scope)?;
+    if then_yielded && cond != 0 {
+        return Ok(Some(true));
+    }
 
     if *pos < tokens.len() && tokens[*pos] == "else" {
         *pos += 1;
-        let _else_val = parse_if_body(tokens, pos, scope)?;
+        let (_else_val, else_yielded) = parse_if_body(tokens, pos, scope)?;
+        if else_yielded && cond == 0 {
+            return Ok(Some(true));
+        }
     } else if cond != 0 {
     }
 
-    Ok(Some(()))
+    Ok(Some(false))
 }
 
 fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
@@ -243,7 +255,10 @@ fn parse_statement_list_with_tw(
         if parse_for_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
-        if parse_if_statement(tokens, pos, scope)? == Some(()) {
+        if let Some(yielded) = parse_if_statement(tokens, pos, scope)? {
+            if yielded {
+                break;
+            }
             continue;
         }
         if parse_while_statement(tokens, pos, scope)? == Some(()) {
