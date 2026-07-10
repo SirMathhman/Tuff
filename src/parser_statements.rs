@@ -301,15 +301,19 @@ pub fn do_assignment(
 
 /// Skip an optional `:` TypeToken annotation if present.
 #[cfg_attr(coverage_nightly, coverage(off))] // called from coverage-off fn, so lines not attributed correctly
-fn skip_optional_type(pos: &mut usize, tokens: &[String]) -> Result<(), ParseError> {
+// Parse optional parameter type annotation: `:` TypeToken -> returns type width or None
+fn parse_param_type(pos: &mut usize, tokens: &[String]) -> Result<Option<u32>, ParseError> {
     if *pos < tokens.len() && tokens[*pos] == ":" {
         *pos += 1; // skip ":"
         if *pos >= tokens.len() {
             return Err(ParseError::UnexpectedEndOfInput);
         }
+        let type_token = tokens[*pos].clone();
         *pos += 1; // skip type token
+        Ok(crate::scope::type_width(&type_token))
+    } else {
+        Ok(None)
     }
-    Ok(())
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))] // llvm-cov attribution issues with closures in type-checking helpers
@@ -339,12 +343,14 @@ fn parse_fn_statement(
 
     // Parse optional parameters: name : Type, ...
     let mut params = Vec::<String>::new();
+    let mut param_types = Vec::<Option<u32>>::new();
     if *pos < tokens.len() && tokens[*pos] != ")" {
         loop {
             let param_name = tokens[*pos].clone();
             *pos += 1;
-            skip_optional_type(pos, tokens)?;
+            let param_type = parse_param_type(pos, tokens)?;
             params.push(param_name);
+            param_types.push(param_type);
             if *pos < tokens.len() && tokens[*pos] == "," {
                 *pos += 1;
             } else {
@@ -411,6 +417,7 @@ fn parse_fn_statement(
                 Value::FunctionBody {
                     begin,
                     params,
+                    param_types,
                     ret_type_width,
                 },
                 true,

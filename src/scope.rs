@@ -11,6 +11,7 @@ pub enum Value {
     FunctionBody {
         begin: usize,
         params: Vec<String>,
+        param_types: Vec<Option<u32>>,
         ret_type_width: Option<u32>,
     },
 }
@@ -26,6 +27,7 @@ impl Value {
     }
 
     /// Extract function return type width if this is a FunctionBody.
+    #[allow(dead_code)]
     #[cfg_attr(coverage_nightly, coverage(off))] // defensive branch unreachable with current callers
     pub fn as_fn_ret_type_width(&self) -> Option<u32> {
         match self {
@@ -112,11 +114,11 @@ impl Scope {
         self.0.iter().any(|frame| frame.contains_key(name))
     }
 
-    /// Look up function body token span + param names for `name` (innermost first).
-    pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>)> {
+    /// Look up function body token span + param names + param types for `name` (innermost first).
+    pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>, Vec<Option<u32>>)> {
         let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
         match &entry.0 {
-            Value::FunctionBody { begin, params, .. } => Some((*begin, params.clone())),
+            Value::FunctionBody { begin, params, param_types, .. } => Some((*begin, params.clone(), param_types.clone())),
             _ => None,
         }
     }

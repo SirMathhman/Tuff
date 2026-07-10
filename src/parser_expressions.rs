@@ -22,6 +22,25 @@ fn bind_fn_params(scope: &mut Scope, params: &[String], arg_values: &[i64]) -> u
     bound_count
 }
 
+/// Check that an argument type width is compatible with a declared parameter type.
+/// Returns Ok(()) if compatible, Err otherwise.
+fn check_param_type_compat(arg_tw: Option<u32>, param_expected_tw: Option<u32>) -> Result<(), ParseError> {
+    match (arg_tw, param_expected_tw) {
+        // No constraint on either side — always ok
+        (None, None) => Ok(()),
+        // Param has no declared type — accepts anything
+        (_, None) => Ok(()),
+        // Arg is untyped literal but param expects a specific non-numeric type (Bool, etc.)
+        // u32::MAX signals Bool-like types; plain int literals have tw=None -> mismatch
+        (None, Some(u32::MAX)) => Err(ParseError::UnexpectedEndOfInput),
+        // Arg has a wider type than param expects
+        (Some(arg_w), Some(expected_w)) if arg_w > expected_w => {
+            Err(ParseError::UnexpectedEndOfInput)
+        }
+        _ => Ok(()),
+    }
+}
+
 pub fn parse_expression(
     tokens: &[String],
     pos: &mut usize,
@@ -274,16 +293,19 @@ fn parse_primary(
         && tokens[*pos + 1] == "("
     {
         // Function call: name(args...)
-        let (begin, params) = scope.get_fn_body(token.as_str()).unwrap();
+        let (begin, params, param_types) = scope.get_fn_body(token.as_str()).unwrap();
         *pos += 1; // skip ident
         *pos += 1; // skip "("
 
-        // Evaluate comma-separated arguments into a Vec<i64>
-        let mut arg_values: Vec<i64> = Vec::new();
+        // Evaluate comma-separated arguments into a Vec<(i64, Option<u32>)>
+        let mut arg_results: Vec<(i64, Option<u32>)> = Vec::new();
         if *pos < tokens.len() && tokens[*pos] != ")" {
             loop {
-                let (arg_val, _) = parse_expression(tokens, pos, scope)?;
-                arg_values.push(arg_val);
+                let (arg_val, arg_tw) = parse_expression(tokens, pos, scope)?;
+                // Validate argument type against declared parameter type
+                let param_expected = param_types.get(arg_results.len()).copied().flatten();
+                check_param_type_compat(arg_tw, param_expected)?;
+                arg_results.push((arg_val, arg_tw));
                 if *pos < tokens.len() && tokens[*pos] == "," {
                     *pos += 1; // skip comma
                 } else {
@@ -295,6 +317,8 @@ fn parse_primary(
         if *pos < tokens.len() && tokens[*pos] == ")" {
             *pos += 1;
         }
+
+        let arg_values: Vec<i64> = arg_results.iter().map(|(v, _)| *v).collect();
 
         // Bind params to args in new scope frames, then evaluate body
         let bound_count = bind_fn_params(scope, &params, &arg_values);
