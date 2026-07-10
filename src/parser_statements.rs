@@ -43,33 +43,33 @@ fn parse_if_body(
     }
 }
 
-/// Returns Some(true) if a yield was triggered (caller should break), Some(false) otherwise.
+/// Returns Some((value, yielded)) — `yielded` is true if a yield was triggered and the caller should break with `value`.
 pub fn parse_if_statement(
     tokens: &[String],
     pos: &mut usize,
     scope: &mut Scope,
-) -> Result<Option<bool>, ParseError> {
+) -> Result<Option<(i64, bool)>, ParseError> {
     if *pos >= tokens.len() || tokens[*pos] != "if" {
         return Ok(None);
     }
     *pos += 1;
     let cond = parse_if_condition(tokens, pos, scope)?;
 
-    let (_then_val, then_yielded) = parse_if_body(tokens, pos, scope)?;
+    let (then_val, then_yielded) = parse_if_body(tokens, pos, scope)?;
     if then_yielded && cond != 0 {
-        return Ok(Some(true));
+        return Ok(Some((then_val, true)));
     }
 
     if *pos < tokens.len() && tokens[*pos] == "else" {
         *pos += 1;
-        let (_else_val, else_yielded) = parse_if_body(tokens, pos, scope)?;
+        let (else_val, else_yielded) = parse_if_body(tokens, pos, scope)?;
         if else_yielded && cond == 0 {
-            return Ok(Some(true));
+            return Ok(Some((else_val, true)));
         }
     } else if cond != 0 {
     }
 
-    Ok(Some(false))
+    Ok(Some((then_val, false)))
 }
 
 fn is_assignment_start(tokens: &[String], pos: usize, scope: &Scope) -> bool {
@@ -255,8 +255,9 @@ fn parse_statement_list_with_tw(
         if parse_for_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
-        if let Some(yielded) = parse_if_statement(tokens, pos, scope)? {
+        if let Some((if_val, yielded)) = parse_if_statement(tokens, pos, scope)? {
             if yielded {
+                result.0 = if_val;
                 break;
             }
             continue;
