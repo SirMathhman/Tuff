@@ -46,3 +46,15 @@ test("mut variables can be reassigned", () => {
 test("reassigning immutable variable is invalid", () => {
   expectInvalid("let a = __args__[1].length; a = __args__[2].length; a");
 });
+
+test("block scope with mut variable reassignment works", () => {
+  expectValid("let mut x = 0; { x = 1; } x", [], 1);
+});
+
+test("variable shadowing allows redeclaration", () => {
+  expectValid("let x = 0; let x = 1; x", [], 1);
+});
+
+test("inner block variable does not leak out of scope", () => {
+  expectValid("let x = 1; { let x = 0; } x", [], 1);
+});
