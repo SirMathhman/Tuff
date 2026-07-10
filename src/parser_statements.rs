@@ -25,6 +25,12 @@ fn parse_if_body(tokens: &[String], pos: &mut usize, scope: &mut Scope) -> Resul
             *pos += 1;
         }
         Ok(val)
+    } else if *pos < tokens.len() && tokens[*pos] == "yield" {
+        // Handle `if (cond) yield expr;` — propagate the yielded value up through control flow
+        *pos += 1; // skip "yield"
+        let result = crate::parser_expressions::parse_expression(tokens, pos, scope)?.0;
+        consume_semicolon(pos, tokens);
+        Ok(result)
     } else {
         let result = crate::parser_expressions::parse_expression(tokens, pos, scope)?.0;
         consume_semicolon(pos, tokens);

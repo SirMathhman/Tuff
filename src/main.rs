@@ -713,4 +713,10 @@ mod tests {
     fn test_yield_in_block() {
         assert_eq!(interpret("{ yield 2; } + 1"), Ok(3));
     }
+
+    #[test]
+    fn test_yield_inside_if_in_block() {
+        // yield inside an if body should propagate up and terminate the enclosing block
+        assert_eq!(interpret("{ if (true) yield 2; 5 } + 1"), Ok(3));
+    }
 }
