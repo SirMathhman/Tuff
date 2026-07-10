@@ -79,11 +79,13 @@ pub struct Scope {
     frames: Vec<ScopeFrame>,
     /// When true, a `return` was triggered and the current function call should terminate immediately.
     returned: bool,
+    /// The value that was returned (used when propagating return through nested blocks).
+    return_value: i64,
 }
 
 impl Scope {
     pub fn new() -> Self {
-        Scope { frames: vec![ScopeFrame::new()], returned: false }
+        Scope { frames: vec![ScopeFrame::new()], returned: false, return_value: 0 }
     }
 
     /// Push a new local scope (for blocks).
@@ -117,9 +119,10 @@ impl Scope {
         self.frames.iter().any(|frame| frame.contains_key(name))
     }
 
-    /// Mark that a return was triggered (for propagating `return` through expression parsing).
-    pub fn mark_returned(&mut self) {
+    /// Mark that a return was triggered with the given value.
+    pub fn mark_returned_with_value(&mut self, val: i64) {
         self.returned = true;
+        self.return_value = val;
     }
 
     /// Check if a return was triggered.
@@ -127,9 +130,20 @@ impl Scope {
         self.returned
     }
 
-    /// Reset the returned flag (called after each function call completes).
+    /// Get the return value (only meaningful when is_returned() is true).
+    pub fn get_return_value(&self) -> i64 {
+        self.return_value
+    }
+
+    /// Reset the returned flag and value (called after each function call completes).
     pub fn clear_returned(&mut self) {
         self.returned = false;
+        self.return_value = 0;
+    }
+
+    /// Get current number of scope frames.
+    pub fn frame_count(&self) -> usize {
+        self.frames.len()
     }
 
     /// Look up function body token span + param names + param types for `name` (innermost first).

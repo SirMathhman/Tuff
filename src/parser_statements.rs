@@ -260,12 +260,21 @@ fn parse_statement_list_with_tw(
             *pos += 1; // skip "return"
             let val = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
             consume_semicolon(pos, tokens);
+            scope.mark_returned_with_value(val.0);
             return Ok((val.0, true));
         }
         if parse_fn_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
         if parse_let_statement(tokens, pos, scope)? == Some(()) {
+            // Check for return triggered during let RHS evaluation
+            if scope.is_returned() {
+                result.0 = scope.get_return_value();
+                while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
+                    *pos += 1;
+                }
+                break;
+            }
             continue;
         }
         // Handle assignment statement: x = expr ; or compound x += expr ;
@@ -301,6 +310,14 @@ fn parse_statement_list_with_tw(
         } else {
             let (val, _) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
             result.0 = val;
+            // If a return was triggered during expression evaluation, propagate it
+            if scope.is_returned() {
+                result.0 = scope.get_return_value();
+                while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
+                    *pos += 1;
+                }
+                break;
+            }
         }
     }
 
@@ -315,7 +332,8 @@ pub fn parse_block(
     scope.push();
     let (val, returned) = parse_statement_list_with_tw(tokens, pos, scope, Some("}"))?;
     if !returned {
-        // Only pop if we didn't return — on return the block boundary is irrelevant
+        // Pop the block's local scope frame
+        scope.pop();
     }
     Ok((val, returned))
 }
@@ -530,8 +548,13 @@ fn parse_let_statement(
     let rhs_token = (*pos < tokens.len()).then(|| tokens[*pos].clone());
     let (lhs, _) = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
 
-    // Determine RHS type width: prefer variable type, then function return type from FunctionBody
-    let rhs_type_from_var = rhs_token.as_ref().and_then(|tok| {
+    // If a return was triggered during RHS evaluation, stop processing this statement
+    if scope.is_returned() {
+        consume_semicolon(pos, tokens);
+        Ok(Some(()))
+    } else {
+        // Determine RHS type width: prefer variable type, then function return type from FunctionBody
+        let rhs_type_from_var = rhs_token.as_ref().and_then(|tok| {
         scope.get(tok).map(|entry| match &entry.0 {
             Value::FunctionBody {
                 ret_type_width: Some(w),
@@ -575,4 +598,5 @@ fn parse_let_statement(
     }
     consume_semicolon(pos, tokens);
     Ok(Some(()))
+    }  // close the else block for scope.is_returned()
 }

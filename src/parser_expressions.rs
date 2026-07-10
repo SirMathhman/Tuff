@@ -125,6 +125,9 @@ fn parse_additive(
     let (mut left_val, mut left_tw) = parse_term(tokens, pos, scope)?;
 
     while *pos < tokens.len() && (tokens[*pos] == "+" || tokens[*pos] == "-") {
+        if scope.is_returned() {
+            break;
+        }
         let op = tokens[*pos].clone();
         *pos += 1;
         let (right_val, right_tw) = parse_term(tokens, pos, scope)?;
@@ -149,6 +152,9 @@ fn parse_term(
 
     while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%")
     {
+        if scope.is_returned() {
+            break;
+        }
         let op = tokens[*pos].clone();
         *pos += 1;
         let (right_val, right_tw) = parse_factor(tokens, pos, scope)?;
@@ -181,18 +187,27 @@ fn parse_factor(
         "(" => {
             *pos += 1;
             let val = parse_expression(tokens, pos, scope)?;
-            if *pos < tokens.len() && tokens[*pos] == ")" {
+            if !scope.is_returned() && *pos < tokens.len() && tokens[*pos] == ")" {
                 *pos += 1;
             }
             Ok(val)
         }
         "{" => {
             *pos += 1;
-            let val = crate::parser_statements::parse_block(tokens, pos, scope)?;
-            if *pos < tokens.len() && tokens[*pos] == "}" {
+            let (val, returned) = crate::parser_statements::parse_block(tokens, pos, scope)?;
+            if !returned && *pos < tokens.len() && tokens[*pos] == "}" {
                 *pos += 1;
+            } else if returned {
+                // On return, skip to end of block and mark scope as returned
+                while *pos < tokens.len() && tokens[*pos] != "}" {
+                    *pos += 1;
+                }
+                if *pos < tokens.len() {
+                    *pos += 1; // skip "}"
+                }
+                scope.mark_returned_with_value(val);
             }
-            Ok(val)
+            Ok((val, None))
         }
         "true" => {
             *pos += 1;
@@ -317,7 +332,7 @@ fn parse_primary(
             }
         }
 
-        if *pos < tokens.len() && tokens[*pos] == ")" {
+        if !scope.is_returned() && *pos < tokens.len() && tokens[*pos] == ")" {
             *pos += 1;
         }
 
