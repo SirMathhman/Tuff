@@ -725,4 +725,16 @@ mod tests {
         // yield in else branch when condition is false should also propagate up
         assert_eq!(interpret("{ if (false) 99; else yield 7; } * 2"), Ok(14));
     }
+
+    #[test]
+    fn test_return_in_nested_block_terminates_fn() {
+        // return inside a nested block terminates the entire function, skipping `inner + 1`
+        assert_eq!(interpret("fn get() => { let inner = { return 3 }; inner + 1 }; get()"), Ok(3));
+    }
+
+    #[test]
+    fn test_yield_in_nested_block_does_not_terminate_fn() {
+        // yield only exits its immediate block, so `inner` is 3 and `inner + 1` evaluates to 4
+        assert_eq!(interpret("fn get() => { let inner = { yield 3 }; inner + 1 }; get()"), Ok(4));
+    }
 }
