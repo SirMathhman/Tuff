@@ -213,6 +213,13 @@ fn parse_statement_list_with_tw(
     let mut result = (0i64, None);
 
     while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
+        // Handle yield: `yield expr;` — sets block return value and exits the block immediately
+        if tokens[*pos] == "yield" {
+            *pos += 1; // skip "yield"
+            result = crate::parser_expressions::parse_expression(tokens, pos, scope)?;
+            consume_semicolon(pos, tokens);
+            break;
+        }
         if parse_fn_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }

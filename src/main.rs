@@ -708,4 +708,9 @@ mod tests {
         // (Some(arg_w), Some(expected_w)) if arg_w > expected_w → Err
         assert!(interpret("fn narrow(x : U8) => 0; narrow(100U16)").is_err());
     }
+
+    #[test]
+    fn test_yield_in_block() {
+        assert_eq!(interpret("{ yield 2; } + 1"), Ok(3));
+    }
 }
