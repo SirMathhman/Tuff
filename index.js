@@ -8,84 +8,7 @@ export function compileTuffToJS(source) {
   // Mutable-var tracking stack: each scope level has its own Set
   const mutStack = [new Set()];
 
-  function compile(tokens, isTopLevel) {
-    let lines = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-
-      if (t.type === "open") {
-        // Enter new scope — wrap block in IIFE so inner vars don't leak out
-        mutStack.push(new Set());
-
-        // Find matching close, collecting inner stmts
-        let depth = 1;
-        i++;
-        const innerStmts = [];
-        while (i < tokens.length && depth > 0) {
-          if (tokens[i].type === "open") depth++;
-          else if (tokens[i].type === "close") {
-            depth--;
-            if (depth === 0) break;
-          } else {
-            innerStmts.push(tokens[i]);
-          }
-          i++;
-        }
-
-        // Recurse into block — blocks never return, so isTopLevel=false
-        const innerLines = compile(innerStmts, false);
-        lines.push("(function(){" + innerLines.join("") + "})();");
-
-        mutStack.pop();
-      } else if (t.type === "close") {
-        // Should not happen at top level; skip
-      } else {
-        const stmt = t.value;
-        const isLast = i === tokens.length - 1 && !hasLaterStmts(tokens, i);
-
-        // let / let mut declaration
-        const letMatch = /^let\s+(?:mut\s+)?(\w+)\s*=\s*(.+)$/.exec(stmt);
-        if (letMatch) {
-          const varName = letMatch[1];
-          const isMut = stmt.startsWith("let mut");
-          if (isMut) mutStack[mutStack.length - 1].add(varName);
-          lines.push(
-            translateExpr("var " + varName + " = " + letMatch[2] + ";"),
-          );
-        } else {
-          // Assignment or plain expression
-          const assignMatch = /^(\w+)\s*=\s*(.+)$/.exec(stmt);
-          if (assignMatch && !isLast) {
-            const targetVar = assignMatch[1];
-            if (!mutStack.some((s) => s.has(targetVar))) {
-              throw new Error(
-                "cannot assign to immutable variable `" + targetVar + "`",
-              );
-            }
-          }
-
-          const translated = translateExpr(stmt);
-          lines.push(
-            isLast && isTopLevel
-              ? "return " + translated + ";"
-              : translated + ";",
-          );
-        }
-      }
-    }
-    return lines;
-  }
-
-  function hasLaterStmts(tokens, fromIdx) {
-    for (let i = fromIdx + 1; i < tokens.length; i++) {
-      if (tokens[i].type === "stmt") return true;
-      // A block after this statement means it's not the last meaningful expr
-      if (tokens[i].type === "open") return true;
-    }
-    return false;
-  }
-
-  let result = compile(tokens, true);
+  let result = compileTokens(tokens, true, mutStack);
 
   // If no return was emitted (e.g. only declarations), default to returning 0
   if (!result.some((l) => l.includes("return"))) {
@@ -94,6 +17,82 @@ export function compileTuffToJS(source) {
 
   const preamble = "var _tuff_args = [null].concat(args);";
   return preamble + result.join("");
+}
+
+function compileTokens(tokens, isTopLevel, mutStack) {
+  let lines = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+
+    if (t.type === "open") {
+      // Enter new scope — wrap block in IIFE so inner vars don't leak out
+      mutStack.push(new Set());
+
+      // Find matching close, collecting inner stmts
+      let depth = 1;
+      i++;
+      const innerStmts = [];
+      while (i < tokens.length && depth > 0) {
+        if (tokens[i].type === "open") depth++;
+        else if (tokens[i].type === "close") {
+          depth--;
+          if (depth === 0) break;
+        } else {
+          innerStmts.push(tokens[i]);
+        }
+        i++;
+      }
+
+      // Recurse into block — blocks never return, so isTopLevel=false
+      const innerLines = compileTokens(innerStmts, false, mutStack);
+      lines.push("(function(){" + innerLines.join("") + "})();");
+
+      mutStack.pop();
+    } else if (t.type === "close") {
+      // Should not happen at top level; skip
+    } else {
+      const stmt = t.value;
+      const isLast = i === tokens.length - 1 && !hasLaterStmts(tokens, i);
+
+      compileStatement(stmt, isLast, isTopLevel, mutStack, lines);
+    }
+  }
+  return lines;
+}
+
+function compileStatement(stmt, isLast, isTopLevel, mutStack, lines) {
+  // let / let mut declaration
+  const letMatch = /^let\s+(?:mut\s+)?(\w+)\s*=\s*(.+)$/.exec(stmt);
+  if (letMatch) {
+    const varName = letMatch[1];
+    const isMut = stmt.startsWith("let mut");
+    if (isMut) mutStack[mutStack.length - 1].add(varName);
+    lines.push(translateExpr("var " + varName + " = " + letMatch[2] + ";"));
+    return;
+  }
+
+  // Assignment or plain expression
+  const assignMatch = /^(\w+)\s*=\s*(.+)$/.exec(stmt);
+  if (assignMatch && !isLast) {
+    const targetVar = assignMatch[1];
+    if (!mutStack.some((s) => s.has(targetVar))) {
+      throw new Error("cannot assign to immutable variable `" + targetVar + "`");
+    }
+  }
+
+  const translated = translateExpr(stmt);
+  lines.push(
+    isLast && isTopLevel ? "return " + translated + ";" : translated + ";",
+  );
+}
+
+function hasLaterStmts(tokens, fromIdx) {
+  for (let i = fromIdx + 1; i < tokens.length; i++) {
+    if (tokens[i].type === "stmt") return true;
+    // A block after this statement means it's not the last meaningful expr
+    if (tokens[i].type === "open") return true;
+  }
+  return false;
 }
 
 function tokenize(source) {
