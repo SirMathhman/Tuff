@@ -719,4 +719,10 @@ mod tests {
         // yield inside an if body should propagate up and terminate the enclosing block
         assert_eq!(interpret("{ if (true) yield 2; 5 } + 1"), Ok(3));
     }
+
+    #[test]
+    fn test_yield_inside_else_branch() {
+        // yield in else branch when condition is false should also propagate up
+        assert_eq!(interpret("{ if (false) 99; else yield 7; } * 2"), Ok(14));
+    }
 }

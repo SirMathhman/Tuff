@@ -255,12 +255,14 @@ fn parse_statement_list_with_tw(
         if parse_for_statement(tokens, pos, scope)? == Some(()) {
             continue;
         }
-        if let Some((if_val, yielded)) = parse_if_statement(tokens, pos, scope)? {
-            if yielded {
-                result.0 = if_val;
-                break;
+        let (if_val, yielded) = if let Some(r) = parse_if_statement(tokens, pos, scope)? { r } else { (0i64, false) };
+        if yielded {
+            result.0 = if_val;
+            // Skip remaining tokens in the block until terminator — don't overwrite yield value
+            while *pos < tokens.len() && terminator.map_or(true, |t| tokens[*pos] != t) {
+                *pos += 1;
             }
-            continue;
+            break;
         }
         if parse_while_statement(tokens, pos, scope)? == Some(()) {
             continue;
