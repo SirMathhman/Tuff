@@ -685,4 +685,9 @@ mod tests {
     fn test_let_with_fn_call_wider_return_type_errors() {
         assert!(interpret("fn get() : U16 => 100U16; let x : U8 = get();").is_err());
     }
+
+    #[test]
+    fn test_fn_bool_param_rejects_int_arg() {
+        assert!(interpret("fn pass(param : Bool) => 0; pass(100)").is_err());
+    }
 }
