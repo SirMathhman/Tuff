@@ -690,4 +690,22 @@ mod tests {
     fn test_fn_bool_param_rejects_int_arg() {
         assert!(interpret("fn pass(param : Bool) => 0; pass(100)").is_err());
     }
+
+    #[test]
+    fn test_fn_untyped_param_accepts_plain_int() {
+        // (None, None) branch: untyped param + plain int arg → Ok
+        assert_eq!(interpret("fn foo(x) => x; foo(5)"), Ok(5));
+    }
+
+    #[test]
+    fn test_fn_untyped_param_accepts_typed_arg() {
+        // (_, None) branch: typed arg passed to untyped param → Ok
+        assert_eq!(interpret("fn bar(y) => y; bar(10U8)"), Ok(10));
+    }
+
+    #[test]
+    fn test_fn_param_rejects_wider_type() {
+        // (Some(arg_w), Some(expected_w)) if arg_w > expected_w → Err
+        assert!(interpret("fn narrow(x : U8) => 0; narrow(100U16)").is_err());
+    }
 }
