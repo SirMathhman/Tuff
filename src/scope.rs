@@ -118,7 +118,12 @@ impl Scope {
     pub fn get_fn_body(&self, name: &str) -> Option<(usize, Vec<String>, Vec<Option<u32>>)> {
         let entry = self.0.iter().rev().find_map(|frame| frame.get(name))?;
         match &entry.0 {
-            Value::FunctionBody { begin, params, param_types, .. } => Some((*begin, params.clone(), param_types.clone())),
+            Value::FunctionBody {
+                begin,
+                params,
+                param_types,
+                ..
+            } => Some((*begin, params.clone(), param_types.clone())),
             _ => None,
         }
     }

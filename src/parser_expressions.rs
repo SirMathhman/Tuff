@@ -24,7 +24,10 @@ fn bind_fn_params(scope: &mut Scope, params: &[String], arg_values: &[i64]) -> u
 
 /// Check that an argument type width is compatible with a declared parameter type.
 /// Returns Ok(()) if compatible, Err otherwise.
-fn check_param_type_compat(arg_tw: Option<u32>, param_expected_tw: Option<u32>) -> Result<(), ParseError> {
+fn check_param_type_compat(
+    arg_tw: Option<u32>,
+    param_expected_tw: Option<u32>,
+) -> Result<(), ParseError> {
     match (arg_tw, param_expected_tw) {
         // No constraint on either side — always ok
         (None, None) => Ok(()),
