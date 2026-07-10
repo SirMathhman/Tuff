@@ -347,6 +347,8 @@ fn parse_primary(
         for _ in 0..bound_count {
             scope.pop();
         }
+        // Clear returned flag so subsequent function calls start fresh
+        scope.clear_returned();
         Ok((val, tw))
     } else if scope.contains_key(token.as_str())
         && (*pos + 1 >= tokens.len() || tokens[*pos + 1] != "=")

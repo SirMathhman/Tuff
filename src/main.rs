@@ -737,4 +737,28 @@ mod tests {
         // yield only exits its immediate block, so `inner` is 3 and `inner + 1` evaluates to 4
         assert_eq!(interpret("fn get() => { let inner = { yield 3 }; inner + 1 }; get()"), Ok(4));
     }
+
+    #[test]
+    fn test_return_in_block_expression_subtraction() {
+        // return in block with subtraction operator chain (covers parse_additive is_returned break)
+        assert_eq!(interpret("fn f() => { let x = { return 10 }; x - 5 }; f()"), Ok(10));
+    }
+
+    #[test]
+    fn test_return_in_if_body_block_terminates_fn() {
+        // covers parse_if_body block-return path (lines 36-48 in parser_statements)
+        assert_eq!(interpret("fn f() => { if (true) { return 7; } else 0; 99 }; f()"), Ok(7));
+    }
+
+    #[test]
+    fn test_return_in_if_body_non_block_terminates_fn() {
+        // covers parse_if_body non-block return path (lines 45-48)
+        assert_eq!(interpret("fn f() => { if (true) return 13; else 0; 99 }; f()"), Ok(13));
+    }
+
+    #[test]
+    fn test_multiple_fn_calls_clear_returned_flag() {
+        // covers scope.clear_returned being called between function invocations
+        assert_eq!(interpret("fn a() => { return 5; } fn b() => 20; a(); b()"), Ok(20));
+    }
 }
