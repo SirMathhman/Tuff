@@ -70,3 +70,11 @@ test("if-else statement with false condition executes else branch", () => {
 test("if-else with block bodies executes correct branch", () => {
   expectValid("let mut x = 0; if (false) { x = 1; } else { x = 2; } x", [], 2);
 });
+
+test("chained else-if with block bodies executes final else branch", () => {
+  expectValid(
+    "let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else { x = 3; } x",
+    [],
+    3,
+  );
+});
