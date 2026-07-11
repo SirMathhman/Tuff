@@ -25,49 +25,54 @@ function compileTokens(tokens, isTopLevel, mutStack) {
     const t = tokens[i];
 
     if (t.type === "open") {
-      // Enter new scope — wrap block in IIFE so inner vars don't leak out
-      mutStack.push(new Set());
-
-      // Find matching close, collecting inner stmts
-      let depth = 1;
-      i++;
-      const innerStmts = [];
-      while (i < tokens.length && depth > 0) {
-        if (tokens[i].type === "open") depth++;
-        else if (tokens[i].type === "close") {
-          depth--;
-          if (depth === 0) break;
-        } else {
-          innerStmts.push(tokens[i]);
-        }
-        i++;
-      }
-
-      // Recurse into block — blocks never return, so isTopLevel=false
-      const innerLines = compileTokens(innerStmts, false, mutStack);
-      lines.push("(function(){" + innerLines.join("") + "})();");
-
-      mutStack.pop();
-    } else if (t.type === "close") {
-      // Should not happen at top level; skip
-    } else {
+      i = processBlock(tokens, i, mutStack, lines);
+    } else if (t.type !== "close") {
       let stmt = t.value;
 
-      // If this statement starts with `if` and the next token starts with `else`, merge them
+      // If this statement starts with `if`, handle it specially to support block bodies
       if (stmt.startsWith("if ") && i + 1 < tokens.length) {
         const nextT = tokens[i + 1];
-        if (nextT.type === "stmt" && nextT.value.startsWith("else ")) {
-          stmt = stmt + "; " + nextT.value;
-          i++; // consume the else token
+        const isLast = i === tokens.length - 1 && !hasLaterStmts(tokens, i);
+
+        // Parse the condition from "if (...)"
+        const condMatch = /^if\s*\((.+)\)$/.exec(stmt);
+        if (condMatch) {
+          i = handleIf(condMatch[1], tokens, mutStack, lines, isLast, ++i);
+          continue;
         }
+
+        // Fallback: plain-expr else clause — merge and delegate to compileStatement
+        if (nextT.type === "stmt" && nextT.value.startsWith("else ")) {
+          stmt += "; " + nextT.value;
+          i++;
+          compileStatement(stmt, isLast, isTopLevel, mutStack, lines);
+          continue;
+        }
+
+        // No block or else — just a plain if with expression body (handled below)
       }
 
-      const isLast = i === tokens.length - 1 && !hasLaterStmts(tokens, i);
+      const isLast2 = i === tokens.length - 1 && !hasLaterStmts(tokens, i);
 
-      compileStatement(stmt, isLast, isTopLevel, mutStack, lines);
+      compileStatement(stmt, isLast2, isTopLevel, mutStack, lines);
     }
   }
   return lines;
+}
+
+function processBlock(tokens, startIdx, mutStack, lines) {
+  // Enter new scope — wrap block in IIFE so inner vars don't leak out
+  mutStack.push(new Set());
+
+  const innerStmts = collectBlockInner(tokens, startIdx);
+
+  // Recurse into block — blocks never return, so isTopLevel=false
+  const innerLines = compileTokens(innerStmts, false, mutStack);
+  lines.push("(function(){" + innerLines.join("") + "})();");
+
+  mutStack.pop();
+
+  return findAfterClose(tokens, startIdx); // for-loop's i++ will skip to next token
 }
 
 function compileStatement(stmt, isLast, isTopLevel, mutStack, lines) {
@@ -111,12 +116,114 @@ function compileIf(condRaw, bodyRaw, mutStack, lines) {
     checkAssignmentMutability(elseBody, mutStack);
 
     lines.push(
-      "if (" + condExpr + ") {" + translateExpr(thenBody) + "} else {" + translateExpr(elseBody) + "}",
+      "if (" +
+        condExpr +
+        ") {" +
+        translateExpr(thenBody) +
+        "} else {" +
+        translateExpr(elseBody) +
+        "}",
     );
   } else {
     checkAssignmentMutability(bodyRaw, mutStack);
     lines.push("if (" + condExpr + ") {" + translateExpr(bodyRaw) + "}");
   }
+}
+
+function handleIf(condRaw, tokens, mutStack, lines, isLast, idx) {
+  const condExpr = translateExpr(condRaw);
+  let i = idx;
+
+  // Collect then-body: could be a block `{ ... }` or a plain expression token
+  let thenLines = [];
+  if (i < tokens.length && tokens[i].type === "open") {
+    compileBlockBody(tokens, i, mutStack).forEach((l) => thenLines.push(l));
+    i = findAfterClose(tokens, i) + 1;
+  } else if (i < tokens.length && tokens[i].type === "stmt") {
+    checkAssignmentMutability(tokens[i].value, mutStack);
+    thenLines.push(translateExpr(tokens[i].value) + ";");
+    i++;
+  }
+
+  // Check for else clause: could be `else ...` or `else { ... }`
+  let elseLines = [];
+  if (
+    i < tokens.length &&
+    tokens[i].type === "stmt" &&
+    tokens[i].value.startsWith("else ")
+  ) {
+    const afterElse = i + 1;
+
+    // Check mutability for plain-expr else body
+    if (!tokens[afterElse] || tokens[afterElse].type !== "open") {
+      checkAssignmentMutability(tokens[i].value.substring(5), mutStack);
+    }
+
+    if (afterElse < tokens.length && tokens[afterElse].type === "open") {
+      i++; // skip the "else ..." stmt token
+      compileBlockBody(tokens, i, mutStack).forEach((l) => elseLines.push(l));
+      i = findAfterClose(tokens, i) + 1;
+    } else {
+      const rawElse = tokens[i].value.substring(5);
+      if (rawElse.trim()) elseLines.push(translateExpr(rawElse) + ";");
+      i++;
+    }
+  }
+
+  buildIfOutput(condExpr, thenLines, elseLines, lines);
+
+  return i;
+}
+
+function compileBlockBody(tokens, startIdx, mutStack) {
+  const innerStmts = collectBlockInner(tokens, startIdx);
+  mutStack.push(new Set());
+  const result = compileTokens(innerStmts, false, mutStack);
+  mutStack.pop();
+  return result;
+}
+
+function findAfterClose(tokens, startIdx) {
+  let depth = 1;
+  for (let j = startIdx + 1; j < tokens.length && depth > 0; j++) {
+    if (tokens[j].type === "open") depth++;
+    else if (tokens[j].type === "close") {
+      depth--;
+      if (depth === 0) return j;
+    }
+  }
+  return startIdx; // fallback — shouldn't happen with valid input
+}
+
+function buildIfOutput(condExpr, thenLines, elseLines, lines) {
+  if (elseLines.length > 0) {
+    lines.push(
+      "if (" +
+        condExpr +
+        ") {" +
+        thenLines.join("") +
+        "} else {" +
+        elseLines.join("") +
+        "}",
+    );
+  } else {
+    lines.push("if (" + condExpr + ") {" + thenLines.join("") + "}");
+  }
+}
+
+function collectBlockInner(tokens, startIdx) {
+  let depth = 1;
+  const innerStmts = [];
+  for (let j = startIdx + 1; j < tokens.length && depth > 0; j++) {
+    if (tokens[j].type === "open") depth++;
+    else if (tokens[j].type === "close") {
+      depth--;
+      if (depth === 0) break;
+    } else {
+      innerStmts.push(tokens[j]);
+    }
+  }
+  return innerStmts;
 }
 
 function checkAssignmentMutability(stmt, mutStack) {

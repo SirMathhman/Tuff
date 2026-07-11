@@ -66,3 +66,7 @@ test("if statement with true condition executes body", () => {
 test("if-else statement with false condition executes else branch", () => {
   expectValid("let mut x = 0; if (false) x = 1; else x = 2; x", [], 2);
 });
+
+test("if-else with block bodies executes correct branch", () => {
+  expectValid("let mut x = 0; if (false) { x = 1; } else { x = 2; } x", [], 2);
+});
