@@ -58,3 +58,11 @@ test("variable shadowing allows redeclaration", () => {
 test("inner block variable does not leak out of scope", () => {
   expectValid("let x = 1; { let x = 0; } x", [], 1);
 });
+
+test("if statement with true condition executes body", () => {
+  expectValid("let mut x = 0; if (true) x = 1; x", [], 1);
+});
+
+test("if-else statement with false condition executes else branch", () => {
+  expectValid("let mut x = 0; if (false) x = 1; else x = 2; x", [], 2);
+});

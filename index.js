@@ -51,7 +51,17 @@ function compileTokens(tokens, isTopLevel, mutStack) {
     } else if (t.type === "close") {
       // Should not happen at top level; skip
     } else {
-      const stmt = t.value;
+      let stmt = t.value;
+
+      // If this statement starts with `if` and the next token starts with `else`, merge them
+      if (stmt.startsWith("if ") && i + 1 < tokens.length) {
+        const nextT = tokens[i + 1];
+        if (nextT.type === "stmt" && nextT.value.startsWith("else ")) {
+          stmt = stmt + "; " + nextT.value;
+          i++; // consume the else token
+        }
+      }
+
       const isLast = i === tokens.length - 1 && !hasLaterStmts(tokens, i);
 
       compileStatement(stmt, isLast, isTopLevel, mutStack, lines);
@@ -63,27 +73,62 @@ function compileTokens(tokens, isTopLevel, mutStack) {
 function compileStatement(stmt, isLast, isTopLevel, mutStack, lines) {
   // let / let mut declaration
   const letMatch = /^let\s+(?:mut\s+)?(\w+)\s*=\s*(.+)$/.exec(stmt);
-  if (letMatch) {
-    const varName = letMatch[1];
-    const isMut = stmt.startsWith("let mut");
-    if (isMut) mutStack[mutStack.length - 1].add(varName);
-    lines.push(translateExpr("var " + varName + " = " + letMatch[2] + ";"));
+  if (letMatch) return compileLet(letMatch, stmt, mutStack, lines);
+
+  // if statement: if (cond) body or if (cond) body; else otherBody
+  const ifMatch = /^if\s*\((.+)\)\s+(.+)$/.exec(stmt);
+  if (ifMatch) {
+    compileIf(ifMatch[1], ifMatch[2], mutStack, lines);
     return;
   }
 
   // Assignment or plain expression
-  const assignMatch = /^(\w+)\s*=\s*(.+)$/.exec(stmt);
-  if (assignMatch && !isLast) {
-    const targetVar = assignMatch[1];
-    if (!mutStack.some((s) => s.has(targetVar))) {
-      throw new Error("cannot assign to immutable variable `" + targetVar + "`");
-    }
-  }
+  if (!isLast) checkAssignmentMutability(stmt, mutStack);
 
   const translated = translateExpr(stmt);
   lines.push(
     isLast && isTopLevel ? "return " + translated + ";" : translated + ";",
   );
+}
+
+function compileLet(letMatch, stmt, mutStack, lines) {
+  const varName = letMatch[1];
+  const isMut = stmt.startsWith("let mut");
+  if (isMut) mutStack[mutStack.length - 1].add(varName);
+  lines.push(translateExpr("var " + varName + " = " + letMatch[2] + ";"));
+}
+
+function compileIf(condRaw, bodyRaw, mutStack, lines) {
+  const condExpr = translateExpr(condRaw);
+
+  // Split on "; else " to separate then-body from else-body
+  const elseIdx = bodyRaw.indexOf("; else ");
+  if (elseIdx >= 0) {
+    const thenBody = bodyRaw.substring(0, elseIdx);
+    const elseBody = bodyRaw.substring(elseIdx + 7).trim();
+
+    checkAssignmentMutability(thenBody, mutStack);
+    checkAssignmentMutability(elseBody, mutStack);
+
+    lines.push(
+      "if (" + condExpr + ") {" + translateExpr(thenBody) + "} else {" + translateExpr(elseBody) + "}",
+    );
+  } else {
+    checkAssignmentMutability(bodyRaw, mutStack);
+    lines.push("if (" + condExpr + ") {" + translateExpr(bodyRaw) + "}");
+  }
+}
+
+function checkAssignmentMutability(stmt, mutStack) {
+  const assignMatch = /^(\w+)\s*=\s*(.+)$/.exec(stmt);
+  if (assignMatch) {
+    const targetVar = assignMatch[1];
+    if (!mutStack.some((s) => s.has(targetVar))) {
+      throw new Error(
+        "cannot assign to immutable variable `" + targetVar + "`",
+      );
+    }
+  }
 }
 
 function hasLaterStmts(tokens, fromIdx) {
