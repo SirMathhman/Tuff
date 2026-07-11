@@ -86,3 +86,11 @@ test("array literal and indexing works", () => {
     2,
   );
 });
+
+test("array element mutation works", () => {
+  expectValid(
+    "let mut array = [0]; array[0] = 2; array[0]",
+    [],
+    2,
+  );
+});
