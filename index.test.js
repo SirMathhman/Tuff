@@ -80,25 +80,29 @@ test("chained else-if with block bodies executes final else branch", () => {
 });
 
 test("array literal and indexing works", () => {
-  expectValid(
-    "let array = [1, 2, 3]; array[1]",
-    [],
-    2,
-  );
+  expectValid("let array = [1, 2, 3]; array[1]", [], 2);
 });
 
 test("array element mutation works", () => {
-  expectValid(
-    "let mut array = [0]; array[0] = 2; array[0]",
-    [],
-    2,
-  );
+  expectValid("let mut array = [0]; array[0] = 2; array[0]", [], 2);
 });
 
 test("block expression returns inner value", () => {
-  expectValid(
-    "let x = { let y = 2; y }; x",
-    [],
-    2,
-  );
+  expectValid("let x = { let y = 2; y }; x", [], 2);
+});
+
+test("yield in block expression returns early", () => {
+  expectValid("let x = { if (true) yield 1; 3 } + 2; x", [], 3);
+});
+
+test("fn with block expression, yield, and trailing operator returns correct value", () => {
+  expectValid("fn get() => { if (true) yield 1; 2 } + 3; get()", [], 4);
+});
+
+test("fn definition and call with property access works", () => {
+  expectValid("fn get() => __args__; get().length", ["foo"], 2);
+});
+
+test("fn with parameters performs arithmetic correctly", () => {
+  expectValid("fn add(first, second) => first + second; add(3, 4)", [], 7);
 });
