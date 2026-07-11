@@ -29,6 +29,13 @@ function compileTokens(tokens, isTopLevel, mutStack) {
     } else if (t.type !== "close") {
       let stmt = t.value;
 
+      // If this statement ends with `=`, check for block expression: `let x = { ... }`
+      const pendingAssignMatch = /^(.+)\s*=$/.exec(stmt);
+      if (pendingAssignMatch && i + 1 < tokens.length && tokens[i + 1].type === "open") {
+        i = compileBlockAssignment(pendingAssignMatch[1], tokens, mutStack, lines, i + 1);
+        continue;
+      }
+
       // If this statement starts with `if`, handle it specially to support block bodies
       if (stmt.startsWith("if ") && i + 1 < tokens.length) {
         const nextT = tokens[i + 1];
@@ -101,6 +108,32 @@ function compileLet(letMatch, stmt, mutStack, lines) {
   const isMut = stmt.startsWith("let mut");
   if (isMut) mutStack[mutStack.length - 1].add(varName);
   lines.push(translateExpr("var " + varName + " = " + letMatch[2] + ";"));
+}
+
+function compileBlockAssignment(lhs, tokens, mutStack, lines, blockIdx) {
+  // Compile block as expression — last inner expr becomes the value
+  mutStack.push(new Set());
+  const innerStmts = collectBlockInner(tokens, blockIdx);
+  const innerLines = compileTokens(innerStmts, true, mutStack);
+  mutStack.pop();
+
+  if (lhs.includes("let")) {
+    // Re-parse as let declaration with block value
+    const letM = /^let\s+(?:mut\s+)?(\w+)\s*$/.exec(lhs);
+    if (letM) {
+      const varName = letM[1];
+      const isMut = lhs.startsWith("let mut");
+      // Push back to track in outer scope since we already popped above
+      if (isMut) mutStack[mutStack.length - 1].add(varName);
+      lines.push(
+        "var " + varName + " = (function(){" + innerLines.join("") + "})();",
+      );
+    } else {
+      lines.push("(function(){" + innerLines.join("") + "})();");
+    }
+  }
+
+  return findAfterClose(tokens, blockIdx); // for-loop's i++ will skip past close brace
 }
 
 function compileIf(condRaw, bodyRaw, mutStack, lines) {

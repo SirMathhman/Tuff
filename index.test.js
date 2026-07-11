@@ -94,3 +94,11 @@ test("array element mutation works", () => {
     2,
   );
 });
+
+test("block expression returns inner value", () => {
+  expectValid(
+    "let x = { let y = 2; y }; x",
+    [],
+    2,
+  );
+});
