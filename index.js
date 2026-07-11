@@ -182,6 +182,15 @@ function translateBody(bodyRaw, inIife) {
   if (inIife) {
     const yieldMatch = /^yield\s+(.+)$/.exec(bodyRaw);
     if (yieldMatch) return "return " + translateExpr(yieldMatch[1]) + ";";
+
+    // Detect `return` inside block — throw sentinel to bypass trailing operators
+    const returnMatch = /^return\s+(.+)$/.exec(bodyRaw);
+    if (returnMatch)
+      return (
+        "throw {_tuff_return: true, value: " +
+        translateExpr(returnMatch[1]) +
+        "};"
+      );
   }
   return translateExpr(bodyRaw) + ";";
 }
@@ -209,6 +218,17 @@ function compileStatement(stmt, isLast, isTopLevel, mutStack, lines) {
   const yieldMatch = /^yield\s+(.+)$/.exec(stmt);
   if (yieldMatch && isTopLevel) {
     lines.push("return " + translateExpr(yieldMatch[1]) + ";");
+    return;
+  }
+
+  // return statement: throw sentinel to escape fn-level try/catch, bypassing trailing ops
+  const returnMatch = /^return\s+(.+)$/.exec(stmt);
+  if (returnMatch && isTopLevel) {
+    lines.push(
+      "throw {_tuff_return: true, value: " +
+        translateExpr(returnMatch[1]) +
+        "};",
+    );
     return;
   }
 
@@ -289,11 +309,11 @@ function compileFnBlockBody(fnPrefix, tokens, mutStack, lines, blockIdx) {
       fnName +
       "(" +
       paramsStr +
-      ") { return (function(){" +
+      ") { try { return (function(){" +
       result.innerLines.join("") +
       "}())" +
       trailingInfo.op +
-      "; }",
+      "; } catch (_tuff_e) { if (_tuff_e && _tuff_e._tuff_return !== undefined) return _tuff_e.value; throw _tuff_e; } }",
   );
 
   return trailingInfo.found ? result.afterBlock : result.afterBlock - 1; // for-loop's i++ will advance past consumed tokens
@@ -328,9 +348,9 @@ function compileFnExprBody(fnName, paramsStr, bodyRaw, mutStack, lines) {
       fnName +
       "(" +
       paramsStr +
-      ") { return (function(){" +
+      ") { try { return (function(){" +
       innerLines.join("") +
-      "}()); }",
+      "}()); } catch (_tuff_e) { if (_tuff_e && _tuff_e._tuff_return !== undefined) return _tuff_e.value; throw _tuff_e; } }",
   );
 }
 

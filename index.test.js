@@ -99,6 +99,10 @@ test("fn with block expression, yield, and trailing operator returns correct val
   expectValid("fn get() => { if (true) yield 1; 2 } + 3; get()", [], 4);
 });
 
+test("fn with block expression using return skips trailing operator", () => {
+  expectValid("fn get() => { if (true) return 1; 2 } + 3; get()", [], 1);
+});
+
 test("fn definition and call with property access works", () => {
   expectValid("fn get() => __args__; get().length", ["foo"], 2);
 });
