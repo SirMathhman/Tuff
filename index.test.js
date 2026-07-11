@@ -78,3 +78,11 @@ test("chained else-if with block bodies executes final else branch", () => {
     3,
   );
 });
+
+test("array literal and indexing works", () => {
+  expectValid(
+    "let array = [1, 2, 3]; array[1]",
+    [],
+    2,
+  );
+});
