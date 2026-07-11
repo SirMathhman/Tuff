@@ -184,15 +184,29 @@ function compileBlockBody(tokens, startIdx, mutStack) {
 }
 
 function findAfterClose(tokens, startIdx) {
+  const result = walkBlock(tokens, startIdx);
+  return result.closeIndex;
+}
+
+function collectBlockInner(tokens, startIdx) {
+  const result = walkBlock(tokens, startIdx);
+  return result.innerStmts;
+}
+
+/** Walk tokens inside a block starting at an open-brace token. */
+function walkBlock(tokens, startIdx) {
   let depth = 1;
+  const innerStmts = [];
   for (let j = startIdx + 1; j < tokens.length && depth > 0; j++) {
     if (tokens[j].type === "open") depth++;
     else if (tokens[j].type === "close") {
       depth--;
-      if (depth === 0) return j;
+      if (depth === 0) return { innerStmts, closeIndex: j };
+    } else {
+      innerStmts.push(tokens[j]);
     }
   }
-  return startIdx; // fallback — shouldn't happen with valid input
+  return { innerStmts, closeIndex: startIdx }; // fallback — shouldn't happen with valid input
 }
 
 function buildIfOutput(condExpr, thenLines, elseLines, lines) {
@@ -209,21 +223,6 @@ function buildIfOutput(condExpr, thenLines, elseLines, lines) {
   } else {
     lines.push("if (" + condExpr + ") {" + thenLines.join("") + "}");
   }
-}
-
-function collectBlockInner(tokens, startIdx) {
-  let depth = 1;
-  const innerStmts = [];
-  for (let j = startIdx + 1; j < tokens.length && depth > 0; j++) {
-    if (tokens[j].type === "open") depth++;
-    else if (tokens[j].type === "close") {
-      depth--;
-      if (depth === 0) break;
-    } else {
-      innerStmts.push(tokens[j]);
-    }
-  }
-  return innerStmts;
 }
 
 function checkAssignmentMutability(stmt, mutStack) {
