@@ -29,6 +29,14 @@ test("empty source compiles and exits with code 0", () => {
   expectValid("", "", 0);
 });
 
+test("read() returns stdin value", () => {
+  expectValid("read()", "1", 1);
+});
+
+test("read() parses first token from multi-value input", () => {
+  expectValid("read()", "1 2", 1);
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });
