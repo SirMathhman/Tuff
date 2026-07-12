@@ -4,7 +4,7 @@ function isAlpha(ch) {
 
 function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
-  const allowed = " \t\n\r+-*/(){ };=UI" + String.fromCharCode(60, 62) + ":|";
+  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
@@ -43,47 +43,87 @@ function skipElseKeyword(source, i) {
   return -1;
 }
 
-// Skip an if/else expression starting at position i. Returns end index or -1.
-function skipIfElseExpression(source, i) {
-  // Skip leading whitespace
-  let pos = skipWhitespace(source, i);
-  const ifEnd = skipIfKeyword(source, pos);
-  if (ifEnd === -1) return -1;
+// Skip "while" keyword at position i. Returns end index or -1.
+function skipWhileKeyword(source, i) {
+  if (source.substring(i, i + 5) === "while" && (i + 5 >= source.length || !isAlpha(source[i + 5]))) {
+    return i + 5;
+  }
+  return -1;
+}
+
+// Skip "for" keyword at position i. Returns end index or -1.
+function skipForKeyword(source, i) {
+  if (source.substring(i, i + 3) === "for" && (i + 3 >= source.length || !isAlpha(source[i + 3]))) {
+    return i + 3;
+  }
+  return -1;
+}
+
+// Skip a for loop starting at position i. Returns end index or -1.
+function skipForLoop(source, i) {
+  const forEnd = skipForKeyword(source, i);
+  if (forEnd === -1) return -1;
   
-  // Skip whitespace after "if"
-  pos = skipWhitespace(source, ifEnd);
-  
-  // Expect opening parenthesis for condition
+  let pos = skipWhitespace(source, forEnd);
   if (source[pos] !== "(") return -1;
   
-  // Find closing parenthesis of condition
+  pos = skipParenthesizedCondition(source, pos + 1);
+  pos = skipWhitespace(source, pos);
+  pos = skipBranch(source, pos);
+  return pos;
+}
+
+// Skip past a parenthesized condition starting at the opening '('. Returns index after closing ')'.
+function skipParenthesizedCondition(source, start) {
   let parenDepth = 1;
-  pos++;
+  let pos = start;
   while (pos < source.length && parenDepth > 0) {
     if (source[pos] === "(") { parenDepth++; pos++; continue; }
     if (source[pos] === ")") { parenDepth--; pos++; continue; }
     pos++;
   }
+  return pos;
+}
+
+// Skip a branch (block or expression) at position i. Returns end index.
+function skipBranch(source, i) {
+  if (source[i] === "{") return findMatchingBrace(source, i) + 1;
+  return skipExpression(source, i);
+}
+
+// Skip a while loop starting at position i. Returns end index or -1.
+function skipWhileLoop(source, i) {
+  const whileEnd = skipWhileKeyword(source, i);
+  if (whileEnd === -1) return -1;
   
-  // Skip whitespace after condition
+  let pos = skipWhitespace(source, whileEnd);
+  if (source[pos] !== "(") return -1;
+  
+  pos = skipParenthesizedCondition(source, pos + 1);
+  pos = skipWhitespace(source, pos);
+  pos = skipBranch(source, pos);
+  return pos;
+}
+
+// Skip an if/else expression starting at position i. Returns end index or -1.
+function skipIfElseExpression(source, i) {
+  let pos = skipWhitespace(source, i);
+  const ifEnd = skipIfKeyword(source, pos);
+  if (ifEnd === -1) return -1;
+  
+  pos = skipWhitespace(source, ifEnd);
+  if (source[pos] !== "(") return -1;
+  
+  pos = skipParenthesizedCondition(source, pos + 1);
+  pos = skipWhitespace(source, pos);
+  pos = skipBranch(source, pos);
   pos = skipWhitespace(source, pos);
   
-  // Skip the true branch (could be a block or expression)
-  if (source[pos] === "{") {
-    pos = findMatchingBrace(source, pos) + 1;
-  } else {
-    pos = skipExpression(source, pos);
-  }
-  
-  // Skip whitespace
-  pos = skipWhitespace(source, pos);
-  
-  // Check for "else" keyword and skip false branch
   const elseEnd = skipElseKeyword(source, pos);
   if (elseEnd === -1) return pos;
   
   pos = skipWhitespace(source, elseEnd);
-  pos = source[pos] === "{" ? findMatchingBrace(source, pos) + 1 : skipExpression(source, pos);
+  pos = skipBranch(source, pos);
   return pos;
 }
 
@@ -192,6 +232,18 @@ function validateSource(source) {
     if (isBlockStart) {
       const endIdx = findMatchingBrace(source, i);
       i = endIdx + 1;
+      continue;
+    }
+    // Try for loop
+    const forEnd = skipForLoop(source, i);
+    if (forEnd !== -1) {
+      i = forEnd;
+      continue;
+    }
+    // Try while loop
+    const whileEnd = skipWhileLoop(source, i);
+    if (whileEnd !== -1) {
+      i = whileEnd;
       continue;
     }
     // Try if/else expression
@@ -412,10 +464,16 @@ function processLetDeclaration(source, i) {
   return skipToSemicolonWithIfElse(source, pos);
 }
 
-// Like skipToSemicolon but properly handles if/else expressions and blocks
+// Like skipToSemicolon but properly handles if/else expressions, while loops, and blocks
 function skipToSemicolonWithIfElse(source, start) {
   let j = start;
   while (j < source.length && source[j] !== ";") {
+    // Handle while loops
+    const whileEnd = skipWhileLoop(source, j);
+    if (whileEnd !== -1) {
+      j = whileEnd;
+      continue;
+    }
     // Handle if/else expressions
     const ifElseEnd = skipIfElseExpression(source, j);
     if (ifElseEnd !== -1) {
@@ -670,7 +728,38 @@ function tryStripTypedRead(source, i) {
 }
 
 
+// Check if a let declaration at position i has a range RHS (contains ".."). Returns {varName, startExpr, endExpr, semiPos} or null.
+function tryExtractRangeAssignment(source, i) {
+  let afterLet = i + 4;
+  // Skip optional "mut" keyword
+  let j = skipWhitespace(source, afterLet);
+  const mutEnd = skipKeywordMut(source, j);
+  if (mutEnd !== -1) afterLet = mutEnd;
+  
+  const identEnd = skipIdentifier(source, afterLet);
+  if (identEnd === -1) return null;
+  
+  const eqPos = source.indexOf("=", identEnd);
+  if (eqPos === -1) return null;
+  
+  const semiPos = source.indexOf(";", eqPos);
+  if (semiPos === -1) return null;
+  
+  const rhs = source.substring(eqPos + 1, semiPos).trim();
+  const dotDotIdx = rhs.indexOf("..");
+  if (dotDotIdx === -1) return null;
+  
+  const varName = source.substring(afterLet, identEnd).trim();
+  return {
+    varName: varName,
+    startExpr: rhs.substring(0, dotDotIdx).trim(),
+    endExpr: rhs.substring(dotDotIdx + 2).trim(),
+    semiPos: semiPos
+  };
+}
+
 // Strip "mut" keyword from let declarations ("let mut x" -> "var x") and replace "let" with "var"
+// Also handle range literals: "let range = 0..read();" -> "var _rangeStart = 0; var _rangeEnd = read();"
 function stripMutKeyword(source) {
   let result = "";
   let i = 0;
@@ -680,12 +769,20 @@ function stripMutKeyword(source) {
       i++;
       continue;
     }
+    // Check for range assignment first
+    const rangeInfo = tryExtractRangeAssignment(source, i);
+    if (rangeInfo) {
+      result += "var _" + rangeInfo.varName + "Start = " + rangeInfo.startExpr + "; var _" + rangeInfo.varName + "End = " + rangeInfo.endExpr + "; ";
+      i = rangeInfo.semiPos + 1;
+      continue;
+    }
+    
     // Check for "mut" keyword after "let "
     let j = skipWhitespace(source, i + 4);
     const mutEnd = skipKeywordMut(source, j);
     if (mutEnd !== -1) {
       result += "var ";
-      i = mutEnd; // skip past "mut" and continue processing from after it
+      i = mutEnd;
       continue;
     }
     result += "var ";
@@ -711,6 +808,22 @@ function transformBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
+    // Check for for loop
+    const forEnd = skipForKeyword(source, i);
+    if (forEnd !== -1) {
+      result += transformForLoop(source, i);
+      const nextI = skipForLoop(source, i);
+      i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
+    // Check for while loop
+    const whileEnd = skipWhileKeyword(source, i);
+    if (whileEnd !== -1) {
+      result += transformWhileLoop(source, i);
+      const nextI = skipWhileLoop(source, i);
+      i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
     // Check for if/else expression
     const ifEnd = skipIfKeyword(source, i);
     if (ifEnd !== -1) {
@@ -738,58 +851,158 @@ function transformBlocks(source) {
   return stripTypedSyntax(stripTypeSuffix(result));
 }
 
-// Transform an if/else expression to JavaScript ternary: (cond) ? (trueBranch) : (falseBranch)
-function transformIfElse(source, start) {
-  const ifEnd = skipIfKeyword(source, start);
-  let pos = skipWhitespace(source, ifEnd);
-  
-  // Extract condition (inside parentheses)
-  pos++; // skip '('
+// Extract a parenthesized condition starting at the opening '('. Returns {condition, endPos}.
+function extractCondition(source, start) {
   let parenDepth = 1;
-  let condStart = pos;
+  let pos = start;
   while (pos < source.length && parenDepth > 0) {
     if (source[pos] === "(") parenDepth++;
     else if (source[pos] === ")") parenDepth--;
     pos++;
   }
-  const condition = source.substring(condStart, pos - 1);
+  return { condition: source.substring(start, pos - 1), endPos: pos };
+}
+
+// Extract a branch (block or expression) at position i. Returns {content, endPos}.
+function extractBranch(source, i) {
+  if (source[i] === "{") {
+    const endIdx = findMatchingBrace(source, i);
+    return { content: source.substring(i + 1, endIdx), endPos: endIdx + 1 };
+  }
+  const exprEnd = skipExpression(source, i);
+  return { content: source.substring(i, exprEnd), endPos: exprEnd };
+}
+
+// Transform an if/else expression to JavaScript ternary: (cond) ? (trueBranch) : (falseBranch)
+function transformIfElse(source, start) {
+  const ifEnd = skipIfKeyword(source, start);
+  let pos = skipWhitespace(source, ifEnd);
+  
+  const { condition } = extractCondition(source, pos + 1);
   const transformedCondition = transformBlocks(stripTypedSyntax(stripTypeSuffix(condition)));
   
-  // Skip whitespace after condition
-  pos = skipWhitespace(source, pos);
+  pos = skipWhitespace(source, pos + (condition.length + 2));
   
-  // Extract true branch
-  let trueBranch;
-  if (source[pos] === "{") {
-    const endIdx = findMatchingBrace(source, pos);
-    trueBranch = source.substring(pos + 1, endIdx);
-  } else {
-    const exprEnd = skipExpression(source, pos);
-    trueBranch = source.substring(pos, exprEnd);
-  }
+  const { content: trueBranch } = extractBranch(source, pos);
   const transformedTrueBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(trueBranch.trim())));
   
-  // Skip whitespace
-  pos = skipWhitespace(source, pos);
+  pos = skipWhitespace(source, pos + trueBranch.length);
   
-  // Extract false branch (after "else")
   const elseEnd = skipElseKeyword(source, pos);
   if (elseEnd !== -1) {
     pos = skipWhitespace(source, elseEnd);
-    let falseBranch;
-    if (source[pos] === "{") {
-      const endIdx = findMatchingBrace(source, pos);
-      falseBranch = source.substring(pos + 1, endIdx);
-    } else {
-      const exprEnd = skipExpression(source, pos);
-      falseBranch = source.substring(pos, exprEnd);
-    }
+    const { content: falseBranch } = extractBranch(source, pos);
     const transformedFalseBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(falseBranch.trim())));
     return "(" + transformedCondition + " ? " + transformedTrueBranch + " : " + transformedFalseBranch + ")";
   }
   
-  // No else branch - return 0 for false case
   return "(" + transformedCondition + " ? " + transformedTrueBranch + " : 0)";
+}
+
+// Extract and transform a branch body at position pos. Returns {transformedBody, endPos}.
+function extractAndTransformBranch(source, pos) {
+  const { content: body } = extractBranch(source, pos);
+  const transformedBody = transformBlocks(stripTypedSyntax(stripTypeSuffix(body.trim())));
+  return { transformedBody, endPos: pos + body.length };
+}
+
+// Transform a while loop to JavaScript: while (cond) { body }
+function transformWhileLoop(source, start) {
+  const whileEnd = skipWhileKeyword(source, start);
+  let pos = skipWhitespace(source, whileEnd);
+  
+  const { condition } = extractCondition(source, pos + 1);
+  const transformedCondition = transformBlocks(stripTypedSyntax(stripTypeSuffix(condition)));
+  
+  pos = skipWhitespace(source, pos + condition.length + 2);
+  const { transformedBody } = extractAndTransformBranch(source, pos);
+  
+  return "while (" + transformedCondition + ") { " + transformedBody + " }";
+}
+
+// Build a map of variable names to their range assignments (start..end). Returns object.
+// Uses transformed variable names (_varNameStart, _varNameEnd) to match stripMutKeyword output.
+function buildRangeMap(source) {
+  const rangeMap = {};
+  for (let i = 0; i < source.length - 3; i++) {
+    if (source.substring(i, i + 4) !== "let ") continue;
+    
+    const identEnd = skipIdentifier(source, i + 4);
+    if (identEnd === -1) continue;
+    
+    const varName = source.substring(i + 4, identEnd);
+    
+    // Find '=' after identifier
+    let eqPos = source.indexOf("=", identEnd);
+    if (eqPos === -1) continue;
+    
+    // Find ';' after '='
+    let semiPos = source.indexOf(";", eqPos);
+    if (semiPos === -1) continue;
+    
+    // Extract RHS
+    const rhs = source.substring(eqPos + 1, semiPos).trim();
+    
+    // Check if RHS is a range expression (contains ..)
+    const dotDotIdx = rhs.indexOf("..");
+    if (dotDotIdx === -1) continue;
+    
+    // Store with transformed variable names
+    rangeMap[varName] = { start: "_" + varName + "Start", end: "_" + varName + "End" };
+  }
+  return rangeMap;
+}
+
+// Transform a for loop with range syntax: for (i in start..end) body
+// Lowered to: let mut i = start; while (i < end) { body; i += 1; }
+function transformForLoop(source, start) {
+  const forEnd = skipForKeyword(source, start);
+  let pos = skipWhitespace(source, forEnd);
+  
+  const { condition: forHeader } = extractCondition(source, pos + 1);
+  
+  // Parse "i in start..end" from the for header
+  const inIdx = forHeader.indexOf(" in ");
+  if (inIdx === -1) {
+    // Fallback: treat as regular while-like loop
+    const transformedCondition = transformBlocks(stripTypedSyntax(stripTypeSuffix(forHeader)));
+    pos = skipWhitespace(source, pos + forHeader.length + 2);
+    const { transformedBody } = extractAndTransformBranch(source, pos);
+    return "while (" + transformedCondition + ") { " + transformedBody + " }";
+  }
+  
+  const varName = forHeader.substring(0, inIdx).trim();
+  const rangeExpr = forHeader.substring(inIdx + 4).trim();
+  
+  // Check if rangeExpr is a variable reference to a range
+  const rangeMap = buildRangeMap(source);
+  let startExpr, endExpr;
+  
+  if (rangeMap[rangeExpr]) {
+    // Use the range from the variable
+    startExpr = rangeMap[rangeExpr].start;
+    endExpr = rangeMap[rangeExpr].end;
+  } else {
+    // Parse "start..end" from range expression
+    const dotDotIdx = rangeExpr.indexOf("..");
+    if (dotDotIdx === -1) {
+      // Fallback without range
+      pos = skipWhitespace(source, pos + forHeader.length + 2);
+      const { transformedBody } = extractAndTransformBranch(source, pos);
+      return "while (1) { " + transformedBody + " }";
+    }
+    
+    startExpr = rangeExpr.substring(0, dotDotIdx).trim();
+    endExpr = rangeExpr.substring(dotDotIdx + 2).trim();
+  }
+  
+  const transformedStart = transformBlocks(stripTypedSyntax(stripTypeSuffix(startExpr)));
+  const transformedEnd = transformBlocks(stripTypedSyntax(stripTypeSuffix(endExpr)));
+  
+  pos = skipWhitespace(source, pos + forHeader.length + 2);
+  const { transformedBody } = extractAndTransformBranch(source, pos);
+  
+  return "var " + varName + " = " + transformedStart + "; var _forEnd = " + transformedEnd + "; while (" + varName + " < _forEnd) { " + transformedBody + "; " + varName + " += 1; }";
 }
 
 const RUNTIME_HELPERS = String.raw`function read() { return parseInt(_tokens.shift()); }

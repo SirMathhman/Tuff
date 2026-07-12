@@ -111,6 +111,21 @@ test("variable shadowing allows redeclaration", () => {
   expectValid("let x = read(); let x = read(); x", "2 3", 3);
 });
 
+test("block-scoped variable shadows outer variable", () => {
+  expectValid("let x = read(); { let x = read(); } x", "2 3", 2);
+});
+
+test("while loop with mutable counter works", () => {
+  expectValid("let mut counter = 0; let limit = read(); while (counter < limit) counter += 1; counter", "3", 3);
+});
+
+test("for loop with range iterates and accumulates", () => {
+  expectValid("let mut sum = 0; for (i in 0..read()) sum += i; sum", "4", 6);
+});
+
+test("for loop with range variable works", () => {
+  expectValid("let mut sum = 0; let range = 0..read(); for (i in range) sum += i; sum", "4", 6);
+});
 
 test("narrower type assigned to wider declaration is valid", () => {
   expectValid("let x : U16 = read<U8>(); x", "100", 100);

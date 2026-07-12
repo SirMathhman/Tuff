@@ -28,13 +28,18 @@ npm run cpd     # Check for code duplication
 
 The language supports:
 - `read()` / `read<T>()` — consume sequential tokens from stdin (parsed as integers). The generated JS receives `stdIn` string; the compiler splits on whitespace into a `_tokens` array consumed via `shift()`.
+- `read<Bool>()` — consume a boolean token (`"true"` → `1`, `"false"` → `0`).
 - `let x = expr;` — immutable variable declarations. Use `let mut x = expr;` for mutable variables that allow reassignment.
-- Type annotations: `let x : U8 = ...` or `read<U8>()`. Types include `U8`, `U16`, `U32`, `I8`, `I16`, `I32`, and `F32`.
+- Type annotations: `let x : U8 = ...` or `read<U8>()`. Types include `U8`, `U16`, `U32`, `I8`, `I16`, `I32`, `F32`, and `Bool`.
 - Type compatibility: a wider type cannot be assigned to a narrower declaration (e.g., `let x : U8 = read<U16>()` is invalid). A narrower type can be assigned to a wider declaration.
 - `{ ... }` — block expressions: statement blocks become IIFEs, expression-only blocks become grouped expressions. Max nesting depth is **2**.
+- `if (cond) expr else expr` — conditional expressions (lowered to JS ternary). `else` is optional; missing else branches evaluate to `0`.
+- `while (cond) body` — indefinite iteration. Body can be a block `{ ... }` or a single expression.
+- Boolean literals (`true` / `false`) and logical operators (`||`, `&&`).
 - Arithmetic operators and multi-character identifiers (alphabetic only).
 - Typed number literals: `100U8`, `50I16`, etc. (validated against type range at compile time, then stripped from output).
-- Bare let statements (no trailing expression) return 0.
+- Bare let statements (no trailing expression) return `0`.
+- Variable shadowing: redeclaring a variable with `let` is allowed; block-scoped shadows don't leak.
 
 ## Conventions
 
@@ -42,6 +47,7 @@ The language supports:
 - **Max nesting depth: 2** — enforced by ESLint (`max-depth`).
 - **CommonJS modules** with named exports (`export function compile`). Note: project uses ESM config files but outputs CommonJS (`"type": "commonjs"` in package.json).
 - **Test pattern:** `expectValid(source, stdIn, expectedExitCode)` for happy paths, `expectInvalid(source)` for validation errors. Generated code is executed at runtime via `new Function("stdIn", generated)(stdIn)`.
+- **Missing features roadmap:** see [`FEATURES_MISSING.md`](./FEATURES_MISSING.md) for planned C-like features not yet implemented.
 
 ## Gotchas
 
