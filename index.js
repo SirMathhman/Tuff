@@ -283,19 +283,28 @@ function resolveAliases(source) {
   return { resolvedSource: result };
 }
 
-export function compile(source) {
-  let trimmed = source.trim();
-  if (trimmed === "") return "return 0;";
+function stripTypes(source) {
+  let result = source;
 
-  // Resolve type aliases first
-  const { resolvedSource } = resolveAliases(trimmed);
-  trimmed = resolvedSource;
+  // Strip type suffixes from numeric literals (U8, U16, U32, I8, etc.)
+  result = result.replace(/(?<!\w)(-?\d+)([UI]\d+)/g, "$1");
 
-  // Validate numeric literals with type suffixes
-  validateLiterals(trimmed);
+  // Strip typed array annotations: let x : [Type; size] => let x
+  result = result.replace(/\b(\w+)\s*:\s*\[(U|I)\d+\s*;\s*\d+\]/g, "$1");
 
-  // Check for narrowing conversions: read<LargeType> assigned to SmallType variable
-  const declMatches = trimmed.matchAll(
+  // Strip type annotations from variable declarations: let x : Type => let x
+  result = result.replace(/\b(\w+)\s*:\s*(U|I)\d+\b/g, "$1");
+
+  // Strip generic arguments from function calls: read<Type> => read
+  result = result.replace(/(\w+)<(U|I)\d+>/g, "$1");
+
+  // Remove type alias declarations (they're only needed at compile time)
+  const parts2 = result.split(";").map((p) => p.trim()).filter(Boolean);
+  return parts2.filter((p) => !/^type\s+\w+/.test(p)).join(";");
+}
+
+function checkNarrowingConversions(source) {
+  const declMatches = source.matchAll(
     /let\s+(?:mut\s+)?\w+\s*:\s*(U|I)(\d+)\s*=\s*\w+<(U|I)(\d+)>\(\)/g,
   );
   for (const match of declMatches) {
@@ -312,22 +321,24 @@ export function compile(source) {
       );
     }
   }
+}
 
-  // Strip type suffixes from numeric literals (U8, U16, U32, I8, etc.)
-  trimmed = trimmed.replace(/(?<!\w)(-?\d+)([UI]\d+)/g, "$1");
+export function compile(source) {
+  let trimmed = source.trim();
+  if (trimmed === "") return "return 0;";
 
-  // Strip type annotations from variable declarations: let x : Type => let x
-  trimmed = trimmed.replace(/\b(\w+)\s*:\s*(U|I)\d+\b/g, "$1");
+  // Resolve type aliases first
+  const { resolvedSource } = resolveAliases(trimmed);
+  trimmed = resolvedSource;
 
-  // Strip generic arguments from function calls: read<Type> => read
-  trimmed = trimmed.replace(/(\w+)<(U|I)\d+>/g, "$1");
+  // Validate numeric literals with type suffixes
+  validateLiterals(trimmed);
 
-  // Remove type alias declarations (they're only needed at compile time)
-  const parts2 = trimmed
-    .split(";")
-    .map((p) => p.trim())
-    .filter(Boolean);
-  trimmed = parts2.filter((p) => !/^type\s+\w+/.test(p)).join(";");
+  // Check for narrowing conversions: read<LargeType> assigned to SmallType variable
+  checkNarrowingConversions(trimmed);
+
+  // Strip all compile-time type syntax (suffixes, annotations, generics, alias decls)
+  trimmed = stripTypes(trimmed);
 
   // Reject bare identifiers that aren't valid Tuff constructs
   if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {

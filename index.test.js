@@ -85,6 +85,14 @@ test("reassigning immutable variable throws error", () => {
   expectInvalid("let x = read(); x = read(); x");
 });
 
+test("array literal with index access returns element", () => {
+  expectValid("let array = [1]; array[0]", "", 1);
+});
+
+test("typed array annotation strips correctly and allows index access", () => {
+  expectValid("let array : [I32; 1] = [1]; array[0]", "", 1);
+});
+
 test("function declaration and call", () => {
   expectValid("fn get() => read(); get()", "1", 1);
 });
