@@ -41,6 +41,10 @@ test("multiple read() calls consume tokens sequentially", () => {
   expectValid("read() + read()", "1 2", 3);
 });
 
+test("block expressions work with read()", () => {
+  expectValid("read() + { read() }", "1 2", 3);
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });
