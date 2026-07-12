@@ -87,6 +87,11 @@ test("narrower type assigned to wider declaration is valid", () => {
 test("wider type assigned to narrower declaration is invalid", () => {
   expectInvalid("let x : U8 = read<U16>(); x");
 });
+
+test("assigning wider variable to narrower declaration is invalid", () => {
+  expectInvalid("let x = read<U16>(); let y : U8 = x;");
+});
+
 test("bare numeric literal with type suffix is invalid", () => {
   expectInvalid("256U8");
   expectInvalid("65536U16");

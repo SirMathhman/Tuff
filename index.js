@@ -265,6 +265,97 @@ function processLetDeclaration(source, i) {
   return skipToSemicolon(source, pos);
 }
 
+// Skip whitespace and return new index.
+function skipWhitespace(source, start) {
+  let j = start;
+  while (j < source.length && " \t\n\r".includes(source[j])) j++;
+  return j;
+}
+
+// Extract variable type from a let declaration at position i. Returns typeName or null.
+function extractVarTypeFromLet(source, i) {
+  const identEnd = skipIdentifier(source, i + 4);
+  if (identEnd === -1) return null;
+  
+  // Check for explicit ": TypeName" annotation after identifier
+  let pos = skipWhitespace(source, identEnd);
+  if (source[pos] === ":") {
+    const annotEnd = skipTypeAnnotation(source, pos);
+    if (annotEnd !== -1) {
+      return source.substring(pos + 1, annotEnd).trim();
+    }
+  }
+  
+  // Infer from read<T>() in RHS after '='
+  let eqPos = source.indexOf("=", i + 4);
+  if (eqPos === -1) return null;
+  const semiPos = source.indexOf(";", eqPos);
+  const endBound = semiPos === -1 ? source.length : semiPos;
+  
+  for (let p = skipWhitespace(source, eqPos + 1); p < endBound && source[p] !== ";"; p++) {
+    if (source.substring(p, p + 5) === "read<") {
+      const info = extractTypedReadInfo(source, p);
+      return info ? info.typeName : null;
+    }
+  }
+  return null;
+}
+
+// Build a map of variable names to their types by scanning all let declarations. Returns object.
+function buildVarTypeMap(source) {
+  const typeMap = {};
+  for (let i = 0; i < source.length; i++) {
+    if (source.substring(i, i + 4) !== "let ") continue;
+    const typeName = extractVarTypeFromLet(source, i);
+    const identEnd = skipIdentifier(source, i + 4);
+    if (identEnd === -1) continue;
+    typeMap[source.substring(i + 4, identEnd)] = typeName;
+  }
+  return typeMap;
+}
+
+// Validate that variable assignments respect type compatibility. Throws if invalid.
+function validateVarAssignments(source) {
+  const varTypes = buildVarTypeMap(source);
+  
+  for (let i = 0; i < source.length; i++) {
+    if (source.substring(i, i + 4) !== "let ") continue;
+    
+    // Find type annotation on this declaration
+    let identEnd = skipIdentifier(source, i + 4);
+    if (identEnd === -1) continue;
+    let pos = skipWhitespace(source, identEnd);
+    if (source[pos] !== ":") continue;
+    
+    const annotEnd = skipTypeAnnotation(source, pos);
+    if (annotEnd === -1) continue;
+    
+    // Get target type and RHS variable name
+    const targetTypeName = source.substring(pos + 1, annotEnd).trim();
+    let eqPos = source.indexOf("=", i + 4);
+    if (eqPos === -1) continue;
+    
+    let rhsStart = skipWhitespace(source, eqPos + 1);
+    const semiPos2 = source.indexOf(";", eqPos);
+    const endBound = semiPos2 === -1 ? source.length : semiPos2;
+    
+    // Check if RHS is a simple identifier reference to another variable
+    let rhsIdentEnd = skipIdentifier(source, rhsStart);
+    if (rhsIdentEnd <= rhsStart) continue;
+    
+    const rhsVarName = source.substring(rhsStart, rhsIdentEnd);
+    const rhsTrimmed = source.substring(rhsStart, endBound).trim();
+    if (rhsVarName !== rhsTrimmed) continue; // not a bare identifier
+    
+    const srcTypeName = varTypes[rhsVarName];
+    if (!srcTypeName || !targetTypeName) continue;
+    
+    validateTypeCompatibility(srcTypeName, targetTypeName);
+  }
+}
+
+
+
 // Validate a typed number value against its type suffix. Throws if out of range.
 function validateTypedNumber(value, typeName) {
   const range = getTypeRange(typeName);
@@ -361,6 +452,8 @@ export function compile(source) {
   if (source === "") {
     return "return 0;";
   }
+
+  validateVarAssignments(source);
 
   if (!validateSource(source)) {
     throw new Error("Invalid source: " + source);
