@@ -99,13 +99,20 @@ function processFunctions(parts) {
   let funcDecls = "";
   const remainingParts = [];
   for (const part of parts) {
-    // Match fn name() => body;
-    const match = part.match(/^fn\s+(\w+)\s*\(\)\s*=>\s*(.+)$/);
+    // Match fn name(params) => body; or fn name() => body;
+    const match = part.match(/^fn\s+(\w+)\s*\(([^)]*)\)\s*=>\s*(.+)$/);
     if (match) {
       const funcName = match[1];
-      let funcBody = replaceRead(match[2]);
+      const paramsStr = match[2].trim();
+      let funcBody = replaceRead(match[3]);
       funcDecls +=
-        "function " + funcName + "(){return " + funcBody.trim() + ";}\n";
+        "function " +
+        funcName +
+        "(" +
+        paramsStr +
+        "){return " +
+        funcBody.trim() +
+        ";}\n";
     } else {
       remainingParts.push(part);
     }

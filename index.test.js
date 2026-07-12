@@ -89,6 +89,14 @@ test("function declaration and call", () => {
   expectValid("fn get() => read(); get()", "1", 1);
 });
 
+test("function with typed parameters passes arguments correctly", () => {
+  expectValid(
+    "fn add(first : I32, second : I32) => first + second; add(3, 4)",
+    "",
+    7,
+  );
+});
+
 test("U8 literal returns value without suffix", () => {
   expectValid("100U8", "", 100);
 });
