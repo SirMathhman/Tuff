@@ -33,3 +33,35 @@ test("empty source compiles and exits with code 0", () => {
 test("whitespace-only source compiles and exits with code 0", () => {
   expectValid(" ", "", 0);
 });
+
+test("read() reads stdin and returns as exit code", () => {
+  expectValid("read()", "1", 1);
+});
+
+test("read() reads only first token from multi-value stdin", () => {
+  expectValid("read()", "1 2", 1);
+});
+
+test("multiple read() calls consume tokens sequentially", () => {
+  expectValid("read() + read()", "1 2", 3);
+});
+
+test("three read() calls sum to exit code", () => {
+  expectValid("read() + read() + read()", "1 2 3", 6);
+});
+
+test("mixed arithmetic with multiple read() calls", () => {
+  expectValid("read() + read() - read()", "3 2 4", 1);
+});
+
+test("operator precedence: multiplication before addition", () => {
+  expectValid("read() + read() * read()", "3 2 4", 11);
+});
+
+test("parentheses override operator precedence", () => {
+  expectValid("(read() + read()) * read()", "3 2 4", 20);
+});
+
+test("variable declaration with let and expression return", () => {
+  expectValid("let x = read(); x", "3 2 4", 3);
+});
