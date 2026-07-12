@@ -61,6 +61,14 @@ test("numeric type suffixes like U8 are supported", () => {
   expectValid("read() + 100U8", "1", 101);
 });
 
+test("bare numeric literal with type suffix is invalid", () => {
+  expectInvalid("256U8");
+});
+
+test("negative value with unsigned type suffix is invalid", () => {
+  expectInvalid("-1U8");
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });

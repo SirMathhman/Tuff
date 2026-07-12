@@ -138,18 +138,38 @@ function skipTypeSuffixChars(source, start) {
   return j;
 }
 
-// Process a number token: copy digits then strip any type suffix, returns new index
-function processNumber(source, start) {
+// Validate a typed number value against its type suffix. Throws if out of range.
+function validateTypedNumber(value, typeChar) {
+  if (typeChar === "U") {
+    if (value < 0 || value > 255) throw new Error("Value out of range for U8");
+  } else if (typeChar === "I") {
+    if (value < -128 || value > 127) throw new Error("Value out of range for I8");
+  }
+}
+
+// Parse a number with optional type suffix and validate range. Returns new index or throws.
+function parseTypedNumber(source, start) {
   const numEnd = skipDigits(source, start);
   let i = numEnd;
-  // Check for type suffix like U8, I16, F32 etc. and skip it
+  // Check for type suffix like U8, I16, F32 etc.
   if (source[i] === "U" || source[i] === "I" || source[i] === "F") {
+    const suffixStart = i;
     i = skipTypeSuffixChars(source, i);
+    // Include sign prefix if present for value calculation
+    let numStr = source.substring(start, numEnd);
+    if (start > 0 && source[start - 1] === "-") {
+      numStr = "-" + numStr;
+    } else if (start > 0 && source[start - 1] === "+") {
+      numStr = "+" + numStr;
+    }
+    const value = parseInt(numStr);
+    // Validate range based on type suffix
+    validateTypedNumber(value, source[suffixStart]);
   }
   return i;
 }
 
-// Strip numeric type suffixes like U8 from source text
+// Strip numeric type suffixes like U8 from source text and validate ranges
 function stripTypeSuffix(source) {
   let result = "";
   let i = 0;
@@ -157,7 +177,7 @@ function stripTypeSuffix(source) {
     if (source[i] >= "0" && source[i] <= "9") {
       const numEnd = skipDigits(source, i);
       result += source.substring(i, numEnd);
-      i = processNumber(source, i);
+      i = parseTypedNumber(source, i);
     } else {
       result += source[i];
       i++;
