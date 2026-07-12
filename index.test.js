@@ -57,6 +57,14 @@ test("multi-character identifiers work in valid contexts", () => {
   expectValid("let invalid = read(); invalid", "1", 1);
 });
 
+test("mutable variables support reassignment", () => {
+  expectValid("let mut x = read(); x = read(); x", "1 2", 2);
+});
+
+test("mutable variables support compound assignment", () => {
+  expectValid("let mut x = read(); x += read(); x", "1 2", 3);
+});
+
 test("numeric type suffixes like U8 are supported", () => {
   expectValid("read() + 100U8", "1", 101);
 });
@@ -90,6 +98,14 @@ test("wider type assigned to narrower declaration is invalid", () => {
 
 test("assigning wider variable to narrower declaration is invalid", () => {
   expectInvalid("let x = read<U16>(); let y : U8 = x;");
+});
+
+test("reassigning immutable variable is invalid", () => {
+  expectInvalid("let x = read(); x = read(); x");
+});
+
+test("compound assignment on immutable variable is invalid", () => {
+  expectInvalid("let x = read(); x += read(); x");
 });
 
 test("bare numeric literal with type suffix is invalid", () => {

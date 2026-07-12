@@ -318,12 +318,18 @@ function buildVarTypeMap(source) {
 function validateVarAssignments(source) {
   const varTypes = buildVarTypeMap(source);
   
-  for (let i = 0; i < source.length; i++) {
+  // Build a set of immutable variables (declared without "mut") and check typed declarations in one pass
+  const immutables = new Set();
+  for (let i = 0; i < source.length - 3; i++) {
     if (source.substring(i, i + 4) !== "let ") continue;
     
-    // Find type annotation on this declaration
     let identEnd = skipIdentifier(source, i + 4);
     if (identEnd === -1) continue;
+    
+    const varName = source.substring(i + 4, identEnd);
+    immutables.add(varName);
+    
+    // Check type annotation on this declaration for compatibility with RHS variable types
     let pos = skipWhitespace(source, identEnd);
     if (source[pos] !== ":") continue;
     
@@ -332,11 +338,11 @@ function validateVarAssignments(source) {
     
     // Get target type and RHS variable name
     const targetTypeName = source.substring(pos + 1, annotEnd).trim();
-    let eqPos = source.indexOf("=", i + 4);
-    if (eqPos === -1) continue;
+    let eqPos2 = source.indexOf("=", i + 4);
+    if (eqPos2 === -1) continue;
     
-    let rhsStart = skipWhitespace(source, eqPos + 1);
-    const semiPos2 = source.indexOf(";", eqPos);
+    let rhsStart = skipWhitespace(source, eqPos2 + 1);
+    const semiPos2 = source.indexOf(";", eqPos2);
     const endBound = semiPos2 === -1 ? source.length : semiPos2;
     
     // Check if RHS is a simple identifier reference to another variable
@@ -351,6 +357,51 @@ function validateVarAssignments(source) {
     if (!srcTypeName || !targetTypeName) continue;
     
     validateTypeCompatibility(srcTypeName, targetTypeName);
+  }
+  
+  // Check for reassignments to immutable variables (pattern: "x =" where x is not mutable)
+  let eqPos = source.indexOf("=");
+  while (eqPos !== -1 && eqPos < source.length) {
+    checkReassignmentToImmutable(source, eqPos, immutables);
+    
+    eqPos = source.indexOf("=", eqPos + 1);
+  }
+}
+
+// Check if an assignment at position eqPos is reassigning an immutable variable. Throws if invalid.
+function checkReassignmentToImmutable(source, eqPos, immutables) {
+  // Find identifier before '=' by walking backwards from '=' skipping whitespace
+  let beforeEq = eqPos - 1;
+
+  // Skip compound assignment operators (+=, -=, *=, /=) — the char before = is an operator
+  if (beforeEq >= 0 && ["+", "-", "*", "/"].includes(source[beforeEq])) {
+    beforeEq--;
+  }
+
+  while (beforeEq >= 0 && " \t\n\r".includes(source[beforeEq])) beforeEq--;
+
+  if (!(beforeEq > 0 && isAlpha(source[beforeEq]))) return; // not an identifier
+  
+  // Walk backwards to find start of identifier
+  let identStart = beforeEq;
+  while (identStart > 0 && isAlpha(source[identStart - 1])) identStart--;
+  
+  const varName = source.substring(identStart, beforeEq + 1);
+  
+  // Check if this looks like a reassignment (not part of "let x =" declaration)
+  let beforeIdent = identStart - 1;
+  while (beforeIdent >= 0 && " \t\n\r".includes(source[beforeIdent])) beforeIdent--;
+  
+  // Determine context: preceded by ';' means standalone assignment, preceded by 'let' is a declaration
+  const hasSemicolonBefore = source[beforeIdent] === ";";
+  const hasLetBefore = identStart > 3 && source.substring(identStart - 4, identStart) === "let ";
+  
+  // If it's part of a let declaration, skip (that's the initial assignment)
+  if (hasLetBefore) return;
+  
+  // Standalone assignment to immutable variable is an error
+  if ((identStart === 0 || hasSemicolonBefore) && immutables.has(varName)) {
+    throw new Error("Cannot reassign immutable variable: " + varName);
   }
 }
 
@@ -420,7 +471,43 @@ function stripTypedSyntax(source) {
     result += source[i];
     i++;
   }
+  return stripMutKeyword(result);
+}
+
+// Strip "mut" keyword from let declarations ("let mut x" -> "let x")
+function stripMutKeyword(source) {
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    if (source.substring(i, i + 4) !== "let ") {
+      result += source[i];
+      i++;
+      continue;
+    }
+    // Check for "mut" keyword after "let "
+    let j = skipWhitespace(source, i + 4);
+    const mutEnd = skipKeywordMut(source, j);
+    if (mutEnd !== -1) {
+      result += source.substring(i, i + 4);
+      i = mutEnd; // skip past "mut" and continue processing from after it
+      continue;
+    }
+    result += source[i];
+    i++;
+  }
   return result;
+}
+
+// Skip "mut" keyword at position i. Returns end index or -1.
+function skipKeywordMut(source, i) {
+  if (source.substring(i, i + 3) === "mut") {
+    // Ensure it's a whole word (followed by whitespace or non-alpha char)
+    const next = i + 3;
+    if (next >= source.length || !isAlpha(source[next])) {
+      return skipWhitespace(source, next);
+    }
+  }
+  return -1;
 }
 
 
