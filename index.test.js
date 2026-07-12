@@ -49,6 +49,18 @@ test("blocks support let declarations and statements", () => {
   expectValid("read() + { let x = read(); x }", "1 2", 3);
 });
 
+test("top-level let with nested block expressions", () => {
+  expectValid("let y = read() + { let x = read(); x }; y", "1 2", 3);
+});
+
+test("multi-character identifiers work in valid contexts", () => {
+  expectValid("let invalid = read(); invalid", "1", 1);
+});
+
+test("numeric type suffixes like U8 are supported", () => {
+  expectValid("read() + 100U8", "1", 101);
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });
