@@ -65,3 +65,15 @@ test("parentheses override operator precedence", () => {
 test("variable declaration with let and expression return", () => {
   expectValid("let x = read(); x", "3 2 4", 3);
 });
+
+test("variable used in arithmetic expression", () => {
+  expectValid("let x = read(); x + x", "3 2 4", 6);
+});
+
+test("read() inside curly braces", () => {
+  expectValid("let x = { read() }; x", "3", 3);
+});
+
+test("block with nested variable declaration returns value", () => {
+  expectValid("let x = { let y = read(); y }; x", "3", 3);
+});
