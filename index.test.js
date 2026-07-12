@@ -77,6 +77,14 @@ test("block with nested variable declaration returns value", () => {
   expectValid("let x = { let y = read(); y }; x", "3", 3);
 });
 
+test("mutable variable reassignment", () => {
+  expectValid("let mut x = read(); x = read(); x", "3 4", 4);
+});
+
+test("reassigning immutable variable throws error", () => {
+  expectInvalid("let x = read(); x = read(); x");
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });

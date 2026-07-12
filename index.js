@@ -58,6 +58,44 @@ function processBlocks(source) {
   return result;
 }
 
+function checkPartMutability(part, mutableVars) {
+  if (/^let\s+mut\b/.test(part)) {
+    const mutMatch = part.match(/^let\s+mut\s+(\w+)/);
+    mutableVars.add(mutMatch[1]);
+    return;
+  }
+  // Check for reassignment to immutable variable
+  const assignMatch = part.match(/^(\w+)\s*=/);
+  if (!assignMatch || mutableVars.has(assignMatch[1])) {
+    return;
+  }
+  throw new Error(
+    "Cannot reassign immutable variable '" + assignMatch[1] + "'",
+  );
+}
+
+function checkMutability(parts) {
+  const mutableVars = new Set();
+  for (const part of parts) {
+    checkPartMutability(part, mutableVars);
+  }
+}
+
+function buildBody(parts, idxRef) {
+  let body = "";
+  for (let i = 0; i < parts.length - 1; i++) {
+    body += replaceRead(parts[i], idxRef).trim() + ";\n";
+  }
+  const lastPart = replaceRead(parts[parts.length - 1], idxRef);
+  body += "return " + lastPart.trim() + ";";
+  return body;
+}
+
+function compileExpression(trimmed, idxRef) {
+  const compiled = replaceRead(trimmed, idxRef);
+  return "return " + compiled.trim() + ";";
+}
+
 export function compile(source) {
   let trimmed = source.trim();
   if (trimmed === "") return "return 0;";
@@ -77,16 +115,20 @@ export function compile(source) {
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (parts.length > 1) {
-    let body = "";
-    for (let i = 0; i < parts.length - 1; i++) {
-      body += replaceRead(parts[i], idxRef).trim() + ";\n";
-    }
-    const lastPart = replaceRead(parts[parts.length - 1], idxRef);
-    body += "return " + lastPart.trim() + ";";
-    return body;
+  // Track mutable vs immutable variables for reassignment checks
+  checkMutability(parts);
+
+  // Replace `let mut` with `let` (JS doesn't have immutable let)
+  trimmed = parts.map((p) => p.replace(/^let\s+mut\b/g, "let")).join(";");
+
+  const finalParts = trimmed
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (finalParts.length > 1) {
+    return buildBody(finalParts, idxRef);
   }
 
-  const compiled = replaceRead(trimmed, idxRef);
-  return "return " + compiled.trim() + ";";
+  return compileExpression(trimmed, idxRef);
 }

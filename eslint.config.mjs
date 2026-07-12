@@ -8,8 +8,9 @@ export default defineConfig([
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
-    rules : {
-      "max-depth" : ["error", 2]
-    }
+    rules: {
+      "max-depth": ["error", 2],
+      "max-lines-per-function": ["error", 50],
+    },
   },
 ]);
