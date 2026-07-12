@@ -37,6 +37,10 @@ test("read() parses first token from multi-value input", () => {
   expectValid("read()", "1 2", 1);
 });
 
+test("multiple read() calls consume tokens sequentially", () => {
+  expectValid("read() + read()", "1 2", 3);
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });

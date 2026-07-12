@@ -19,21 +19,6 @@ function validateSource(source) {
   return true;
 }
 
-function replaceRead(source) {
-  let result = "";
-  let i = 0;
-  while (i < source.length) {
-    if (source.substring(i, i + 6) === "read()") {
-      result += "parseInt(stdIn)";
-      i += 6;
-    } else {
-      result += source[i];
-      i++;
-    }
-  }
-  return result;
-}
-
 export function compile(source) {
   if (source === "") {
     return "return 0;";
@@ -43,6 +28,11 @@ export function compile(source) {
     throw new Error("Invalid source: " + source);
   }
 
-  const generated = replaceRead(source);
-  return "return " + generated + ";";
+  return (
+    "var _tokens = stdIn.split(/\\s+/);\n" +
+    "function read() { return parseInt(_tokens.shift()); }\n" +
+    "return " +
+    source +
+    ";"
+  );
 }
