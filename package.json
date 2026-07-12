@@ -16,7 +16,8 @@
   "main": "index.js",
   "scripts": {
     "test": "bun test",
-    "lint" : "eslint . --fix"
+    "lint": "eslint . --fix",
+    "cpd": "pmd cpd index.js index.test.js --minimum-tokens 50 --language ecmascript --ignore-literals --ignore-identifiers"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -89,6 +89,46 @@ test("function declaration and call", () => {
   expectValid("fn get() => read(); get()", "1", 1);
 });
 
+test("U8 literal returns value without suffix", () => {
+  expectValid("100U8", "", 100);
+});
+
+test("typed variable with generic read call", () => {
+  expectValid("let x : U8 = read<U8>(); x", "100", 100);
+});
+
+test("type alias resolves in declarations and literals", () => {
+  expectValid("type Temp = I32; let foo : Temp = 100I32; foo", "", 100);
+});
+
+test("generic type alias with parameter substitution", () => {
+  expectValid("type Temp<T> = T; let foo : Temp<I32> = 100I32; foo", "", 100);
+});
+
+test("nested generic type alias resolves recursively", () => {
+  expectValid(
+    "type Temp<T> = T; let foo : Temp<Temp<I32>> = 100I32; foo",
+    "",
+    100,
+  );
+});
+
+test("wider read type assigned to wider var is OK", () => {
+  expectValid("let x : U16 = read<U8>(); x", "100", 100);
+});
+
+test("narrower var cannot hold wider read type", () => {
+  expectInvalid("let x : U8 = read<U16>(); x");
+});
+
+test("256U8 exceeds U8 range and throws error", () => {
+  expectInvalid("256U8");
+});
+
+test("-1U8 is negative and out of unsigned range", () => {
+  expectInvalid("-1U8");
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });
