@@ -61,8 +61,25 @@ test("numeric type suffixes like U8 are supported", () => {
   expectValid("read() + 100U8", "1", 101);
 });
 
+test("U16 and U32 types work correctly", () => {
+  expectValid("read() + 50000U16", "1", 50001);
+  expectValid("read() + 4000000000U32", "1", 4000000001);
+});
+
+test("I8, I16, and I32 types work correctly", () => {
+  expectValid("read() - 50I8", "1", -49);
+  expectValid("read() + 30000I16", "1", 30001);
+});
+
+test("typed variable declarations and typed read calls work correctly", () => {
+  expectValid("let x : U8 = read<U8>(); x", "100", 100);
+});
+
 test("bare numeric literal with type suffix is invalid", () => {
   expectInvalid("256U8");
+  expectInvalid("65536U16");
+  expectInvalid("-1U16");
+  expectInvalid("128I8");
 });
 
 test("negative value with unsigned type suffix is invalid", () => {
