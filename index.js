@@ -13,40 +13,47 @@ function replaceRead(source, idxRef) {
   return result;
 }
 
+function findMatchingBrace(source, start) {
+  let depth = 1;
+  let j = start;
+  while (j < source.length && depth > 0) {
+    if (source[j] === "{") depth++;
+    else if (source[j] === "}") depth--;
+    j++;
+  }
+  return j - 1; // index of matching '}'
+}
+
+function buildIIFE(innerContent) {
+  const parts = innerContent
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  let body = "";
+  for (let k = 0; k < parts.length - 1; k++) {
+    body += parts[k] + ";";
+  }
+  body += "return " + parts[parts.length - 1] + ";";
+  return "(function(){" + body + "})()";
+}
+
 function processBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
-    if (source[i] === "{") {
-      // Find matching closing brace
-      let depth = 1;
-      let j = i + 1;
-      while (j < source.length && depth > 0) {
-        if (source[j] === "{") depth++;
-        else if (source[j] === "}") depth--;
-        j++;
-      }
-      const innerContent = processBlocks(source.slice(i + 1, j - 1));
-      // If content has semicolons, it's a block with statements → IIFE
-      if (innerContent.includes(";")) {
-        const parts = innerContent
-          .split(";")
-          .map((p) => p.trim())
-          .filter(Boolean);
-        let body = "";
-        for (let k = 0; k < parts.length - 1; k++) {
-          body += parts[k] + ";";
-        }
-        body += "return " + parts[parts.length - 1] + ";";
-        result += "(function(){" + body + "})()";
-      } else {
-        result += "(" + innerContent.trim() + ")";
-      }
-      i = j;
-    } else {
+    if (source[i] !== "{") {
       result += source[i];
       i++;
+      continue;
     }
+    const endIdx = findMatchingBrace(source, i + 1);
+    const innerContent = processBlocks(source.slice(i + 1, endIdx));
+    if (innerContent.includes(";")) {
+      result += buildIIFE(innerContent);
+    } else {
+      result += "(" + innerContent.trim() + ")";
+    }
+    i = endIdx + 1;
   }
   return result;
 }
@@ -54,6 +61,11 @@ function processBlocks(source) {
 export function compile(source) {
   let trimmed = source.trim();
   if (trimmed === "") return "return 0;";
+
+  // Reject bare identifiers that aren't valid Tuff constructs
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+    throw new Error("Invalid syntax: unknown identifier '" + trimmed + "'");
+  }
 
   // Process curly brace blocks first
   trimmed = processBlocks(trimmed);

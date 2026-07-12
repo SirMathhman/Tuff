@@ -1,6 +1,5 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { compile } from ".";
-import { act } from "react";
 
 function expectValid(source, stdIn, expectedExitCode) {
   const generated = compile(source);
@@ -76,4 +75,8 @@ test("read() inside curly braces", () => {
 
 test("block with nested variable declaration returns value", () => {
   expectValid("let x = { let y = read(); y }; x", "3", 3);
+});
+
+test("invalid source throws error", () => {
+  expectInvalid("invalid");
 });
