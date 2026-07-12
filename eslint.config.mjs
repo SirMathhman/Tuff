@@ -14,6 +14,21 @@ export default defineConfig([
         "error",
         { max: 50, skipBlankLines: true, skipComments: true },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[regex]",
+          message: "Regex literals are not allowed.",
+        },
+        {
+          selector: 'NewExpression[callee.name="RegExp"]',
+          message: "`new RegExp()` is not allowed.",
+        },
+        {
+          selector: 'CallExpression[callee.name="RegExp"]',
+          message: "`RegExp()` calls are not allowed.",
+        },
+      ],
     },
   },
 ]);
