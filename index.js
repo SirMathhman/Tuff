@@ -1,14 +1,45 @@
 function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
-  const allowed = " \t\n\r+-*/(){ }";
+  const allowed = " \t\n\r+-*/(){ };=";
   return allowed.indexOf(ch) !== -1;
+}
+
+function skipKeyword(source, i, keyword) {
+  if (source.substring(i, i + keyword.length) === keyword) {
+    return i + keyword.length;
+  }
+  return -1;
+}
+
+function skipToSemicolon(source, start) {
+  let j = start;
+  while (
+    j < source.length &&
+    isValidChar(source[j]) === false &&
+    source[j] !== ";"
+  )
+    j++;
+  return j;
 }
 
 function validateSource(source) {
   let i = 0;
   while (i < source.length) {
-    if (source.substring(i, i + 6) === "read()") {
-      i += 6;
+    const matchedRead = skipKeyword(source, i, "read()");
+    if (matchedRead !== -1) {
+      i = matchedRead;
+      continue;
+    }
+    // Allow 'let' keyword inside blocks
+    const matchedLet = skipKeyword(source, i, "let ");
+    if (matchedLet !== -1) {
+      i = skipToSemicolon(source, i + 4);
+      continue;
+    }
+    // Allow identifiers inside blocks
+    const matchedIdent = skipKeyword(source, i, "x");
+    if (matchedIdent !== -1) {
+      i += 1;
       continue;
     }
     if (!isValidChar(source[i])) {
@@ -30,19 +61,58 @@ function findMatchingBrace(source, start) {
   return i - 1; // index of matching '}'
 }
 
+function hasStatements(source) {
+  let i = 0;
+  while (i < source.length) {
+    if (source[i] === ";") return true;
+    const isBlock = source[i] === "{";
+    if (!isBlock) {
+      i++;
+      continue;
+    }
+    const endIdx = findMatchingBrace(source, i);
+    i = endIdx + 1;
+  }
+  return false;
+}
+
+function prependReturnToLastExpr(transformedInner) {
+  let depth = 0;
+  for (let j = transformedInner.length - 1; j >= 0; j--) {
+    if (transformedInner[j] === "}") depth++;
+    else if (transformedInner[j] === "{") depth--;
+    else if (transformedInner[j] === ";" && depth === 0) {
+      return (
+        transformedInner.substring(0, j + 1) +
+        "return" +
+        transformedInner.substring(j + 1)
+      );
+    }
+  }
+  // No semicolons found; prepend 'return' to entire string
+  return "return" + transformedInner;
+}
+
 function transformBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
-    if (source[i] === "{") {
-      const endIdx = findMatchingBrace(source, i);
-      const inner = source.substring(i + 1, endIdx);
-      result += "(" + transformBlocks(inner) + ")";
-      i = endIdx + 1;
-    } else {
+    if (source[i] !== "{") {
       result += source[i];
       i++;
+      continue;
     }
+    const endIdx = findMatchingBrace(source, i);
+    const inner = source.substring(i + 1, endIdx);
+    const isStmtBlock = hasStatements(inner);
+    if (!isStmtBlock) {
+      result += "(" + transformBlocks(inner) + ")";
+    } else {
+      let transformedInner = transformBlocks(inner);
+      const withReturn = prependReturnToLastExpr(transformedInner);
+      result += "(function() {" + withReturn + "; })()";
+    }
+    i = endIdx + 1;
   }
   return result;
 }

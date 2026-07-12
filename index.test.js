@@ -45,6 +45,10 @@ test("block expressions work with read()", () => {
   expectValid("read() + { read() }", "1 2", 3);
 });
 
+test("blocks support let declarations and statements", () => {
+  expectValid("read() + { let x = read(); x }", "1 2", 3);
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });
