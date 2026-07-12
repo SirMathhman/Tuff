@@ -4,25 +4,111 @@ function isAlpha(ch) {
 
 function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
-  const allowed = " \t\n\r+-*/(){ };=UI<>:";
+  const allowed = " \t\n\r+-*/(){ };=UI" + String.fromCharCode(60, 62) + ":|";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
   return false;
 }
 
+// Skip a boolean literal ("true" or "false") at position i. Returns end index or -1.
+function skipBoolLiteral(source, i) {
+  const trueEnd = skipKeyword(source, i, "true");
+  if (trueEnd !== -1 && (trueEnd >= source.length || !isAlpha(source[trueEnd]))) return trueEnd;
+  const falseEnd = skipKeyword(source, i, "false");
+  if (falseEnd !== -1 && (falseEnd >= source.length || !isAlpha(source[falseEnd]))) return falseEnd;
+  return -1;
+}
+
+// Skip a logical operator ("||" or "&&") at position i. Returns end index or -1.
+function skipLogicalOperator(source, i) {
+  if (source.substring(i, i + 2) === "||") return i + 2;
+  if (source.substring(i, i + 2) === "&&") return i + 2;
+  return -1;
+}
+
+// Skip "if" keyword at position i. Returns end index or -1.
+function skipIfKeyword(source, i) {
+  if (source.substring(i, i + 2) === "if" && (i + 2 >= source.length || !isAlpha(source[i + 2]))) {
+    return i + 2;
+  }
+  return -1;
+}
+
+// Skip "else" keyword at position i. Returns end index or -1.
+function skipElseKeyword(source, i) {
+  if (source.substring(i, i + 4) === "else" && (i + 4 >= source.length || !isAlpha(source[i + 4]))) {
+    return i + 4;
+  }
+  return -1;
+}
+
+// Skip an if/else expression starting at position i. Returns end index or -1.
+function skipIfElseExpression(source, i) {
+  // Skip leading whitespace
+  let pos = skipWhitespace(source, i);
+  const ifEnd = skipIfKeyword(source, pos);
+  if (ifEnd === -1) return -1;
+  
+  // Skip whitespace after "if"
+  pos = skipWhitespace(source, ifEnd);
+  
+  // Expect opening parenthesis for condition
+  if (source[pos] !== "(") return -1;
+  
+  // Find closing parenthesis of condition
+  let parenDepth = 1;
+  pos++;
+  while (pos < source.length && parenDepth > 0) {
+    if (source[pos] === "(") { parenDepth++; pos++; continue; }
+    if (source[pos] === ")") { parenDepth--; pos++; continue; }
+    pos++;
+  }
+  
+  // Skip whitespace after condition
+  pos = skipWhitespace(source, pos);
+  
+  // Skip the true branch (could be a block or expression)
+  if (source[pos] === "{") {
+    pos = findMatchingBrace(source, pos) + 1;
+  } else {
+    pos = skipExpression(source, pos);
+  }
+  
+  // Skip whitespace
+  pos = skipWhitespace(source, pos);
+  
+  // Check for "else" keyword and skip false branch
+  const elseEnd = skipElseKeyword(source, pos);
+  if (elseEnd === -1) return pos;
+  
+  pos = skipWhitespace(source, elseEnd);
+  pos = source[pos] === "{" ? findMatchingBrace(source, pos) + 1 : skipExpression(source, pos);
+  return pos;
+}
+
+// Skip an expression (non-block) until delimiter (semicolon, else, closing brace, etc.).
+function skipExpression(source, start) {
+  let i = start;
+  let parenDepth = 0;
+  while (i < source.length) {
+    if (source[i] === "(") { parenDepth++; i++; continue; }
+    if (source[i] === ")" && parenDepth === 0) break;
+    if (source[i] === ")") { parenDepth--; i++; continue; }
+    if (source[i] === ";" && parenDepth === 0) break;
+    if (source[i] === "{") { i = findMatchingBrace(source, i) + 1; continue; }
+    if (parenDepth === 0 && skipElseKeyword(source, skipWhitespace(source, i)) !== -1) break;
+    i++;
+  }
+  return i;
+}
+
+
 function skipKeyword(source, i, keyword) {
   if (source.substring(i, i + keyword.length) === keyword) {
     return i + keyword.length;
   }
   return -1;
-}
-
-function skipToSemicolon(source, start) {
-  let j = start;
-  while (j < source.length && isValidChar(source[j]) === false && source[j] !== ";")
-    j++;
-  return j;
 }
 
 // Try to match read<TYPE>() at position i. Returns end index or -1.
@@ -48,6 +134,10 @@ function skipTypeAnnotation(source, i) {
   while (j < source.length && " \t\n\r".includes(source[j])) j++;
   if (j < source.length && (source[j] === 'U' || source[j] === 'I' || source[j] === 'F')) {
     return skipTypeSuffixChars(source, j);
+  }
+  // Bool type annotation
+  if (j + 3 <= source.length && source.substring(j, j + 4) === "Bool") {
+    return j + 4;
   }
   return -1;
 }
@@ -104,6 +194,24 @@ function validateSource(source) {
       i = endIdx + 1;
       continue;
     }
+    // Try if/else expression
+    const ifElseEnd = skipIfElseExpression(source, i);
+    if (ifElseEnd !== -1) {
+      i = ifElseEnd;
+      continue;
+    }
+    // Skip boolean literals ("true" or "false")
+    const boolEnd = skipBoolLiteral(source, i);
+    if (boolEnd !== -1) {
+      i = boolEnd;
+      continue;
+    }
+    // Skip logical operators ("||", "&&")
+    const logicOpEnd = skipLogicalOperator(source, i);
+    if (logicOpEnd !== -1) {
+      i = logicOpEnd;
+      continue;
+    }
     // Allow identifiers only after semicolons or assignment operators
     const identIdx = maybeSkipIdentifier(source, i);
     if (identIdx !== -1) {
@@ -141,14 +249,52 @@ function hasStatements(source) {
   return false;
 }
 
+// Find the start of an IIFE pattern ending at position endParen. Returns start index or -1.
+function findIIFEStart(transformedInner, endParen) {
+  if (endParen === 0 || transformedInner[endParen - 1] !== "(") return -1;
+  let iifeDepth = 1;
+  let j = endParen - 1;
+  while (j >= 0 && iifeDepth > 0) {
+    if (transformedInner[j] === "(") { iifeDepth--; j--; continue; }
+    if (transformedInner[j] === ")") { iifeDepth++; j--; continue; }
+    j--;
+  }
+  return iifeDepth === 0 ? j + 1 : -1;
+}
+
+// Try to skip over an IIFE ending at position j. Returns new j or -1 if not an IIFE.
+function trySkipIIFE(transformedInner, j) {
+  const iifeStart = findIIFEStart(transformedInner, j);
+  if (iifeStart !== -1) return iifeStart;
+  return -1;
+}
+
+// Process a single character in prependReturnToLastExpr. Returns {j, depth, parenDepth} or null if found semicolon.
+function processChar(transformedInner, j, depth, parenDepth) {
+  const ch = transformedInner[j];
+  if (ch === "}") return { j, depth: depth + 1, parenDepth };
+  if (ch === "{") return { j, depth: depth - 1, parenDepth };
+  if (ch === ")") {
+    const newParenDepth = parenDepth + 1;
+    if (depth !== 0 || newParenDepth !== 1) { return { j, depth, parenDepth: newParenDepth }; }
+    const skipped = trySkipIIFE(transformedInner, j);
+    if (skipped !== -1) return { j: skipped, depth, parenDepth: 0 };
+    return { j, depth, parenDepth: newParenDepth };
+  }
+  if (ch === "(") return { j, depth, parenDepth: parenDepth - 1 };
+  if (ch === ";" && depth === 0 && parenDepth === 0) return null;
+  return { j, depth, parenDepth };
+}
+
 function prependReturnToLastExpr(transformedInner) {
   let depth = 0;
+  let parenDepth = 0;
   for (let j = transformedInner.length - 1; j >= 0; j--) {
-    if (transformedInner[j] === "}") depth++;
-    else if (transformedInner[j] === "{") depth--;
-    else if (transformedInner[j] === ";" && depth === 0) {
-      return buildReturnAfterSemi(transformedInner, j);
-    }
+    const result = processChar(transformedInner, j, depth, parenDepth);
+    if (result === null) return buildReturnAfterSemi(transformedInner, j);
+    j = result.j;
+    depth = result.depth;
+    parenDepth = result.parenDepth;
   }
   // No semicolons found; prepend 'return' to entire string
   return "return" + transformedInner;
@@ -262,7 +408,34 @@ function processLetDeclaration(source, i) {
     if (annotEnd !== -1) { checkTypedReadInRHS(source, annotEnd); return annotEnd; }
     pos++;
   }
-  return skipToSemicolon(source, pos);
+  // Skip to semicolon, but handle if/else expressions and blocks properly
+  return skipToSemicolonWithIfElse(source, pos);
+}
+
+// Like skipToSemicolon but properly handles if/else expressions and blocks
+function skipToSemicolonWithIfElse(source, start) {
+  let j = start;
+  while (j < source.length && source[j] !== ";") {
+    // Handle if/else expressions
+    const ifElseEnd = skipIfElseExpression(source, j);
+    if (ifElseEnd !== -1) {
+      j = ifElseEnd;
+      continue;
+    }
+    // Handle blocks
+    if (source[j] === "{") {
+      const endIdx = findMatchingBrace(source, j);
+      j = endIdx + 1;
+      continue;
+    }
+    // Skip invalid chars (like alpha chars that aren't recognized keywords)
+    if (isValidChar(source[j]) === false) {
+      j++;
+      continue;
+    }
+    j++;
+  }
+  return j;
 }
 
 // Skip whitespace and return new index.
@@ -454,18 +627,27 @@ function stripTypeSuffix(source) {
   return result;
 }
 
-// Strip type annotations (": TypeName") and transform typed reads ("read<T>()" -> "read()")
+// Strip type annotations (": TypeName") and transform typed reads ("read<T>()" -> "read()" or "_readBool()")
 function stripTypedSyntax(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
-    if (source.substring(i, i + 5) === "read<") {
-      const closeParen = source.indexOf(")", i);
-      result += "read()";
-      i = closeParen >= 0 ? closeParen + 1 : i + 5;
+    const isReadTagged = source.substring(i, i + 5) === "read<";
+    if (isReadTagged) {
+      const nextI = tryStripTypedRead(source, i);
+      result += source.substring(i + 5, i + 9) === "Bool" ? "_readBool()" : "read()";
+      i = nextI !== null ? nextI : i + 1;
       continue;
     }
-    if (source[i] !== ":") { result += source[i]; i++; continue; }
+    // Convert boolean literals: true -> 1, false -> 0
+    const boolEnd = skipBoolLiteral(source, i);
+    if (boolEnd !== -1) {
+      result += source.substring(i, boolEnd) === "true" ? "1" : "0";
+      i = boolEnd;
+      continue;
+    }
+    const isColon = source[i] === ":";
+    if (!isColon) { result += source[i]; i++; continue; }
     const annotEnd = skipTypeAnnotation(source, i);
     if (annotEnd !== -1) { i = annotEnd; continue; }
     result += source[i];
@@ -474,7 +656,21 @@ function stripTypedSyntax(source) {
   return stripMutKeyword(result);
 }
 
-// Strip "mut" keyword from let declarations ("let mut x" -> "let x")
+// Handle typed read at position i. Returns new index or null if not a typed read.
+function tryStripTypedRead(source, i) {
+  const closeParen = source.indexOf(")", i);
+  // Check for Bool type: read<Bool>() -> _readBool()
+  if (source.substring(i + 5, i + 9) === "Bool" && closeParen > i + 9) {
+    return closeParen >= 0 ? closeParen + 1 : i + 9;
+  } else if (closeParen >= 0) {
+    // Generic typed read: read<T>() -> read()
+    return closeParen + 1;
+  }
+  return null;
+}
+
+
+// Strip "mut" keyword from let declarations ("let mut x" -> "var x") and replace "let" with "var"
 function stripMutKeyword(source) {
   let result = "";
   let i = 0;
@@ -488,12 +684,12 @@ function stripMutKeyword(source) {
     let j = skipWhitespace(source, i + 4);
     const mutEnd = skipKeywordMut(source, j);
     if (mutEnd !== -1) {
-      result += source.substring(i, i + 4);
+      result += "var ";
       i = mutEnd; // skip past "mut" and continue processing from after it
       continue;
     }
-    result += source[i];
-    i++;
+    result += "var ";
+    i += 4;
   }
   return result;
 }
@@ -515,6 +711,14 @@ function transformBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
+    // Check for if/else expression
+    const ifEnd = skipIfKeyword(source, i);
+    if (ifEnd !== -1) {
+      result += transformIfElse(source, i);
+      const nextI = skipIfElseExpression(source, i);
+      i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
     if (source[i] !== "{") {
       result += source[i];
       i++;
@@ -522,18 +726,74 @@ function transformBlocks(source) {
     }
     const endIdx = findMatchingBrace(source, i);
     const inner = source.substring(i + 1, endIdx);
-    const isStmtBlock = hasStatements(inner);
-    if (!isStmtBlock) {
+    if (!hasStatements(inner)) {
       result += "(" + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + ")";
     } else {
       let transformedInner = transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)));
       const withReturn = prependReturnToLastExpr(transformedInner);
-      result += "(function() {" + withReturn + "; })()";
+      result += "(function() {" + withReturn + "; })();";
     }
     i = endIdx + 1;
   }
   return stripTypedSyntax(stripTypeSuffix(result));
 }
+
+// Transform an if/else expression to JavaScript ternary: (cond) ? (trueBranch) : (falseBranch)
+function transformIfElse(source, start) {
+  const ifEnd = skipIfKeyword(source, start);
+  let pos = skipWhitespace(source, ifEnd);
+  
+  // Extract condition (inside parentheses)
+  pos++; // skip '('
+  let parenDepth = 1;
+  let condStart = pos;
+  while (pos < source.length && parenDepth > 0) {
+    if (source[pos] === "(") parenDepth++;
+    else if (source[pos] === ")") parenDepth--;
+    pos++;
+  }
+  const condition = source.substring(condStart, pos - 1);
+  const transformedCondition = transformBlocks(stripTypedSyntax(stripTypeSuffix(condition)));
+  
+  // Skip whitespace after condition
+  pos = skipWhitespace(source, pos);
+  
+  // Extract true branch
+  let trueBranch;
+  if (source[pos] === "{") {
+    const endIdx = findMatchingBrace(source, pos);
+    trueBranch = source.substring(pos + 1, endIdx);
+  } else {
+    const exprEnd = skipExpression(source, pos);
+    trueBranch = source.substring(pos, exprEnd);
+  }
+  const transformedTrueBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(trueBranch.trim())));
+  
+  // Skip whitespace
+  pos = skipWhitespace(source, pos);
+  
+  // Extract false branch (after "else")
+  const elseEnd = skipElseKeyword(source, pos);
+  if (elseEnd !== -1) {
+    pos = skipWhitespace(source, elseEnd);
+    let falseBranch;
+    if (source[pos] === "{") {
+      const endIdx = findMatchingBrace(source, pos);
+      falseBranch = source.substring(pos + 1, endIdx);
+    } else {
+      const exprEnd = skipExpression(source, pos);
+      falseBranch = source.substring(pos, exprEnd);
+    }
+    const transformedFalseBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(falseBranch.trim())));
+    return "(" + transformedCondition + " ? " + transformedTrueBranch + " : " + transformedFalseBranch + ")";
+  }
+  
+  // No else branch - return 0 for false case
+  return "(" + transformedCondition + " ? " + transformedTrueBranch + " : 0)";
+}
+
+const RUNTIME_HELPERS = String.raw`function read() { return parseInt(_tokens.shift()); }
+function _readBool() { var v = _tokens.shift(); return v === 'true' ? 1 : 0; }`;
 
 export function compile(source) {
   if (source === "") {
@@ -549,12 +809,12 @@ export function compile(source) {
   const transformed = transformBlocks(source);
 
   // If top-level has statements, wrap in IIFE with proper returns
-  const isStmtLevel = hasStatements(transformed);
+  const isStmtLevel = hasStatements(source);
   if (isStmtLevel) {
     const withReturn = prependReturnToLastExpr(transformed);
     return (
       "var _tokens = stdIn.split(/\\s+/);\n" +
-      "function read() { return parseInt(_tokens.shift()); }\n" +
+      RUNTIME_HELPERS + "\n" +
       "return (function() {" +
       withReturn +
       "; })();"
@@ -563,7 +823,7 @@ export function compile(source) {
 
   return (
     "var _tokens = stdIn.split(/\\s+/);\n" +
-    "function read() { return parseInt(_tokens.shift()); }\n" +
+    RUNTIME_HELPERS + "\n" +
     "return " +
     transformed +
     ";"

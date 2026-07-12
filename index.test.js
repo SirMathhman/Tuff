@@ -65,6 +65,10 @@ test("mutable variables support compound assignment", () => {
   expectValid("let mut x = read(); x += read(); x", "1 2", 3);
 });
 
+test("mutable variables can be reassigned inside blocks", () => {
+  expectValid("let mut x = 0; { x = read(); } x", "3", 3);
+});
+
 test("numeric type suffixes like U8 are supported", () => {
   expectValid("read() + 100U8", "1", 101);
 });
@@ -83,8 +87,28 @@ test("typed variable declarations and typed read calls work correctly", () => {
   expectValid("let x : U8 = read<U8>(); x", "100", 100);
 });
 
+test("read<Bool>() parses boolean literals", () => {
+  expectValid("read<Bool>()", "true", 1);
+});
+
+test("logical OR with boolean expressions works", () => {
+  expectValid("read<Bool>() || false", "true", 1);
+});
+
+test("logical AND with boolean expressions works", () => {
+  expectValid("read<Bool>() && false", "true", 0);
+});
+
+test("if/else expression with boolean condition works", () => {
+  expectValid("let temp = if (read<Bool>()) 3 else 5; temp", "true", 3);
+});
+
 test("bare let declaration with no trailing expression returns 0", () => {
   expectValid("let x = read();", "100", 0);
+});
+
+test("variable shadowing allows redeclaration", () => {
+  expectValid("let x = read(); let x = read(); x", "2 3", 3);
 });
 
 
