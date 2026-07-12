@@ -52,18 +52,6 @@ function skipTypeAnnotation(source, i) {
   return -1;
 }
 
-// Process a let declaration starting at position i (where "let" begins), returns index after semicolon
-function processLetDeclaration(source, i) {
-  let pos = i + 4; // skip past "let "
-  pos = skipIdentifier(source, pos);
-  while (pos < source.length && isValidChar(source[pos]) === true && !isAlpha(source[pos])) {
-    const annotEnd = skipTypeAnnotation(source, pos);
-    if (annotEnd !== -1) return annotEnd;
-    pos++;
-  }
-  return skipToSemicolon(source, pos);
-}
-
 // Skip an identifier and return new index, or -1 if not found
 function skipIdentifier(source, i) {
   if (i < source.length && isAlpha(source[i])) {
@@ -197,6 +185,68 @@ function getTypeRange(typeName) {
   const minVal = isUnsigned ? 0 : -(Math.pow(2, bits - 1));
   const maxVal = Math.pow(2, (isUnsigned ? bits : bits - 1)) - 1;
   return { min: minVal, max: maxVal };
+}
+
+// Get the bit width from a type name like U8, I16, F32. Returns number or -1 if unrecognized.
+function getTypeBits(typeName) {
+  const prefix = typeName[0];
+  if (prefix !== "U" && prefix !== "I" && prefix !== "F") return -1;
+  const bitsStr = typeName.substring(1);
+  const bits = parseInt(bitsStr, 10);
+  return isNaN(bits) ? -1 : bits;
+}
+
+// Validate that inner type (from read<T>()) fits within outer declaration type. Throws if invalid.
+function validateTypeCompatibility(innerTypeName, outerTypeName) {
+  const innerBits = getTypeBits(innerTypeName);
+  const outerBits = getTypeBits(outerTypeName);
+  if (innerBits === -1 || outerBits === -1) return; // unrecognized types, skip check
+  if (innerBits > outerBits) throw new Error("Type " + innerTypeName + " does not fit in " + outerTypeName);
+}
+
+// Extract type name from a typed read like "read<U8>" at position i. Returns {typeName, endPos} or null.
+function extractTypedReadInfo(source, i) {
+  if (source.substring(i, i + 5) !== "read<") return null;
+  let j = i + 5; // skip past "read<"
+  while (j < source.length && source[j] !== ">") j++;
+  const typeNameStart = i + 5;
+  if (source.substring(j, j + 3) !== ">()") return null;
+  const typeName = source.substring(typeNameStart, j);
+  return { typeName: typeName, endPos: j + 3 };
+}
+
+// Check for typed read in the RHS of a let declaration and validate compatibility. Throws if invalid.
+function checkTypedReadInRHS(source, afterColonEnd) {
+  // Skip whitespace and '=' to find potential 'read<'
+  let pos = afterColonEnd;
+  while (pos < source.length && " \t\n\r=".includes(source[pos])) pos++;
+  const info = extractTypedReadInfo(source, pos);
+  if (!info) return; // no typed read found in RHS
+  // Walk back from afterColonEnd to find the colon position. Skip past all valid chars (type name + whitespace).
+  let j = afterColonEnd - 1;
+  while (j >= 0 && isValidChar(source[j]) === true) {
+    if (source[j] === ":") break; // stop at colon itself
+    j--;
+  }
+  const colonPos = source[j] === ":" ? j : j + 1; // position of ':'
+  if (source[colonPos] !== ":") return; // sanity check — no type annotation found
+  let outerStart = colonPos + 1;
+  while (outerStart < afterColonEnd && " \t\n\r".includes(source[outerStart])) outerStart++;
+  const outerTypeName = source.substring(outerStart, afterColonEnd);
+  validateTypeCompatibility(info.typeName, outerTypeName);
+}
+
+// Process a let declaration starting at position i (where "let" begins), returns index after semicolon
+function processLetDeclaration(source, i) {
+  let pos = i + 4; // skip past "let "
+  pos = skipIdentifier(source, pos);
+  while (pos < source.length && isValidChar(source[pos]) === true && !isAlpha(source[pos])) {
+    if (source[pos] !== ":") { pos++; continue; }
+    const annotEnd = skipTypeAnnotation(source, pos);
+    if (annotEnd !== -1) { checkTypedReadInRHS(source, annotEnd); return annotEnd; }
+    pos++;
+  }
+  return skipToSemicolon(source, pos);
 }
 
 // Validate a typed number value against its type suffix. Throws if out of range.
