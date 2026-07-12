@@ -17,10 +17,19 @@ function expectValid(source, stdIn, expectedExitCode) {
           "'",
       );
     }
-  } catch (e) {}
-  throw new Error("Failed to execute generated code: '" + generated + "'", e);
+  } catch (e) {
+    throw new Error("Failed to execute generated code: '" + generated + "'", e);
+  }
 }
 
 function expectInvalid(source) {
   expect(() => compile(source)).toThrow();
 }
+
+test("empty source compiles and exits with code 0", () => {
+  expectValid("", "", 0);
+});
+
+test("whitespace-only source compiles and exits with code 0", () => {
+  expectValid(" ", "", 0);
+});
