@@ -75,6 +75,10 @@ test("typed variable declarations and typed read calls work correctly", () => {
   expectValid("let x : U8 = read<U8>(); x", "100", 100);
 });
 
+test("bare let declaration with no trailing expression returns 0", () => {
+  expectValid("let x = read();", "100", 0);
+});
+
 
 test("narrower type assigned to wider declaration is valid", () => {
   expectValid("let x : U16 = read<U8>(); x", "100", 100);

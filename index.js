@@ -147,11 +147,27 @@ function prependReturnToLastExpr(transformedInner) {
     if (transformedInner[j] === "}") depth++;
     else if (transformedInner[j] === "{") depth--;
     else if (transformedInner[j] === ";" && depth === 0) {
-      return transformedInner.substring(0, j + 1) + "return" + transformedInner.substring(j + 1);
+      return buildReturnAfterSemi(transformedInner, j);
     }
   }
   // No semicolons found; prepend 'return' to entire string
   return "return" + transformedInner;
+}
+
+// Check if a string contains only semicolons or whitespace. Returns true.
+function isEmptyOrSemicolons(str) {
+  for (let k = 0; k < str.length; k++) {
+    const ch = str[k];
+    if (ch !== ";" && ch !== " " && ch !== "\t" && ch !== "\n") return false;
+  }
+  return true;
+}
+
+// Build the return statement after a semicolon at position j. Returns new string.
+function buildReturnAfterSemi(transformedInner, j) {
+  const afterSemi = transformedInner.substring(j + 1);
+  if (isEmptyOrSemicolons(afterSemi)) return transformedInner.substring(0, j + 1) + "return 0";
+  return transformedInner.substring(0, j + 1) + "return" + afterSemi;
 }
 
 // Skip digits and advance index, returns the digit string
