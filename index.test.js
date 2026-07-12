@@ -85,6 +85,10 @@ test("reassigning immutable variable throws error", () => {
   expectInvalid("let x = read(); x = read(); x");
 });
 
+test("function declaration and call", () => {
+  expectValid("fn get() => read(); get()", "1", 1);
+});
+
 test("invalid source throws error", () => {
   expectInvalid("invalid");
 });

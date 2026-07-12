@@ -1,10 +1,9 @@
-function replaceRead(source, idxRef) {
+function replaceRead(source) {
   let result = "";
   let pos = 0;
   for (const match of String(source).matchAll(/read\(\)/g)) {
     result += source.slice(pos, match.index);
-    result += `parseInt(stdIn.split(' ')[${idxRef.current}], 10)`;
-    idxRef.current++;
+    result += "nextToken()";
     pos = match.index + match[0].length;
   }
   if (pos < source.length) {
@@ -81,19 +80,57 @@ function checkMutability(parts) {
   }
 }
 
-function buildBody(parts, idxRef) {
+function buildBody(parts) {
   let body = "";
   for (let i = 0; i < parts.length - 1; i++) {
-    body += replaceRead(parts[i], idxRef).trim() + ";\n";
+    body += replaceRead(parts[i]).trim() + ";\n";
   }
-  const lastPart = replaceRead(parts[parts.length - 1], idxRef);
+  const lastPart = replaceRead(parts[parts.length - 1]);
   body += "return " + lastPart.trim() + ";";
   return body;
 }
 
-function compileExpression(trimmed, idxRef) {
-  const compiled = replaceRead(trimmed, idxRef);
+function compileExpression(trimmed) {
+  const compiled = replaceRead(trimmed);
   return "return " + compiled.trim() + ";";
+}
+
+function processFunctions(parts) {
+  let funcDecls = "";
+  const remainingParts = [];
+  for (const part of parts) {
+    // Match fn name() => body;
+    const match = part.match(/^fn\s+(\w+)\s*\(\)\s*=>\s*(.+)$/);
+    if (match) {
+      const funcName = match[1];
+      let funcBody = replaceRead(match[2]);
+      funcDecls +=
+        "function " + funcName + "(){return " + funcBody.trim() + ";}\n";
+    } else {
+      remainingParts.push(part);
+    }
+  }
+  return { funcDecls, remainingParts };
+}
+
+function buildTokenIterator() {
+  return (
+    "let tokens=stdIn.split(' ');let idx=0;" +
+    "function nextToken(){return parseInt(tokens[idx++],10);}"
+  );
+}
+
+function buildOutput(funcDecls, finalParts, trimmed) {
+  const body =
+    finalParts.length > 1 ? buildBody(finalParts) : compileExpression(trimmed);
+
+  let output = "";
+  if (funcDecls.trim()) {
+    output += funcDecls + "\n";
+  }
+  output += body;
+
+  return buildTokenIterator() + output;
 }
 
 export function compile(source) {
@@ -108,27 +145,26 @@ export function compile(source) {
   // Process curly brace blocks first
   trimmed = processBlocks(trimmed);
 
-  let idxRef = { current: 0 };
-
   const parts = trimmed
     .split(";")
     .map((p) => p.trim())
     .filter(Boolean);
 
+  // Extract function declarations and replace read() in them
+  const { funcDecls, remainingParts } = processFunctions(parts);
+
   // Track mutable vs immutable variables for reassignment checks
-  checkMutability(parts);
+  checkMutability(remainingParts);
 
   // Replace `let mut` with `let` (JS doesn't have immutable let)
-  trimmed = parts.map((p) => p.replace(/^let\s+mut\b/g, "let")).join(";");
+  trimmed = remainingParts
+    .map((p) => p.replace(/^let\s+mut\b/g, "let"))
+    .join(";");
 
   const finalParts = trimmed
     .split(";")
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (finalParts.length > 1) {
-    return buildBody(finalParts, idxRef);
-  }
-
-  return compileExpression(trimmed, idxRef);
+  return buildOutput(funcDecls, finalParts, trimmed);
 }

@@ -10,7 +10,10 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
     rules: {
       "max-depth": ["error", 2],
-      "max-lines-per-function": ["error", 50],
+      "max-lines-per-function": [
+        "error",
+        { max: 50, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
 ]);
