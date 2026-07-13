@@ -278,6 +278,10 @@ test("dereference of address-of returns the variable value", () => {
   expectValid("let temp = 100; *&temp", "", 100);
 });
 
+test("string literal .length returns character count", () => {
+  expectValid("\"foo\".length", "", 3);
+});
+
 test("mutable reference writes through to the original variable", () => {
   expectValid("let mut x = read(); let y : &mut I32 = &mut x; *y = read(); x", "1 2", 2);
 });

@@ -6,11 +6,19 @@ function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
   if (ch >= "a" && ch <= "z") return true;
   if (ch >= "A" && ch <= "Z") return true;
-  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&";
+  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
   return false;
+}
+
+// Skip a string literal starting with " at position i. Returns end index (after closing ") or -1.
+function skipStringLiteral(source, i) {
+  if (source[i] !== '"') return -1;
+  let j = i + 1;
+  while (j < source.length && source[j] !== '"') j++;
+  return j < source.length ? j + 1 : -1;
 }
 
 // Skip a boolean literal ("true" or "false") at position i. Returns end index or -1.
@@ -439,6 +447,12 @@ function validateSource(source) {
     if (isArrayLiteral) {
       const endIdx = findMatchingBracket(source, i);
       i = endIdx + 1;
+      continue;
+    }
+    // Skip string literals entirely
+    const stringEnd = skipStringLiteral(source, i);
+    if (stringEnd !== -1) {
+      i = stringEnd;
       continue;
     }
     // Try break keyword
@@ -1054,6 +1068,9 @@ function scanFunctionParams(source, start, declaredVars) {
 function validateIdentifiers(source, declaredVars, declaredFns) {
   let i = 0;
   while (i < source.length) {
+    // Skip string literals so identifiers inside them aren't flagged
+    const stringEnd = skipStringLiteral(source, i);
+    if (stringEnd !== -1) { i = stringEnd; continue; }
     if (!isAlpha(source[i])) { i++; continue; }
     const identEnd = skipIdentifier(source, i);
     if (identEnd === -1) { i++; continue; }
@@ -1308,6 +1325,13 @@ function stripTypedSyntax(source) {
       // Skip remaining content until end of block
       i = source.indexOf("}", pos);
       i = i === -1 ? source.length : i;
+      continue;
+    }
+    // Pass through string literals: "foo" -> "foo"
+    const stringEnd = skipStringLiteral(source, i);
+    if (stringEnd !== -1) {
+      result += source.substring(i, stringEnd);
+      i = stringEnd;
       continue;
     }
     // Convert boolean literals: true -> 1, false -> 0
