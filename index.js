@@ -1652,6 +1652,13 @@ function stripTypedSyntax(source) {
       i = boolEnd;
       continue;
     }
+    // Pass through logical operators: && and ||
+    const logicOpEnd = skipLogicalOperator(source, i);
+    if (logicOpEnd !== -1) {
+      result += source.substring(i, logicOpEnd);
+      i = logicOpEnd;
+      continue;
+    }
     // Mutable address-of: &mut x -> x, aliasing the same box as the boxed variable x
     // (see CURRENT_BOXED_VARS/boxDeclarations). Must be checked before the plain "&" case.
     if (source.substring(i, i + 5) === "&mut ") {
@@ -2229,9 +2236,7 @@ function transformFnDeclaration(source, start) {
   if (hasStatements(transformedExpr)) {
     // Empty block body: just return 0
     if (transformedExpr === "0;") {
-      return (
-        "function " + varName + "(" + paramList + ") { return 0; } "
-      );
+      return "function " + varName + "(" + paramList + ") { return 0; } ";
     }
     const withReturn = prependReturnToLastExpr(transformedExpr);
     return (
@@ -2407,7 +2412,10 @@ export function compile(source) {
   );
 
   // If top-level has statements OR contains yield, wrap in IIFE with proper returns
-  const isStmtLevel = hasStatements(source) || source.indexOf("yield") !== -1 || source.indexOf("fn ") !== -1;
+  const isStmtLevel =
+    hasStatements(source) ||
+    source.indexOf("yield") !== -1 ||
+    source.indexOf("fn ") !== -1;
   if (isStmtLevel) {
     // yield -> return conversion already handled by transformBlocks, so use
     // prependReturnToLastExpr which correctly skips leading function declarations
@@ -2441,7 +2449,7 @@ import * as fs from "fs/promises";
 
 async function run() {
   const input = await fs.readFile("./lib.tuff", "utf8");
-  const output = compile(input);
+  const output = "process.exit((() => {" + compile(input) + "})())";
   await fs.writeFile("./lib.js", output);
 }
 

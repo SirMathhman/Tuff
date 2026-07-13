@@ -167,6 +167,10 @@ test("function with empty block body works", () => {
   expectValid("fn get() => {} 100", "", 100);
 });
 
+test("function body with && operator works", () => {
+  expectValid("fn get() => true && false; get()", "", 0);
+});
+
 test("yield returns early from block", () => {
   expectValid("{ if (true) yield 1; 2 } + 3", "", 4);
 });
