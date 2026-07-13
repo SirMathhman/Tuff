@@ -27,19 +27,44 @@ npm run cpd     # Check for code duplication
 ## DSL Overview
 
 The language supports:
+
+### I/O
 - `read()` / `read<T>()` — consume sequential tokens from stdin (parsed as integers). The generated JS receives `stdIn` string; the compiler splits on whitespace into a `_tokens` array consumed via `shift()`.
 - `read<Bool>()` — consume a boolean token (`"true"` → `1`, `"false"` → `0`).
+
+### Variables
 - `let x = expr;` — immutable variable declarations. Use `let mut x = expr;` for mutable variables that allow reassignment.
+- Compound assignments: `+=`, `-=`, `*=`, `/=` on mutable variables.
 - Type annotations: `let x : U8 = ...` or `read<U8>()`. Types include `U8`, `U16`, `U32`, `I8`, `I16`, `I32`, `F32`, and `Bool`.
 - Type compatibility: a wider type cannot be assigned to a narrower declaration (e.g., `let x : U8 = read<U16>()` is invalid). A narrower type can be assigned to a wider declaration.
+- Variable shadowing: redeclaring a variable with `let` is allowed; block-scoped shadows don't leak.
+- Bare let statements (no trailing expression) return `0`.
+
+### Arrays
+- Array literals: `[a, b, c]` with indexing via `arr[0]`.
+- Typed array declarations: `let arr : [I32; 2] = [read(), read()];` — size is validated at compile time.
+
+### Control Flow
 - `{ ... }` — block expressions: statement blocks become IIFEs, expression-only blocks become grouped expressions. Max nesting depth is **2**.
-- `if (cond) expr else expr` — conditional expressions (lowered to JS ternary). `else` is optional; missing else branches evaluate to `0`.
+- `if (cond) expr else expr` — conditional expressions (lowered to JS ternary). `else` is optional; missing else branches evaluate to `0`. If branches contain `break`/`continue`/`return`, lowered to JS `if/else` statements instead.
 - `while (cond) body` — indefinite iteration. Body can be a block `{ ... }` or a single expression.
+- `for (i in start..end) body` — definite iteration over a range. Range can be literal (`0..read()`) or a variable reference (`let range = 0..10; for (i in range) ...`).
+- `break` — exit enclosing `while` or `for` loop.
+- `continue` — skip to next loop iteration.
+- `yield expr;` — early return from a block (lowered to `return` in an IIFE).
+- `return expr;` — explicit return in function bodies.
+
+### Functions
+- `fn name(params) => expr;` — function declarations (lowered to JS `function` with `return`).
+- `fn name(param : Type) : ReturnType => expr;` — typed parameters and optional return type annotation.
+- Functions support recursive calls.
+- Block bodies with `return` statements: `fn name() => { if (cond) return val }`.
+
+### Expressions
 - Boolean literals (`true` / `false`) and logical operators (`||`, `&&`).
 - Arithmetic operators and multi-character identifiers (alphabetic only).
 - Typed number literals: `100U8`, `50I16`, etc. (validated against type range at compile time, then stripped from output).
-- Bare let statements (no trailing expression) return `0`.
-- Variable shadowing: redeclaring a variable with `let` is allowed; block-scoped shadows don't leak.
+- Range literals: `start..end` (used in `for` loops or `let` declarations).
 
 ## Conventions
 

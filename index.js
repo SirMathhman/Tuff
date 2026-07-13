@@ -712,19 +712,12 @@ function extractArrayDeclaredSize(typeStr) {
 
 // Validate that the array literal on the RHS has the correct number of elements. Throws if mismatch.
 function validateArrayLiteralSize(source, afterColonEnd, declaredSize) {
-  // Find '=' after the type annotation
-  let eqPos = source.indexOf("=", afterColonEnd);
-  if (eqPos === -1) return;
-  // Find ';' after '='
-  let semiPos = source.indexOf(";", eqPos);
-  if (semiPos === -1) return;
-  // Extract RHS
-  let rhsStart = skipWhitespace(source, eqPos + 1);
-  const rhs = source.substring(rhsStart, semiPos).trim();
+  const rhsInfo = extractRhs(source, afterColonEnd);
+  if (!rhsInfo) return;
   // Check if RHS is an array literal
-  if (rhs[0] !== "[") return;
+  if (rhsInfo.rhs[0] !== "[") return;
   // Count elements in the array literal by counting top-level commas + 1
-  const elementCount = countArrayElements(rhs);
+  const elementCount = countArrayElements(rhsInfo.rhs);
   if (elementCount !== declaredSize) {
     throw new Error("Array size mismatch: declared " + declaredSize + " but got " + elementCount);
   }
@@ -732,20 +725,14 @@ function validateArrayLiteralSize(source, afterColonEnd, declaredSize) {
 
 // Validate that when assigning an array variable to a typed array, sizes are compatible. Throws if mismatch.
 function validateArrayVariableAssignment(source, afterColonEnd, declaredSize) {
-  // Find '=' after the type annotation
-  let eqPos = source.indexOf("=", afterColonEnd);
-  if (eqPos === -1) return;
-  // Find ';' after '='
-  let semiPos = source.indexOf(";", eqPos);
-  if (semiPos === -1) return;
-  // Extract RHS
-  let rhsStart = skipWhitespace(source, eqPos + 1);
-  const rhs = source.substring(rhsStart, semiPos).trim();
+  const rhsInfo = extractRhs(source, afterColonEnd);
+  if (!rhsInfo) return;
   // Check if RHS is a simple identifier (variable reference)
+  let rhsStart = skipWhitespace(source, rhsInfo.eqPos + 1);
   let identEnd = skipIdentifier(source, rhsStart);
   if (identEnd <= rhsStart) return;
   const rhsVarName = source.substring(rhsStart, identEnd);
-  if (rhsVarName !== rhs) return; // not a bare identifier
+  if (rhsVarName !== rhsInfo.rhs) return; // not a bare identifier
   // Check if the RHS variable is an array by looking at its declaration
   const rhsArraySize = findArrayVariableSize(source, rhsVarName);
   if (rhsArraySize !== null && rhsArraySize !== declaredSize) {
@@ -753,27 +740,45 @@ function validateArrayVariableAssignment(source, afterColonEnd, declaredSize) {
   }
 }
 
-// Find the declared size of an array variable by scanning its 'let' declaration. Returns size or null.
-function findArrayVariableSize(source, varName) {
+// Extract the RHS string between '=' and ';' after a given position. Returns {rhs, eqPos, semiPos} or null.
+function extractRhs(source, startPos) {
+  let eqPos = source.indexOf("=", startPos);
+  if (eqPos === -1) return null;
+  let semiPos = source.indexOf(";", eqPos);
+  if (semiPos === -1) return null;
+  let rhsStart = skipWhitespace(source, eqPos + 1);
+  return { rhs: source.substring(rhsStart, semiPos).trim(), eqPos, semiPos };
+}
+
+// Iterate over all 'let' declarations in source, calling callback with (varName, identEnd, pos) for each.
+function forEachLetDeclaration(source, callback) {
   for (let i = 0; i < source.length - 3; i++) {
     if (source.substring(i, i + 4) !== "let ") continue;
     let identEnd = skipIdentifier(source, i + 4);
     if (identEnd === -1) continue;
     const name = source.substring(i + 4, identEnd);
-    if (name !== varName) continue;
-    // Check if this declaration has an array type annotation
-    let pos = skipWhitespace(source, identEnd);
-    if (source[pos] !== ":") {
-      const size = countArrayLiteralSize(source, i + 4);
-      if (size !== null) return size;
-      continue;
-    }
-    const annotEnd = skipTypeAnnotation(source, pos);
-    if (annotEnd === -1) continue;
-    const typeStr = source.substring(pos + 1, annotEnd).trim();
-    if (typeStr.startsWith("[")) return extractArrayDeclaredSize(typeStr);
+    callback(name, identEnd, i);
   }
-  return null;
+}
+
+// Find the declared size of an array variable by scanning its 'let' declaration. Returns size or null.
+function findArrayVariableSize(source, varName) {
+  let result = null;
+  forEachLetDeclaration(source, (name, identEnd, pos) => {
+    if (name !== varName) return;
+    // Check if this declaration has an array type annotation
+    let typePos = skipWhitespace(source, identEnd);
+    if (source[typePos] !== ":") {
+      const size = countArrayLiteralSize(source, pos + 4);
+      if (size !== null) result = size;
+      return;
+    }
+    const annotEnd = skipTypeAnnotation(source, typePos);
+    if (annotEnd === -1) return;
+    const typeStr = source.substring(typePos + 1, annotEnd).trim();
+    if (typeStr.startsWith("[")) result = extractArrayDeclaredSize(typeStr);
+  });
+  return result;
 }
 
 // Count elements in the array literal RHS of a let declaration starting at position i. Returns count or null.
@@ -906,26 +911,20 @@ function validateVarAssignments(source) {
   
   // Build a set of immutable variables (declared without "mut") and check typed declarations in one pass
   const immutables = new Set();
-  for (let i = 0; i < source.length - 3; i++) {
-    if (source.substring(i, i + 4) !== "let ") continue;
-    
-    let identEnd = skipIdentifier(source, i + 4);
-    if (identEnd === -1) continue;
-    
-    const varName = source.substring(i + 4, identEnd);
+  forEachLetDeclaration(source, (varName, identEnd, pos) => {
     immutables.add(varName);
     
     // Check type annotation on this declaration for compatibility with RHS variable types
-    let pos = skipWhitespace(source, identEnd);
-    if (source[pos] !== ":") continue;
+    let typePos = skipWhitespace(source, identEnd);
+    if (source[typePos] !== ":") return;
     
-    const annotEnd = skipTypeAnnotation(source, pos);
-    if (annotEnd === -1) continue;
+    const annotEnd = skipTypeAnnotation(source, typePos);
+    if (annotEnd === -1) return;
     
     // Get target type and RHS variable name
-    const targetTypeName = source.substring(pos + 1, annotEnd).trim();
-    let eqPos2 = source.indexOf("=", i + 4);
-    if (eqPos2 === -1) continue;
+    const targetTypeName = source.substring(typePos + 1, annotEnd).trim();
+    let eqPos2 = source.indexOf("=", pos + 4);
+    if (eqPos2 === -1) return;
     
     let rhsStart = skipWhitespace(source, eqPos2 + 1);
     const semiPos2 = source.indexOf(";", eqPos2);
@@ -933,17 +932,17 @@ function validateVarAssignments(source) {
     
     // Check if RHS is a simple identifier reference to another variable
     let rhsIdentEnd = skipIdentifier(source, rhsStart);
-    if (rhsIdentEnd <= rhsStart) continue;
+    if (rhsIdentEnd <= rhsStart) return;
     
     const rhsVarName = source.substring(rhsStart, rhsIdentEnd);
     const rhsTrimmed = source.substring(rhsStart, endBound).trim();
-    if (rhsVarName !== rhsTrimmed) continue; // not a bare identifier
+    if (rhsVarName !== rhsTrimmed) return; // not a bare identifier
     
     const srcTypeName = varTypes[rhsVarName];
-    if (!srcTypeName || !targetTypeName) continue;
+    if (!srcTypeName || !targetTypeName) return;
     
     validateTypeCompatibility(srcTypeName, targetTypeName);
-  }
+  });
   
   // Check for reassignments to immutable variables (pattern: "x =" where x is not mutable)
   let eqPos = source.indexOf("=");
