@@ -1,9 +1,11 @@
 function isAlpha(ch) {
-  return ch >= "a" && ch <= "z";
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
 }
 
 function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
+  if (ch >= "a" && ch <= "z") return true;
+  if (ch >= "A" && ch <= "Z") return true;
   const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
@@ -91,6 +93,69 @@ function skipYieldStatement(source, i) {
   return pos;
 }
 
+// Skip "struct" keyword at position i. Returns end index or -1.
+function skipStructKeyword(source, i) {
+  if (source.substring(i, i + 6) === "struct" && (i + 6 >= source.length || !isAlpha(source[i + 6]))) {
+    return i + 6; 
+  }
+  return -1;
+}
+
+// Skip a struct declaration starting at position i. Returns end index or -1.
+// Syntax: struct Name { field : Type, field : Type }
+// Validates that field names are unique within the struct.
+function skipStructDeclaration(source, i) {
+  const structEnd = skipStructKeyword(source, i);
+  if (structEnd === -1) return -1;
+  
+  let pos = skipWhitespace(source, structEnd);
+  // Skip identifier (struct name)
+  const identEnd = skipIdentifier(source, pos);
+  if (identEnd === -1) return -1;
+  
+  pos = skipWhitespace(source, identEnd);
+  // Skip "{ ... }" block and validate field names
+  if (source[pos] !== "{") return -1;
+  const endIdx = findMatchingBrace(source, pos);
+  const body = source.substring(pos + 1, endIdx);
+  validateStructFields(body);
+  return endIdx + 1;
+}
+
+// Validate struct fields: check for duplicate field names and valid type names. Throws if invalid.
+function validateStructFields(body) {
+  const fieldNames = new Set();
+  let i = 0;
+  while (i < body.length) {
+    // Skip whitespace and commas
+    if (" \t\n\r,".includes(body[i])) { i++; continue; }
+    // Skip field identifier
+    const identEnd = skipIdentifier(body, i);
+    if (identEnd === -1) { i++; continue; }
+    const fieldName = body.substring(i, identEnd);
+    if (fieldNames.has(fieldName)) {
+      throw new Error("Duplicate field name: " + fieldName);
+    }
+    fieldNames.add(fieldName);
+    i = identEnd;
+    // Skip to type annotation ": TypeName"
+    let pos = skipWhitespace(body, i);
+    if (body[pos] !== ":") continue;
+    pos = skipWhitespace(body, pos + 1);
+    // Extract type name (can start with uppercase U, I, F or lowercase for Bool)
+    let typeEnd = pos;
+    while (typeEnd < body.length && !", \t\n\r}".includes(body[typeEnd])) typeEnd++;
+    if (typeEnd === pos) continue;
+    const typeName = body.substring(pos, typeEnd).trim();
+    if (typeName.length === 0) continue;
+    // Validate type name
+    if (getTypeBits(typeName) === -1 && typeName !== "Bool") {
+      throw new Error("Unknown type: " + typeName);
+    }
+    i = typeEnd;
+  }
+}
+
 // Skip "fn" keyword at position i. Returns end index or -1.
 function skipFnKeyword(source, i) {
   if (source.substring(i, i + 2) === "fn" && (i + 2 >= source.length || !isAlpha(source[i + 2]))) {
@@ -115,19 +180,8 @@ function skipFnDeclaration(source, i) {
   if (source[pos] !== "(") return -1;
   pos++;
   // Skip parameters (identifier, optional ": Type", optional ",")
-  while (pos < source.length && source[pos] !== ")") {
-    pos = skipWhitespace(source, pos);
-    if (source[pos] === ",") { pos++; continue; }
-    const paramEnd = skipIdentifier(source, pos);
-    if (paramEnd === -1) return -1;
-    pos = skipWhitespace(source, paramEnd);
-    // Skip optional type annotation ": Type"
-    const annotEnd = skipTypeAnnotation(source, pos);
-    if (annotEnd !== -1) { pos = annotEnd; }
-    pos = skipWhitespace(source, pos);
-  }
-  if (source[pos] !== ")") return -1;
-  pos++;
+  pos = skipParams(source, pos);
+  if (pos === -1) return -1;
   
   pos = skipWhitespace(source, pos);
   // Skip optional return type annotation ": Type"
@@ -387,6 +441,12 @@ function validateSource(source) {
     const yieldEnd = skipYieldStatement(source, i);
     if (yieldEnd !== -1) {
       i = yieldEnd;
+      continue;
+    }
+    // Try struct declaration
+    const structEnd = skipStructDeclaration(source, i);
+    if (structEnd !== -1) {
+      i = structEnd;
       continue;
     }
     // Try function declaration
@@ -761,12 +821,17 @@ function extractRhs(source, startPos) {
 }
 
 // Iterate over all 'let' declarations in source, calling callback with (varName, identEnd, pos) for each.
+// Handles both "let x" and "let mut x" declarations.
 function forEachLetDeclaration(source, callback) {
   for (let i = 0; i < source.length - 3; i++) {
     if (source.substring(i, i + 4) !== "let ") continue;
-    let identEnd = skipIdentifier(source, i + 4);
+    let pos = skipWhitespace(source, i + 4);
+    // Skip optional "mut" keyword
+    const mutEnd = skipKeywordMut(source, pos);
+    if (mutEnd !== -1) pos = mutEnd;
+    let identEnd = skipIdentifier(source, pos);
     if (identEnd === -1) continue;
-    const name = source.substring(i + 4, identEnd);
+    const name = source.substring(pos, identEnd);
     callback(name, identEnd, i);
   }
 }
@@ -916,12 +981,151 @@ function buildVarTypeMap(source) {
 }
 
 // Validate that variable assignments respect type compatibility. Throws if invalid.
+// Set of built-in identifiers that are always valid.
+const BUILTINS = new Set(["read", "true", "false", "mut", "in", "yield", "break", "continue", "return", "length"]);
+
+// Scan struct fields and add them to declaredVars set.
+function scanStructFields(body, declaredVars) {
+  let j = 0;
+  while (j < body.length) {
+    if (" \t\n\r,".includes(body[j])) { j++; continue; }
+    const fieldEnd = skipIdentifier(body, j);
+    if (fieldEnd === -1) { j++; continue; }
+    declaredVars.add(body.substring(j, fieldEnd));
+    j = fieldEnd;
+  }
+}
+
+// Skip a single parameter (identifier + optional type annotation). Returns new position or -1.
+function skipParam(source, pos) {
+  const paramEnd = skipIdentifier(source, pos);
+  if (paramEnd === -1) return -1;
+  pos = skipWhitespace(source, paramEnd);
+  const annotEnd = skipTypeAnnotation(source, pos);
+  if (annotEnd !== -1) pos = annotEnd;
+  return skipWhitespace(source, pos);
+}
+
+// Skip parameters in parentheses, returning position after closing ")". Returns -1 on failure.
+function skipParams(source, start) {
+  let pos = start;
+  while (pos < source.length && source[pos] !== ")") {
+    pos = skipWhitespace(source, pos);
+    if (source[pos] === ",") { pos++; continue; }
+    const nextPos = skipParam(source, pos);
+    if (nextPos === -1) return -1;
+    pos = nextPos;
+  }
+  if (pos >= source.length || source[pos] !== ")") return -1;
+  return pos + 1;
+}
+
+// Scan function parameters and add them to declaredVars set.
+function scanFunctionParams(source, start, declaredVars) {
+  let pos = start;
+  while (pos < source.length && source[pos] !== ")") {
+    pos = skipWhitespace(source, pos);
+    if (source[pos] === ",") { pos++; continue; }
+    const paramEnd = skipIdentifier(source, pos);
+    if (paramEnd === -1) break;
+    declaredVars.add(source.substring(pos, paramEnd));
+    pos = skipParam(source, pos);
+    if (pos === -1) break;
+  }
+}
+
+// Validate that all identifier references are declared variables, functions, or built-ins. Throws if not.
+function validateIdentifiers(source, declaredVars, declaredFns) {
+  let i = 0;
+  while (i < source.length) {
+    if (!isAlpha(source[i])) { i++; continue; }
+    const identEnd = skipIdentifier(source, i);
+    if (identEnd === -1) { i++; continue; }
+    const name = source.substring(i, identEnd);
+    // Skip keywords and built-ins
+    if (BUILTINS.has(name)) { i = identEnd; continue; }
+    // Skip "let", "fn", "struct", "if", "else", "while", "for" keywords
+    if (name === "let" || name === "fn" || name === "struct" || name === "if" || name === "else" || name === "while" || name === "for") { i = identEnd; continue; }
+    // Skip type names (U, I, F followed by digits, or Bool)
+    if ((name[0] === "U" || name[0] === "I" || name[0] === "F") && identEnd < source.length && source[identEnd] >= "0" && source[identEnd] <= "9") { i = identEnd; continue; }
+    if (name === "Bool") { i = identEnd; continue; }
+    // Skip if this is a declaration (let x = ... or fn name ...)
+    if (i > 0 && source.substring(i - 4, i) === "let ") { i = identEnd; continue; }
+    if (i > 0 && source.substring(i - 2, i) === "fn ") { i = identEnd; continue; }
+    if (i > 0 && source.substring(i - 6, i) === "struct ") { i = identEnd; continue; }
+    // Skip if preceded by "mut " (let mut x)
+    if (i > 0 && source.substring(i - 4, i) === "mut ") { i = identEnd; continue; }
+    // Check if identifier is declared
+    if (!declaredVars.has(name) && !declaredFns.has(name)) {
+      throw new Error("Unknown identifier: " + name);
+    }
+    i = identEnd;
+  }
+}
+
 function validateVarAssignments(source) {
   const varTypes = buildVarTypeMap(source);
+  
+  // Build a set of declared variables and functions
+  const declaredVars = new Set();
+  const declaredFns = new Set();
+  forEachLetDeclaration(source, (varName) => { declaredVars.add(varName); });
+  // Scan for function declarations and their parameters
+  for (let i = 0; i < source.length - 3; i++) {
+    if (source.substring(i, i + 3) !== "fn ") continue;
+    let pos = skipWhitespace(source, i + 3);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) continue;
+    declaredFns.add(source.substring(pos, identEnd));
+    // Scan parameters in parentheses
+    pos = identEnd;
+    if (source[pos] !== "(") continue;
+    scanFunctionParams(source, pos + 1, declaredVars);
+  }
+  // Scan for struct declarations and their field names
+  for (let i = 0; i < source.length - 6; i++) {
+    if (source.substring(i, i + 7) !== "struct ") continue;
+    let pos = skipWhitespace(source, i + 7);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) continue;
+    declaredVars.add(source.substring(pos, identEnd));
+    // Scan fields in braces
+    pos = skipWhitespace(source, identEnd);
+    if (source[pos] !== "{") continue;
+    const endIdx = findMatchingBrace(source, pos);
+    const body = source.substring(pos + 1, endIdx);
+    scanStructFields(body, declaredVars);
+  }
+  
+  // Scan for for-loop variable declarations: for (i in ...)
+  for (let i = 0; i < source.length - 3; i++) {
+    if (source.substring(i, i + 3) !== "for") continue;
+    let pos = skipWhitespace(source, i + 3);
+    if (source[pos] !== "(") continue;
+    pos++;
+    // Find " in " to get the loop variable
+    const inIdx = source.indexOf(" in ", pos);
+    if (inIdx === -1) continue;
+    // Extract variable name before " in "
+    let varEnd = inIdx;
+    while (varEnd > pos && " \t\n\r".includes(source[varEnd - 1])) varEnd--;
+    let varStart = varEnd;
+    while (varStart > pos && isAlpha(source[varStart - 1])) varStart--;
+    if (varStart < varEnd) {
+      declaredVars.add(source.substring(varStart, varEnd));
+    }
+  }
+  
+  // Check all identifier references are declared or built-in
+  validateIdentifiers(source, declaredVars, declaredFns);
   
   // Build a set of immutable variables (declared without "mut") and check typed declarations in one pass
   const immutables = new Set();
   forEachLetDeclaration(source, (varName, identEnd, pos) => {
+    // Check if this declaration has "mut" keyword
+    let afterLet = skipWhitespace(source, pos + 4);
+    const mutEnd = skipKeywordMut(source, afterLet);
+    if (mutEnd !== -1) return; // mutable variable, skip
     immutables.add(varName);
     
     // Check type annotation on this declaration for compatibility with RHS variable types
@@ -1208,6 +1412,14 @@ function transformBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
+    // Check for struct declaration
+    const structEnd = skipStructKeyword(source, i);
+    if (structEnd !== -1) {
+      const nextI = skipStructDeclaration(source, i);
+      result += "0; ";
+      i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
     // Check for function declaration
     const fnEnd = skipFnKeyword(source, i);
     if (fnEnd !== -1) {

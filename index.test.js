@@ -175,6 +175,22 @@ test("array .length property returns array size", () => {
   expectValid("let array = [100]; array.length", "", 1);
 });
 
+test("struct declaration compiles and evaluates to 0", () => {
+  expectValid("struct empty {}", "", 0);
+});
+
+test("struct declaration with fields compiles and evaluates to 0", () => {
+  expectValid("struct wrapper { field : I32 }", "", 0);
+});
+
+test("struct declaration with duplicate field names is invalid", () => {
+  expectInvalid("struct wrapper { field : I32, field : I32 }");
+});
+
+test("struct declaration with unknown type is invalid", () => {
+  expectInvalid("struct wrapper { field : UnknownType }");
+});
+
 test("wider type assigned to narrower array element is invalid", () => {
   expectInvalid("let array : [U8; 1] = [read<U16>()]; array[0]");
 });
@@ -219,5 +235,17 @@ test("negative value with unsigned type suffix is invalid", () => {
 });
 
 test("invalid source throws error", () => {
-  expectInvalid("invalid");
+  expectInvalid("@invalid");
+});
+
+test("upper-case identifier is valid", () => {
+  expectValid("let X = read(); X", "42", 42);
+});
+
+test("mixed-case identifier is valid", () => {
+  expectValid("let myVar = read(); myVar", "42", 42);
+});
+
+test("unknown identifier throws error", () => {
+  expectInvalid("unknownIdentifier");
 });

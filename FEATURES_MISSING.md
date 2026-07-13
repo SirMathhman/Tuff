@@ -2,7 +2,8 @@
 
 ## Data Structures
 - [x] Array length property (`.length`)
-- [ ] Structs / user-defined types
+- [x] Struct declarations (`struct Name {}`)
+- [ ] Structs with fields / user-defined types
 - [ ] Pointers and address-of operator (`&`, `*`)
 
 ## I/O & Built-ins
@@ -18,7 +19,7 @@
 - [ ] Implicit type inference (currently requires explicit annotation in many paths)
 - [ ] Type casting / conversion operators (`(U8)x`, `as U8`)
 - [ ] Additional numeric types: `U64`, `I64`
-- [ ] Enumerations
+- [ ] Enumerations  
 
 ## Statements & Scoping
 - [ ] Labelled statements and `goto` (if aiming for C parity)
