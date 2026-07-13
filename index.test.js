@@ -273,3 +273,7 @@ test("address-of operator passes through", () => {
 test("address-of operator differs across distinct variables", () => {
   expectValid("let x = 0; let y = 0; &x == &y", "", 0);
 });
+
+test("mutable reference writes through to the original variable", () => {
+  expectValid("let mut x = read(); let y : &mut I32 = &mut x; *y = read(); x", "1 2", 2);
+});

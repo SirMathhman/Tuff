@@ -328,6 +328,13 @@ function skipTypeAnnotation(source, i) {
   if (source[i] !== ":") return -1;
   let j = i + 1;
   while (j < source.length && " \t\n\r".includes(source[j])) j++;
+  // Reference type annotation: "&Type" or "&mut Type" — the marker carries no runtime
+  // meaning here, so just skip past it and parse the underlying base type below.
+  if (j < source.length && source[j] === "&") {
+    j++;
+    const mutEnd = skipKeywordMut(source, j);
+    j = mutEnd !== -1 ? mutEnd : skipWhitespace(source, j);
+  }
   if (j < source.length && (source[j] === 'U' || source[j] === 'I' || source[j] === 'F')) {
     return skipTypeSuffixChars(source, j);
   }
@@ -340,6 +347,15 @@ function skipTypeAnnotation(source, i) {
     return findMatchingBracket(source, j) + 1;
   }
   return -1;
+}
+
+// Check whether position i is immediately preceded (ignoring whitespace) by a value-producing
+// token (identifier char, digit, ")", "]") — used to tell binary "*" (multiplication) apart
+// from unary "*" (dereference), which appears at expression-start instead.
+function isPrecededByValue(source, i) {
+  let j = i - 1;
+  while (j >= 0 && " \t\n\r".includes(source[j])) j--;
+  return j >= 0 && (isAlpha(source[j]) || (source[j] >= "0" && source[j] <= "9") || source[j] === ")" || source[j] === "]");
 }
 
 // Skip an identifier and return new index, or -1 if not found
@@ -1301,6 +1317,14 @@ function stripTypedSyntax(source) {
       i = boolEnd;
       continue;
     }
+    // Mutable address-of: &mut x -> x, aliasing the same box as the boxed variable x
+    // (see CURRENT_BOXED_VARS/boxDeclarations). Must be checked before the plain "&" case.
+    if (source.substring(i, i + 5) === "&mut ") {
+      const identEnd = skipIdentifier(source, i + 5);
+      result += identEnd !== -1 ? source.substring(i + 5, identEnd) : "&mut ";
+      i = identEnd !== -1 ? identEnd : i + 5;
+      continue;
+    }
     // Address-of operator: &x -> "&x", a string literal used as a stable per-name
     // identity token so that &x == &x but &x != &y for distinct variables.
     // Must check after && which is handled by boolean literal conversion
@@ -1309,6 +1333,24 @@ function stripTypedSyntax(source) {
       const identEnd = skipIdentifier(source, i + 1);
       result += identEnd !== -1 ? '"&' + source.substring(i + 1, identEnd) + '"' : "";
       i = identEnd !== -1 ? identEnd : i + 1;
+      continue;
+    }
+    // Dereference operator: *y -> y[0], but only when "*" is in an expression-start
+    // position (not immediately after a value, where it means multiplication).
+    if (source[i] === "*" && !isPrecededByValue(source, i)) {
+      const identEnd = skipIdentifier(source, i + 1);
+      result += identEnd !== -1 ? source.substring(i + 1, identEnd) + "[0]" : "*";
+      i = identEnd !== -1 ? identEnd : i + 1;
+      continue;
+    }
+    // Bare read of a boxed variable: x -> x[0] (except at its own declaration site,
+    // "let x" / "let mut x", where the binding itself — not its box — is named).
+    if (isAlpha(source[i])) {
+      const identEnd = skipIdentifier(source, i);
+      const name = source.substring(i, identEnd);
+      const isDeclSite = source.substring(i - 4, i) === "let " || source.substring(i - 4, i) === "mut ";
+      result += CURRENT_BOXED_VARS.has(name) && !isDeclSite ? name + "[0]" : name;
+      i = identEnd;
       continue;
     }
     const isColon = source[i] === ":";
@@ -1786,6 +1828,50 @@ function stripTrailingSemicolon(source) {
   return source.substring(0, end);
 }
 
+// Names of variables that are targets of "&mut NAME" somewhere in the source. Set once per
+// compile() call and read from stripTypedSyntax to decide when a bare read of NAME needs to
+// go through its box ("[0]") instead of being emitted directly. See findBoxedVars/boxDeclarations.
+let CURRENT_BOXED_VARS = new Set();
+
+// Find variable names that a mutable reference is taken of, i.e. "= &mut NAME" (RHS/expression
+// position only — a "&mut Type" appearing in a type annotation like ": &mut I32" is not a
+// reference expression and must not be picked up here).
+function findBoxedVars(source) {
+  const boxed = new Set();
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] !== "=") continue;
+    const pos = skipWhitespace(source, i + 1);
+    if (source.substring(pos, pos + 5) !== "&mut ") continue;
+    const identEnd = skipIdentifier(source, pos + 5);
+    if (identEnd !== -1) boxed.add(source.substring(pos + 5, identEnd));
+  }
+  return boxed;
+}
+
+// Wrap the RHS of "let mut NAME = EXPR;" in "[EXPR]" for each NAME in boxedVars, turning it into
+// a mutable box (a single-element array — plain "{...}" would be misread as a block expression
+// by transformBlocks, but "[...]" is preserved as a literal) that "&mut NAME" (aliasing the box)
+// and "*ref" (reading/writing "[0]") can share access to.
+function boxDeclarations(source, boxedVars) {
+  if (boxedVars.size === 0) return source;
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    if (source.substring(i, i + 4) !== "let ") { result += source[i]; i++; continue; }
+    const pos = skipWhitespace(source, i + 4);
+    const mutEnd = skipKeywordMut(source, pos);
+    const identEnd = mutEnd !== -1 ? skipIdentifier(source, mutEnd) : -1;
+    const varName = identEnd !== -1 ? source.substring(mutEnd, identEnd) : null;
+    const eqPos = varName !== null && boxedVars.has(varName) ? source.indexOf("=", identEnd) : -1;
+    const semiPos = eqPos !== -1 ? source.indexOf(";", eqPos) : -1;
+    if (semiPos === -1) { result += source[i]; i++; continue; }
+    const rhs = source.substring(eqPos + 1, semiPos).trim();
+    result += source.substring(i, eqPos + 1) + " [" + rhs + "];";
+    i = semiPos + 1;
+  }
+  return result;
+}
+
 export function compile(source) {
   if (source === "") {
     return "return 0;";
@@ -1797,7 +1883,8 @@ export function compile(source) {
     throw new Error("Invalid source: " + source);
   }
 
-  const transformed = transformBlocks(source);
+  CURRENT_BOXED_VARS = findBoxedVars(source);
+  const transformed = transformBlocks(boxDeclarations(source, CURRENT_BOXED_VARS));
 
   // If top-level has statements OR contains yield, wrap in IIFE with proper returns
   const isStmtLevel = hasStatements(source) || source.indexOf("yield") !== -1;

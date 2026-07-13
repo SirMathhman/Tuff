@@ -5,7 +5,7 @@
 - [x] Struct declarations (`struct Name {}`)
 - [x] Structs with fields / user-defined types (declaration, instantiation, field access)
 - [x] Address-of operator (`&`)
-- [ ] Dereference operator (`*`) / pointer indirection
+- [x] Mutable references (`&mut x`, `: &mut Type`) and dereference-assignment (`*y = ...`)
 
 ## I/O & Built-ins
 - [ ] Output/print statements (`print(x)`, `println()`) — currently only input via `read()`
