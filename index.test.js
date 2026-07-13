@@ -155,6 +155,10 @@ test("recursive function works", () => {
   expectValid("fn fact(n : I32) : I32 => if (n < 2) 1 else n * fact(n - 1); fact(read())", "5", 120);
 });
 
+test("function with if/return in block body works", () => {
+  expectValid("fn get() => { if (true) return 3 } + 1; get()", "", 3);
+});
+
 test("yield returns early from block", () => {
   expectValid("{ if (true) yield 1; 2 } + 3", "", 4);
 });

@@ -1045,11 +1045,11 @@ function transformBlocks(source) {
     }
     const endIdx = findMatchingBrace(source, i);
     const inner = source.substring(i + 1, endIdx);
-    if (!hasStatements(inner)) {
-      result += "(" + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + ")";
-    } else if (hasBreakOrContinue(inner)) {
-      // Blocks with break/continue must stay as plain blocks, not IIFEs
+    if (hasBreakOrContinue(inner) || hasReturn(inner)) {
+      // Blocks with break/continue/return must stay as plain blocks, not IIFEs
       result += "{ " + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + " }";
+    } else if (!hasStatements(inner)) {
+      result += "(" + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + ")";
     } else if (inner.indexOf("yield") !== -1) {
       // Blocks with yield: wrap as IIFE, yield -> return exits the IIFE
       let transformedInner = transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)));
@@ -1095,6 +1095,14 @@ function hasBreakOrContinue(source) {
   return false;
 }
 
+// Check if a source string contains the return keyword. Returns true if found.
+function hasReturn(source) {
+  for (let i = 0; i < source.length - 5; i++) {
+    if (source.substring(i, i + 6) === "return" && (i + 6 >= source.length || !isAlpha(source[i + 6]))) return true;
+  }
+  return false;
+}
+
 // Transform an if/else expression to JavaScript ternary: (cond) ? (trueBranch) : (falseBranch)
 // If branches contain break/continue, use statement-style output instead.
 function transformIfElse(source, start) {
@@ -1111,19 +1119,14 @@ function transformIfElse(source, start) {
   
   pos = skipWhitespace(source, pos + trueBranch.length);
   // Skip past semicolon if present (e.g., "if (c) break; else ...")
-  const hasSemiAfterTrue = source[pos] === ";";
   if (source[pos] === ";") pos++;
   pos = skipWhitespace(source, pos);
-  
-  console.log("DEBUG transformIfElse:", { trueBranch, transformedTrueBranch, hasSemiAfterTrue, posChar: source[pos], elseEnd: skipElseKeyword(source, pos) });
   
   const elseEnd = skipElseKeyword(source, pos);
   if (elseEnd !== -1) {
     pos = skipWhitespace(source, elseEnd);
     const { content: falseBranch } = extractBranch(source, pos);
     const transformedFalseBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(falseBranch.trim())));
-    
-    console.log("DEBUG hasBreakOrContinue:", { tb: hasBreakOrContinue(trueBranch), fb: hasBreakOrContinue(falseBranch), tbHasBreak: transformedTrueBranch.indexOf("break"), fbHasBreak: transformedFalseBranch.indexOf("break") });
     
     // If either branch contains break/continue/yield, use statement-style output
     if (hasBreakOrContinue(trueBranch) || hasBreakOrContinue(falseBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1 || transformedFalseBranch.indexOf("break") !== -1 || transformedFalseBranch.indexOf("continue") !== -1 || transformedTrueBranch.indexOf("return") !== -1 || transformedFalseBranch.indexOf("return") !== -1) {
@@ -1234,6 +1237,11 @@ function transformFnDeclaration(source, start) {
   const expr = source.substring(pos, exprEnd);
   
   const transformedExpr = transformBlocks(stripTypedSyntax(stripTypeSuffix(expr.trim())));
+  
+  // If the body contains return statements, emit body directly without wrapping in return
+  if (hasReturn(expr)) {
+    return "function " + varName + "(" + paramList + ") { " + transformedExpr + " } ";
+  }
   
   return "function " + varName + "(" + paramList + ") { return " + transformedExpr + "; } ";
 }
