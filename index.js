@@ -4,7 +4,7 @@ function isAlpha(ch) {
 
 function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
-  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|";
+  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
@@ -238,6 +238,7 @@ function skipExpression(source, start) {
     if (source[i] === ")") { parenDepth--; i++; continue; }
     if (source[i] === ";" && parenDepth === 0) break;
     if (source[i] === "{") { i = findMatchingBrace(source, i) + 1; continue; }
+    if (source[i] === "[") { i = findMatchingBracket(source, i) + 1; continue; }
     if (parenDepth === 0 && skipElseKeyword(source, skipWhitespace(source, i)) !== -1) break;
     i++;
   }
@@ -268,7 +269,7 @@ function tryMatchTypedRead(source, i) {
   return -1;
 }
 
-// Skip a type annotation like ": U8" or ": I16", returns new index
+// Skip a type annotation like ": U8" or ": I16" or ": [I32; 2]", returns new index
 function skipTypeAnnotation(source, i) {
   if (source[i] !== ":") return -1;
   let j = i + 1;
@@ -279,6 +280,10 @@ function skipTypeAnnotation(source, i) {
   // Bool type annotation
   if (j + 3 <= source.length && source.substring(j, j + 4) === "Bool") {
     return j + 4;
+  }
+  // Array type annotation: [Type; size]
+  if (j < source.length && source[j] === "[") {
+    return findMatchingBracket(source, j) + 1;
   }
   return -1;
 }
@@ -295,13 +300,27 @@ function skipIdentifier(source, i) {
   return -1;
 }
 
+// Skip array indexing brackets after an identifier. Returns new index.
+function skipArrayIndexing(source, start) {
+  let i = start;
+  while (i < source.length && source[i] === "[") {
+    i = findMatchingBracket(source, i) + 1;
+  }
+  return i;
+}
+
 // Try to skip identifier if preceded by ; or = (ignoring whitespace), returns new index or -1
+// Also handles array indexing: identifier[expr]
 function maybeSkipIdentifier(source, i) {
   if (!isAlpha(source[i])) return -1;
   let j = i - 1;
   while (j >= 0 && isValidChar(source[j]) === true && !isAlpha(source[j])) {
     const ch = source[j];
-    if (ch === ";" || ch === "=") return skipIdentifier(source, i);
+    if (ch === ";" || ch === "=" || ch === "]" || ch === ")" || ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "<" || ch === ">" || ch === "|" || ch === "&") {
+      let identEnd = skipIdentifier(source, i);
+      identEnd = skipArrayIndexing(source, identEnd);
+      return identEnd;
+    }
     j--;
   }
   return -1;
@@ -332,6 +351,13 @@ function validateSource(source) {
     const isBlockStart = source[i] === "{" ;
     if (isBlockStart) {
       const endIdx = findMatchingBrace(source, i);
+      i = endIdx + 1;
+      continue;
+    }
+    // Skip array literals entirely
+    const isArrayLiteral = source[i] === "[";
+    if (isArrayLiteral) {
+      const endIdx = findMatchingBracket(source, i);
       i = endIdx + 1;
       continue;
     }
@@ -412,6 +438,18 @@ function findMatchingBrace(source, start) {
     i++;
   }
   return i - 1; // index of matching '}'
+}
+
+// Find the matching ']' for '[' at position start. Returns index of ']'.
+function findMatchingBracket(source, start) {
+  let depth = 1;
+  let i = start + 1;
+  while (depth > 0 && i < source.length) {
+    if (source[i] === "[") depth++;
+    else if (source[i] === "]") depth--;
+    i++;
+  }
+  return i - 1; // index of matching ']'
 }
 
 function hasStatements(source) {
@@ -600,11 +638,6 @@ function extractTypedReadInfo(source, i) {
 
 // Check for typed read in the RHS of a let declaration and validate compatibility. Throws if invalid.
 function checkTypedReadInRHS(source, afterColonEnd) {
-  // Skip whitespace and '=' to find potential 'read<'
-  let pos = afterColonEnd;
-  while (pos < source.length && " \t\n\r=".includes(source[pos])) pos++;
-  const info = extractTypedReadInfo(source, pos);
-  if (!info) return; // no typed read found in RHS
   // Walk back from afterColonEnd to find the colon position. Skip past all valid chars (type name + whitespace).
   let j = afterColonEnd - 1;
   while (j >= 0 && isValidChar(source[j]) === true) {
@@ -615,8 +648,155 @@ function checkTypedReadInRHS(source, afterColonEnd) {
   if (source[colonPos] !== ":") return; // sanity check — no type annotation found
   let outerStart = colonPos + 1;
   while (outerStart < afterColonEnd && " \t\n\r".includes(source[outerStart])) outerStart++;
-  const outerTypeName = source.substring(outerStart, afterColonEnd);
-  validateTypeCompatibility(info.typeName, outerTypeName);
+  const outerTypeStr = source.substring(outerStart, afterColonEnd);
+
+  // Check if this is an array type annotation like [U8; 2]
+  const isArrayType = outerTypeStr.startsWith("[");
+  const elementType = isArrayType ? extractArrayElementType(outerTypeStr) : outerTypeStr;
+  const declaredSize = isArrayType ? extractArrayDeclaredSize(outerTypeStr) : null;
+
+  // Find all read<T>() in RHS and validate against element type (for arrays) or outer type
+  let pos = afterColonEnd;
+  while (pos < source.length) {
+    const semiPos = source.indexOf(";", pos);
+    if (semiPos === -1) break;
+    validateTypedReadsInRange(source, pos, semiPos, elementType);
+    pos = semiPos + 1;
+  }
+
+  // Validate array literal size matches declared size
+  if (isArrayType && declaredSize !== null) {
+    validateArrayLiteralSize(source, afterColonEnd, declaredSize);
+    // Also check if RHS is a variable reference to an array and validate size compatibility
+    validateArrayVariableAssignment(source, afterColonEnd, declaredSize);
+  }
+}
+
+// Validate all read<T>() calls in source[pos..end] against the given target type. Throws if incompatible.
+function validateTypedReadsInRange(source, pos, end, targetType) {
+  for (let p = pos; p < end; p++) {
+    if (source.substring(p, p + 5) !== "read<") continue;
+    const info = extractTypedReadInfo(source, p);
+    if (info) validateTypeCompatibility(info.typeName, targetType);
+  }
+}
+
+// Extract element type from an array type annotation like "[U8; 2]". Returns type name or null.
+function extractArrayElementType(typeStr) {
+  // Find first '[' and extract type name before ';'
+  let i = typeStr.indexOf("[");
+  if (i === -1) return null;
+  i++;
+  // Skip whitespace
+  while (i < typeStr.length && " \t\n\r".includes(typeStr[i])) i++;
+  // Read type name (U8, I16, F32, Bool)
+  let typeStart = i;
+  while (i < typeStr.length && typeStr[i] !== ";" && typeStr[i] !== "]" && !" \t\n\r".includes(typeStr[i])) i++;
+  return typeStr.substring(typeStart, i);
+}
+
+// Extract declared size from an array type annotation like "[U8; 2]". Returns number or null.
+function extractArrayDeclaredSize(typeStr) {
+  // Find ';' after type name, then read number before ']'
+  let i = typeStr.indexOf(";");
+  if (i === -1) return null;
+  i++;
+  // Skip whitespace
+  while (i < typeStr.length && " \t\n\r".includes(typeStr[i])) i++;
+  // Read number
+  let numStart = i;
+  while (i < typeStr.length && typeStr[i] >= "0" && typeStr[i] <= "9") i++;
+  const numStr = typeStr.substring(numStart, i);
+  return numStr.length > 0 ? parseInt(numStr) : null;
+}
+
+// Validate that the array literal on the RHS has the correct number of elements. Throws if mismatch.
+function validateArrayLiteralSize(source, afterColonEnd, declaredSize) {
+  // Find '=' after the type annotation
+  let eqPos = source.indexOf("=", afterColonEnd);
+  if (eqPos === -1) return;
+  // Find ';' after '='
+  let semiPos = source.indexOf(";", eqPos);
+  if (semiPos === -1) return;
+  // Extract RHS
+  let rhsStart = skipWhitespace(source, eqPos + 1);
+  const rhs = source.substring(rhsStart, semiPos).trim();
+  // Check if RHS is an array literal
+  if (rhs[0] !== "[") return;
+  // Count elements in the array literal by counting top-level commas + 1
+  const elementCount = countArrayElements(rhs);
+  if (elementCount !== declaredSize) {
+    throw new Error("Array size mismatch: declared " + declaredSize + " but got " + elementCount);
+  }
+}
+
+// Validate that when assigning an array variable to a typed array, sizes are compatible. Throws if mismatch.
+function validateArrayVariableAssignment(source, afterColonEnd, declaredSize) {
+  // Find '=' after the type annotation
+  let eqPos = source.indexOf("=", afterColonEnd);
+  if (eqPos === -1) return;
+  // Find ';' after '='
+  let semiPos = source.indexOf(";", eqPos);
+  if (semiPos === -1) return;
+  // Extract RHS
+  let rhsStart = skipWhitespace(source, eqPos + 1);
+  const rhs = source.substring(rhsStart, semiPos).trim();
+  // Check if RHS is a simple identifier (variable reference)
+  let identEnd = skipIdentifier(source, rhsStart);
+  if (identEnd <= rhsStart) return;
+  const rhsVarName = source.substring(rhsStart, identEnd);
+  if (rhsVarName !== rhs) return; // not a bare identifier
+  // Check if the RHS variable is an array by looking at its declaration
+  const rhsArraySize = findArrayVariableSize(source, rhsVarName);
+  if (rhsArraySize !== null && rhsArraySize !== declaredSize) {
+    throw new Error("Array size mismatch: declared " + declaredSize + " but source has " + rhsArraySize);
+  }
+}
+
+// Find the declared size of an array variable by scanning its 'let' declaration. Returns size or null.
+function findArrayVariableSize(source, varName) {
+  for (let i = 0; i < source.length - 3; i++) {
+    if (source.substring(i, i + 4) !== "let ") continue;
+    let identEnd = skipIdentifier(source, i + 4);
+    if (identEnd === -1) continue;
+    const name = source.substring(i + 4, identEnd);
+    if (name !== varName) continue;
+    // Check if this declaration has an array type annotation
+    let pos = skipWhitespace(source, identEnd);
+    if (source[pos] !== ":") {
+      const size = countArrayLiteralSize(source, i + 4);
+      if (size !== null) return size;
+      continue;
+    }
+    const annotEnd = skipTypeAnnotation(source, pos);
+    if (annotEnd === -1) continue;
+    const typeStr = source.substring(pos + 1, annotEnd).trim();
+    if (typeStr.startsWith("[")) return extractArrayDeclaredSize(typeStr);
+  }
+  return null;
+}
+
+// Count elements in the array literal RHS of a let declaration starting at position i. Returns count or null.
+function countArrayLiteralSize(source, i) {
+  let eqPos = source.indexOf("=", i);
+  if (eqPos === -1) return null;
+  let semiPos = source.indexOf(";", eqPos);
+  if (semiPos === -1) return null;
+  let rhsStart = skipWhitespace(source, eqPos + 1);
+  if (source[rhsStart] !== "[") return null;
+  return countArrayElements(source.substring(rhsStart, semiPos));
+}
+
+// Count elements in an array literal string like "[a, b, c]". Returns count.
+function countArrayElements(arrayStr) {
+  let count = 0;
+  let depth = 0;
+  for (let i = 0; i < arrayStr.length; i++) {
+    if (arrayStr[i] === "[") depth++;
+    else if (arrayStr[i] === "]") depth--;
+    else if (arrayStr[i] === "," && depth === 1) count++;
+  }
+  return count + 1;
 }
 
 // Process a let declaration starting at position i (where "let" begins), returns index after semicolon
@@ -652,6 +832,12 @@ function skipToSemicolonWithIfElse(source, start) {
     // Handle blocks
     if (source[j] === "{") {
       const endIdx = findMatchingBrace(source, j);
+      j = endIdx + 1;
+      continue;
+    }
+    // Handle array literals
+    if (source[j] === "[") {
+      const endIdx = findMatchingBracket(source, j);
       j = endIdx + 1;
       continue;
     }
@@ -906,6 +1092,13 @@ function stripTypedSyntax(source) {
     if (!isColon) { result += source[i]; i++; continue; }
     const annotEnd = skipTypeAnnotation(source, i);
     if (annotEnd !== -1) { i = annotEnd; continue; }
+    // Check for array type annotation: : [Type; size]
+    let j = i + 1;
+    while (j < source.length && " \t\n\r".includes(source[j])) j++;
+    if (j < source.length && source[j] === "[") {
+      i = findMatchingBracket(source, j) + 1;
+      continue;
+    }
     result += source[i];
     i++;
   }
@@ -1036,6 +1229,15 @@ function transformBlocks(source) {
       result += transformIfElse(source, i);
       const nextI = skipIfElseExpression(source, i);
       i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
+    if (source[i] === "[") {
+      // Transform array literal: [a, b, c] -> [transformed_a, transformed_b, transformed_c]
+      const endIdx = findMatchingBracket(source, i);
+      const inner = source.substring(i + 1, endIdx);
+      const transformedInner = transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)));
+      result += "[" + transformedInner + "]";
+      i = endIdx + 1;
       continue;
     }
     if (source[i] !== "{") {

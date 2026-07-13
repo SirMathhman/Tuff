@@ -1,7 +1,6 @@
 # Missing Features (C-like Roadmap)
 
 ## Data Structures
-- [ ] Arrays with indexing (`let arr = [1, 2, 3]; let x = arr[0]`)
 - [ ] Array length property (`.len` or `sizeof`)
 - [ ] Structs / user-defined types
 - [ ] Pointers and address-of operator (`&`, `*`)

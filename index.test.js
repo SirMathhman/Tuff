@@ -163,6 +163,26 @@ test("yield returns early from block", () => {
   expectValid("{ if (true) yield 1; 2 } + 3", "", 4);
 });
 
+test("array literal with indexing works", () => {
+  expectValid("let array = [read(), read()]; array[0] + array[1]", "1 2", 3);
+});
+
+test("typed array declaration with indexing works", () => {
+  expectValid("let array : [I32; 2] = [read(), read()]; array[0] + array[1]", "1 2", 3);
+});
+
+test("wider type assigned to narrower array element is invalid", () => {
+  expectInvalid("let array : [U8; 1] = [read<U16>()]; array[0]");
+});
+
+test("array literal with too many elements is invalid", () => {
+  expectInvalid("let array : [U16; 1] = [read<U16>(), read<U16>()]; array[0]");
+});
+
+test("assigning array variable to mismatched typed array is invalid", () => {
+  expectInvalid("let array = [read<U16>(), read<U16>()]; let array0 : [U16; 1] = array;");
+});
+
 test("narrower type assigned to wider declaration is valid", () => {
   expectValid("let x : U16 = read<U8>(); x", "100", 100);
 });
