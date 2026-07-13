@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
-import { compile } from ".";
+import { compile, compileModules } from ".";
 
-function expectValid(source, stdIn, expectedExitCode) {
-  const generated = compile(source);
+function runGenerated(generated, stdIn, expectedExitCode) {
   try {
     const actualExitCode = new Function("stdIn", generated)(stdIn);
     if (actualExitCode !== expectedExitCode) {
@@ -21,8 +20,16 @@ function expectValid(source, stdIn, expectedExitCode) {
   }
 }
 
+function expectValid(source, stdIn, expectedExitCode) {
+  runGenerated(compile(source), stdIn, expectedExitCode);
+}
+
 function expectInvalid(source) {
   expect(() => compile(source)).toThrow();
+}
+
+function expectValidWithModules(moduleNames, moduleSources, stdIn, expectedExitCode) {
+  runGenerated(compileModules(moduleNames, moduleSources), stdIn, expectedExitCode);
 }
 
 test("empty source compiles and exits with code 0", () => {
@@ -308,4 +315,17 @@ test("string indexing returns ASCII value", () => {
 
 test("mutable reference writes through to the original variable", () => {
   expectValid("let mut x = read(); let y : &mut I32 = &mut x; *y = read(); x", "1 2", 2);
+});
+
+test("module entry point returns expected value", () => {
+  expectValidWithModules(["index"], { index: "100" }, "", 100);
+});
+
+test("cross-module reference with out let", () => {
+  expectValidWithModules(
+    ["index"],
+    { index: "lib.myVar", lib: "out let myVar = read();" },
+    "100",
+    100,
+  );
 });

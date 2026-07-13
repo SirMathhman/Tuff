@@ -850,7 +850,11 @@ function buildReturnAfterSemi(transformedInner, j) {
   const afterSemi = transformedInner.substring(j + 1);
   if (isEmptyOrSemicolons(afterSemi))
     return transformedInner.substring(0, j + 1) + "return 0";
-  return transformedInner.substring(0, j + 1) + "return " + afterSemi;
+  // Trim leading whitespace to avoid ASI issues with return \n expr
+  let k = 0;
+  while (k < afterSemi.length && " \t\n\r".includes(afterSemi[k])) k++;
+  const trimmed = afterSemi.substring(k);
+  return transformedInner.substring(0, j + 1) + "return " + trimmed;
 }
 
 // Skip digits and advance index, returns the digit string
@@ -2443,6 +2447,77 @@ export function compile(source) {
     transformedExpr +
     ");"
   );
+}
+
+// Compile multiple modules into a single JS program.
+// moduleNames: ordered list of module names (first is entry point).
+// moduleSources: map of module name -> source code.
+// Non-entry modules are concatenated first (so their declarations are available),
+// then the entry module. "out let" is stripped to "let", and cross-module
+// references like "lib.myVar" are resolved to "myVar".
+export function compileModules(moduleNames, moduleSources) {
+  const entryModule = moduleNames[0];
+
+  // Build set of all module names from moduleSources for cross-module reference resolution
+  const allModuleNames = new Set(Object.keys(moduleSources));
+
+  // Process all non-entry modules first (derive from moduleSources keys)
+  let combinedSource = "";
+  for (const modName of Object.keys(moduleSources)) {
+    if (modName === entryModule) continue;
+    let src = moduleSources[modName];
+    src = stripOutKeyword(src);
+    src = resolveCrossModuleRefs(src, allModuleNames);
+    combinedSource += src + "\n";
+  }
+
+  // Process entry module
+  let entrySource = moduleSources[entryModule];
+  entrySource = stripOutKeyword(entrySource);
+  entrySource = resolveCrossModuleRefs(entrySource, allModuleNames);
+  combinedSource += entrySource;
+
+  return compile(combinedSource);
+}
+
+// Strip "out " prefix from "out let" declarations.
+function stripOutKeyword(source) {
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    if (source.substring(i, i + 4) === "out " && source.substring(i + 4, i + 8) === "let ") {
+      result += "let ";
+      i += 8;
+      continue;
+    }
+    result += source[i];
+    i++;
+  }
+  return result;
+}
+
+// Resolve cross-module references like "lib.myVar" -> "myVar".
+function resolveCrossModuleRefs(source, moduleNames) {
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    if (!isAlpha(source[i])) {
+      result += source[i];
+      i++;
+      continue;
+    }
+    const identEnd = skipIdentifier(source, i);
+    const name = source.substring(i, identEnd);
+    // Check if this is a module name followed by a dot
+    if (moduleNames.has(name) && identEnd < source.length && source[identEnd] === ".") {
+      // Skip the module name and dot, keep the member name
+      i = identEnd + 1;
+      continue;
+    }
+    result += name;
+    i = identEnd;
+  }
+  return result;
 }
 
 import * as fs from "fs/promises";
