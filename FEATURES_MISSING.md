@@ -1,16 +1,5 @@
 # Missing Features (C-like Roadmap)
 
-## Control Flow
-- [ ] `if` / `else if` / `else` — conditional branching with boolean expressions
-- [ ] `while` loops — indefinite iteration
-- [ ] `for` loops — definite iteration (`for init; cond; inc`)
-- [ ] `break` / `continue` — loop control statements
-
-## Comparison & Boolean Operators
-- [ ] Relational operators: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- [ ] Logical operators: `&&`, `||`, `!`
-- [ ] Boolean literals (`true`/`false`) and a Bool type (or implicit booleans)
-
 ## Functions
 - [ ] Function declarations with parameters and return types (`fn add(a : I32, b : I32) -> I32 { ... }`)
 - [ ] Function calls beyond `read()` / built-ins
