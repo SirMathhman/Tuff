@@ -282,6 +282,10 @@ test("string literal .length returns character count", () => {
   expectValid("\"foo\".length", "", 3);
 });
 
+test("read<&Str>().length returns character count of input", () => {
+  expectValid("read<&Str>().length", "foo", 3);
+});
+
 test("mutable reference writes through to the original variable", () => {
   expectValid("let mut x = read(); let y : &mut I32 = &mut x; *y = read(); x", "1 2", 2);
 });

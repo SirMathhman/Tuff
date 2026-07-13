@@ -1012,7 +1012,7 @@ function buildVarTypeMap(source) {
 
 // Validate that variable assignments respect type compatibility. Throws if invalid.
 // Set of built-in identifiers that are always valid.
-const BUILTINS = new Set(["read", "true", "false", "mut", "in", "yield", "break", "continue", "return", "length"]);
+const BUILTINS = new Set(["read", "true", "false", "mut", "in", "yield", "break", "continue", "return", "length", "Str"]);
 
 // Scan struct fields and add them to declaredVars set.
 function scanStructFields(body, declaredVars) {
@@ -1294,7 +1294,8 @@ function stripTypedSyntax(source) {
     const isReadTagged = source.substring(i, i + 5) === "read<";
     if (isReadTagged) {
       const nextI = tryStripTypedRead(source, i);
-      result += source.substring(i + 5, i + 9) === "Bool" ? "_readBool()" : "read()";
+      const typeStr = source.substring(i + 5, source.indexOf(">", i + 5));
+      result += typeStr === "Bool" ? "_readBool()" : typeStr === "&Str" ? "_readString()" : "read()";
       i = nextI !== null ? nextI : i + 1;
       continue;
     }
@@ -1851,6 +1852,7 @@ function transformForLoop(source, start) {
 
 const RUNTIME_HELPERS = String.raw`function read() { return parseInt(_tokens.shift()); }
 function _readBool() { var v = _tokens.shift(); return v === 'true' ? 1 : 0; }
+function _readString() { return _tokens.shift(); }
 function _toInt(v) { return v === true ? 1 : v === false ? 0 : v; }`;
 
 // Strip a single trailing ";" (and any trailing whitespace after it) from source.
