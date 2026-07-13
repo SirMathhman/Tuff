@@ -1,0 +1,6 @@
+{
+  "watch": ["."],
+  "ext": "tuff,js",
+  "ignore": ["node_modules/*", "node_modules", "lib.js"],
+  "exec": "npm run start"
+}
