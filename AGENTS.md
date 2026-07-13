@@ -24,6 +24,10 @@ npm run cpd     # Check for code duplication
 2. **Transformation** — `transformBlocks()` recursively processes `{ ... }` blocks, stripping type suffixes and annotations via `stripTypeSuffix()` and `stripTypedSyntax()`. Statement blocks become IIFEs; expression-only blocks become grouped expressions with parentheses.
 3. **Wrapping** — Top-level output is wrapped in a `(function(){...})()` IIFE if it contains statements, otherwise emitted as a bare `return` expression. Both paths inject `_tokens` and `read()` runtime helpers.
 
+**Key Pattern:** Every transformation step chains `transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)))`. Order matters: `stripTypeSuffix` first (strips `U8` from `100U8`), then `stripTypedSyntax` (handles type annotations and keywords).
+
+**Dual Skip/Transform Pattern:** For each DSL construct, there's a `skip*` helper (for validation boundary detection) and a corresponding transform in `transformBlocks`/`stripTypedSyntax` (for code generation). They're called independently in the pipeline.
+
 ## DSL Overview
 
 The language supports:
@@ -75,6 +79,38 @@ The language supports:
 - Range literals: `start..end` (used in `for` loops or `let` declarations).
 - Address-of operator: `&x` produces a unique pointer value per variable.
 - Mutable references: `let y : &mut I32 = &mut x; *y = val;` — dereference-assignment writes through to the original variable.
+- String literals: `"foo"` (passthrough to JS, supports `.length`).
+- Character literals: `'a'` → ASCII value (`97`) at compile time.
+
+### Type System
+
+| Type | Bits | Min | Max |
+|------|------|-----|-----|
+| `U8` | 8 | 0 | 255 |
+| `U16` | 16 | 0 | 65535 |
+| `U32` | 32 | 0 | 4294967295 |
+| `I8` | 8 | -128 | 127 |
+| `I16` | 16 | -32768 | 32767 |
+| `I32` | 32 | -2147483648 | 2147483647 |
+| `F32` | 32 | (float) | (no range check) |
+| `Bool` | — | — | — |
+
+Type compatibility: narrower type can be assigned to wider declaration. Wider-to-narrower is invalid. `getTypeBits()` and `getTypeRange()` in `index.js` implement the rules.
+
+### Boxing Mechanism
+
+Variables with `&mut` references are "boxed": their `let mut` RHS is wrapped in `[value]`. `&mut x` becomes `x` (the box), and `*ref` becomes `ref[0]`. Managed by `findBoxedVars()`, `boxDeclarations()`, and the `CURRENT_BOXED_VARS` module-level Set.
+
+### Runtime Helpers
+
+Generated code receives `stdIn` parameter. Injected helpers:
+- `read()` — `parseInt(_tokens.shift())`
+- `_readBool()` — `'true'` → `1`, `'false'` → `0`
+- `_readString()` — raw token string
+- `_toInt(v)` — converts JS `true`/`false` to `1`/`0`, passthrough otherwise
+- `_tokens` — `stdIn.split(/\s+/)` consumed via `shift()`
+
+All top-level returns wrap in `_toInt(...)` to ensure DSL booleans never leak as JS booleans.
 
 ## Conventions
 
@@ -86,7 +122,9 @@ The language supports:
 
 ## Gotchas
 
-- See `/memories/` (user memory) for ASI pitfalls with dynamically generated JS and parser queue draining patterns.
+- **ASI with `return`:** Never emit a newline after `return` in generated JS (e.g., `return \n ...`). Automatic Semicolon Insertion treats it as `return;` producing `undefined`. The `prependReturnToLastExpr` function reverse-scans transformed code to inject `return` before the last expression.
+- **`CURRENT_BOXED_VARS` is a module-level global** Set, set once per `compile()` call. Used by `stripTypedSyntax` to decide whether bare variable reads need `[0]` boxing. Be cautious with test isolation.
+- **Parser queue draining:** If the parser emits queued statements (syntax-lowering), EOF loops must drain the queue or trailing lowered declarations are silently dropped.
 - Pre-commit hooks run test → lint → cpd; all must pass before commit succeeds (`.github/hooks/hooks.json`).
 - The `validateSource` function uses character-by-character iteration — no regex parsing. All token matching is done via string comparison helpers (`skipKeyword`, `tryMatchTypedRead`, etc.).
 - **Don't think, measure!** — When stuck on a bug or unexpected behavior, add strategic `console.log` statements to trace runtime values and execution flow rather than manually reasoning through the code. Instrument the compiler pipeline (validation, transformation, wrapping) to observe what's actually happening.
