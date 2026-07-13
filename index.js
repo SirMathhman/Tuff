@@ -29,6 +29,13 @@ function skipCharLiteral(source, i) {
   return j < source.length ? j + 1 : -1;
 }
 
+// Skip string or character literals at position i. Returns end index or -1 if neither matches.
+function skipLiteral(source, i) {
+  const stringEnd = skipStringLiteral(source, i);
+  if (stringEnd !== -1) return stringEnd;
+  return skipCharLiteral(source, i);
+}
+
 // Skip a boolean literal ("true" or "false") at position i. Returns end index or -1.
 function skipBoolLiteral(source, i) {
   const trueEnd = skipKeyword(source, i, "true");
@@ -457,16 +464,10 @@ function validateSource(source) {
       i = endIdx + 1;
       continue;
     }
-    // Skip string literals entirely
-    const stringEnd = skipStringLiteral(source, i);
-    if (stringEnd !== -1) {
-      i = stringEnd;
-      continue;
-    }
-    // Skip character literals entirely
-    const charEnd = skipCharLiteral(source, i);
-    if (charEnd !== -1) {
-      i = charEnd;
+    // Skip string and character literals entirely
+    const literalEnd = skipLiteral(source, i);
+    if (literalEnd !== -1) {
+      i = literalEnd;
       continue;
     }
     // Try break keyword
@@ -1082,12 +1083,9 @@ function scanFunctionParams(source, start, declaredVars) {
 function validateIdentifiers(source, declaredVars, declaredFns) {
   let i = 0;
   while (i < source.length) {
-    // Skip string literals so identifiers inside them aren't flagged
-    const stringEnd = skipStringLiteral(source, i);
-    if (stringEnd !== -1) { i = stringEnd; continue; }
-    // Skip character literals so identifiers inside them aren't flagged
-    const charEnd = skipCharLiteral(source, i);
-    if (charEnd !== -1) { i = charEnd; continue; }
+    // Skip string and character literals so identifiers inside them aren't flagged
+    const literalEnd = skipLiteral(source, i);
+    if (literalEnd !== -1) { i = literalEnd; continue; }
     if (!isAlpha(source[i])) { i++; continue; }
     const identEnd = skipIdentifier(source, i);
     if (identEnd === -1) { i++; continue; }
