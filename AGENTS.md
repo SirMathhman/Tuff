@@ -43,6 +43,7 @@ The language supports:
 ### Arrays
 - Array literals: `[a, b, c]` with indexing via `arr[0]`.
 - Typed array declarations: `let arr : [I32; 2] = [read(), read()];` — size is validated at compile time.
+- `.length` property: `arr.length` returns array size.
 
 ### Control Flow
 - `{ ... }` — block expressions: statement blocks become IIFEs, expression-only blocks become grouped expressions. Max nesting depth is **2**.
@@ -60,11 +61,20 @@ The language supports:
 - Functions support recursive calls.
 - Block bodies with `return` statements: `fn name() => { if (cond) return val }`.
 
+### Structs
+- `struct Name { field : Type, field2 : Type }` — struct declarations (evaluates to `0`).
+- Struct instantiation: `let s = Name { field : val };`.
+- Field access: `s.field` returns the field value.
+- Duplicate field names and unknown types are validation errors.
+
 ### Expressions
 - Boolean literals (`true` / `false`) and logical operators (`||`, `&&`).
+- Equality comparison: `==` returns `1` (true) or `0` (false), never JS `true`/`false`.
 - Arithmetic operators and multi-character identifiers (alphabetic only).
 - Typed number literals: `100U8`, `50I16`, etc. (validated against type range at compile time, then stripped from output).
 - Range literals: `start..end` (used in `for` loops or `let` declarations).
+- Address-of operator: `&x` produces a unique pointer value per variable.
+- Mutable references: `let y : &mut I32 = &mut x; *y = val;` — dereference-assignment writes through to the original variable.
 
 ## Conventions
 

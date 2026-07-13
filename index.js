@@ -1335,6 +1335,15 @@ function stripTypedSyntax(source) {
       i = identEnd !== -1 ? identEnd : i + 1;
       continue;
     }
+    // Dereference of address-of: *&x -> x (round-trip through reference).
+    // Must be checked before the plain "*" case.
+    const isDerefAddr = source[i] === "*" && !isPrecededByValue(source, i) && source[i + 1] === "&";
+    if (isDerefAddr) {
+      const identEnd = skipIdentifier(source, i + 2);
+      result += identEnd !== -1 ? source.substring(i + 2, identEnd) : "";
+      i = identEnd !== -1 ? identEnd : i + 1;
+      continue;
+    }
     // Dereference operator: *y -> y[0], but only when "*" is in an expression-start
     // position (not immediately after a value, where it means multiplication).
     if (source[i] === "*" && !isPrecededByValue(source, i)) {
