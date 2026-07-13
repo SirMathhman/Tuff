@@ -1,11 +1,5 @@
 # Missing Features (C-like Roadmap)
 
-## Functions
-- [ ] Function declarations with parameters and return types (`fn add(a : I32, b : I32) -> I32 { ... }`)
-- [ ] Function calls beyond `read()` / built-ins
-- [ ] Recursion support
-- [ ] Return statements inside function bodies
-
 ## Data Structures
 - [ ] Arrays with indexing (`let arr = [1, 2, 3]; let x = arr[0]`)
 - [ ] Array length property (`.len` or `sizeof`)
@@ -18,9 +12,8 @@
 
 ## Operators & Expressions
 - [ ] Unary operators: `-x`, `!x`
-- [ ] Remaining compound assignments: `-=`, `*=`, `/=` 
+- [ ] Remaining compound assignments: `-=`, `*=`, `/=`
 - [ ] Increment/decrement: `++x`, `--x`
-- [ ] Ternary conditional expression (`cond ? a : b`)
 
 ## Type System
 - [ ] Implicit type inference (currently requires explicit annotation in many paths)
@@ -29,7 +22,6 @@
 - [ ] Enumerations
 
 ## Statements & Scoping
-- [ ] Early returns from blocks/IIFEs
 - [ ] Labelled statements and `goto` (if aiming for C parity)
 - [ ] Const expressions / compile-time constants (`const PI : F32 = 3.14`)
 
