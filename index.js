@@ -6,7 +6,7 @@ function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
   if (ch >= "a" && ch <= "z") return true;
   if (ch >= "A" && ch <= "Z") return true;
-  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]";
+  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
@@ -1301,6 +1301,9 @@ function stripTypedSyntax(source) {
       i = boolEnd;
       continue;
     }
+    // Strip standalone address-of operator (pass through as identity for now)
+    // Must check after && which is handled by boolean literal conversion
+    if (source[i] === "&" && (i + 1 >= source.length || source[i + 1] !== "&")) { i++; continue; }
     const isColon = source[i] === ":";
     if (!isColon) { result += source[i]; i++; continue; }
     const annotEnd = skipTypeAnnotation(source, i);

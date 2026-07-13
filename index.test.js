@@ -261,3 +261,7 @@ test("mixed-case identifier is valid", () => {
 test("unknown identifier throws error", () => {
   expectInvalid("unknownIdentifier");
 });
+
+test("address-of operator passes through", () => {
+  expectValid("let x = 0; &x == &x", "", true);
+});
