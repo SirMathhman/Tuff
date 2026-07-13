@@ -67,6 +67,30 @@ function skipContinueKeyword(source, i) {
   return -1;
 }
 
+// Skip "yield" keyword at position i. Returns end index or -1.
+function skipYieldKeyword(source, i) {
+  if (source.substring(i, i + 5) === "yield" && (i + 5 >= source.length || !isAlpha(source[i + 5]))) {
+    return i + 5;
+  }
+  return -1;
+}
+
+// Skip a yield statement starting at position i. Returns end index or -1.
+// Syntax: yield expression;
+function skipYieldStatement(source, i) {
+  const yieldEnd = skipYieldKeyword(source, i);
+  if (yieldEnd === -1) return -1;
+  
+  let pos = skipWhitespace(source, yieldEnd);
+  // Skip expression until semicolon
+  const exprEnd = skipExpression(source, pos);
+  pos = exprEnd;
+  // Skip semicolon
+  if (source[pos] === ";") pos++;
+  
+  return pos;
+}
+
 // Skip "fn" keyword at position i. Returns end index or -1.
 function skipFnKeyword(source, i) {
   if (source.substring(i, i + 2) === "fn" && (i + 2 >= source.length || !isAlpha(source[i + 2]))) {
@@ -323,6 +347,12 @@ function validateSource(source) {
       i = continueEnd;
       continue;
     }
+    // Try yield statement
+    const yieldEnd = skipYieldStatement(source, i);
+    if (yieldEnd !== -1) {
+      i = yieldEnd;
+      continue;
+    }
     // Try function declaration
     const fnEnd = skipFnDeclaration(source, i);
     if (fnEnd !== -1) {
@@ -449,7 +479,13 @@ function processChar(transformedInner, j, depth, parenDepth) {
     return { j, depth, parenDepth: newParenDepth };
   }
   if (ch === "(") return { j, depth, parenDepth: parenDepth - 1 };
-  if (ch === ";" && depth === 0 && parenDepth === 0) return null;
+  if (ch === ";" && depth === 0 && parenDepth === 0) {
+    // If content after semicolon starts with an operator, it's part of a larger expression — skip this semicolon
+    let k = j + 1;
+    while (k < transformedInner.length && " \t\n\r".includes(transformedInner[k])) k++;
+    if (k < transformedInner.length && "+-*/%".includes(transformedInner[k])) return { j, depth, parenDepth };
+    return null;
+  }
   return { j, depth, parenDepth };
 }
 
@@ -844,6 +880,21 @@ function stripTypedSyntax(source) {
       i = continueEnd;
       continue;
     }
+    // Convert "yield expr;" -> "return expr;" and skip rest of block
+    const yieldEnd = skipYieldKeyword(source, i);
+    if (yieldEnd !== -1) {
+      let pos = skipWhitespace(source, yieldEnd);
+      const exprEnd = skipExpression(source, pos);
+      const expr = source.substring(pos, exprEnd);
+      result += "return " + expr;
+      pos = exprEnd;
+      result += source[pos] === ";" ? ";" : "";
+      pos = source[pos] === ";" ? pos + 1 : pos;
+      // Skip remaining content until end of block
+      i = source.indexOf("}", pos);
+      i = i === -1 ? source.length : i;
+      continue;
+    }
     // Convert boolean literals: true -> 1, false -> 0
     const boolEnd = skipBoolLiteral(source, i);
     if (boolEnd !== -1) {
@@ -999,6 +1050,10 @@ function transformBlocks(source) {
     } else if (hasBreakOrContinue(inner)) {
       // Blocks with break/continue must stay as plain blocks, not IIFEs
       result += "{ " + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + " }";
+    } else if (inner.indexOf("yield") !== -1) {
+      // Blocks with yield: wrap as IIFE, yield -> return exits the IIFE
+      let transformedInner = transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)));
+      result += "(function() {" + transformedInner + "})()";
     } else {
       let transformedInner = transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)));
       const withReturn = prependReturnToLastExpr(transformedInner);
@@ -1070,18 +1125,19 @@ function transformIfElse(source, start) {
     
     console.log("DEBUG hasBreakOrContinue:", { tb: hasBreakOrContinue(trueBranch), fb: hasBreakOrContinue(falseBranch), tbHasBreak: transformedTrueBranch.indexOf("break"), fbHasBreak: transformedFalseBranch.indexOf("break") });
     
-    // If either branch contains break/continue, use statement-style output
-    if (hasBreakOrContinue(trueBranch) || hasBreakOrContinue(falseBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1 || transformedFalseBranch.indexOf("break") !== -1 || transformedFalseBranch.indexOf("continue") !== -1) {
-      const trueBranchStr = transformedTrueBranch + ";";
-      return "if (" + transformedCondition + ") { " + trueBranchStr + " } else { " + transformedFalseBranch + " }";
+    // If either branch contains break/continue/yield, use statement-style output
+    if (hasBreakOrContinue(trueBranch) || hasBreakOrContinue(falseBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1 || transformedFalseBranch.indexOf("break") !== -1 || transformedFalseBranch.indexOf("continue") !== -1 || transformedTrueBranch.indexOf("return") !== -1 || transformedFalseBranch.indexOf("return") !== -1) {
+      const trueBranchStr = transformedTrueBranch.endsWith(";") ? transformedTrueBranch : transformedTrueBranch + ";";
+      const falseBranchStr = transformedFalseBranch.endsWith(";") ? transformedFalseBranch : transformedFalseBranch + ";";
+      return "if (" + transformedCondition + ") { " + trueBranchStr + " } else { " + falseBranchStr + " }";
     }
     
     return "(" + transformedCondition + " ? " + transformedTrueBranch + " : " + transformedFalseBranch + ")";
   }
   
-  // If true branch contains break/continue, use statement-style output
-  if (hasBreakOrContinue(trueBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1) {
-    const trueBranchStr = hasSemiAfterTrue ? transformedTrueBranch : transformedTrueBranch + ";";
+  // If true branch contains break/continue/yield, use statement-style output
+  if (hasBreakOrContinue(trueBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1 || transformedTrueBranch.indexOf("return") !== -1) {
+    const trueBranchStr = transformedTrueBranch.endsWith(";") ? transformedTrueBranch : transformedTrueBranch + ";";
     return "if (" + transformedCondition + ") { " + trueBranchStr + " }";
   }
   
@@ -1250,9 +1306,11 @@ export function compile(source) {
 
   const transformed = transformBlocks(source);
 
-  // If top-level has statements, wrap in IIFE with proper returns
-  const isStmtLevel = hasStatements(source);
+  // If top-level has statements OR contains yield, wrap in IIFE with proper returns
+  const isStmtLevel = hasStatements(source) || source.indexOf("yield") !== -1;
   if (isStmtLevel) {
+    // yield -> return conversion already handled by transformBlocks, so use
+    // prependReturnToLastExpr which correctly skips leading function declarations
     const withReturn = prependReturnToLastExpr(transformed);
     return (
       "var _tokens = stdIn.split(/\\s+/);\n" +
