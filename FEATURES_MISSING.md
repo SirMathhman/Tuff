@@ -3,8 +3,9 @@
 ## Data Structures
 - [x] Array length property (`.length`)
 - [x] Struct declarations (`struct Name {}`)
-- [ ] Structs with fields / user-defined types
-- [ ] Pointers and address-of operator (`&`, `*`)
+- [x] Structs with fields / user-defined types (declaration, instantiation, field access)
+- [x] Address-of operator (`&`)
+- [ ] Dereference operator (`*`) / pointer indirection
 
 ## I/O & Built-ins
 - [ ] Output/print statements (`print(x)`, `println()`) — currently only input via `read()`

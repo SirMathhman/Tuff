@@ -99,6 +99,10 @@ test("logical AND with boolean expressions works", () => {
   expectValid("read<Bool>() && false", "true", 0);
 });
 
+test("equality comparison returns 1 for equal values", () => {
+  expectValid("5 == 5", "", 1);
+});
+
 test("if/else expression with boolean condition works", () => {
   expectValid("let temp = if (read<Bool>()) 3 else 5; temp", "true", 3);
 });
@@ -263,5 +267,9 @@ test("unknown identifier throws error", () => {
 });
 
 test("address-of operator passes through", () => {
-  expectValid("let x = 0; &x == &x", "", true);
+  expectValid("let x = 0; &x == &x", "", 1);
+});
+
+test("address-of operator differs across distinct variables", () => {
+  expectValid("let x = 0; let y = 0; &x == &y", "", 0);
 });

@@ -1301,9 +1301,16 @@ function stripTypedSyntax(source) {
       i = boolEnd;
       continue;
     }
-    // Strip standalone address-of operator (pass through as identity for now)
+    // Address-of operator: &x -> "&x", a string literal used as a stable per-name
+    // identity token so that &x == &x but &x != &y for distinct variables.
     // Must check after && which is handled by boolean literal conversion
-    if (source[i] === "&" && (i + 1 >= source.length || source[i + 1] !== "&")) { i++; continue; }
+    const isAddressOf = source[i] === "&" && (i + 1 >= source.length || source[i + 1] !== "&");
+    if (isAddressOf) {
+      const identEnd = skipIdentifier(source, i + 1);
+      result += identEnd !== -1 ? '"&' + source.substring(i + 1, identEnd) + '"' : "";
+      i = identEnd !== -1 ? identEnd : i + 1;
+      continue;
+    }
     const isColon = source[i] === ":";
     if (!isColon) { result += source[i]; i++; continue; }
     const annotEnd = skipTypeAnnotation(source, i);
@@ -1768,7 +1775,16 @@ function transformForLoop(source, start) {
 }
 
 const RUNTIME_HELPERS = String.raw`function read() { return parseInt(_tokens.shift()); }
-function _readBool() { var v = _tokens.shift(); return v === 'true' ? 1 : 0; }`;
+function _readBool() { var v = _tokens.shift(); return v === 'true' ? 1 : 0; }
+function _toInt(v) { return v === true ? 1 : v === false ? 0 : v; }`;
+
+// Strip a single trailing ";" (and any trailing whitespace after it) from source.
+function stripTrailingSemicolon(source) {
+  let end = source.length;
+  while (end > 0 && " \t\n\r".includes(source[end - 1])) end--;
+  if (end > 0 && source[end - 1] === ";") end--;
+  return source.substring(0, end);
+}
 
 export function compile(source) {
   if (source === "") {
@@ -1792,17 +1808,22 @@ export function compile(source) {
     return (
       "var _tokens = stdIn.split(/\\s+/);\n" +
       RUNTIME_HELPERS + "\n" +
-      "return (function() {" +
+      "return _toInt((function() {" +
       withReturn +
-      "; })();"
+      "; })());"
     );
   }
+
+  // transformBlocks() can leave a trailing ";" from struct declarations or
+  // block IIFEs (harmless when concatenated after "return X;", but invalid
+  // once wrapped as an argument to _toInt(...)) — strip it before wrapping.
+  const transformedExpr = stripTrailingSemicolon(transformed);
 
   return (
     "var _tokens = stdIn.split(/\\s+/);\n" +
     RUNTIME_HELPERS + "\n" +
-    "return " +
-    transformed +
-    ";"
+    "return _toInt(" +
+    transformedExpr +
+    ");"
   );
 }
