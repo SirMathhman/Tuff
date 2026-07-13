@@ -6,7 +6,7 @@ function isValidChar(ch) {
   if (ch >= "0" && ch <= "9") return true;
   if (ch >= "a" && ch <= "z") return true;
   if (ch >= "A" && ch <= "Z") return true;
-  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"";
+  const allowed = " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"'";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
@@ -18,6 +18,14 @@ function skipStringLiteral(source, i) {
   if (source[i] !== '"') return -1;
   let j = i + 1;
   while (j < source.length && source[j] !== '"') j++;
+  return j < source.length ? j + 1 : -1;
+}
+
+// Skip a character literal starting with ' at position i. Returns end index (after closing ') or -1.
+function skipCharLiteral(source, i) {
+  if (source[i] !== "'") return -1;
+  let j = i + 1;
+  while (j < source.length && source[j] !== "'") j++;
   return j < source.length ? j + 1 : -1;
 }
 
@@ -453,6 +461,12 @@ function validateSource(source) {
     const stringEnd = skipStringLiteral(source, i);
     if (stringEnd !== -1) {
       i = stringEnd;
+      continue;
+    }
+    // Skip character literals entirely
+    const charEnd = skipCharLiteral(source, i);
+    if (charEnd !== -1) {
+      i = charEnd;
       continue;
     }
     // Try break keyword
@@ -1071,6 +1085,9 @@ function validateIdentifiers(source, declaredVars, declaredFns) {
     // Skip string literals so identifiers inside them aren't flagged
     const stringEnd = skipStringLiteral(source, i);
     if (stringEnd !== -1) { i = stringEnd; continue; }
+    // Skip character literals so identifiers inside them aren't flagged
+    const charEnd = skipCharLiteral(source, i);
+    if (charEnd !== -1) { i = charEnd; continue; }
     if (!isAlpha(source[i])) { i++; continue; }
     const identEnd = skipIdentifier(source, i);
     if (identEnd === -1) { i++; continue; }
@@ -1333,6 +1350,14 @@ function stripTypedSyntax(source) {
     if (stringEnd !== -1) {
       result += source.substring(i, stringEnd);
       i = stringEnd;
+      continue;
+    }
+    // Convert character literals: 'a' -> 97 (ASCII code)
+    const charEnd = skipCharLiteral(source, i);
+    if (charEnd !== -1) {
+      const ch = source[i + 1];
+      result += ch.charCodeAt(0);
+      i = charEnd;
       continue;
     }
     // Convert boolean literals: true -> 1, false -> 0
