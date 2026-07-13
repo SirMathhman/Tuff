@@ -290,6 +290,10 @@ test("character literal returns ASCII value", () => {
   expectValid("'a'", "", 97);
 });
 
+test("Char type declaration with character literal works", () => {
+  expectValid("let temp : Char = 't'; temp", "", 116);
+});
+
 test("string indexing returns ASCII value", () => {
   expectValid("\"test\"[0]", "", 116);
 });

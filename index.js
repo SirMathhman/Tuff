@@ -194,7 +194,7 @@ function validateStructFields(body) {
     const typeName = body.substring(pos, typeEnd).trim();
     if (typeName.length === 0) continue;
     // Validate type name
-    if (getTypeBits(typeName) === -1 && typeName !== "Bool") {
+    if (getTypeBits(typeName) === -1 && typeName !== "Bool" && typeName !== "Char") {
       throw new Error("Unknown type: " + typeName);
     }
     i = typeEnd;
@@ -385,6 +385,10 @@ function skipTypeAnnotation(source, i) {
   }
   // Bool type annotation
   if (j + 3 <= source.length && source.substring(j, j + 4) === "Bool") {
+    return j + 4;
+  }
+  // Char type annotation
+  if (j + 3 <= source.length && source.substring(j, j + 4) === "Char") {
     return j + 4;
   }
   // Array type annotation: [Type; size]
@@ -1049,7 +1053,7 @@ function buildVarTypeMap(source) {
 
 // Validate that variable assignments respect type compatibility. Throws if invalid.
 // Set of built-in identifiers that are always valid.
-const BUILTINS = new Set(["read", "true", "false", "mut", "in", "yield", "break", "continue", "return", "length", "Str"]);
+const BUILTINS = new Set(["read", "true", "false", "mut", "in", "yield", "break", "continue", "return", "length", "Str", "Char"]);
 
 // Scan struct fields and add them to declaredVars set.
 function scanStructFields(body, declaredVars) {
