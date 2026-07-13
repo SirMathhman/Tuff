@@ -51,6 +51,22 @@ function skipWhileKeyword(source, i) {
   return -1;
 }
 
+// Skip "break" keyword at position i. Returns end index or -1.
+function skipBreakKeyword(source, i) {
+  if (source.substring(i, i + 5) === "break" && (i + 5 >= source.length || !isAlpha(source[i + 5]))) {
+    return i + 5;
+  }
+  return -1;
+}
+
+// Skip "continue" keyword at position i. Returns end index or -1.
+function skipContinueKeyword(source, i) {
+  if (source.substring(i, i + 8) === "continue" && (i + 8 >= source.length || !isAlpha(source[i + 8]))) {
+    return i + 8;
+  }
+  return -1;
+}
+
 // Skip "for" keyword at position i. Returns end index or -1.
 function skipForKeyword(source, i) {
   if (source.substring(i, i + 3) === "for" && (i + 3 >= source.length || !isAlpha(source[i + 3]))) {
@@ -117,6 +133,9 @@ function skipIfElseExpression(source, i) {
   pos = skipParenthesizedCondition(source, pos + 1);
   pos = skipWhitespace(source, pos);
   pos = skipBranch(source, pos);
+  // Skip past semicolon if present (e.g., "if (c) break; else ...")
+  pos = skipWhitespace(source, pos);
+  if (source[pos] === ";") pos++;
   pos = skipWhitespace(source, pos);
   
   const elseEnd = skipElseKeyword(source, pos);
@@ -232,6 +251,18 @@ function validateSource(source) {
     if (isBlockStart) {
       const endIdx = findMatchingBrace(source, i);
       i = endIdx + 1;
+      continue;
+    }
+    // Try break keyword
+    const breakEnd = skipBreakKeyword(source, i);
+    if (breakEnd !== -1) {
+      i = breakEnd;
+      continue;
+    }
+    // Try continue keyword
+    const continueEnd = skipContinueKeyword(source, i);
+    if (continueEnd !== -1) {
+      i = continueEnd;
       continue;
     }
     // Try for loop
@@ -697,6 +728,20 @@ function stripTypedSyntax(source) {
       i = nextI !== null ? nextI : i + 1;
       continue;
     }
+    // Convert "break" keyword
+    const breakEnd = skipBreakKeyword(source, i);
+    if (breakEnd !== -1) {
+      result += "break";
+      i = breakEnd;
+      continue;
+    }
+    // Convert "continue" keyword
+    const continueEnd = skipContinueKeyword(source, i);
+    if (continueEnd !== -1) {
+      result += "continue";
+      i = continueEnd;
+      continue;
+    }
     // Convert boolean literals: true -> 1, false -> 0
     const boolEnd = skipBoolLiteral(source, i);
     if (boolEnd !== -1) {
@@ -841,6 +886,9 @@ function transformBlocks(source) {
     const inner = source.substring(i + 1, endIdx);
     if (!hasStatements(inner)) {
       result += "(" + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + ")";
+    } else if (hasBreakOrContinue(inner)) {
+      // Blocks with break/continue must stay as plain blocks, not IIFEs
+      result += "{ " + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + " }";
     } else {
       let transformedInner = transformBlocks(stripTypedSyntax(stripTypeSuffix(inner)));
       const withReturn = prependReturnToLastExpr(transformedInner);
@@ -873,7 +921,17 @@ function extractBranch(source, i) {
   return { content: source.substring(i, exprEnd), endPos: exprEnd };
 }
 
+// Check if a source string contains break or continue keywords. Returns true if found.
+function hasBreakOrContinue(source) {
+  for (let i = 0; i < source.length - 4; i++) {
+    if (source.substring(i, i + 5) === "break" && (i + 5 >= source.length || !isAlpha(source[i + 5]))) return true;
+    if (source.substring(i, i + 8) === "continue" && (i + 8 >= source.length || !isAlpha(source[i + 8]))) return true;
+  }
+  return false;
+}
+
 // Transform an if/else expression to JavaScript ternary: (cond) ? (trueBranch) : (falseBranch)
+// If branches contain break/continue, use statement-style output instead.
 function transformIfElse(source, start) {
   const ifEnd = skipIfKeyword(source, start);
   let pos = skipWhitespace(source, ifEnd);
@@ -887,13 +945,34 @@ function transformIfElse(source, start) {
   const transformedTrueBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(trueBranch.trim())));
   
   pos = skipWhitespace(source, pos + trueBranch.length);
+  // Skip past semicolon if present (e.g., "if (c) break; else ...")
+  const hasSemiAfterTrue = source[pos] === ";";
+  if (source[pos] === ";") pos++;
+  pos = skipWhitespace(source, pos);
+  
+  console.log("DEBUG transformIfElse:", { trueBranch, transformedTrueBranch, hasSemiAfterTrue, posChar: source[pos], elseEnd: skipElseKeyword(source, pos) });
   
   const elseEnd = skipElseKeyword(source, pos);
   if (elseEnd !== -1) {
     pos = skipWhitespace(source, elseEnd);
     const { content: falseBranch } = extractBranch(source, pos);
     const transformedFalseBranch = transformBlocks(stripTypedSyntax(stripTypeSuffix(falseBranch.trim())));
+    
+    console.log("DEBUG hasBreakOrContinue:", { tb: hasBreakOrContinue(trueBranch), fb: hasBreakOrContinue(falseBranch), tbHasBreak: transformedTrueBranch.indexOf("break"), fbHasBreak: transformedFalseBranch.indexOf("break") });
+    
+    // If either branch contains break/continue, use statement-style output
+    if (hasBreakOrContinue(trueBranch) || hasBreakOrContinue(falseBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1 || transformedFalseBranch.indexOf("break") !== -1 || transformedFalseBranch.indexOf("continue") !== -1) {
+      const trueBranchStr = transformedTrueBranch + ";";
+      return "if (" + transformedCondition + ") { " + trueBranchStr + " } else { " + transformedFalseBranch + " }";
+    }
+    
     return "(" + transformedCondition + " ? " + transformedTrueBranch + " : " + transformedFalseBranch + ")";
+  }
+  
+  // If true branch contains break/continue, use statement-style output
+  if (hasBreakOrContinue(trueBranch) || transformedTrueBranch.indexOf("break") !== -1 || transformedTrueBranch.indexOf("continue") !== -1) {
+    const trueBranchStr = hasSemiAfterTrue ? transformedTrueBranch : transformedTrueBranch + ";";
+    return "if (" + transformedCondition + ") { " + trueBranchStr + " }";
   }
   
   return "(" + transformedCondition + " ? " + transformedTrueBranch + " : 0)";
@@ -906,7 +985,7 @@ function extractAndTransformBranch(source, pos) {
   return { transformedBody, endPos: pos + body.length };
 }
 
-// Transform a while loop to JavaScript: while (cond) { body }
+// Transform a while loop to JavaScript: while (cond) { body };
 function transformWhileLoop(source, start) {
   const whileEnd = skipWhileKeyword(source, start);
   let pos = skipWhitespace(source, whileEnd);
@@ -917,7 +996,7 @@ function transformWhileLoop(source, start) {
   pos = skipWhitespace(source, pos + condition.length + 2);
   const { transformedBody } = extractAndTransformBranch(source, pos);
   
-  return "while (" + transformedCondition + ") { " + transformedBody + " }";
+  return "while (" + transformedCondition + ") { " + transformedBody + " };";
 }
 
 // Build a map of variable names to their range assignments (start..end). Returns object.

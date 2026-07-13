@@ -54,3 +54,4 @@ The language supports:
 - See `/memories/` (user memory) for ASI pitfalls with dynamically generated JS and parser queue draining patterns.
 - Pre-commit hooks run test → lint → cpd; all must pass before commit succeeds (`.github/hooks/hooks.json`).
 - The `validateSource` function uses character-by-character iteration — no regex parsing. All token matching is done via string comparison helpers (`skipKeyword`, `tryMatchTypedRead`, etc.).
+- **Don't think, measure!** — When stuck on a bug or unexpected behavior, add strategic `console.log` statements to trace runtime values and execution flow rather than manually reasoning through the code. Instrument the compiler pipeline (validation, transformation, wrapping) to observe what's actually happening.

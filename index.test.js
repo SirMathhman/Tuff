@@ -119,6 +119,18 @@ test("while loop with mutable counter works", () => {
   expectValid("let mut counter = 0; let limit = read(); while (counter < limit) counter += 1; counter", "3", 3);
 });
 
+test("break exits while loop early", () => {
+  expectValid("let mut temp = 0; while (true) { temp = 1; break; } temp", "", 1);
+});
+
+test("continue skips to next loop iteration", () => {
+  expectValid("let mut temp = 0; while (true) { if (temp > 4) break; else { temp += 1; continue; } } temp", "", 5);
+});
+
+test("break exits while loop when condition met", () => {
+  expectValid("let mut temp = 0; while (true) { if (temp >= 4) break; else { temp += 1; continue; } } temp", "", 4);
+});
+
 test("for loop with range iterates and accumulates", () => {
   expectValid("let mut sum = 0; for (i in 0..read()) sum += i; sum", "4", 6);
 });
