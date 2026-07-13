@@ -151,6 +151,10 @@ test("function with typed parameter and return type works", () => {
   expectValid("fn add(temp : I32) : I32 => read() + temp; add(1)", "4", 5);
 });
 
+test("recursive function works", () => {
+  expectValid("fn fact(n : I32) : I32 => if (n < 2) 1 else n * fact(n - 1); fact(read())", "5", 120);
+});
+
 test("narrower type assigned to wider declaration is valid", () => {
   expectValid("let x : U16 = read<U8>(); x", "100", 100);
 });

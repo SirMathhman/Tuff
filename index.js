@@ -116,8 +116,8 @@ function skipFnDeclaration(source, i) {
   pos += 2;
   
   pos = skipWhitespace(source, pos);
-  // Skip expression until semicolon
-  const exprEnd = skipExpression(source, pos);
+  // Skip expression until semicolon (handles if/else, while, blocks)
+  const exprEnd = skipToSemicolonWithIfElse(source, pos);
   pos = exprEnd;
   // Skip semicolon
   if (source[pos] === ";") pos++;
@@ -1173,8 +1173,8 @@ function transformFnDeclaration(source, start) {
   pos += 2;
   
   pos = skipWhitespace(source, pos);
-  // Extract expression until semicolon
-  const exprEnd = skipExpression(source, pos);
+  // Extract expression until semicolon (handles if/else, while, blocks)
+  const exprEnd = skipToSemicolonWithIfElse(source, pos);
   const expr = source.substring(pos, exprEnd);
   
   const transformedExpr = transformBlocks(stripTypedSyntax(stripTypeSuffix(expr.trim())));
