@@ -1408,6 +1408,32 @@ function skipKeywordMut(source, i) {
 }
 
 
+// Transform struct field assignments inside {{} into JS object properties.
+// "field : 100, other : read()" -> "field: 100, other: read()"
+function transformStructFields(source) {
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    if (" \t\n\r,".includes(source[i])) { i++; continue; }
+    // Extract field name
+    const fieldEnd = skipIdentifier(source, i);
+    if (fieldEnd === -1) { i++; continue; }
+    const fieldName = source.substring(i, fieldEnd);
+    result += fieldName;
+    let pos = skipWhitespace(source, fieldEnd);
+    // Skip ": " separator (field : value)
+    if (source[pos] === ":") pos++;
+    pos = skipWhitespace(source, pos);
+    // Find value expression (until comma or end)
+    let valEnd = pos;
+    while (valEnd < source.length && source[valEnd] !== ",") valEnd++;
+    const value = source.substring(pos, valEnd);
+    result += ":" + transformBlocks(stripTypedSyntax(stripTypeSuffix(value)));
+    i = valEnd;
+  }
+  return result;
+}
+
 function transformBlocks(source) {
   let result = "";
   let i = 0;
@@ -1476,9 +1502,11 @@ function transformBlocks(source) {
     const hasStructType = identEndInResult > identStartInResult;
     const endIdx = findMatchingBrace(source, i);
     if (hasStructType) {
-      // Struct instantiation: remove the type name from result and emit 0
+      // Struct instantiation: remove type name, transform inner as JS object
       result = result.substring(0, identStartInResult);
-      result += "0";
+      const structInner = source.substring(i + 1, endIdx);
+      const transformedStructInner = transformStructFields(structInner);
+      result += "{" + transformedStructInner + "}";
       i = endIdx + 1;
       continue;
     }

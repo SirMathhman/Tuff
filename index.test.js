@@ -199,6 +199,10 @@ test("struct instantiation with fields compiles and evaluates to 0", () => {
   expectValid("struct Wrapper { field : I32 } let wrapper = Wrapper { field : 100 };", "", 0);
 });
 
+test("struct field access returns field value", () => {
+  expectValid("struct Wrapper { field : I32 } let wrapper = Wrapper { field : 100 }; wrapper.field", "", 100);
+});
+
 test("wider type assigned to narrower array element is invalid", () => {
   expectInvalid("let array : [U8; 1] = [read<U16>()]; array[0]");
 });
