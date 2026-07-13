@@ -1,7 +1,7 @@
 # Missing Features (C-like Roadmap)
 
 ## Data Structures
-- [ ] Array length property (`.len` or `sizeof`)
+- [x] Array length property (`.length`)
 - [ ] Structs / user-defined types
 - [ ] Pointers and address-of operator (`&`, `*`)
 

@@ -171,6 +171,10 @@ test("typed array declaration with indexing works", () => {
   expectValid("let array : [I32; 2] = [read(), read()]; array[0] + array[1]", "1 2", 3);
 });
 
+test("array .length property returns array size", () => {
+  expectValid("let array = [100]; array.length", "", 1);
+});
+
 test("wider type assigned to narrower array element is invalid", () => {
   expectInvalid("let array : [U8; 1] = [read<U16>()]; array[0]");
 });

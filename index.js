@@ -309,8 +309,16 @@ function skipArrayIndexing(source, start) {
   return i;
 }
 
+// Skip ".length" property access at position i. Returns end index or -1.
+function skipDotLength(source, i) {
+  if (source.substring(i, i + 7) === ".length" && (i + 7 >= source.length || !isAlpha(source[i + 7]))) {
+    return i + 7;
+  }
+  return -1;
+}
+
 // Try to skip identifier if preceded by ; or = (ignoring whitespace), returns new index or -1
-// Also handles array indexing: identifier[expr]
+// Also handles array indexing: identifier[expr] and .length property access
 function maybeSkipIdentifier(source, i) {
   if (!isAlpha(source[i])) return -1;
   let j = i - 1;
@@ -319,6 +327,8 @@ function maybeSkipIdentifier(source, i) {
     if (ch === ";" || ch === "=" || ch === "]" || ch === ")" || ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "<" || ch === ">" || ch === "|" || ch === "&") {
       let identEnd = skipIdentifier(source, i);
       identEnd = skipArrayIndexing(source, identEnd);
+      // Also skip .length if present
+      identEnd = skipDotLength(source, identEnd) !== -1 ? skipDotLength(source, identEnd) : identEnd;
       return identEnd;
     }
     j--;
