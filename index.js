@@ -36,6 +36,28 @@ function skipLiteral(source, i) {
   return skipCharLiteral(source, i);
 }
 
+// Try to resolve "string"[N] at position i (which should be at the opening ").
+// Returns {ascii: number, end: number, indexed: true} if followed by [N],
+// or {ascii: string, end: number, indexed: false} for plain string passthrough,
+// or null if not a valid string literal.
+function tryResolveStringIndex(source, i) {
+  const stringEnd = skipStringLiteral(source, i);
+  if (stringEnd === -1) return null;
+  let idx = stringEnd;
+  while (idx < source.length && " \t\n\r".includes(source[idx])) idx++;
+  if (idx < source.length && source[idx] === "[") {
+    let k = idx + 1;
+    while (k < source.length && source[k] >= "0" && source[k] <= "9") k++;
+    if (k < source.length && source[k] === "]") {
+      const index = parseInt(source.substring(idx + 1, k));
+      const strContent = source.substring(i + 1, stringEnd - 1);
+      const ch = strContent[index];
+      return {ascii: ch !== undefined ? ch.charCodeAt(0) : 0, end: k + 1, indexed: true};
+    }
+  }
+  return {ascii: source.substring(i, stringEnd), end: stringEnd, indexed: false};
+}
+
 // Skip a boolean literal ("true" or "false") at position i. Returns end index or -1.
 function skipBoolLiteral(source, i) {
   const trueEnd = skipKeyword(source, i, "true");
@@ -1344,10 +1366,11 @@ function stripTypedSyntax(source) {
       continue;
     }
     // Pass through string literals: "foo" -> "foo"
-    const stringEnd = skipStringLiteral(source, i);
-    if (stringEnd !== -1) {
-      result += source.substring(i, stringEnd);
-      i = stringEnd;
+    // If followed by [N], resolve to ASCII value at compile time: "test"[0] -> 116
+    const resolved = tryResolveStringIndex(source, i);
+    if (resolved) {
+      result += resolved.ascii;
+      i = resolved.end;
       continue;
     }
     // Convert character literals: 'a' -> 97 (ASCII code)

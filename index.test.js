@@ -290,6 +290,10 @@ test("character literal returns ASCII value", () => {
   expectValid("'a'", "", 97);
 });
 
+test("string indexing returns ASCII value", () => {
+  expectValid("\"test\"[0]", "", 116);
+});
+
 test("mutable reference writes through to the original variable", () => {
   expectValid("let mut x = read(); let y : &mut I32 = &mut x; *y = read(); x", "1 2", 2);
 });
