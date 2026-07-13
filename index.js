@@ -291,8 +291,13 @@ function skipFnDeclaration(source, i) {
 
   pos = skipWhitespace(source, pos);
   // Skip expression until semicolon (handles if/else, while, blocks)
-  const exprEnd = skipToSemicolonWithIfElse(source, pos);
-  pos = exprEnd;
+  // If body starts with "{", the function body ends at the matching "}"
+  if (source[pos] === "{") {
+    pos = findMatchingBrace(source, pos) + 1;
+  } else {
+    const exprEnd = skipToSemicolonWithIfElse(source, pos);
+    pos = exprEnd;
+  }
   // Skip semicolon
   if (source[pos] === ";") pos++;
 
@@ -845,7 +850,7 @@ function buildReturnAfterSemi(transformedInner, j) {
   const afterSemi = transformedInner.substring(j + 1);
   if (isEmptyOrSemicolons(afterSemi))
     return transformedInner.substring(0, j + 1) + "return 0";
-  return transformedInner.substring(0, j + 1) + "return" + afterSemi;
+  return transformedInner.substring(0, j + 1) + "return " + afterSemi;
 }
 
 // Skip digits and advance index, returns the digit string
@@ -1935,7 +1940,10 @@ function transformBlocks(source) {
       continue;
     }
     const inner = source.substring(i + 1, endIdx);
-    if (hasBreakOrContinue(inner) || hasReturn(inner)) {
+    if (isEmptyOrSemicolons(inner)) {
+      // Empty block evaluates to 0 as a statement
+      result += "0;";
+    } else if (hasBreakOrContinue(inner) || hasReturn(inner)) {
       // Blocks with break/continue/return must stay as plain blocks, not IIFEs
       result +=
         "{ " + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + " }";
@@ -2196,8 +2204,15 @@ function transformFnDeclaration(source, start) {
 
   pos = skipWhitespace(source, pos);
   // Extract expression until semicolon (handles if/else, while, blocks)
-  const exprEnd = skipToSemicolonWithIfElse(source, pos);
-  const expr = source.substring(pos, exprEnd);
+  // If body starts with "{", the function body ends at the matching "}"
+  let expr;
+  if (source[pos] === "{") {
+    const bodyEnd = findMatchingBrace(source, pos) + 1;
+    expr = source.substring(pos, bodyEnd);
+  } else {
+    const exprEnd = skipToSemicolonWithIfElse(source, pos);
+    expr = source.substring(pos, exprEnd);
+  }
 
   const transformedExpr = transformBlocks(
     stripTypedSyntax(stripTypeSuffix(expr.trim())),
@@ -2207,6 +2222,20 @@ function transformFnDeclaration(source, start) {
   if (hasReturn(expr)) {
     return (
       "function " + varName + "(" + paramList + ") { " + transformedExpr + " } "
+    );
+  }
+
+  // If the body contains statements, use prependReturnToLastExpr to inject return before last expression
+  if (hasStatements(transformedExpr)) {
+    // Empty block body: just return 0
+    if (transformedExpr === "0;") {
+      return (
+        "function " + varName + "(" + paramList + ") { return 0; } "
+      );
+    }
+    const withReturn = prependReturnToLastExpr(transformedExpr);
+    return (
+      "function " + varName + "(" + paramList + ") { " + withReturn + "; } "
     );
   }
 
@@ -2378,7 +2407,7 @@ export function compile(source) {
   );
 
   // If top-level has statements OR contains yield, wrap in IIFE with proper returns
-  const isStmtLevel = hasStatements(source) || source.indexOf("yield") !== -1;
+  const isStmtLevel = hasStatements(source) || source.indexOf("yield") !== -1 || source.indexOf("fn ") !== -1;
   if (isStmtLevel) {
     // yield -> return conversion already handled by transformBlocks, so use
     // prependReturnToLastExpr which correctly skips leading function declarations

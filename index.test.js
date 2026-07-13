@@ -163,6 +163,10 @@ test("function with if/return in block body works", () => {
   expectValid("fn get() => { if (true) return 3 } + 1; get()", "", 3);
 });
 
+test("function with empty block body works", () => {
+  expectValid("fn get() => {} 100", "", 100);
+});
+
 test("yield returns early from block", () => {
   expectValid("{ if (true) yield 1; 2 } + 3", "", 4);
 });

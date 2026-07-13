@@ -1,0 +1,2 @@
+fn isAlpha(c : Char) => true && false;
+0
