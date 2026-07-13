@@ -1466,7 +1466,22 @@ function transformBlocks(source) {
       i++;
       continue;
     }
+    // Check for struct instantiation: identifier followed by { ... }
+    // Look back in result to see if it ends with an identifier
+    let resultTrimEnd = result.length;
+    while (resultTrimEnd > 0 && " \t\n\r".includes(result[resultTrimEnd - 1])) resultTrimEnd--;
+    let identEndInResult = resultTrimEnd;
+    let identStartInResult = identEndInResult;
+    while (identStartInResult > 0 && isAlpha(result[identStartInResult - 1])) identStartInResult--;
+    const hasStructType = identEndInResult > identStartInResult;
     const endIdx = findMatchingBrace(source, i);
+    if (hasStructType) {
+      // Struct instantiation: remove the type name from result and emit 0
+      result = result.substring(0, identStartInResult);
+      result += "0";
+      i = endIdx + 1;
+      continue;
+    }
     const inner = source.substring(i + 1, endIdx);
     if (hasBreakOrContinue(inner) || hasReturn(inner)) {
       // Blocks with break/continue/return must stay as plain blocks, not IIFEs
