@@ -67,6 +67,64 @@ function skipContinueKeyword(source, i) {
   return -1;
 }
 
+// Skip "fn" keyword at position i. Returns end index or -1.
+function skipFnKeyword(source, i) {
+  if (source.substring(i, i + 2) === "fn" && (i + 2 >= source.length || !isAlpha(source[i + 2]))) {
+    return i + 2;
+  }
+  return -1;
+}
+
+// Skip a function declaration starting at position i. Returns end index or -1.
+// Syntax: fn name(param : Type) => expression;  or  fn name() => expression;
+function skipFnDeclaration(source, i) {
+  const fnEnd = skipFnKeyword(source, i);
+  if (fnEnd === -1) return -1;
+  
+  let pos = skipWhitespace(source, fnEnd);
+  // Skip identifier (function name)
+  const identEnd = skipIdentifier(source, pos);
+  if (identEnd === -1) return -1;
+  
+  pos = identEnd;
+  // Skip "(params)"
+  if (source[pos] !== "(") return -1;
+  pos++;
+  // Skip parameters (identifier, optional ": Type", optional ",")
+  while (pos < source.length && source[pos] !== ")") {
+    pos = skipWhitespace(source, pos);
+    if (source[pos] === ",") { pos++; continue; }
+    const paramEnd = skipIdentifier(source, pos);
+    if (paramEnd === -1) return -1;
+    pos = skipWhitespace(source, paramEnd);
+    // Skip optional type annotation ": Type"
+    const annotEnd = skipTypeAnnotation(source, pos);
+    if (annotEnd !== -1) { pos = annotEnd; }
+    pos = skipWhitespace(source, pos);
+  }
+  if (source[pos] !== ")") return -1;
+  pos++;
+  
+  pos = skipWhitespace(source, pos);
+  // Skip optional return type annotation ": Type"
+  const annotEnd = skipTypeAnnotation(source, pos);
+  if (annotEnd !== -1) { pos = annotEnd; }
+  
+  pos = skipWhitespace(source, pos);
+  // Skip "=>"
+  if (source.substring(pos, pos + 2) !== "=>") return -1;
+  pos += 2;
+  
+  pos = skipWhitespace(source, pos);
+  // Skip expression until semicolon
+  const exprEnd = skipExpression(source, pos);
+  pos = exprEnd;
+  // Skip semicolon
+  if (source[pos] === ";") pos++;
+  
+  return pos;
+}
+
 // Skip "for" keyword at position i. Returns end index or -1.
 function skipForKeyword(source, i) {
   if (source.substring(i, i + 3) === "for" && (i + 3 >= source.length || !isAlpha(source[i + 3]))) {
@@ -265,6 +323,12 @@ function validateSource(source) {
       i = continueEnd;
       continue;
     }
+    // Try function declaration
+    const fnEnd = skipFnDeclaration(source, i);
+    if (fnEnd !== -1) {
+      i = fnEnd;
+      continue;
+    }
     // Try for loop
     const forEnd = skipForLoop(source, i);
     if (forEnd !== -1) {
@@ -352,10 +416,30 @@ function trySkipIIFE(transformedInner, j) {
   return -1;
 }
 
+// Try to detect a function declaration ending near position j and return the start index, or -1.
+function tryFindFunctionDeclaration(transformedInner, j) {
+  const funcKeyword = "function ";
+  for (let k = j; k >= 0; k--) {
+    if (k + funcKeyword.length > j + 1) continue;
+    if (transformedInner.substring(k, k + funcKeyword.length) !== funcKeyword) continue;
+    const braceStart = transformedInner.indexOf("{", k + funcKeyword.length);
+    if (braceStart === -1 || braceStart > j) continue;
+    const endIdx = findMatchingBrace(transformedInner, braceStart);
+    if (endIdx <= j) continue;
+    return k;
+  }
+  return -1;
+}
+
 // Process a single character in prependReturnToLastExpr. Returns {j, depth, parenDepth} or null if found semicolon.
 function processChar(transformedInner, j, depth, parenDepth) {
   const ch = transformedInner[j];
-  if (ch === "}") return { j, depth: depth + 1, parenDepth };
+  if (ch === "}") {
+    // Check if this is part of a function declaration
+    const fnStart = tryFindFunctionDeclaration(transformedInner, j);
+    if (fnStart !== -1) return { j: fnStart - 1, depth, parenDepth };
+    return { j, depth: depth + 1, parenDepth };
+  }
   if (ch === "{") return { j, depth: depth - 1, parenDepth };
   if (ch === ")") {
     const newParenDepth = parenDepth + 1;
@@ -369,6 +453,21 @@ function processChar(transformedInner, j, depth, parenDepth) {
   return { j, depth, parenDepth };
 }
 
+// Skip leading function declarations and return the index after them.
+function skipLeadingFunctionDeclarations(transformedInner) {
+  let i = 0;
+  while (i < transformedInner.length) {
+    const funcKeyword = "function ";
+    if (transformedInner.substring(i, i + funcKeyword.length) !== funcKeyword) break;
+    const braceStart = transformedInner.indexOf("{", i + funcKeyword.length);
+    if (braceStart === -1) break;
+    const endIdx = findMatchingBrace(transformedInner, braceStart);
+    i = endIdx + 1;
+    i = skipWhitespace(transformedInner, i);
+  }
+  return i;
+}
+
 function prependReturnToLastExpr(transformedInner) {
   let depth = 0;
   let parenDepth = 0;
@@ -379,8 +478,11 @@ function prependReturnToLastExpr(transformedInner) {
     depth = result.depth;
     parenDepth = result.parenDepth;
   }
-  // No semicolons found; prepend 'return' to entire string
-  return "return" + transformedInner;
+  // No semicolons found; skip leading function declarations and prepend 'return' to the rest
+  const afterFns = skipLeadingFunctionDeclarations(transformedInner);
+  const fnDecls = transformedInner.substring(0, afterFns);
+  const rest = transformedInner.substring(afterFns);
+  return fnDecls + "return " + rest;
 }
 
 // Check if a string contains only semicolons or whitespace. Returns true.
@@ -853,6 +955,14 @@ function transformBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
+    // Check for function declaration
+    const fnEnd = skipFnKeyword(source, i);
+    if (fnEnd !== -1) {
+      result += transformFnDeclaration(source, i);
+      const nextI = skipFnDeclaration(source, i);
+      i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
     // Check for for loop
     const forEnd = skipForKeyword(source, i);
     if (forEnd !== -1) {
@@ -1030,6 +1140,46 @@ function buildRangeMap(source) {
     rangeMap[varName] = { start: "_" + varName + "Start", end: "_" + varName + "End" };
   }
   return rangeMap;
+}
+
+// Transform a function declaration to JavaScript: fn name() => expr; -> function name() { return expr; }
+function transformFnDeclaration(source, start) {
+  const fnEnd = skipFnKeyword(source, start);
+  let pos = skipWhitespace(source, fnEnd);
+  
+  // Extract function name
+  const identEnd = skipIdentifier(source, pos);
+  const varName = source.substring(pos, identEnd);
+  
+  pos = identEnd;
+  // Extract parameters from "(params)"
+  if (source[pos] !== "(") return "";
+  pos++;
+  const paramsStart = pos;
+  while (pos < source.length && source[pos] !== ")") pos++;
+  const paramsStr = source.substring(paramsStart, pos).trim();
+  pos++; // skip ")"
+  
+  // Build parameter list (strip type annotations)
+  const paramList = stripTypedSyntax(paramsStr).split(",").map(p => p.trim()).filter(p => p.length > 0).join(", ");
+  
+  pos = skipWhitespace(source, pos);
+  // Skip optional return type annotation ": Type"
+  const annotEnd = skipTypeAnnotation(source, pos);
+  if (annotEnd !== -1) { pos = annotEnd; }
+  
+  pos = skipWhitespace(source, pos);
+  // Skip "=>"
+  pos += 2;
+  
+  pos = skipWhitespace(source, pos);
+  // Extract expression until semicolon
+  const exprEnd = skipExpression(source, pos);
+  const expr = source.substring(pos, exprEnd);
+  
+  const transformedExpr = transformBlocks(stripTypedSyntax(stripTypeSuffix(expr.trim())));
+  
+  return "function " + varName + "(" + paramList + ") { return " + transformedExpr + "; } ";
 }
 
 // Transform a for loop with range syntax: for (i in start..end) body

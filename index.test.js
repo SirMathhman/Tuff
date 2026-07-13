@@ -139,6 +139,18 @@ test("for loop with range variable works", () => {
   expectValid("let mut sum = 0; let range = 0..read(); for (i in range) sum += i; sum", "4", 6);
 });
 
+test("function declaration and call works", () => {
+  expectValid("fn get() => read(); get()", "4", 4);
+});
+
+test("function with typed parameter works", () => {
+  expectValid("fn add(temp : I32) => read() + temp; add(1)", "4", 5);
+});
+
+test("function with typed parameter and return type works", () => {
+  expectValid("fn add(temp : I32) : I32 => read() + temp; add(1)", "4", 5);
+});
+
 test("narrower type assigned to wider declaration is valid", () => {
   expectValid("let x : U16 = read<U8>(); x", "100", 100);
 });
