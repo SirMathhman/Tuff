@@ -184,22 +184,28 @@ function skipStructKeyword(source, i) {
 // Skip a struct declaration starting at position i. Returns end index or -1.
 // Syntax: struct Name { field : Type, field : Type }
 // Validates that field names are unique within the struct.
+// Skip struct name and braces starting at position i (after struct keyword).
+// Returns end index (after closing brace) or -1.
+function skipStructNameAndBraces(source, i) {
+  let pos = skipWhitespace(source, i);
+  const identEnd = skipIdentifier(source, pos);
+  if (identEnd === -1) return -1;
+  pos = skipWhitespace(source, identEnd);
+  if (source[pos] !== "{") return -1;
+  return findMatchingBrace(source, pos) + 1;
+}
+
 function skipStructDeclaration(source, i) {
   const structEnd = skipStructKeyword(source, i);
   if (structEnd === -1) return -1;
 
-  let pos = skipWhitespace(source, structEnd);
-  // Skip identifier (struct name)
-  const identEnd = skipIdentifier(source, pos);
-  if (identEnd === -1) return -1;
-
-  pos = skipWhitespace(source, identEnd);
-  // Skip "{ ... }" block and validate field names
-  if (source[pos] !== "{") return -1;
-  const endIdx = findMatchingBrace(source, pos);
-  const body = source.substring(pos + 1, endIdx);
-  validateStructFields(body);
-  return endIdx + 1;
+  const endIdx = skipStructNameAndBraces(source, structEnd);
+  if (endIdx === -1) return -1;
+  // Find the actual body content (between braces)
+  const braceStart = source.indexOf("{", structEnd);
+  const braceEnd = findMatchingBrace(source, braceStart);
+  validateStructFields(source.substring(braceStart + 1, braceEnd));
+  return endIdx;
 }
 
 // Validate struct fields: check for duplicate field names and valid type names. Throws if invalid.
@@ -258,6 +264,46 @@ function skipFnKeyword(source, i) {
   return -1;
 }
 
+// Skip a function signature: name(params) : ReturnType. Returns {pos, identEnd} or null.
+// pos is the position after the return type annotation (or after params if no annotation).
+function skipFnSignature(source, pos) {
+  const identEnd = skipIdentifier(source, pos);
+  if (identEnd === -1) return null;
+  pos = identEnd;
+  if (source[pos] !== "(") return null;
+  pos++;
+  pos = skipParams(source, pos);
+  if (pos === -1) return null;
+  pos = skipWhitespace(source, pos);
+  const annotEnd = skipTypeAnnotation(source, pos);
+  if (annotEnd !== -1) pos = annotEnd;
+  return { pos, identEnd };
+}
+
+// Skip an extern function declaration starting at position i. Returns end index or -1.
+// Syntax: extern fn name(params) : ReturnType;
+function skipExternFnDeclaration(source, i) {
+  if (source.substring(i, i + 7) !== "extern ") return -1;
+  let pos = i + 7;
+  const fnEnd = skipFnKeyword(source, pos);
+  if (fnEnd === -1) return -1;
+  pos = skipWhitespace(source, fnEnd);
+  const sig = skipFnSignature(source, pos);
+  if (!sig) return -1;
+  pos = skipWhitespace(source, sig.pos);
+  if (source[pos] === ";") pos++;
+  return pos;
+}
+
+// Skip an extern struct declaration starting at position i. Returns end index or -1.
+// Syntax: extern struct Name {}
+function skipExternStructDeclaration(source, i) {
+  if (source.substring(i, i + 7) !== "extern ") return -1;
+  const structEnd = skipStructKeyword(source, i + 7);
+  if (structEnd === -1) return -1;
+  return skipStructNameAndBraces(source, structEnd);
+}
+
 // Skip a function declaration starting at position i. Returns end index or -1.
 // Syntax: fn name(param : Type) => expression;  or  fn name() => expression;
 function skipFnDeclaration(source, i) {
@@ -265,24 +311,9 @@ function skipFnDeclaration(source, i) {
   if (fnEnd === -1) return -1;
 
   let pos = skipWhitespace(source, fnEnd);
-  // Skip identifier (function name)
-  const identEnd = skipIdentifier(source, pos);
-  if (identEnd === -1) return -1;
-
-  pos = identEnd;
-  // Skip "(params)"
-  if (source[pos] !== "(") return -1;
-  pos++;
-  // Skip parameters (identifier, optional ": Type", optional ",")
-  pos = skipParams(source, pos);
-  if (pos === -1) return -1;
-
-  pos = skipWhitespace(source, pos);
-  // Skip optional return type annotation ": Type"
-  const annotEnd = skipTypeAnnotation(source, pos);
-  if (annotEnd !== -1) {
-    pos = annotEnd;
-  }
+  const sig = skipFnSignature(source, pos);
+  if (!sig) return -1;
+  pos = sig.pos;
 
   pos = skipWhitespace(source, pos);
   // Skip "=>"
@@ -482,6 +513,10 @@ function skipTypeAnnotation(source, i) {
   if (j + 3 <= source.length && source.substring(j, j + 4) === "Char") {
     return j + 4;
   }
+  // Str type annotation
+  if (j + 2 <= source.length && source.substring(j, j + 3) === "Str") {
+    return j + 3;
+  }
   // Array type annotation: [Type; size]
   if (j < source.length && source[j] === "[") {
     return findMatchingBracket(source, j) + 1;
@@ -634,6 +669,18 @@ function validateSource(source) {
     const structEnd = skipStructDeclaration(source, i);
     if (structEnd !== -1) {
       i = structEnd;
+      continue;
+    }
+    // Try extern function declaration
+    const externFnEnd = skipExternFnDeclaration(source, i);
+    if (externFnEnd !== -1) {
+      i = externFnEnd;
+      continue;
+    }
+    // Try extern struct declaration
+    const externStructEnd = skipExternStructDeclaration(source, i);
+    if (externStructEnd !== -1) {
+      i = externStructEnd;
       continue;
     }
     // Try function declaration
@@ -1257,6 +1304,7 @@ const BUILTINS = new Set([
   "length",
   "Str",
   "Char",
+  "extern",
 ]);
 
 // Scan struct fields and add them to declaredVars set.
@@ -1419,6 +1467,22 @@ function validateVarAssignments(source) {
     pos = identEnd;
     if (source[pos] !== "(") continue;
     scanFunctionParams(source, pos + 1, declaredVars);
+  }
+  // Scan for extern function declarations
+  for (let i = 0; i < source.length - 10; i++) {
+    if (source.substring(i, i + 10) !== "extern fn ") continue;
+    let pos = skipWhitespace(source, i + 10);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) continue;
+    declaredFns.add(source.substring(pos, identEnd));
+  }
+  // Scan for extern struct declarations
+  for (let i = 0; i < source.length - 12; i++) {
+    if (source.substring(i, i + 12) !== "extern struct ") continue;
+    let pos = skipWhitespace(source, i + 12);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) continue;
+    declaredVars.add(source.substring(pos, identEnd));
   }
   // Scan for struct declarations and their field names
   for (let i = 0; i < source.length - 6; i++) {
@@ -1925,6 +1989,20 @@ function transformBlocks(source) {
       const nextI = skipStructDeclaration(source, i);
       result += "0; ";
       i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
+    // Check for extern function declaration
+    const externFnEnd = skipExternFnDeclaration(source, i);
+    if (externFnEnd !== -1) {
+      result += "0; ";
+      i = externFnEnd;
+      continue;
+    }
+    // Check for extern struct declaration
+    const externStructEnd = skipExternStructDeclaration(source, i);
+    if (externStructEnd !== -1) {
+      result += "0; ";
+      i = externStructEnd;
       continue;
     }
     // Check for function declaration
@@ -2567,6 +2645,11 @@ function stripOutKeyword(source) {
     if (source.substring(i, i + 4) === "out " && source.substring(i + 4, i + 8) === "let ") {
       result += "let ";
       i += 8;
+      continue;
+    }
+    if (source.substring(i, i + 4) === "out " && source.substring(i + 4, i + 7) === "fn ") {
+      result += "fn ";
+      i += 7;
       continue;
     }
     result += source[i];

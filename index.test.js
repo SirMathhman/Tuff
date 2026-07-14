@@ -357,3 +357,22 @@ test("struct destructuring with nested module reference", () => {
   moduleSources[["lib", "sub"]] = "out let myVar = read();";
   expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
 });
+
+test("nested module function call", () => {
+  const moduleSources = {};
+  moduleSources[["index", "foo"]] = "lib::sub.myFunc()";
+  moduleSources[["lib", "sub"]] = "out fn myFunc() => read();";
+  expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
+});
+
+test("extern fn declaration and call", () => {
+  const moduleSources = {};
+  moduleSources[["index"]] = "extern fn parseInt(input : &Str) : I32; parseInt(read<&Str>()) + 1";
+  expectValidWithModules(["index"], moduleSources, "100", 101);
+});
+
+test("extern struct declaration", () => {
+  const moduleSources = {};
+  moduleSources[["index"]] = "extern struct Console {}";
+  expectValidWithModules(["index"], moduleSources, "", 0);
+});
