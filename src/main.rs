@@ -9,12 +9,42 @@ fn main() {
     println!("Hello, world!");
 }
 
-fn compile(_source: &str) -> Result<String, Error> {
-    return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
+fn compile(source: &str) -> Result<String, Error> {
+    let trimmed = source.trim();
+    if trimmed.is_empty() {
+        return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
+    }
+
+    // Count how many read() calls are in the expression
+    let read_count = trimmed.matches("read()").count();
+    if read_count > 0 {
+        let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
+        let scanf_fmt = format!("%d{}", " %d".repeat(read_count - 1));
+        let scanf_args = vars.iter().map(|v| format!("&{}", v)).collect::<Vec<_>>().join(", ");
+        // Build expression by replacing each read() with its variable, preserving operators
+        let mut expr = String::new();
+        let mut var_idx = 0;
+        let mut last = 0;
+        for m in trimmed.match_indices("read()") {
+            expr.push_str(&trimmed[last..m.0]);
+            expr.push_str(&vars[var_idx]);
+            var_idx += 1;
+            last = m.0 + m.1.len();
+        }
+        expr.push_str(&trimmed[last..]);
+        return Ok(format!(
+            "#include <stdio.h>\nint main() {{\n\tint {};\n\tscanf(\"{}\", {});\n\treturn {};\n}}\n",
+            vars.join(", "),
+            scanf_fmt,
+            scanf_args,
+            expr
+        ));
+    }
+    Ok(source.to_string())
 }
 
 #[allow(dead_code)]
-fn expect_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
+fn expect_valid(source: &str, std_in: &str, expected_exit_code: i32) {
     fn save_to_temp_path(generated: &str) -> String {
         let dir = std::env::temp_dir();
         let id = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -50,10 +80,20 @@ fn expect_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
         }
     }
 
-    fn execute_temp_exe(temp_exe: &str) -> i32 {
-        let status = Command::new(temp_exe)
-            .status()
-            .expect("Failed to execute compiled exe");
+    fn execute_temp_exe(temp_exe: &str, stdin: &str) -> i32 {
+        let mut child = Command::new(temp_exe)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .expect("Failed to start compiled exe");
+        // Write stdin if provided
+        if !stdin.is_empty() {
+            if let Some(ref mut stdin_handle) = child.stdin {
+                use std::io::Write;
+                stdin_handle.write_all(stdin.as_bytes())
+                    .expect("Failed to write to stdin");
+            }
+        }
+        let status = child.wait().expect("Failed to wait for exe");
         status.code().unwrap_or(-1)
     }
 
@@ -64,7 +104,7 @@ fn expect_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
 
     let temp_path = save_to_temp_path(generated.unwrap().as_str());
     let temp_exe = compile_temp_path_using_clang(temp_path.as_str());
-    let actual_exit_code = execute_temp_exe(temp_exe.as_str());
+    let actual_exit_code = execute_temp_exe(temp_exe.as_str(), std_in);
 
     // Cleanup
     let _ = std::fs::remove_file(&temp_path);
@@ -96,5 +136,35 @@ mod tests {
     #[test]
     fn test_whitespace_source() {
         expect_valid(" ", "", 0);
+    }
+
+    #[test]
+    fn test_read_stdin() {
+        expect_valid("read()", "1", 1);
+    }
+
+    #[test]
+    fn test_read_stdin_multiple() {
+        expect_valid("read()", "1 2", 1);
+    }
+
+    #[test]
+    fn test_read_with_whitespace() {
+        expect_valid(" read() ", "1 2", 1);
+    }
+
+    #[test]
+    fn test_read_add_read() {
+        expect_valid("read() + read()", "1 2", 3);
+    }
+
+    #[test]
+    fn test_read_add_read_add_read() {
+        expect_valid("read() + read() + read()", "1 2 3", 6);
+    }
+
+    #[test]
+    fn test_read_add_read_sub_read() {
+        expect_valid("read() + read() - read()", "3 4 5", 2);
     }
 }
