@@ -304,6 +304,27 @@ function skipExternStructDeclaration(source, i) {
   return skipStructNameAndBraces(source, structEnd);
 }
 
+// Skip an extern let declaration starting at position i. Returns end index or -1.
+// Syntax: extern let name : Type; — declares that "name" already exists in the
+// host environment (e.g. the global "Math" object), so it emits no code.
+function skipExternLetDeclaration(source, i) {
+  if (source.substring(i, i + 11) !== "extern let ") return -1;
+  const identEnd = skipIdentifier(source, i + 11);
+  if (identEnd === -1) return -1;
+  // Skip to the statement-terminating ";", respecting nested braces/parens/brackets
+  // in the type annotation (e.g. an object type with function-typed fields).
+  let depth = 0;
+  let j = identEnd;
+  while (j < source.length) {
+    const ch = source[j];
+    if (ch === "{" || ch === "(" || ch === "[") depth++;
+    else if (ch === "}" || ch === ")" || ch === "]") depth--;
+    else if (ch === ";" && depth === 0) return j + 1;
+    j++;
+  }
+  return j;
+}
+
 // Skip a function declaration starting at position i. Returns end index or -1.
 // Syntax: fn name(param : Type) => expression;  or  fn name() => expression;
 function skipFnDeclaration(source, i) {
@@ -1305,6 +1326,7 @@ const BUILTINS = new Set([
   "Str",
   "Char",
   "extern",
+  "this",
 ]);
 
 // Scan struct fields and add them to declaredVars set.
@@ -1331,7 +1353,13 @@ function skipParam(source, pos) {
   if (paramEnd === -1) return -1;
   pos = skipWhitespace(source, paramEnd);
   const annotEnd = skipTypeAnnotation(source, pos);
-  if (annotEnd !== -1) pos = annotEnd;
+  if (annotEnd !== -1) {
+    pos = annotEnd;
+  } else if (source[pos] === ":") {
+    // Custom type annotation (e.g. a struct name) — skip the identifier.
+    const typeEnd = skipIdentifier(source, skipWhitespace(source, pos + 1));
+    if (typeEnd !== -1) pos = typeEnd;
+  }
   return skipWhitespace(source, pos);
 }
 
@@ -1774,17 +1802,23 @@ function stripTypedSyntax(source) {
       i = identEnd !== -1 ? identEnd : i + 1;
       continue;
     }
-    // Bare read of a boxed variable: x -> x[0] (except at its own declaration site,
-    // "let x" / "let mut x", where the binding itself — not its box — is named).
+    // Handle "this.x" -> x (access current scope variable by name)
+    if (source.substring(i, i + 5) === "this.") {
+      const identEnd = skipIdentifier(source, i + 5);
+      result += identEnd !== -1 ? source.substring(i + 5, identEnd) : "";
+      i = identEnd !== -1 ? identEnd : i + 1;
+      continue;
+    }
+    // Handle "this" variable field access: y.x where y = this -> x
     if (isAlpha(source[i])) {
       const identEnd = skipIdentifier(source, i);
       const name = source.substring(i, identEnd);
-      const isDeclSite =
-        source.substring(i - 4, i) === "let " ||
-        source.substring(i - 4, i) === "mut ";
-      result +=
-        CURRENT_BOXED_VARS.has(name) && !isDeclSite ? name + "[0]" : name;
-      i = identEnd;
+      const isThisVar = CURRENT_THIS_VARS.has(name) && source[identEnd] === "." && !CURRENT_BOXED_VARS.has(name);
+      const thisFieldEnd = isThisVar ? skipIdentifier(source, identEnd + 1) : -1;
+      const isDeclSite = source.substring(i - 4, i) === "let " || source.substring(i - 4, i) === "mut ";
+      const isBoxed = CURRENT_BOXED_VARS.has(name) && !isDeclSite;
+      result += thisFieldEnd !== -1 ? source.substring(identEnd + 1, thisFieldEnd) : (isBoxed ? name + "[0]" : name);
+      i = thisFieldEnd !== -1 ? thisFieldEnd : identEnd;
       continue;
     }
     const isColon = source[i] === ":";
@@ -2003,6 +2037,13 @@ function transformBlocks(source) {
     if (externStructEnd !== -1) {
       result += "0; ";
       i = externStructEnd;
+      continue;
+    }
+    // Check for extern let declaration
+    const externLetEnd = skipExternLetDeclaration(source, i);
+    if (externLetEnd !== -1) {
+      result += "0; ";
+      i = externLetEnd;
       continue;
     }
     // Check for function declaration
@@ -2300,6 +2341,21 @@ function buildRangeMap(source) {
   return rangeMap;
 }
 
+// Rename whole-word "this" references in a function body to "_this".
+function renameThisReferences(expr) {
+  let renamed = "";
+  let k = 0;
+  while (k < expr.length) {
+    const isWholeWordThis =
+      expr.substring(k, k + 4) === "this" &&
+      (k + 4 >= expr.length || !isAlpha(expr[k + 4])) &&
+      (k === 0 || !isAlpha(expr[k - 1]));
+    renamed += isWholeWordThis ? "_this" : expr[k];
+    k += isWholeWordThis ? 4 : 1;
+  }
+  return renamed;
+}
+
 // Transform a function declaration to JavaScript: fn name() => expr; -> function name() { return expr; }
 function transformFnDeclaration(source, start) {
   const fnEnd = skipFnKeyword(source, start);
@@ -2318,11 +2374,12 @@ function transformFnDeclaration(source, start) {
   const paramsStr = source.substring(paramsStart, pos).trim();
   pos++; // skip ")"
 
-  // Build parameter list (strip type annotations)
+  // Build parameter list (strip type annotations, rename "this" param)
   const paramList = stripTypedSyntax(paramsStr)
     .split(",")
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
+    .map((p) => p === "this" ? "_this" : p)
     .join(", ");
 
   pos = skipWhitespace(source, pos);
@@ -2346,6 +2403,11 @@ function transformFnDeclaration(source, start) {
   } else {
     const exprEnd = skipToSemicolonWithIfElse(source, pos);
     expr = source.substring(pos, exprEnd);
+  }
+
+  // Rename "this" param references in body to _this
+  if (paramsStr.indexOf("this") !== -1) {
+    expr = renameThisReferences(expr);
   }
 
   const transformedExpr = transformBlocks(
@@ -2472,6 +2534,127 @@ function stripTrailingSemicolon(source) {
 // go through its box ("[0]") instead of being emitted directly. See findBoxedVars/boxDeclarations.
 let CURRENT_BOXED_VARS = new Set();
 
+// Track variables assigned from "this" so that y.x resolves to x.
+let CURRENT_THIS_VARS = new Set();
+
+// Find variable names assigned from "this", i.e. "let y = this;".
+function findThisVars(source) {
+  const thisVars = new Set();
+  let i = 0;
+  while (i < source.length) {
+    if (source.substring(i, i + 4) !== "let ") {
+      i++;
+      continue;
+    }
+    const pos = skipWhitespace(source, i + 4);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) { i++; continue; }
+    const eqPos = source.indexOf("=", identEnd);
+    if (eqPos === -1) { i++; continue; }
+    const rhsStart = skipWhitespace(source, eqPos + 1);
+    if (source.substring(rhsStart, rhsStart + 4) === "this") {
+      thisVars.add(source.substring(pos, identEnd));
+    }
+    i++;
+  }
+  return thisVars;
+}
+
+// Find names of functions declared with "this" as their first parameter,
+// e.g. "fn addOnce(this : I32) => this + 1;" -> these can be called as
+// methods: "100.addOnce()".
+function findThisParamFnNames(source) {
+  const names = new Set();
+  let i = 0;
+  while (i < source.length) {
+    if (source.substring(i, i + 3) !== "fn ") {
+      i++;
+      continue;
+    }
+    // Skip "extern fn" declarations: those name a method that already exists
+    // on the host object (e.g. Math.abs), so the call site must stay as-is.
+    if (source.substring(i - 7, i) === "extern ") {
+      i += 3;
+      continue;
+    }
+    let pos = skipWhitespace(source, i + 3);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) {
+      i++;
+      continue;
+    }
+    const fnName = source.substring(pos, identEnd);
+    pos = skipWhitespace(source, identEnd);
+    if (source[pos] !== "(") {
+      i = identEnd;
+      continue;
+    }
+    const paramsStart = pos + 1;
+    let paramsEnd = paramsStart;
+    while (paramsEnd < source.length && source[paramsEnd] !== ")") paramsEnd++;
+    const firstParam = source.substring(paramsStart, paramsEnd).split(",")[0].trim();
+    const isThisParam =
+      firstParam === "this" ||
+      (firstParam.substring(0, 4) === "this" &&
+        firstParam.substring(4).trim()[0] === ":");
+    if (isThisParam) {
+      names.add(fnName);
+    }
+    i = paramsEnd;
+  }
+  return names;
+}
+
+// Find the matching ')' for '(' at position start. Returns index of ')'.
+function findMatchingParen(source, start) {
+  let depth = 1;
+  let i = start + 1;
+  while (depth > 0 && i < source.length) {
+    if (source[i] === "(") depth++;
+    else if (source[i] === ")") depth--;
+    i++;
+  }
+  return i - 1; // index of matching ')'
+}
+
+// Skip a number literal or identifier at position i (a valid method-call receiver).
+// Returns the end index, or -1 if neither is present at i.
+function skipThisParamReceiver(source, i) {
+  if (isAlpha(source[i])) return skipIdentifier(source, i);
+  if (source[i] < "0" || source[i] > "9") return -1;
+  let end = i + 1;
+  while (end < source.length && source[end] >= "0" && source[end] <= "9") end++;
+  return end;
+}
+
+// Rewrite call-site method syntax "receiver.fnName(args)" into
+// "fnName(receiver, args)" for functions declared with "this" as their
+// first parameter (see findThisParamFnNames). The receiver is a number
+// literal or identifier immediately preceding the dot.
+function transformThisParamCalls(source, fnNames) {
+  if (fnNames.size === 0) return source;
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i];
+    const receiverEnd = skipThisParamReceiver(source, i);
+    const dotIdentEnd = receiverEnd !== -1 && source[receiverEnd] === "." ? skipIdentifier(source, receiverEnd + 1) : -1;
+    const fnName = dotIdentEnd !== -1 ? source.substring(receiverEnd + 1, dotIdentEnd) : "";
+    const isMethodCall = dotIdentEnd !== -1 && source[dotIdentEnd] === "(" && fnNames.has(fnName);
+    if (isMethodCall) {
+      const receiver = source.substring(i, receiverEnd);
+      const closeParen = findMatchingParen(source, dotIdentEnd);
+      const args = source.substring(dotIdentEnd + 1, closeParen).trim();
+      result += fnName + "(" + receiver + (args.length > 0 ? ", " + args : "") + ")";
+      i = closeParen + 1;
+      continue;
+    }
+    result += ch;
+    i++;
+  }
+  return result;
+}
+
 // Find variable names that a mutable reference is taken of, i.e. "= &mut NAME" (RHS/expression
 // position only — a "&mut Type" appearing in a type annotation like ": &mut I32" is not a
 // reference expression and must not be picked up here).
@@ -2533,7 +2716,10 @@ export function compile(source) {
     throw new Error("Invalid source: " + source);
   }
 
+  source = transformThisParamCalls(source, findThisParamFnNames(source));
+
   CURRENT_BOXED_VARS = findBoxedVars(source);
+  CURRENT_THIS_VARS = findThisVars(source);
   const transformed = transformBlocks(
     boxDeclarations(source, CURRENT_BOXED_VARS),
   );

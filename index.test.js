@@ -376,3 +376,27 @@ test("extern struct declaration", () => {
   moduleSources[["index"]] = "extern struct Console {}";
   expectValidWithModules(["index"], moduleSources, "", 0);
 });
+
+test("this keyword accesses current variable", () => {
+  expectValid("let x = 100; this.x", "", 100);
+});
+
+test("this assigned to variable then accessed", () => {
+  expectValid("let x = 100; let y = this; y.x", "", 100);
+});
+
+test("this variable assignment does not mutate original", () => {
+  expectValid("let mut x = 0; let mut temp = this; temp.x = 100; x", "", 0);
+});
+
+test("function with this parameter called as method", () => {
+  expectValid("fn addOnce(this : I32) => this + 1; 100.addOnce()", "", 101);
+});
+
+test("extern struct with extern fn this-param method call", () => {
+  expectValid(
+    "extern struct MathInstance {} extern fn abs(this : MathInstance, value : I32) : I32; extern let Math : MathInstance; Math.abs(-100)",
+    "",
+    100,
+  );
+});
