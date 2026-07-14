@@ -26,7 +26,8 @@ fn compile(source: &str) -> Result<String, CompileError> {
     // Parse let declarations and build C body
     let mut var_idx = 0;
     let mut mutable_vars: Vec<String> = Vec::new();
-    let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx, &mut mutable_vars)?;
+    let mut declared_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx, &mut mutable_vars, &mut declared_vars)?;
 
     if read_count > 0 {
         // Generate C code for reads - handle both plain int and Bool types
@@ -171,17 +172,18 @@ fn compile_array_decl(
     vars: &[String],
     var_idx: &mut usize,
     mutable_vars: &mut Vec<String>,
+    declared_vars: &mut std::collections::HashSet<String>,
 ) -> Result<(String, String), CompileError> {
     let trimmed = array_expr.trim();
     debug_assert!(trimmed.starts_with('['));
 
     // Check for array repeat syntax: [value; count]
     if let Some((repeat_value, repeat_count)) = parse_array_repeat(trimmed) {
-        let (val_body, val_result) = compile_expression(repeat_value, vars, var_idx, mutable_vars)?;
+        let (val_body, val_result) = compile_expression(repeat_value, vars, var_idx, mutable_vars, declared_vars)?;
         let repeated: Vec<_> = (0..repeat_count).map(|_| val_result.clone()).collect();
         let init = format!("{{{}}}", repeated.join(", "));
         let c_decl = format!("{}\n\tint {}[{}] = {};", val_body, var_name, repeat_count, init);
-        let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
+        let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars, declared_vars)?;
         return Ok((format!("{}\n{}", c_decl, final_body), final_result));
     }
 
@@ -194,13 +196,13 @@ fn compile_array_decl(
         if has_nested_arrays && len > 0 {
             // Determine inner dimensions by recursively compiling first element
             let (first_body, first_init, inner_dims) =
-                compile_array_item(&items[0], vars, var_idx, mutable_vars)?;
+                compile_array_item(&items[0], vars, var_idx, mutable_vars, declared_vars)?;
 
             // Compile remaining items
             let mut compiled_items = vec![first_init];
             let mut body = first_body;
             for item in &items[1..] {
-                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx, mutable_vars)?;
+                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx, mutable_vars, declared_vars)?;
                 body.push_str(&item_body);
                 compiled_items.push(item_init);
             }
@@ -219,14 +221,14 @@ fn compile_array_decl(
                 dims,
                 compiled_items.join(", ")
             );
-            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars, declared_vars)?;
             return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         } else {
             // Flat array - compile each element as an expression
             let mut compiled_items = Vec::new();
             let mut body = String::new();
             for item in &items {
-                let (item_body, item_result) = compile_expression(item, vars, var_idx, mutable_vars)?;
+                let (item_body, item_result) = compile_expression(item, vars, var_idx, mutable_vars, declared_vars)?;
                 body.push_str(&item_body);
                 compiled_items.push(item_result);
             }
@@ -238,15 +240,15 @@ fn compile_array_decl(
                 len,
                 compiled_items.join(", ")
             );
-            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars, declared_vars)?;
             return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         }
     }
 
     // Fallback: treat as scalar
-    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx, mutable_vars)?;
+    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx, mutable_vars, declared_vars)?;
     let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-    let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
+    let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars, declared_vars)?;
     Ok((format!("{}\n{}", c_body, final_body), final_result))
 }
 
@@ -257,6 +259,7 @@ fn compile_array_item(
     vars: &[String],
     var_idx: &mut usize,
     mutable_vars: &mut Vec<String>,
+    declared_vars: &mut std::collections::HashSet<String>,
 ) -> Result<(String, String, String), CompileError> {
     let trimmed = item.trim();
 
@@ -270,7 +273,7 @@ fn compile_array_item(
             let mut has_nested = false;
 
             for sub_item in &items {
-                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx, mutable_vars)?;
+                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx, mutable_vars, declared_vars)?;
                 body.push_str(&sub_body);
                 compiled_items.push(sub_result);
                 if !sub_dims.is_empty() {
@@ -289,12 +292,12 @@ fn compile_array_item(
             Ok((body, init, dims))
         } else {
             // Malformed - fall through to expression compilation
-            let (body, result) = compile_expression(trimmed, vars, var_idx, mutable_vars)?;
+            let (body, result) = compile_expression(trimmed, vars, var_idx, mutable_vars, declared_vars)?;
             Ok((body, result, String::new()))
         }
     } else {
         // Scalar item
-        let (body, result) = compile_expression(trimmed, vars, var_idx, mutable_vars)?;
+        let (body, result) = compile_expression(trimmed, vars, var_idx, mutable_vars, declared_vars)?;
         Ok((body, result, String::new()))
     }
 }
@@ -306,6 +309,7 @@ fn compile_expression(
     vars: &[String],
     var_idx: &mut usize,
     mutable_vars: &mut Vec<String>,
+    declared_vars: &mut std::collections::HashSet<String>,
 ) -> Result<(String, String), CompileError> {
     let trimmed = expr.trim();
 
@@ -324,9 +328,9 @@ fn compile_expression(
                     return Err(format!("Cannot reassign immutable variable '{}'", base_var));
                 }
                 let rhs = assign_part[eq_pos + 1..].trim();
-                let (assign_body, assign_result) = compile_expression(rhs, vars, var_idx, mutable_vars)?;
+                let (assign_body, assign_result) = compile_expression(rhs, vars, var_idx, mutable_vars, declared_vars)?;
                 let c_body = format!("{}\n\t{} = {};", assign_body, var_name, assign_result);
-                let final_result = compile_expression(final_part, vars, var_idx, mutable_vars).map(|r| r.1)?;
+                let final_result = compile_expression(final_part, vars, var_idx, mutable_vars, declared_vars).map(|r| r.1)?;
                 return Ok((c_body, final_result));
             }
         }
@@ -377,7 +381,7 @@ fn compile_expression(
                             }
                         }
                     }
-                    return compile_array_decl(var_name, after_eq, final_part, vars, var_idx, mutable_vars);
+                    return compile_array_decl(var_name, after_eq, final_part, vars, var_idx, mutable_vars, declared_vars);
                 }
             }
 
@@ -392,11 +396,18 @@ fn compile_expression(
             }
 
             // Recursively compile the declaration's expression
-            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx, mutable_vars)?;
+            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx, mutable_vars, declared_vars)?;
 
-            let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
-            return Ok((format!("{}\n{}", c_body, final_body), final_result));
+            // Handle shadowing: if variable already declared, generate assignment instead of redeclaration
+            let c_decl = if declared_vars.contains(var_name) {
+                format!("{}\n\t{} = {};", decl_body, var_name, decl_result)
+            } else {
+                declared_vars.insert(var_name.to_string());
+                format!("{}\n\tint {} = {};", decl_body, var_name, decl_result)
+            };
+
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars, declared_vars)?;
+            return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         }
     }
 
@@ -405,7 +416,7 @@ fn compile_expression(
         let inner = &trimmed[1..trimmed.len() - 1].trim();
         // If inner content has statements (let decls, assignments with semicolons), process recursively
         if inner.contains("let ") || find_top_level_semicolon(inner).is_some() {
-            return compile_expression(inner, vars, var_idx, mutable_vars);
+            return compile_expression(inner, vars, var_idx, mutable_vars, declared_vars);
         }
         // Otherwise convert to parentheses for grouping expressions
         let mut result = String::new();
@@ -440,19 +451,19 @@ fn compile_expression(
 
                     // Compile "before" FIRST (source order), then the block's statements
                     let (before_body, before_result) = if !before.trim().is_empty() {
-                        compile_expression(before.trim(), vars, var_idx, mutable_vars)?
+                        compile_expression(before.trim(), vars, var_idx, mutable_vars, declared_vars)?
                     } else {
                         (String::new(), String::new())
                     };
 
-                    let (block_body, block_result) = compile_expression(block_content, vars, var_idx, mutable_vars)?;
+                    let (block_body, block_result) = compile_expression(block_content, vars, var_idx, mutable_vars, declared_vars)?;
 
                     if !before.trim().is_empty() {
                         let combined_body = format!("{}{}", before_body, block_body);
 
                         if !after.trim().is_empty() {
                             // "after" provides the final return expression
-                            let (_, after_result) = compile_expression(after.trim(), vars, var_idx, mutable_vars)?;
+                            let (_, after_result) = compile_expression(after.trim(), vars, var_idx, mutable_vars, declared_vars)?;
                             let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
                             return Ok((combined_body, combined_expr));
                         } else {
@@ -462,7 +473,7 @@ fn compile_expression(
                         }
                     } else if !after.trim().is_empty() {
                         // No "before", but there's an expression after the block
-                        let (_, after_result) = compile_expression(after.trim(), vars, var_idx, mutable_vars)?;
+                        let (_, after_result) = compile_expression(after.trim(), vars, var_idx, mutable_vars, declared_vars)?;
                         return Ok((block_body, after_result));
                     } else {
                         return Ok((block_body, block_result));
@@ -485,9 +496,9 @@ fn compile_expression(
             let then_expr = &rest[..else_pos].trim();
             let else_expr = &rest[else_pos + "else".len()..].trim();
 
-            let (_, cond_result) = compile_expression(cond, vars, var_idx, mutable_vars)?;
-            let (_, then_result) = compile_expression(then_expr, vars, var_idx, mutable_vars)?;
-            let (_, else_result) = compile_expression(else_expr, vars, var_idx, mutable_vars)?;
+            let (_, cond_result) = compile_expression(cond, vars, var_idx, mutable_vars, declared_vars)?;
+            let (_, then_result) = compile_expression(then_expr, vars, var_idx, mutable_vars, declared_vars)?;
+            let (_, else_result) = compile_expression(else_expr, vars, var_idx, mutable_vars, declared_vars)?;
 
             return Ok((String::new(), format!("({} ? {} : {})", cond_result, then_result, else_result)));
         }
@@ -888,5 +899,10 @@ mod tests {
     #[test]
     fn test_mut_reassign_in_block() {
         expect_valid("let mut x = read(); { x = read(); } x", "1 3", 3);
+    }
+
+    #[test]
+    fn test_let_shadowing() {
+        expect_valid("let x = read(); let x = read(); x", "1 3", 3);
     }
 }
