@@ -222,6 +222,10 @@ test("struct field access returns field value", () => {
   expectValid("struct Wrapper { field : I32 } let wrapper = Wrapper { field : 100 }; wrapper.field", "", 100);
 });
 
+test("struct field access with multiple fields supports arithmetic", () => {
+  expectValid("struct Point { x : I32, y : I32 } let point = Point { x : 3, y : 4 }; point.x + point.y", "", 7);
+});
+
 test("wider type assigned to narrower array element is invalid", () => {
   expectInvalid("let array : [U8; 1] = [read<U16>()]; array[0]");
 });

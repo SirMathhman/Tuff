@@ -1843,6 +1843,7 @@ function skipKeywordMut(source, i) {
 function transformStructFields(source) {
   let result = "";
   let i = 0;
+  let first = true;
   while (i < source.length) {
     if (" \t\n\r,".includes(source[i])) {
       i++;
@@ -1855,6 +1856,8 @@ function transformStructFields(source) {
       continue;
     }
     const fieldName = source.substring(i, fieldEnd);
+    if (!first) result += ",";
+    first = false;
     result += fieldName;
     let pos = skipWhitespace(source, fieldEnd);
     // Skip ": " separator (field : value)
