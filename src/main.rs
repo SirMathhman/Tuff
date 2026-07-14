@@ -400,14 +400,14 @@ fn compile_expression(
         }
     }
 
-    // Handle blocks { ... } - check if block contains let declarations
+    // Handle blocks { ... } - check if block contains let declarations or assignments
     if trimmed.starts_with('{') && trimmed.ends_with('}') {
         let inner = &trimmed[1..trimmed.len() - 1].trim();
-        // If inner content has let declarations, process them
-        if inner.contains("let ") && inner.contains(';') {
+        // If inner content has statements (let decls, assignments with semicolons), process recursively
+        if inner.contains("let ") || find_top_level_semicolon(inner).is_some() {
             return compile_expression(inner, vars, var_idx, mutable_vars);
         }
-        // Otherwise convert to parentheses
+        // Otherwise convert to parentheses for grouping expressions
         let mut result = String::new();
         result.push('(');
         for ch in inner.chars() {
@@ -421,35 +421,81 @@ fn compile_expression(
         return Ok((String::new(), result));
     }
 
-    // Check if expression contains blocks with let declarations
-    // e.g., "read() + { let x = read() - read(); x }"
-    if trimmed.contains("{ let ") {
-        // Find the block and process it separately
-        let block_start = trimmed.find("{ let ").unwrap();
-        let block_end = find_matching_brace(&trimmed[block_start..]).unwrap() + block_start;
+    // Check if expression contains embedded blocks with statements (let decls or assignments)
+    // e.g., "read() + { let x = read(); x }"  OR  "{ x = read(); } x"
+    // We look for any block that has internal semicolons (statements, not just grouping).
+    if trimmed.contains('{') && (find_top_level_semicolon(trimmed).is_some() || trimmed.contains("{ let ") || trimmed.contains("= ")) {
+        for (brace_pos, ch) in trimmed.char_indices() {
+            if ch == '{' {
+                let remaining = &trimmed[brace_pos..];
+                if let Some(block_len) = find_matching_brace(remaining) {
+                    let block_content = &trimmed[brace_pos + 1..brace_pos + block_len - 1].trim();
 
-        let before = &trimmed[..block_start];
-        let block_content = &trimmed[block_start + 1..block_end - 1].trim();
-        let after = &trimmed[block_end + 1..];
+                    // Only treat as statement block if it contains semicolons or let declarations inside
+                    let has_statements = find_top_level_semicolon(block_content).is_some() || block_content.contains("let ");
+                    if !has_statements { continue; }
 
-        // Process before part
-        let (before_body, before_result) = compile_expression(before, vars, var_idx, mutable_vars)?;
+                    let before = &trimmed[..brace_pos];
+                    let after = &trimmed[brace_pos + block_len + 1..];
 
-        // Process the block's let declaration
-        let (block_body, block_result) = compile_expression(block_content, vars, var_idx, mutable_vars)?;
+                    // Compile "before" FIRST (source order), then the block's statements
+                    let (before_body, before_result) = if !before.trim().is_empty() {
+                        compile_expression(before.trim(), vars, var_idx, mutable_vars)?
+                    } else {
+                        (String::new(), String::new())
+                    };
 
-        // Process after part
-        let (_, after_result) = compile_expression(after, vars, var_idx, mutable_vars)?;
+                    let (block_body, block_result) = compile_expression(block_content, vars, var_idx, mutable_vars)?;
 
-        let combined_body = format!("{}{}", before_body, block_body);
-        let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
+                    if !before.trim().is_empty() {
+                        let combined_body = format!("{}{}", before_body, block_body);
 
-        return Ok((combined_body, combined_expr));
+                        if !after.trim().is_empty() {
+                            // "after" provides the final return expression
+                            let (_, after_result) = compile_expression(after.trim(), vars, var_idx, mutable_vars)?;
+                            let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
+                            return Ok((combined_body, combined_expr));
+                        } else {
+                            // Block is the final part of expression: before(block_result)
+                            let combined_expr = format!("{}({})", before_result, block_result);
+                            return Ok((combined_body, combined_expr));
+                        }
+                    } else if !after.trim().is_empty() {
+                        // No "before", but there's an expression after the block
+                        let (_, after_result) = compile_expression(after.trim(), vars, var_idx, mutable_vars)?;
+                        return Ok((block_body, after_result));
+                    } else {
+                        return Ok((block_body, block_result));
+                    }
+                }
+            }
+        }
+    }
+
+
+    // Handle if/else expression: "if (cond) a else b" → "(cond ? a : b)"
+    if trimmed.starts_with("if ") {
+        let paren_start = 3; // skip "if "
+        let paren_end = find_matching_paren(&trimmed[paren_start..]).unwrap();
+        let cond = &trimmed[paren_start + 1..paren_start + paren_end];
+        let rest = &trimmed[paren_start + paren_end + 2..].trim();
+
+        // Find "else" keyword (not inside parens)
+        if let Some(else_pos) = find_top_level_else(rest) {
+            let then_expr = &rest[..else_pos].trim();
+            let else_expr = &rest[else_pos + "else".len()..].trim();
+
+            let (_, cond_result) = compile_expression(cond, vars, var_idx, mutable_vars)?;
+            let (_, then_result) = compile_expression(then_expr, vars, var_idx, mutable_vars)?;
+            let (_, else_result) = compile_expression(else_expr, vars, var_idx, mutable_vars)?;
+
+            return Ok((String::new(), format!("({} ? {} : {})", cond_result, then_result, else_result)));
+        }
     }
 
     // Base case: replace read<T>() and read() with variables, convert braces to parens.
     let mut result = String::new();
-    
+
     fn copy_chars(s: &str, out: &mut String) {
         for ch in s.chars() {
             match ch {
@@ -544,6 +590,41 @@ fn find_matching_bracket(s: &str) -> Option<usize> {
 /// Find the index of a top-level semicolon (not inside any braces or brackets).
 fn find_top_level_semicolon(s: &str) -> Option<usize> {
     find_top_level_char(s, ';')
+}
+
+/// Find matching closing paren for opening paren at position 0.
+fn find_matching_paren(s: &str) -> Option<usize> {
+    if !s.starts_with('(') {
+        return None;
+    }
+    let mut depth = 0;
+    for (i, ch) in s.chars().enumerate() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Find "else" keyword at top level (not inside parens/braces).
+fn find_top_level_else(s: &str) -> Option<usize> {
+    for i in 0..s.len().saturating_sub(3) {
+        if s[i..].starts_with("else ") || &s[i..] == "else" {
+            // Ensure it's a standalone keyword, not part of another word
+            let before_ok = i == 0 || !matches!(s.chars().nth(i.saturating_sub(1)), Some('a'..='z'));
+            if before_ok {
+                return Some(i);
+            }
+        }
+    }
+    None
 }
 
 #[allow(dead_code)]
@@ -792,5 +873,20 @@ mod tests {
     #[test]
     fn test_equality_comparison_false() {
         expect_valid("read() == read()", "1 2", 0);
+    }
+
+    #[test]
+    fn test_if_else_bool_read() {
+        expect_valid("if (read<Bool>()) 3 else 5", "true", 3);
+    }
+
+    #[test]
+    fn test_let_with_if_else() {
+        expect_valid("let x = if (read<Bool>()) 3 else 5; x", "true", 3);
+    }
+
+    #[test]
+    fn test_mut_reassign_in_block() {
+        expect_valid("let mut x = read(); { x = read(); } x", "1 3", 3);
     }
 }
