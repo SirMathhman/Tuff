@@ -63,8 +63,8 @@ fn compile(source: &str) -> Result<String, CompileError> {
             }
         }
 
-        // Build final C program
-        let includes = "#include <stdio.h>\n#include <string.h>";
+        // Build final C program with stdbool.h for boolean support
+        let includes = "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>";
         let buf_decl = "\tchar buf[64];";
         Ok(format!(
             "{}\nint main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
@@ -772,5 +772,15 @@ mod tests {
     #[test]
     fn test_bool_read_generic() {
         expect_valid("let x : Bool = read<Bool>(); x", "true", 1);
+    }
+
+    #[test]
+    fn test_bool_or_false_literal() {
+        expect_valid("let x : Bool = read<Bool>(); x || false", "true", 1);
+    }
+
+    #[test]
+    fn test_bool_and_false_literal() {
+        expect_valid("let x : Bool = read<Bool>(); x && false", "true", 0);
     }
 }
