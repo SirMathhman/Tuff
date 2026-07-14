@@ -66,6 +66,21 @@ fn parse_let_declaration(decl: &str) -> (&str, Option<String>) {
     }
 }
 
+/// Parse the expected size from an array type annotation like "[I32; 1]" or "[u8; 4]".
+fn parse_array_size(ty: &str) -> Option<usize> {
+    let trimmed = ty.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return None;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    if let Some(semi_pos) = inner.find(';') {
+        let size_part = inner[semi_pos + 1..].trim();
+        size_part.parse().ok()
+    } else {
+        None
+    }
+}
+
 /// Find the index of a character at the top level (not inside any braces or brackets).
 fn find_top_level_char(s: &str, target: char) -> Option<usize> {
     let mut brace_depth = 0;
@@ -235,16 +250,41 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> Resul
 
             // Check for array literal: [expr1, expr2, ...]
             if after_eq.starts_with('[') {
-                if find_matching_bracket(after_eq).is_some() {
+                if let Some(closing_bracket) = find_matching_bracket(after_eq) {
+                    // Count items in the array
+                    let array_content = &after_eq[1..closing_bracket];
+                    let item_count = if array_content.trim().is_empty() {
+                        0
+                    } else {
+                        array_content.split(',').count()
+                    };
+
                     // If there's a non-array type annotation, this is a type error
                     if let Some(ty) = &type_annotation {
-                        if !ty.to_uppercase().contains("ARRAY") && !ty.to_uppercase().contains("[]") {
+                        let upper = ty.to_uppercase();
+                        if !upper.contains("ARRAY") && !upper.contains('[') {
                             return Err(format!("Type mismatch: expected {} but got array", ty));
+                        }
+                        // Check array size if type specifies one (e.g., [I32; 1])
+                        if let Some(expected_size) = parse_array_size(ty) {
+                            if item_count != expected_size {
+                                return Err(format!(
+                                    "Array size mismatch: expected {} but got {}",
+                                    expected_size, item_count
+                                ));
+                            }
                         }
                     }
                     return compile_array_decl(
                         var_name, after_eq, final_part, vars, var_idx,
                     );
+                }
+            }
+
+            // If type annotation expects an array but RHS is not an array literal, error
+            if let Some(ty) = &type_annotation {
+                if ty.contains('[') && !after_eq.starts_with('[') {
+                    return Err(format!("Type mismatch: expected array but got {}", after_eq));
                 }
             }
 
@@ -542,5 +582,20 @@ mod tests {
     #[test]
     fn test_typed_let_array_mismatch() {
         expect_invalid("let x : I32 = [100]; x");
+    }
+
+    #[test]
+    fn test_typed_array_let() {
+        expect_valid("let x : [I32; 1] = [100]; x[0]", "", 100);
+    }
+
+    #[test]
+    fn test_typed_array_size_mismatch() {
+        expect_invalid("let x : [I32; 1] = []; x[0]");
+    }
+
+    #[test]
+    fn test_typed_array_scalar_rhs() {
+        expect_invalid("let x = read(); let y : [I32; 3] = x;");
     }
 }
