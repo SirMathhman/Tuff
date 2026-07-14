@@ -121,8 +121,9 @@ All top-level returns wrap in `_toInt(...)` to ensure DSL booleans never leak as
 - **No regex literals or `RegExp` constructor** — ESLint rule enforces this; use string iteration instead.
 - **Max nesting depth: 2** — enforced by ESLint (`max-depth`).
 - **ESM modules** (`"type": "module"` in package.json) with named exports (`export function compile`).
-- **TypeScript 7** with strict mode, `nodenext` module resolution, `verbatimModuleSyntax`, and `isolatedModules`. All functions have explicit type annotations. `tsc --noEmit` must pass.
-- **ESLint only targets `.js` files** — `.ts` files are NOT linted by ESLint (config only covers `.js`, `.mjs`, `.cjs`). Type checking via `tsc` replaces linting for TypeScript.
+- **TypeScript 5.6** with strict mode, `nodenext` module resolution, `verbatimModuleSyntax`, and `isolatedModules`. All functions have explicit type annotations. `tsc --noEmit` must pass. (Pinned below TS 7 because `typescript-eslint` doesn't yet support TS 7's restructured compiler internals.)
+- **ESLint targets `.js`, `.mjs`, `.cjs`, `.ts`, and `.tsx` files**, using `typescript-eslint` for TS parsing.
+- **No `throw` statements** — ESLint rule enforces this; use `Result<T, X>` (a `{ ok: true; value: T } | { ok: false; error: X }` discriminated union, with `Ok()`/`Err()` helpers) instead, and propagate errors by checking `.ok` at each call site.
 - **Test pattern:** `expectValid(source, stdIn, expectedExitCode)` for happy paths, `expectInvalid(source)` for validation errors. Generated code is executed at runtime via `new Function("stdIn", generated)(stdIn)`.
 - **Missing features roadmap:** see [`FEATURES_MISSING.md`](./FEATURES_MISSING.md) for planned C-like features not yet implemented.
 - **Pre-commit hooks** (`.github/hooks/hooks.json`) run test → lint → cpd on the `Stop` lifecycle event; all must pass before commit succeeds.

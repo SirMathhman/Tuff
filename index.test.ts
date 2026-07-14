@@ -2,34 +2,27 @@ import { expect, test } from "bun:test";
 import { compile, compileModules } from "./index.js";
 
 function runGenerated(generated: string, stdIn: string, expectedExitCode: number): void {
-  try {
-    const actualExitCode = new Function("stdIn", generated)(stdIn);
-    if (actualExitCode !== expectedExitCode) {
-      throw new Error(
-        "Expected '" +
-          expectedExitCode +
-          "' but was actually '" +
-          actualExitCode +
-          "'. Generated: '" +
-          generated +
-          "'",
-      );
-    }
-  } catch (e) {
-    throw new Error("Failed to execute generated code: '" + generated + "'", { cause: e });
-  }
+  const actualExitCode = new Function("stdIn", generated)(stdIn);
+  expect(actualExitCode).toBe(expectedExitCode);
 }
 
 function expectValid(source: string, stdIn: string, expectedExitCode: number): void {
-  runGenerated(compile(source), stdIn, expectedExitCode);
+  const result = compile(source);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  runGenerated(result.value, stdIn, expectedExitCode);
 }
 
 function expectInvalid(source: string): void {
-  expect(() => compile(source)).toThrow();
+  const result = compile(source);
+  expect(result.ok).toBe(false);
 }
 
 function expectValidWithModules(moduleNames: string[], moduleSources: Record<string, string>, stdIn: string, expectedExitCode: number): void {
-  runGenerated(compileModules(moduleNames, moduleSources), stdIn, expectedExitCode);
+  const result = compileModules(moduleNames, moduleSources);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  runGenerated(result.value, stdIn, expectedExitCode);
 }
 
 test("empty source compiles and exits with code 0", () => {
