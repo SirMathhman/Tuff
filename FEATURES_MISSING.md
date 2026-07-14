@@ -15,7 +15,8 @@
 - [ ] Output/print statements (`print(x)`, `println()`) — currently only input via `read()`
 
 ## Operators & Expressions
-- [ ] Unary operators: `-x`, `!x`
+- [x] Unary negation: `-x`
+- [x] Unary logical NOT: `!x`
 - [ ] Increment/decrement: `++x`, `--x`
 
 ## Type System

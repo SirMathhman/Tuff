@@ -7,7 +7,7 @@ function isValidChar(ch) {
   if (ch >= "a" && ch <= "z") return true;
   if (ch >= "A" && ch <= "Z") return true;
   const allowed =
-    " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"'";
+    " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"'!";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
@@ -611,7 +611,8 @@ function maybeSkipIdentifier(source, i) {
       ch === "<" ||
       ch === ">" ||
       ch === "|" ||
-      ch === "&"
+      ch === "&" ||
+      ch === "!"
     ) {
       let identEnd = skipIdentifier(source, i);
       identEnd = skipArrayIndexing(source, identEnd);
@@ -1759,6 +1760,12 @@ function stripTypedSyntax(source) {
     if (logicOpEnd !== -1) {
       result += source.substring(i, logicOpEnd);
       i = logicOpEnd;
+      continue;
+    }
+    // Pass through unary logical NOT: ! -> !
+    if (source[i] === "!") {
+      result += "!";
+      i++;
       continue;
     }
     // Mutable address-of: &mut x -> x, aliasing the same box as the boxed variable x

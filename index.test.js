@@ -98,6 +98,14 @@ test("read<Bool>() parses boolean literals", () => {
   expectValid("read<Bool>()", "true", 1);
 });
 
+test("unary negation with read() works", () => {
+  expectValid("-read()", "-10", 10);
+});
+
+test("unary logical NOT with read<Bool>() works", () => {
+  expectValid("!read<Bool>()", "false", 1);
+});
+
 test("logical OR with boolean expressions works", () => {
   expectValid("read<Bool>() || false", "true", 1);
 });
