@@ -1,3 +1,4 @@
+use core::panic;
 use std::fmt::Error;
 use std::io::Write;
 use std::process::Command;
@@ -15,7 +16,8 @@ fn expect_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
         let dir = std::env::temp_dir();
         let path = dir.join(format!("tuff_test_{}.c", std::process::id()));
         let mut file = std::fs::File::create(&path).expect("Failed to create temp file");
-        file.write_all(generated.as_bytes()).expect("Failed to write temp file");
+        file.write_all(generated.as_bytes())
+            .expect("Failed to write temp file");
         path.to_str().unwrap().to_string()
     }
 
@@ -57,10 +59,13 @@ fn expect_valid(source: &str, _std_in: &str, expected_exit_code: i32) {
 
 #[allow(dead_code)]
 fn expect_invalid(source: &str) {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        compile(source).unwrap();
-    }));
-    assert!(result.is_err(), "Expected compile to panic for source: {}", source);
+    let result = compile(source);
+    if let Ok(generated) = result {
+        panic!(
+            "Expected an error but compiler actually produced: '{}'",
+            generated
+        );
+    }
 }
 
 #[cfg(test)]
