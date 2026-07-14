@@ -17,8 +17,10 @@ fn compile(source: &str) -> Result<String, CompileError> {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
     }
 
-    // Count how many read() calls are in the expression
-    let read_count = trimmed.matches("read()").count();
+    // Count how many read() calls are in the expression (plain and generic)
+    let plain_read_count = trimmed.matches("read()").count();
+    let bool_read_count = trimmed.matches("read<Bool>()").count();
+    let read_count = plain_read_count + bool_read_count;
     let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
 
     // Parse let declarations and build C body
@@ -27,20 +29,46 @@ fn compile(source: &str) -> Result<String, CompileError> {
     let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx, &mut mutable_vars)?;
 
     if read_count > 0 {
-        let scanf_fmt = format!("%d{}", " %d".repeat(read_count - 1));
-        let scanf_args = vars
-            .iter()
-            .map(|v| format!("&{}", v))
-            .collect::<Vec<_>>()
-            .join(", ");
+        // Generate C code for reads - handle both plain int and Bool types
+        let mut c_decls = String::new();
+        let mut c_reads = String::new();
 
+        // Integer reads use scanf %d
+        if plain_read_count > 0 {
+            let scanf_fmt = format!("%d{}", " %d".repeat(plain_read_count - 1));
+            let scanf_args: Vec<_> = (0..plain_read_count)
+                .map(|i| format!("&v{}", i))
+                .collect();
+            c_decls.push_str(&format!(
+                "\tint {};\n",
+                (0..plain_read_count).map(|i| format!("v{}", i)).collect::<Vec<_>>().join(", ")
+            ));
+            let args_joined = scanf_args.join(", ");
+            c_reads.push_str("scanf(\"");
+            c_reads.push_str(&scanf_fmt);
+            c_reads.push_str("\", ");
+            c_reads.push_str(&args_joined);
+            c_reads.push_str(");\n");
+        }
+
+        // Bool reads use fgets + strcmp
+        if bool_read_count > 0 {
+            let start_idx = plain_read_count;
+            for i in 0..bool_read_count {
+                c_decls.push_str(&format!("\tint v{};\n", start_idx + i));
+                c_reads.push_str(&format!(
+                    "\tfgets(buf, sizeof(buf), stdin);\nv{} = strcmp(buf, \"true\") == 0 || buf[0] == '1';\n",
+                    start_idx + i
+                ));
+            }
+        }
+
+        // Build final C program
+        let includes = "#include <stdio.h>\n#include <string.h>";
+        let buf_decl = "\tchar buf[64];";
         Ok(format!(
-            "#include <stdio.h>\nint main() {{\n\tint {};\n\tscanf(\"{}\", {});\n\t{}\n\treturn {};\n}}\n",
-            vars.join(", "),
-            scanf_fmt,
-            scanf_args,
-            c_body,
-            return_expr
+            "{}\nint main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
+            includes, buf_decl, c_decls.trim(), c_reads.trim(), c_body, return_expr
         ))
     } else {
         Ok(format!(
@@ -51,7 +79,6 @@ fn compile(source: &str) -> Result<String, CompileError> {
 }
 
 /// Parse a let declaration, extracting the variable name, mutability, and optional type annotation.
-/// Returns (var_name, is_mut, type_annotation).
 fn parse_let_declaration(decl: &str) -> (&str, bool, Option<String>) {
     // Find '=' position (top-level, not inside brackets)
     let eq_pos = find_top_level_char(decl, '=');
@@ -420,29 +447,54 @@ fn compile_expression(
         return Ok((combined_body, combined_expr));
     }
 
-    // Base case: replace read() with variables and convert braces to parens
+    // Base case: replace read<T>() and read() with variables, convert braces to parens.
     let mut result = String::new();
-    let mut last = 0;
-    for m in trimmed.match_indices("read()") {
-        let segment = &trimmed[last..m.0];
-        for ch in segment.chars() {
+    
+    fn copy_chars(s: &str, out: &mut String) {
+        for ch in s.chars() {
             match ch {
-                '{' => result.push('('),
-                '}' => result.push(')'),
-                _ => result.push(ch),
+                '{' => out.push('('),
+                '}' => out.push(')'),
+                _ => out.push(ch),
             }
+        }
+    }
+
+    // First pass: handle generic reads like read<Bool>(), etc.
+    let mut last = 0;
+    for m in trimmed.match_indices("read<") {
+        copy_chars(&trimmed[last..m.0], &mut result);
+        let rest = &trimmed[m.0 + m.1.len()..]; // after "read<"
+        if let Some(end_pos) = rest.find(">()") {
+            result.push_str(&vars[*var_idx]);
+            *var_idx += 1;
+            last = m.0 + m.1.len() + end_pos + ">()".len();
+        } else {
+            // Fallback: copy literally (shouldn't happen with valid input)
+            for ch in trimmed[m.0..].chars() {
+                result.push(ch);
+            }
+            last = trimmed.len();
+        }
+    }
+
+    // Second pass: handle plain read() calls on remaining text after generics.
+    let remaining_start = last;
+    let remaining = &trimmed[remaining_start..];
+    for (i, m) in remaining.match_indices("read()").enumerate() {
+        if i == 0 && m.0 == 0 {
+            copy_chars(&remaining[..m.0], &mut result);
+        } else {
+            // Copy text between previous match end and this one
+            let prev_end = last;
+            copy_chars(&trimmed[prev_end..remaining_start + m.0], &mut result);
         }
         result.push_str(&vars[*var_idx]);
         *var_idx += 1;
-        last = m.0 + m.1.len();
+        last = remaining_start + m.0 + "read()".len();
     }
-    for ch in trimmed[last..].chars() {
-        match ch {
-            '{' => result.push('('),
-            '}' => result.push(')'),
-            _ => result.push(ch),
-        }
-    }
+    // Copy any trailing text after last read().
+    copy_chars(&trimmed[last..], &mut result);
 
     Ok((String::new(), result))
 }
@@ -715,5 +767,10 @@ mod tests {
     #[test]
     fn test_array_repeat_with_read() {
         expect_valid("let x = [read(); 2]; x[0] + x[1]", "2 5", 4);
+    }
+
+    #[test]
+    fn test_bool_read_generic() {
+        expect_valid("let x : Bool = read<Bool>(); x", "true", 1);
     }
 }
