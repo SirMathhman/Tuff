@@ -1124,7 +1124,13 @@ function countArrayElements(arrayStr) {
 // Process a let declaration starting at position i (where "let" begins), returns index after semicolon
 function processLetDeclaration(source, i) {
   let pos = i + 4; // skip past "let "
-  pos = skipIdentifier(source, pos);
+  // Handle destructuring pattern: let { x, y } = ...
+  if (source[pos] === "{") {
+    const braceEnd = findMatchingBrace(source, pos);
+    pos = braceEnd + 1;
+  } else {
+    pos = skipIdentifier(source, pos);
+  }
   while (
     pos < source.length &&
     isValidChar(source[pos]) === true &&
@@ -1786,6 +1792,7 @@ function tryExtractRangeAssignment(source, i) {
 
 // Strip "mut" keyword from let declarations ("let mut x" -> "var x") and replace "let" with "var"
 // Also handle range literals: "let range = 0..read();" -> "var _rangeStart = 0; var _rangeEnd = read();"
+// Also handle struct destructuring: "let { x, y } = Struct { ... };" -> "var {x, y} = {x: val, y: val};"
 function stripMutKeyword(source) {
   let result = "";
   let i = 0;
@@ -1873,10 +1880,45 @@ function transformStructFields(source) {
   return result;
 }
 
+// Try to match "let { x, y } = Struct { ... };" at position i.
+// Returns {output, nextPos} on success, or null if not a destructuring pattern.
+function tryTransformStructDestruct(source, i) {
+  if (source.substring(i, i + 4) !== "let ") return null;
+  let j = skipWhitespace(source, i + 4);
+  if (source[j] !== "{") return null;
+  const braceEnd = findMatchingBrace(source, j);
+  let eqPos = skipWhitespace(source, braceEnd + 1);
+  if (source[eqPos] !== "=") return null;
+  let semiPos = eqPos + 1;
+  while (semiPos < source.length && source[semiPos] !== ";") semiPos++;
+  if (semiPos >= source.length) return null;
+  const destructFields = source.substring(j + 1, braceEnd);
+  const rhsExpr = source.substring(eqPos + 1, semiPos);
+  const cleanedFields = destructFields
+    .split(",")
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0)
+    .join(",");
+  const output =
+    "var {" +
+    cleanedFields +
+    "} = " +
+    transformBlocks(stripTypedSyntax(stripTypeSuffix(rhsExpr))) +
+    "; ";
+  return { output, nextPos: semiPos + 1 };
+}
+
 function transformBlocks(source) {
   let result = "";
   let i = 0;
   while (i < source.length) {
+    // Check for struct destructuring: "let { x, y } = Struct { ... };"
+    const destruct = tryTransformStructDestruct(source, i);
+    if (destruct) {
+      result += destruct.output;
+      i = destruct.nextPos;
+      continue;
+    }
     // Check for struct declaration
     const structEnd = skipStructKeyword(source, i);
     if (structEnd !== -1) {
@@ -2468,12 +2510,14 @@ export function compileModules(moduleNames, moduleSources) {
   // Build set of all module paths from moduleSources for cross-module reference resolution.
   // Keys containing commas (from array coercion) are converted to "::"-separated paths.
   const allModulePaths = new Set();
+  // Map module paths to their exported variable names for bare module path resolution.
+  const moduleExports = new Map();
   for (const key of Object.keys(moduleSources)) {
-    if (key.includes(",")) {
-      allModulePaths.add(key.split(",").join("::"));
-    } else {
-      allModulePaths.add(key);
-    }
+    const modPath = key.includes(",") ? key.split(",").join("::") : key;
+    allModulePaths.add(modPath);
+    // Extract exported variable names from "out let" declarations
+    const exports = extractModuleExports(moduleSources[key]);
+    if (exports.length > 0) moduleExports.set(modPath, exports);
   }
 
   // Process all non-entry modules first (derive from moduleSources keys)
@@ -2482,17 +2526,37 @@ export function compileModules(moduleNames, moduleSources) {
     if (modName === entryModule) continue;
     let src = moduleSources[modName];
     src = stripOutKeyword(src);
-    src = resolveCrossModuleRefs(src, allModulePaths);
+    src = resolveCrossModuleRefs(src, allModulePaths, moduleExports);
     combinedSource += src + "\n";
   }
 
   // Process entry module
   let entrySource = moduleSources[entryModule];
   entrySource = stripOutKeyword(entrySource);
-  entrySource = resolveCrossModuleRefs(entrySource, allModulePaths);
+  entrySource = stripModuleDestructuring(entrySource, allModulePaths);
+  entrySource = resolveCrossModuleRefs(entrySource, allModulePaths, moduleExports);
   combinedSource += entrySource;
 
   return compile(combinedSource);
+}
+
+// Extract variable names from "out let" declarations in a module source.
+function extractModuleExports(source) {
+  const exports = [];
+  let i = 0;
+  while (i < source.length) {
+    const outLetEnd = source.indexOf("out let ", i);
+    if (outLetEnd === -1) break;
+    let pos = outLetEnd + 8;
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd !== -1) {
+      exports.push(source.substring(pos, identEnd));
+      i = identEnd;
+    } else {
+      i = pos;
+    }
+  }
+  return exports;
 }
 
 // Strip "out " prefix from "out let" declarations.
@@ -2507,8 +2571,49 @@ function stripOutKeyword(source) {
     }
     result += source[i];
     i++;
+  } 
+  return result;
+}
+
+// Strip "let { ... } = module::path;" destructuring statements.
+// The exports are already globally declared from the non-entry module source,
+// so the destructuring is redundant.
+function stripModuleDestructuring(source, modulePaths) {
+  let result = "";
+  let i = 0;
+  while (i < source.length) {
+    const match = tryMatchModuleDestruct(source, i, modulePaths);
+    if (match) {
+      i = match;
+      continue;
+    }
+    result += source[i];
+    i++;
   }
   return result;
+}
+
+// Try to match "let { ... } = module::path;" at position i.
+// Returns the position after the statement if matched, or 0 if not.
+function tryMatchModuleDestruct(source, i, modulePaths) {
+  if (source.substring(i, i + 4) !== "let ") return 0;
+  let j = i + 4;
+  while (j < source.length && " \t\n\r".includes(source[j])) j++;
+  if (j >= source.length || source[j] !== "{") return 0;
+  const braceEnd = findMatchingBrace(source, j);
+  let k = braceEnd + 1;
+  while (k < source.length && " \t\n\r".includes(source[k])) k++;
+  if (k >= source.length || source[k] !== "=") return 0;
+  let l = k + 1;
+  while (l < source.length && " \t\n\r".includes(source[l])) l++;
+  if (l >= source.length || !isAlpha(source[l])) return 0;
+  const pathEnd = skipModulePath(source, l);
+  const path = source.substring(l, pathEnd);
+  if (!modulePaths.has(path)) return 0;
+  let stmtEnd = pathEnd;
+  while (stmtEnd < source.length && source[stmtEnd] !== ";" && source[stmtEnd] !== "\n") stmtEnd++;
+  if (stmtEnd < source.length && source[stmtEnd] === ";") stmtEnd++;
+  return stmtEnd;
 }
 
 // Skip "::" separators and subsequent identifiers to collect a full module path.
@@ -2526,7 +2631,8 @@ function skipModulePath(source, start) {
 }
 
 // Resolve cross-module references like "lib.myVar" -> "myVar" or "lib::sub.myVar" -> "myVar".
-function resolveCrossModuleRefs(source, modulePaths) {
+// Also resolves bare module paths in destructuring patterns: "let { x } = lib::sub;" -> "let { x } = { x };"
+function resolveCrossModuleRefs(source, modulePaths, moduleExports) {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -2540,6 +2646,13 @@ function resolveCrossModuleRefs(source, modulePaths) {
     // Check if this is a module path followed by a dot
     if (modulePaths.has(name) && pathEnd < source.length && source[pathEnd] === ".") {
       i = pathEnd + 1;
+      continue;
+    }
+    // Check if this is a bare module path (used in destructuring)
+    if (modulePaths.has(name) && moduleExports.has(name)) {
+      const exports = moduleExports.get(name);
+      result += "{" + exports.join(",") + "}";
+      i = pathEnd;
       continue;
     }
     // Not a module reference; emit the first identifier only

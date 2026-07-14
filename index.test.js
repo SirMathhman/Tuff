@@ -226,6 +226,10 @@ test("struct field access with multiple fields supports arithmetic", () => {
   expectValid("struct Point { x : I32, y : I32 } let point = Point { x : 3, y : 4 }; point.x + point.y", "", 7);
 });
 
+test("struct destructuring assigns fields to variables", () => {
+  expectValid("struct Point { x : I32, y : I32 } let { x, y } = Point { x : 3, y : 4 }; x + y", "", 7);
+});
+
 test("wider type assigned to narrower array element is invalid", () => {
   expectInvalid("let array : [U8; 1] = [read<U16>()]; array[0]");
 });
@@ -343,6 +347,13 @@ test("nested module reference with out let", () => {
 test("nested entry module with nested module reference", () => {
   const moduleSources = {};
   moduleSources[["index", "foo"]] = "lib::sub.myVar";
+  moduleSources[["lib", "sub"]] = "out let myVar = read();";
+  expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
+});
+
+test("struct destructuring with nested module reference", () => {
+  const moduleSources = {};
+  moduleSources[["index", "foo"]] = "let { myVar } = lib::sub; myVar";
   moduleSources[["lib", "sub"]] = "out let myVar = read();";
   expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
 });
