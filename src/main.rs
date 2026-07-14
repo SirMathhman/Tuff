@@ -783,4 +783,14 @@ mod tests {
     fn test_bool_and_false_literal() {
         expect_valid("let x : Bool = read<Bool>(); x && false", "true", 0);
     }
+
+    #[test]
+    fn test_less_than_comparison() {
+        expect_valid("read() < read()", "1 2", 1);
+    }
+
+    #[test]
+    fn test_equality_comparison_false() {
+        expect_valid("read() == read()", "1 2", 0);
+    }
 }
