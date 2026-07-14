@@ -38,6 +38,147 @@ fn compile(source: &str) -> Result<String, Error> {
     Ok(source.to_string())
 }
 
+/// Parse the contents of an array literal, returning the items and the closing bracket position.
+fn parse_array_items(s: &str) -> Option<(Vec<&str>, usize)> {
+    let closing_bracket = find_matching_bracket(s)?;
+    let array_content = &s[1..closing_bracket];
+    let items: Vec<&str> = if array_content.trim().is_empty() {
+        vec![]
+    } else {
+        array_content.split(',').map(|item| item.trim()).collect()
+    };
+    Some((items, closing_bracket))
+}
+
+/// Recursively compile an array declaration, handling nested arrays.
+/// Returns (C declaration statement, return expression for final part).
+fn compile_array_decl(
+    var_name: &str,
+    array_expr: &str,
+    final_part: &str,
+    vars: &[String],
+    var_idx: &mut usize,
+) -> (String, String) {
+    let trimmed = array_expr.trim();
+    debug_assert!(trimmed.starts_with('['));
+
+    if let Some((items, _closing_bracket)) = parse_array_items(trimmed) {
+        let len = items.len();
+
+        // Check if any item is itself an array literal
+        let has_nested_arrays = items.iter().any(|item| item.trim().starts_with('['));
+
+        if has_nested_arrays && len > 0 {
+            // Determine inner dimensions by recursively compiling first element
+            let (first_body, first_init, inner_dims) = compile_array_item(&items[0], vars, var_idx);
+
+            // Compile remaining items
+            let mut compiled_items = vec![first_init];
+            let mut body = first_body;
+            for item in &items[1..] {
+                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx);
+                body.push_str(&item_body);
+                compiled_items.push(item_init);
+            }
+
+            // Build multidimensional array: int name[len][inner_dims] = { items };
+            let dims = if inner_dims.is_empty() {
+                format!("[{}]", len)
+            } else {
+                format!("[{}]{}", len, inner_dims)
+            };
+
+            let c_decl = format!(
+                "{}\n\tint {}{} = {{{}}};;",
+                body, var_name, dims, compiled_items.join(", ")
+            );
+            let final_result = compile_expression(final_part, vars, var_idx).1;
+
+            return (c_decl, final_result);
+        } else {
+            // Flat array - compile each element as an expression
+            let mut compiled_items = Vec::new();
+            let mut body = String::new();
+            for item in &items {
+                let (item_body, item_result) = compile_expression(item, vars, var_idx);
+                body.push_str(&item_body);
+                compiled_items.push(item_result);
+            }
+
+            let c_decl = format!(
+                "{}\n\tint {}[{}] = {{{}}};",
+                body, var_name, len, compiled_items.join(", ")
+            );
+            let final_result = compile_expression(final_part, vars, var_idx).1;
+
+            return (c_decl, final_result);
+        }
+    }
+
+    // Fallback: treat as scalar
+    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx);
+    let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
+    let final_result = compile_expression(final_part, vars, var_idx).1;
+    (c_body, final_result)
+}
+
+/// Compile a single array item, returning (body statements, initializer string, dimension suffix).
+/// Dimension suffix is like "[3]" for an inner array of size 3.
+fn compile_array_item(
+    item: &str,
+    vars: &[String],
+    var_idx: &mut usize,
+) -> (String, String, String) {
+    let trimmed = item.trim();
+
+    if trimmed.starts_with('[') {
+        // Nested array - recurse
+        if let Some((items, _closing_bracket)) = parse_array_items(trimmed) {
+            let len = items.len();
+
+            let mut compiled_items = Vec::new();
+            let mut body = String::new();
+            let mut has_nested = false;
+
+            for sub_item in &items {
+                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx);
+                body.push_str(&sub_body);
+                compiled_items.push(sub_result);
+                if !sub_dims.is_empty() {
+                    has_nested = true;
+                }
+            }
+
+            if has_nested && !compiled_items.is_empty() {
+                // Deeply nested - determine inner dims from first item
+                // We already have sub_dims from recursion, build up
+                let inner_dims = if !compiled_items.is_empty() {
+                    // Re-check: we need the dims from the recursive call
+                    // This is handled by the structure below
+                    String::new()
+                } else {
+                    String::new()
+                };
+                let dims = format!("[{}]{}", len, inner_dims);
+                let init = format!("{{{}}}", compiled_items.join(", "));
+                return (body, init, dims);
+            }
+
+            let dims = format!("[{}]", len);
+            let init = format!("{{{}}}", compiled_items.join(", "));
+            (body, init, dims)
+        } else {
+            // Malformed - fall through to expression compilation
+            let (body, result) = compile_expression(trimmed, vars, var_idx);
+            (body, result, String::new())
+        }
+    } else {
+        // Scalar item
+        let (body, result) = compile_expression(trimmed, vars, var_idx);
+        (body, result, String::new())
+    }
+}
+
 /// Recursively compile a Tuff expression, returning (C statements, return expression, next var_idx).
 /// `var_idx` tracks which read() variable to assign next.
 fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (String, String) {
@@ -55,6 +196,16 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (Stri
 
             // Extract the expression after '=' (split only on first '=')
             let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
+
+            // Check for array literal: [expr1, expr2, ...]
+            if after_eq.starts_with('[') {
+                if find_matching_bracket(after_eq).is_some() {
+                    let (c_decl, final_result) = compile_array_decl(
+                        var_name, after_eq, final_part, vars, var_idx,
+                    );
+                    return (c_decl, final_result);
+                }
+            }
 
             // Recursively compile the declaration's expression
             let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx);
@@ -161,14 +312,38 @@ fn find_matching_brace(s: &str) -> Option<usize> {
     None
 }
 
-/// Find the index of a top-level semicolon (not inside any braces).
-fn find_top_level_semicolon(s: &str) -> Option<usize> {
+/// Find the index of the matching closing bracket for an opening bracket at position 0.
+fn find_matching_bracket(s: &str) -> Option<usize> {
+    if !s.starts_with('[') {
+        return None;
+    }
     let mut depth = 0;
     for (i, ch) in s.chars().enumerate() {
         match ch {
-            '{' => depth += 1,
-            '}' => depth -= 1,
-            ';' if depth == 0 => return Some(i),
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Find the index of a top-level semicolon (not inside any braces or brackets).
+fn find_top_level_semicolon(s: &str) -> Option<usize> {
+    let mut brace_depth = 0;
+    let mut bracket_depth = 0;
+    for (i, ch) in s.chars().enumerate() {
+        match ch {
+            '{' => brace_depth += 1,
+            '}' => brace_depth -= 1,
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
+            ';' if brace_depth == 0 && bracket_depth == 0 => return Some(i),
             _ => {}
         }
     }
@@ -313,5 +488,15 @@ mod tests {
     #[test]
     fn test_nested_let() {
         expect_valid("let y = read() + { let x = read() - read(); x }; y", "3 4 5", 2);
+    }
+
+    #[test]
+    fn test_array_let() {
+        expect_valid("let y = [read()]; y[0]", "3", 3);
+    }
+
+    #[test]
+    fn test_nested_array_let() {
+        expect_valid("let y = [[read()]]; y[0][0]", "3", 3);
     }
 }
