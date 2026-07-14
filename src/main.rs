@@ -1,7 +1,8 @@
-use std::fmt::Error;
 use std::io::Write;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
+
+type CompileError = String;
 
 static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -9,7 +10,7 @@ fn main() {
     println!("Hello, world!");
 }
 
-fn compile(source: &str) -> Result<String, Error> {
+fn compile(source: &str) -> Result<String, CompileError> {
     let trimmed = source.trim();
     if trimmed.is_empty() {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
@@ -17,25 +18,69 @@ fn compile(source: &str) -> Result<String, Error> {
 
     // Count how many read() calls are in the expression
     let read_count = trimmed.matches("read()").count();
+    let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
+
+    // Parse let declarations and build C body
+    let mut var_idx = 0;
+    let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx)?;
+
     if read_count > 0 {
-        let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
         let scanf_fmt = format!("%d{}", " %d".repeat(read_count - 1));
         let scanf_args = vars.iter().map(|v| format!("&{}", v)).collect::<Vec<_>>().join(", ");
 
-        // Parse let declarations and build C body
-        let mut var_idx = 0;
-        let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx);
-
-        return Ok(format!(
+        Ok(format!(
             "#include <stdio.h>\nint main() {{\n\tint {};\n\tscanf(\"{}\", {});\n\t{}\n\treturn {};\n}}\n",
             vars.join(", "),
             scanf_fmt,
             scanf_args,
             c_body,
             return_expr
-        ));
+        ))
+    } else {
+        Ok(format!(
+            "int main() {{\n\t{}\n\treturn {};\n}}\n",
+            c_body, return_expr
+        ))
     }
-    Ok(source.to_string())
+}
+
+/// Parse a let declaration, extracting the variable name and optional type annotation.
+/// Returns (var_name, type_annotation). Type annotation is None if not present.
+fn parse_let_declaration(decl: &str) -> (&str, Option<String>) {
+    // Find '=' position (top-level, not inside brackets)
+    let eq_pos = find_top_level_char(decl, '=');
+    let before_eq = if let Some(pos) = eq_pos {
+        &decl[..pos]
+    } else {
+        decl
+    };
+
+    // Check for type annotation: "x : Type"
+    if let Some(colon_pos) = before_eq.find(':') {
+        let var_name = before_eq[..colon_pos].trim();
+        let type_name = before_eq[colon_pos + 1..].trim();
+        (var_name, Some(type_name.to_string()))
+    } else {
+        let var_name = before_eq.split_whitespace().next().unwrap_or("x");
+        (var_name, None)
+    }
+}
+
+/// Find the index of a character at the top level (not inside any braces or brackets).
+fn find_top_level_char(s: &str, target: char) -> Option<usize> {
+    let mut brace_depth = 0;
+    let mut bracket_depth = 0;
+    for (i, ch) in s.chars().enumerate() {
+        match ch {
+            '{' => brace_depth += 1,
+            '}' => brace_depth -= 1,
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
+            c if brace_depth == 0 && bracket_depth == 0 && c == target => return Some(i),
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Parse the contents of an array literal, returning the items and the closing bracket position.
@@ -58,7 +103,7 @@ fn compile_array_decl(
     final_part: &str,
     vars: &[String],
     var_idx: &mut usize,
-) -> (String, String) {
+) -> Result<(String, String), CompileError> {
     let trimmed = array_expr.trim();
     debug_assert!(trimmed.starts_with('['));
 
@@ -70,13 +115,13 @@ fn compile_array_decl(
 
         if has_nested_arrays && len > 0 {
             // Determine inner dimensions by recursively compiling first element
-            let (first_body, first_init, inner_dims) = compile_array_item(&items[0], vars, var_idx);
+            let (first_body, first_init, inner_dims) = compile_array_item(&items[0], vars, var_idx)?;
 
             // Compile remaining items
             let mut compiled_items = vec![first_init];
             let mut body = first_body;
             for item in &items[1..] {
-                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx);
+                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx)?;
                 body.push_str(&item_body);
                 compiled_items.push(item_init);
             }
@@ -92,15 +137,15 @@ fn compile_array_decl(
                 "{}\n\tint {}{} = {{{}}};;",
                 body, var_name, dims, compiled_items.join(", ")
             );
-            let final_result = compile_expression(final_part, vars, var_idx).1;
+            let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
 
-            return (c_decl, final_result);
+            return Ok((c_decl, final_result));
         } else {
             // Flat array - compile each element as an expression
             let mut compiled_items = Vec::new();
             let mut body = String::new();
             for item in &items {
-                let (item_body, item_result) = compile_expression(item, vars, var_idx);
+                let (item_body, item_result) = compile_expression(item, vars, var_idx)?;
                 body.push_str(&item_body);
                 compiled_items.push(item_result);
             }
@@ -109,17 +154,17 @@ fn compile_array_decl(
                 "{}\n\tint {}[{}] = {{{}}};",
                 body, var_name, len, compiled_items.join(", ")
             );
-            let final_result = compile_expression(final_part, vars, var_idx).1;
+            let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
 
-            return (c_decl, final_result);
+            return Ok((c_decl, final_result));
         }
     }
 
     // Fallback: treat as scalar
-    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx);
+    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx)?;
     let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-    let final_result = compile_expression(final_part, vars, var_idx).1;
-    (c_body, final_result)
+    let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
+    Ok((c_body, final_result))
 }
 
 /// Compile a single array item, returning (body statements, initializer string, dimension suffix).
@@ -128,7 +173,7 @@ fn compile_array_item(
     item: &str,
     vars: &[String],
     var_idx: &mut usize,
-) -> (String, String, String) {
+) -> Result<(String, String, String), CompileError> {
     let trimmed = item.trim();
 
     if trimmed.starts_with('[') {
@@ -141,7 +186,7 @@ fn compile_array_item(
             let mut has_nested = false;
 
             for sub_item in &items {
-                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx);
+                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx)?;
                 body.push_str(&sub_body);
                 compiled_items.push(sub_result);
                 if !sub_dims.is_empty() {
@@ -150,38 +195,29 @@ fn compile_array_item(
             }
 
             if has_nested && !compiled_items.is_empty() {
-                // Deeply nested - determine inner dims from first item
-                // We already have sub_dims from recursion, build up
-                let inner_dims = if !compiled_items.is_empty() {
-                    // Re-check: we need the dims from the recursive call
-                    // This is handled by the structure below
-                    String::new()
-                } else {
-                    String::new()
-                };
-                let dims = format!("[{}]{}", len, inner_dims);
+                let dims = format!("[{}]", len);
                 let init = format!("{{{}}}", compiled_items.join(", "));
-                return (body, init, dims);
+                return Ok((body, init, dims));
             }
 
             let dims = format!("[{}]", len);
             let init = format!("{{{}}}", compiled_items.join(", "));
-            (body, init, dims)
+            Ok((body, init, dims))
         } else {
             // Malformed - fall through to expression compilation
-            let (body, result) = compile_expression(trimmed, vars, var_idx);
-            (body, result, String::new())
+            let (body, result) = compile_expression(trimmed, vars, var_idx)?;
+            Ok((body, result, String::new()))
         }
     } else {
         // Scalar item
-        let (body, result) = compile_expression(trimmed, vars, var_idx);
-        (body, result, String::new())
+        let (body, result) = compile_expression(trimmed, vars, var_idx)?;
+        Ok((body, result, String::new()))
     }
 }
 
 /// Recursively compile a Tuff expression, returning (C statements, return expression, next var_idx).
 /// `var_idx` tracks which read() variable to assign next.
-fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (String, String) {
+fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> Result<(String, String), CompileError> {
     let trimmed = expr.trim();
 
     // Check for let declaration pattern: "let x = <expr>; <final>"
@@ -191,8 +227,8 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (Stri
             let decl_part = &decl_expr[..semi_pos];
             let final_part = &decl_expr[semi_pos + 1..];
 
-            // Extract variable name from "x = ..."
-            let var_name = decl_part.split_whitespace().next().unwrap_or("x");
+            // Extract variable name and optional type annotation from "x : Type = ..." or "x = ..."
+            let (var_name, type_annotation) = parse_let_declaration(decl_part);
 
             // Extract the expression after '=' (split only on first '=')
             let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
@@ -200,20 +236,25 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (Stri
             // Check for array literal: [expr1, expr2, ...]
             if after_eq.starts_with('[') {
                 if find_matching_bracket(after_eq).is_some() {
-                    let (c_decl, final_result) = compile_array_decl(
+                    // If there's a non-array type annotation, this is a type error
+                    if let Some(ty) = &type_annotation {
+                        if !ty.to_uppercase().contains("ARRAY") && !ty.to_uppercase().contains("[]") {
+                            return Err(format!("Type mismatch: expected {} but got array", ty));
+                        }
+                    }
+                    return compile_array_decl(
                         var_name, after_eq, final_part, vars, var_idx,
                     );
-                    return (c_decl, final_result);
                 }
             }
 
             // Recursively compile the declaration's expression
-            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx);
+            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx)?;
 
             let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-            let final_result = compile_expression(final_part, vars, var_idx).1;
+            let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
 
-            return (c_body, final_result);
+            return Ok((c_body, final_result));
         }
     }
 
@@ -235,7 +276,7 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (Stri
             }
         }
         result.push(')');
-        return (String::new(), result);
+        return Ok((String::new(), result));
     }
 
     // Check if expression contains blocks with let declarations
@@ -250,18 +291,18 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (Stri
         let after = &trimmed[block_end + 1..];
 
         // Process before part
-        let (before_body, before_result) = compile_expression(before, vars, var_idx);
+        let (before_body, before_result) = compile_expression(before, vars, var_idx)?;
 
         // Process the block's let declaration
-        let (block_body, block_result) = compile_expression(block_content, vars, var_idx);
+        let (block_body, block_result) = compile_expression(block_content, vars, var_idx)?;
 
         // Process after part
-        let (_, after_result) = compile_expression(after, vars, var_idx);
+        let (_, after_result) = compile_expression(after, vars, var_idx)?;
 
         let combined_body = format!("{}{}", before_body, block_body);
         let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
 
-        return (combined_body, combined_expr);
+        return Ok((combined_body, combined_expr));
     }
 
     // Base case: replace read() with variables and convert braces to parens
@@ -288,7 +329,7 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (Stri
         }
     }
 
-    (String::new(), result)
+    Ok((String::new(), result))
 }
 
 /// Find the index of the matching closing brace for an opening brace at position 0.
@@ -335,19 +376,7 @@ fn find_matching_bracket(s: &str) -> Option<usize> {
 
 /// Find the index of a top-level semicolon (not inside any braces or brackets).
 fn find_top_level_semicolon(s: &str) -> Option<usize> {
-    let mut brace_depth = 0;
-    let mut bracket_depth = 0;
-    for (i, ch) in s.chars().enumerate() {
-        match ch {
-            '{' => brace_depth += 1,
-            '}' => brace_depth -= 1,
-            '[' => bracket_depth += 1,
-            ']' => bracket_depth -= 1,
-            ';' if brace_depth == 0 && bracket_depth == 0 => return Some(i),
-            _ => {}
-        }
-    }
-    None
+    find_top_level_char(s, ';')
 }
 
 #[allow(dead_code)]
@@ -498,5 +527,20 @@ mod tests {
     #[test]
     fn test_nested_array_let() {
         expect_valid("let y = [[read()]]; y[0][0]", "3", 3);
+    }
+
+    #[test]
+    fn test_nested_array_literal() {
+        expect_valid("let y = [[ 3 ]]; y[0][0]", "", 3);
+    }
+
+    #[test]
+    fn test_typed_let() {
+        expect_valid("let x : I32 = 100; x", "", 100);
+    }
+
+    #[test]
+    fn test_typed_let_array_mismatch() {
+        expect_invalid("let x : I32 = [100]; x");
     }
 }
