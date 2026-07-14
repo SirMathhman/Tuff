@@ -13,8 +13,9 @@ npm run cpd     # Check for code duplication
 
 ## Architecture
 
-- **`index.js`** — Single-file compiler exposing `compile(source)` which validates and transforms DSL source to JS string. Returns the generated JavaScript or throws on validation failure.
-- **`index.test.js`** — Tests using Bun's built-in test runner (`bun:test`). Test helper `expectValid()` executes generated code via `new Function()`.
+- **`index.js`** — Single-file compiler exposing `compile(source)` and `compileModules(moduleNames, moduleSources)`. The former validates and transforms single-file DSL source to JS. The latter handles multi-module compilation with cross-module references (`lib.myVar`), `out let` exports, and module path resolution.
+- **`index.test.js`** — Tests using Bun's built-in test runner (`bun:test`). Test helper `expectValid()` executes generated code via `new Function()`. Also `expectValidWithModules()` for multi-module tests.
+- **`lib.tuff`** — Example DSL source file (the compiler's own helper functions written in the Tuff DSL).
 
 ### Compiler Pipeline
 
@@ -116,7 +117,7 @@ All top-level returns wrap in `_toInt(...)` to ensure DSL booleans never leak as
 
 - **No regex literals or `RegExp` constructor** — ESLint rule enforces this; use string iteration instead.
 - **Max nesting depth: 2** — enforced by ESLint (`max-depth`).
-- **CommonJS modules** with named exports (`export function compile`). Note: project uses ESM config files but outputs CommonJS (`"type": "commonjs"` in package.json).
+- **ESM modules** (`"type": "module"` in package.json) with named exports (`export function compile`).
 - **Test pattern:** `expectValid(source, stdIn, expectedExitCode)` for happy paths, `expectInvalid(source)` for validation errors. Generated code is executed at runtime via `new Function("stdIn", generated)(stdIn)`.
 - **Missing features roadmap:** see [`FEATURES_MISSING.md`](./FEATURES_MISSING.md) for planned C-like features not yet implemented.
 
