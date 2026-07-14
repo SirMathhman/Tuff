@@ -23,7 +23,8 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
     // Parse let declarations and build C body
     let mut var_idx = 0;
-    let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx)?;
+    let mut mutable_vars: Vec<String> = Vec::new();
+    let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx, &mut mutable_vars)?;
 
     if read_count > 0 {
         let scanf_fmt = format!("%d{}", " %d".repeat(read_count - 1));
@@ -110,6 +111,18 @@ fn find_top_level_char(s: &str, target: char) -> Option<usize> {
     None
 }
 
+/// Parse array repeat syntax [value; count], returning (value_str, count) if it matches.
+fn parse_array_repeat(s: &str) -> Option<(&str, usize)> {
+    let closing_bracket = find_matching_bracket(s)?;
+    let inner = &s[1..closing_bracket];
+    // Must have exactly one ';' at top level
+    let semi_pos = find_top_level_char(inner, ';')?;
+    let value_part = inner[..semi_pos].trim();
+    let count_part = inner[semi_pos + 1..].trim();
+    let count = count_part.parse().ok()?;
+    Some((value_part, count))
+}
+
 /// Parse the contents of an array literal, returning the items and the closing bracket position.
 fn parse_array_items(s: &str) -> Option<(Vec<&str>, usize)> {
     let closing_bracket = find_matching_bracket(s)?;
@@ -130,9 +143,20 @@ fn compile_array_decl(
     final_part: &str,
     vars: &[String],
     var_idx: &mut usize,
+    mutable_vars: &mut Vec<String>,
 ) -> Result<(String, String), CompileError> {
     let trimmed = array_expr.trim();
     debug_assert!(trimmed.starts_with('['));
+
+    // Check for array repeat syntax: [value; count]
+    if let Some((repeat_value, repeat_count)) = parse_array_repeat(trimmed) {
+        let (val_body, val_result) = compile_expression(repeat_value, vars, var_idx, mutable_vars)?;
+        let repeated: Vec<_> = (0..repeat_count).map(|_| val_result.clone()).collect();
+        let init = format!("{{{}}}", repeated.join(", "));
+        let c_decl = format!("{}\n\tint {}[{}] = {};", val_body, var_name, repeat_count, init);
+        let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
+        return Ok((format!("{}\n{}", c_decl, final_body), final_result));
+    }
 
     if let Some((items, _closing_bracket)) = parse_array_items(trimmed) {
         let len = items.len();
@@ -143,13 +167,13 @@ fn compile_array_decl(
         if has_nested_arrays && len > 0 {
             // Determine inner dimensions by recursively compiling first element
             let (first_body, first_init, inner_dims) =
-                compile_array_item(&items[0], vars, var_idx)?;
+                compile_array_item(&items[0], vars, var_idx, mutable_vars)?;
 
             // Compile remaining items
             let mut compiled_items = vec![first_init];
             let mut body = first_body;
             for item in &items[1..] {
-                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx)?;
+                let (item_body, item_init, _) = compile_array_item(item, vars, var_idx, mutable_vars)?;
                 body.push_str(&item_body);
                 compiled_items.push(item_init);
             }
@@ -168,14 +192,14 @@ fn compile_array_decl(
                 dims,
                 compiled_items.join(", ")
             );
-            let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
             return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         } else {
             // Flat array - compile each element as an expression
             let mut compiled_items = Vec::new();
             let mut body = String::new();
             for item in &items {
-                let (item_body, item_result) = compile_expression(item, vars, var_idx)?;
+                let (item_body, item_result) = compile_expression(item, vars, var_idx, mutable_vars)?;
                 body.push_str(&item_body);
                 compiled_items.push(item_result);
             }
@@ -187,15 +211,15 @@ fn compile_array_decl(
                 len,
                 compiled_items.join(", ")
             );
-            let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
             return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         }
     }
 
     // Fallback: treat as scalar
-    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx)?;
+    let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx, mutable_vars)?;
     let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-    let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+    let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
     Ok((format!("{}\n{}", c_body, final_body), final_result))
 }
 
@@ -205,6 +229,7 @@ fn compile_array_item(
     item: &str,
     vars: &[String],
     var_idx: &mut usize,
+    mutable_vars: &mut Vec<String>,
 ) -> Result<(String, String, String), CompileError> {
     let trimmed = item.trim();
 
@@ -218,7 +243,7 @@ fn compile_array_item(
             let mut has_nested = false;
 
             for sub_item in &items {
-                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx)?;
+                let (sub_body, sub_result, sub_dims) = compile_array_item(sub_item, vars, var_idx, mutable_vars)?;
                 body.push_str(&sub_body);
                 compiled_items.push(sub_result);
                 if !sub_dims.is_empty() {
@@ -237,12 +262,12 @@ fn compile_array_item(
             Ok((body, init, dims))
         } else {
             // Malformed - fall through to expression compilation
-            let (body, result) = compile_expression(trimmed, vars, var_idx)?;
+            let (body, result) = compile_expression(trimmed, vars, var_idx, mutable_vars)?;
             Ok((body, result, String::new()))
         }
     } else {
         // Scalar item
-        let (body, result) = compile_expression(trimmed, vars, var_idx)?;
+        let (body, result) = compile_expression(trimmed, vars, var_idx, mutable_vars)?;
         Ok((body, result, String::new()))
     }
 }
@@ -253,6 +278,7 @@ fn compile_expression(
     expr: &str,
     vars: &[String],
     var_idx: &mut usize,
+    mutable_vars: &mut Vec<String>,
 ) -> Result<(String, String), CompileError> {
     let trimmed = expr.trim();
 
@@ -264,10 +290,16 @@ fn compile_expression(
             // Check if it's an assignment (contains '=' at top level)
             if let Some(eq_pos) = find_top_level_char(assign_part, '=') {
                 let var_name = assign_part[..eq_pos].trim();
+                // Extract base variable name (e.g., "x" from "x[0]")
+                let base_var = var_name.split('[').next().unwrap_or(var_name);
+                // Check if variable was declared as mutable
+                if !mutable_vars.iter().any(|v| v == base_var) {
+                    return Err(format!("Cannot reassign immutable variable '{}'", base_var));
+                }
                 let rhs = assign_part[eq_pos + 1..].trim();
-                let (assign_body, assign_result) = compile_expression(rhs, vars, var_idx)?;
+                let (assign_body, assign_result) = compile_expression(rhs, vars, var_idx, mutable_vars)?;
                 let c_body = format!("{}\n\t{} = {};", assign_body, var_name, assign_result);
-                let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
+                let final_result = compile_expression(final_part, vars, var_idx, mutable_vars).map(|r| r.1)?;
                 return Ok((c_body, final_result));
             }
         }
@@ -281,7 +313,12 @@ fn compile_expression(
             let final_part = &decl_expr[semi_pos + 1..];
 
             // Extract variable name, mutability, and optional type annotation
-            let (var_name, _is_mut, type_annotation) = parse_let_declaration(decl_part);
+            let (var_name, is_mut, type_annotation) = parse_let_declaration(decl_part);
+
+            // Track mutable variables
+            if is_mut {
+                mutable_vars.push(var_name.to_string());
+            }
 
             // Extract the expression after '=' (split only on first '=')
             let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
@@ -313,7 +350,7 @@ fn compile_expression(
                             }
                         }
                     }
-                    return compile_array_decl(var_name, after_eq, final_part, vars, var_idx);
+                    return compile_array_decl(var_name, after_eq, final_part, vars, var_idx, mutable_vars);
                 }
             }
 
@@ -328,10 +365,10 @@ fn compile_expression(
             }
 
             // Recursively compile the declaration's expression
-            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx)?;
+            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx, mutable_vars)?;
 
             let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-            let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx, mutable_vars)?;
             return Ok((format!("{}\n{}", c_body, final_body), final_result));
         }
     }
@@ -341,7 +378,7 @@ fn compile_expression(
         let inner = &trimmed[1..trimmed.len() - 1].trim();
         // If inner content has let declarations, process them
         if inner.contains("let ") && inner.contains(';') {
-            return compile_expression(inner, vars, var_idx);
+            return compile_expression(inner, vars, var_idx, mutable_vars);
         }
         // Otherwise convert to parentheses
         let mut result = String::new();
@@ -369,13 +406,13 @@ fn compile_expression(
         let after = &trimmed[block_end + 1..];
 
         // Process before part
-        let (before_body, before_result) = compile_expression(before, vars, var_idx)?;
+        let (before_body, before_result) = compile_expression(before, vars, var_idx, mutable_vars)?;
 
         // Process the block's let declaration
-        let (block_body, block_result) = compile_expression(block_content, vars, var_idx)?;
+        let (block_body, block_result) = compile_expression(block_content, vars, var_idx, mutable_vars)?;
 
         // Process after part
-        let (_, after_result) = compile_expression(after, vars, var_idx)?;
+        let (_, after_result) = compile_expression(after, vars, var_idx, mutable_vars)?;
 
         let combined_body = format!("{}{}", before_body, block_body);
         let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
@@ -653,5 +690,30 @@ mod tests {
     #[test]
     fn test_mut_reassign() {
         expect_valid("let mut x = read(); x = read(); x", "1 2", 2);
+    }
+
+    #[test]
+    fn test_reassign_without_mut() {
+        expect_invalid("let x = read(); x = read(); x");
+    }
+
+    #[test]
+    fn test_mut_array_element_assign() {
+        expect_valid("let mut x = [read()]; x[0] = read(); x[0]", "1 2", 2);
+    }
+
+    #[test]
+    fn test_array_element_assign_without_mut() {
+        expect_invalid("let x = [read()]; x[0] = read(); x[0]");
+    }
+
+    #[test]
+    fn test_array_repeat_syntax() {
+        expect_valid("let x = [10; 2]; x[0] + x[1]", "", 20);
+    }
+
+    #[test]
+    fn test_array_repeat_with_read() {
+        expect_valid("let x = [read(); 2]; x[0] + x[1]", "2 5", 4);
     }
 }
