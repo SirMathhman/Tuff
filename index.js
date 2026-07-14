@@ -2454,12 +2454,24 @@ export function compile(source) {
 // moduleSources: map of module name -> source code.
 // Non-entry modules are concatenated first (so their declarations are available),
 // then the entry module. "out let" is stripped to "let", and cross-module
-// references like "lib.myVar" are resolved to "myVar".
+// references like "lib.myVar" or "lib::sub.myVar" are resolved to "myVar".
+// Array keys like ["lib", "sub"] are coerced to "lib,sub" by JS, so we
+// split on commas and rejoin with "::" to form the module path.
 export function compileModules(moduleNames, moduleSources) {
-  const entryModule = moduleNames[0];
+  // Resolve entry module key: join moduleNames with commas to match
+  // the JS-coerced object key (e.g., ["index", "foo"] -> "index,foo").
+  const entryModule = moduleNames.join(",");
 
-  // Build set of all module names from moduleSources for cross-module reference resolution
-  const allModuleNames = new Set(Object.keys(moduleSources));
+  // Build set of all module paths from moduleSources for cross-module reference resolution.
+  // Keys containing commas (from array coercion) are converted to "::"-separated paths.
+  const allModulePaths = new Set();
+  for (const key of Object.keys(moduleSources)) {
+    if (key.includes(",")) {
+      allModulePaths.add(key.split(",").join("::"));
+    } else {
+      allModulePaths.add(key);
+    }
+  }
 
   // Process all non-entry modules first (derive from moduleSources keys)
   let combinedSource = "";
@@ -2467,14 +2479,14 @@ export function compileModules(moduleNames, moduleSources) {
     if (modName === entryModule) continue;
     let src = moduleSources[modName];
     src = stripOutKeyword(src);
-    src = resolveCrossModuleRefs(src, allModuleNames);
+    src = resolveCrossModuleRefs(src, allModulePaths);
     combinedSource += src + "\n";
   }
 
   // Process entry module
   let entrySource = moduleSources[entryModule];
   entrySource = stripOutKeyword(entrySource);
-  entrySource = resolveCrossModuleRefs(entrySource, allModuleNames);
+  entrySource = resolveCrossModuleRefs(entrySource, allModulePaths);
   combinedSource += entrySource;
 
   return compile(combinedSource);
@@ -2496,8 +2508,22 @@ function stripOutKeyword(source) {
   return result;
 }
 
-// Resolve cross-module references like "lib.myVar" -> "myVar".
-function resolveCrossModuleRefs(source, moduleNames) {
+// Skip "::" separators and subsequent identifiers to collect a full module path.
+// Returns the end index after the last identifier in the path.
+function skipModulePath(source, start) {
+  let end = skipIdentifier(source, start);
+  while (end < source.length && source[end] === ":") {
+    if (end + 1 >= source.length || source[end + 1] !== ":") break;
+    end += 2;
+    while (end < source.length && " \t\n\r".includes(source[end])) end++;
+    if (!isAlpha(source[end])) break;
+    end = skipIdentifier(source, end);
+  }
+  return end;
+}
+
+// Resolve cross-module references like "lib.myVar" -> "myVar" or "lib::sub.myVar" -> "myVar".
+function resolveCrossModuleRefs(source, modulePaths) {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -2506,16 +2532,17 @@ function resolveCrossModuleRefs(source, moduleNames) {
       i++;
       continue;
     }
-    const identEnd = skipIdentifier(source, i);
-    const name = source.substring(i, identEnd);
-    // Check if this is a module name followed by a dot
-    if (moduleNames.has(name) && identEnd < source.length && source[identEnd] === ".") {
-      // Skip the module name and dot, keep the member name
-      i = identEnd + 1;
+    const pathEnd = skipModulePath(source, i);
+    const name = source.substring(i, pathEnd);
+    // Check if this is a module path followed by a dot
+    if (modulePaths.has(name) && pathEnd < source.length && source[pathEnd] === ".") {
+      i = pathEnd + 1;
       continue;
     }
-    result += name;
-    i = identEnd;
+    // Not a module reference; emit the first identifier only
+    const firstIdentEnd = skipIdentifier(source, i);
+    result += source.substring(i, firstIdentEnd);
+    i = firstIdentEnd;
   }
   return result;
 }

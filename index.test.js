@@ -329,3 +329,16 @@ test("cross-module reference with out let", () => {
     100,
   );
 });
+
+test("nested module reference with out let", () => {
+  const moduleSources = { index: "lib::sub.myVar" };
+  moduleSources[["lib", "sub"]] = "out let myVar = read();";
+  expectValidWithModules(["index"], moduleSources, "100", 100);
+});
+
+test("nested entry module with nested module reference", () => {
+  const moduleSources = {};
+  moduleSources[["index", "foo"]] = "lib::sub.myVar";
+  moduleSources[["lib", "sub"]] = "out let myVar = read();";
+  expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
+});
