@@ -21,26 +21,158 @@ fn compile(source: &str) -> Result<String, Error> {
         let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
         let scanf_fmt = format!("%d{}", " %d".repeat(read_count - 1));
         let scanf_args = vars.iter().map(|v| format!("&{}", v)).collect::<Vec<_>>().join(", ");
-        // Build expression by replacing each read() with its variable, preserving operators
-        let mut expr = String::new();
+
+        // Parse let declarations and build C body
         let mut var_idx = 0;
-        let mut last = 0;
-        for m in trimmed.match_indices("read()") {
-            expr.push_str(&trimmed[last..m.0]);
-            expr.push_str(&vars[var_idx]);
-            var_idx += 1;
-            last = m.0 + m.1.len();
-        }
-        expr.push_str(&trimmed[last..]);
+        let (c_body, return_expr) = compile_expression(trimmed, &vars, &mut var_idx);
+
         return Ok(format!(
-            "#include <stdio.h>\nint main() {{\n\tint {};\n\tscanf(\"{}\", {});\n\treturn {};\n}}\n",
+            "#include <stdio.h>\nint main() {{\n\tint {};\n\tscanf(\"{}\", {});\n\t{}\n\treturn {};\n}}\n",
             vars.join(", "),
             scanf_fmt,
             scanf_args,
-            expr
+            c_body,
+            return_expr
         ));
     }
     Ok(source.to_string())
+}
+
+/// Recursively compile a Tuff expression, returning (C statements, return expression, next var_idx).
+/// `var_idx` tracks which read() variable to assign next.
+fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> (String, String) {
+    let trimmed = expr.trim();
+
+    // Check for let declaration pattern: "let x = <expr>; <final>"
+    if let Some(decl_expr) = trimmed.strip_prefix("let ") {
+        // Find the top-level semicolon (not inside braces)
+        if let Some(semi_pos) = find_top_level_semicolon(decl_expr) {
+            let decl_part = &decl_expr[..semi_pos];
+            let final_part = &decl_expr[semi_pos + 1..];
+
+            // Extract variable name from "x = ..."
+            let var_name = decl_part.split_whitespace().next().unwrap_or("x");
+
+            // Extract the expression after '=' (split only on first '=')
+            let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
+
+            // Recursively compile the declaration's expression
+            let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx);
+
+            let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
+            let final_result = compile_expression(final_part, vars, var_idx).1;
+
+            return (c_body, final_result);
+        }
+    }
+
+    // Handle blocks { ... } - check if block contains let declarations
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        let inner = &trimmed[1..trimmed.len() - 1].trim();
+        // If inner content has let declarations, process them
+        if inner.contains("let ") && inner.contains(';') {
+            return compile_expression(inner, vars, var_idx);
+        }
+        // Otherwise convert to parentheses
+        let mut result = String::new();
+        result.push('(');
+        for ch in inner.chars() {
+            match ch {
+                '{' => result.push('('),
+                '}' => result.push(')'),
+                _ => result.push(ch),
+            }
+        }
+        result.push(')');
+        return (String::new(), result);
+    }
+
+    // Check if expression contains blocks with let declarations
+    // e.g., "read() + { let x = read() - read(); x }"
+    if trimmed.contains("{ let ") {
+        // Find the block and process it separately
+        let block_start = trimmed.find("{ let ").unwrap();
+        let block_end = find_matching_brace(&trimmed[block_start..]).unwrap() + block_start;
+
+        let before = &trimmed[..block_start];
+        let block_content = &trimmed[block_start + 1..block_end - 1].trim();
+        let after = &trimmed[block_end + 1..];
+
+        // Process before part
+        let (before_body, before_result) = compile_expression(before, vars, var_idx);
+
+        // Process the block's let declaration
+        let (block_body, block_result) = compile_expression(block_content, vars, var_idx);
+
+        // Process after part
+        let (_, after_result) = compile_expression(after, vars, var_idx);
+
+        let combined_body = format!("{}{}", before_body, block_body);
+        let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
+
+        return (combined_body, combined_expr);
+    }
+
+    // Base case: replace read() with variables and convert braces to parens
+    let mut result = String::new();
+    let mut last = 0;
+    for m in trimmed.match_indices("read()") {
+        let segment = &trimmed[last..m.0];
+        for ch in segment.chars() {
+            match ch {
+                '{' => result.push('('),
+                '}' => result.push(')'),
+                _ => result.push(ch),
+            }
+        }
+        result.push_str(&vars[*var_idx]);
+        *var_idx += 1;
+        last = m.0 + m.1.len();
+    }
+    for ch in trimmed[last..].chars() {
+        match ch {
+            '{' => result.push('('),
+            '}' => result.push(')'),
+            _ => result.push(ch),
+        }
+    }
+
+    (String::new(), result)
+}
+
+/// Find the index of the matching closing brace for an opening brace at position 0.
+fn find_matching_brace(s: &str) -> Option<usize> {
+    if !s.starts_with('{') {
+        return None;
+    }
+    let mut depth = 0;
+    for (i, ch) in s.chars().enumerate() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Find the index of a top-level semicolon (not inside any braces).
+fn find_top_level_semicolon(s: &str) -> Option<usize> {
+    let mut depth = 0;
+    for (i, ch) in s.chars().enumerate() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            ';' if depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
 }
 
 #[allow(dead_code)]
@@ -166,5 +298,20 @@ mod tests {
     #[test]
     fn test_read_add_read_sub_read() {
         expect_valid("read() + read() - read()", "3 4 5", 2);
+    }
+
+    #[test]
+    fn test_read_with_braces() {
+        expect_valid("read() + { read() - read() }", "3 4 5", 2);
+    }
+
+    #[test]
+    fn test_read_with_let() {
+        expect_valid("read() + { let x = read() - read(); x }", "3 4 5", 2);
+    }
+
+    #[test]
+    fn test_nested_let() {
+        expect_valid("let y = read() + { let x = read() - read(); x }; y", "3 4 5", 2);
     }
 }
