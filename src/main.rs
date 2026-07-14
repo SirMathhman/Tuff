@@ -1,3 +1,4 @@
+use core::panic;
 use std::io::Write;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -26,7 +27,11 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
     if read_count > 0 {
         let scanf_fmt = format!("%d{}", " %d".repeat(read_count - 1));
-        let scanf_args = vars.iter().map(|v| format!("&{}", v)).collect::<Vec<_>>().join(", ");
+        let scanf_args = vars
+            .iter()
+            .map(|v| format!("&{}", v))
+            .collect::<Vec<_>>()
+            .join(", ");
 
         Ok(format!(
             "#include <stdio.h>\nint main() {{\n\tint {};\n\tscanf(\"{}\", {});\n\t{}\n\treturn {};\n}}\n",
@@ -44,9 +49,9 @@ fn compile(source: &str) -> Result<String, CompileError> {
     }
 }
 
-/// Parse a let declaration, extracting the variable name and optional type annotation.
-/// Returns (var_name, type_annotation). Type annotation is None if not present.
-fn parse_let_declaration(decl: &str) -> (&str, Option<String>) {
+/// Parse a let declaration, extracting the variable name, mutability, and optional type annotation.
+/// Returns (var_name, is_mut, type_annotation).
+fn parse_let_declaration(decl: &str) -> (&str, bool, Option<String>) {
     // Find '=' position (top-level, not inside brackets)
     let eq_pos = find_top_level_char(decl, '=');
     let before_eq = if let Some(pos) = eq_pos {
@@ -55,14 +60,21 @@ fn parse_let_declaration(decl: &str) -> (&str, Option<String>) {
         decl
     };
 
-    // Check for type annotation: "x : Type"
-    if let Some(colon_pos) = before_eq.find(':') {
-        let var_name = before_eq[..colon_pos].trim();
-        let type_name = before_eq[colon_pos + 1..].trim();
-        (var_name, Some(type_name.to_string()))
+    // Strip "mut " prefix if present
+    let after_mut = if let Some(stripped) = before_eq.strip_prefix("mut ") {
+        (stripped, true)
     } else {
-        let var_name = before_eq.split_whitespace().next().unwrap_or("x");
-        (var_name, None)
+        (before_eq, false)
+    };
+
+    // Check for type annotation: "x : Type"
+    if let Some(colon_pos) = after_mut.0.find(':') {
+        let var_name = after_mut.0[..colon_pos].trim();
+        let type_name = after_mut.0[colon_pos + 1..].trim();
+        (var_name, after_mut.1, Some(type_name.to_string()))
+    } else {
+        let var_name = after_mut.0.split_whitespace().next().unwrap_or("x");
+        (var_name, after_mut.1, None)
     }
 }
 
@@ -130,7 +142,8 @@ fn compile_array_decl(
 
         if has_nested_arrays && len > 0 {
             // Determine inner dimensions by recursively compiling first element
-            let (first_body, first_init, inner_dims) = compile_array_item(&items[0], vars, var_idx)?;
+            let (first_body, first_init, inner_dims) =
+                compile_array_item(&items[0], vars, var_idx)?;
 
             // Compile remaining items
             let mut compiled_items = vec![first_init];
@@ -150,11 +163,13 @@ fn compile_array_decl(
 
             let c_decl = format!(
                 "{}\n\tint {}{} = {{{}}};;",
-                body, var_name, dims, compiled_items.join(", ")
+                body,
+                var_name,
+                dims,
+                compiled_items.join(", ")
             );
-            let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
-
-            return Ok((c_decl, final_result));
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+            return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         } else {
             // Flat array - compile each element as an expression
             let mut compiled_items = Vec::new();
@@ -167,19 +182,21 @@ fn compile_array_decl(
 
             let c_decl = format!(
                 "{}\n\tint {}[{}] = {{{}}};",
-                body, var_name, len, compiled_items.join(", ")
+                body,
+                var_name,
+                len,
+                compiled_items.join(", ")
             );
-            let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
-
-            return Ok((c_decl, final_result));
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+            return Ok((format!("{}\n{}", c_decl, final_body), final_result));
         }
     }
 
     // Fallback: treat as scalar
     let (decl_body, decl_result) = compile_expression(array_expr, vars, var_idx)?;
     let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-    let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
-    Ok((c_body, final_result))
+    let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+    Ok((format!("{}\n{}", c_body, final_body), final_result))
 }
 
 /// Compile a single array item, returning (body statements, initializer string, dimension suffix).
@@ -232,8 +249,29 @@ fn compile_array_item(
 
 /// Recursively compile a Tuff expression, returning (C statements, return expression, next var_idx).
 /// `var_idx` tracks which read() variable to assign next.
-fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> Result<(String, String), CompileError> {
+fn compile_expression(
+    expr: &str,
+    vars: &[String],
+    var_idx: &mut usize,
+) -> Result<(String, String), CompileError> {
     let trimmed = expr.trim();
+
+    // Check for plain reassignment: "x = <expr>; <final>" (no "let")
+    if !trimmed.starts_with("let ") && !trimmed.starts_with('{') {
+        if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
+            let assign_part = &trimmed[..semi_pos];
+            let final_part = &trimmed[semi_pos + 1..];
+            // Check if it's an assignment (contains '=' at top level)
+            if let Some(eq_pos) = find_top_level_char(assign_part, '=') {
+                let var_name = assign_part[..eq_pos].trim();
+                let rhs = assign_part[eq_pos + 1..].trim();
+                let (assign_body, assign_result) = compile_expression(rhs, vars, var_idx)?;
+                let c_body = format!("{}\n\t{} = {};", assign_body, var_name, assign_result);
+                let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
+                return Ok((c_body, final_result));
+            }
+        }
+    }
 
     // Check for let declaration pattern: "let x = <expr>; <final>"
     if let Some(decl_expr) = trimmed.strip_prefix("let ") {
@@ -242,8 +280,8 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> Resul
             let decl_part = &decl_expr[..semi_pos];
             let final_part = &decl_expr[semi_pos + 1..];
 
-            // Extract variable name and optional type annotation from "x : Type = ..." or "x = ..."
-            let (var_name, type_annotation) = parse_let_declaration(decl_part);
+            // Extract variable name, mutability, and optional type annotation
+            let (var_name, _is_mut, type_annotation) = parse_let_declaration(decl_part);
 
             // Extract the expression after '=' (split only on first '=')
             let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
@@ -275,16 +313,17 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> Resul
                             }
                         }
                     }
-                    return compile_array_decl(
-                        var_name, after_eq, final_part, vars, var_idx,
-                    );
+                    return compile_array_decl(var_name, after_eq, final_part, vars, var_idx);
                 }
             }
 
             // If type annotation expects an array but RHS is not an array literal, error
             if let Some(ty) = &type_annotation {
                 if ty.contains('[') && !after_eq.starts_with('[') {
-                    return Err(format!("Type mismatch: expected array but got {}", after_eq));
+                    return Err(format!(
+                        "Type mismatch: expected array but got {}",
+                        after_eq
+                    ));
                 }
             }
 
@@ -292,9 +331,8 @@ fn compile_expression(expr: &str, vars: &[String], var_idx: &mut usize) -> Resul
             let (decl_body, decl_result) = compile_expression(after_eq, vars, var_idx)?;
 
             let c_body = format!("{}\n\tint {} = {};", decl_body, var_name, decl_result);
-            let final_result = compile_expression(final_part, vars, var_idx).map(|r| r.1)?;
-
-            return Ok((c_body, final_result));
+            let (final_body, final_result) = compile_expression(final_part, vars, var_idx)?;
+            return Ok((format!("{}\n{}", c_body, final_body), final_result));
         }
     }
 
@@ -434,7 +472,9 @@ fn expect_valid(source: &str, std_in: &str, expected_exit_code: i32) {
     fn compile_temp_path_using_clang(temp_path: &str) -> String {
         let exe_path = temp_path.replace(".c", ".exe");
         // Ensure the .c file exists and has content before compiling
-        if std::fs::read_to_string(temp_path).is_err() || std::fs::metadata(temp_path).unwrap().len() == 0 {
+        if std::fs::read_to_string(temp_path).is_err()
+            || std::fs::metadata(temp_path).unwrap().len() == 0
+        {
             panic!("Temp C source file is empty or missing: {}", temp_path);
         }
 
@@ -465,7 +505,8 @@ fn expect_valid(source: &str, std_in: &str, expected_exit_code: i32) {
         if !stdin.is_empty() {
             if let Some(ref mut stdin_handle) = child.stdin {
                 use std::io::Write;
-                stdin_handle.write_all(stdin.as_bytes())
+                stdin_handle
+                    .write_all(stdin.as_bytes())
                     .expect("Failed to write to stdin");
             }
         }
@@ -473,12 +514,13 @@ fn expect_valid(source: &str, std_in: &str, expected_exit_code: i32) {
         status.code().unwrap_or(-1)
     }
 
-    let generated = compile(source);
-    if let Err(error) = generated {
+    let generated_result = compile(source);
+    if let Err(error) = generated_result {
         panic!("{}", error);
     }
 
-    let temp_path = save_to_temp_path(generated.unwrap().as_str());
+    let generated: String = generated_result.unwrap();
+    let temp_path = save_to_temp_path(&generated.as_str());
     let temp_exe = compile_temp_path_using_clang(temp_path.as_str());
     let actual_exit_code = execute_temp_exe(temp_exe.as_str(), std_in);
 
@@ -486,7 +528,12 @@ fn expect_valid(source: &str, std_in: &str, expected_exit_code: i32) {
     let _ = std::fs::remove_file(&temp_path);
     let _ = std::fs::remove_file(&temp_exe);
 
-    assert_eq!(actual_exit_code, expected_exit_code);
+    if actual_exit_code != expected_exit_code {
+        panic!(
+            "Expected exit code '{}' but was actually '{}'. Generated: '{}'",
+            expected_exit_code, actual_exit_code, generated
+        );
+    }
 }
 
 #[allow(dead_code)]
@@ -556,7 +603,11 @@ mod tests {
 
     #[test]
     fn test_nested_let() {
-        expect_valid("let y = read() + { let x = read() - read(); x }; y", "3 4 5", 2);
+        expect_valid(
+            "let y = read() + { let x = read() - read(); x }; y",
+            "3 4 5",
+            2,
+        );
     }
 
     #[test]
@@ -597,5 +648,10 @@ mod tests {
     #[test]
     fn test_typed_array_scalar_rhs() {
         expect_invalid("let x = read(); let y : [I32; 3] = x;");
+    }
+
+    #[test]
+    fn test_mut_reassign() {
+        expect_valid("let mut x = read(); x = read(); x", "1 2", 2);
     }
 }
