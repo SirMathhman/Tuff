@@ -202,6 +202,14 @@ test("array .length property returns array size", () => {
   expectValid("let array = [100]; array.length", "", 1);
 });
 
+test("enum declaration compiles and evaluates to 0", () => {
+  expectValid("enum Empty {}", "", 0);
+});
+
+test("enum variant comparison works", () => {
+  expectValid("enum Simple { Entry } Simple::Entry == Simple::Entry", "", 1);
+});
+
 test("struct declaration compiles and evaluates to 0", () => {
   expectValid("struct empty {}", "", 0);
 });

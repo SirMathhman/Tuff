@@ -24,7 +24,7 @@
 - [x] `Char` type for character literals
 - [ ] Type casting / conversion operators (`(U8)x`, `as U8`)
 - [ ] Additional numeric types: `U64`, `I64`
-- [ ] Enumerations  
+- [x] Enumerations (`enum Name {}`)  
 
 ## Statements & Scoping
 - [x] `this` keyword (`this.x` → `x`, `let y = this; y.x` → `x`)

@@ -7,7 +7,7 @@ function isValidChar(ch) {
   if (ch >= "a" && ch <= "z") return true;
   if (ch >= "A" && ch <= "Z") return true;
   const allowed =
-    " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"'!";
+    " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + "::|[]&\"'!";
   for (let k = 0; k < allowed.length; k++) {
     if (allowed[k] === ch) return true;
   }
@@ -251,6 +251,42 @@ function validateStructFields(body) {
     }
     i = typeEnd;
   }
+}
+
+// Skip "enum" keyword at position i. Returns end index or -1.
+function skipEnumKeyword(source, i) {
+  if (
+    source.substring(i, i + 4) === "enum" &&
+    (i + 4 >= source.length || !isAlpha(source[i + 4]))
+  ) {
+    return i + 4;
+  }
+  return -1;
+}
+
+// Skip an enum declaration starting at position i. Returns end index or -1.
+// Syntax: enum Name { }
+function skipEnumDeclaration(source, i) {
+  const enumEnd = skipEnumKeyword(source, i);
+  if (enumEnd === -1) return -1;
+  const endIdx = skipStructNameAndBraces(source, enumEnd);
+  return endIdx;
+}
+
+// Try to match an enum variant reference (EnumName::Variant) at position i and produce its
+// string-literal output. Returns {output, nextPos} or null if there's no match.
+function matchEnumVariantRefLiteral(source, i) {
+  if (!isAlpha(source[i])) return null;
+  const identEnd = skipIdentifier(source, i);
+  if (identEnd === -1) return null;
+  const afterIdent = skipWhitespace(source, identEnd);
+  if (source.substring(afterIdent, afterIdent + 2) !== "::") return null;
+  const varStart = skipWhitespace(source, afterIdent + 2);
+  const varEnd = skipIdentifier(source, varStart);
+  if (varEnd === -1) return null;
+  const enumName = source.substring(i, identEnd);
+  const varName = source.substring(varStart, varEnd);
+  return { output: '"' + enumName + "::" + varName + '"', nextPos: varEnd };
 }
 
 // Skip "fn" keyword at position i. Returns end index or -1.
@@ -691,6 +727,12 @@ function validateSource(source) {
     const structEnd = skipStructDeclaration(source, i);
     if (structEnd !== -1) {
       i = structEnd;
+      continue;
+    }
+    // Try enum declaration
+    const enumEnd = skipEnumDeclaration(source, i);
+    if (enumEnd !== -1) {
+      i = enumEnd;
       continue;
     }
     // Try extern function declaration
@@ -1328,6 +1370,7 @@ const BUILTINS = new Set([
   "Char",
   "extern",
   "this",
+  "enum",
 ]);
 
 // Scan struct fields and add them to declaredVars set.
@@ -1345,6 +1388,24 @@ function scanStructFields(body, declaredVars) {
     }
     declaredVars.add(body.substring(j, fieldEnd));
     j = fieldEnd;
+  }
+}
+
+// Scan enum variant names in body and add "EnumName::Variant" entries to declaredVars set.
+function scanEnumVariants(enumName, body, declaredVars) {
+  let j = 0;
+  while (j < body.length) {
+    if (" \t\n\r,".includes(body[j])) {
+      j++;
+      continue;
+    }
+    const varEnd = skipIdentifier(body, j);
+    if (varEnd === -1) {
+      j++;
+      continue;
+    }
+    declaredVars.add(enumName + "::" + body.substring(j, varEnd));
+    j = varEnd;
   }
 }
 
@@ -1398,6 +1459,32 @@ function scanFunctionParams(source, start, declaredVars) {
   }
 }
 
+// Check whether the "{" at position i opens an enum body (i.e. is preceded by "enum Name").
+// Returns true if so.
+function isEnumBodyBrace(source, i) {
+  let beforeBrace = i - 1;
+  while (beforeBrace >= 0 && " \t\n\r".includes(source[beforeBrace])) beforeBrace--;
+  if (beforeBrace < 0 || !isAlpha(source[beforeBrace])) return false;
+  let nameStart = beforeBrace;
+  while (nameStart > 0 && isAlpha(source[nameStart - 1])) nameStart--;
+  let checkPos = nameStart - 1;
+  while (checkPos >= 0 && " \t\n\r".includes(source[checkPos])) checkPos--;
+  return checkPos >= 3 && source.substring(checkPos - 3, checkPos + 1) === "enum";
+}
+
+// If the identifier ending at identEnd is followed by "::Variant" and the full
+// "name::Variant" reference is in declaredVars, returns the index after the variant
+// name so the caller can skip past it. Returns -1 if there's no such reference.
+function matchDeclaredEnumVariantRef(source, identEnd, name, declaredVars) {
+  let afterIdent = skipWhitespace(source, identEnd);
+  if (source.substring(afterIdent, afterIdent + 2) !== "::") return -1;
+  const varStart = skipWhitespace(source, afterIdent + 2);
+  const varEnd = skipIdentifier(source, varStart);
+  if (varEnd === -1) return -1;
+  const fullRef = name + "::" + source.substring(varStart, varEnd);
+  return declaredVars.has(fullRef) ? varEnd : -1;
+}
+
 // Validate that all identifier references are declared variables, functions, or built-ins. Throws if not.
 function validateIdentifiers(source, declaredVars, declaredFns) {
   let i = 0;
@@ -1406,6 +1493,11 @@ function validateIdentifiers(source, declaredVars, declaredFns) {
     const literalEnd = skipLiteral(source, i);
     if (literalEnd !== -1) {
       i = literalEnd;
+      continue;
+    }
+    // Skip enum bodies so variant names inside aren't flagged as unknown identifiers
+    if (source[i] === "{" && isEnumBodyBrace(source, i)) {
+      i = findMatchingBrace(source, i) + 1;
       continue;
     }
     if (!isAlpha(source[i])) {
@@ -1423,11 +1515,12 @@ function validateIdentifiers(source, declaredVars, declaredFns) {
       i = identEnd;
       continue;
     }
-    // Skip "let", "fn", "struct", "if", "else", "while", "for" keywords
+    // Skip "let", "fn", "struct", "enum", "if", "else", "while", "for" keywords
     if (
       name === "let" ||
       name === "fn" ||
       name === "struct" ||
+      name === "enum" ||
       name === "if" ||
       name === "else" ||
       name === "while" ||
@@ -1463,14 +1556,30 @@ function validateIdentifiers(source, declaredVars, declaredFns) {
       i = identEnd;
       continue;
     }
+    if (i > 0 && source.substring(i - 5, i) === "enum ") {
+      i = identEnd;
+      continue;
+    }
     // Skip if preceded by "mut " (let mut x)
     if (i > 0 && source.substring(i - 4, i) === "mut ") {
       i = identEnd;
       continue;
     }
+    // Check if followed by :: (enum variant reference like Simple::Entry).
+    // This must run even for declared identifiers, because "Simple" is declared but
+    // "Simple::Entry" needs its own declaredVars entry to be recognized.
+    const enumVariantEnd = matchDeclaredEnumVariantRef(source, identEnd, name, declaredVars);
+    if (enumVariantEnd !== -1) {
+      i = enumVariantEnd;
+      continue;
+    }
     // Check if identifier is declared
     if (!declaredVars.has(name) && !declaredFns.has(name)) {
-      throw new Error("Unknown identifier: " + name);
+      // Build context snippet for better error messages
+      const start = Math.max(0, i - 10);
+      const end = Math.min(source.length, identEnd + 10);
+      const context = source.substring(start, end).split("\n").join(" ");
+      throw new Error("Unknown identifier: " + name + " (near: ..." + context + "...)");
     }
     i = identEnd;
   }
@@ -1526,6 +1635,21 @@ function validateVarAssignments(source) {
     const endIdx = findMatchingBrace(source, pos);
     const body = source.substring(pos + 1, endIdx);
     scanStructFields(body, declaredVars);
+  }
+  // Scan for enum declarations and their variant names
+  for (let i = 0; i < source.length - 4; i++) {
+    if (source.substring(i, i + 5) !== "enum ") continue;
+    let pos = skipWhitespace(source, i + 5);
+    const identEnd = skipIdentifier(source, pos);
+    if (identEnd === -1) continue;
+    const enumName = source.substring(pos, identEnd);
+    declaredVars.add(enumName); // enum name is a valid type/identifier
+    // Scan variants in braces
+    pos = skipWhitespace(source, identEnd);
+    if (source[pos] !== "{") continue;
+    const endIdx = findMatchingBrace(source, pos);
+    const body = source.substring(pos + 1, endIdx);
+    scanEnumVariants(enumName, body, declaredVars);
   }
 
   // Scan for for-loop variable declarations: for (i in ...)
@@ -2030,6 +2154,20 @@ function transformBlocks(source) {
       const nextI = skipStructDeclaration(source, i);
       result += "0; ";
       i = nextI === -1 ? source.length : nextI;
+      continue;
+    }
+    // Check for enum declaration
+    const enumDeclEnd = skipEnumDeclaration(source, i);
+    if (enumDeclEnd !== -1) {
+      result += "0; ";
+      i = enumDeclEnd;
+      continue;
+    }
+    // Check for enum variant reference: EnumName::Variant -> "EnumName::Variant"
+    const variantRef = matchEnumVariantRefLiteral(source, i);
+    if (variantRef !== null) {
+      result += variantRef.output;
+      i = variantRef.nextPos;
       continue;
     }
     // Check for extern function declaration
@@ -2735,7 +2873,9 @@ export function compile(source) {
   const isStmtLevel =
     hasStatements(source) ||
     source.indexOf("yield") !== -1 ||
-    source.indexOf("fn ") !== -1;
+    source.indexOf("fn ") !== -1 ||
+    source.indexOf("struct ") !== -1 ||
+    source.indexOf("enum ") !== -1;
   if (isStmtLevel) {
     // yield -> return conversion already handled by transformBlocks, so use
     // prependReturnToLastExpr which correctly skips leading function declarations

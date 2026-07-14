@@ -2,18 +2,8 @@ fn isAlpha(ch) => {
   return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
 }
 
-extern let String : {
-    fromCharCode : (...charCodes : [I32; _]) => &Str;
-};
+extern struct StringType {
 
-fn isValidChar(ch) => {
-  if (ch >= "0" && ch <= "9") return true;
-  if (ch >= "a" && ch <= "z") return true;
-  if (ch >= "A" && ch <= "Z") return true;
-  let allowed =
-    " \t\n\r+-*/(){ };=UI." + String.fromCharCode(60, 62) + ":|[]&\"'";
-  for (let k = 0; k < allowed.length; k++) {
-    if (allowed[k] === ch) return true;
-  }
-  return false;
 }
+
+extern let String : StringType;
