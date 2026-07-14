@@ -8,6 +8,10 @@ function Err<X, T = never>(error: X): Result<T, X> {
   return { ok: false, error };
 }
 
+// Every validation guard clause returns the same immutable "success, no value"
+// result — share one instance instead of allocating a fresh object each time.
+const OK_VOID: Result<void, string> = Ok(undefined);
+
 function isAlpha(ch: string): boolean {
   return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
 }
@@ -63,8 +67,8 @@ function skipBoolLiteral(source: string, i: number): number {
 
 // Skip a logical operator ("||" or "&&") at position i. Returns end index or -1.
 function skipLogicalOperator(source: string, i: number): number {
-  if (source.substring(i, i + 2) === "||") return i + 2;
-  if (source.substring(i, i + 2) === "&&") return i + 2;
+  const twoChars = source.substring(i, i + 2);
+  if (twoChars === "||" || twoChars === "&&") return i + 2;
   return -1;
 }
 
@@ -434,12 +438,9 @@ function skipTypeAnnotation(source: string, i: number): number {
   ) {
     return skipTypeSuffixChars(source, j);
   }
-  // Bool type annotation
-  if (j + 3 <= source.length && source.substring(j, j + 4) === "Bool") {
-    return j + 4;
-  }
-  // Char type annotation
-  if (j + 3 <= source.length && source.substring(j, j + 4) === "Char") {
+  // Bool / Char type annotation
+  const fourChars = j + 3 <= source.length ? source.substring(j, j + 4) : "";
+  if (fourChars === "Bool" || fourChars === "Char") {
     return j + 4;
   }
   // Str type annotation
@@ -476,17 +477,6 @@ function skipIdentifier(source: string, i: number): number {
       j++;
     }
     return j;
-  }
-  return -1;
-}
-
-// Skip ".length" property access at position i. Returns end index or -1.
-function skipDotLength(source: string, i: number): number {
-  if (
-    source.substring(i, i + 7) === ".length" &&
-    (i + 7 >= source.length || !isAlpha(source[i + 7]))
-  ) {
-    return i + 7;
   }
   return -1;
 }
@@ -622,13 +612,13 @@ function prependReturnToLastExpr(transformedInner: string): string {
     if (result === null)
       return (function (transformedInner: string, j: number) {
         const afterSemi = transformedInner.substring(j + 1);
-        if (isEmptyOrSemicolons(afterSemi))
-          return transformedInner.substring(0, j + 1) + "return 0";
+        const before = transformedInner.substring(0, j + 1);
+        if (isEmptyOrSemicolons(afterSemi)) return before + "return 0";
         // Trim leading whitespace to avoid ASI issues with return \n expr
         let k = 0;
         while (k < afterSemi.length && " \t\n\r".includes(afterSemi[k])) k++;
         const trimmed = afterSemi.substring(k);
-        return transformedInner.substring(0, j + 1) + "return " + trimmed;
+        return before + "return " + trimmed;
       })(transformedInner, j);
     j = result.j;
     depth = result.depth;
@@ -703,10 +693,10 @@ function validateTypeCompatibility(
 ): Result<void, string> {
   const innerBits = getTypeBits(innerTypeName);
   const outerBits = getTypeBits(outerTypeName);
-  if (innerBits === -1 || outerBits === -1) return Ok(undefined); // unrecognized types, skip check
+  if (innerBits === -1 || outerBits === -1) return OK_VOID; // unrecognized types, skip check
   if (innerBits > outerBits)
     return Err("Type " + innerTypeName + " does not fit in " + outerTypeName);
-  return Ok(undefined);
+  return OK_VOID;
 }
 
 // Extract type name from a typed read like "read<U8>" at position i. Returns {typeName, endPos} or null.
@@ -751,6 +741,31 @@ function extractRhs(
   return { rhs: source.substring(rhsStart, semiPos).trim(), eqPos, semiPos };
 }
 
+// If a "{ ... }" body immediately follows position `afterName` (skipping
+// whitespace), scan its comma/whitespace-separated identifier list and call
+// `addName` with each one found. Used for both a struct's field names and an
+// enum's variant names.
+function scanBracedIdentifierList(source: string, afterName: number, addName: (name: string) => void): void {
+  const pos = skipWhitespace(source, afterName);
+  if (source[pos] !== "{") return;
+  const endIdx = findMatchingBrace(source, pos);
+  const body = source.substring(pos + 1, endIdx);
+  let j = 0;
+  while (j < body.length) {
+    if (" \t\n\r,".includes(body[j])) {
+      j++;
+      continue;
+    }
+    const identEnd = skipIdentifier(body, j);
+    if (identEnd === -1) {
+      j++;
+      continue;
+    }
+    addName(body.substring(j, identEnd));
+    j = identEnd;
+  }
+}
+
 // Iterate over all 'let' declarations in source, calling callback with (varName, identEnd, pos) for each.
 // Handles both "let x" and "let mut x" declarations.
 function forEachLetDeclaration(
@@ -773,7 +788,7 @@ function forEachLetDeclaration(
     const result = callback(name, identEnd, i);
     if (!result.ok) return result;
   }
-  return Ok(undefined);
+  return OK_VOID;
 }
 
 // Count elements in an array literal string like "[a, b, c]". Returns count.
@@ -869,30 +884,9 @@ function skipParam(source: string, pos: number): number {
   return skipWhitespace(source, pos);
 }
 
-// Validate a typed number value against its type suffix.
-function validateTypedNumber(
-  value: number,
-  typeName: string,
-): Result<void, string> {
-  const range = (function (typeName: string) {
-    const isUnsigned = typeName[0] === "U";
-    let bits: number;
-    if (typeName.length >= 2 && !isNaN(parseInt(typeName.substring(1)))) {
-      bits = parseInt(typeName.substring(1));
-    } else {
-      // Fallback to U8/I8 if bit width not recognized
-      bits = isUnsigned ? 8 : 8;
-    }
-    const minVal = isUnsigned ? 0 : -Math.pow(2, bits - 1);
-    const maxVal = Math.pow(2, isUnsigned ? bits : bits - 1) - 1;
-    return { min: minVal, max: maxVal };
-  })(typeName);
-  if (value < range.min || value > range.max)
-    return Err("Value out of range for " + typeName);
-  return Ok(undefined);
-}
-
-// Strip numeric type suffixes like U8 from source text and validate ranges
+// Strip numeric type suffixes like U8 from source text. Ranges are already
+// validated by validateTypedNumberLiterals() before this transform-phase
+// helper ever runs, so this just needs to skip past the suffix chars.
 function stripTypeSuffix(source: string): string {
   let result = "";
   let i = 0;
@@ -900,28 +894,10 @@ function stripTypeSuffix(source: string): string {
     if (source[i] >= "0" && source[i] <= "9") {
       const numEnd = skipDigits(source, i);
       result += source.substring(i, numEnd);
-      i = (function (source: string, start: number) {
-        const numEnd = skipDigits(source, start);
-        let i = numEnd;
-        // Check for type suffix like U8, I16, F32 etc.
-        if (source[i] === "U" || source[i] === "I" || source[i] === "F") {
-          const suffixStart = i;
-          i = skipTypeSuffixChars(source, i);
-          // Extract the full type name for validation (e.g., "U16", "I32")
-          const typeName = source.substring(suffixStart, i);
-          // Include sign prefix if present for value calculation
-          let numStr = source.substring(start, numEnd);
-          if (start > 0 && source[start - 1] === "-") {
-            numStr = "-" + numStr;
-          } else if (start > 0 && source[start - 1] === "+") {
-            numStr = "+" + numStr;
-          }
-          const value = parseInt(numStr);
-          // Validate range based on type suffix
-          validateTypedNumber(value, typeName);
-        }
-        return i;
-      })(source, i);
+      i = numEnd;
+      if (source[i] === "U" || source[i] === "I" || source[i] === "F") {
+        i = skipTypeSuffixChars(source, i);
+      }
     } else {
       result += source[i];
       i++;
@@ -1099,17 +1075,17 @@ function stripTypedSyntax(source: string): string {
     if (isAlpha(source[i])) {
       const identEnd = skipIdentifier(source, i);
       const name = source.substring(i, identEnd);
+      const isBoxedVar = CURRENT_BOXED_VARS.has(name);
       const isThisVar =
         CURRENT_THIS_VARS.has(name) &&
         source[identEnd] === "." &&
-        !CURRENT_BOXED_VARS.has(name);
+        !isBoxedVar;
       const thisFieldEnd = isThisVar
         ? skipIdentifier(source, identEnd + 1)
         : -1;
-      const isDeclSite =
-        source.substring(i - 4, i) === "let " ||
-        source.substring(i - 4, i) === "mut ";
-      const isBoxed = CURRENT_BOXED_VARS.has(name) && !isDeclSite;
+      const fourBefore = source.substring(i - 4, i);
+      const isDeclSite = fourBefore === "let " || fourBefore === "mut ";
+      const isBoxed = isBoxedVar && !isDeclSite;
       result +=
         thisFieldEnd !== -1
           ? source.substring(identEnd + 1, thisFieldEnd)
@@ -1594,6 +1570,15 @@ function transformBlocks(source: string): string {
         const transformedTrueBranch = transformBlocks(
           stripTypedSyntax(stripTypeSuffix(trueBranch.trim())),
         );
+        // Shared by both the if/else and if-only cases below.
+        const trueBranchHasControlFlow =
+          hasBreakOrContinue(trueBranch) ||
+          transformedTrueBranch.indexOf("break") !== -1 ||
+          transformedTrueBranch.indexOf("continue") !== -1 ||
+          transformedTrueBranch.indexOf("return") !== -1;
+        const trueBranchStr = transformedTrueBranch.endsWith(";")
+          ? transformedTrueBranch
+          : transformedTrueBranch + ";";
 
         pos = skipWhitespace(source, pos + trueBranch.length);
         // Skip past semicolon if present (e.g., "if (c) break; else ...")
@@ -1610,18 +1595,12 @@ function transformBlocks(source: string): string {
 
           // If either branch contains break/continue/yield, use statement-style output
           if (
-            hasBreakOrContinue(trueBranch) ||
+            trueBranchHasControlFlow ||
             hasBreakOrContinue(falseBranch) ||
-            transformedTrueBranch.indexOf("break") !== -1 ||
-            transformedTrueBranch.indexOf("continue") !== -1 ||
             transformedFalseBranch.indexOf("break") !== -1 ||
             transformedFalseBranch.indexOf("continue") !== -1 ||
-            transformedTrueBranch.indexOf("return") !== -1 ||
             transformedFalseBranch.indexOf("return") !== -1
           ) {
-            const trueBranchStr = transformedTrueBranch.endsWith(";")
-              ? transformedTrueBranch
-              : transformedTrueBranch + ";";
             const falseBranchStr = transformedFalseBranch.endsWith(";")
               ? transformedFalseBranch
               : transformedFalseBranch + ";";
@@ -1648,15 +1627,7 @@ function transformBlocks(source: string): string {
         }
 
         // If true branch contains break/continue/yield, use statement-style output
-        if (
-          hasBreakOrContinue(trueBranch) ||
-          transformedTrueBranch.indexOf("break") !== -1 ||
-          transformedTrueBranch.indexOf("continue") !== -1 ||
-          transformedTrueBranch.indexOf("return") !== -1
-        ) {
-          const trueBranchStr = transformedTrueBranch.endsWith(";")
-            ? transformedTrueBranch
-            : transformedTrueBranch + ";";
+        if (trueBranchHasControlFlow) {
           return "if (" + transformedCondition + ") { " + trueBranchStr + " }";
         }
 
@@ -1740,25 +1711,22 @@ function transformBlocks(source: string): string {
     if (isEmptyOrSemicolons(inner)) {
       // Empty block evaluates to 0 as a statement
       result += "0;";
-    } else if (hasBreakOrContinue(inner) || hasReturn(inner)) {
-      // Blocks with break/continue/return must stay as plain blocks, not IIFEs
-      result +=
-        "{ " + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + " }";
-    } else if (!hasStatements(inner)) {
-      result +=
-        "(" + transformBlocks(stripTypedSyntax(stripTypeSuffix(inner))) + ")";
-    } else if (inner.indexOf("yield") !== -1) {
-      // Blocks with yield: wrap as IIFE, yield -> return exits the IIFE
-      let transformedInner = transformBlocks(
-        stripTypedSyntax(stripTypeSuffix(inner)),
-      );
-      result += "(function() {" + transformedInner + "})()";
     } else {
-      let transformedInner = transformBlocks(
+      const transformedInner = transformBlocks(
         stripTypedSyntax(stripTypeSuffix(inner)),
       );
-      const withReturn = prependReturnToLastExpr(transformedInner);
-      result += "(function() {" + withReturn + "; })();";
+      if (hasBreakOrContinue(inner) || hasReturn(inner)) {
+        // Blocks with break/continue/return must stay as plain blocks, not IIFEs
+        result += "{ " + transformedInner + " }";
+      } else if (!hasStatements(inner)) {
+        result += "(" + transformedInner + ")";
+      } else if (inner.indexOf("yield") !== -1) {
+        // Blocks with yield: wrap as IIFE, yield -> return exits the IIFE
+        result += "(function() {" + transformedInner + "})()";
+      } else {
+        const withReturn = prependReturnToLastExpr(transformedInner);
+        result += "(function() {" + withReturn + "; })();";
+      }
     }
     i = endIdx + 1;
   }
@@ -1900,7 +1868,7 @@ export function compile(source: string): Result<string, string> {
     const declaredFns: Set<string> = new Set();
     forEachLetDeclaration(source, (varName) => {
       declaredVars.add(varName);
-      return Ok(undefined);
+      return OK_VOID;
     });
     // Scan for function declarations and their parameters
     for (let i = 0; i < source.length - 3; i++) {
@@ -1952,26 +1920,7 @@ export function compile(source: string): Result<string, string> {
       if (identEnd === -1) continue;
       declaredVars.add(source.substring(pos, identEnd));
       // Scan fields in braces
-      pos = skipWhitespace(source, identEnd);
-      if (source[pos] !== "{") continue;
-      const endIdx = findMatchingBrace(source, pos);
-      const body = source.substring(pos + 1, endIdx);
-      {
-        let j = 0;
-        while (j < body.length) {
-          if (" \t\n\r,".includes(body[j])) {
-            j++;
-            continue;
-          }
-          const fieldEnd = skipIdentifier(body, j);
-          if (fieldEnd === -1) {
-            j++;
-            continue;
-          }
-          declaredVars.add(body.substring(j, fieldEnd));
-          j = fieldEnd;
-        }
-      }
+      scanBracedIdentifierList(source, identEnd, (name) => declaredVars.add(name));
     }
     // Scan for enum declarations and their variant names
     for (let i = 0; i < source.length - 4; i++) {
@@ -1982,26 +1931,9 @@ export function compile(source: string): Result<string, string> {
       const enumName = source.substring(pos, identEnd);
       declaredVars.add(enumName); // enum name is a valid type/identifier
       // Scan variants in braces
-      pos = skipWhitespace(source, identEnd);
-      if (source[pos] !== "{") continue;
-      const endIdx = findMatchingBrace(source, pos);
-      const body = source.substring(pos + 1, endIdx);
-      {
-        let j = 0;
-        while (j < body.length) {
-          if (" \t\n\r,".includes(body[j])) {
-            j++;
-            continue;
-          }
-          const varEnd = skipIdentifier(body, j);
-          if (varEnd === -1) {
-            j++;
-            continue;
-          }
-          declaredVars.add(enumName + "::" + body.substring(j, varEnd));
-          j = varEnd;
-        }
-      }
+      scanBracedIdentifierList(source, identEnd, (name) =>
+        declaredVars.add(enumName + "::" + name),
+      );
     }
 
     // Scan for for-loop variable declarations: for (i in ...)
@@ -2157,7 +2089,7 @@ export function compile(source: string): Result<string, string> {
         }
         i = identEnd;
       }
-      return Ok(undefined);
+      return OK_VOID;
     })(source, declaredVars, declaredFns);
     if (!identifiersResult.ok) return identifiersResult;
 
@@ -2169,20 +2101,20 @@ export function compile(source: string): Result<string, string> {
         // Check if this declaration has "mut" keyword
         let afterLet = skipWhitespace(source, pos + 4);
         const mutEnd = skipKeywordMut(source, afterLet);
-        if (mutEnd !== -1) return Ok(undefined); // mutable variable, skip
+        if (mutEnd !== -1) return OK_VOID; // mutable variable, skip
         immutables.add(varName);
 
         // Check type annotation on this declaration for compatibility with RHS variable types
         let typePos = skipWhitespace(source, identEnd);
-        if (source[typePos] !== ":") return Ok(undefined);
+        if (source[typePos] !== ":") return OK_VOID;
 
         const annotEnd = skipTypeAnnotation(source, typePos);
-        if (annotEnd === -1) return Ok(undefined);
+        if (annotEnd === -1) return OK_VOID;
 
         // Get target type and RHS variable name
         const targetTypeName = source.substring(typePos + 1, annotEnd).trim();
         let eqPos2 = source.indexOf("=", pos + 4);
-        if (eqPos2 === -1) return Ok(undefined);
+        if (eqPos2 === -1) return OK_VOID;
 
         let rhsStart = skipWhitespace(source, eqPos2 + 1);
         const semiPos2 = source.indexOf(";", eqPos2);
@@ -2190,14 +2122,14 @@ export function compile(source: string): Result<string, string> {
 
         // Check if RHS is a simple identifier reference to another variable
         let rhsIdentEnd = skipIdentifier(source, rhsStart);
-        if (rhsIdentEnd <= rhsStart) return Ok(undefined);
+        if (rhsIdentEnd <= rhsStart) return OK_VOID;
 
         const rhsVarName = source.substring(rhsStart, rhsIdentEnd);
         const rhsTrimmed = source.substring(rhsStart, endBound).trim();
-        if (rhsVarName !== rhsTrimmed) return Ok(undefined); // not a bare identifier
+        if (rhsVarName !== rhsTrimmed) return OK_VOID; // not a bare identifier
 
         const srcTypeName = varTypes[rhsVarName];
-        if (!srcTypeName || !targetTypeName) return Ok(undefined);
+        if (!srcTypeName || !targetTypeName) return OK_VOID;
 
         return validateTypeCompatibility(srcTypeName, targetTypeName);
       },
@@ -2223,7 +2155,7 @@ export function compile(source: string): Result<string, string> {
         while (beforeEq >= 0 && " \t\n\r".includes(source[beforeEq]))
           beforeEq--;
 
-        if (!(beforeEq > 0 && isAlpha(source[beforeEq]))) return Ok(undefined); // not an identifier
+        if (!(beforeEq > 0 && isAlpha(source[beforeEq]))) return OK_VOID; // not an identifier
 
         // Walk backwards to find start of identifier
         let identStart = beforeEq;
@@ -2243,7 +2175,7 @@ export function compile(source: string): Result<string, string> {
           source.substring(identStart - 4, identStart) === "let ";
 
         // If it's part of a let declaration, skip (that's the initial assignment)
-        if (hasLetBefore) return Ok(undefined);
+        if (hasLetBefore) return OK_VOID;
 
         // Standalone assignment to immutable variable is an error
         if (
@@ -2252,13 +2184,13 @@ export function compile(source: string): Result<string, string> {
         ) {
           return Err("Cannot reassign immutable variable: " + varName);
         }
-        return Ok(undefined);
+        return OK_VOID;
       })(source, eqPos, immutables);
       if (!reassignResult.ok) return reassignResult;
 
       eqPos = source.indexOf("=", eqPos + 1);
     }
-    return Ok(undefined);
+    return OK_VOID;
   })(source);
   if (!varAssignResult.ok) return varAssignResult;
 
@@ -2328,7 +2260,7 @@ export function compile(source: string): Result<string, string> {
                   j--;
                 }
                 const colonPos = source[j] === ":" ? j : j + 1; // position of ':'
-                if (source[colonPos] !== ":") return Ok(undefined); // sanity check — no type annotation found
+                if (source[colonPos] !== ":") return OK_VOID; // sanity check — no type annotation found
                 let outerStart = colonPos + 1;
                 while (
                   outerStart < afterColonEnd &&
@@ -2392,7 +2324,7 @@ export function compile(source: string): Result<string, string> {
                         if (!result.ok) return result;
                       }
                     }
-                    return Ok(undefined);
+                    return OK_VOID;
                   })(source, pos, semiPos, elementType as string);
                   if (!readsResult.ok) return readsResult;
                   pos = semiPos + 1;
@@ -2406,9 +2338,9 @@ export function compile(source: string): Result<string, string> {
                     declaredSize: number,
                   ) {
                     const rhsInfo = extractRhs(source, afterColonEnd);
-                    if (!rhsInfo) return Ok(undefined);
+                    if (!rhsInfo) return OK_VOID;
                     // Check if RHS is an array literal
-                    if (rhsInfo.rhs[0] !== "[") return Ok(undefined);
+                    if (rhsInfo.rhs[0] !== "[") return OK_VOID;
                     // Count elements in the array literal by counting top-level commas + 1
                     const elementCount = countArrayElements(rhsInfo.rhs);
                     if (elementCount !== declaredSize) {
@@ -2419,7 +2351,7 @@ export function compile(source: string): Result<string, string> {
                           elementCount,
                       );
                     }
-                    return Ok(undefined);
+                    return OK_VOID;
                   })(source, afterColonEnd, declaredSize);
                   if (!literalSizeResult.ok) return literalSizeResult;
                   // Also check if RHS is a variable reference to an array and validate size compatibility
@@ -2429,13 +2361,13 @@ export function compile(source: string): Result<string, string> {
                     declaredSize: number,
                   ) {
                     const rhsInfo = extractRhs(source, afterColonEnd);
-                    if (!rhsInfo) return Ok(undefined);
+                    if (!rhsInfo) return OK_VOID;
                     // Check if RHS is a simple identifier (variable reference)
                     let rhsStart = skipWhitespace(source, rhsInfo.eqPos + 1);
                     let identEnd = skipIdentifier(source, rhsStart);
-                    if (identEnd <= rhsStart) return Ok(undefined);
+                    if (identEnd <= rhsStart) return OK_VOID;
                     const rhsVarName = source.substring(rhsStart, identEnd);
-                    if (rhsVarName !== rhsInfo.rhs) return Ok(undefined); // not a bare identifier
+                    if (rhsVarName !== rhsInfo.rhs) return OK_VOID; // not a bare identifier
                     // Check if the RHS variable is an array by looking at its declaration
                     const rhsArraySize = (function (
                       source: string,
@@ -2445,7 +2377,7 @@ export function compile(source: string): Result<string, string> {
                       forEachLetDeclaration(
                         source,
                         (name: string, identEnd: number, pos: number) => {
-                          if (name !== varName) return Ok(undefined);
+                          if (name !== varName) return OK_VOID;
                           // Check if this declaration has an array type annotation
                           let typePos = skipWhitespace(source, identEnd);
                           if (source[typePos] !== ":") {
@@ -2461,16 +2393,16 @@ export function compile(source: string): Result<string, string> {
                               );
                             })(source, pos + 4);
                             if (size !== null) result = size;
-                            return Ok(undefined);
+                            return OK_VOID;
                           }
                           const annotEnd = skipTypeAnnotation(source, typePos);
-                          if (annotEnd === -1) return Ok(undefined);
+                          if (annotEnd === -1) return OK_VOID;
                           const typeStr = source
                             .substring(typePos + 1, annotEnd)
                             .trim();
                           if (typeStr.startsWith("["))
                             result = extractArrayDeclaredSize(typeStr);
-                          return Ok(undefined);
+                          return OK_VOID;
                         },
                       );
                       return result;
@@ -2486,11 +2418,11 @@ export function compile(source: string): Result<string, string> {
                           rhsArraySize,
                       );
                     }
-                    return Ok(undefined);
+                    return OK_VOID;
                   })(source, afterColonEnd, declaredSize);
                   if (!varAssignResult.ok) return varAssignResult;
                 }
-                return Ok(undefined);
+                return OK_VOID;
               })(source, annotEnd);
               if (!checkResult.ok) return checkResult;
               return Ok(annotEnd);
@@ -2605,7 +2537,7 @@ export function compile(source: string): Result<string, string> {
             }
             i = typeEnd;
           }
-          return Ok(undefined);
+          return OK_VOID;
         })(source.substring(braceStart + 1, braceEnd));
         if (!fieldsResult.ok) return fieldsResult;
         i = structEnd;
@@ -2699,10 +2631,16 @@ export function compile(source: string): Result<string, string> {
               return i;
             })(source, identEnd);
             // Also skip .length if present
-            identEnd =
-              skipDotLength(source, identEnd) !== -1
-                ? skipDotLength(source, identEnd)
-                : identEnd;
+            const dotLengthEnd = (function (source: string, i: number) {
+              if (
+                source.substring(i, i + 7) === ".length" &&
+                (i + 7 >= source.length || !isAlpha(source[i + 7]))
+              ) {
+                return i + 7;
+              }
+              return -1;
+            })(source, identEnd);
+            identEnd = dotLengthEnd !== -1 ? dotLengthEnd : identEnd;
             return identEnd;
           }
           j--;
@@ -2718,7 +2656,7 @@ export function compile(source: string): Result<string, string> {
       }
       i++;
     }
-    return Ok(undefined);
+    return OK_VOID;
   })(source);
   if (!sourceResult.ok) return sourceResult;
 
@@ -2743,7 +2681,22 @@ export function compile(source: string): Result<string, string> {
               numStr = "+" + numStr;
             }
             const value = parseInt(numStr);
-            const rangeResult = validateTypedNumber(value, typeName);
+            const rangeResult = (function (value: number, typeName: string) {
+              const isUnsigned = typeName[0] === "U";
+              let bits: number;
+              const parsedBits = parseInt(typeName.substring(1));
+              if (typeName.length >= 2 && !isNaN(parsedBits)) {
+                bits = parsedBits;
+              } else {
+                // Fallback to U8/I8 if bit width not recognized
+                bits = isUnsigned ? 8 : 8;
+              }
+              const minVal = isUnsigned ? 0 : -Math.pow(2, bits - 1);
+              const maxVal = Math.pow(2, isUnsigned ? bits : bits - 1) - 1;
+              if (value < minVal || value > maxVal)
+                return Err("Value out of range for " + typeName);
+              return OK_VOID;
+            })(value, typeName);
             if (!rangeResult.ok) return rangeResult;
           }
           return Ok(i);
@@ -2754,7 +2707,7 @@ export function compile(source: string): Result<string, string> {
         i++;
       }
     }
-    return Ok(undefined);
+    return OK_VOID;
   })(source);
   if (!numberLiteralsResult.ok) return numberLiteralsResult;
 
@@ -2989,7 +2942,8 @@ export function compileModules(
   const allModulePaths: Set<string> = new Set();
   // Map module paths to their exported variable names for bare module path resolution.
   const moduleExports: Map<string, string[]> = new Map();
-  for (const key of Object.keys(moduleSources)) {
+  const moduleSourceKeys = Object.keys(moduleSources);
+  for (const key of moduleSourceKeys) {
     const modPath = key.includes(",") ? key.split(",").join("::") : key;
     allModulePaths.add(modPath);
     // Extract exported variable names from "out let" declarations
@@ -3015,7 +2969,7 @@ export function compileModules(
 
   // Process all non-entry modules first (derive from moduleSources keys)
   let combinedSource = "";
-  for (const modName of Object.keys(moduleSources)) {
+  for (const modName of moduleSourceKeys) {
     if (modName === entryModule) continue;
     let src = moduleSources[modName];
     src = stripOutKeyword(src);
@@ -3136,17 +3090,14 @@ function resolveCrossModuleRefs(
     }
     const pathEnd = skipModulePath(source, i);
     const name = source.substring(i, pathEnd);
+    const isModulePath = modulePaths.has(name);
     // Check if this is a module path followed by a dot
-    if (
-      modulePaths.has(name) &&
-      pathEnd < source.length &&
-      source[pathEnd] === "."
-    ) {
+    if (isModulePath && pathEnd < source.length && source[pathEnd] === ".") {
       i = pathEnd + 1;
       continue;
     }
     // Check if this is a bare module path (used in destructuring)
-    if (modulePaths.has(name) && moduleExports.has(name)) {
+    if (isModulePath && moduleExports.has(name)) {
       const exports = moduleExports.get(name);
       result += "{" + (exports as string[]).join(",") + "}";
       i = pathEnd;

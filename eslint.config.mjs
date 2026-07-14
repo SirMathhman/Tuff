@@ -3,10 +3,12 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
 import noSingleUseFunction from "./eslint-rules/no-single-use-function.mjs";
+import noDuplicateExpression from "./eslint-rules/no-duplicate-expression.mjs";
 
 const local = {
   rules: {
     "no-single-use-function": noSingleUseFunction,
+    "no-duplicate-expression": noDuplicateExpression,
   },
 };
 
@@ -40,6 +42,7 @@ export default defineConfig([
     rules: {
       "no-restricted-syntax": noRestrictedSyntax,
       "local/no-single-use-function": "warn",
+      "local/no-duplicate-expression": "warn",
     },
   },
   {
@@ -52,6 +55,7 @@ export default defineConfig([
     rules: {
       "no-restricted-syntax": noRestrictedSyntax,
       "local/no-single-use-function": "warn",
+      "local/no-duplicate-expression": "warn",
     },
   },
 ]);
