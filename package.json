@@ -19,14 +19,17 @@
     "dev": "nodemon",
     "test": "bun test",
     "lint": "eslint . --fix",
-    "cpd": "pmd cpd index.js index.test.js --minimum-tokens 50 --language ecmascript --ignore-literals --ignore-identifiers"
+    "cpd": "pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.1.1",
     "eslint": "^10.7.0",
     "globals": "^17.7.0"
   },
   "dependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "typescript": "^7.0.2"
   }
 }

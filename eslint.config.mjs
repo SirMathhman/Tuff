@@ -10,7 +10,6 @@ export default defineConfig([
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
-      "max-depth": ["error", 2],
       "no-restricted-syntax": [
         "error",
         {

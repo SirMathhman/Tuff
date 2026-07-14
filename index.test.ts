@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { compile, compileModules } from ".";
+import { compile, compileModules } from "./index.js";
 
-function runGenerated(generated, stdIn, expectedExitCode) {
+function runGenerated(generated: string, stdIn: string, expectedExitCode: number): void {
   try {
     const actualExitCode = new Function("stdIn", generated)(stdIn);
     if (actualExitCode !== expectedExitCode) {
@@ -16,19 +16,19 @@ function runGenerated(generated, stdIn, expectedExitCode) {
       );
     }
   } catch (e) {
-    throw new Error("Failed to execute generated code: '" + generated + "'", e);
+    throw new Error("Failed to execute generated code: '" + generated + "'", { cause: e });
   }
 }
 
-function expectValid(source, stdIn, expectedExitCode) {
+function expectValid(source: string, stdIn: string, expectedExitCode: number): void {
   runGenerated(compile(source), stdIn, expectedExitCode);
 }
 
-function expectInvalid(source) {
+function expectInvalid(source: string): void {
   expect(() => compile(source)).toThrow();
 }
 
-function expectValidWithModules(moduleNames, moduleSources, stdIn, expectedExitCode) {
+function expectValidWithModules(moduleNames: string[], moduleSources: Record<string, string>, stdIn: string, expectedExitCode: number): void {
   runGenerated(compileModules(moduleNames, moduleSources), stdIn, expectedExitCode);
 }
 
@@ -355,41 +355,41 @@ test("cross-module reference with out let", () => {
 });
 
 test("nested module reference with out let", () => {
-  const moduleSources = { index: "lib::sub.myVar" };
-  moduleSources[["lib", "sub"]] = "out let myVar = read();";
+  const moduleSources: Record<string, string> = { index: "lib::sub.myVar" };
+  moduleSources[["lib", "sub"] as unknown as string] = "out let myVar = read();";
   expectValidWithModules(["index"], moduleSources, "100", 100);
 });
 
 test("nested entry module with nested module reference", () => {
-  const moduleSources = {};
-  moduleSources[["index", "foo"]] = "lib::sub.myVar";
-  moduleSources[["lib", "sub"]] = "out let myVar = read();";
+  const moduleSources: Record<string, string> = {};
+  moduleSources[["index", "foo"] as unknown as string] = "lib::sub.myVar";
+  moduleSources[["lib", "sub"] as unknown as string] = "out let myVar = read();";
   expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
 });
 
 test("struct destructuring with nested module reference", () => {
-  const moduleSources = {};
-  moduleSources[["index", "foo"]] = "let { myVar } = lib::sub; myVar";
-  moduleSources[["lib", "sub"]] = "out let myVar = read();";
+  const moduleSources: Record<string, string> = {};
+  moduleSources[["index", "foo"] as unknown as string] = "let { myVar } = lib::sub; myVar";
+  moduleSources[["lib", "sub"] as unknown as string] = "out let myVar = read();";
   expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
 });
 
 test("nested module function call", () => {
-  const moduleSources = {};
-  moduleSources[["index", "foo"]] = "lib::sub.myFunc()";
-  moduleSources[["lib", "sub"]] = "out fn myFunc() => read();";
+  const moduleSources: Record<string, string> = {};
+  moduleSources[["index", "foo"] as unknown as string] = "lib::sub.myFunc()";
+  moduleSources[["lib", "sub"] as unknown as string] = "out fn myFunc() => read();";
   expectValidWithModules(["index", "foo"], moduleSources, "100", 100);
 });
 
 test("extern fn declaration and call", () => {
-  const moduleSources = {};
-  moduleSources[["index"]] = "extern fn parseInt(input : &Str) : I32; parseInt(read<&Str>()) + 1";
+  const moduleSources: Record<string, string> = {};
+  moduleSources[["index"] as unknown as string] = "extern fn parseInt(input : &Str) : I32; parseInt(read<&Str>()) + 1";
   expectValidWithModules(["index"], moduleSources, "100", 101);
 });
 
 test("extern struct declaration", () => {
-  const moduleSources = {};
-  moduleSources[["index"]] = "extern struct Console {}";
+  const moduleSources: Record<string, string> = {};
+  moduleSources[["index"] as unknown as string] = "extern struct Console {}";
   expectValidWithModules(["index"], moduleSources, "", 0);
 });
 

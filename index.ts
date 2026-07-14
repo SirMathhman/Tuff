@@ -1,8 +1,8 @@
-function isAlpha(ch) {
+function isAlpha(ch: string): boolean {
   return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
 }
 
-function isValidChar(ch) {
+function isValidChar(ch: string): boolean {
   if (ch >= "0" && ch <= "9") return true;
   if (ch >= "a" && ch <= "z") return true;
   if (ch >= "A" && ch <= "Z") return true;
@@ -15,7 +15,7 @@ function isValidChar(ch) {
 }
 
 // Skip a string literal starting with " at position i. Returns end index (after closing ") or -1.
-function skipStringLiteral(source, i) {
+function skipStringLiteral(source: string, i: number): number {
   if (source[i] !== '"') return -1;
   let j = i + 1;
   while (j < source.length && source[j] !== '"') j++;
@@ -23,7 +23,7 @@ function skipStringLiteral(source, i) {
 }
 
 // Skip a character literal starting with ' at position i. Returns end index (after closing ') or -1.
-function skipCharLiteral(source, i) {
+function skipCharLiteral(source: string, i: number): number {
   if (source[i] !== "'") return -1;
   let j = i + 1;
   while (j < source.length && source[j] !== "'") j++;
@@ -31,7 +31,7 @@ function skipCharLiteral(source, i) {
 }
 
 // Skip string or character literals at position i. Returns end index or -1 if neither matches.
-function skipLiteral(source, i) {
+function skipLiteral(source: string, i: number): number {
   const stringEnd = skipStringLiteral(source, i);
   if (stringEnd !== -1) return stringEnd;
   return skipCharLiteral(source, i);
@@ -41,7 +41,7 @@ function skipLiteral(source, i) {
 // Returns {ascii: number, end: number, indexed: true} if followed by [N],
 // or {ascii: string, end: number, indexed: false} for plain string passthrough,
 // or null if not a valid string literal.
-function tryResolveStringIndex(source, i) {
+function tryResolveStringIndex(source: string, i: number): { ascii: number | string; end: number; indexed: boolean } | null {
   const stringEnd = skipStringLiteral(source, i);
   if (stringEnd === -1) return null;
   let idx = stringEnd;
@@ -68,7 +68,7 @@ function tryResolveStringIndex(source, i) {
 }
 
 // Skip a boolean literal ("true" or "false") at position i. Returns end index or -1.
-function skipBoolLiteral(source, i) {
+function skipBoolLiteral(source: string, i: number): number {
   const trueEnd = skipKeyword(source, i, "true");
   if (trueEnd !== -1 && (trueEnd >= source.length || !isAlpha(source[trueEnd])))
     return trueEnd;
@@ -82,14 +82,14 @@ function skipBoolLiteral(source, i) {
 }
 
 // Skip a logical operator ("||" or "&&") at position i. Returns end index or -1.
-function skipLogicalOperator(source, i) {
+function skipLogicalOperator(source: string, i: number): number {
   if (source.substring(i, i + 2) === "||") return i + 2;
   if (source.substring(i, i + 2) === "&&") return i + 2;
   return -1;
 }
 
 // Skip "if" keyword at position i. Returns end index or -1.
-function skipIfKeyword(source, i) {
+function skipIfKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 2) === "if" &&
     (i + 2 >= source.length || !isAlpha(source[i + 2]))
@@ -100,7 +100,7 @@ function skipIfKeyword(source, i) {
 }
 
 // Skip "else" keyword at position i. Returns end index or -1.
-function skipElseKeyword(source, i) {
+function skipElseKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 4) === "else" &&
     (i + 4 >= source.length || !isAlpha(source[i + 4]))
@@ -111,7 +111,7 @@ function skipElseKeyword(source, i) {
 }
 
 // Skip "while" keyword at position i. Returns end index or -1.
-function skipWhileKeyword(source, i) {
+function skipWhileKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 5) === "while" &&
     (i + 5 >= source.length || !isAlpha(source[i + 5]))
@@ -122,7 +122,7 @@ function skipWhileKeyword(source, i) {
 }
 
 // Skip "break" keyword at position i. Returns end index or -1.
-function skipBreakKeyword(source, i) {
+function skipBreakKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 5) === "break" &&
     (i + 5 >= source.length || !isAlpha(source[i + 5]))
@@ -133,18 +133,18 @@ function skipBreakKeyword(source, i) {
 }
 
 // Skip "continue" keyword at position i. Returns end index or -1.
-function skipContinueKeyword(source, i) {
+function skipContinueKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 8) === "continue" &&
     (i + 8 >= source.length || !isAlpha(source[i + 8]))
   ) {
     return i + 8;
   }
-  return -1;
+  return -1;  
 }
 
 // Skip "yield" keyword at position i. Returns end index or -1.
-function skipYieldKeyword(source, i) {
+function skipYieldKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 5) === "yield" &&
     (i + 5 >= source.length || !isAlpha(source[i + 5]))
@@ -156,7 +156,7 @@ function skipYieldKeyword(source, i) {
 
 // Skip a yield statement starting at position i. Returns end index or -1.
 // Syntax: yield expression;
-function skipYieldStatement(source, i) {
+function skipYieldStatement(source: string, i: number): number {
   const yieldEnd = skipYieldKeyword(source, i);
   if (yieldEnd === -1) return -1;
 
@@ -171,7 +171,7 @@ function skipYieldStatement(source, i) {
 }
 
 // Skip "struct" keyword at position i. Returns end index or -1.
-function skipStructKeyword(source, i) {
+function skipStructKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 6) === "struct" &&
     (i + 6 >= source.length || !isAlpha(source[i + 6]))
@@ -186,7 +186,7 @@ function skipStructKeyword(source, i) {
 // Validates that field names are unique within the struct.
 // Skip struct name and braces starting at position i (after struct keyword).
 // Returns end index (after closing brace) or -1.
-function skipStructNameAndBraces(source, i) {
+function skipStructNameAndBraces(source: string, i: number): number {
   let pos = skipWhitespace(source, i);
   const identEnd = skipIdentifier(source, pos);
   if (identEnd === -1) return -1;
@@ -195,7 +195,7 @@ function skipStructNameAndBraces(source, i) {
   return findMatchingBrace(source, pos) + 1;
 }
 
-function skipStructDeclaration(source, i) {
+function skipStructDeclaration(source: string, i: number): number {
   const structEnd = skipStructKeyword(source, i);
   if (structEnd === -1) return -1;
 
@@ -209,8 +209,8 @@ function skipStructDeclaration(source, i) {
 }
 
 // Validate struct fields: check for duplicate field names and valid type names. Throws if invalid.
-function validateStructFields(body) {
-  const fieldNames = new Set();
+function validateStructFields(body: string): void {
+  const fieldNames = new Set<string>();
   let i = 0;
   while (i < body.length) {
     // Skip whitespace and commas
@@ -254,7 +254,7 @@ function validateStructFields(body) {
 }
 
 // Skip "enum" keyword at position i. Returns end index or -1.
-function skipEnumKeyword(source, i) {
+function skipEnumKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 4) === "enum" &&
     (i + 4 >= source.length || !isAlpha(source[i + 4]))
@@ -266,7 +266,7 @@ function skipEnumKeyword(source, i) {
 
 // Skip an enum declaration starting at position i. Returns end index or -1.
 // Syntax: enum Name { }
-function skipEnumDeclaration(source, i) {
+function skipEnumDeclaration(source: string, i: number): number {
   const enumEnd = skipEnumKeyword(source, i);
   if (enumEnd === -1) return -1;
   const endIdx = skipStructNameAndBraces(source, enumEnd);
@@ -275,7 +275,7 @@ function skipEnumDeclaration(source, i) {
 
 // Try to match an enum variant reference (EnumName::Variant) at position i and produce its
 // string-literal output. Returns {output, nextPos} or null if there's no match.
-function matchEnumVariantRefLiteral(source, i) {
+function matchEnumVariantRefLiteral(source: string, i: number): { output: string; nextPos: number } | null {
   if (!isAlpha(source[i])) return null;
   const identEnd = skipIdentifier(source, i);
   if (identEnd === -1) return null;
@@ -290,7 +290,7 @@ function matchEnumVariantRefLiteral(source, i) {
 }
 
 // Skip "fn" keyword at position i. Returns end index or -1.
-function skipFnKeyword(source, i) {
+function skipFnKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 2) === "fn" &&
     (i + 2 >= source.length || !isAlpha(source[i + 2]))
@@ -302,7 +302,7 @@ function skipFnKeyword(source, i) {
 
 // Skip a function signature: name(params) : ReturnType. Returns {pos, identEnd} or null.
 // pos is the position after the return type annotation (or after params if no annotation).
-function skipFnSignature(source, pos) {
+function skipFnSignature(source: string, pos: number): { pos: number; identEnd: number } | null {
   const identEnd = skipIdentifier(source, pos);
   if (identEnd === -1) return null;
   pos = identEnd;
@@ -318,7 +318,7 @@ function skipFnSignature(source, pos) {
 
 // Skip an extern function declaration starting at position i. Returns end index or -1.
 // Syntax: extern fn name(params) : ReturnType;
-function skipExternFnDeclaration(source, i) {
+function skipExternFnDeclaration(source: string, i: number): number {
   if (source.substring(i, i + 7) !== "extern ") return -1;
   let pos = i + 7;
   const fnEnd = skipFnKeyword(source, pos);
@@ -333,7 +333,7 @@ function skipExternFnDeclaration(source, i) {
 
 // Skip an extern struct declaration starting at position i. Returns end index or -1.
 // Syntax: extern struct Name {}
-function skipExternStructDeclaration(source, i) {
+function skipExternStructDeclaration(source: string, i: number): number {
   if (source.substring(i, i + 7) !== "extern ") return -1;
   const structEnd = skipStructKeyword(source, i + 7);
   if (structEnd === -1) return -1;
@@ -343,7 +343,7 @@ function skipExternStructDeclaration(source, i) {
 // Skip an extern let declaration starting at position i. Returns end index or -1.
 // Syntax: extern let name : Type; — declares that "name" already exists in the
 // host environment (e.g. the global "Math" object), so it emits no code.
-function skipExternLetDeclaration(source, i) {
+function skipExternLetDeclaration(source: string, i: number): number {
   if (source.substring(i, i + 11) !== "extern let ") return -1;
   const identEnd = skipIdentifier(source, i + 11);
   if (identEnd === -1) return -1;
@@ -363,7 +363,7 @@ function skipExternLetDeclaration(source, i) {
 
 // Skip a function declaration starting at position i. Returns end index or -1.
 // Syntax: fn name(param : Type) => expression;  or  fn name() => expression;
-function skipFnDeclaration(source, i) {
+function skipFnDeclaration(source: string, i: number): number {
   const fnEnd = skipFnKeyword(source, i);
   if (fnEnd === -1) return -1;
 
@@ -393,7 +393,7 @@ function skipFnDeclaration(source, i) {
 }
 
 // Skip "for" keyword at position i. Returns end index or -1.
-function skipForKeyword(source, i) {
+function skipForKeyword(source: string, i: number): number {
   if (
     source.substring(i, i + 3) === "for" &&
     (i + 3 >= source.length || !isAlpha(source[i + 3]))
@@ -404,7 +404,7 @@ function skipForKeyword(source, i) {
 }
 
 // Skip a for loop starting at position i. Returns end index or -1.
-function skipForLoop(source, i) {
+function skipForLoop(source: string, i: number): number {
   const forEnd = skipForKeyword(source, i);
   if (forEnd === -1) return -1;
 
@@ -418,7 +418,7 @@ function skipForLoop(source, i) {
 }
 
 // Skip past a parenthesized condition starting at the opening '('. Returns index after closing ')'.
-function skipParenthesizedCondition(source, start) {
+function skipParenthesizedCondition(source: string, start: number): number {
   let parenDepth = 1;
   let pos = start;
   while (pos < source.length && parenDepth > 0) {
@@ -438,13 +438,13 @@ function skipParenthesizedCondition(source, start) {
 }
 
 // Skip a branch (block or expression) at position i. Returns end index.
-function skipBranch(source, i) {
+function skipBranch(source: string, i: number): number {
   if (source[i] === "{") return findMatchingBrace(source, i) + 1;
   return skipExpression(source, i);
 }
 
 // Skip a while loop starting at position i. Returns end index or -1.
-function skipWhileLoop(source, i) {
+function skipWhileLoop(source: string, i: number): number {
   const whileEnd = skipWhileKeyword(source, i);
   if (whileEnd === -1) return -1;
 
@@ -458,7 +458,7 @@ function skipWhileLoop(source, i) {
 }
 
 // Skip an if/else expression starting at position i. Returns end index or -1.
-function skipIfElseExpression(source, i) {
+function skipIfElseExpression(source: string, i: number): number {
   let pos = skipWhitespace(source, i);
   const ifEnd = skipIfKeyword(source, pos);
   if (ifEnd === -1) return -1;
@@ -483,7 +483,7 @@ function skipIfElseExpression(source, i) {
 }
 
 // Skip an expression (non-block) until delimiter (semicolon, else, closing brace, etc.).
-function skipExpression(source, start) {
+function skipExpression(source: string, start: number): number {
   let i = start;
   let parenDepth = 0;
   while (i < source.length) {
@@ -517,7 +517,7 @@ function skipExpression(source, start) {
   return i;
 }
 
-function skipKeyword(source, i, keyword) {
+function skipKeyword(source: string, i: number, keyword: string): number {
   if (source.substring(i, i + keyword.length) === keyword) {
     return i + keyword.length;
   }
@@ -525,7 +525,7 @@ function skipKeyword(source, i, keyword) {
 }
 
 // Try to match read<TYPE>() at position i. Returns end index or -1.
-function tryMatchTypedRead(source, i) {
+function tryMatchTypedRead(source: string, i: number): number {
   // Check for "read<" followed by type name and ">"
   if (source.substring(i, i + 5) === "read<") {
     let j = i + 5;
@@ -545,7 +545,7 @@ function tryMatchTypedRead(source, i) {
 }
 
 // Skip a type annotation like ": U8" or ": I16" or ": [I32; 2]", returns new index
-function skipTypeAnnotation(source, i) {
+function skipTypeAnnotation(source: string, i: number): number {
   if (source[i] !== ":") return -1;
   let j = i + 1;
   while (j < source.length && " \t\n\r".includes(source[j])) j++;
@@ -584,7 +584,7 @@ function skipTypeAnnotation(source, i) {
 // Check whether position i is immediately preceded (ignoring whitespace) by a value-producing
 // token (identifier char, digit, ")", "]") — used to tell binary "*" (multiplication) apart
 // from unary "*" (dereference), which appears at expression-start instead.
-function isPrecededByValue(source, i) {
+function isPrecededByValue(source: string, i: number): boolean {
   let j = i - 1;
   while (j >= 0 && " \t\n\r".includes(source[j])) j--;
   return (
@@ -597,7 +597,7 @@ function isPrecededByValue(source, i) {
 }
 
 // Skip an identifier and return new index, or -1 if not found
-function skipIdentifier(source, i) {
+function skipIdentifier(source: string, i: number): number {
   if (i < source.length && isAlpha(source[i])) {
     let j = i + 1;
     while (j < source.length && isAlpha(source[j])) {
@@ -609,7 +609,7 @@ function skipIdentifier(source, i) {
 }
 
 // Skip array indexing brackets after an identifier. Returns new index.
-function skipArrayIndexing(source, start) {
+function skipArrayIndexing(source: string, start: number): number {
   let i = start;
   while (i < source.length && source[i] === "[") {
     i = findMatchingBracket(source, i) + 1;
@@ -618,7 +618,7 @@ function skipArrayIndexing(source, start) {
 }
 
 // Skip ".length" property access at position i. Returns end index or -1.
-function skipDotLength(source, i) {
+function skipDotLength(source: string, i: number): number {
   if (
     source.substring(i, i + 7) === ".length" &&
     (i + 7 >= source.length || !isAlpha(source[i + 7]))
@@ -630,7 +630,7 @@ function skipDotLength(source, i) {
 
 // Try to skip identifier if preceded by ; or = (ignoring whitespace), returns new index or -1
 // Also handles array indexing: identifier[expr] and .length property access
-function maybeSkipIdentifier(source, i) {
+function maybeSkipIdentifier(source: string, i: number): number {
   if (!isAlpha(source[i])) return -1;
   let j = i - 1;
   while (j >= 0 && isValidChar(source[j]) === true && !isAlpha(source[j])) {
@@ -664,7 +664,7 @@ function maybeSkipIdentifier(source, i) {
   return -1;
 }
 
-function validateSource(source) {
+function validateSource(source: string): boolean {
   let i = 0;
   while (i < source.length) {
     // Try typed read first: read<T>()
@@ -797,7 +797,7 @@ function validateSource(source) {
   return true;
 }
 
-function findMatchingBrace(source, start) {
+function findMatchingBrace(source: string, start: number): number {
   let depth = 1;
   let i = start + 1;
   while (depth > 0 && i < source.length) {
@@ -809,7 +809,7 @@ function findMatchingBrace(source, start) {
 }
 
 // Find the matching ']' for '[' at position start. Returns index of ']'.
-function findMatchingBracket(source, start) {
+function findMatchingBracket(source: string, start: number): number {
   let depth = 1;
   let i = start + 1;
   while (depth > 0 && i < source.length) {
@@ -820,7 +820,7 @@ function findMatchingBracket(source, start) {
   return i - 1; // index of matching ']'
 }
 
-function hasStatements(source) {
+function hasStatements(source: string): boolean {
   let i = 0;
   while (i < source.length) {
     if (source[i] === ";") return true;
@@ -836,7 +836,7 @@ function hasStatements(source) {
 }
 
 // Find the start of an IIFE pattern ending at position endParen. Returns start index or -1.
-function findIIFEStart(transformedInner, endParen) {
+function findIIFEStart(transformedInner: string, endParen: number): number {
   if (endParen === 0 || transformedInner[endParen - 1] !== "(") return -1;
   let iifeDepth = 1;
   let j = endParen - 1;
@@ -857,14 +857,14 @@ function findIIFEStart(transformedInner, endParen) {
 }
 
 // Try to skip over an IIFE ending at position j. Returns new j or -1 if not an IIFE.
-function trySkipIIFE(transformedInner, j) {
+function trySkipIIFE(transformedInner: string, j: number): number {
   const iifeStart = findIIFEStart(transformedInner, j);
   if (iifeStart !== -1) return iifeStart;
   return -1;
 }
 
 // Try to detect a function declaration ending near position j and return the start index, or -1.
-function tryFindFunctionDeclaration(transformedInner, j) {
+function tryFindFunctionDeclaration(transformedInner: string, j: number): number {
   const funcKeyword = "function ";
   for (let k = j; k >= 0; k--) {
     if (k + funcKeyword.length > j + 1) continue;
@@ -880,7 +880,7 @@ function tryFindFunctionDeclaration(transformedInner, j) {
 }
 
 // Process a single character in prependReturnToLastExpr. Returns {j, depth, parenDepth} or null if found semicolon.
-function processChar(transformedInner, j, depth, parenDepth) {
+function processChar(transformedInner: string, j: number, depth: number, parenDepth: number): { j: number; depth: number; parenDepth: number } | null {
   const ch = transformedInner[j];
   if (ch === "}") {
     // Check if this is part of a function declaration
@@ -915,7 +915,7 @@ function processChar(transformedInner, j, depth, parenDepth) {
 }
 
 // Skip leading function declarations and return the index after them.
-function skipLeadingFunctionDeclarations(transformedInner) {
+function skipLeadingFunctionDeclarations(transformedInner: string): number {
   let i = 0;
   while (i < transformedInner.length) {
     const funcKeyword = "function ";
@@ -930,7 +930,7 @@ function skipLeadingFunctionDeclarations(transformedInner) {
   return i;
 }
 
-function prependReturnToLastExpr(transformedInner) {
+function prependReturnToLastExpr(transformedInner: string): string {
   let depth = 0;
   let parenDepth = 0;
   for (let j = transformedInner.length - 1; j >= 0; j--) {
@@ -948,7 +948,7 @@ function prependReturnToLastExpr(transformedInner) {
 }
 
 // Check if a string contains only semicolons or whitespace. Returns true.
-function isEmptyOrSemicolons(str) {
+function isEmptyOrSemicolons(str: string): boolean {
   for (let k = 0; k < str.length; k++) {
     const ch = str[k];
     if (ch !== ";" && ch !== " " && ch !== "\t" && ch !== "\n") return false;
@@ -957,7 +957,7 @@ function isEmptyOrSemicolons(str) {
 }
 
 // Build the return statement after a semicolon at position j. Returns new string.
-function buildReturnAfterSemi(transformedInner, j) {
+function buildReturnAfterSemi(transformedInner: string, j: number): string {
   const afterSemi = transformedInner.substring(j + 1);
   if (isEmptyOrSemicolons(afterSemi))
     return transformedInner.substring(0, j + 1) + "return 0";
@@ -969,7 +969,7 @@ function buildReturnAfterSemi(transformedInner, j) {
 }
 
 // Skip digits and advance index, returns the digit string
-function skipDigits(source, start) {
+function skipDigits(source: string, start: number): number {
   let j = start;
   while (j < source.length && source[j] >= "0" && source[j] <= "9") {
     j++;
@@ -978,7 +978,7 @@ function skipDigits(source, start) {
 }
 
 // Skip type suffix like U8, I16, F32 and advance index
-function skipTypeSuffixChars(source, start) {
+function skipTypeSuffixChars(source: string, start: number): number {
   let j = start;
   while (
     j < source.length &&
@@ -993,9 +993,9 @@ function skipTypeSuffixChars(source, start) {
 }
 
 // Get the valid range for a type name like U8, I16, etc. Returns {min, max}.
-function getTypeRange(typeName) {
+function getTypeRange(typeName: string): { min: number; max: number } {
   const isUnsigned = typeName[0] === "U";
-  let bits;
+  let bits: number;
   if (typeName.length >= 2 && !isNaN(parseInt(typeName.substring(1)))) {
     bits = parseInt(typeName.substring(1));
   } else {
@@ -1008,7 +1008,7 @@ function getTypeRange(typeName) {
 }
 
 // Get the bit width from a type name like U8, I16, F32. Returns number or -1 if unrecognized.
-function getTypeBits(typeName) {
+function getTypeBits(typeName: string): number {
   const prefix = typeName[0];
   if (prefix !== "U" && prefix !== "I" && prefix !== "F") return -1;
   const bitsStr = typeName.substring(1);
@@ -1017,7 +1017,7 @@ function getTypeBits(typeName) {
 }
 
 // Validate that inner type (from read<T>()) fits within outer declaration type. Throws if invalid.
-function validateTypeCompatibility(innerTypeName, outerTypeName) {
+function validateTypeCompatibility(innerTypeName: string, outerTypeName: string): void {
   const innerBits = getTypeBits(innerTypeName);
   const outerBits = getTypeBits(outerTypeName);
   if (innerBits === -1 || outerBits === -1) return; // unrecognized types, skip check
@@ -1028,7 +1028,7 @@ function validateTypeCompatibility(innerTypeName, outerTypeName) {
 }
 
 // Extract type name from a typed read like "read<U8>" at position i. Returns {typeName, endPos} or null.
-function extractTypedReadInfo(source, i) {
+function extractTypedReadInfo(source: string, i: number): { typeName: string; endPos: number } | null {
   if (source.substring(i, i + 5) !== "read<") return null;
   let j = i + 5; // skip past "read<"
   while (j < source.length && source[j] !== ">") j++;
@@ -1039,7 +1039,7 @@ function extractTypedReadInfo(source, i) {
 }
 
 // Check for typed read in the RHS of a let declaration and validate compatibility. Throws if invalid.
-function checkTypedReadInRHS(source, afterColonEnd) {
+function checkTypedReadInRHS(source: string, afterColonEnd: number): void {
   // Walk back from afterColonEnd to find the colon position. Skip past all valid chars (type name + whitespace).
   let j = afterColonEnd - 1;
   while (j >= 0 && isValidChar(source[j]) === true) {
@@ -1067,7 +1067,7 @@ function checkTypedReadInRHS(source, afterColonEnd) {
   while (pos < source.length) {
     const semiPos = source.indexOf(";", pos);
     if (semiPos === -1) break;
-    validateTypedReadsInRange(source, pos, semiPos, elementType);
+    validateTypedReadsInRange(source, pos, semiPos, elementType as string);
     pos = semiPos + 1;
   }
 
@@ -1080,7 +1080,7 @@ function checkTypedReadInRHS(source, afterColonEnd) {
 }
 
 // Validate all read<T>() calls in source[pos..end] against the given target type. Throws if incompatible.
-function validateTypedReadsInRange(source, pos, end, targetType) {
+function validateTypedReadsInRange(source: string, pos: number, end: number, targetType: string): void {
   for (let p = pos; p < end; p++) {
     if (source.substring(p, p + 5) !== "read<") continue;
     const info = extractTypedReadInfo(source, p);
@@ -1089,7 +1089,7 @@ function validateTypedReadsInRange(source, pos, end, targetType) {
 }
 
 // Extract element type from an array type annotation like "[U8; 2]". Returns type name or null.
-function extractArrayElementType(typeStr) {
+function extractArrayElementType(typeStr: string): string | null {
   // Find first '[' and extract type name before ';'
   let i = typeStr.indexOf("[");
   if (i === -1) return null;
@@ -1109,7 +1109,7 @@ function extractArrayElementType(typeStr) {
 }
 
 // Extract declared size from an array type annotation like "[U8; 2]". Returns number or null.
-function extractArrayDeclaredSize(typeStr) {
+function extractArrayDeclaredSize(typeStr: string): number | null {
   // Find ';' after type name, then read number before ']'
   let i = typeStr.indexOf(";");
   if (i === -1) return null;
@@ -1124,7 +1124,7 @@ function extractArrayDeclaredSize(typeStr) {
 }
 
 // Validate that the array literal on the RHS has the correct number of elements. Throws if mismatch.
-function validateArrayLiteralSize(source, afterColonEnd, declaredSize) {
+function validateArrayLiteralSize(source: string, afterColonEnd: number, declaredSize: number): void {
   const rhsInfo = extractRhs(source, afterColonEnd);
   if (!rhsInfo) return;
   // Check if RHS is an array literal
@@ -1142,7 +1142,7 @@ function validateArrayLiteralSize(source, afterColonEnd, declaredSize) {
 }
 
 // Validate that when assigning an array variable to a typed array, sizes are compatible. Throws if mismatch.
-function validateArrayVariableAssignment(source, afterColonEnd, declaredSize) {
+function validateArrayVariableAssignment(source: string, afterColonEnd: number, declaredSize: number): void {
   const rhsInfo = extractRhs(source, afterColonEnd);
   if (!rhsInfo) return;
   // Check if RHS is a simple identifier (variable reference)
@@ -1164,7 +1164,7 @@ function validateArrayVariableAssignment(source, afterColonEnd, declaredSize) {
 }
 
 // Extract the RHS string between '=' and ';' after a given position. Returns {rhs, eqPos, semiPos} or null.
-function extractRhs(source, startPos) {
+function extractRhs(source: string, startPos: number): { rhs: string; eqPos: number; semiPos: number } | null {
   let eqPos = source.indexOf("=", startPos);
   if (eqPos === -1) return null;
   let semiPos = source.indexOf(";", eqPos);
@@ -1175,7 +1175,7 @@ function extractRhs(source, startPos) {
 
 // Iterate over all 'let' declarations in source, calling callback with (varName, identEnd, pos) for each.
 // Handles both "let x" and "let mut x" declarations.
-function forEachLetDeclaration(source, callback) {
+function forEachLetDeclaration(source: string, callback: (varName: string, identEnd: number, pos: number) => void): void {
   for (let i = 0; i < source.length - 3; i++) {
     if (source.substring(i, i + 4) !== "let ") continue;
     let pos = skipWhitespace(source, i + 4);
@@ -1190,9 +1190,9 @@ function forEachLetDeclaration(source, callback) {
 }
 
 // Find the declared size of an array variable by scanning its 'let' declaration. Returns size or null.
-function findArrayVariableSize(source, varName) {
-  let result = null;
-  forEachLetDeclaration(source, (name, identEnd, pos) => {
+function findArrayVariableSize(source: string, varName: string): number | null {
+  let result: number | null = null;
+  forEachLetDeclaration(source, (name: string, identEnd: number, pos: number) => {
     if (name !== varName) return;
     // Check if this declaration has an array type annotation
     let typePos = skipWhitespace(source, identEnd);
@@ -1210,7 +1210,7 @@ function findArrayVariableSize(source, varName) {
 }
 
 // Count elements in the array literal RHS of a let declaration starting at position i. Returns count or null.
-function countArrayLiteralSize(source, i) {
+function countArrayLiteralSize(source: string, i: number): number | null {
   let eqPos = source.indexOf("=", i);
   if (eqPos === -1) return null;
   let semiPos = source.indexOf(";", eqPos);
@@ -1221,7 +1221,7 @@ function countArrayLiteralSize(source, i) {
 }
 
 // Count elements in an array literal string like "[a, b, c]". Returns count.
-function countArrayElements(arrayStr) {
+function countArrayElements(arrayStr: string): number {
   let count = 0;
   let depth = 0;
   for (let i = 0; i < arrayStr.length; i++) {
@@ -1233,7 +1233,7 @@ function countArrayElements(arrayStr) {
 }
 
 // Process a let declaration starting at position i (where "let" begins), returns index after semicolon
-function processLetDeclaration(source, i) {
+function processLetDeclaration(source: string, i: number): number {
   let pos = i + 4; // skip past "let "
   // Handle destructuring pattern: let { x, y } = ...
   if (source[pos] === "{") {
@@ -1263,7 +1263,7 @@ function processLetDeclaration(source, i) {
 }
 
 // Like skipToSemicolon but properly handles if/else expressions, while loops, and blocks
-function skipToSemicolonWithIfElse(source, start) {
+function skipToSemicolonWithIfElse(source: string, start: number): number {
   let j = start;
   while (j < source.length && source[j] !== ";") {
     // Handle while loops
@@ -1301,14 +1301,14 @@ function skipToSemicolonWithIfElse(source, start) {
 }
 
 // Skip whitespace and return new index.
-function skipWhitespace(source, start) {
+function skipWhitespace(source: string, start: number): number {
   let j = start;
   while (j < source.length && " \t\n\r".includes(source[j])) j++;
   return j;
 }
 
 // Extract variable type from a let declaration at position i. Returns typeName or null.
-function extractVarTypeFromLet(source, i) {
+function extractVarTypeFromLet(source: string, i: number): string | null {
   const identEnd = skipIdentifier(source, i + 4);
   if (identEnd === -1) return null;
 
@@ -1341,8 +1341,8 @@ function extractVarTypeFromLet(source, i) {
 }
 
 // Build a map of variable names to their types by scanning all let declarations. Returns object.
-function buildVarTypeMap(source) {
-  const typeMap = {};
+function buildVarTypeMap(source: string): Record<string, string | null> {
+  const typeMap: Record<string, string | null> = {};
   for (let i = 0; i < source.length; i++) {
     if (source.substring(i, i + 4) !== "let ") continue;
     const typeName = extractVarTypeFromLet(source, i);
@@ -1374,7 +1374,7 @@ const BUILTINS = new Set([
 ]);
 
 // Scan struct fields and add them to declaredVars set.
-function scanStructFields(body, declaredVars) {
+function scanStructFields(body: string, declaredVars: Set<string>): void {
   let j = 0;
   while (j < body.length) {
     if (" \t\n\r,".includes(body[j])) {
@@ -1392,7 +1392,7 @@ function scanStructFields(body, declaredVars) {
 }
 
 // Scan enum variant names in body and add "EnumName::Variant" entries to declaredVars set.
-function scanEnumVariants(enumName, body, declaredVars) {
+function scanEnumVariants(enumName: string, body: string, declaredVars: Set<string>): void {
   let j = 0;
   while (j < body.length) {
     if (" \t\n\r,".includes(body[j])) {
@@ -1410,7 +1410,7 @@ function scanEnumVariants(enumName, body, declaredVars) {
 }
 
 // Skip a single parameter (identifier + optional type annotation). Returns new position or -1.
-function skipParam(source, pos) {
+function skipParam(source: string, pos: number): number {
   const paramEnd = skipIdentifier(source, pos);
   if (paramEnd === -1) return -1;
   pos = skipWhitespace(source, paramEnd);
@@ -1426,7 +1426,7 @@ function skipParam(source, pos) {
 }
 
 // Skip parameters in parentheses, returning position after closing ")". Returns -1 on failure.
-function skipParams(source, start) {
+function skipParams(source: string, start: number): number {
   let pos = start;
   while (pos < source.length && source[pos] !== ")") {
     pos = skipWhitespace(source, pos);
@@ -1443,7 +1443,7 @@ function skipParams(source, start) {
 }
 
 // Scan function parameters and add them to declaredVars set.
-function scanFunctionParams(source, start, declaredVars) {
+function scanFunctionParams(source: string, start: number, declaredVars: Set<string>): void {
   let pos = start;
   while (pos < source.length && source[pos] !== ")") {
     pos = skipWhitespace(source, pos);
@@ -1461,7 +1461,7 @@ function scanFunctionParams(source, start, declaredVars) {
 
 // Check whether the "{" at position i opens an enum body (i.e. is preceded by "enum Name").
 // Returns true if so.
-function isEnumBodyBrace(source, i) {
+function isEnumBodyBrace(source: string, i: number): boolean {
   let beforeBrace = i - 1;
   while (beforeBrace >= 0 && " \t\n\r".includes(source[beforeBrace])) beforeBrace--;
   if (beforeBrace < 0 || !isAlpha(source[beforeBrace])) return false;
@@ -1475,7 +1475,7 @@ function isEnumBodyBrace(source, i) {
 // If the identifier ending at identEnd is followed by "::Variant" and the full
 // "name::Variant" reference is in declaredVars, returns the index after the variant
 // name so the caller can skip past it. Returns -1 if there's no such reference.
-function matchDeclaredEnumVariantRef(source, identEnd, name, declaredVars) {
+function matchDeclaredEnumVariantRef(source: string, identEnd: number, name: string, declaredVars: Set<string>): number {
   let afterIdent = skipWhitespace(source, identEnd);
   if (source.substring(afterIdent, afterIdent + 2) !== "::") return -1;
   const varStart = skipWhitespace(source, afterIdent + 2);
@@ -1486,7 +1486,7 @@ function matchDeclaredEnumVariantRef(source, identEnd, name, declaredVars) {
 }
 
 // Validate that all identifier references are declared variables, functions, or built-ins. Throws if not.
-function validateIdentifiers(source, declaredVars, declaredFns) {
+function validateIdentifiers(source: string, declaredVars: Set<string>, declaredFns: Set<string>): void {
   let i = 0;
   while (i < source.length) {
     // Skip string and character literals so identifiers inside them aren't flagged
@@ -1585,12 +1585,12 @@ function validateIdentifiers(source, declaredVars, declaredFns) {
   }
 }
 
-function validateVarAssignments(source) {
+function validateVarAssignments(source: string): void {
   const varTypes = buildVarTypeMap(source);
 
   // Build a set of declared variables and functions
-  const declaredVars = new Set();
-  const declaredFns = new Set();
+  const declaredVars: Set<string> = new Set();
+  const declaredFns: Set<string> = new Set();
   forEachLetDeclaration(source, (varName) => {
     declaredVars.add(varName);
   });
@@ -1675,7 +1675,7 @@ function validateVarAssignments(source) {
   validateIdentifiers(source, declaredVars, declaredFns);
 
   // Build a set of immutable variables (declared without "mut") and check typed declarations in one pass
-  const immutables = new Set();
+  const immutables: Set<string> = new Set();
   forEachLetDeclaration(source, (varName, identEnd, pos) => {
     // Check if this declaration has "mut" keyword
     let afterLet = skipWhitespace(source, pos + 4);
@@ -1723,7 +1723,7 @@ function validateVarAssignments(source) {
 }
 
 // Check if an assignment at position eqPos is reassigning an immutable variable. Throws if invalid.
-function checkReassignmentToImmutable(source, eqPos, immutables) {
+function checkReassignmentToImmutable(source: string, eqPos: number, immutables: Set<string>): void {
   // Find identifier before '=' by walking backwards from '=' skipping whitespace
   let beforeEq = eqPos - 1;
 
@@ -1762,14 +1762,14 @@ function checkReassignmentToImmutable(source, eqPos, immutables) {
 }
 
 // Validate a typed number value against its type suffix. Throws if out of range.
-function validateTypedNumber(value, typeName) {
+function validateTypedNumber(value: number, typeName: string): void {
   const range = getTypeRange(typeName);
   if (value < range.min || value > range.max)
     throw new Error("Value out of range for " + typeName);
 }
 
 // Parse a number with optional type suffix and validate range. Returns new index or throws.
-function parseTypedNumber(source, start) {
+function parseTypedNumber(source: string, start: number): number {
   const numEnd = skipDigits(source, start);
   let i = numEnd;
   // Check for type suffix like U8, I16, F32 etc.
@@ -1793,7 +1793,7 @@ function parseTypedNumber(source, start) {
 }
 
 // Strip numeric type suffixes like U8 from source text and validate ranges
-function stripTypeSuffix(source) {
+function stripTypeSuffix(source: string): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -1810,7 +1810,7 @@ function stripTypeSuffix(source) {
 }
 
 // Strip type annotations (": TypeName") and transform typed reads ("read<T>()" -> "read()" or "_readBool()")
-function stripTypedSyntax(source) {
+function stripTypedSyntax(source: string): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -1977,7 +1977,7 @@ function stripTypedSyntax(source) {
 }
 
 // Handle typed read at position i. Returns new index or null if not a typed read.
-function tryStripTypedRead(source, i) {
+function tryStripTypedRead(source: string, i: number): number | null {
   const closeParen = source.indexOf(")", i);
   // Check for Bool type: read<Bool>() -> _readBool()
   if (source.substring(i + 5, i + 9) === "Bool" && closeParen > i + 9) {
@@ -1990,7 +1990,7 @@ function tryStripTypedRead(source, i) {
 }
 
 // Check if a let declaration at position i has a range RHS (contains ".."). Returns {varName, startExpr, endExpr, semiPos} or null.
-function tryExtractRangeAssignment(source, i) {
+function tryExtractRangeAssignment(source: string, i: number): { varName: string; startExpr: string; endExpr: string; semiPos: number } | null {
   let afterLet = i + 4;
   // Skip optional "mut" keyword
   let j = skipWhitespace(source, afterLet);
@@ -2022,7 +2022,7 @@ function tryExtractRangeAssignment(source, i) {
 // Strip "mut" keyword from let declarations ("let mut x" -> "var x") and replace "let" with "var"
 // Also handle range literals: "let range = 0..read();" -> "var _rangeStart = 0; var _rangeEnd = read();"
 // Also handle struct destructuring: "let { x, y } = Struct { ... };" -> "var {x, y} = {x: val, y: val};"
-function stripMutKeyword(source) {
+function stripMutKeyword(source: string): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -2063,7 +2063,7 @@ function stripMutKeyword(source) {
 }
 
 // Skip "mut" keyword at position i. Returns end index or -1.
-function skipKeywordMut(source, i) {
+function skipKeywordMut(source: string, i: number): number {
   if (source.substring(i, i + 3) === "mut") {
     // Ensure it's a whole word (followed by whitespace or non-alpha char)
     const next = i + 3;
@@ -2076,7 +2076,7 @@ function skipKeywordMut(source, i) {
 
 // Transform struct field assignments inside {{} into JS object properties.
 // "field : 100, other : read()" -> "field: 100, other: read()"
-function transformStructFields(source) {
+function transformStructFields(source: string): string {
   let result = "";
   let i = 0;
   let first = true;
@@ -2111,7 +2111,7 @@ function transformStructFields(source) {
 
 // Try to match "let { x, y } = Struct { ... };" at position i.
 // Returns {output, nextPos} on success, or null if not a destructuring pattern.
-function tryTransformStructDestruct(source, i) {
+function tryTransformStructDestruct(source: string, i: number): { output: string; nextPos: number } | null {
   if (source.substring(i, i + 4) !== "let ") return null;
   let j = skipWhitespace(source, i + 4);
   if (source[j] !== "{") return null;
@@ -2137,7 +2137,7 @@ function tryTransformStructDestruct(source, i) {
   return { output, nextPos: semiPos + 1 };
 }
 
-function transformBlocks(source) {
+function transformBlocks(source: string): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -2289,7 +2289,7 @@ function transformBlocks(source) {
 }
 
 // Extract a parenthesized condition starting at the opening '('. Returns {condition, endPos}.
-function extractCondition(source, start) {
+function extractCondition(source: string, start: number): { condition: string; endPos: number } {
   let parenDepth = 1;
   let pos = start;
   while (pos < source.length && parenDepth > 0) {
@@ -2301,7 +2301,7 @@ function extractCondition(source, start) {
 }
 
 // Extract a branch (block or expression) at position i. Returns {content, endPos}.
-function extractBranch(source, i) {
+function extractBranch(source: string, i: number): { content: string; endPos: number } {
   if (source[i] === "{") {
     const endIdx = findMatchingBrace(source, i);
     return { content: source.substring(i + 1, endIdx), endPos: endIdx + 1 };
@@ -2311,7 +2311,7 @@ function extractBranch(source, i) {
 }
 
 // Check if a source string contains break or continue keywords. Returns true if found.
-function hasBreakOrContinue(source) {
+function hasBreakOrContinue(source: string): boolean {
   for (let i = 0; i < source.length - 4; i++) {
     if (
       source.substring(i, i + 5) === "break" &&
@@ -2328,7 +2328,7 @@ function hasBreakOrContinue(source) {
 }
 
 // Check if a source string contains the return keyword. Returns true if found.
-function hasReturn(source) {
+function hasReturn(source: string): boolean {
   for (let i = 0; i < source.length - 5; i++) {
     if (
       source.substring(i, i + 6) === "return" &&
@@ -2341,7 +2341,7 @@ function hasReturn(source) {
 
 // Transform an if/else expression to JavaScript ternary: (cond) ? (trueBranch) : (falseBranch)
 // If branches contain break/continue, use statement-style output instead.
-function transformIfElse(source, start) {
+function transformIfElse(source: string, start: number): string {
   const ifEnd = skipIfKeyword(source, start);
   let pos = skipWhitespace(source, ifEnd);
 
@@ -2426,7 +2426,7 @@ function transformIfElse(source, start) {
 }
 
 // Extract and transform a branch body at position pos. Returns {transformedBody, endPos}.
-function extractAndTransformBranch(source, pos) {
+function extractAndTransformBranch(source: string, pos: number): { transformedBody: string; endPos: number } {
   const { content: body } = extractBranch(source, pos);
   const transformedBody = transformBlocks(
     stripTypedSyntax(stripTypeSuffix(body.trim())),
@@ -2435,7 +2435,7 @@ function extractAndTransformBranch(source, pos) {
 }
 
 // Transform a while loop to JavaScript: while (cond) { body };
-function transformWhileLoop(source, start) {
+function transformWhileLoop(source: string, start: number): string {
   const whileEnd = skipWhileKeyword(source, start);
   let pos = skipWhitespace(source, whileEnd);
 
@@ -2452,8 +2452,8 @@ function transformWhileLoop(source, start) {
 
 // Build a map of variable names to their range assignments (start..end). Returns object.
 // Uses transformed variable names (_varNameStart, _varNameEnd) to match stripMutKeyword output.
-function buildRangeMap(source) {
-  const rangeMap = {};
+function buildRangeMap(source: string): Record<string, { start: string; end: string }> {
+  const rangeMap: Record<string, { start: string; end: string }> = {};
   for (let i = 0; i < source.length - 3; i++) {
     if (source.substring(i, i + 4) !== "let ") continue;
 
@@ -2487,7 +2487,7 @@ function buildRangeMap(source) {
 }
 
 // Rename whole-word "this" references in a function body to "_this".
-function renameThisReferences(expr) {
+function renameThisReferences(expr: string): string {
   let renamed = "";
   let k = 0;
   while (k < expr.length) {
@@ -2502,7 +2502,7 @@ function renameThisReferences(expr) {
 }
 
 // Transform a function declaration to JavaScript: fn name() => expr; -> function name() { return expr; }
-function transformFnDeclaration(source, start) {
+function transformFnDeclaration(source: string, start: number): string {
   const fnEnd = skipFnKeyword(source, start);
   let pos = skipWhitespace(source, fnEnd);
 
@@ -2522,9 +2522,9 @@ function transformFnDeclaration(source, start) {
   // Build parameter list (strip type annotations, rename "this" param)
   const paramList = stripTypedSyntax(paramsStr)
     .split(",")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-    .map((p) => p === "this" ? "_this" : p)
+    .map((p: string) => p.trim())
+    .filter((p: string) => p.length > 0)
+    .map((p: string) => p === "this" ? "_this" : p)
     .join(", ");
 
   pos = skipWhitespace(source, pos);
@@ -2541,7 +2541,7 @@ function transformFnDeclaration(source, start) {
   pos = skipWhitespace(source, pos);
   // Extract expression until semicolon (handles if/else, while, blocks)
   // If body starts with "{", the function body ends at the matching "}"
-  let expr;
+  let expr: string;
   if (source[pos] === "{") {
     const bodyEnd = findMatchingBrace(source, pos) + 1;
     expr = source.substring(pos, bodyEnd);
@@ -2591,7 +2591,7 @@ function transformFnDeclaration(source, start) {
 
 // Transform a for loop with range syntax: for (i in start..end) body
 // Lowered to: let mut i = start; while (i < end) { body; i += 1; }
-function transformForLoop(source, start) {
+function transformForLoop(source: string, start: number): string {
   const forEnd = skipForKeyword(source, start);
   let pos = skipWhitespace(source, forEnd);
 
@@ -2614,7 +2614,7 @@ function transformForLoop(source, start) {
 
   // Check if rangeExpr is a variable reference to a range
   const rangeMap = buildRangeMap(source);
-  let startExpr, endExpr;
+  let startExpr: string, endExpr: string;
 
   if (rangeMap[rangeExpr]) {
     // Use the range from the variable
@@ -2667,7 +2667,7 @@ function _readString() { return _tokens.shift(); }
 function _toInt(v) { return v === true ? 1 : v === false ? 0 : v; }`;
 
 // Strip a single trailing ";" (and any trailing whitespace after it) from source.
-function stripTrailingSemicolon(source) {
+function stripTrailingSemicolon(source: string): string {
   let end = source.length;
   while (end > 0 && " \t\n\r".includes(source[end - 1])) end--;
   if (end > 0 && source[end - 1] === ";") end--;
@@ -2677,14 +2677,14 @@ function stripTrailingSemicolon(source) {
 // Names of variables that are targets of "&mut NAME" somewhere in the source. Set once per
 // compile() call and read from stripTypedSyntax to decide when a bare read of NAME needs to
 // go through its box ("[0]") instead of being emitted directly. See findBoxedVars/boxDeclarations.
-let CURRENT_BOXED_VARS = new Set();
+let CURRENT_BOXED_VARS: Set<string> = new Set();
 
 // Track variables assigned from "this" so that y.x resolves to x.
-let CURRENT_THIS_VARS = new Set();
+let CURRENT_THIS_VARS: Set<string> = new Set();
 
 // Find variable names assigned from "this", i.e. "let y = this;".
-function findThisVars(source) {
-  const thisVars = new Set();
+function findThisVars(source: string): Set<string> {
+  const thisVars: Set<string> = new Set();
   let i = 0;
   while (i < source.length) {
     if (source.substring(i, i + 4) !== "let ") {
@@ -2708,8 +2708,8 @@ function findThisVars(source) {
 // Find names of functions declared with "this" as their first parameter,
 // e.g. "fn addOnce(this : I32) => this + 1;" -> these can be called as
 // methods: "100.addOnce()".
-function findThisParamFnNames(source) {
-  const names = new Set();
+function findThisParamFnNames(source: string): Set<string> {
+  const names: Set<string> = new Set();
   let i = 0;
   while (i < source.length) {
     if (source.substring(i, i + 3) !== "fn ") {
@@ -2751,7 +2751,7 @@ function findThisParamFnNames(source) {
 }
 
 // Find the matching ')' for '(' at position start. Returns index of ')'.
-function findMatchingParen(source, start) {
+function findMatchingParen(source: string, start: number): number {
   let depth = 1;
   let i = start + 1;
   while (depth > 0 && i < source.length) {
@@ -2764,7 +2764,7 @@ function findMatchingParen(source, start) {
 
 // Skip a number literal or identifier at position i (a valid method-call receiver).
 // Returns the end index, or -1 if neither is present at i.
-function skipThisParamReceiver(source, i) {
+function skipThisParamReceiver(source: string, i: number): number {
   if (isAlpha(source[i])) return skipIdentifier(source, i);
   if (source[i] < "0" || source[i] > "9") return -1;
   let end = i + 1;
@@ -2776,16 +2776,16 @@ function skipThisParamReceiver(source, i) {
 // "fnName(receiver, args)" for functions declared with "this" as their
 // first parameter (see findThisParamFnNames). The receiver is a number
 // literal or identifier immediately preceding the dot.
-function transformThisParamCalls(source, fnNames) {
+function transformThisParamCalls(source: string, fnNames: Set<string>): string {
   if (fnNames.size === 0) return source;
   let result = "";
   let i = 0;
   while (i < source.length) {
     const ch = source[i];
     const receiverEnd = skipThisParamReceiver(source, i);
-    const dotIdentEnd = receiverEnd !== -1 && source[receiverEnd] === "." ? skipIdentifier(source, receiverEnd + 1) : -1;
-    const fnName = dotIdentEnd !== -1 ? source.substring(receiverEnd + 1, dotIdentEnd) : "";
-    const isMethodCall = dotIdentEnd !== -1 && source[dotIdentEnd] === "(" && fnNames.has(fnName);
+    const dotIdentEnd: number = receiverEnd !== -1 && source[receiverEnd] === "." ? skipIdentifier(source, receiverEnd + 1) : -1;
+    const fnName: string = dotIdentEnd !== -1 ? source.substring(receiverEnd + 1, dotIdentEnd) : "";
+    const isMethodCall: boolean = dotIdentEnd !== -1 && source[dotIdentEnd] === "(" && fnNames.has(fnName);
     if (isMethodCall) {
       const receiver = source.substring(i, receiverEnd);
       const closeParen = findMatchingParen(source, dotIdentEnd);
@@ -2803,8 +2803,8 @@ function transformThisParamCalls(source, fnNames) {
 // Find variable names that a mutable reference is taken of, i.e. "= &mut NAME" (RHS/expression
 // position only — a "&mut Type" appearing in a type annotation like ": &mut I32" is not a
 // reference expression and must not be picked up here).
-function findBoxedVars(source) {
-  const boxed = new Set();
+function findBoxedVars(source: string): Set<string> {
+  const boxed: Set<string> = new Set();
   for (let i = 0; i < source.length; i++) {
     if (source[i] !== "=") continue;
     const pos = skipWhitespace(source, i + 1);
@@ -2819,7 +2819,7 @@ function findBoxedVars(source) {
 // a mutable box (a single-element array — plain "{...}" would be misread as a block expression
 // by transformBlocks, but "[...]" is preserved as a literal) that "&mut NAME" (aliasing the box)
 // and "*ref" (reading/writing "[0]") can share access to.
-function boxDeclarations(source, boxedVars) {
+function boxDeclarations(source: string, boxedVars: Set<string>): string {
   if (boxedVars.size === 0) return source;
   let result = "";
   let i = 0;
@@ -2850,7 +2850,7 @@ function boxDeclarations(source, boxedVars) {
   return result;
 }
 
-export function compile(source) {
+export function compile(source: string): string {
   if (source === "") {
     return "return 0;";
   }
@@ -2913,16 +2913,16 @@ export function compile(source) {
 // references like "lib.myVar" or "lib::sub.myVar" are resolved to "myVar".
 // Array keys like ["lib", "sub"] are coerced to "lib,sub" by JS, so we
 // split on commas and rejoin with "::" to form the module path.
-export function compileModules(moduleNames, moduleSources) {
+export function compileModules(moduleNames: string[], moduleSources: Record<string, string>): string {
   // Resolve entry module key: join moduleNames with commas to match
   // the JS-coerced object key (e.g., ["index", "foo"] -> "index,foo").
   const entryModule = moduleNames.join(",");
 
   // Build set of all module paths from moduleSources for cross-module reference resolution.
   // Keys containing commas (from array coercion) are converted to "::"-separated paths.
-  const allModulePaths = new Set();
+  const allModulePaths: Set<string> = new Set();
   // Map module paths to their exported variable names for bare module path resolution.
-  const moduleExports = new Map();
+  const moduleExports: Map<string, string[]> = new Map();
   for (const key of Object.keys(moduleSources)) {
     const modPath = key.includes(",") ? key.split(",").join("::") : key;
     allModulePaths.add(modPath);
@@ -2952,8 +2952,8 @@ export function compileModules(moduleNames, moduleSources) {
 }
 
 // Extract variable names from "out let" declarations in a module source.
-function extractModuleExports(source) {
-  const exports = [];
+function extractModuleExports(source: string): string[] {
+  const exports: string[] = [];
   let i = 0;
   while (i < source.length) {
     const outLetEnd = source.indexOf("out let ", i);
@@ -2971,7 +2971,7 @@ function extractModuleExports(source) {
 }
 
 // Strip "out " prefix from "out let" declarations.
-function stripOutKeyword(source) {
+function stripOutKeyword(source: string): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -2994,7 +2994,7 @@ function stripOutKeyword(source) {
 // Strip "let { ... } = module::path;" destructuring statements.
 // The exports are already globally declared from the non-entry module source,
 // so the destructuring is redundant.
-function stripModuleDestructuring(source, modulePaths) {
+function stripModuleDestructuring(source: string, modulePaths: Set<string>): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -3011,7 +3011,7 @@ function stripModuleDestructuring(source, modulePaths) {
 
 // Try to match "let { ... } = module::path;" at position i.
 // Returns the position after the statement if matched, or 0 if not.
-function tryMatchModuleDestruct(source, i, modulePaths) {
+function tryMatchModuleDestruct(source: string, i: number, modulePaths: Set<string>): number {
   if (source.substring(i, i + 4) !== "let ") return 0;
   let j = i + 4;
   while (j < source.length && " \t\n\r".includes(source[j])) j++;
@@ -3034,7 +3034,7 @@ function tryMatchModuleDestruct(source, i, modulePaths) {
 
 // Skip "::" separators and subsequent identifiers to collect a full module path.
 // Returns the end index after the last identifier in the path.
-function skipModulePath(source, start) {
+function skipModulePath(source: string, start: number): number {
   let end = skipIdentifier(source, start);
   while (end < source.length && source[end] === ":") {
     if (end + 1 >= source.length || source[end + 1] !== ":") break;
@@ -3048,7 +3048,7 @@ function skipModulePath(source, start) {
 
 // Resolve cross-module references like "lib.myVar" -> "myVar" or "lib::sub.myVar" -> "myVar".
 // Also resolves bare module paths in destructuring patterns: "let { x } = lib::sub;" -> "let { x } = { x };"
-function resolveCrossModuleRefs(source, modulePaths, moduleExports) {
+function resolveCrossModuleRefs(source: string, modulePaths: Set<string>, moduleExports: Map<string, string[]>): string {
   let result = "";
   let i = 0;
   while (i < source.length) {
@@ -3067,7 +3067,7 @@ function resolveCrossModuleRefs(source, modulePaths, moduleExports) {
     // Check if this is a bare module path (used in destructuring)
     if (modulePaths.has(name) && moduleExports.has(name)) {
       const exports = moduleExports.get(name);
-      result += "{" + exports.join(",") + "}";
+      result += "{" + (exports as string[]).join(",") + "}";
       i = pathEnd;
       continue;
     }
