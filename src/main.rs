@@ -1988,7 +1988,7 @@ fn infer_literal_type(expr: &str) -> String {
 /// Check if a type name is a known built-in type or a defined struct/alias.
 /// Handles generic types like `Wrapper<I32>` by extracting the base name.
 fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
-    matches!(ty, "I32" | "I64" | "U8" | "&Str" | "Bool")
+    matches!(ty, "I32" | "I64" | "U8" | "USize" | "&Str" | "Bool")
         || ctx.defined_structs.contains(ty)
         || ctx.type_aliases.contains_key(ty)
         || ctx.union_types.contains_key(ty)
@@ -2011,6 +2011,7 @@ fn tuff_type_to_c(ctx: &CompileContext, ty: &str) -> Result<String, CompileError
         "I32" => return Ok("int".to_string()),
         "I64" => return Ok("long long".to_string()),
         "U8" => return Ok("unsigned char".to_string()),
+        "USize" => return Ok("size_t".to_string()),
         "&Str" => return Ok("const char *".to_string()),
         "Bool" => return Ok("int".to_string()),
         _ => {}
@@ -2553,6 +2554,11 @@ mod tests {
     #[test]
     fn test_u8_literal_negative() {
         expect_invalid("-1U8");
+    }
+
+    #[test]
+    fn test_usize_type() {
+        expect_valid("let x : USize = 10; x", "", 10);
     }
 
     #[test]
