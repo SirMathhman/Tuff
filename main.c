@@ -58,5 +58,5 @@ typedef struct {
 
 int main() {
 	
-	return let size = sizeof(U64);
+	return 0;
 }

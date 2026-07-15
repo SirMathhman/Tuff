@@ -2641,7 +2641,7 @@ fn infer_literal_type(expr: &str) -> String {
 /// Check if a type name is a known built-in type or a defined struct/alias.
 /// Handles generic types like `Wrapper<I32>` by extracting the base name.
 fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
-    matches!(ty, "I32" | "I64" | "U8" | "USize" | "&Str" | "Bool")
+    matches!(ty, "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" | "&Str" | "Bool")
         || ctx.defined_structs.contains(ty)
         || ctx.type_aliases.contains_key(ty)
         || ctx.union_types.contains_key(ty)
@@ -2671,10 +2671,14 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
     }
     // Built-in types
     match ty {
+        "I8" => return Ok("signed char".to_string()),
+        "I16" => return Ok("short".to_string()),
         "I32" => return Ok("int".to_string()),
         "I64" => return Ok("long long".to_string()),
         "U8" => return Ok("unsigned char".to_string()),
         "U16" => return Ok("unsigned short".to_string()),
+        "U32" => return Ok("unsigned int".to_string()),
+        "U64" => return Ok("unsigned long long".to_string()),
         "USize" => return Ok("size_t".to_string()),
         "&Str" => return Ok("const char *".to_string()),
         "Bool" => return Ok("int".to_string()),
@@ -3844,6 +3848,24 @@ mod tests {
             "let x = 100; let y : *I32 = &x; *y",
             "",
             100,
+        );
+    }
+
+    #[test]
+    fn test_sizeof_on_let_rhs() {
+        expect_valid(
+            "let x = sizeOf<I32>(); x",
+            "",
+            4,
+        );
+    }
+
+    #[test]
+    fn test_sizeof_on_let_rhs_u64() {
+        expect_valid(
+            "let x = sizeOf<U64>(); x",
+            "",
+            8,
         );
     }
 }

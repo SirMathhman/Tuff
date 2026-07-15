@@ -64,4 +64,4 @@ struct CompileContext {
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
-let size = sizeOf<U64>();
+sizeOf<U64>() is USize
