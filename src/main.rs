@@ -1,5 +1,5 @@
 use core::panic;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -31,6 +31,9 @@ struct CompileContext {
     var_idx: usize,
     mutable_vars: Vec<String>,
     declared_vars: HashSet<String>,
+    #[allow(dead_code)]
+    var_types: HashMap<String, String>,  // variable name -> type name (e.g., "I32", "I64", "Bool")
+    type_aliases: HashMap<String, String>,  // alias name -> resolved type name (e.g., "MyAlias" -> "I32")
     generated_structs: Vec<String>,  // C typedef structs
     defined_structs: HashSet<String>,  // struct names already defined
     generic_structs: Vec<GenericStructTemplate>,  // generic struct templates
@@ -48,6 +51,8 @@ impl CompileContext {
             var_idx: 0,
             mutable_vars: Vec::new(),
             declared_vars: HashSet::new(),
+            var_types: HashMap::new(),
+            type_aliases: HashMap::new(),
             generated_structs: Vec::new(),
             defined_structs: HashSet::new(),
             generic_structs: Vec::new(),
@@ -593,7 +598,7 @@ fn compile_expression(
         return Ok((String::new(), String::from("")));
     }
 
-    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if", no "while", no "for", no "fn")
+    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if", no "while", no "for", no "fn", no "type")
     if !trimmed.starts_with("let ")
         && !trimmed.starts_with('{')
         && !trimmed.starts_with("if ")
@@ -601,6 +606,7 @@ fn compile_expression(
         && !trimmed.starts_with("for ")
         && !trimmed.starts_with("fn ")
         && !trimmed.starts_with("struct ")
+        && !trimmed.starts_with("type ")
     {
         if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
             let assign_part = &trimmed[..semi_pos];
@@ -730,11 +736,15 @@ fn compile_expression(
                     }
                     None
                 });
+                // Track the type for `is` operator checks
+                let inferred_type = type_annotation.as_ref().cloned().unwrap_or_else(|| infer_literal_type(after_eq));
+                let resolved = resolve_type_alias(ctx, &inferred_type);
+                ctx.var_types.insert(var_name.to_string(), resolved);
                 // Use struct type name if it's a defined struct, otherwise default to int
                 let c_type = if let Some(ref ty) = resolved_type {
                     " ".to_string() + ty
                 } else {
-                    " int".to_string()
+                    format!(" {}", tuff_type_to_c(&inferred_type))
                 };
                 format!("{}\n\t{} {} = {};", decl_body, c_type, var_name, decl_result)
             };
@@ -1009,6 +1019,25 @@ fn compile_expression(
             return Ok((String::new(), String::new()));
         } else {
             return Err(format!("Invalid fn syntax: missing semicolon after body"));
+        }
+    }
+
+    // Handle type alias: "type Name = Type; rest"
+    if trimmed.starts_with("type ") {
+        let after_type = &trimmed[5..];  // skip "type "
+        if let Some(semi_pos) = find_top_level_semicolon(after_type) {
+            let alias_part = &after_type[..semi_pos];
+            let rest = &after_type[semi_pos + 1..].trim();
+            // Parse "Name = Type"
+            if let Some(eq_pos) = find_top_level_char(alias_part, '=') {
+                let alias_name = alias_part[..eq_pos].trim();
+                let alias_type = alias_part[eq_pos + 1..].trim();
+                ctx.type_aliases.insert(alias_name.to_string(), alias_type.to_string());
+            }
+            if !rest.is_empty() {
+                return compile_expression(rest, ctx);
+            }
+            return Ok((String::new(), String::from("0")));
         }
     }
 
@@ -1322,16 +1351,35 @@ fn compile_expression(
         }
     }
 
-    // Handle "is" type-checking operator: "expr is Type" => 1 (always true for now, all types are int in C)
+    // Handle logical operators "&&" and "||" at top level
+    for op in &[" && ", " || "] {
+        if let Some(pos) = find_top_level_keyword(trimmed, op) {
+            let lhs = trimmed[..pos].trim().to_string();
+            let rhs = trimmed[pos + op.len()..].trim().to_string();
+            let (_, lhs_result) = compile_expression(&lhs, ctx)?;
+            let (_, rhs_result) = compile_expression(&rhs, ctx)?;
+            return Ok((String::new(), format!("({}) {} ({})", lhs_result, op.trim(), rhs_result)));
+        }
+    }
+
+    // Handle "is" type-checking operator: "expr is Type" => 1 if types match, 0 otherwise
     if let Some(is_pos) = find_top_level_keyword(trimmed, " is ") {
-        let lhs = &trimmed[..is_pos].trim();
-        let _type_name = &trimmed[is_pos + 4..].trim(); // skip " is " - unused until proper type system
-        // For now, all types compile to int in C, so type checks always pass.
-        // In the future, this could track actual types and validate at compile time.
-        let (_, _lhs_result) = compile_expression(lhs, ctx)?;
-        // Type check: for now, always returns 1 (true) since we don't have real type tracking.
-        // TODO: Implement proper type checking when we have a type system.
-        return Ok((String::new(), String::from("1")));
+        let lhs = trimmed[..is_pos].trim().to_string();
+        let check_type = trimmed[is_pos + 4..].trim().to_string(); // skip " is "
+        // Compile LHS to get its expression
+        let (_, _lhs_result) = compile_expression(&lhs, ctx)?;
+        // Determine the type of the LHS expression
+        let lhs_type: String = if let Some(var_type) = ctx.var_types.get(&lhs) {
+            resolve_type_alias(ctx, var_type)
+        } else {
+            // Infer from literal suffix or default to I32
+            infer_literal_type(&lhs)
+        };
+        // Resolve both types through aliases
+        let check_type = resolve_type_alias(ctx, &check_type);
+        // Compare types and return 1 if they match, 0 otherwise
+        let result = if lhs_type == check_type { "1" } else { "0" };
+        return Ok((String::new(), String::from(result)));
     }
 
     // Handle "!" (not) operator: "!expr" => "!expr"
@@ -1412,45 +1460,10 @@ fn copy_chars(s: &str, out: &mut String) {
     // Copy any trailing text after last read().
     copy_chars(&trimmed[last..], &mut result);
 
-    // Fourth pass: strip U8 suffix from integer literals (C doesn't support U8)
-    // Also validate U8 range (0-255)
-    let mut stripped = String::new();
-    let mut skip_until = 0;
-    for (i, m) in result.match_indices("U8").enumerate() {
-        // Copy text since last position
-        let start = if i == 0 { 0 } else { skip_until };
-        if m.0 > start {
-            stripped.push_str(&result[start..m.0]);
-        }
-        // Check if the character before U8 is a digit
-        let before = &result[..m.0];
-        if let Some(last_ch) = before.chars().last() {
-            if last_ch.is_ascii_digit() {
-                let after = &result[m.0 + 2..];
-                // Only strip if followed by a non-alphanumeric char (not part of identifier)
-                if let Some(next_ch) = after.chars().next() {
-                    if !next_ch.is_alphanumeric() && next_ch != '_' {
-                        validate_u8_range(before)?;
-                        skip_until = m.0 + 2; // skip U8
-                        continue;
-                    }
-                } else {
-                    // End of string - safe to strip
-                    validate_u8_range(before)?;
-                    skip_until = m.0 + 2;
-                    continue;
-                }
-            }
-        }
-        // Not a numeric literal - keep U8
-        stripped.push_str("U8");
-        skip_until = m.0 + 2;
-    }
-    // Copy remaining text
-    if skip_until < result.len() {
-        stripped.push_str(&result[skip_until..]);
-    }
-    result = stripped;
+    // Strip literal suffixes from integer literals (C doesn't support U8 or I64 suffixes)
+    let u8_validate = |before: &str| validate_u8_range(before);
+    result = strip_literal_suffix(&result, "U8", Some(&u8_validate))?;
+    result = strip_literal_suffix(&result, "I64", None)?;
 
     // Third pass: handle function calls (generic & non-generic) inline in the result
     // This replaces function calls in-place so surrounding expressions (e.g., "+ 1") are preserved
@@ -1580,6 +1593,99 @@ fn find_matching_brace(s: &str) -> Option<usize> {
         }
     }
     None
+}
+
+/// Infer the type of a literal expression based on its suffix.
+/// "100I64" -> "I64", "100U8" -> "U8", "100" -> "I32"
+fn infer_literal_type(expr: &str) -> String {
+    let trimmed = expr.trim();
+    if trimmed.ends_with("I64") {
+        // Verify the char before "I64" is a digit (not part of an identifier)
+        if let Some(before_suffix) = trimmed.strip_suffix("I64") {
+            if let Some(last_ch) = before_suffix.chars().last() {
+                if last_ch.is_ascii_digit() {
+                    return "I64".to_string();
+                }
+            }
+        }
+    }
+    if trimmed.ends_with("U8") {
+        if let Some(before_suffix) = trimmed.strip_suffix("U8") {
+            if let Some(last_ch) = before_suffix.chars().last() {
+                if last_ch.is_ascii_digit() {
+                    return "U8".to_string();
+                }
+            }
+        }
+    }
+    "I32".to_string()
+}
+
+/// Map a Tuff type name to its corresponding C type.
+fn tuff_type_to_c(ty: &str) -> &'static str {
+    match ty {
+        "I64" => "long long",
+        "U8" => "unsigned char",
+        _ => "int",
+    }
+}
+
+/// Resolve a type name, following type aliases to their underlying type.
+fn resolve_type_alias(ctx: &CompileContext, type_name: &str) -> String {
+    let mut current = type_name;
+    let mut visited = std::collections::HashSet::new();
+    while let Some(resolved) = ctx.type_aliases.get(current) {
+        if !visited.insert(current.to_string()) {
+            break;  // Prevent infinite loops from circular aliases
+        }
+        current = resolved.as_str();
+    }
+    current.to_string()
+}
+
+/// Strip a literal suffix from text if it follows a digit and is not part of an identifier.
+/// Optionally validates the numeric value before stripping.
+fn strip_literal_suffix(
+    text: &str,
+    suffix: &str,
+    validate: Option<&dyn Fn(&str) -> Result<(), CompileError>>,
+) -> Result<String, CompileError> {
+    let mut stripped = String::new();
+    let mut skip_until = 0;
+    let suffix_len = suffix.len();
+    for (i, m) in text.match_indices(suffix).enumerate() {
+        let start = if i == 0 { 0 } else { skip_until };
+        if m.0 > start {
+            stripped.push_str(&text[start..m.0]);
+        }
+        let before = &text[..m.0];
+        if let Some(last_ch) = before.chars().last() {
+            if last_ch.is_ascii_digit() {
+                let after = &text[m.0 + suffix_len..];
+                if let Some(next_ch) = after.chars().next() {
+                    if !next_ch.is_alphanumeric() && next_ch != '_' {
+                        if let Some(v) = validate {
+                            v(before)?;
+                        }
+                        skip_until = m.0 + suffix_len;
+                        continue;
+                    }
+                } else {
+                    if let Some(v) = validate {
+                        v(before)?;
+                    }
+                    skip_until = m.0 + suffix_len;
+                    continue;
+                }
+            }
+        }
+        stripped.push_str(suffix);
+        skip_until = m.0 + suffix_len;
+    }
+    if skip_until < text.len() {
+        stripped.push_str(&text[skip_until..]);
+    }
+    Ok(stripped)
 }
 
 /// Find the index of the matching closing bracket for an opening bracket at position 0.
@@ -2133,5 +2239,29 @@ mod tests {
     #[test]
     fn test_not_operator_false() {
         expect_valid("!1", "", 0);
+    }
+
+    #[test]
+    fn test_is_type_check_with_let() {
+        expect_valid("let x = 100; x is I32", "", 1);
+    }
+
+    #[test]
+    fn test_is_type_check_mismatch() {
+        expect_valid("let x = 100; x is I64", "", 0);
+    }
+
+    #[test]
+    fn test_i64_literal_type_check() {
+        expect_valid("let x = 100I64; x is I64", "", 1);
+    }
+
+    #[test]
+    fn test_type_alias_is_check() {
+        expect_valid(
+            "type MyAlias = I32; let temp : MyAlias = 100; temp is MyAlias && temp is I32",
+            "",
+            1,
+        );
     }
 }
