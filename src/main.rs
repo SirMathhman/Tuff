@@ -14,10 +14,47 @@ struct CompileContext {
     declared_vars: HashSet<String>,
 }
 
+/// Tracks read calls in source order with their types for correct C code generation.
+#[allow(dead_code)]
+struct ReadTracker {
+    reads: Vec<(usize, ReadType)>,
+}
+
+impl ReadTracker {
+    #[allow(dead_code)]
+    fn track(&mut self, pos: usize, read_type: ReadType) {
+        self.reads.push((pos, read_type));
+    }
+}
+
+#[derive(Clone)]
+enum ReadType {
+    Int,
+    Bool,
+}
+
 static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 fn main() {
     println!("Hello, world!");
+}
+
+/// Find all read calls in source order and classify them by type.
+fn find_reads_in_order(source: &str) -> Vec<(usize, ReadType)> {
+    let mut reads = Vec::new();
+    let mut i = 0;
+    while i < source.len() {
+        if source[i..].starts_with("read<Bool>()") {
+            reads.push((i, ReadType::Bool));
+            i += "read<Bool>()".len();
+        } else if source[i..].starts_with("read()") {
+            reads.push((i, ReadType::Int));
+            i += "read()".len();
+        } else {
+            i += 1;
+        }
+    }
+    reads
 }
 
 fn compile(source: &str) -> Result<String, CompileError> {
@@ -26,15 +63,14 @@ fn compile(source: &str) -> Result<String, CompileError> {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
     }
 
-    // Count how many read() calls are in the expression (plain and generic)
-    let plain_read_count = trimmed.matches("read()").count();
-    let bool_read_count = trimmed.matches("read<Bool>()").count();
-    let read_count = plain_read_count + bool_read_count;
+    // Find all reads in source order and assign variables sequentially.
+    let read_entries = find_reads_in_order(trimmed);
+    let read_count = read_entries.len();
     let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
 
     // Parse let declarations and build C body
     let mut ctx = CompileContext {
-        vars,
+        vars: vars.clone(),
         var_idx: 0,
         mutable_vars: Vec::new(),
         declared_vars: HashSet::new(),
@@ -42,43 +78,39 @@ fn compile(source: &str) -> Result<String, CompileError> {
     let (c_body, return_expr) = compile_expression(trimmed, &mut ctx)?;
 
     if read_count > 0 {
-        // Generate C code for reads - handle both plain int and Bool types
+        // Generate C code for reads in source order.
         let mut c_decls = String::new();
         let mut c_reads = String::new();
 
-        // Integer reads use scanf %d
-        if plain_read_count > 0 {
-            let scanf_fmt = format!("%d{}", " %d".repeat(plain_read_count - 1));
-            let scanf_args: Vec<_> = (0..plain_read_count)
-                .map(|i| format!("&v{}", i))
-                .collect();
-            c_decls.push_str(&format!(
-                "\tint {};\n",
-                (0..plain_read_count).map(|i| format!("v{}", i)).collect::<Vec<_>>().join(", ")
-            ));
-            let args_joined = scanf_args.join(", ");
-            c_reads.push_str("scanf(\"");
-            c_reads.push_str(&scanf_fmt);
-            c_reads.push_str("\", ");
-            c_reads.push_str(&args_joined);
-            c_reads.push_str(");\n");
-        }
-
-        // Bool reads use fgets + strcmp
-        if bool_read_count > 0 {
-            let start_idx = plain_read_count;
-            for i in 0..bool_read_count {
-                c_decls.push_str(&format!("\tint v{};\n", start_idx + i));
-                c_reads.push_str(&format!(
-                    "\tfgets(buf, sizeof(buf), stdin);\nv{} = strcmp(buf, \"true\") == 0 || buf[0] == '1';\n",
-                    start_idx + i
-                ));
+        for (i, (_pos, entry_type)) in read_entries.iter().enumerate() {
+            let var_name = &vars[i];
+            match entry_type {
+                ReadType::Int => {
+                    c_decls.push_str(&format!("\tint {};\n", var_name));
+                    c_reads.push_str(&format!(
+                        "\tscanf(\"%d\", &{});\n",
+                        var_name
+                    ));
+                }
+                ReadType::Bool => {
+                    c_decls.push_str(&format!("\tint {};\n", var_name));
+                    // Use scanf("%s") to read a single whitespace-delimited token, then compare.
+                    c_reads.push_str(&format!(
+                        "\tscanf(\"%63s\", buf);\n{} = strcmp(buf, \"true\") == 0 || buf[0] == '1';\n",
+                        var_name
+                    ));
+                }
             }
         }
 
         // Build final C program with stdbool.h for boolean support
-        let includes = "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>";
-        let buf_decl = "\tchar buf[64];";
+        let has_bool_reads = read_entries.iter().any(|(_, t)| matches!(t, ReadType::Bool));
+        let includes = if has_bool_reads {
+            "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
+        } else {
+            "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
+        };
+        let buf_decl = if has_bool_reads { "\tchar buf[64];" } else { "" };
         Ok(format!(
             "{}\nint main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
             includes, buf_decl, c_decls.trim(), c_reads.trim(), c_body, return_expr
@@ -315,23 +347,48 @@ fn compile_expression(
 ) -> Result<(String, String), CompileError> {
     let trimmed = expr.trim();
 
-    // Check for plain reassignment: "x = <expr>; <final>" (no "let")
-    if !trimmed.starts_with("let ") && !trimmed.starts_with('{') {
+    // Handle empty expressions.
+    if trimmed.is_empty() {
+        return Ok((String::new(), String::from("")));
+    }
+
+    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if")
+    if !trimmed.starts_with("let ") && !trimmed.starts_with('{') && !trimmed.starts_with("if ") {
         if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
             let assign_part = &trimmed[..semi_pos];
             let final_part = &trimmed[semi_pos + 1..];
             // Check if it's an assignment (contains '=' at top level)
             if let Some(eq_pos) = find_top_level_char(assign_part, '=') {
-                let var_name = assign_part[..eq_pos].trim();
+                // Check for compound assignment operators: += -= *= /=
+                // The '=' found by find_top_level_char is the one in "+=" etc., so look back 1 char.
+                let (var_name, op, rhs_start_offset) = if eq_pos >= 1 {
+                    let prev_ch = assign_part.chars().nth(eq_pos - 1);
+                    match prev_ch {
+                        Some('+') => (&assign_part[..eq_pos - 1], Some('+'), eq_pos + 1), // skip '=' only
+                        Some('-') => (&assign_part[..eq_pos - 1], Some('-'), eq_pos + 1),
+                        Some('*') => (&assign_part[..eq_pos - 1], Some('*'), eq_pos + 1),
+                        Some('/') => (&assign_part[..eq_pos - 1], Some('/'), eq_pos + 1),
+                        _ => (&assign_part[..eq_pos], None, eq_pos + 1), // plain '='
+                    }
+                } else {
+                    (&assign_part[..eq_pos], None, eq_pos + 1)
+                };
+                let var_name = var_name.trim();
                 // Extract base variable name (e.g., "x" from "x[0]")
                 let base_var = var_name.split('[').next().unwrap_or(var_name);
                 // Check if variable was declared as mutable
                 if !ctx.mutable_vars.iter().any(|v| v == base_var) {
                     return Err(format!("Cannot reassign immutable variable '{}'", base_var));
                 }
-                let rhs = assign_part[eq_pos + 1..].trim();
+                let rhs = assign_part[rhs_start_offset..].trim();
                 let (assign_body, assign_result) = compile_expression(rhs, ctx)?;
-                let c_body = format!("{}\n\t{} = {};", assign_body, var_name, assign_result);
+                let c_body = match op {
+                    Some(op_char) => format!(
+                        "{}\n\t{} {}= {};",
+                        assign_body, var_name, op_char, assign_result
+                    ),
+                    None => format!("{}\n\t{} = {};", assign_body, var_name, assign_result),
+                };
                 let final_result = compile_expression(final_part, ctx).map(|r| r.1)?;
                 return Ok((c_body, final_result));
             }
@@ -438,7 +495,8 @@ fn compile_expression(
     // Check if expression contains embedded blocks with statements (let decls or assignments)
     // e.g., "read() + { let x = read(); x }"  OR  "{ x = read(); } x"
     // We look for any block that has internal semicolons (statements, not just grouping).
-    if trimmed.contains('{') && (find_top_level_semicolon(trimmed).is_some() || trimmed.contains("{ let ") || trimmed.contains("= ")) {
+    // Skip this check if the expression starts with "if " - let the if/else handler deal with brace-delimited branches.
+    if !trimmed.starts_with("if ") && trimmed.contains('{') && (find_top_level_semicolon(trimmed).is_some() || trimmed.contains("{ let ") || trimmed.contains("= ")) {
         for (brace_pos, ch) in trimmed.char_indices() {
             if ch == '{' {
                 let remaining = &trimmed[brace_pos..];
@@ -487,7 +545,8 @@ fn compile_expression(
     }
 
 
-    // Handle if/else expression: "if (cond) a else b" → "(cond ? a : b)"
+    // Handle if/else expression: "if (cond) a else b" → "(cond ? a : b)" or block form for statements.
+    // Or statement form: "if (cond) stmt;" → "if (cond) { stmt; }"
     if trimmed.starts_with("if ") {
         let paren_start = 3; // skip "if "
         let paren_end = find_matching_paren(&trimmed[paren_start..]).unwrap();
@@ -499,11 +558,120 @@ fn compile_expression(
             let then_expr = &rest[..else_pos].trim();
             let else_expr = &rest[else_pos + "else".len()..].trim();
 
-            let (_, cond_result) = compile_expression(cond, ctx)?;
-            let (_, then_result) = compile_expression(then_expr, ctx)?;
-            let (_, else_result) = compile_expression(else_expr, ctx)?;
+            // Check if either branch is a statement (contains assignment at top level or inside braces).
+            fn has_assignment_in(s: &str) -> bool {
+                find_top_level_char(s, '=').is_some() || {
+                    let trimmed = s.trim();
+                    // Also check inside brace-delimited blocks.
+                    if trimmed.starts_with('{') && trimmed.ends_with('}') && trimmed.len() >= 2 {
+                        let inner = &trimmed[1..trimmed.len() - 1];
+                        find_top_level_char(inner, '=').is_some()
+                    } else {
+                        false
+                    }
+                }
+            }
+            let then_is_stmt = has_assignment_in(then_expr);
+            let else_is_stmt = has_assignment_in(else_expr);
 
-            return Ok((String::new(), format!("({} ? {} : {})", cond_result, then_result, else_result)));
+            let (_, cond_result) = compile_expression(cond, ctx)?;
+
+            if then_is_stmt || else_is_stmt {
+                // Generate C if/else block form for statements.
+                let (then_body, then_result) = compile_expression(then_expr, ctx)?;
+
+                // Check if else branch has a trailing semicolon with content after it.
+                // Also check for brace-delimited blocks followed by content: "{ x = read(); } x"
+                let mut else_part: &str = else_expr;
+                let after_else: &str = if let Some(semi_pos) = find_top_level_semicolon(else_expr) {
+                    else_part = &else_expr[..semi_pos];
+                    &else_expr[semi_pos + 1..]
+                } else {
+                    // Check for brace-delimited block followed by content.
+                    let trimmed_else = else_expr.trim();
+                    if let Some(block_len) = find_matching_brace(trimmed_else) {
+                        // Content after the closing brace (block_len is index of '}').
+                        let after_block = &trimmed_else[block_len + 1..].trim();
+                        if !after_block.is_empty() {
+                            else_part = &trimmed_else[..=block_len]; // Include the closing brace.
+                            after_block
+                        } else {
+                            ""
+                        }
+                    } else {
+                        ""
+                    }
+                };
+
+                let (else_body, else_result) = compile_expression(else_part.trim(), ctx)?;
+
+                // Build if/else block with bodies inside.
+                let mut c_stmt = String::new();
+                c_stmt.push_str(&format!("\tif ({}) {{\n", cond_result));
+                if !then_body.is_empty() {
+                    for line in then_body.lines() {
+                        c_stmt.push('\t');
+                        c_stmt.push_str(line);
+                        c_stmt.push('\n');
+                    }
+                }
+                // Only add result line if there's a non-empty result (avoid empty semicolons).
+                if !then_result.is_empty() {
+                    c_stmt.push_str(&format!("\t\t{};\n", then_result));
+                }
+                c_stmt.push_str("\t} else {\n");
+                if !else_body.is_empty() {
+                    for line in else_body.lines() {
+                        c_stmt.push('\t');
+                        c_stmt.push_str(line);
+                        c_stmt.push('\n');
+                    }
+                }
+                // Only add result line if there's a non-empty result.
+                if !else_result.is_empty() {
+                    c_stmt.push_str(&format!("\t\t{};\n", else_result));
+                }
+                c_stmt.push_str("\t}");
+
+                // If there's content after the else branch (e.g., "; x"), use it as return.
+                let ret = if !after_else.trim().is_empty() {
+                    compile_expression(after_else.trim(), ctx).map(|r| r.1)?
+                } else {
+                    String::new()
+                };
+
+                return Ok((c_stmt, ret));
+            } else {
+                // Pure expressions — use ternary.
+                let (_, then_result) = compile_expression(then_expr, ctx)?;
+                let (_, else_result) = compile_expression(else_expr, ctx)?;
+
+                return Ok((String::new(), format!("({} ? {} : {})", cond_result, then_result, else_result)));
+            }
+        } else {
+            // No else — treat as statement: "if (cond) body" or "if (cond) body; remaining..."
+            let (_, cond_result) = compile_expression(cond, ctx)?;
+
+            // Check if rest has a top-level semicolon separating then-body from what follows
+            if let Some(semi_pos) = find_top_level_semicolon(rest) {
+                let then_part = &rest[..semi_pos].trim();
+                let after_part = &rest[semi_pos + 1..].trim();
+
+                let (then_body, then_result) = compile_expression(then_part, ctx)?;
+                let c_stmt = format!("{}\n\tif ({}) {{\n\t\t{};\n\t}}", then_body, cond_result, then_result);
+
+                if !after_part.is_empty() {
+                    let (_, after_result) = compile_expression(after_part, ctx)?;
+                    return Ok((c_stmt, after_result));
+                } else {
+                    return Ok((c_stmt, String::new()));
+                }
+            } else {
+                // No semicolon — entire rest is the then-body
+                let (then_body, then_result) = compile_expression(rest, ctx)?;
+                let c_stmt = format!("{}\n\tif ({}) {{\n\t\t{};\n\t}}", then_body, cond_result, then_result);
+                return Ok((c_stmt, String::new()));
+            }
         }
     }
 
@@ -612,10 +780,13 @@ fn find_matching_paren(s: &str) -> Option<usize> {
         return None;
     }
     let mut depth = 0;
+    let mut in_angle_bracket = false;
     for (i, ch) in s.chars().enumerate() {
         match ch {
-            '(' => depth += 1,
-            ')' => {
+            '<' => in_angle_bracket = true,
+            '>' if in_angle_bracket => in_angle_bracket = false,
+            '(' if !in_angle_bracket => depth += 1,
+            ')' if !in_angle_bracket => {
                 depth -= 1;
                 if depth == 0 {
                     return Some(i);
@@ -840,6 +1011,16 @@ mod tests {
     }
 
     #[test]
+    fn test_mut_compound_assign() {
+        expect_valid("let mut x = read(); x += read(); x", "1 3", 4);
+    }
+
+    #[test]
+    fn test_compound_assign_without_mut() {
+        expect_invalid("let x = read(); x += read(); x");
+    }
+
+    #[test]
     fn test_reassign_without_mut() {
         expect_invalid("let x = read(); x = read(); x");
     }
@@ -907,5 +1088,31 @@ mod tests {
     #[test]
     fn test_let_shadowing() {
         expect_valid("let x = read(); let x = read(); x", "1 3", 3);
+    }
+
+    #[test]
+    fn test_if_with_mut_reassign() {
+        expect_valid("let mut x = 0; if (read<Bool>()) x = read(); x", "true 3", 3);
+    }
+
+    #[test]
+    fn test_if_else_with_mut_reassign() {
+        // All reads are eagerly evaluated at top of main(), so both branch reads need input.
+        expect_valid(
+            "let mut x = 0; if (read<Bool>()) x = read(); else x = read() + 1; x",
+            "false 0 8",
+            9,
+        );
+    }
+
+    #[test]
+    fn test_if_else_brace_blocks_with_mut_reassign() {
+        // Explicit brace-delimited if/else blocks with assignments inside.
+        // All reads are eagerly evaluated at top of main(), so both branch reads need input.
+        expect_valid(
+            "let mut x = 0; if (read<Bool>()) { x = read(); } else { x = read() + 1; } x",
+            "false 0 8",
+            9,
+        );
     }
 }
