@@ -961,20 +961,18 @@ fn compile_expression(
                             format!("{}\n\t{} {} = {};", decl_body, ty, var_name, decl_result)
                         }
                     } else {
+                        let c_type = tuff_type_to_c(ctx, &inferred_type)?;
                         format!(
                             "{}\n\t{} {} = {};",
-                            decl_body,
-                            tuff_type_to_c(&inferred_type),
-                            var_name,
-                            decl_result
+                            decl_body, c_type, var_name, decl_result
                         )
                     }
                 } else {
-                    // Use struct type name if it's a defined struct, otherwise default to int
+                    // Use struct type name if it's a defined struct, otherwise convert type
                     let c_type = if let Some(ref ty) = resolved_generic_type {
                         " ".to_string() + ty
                     } else {
-                        format!(" {}", tuff_type_to_c(&inferred_type))
+                        format!(" {}", tuff_type_to_c(ctx, &inferred_type)?)
                     };
                     format!(
                         "{}\n\t{} {} = {};",
@@ -1344,7 +1342,7 @@ fn compile_expression(
                     if !seen_fields.insert(name.clone()) {
                         return Err(format!("Duplicate struct field: {}", name));
                     }
-                    // Determine field type from annotation
+                    // Determine field type from annotation (type is required)
                     let field_type_str: String = if parts.len() > 1 {
                         let ty = parts[1].trim();
                         // Validate type is known
@@ -1356,10 +1354,10 @@ fn compile_expression(
                             let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
                             monomorphize_generic_struct(ctx, base, &type_args)?
                         } else {
-                            tuff_type_to_c(ty).to_string()
+                            tuff_type_to_c(ctx, ty)?
                         }
                     } else {
-                        "int".to_string()
+                        return Err(format!("Missing type annotation for struct field '{}'", name));
                     };
                     c_fields.push_str(&format!("\t\t{} {};\n", field_type_str, name));
                 }
@@ -1956,13 +1954,45 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
 }
 
 /// Map a Tuff type name to its corresponding C type.
-fn tuff_type_to_c(ty: &str) -> &'static str {
+/// Returns an error for unknown types instead of defaulting to "int".
+fn tuff_type_to_c(ctx: &CompileContext, ty: &str) -> Result<String, CompileError> {
+    // Built-in types
     match ty {
-        "I64" => "long long",
-        "U8" => "unsigned char",
-        "&Str" => "const char *",
-        _ => "int",
+        "I32" => return Ok("int".to_string()),
+        "I64" => return Ok("long long".to_string()),
+        "U8" => return Ok("unsigned char".to_string()),
+        "&Str" => return Ok("const char *".to_string()),
+        "Bool" => return Ok("int".to_string()),
+        _ => {}
     }
+    // User-defined struct (typedef name used as-is)
+    if ctx.defined_structs.contains(ty) {
+        return Ok(ty.to_string());
+    }
+    // Type alias — resolve and recurse
+    if let Some(members) = ctx.type_aliases.get(ty) {
+        if members.len() == 1 {
+            return tuff_type_to_c(ctx, &members[0]);
+        }
+        // Union alias — return first member's C type (or error if empty)
+        if let Some(first) = members.first() {
+            return tuff_type_to_c(ctx, first);
+        }
+    }
+    // Union type — resolve to underlying types
+    if let Some(variants) = ctx.union_types.get(ty) {
+        if let Some(first) = variants.first() {
+            return tuff_type_to_c(ctx, first);
+        }
+    }
+    // Generic struct instantiation: "Wrapper<I32>" -> build concrete C name
+    if let Some((base, type_args_str)) = parse_generic_type(ty) {
+        let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+        let sanitized_args: Vec<String> = type_args.iter().map(|a| sanitize_type_name(a)).collect();
+        let args_joined = sanitized_args.join("_");
+        return Ok(format!("{}_{}", base, args_joined));
+    }
+    Err(format!("Unknown type: {}", ty))
 }
 
 /// Resolve a type name, following type aliases to their underlying type(s).
@@ -2148,9 +2178,13 @@ fn monomorphize_generic_struct(
             }
             let field_type = field[colon_pos + 1..].trim();
             let resolved_type = if let Some(idx) = template.type_params.iter().position(|p| p == field_type) {
-                type_args.get(idx).map(|a| tuff_type_to_c(a).to_string()).unwrap_or_else(|| "int".to_string())
+                let arg = type_args.get(idx)
+                    .ok_or_else(|| format!("Missing type argument at index {} in '{}'", idx, base))?;
+                tuff_type_to_c(ctx, arg)?.to_string()
+            } else if is_valid_type(ctx, field_type) {
+                tuff_type_to_c(ctx, field_type)?.to_string()
             } else {
-                tuff_type_to_c(field_type).to_string()
+                return Err(format!("Unknown type in generic struct '{}': {}", base, field_type));
             };
             concrete_fields.push_str(&format!("\t\t{} {};\n", resolved_type, field_name));
         }
@@ -2656,6 +2690,11 @@ mod tests {
     #[test]
     fn test_struct_unknown_field_type() {
         expect_invalid("struct Wrapper { field : UnknownType }");
+    }
+
+    #[test]
+    fn test_struct_missing_field_type() {
+        expect_invalid("struct Wrapper { field }");
     }
 
     #[test]
