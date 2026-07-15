@@ -1325,7 +1325,21 @@ fn compile_expression(
     // Base case: replace read<T>() and read() with variables, convert braces to parens.
     let mut result = String::new();
 
-    fn copy_chars(s: &str, out: &mut String) {
+    /// Validate that a U8 literal value is within range (0-255).
+fn validate_u8_range(before: &str) -> Result<(), CompileError> {
+    let num_str = before.trim_end_matches(|c: char| !c.is_ascii_digit());
+    if let Ok(val) = num_str.parse::<u64>() {
+        if val > 255 {
+            return Err(format!(
+                "U8 literal out of range: {} (must be 0-255)",
+                val
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn copy_chars(s: &str, out: &mut String) {
         for ch in s.chars() {
             match ch {
                 '{' => out.push('('),
@@ -1372,6 +1386,7 @@ fn compile_expression(
     copy_chars(&trimmed[last..], &mut result);
 
     // Fourth pass: strip U8 suffix from integer literals (C doesn't support U8)
+    // Also validate U8 range (0-255)
     let mut stripped = String::new();
     let mut skip_until = 0;
     for (i, m) in result.match_indices("U8").enumerate() {
@@ -1388,11 +1403,13 @@ fn compile_expression(
                 // Only strip if followed by a non-alphanumeric char (not part of identifier)
                 if let Some(next_ch) = after.chars().next() {
                     if !next_ch.is_alphanumeric() && next_ch != '_' {
+                        validate_u8_range(before)?;
                         skip_until = m.0 + 2; // skip U8
                         continue;
                     }
                 } else {
                     // End of string - safe to strip
+                    validate_u8_range(before)?;
                     skip_until = m.0 + 2;
                     continue;
                 }
@@ -1812,6 +1829,11 @@ mod tests {
     #[test]
     fn test_u8_literal() {
         expect_valid("100U8", "", 100);
+    }
+
+    #[test]
+    fn test_u8_literal_out_of_range() {
+        expect_invalid("256U8");
     }
 
     #[test]
