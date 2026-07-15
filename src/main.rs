@@ -617,6 +617,31 @@ fn find_top_level_char(s: &str, target: char) -> Option<usize> {
     None
 }
 
+/// Split a string by commas at the top level (not inside <...>, [...], or {...}).
+fn split_top_level_commas(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
+        match ch {
+            '<' | '[' | '{' => depth += 1,
+            '>' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
 /// Parse array repeat syntax [value; count], returning (value_str, count) if it matches.
 fn parse_array_repeat(s: &str) -> Option<(&str, usize)> {
     let closing_bracket = find_matching_bracket(s)?;
@@ -1385,7 +1410,7 @@ fn compile_expression(
             let mut c_fields = String::new();
             let mut seen_fields: HashSet<String> = HashSet::new();
             if !fields_str.is_empty() {
-                for field in fields_str.split(',') {
+                for field in split_top_level_commas(fields_str) {
                     let parts: Vec<&str> = field.trim().split(':').collect();
                     let name = parts[0].trim().to_string();
                     // Check for duplicate field names
@@ -2780,6 +2805,15 @@ mod tests {
     fn test_generic_struct_with_str_type_arg() {
         expect_valid(
             "struct Wrapper<T> { value : T } struct Container { wrapper : Wrapper<&Str> };",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_two_type_args_as_field() {
+        expect_valid(
+            "struct Pair<A, B> { first : A, second : B } struct Container { pair : Pair<I32, Bool> };",
             "",
             0,
         );
