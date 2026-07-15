@@ -89,6 +89,53 @@ enum ReadType {
 
 static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 
+/// Strip line comments (// ...) from source, handling string literals.
+fn strip_line_comments(source: &str) -> String {
+    let mut result = String::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    let chars: Vec<char> = source.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
+        if escaped {
+            result.push(ch);
+            escaped = false;
+            i += 1;
+            continue;
+        }
+        if ch == '\\' && in_string {
+            result.push(ch);
+            escaped = true;
+            i += 1;
+            continue;
+        }
+        if ch == '"' {
+            in_string = !in_string;
+            result.push(ch);
+            i += 1;
+            continue;
+        }
+        if !in_string && ch == '/' && i + 1 < len && chars[i + 1] == '/' {
+            // Skip until end of line
+            i += 2;
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+            // Keep the newline
+            if i < len {
+                result.push('\n');
+                i += 1;
+            }
+            continue;
+        }
+        result.push(ch);
+        i += 1;
+    }
+    result
+}
+
 /// Strip fn bodies from source for top-level read tracking.
 /// Replaces "fn name(...) => body;" with empty string so reads inside fn aren't counted at main level.
 fn strip_fn_bodies(source: &str) -> String {
@@ -370,8 +417,11 @@ fn compile(source: &str) -> Result<String, CompileError> {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
     }
 
+    // Strip line comments before processing
+    let no_comments = strip_line_comments(trimmed);
+
     // Strip fn bodies from source before scanning for top-level reads.
-    let stripped_for_reads = strip_fn_bodies(trimmed);
+    let stripped_for_reads = strip_fn_bodies(&no_comments);
 
     // Find all reads in source order and assign variables sequentially.
     let read_entries = find_reads_in_order(&stripped_for_reads);
@@ -380,7 +430,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
     // Parse let declarations and build C body
     let mut ctx = CompileContext::new(vars.clone());
-    let (c_body, return_expr) = compile_expression(trimmed, &mut ctx)?;
+    let (c_body, return_expr) = compile_expression(&no_comments, &mut ctx)?;
 
     if read_count > 0 {
         // Generate C code for reads in source order.
@@ -2409,6 +2459,11 @@ mod tests {
     #[test]
     fn test_whitespace_source() {
         expect_valid(" ", "", 0);
+    }
+
+    #[test]
+    fn test_line_comment() {
+        expect_valid("let x = 5; // this is a comment\nx", "", 5);
     }
 
     #[test]
