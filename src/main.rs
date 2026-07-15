@@ -365,6 +365,7 @@ fn generate_tagged_union_if_else(
 
 fn compile(source: &str) -> Result<String, CompileError> {
     let trimmed = source.trim();
+    eprintln!("[compile] source: '{}'", trimmed);
     if trimmed.is_empty() {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
     }
@@ -731,6 +732,7 @@ fn compile_expression(
     ctx: &mut CompileContext,
 ) -> Result<(String, String), CompileError> {
     let trimmed = expr.trim();
+    eprintln!("[compile_expr] expr: '{}'", trimmed);
 
     // Handle empty expressions.
     if trimmed.is_empty() {
@@ -920,17 +922,7 @@ fn compile_expression(
                 // If no struct found, check for generic instantiation from type annotation
                 let resolved_generic_type = resolved_struct_type.clone().or_else(|| {
                     type_annotation.as_ref().and_then(|ty| {
-                        if let Some(angle_start) = ty.find('<') {
-                            if let Some(angle_end) = ty.find('>') {
-                                let base = &ty[..angle_start];
-                                let type_args_str = &ty[angle_start + 1..angle_end];
-                                Some(build_concrete_name(base, type_args_str))
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
+                        parse_generic_type(ty).map(|(base, type_args_str)| build_concrete_name(base, type_args_str))
                     })
                 });
                 // Track all resolved types for `is` operator checks (union support)
@@ -1355,7 +1347,17 @@ fn compile_expression(
                     // Determine field type from annotation
                     let field_type_str: String = if parts.len() > 1 {
                         let ty = parts[1].trim();
-                        tuff_type_to_c(ty).to_string()
+                        // Validate type is known
+                        if !is_valid_type(ctx, ty) {
+                            return Err(format!("Unknown type: {}", ty));
+                        }
+                        // Handle generic struct instantiations: "Wrapper<I32>" -> "Wrapper_I32"
+                        if let Some((base, type_args_str)) = parse_generic_type(ty) {
+                            let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+                            monomorphize_generic_struct(ctx, base, &type_args)?
+                        } else {
+                            tuff_type_to_c(ty).to_string()
+                        }
                     } else {
                         "int".to_string()
                     };
@@ -1381,7 +1383,14 @@ fn compile_expression(
 
         // Check for remaining content after the struct definition (semicolon-separated)
         let rest = &after_struct[brace_pos + brace_end + 1..].trim();
+        // Strip trailing semicolons only when followed by another struct definition
+        let rest = if rest.starts_with("struct ") {
+            rest.trim_end_matches(';').trim()
+        } else {
+            rest
+        };
         if !rest.is_empty() {
+            eprintln!("[struct] rest: '{}'", rest);
             return compile_expression(rest, ctx);
         }
 
@@ -1555,51 +1564,9 @@ fn compile_expression(
             };
 
             // Monomorphize generic struct if needed
-            if !type_args.is_empty() && !ctx.generated_instantiations.contains(&concrete_name) {
-                // Find the generic template
-                if let Some(template) = ctx.generic_structs.iter().find(|t| t.name == struct_base) {
-                    // Generate concrete struct by substituting type params
-                    let mut concrete_fields = String::new();
-                    let mut seen_fields: HashSet<String> = HashSet::new();
-                    for field in template.fields_str.split(',') {
-                        let field = field.trim();
-                        if field.is_empty() {
-                            continue;
-                        }
-                        if let Some(colon_pos) = field.find(':') {
-                            let field_name = field[..colon_pos].trim().to_string();
-                            let field_type = field[colon_pos + 1..].trim();
-                            // Substitute type params with concrete types (all resolve to int for now)
-                            #[allow(unused_variables)]
-                            let resolved_type = if let Some(idx) =
-                                template.type_params.iter().position(|p| p == field_type)
-                            {
-                                type_args.get(idx).map(|a| a.as_str()).unwrap_or("int")
-                            } else {
-                                "int"
-                            };
-                            // Check for duplicate field names
-                            if !seen_fields.insert(field_name.clone()) {
-                                return Err(format!("Duplicate struct field: {}", field_name));
-                            }
-                            // All types resolve to int for now (C doesn't have generics)
-                            concrete_fields.push_str(&format!("\t\tint {};\n", field_name));
-                        }
-                    }
-
-                    // Generate C typedef for the concrete instantiation
-                    let mut typedef = "typedef struct {\n".to_string();
-                    if !concrete_fields.is_empty() {
-                        typedef.push_str(&concrete_fields);
-                    }
-                    typedef.push_str("} ");
-                    typedef.push_str(&concrete_name);
-                    typedef.push(';');
-
-                    ctx.generated_structs.push(typedef);
-                    ctx.generated_instantiations.insert(concrete_name.clone());
-                    ctx.defined_structs.insert(concrete_name.clone());
-                }
+            if !type_args.is_empty() {
+                let type_args_refs: Vec<&str> = type_args.iter().map(|s| s.as_str()).collect();
+                monomorphize_generic_struct(ctx, &struct_base, &type_args_refs)?;
             }
 
             // Check if struct is defined (either non-generic or already monomorphized)
@@ -1970,6 +1937,24 @@ fn infer_literal_type(expr: &str) -> String {
     "I32".to_string()
 }
 
+/// Check if a type name is a known built-in type or a defined struct/alias.
+/// Handles generic types like `Wrapper<I32>` by extracting the base name.
+fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
+    matches!(ty, "I32" | "I64" | "U8" | "&Str" | "Bool")
+        || ctx.defined_structs.contains(ty)
+        || ctx.type_aliases.contains_key(ty)
+        || ctx.union_types.contains_key(ty)
+        || {
+            // Handle generic types like "Wrapper<I32>" — extract base name
+            if let Some(angle_start) = ty.find('<') {
+                let base = &ty[..angle_start];
+                ctx.defined_structs.contains(base)
+            } else {
+                false
+            }
+        }
+}
+
 /// Map a Tuff type name to its corresponding C type.
 fn tuff_type_to_c(ty: &str) -> &'static str {
     match ty {
@@ -2108,12 +2093,79 @@ fn find_matching_paren(s: &str) -> Option<usize> {
     None
 }
 
+/// Sanitize a type name for use in a C identifier (e.g. "&Str" -> "Str").
+fn sanitize_type_name(ty: &str) -> String {
+    ty.replace('&', "").replace(' ', "_")
+}
+
 /// Build a concrete type name from a base and type args string.
 /// "Wrapper", "I32" -> "Wrapper_I32"
 /// "Wrapper", "I32, Bool" -> "Wrapper_I32_Bool"
+/// "Wrapper", "&Str" -> "Wrapper_Str"
 fn build_concrete_name(base: &str, type_args_str: &str) -> String {
-    let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+    let type_args: Vec<String> = type_args_str.split(',').map(|a| sanitize_type_name(a.trim())).collect();
     format!("{}_{}", base, type_args.join("_"))
+}
+
+/// Parse a generic type annotation like "Wrapper<I32>" into (base, type_args_str).
+/// Returns None if the type is not generic.
+fn parse_generic_type(ty: &str) -> Option<(&str, &str)> {
+    if let Some(angle_start) = ty.find('<') {
+        if let Some(angle_end) = ty.find('>') {
+            let base = &ty[..angle_start];
+            let type_args_str = &ty[angle_start + 1..angle_end];
+            Some((base, type_args_str))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Monomorphize a generic struct template into a concrete C typedef.
+/// If already generated, does nothing. Returns the concrete name.
+fn monomorphize_generic_struct(
+    ctx: &mut CompileContext,
+    base: &str,
+    type_args: &[&str],
+) -> Result<String, CompileError> {
+    let concrete_name = format!("{}_{}", base, type_args.iter().map(|a| sanitize_type_name(a)).collect::<Vec<_>>().join("_"));
+    if ctx.generated_instantiations.contains(&concrete_name) {
+        return Ok(concrete_name);
+    }
+    let template = ctx.generic_structs.iter().find(|t| t.name == base)
+        .ok_or_else(|| format!("Undefined generic struct: {}", base))?;
+    let mut concrete_fields = String::new();
+    let mut seen_fields: HashSet<String> = HashSet::new();
+    for field in template.fields_str.split(',') {
+        let field = field.trim();
+        if field.is_empty() { continue; }
+        if let Some(colon_pos) = field.find(':') {
+            let field_name = field[..colon_pos].trim().to_string();
+            if !seen_fields.insert(field_name.clone()) {
+                return Err(format!("Duplicate struct field: {}", field_name));
+            }
+            let field_type = field[colon_pos + 1..].trim();
+            let resolved_type = if let Some(idx) = template.type_params.iter().position(|p| p == field_type) {
+                type_args.get(idx).map(|a| tuff_type_to_c(a).to_string()).unwrap_or_else(|| "int".to_string())
+            } else {
+                tuff_type_to_c(field_type).to_string()
+            };
+            concrete_fields.push_str(&format!("\t\t{} {};\n", resolved_type, field_name));
+        }
+    }
+    let mut typedef = "typedef struct {\n".to_string();
+    if !concrete_fields.is_empty() {
+        typedef.push_str(&concrete_fields);
+    }
+    typedef.push_str("} ");
+    typedef.push_str(&concrete_name);
+    typedef.push(';');
+    ctx.generated_structs.push(typedef);
+    ctx.generated_instantiations.insert(concrete_name.clone());
+    ctx.defined_structs.insert(concrete_name.clone());
+    Ok(concrete_name)
 }
 
 /// Find "else" keyword at top level (not inside parens/braces).
@@ -2599,6 +2651,47 @@ mod tests {
     #[test]
     fn test_struct_duplicate_definition() {
         expect_invalid("struct Empty {} struct Empty {}");
+    }
+
+    #[test]
+    fn test_struct_unknown_field_type() {
+        expect_invalid("struct Wrapper { field : UnknownType }");
+    }
+
+    #[test]
+    fn test_struct_as_field_type() {
+        expect_valid(
+            "struct Point { x : I32, y : I32 } struct Wrapper { point : Point };",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_as_field_type() {
+        expect_valid(
+            "struct Wrapper<T> { value : T } struct Container { wrapper : Wrapper<I32> };",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_with_str_type_arg() {
+        expect_valid(
+            "struct Wrapper<T> { value : T } struct Container { wrapper : Wrapper<&Str> };",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_construct_struct_with_generic_field() {
+        expect_valid(
+            "struct Wrapper<T> { value : T } struct Container { wrapper : Wrapper<I32> } let c : Container = Container { wrapper : Wrapper<I32> { value : read() } }; c.wrapper.value",
+            "42",
+            42,
+        );
     }
 
     #[test]

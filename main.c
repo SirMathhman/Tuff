@@ -2,8 +2,10 @@
 #include <string.h>
 #include <stdbool.h>
 typedef struct {
+} Vec_Str;
+typedef struct {
 		const char * name;
-		int type_params;
+		Vec_Str type_params;
 		const char * fields_str;
 } GenericStructTemplate;
 
