@@ -968,6 +968,20 @@ fn compile_expression(
         return Ok((String::new(), String::from("")));
     }
 
+    // Handle parenthesized expressions: "(expr)" => compile inner expr
+    // But NOT tuple literals like "(3, 4)" which contain commas at the top level
+    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        if let Some(paren_end) = find_matching_paren(trimmed) {
+            let inner = &trimmed[1..paren_end].trim();
+            // Check if this is a tuple literal (contains top-level commas)
+            let has_top_level_comma = find_top_level_char(inner, ',').is_some();
+            if !has_top_level_comma {
+                let (body, result) = compile_expression(inner, ctx)?;
+                return Ok((body, format!("({})", result)));
+            }
+        }
+    }
+
     // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if", no "while", no "for", no "fn", no "type")
     if !trimmed.starts_with("let ")
         && !trimmed.starts_with('{')
@@ -1883,6 +1897,15 @@ fn compile_expression(
         }
     }
 
+    // Handle "as" type cast: "expr as Type" => C cast expression
+    if let Some(as_pos) = find_top_level_keyword(trimmed, " as ") {
+        let lhs = trimmed[..as_pos].trim();
+        let target_type = trimmed[as_pos + 4..].trim(); // skip " as "
+        let (_, lhs_result) = compile_expression(lhs, ctx)?;
+        let c_type = tuff_type_to_c(ctx, target_type)?;
+        return Ok((String::new(), format!("(({})({}))", c_type, lhs_result)));
+    }
+
     // Handle "is" type-checking operator: "expr is Type" => 1 if types match, 0 otherwise
     if let Some(is_pos) = find_top_level_keyword(trimmed, " is ") {
         let lhs = trimmed[..is_pos].trim().to_string();
@@ -1916,7 +1939,21 @@ fn compile_expression(
             // Already returned above
         }
         // Determine the set of possible types for the LHS expression (compile-time check)
-        let lhs_types: Vec<String> = if let Some(var_types) = ctx.var_types.get(&lhs) {
+        // Check if LHS is an "as" cast expression - extract target type
+        // Strip outer parens first to find "as" inside
+        let lhs_unwrapped = if lhs.starts_with('(') && lhs.ends_with(')') {
+            if let Some(paren_end) = find_matching_paren(&lhs) {
+                lhs[1..paren_end].trim()
+            } else {
+            &lhs
+            }
+        } else {
+            &lhs
+        };
+        let lhs_types: Vec<String> = if let Some(as_pos) = find_top_level_keyword(lhs_unwrapped, " as ") {
+            let cast_type = lhs_unwrapped[as_pos + 4..].trim().to_string();
+            vec![cast_type]
+        } else if let Some(var_types) = ctx.var_types.get(&lhs) {
             // Resolve each type through aliases
             let mut resolved = Vec::new();
             for ty in var_types {
@@ -2405,6 +2442,7 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         "I32" => return Ok("int".to_string()),
         "I64" => return Ok("long long".to_string()),
         "U8" => return Ok("unsigned char".to_string()),
+        "U16" => return Ok("unsigned short".to_string()),
         "USize" => return Ok("size_t".to_string()),
         "&Str" => return Ok("const char *".to_string()),
         "Bool" => return Ok("int".to_string()),
@@ -3445,6 +3483,11 @@ mod tests {
     #[test]
     fn test_is_type_check() {
         expect_valid("100 is I32", "", 1);
+    }
+
+    #[test]
+    fn test_as_cast_is_check() {
+        expect_valid("(100U8 as U16) is U16", "", 1);
     }
 
     #[test]
