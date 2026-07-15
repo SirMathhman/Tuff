@@ -6,7 +6,7 @@ Tuff is a C-like programming language designed to eliminate undefined behavior, 
 ## Build & Test
 ```bash
 cargo build    # Compile
-cargo test     # Run tests (60 passing end-to-end tests)
+cargo test     # Run tests (66 passing end-to-end tests)
 ```
 
 ## Architecture
@@ -31,6 +31,11 @@ cargo test     # Run tests (60 passing end-to-end tests)
 - Braces-to-parens conversion in expressions
 - Type-check operator: `expr is Type` — returns 1 if types match, 0 otherwise (tracks `let x : Type` annotations)
 - Logical not: `!expr` — unary negation operator
+- **String literals**: `"hello"` with `&Str` type annotation
+- **String `.length` property**: `str.length` → `(int)strlen(str)` for `&Str` types
+- **Union type aliases**: `type Result = Ok | Err` with struct variants
+- **Tagged unions**: `let result : Result = if (cond) Ok { ... } else Err { ... }` — generates C struct with enum tag + union data
+- **Runtime tag checking**: `result is Ok` generates `result.tag == Tag_Ok` for tagged union variables
 
 ## Key Conventions
 - Rust 2024 edition
@@ -41,13 +46,18 @@ cargo test     # Run tests (60 passing end-to-end tests)
 - `GenericStructTemplate`: `{name, type_params, fields_str}` - stores generic struct definitions
 - `GenericFunctionTemplate`: `{name, type_params, param_names, body}` - stores generic function definitions
 - Monomorphization: Runtime type substitution (e.g., `Wrapper<I32>` → `Wrapper_I32`, `pass<I32>` → `pass_I32`)
+- `union_types: HashMap<String, Vec<String>>` — tracks union aliases with struct variant names
+- `tagged_union_vars: HashSet<String>` — tracks variables using tagged union assignments
+- `generate_union_typedefs()` — generates C tagged union typedefs with enum tags and union data
+- `generate_tagged_union_if_else()` — generates if/else block with tag assignments for union variants
+- `to_lower_first()` — converts struct names to lowercase-first for C field naming
 - Test helpers: `expect_valid(source, stdin_str, exit_code)` and `expect_invalid(source)`
 - Use `#[allow(dead_code)]` on test helper functions
 - Temp files use atomic counter (`TEMP_COUNTER`) for thread-safe naming
 - `CompileError = String` - will need custom error enum as compiler grows
 
 ## Current Status
-Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, and type-check operator. All 60 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
+Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, and tagged unions with runtime tag checking. All 66 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
 
 ## Pitfalls
 - `main()` currently just prints "Hello, world!" - `compile()` is tested but not wired to CLI args

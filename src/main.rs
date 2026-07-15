@@ -32,14 +32,16 @@ struct CompileContext {
     mutable_vars: Vec<String>,
     declared_vars: HashSet<String>,
     #[allow(dead_code)]
-    var_types: HashMap<String, String>,  // variable name -> type name (e.g., "I32", "I64", "Bool")
-    type_aliases: HashMap<String, String>,  // alias name -> resolved type name (e.g., "MyAlias" -> "I32")
-    generated_structs: Vec<String>,  // C typedef structs
-    defined_structs: HashSet<String>,  // struct names already defined
-    generic_structs: Vec<GenericStructTemplate>,  // generic struct templates
-    generated_instantiations: HashSet<String>,  // already-generated monomorphized names
-    generic_functions: Vec<GenericFunctionTemplate>,  // generic function templates
-    generated_function_instantiations: HashSet<String>,  // already-generated monomorphized function names
+    var_types: HashMap<String, Vec<String>>, // variable name -> list of possible types (union support)
+    type_aliases: HashMap<String, Vec<String>>, // alias name -> list of member types (union support)
+    union_types: HashMap<String, Vec<String>>,  // union alias -> list of struct variant names
+    tagged_union_vars: HashSet<String>, // variables that are tagged unions (if/else with different struct variants)
+    generated_structs: Vec<String>,     // C typedef structs
+    defined_structs: HashSet<String>,   // struct names already defined
+    generic_structs: Vec<GenericStructTemplate>, // generic struct templates
+    generated_instantiations: HashSet<String>, // already-generated monomorphized names
+    generic_functions: Vec<GenericFunctionTemplate>, // generic function templates
+    generated_function_instantiations: HashSet<String>, // already-generated monomorphized function names
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
@@ -53,6 +55,8 @@ impl CompileContext {
             declared_vars: HashSet::new(),
             var_types: HashMap::new(),
             type_aliases: HashMap::new(),
+            union_types: HashMap::new(),
+            tagged_union_vars: HashSet::new(),
             generated_structs: Vec::new(),
             defined_structs: HashSet::new(),
             generic_structs: Vec::new(),
@@ -240,6 +244,122 @@ fn compile_fn_call(
     Ok(format!("{}({})", func_name, compiled_args.join(", ")))
 }
 
+/// Convert a struct name to lowercase-first for C field naming.
+fn to_lower_first(s: &str) -> String {
+    let mut lower_name = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i == 0 {
+            lower_name.push(c.to_lowercase().next().unwrap());
+        } else {
+            lower_name.push(c);
+        }
+    }
+    lower_name
+}
+
+/// Generate C struct typedefs.
+fn generate_struct_typedefs(ctx: &CompileContext) -> String {
+    let mut c_structs = String::new();
+    for s in &ctx.generated_structs {
+        c_structs.push_str(s);
+        c_structs.push('\n');
+    }
+    c_structs
+}
+
+/// Generate C tagged union typedefs for union types with struct members.
+fn generate_union_typedefs(ctx: &CompileContext) -> String {
+    let mut c_unions = String::new();
+    for (alias_name, struct_members) in &ctx.union_types {
+        let tag_variants: Vec<String> = struct_members
+            .iter()
+            .map(|s| format!("Tag_{}", s))
+            .collect();
+        c_unions.push_str(&format!(
+            "typedef enum {{ {} }} {}_tag;\n",
+            tag_variants.join(", "),
+            alias_name
+        ));
+        let data_members: Vec<String> = struct_members
+            .iter()
+            .map(|s| format!("{} {}", s, to_lower_first(s)))
+            .collect();
+        c_unions.push_str(&format!(
+            "typedef struct {{ {}_tag tag; union {{ {} }} data; }} {};\n",
+            alias_name,
+            data_members.join("; "),
+            alias_name
+        ));
+    }
+    c_unions
+}
+
+/// Generate both struct and union typedefs.
+fn generate_typedefs(ctx: &CompileContext) -> (String, String) {
+    let c_structs = generate_struct_typedefs(ctx);
+    let c_unions = generate_union_typedefs(ctx);
+    (c_structs, c_unions)
+}
+
+/// Generate C code for tagged union if/else assignment.
+/// Converts "if (cond) Ok { ... } else Err { ... }" to:
+/// "if (cond) { var.tag = Tag_Ok; var.data.okVal = (Ok){...}; } else { var.tag = Tag_Err; var.data.errVal = (Err){...}; }"
+fn generate_tagged_union_if_else(
+    rhs: &str,
+    var_name: &str,
+    _union_type: &str,
+    _struct_members: &[String],
+    ctx: &mut CompileContext,
+) -> Result<String, CompileError> {
+    // Parse the if/else expression
+    if !rhs.starts_with("if ") {
+        return Err("Expected if/else expression".to_string());
+    }
+    // Inline parse_cond_and_rest logic
+    let after_kw = &rhs[3..];
+    let paren_end = find_matching_paren(after_kw).ok_or("Failed to parse if condition")?;
+    let cond = &after_kw[1..paren_end];
+    let rest = &after_kw[paren_end + 2..].trim();
+    let (cond, rest) = (cond, rest);
+
+    // Find else keyword
+    let else_pos = find_top_level_else(rest).ok_or("Expected else branch")?;
+    let then_expr = &rest[..else_pos].trim();
+    let else_expr = &rest[else_pos + "else".len()..].trim();
+
+    // Compile condition
+    let (_, cond_result) = compile_expression(cond, ctx)?;
+
+    // Determine which struct variant is in each branch
+    let then_variant = then_expr.split_whitespace().next().unwrap_or("");
+    let else_variant = else_expr.split_whitespace().next().unwrap_or("");
+
+    // Build tag and data field names
+    let then_tag = format!("Tag_{}", then_variant);
+    let else_tag = format!("Tag_{}", else_variant);
+    let then_data_field = to_lower_first(then_variant);
+    let else_data_field = to_lower_first(else_variant);
+
+    // Compile then/else expressions to get struct initializers
+    let (_, then_result) = compile_expression(then_expr, ctx)?;
+    let (_, else_result) = compile_expression(else_expr, ctx)?;
+
+    Ok(format!(
+        "if ({}) {{ {} .tag = {}; {} .data.{} = {}; }} else {{ {} .tag = {}; {} .data.{} = {}; }}",
+        cond_result,
+        var_name,
+        then_tag,
+        var_name,
+        then_data_field,
+        then_result,
+        var_name,
+        else_tag,
+        var_name,
+        else_data_field,
+        else_result
+    ))
+}
+
 fn compile(source: &str) -> Result<String, CompileError> {
     let trimmed = source.trim();
     if trimmed.is_empty() {
@@ -298,18 +418,23 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
 
-        // Generate struct typedefs
-        let mut c_structs = String::new();
-        for s in &ctx.generated_structs {
-            c_structs.push_str(s);
-            c_structs.push('\n');
-        }
+        // Generate struct and union typedefs
+        let (c_structs, c_unions) = generate_typedefs(&ctx);
 
-        let final_return = if return_expr.is_empty() { "0".to_string() } else { return_expr };
+        let final_return = if return_expr.is_empty() {
+            "0".to_string()
+        } else {
+            return_expr
+        };
         Ok(format!(
             "{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
             includes,
-            format!("{}\n{}", c_structs.trim(), c_prototypes.trim()),
+            format!(
+                "{}\n{}\n{}",
+                c_structs.trim(),
+                c_unions.trim(),
+                c_prototypes.trim()
+            ),
             c_functions.trim(),
             buf_decl,
             c_decls.trim(),
@@ -320,25 +445,36 @@ fn compile(source: &str) -> Result<String, CompileError> {
     } else {
         let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
 
-        // Generate struct typedefs
-        let mut c_structs = String::new();
-        for s in &ctx.generated_structs {
-            c_structs.push_str(s);
-            c_structs.push('\n');
-        }
+        // Generate struct and union typedefs
+        let (c_structs, c_unions) = generate_typedefs(&ctx);
+
+        // Check if any variable is of type &Str (needs string.h for strlen)
+        let has_str_type = ctx
+            .var_types
+            .values()
+            .any(|types| types.iter().any(|t| t == "&Str"));
 
         // Include stdio.h if any generated functions use scanf (have local reads) or structs exist
-        let includes = if !c_functions.is_empty() || !c_structs.is_empty() {
+        let includes = if !c_functions.is_empty() || !c_structs.is_empty() || has_str_type {
             "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
         } else {
             ""
         };
 
-        let final_return = if return_expr.is_empty() { "0".to_string() } else { return_expr };
+        let final_return = if return_expr.is_empty() {
+            "0".to_string()
+        } else {
+            return_expr
+        };
         Ok(format!(
             "{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
             includes,
-            format!("{}\n{}", c_structs.trim(), c_prototypes.trim()),
+            format!(
+                "{}\n{}\n{}",
+                c_structs.trim(),
+                c_unions.trim(),
+                c_prototypes.trim()
+            ),
             c_functions.trim(),
             c_body,
             final_return
@@ -708,8 +844,30 @@ fn compile_expression(
                 }
             }
 
-            // Recursively compile the declaration's expression
-            let (decl_body, decl_result) = compile_expression(after_eq, ctx)?;
+            // Check if this is a union type assignment with if/else (tagged union)
+            let is_union_if_else = type_annotation
+                .as_ref()
+                .and_then(|ty| {
+                    let resolved = resolve_type_alias_set(ctx, ty);
+                    // Check if any resolved type is a struct in union_types
+                    ctx.union_types.get(ty.as_str()).or_else(|| {
+                        for rty in &resolved {
+                            if let Some(members) = ctx.union_types.get(rty.as_str()) {
+                                return Some(members);
+                            }
+                        }
+                        None
+                    })
+                })
+                .is_some()
+                && after_eq.starts_with("if ");
+
+            // Recursively compile the declaration's expression (skip for union if/else - handled separately)
+            let (decl_body, decl_result) = if is_union_if_else {
+                (String::new(), String::new())
+            } else {
+                compile_expression(after_eq, ctx)?
+            };
 
             // Handle shadowing: if variable already declared, generate assignment instead of redeclaration
             let c_decl = if ctx.declared_vars.contains(var_name) {
@@ -717,36 +875,117 @@ fn compile_expression(
             } else {
                 ctx.declared_vars.insert(var_name.to_string());
                 // Resolve type annotation: handle generic types like "Wrapper<I32>" -> "Wrapper_I32"
-                let resolved_type = type_annotation.as_ref().and_then(|ty| {
-                    // Check if it's a direct struct type
-                    if ctx.defined_structs.contains(ty) {
-                        return Some(ty.clone());
-                    }
-                    // Check if it's a generic instantiation: "Name<T>"
-                    if let Some(angle_start) = ty.find('<') {
-                        if let Some(angle_end) = ty.find('>') {
-                            let base = &ty[..angle_start];
-                            let type_args_str = &ty[angle_start + 1..angle_end];
-                            let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
-                            let concrete_name = format!("{}_{}", base, type_args.join("_"));
-                            if ctx.defined_structs.contains(&concrete_name) {
+                // Also handle union type aliases: "Result" -> ["Ok", "Err"]
+                let all_resolved_types = type_annotation
+                    .as_ref()
+                    .map(|ty| resolve_type_alias_set(ctx, ty))
+                    .unwrap_or_else(|| vec![]);
+                // Determine which struct type is actually instantiated from the RHS
+                // e.g., "Ok { value : read() }" -> "Ok" or "Wrapper<I32> { ... }" -> "Wrapper_I32"
+                // Only returns Some if the RHS is a struct instantiation (not a plain expression like "100")
+                let rhs_concrete_name = after_eq.split_whitespace().next().and_then(|word| {
+                    // Check for generic instantiation: "Wrapper<I32>" -> "Wrapper_I32"
+                    if let Some(angle_start) = word.find('<') {
+                        if let Some(angle_end) = word.find('>') {
+                            let base = &word[..angle_start];
+                            let type_args_str = &word[angle_start + 1..angle_end];
+                            let concrete_name = build_concrete_name(base, type_args_str);
+                            // Only return if the base is a defined struct (generic or concrete)
+                            if ctx.defined_structs.contains(base)
+                                || ctx.defined_structs.contains(&concrete_name)
+                            {
                                 return Some(concrete_name);
                             }
+                            return None;
                         }
                     }
-                    None
+                    // Non-generic struct: "Ok" -> "Ok" (only if it's a defined struct)
+                    let base = word.split('<').next().unwrap_or(word);
+                    if ctx.defined_structs.contains(base) {
+                        Some(base.to_string())
+                    } else {
+                        None
+                    }
                 });
-                // Track the type for `is` operator checks
-                let inferred_type = type_annotation.as_ref().cloned().unwrap_or_else(|| infer_literal_type(after_eq));
-                let resolved = resolve_type_alias(ctx, &inferred_type);
-                ctx.var_types.insert(var_name.to_string(), resolved);
-                // Use struct type name if it's a defined struct, otherwise default to int
-                let c_type = if let Some(ref ty) = resolved_type {
-                    " ".to_string() + ty
+                // For union types, pick the struct that matches the RHS instantiation
+                let resolved_struct_type = rhs_concrete_name.clone().or_else(|| {
+                    all_resolved_types
+                        .iter()
+                        .find(|ty| ctx.defined_structs.contains(*ty))
+                        .cloned()
+                });
+                // If no struct found, check for generic instantiation from type annotation
+                let resolved_generic_type = resolved_struct_type.clone().or_else(|| {
+                    type_annotation.as_ref().and_then(|ty| {
+                        if let Some(angle_start) = ty.find('<') {
+                            if let Some(angle_end) = ty.find('>') {
+                                let base = &ty[..angle_start];
+                                let type_args_str = &ty[angle_start + 1..angle_end];
+                                Some(build_concrete_name(base, type_args_str))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                });
+                // Track all resolved types for `is` operator checks (union support)
+                let inferred_type = type_annotation
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_else(|| infer_literal_type(after_eq));
+                let tracked_types = if !all_resolved_types.is_empty() {
+                    all_resolved_types.clone()
                 } else {
-                    format!(" {}", tuff_type_to_c(&inferred_type))
+                    vec![resolve_type_alias(ctx, &inferred_type)]
                 };
-                format!("{}\n\t{} {} = {};", decl_body, c_type, var_name, decl_result)
+                ctx.var_types.insert(var_name.to_string(), tracked_types);
+                // For union types with if/else, generate tagged union assignment
+                if is_union_if_else {
+                    if let Some(ref ty) = type_annotation {
+                        let struct_members_clone = ctx.union_types.get(ty.as_str()).cloned();
+                        if let Some(struct_members) = struct_members_clone {
+                            // Mark this variable as a tagged union
+                            ctx.tagged_union_vars.insert(var_name.to_string());
+                            // Generate: Type var; if (cond) { var.tag = Tag_Then; var.data.thenVal = ...; } else { ... }
+                            // Don't call compile_expression on after_eq first - let generate_tagged_union_if_else handle it
+                            let tagged_if_else = generate_tagged_union_if_else(
+                                after_eq,
+                                var_name,
+                                ty,
+                                &struct_members,
+                                ctx,
+                            )
+                            .unwrap_or_else(|_| format!("{} = {};", var_name, decl_result));
+                            format!(
+                                "{}\n\t{} {};\n\t{}",
+                                decl_body, ty, var_name, tagged_if_else
+                            )
+                        } else {
+                            format!("{}\n\t{} {} = {};", decl_body, ty, var_name, decl_result)
+                        }
+                    } else {
+                        format!(
+                            "{}\n\t{} {} = {};",
+                            decl_body,
+                            tuff_type_to_c(&inferred_type),
+                            var_name,
+                            decl_result
+                        )
+                    }
+                } else {
+                    // Use struct type name if it's a defined struct, otherwise default to int
+                    let c_type = if let Some(ref ty) = resolved_generic_type {
+                        " ".to_string() + ty
+                    } else {
+                        format!(" {}", tuff_type_to_c(&inferred_type))
+                    };
+                    format!(
+                        "{}\n\t{} {} = {};",
+                        decl_body, c_type, var_name, decl_result
+                    )
+                }
             };
 
             let (final_body, final_result) = compile_expression(final_part, ctx)?;
@@ -937,8 +1176,8 @@ fn compile_expression(
         let func_name_raw = after_fn[..paren_pos].trim();
 
         // Parse generic type parameters if present: "name<T, U>" -> name="name", params=["T","U"]
-        let (func_name, type_params) = parse_generic_params(func_name_raw)
-            .map_err(|e| format!("Invalid fn syntax: {}", e))?;
+        let (func_name, type_params) =
+            parse_generic_params(func_name_raw).map_err(|e| format!("Invalid fn syntax: {}", e))?;
 
         // Parse parameters inside parens
         let params_str_start = paren_pos + 1;
@@ -986,7 +1225,8 @@ fn compile_expression(
                     body: func_body.to_string(),
                 });
                 // Register the base name so we can find it during calls
-                ctx.generated_functions.push((func_name, Vec::new(), String::new()));
+                ctx.generated_functions
+                    .push((func_name, Vec::new(), String::new()));
 
                 // Compile remaining expression after the function definition
                 if !remaining.is_empty() {
@@ -999,7 +1239,9 @@ fn compile_expression(
             // Non-generic function: generate C code immediately
             let fn_read_entries = find_reads_in_order(func_body);
             let mut fn_ctx = CompileContext::new(
-                (0..fn_read_entries.len()).map(|i| format!("v{}", i)).collect(),
+                (0..fn_read_entries.len())
+                    .map(|i| format!("v{}", i))
+                    .collect(),
             );
 
             for name in &param_names {
@@ -1008,8 +1250,15 @@ fn compile_expression(
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
-            let c_func = build_c_function(&func_name, &param_names, &fn_read_entries, &fn_body_stmts, &fn_return_expr);
-            ctx.generated_functions.push((func_name, param_names, c_func));
+            let c_func = build_c_function(
+                &func_name,
+                &param_names,
+                &fn_read_entries,
+                &fn_body_stmts,
+                &fn_return_expr,
+            );
+            ctx.generated_functions
+                .push((func_name, param_names, c_func));
 
             // Compile remaining expression after the function definition
             if !remaining.is_empty() {
@@ -1024,15 +1273,30 @@ fn compile_expression(
 
     // Handle type alias: "type Name = Type; rest"
     if trimmed.starts_with("type ") {
-        let after_type = &trimmed[5..];  // skip "type "
+        let after_type = &trimmed[5..]; // skip "type "
         if let Some(semi_pos) = find_top_level_semicolon(after_type) {
             let alias_part = &after_type[..semi_pos];
             let rest = &after_type[semi_pos + 1..].trim();
             // Parse "Name = Type"
             if let Some(eq_pos) = find_top_level_char(alias_part, '=') {
                 let alias_name = alias_part[..eq_pos].trim();
-                let alias_type = alias_part[eq_pos + 1..].trim();
-                ctx.type_aliases.insert(alias_name.to_string(), alias_type.to_string());
+                let alias_type_str = alias_part[eq_pos + 1..].trim();
+                // Parse union types: "I32 | Bool" -> ["I32", "Bool"]
+                let member_types: Vec<String> = alias_type_str
+                    .split('|')
+                    .map(|s| s.trim().to_string())
+                    .collect();
+                ctx.type_aliases
+                    .insert(alias_name.to_string(), member_types.clone());
+                // Track union types where members are structs (for tagged union generation)
+                let struct_members: Vec<String> = member_types
+                    .into_iter()
+                    .filter(|t| ctx.defined_structs.contains(t.as_str()))
+                    .collect();
+                if !struct_members.is_empty() {
+                    ctx.union_types
+                        .insert(alias_name.to_string(), struct_members);
+                }
             }
             if !rest.is_empty() {
                 return compile_expression(rest, ctx);
@@ -1043,20 +1307,23 @@ fn compile_expression(
 
     // Handle struct definition: "struct Name { fields }" or "struct Name<T> { fields }"
     if trimmed.starts_with("struct ") {
-        let after_struct = &trimmed[7..];  // skip "struct " (7 chars)
-        
+        let after_struct = &trimmed[7..]; // skip "struct " (7 chars)
+
         // Find opening brace to get struct name (may include generic params like "Name<T>")
-        let brace_pos = after_struct.find('{').ok_or_else(|| format!("Invalid struct syntax: {}", after_struct))?;
+        let brace_pos = after_struct
+            .find('{')
+            .ok_or_else(|| format!("Invalid struct syntax: {}", after_struct))?;
         let struct_name_raw = after_struct[..brace_pos].trim();
-        
+
         // Parse generic type parameters if present: "Name<T, U>" -> name="Name", params=["T","U"]
         let (struct_name, type_params) = parse_generic_params(struct_name_raw)
             .map_err(|e| format!("Invalid struct syntax: {}", e))?;
-        
+
         // Find matching closing brace
-        let brace_end = find_matching_brace(&after_struct[brace_pos..]).ok_or_else(|| format!("Invalid struct syntax: missing closing brace"))?;
+        let brace_end = find_matching_brace(&after_struct[brace_pos..])
+            .ok_or_else(|| format!("Invalid struct syntax: missing closing brace"))?;
         let fields_str = &after_struct[brace_pos + 1..brace_pos + brace_end].trim();
-        
+
         // Check for duplicate struct definition
         if !type_params.is_empty() {
             // Generic struct - store template for later monomorphization
@@ -1082,11 +1349,17 @@ fn compile_expression(
                     if !seen_fields.insert(name.clone()) {
                         return Err(format!("Duplicate struct field: {}", name));
                     }
-                    // Default to int type
-                    c_fields.push_str(&format!("\t\tint {};\n", name));
+                    // Determine field type from annotation
+                    let field_type_str: String = if parts.len() > 1 {
+                        let ty = parts[1].trim();
+                        tuff_type_to_c(ty).to_string()
+                    } else {
+                        "int".to_string()
+                    };
+                    c_fields.push_str(&format!("\t\t{} {};\n", field_type_str, name));
                 }
             }
-            
+
             // Generate C typedef struct (C requires 'struct' keyword before braces)
             let mut typedef = "typedef struct {\n".to_string();
             if !fields_str.is_empty() {
@@ -1095,20 +1368,20 @@ fn compile_expression(
             typedef.push_str("} ");
             typedef.push_str(&struct_name);
             typedef.push(';');
-            
+
             if !ctx.defined_structs.insert(struct_name.clone()) {
                 return Err(format!("Duplicate struct definition: {}", struct_name));
             }
-            
+
             ctx.generated_structs.push(typedef);
         }
-        
+
         // Check for remaining content after the struct definition (semicolon-separated)
         let rest = &after_struct[brace_pos + brace_end + 1..].trim();
         if !rest.is_empty() {
             return compile_expression(rest, ctx);
         }
-        
+
         return Ok((String::new(), String::from("0")));
     }
 
@@ -1295,7 +1568,9 @@ fn compile_expression(
                             let field_type = field[colon_pos + 1..].trim();
                             // Substitute type params with concrete types (all resolve to int for now)
                             #[allow(unused_variables)]
-                            let resolved_type = if let Some(idx) = template.type_params.iter().position(|p| p == field_type) {
+                            let resolved_type = if let Some(idx) =
+                                template.type_params.iter().position(|p| p == field_type)
+                            {
                                 type_args.get(idx).map(|a| a.as_str()).unwrap_or("int")
                             } else {
                                 "int"
@@ -1338,7 +1613,8 @@ fn compile_expression(
                             if let Some(colon_pos) = field.find(':') {
                                 let field_name = field[..colon_pos].trim();
                                 let field_value = field[colon_pos + 1..].trim();
-                                let (field_body, field_result) = compile_expression(field_value, ctx)?;
+                                let (field_body, field_result) =
+                                    compile_expression(field_value, ctx)?;
                                 c_body.push_str(&field_body);
                                 compiled_fields.push(format!(".{} = {}", field_name, field_result));
                             }
@@ -1358,7 +1634,10 @@ fn compile_expression(
             let rhs = trimmed[pos + op.len()..].trim().to_string();
             let (_, lhs_result) = compile_expression(&lhs, ctx)?;
             let (_, rhs_result) = compile_expression(&rhs, ctx)?;
-            return Ok((String::new(), format!("({}) {} ({})", lhs_result, op.trim(), rhs_result)));
+            return Ok((
+                String::new(),
+                format!("({}) {} ({})", lhs_result, op.trim(), rhs_result),
+            ));
         }
     }
 
@@ -1368,18 +1647,67 @@ fn compile_expression(
         let check_type = trimmed[is_pos + 4..].trim().to_string(); // skip " is "
         // Compile LHS to get its expression
         let (_, _lhs_result) = compile_expression(&lhs, ctx)?;
-        // Determine the type of the LHS expression
-        let lhs_type: String = if let Some(var_type) = ctx.var_types.get(&lhs) {
-            resolve_type_alias(ctx, var_type)
+        // Check if this is a tagged union variable - generate runtime tag check
+        let is_union_check = if ctx.tagged_union_vars.contains(&lhs) {
+            // Find the union type for this variable
+            if let Some(var_types) = ctx.var_types.get(&lhs) {
+                for (_union_alias, struct_members) in &ctx.union_types {
+                    // Check if var_types are from this union
+                    let match_count = var_types
+                        .iter()
+                        .filter(|vt| struct_members.iter().any(|sm| *sm == **vt))
+                        .count();
+                    if match_count > 0 && struct_members.iter().any(|m| m == &check_type) {
+                        // Generate runtime tag check: (lhs.tag == Tag_checkType)
+                        return Ok((
+                            String::new(),
+                            format!("({}.tag == Tag_{})", lhs, check_type),
+                        ));
+                    }
+                }
+            }
+            false
         } else {
-            // Infer from literal suffix or default to I32
-            infer_literal_type(&lhs)
+            false
         };
-        // Resolve both types through aliases
-        let check_type = resolve_type_alias(ctx, &check_type);
-        // Compare types and return 1 if they match, 0 otherwise
-        let result = if lhs_type == check_type { "1" } else { "0" };
+        if is_union_check {
+            // Already returned above
+        }
+        // Determine the set of possible types for the LHS expression (compile-time check)
+        let lhs_types: Vec<String> = if let Some(var_types) = ctx.var_types.get(&lhs) {
+            // Resolve each type through aliases
+            let mut resolved = Vec::new();
+            for ty in var_types {
+                resolved.extend(resolve_type_alias_set(ctx, ty));
+            }
+            resolved
+        } else {
+            vec![infer_literal_type(&lhs)]
+        };
+        // Resolve check type through aliases
+        let check_types = resolve_type_alias_set(ctx, &check_type);
+        // Check if any LHS type matches any check type
+        let matched = lhs_types
+            .iter()
+            .any(|lt| check_types.iter().any(|ct| lt == ct));
+        let result = if matched { "1" } else { "0" };
         return Ok((String::new(), String::from(result)));
+    }
+
+    // Handle string property access: "expr.length" => "strlen(expr)" for &Str types
+    if let Some(dot_pos) = find_top_level_dot_length(trimmed) {
+        let base_expr = trimmed[..dot_pos].trim();
+        // Check if the base expression is a variable of type &Str
+        let base_var = base_expr.trim();
+        if let Some(types) = ctx.var_types.get(base_var) {
+            if types.iter().any(|t| t == "&Str") {
+                let (_, base_result) = compile_expression(base_expr, ctx)?;
+                return Ok((String::new(), format!("(int)strlen({})", base_result)));
+            }
+        }
+        // Fallback: treat as struct field access (pass through)
+        let (_, base_result) = compile_expression(base_expr, ctx)?;
+        return Ok((String::new(), format!("{}.length", base_result)));
     }
 
     // Handle "!" (not) operator: "!expr" => "!expr"
@@ -1392,29 +1720,23 @@ fn compile_expression(
     let mut result = String::new();
 
     /// Validate that a U8 literal value is within range (0-255).
-fn validate_u8_range(before: &str) -> Result<(), CompileError> {
-    let num_str = before.trim_end_matches(|c: char| !c.is_ascii_digit());
-    // Check for negative values (U8 cannot be negative)
-    if num_str.starts_with('-') {
-        if let Ok(val) = num_str.parse::<i64>() {
-            return Err(format!(
-                "U8 literal out of range: {} (must be 0-255)",
-                val
-            ));
+    fn validate_u8_range(before: &str) -> Result<(), CompileError> {
+        let num_str = before.trim_end_matches(|c: char| !c.is_ascii_digit());
+        // Check for negative values (U8 cannot be negative)
+        if num_str.starts_with('-') {
+            if let Ok(val) = num_str.parse::<i64>() {
+                return Err(format!("U8 literal out of range: {} (must be 0-255)", val));
+            }
         }
-    }
-    if let Ok(val) = num_str.parse::<u64>() {
-        if val > 255 {
-            return Err(format!(
-                "U8 literal out of range: {} (must be 0-255)",
-                val
-            ));
+        if let Ok(val) = num_str.parse::<u64>() {
+            if val > 255 {
+                return Err(format!("U8 literal out of range: {} (must be 0-255)", val));
+            }
         }
+        Ok(())
     }
-    Ok(())
-}
 
-fn copy_chars(s: &str, out: &mut String) {
+    fn copy_chars(s: &str, out: &mut String) {
         for ch in s.chars() {
             match ch {
                 '{' => out.push('('),
@@ -1530,25 +1852,45 @@ fn copy_chars(s: &str, out: &mut String) {
         let resolved_name = if !call_type_args.is_empty() {
             if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == call_name) {
                 let concrete_name = format!("{}_{}", call_name, call_type_args.join("_"));
-                if !ctx.generated_function_instantiations.contains(&concrete_name) {
+                if !ctx
+                    .generated_function_instantiations
+                    .contains(&concrete_name)
+                {
                     let fn_read_entries = find_reads_in_order(&template.body);
                     let mut fn_ctx = CompileContext::new(
-                        (0..fn_read_entries.len()).map(|i| format!("v{}", i)).collect(),
+                        (0..fn_read_entries.len())
+                            .map(|i| format!("v{}", i))
+                            .collect(),
                     );
                     for name in &template.param_names {
                         fn_ctx.declared_vars.insert(name.clone());
                     }
-                    let (fn_body_stmts, fn_return_expr) = compile_expression(&template.body, &mut fn_ctx)?;
-                    let c_func = build_c_function(&concrete_name, &template.param_names, &fn_read_entries, &fn_body_stmts, &fn_return_expr);
-                    ctx.generated_functions.push((concrete_name.clone(), template.param_names.clone(), c_func));
-                    ctx.generated_function_instantiations.insert(concrete_name.clone());
+                    let (fn_body_stmts, fn_return_expr) =
+                        compile_expression(&template.body, &mut fn_ctx)?;
+                    let c_func = build_c_function(
+                        &concrete_name,
+                        &template.param_names,
+                        &fn_read_entries,
+                        &fn_body_stmts,
+                        &fn_return_expr,
+                    );
+                    ctx.generated_functions.push((
+                        concrete_name.clone(),
+                        template.param_names.clone(),
+                        c_func,
+                    ));
+                    ctx.generated_function_instantiations
+                        .insert(concrete_name.clone());
                 }
                 Some(concrete_name)
             } else {
                 None // Built-in generic like read<Bool> - skip
             }
         } else if !call_name.contains(|c: char| c == ' ')
-            && ctx.generated_functions.iter().any(|(name, _, _)| *name == call_name)
+            && ctx
+                .generated_functions
+                .iter()
+                .any(|(name, _, _)| *name == call_name)
         {
             Some(call_name.clone())
         } else {
@@ -1596,9 +1938,13 @@ fn find_matching_brace(s: &str) -> Option<usize> {
 }
 
 /// Infer the type of a literal expression based on its suffix.
-/// "100I64" -> "I64", "100U8" -> "U8", "100" -> "I32"
+/// "100I64" -> "I64", "100U8" -> "U8", "\"hello\"" -> "&Str", "100" -> "I32"
 fn infer_literal_type(expr: &str) -> String {
     let trimmed = expr.trim();
+    // String literal: "..." -> &Str
+    if trimmed.starts_with('"') && trimmed.ends_with('"') {
+        return "&Str".to_string();
+    }
     if trimmed.ends_with("I64") {
         // Verify the char before "I64" is a digit (not part of an identifier)
         if let Some(before_suffix) = trimmed.strip_suffix("I64") {
@@ -1626,21 +1972,39 @@ fn tuff_type_to_c(ty: &str) -> &'static str {
     match ty {
         "I64" => "long long",
         "U8" => "unsigned char",
+        "&Str" => "const char *",
         _ => "int",
     }
 }
 
-/// Resolve a type name, following type aliases to their underlying type.
-fn resolve_type_alias(ctx: &CompileContext, type_name: &str) -> String {
-    let mut current = type_name;
+/// Resolve a type name, following type aliases to their underlying type(s).
+/// Returns a list of resolved types (for union aliases, returns all members).
+fn resolve_type_alias_set(ctx: &CompileContext, type_name: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut stack = vec![type_name.to_string()];
     let mut visited = std::collections::HashSet::new();
-    while let Some(resolved) = ctx.type_aliases.get(current) {
-        if !visited.insert(current.to_string()) {
-            break;  // Prevent infinite loops from circular aliases
+    while let Some(current) = stack.pop() {
+        if !visited.insert(current.clone()) {
+            continue;
         }
-        current = resolved.as_str();
+        if let Some(members) = ctx.type_aliases.get(&current) {
+            for member in members {
+                stack.push(member.clone());
+            }
+        } else {
+            result.push(current);
+        }
     }
-    current.to_string()
+    result
+}
+
+/// Resolve a single type name to a single resolved type (non-union).
+fn resolve_type_alias(ctx: &CompileContext, type_name: &str) -> String {
+    let resolved = resolve_type_alias_set(ctx, type_name);
+    resolved
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| type_name.to_string())
 }
 
 /// Strip a literal suffix from text if it follows a digit and is not part of an identifier.
@@ -1741,6 +2105,14 @@ fn find_matching_paren(s: &str) -> Option<usize> {
     None
 }
 
+/// Build a concrete type name from a base and type args string.
+/// "Wrapper", "I32" -> "Wrapper_I32"
+/// "Wrapper", "I32, Bool" -> "Wrapper_I32_Bool"
+fn build_concrete_name(base: &str, type_args_str: &str) -> String {
+    let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+    format!("{}_{}", base, type_args.join("_"))
+}
+
 /// Find "else" keyword at top level (not inside parens/braces).
 fn find_top_level_else(s: &str) -> Option<usize> {
     for i in 0..s.len().saturating_sub(3) {
@@ -1763,10 +2135,10 @@ fn find_top_level_keyword(s: &str, keyword: &str) -> Option<usize> {
     let mut bracket_depth = 0;
     let mut paren_depth = 0;
     let keyword_len = keyword.len();
-    
+
     // Determine how many leading spaces to skip for boundary check.
     let leading_spaces = keyword.chars().take_while(|&c| c == ' ').count();
-    
+
     for i in 0..s.len().saturating_sub(keyword_len.saturating_sub(1)) {
         let ch = s.as_bytes()[i] as char;
         match ch {
@@ -1778,16 +2150,44 @@ fn find_top_level_keyword(s: &str, keyword: &str) -> Option<usize> {
             ')' => paren_depth -= 1,
             _ => {}
         }
-        
+
         if brace_depth == 0 && bracket_depth == 0 && paren_depth == 0 {
             if s[i..].starts_with(keyword) {
                 // Check word boundary at the first non-space char of the keyword.
                 let boundary_pos = i + leading_spaces;
-                let before_ok = boundary_pos == 0 || !matches!(s.chars().nth(boundary_pos.saturating_sub(1)), Some('a'..='z') | Some('A'..='Z') | Some('_'));
+                let before_ok = boundary_pos == 0
+                    || !matches!(
+                        s.chars().nth(boundary_pos.saturating_sub(1)),
+                        Some('a'..='z') | Some('A'..='Z') | Some('_')
+                    );
                 if before_ok {
                     return Some(i);
                 }
             }
+        }
+    }
+    None
+}
+
+/// Find ".length" at the top level (not inside braces, brackets, or parens).
+fn find_top_level_dot_length(s: &str) -> Option<usize> {
+    let mut brace_depth = 0;
+    let mut bracket_depth = 0;
+    let mut paren_depth = 0;
+    for (i, ch) in s.chars().enumerate() {
+        match ch {
+            '{' => brace_depth += 1,
+            '}' => brace_depth -= 1,
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
+            '(' => paren_depth += 1,
+            ')' => paren_depth -= 1,
+            '.' if brace_depth == 0 && bracket_depth == 0 && paren_depth == 0 => {
+                if s[i..].starts_with(".length") {
+                    return Some(i);
+                }
+            }
+            _ => {}
         }
     }
     None
@@ -2223,7 +2623,11 @@ mod tests {
 
     #[test]
     fn test_generic_function_call() {
-        expect_valid("fn pass<T>(param : T) => param; pass<I32>(read()) + 1", "5", 6);
+        expect_valid(
+            "fn pass<T>(param : T) => param; pass<I32>(read()) + 1",
+            "5",
+            6,
+        );
     }
 
     #[test]
@@ -2262,6 +2666,38 @@ mod tests {
             "type MyAlias = I32; let temp : MyAlias = 100; temp is MyAlias && temp is I32",
             "",
             1,
+        );
+    }
+
+    #[test]
+    fn test_union_type_is_check() {
+        expect_valid(
+            "type MyUnion = I32 | Bool; let value : MyUnion = if (read<Bool>()) 3 else true; value is Bool",
+            "false",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_string_length() {
+        expect_valid("let str : &Str = \"foo\"; str.length", "", 3);
+    }
+
+    #[test]
+    fn test_union_type_with_structs() {
+        expect_valid(
+            "struct Ok { value : I32 } struct Err { error : &Str } type Result = Ok | Err; let result : Result = Ok { value : read() }; result is Ok",
+            "3",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_union_type_with_if_else() {
+        expect_valid(
+            "struct Ok { value : I32 } struct Err { error : &Str } type Result = Ok | Err; let result : Result = if (read<Bool>()) Ok { value : read() } else Err { error : \"foo\" }; result is Ok",
+            "false",
+            0,
         );
     }
 }
