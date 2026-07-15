@@ -6,6 +6,15 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 type CompileError = String;
 
+/// Generic struct template: (name, type_params, fields_str).
+#[allow(dead_code)]
+#[derive(Clone)]
+struct GenericStructTemplate {
+    name: String,
+    type_params: Vec<String>,
+    fields_str: String,
+}
+
 /// Shared compilation context passed between compiler functions.
 struct CompileContext {
     vars: Vec<String>,
@@ -14,7 +23,26 @@ struct CompileContext {
     declared_vars: HashSet<String>,
     generated_structs: Vec<String>,  // C typedef structs
     defined_structs: HashSet<String>,  // struct names already defined
+    generic_structs: Vec<GenericStructTemplate>,  // generic struct templates
+    generated_instantiations: HashSet<String>,  // already-generated monomorphized names
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
+}
+
+impl CompileContext {
+    /// Create a new context with the given variable names.
+    fn new(vars: Vec<String>) -> Self {
+        Self {
+            vars,
+            var_idx: 0,
+            mutable_vars: Vec::new(),
+            declared_vars: HashSet::new(),
+            generated_structs: Vec::new(),
+            defined_structs: HashSet::new(),
+            generic_structs: Vec::new(),
+            generated_instantiations: HashSet::new(),
+            generated_functions: Vec::new(),
+        }
+    }
 }
 
 /// Tracks read calls in source order with their types for correct C code generation.
@@ -130,15 +158,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
     let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
 
     // Parse let declarations and build C body
-    let mut ctx = CompileContext {
-        vars: vars.clone(),
-        var_idx: 0,
-        mutable_vars: Vec::new(),
-        declared_vars: HashSet::new(),
-        generated_structs: Vec::new(),
-        defined_structs: HashSet::new(),
-        generated_functions: Vec::new(),
-    };
+    let mut ctx = CompileContext::new(vars.clone());
     let (c_body, return_expr) = compile_expression(trimmed, &mut ctx)?;
 
     if read_count > 0 {
@@ -188,6 +208,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             c_structs.push('\n');
         }
 
+        let final_return = if return_expr.is_empty() { "0".to_string() } else { return_expr };
         Ok(format!(
             "{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
             includes,
@@ -197,7 +218,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             c_decls.trim(),
             c_reads.trim(),
             c_body,
-            return_expr
+            final_return
         ))
     } else {
         let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
@@ -216,13 +237,14 @@ fn compile(source: &str) -> Result<String, CompileError> {
             ""
         };
 
+        let final_return = if return_expr.is_empty() { "0".to_string() } else { return_expr };
         Ok(format!(
             "{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
             includes,
             format!("{}\n{}", c_structs.trim(), c_prototypes.trim()),
             c_functions.trim(),
             c_body,
-            return_expr
+            final_return
         ))
     }
 }
@@ -596,7 +618,33 @@ fn compile_expression(
                 format!("{}\n\t{} = {};", decl_body, var_name, decl_result)
             } else {
                 ctx.declared_vars.insert(var_name.to_string());
-                format!("{}\n\tint {} = {};", decl_body, var_name, decl_result)
+                // Resolve type annotation: handle generic types like "Wrapper<I32>" -> "Wrapper_I32"
+                let resolved_type = type_annotation.as_ref().and_then(|ty| {
+                    // Check if it's a direct struct type
+                    if ctx.defined_structs.contains(ty) {
+                        return Some(ty.clone());
+                    }
+                    // Check if it's a generic instantiation: "Name<T>"
+                    if let Some(angle_start) = ty.find('<') {
+                        if let Some(angle_end) = ty.find('>') {
+                            let base = &ty[..angle_start];
+                            let type_args_str = &ty[angle_start + 1..angle_end];
+                            let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+                            let concrete_name = format!("{}_{}", base, type_args.join("_"));
+                            if ctx.defined_structs.contains(&concrete_name) {
+                                return Some(concrete_name);
+                            }
+                        }
+                    }
+                    None
+                });
+                // Use struct type name if it's a defined struct, otherwise default to int
+                let c_type = if let Some(ref ty) = resolved_type {
+                    " ".to_string() + ty
+                } else {
+                    " int".to_string()
+                };
+                format!("{}\n\t{} {} = {};", decl_body, c_type, var_name, decl_result)
             };
 
             let (final_body, final_result) = compile_expression(final_part, ctx)?;
@@ -640,7 +688,10 @@ fn compile_expression(
             if ch == '{' {
                 let remaining = &trimmed[brace_pos..];
                 if let Some(block_len) = find_matching_brace(remaining) {
-                    let block_content = &trimmed[brace_pos + 1..brace_pos + block_len - 1].trim();
+                    // block_content is between { and }, exclusive of both
+                    let content_start = brace_pos + 1;
+                    let content_end = brace_pos + block_len; // closing brace position (exclusive)
+                    let block_content = &trimmed[content_start..content_end].trim();
 
                     // Only treat as statement block if it contains semicolons or let declarations inside
                     let has_statements = find_top_level_semicolon(block_content).is_some()
@@ -821,17 +872,9 @@ fn compile_expression(
 
             // Generate C function with its own local reads
             let fn_read_entries = find_reads_in_order(func_body);
-            let mut fn_ctx = CompileContext {
-                vars: (0..fn_read_entries.len())
-                    .map(|i| format!("v{}", i))
-                    .collect(),
-                var_idx: 0,
-                mutable_vars: Vec::new(),
-                declared_vars: HashSet::new(),
-                generated_structs: Vec::new(),
-                defined_structs: HashSet::new(),
-                generated_functions: Vec::new(), // nested fn not supported yet
-            };
+            let mut fn_ctx = CompileContext::new(
+                (0..fn_read_entries.len()).map(|i| format!("v{}", i)).collect(),
+            );
 
             // Add parameters as pre-declared variables in the function context
             for name in &param_names {
@@ -889,49 +932,77 @@ fn compile_expression(
         }
     }
 
-    // Handle struct definition: "struct Name { fields }"
+    // Handle struct definition: "struct Name { fields }" or "struct Name<T> { fields }"
     if trimmed.starts_with("struct ") {
-        let after_struct = &trimmed[8..];  // skip "struct "
+        let after_struct = &trimmed[7..];  // skip "struct " (7 chars)
         
-        // Find opening brace to get struct name
+        // Find opening brace to get struct name (may include generic params like "Name<T>")
         let brace_pos = after_struct.find('{').ok_or_else(|| format!("Invalid struct syntax: {}", after_struct))?;
-        let struct_name = after_struct[..brace_pos].trim();
+        let struct_name_raw = after_struct[..brace_pos].trim();
+        
+        // Parse generic type parameters if present: "Name<T, U>" -> name="Name", params=["T","U"]
+        let (struct_name, type_params) = if let Some(angle_start) = struct_name_raw.find('<') {
+            if let Some(angle_end) = struct_name_raw.find('>') {
+                let name = struct_name_raw[..angle_start].trim().to_string();
+                let params_str = &struct_name_raw[angle_start + 1..angle_end];
+                let params: Vec<String> = params_str.split(',').map(|p| p.trim().to_string()).collect();
+                (name, params)
+            } else {
+                return Err(format!("Invalid struct syntax: missing closing '>' in {}", struct_name_raw));
+            }
+        } else {
+            (struct_name_raw.to_string(), Vec::new())
+        };
         
         // Find matching closing brace
         let brace_end = find_matching_brace(&after_struct[brace_pos..]).ok_or_else(|| format!("Invalid struct syntax: missing closing brace"))?;
         let fields_str = &after_struct[brace_pos + 1..brace_pos + brace_end].trim();
         
-        // Parse fields (comma-separated, each can be "name : Type")
-        let mut c_fields = String::new();
-        let mut seen_fields: HashSet<String> = HashSet::new();
-        if !fields_str.is_empty() {
-            for field in fields_str.split(',') {
-                let parts: Vec<&str> = field.trim().split(':').collect();
-                let name = parts[0].trim().to_string();
-                // Check for duplicate field names
-                if !seen_fields.insert(name.clone()) {
-                    return Err(format!("Duplicate struct field: {}", name));
-                }
-                // Default to int type
-                c_fields.push_str(&format!("\t\tint {};\n", name));
-            }
-        }
-        
-        // Generate C typedef struct (C requires 'struct' keyword before braces)
-        let mut typedef = "typedef struct {\n".to_string();
-        if !fields_str.is_empty() {
-            typedef.push_str(&c_fields);
-        }
-        typedef.push_str("} ");
-        typedef.push_str(struct_name);
-        typedef.push(';');
-        
         // Check for duplicate struct definition
-        if !ctx.defined_structs.insert(struct_name.to_string()) {
-            return Err(format!("Duplicate struct definition: {}", struct_name));
+        if !type_params.is_empty() {
+            // Generic struct - store template for later monomorphization
+            if ctx.defined_structs.contains(&struct_name) {
+                return Err(format!("Duplicate struct definition: {}", struct_name));
+            }
+            ctx.defined_structs.insert(struct_name.clone());
+            ctx.generic_structs.push(GenericStructTemplate {
+                name: struct_name.clone(),
+                type_params,
+                fields_str: fields_str.to_string(),
+            });
+        } else {
+            // Non-generic struct - generate C typedef immediately
+            // Parse fields (comma-separated, each can be "name : Type")
+            let mut c_fields = String::new();
+            let mut seen_fields: HashSet<String> = HashSet::new();
+            if !fields_str.is_empty() {
+                for field in fields_str.split(',') {
+                    let parts: Vec<&str> = field.trim().split(':').collect();
+                    let name = parts[0].trim().to_string();
+                    // Check for duplicate field names
+                    if !seen_fields.insert(name.clone()) {
+                        return Err(format!("Duplicate struct field: {}", name));
+                    }
+                    // Default to int type
+                    c_fields.push_str(&format!("\t\tint {};\n", name));
+                }
+            }
+            
+            // Generate C typedef struct (C requires 'struct' keyword before braces)
+            let mut typedef = "typedef struct {\n".to_string();
+            if !fields_str.is_empty() {
+                typedef.push_str(&c_fields);
+            }
+            typedef.push_str("} ");
+            typedef.push_str(&struct_name);
+            typedef.push(';');
+            
+            if !ctx.defined_structs.insert(struct_name.clone()) {
+                return Err(format!("Duplicate struct definition: {}", struct_name));
+            }
+            
+            ctx.generated_structs.push(typedef);
         }
-        
-        ctx.generated_structs.push(typedef);
         
         // Check for remaining content after the struct definition (semicolon-separated)
         let rest = &after_struct[brace_pos + brace_end + 1..].trim();
@@ -1074,6 +1145,109 @@ fn compile_expression(
                     then_body, cond_result, then_result
                 );
                 return Ok((c_stmt, String::new()));
+            }
+        }
+    }
+
+    // Check for struct instantiation: "StructName {}" or "StructName { field1, field2 }"
+    // Also handles generic instantiation: "StructName<T> { field1, field2 }"
+    // Must be checked BEFORE read replacement so field values are compiled correctly.
+    if let Some(brace_pos) = trimmed.find('{') {
+        let before_brace = &trimmed[..brace_pos].trim();
+        // Parse generic type args if present: "Wrapper<I32>" -> ("Wrapper", ["I32"])
+        let (struct_base, type_args) = if let Some(angle_start) = before_brace.find('<') {
+            if let Some(angle_end) = before_brace.find('>') {
+                let base = before_brace[..angle_start].trim().to_string();
+                let args: Vec<String> = before_brace[angle_start + 1..angle_end]
+                    .split(',')
+                    .map(|a| a.trim().to_string())
+                    .collect();
+                (base, args)
+            } else {
+                (before_brace.to_string(), Vec::new())
+            }
+        } else {
+            (before_brace.to_string(), Vec::new())
+        };
+
+        // Must be a single identifier (no spaces)
+        if !struct_base.contains(' ') {
+            // Check if this is a generic struct instantiation
+            let concrete_name = if type_args.is_empty() {
+                struct_base.clone()
+            } else {
+                format!("{}_{}", struct_base, type_args.join("_"))
+            };
+
+            // Monomorphize generic struct if needed
+            if !type_args.is_empty() && !ctx.generated_instantiations.contains(&concrete_name) {
+                // Find the generic template
+                if let Some(template) = ctx.generic_structs.iter().find(|t| t.name == struct_base) {
+                    // Generate concrete struct by substituting type params
+                    let mut concrete_fields = String::new();
+                    let mut seen_fields: HashSet<String> = HashSet::new();
+                    for field in template.fields_str.split(',') {
+                        let field = field.trim();
+                        if field.is_empty() {
+                            continue;
+                        }
+                        if let Some(colon_pos) = field.find(':') {
+                            let field_name = field[..colon_pos].trim().to_string();
+                            let field_type = field[colon_pos + 1..].trim();
+                            // Substitute type params with concrete types (all resolve to int for now)
+                            #[allow(unused_variables)]
+                            let resolved_type = if let Some(idx) = template.type_params.iter().position(|p| p == field_type) {
+                                type_args.get(idx).map(|a| a.as_str()).unwrap_or("int")
+                            } else {
+                                "int"
+                            };
+                            // Check for duplicate field names
+                            if !seen_fields.insert(field_name.clone()) {
+                                return Err(format!("Duplicate struct field: {}", field_name));
+                            }
+                            // All types resolve to int for now (C doesn't have generics)
+                            concrete_fields.push_str(&format!("\t\tint {};\n", field_name));
+                        }
+                    }
+
+                    // Generate C typedef for the concrete instantiation
+                    let mut typedef = "typedef struct {\n".to_string();
+                    if !concrete_fields.is_empty() {
+                        typedef.push_str(&concrete_fields);
+                    }
+                    typedef.push_str("} ");
+                    typedef.push_str(&concrete_name);
+                    typedef.push(';');
+
+                    ctx.generated_structs.push(typedef);
+                    ctx.generated_instantiations.insert(concrete_name.clone());
+                    ctx.defined_structs.insert(concrete_name.clone());
+                }
+            }
+
+            // Check if struct is defined (either non-generic or already monomorphized)
+            if ctx.defined_structs.contains(&concrete_name) {
+                // Find matching closing brace
+                if let Some(block_len) = find_matching_brace(&trimmed[brace_pos..]) {
+                    let fields_str = &trimmed[brace_pos + 1..brace_pos + block_len].trim();
+                    // Parse and compile each field initializer
+                    let mut c_body = String::new();
+                    let mut compiled_fields = Vec::new();
+                    if !fields_str.is_empty() {
+                        for field in fields_str.split(',') {
+                            let field = field.trim();
+                            if let Some(colon_pos) = field.find(':') {
+                                let field_name = field[..colon_pos].trim();
+                                let field_value = field[colon_pos + 1..].trim();
+                                let (field_body, field_result) = compile_expression(field_value, ctx)?;
+                                c_body.push_str(&field_body);
+                                compiled_fields.push(format!(".{} = {}", field_name, field_result));
+                            }
+                        }
+                    }
+                    let c_init = format!("({}){{{} }}", concrete_name, compiled_fields.join(", "));
+                    return Ok((c_body, c_init));
+                }
             }
         }
     }
@@ -1451,6 +1625,11 @@ mod tests {
     }
 
     #[test]
+    fn test_simple_let_exit_zero() {
+        expect_valid("let x = 100;", "", 0);
+    }
+
+    #[test]
     fn test_typed_let_array_mismatch() {
         expect_invalid("let x : I32 = [100]; x");
     }
@@ -1635,5 +1814,28 @@ mod tests {
     #[test]
     fn test_struct_duplicate_definition() {
         expect_invalid("struct Empty {} struct Empty {}");
+    }
+
+    #[test]
+    fn test_empty_struct_instantiation() {
+        expect_valid("struct Empty {} let empty : Empty = Empty {};", "", 0);
+    }
+
+    #[test]
+    fn test_struct_field_access_with_read() {
+        expect_valid(
+            "struct Wrapper { field : I32 } let wrapper : Wrapper = Wrapper { field : read() }; wrapper.field",
+            "100",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_field_access_with_read() {
+        expect_valid(
+            "struct Wrapper<T> { field : T } let wrapper : Wrapper<I32> = Wrapper<I32> { field : read() }; wrapper.field",
+            "100",
+            100,
+        );
     }
 }
