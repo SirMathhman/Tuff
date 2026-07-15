@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include <stdlib.h>
 
 typedef struct {
 } Box;
@@ -58,5 +57,9 @@ typedef struct {
 
 int main() {
 	
-	return 0;
+	int array[3] = {1, 2, 3};
+
+	 int * temp = ((int *)(&array));
+
+	return temp[0];
 }

@@ -1173,8 +1173,9 @@ fn compile_expression(
             }
 
             // If type annotation expects an array but RHS is not an array literal, error
+            // Skip this check for pointer-to-array types where RHS is an address-of expression
             if let Some(ty) = &type_annotation {
-                if ty.contains('[') && !after_eq.starts_with('[') {
+                if ty.contains('[') && !after_eq.starts_with('[') && !ty.starts_with('*') {
                     return Err(format!(
                         "Type mismatch: expected array but got {}",
                         after_eq
@@ -1324,9 +1325,20 @@ fn compile_expression(
                     } else {
                         format!(" {}", tuff_type_to_c(ctx, &inferred_type)?)
                     };
+                    // For pointer-to-array types, cast the RHS address-of to element pointer
+                    let decl_result_final = if let Some(ref ty) = type_annotation {
+                        if ty.starts_with('*') && ty[1..].trim().starts_with('[') {
+                            let target_c = tuff_type_to_c(ctx, ty).unwrap_or_else(|_| "void *".to_string());
+                            format!("(({})({}))", target_c, decl_result)
+                        } else {
+                            decl_result.clone()
+                        }
+                    } else {
+                        decl_result.clone()
+                    };
                     format!(
                         "{}\n\t{} {} = {};",
-                        decl_body, c_type, var_name, decl_result
+                        decl_body, c_type, var_name, decl_result_final
                     )
                 }
             };
@@ -2142,6 +2154,8 @@ fn compile_expression(
                 resolved.extend(resolve_type_alias_set(ctx, ty));
             }
             resolved
+        } else if lhs_unwrapped.starts_with("sizeOf<") && lhs_unwrapped.ends_with(">()") {
+            vec!["USize".to_string()]
         } else {
             vec![infer_literal_type(&lhs)]
         };
@@ -2598,6 +2612,10 @@ fn find_matching_brace(s: &str) -> Option<usize> {
 /// "100I64" -> "I64", "100U8" -> "U8", "\"hello\"" -> "&Str", "100" -> "I32"
 fn infer_literal_type(expr: &str) -> String {
     let trimmed = expr.trim();
+    // sizeOf<T>() always returns USize
+    if trimmed.starts_with("sizeOf<") && trimmed.ends_with(">()") {
+        return "USize".to_string();
+    }
     // String literal: "..." -> &Str
     if trimmed.starts_with('"') && trimmed.ends_with('"') {
         return "&Str".to_string();
@@ -2664,9 +2682,19 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
 /// Map a Tuff type name to its corresponding C type.
 /// Returns an error for unknown types instead of defaulting to "int".
 fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileError> {
-    // Pointer types: "*I32" -> "int *"
+    // Pointer types: "*I32" -> "int *", "*[I32; 3]" -> "int *"
     if let Some(inner_type) = ty.strip_prefix('*') {
-        let inner_c = tuff_type_to_c(ctx, inner_type.trim())?;
+        let inner_trimmed = inner_type.trim();
+        // Pointer to array: "*[I32; 3]" -> element pointer "int *"
+        if inner_trimmed.starts_with('[') && inner_trimmed.ends_with(']') {
+            let inner = &inner_trimmed[1..inner_trimmed.len() - 1];
+            if let Some(semi_pos) = inner.find(';') {
+                let elem_type = inner[..semi_pos].trim();
+                let elem_c = tuff_type_to_c(ctx, elem_type)?;
+                return Ok(format!("{} *", elem_c));
+            }
+        }
+        let inner_c = tuff_type_to_c(ctx, inner_trimmed)?;
         return Ok(format!("{} *", inner_c));
     }
     // Built-in types
@@ -2737,6 +2765,16 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
             ctx.defined_structs.insert(tuple_name.clone());
         }
         return Ok(tuple_name);
+    }
+    // Array type: "[I32; 3]" -> "int" (arrays decay to pointers in C)
+    if ty.starts_with('[') && ty.ends_with(']') {
+        let inner = &ty[1..ty.len() - 1];
+        if let Some(semi_pos) = inner.find(';') {
+            let elem_type = inner[..semi_pos].trim();
+            return tuff_type_to_c(ctx, elem_type);
+        }
+        // Variable-length array without size: "[I32]" -> element type
+        return tuff_type_to_c(ctx, inner.trim());
     }
     Err(format!("Unknown type: {}", ty))
 }
@@ -3866,6 +3904,33 @@ mod tests {
             "let x = sizeOf<U64>(); x",
             "",
             8,
+        );
+    }
+
+    #[test]
+    fn test_sizeof_is_usize() {
+        expect_valid(
+            "sizeOf<U64>() is USize",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_sizeof_let_is_usize() {
+        expect_valid(
+            "let x = sizeOf<U64>(); x is USize",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_pointer_array_index() {
+        expect_valid(
+            "let array = [1, 2, 3]; let temp : *[I32; 3] = &array; temp[0]",
+            "",
+            1,
         );
     }
 }

@@ -1,4 +1,4 @@
-extern let { malloc, free } = extern stdlib;
+
 
 struct Some<T> {
     value : T
@@ -9,10 +9,6 @@ struct None<T> {
 
 type Option<T> = Some<T> | None<T>;
 
-type Alloc<T, L> = *[T; L] then free;
-
-extern fn malloc<T, L>(size : USize) : Alloc<T, L> | null;
-extern fn free(alloc : Alloc<T, L>) : Void;
 
 struct Box {
 
@@ -64,4 +60,6 @@ struct CompileContext {
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
-sizeOf<U64>() is USize
+let array = [1, 2, 3];
+let temp : *[I32; 3] = &array;
+temp[0]
