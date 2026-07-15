@@ -6,14 +6,14 @@ Tuff is a C-like programming language designed to eliminate undefined behavior, 
 ## Build & Test
 ```bash
 cargo build    # Compile
-cargo test     # Run tests (50 passing end-to-end tests)
+cargo test     # Run tests (52 passing end-to-end tests)
 ```
 
 ## Architecture
 - **Codegen approach**: Tuff source → C code → clang → native executable
 - **Zero dependencies**: Self-contained compiler, no external crates
 - **End-to-end testing**: Tests actually compile and run generated C code via `clang`
-- **Single-file compiler**: All code in `src/main.rs` (~1700 lines, tests at line ~1398)
+- **Single-file compiler**: All code in `src/main.rs` (~2000 lines, tests at line ~1900+)
 
 ## Tuff Language Features (Implemented)
 - `read()` / `read<Bool>()` - reads from stdin; multiple calls map to separate variables
@@ -24,7 +24,9 @@ cargo test     # Run tests (50 passing end-to-end tests)
 - Array literals: `[a, b, c]`, nested arrays: `[[a], [b]]`, repeat syntax: `[val; count]`
 - Control flow: `if`, `while`, `for`
 - Functions: `fn name(params) => body;`
+- **Generic functions**: `fn pass<T>(param : T) => body;` with monomorphization (`pass<I32>(x)` → `pass_I32(x)`)
 - Structs: `struct` definitions with C `typedef` generation
+- **Generic structs**: `struct Wrapper<T> { value : T }` with monomorphization (`Wrapper<I32>` → `Wrapper_I32`)
 - Block expressions with `{ let ...; expr }` for scoped variables
 - Braces-to-parens conversion in expressions
 
@@ -32,13 +34,18 @@ cargo test     # Run tests (50 passing end-to-end tests)
 - Rust 2024 edition
 - `compile(source: &str) -> Result<String, CompileError>` - main compiler entry point (returns C code)
 - `CompileContext` struct passed mutably between compiler functions (vars, mutable_vars, declared_vars, etc.)
+- `CompileContext::new(vars)` - constructor eliminates 10-line init duplication (PMD CPD requirement)
+- Helper functions: `parse_generic_params`, `build_c_function`, `compile_fn_call` - extracted to satisfy PMD CPD 50-token hook
+- `GenericStructTemplate`: `{name, type_params, fields_str}` - stores generic struct definitions
+- `GenericFunctionTemplate`: `{name, type_params, param_names, body}` - stores generic function definitions
+- Monomorphization: Runtime type substitution (e.g., `Wrapper<I32>` → `Wrapper_I32`, `pass<I32>` → `pass_I32`)
 - Test helpers: `expect_valid(source, stdin_str, exit_code)` and `expect_invalid(source)`
 - Use `#[allow(dead_code)]` on test helper functions
 - Temp files use atomic counter (`TEMP_COUNTER`) for thread-safe naming
 - `CompileError = String` - will need custom error enum as compiler grows
 
 ## Current Status
-Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, and structs. Next: proper lexer → parser AST → typed codegen pipeline.
+Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, and generic structs. All 52 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
 
 ## Pitfalls
 - `main()` currently just prints "Hello, world!" - `compile()` is tested but not wired to CLI args
