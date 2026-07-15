@@ -1,0 +1,1 @@
+watchexec -e tuff,rs -r -- cargo run

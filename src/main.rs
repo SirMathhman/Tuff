@@ -145,7 +145,10 @@ fn strip_fn_bodies(source: &str) -> String {
 }
 
 fn main() {
-    println!("Hello, world!");
+    let source = std::fs::read_to_string("main.tuff")
+        .expect("Failed to read main.tuff");
+    let c_code = compile(&source).expect("Compilation failed");
+    std::fs::write("main.c", c_code).expect("Failed to write main.c");
 }
 
 /// Find all read calls in source order and classify them by type.
