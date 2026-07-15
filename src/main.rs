@@ -1322,6 +1322,24 @@ fn compile_expression(
         }
     }
 
+    // Handle "is" type-checking operator: "expr is Type" => 1 (always true for now, all types are int in C)
+    if let Some(is_pos) = find_top_level_keyword(trimmed, " is ") {
+        let lhs = &trimmed[..is_pos].trim();
+        let _type_name = &trimmed[is_pos + 4..].trim(); // skip " is " - unused until proper type system
+        // For now, all types compile to int in C, so type checks always pass.
+        // In the future, this could track actual types and validate at compile time.
+        let (_, _lhs_result) = compile_expression(lhs, ctx)?;
+        // Type check: for now, always returns 1 (true) since we don't have real type tracking.
+        // TODO: Implement proper type checking when we have a type system.
+        return Ok((String::new(), String::from("1")));
+    }
+
+    // Handle "!" (not) operator: "!expr" => "!expr"
+    if trimmed.starts_with('!') {
+        let (_, inner_result) = compile_expression(&trimmed[1..], ctx)?;
+        return Ok((String::new(), format!("(!{})", inner_result)));
+    }
+
     // Base case: replace read<T>() and read() with variables, convert braces to parens.
     let mut result = String::new();
 
@@ -1626,6 +1644,43 @@ fn find_top_level_else(s: &str) -> Option<usize> {
                 i == 0 || !matches!(s.chars().nth(i.saturating_sub(1)), Some('a'..='z'));
             if before_ok {
                 return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// Find a keyword at top level (not inside parens/braces/brackets).
+/// The keyword should include surrounding spaces if needed (e.g., " is ").
+fn find_top_level_keyword(s: &str, keyword: &str) -> Option<usize> {
+    let mut brace_depth = 0;
+    let mut bracket_depth = 0;
+    let mut paren_depth = 0;
+    let keyword_len = keyword.len();
+    
+    // Determine how many leading spaces to skip for boundary check.
+    let leading_spaces = keyword.chars().take_while(|&c| c == ' ').count();
+    
+    for i in 0..s.len().saturating_sub(keyword_len.saturating_sub(1)) {
+        let ch = s.as_bytes()[i] as char;
+        match ch {
+            '{' => brace_depth += 1,
+            '}' => brace_depth -= 1,
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
+            '(' => paren_depth += 1,
+            ')' => paren_depth -= 1,
+            _ => {}
+        }
+        
+        if brace_depth == 0 && bracket_depth == 0 && paren_depth == 0 {
+            if s[i..].starts_with(keyword) {
+                // Check word boundary at the first non-space char of the keyword.
+                let boundary_pos = i + leading_spaces;
+                let before_ok = boundary_pos == 0 || !matches!(s.chars().nth(boundary_pos.saturating_sub(1)), Some('a'..='z') | Some('A'..='Z') | Some('_'));
+                if before_ok {
+                    return Some(i);
+                }
             }
         }
     }
@@ -2063,5 +2118,20 @@ mod tests {
     #[test]
     fn test_generic_function_call() {
         expect_valid("fn pass<T>(param : T) => param; pass<I32>(read()) + 1", "5", 6);
+    }
+
+    #[test]
+    fn test_is_type_check() {
+        expect_valid("100 is I32", "", 1);
+    }
+
+    #[test]
+    fn test_not_operator() {
+        expect_valid("!0", "", 1);
+    }
+
+    #[test]
+    fn test_not_operator_false() {
+        expect_valid("!1", "", 0);
     }
 }

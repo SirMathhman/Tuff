@@ -6,7 +6,7 @@ Tuff is a C-like programming language designed to eliminate undefined behavior, 
 ## Build & Test
 ```bash
 cargo build    # Compile
-cargo test     # Run tests (52 passing end-to-end tests)
+cargo test     # Run tests (58 passing end-to-end tests)
 ```
 
 ## Architecture
@@ -29,6 +29,8 @@ cargo test     # Run tests (52 passing end-to-end tests)
 - **Generic structs**: `struct Wrapper<T> { value : T }` with monomorphization (`Wrapper<I32>` → `Wrapper_I32`)
 - Block expressions with `{ let ...; expr }` for scoped variables
 - Braces-to-parens conversion in expressions
+- Type-check operator: `expr is Type` — returns 1 (true); pending proper type system
+- Logical not: `!expr` — unary negation operator
 
 ## Key Conventions
 - Rust 2024 edition
@@ -45,7 +47,7 @@ cargo test     # Run tests (52 passing end-to-end tests)
 - `CompileError = String` - will need custom error enum as compiler grows
 
 ## Current Status
-Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, and generic structs. All 52 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
+Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, and type-check operator. All 58 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
 
 ## Pitfalls
 - `main()` currently just prints "Hello, world!" - `compile()` is tested but not wired to CLI args
