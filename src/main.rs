@@ -1033,6 +1033,56 @@ fn compile_expression(
         }
     }
 
+    // Check for struct destructuring: "let { x, y } = StructName { ... }; <final>"
+    if let Some(rest) = trimmed.strip_prefix("let ") {
+        let rest_trimmed = rest.trim_start();
+        if rest_trimmed.starts_with('{') {
+            if let Some(closing_brace) = find_matching_brace(rest_trimmed) {
+                let pattern = &rest_trimmed[1..closing_brace];
+                let after_pattern = rest_trimmed[closing_brace + 1..].trim_start();
+                // Expect "= StructName { ... }"
+                if let Some(eq_pos) = after_pattern.find('=') {
+                    let after_eq = after_pattern[eq_pos + 1..].trim_start();
+                    // Find the struct instantiation by locating the opening brace
+                    let struct_name = after_eq.split(|c| c == '{' || c == '<').next().unwrap_or("").trim();
+                    // Find the matching brace for the struct instantiation
+                    let (rhs, after_rhs) = if let Some(brace_pos) = after_eq.find('{') {
+                        if let Some(matching_brace) = find_matching_brace(&after_eq[brace_pos..]) {
+                            let end = brace_pos + matching_brace + 1;
+                            (after_eq[..end].trim(), after_eq[end..].trim_start())
+                        } else {
+                            (after_eq, "")
+                        }
+                    } else {
+                        (after_eq, "")
+                    };
+                    // Extract the final part after semicolon
+                    let final_part = if let Some(semi_pos) = find_top_level_semicolon(after_rhs) {
+                        &after_rhs[semi_pos + 1..]
+                    } else {
+                        ""
+                    };
+                    // Extract field names from pattern: "x, y"
+                    let fields: Vec<&str> = pattern.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+                    // Generate a temporary variable for the struct instance
+                    let tmp_var = format!("__tmp_{}", struct_name.to_lowercase());
+                    // Compile the RHS expression to get the struct value
+                    let (rhs_body, rhs_result) = compile_expression(rhs, ctx)?;
+                    // Generate: Point __tmp_point = (Point){.x = 3, .y = 4};
+                    let mut c_body = rhs_body.clone();
+                    c_body.push_str(&format!("\n\t{} {} = {};", struct_name, tmp_var, rhs_result));
+                    // Generate individual let declarations for each field
+                    for field in &fields {
+                        ctx.declared_vars.insert((*field).to_string());
+                        c_body.push_str(&format!("\n\tint {} = {}.{};", field, tmp_var, to_lower_first(field)));
+                    }
+                    let final_result = compile_expression(final_part, ctx)?;
+                    return Ok((format!("{}\n\t{}", c_body, final_result.0), final_result.1));
+                }
+            }
+        }
+    }
+
     // Check for let declaration pattern: "let x = <expr>; <final>"
     if let Some(decl_expr) = trimmed.strip_prefix("let ") {
         // Find the top-level semicolon (not inside braces)
@@ -3553,6 +3603,15 @@ mod tests {
             "struct Ok { value : I32 } struct Err { error : &Str } type Result = Ok | Err; let result : Result = if (read<Bool>()) Ok { value : read() } else Err { error : \"foo\" }; result is Ok",
             "false",
             0,
+        );
+    }
+
+    #[test]
+    fn test_struct_destructuring() {
+        expect_valid(
+            "struct Point { x : I32, y : I32 }; let { x, y } = Point { x : 3, y : 4 }; x + y",
+            "",
+            7,
         );
     }
 }

@@ -4,24 +4,30 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 
 ## Type System
 
-- **Primitive types** — `U8`, `U16`, `U32`, `U64`, `I16`, `I32`, `I64`, `F32`, `F64`, `Char`, `String` (currently everything compiles to `int`)
+- **Primitive types** — `U8` ✅, `U16` ✅, `U32` ✅, `U64` ✅, `I16` ✅, `I32` ✅, `I64` ✅, `USize` ✅ (literal suffixes & type checking); `F32`, `F64`, `Char`, `String` (still pending)
 - **Type inference** — infer variable types from expressions instead of defaulting to `int`
 - **Type checking** — reject invalid operations at compile time (e.g., `1 + "hello"`, `read() + true`)
 - **Enums** — `enum Color { Red, Green, Blue }` with discriminant values
 - **Type aliases** — `type Meter = I32` for creating named type synonyms
+- **Union type aliases** — `type Result = Ok | Err` ✅ (tagged unions with runtime tag checking)
 - **Const generics** — `struct Array<T, N> { data: [T; N] }` with compile-time size parameters
 
 ## Expressions & Operators
 
-- **String literals** — `"hello"` with concatenation (`+`) and length (`.len`)
+- **String literals** — `"hello"` ✅ with `&Str` type; concatenation (`+`) still pending
+- **String `.length`** — `str.length` ✅ → `(int)strlen(str)` for `&Str` types
 - **Character literals** — `'a'` with comparison and arithmetic
 - **Floating point literals** — `3.14`, `1.0e-5`
 - **Bitwise operators** — `&`, `|`, `^`, `~`, `<<`, `>>`
-- **Logical operators** — `!` (not) ✅, `||` (or), `&&` (and) — partially implemented for booleans
-- **Type-check operator** — `expr is Type` — ✅ implemented
+- **Logical operators** — `!` ✅, `||` ✅, `&&` ✅ — short-circuit evaluation
+- **Comparison operators** — `<` ✅, `==` ✅ — binary comparison
+- **Type-check operator** — `expr is Type` ✅ — returns 1 if types match, 0 otherwise
+- **Type cast** — `expr as Type` ✅ — generates C cast expression
+- **Literal suffixes** — `100U8` ✅, `100I64` ✅ — range validation for `U8` (0–255)
+- **Parenthesized expressions** — `(expr)` ✅ — strips parens (except tuple literals)
 - **Ternary expression** — `cond ? a : b` as syntactic sugar for `if (cond) a else b`
 - **Match/switch expressions** — `match x { 1 => "one", 2 => "two", _ => "other" }`
-- **Tuples** — `(1, "hello", true)` with destructuring: `let (a, b) = pair`
+- **Tuples** — `(a, b)` ✅ — generates C struct with `.f0`, `.f1` fields; usable as generic type args; destructuring still pending
 - **Closures** — `let f = |x| x + 1` with capture semantics
 - **Operator overloading** — custom operators for user-defined types
 
@@ -122,13 +128,14 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 
 - **Pattern matching** — `match point { Point(0, 0) => "origin", Point(x, 0) => "x-axis", _ => "other" }`
 - **Struct destructuring** — `let Point { x, y } = p` for extracting fields
+- **Tuple destructuring** — `let (a, b) = pair` for extracting tuple fields
 - **Operator precedence** — well-defined precedence table (currently relies on C's precedence)
 - **Comments** — `// line comment`, `/* block comment */` support
 - **Documentation comments** — `///` for public API documentation
 - **Visibility system** — `pub`, `pub(crate)`, `pub(super)` for module visibility
 - **Lifetime annotations** — `'a` for borrow checker (if adding references)
 - **Null/option types** — `Option<T>` with `Some(value)` and `None` variants
-- **Generics with bounds** — `fn max<T : Comparable>(a : T, b : T) => T`
+- **Generics with bounds** — `fn max<T : Comparable>(a : T, b : T) => T` ✅ (partial — `T : USize` bound works for rest params)
 
 ---
 
@@ -136,8 +143,8 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 
 1. **Proper lexer → AST** — foundational, makes everything else safer
 2. **Custom error types** — better diagnostics for users
-3. **Primitive types & type checking** — core language safety
-4. **String type & literals** — most requested practical feature
+3. **Type inference & type checking** — core language safety
+4. **String concatenation** — complete string support
 5. **Match expressions** — powerful pattern matching
 6. **Modules & imports** — code organization at scale
 7. **Result type & error handling** — idiomatic error management
