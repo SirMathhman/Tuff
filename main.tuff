@@ -1,0 +1,9 @@
+struct Vec<T> {
+
+}
+
+struct GenericStructTemplate {
+    name : &Str,
+    type_params : Vec<&Str>,
+    fields_str : &Str
+}
