@@ -12,6 +12,7 @@ struct CompileContext {
     var_idx: usize,
     mutable_vars: Vec<String>,
     declared_vars: HashSet<String>,
+    generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
 /// Tracks read calls in source order with their types for correct C code generation.
@@ -34,6 +35,61 @@ enum ReadType {
 }
 
 static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// Strip fn bodies from source for top-level read tracking.
+/// Replaces "fn name(...) => body;" with empty string so reads inside fn aren't counted at main level.
+fn strip_fn_bodies(source: &str) -> String {
+    let mut result = String::new();
+    let mut i = 0;
+
+    while i < source.len() {
+        if source[i..].starts_with("fn ")
+            && (i == 0 || !source[..i].chars().last().unwrap_or(' ').is_alphanumeric())
+        {
+            // Skip past "fn name" to the opening paren
+            let start = i;
+            i += 3; // skip "fn "
+            // Find '('
+            while i < source.len() && source.as_bytes()[i] != b'(' {
+                i += 1;
+            }
+            if i < source.len() {
+                // Skip to matching ')'
+                let paren_end = find_matching_paren(&source[i..]);
+                if let Some(end) = paren_end {
+                    i = i + end + 1;
+                    // Skip past optional return type annotation (e.g., ": I32") and find "=>"
+                    while i < source.len() && !source[i..].starts_with("=>") {
+                        i += 1;
+                    }
+                    if source[i..].starts_with("=>") {
+                        i += 2; // skip "=>"
+                    }
+                    // Now find the semicolon that ends this fn definition (at top level)
+                    let semi_pos = find_top_level_semicolon(&source[i..]);
+                    if let Some(s) = semi_pos {
+                        i = i + s + 1;
+                    } else {
+                        result.push_str(&source[start..]);
+                        break;
+                    }
+                } else {
+                    // No matching paren, just copy from start
+                    result.push(source.as_bytes()[start] as char);
+                    i = start + 1;
+                }
+            } else {
+                result.push_str(&source[start..]);
+            }
+        } else {
+            let ch_len = source[i..].chars().next().unwrap_or('\0').len_utf8();
+            result.push(source[i..i + ch_len].chars().next().unwrap());
+            i += ch_len;
+        }
+    }
+
+    result
+}
 
 fn main() {
     println!("Hello, world!");
@@ -63,8 +119,11 @@ fn compile(source: &str) -> Result<String, CompileError> {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
     }
 
+    // Strip fn bodies from source before scanning for top-level reads.
+    let stripped_for_reads = strip_fn_bodies(trimmed);
+
     // Find all reads in source order and assign variables sequentially.
-    let read_entries = find_reads_in_order(trimmed);
+    let read_entries = find_reads_in_order(&stripped_for_reads);
     let read_count = read_entries.len();
     let vars: Vec<String> = (0..read_count).map(|i| format!("v{}", i)).collect();
 
@@ -74,6 +133,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
         var_idx: 0,
         mutable_vars: Vec::new(),
         declared_vars: HashSet::new(),
+        generated_functions: Vec::new(),
     };
     let (c_body, return_expr) = compile_expression(trimmed, &mut ctx)?;
 
@@ -87,10 +147,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             match entry_type {
                 ReadType::Int => {
                     c_decls.push_str(&format!("\tint {};\n", var_name));
-                    c_reads.push_str(&format!(
-                        "\tscanf(\"%d\", &{});\n",
-                        var_name
-                    ));
+                    c_reads.push_str(&format!("\tscanf(\"%d\", &{});\n", var_name));
                 }
                 ReadType::Bool => {
                     c_decls.push_str(&format!("\tint {};\n", var_name));
@@ -104,23 +161,73 @@ fn compile(source: &str) -> Result<String, CompileError> {
         }
 
         // Build final C program with stdbool.h for boolean support
-        let has_bool_reads = read_entries.iter().any(|(_, t)| matches!(t, ReadType::Bool));
+        let has_bool_reads = read_entries
+            .iter()
+            .any(|(_, t)| matches!(t, ReadType::Bool));
         let includes = if has_bool_reads {
             "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
         } else {
             "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
         };
-        let buf_decl = if has_bool_reads { "\tchar buf[64];" } else { "" };
+        let buf_decl = if has_bool_reads {
+            "\tchar buf[64];"
+        } else {
+            ""
+        };
+
+        let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
+
         Ok(format!(
-            "{}\nint main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
-            includes, buf_decl, c_decls.trim(), c_reads.trim(), c_body, return_expr
+            "{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
+            includes,
+            c_prototypes.trim(),
+            c_functions.trim(),
+            buf_decl,
+            c_decls.trim(),
+            c_reads.trim(),
+            c_body,
+            return_expr
         ))
     } else {
+        let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
+
+        // Include stdio.h if any generated functions use scanf (have local reads)
+        let includes = if !c_functions.is_empty() {
+            "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
+        } else {
+            ""
+        };
+
         Ok(format!(
-            "int main() {{\n\t{}\n\treturn {};\n}}\n",
-            c_body, return_expr
+            "{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
+            includes,
+            c_prototypes.trim(),
+            c_functions.trim(),
+            c_body,
+            return_expr
         ))
     }
+}
+
+/// Generate C function prototypes and definitions from compiled functions.
+fn generate_function_code(functions: &[(String, Vec<String>, String)]) -> (String, String) {
+    let mut c_prototypes = String::new();
+    for (name, params, _func_code) in functions {
+        if params.is_empty() {
+            c_prototypes.push_str(&format!("int {}(void);\n", name));
+        } else {
+            let param_sig: Vec<String> = params.iter().map(|p| format!("int {}", p)).collect();
+            c_prototypes.push_str(&format!("int {}({});\n", name, param_sig.join(", ")));
+        }
+    }
+
+    let mut c_functions = String::new();
+    for (_name, _params, func_code) in functions {
+        c_functions.push_str(func_code);
+        c_functions.push('\n');
+    }
+
+    (c_prototypes, c_functions)
 }
 
 /// Parse a let declaration, extracting the variable name, mutability, and optional type annotation.
@@ -223,7 +330,10 @@ fn compile_array_decl(
         let (val_body, val_result) = compile_expression(repeat_value, ctx)?;
         let repeated: Vec<_> = (0..repeat_count).map(|_| val_result.clone()).collect();
         let init = format!("{{{}}}", repeated.join(", "));
-        let c_decl = format!("{}\n\tint {}[{}] = {};", val_body, var_name, repeat_count, init);
+        let c_decl = format!(
+            "{}\n\tint {}[{}] = {};",
+            val_body, var_name, repeat_count, init
+        );
         let (final_body, final_result) = compile_expression(final_part, ctx)?;
         return Ok((format!("{}\n{}", c_decl, final_body), final_result));
     }
@@ -236,8 +346,7 @@ fn compile_array_decl(
 
         if has_nested_arrays && len > 0 {
             // Determine inner dimensions by recursively compiling first element
-            let (first_body, first_init, inner_dims) =
-                compile_array_item(&items[0], ctx)?;
+            let (first_body, first_init, inner_dims) = compile_array_item(&items[0], ctx)?;
 
             // Compile remaining items
             let mut compiled_items = vec![first_init];
@@ -352,8 +461,14 @@ fn compile_expression(
         return Ok((String::new(), String::from("")));
     }
 
-    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if", no "while")
-    if !trimmed.starts_with("let ") && !trimmed.starts_with('{') && !trimmed.starts_with("if ") && !trimmed.starts_with("while ") {
+    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if", no "while", no "for", no "fn")
+    if !trimmed.starts_with("let ")
+        && !trimmed.starts_with('{')
+        && !trimmed.starts_with("if ")
+        && !trimmed.starts_with("while ")
+        && !trimmed.starts_with("for ")
+        && !trimmed.starts_with("fn ")
+    {
         if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
             let assign_part = &trimmed[..semi_pos];
             let final_part = &trimmed[semi_pos + 1..];
@@ -496,7 +611,12 @@ fn compile_expression(
     // e.g., "read() + { let x = read(); x }"  OR  "{ x = read(); } x"
     // We look for any block that has internal semicolons (statements, not just grouping).
     // Skip this check if the expression starts with "if " - let the if/else handler deal with brace-delimited branches.
-    if !trimmed.starts_with("if ") && trimmed.contains('{') && (find_top_level_semicolon(trimmed).is_some() || trimmed.contains("{ let ") || trimmed.contains("= ")) {
+    if !trimmed.starts_with("if ")
+        && trimmed.contains('{')
+        && (find_top_level_semicolon(trimmed).is_some()
+            || trimmed.contains("{ let ")
+            || trimmed.contains("= "))
+    {
         for (brace_pos, ch) in trimmed.char_indices() {
             if ch == '{' {
                 let remaining = &trimmed[brace_pos..];
@@ -504,8 +624,11 @@ fn compile_expression(
                     let block_content = &trimmed[brace_pos + 1..brace_pos + block_len - 1].trim();
 
                     // Only treat as statement block if it contains semicolons or let declarations inside
-                    let has_statements = find_top_level_semicolon(block_content).is_some() || block_content.contains("let ");
-                    if !has_statements { continue; }
+                    let has_statements = find_top_level_semicolon(block_content).is_some()
+                        || block_content.contains("let ");
+                    if !has_statements {
+                        continue;
+                    }
 
                     let before = &trimmed[..brace_pos];
                     let after = &trimmed[brace_pos + block_len + 1..];
@@ -525,7 +648,8 @@ fn compile_expression(
                         if !after.trim().is_empty() {
                             // "after" provides the final return expression
                             let (_, after_result) = compile_expression(after.trim(), ctx)?;
-                            let combined_expr = format!("{}({}){}", before_result, block_result, after_result);
+                            let combined_expr =
+                                format!("{}({}){}", before_result, block_result, after_result);
                             return Ok((combined_body, combined_expr));
                         } else {
                             // Block is the final part of expression: before(block_result)
@@ -543,7 +667,6 @@ fn compile_expression(
             }
         }
     }
-
 
     // Helper: parse "keyword (cond) rest" → (&cond, &rest)
     fn parse_cond_and_rest(input: &str, keyword_len: usize) -> Option<(&str, &str)> {
@@ -578,6 +701,171 @@ fn compile_expression(
         }
 
         return Ok((c_stmt, String::new()));
+    }
+
+    // Handle for-in-range loop: "for (i in start..end) body; remaining"
+    if trimmed.starts_with("for ") {
+        let paren_start = 4; // skip "for "
+        let paren_end = find_matching_paren(&trimmed[paren_start..]).unwrap();
+        let for_header = &trimmed[paren_start + 1..paren_start + paren_end];
+        let rest = &trimmed[paren_start + paren_end + 2..].trim();
+
+        // Parse "i in start..end"
+        let in_parts: Vec<&str> = for_header.splitn(2, "in ").collect();
+        if in_parts.len() == 2 {
+            let var_name = in_parts[0].trim();
+            let range_str = in_parts[1].trim();
+
+            // Parse start..end (compile both bounds)
+            let dotdot_pos = range_str.find("..").unwrap();
+            let start_expr = &range_str[..dotdot_pos];
+            let end_expr = &range_str[dotdot_pos + 2..];
+
+            let (_, start_result) = compile_expression(start_expr, ctx)?;
+            let (_, end_result) = compile_expression(end_expr, ctx)?;
+
+            // Compile loop body — split on semicolon if there's a trailing expression.
+            let (body_stmts, body_result) = if let Some(semi_pos) = find_top_level_semicolon(rest) {
+                compile_expression(&rest[..semi_pos], ctx)?
+            } else {
+                compile_expression(rest, ctx)?
+            };
+
+            // Generate C for loop: "for (int i = start; i < end; i++) { body; }"
+            let header = format!(
+                "for (int {} = {}; {} < {}; {}++)",
+                var_name, start_result, var_name, end_result, var_name
+            );
+            let c_stmt = build_c_block_with_header(&header, &body_stmts, &body_result);
+
+            // If there's content after the for loop (e.g., "; sum"), use it as return.
+            if let Some(semi_pos) = find_top_level_semicolon(rest) {
+                let after_for = rest[semi_pos + 1..].trim();
+                if !after_for.is_empty() {
+                    let (_, after_result) = compile_expression(after_for, ctx)?;
+                    return Ok((c_stmt, after_result));
+                }
+            }
+
+            return Ok((c_stmt, String::new()));
+        } else {
+            // Fallback for unexpected syntax — treat as error.
+            return Err(format!("Invalid for loop syntax: {}", for_header));
+        }
+    }
+
+    // Handle function definition: "fn name(params) => body; remaining"
+    if trimmed.starts_with("fn ") {
+        let after_fn = &trimmed[3..];
+        // Find the opening paren to get function name
+        let paren_pos = after_fn
+            .find('(')
+            .ok_or_else(|| format!("Invalid fn syntax: {}", after_fn))?;
+        let func_name = after_fn[..paren_pos].trim();
+
+        // Parse parameters inside parens
+        let params_str_start = paren_pos + 1;
+        let params_paren_end = find_matching_paren(&after_fn[params_str_start - 1..])
+            .ok_or_else(|| format!("Invalid fn syntax: missing closing paren"))?;
+        let params_inner =
+            &after_fn[params_str_start..params_str_start + params_paren_end - 1].trim();
+
+        // Parse each parameter: "name : Type" or just "name"
+        let mut param_names: Vec<String> = Vec::new();
+        if !params_inner.is_empty() {
+            for param in params_inner.split(',') {
+                let parts: Vec<&str> = param.trim().split(':').collect();
+                let name = parts[0].trim();
+                if !name.is_empty() {
+                    param_names.push(name.to_string());
+                }
+            }
+        }
+
+        // Find optional return type annotation and "=>" after the params
+        let after_params = &after_fn[params_str_start + params_paren_end..];
+
+        // Check for ": ReturnType =>" or just "=>"
+        if !after_params.contains("=>") {
+            return Err(format!(
+                "Invalid fn syntax: expected '=>' but got '{}'",
+                after_params
+            ));
+        }
+        let arrow_pos = after_params.find("=>").unwrap();
+        let body_and_rest = &after_params[arrow_pos + 2..].trim(); // skip "=>"
+
+        // Find semicolon separating function definition from remaining code
+        if let Some(semi_pos) = find_top_level_semicolon(body_and_rest) {
+            let func_body = &body_and_rest[..semi_pos];
+            let remaining = &body_and_rest[semi_pos + 1..].trim();
+
+            // Generate C function with its own local reads
+            let fn_read_entries = find_reads_in_order(func_body);
+            let mut fn_ctx = CompileContext {
+                vars: (0..fn_read_entries.len())
+                    .map(|i| format!("v{}", i))
+                    .collect(),
+                var_idx: 0,
+                mutable_vars: Vec::new(),
+                declared_vars: HashSet::new(),
+                generated_functions: Vec::new(), // nested fn not supported yet
+            };
+
+            // Add parameters as pre-declared variables in the function context
+            for name in &param_names {
+                fn_ctx.declared_vars.insert(name.clone());
+            }
+
+            let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
+
+            // Build C function signature with parameters
+            let param_sig: Vec<String> = param_names.iter().map(|n| format!("int {}", n)).collect();
+            let sig_str = if param_sig.is_empty() {
+                "void"
+            } else {
+                &param_sig.join(", ")
+            };
+            let mut c_func = format!("int {}({}) {{\n", func_name, sig_str);
+
+            // Add local reads after parameters
+            if !fn_read_entries.is_empty() {
+                for (i, (_pos, entry_type)) in fn_read_entries.iter().enumerate() {
+                    let var_name = &format!("v{}", i);
+                    match entry_type {
+                        ReadType::Int => {
+                            c_func.push_str(&format!("\t\tint {};\n", var_name));
+                            c_func.push_str(&format!("\t\tscanf(\"%d\", &{});\n", var_name));
+                        }
+                        ReadType::Bool => {
+                            c_func.push_str(&format!("\t\tint {};\n", var_name));
+                            c_func.push_str(&format!("\t\tchar buf[64];\n"));
+                            c_func.push_str(&format!(
+                                "\t\tscanf(\"%63s\", buf);{} = strcmp(buf, \"true\") == 0 || buf[0] == '1';\n",
+                                var_name
+                            ));
+                        }
+                    }
+                }
+            }
+
+            if !fn_body_stmts.is_empty() {
+                c_func.push_str(&fn_body_stmts);
+            }
+            c_func.push_str(&format!("\t\treturn {};\n}}\n", fn_return_expr));
+
+            ctx.generated_functions
+                .push((func_name.to_string(), param_names, c_func));
+
+            // Compile remaining expression after the function definition
+            if !remaining.is_empty() {
+                return compile_expression(remaining, ctx);
+            }
+
+            return Ok((String::new(), String::new()));
+        } else {
+            return Err(format!("Invalid fn syntax: missing semicolon after body"));
+        }
     }
 
     // Handle if/else expression: "if (cond) a else b" → "(cond ? a : b)" or block form for statements.
@@ -678,7 +966,10 @@ fn compile_expression(
                 let (_, then_result) = compile_expression(then_expr, ctx)?;
                 let (_, else_result) = compile_expression(else_expr, ctx)?;
 
-                return Ok((String::new(), format!("({} ? {} : {})", cond_result, then_result, else_result)));
+                return Ok((
+                    String::new(),
+                    format!("({} ? {} : {})", cond_result, then_result, else_result),
+                ));
             }
         } else {
             // No else — treat as statement: "if (cond) body" or "if (cond) body; remaining..."
@@ -690,7 +981,10 @@ fn compile_expression(
                 let after_part = &rest[semi_pos + 1..].trim();
 
                 let (then_body, then_result) = compile_expression(then_part, ctx)?;
-                let c_stmt = format!("{}\n\tif ({}) {{\n\t\t{};\n\t}}", then_body, cond_result, then_result);
+                let c_stmt = format!(
+                    "{}\n\tif ({}) {{\n\t\t{};\n\t}}",
+                    then_body, cond_result, then_result
+                );
 
                 if !after_part.is_empty() {
                     let (_, after_result) = compile_expression(after_part, ctx)?;
@@ -701,7 +995,10 @@ fn compile_expression(
             } else {
                 // No semicolon — entire rest is the then-body
                 let (then_body, then_result) = compile_expression(rest, ctx)?;
-                let c_stmt = format!("{}\n\tif ({}) {{\n\t\t{};\n\t}}", then_body, cond_result, then_result);
+                let c_stmt = format!(
+                    "{}\n\tif ({}) {{\n\t\t{};\n\t}}",
+                    then_body, cond_result, then_result
+                );
                 return Ok((c_stmt, String::new()));
             }
         }
@@ -755,6 +1052,39 @@ fn compile_expression(
     }
     // Copy any trailing text after last read().
     copy_chars(&trimmed[last..], &mut result);
+
+    // Check if this is a function call: name(args)
+    let paren_idx = trimmed.find('(');
+    if let Some(pi) = paren_idx {
+        // Check if the part before '(' matches a known function name (no dots, spaces, etc.)
+        let potential_name = &trimmed[..pi];
+        if !potential_name.contains(|c: char| c == ' ')
+            && ctx
+                .generated_functions
+                .iter()
+                .any(|(name, _, _)| name == potential_name)
+        {
+            // Find matching closing paren
+            if let Some(paren_end) = find_matching_paren(&trimmed[pi..]) {
+                let args_str = &trimmed[pi + 1..pi + paren_end].trim();
+
+                // Compile arguments
+                let mut compiled_args: Vec<String> = Vec::new();
+                if !args_str.is_empty() {
+                    for arg in args_str.split(',') {
+                        let (_, arg_result) = compile_expression(arg.trim(), ctx)?;
+                        compiled_args.push(arg_result);
+                    }
+                }
+
+                // Build function call expression
+                return Ok((
+                    String::new(),
+                    format!("{}({})", potential_name, compiled_args.join(", ")),
+                ));
+            }
+        }
+    }
 
     Ok((String::new(), result))
 }
@@ -838,7 +1168,8 @@ fn find_top_level_else(s: &str) -> Option<usize> {
     for i in 0..s.len().saturating_sub(3) {
         if s[i..].starts_with("else ") || &s[i..] == "else" {
             // Ensure it's a standalone keyword, not part of another word
-            let before_ok = i == 0 || !matches!(s.chars().nth(i.saturating_sub(1)), Some('a'..='z'));
+            let before_ok =
+                i == 0 || !matches!(s.chars().nth(i.saturating_sub(1)), Some('a'..='z'));
             if before_ok {
                 return Some(i);
             }
@@ -847,10 +1178,11 @@ fn find_top_level_else(s: &str) -> Option<usize> {
     None
 }
 
-/// Build a C block statement like "while (cond) { body; }" or "if (cond) { stmt; }".
-fn build_c_block(keyword: &str, cond_result: &str, body_stmts: &str, body_result: &str) -> String {
+/// Build a C block statement with a custom header line.
+/// e.g., "for (int i = 0; i < n; i++) { body; }"
+fn build_c_block_with_header(header: &str, body_stmts: &str, body_result: &str) -> String {
     let mut c_stmt = String::new();
-    c_stmt.push_str(&format!("\t{} ({}) {{\n", keyword, cond_result));
+    c_stmt.push_str(&format!("\t{} {{\n", header));
     if !body_stmts.is_empty() {
         for line in body_stmts.lines() {
             c_stmt.push('\t');
@@ -863,6 +1195,12 @@ fn build_c_block(keyword: &str, cond_result: &str, body_stmts: &str, body_result
     }
     c_stmt.push_str("\t}");
     c_stmt
+}
+
+/// Build a C block statement like "while (cond) { body; }" or "if (cond) { stmt; }".
+fn build_c_block(keyword: &str, cond_result: &str, body_stmts: &str, body_result: &str) -> String {
+    let header = format!("{} ({})", keyword, cond_result);
+    build_c_block_with_header(&header, body_stmts, body_result)
 }
 
 #[allow(dead_code)]
@@ -1145,7 +1483,11 @@ mod tests {
 
     #[test]
     fn test_if_with_mut_reassign() {
-        expect_valid("let mut x = 0; if (read<Bool>()) x = read(); x", "true 3", 3);
+        expect_valid(
+            "let mut x = 0; if (read<Bool>()) x = read(); x",
+            "true 3",
+            3,
+        );
     }
 
     #[test]
@@ -1175,6 +1517,29 @@ mod tests {
             "let mut x = 0; let total = read(); while (x < total) x += 1; x",
             "4",
             4,
+        );
+    }
+
+    #[test]
+    fn test_for_loop_with_mut_reassign() {
+        expect_valid(
+            "let mut sum = 0; for (i in 0..read()) sum += i; sum",
+            "4",
+            6,
+        );
+    }
+
+    #[test]
+    fn test_function_call_forwarding_read() {
+        expect_valid("fn get() => read(); get()", "100", 100);
+    }
+
+    #[test]
+    fn test_fn_with_params_and_type_annotation() {
+        expect_valid(
+            "fn add(offset : I32) : I32 => read() + offset; add(2)",
+            "1",
+            3,
         );
     }
 }
