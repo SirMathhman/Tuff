@@ -1432,8 +1432,7 @@ fn compile_expression(
                             return Err(format!("Unknown type: {}", ty));
                         }
                         // Handle generic struct instantiations: "Wrapper<I32>" -> "Wrapper_I32"
-                        if let Some((base, type_args_str)) = parse_generic_type(ty) {
-                            let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+                        if let Some((base, type_args)) = parse_generic_type_args(ty) {
                             monomorphize_generic_struct(ctx, base, &type_args)?
                         } else {
                             tuff_type_to_c(ctx, ty)?
@@ -1619,28 +1618,25 @@ fn compile_expression(
     if let Some(brace_pos) = trimmed.find('{') {
         let before_brace = &trimmed[..brace_pos].trim();
         // Parse generic type args if present: "Wrapper<I32>" -> ("Wrapper", ["I32"])
-        let (struct_base, type_args) = if let Some(angle_start) = before_brace.find('<') {
-            if let Some(angle_end) = before_brace.find('>') {
-                let base = before_brace[..angle_start].trim().to_string();
-                let args: Vec<String> = before_brace[angle_start + 1..angle_end]
-                    .split(',')
-                    .map(|a| a.trim().to_string())
-                    .collect();
-                (base, args)
-            } else {
-                (before_brace.to_string(), Vec::new())
-            }
+        // Use parse_generic_type to handle nested generics like "Wrapper<Pair<I32, Bool>>"
+        let (struct_base, type_args) = if let Some((base, args_str)) = parse_generic_type(before_brace) {
+            let args: Vec<String> = split_top_level_commas(args_str)
+                .iter()
+                .map(|a| a.trim().to_string())
+                .collect();
+            (base.to_string(), args)
         } else {
             (before_brace.to_string(), Vec::new())
         };
 
         // Must be a single identifier (no spaces)
         if !struct_base.contains(' ') {
-            // Check if this is a generic struct instantiation
+            // Build concrete name using sanitized type args for valid C identifiers
             let concrete_name = if type_args.is_empty() {
                 struct_base.clone()
             } else {
-                format!("{}_{}", struct_base, type_args.join("_"))
+                let sanitized: Vec<String> = type_args.iter().map(|a| sanitize_type_name(a)).collect();
+                format!("{}_{}", struct_base, sanitized.join("_"))
             };
 
             // Monomorphize generic struct if needed
@@ -1766,6 +1762,32 @@ fn compile_expression(
         return Ok((String::new(), format!("(!{})", inner_result)));
     }
 
+    // Handle tuple literal: "(a, b)" where commas exist at top level inside parens.
+    // Distinguish from parenthesized expression: "(a + b)" has no top-level comma.
+    if let Some(tuple_elements) = parse_tuple_literal(trimmed) {
+        let mut c_body = String::new();
+        let mut compiled_elements = Vec::new();
+        for elem in &tuple_elements {
+            let (elem_body, elem_result) = compile_expression(elem, ctx)?;
+            c_body.push_str(&elem_body);
+            compiled_elements.push(elem_result);
+        }
+        let fields_str = compiled_elements
+            .iter()
+            .enumerate()
+            .map(|(i, v)| format!(".f{} = {}", i, v))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let tuple_type = format!("({})", tuple_elements
+            .iter()
+            .map(|e| infer_literal_type(e))
+            .collect::<Vec<_>>()
+            .join(", "));
+        let tuple_name = tuff_type_to_c(ctx, &tuple_type)?;
+        let c_init = format!("({}){{{}}}", tuple_name, fields_str);
+        return Ok((c_body, c_init));
+    }
+
     // Base case: replace read<T>() and read() with variables, convert braces to parens.
     let mut result = String::new();
 
@@ -1787,10 +1809,22 @@ fn compile_expression(
     }
 
     fn copy_chars(s: &str, out: &mut String) {
-        for ch in s.chars() {
+        let mut chars = s.chars().peekable();
+        while let Some(ch) = chars.next() {
             match ch {
                 '{' => out.push('('),
                 '}' => out.push(')'),
+                '.' => {
+                    out.push('.');
+                    // Check if next char is a digit (tuple field access: .0 -> .f0)
+                    if let Some(&next_ch) = chars.peek() {
+                        if next_ch.is_ascii_digit() {
+                            out.push('f');
+                            out.push(next_ch);
+                            chars.next(); // consume the digit
+                        }
+                    }
+                }
                 _ => out.push(ch),
             }
         }
@@ -2033,11 +2067,16 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
                 false
             }
         }
+        || {
+            // Handle tuple types like "(I32, I32)"
+            let inner = ty.trim();
+            inner.starts_with('(') && inner.ends_with(')')
+        }
 }
 
 /// Map a Tuff type name to its corresponding C type.
 /// Returns an error for unknown types instead of defaulting to "int".
-fn tuff_type_to_c(ctx: &CompileContext, ty: &str) -> Result<String, CompileError> {
+fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileError> {
     // Built-in types
     match ty {
         "I32" => return Ok("int".to_string()),
@@ -2055,25 +2094,47 @@ fn tuff_type_to_c(ctx: &CompileContext, ty: &str) -> Result<String, CompileError
     // Type alias — resolve and recurse
     if let Some(members) = ctx.type_aliases.get(ty) {
         if members.len() == 1 {
-            return tuff_type_to_c(ctx, &members[0]);
+            let member = members[0].clone();
+            return tuff_type_to_c(ctx, &member);
         }
         // Union alias — return first member's C type (or error if empty)
         if let Some(first) = members.first() {
-            return tuff_type_to_c(ctx, first);
+            let member = first.clone();
+            return tuff_type_to_c(ctx, &member);
         }
     }
     // Union type — resolve to underlying types
     if let Some(variants) = ctx.union_types.get(ty) {
         if let Some(first) = variants.first() {
-            return tuff_type_to_c(ctx, first);
+            let member = first.clone();
+            return tuff_type_to_c(ctx, &member);
         }
     }
     // Generic struct instantiation: "Wrapper<I32>" -> build concrete C name
-    if let Some((base, type_args_str)) = parse_generic_type(ty) {
-        let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+    if let Some((base, type_args)) = parse_generic_type_args(ty) {
         let sanitized_args: Vec<String> = type_args.iter().map(|a| sanitize_type_name(a)).collect();
         let args_joined = sanitized_args.join("_");
         return Ok(format!("{}_{}", base, args_joined));
+    }
+    // Tuple type: "(I32, I32)" -> generate C struct typedef and return type name
+    if let Some(elements) = parse_tuple_type(ty) {
+        let sanitized: Vec<String> = elements.iter().map(|e| sanitize_type_name(e)).collect();
+        let tuple_name = format!("__Tuple_{}", sanitized.join("_"));
+        if !ctx.defined_structs.contains(&tuple_name) {
+            let mut fields = String::new();
+            for (i, elem) in elements.iter().enumerate() {
+                let c_type = tuff_type_to_c(ctx, elem)?;
+                fields.push_str(&format!("\t\t{} f{};\n", c_type, i));
+            }
+            let mut typedef = "typedef struct {\n".to_string();
+            typedef.push_str(&fields);
+            typedef.push_str("} ");
+            typedef.push_str(&tuple_name);
+            typedef.push(';');
+            ctx.generated_structs.push(typedef);
+            ctx.defined_structs.insert(tuple_name.clone());
+        }
+        return Ok(tuple_name);
     }
     Err(format!("Unknown type: {}", ty))
 }
@@ -2207,8 +2268,68 @@ fn find_matching_paren(s: &str) -> Option<usize> {
 }
 
 /// Sanitize a type name for use in a C identifier (e.g. "&Str" -> "Str").
+/// Handles nested generics: "Pair<I32, Bool>" -> "Pair_I32_Bool".
 fn sanitize_type_name(ty: &str) -> String {
-    ty.replace('&', "").replace(' ', "_")
+    if let Some((base, type_args_str)) = parse_generic_type(ty) {
+        let sanitized_args: Vec<String> = split_top_level_commas(type_args_str)
+            .iter()
+            .map(|a| sanitize_type_name(a.trim()))
+            .collect();
+        format!("{}_{}", sanitize_type_name(base), sanitized_args.join("_"))
+    } else {
+        ty.replace('&', "").replace(' ', "_")
+    }
+}
+
+/// Parse a generic type and split type args at top-level commas.
+/// Returns (base_name, vec_of_trimmed_type_args) or None if not generic.
+fn parse_generic_type_args(ty: &str) -> Option<(&str, Vec<&str>)> {
+    if let Some((base, type_args_str)) = parse_generic_type(ty) {
+        let type_args: Vec<&str> = split_top_level_commas(type_args_str).iter().map(|a| a.trim()).collect();
+        Some((base, type_args))
+    } else {
+        None
+    }
+}
+
+/// Parse a tuple literal like "(a, b)" into its element strings.
+/// Returns None if not a tuple (single element or no top-level commas).
+fn parse_tuple_literal(s: &str) -> Option<Vec<&str>> {
+    let trimmed = s.trim();
+    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        let inner = &trimmed[1..trimmed.len() - 1];
+        let elements: Vec<&str> = split_top_level_commas(inner)
+            .iter()
+            .map(|e| e.trim())
+            .collect();
+        if elements.len() >= 2 {
+            Some(elements)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Parse a tuple type annotation like "(I32, I32)" into its element type strings.
+/// Returns None if not a tuple type.
+fn parse_tuple_type(ty: &str) -> Option<Vec<&str>> {
+    let inner = ty.trim();
+    if inner.starts_with('(') && inner.ends_with(')') {
+        let content = &inner[1..inner.len() - 1];
+        let elements: Vec<&str> = split_top_level_commas(content)
+            .iter()
+            .map(|e| e.trim())
+            .collect();
+        if elements.len() >= 2 {
+            Some(elements)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 /// Build a concrete type name from a base and type args string.
@@ -2216,17 +2337,34 @@ fn sanitize_type_name(ty: &str) -> String {
 /// "Wrapper", "I32, Bool" -> "Wrapper_I32_Bool"
 /// "Wrapper", "&Str" -> "Wrapper_Str"
 fn build_concrete_name(base: &str, type_args_str: &str) -> String {
-    let type_args: Vec<String> = type_args_str.split(',').map(|a| sanitize_type_name(a.trim())).collect();
+    let type_args: Vec<String> = split_top_level_commas(type_args_str).iter().map(|a| sanitize_type_name(a.trim())).collect();
     format!("{}_{}", base, type_args.join("_"))
 }
 
 /// Parse a generic type annotation like "Wrapper<I32>" into (base, type_args_str).
+/// Handles nested generics like "Wrapper<Pair<I32, Bool>>" by finding the matching ">".
 /// Returns None if the type is not generic.
 fn parse_generic_type(ty: &str) -> Option<(&str, &str)> {
     if let Some(angle_start) = ty.find('<') {
-        if let Some(angle_end) = ty.find('>') {
-            let base = &ty[..angle_start];
-            let type_args_str = &ty[angle_start + 1..angle_end];
+        let base = &ty[..angle_start];
+        // Find the matching '>' by tracking depth
+        let mut depth = 0;
+        let mut angle_end = None;
+        for (i, ch) in ty.chars().enumerate() {
+            match ch {
+                '<' => depth += 1,
+                '>' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        angle_end = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(end) = angle_end {
+            let type_args_str = &ty[angle_start + 1..end];
             Some((base, type_args_str))
         } else {
             None
@@ -2243,15 +2381,32 @@ fn monomorphize_generic_struct(
     base: &str,
     type_args: &[&str],
 ) -> Result<String, CompileError> {
-    let concrete_name = format!("{}_{}", base, type_args.iter().map(|a| sanitize_type_name(a)).collect::<Vec<_>>().join("_"));
+    // Build concrete name using sanitized Tuff type names (not C types).
+    // sanitize_type_name handles nested generics recursively.
+    let sanitized_args: Vec<String> = type_args.iter()
+        .map(|a| sanitize_type_name(a.trim()))
+        .collect();
+    let concrete_name = format!("{}_{}", base, sanitized_args.join("_"));
+    // Recursively monomorphize any nested generic type args.
+    let resolved_type_args: Vec<String> = type_args.iter().map(|arg| {
+        if let Some((nested_base, nested_args)) = parse_generic_type_args(*arg) {
+            monomorphize_generic_struct(ctx, nested_base, &nested_args)
+                .map(|name| name.to_string())
+        } else {
+            tuff_type_to_c(ctx, arg)
+        }
+    }).collect::<Result<Vec<_>, _>>()?;
     if ctx.generated_instantiations.contains(&concrete_name) {
         return Ok(concrete_name);
     }
     let template = ctx.generic_structs.iter().find(|t| t.name == base)
         .ok_or_else(|| format!("Undefined generic struct: {}", base))?;
+    // Clone template data to avoid holding immutable borrow on ctx during tuff_type_to_c calls
+    let fields_str = template.fields_str.clone();
+    let type_params = template.type_params.clone();
     let mut concrete_fields = String::new();
     let mut seen_fields: HashSet<String> = HashSet::new();
-    for field in template.fields_str.split(',') {
+    for field in fields_str.split(',') {
         let field = field.trim();
         if field.is_empty() { continue; }
         if let Some(colon_pos) = field.find(':') {
@@ -2260,12 +2415,15 @@ fn monomorphize_generic_struct(
                 return Err(format!("Duplicate struct field: {}", field_name));
             }
             let field_type = field[colon_pos + 1..].trim();
-            let resolved_type = if let Some(idx) = template.type_params.iter().position(|p| p == field_type) {
-                let arg = type_args.get(idx)
+            let type_param_idx = type_params.iter().position(|p| p == field_type);
+            let valid = is_valid_type(ctx, field_type);
+            let resolved_type = if let Some(idx) = type_param_idx {
+                let arg = resolved_type_args.get(idx)
                     .ok_or_else(|| format!("Missing type argument at index {} in '{}'", idx, base))?;
-                tuff_type_to_c(ctx, arg)?.to_string()
-            } else if is_valid_type(ctx, field_type) {
-                tuff_type_to_c(ctx, field_type)?.to_string()
+                arg.clone()
+            } else if valid {
+                let ft = field_type.to_string();
+                tuff_type_to_c(ctx, &ft)?.to_string()
             } else {
                 return Err(format!("Unknown type in generic struct '{}': {}", base, field_type));
             };
@@ -2341,8 +2499,8 @@ fn find_top_level_keyword(s: &str, keyword: &str) -> Option<usize> {
     None
 }
 
-/// Find ".length" at the top level (not inside braces, brackets, or parens).
-fn find_top_level_dot_length(s: &str) -> Option<usize> {
+/// Find "." at the top level (not inside braces, brackets, or parens).
+fn find_top_level_dot(s: &str) -> Option<usize> {
     let mut brace_depth = 0;
     let mut bracket_depth = 0;
     let mut paren_depth = 0;
@@ -2355,14 +2513,19 @@ fn find_top_level_dot_length(s: &str) -> Option<usize> {
             '(' => paren_depth += 1,
             ')' => paren_depth -= 1,
             '.' if brace_depth == 0 && bracket_depth == 0 && paren_depth == 0 => {
-                if s[i..].starts_with(".length") {
-                    return Some(i);
-                }
+                return Some(i);
             }
             _ => {}
         }
     }
     None
+}
+
+/// Find ".length" at the top level (not inside braces, brackets, or parens).
+fn find_top_level_dot_length(s: &str) -> Option<usize> {
+    find_top_level_dot(s).and_then(|i| {
+        if s[i..].starts_with(".length") { Some(i) } else { None }
+    })
 }
 
 /// Build a C block statement with a custom header line.
@@ -2827,6 +2990,15 @@ mod tests {
     }
 
     #[test]
+    fn test_nested_generic_struct_as_field() {
+        expect_valid(
+            "struct Wrapper<T> { value : T } struct Pair<A, B> { first : A, second : B } struct Container { wrapped : Wrapper<Pair<I32, Bool>> };",
+            "",
+            0,
+        );
+    }
+
+    #[test]
     fn test_construct_struct_with_generic_field() {
         expect_valid(
             "struct Wrapper<T> { value : T } struct Container { wrapper : Wrapper<I32> } let c : Container = Container { wrapper : Wrapper<I32> { value : read() } }; c.wrapper.value",
@@ -2864,6 +3036,15 @@ mod tests {
             "fn pass<T>(param : T) => param; pass<I32>(read()) + 1",
             "5",
             6,
+        );
+    }
+
+    #[test]
+    fn test_tuple_type_with_field_access() {
+        expect_valid(
+            "let x : (I32, I32) = (3, 4); x.0 + x.1",
+            "",
+            7,
         );
     }
 
