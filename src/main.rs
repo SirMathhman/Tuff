@@ -15,6 +15,16 @@ struct GenericStructTemplate {
     fields_str: String,
 }
 
+/// Generic function template: (name, type_params, param_names, body).
+#[allow(dead_code)]
+#[derive(Clone)]
+struct GenericFunctionTemplate {
+    name: String,
+    type_params: Vec<String>,
+    param_names: Vec<String>,
+    body: String,
+}
+
 /// Shared compilation context passed between compiler functions.
 struct CompileContext {
     vars: Vec<String>,
@@ -25,6 +35,8 @@ struct CompileContext {
     defined_structs: HashSet<String>,  // struct names already defined
     generic_structs: Vec<GenericStructTemplate>,  // generic struct templates
     generated_instantiations: HashSet<String>,  // already-generated monomorphized names
+    generic_functions: Vec<GenericFunctionTemplate>,  // generic function templates
+    generated_function_instantiations: HashSet<String>,  // already-generated monomorphized function names
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
@@ -40,6 +52,8 @@ impl CompileContext {
             defined_structs: HashSet::new(),
             generic_structs: Vec::new(),
             generated_instantiations: HashSet::new(),
+            generic_functions: Vec::new(),
+            generated_function_instantiations: HashSet::new(),
             generated_functions: Vec::new(),
         }
     }
@@ -141,6 +155,84 @@ fn find_reads_in_order(source: &str) -> Vec<(usize, ReadType)> {
         }
     }
     reads
+}
+
+/// Parse generic type parameters from a string like "name<T, U>" -> ("name", ["T", "U"]).
+fn parse_generic_params(raw: &str) -> Result<(String, Vec<String>), CompileError> {
+    if let Some(angle_start) = raw.find('<') {
+        if let Some(angle_end) = raw.find('>') {
+            let name = raw[..angle_start].trim().to_string();
+            let params: Vec<String> = raw[angle_start + 1..angle_end]
+                .split(',')
+                .map(|p| p.trim().to_string())
+                .collect();
+            Ok((name, params))
+        } else {
+            Err(format!("Invalid syntax: missing closing '>' in {}", raw))
+        }
+    } else {
+        Ok((raw.to_string(), Vec::new()))
+    }
+}
+
+/// Generate a C function string from compiled body parts and read entries.
+fn build_c_function(
+    func_name: &str,
+    param_names: &[String],
+    fn_read_entries: &[(usize, ReadType)],
+    fn_body_stmts: &str,
+    fn_return_expr: &str,
+) -> String {
+    let param_sig: Vec<String> = param_names.iter().map(|n| format!("int {}", n)).collect();
+    let sig_str = if param_sig.is_empty() {
+        "void"
+    } else {
+        &param_sig.join(", ")
+    };
+    let mut c_func = format!("int {}({}) {{\n", func_name, sig_str);
+
+    // Add local reads after parameters
+    if !fn_read_entries.is_empty() {
+        for (i, (_pos, entry_type)) in fn_read_entries.iter().enumerate() {
+            let var_name = &format!("v{}", i);
+            match entry_type {
+                ReadType::Int => {
+                    c_func.push_str(&format!("\t\tint {};\n", var_name));
+                    c_func.push_str(&format!("\t\tscanf(\"%d\", &{});\n", var_name));
+                }
+                ReadType::Bool => {
+                    c_func.push_str(&format!("\t\tint {};\n", var_name));
+                    c_func.push_str(&format!("\t\tchar buf[64];\n"));
+                    c_func.push_str(&format!(
+                        "\t\tscanf(\"%63s\", buf);{} = strcmp(buf, \"true\") == 0 || buf[0] == '1';\n",
+                        var_name
+                    ));
+                }
+            }
+        }
+    }
+
+    if !fn_body_stmts.is_empty() {
+        c_func.push_str(fn_body_stmts);
+    }
+    c_func.push_str(&format!("\t\treturn {};\n}}\n", fn_return_expr));
+    c_func
+}
+
+/// Compile function arguments and generate a C function call string.
+fn compile_fn_call(
+    func_name: &str,
+    args_str: &str,
+    ctx: &mut CompileContext,
+) -> Result<String, CompileError> {
+    let mut compiled_args: Vec<String> = Vec::new();
+    if !args_str.is_empty() {
+        for arg in args_str.split(',') {
+            let (_, arg_result) = compile_expression(arg.trim(), ctx)?;
+            compiled_args.push(arg_result);
+        }
+    }
+    Ok(format!("{}({})", func_name, compiled_args.join(", ")))
 }
 
 fn compile(source: &str) -> Result<String, CompileError> {
@@ -825,13 +917,18 @@ fn compile_expression(
     }
 
     // Handle function definition: "fn name(params) => body; remaining"
+    // Also handles generic functions: "fn name<T>(params) => body; remaining"
     if trimmed.starts_with("fn ") {
         let after_fn = &trimmed[3..];
-        // Find the opening paren to get function name
+        // Find the opening paren to get function name (may include generic params like "name<T>")
         let paren_pos = after_fn
             .find('(')
             .ok_or_else(|| format!("Invalid fn syntax: {}", after_fn))?;
-        let func_name = after_fn[..paren_pos].trim();
+        let func_name_raw = after_fn[..paren_pos].trim();
+
+        // Parse generic type parameters if present: "name<T, U>" -> name="name", params=["T","U"]
+        let (func_name, type_params) = parse_generic_params(func_name_raw)
+            .map_err(|e| format!("Invalid fn syntax: {}", e))?;
 
         // Parse parameters inside parens
         let params_str_start = paren_pos + 1;
@@ -870,56 +967,39 @@ fn compile_expression(
             let func_body = &body_and_rest[..semi_pos];
             let remaining = &body_and_rest[semi_pos + 1..].trim();
 
-            // Generate C function with its own local reads
+            // If this is a generic function, store the template for later monomorphization
+            if !type_params.is_empty() {
+                ctx.generic_functions.push(GenericFunctionTemplate {
+                    name: func_name.clone(),
+                    type_params,
+                    param_names,
+                    body: func_body.to_string(),
+                });
+                // Register the base name so we can find it during calls
+                ctx.generated_functions.push((func_name, Vec::new(), String::new()));
+
+                // Compile remaining expression after the function definition
+                if !remaining.is_empty() {
+                    return compile_expression(remaining, ctx);
+                }
+
+                return Ok((String::new(), String::new()));
+            }
+
+            // Non-generic function: generate C code immediately
             let fn_read_entries = find_reads_in_order(func_body);
             let mut fn_ctx = CompileContext::new(
                 (0..fn_read_entries.len()).map(|i| format!("v{}", i)).collect(),
             );
 
-            // Add parameters as pre-declared variables in the function context
             for name in &param_names {
                 fn_ctx.declared_vars.insert(name.clone());
             }
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
-            // Build C function signature with parameters
-            let param_sig: Vec<String> = param_names.iter().map(|n| format!("int {}", n)).collect();
-            let sig_str = if param_sig.is_empty() {
-                "void"
-            } else {
-                &param_sig.join(", ")
-            };
-            let mut c_func = format!("int {}({}) {{\n", func_name, sig_str);
-
-            // Add local reads after parameters
-            if !fn_read_entries.is_empty() {
-                for (i, (_pos, entry_type)) in fn_read_entries.iter().enumerate() {
-                    let var_name = &format!("v{}", i);
-                    match entry_type {
-                        ReadType::Int => {
-                            c_func.push_str(&format!("\t\tint {};\n", var_name));
-                            c_func.push_str(&format!("\t\tscanf(\"%d\", &{});\n", var_name));
-                        }
-                        ReadType::Bool => {
-                            c_func.push_str(&format!("\t\tint {};\n", var_name));
-                            c_func.push_str(&format!("\t\tchar buf[64];\n"));
-                            c_func.push_str(&format!(
-                                "\t\tscanf(\"%63s\", buf);{} = strcmp(buf, \"true\") == 0 || buf[0] == '1';\n",
-                                var_name
-                            ));
-                        }
-                    }
-                }
-            }
-
-            if !fn_body_stmts.is_empty() {
-                c_func.push_str(&fn_body_stmts);
-            }
-            c_func.push_str(&format!("\t\treturn {};\n}}\n", fn_return_expr));
-
-            ctx.generated_functions
-                .push((func_name.to_string(), param_names, c_func));
+            let c_func = build_c_function(&func_name, &param_names, &fn_read_entries, &fn_body_stmts, &fn_return_expr);
+            ctx.generated_functions.push((func_name, param_names, c_func));
 
             // Compile remaining expression after the function definition
             if !remaining.is_empty() {
@@ -941,18 +1021,8 @@ fn compile_expression(
         let struct_name_raw = after_struct[..brace_pos].trim();
         
         // Parse generic type parameters if present: "Name<T, U>" -> name="Name", params=["T","U"]
-        let (struct_name, type_params) = if let Some(angle_start) = struct_name_raw.find('<') {
-            if let Some(angle_end) = struct_name_raw.find('>') {
-                let name = struct_name_raw[..angle_start].trim().to_string();
-                let params_str = &struct_name_raw[angle_start + 1..angle_end];
-                let params: Vec<String> = params_str.split(',').map(|p| p.trim().to_string()).collect();
-                (name, params)
-            } else {
-                return Err(format!("Invalid struct syntax: missing closing '>' in {}", struct_name_raw));
-            }
-        } else {
-            (struct_name_raw.to_string(), Vec::new())
-        };
+        let (struct_name, type_params) = parse_generic_params(struct_name_raw)
+            .map_err(|e| format!("Invalid struct syntax: {}", e))?;
         
         // Find matching closing brace
         let brace_end = find_matching_brace(&after_struct[brace_pos..]).ok_or_else(|| format!("Invalid struct syntax: missing closing brace"))?;
@@ -1301,40 +1371,113 @@ fn compile_expression(
     // Copy any trailing text after last read().
     copy_chars(&trimmed[last..], &mut result);
 
-    // Check if this is a function call: name(args)
-    let paren_idx = trimmed.find('(');
-    if let Some(pi) = paren_idx {
-        // Check if the part before '(' matches a known function name (no dots, spaces, etc.)
-        let potential_name = &trimmed[..pi];
-        if !potential_name.contains(|c: char| c == ' ')
-            && ctx
-                .generated_functions
-                .iter()
-                .any(|(name, _, _)| name == potential_name)
-        {
-            // Find matching closing paren
-            if let Some(paren_end) = find_matching_paren(&trimmed[pi..]) {
-                let args_str = &trimmed[pi + 1..pi + paren_end].trim();
+    // Third pass: handle function calls (generic & non-generic) inline in the result
+    // This replaces function calls in-place so surrounding expressions (e.g., "+ 1") are preserved
+    let final_result = result;
+    let mut func_result = String::new();
+    let mut func_last = 0;
 
-                // Compile arguments
-                let mut compiled_args: Vec<String> = Vec::new();
-                if !args_str.is_empty() {
-                    for arg in args_str.split(',') {
-                        let (_, arg_result) = compile_expression(arg.trim(), ctx)?;
-                        compiled_args.push(arg_result);
-                    }
+    // Find function calls in the result (after read replacement)
+    for m in final_result.match_indices('(') {
+        let before_paren = &final_result[..m.0];
+        // Find the function name (go backwards from '(')
+        let name_end = m.0;
+        let mut name_start = name_end;
+        let mut in_angle = 0;
+        let mut chars = before_paren.char_indices().rev();
+        for (_, ch) in chars.by_ref() {
+            if ch == '>' {
+                in_angle += 1;
+                name_start -= ch.len_utf8();
+            } else if ch == '<' {
+                if in_angle > 0 {
+                    in_angle -= 1;
+                } else {
+                    break;
                 }
+                name_start -= ch.len_utf8();
+            } else if ch.is_alphanumeric() || ch == '_' {
+                name_start -= ch.len_utf8();
+            } else {
+                break;
+            }
+        }
 
-                // Build function call expression
-                return Ok((
-                    String::new(),
-                    format!("{}({})", potential_name, compiled_args.join(", ")),
-                ));
+        let potential_name = &final_result[name_start..name_end];
+        // Parse generic type args if present
+        let (call_name, call_type_args) = if let Some(angle_start) = potential_name.find('<') {
+            if let Some(angle_end) = potential_name.find('>') {
+                let base = potential_name[..angle_start].trim().to_string();
+                let args: Vec<String> = potential_name[angle_start + 1..angle_end]
+                    .split(',')
+                    .map(|a| a.trim().to_string())
+                    .collect();
+                (base, args)
+            } else {
+                (potential_name.to_string(), Vec::new())
+            }
+        } else {
+            (potential_name.to_string(), Vec::new())
+        };
+
+        // Skip if this looks like a comparison operator (e.g., "x < y")
+        if name_start > 0 {
+            let char_before = final_result[..name_start].chars().next_back();
+            if let Some(ch) = char_before {
+                if ch.is_alphanumeric() || ch == ')' || ch == ']' {
+                    // Continue processing
+                } else {
+                    continue;
+                }
+            }
+        }
+
+        // Resolve the concrete function name to use (generic or non-generic)
+        let resolved_name = if !call_type_args.is_empty() {
+            if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == call_name) {
+                let concrete_name = format!("{}_{}", call_name, call_type_args.join("_"));
+                if !ctx.generated_function_instantiations.contains(&concrete_name) {
+                    let fn_read_entries = find_reads_in_order(&template.body);
+                    let mut fn_ctx = CompileContext::new(
+                        (0..fn_read_entries.len()).map(|i| format!("v{}", i)).collect(),
+                    );
+                    for name in &template.param_names {
+                        fn_ctx.declared_vars.insert(name.clone());
+                    }
+                    let (fn_body_stmts, fn_return_expr) = compile_expression(&template.body, &mut fn_ctx)?;
+                    let c_func = build_c_function(&concrete_name, &template.param_names, &fn_read_entries, &fn_body_stmts, &fn_return_expr);
+                    ctx.generated_functions.push((concrete_name.clone(), template.param_names.clone(), c_func));
+                    ctx.generated_function_instantiations.insert(concrete_name.clone());
+                }
+                Some(concrete_name)
+            } else {
+                None // Built-in generic like read<Bool> - skip
+            }
+        } else if !call_name.contains(|c: char| c == ' ')
+            && ctx.generated_functions.iter().any(|(name, _, _)| *name == call_name)
+        {
+            Some(call_name.clone())
+        } else {
+            None
+        };
+
+        // Replace function call in result if we resolved a name
+        if let Some(resolved_name) = resolved_name {
+            if let Some(paren_end) = find_matching_paren(&final_result[m.0..]) {
+                let abs_paren_end = m.0 + paren_end;
+                let args_str = &final_result[m.0 + 1..abs_paren_end].trim();
+                let call_expr = compile_fn_call(&resolved_name, args_str, ctx)?;
+                copy_chars(&final_result[func_last..name_start], &mut func_result);
+                func_result.push_str(&call_expr);
+                func_last = abs_paren_end + 1;
             }
         }
     }
 
-    Ok((String::new(), result))
+    // Copy remaining text after last function call
+    copy_chars(&final_result[func_last..], &mut func_result);
+
+    Ok((String::new(), func_result))
 }
 
 /// Find the index of the matching closing brace for an opening brace at position 0.
@@ -1837,5 +1980,10 @@ mod tests {
             "100",
             100,
         );
+    }
+
+    #[test]
+    fn test_generic_function_call() {
+        expect_valid("fn pass<T>(param : T) => param; pass<I32>(read()) + 1", "5", 6);
     }
 }
