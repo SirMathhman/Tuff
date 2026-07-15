@@ -418,7 +418,8 @@ fn compile_expression(
         let inner = &trimmed[1..trimmed.len() - 1].trim();
         // If inner content has statements (let decls, assignments with semicolons), process recursively
         if inner.contains("let ") || find_top_level_semicolon(inner).is_some() {
-            return compile_expression(inner, ctx);
+            let (block_body, block_result) = compile_expression(inner, ctx)?;
+            return Ok((block_body, block_result));
         }
         // Otherwise convert to parentheses for grouping expressions
         let mut result = String::new();
