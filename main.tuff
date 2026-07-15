@@ -1,7 +1,7 @@
 extern let { malloc, free } = extern stdlib;
 
 struct Some<T> {
-    value : T;
+    value : T
 }
 
 struct None<T> {
@@ -9,11 +9,9 @@ struct None<T> {
 
 type Option<T> = Some<T> | None<T>;
 
-
-
 type Alloc<T, L> = *[T; L] then free;
 
-extern fn malloc() : Alloc<T, L>;
+extern fn malloc<T, L>(size : USize) : Alloc<T, L> | null;
 extern fn free(alloc : Alloc<T, L>) : Void;
 
 struct Box {
@@ -65,3 +63,5 @@ struct CompileContext {
     generated_function_instantiations: HashSet<String>, // already-generated monomorphized function names
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
+
+let size = sizeOf<U64>();

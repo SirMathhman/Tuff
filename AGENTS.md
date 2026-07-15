@@ -47,7 +47,9 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Comparison operators**: `<`, `==` — binary comparison
 - **Literal suffixes**: `100U8`, `100I64` — range validation for `U8` (0–255)
 - **USize type**: `USize` for unsigned size types (used in rest param length inference)
-
+- **Pointer types**: `let y : *I32 = &x` — pointer type annotation with address-of operator
+- **Address-of operator**: `&x` — generates C `&x` for taking variable addresses
+- **Dereference operator**: `*y` — generates C `(*y)` for pointer dereference
 ## Key Conventions
 - Rust 2024 edition
 - `compile(source: &str) -> Result<String, CompileError>` - main compiler entry point (returns C code)

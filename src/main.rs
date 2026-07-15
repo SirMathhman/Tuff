@@ -48,6 +48,7 @@ struct CompileContext {
     function_return_types: HashMap<String, String>, // function name -> return type
     extern_functions: HashMap<String, (Vec<String>, Vec<String>, String)>, // name -> (param_names, param_types, return_type)
     extern_includes: Vec<String>, // C headers to include (e.g., "stdlib.h")
+    extern_types: HashSet<String>, // C type names imported via extern let { type ... }
 }
 
 impl CompileContext {
@@ -72,6 +73,7 @@ impl CompileContext {
             function_return_types: HashMap::new(),
             extern_functions: HashMap::new(),
             extern_includes: Vec::new(),
+            extern_types: HashSet::new(),
         }
     }
 }
@@ -607,31 +609,10 @@ fn compile(source: &str) -> Result<String, CompileError> {
 }
 
 /// Generate C extern function declarations for FFI.
-fn generate_extern_decls(ctx: &CompileContext) -> String {
-    let mut result = String::new();
-    for (name, (params, param_types, ret_type)) in &ctx.extern_functions {
-        if ret_type.is_empty() {
-            continue; // placeholder from extern let, skip
-        }
-        let c_ret = match ret_type.as_str() {
-            "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" => "int",
-            "&Str" => "const char*",
-            _ => "int",
-        };
-        let param_sig: Vec<String> = params.iter().enumerate().map(|(i, p)| {
-            let c_type = if i < param_types.len() {
-                match param_types[i].as_str() {
-                    "&Str" => "const char*",
-                    _ => "int",
-                }
-            } else {
-                "int"
-            };
-            format!("{} {}", c_type, p)
-        }).collect();
-        result.push_str(&format!("extern {} {}({});\n", c_ret, name, param_sig.join(", ")));
-    }
-    result
+/// Returns empty string — extern functions are declared in the included headers,
+/// and generating duplicate declarations can conflict with the real signatures.
+fn generate_extern_decls(_ctx: &CompileContext) -> String {
+    String::new()
 }
 
 /// Generate C function prototypes and definitions from compiled functions.
@@ -1547,9 +1528,13 @@ fn compile_expression(
                         if !ctx.extern_includes.contains(&include_name) {
                             ctx.extern_includes.push(include_name);
                         }
-                        // Register each name as an extern function (signature will come from extern fn)
-                        for name in names_str.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
-                            ctx.extern_functions.entry(name.to_string()).or_insert((Vec::new(), Vec::new(), String::new()));
+                        // Register each entry: 'type TypeName' -> extern type, plain name -> extern function
+                        for entry in names_str.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                            if let Some(type_name) = entry.strip_prefix("type ") {
+                                ctx.extern_types.insert(type_name.trim().to_string());
+                            } else {
+                                ctx.extern_functions.entry(entry.to_string()).or_insert((Vec::new(), Vec::new(), String::new()));
+                            }
                         }
                         if !remaining.is_empty() {
                             return compile_expression(remaining, ctx);
@@ -2199,6 +2184,22 @@ fn compile_expression(
         return Ok((String::new(), format!("(!{})", inner_result)));
     }
 
+    // Handle "&" (address-of) operator: "&expr" => "&expr"
+    if trimmed.starts_with('&') && !trimmed.starts_with("&Str") {
+        let inner = trimmed[1..].trim_start();
+        // Only treat as address-of if it's followed by an identifier (variable name)
+        if inner.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false) {
+            let (_, inner_result) = compile_expression(inner, ctx)?;
+            return Ok((String::new(), format!("&{}", inner_result)));
+        }
+    }
+
+    // Handle "*" (dereference) operator: "*expr" => "(*expr)"
+    if trimmed.starts_with('*') {
+        let (_, inner_result) = compile_expression(&trimmed[1..], ctx)?;
+        return Ok((String::new(), format!("(*{})", inner_result)));
+    }
+
     // Handle array literal as expression: "[1, 2, 3]" or "[value; count]"
     if trimmed.starts_with('[') && trimmed.ends_with(']') {
         // Check for array repeat syntax: [value; count]
@@ -2322,6 +2323,33 @@ fn compile_expression(
     }
     // Copy any trailing text after last read().
     copy_chars(&trimmed[last..], &mut result);
+
+    // Third pass: handle sizeOf<T>() -> sizeof(C_type)
+    let mut sizeof_result = String::new();
+    let mut sizeof_last = 0;
+    for m in result.match_indices("sizeOf<") {
+        copy_chars(&result[sizeof_last..m.0], &mut sizeof_result);
+        let rest = &result[m.0 + m.1.len()..]; // after "sizeOf<"
+        if let Some(end_pos) = rest.find(">()") {
+            let type_arg = rest[..end_pos].trim();
+            // Resolve type: extern type -> use as-is, Tuff type -> convert to C
+            let c_type = if ctx.extern_types.contains(type_arg) {
+                type_arg.to_string()
+            } else {
+                tuff_type_to_c(ctx, type_arg).unwrap_or_else(|_| type_arg.to_string())
+            };
+            sizeof_result.push_str(&format!("sizeof({})", c_type));
+            sizeof_last = m.0 + m.1.len() + end_pos + ">()".len();
+        } else {
+            // Fallback: copy literally
+            for ch in result[m.0..].chars() {
+                sizeof_result.push(ch);
+            }
+            sizeof_last = result.len();
+        }
+    }
+    copy_chars(&result[sizeof_last..], &mut sizeof_result);
+    result = sizeof_result;
 
     // Strip literal suffixes from integer literals (C doesn't support U8 or I64 suffixes)
     let u8_validate = |before: &str| validate_u8_range(before);
@@ -2636,6 +2664,11 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
 /// Map a Tuff type name to its corresponding C type.
 /// Returns an error for unknown types instead of defaulting to "int".
 fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileError> {
+    // Pointer types: "*I32" -> "int *"
+    if let Some(inner_type) = ty.strip_prefix('*') {
+        let inner_c = tuff_type_to_c(ctx, inner_type.trim())?;
+        return Ok(format!("{} *", inner_c));
+    }
     // Built-in types
     match ty {
         "I32" => return Ok("int".to_string()),
@@ -3775,6 +3808,42 @@ mod tests {
             "extern let { atoi } = extern stdlib; extern fn atoi(str : &Str) : I32; atoi(\"7\")",
             "",
             7,
+        );
+    }
+
+    #[test]
+    fn test_sizeof_extern_type() {
+        expect_valid(
+            "extern let { type uint8_t } = extern stdint; sizeOf<uint8_t>()",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_extern_fn_type_param() {
+        expect_valid(
+            "extern let { type uint8_t } = extern stdint; extern fn to_uint8(x : I32) : uint8_t; 0",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extern_fn_is_type_check() {
+        expect_valid(
+            "extern let { strtol } = extern stdlib; extern fn strtol(str : &Str, end : &Str, base : I32) : I64; let x : I64 = strtol(\"100\", 0, 10); x is I64",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_pointer_deref() {
+        expect_valid(
+            "let x = 100; let y : *I32 = &x; *y",
+            "",
+            100,
         );
     }
 }
