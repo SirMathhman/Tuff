@@ -22,6 +22,7 @@ struct GenericFunctionTemplate {
     name: String,
     type_params: Vec<String>,
     param_names: Vec<String>,
+    rest_params: Vec<(String, String)>, // (name, type) for rest parameters like "...args : [I32; L]"
     body: String,
     return_type: Option<String>, // optional return type annotation (may contain type params)
 }
@@ -656,6 +657,7 @@ fn parse_array_size(ty: &str) -> Option<usize> {
 
 /// Extract the function name from a call expression like "get_3(100)" and look up its return type.
 /// Handles generic calls like "get<3>(100)" by looking up the template and computing the concrete return type.
+/// Also handles inferred generic calls like "toArray(1, 2, 4)" by inferring type args from argument count.
 fn get_function_call_return_type(ctx: &CompileContext, expr: &str) -> Option<String> {
     let trimmed = expr.trim();
     if let Some(paren_pos) = trimmed.find('(') {
@@ -678,13 +680,53 @@ fn get_function_call_return_type(ctx: &CompileContext, expr: &str) -> Option<Str
                 }
             }
         } else {
-            // Non-generic call - look up directly
+            // Non-generic call - look up directly first
             if let Some(ret) = ctx.function_return_types.get(raw_name) {
                 return Some(ret.clone());
+            }
+            // Try to infer from generic function template with rest params
+            if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == raw_name) {
+                // Count arguments in the call - find matching paren from the full expression
+                let after_paren = &trimmed[paren_pos..];
+                if let Some(args_end) = find_matching_paren(after_paren) {
+                    let args_inner = &after_paren[1..args_end].trim();
+                    let arg_count = if args_inner.is_empty() { 0 } else { args_inner.split(',').count() };
+                    if let Some(inferred) = infer_rest_param_types(template, arg_count) {
+                        if let Some(ref ret_type) = template.return_type {
+                            let mut concrete_ret = ret_type.clone();
+                            for (type_param, concrete_type) in template.type_params.iter().zip(inferred.iter()) {
+                                concrete_ret = concrete_ret.replace(type_param, concrete_type);
+                            }
+                            return Some(concrete_ret);
+                        }
+                    }
+                }
             }
         }
     }
     None
+}
+
+/// Infer type args for a generic function with rest params based on argument count.
+/// Returns a vector of concrete type strings (e.g., ["3"] for L=3).
+fn infer_rest_param_types(template: &GenericFunctionTemplate, arg_count: usize) -> Option<Vec<String>> {
+    if template.rest_params.is_empty() {
+        return None;
+    }
+    let mut inferred: Vec<String> = Vec::new();
+    for type_param in &template.type_params {
+        let rest_type = &template.rest_params[0].1;
+        if rest_type.contains(type_param) {
+            inferred.push(arg_count.to_string());
+        } else {
+            inferred.push(type_param.clone());
+        }
+    }
+    if inferred.len() == template.type_params.len() {
+        Some(inferred)
+    } else {
+        None
+    }
 }
 
 /// Check if a generic function call has an array return type and return the array size.
@@ -1383,14 +1425,28 @@ fn compile_expression(
         let params_inner =
             &after_fn[params_str_start..params_str_start + params_paren_end - 1].trim();
 
-        // Parse each parameter: "name : Type" or just "name"
+        // Parse each parameter: "name : Type", "...name : Type" (rest), or just "name"
         let mut param_names: Vec<String> = Vec::new();
+        let mut rest_params: Vec<(String, String)> = Vec::new(); // (name, type) for rest params
         if !params_inner.is_empty() {
             for param in params_inner.split(',') {
-                let parts: Vec<&str> = param.trim().split(':').collect();
-                let name = parts[0].trim();
-                if !name.is_empty() {
-                    param_names.push(name.to_string());
+                let param_trimmed = param.trim();
+                if let Some(stripped) = param_trimmed.strip_prefix("...") {
+                    // Rest parameter: "...args : [I32; L]"
+                    let parts: Vec<&str> = stripped.split(':').collect();
+                    let name = parts[0].trim().to_string();
+                    let ptype = if parts.len() > 1 {
+                        parts[1].trim().to_string()
+                    } else {
+                        String::new()
+                    };
+                    rest_params.push((name, ptype));
+                } else {
+                    let parts: Vec<&str> = param_trimmed.split(':').collect();
+                    let name = parts[0].trim();
+                    if !name.is_empty() {
+                        param_names.push(name.to_string());
+                    }
                 }
             }
         }
@@ -1426,6 +1482,7 @@ fn compile_expression(
                     name: func_name.clone(),
                     type_params,
                     param_names,
+                    rest_params,
                     body: func_body.to_string(),
                     return_type,
                 });
@@ -2099,32 +2156,88 @@ fn compile_expression(
         }
 
         // Resolve the concrete function name to use (generic or non-generic)
-        let resolved_name = if !call_type_args.is_empty() {
+        // If no explicit type args, try to infer from argument count for rest-parameter functions
+        let effective_type_args = if call_type_args.is_empty() {
+            // Check if this is a generic function with rest params - infer L from arg count
             if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == call_name) {
-                let concrete_name = format!("{}_{}", call_name, call_type_args.join("_"));
+                // Count arguments in the call
+                if let Some(paren_end_opt) = find_matching_paren(&final_result[m.0..]) {
+                    let args_str = &final_result[m.0 + 1..m.0 + paren_end_opt].trim();
+                    let arg_count = if args_str.is_empty() { 0 } else { args_str.split(',').count() };
+                    infer_rest_param_types(template, arg_count)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            Some(call_type_args.clone())
+        };
+
+        let resolved_name = if let Some(effective_args) = effective_type_args {
+            if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == call_name) {
+                let concrete_name = format!("{}_{}", call_name, effective_args.join("_"));
                 if !ctx
                     .generated_function_instantiations
                     .contains(&concrete_name)
                 {
                     // Substitute type parameters in the function body
                     let mut substituted_body = template.body.clone();
-                    for (type_param, concrete_type) in template.type_params.iter().zip(call_type_args.iter()) {
+                    for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
                         substituted_body = substituted_body.replace(type_param, concrete_type);
                     }
+
+                    // Handle rest parameters: expand ...args to individual params
+                    let mut all_param_names = template.param_names.clone();
+                    let mut rest_param_replacements: Vec<(String, String)> = Vec::new(); // (rest_name, array_literal)
+                    for (rest_name, _rest_type) in &template.rest_params {
+                        // Infer array size from rest type if it contains a type param
+                        let rest_type = _rest_type;
+                        let array_size = if rest_type.starts_with('[') {
+                            // Try to extract size from type, e.g., "[I32; L]" -> look for L in type_params
+                            if let Some(semi_pos) = rest_type.find(';') {
+                                let size_str = rest_type[semi_pos + 1..].trim().trim_end_matches(']');
+                                // Check if size_str is a type param that needs substitution
+                                let mut resolved_size = size_str.to_string();
+                                for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
+                                    resolved_size = resolved_size.replace(type_param, concrete_type);
+                                }
+                                // resolved_size is now just the number (e.g., "3"), parse directly
+                                resolved_size.parse().unwrap_or(0)
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+                        let expanded_params: Vec<String> = (0..array_size)
+                            .map(|i| format!("{}{}", rest_name, i))
+                            .collect();
+                        all_param_names.extend(expanded_params.clone());
+                        let array_literal = format!("[{}]", expanded_params.join(", "));
+                        rest_param_replacements.push((rest_name.clone(), array_literal));
+                    }
+
+                    // Replace rest param names in body with array literals
+                    for (rest_name, array_literal) in &rest_param_replacements {
+                        substituted_body = substituted_body.replace(rest_name, array_literal);
+                    }
+
                     let fn_read_entries = find_reads_in_order(&substituted_body);
                     let mut fn_ctx = CompileContext::new(
                         (0..fn_read_entries.len())
                             .map(|i| format!("v{}", i))
                             .collect(),
                     );
-                    for name in &template.param_names {
+                    for name in &all_param_names {
                         fn_ctx.declared_vars.insert(name.clone());
                     }
                     let (fn_body_stmts, fn_return_expr) =
                         compile_expression(&substituted_body, &mut fn_ctx)?;
                     let c_func = build_c_function(
                         &concrete_name,
-                        &template.param_names,
+                        &all_param_names,
                         &fn_read_entries,
                         &fn_body_stmts,
                         &fn_return_expr,
@@ -2132,7 +2245,7 @@ fn compile_expression(
                     // Check if return type is an array - need struct wrapper for C
                     let is_array_return = if let Some(ref ret_type) = template.return_type {
                         let mut concrete_ret = ret_type.clone();
-                        for (type_param, concrete_type) in template.type_params.iter().zip(call_type_args.iter()) {
+                        for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
                             concrete_ret = concrete_ret.replace(type_param, concrete_type);
                         }
                         ctx.function_return_types.insert(concrete_name.clone(), concrete_ret.clone());
@@ -2144,7 +2257,7 @@ fn compile_expression(
                         let size = parse_array_size(&ctx.function_return_types[&concrete_name]).unwrap_or(1);
                         build_c_function_with_return_type(
                             &concrete_name,
-                            &template.param_names,
+                            &all_param_names,
                             &fn_read_entries,
                             &fn_body_stmts,
                             &fn_return_expr,
@@ -2156,7 +2269,7 @@ fn compile_expression(
                     };
                     ctx.generated_functions.push((
                         concrete_name.clone(),
-                        template.param_names.clone(),
+                        all_param_names,
                         c_func,
                     ));
                     ctx.generated_function_instantiations
@@ -3279,6 +3392,15 @@ mod tests {
     fn test_generic_function_array_length() {
         expect_valid(
             "fn get<L : USize>(value : I32) : [I32; L] => [value; L]; get<3>(100).length",
+            "",
+            3,
+        );
+    }
+
+    #[test]
+    fn test_rest_param_array_length() {
+        expect_valid(
+            "fn toArray<L : USize>(...args : [I32; L]) : [I32; L] => args; toArray(1, 2, 4).length",
             "",
             3,
         );
