@@ -12,6 +12,8 @@ struct CompileContext {
     var_idx: usize,
     mutable_vars: Vec<String>,
     declared_vars: HashSet<String>,
+    generated_structs: Vec<String>,  // C typedef structs
+    defined_structs: HashSet<String>,  // struct names already defined
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
@@ -133,6 +135,8 @@ fn compile(source: &str) -> Result<String, CompileError> {
         var_idx: 0,
         mutable_vars: Vec::new(),
         declared_vars: HashSet::new(),
+        generated_structs: Vec::new(),
+        defined_structs: HashSet::new(),
         generated_functions: Vec::new(),
     };
     let (c_body, return_expr) = compile_expression(trimmed, &mut ctx)?;
@@ -177,10 +181,17 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
 
+        // Generate struct typedefs
+        let mut c_structs = String::new();
+        for s in &ctx.generated_structs {
+            c_structs.push_str(s);
+            c_structs.push('\n');
+        }
+
         Ok(format!(
             "{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
             includes,
-            c_prototypes.trim(),
+            format!("{}\n{}", c_structs.trim(), c_prototypes.trim()),
             c_functions.trim(),
             buf_decl,
             c_decls.trim(),
@@ -191,8 +202,15 @@ fn compile(source: &str) -> Result<String, CompileError> {
     } else {
         let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
 
-        // Include stdio.h if any generated functions use scanf (have local reads)
-        let includes = if !c_functions.is_empty() {
+        // Generate struct typedefs
+        let mut c_structs = String::new();
+        for s in &ctx.generated_structs {
+            c_structs.push_str(s);
+            c_structs.push('\n');
+        }
+
+        // Include stdio.h if any generated functions use scanf (have local reads) or structs exist
+        let includes = if !c_functions.is_empty() || !c_structs.is_empty() {
             "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
         } else {
             ""
@@ -201,7 +219,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
         Ok(format!(
             "{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
             includes,
-            c_prototypes.trim(),
+            format!("{}\n{}", c_structs.trim(), c_prototypes.trim()),
             c_functions.trim(),
             c_body,
             return_expr
@@ -468,6 +486,7 @@ fn compile_expression(
         && !trimmed.starts_with("while ")
         && !trimmed.starts_with("for ")
         && !trimmed.starts_with("fn ")
+        && !trimmed.starts_with("struct ")
     {
         if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
             let assign_part = &trimmed[..semi_pos];
@@ -809,6 +828,8 @@ fn compile_expression(
                 var_idx: 0,
                 mutable_vars: Vec::new(),
                 declared_vars: HashSet::new(),
+                generated_structs: Vec::new(),
+                defined_structs: HashSet::new(),
                 generated_functions: Vec::new(), // nested fn not supported yet
             };
 
@@ -866,6 +887,59 @@ fn compile_expression(
         } else {
             return Err(format!("Invalid fn syntax: missing semicolon after body"));
         }
+    }
+
+    // Handle struct definition: "struct Name { fields }"
+    if trimmed.starts_with("struct ") {
+        let after_struct = &trimmed[8..];  // skip "struct "
+        
+        // Find opening brace to get struct name
+        let brace_pos = after_struct.find('{').ok_or_else(|| format!("Invalid struct syntax: {}", after_struct))?;
+        let struct_name = after_struct[..brace_pos].trim();
+        
+        // Find matching closing brace
+        let brace_end = find_matching_brace(&after_struct[brace_pos..]).ok_or_else(|| format!("Invalid struct syntax: missing closing brace"))?;
+        let fields_str = &after_struct[brace_pos + 1..brace_pos + brace_end].trim();
+        
+        // Parse fields (comma-separated, each can be "name : Type")
+        let mut c_fields = String::new();
+        let mut seen_fields: HashSet<String> = HashSet::new();
+        if !fields_str.is_empty() {
+            for field in fields_str.split(',') {
+                let parts: Vec<&str> = field.trim().split(':').collect();
+                let name = parts[0].trim().to_string();
+                // Check for duplicate field names
+                if !seen_fields.insert(name.clone()) {
+                    return Err(format!("Duplicate struct field: {}", name));
+                }
+                // Default to int type
+                c_fields.push_str(&format!("\t\tint {};\n", name));
+            }
+        }
+        
+        // Generate C typedef struct (C requires 'struct' keyword before braces)
+        let mut typedef = "typedef struct {\n".to_string();
+        if !fields_str.is_empty() {
+            typedef.push_str(&c_fields);
+        }
+        typedef.push_str("} ");
+        typedef.push_str(struct_name);
+        typedef.push(';');
+        
+        // Check for duplicate struct definition
+        if !ctx.defined_structs.insert(struct_name.to_string()) {
+            return Err(format!("Duplicate struct definition: {}", struct_name));
+        }
+        
+        ctx.generated_structs.push(typedef);
+        
+        // Check for remaining content after the struct definition (semicolon-separated)
+        let rest = &after_struct[brace_pos + brace_end + 1..].trim();
+        if !rest.is_empty() {
+            return compile_expression(rest, ctx);
+        }
+        
+        return Ok((String::new(), String::from("0")));
     }
 
     // Handle if/else expression: "if (cond) a else b" → "(cond ? a : b)" or block form for statements.
@@ -1541,5 +1615,25 @@ mod tests {
             "1",
             3,
         );
+    }
+
+    #[test]
+    fn test_empty_struct() {
+        expect_valid("struct Empty {}", "", 0);
+    }
+
+    #[test]
+    fn test_struct_with_field() {
+        expect_valid("struct Empty { field : I32 }", "", 0);
+    }
+
+    #[test]
+    fn test_struct_duplicate_fields() {
+        expect_invalid("struct Empty { field : I32, field : I32 }");
+    }
+
+    #[test]
+    fn test_struct_duplicate_definition() {
+        expect_invalid("struct Empty {} struct Empty {}");
     }
 }
