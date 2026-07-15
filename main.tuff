@@ -1,4 +1,20 @@
-// extern let { malloc, free } = extern stdlib;
+extern let { malloc, free } = extern stdlib;
+
+struct Some<T> {
+    value : T;
+}
+
+struct None<T> {
+}
+
+type Option<T> = Some<T> | None<T>;
+
+
+
+type Alloc<T, L> = *[T; L] then free;
+
+extern fn malloc() : Alloc<T, L>;
+extern fn free(alloc : Alloc<T, L>) : Void;
 
 struct Box {
 

@@ -46,6 +46,8 @@ struct CompileContext {
     generated_function_instantiations: HashSet<String>, // already-generated monomorphized function names
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
     function_return_types: HashMap<String, String>, // function name -> return type
+    extern_functions: HashMap<String, (Vec<String>, Vec<String>, String)>, // name -> (param_names, param_types, return_type)
+    extern_includes: Vec<String>, // C headers to include (e.g., "stdlib.h")
 }
 
 impl CompileContext {
@@ -68,6 +70,8 @@ impl CompileContext {
             generated_function_instantiations: HashSet::new(),
             generated_functions: Vec::new(),
             function_return_types: HashMap::new(),
+            extern_functions: HashMap::new(),
+            extern_includes: Vec::new(),
         }
     }
 }
@@ -312,6 +316,9 @@ fn build_c_function_with_return_type(
         let ret_struct = format!("{}_ret", func_name);
         let return_line = format!("\t\treturn ({0}){{.data = {1}}};\n\t}}\n", ret_struct, fn_return_expr);
         c_func.push_str(&return_line);
+    } else if return_type == "void" && fn_return_expr.is_empty() {
+        // Void function with no return expression — just close the body
+        c_func.push_str("}\n");
     } else {
         c_func.push_str(&format!("\t\treturn {};\n}}\n", fn_return_expr));
     }
@@ -504,6 +511,11 @@ fn compile(source: &str) -> Result<String, CompileError> {
         } else {
             "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
         };
+        // Add extern includes
+        let mut all_includes = includes.to_string();
+        for inc in &ctx.extern_includes {
+            all_includes.push_str(&format!("\n#include <{}>", inc));
+        }
         let buf_decl = if has_bool_reads {
             "\tchar buf[64];"
         } else {
@@ -515,14 +527,17 @@ fn compile(source: &str) -> Result<String, CompileError> {
         // Generate struct and union typedefs
         let (c_structs, c_unions) = generate_typedefs(&ctx);
 
+        // Generate extern declarations
+        let extern_decls = generate_extern_decls(&ctx);
+
         let final_return = if return_expr.is_empty() {
             "0".to_string()
         } else {
             return_expr
         };
         Ok(format!(
-            "{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
-            includes,
+            "{}\n{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
+            all_includes,
             c_func_typedefs.trim(),
             format!(
                 "{}\n{}\n{}",
@@ -530,6 +545,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
                 c_unions.trim(),
                 c_prototypes.trim()
             ),
+            extern_decls.trim(),
             c_functions.trim(),
             buf_decl,
             c_decls.trim(),
@@ -550,11 +566,22 @@ fn compile(source: &str) -> Result<String, CompileError> {
             .any(|types| types.iter().any(|t| t == "&Str"));
 
         // Include stdio.h if any generated functions use scanf (have local reads) or structs exist
-        let includes = if !c_functions.is_empty() || !c_structs.is_empty() || has_str_type {
-            "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>"
+        let mut includes = if !c_functions.is_empty() || !c_structs.is_empty() || has_str_type {
+            "#include <stdio.h>\n#include <string.h>\n#include <stdbool.h>".to_string()
         } else {
-            ""
+            String::new()
         };
+        // Add extern includes
+        for inc in &ctx.extern_includes {
+            if includes.is_empty() {
+                includes = format!("#include <{}>", inc);
+            } else {
+                includes.push_str(&format!("\n#include <{}>", inc));
+            }
+        }
+
+        // Generate extern declarations
+        let extern_decls = generate_extern_decls(&ctx);
 
         let final_return = if return_expr.is_empty() {
             "0".to_string()
@@ -562,7 +589,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             return_expr
         };
         Ok(format!(
-            "{}\n{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
             includes,
             c_func_typedefs.trim(),
             format!(
@@ -571,11 +598,40 @@ fn compile(source: &str) -> Result<String, CompileError> {
                 c_unions.trim(),
                 c_prototypes.trim()
             ),
+            extern_decls.trim(),
             c_functions.trim(),
             c_body,
             final_return
         ))
     }
+}
+
+/// Generate C extern function declarations for FFI.
+fn generate_extern_decls(ctx: &CompileContext) -> String {
+    let mut result = String::new();
+    for (name, (params, param_types, ret_type)) in &ctx.extern_functions {
+        if ret_type.is_empty() {
+            continue; // placeholder from extern let, skip
+        }
+        let c_ret = match ret_type.as_str() {
+            "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" => "int",
+            "&Str" => "const char*",
+            _ => "int",
+        };
+        let param_sig: Vec<String> = params.iter().enumerate().map(|(i, p)| {
+            let c_type = if i < param_types.len() {
+                match param_types[i].as_str() {
+                    "&Str" => "const char*",
+                    _ => "int",
+                }
+            } else {
+                "int"
+            };
+            format!("{} {}", c_type, p)
+        }).collect();
+        result.push_str(&format!("extern {} {}({});\n", c_ret, name, param_sig.join(", ")));
+    }
+    result
 }
 
 /// Generate C function prototypes and definitions from compiled functions.
@@ -584,7 +640,9 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
     let mut c_prototypes = String::new();
     for (name, params, _func_code) in functions {
         let return_type = if let Some(ret) = function_return_types.get(name) {
-            if ret.starts_with('[') {
+            if ret == "Void" {
+                "void".to_string()
+            } else if ret.starts_with('[') {
                 let size = parse_array_size(ret).unwrap_or(1);
                 let ret_struct = format!("{}_ret", name);
                 c_typedefs.push_str(&format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct));
@@ -991,6 +1049,7 @@ fn compile_expression(
         && !trimmed.starts_with("fn ")
         && !trimmed.starts_with("struct ")
         && !trimmed.starts_with("type ")
+        && !trimmed.starts_with("extern ")
     {
         if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
             let assign_part = &trimmed[..semi_pos];
@@ -1468,6 +1527,79 @@ fn compile_expression(
         }
     }
 
+    // Handle extern declarations: "extern let { name } = extern header; extern fn name(params) : Type;"
+    if trimmed.starts_with("extern ") {
+        let after_extern = trimmed[7..].trim_start();
+        if after_extern.starts_with("let ") {
+            // "extern let { name1, name2 } = extern header;"
+            let after_let = after_extern[4..].trim_start();
+            if let Some(closing_brace) = find_matching_brace(after_let) {
+                let names_str = &after_let[1..closing_brace];
+                let after_brace = after_let[closing_brace + 1..].trim_start();
+                if let Some(eq_pos) = after_brace.find('=') {
+                    let after_eq = after_brace[eq_pos + 1..].trim_start();
+                    if let Some(semi_pos) = find_top_level_semicolon(after_eq) {
+                        let header = after_eq[..semi_pos].trim();
+                        let remaining = after_eq[semi_pos + 1..].trim();
+                        // "extern stdlib" -> "stdlib.h"
+                        let header_name = header.strip_prefix("extern ").unwrap_or(header);
+                        let include_name = format!("{}.h", header_name);
+                        if !ctx.extern_includes.contains(&include_name) {
+                            ctx.extern_includes.push(include_name);
+                        }
+                        // Register each name as an extern function (signature will come from extern fn)
+                        for name in names_str.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                            ctx.extern_functions.entry(name.to_string()).or_insert((Vec::new(), Vec::new(), String::new()));
+                        }
+                        if !remaining.is_empty() {
+                            return compile_expression(remaining, ctx);
+                        }
+                        return Ok((String::new(), String::new()));
+                    }
+                }
+            }
+        } else if after_extern.starts_with("fn ") {
+            // "extern fn name(params) : Type;"
+            let after_fn = after_extern[3..].trim_start();
+            let paren_pos = after_fn.find('(')
+                .ok_or_else(|| format!("Invalid extern fn syntax: {}", after_fn))?;
+            let func_name = after_fn[..paren_pos].trim();
+            let params_str_start = paren_pos + 1;
+            let params_paren_end = find_matching_paren(&after_fn[params_str_start - 1..])
+                .ok_or_else(|| format!("Invalid extern fn syntax: missing closing paren"))?;
+            let params_inner = &after_fn[params_str_start..params_str_start + params_paren_end - 1].trim();
+            let after_params = &after_fn[params_str_start + params_paren_end..].trim();
+            // Parse return type: ": Type;"
+            let colon_pos = after_params.find(':')
+                .ok_or_else(|| format!("Invalid extern fn syntax: missing return type"))?;
+            let after_colon = after_params[colon_pos + 1..].trim();
+            let semi_pos = find_top_level_semicolon(after_colon)
+                .ok_or_else(|| format!("Invalid extern fn syntax: missing semicolon"))?;
+            let ret_type = after_colon[..semi_pos].trim().to_string();
+            let remaining = after_colon[semi_pos + 1..].trim();
+            // Parse param names and types
+            let mut param_names: Vec<String> = Vec::new();
+            let mut param_types: Vec<String> = Vec::new();
+            if !params_inner.is_empty() {
+                for param in params_inner.split(',') {
+                    let parts: Vec<&str> = param.trim().split(':').collect();
+                    if !parts.is_empty() && !parts[0].trim().is_empty() {
+                        param_names.push(parts[0].trim().to_string());
+                        let ptype = if parts.len() > 1 { parts[1].trim().to_string() } else { "I32".to_string() };
+                        param_types.push(ptype);
+                    }
+                }
+            }
+            ctx.extern_functions.insert(func_name.to_string(), (param_names, param_types, ret_type.clone()));
+            ctx.function_return_types.insert(func_name.to_string(), ret_type);
+            if !remaining.is_empty() {
+                return compile_expression(remaining, ctx);
+            }
+            return Ok((String::new(), String::new()));
+        }
+        return Err(format!("Invalid extern syntax: {}", after_extern));
+    }
+
     // Handle function definition: "fn name(params) => body; remaining"
     // Also handles generic functions: "fn name<T>(params) => body; remaining"
     if trimmed.starts_with("fn ") {
@@ -1576,15 +1708,30 @@ fn compile_expression(
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
-            let c_func = build_c_function(
-                &func_name,
-                &param_names,
-                &fn_read_entries,
-                &fn_body_stmts,
-                &fn_return_expr,
-            );
+            let c_func = if return_type.as_deref() == Some("Void") {
+                build_c_function_with_return_type(
+                    &func_name,
+                    &param_names,
+                    &fn_read_entries,
+                    &fn_body_stmts,
+                    "",
+                    "void",
+                    None,
+                )
+            } else {
+                build_c_function(
+                    &func_name,
+                    &param_names,
+                    &fn_read_entries,
+                    &fn_body_stmts,
+                    &fn_return_expr,
+                )
+            };
             ctx.generated_functions
-                .push((func_name, param_names, c_func));
+                .push((func_name.clone(), param_names, c_func));
+            if let Some(ref ret) = return_type {
+                ctx.function_return_types.insert(func_name, ret.clone());
+            }
 
             // Compile remaining expression after the function definition
             if !remaining.is_empty() {
@@ -2372,6 +2519,8 @@ fn compile_expression(
                 .iter()
                 .any(|(name, _, _)| *name == call_name)
         {
+            Some(call_name.clone())
+        } else if ctx.extern_functions.contains_key(&call_name) {
             Some(call_name.clone())
         } else {
             None
@@ -3352,6 +3501,11 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_function() {
+        expect_valid("fn empty() : Void => {};", "", 0);
+    }
+
+    #[test]
     fn test_fn_with_params_and_type_annotation() {
         expect_valid(
             "fn add(offset : I32) : I32 => read() + offset; add(2)",
@@ -3610,6 +3764,15 @@ mod tests {
     fn test_struct_destructuring() {
         expect_valid(
             "struct Point { x : I32, y : I32 }; let { x, y } = Point { x : 3, y : 4 }; x + y",
+            "",
+            7,
+        );
+    }
+
+    #[test]
+    fn test_extern_ffi() {
+        expect_valid(
+            "extern let { atoi } = extern stdlib; extern fn atoi(str : &Str) : I32; atoi(\"7\")",
             "",
             7,
         );

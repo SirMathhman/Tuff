@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef struct {
 } Box;
@@ -54,6 +55,8 @@ typedef struct {
 } CompileContext;
 
 
+extern int malloc();
+extern int free(int alloc, int L>);
 int main() {
 	
 	return 0;
