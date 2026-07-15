@@ -963,30 +963,47 @@ fn compile_expression(
                 // Determine which struct type is actually instantiated from the RHS
                 // e.g., "Ok { value : read() }" -> "Ok" or "Wrapper<I32> { ... }" -> "Wrapper_I32"
                 // Only returns Some if the RHS is a struct instantiation (not a plain expression like "100")
-                let rhs_concrete_name = after_eq.split_whitespace().next().and_then(|word| {
-                    // Check for generic instantiation: "Wrapper<I32>" -> "Wrapper_I32"
-                    if let Some(angle_start) = word.find('<') {
-                        if let Some(angle_end) = word.find('>') {
-                            let base = &word[..angle_start];
-                            let type_args_str = &word[angle_start + 1..angle_end];
-                            let concrete_name = build_concrete_name(base, type_args_str);
-                            // Only return if the base is a defined struct (generic or concrete)
-                            if ctx.defined_structs.contains(base)
-                                || ctx.defined_structs.contains(&concrete_name)
-                            {
-                                return Some(concrete_name);
+                let rhs_concrete_name = if let Some(angle_start) = after_eq.find('<') {
+                    // Generic instantiation: find matching '>' by tracking depth
+                    let base = after_eq[..angle_start].trim();
+                    let rest = &after_eq[angle_start + 1..];
+                    let mut depth = 1; // start at 1 for the opening '<'
+                    let mut angle_end = None;
+                    for (i, ch) in rest.chars().enumerate() {
+                        match ch {
+                            '<' | '(' | '[' => depth += 1,
+                            '>' | ')' | ']' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    angle_end = Some(i);
+                                    break;
+                                }
                             }
-                            return None;
+                            _ => {}
                         }
                     }
+                    if let Some(end) = angle_end {
+                        let type_args_str = &rest[..end];
+                        let concrete_name = build_concrete_name(base, type_args_str);
+                        if ctx.defined_structs.contains(base) || ctx.defined_structs.contains(&concrete_name) {
+                            Some(concrete_name)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else if let Some(word) = after_eq.split_whitespace().next() {
                     // Non-generic struct: "Ok" -> "Ok" (only if it's a defined struct)
-                    let base = word.split('<').next().unwrap_or(word);
+                    let base = word;
                     if ctx.defined_structs.contains(base) {
                         Some(base.to_string())
                     } else {
                         None
                     }
-                });
+                } else {
+                    None
+                };
                 // For union types, pick the struct that matches the RHS instantiation
                 let resolved_struct_type = rhs_concrete_name.clone().or_else(|| {
                     all_resolved_types
@@ -2278,6 +2295,13 @@ fn sanitize_type_name(ty: &str) -> String {
             .map(|a| sanitize_type_name(a.trim()))
             .collect();
         format!("{}_{}", sanitize_type_name(base), sanitized_args.join("_"))
+    } else if let Some(tuple_types) = parse_tuple_type(ty) {
+        // Handle tuple types: "(I32, I32)" -> "Tuple_I32_I32"
+        let sanitized_elements: Vec<String> = tuple_types
+            .iter()
+            .map(|e| sanitize_type_name(e.trim()))
+            .collect();
+        format!("Tuple_{}", sanitized_elements.join("_"))
     } else {
         ty.replace('&', "").replace(' ', "_")
     }
@@ -3054,6 +3078,15 @@ mod tests {
     fn test_struct_field_with_tuple_type() {
         expect_valid(
             "struct Point { coords : (I32, I32) }; let p = Point { coords : (3, 4) }; p.coords.0 + p.coords.1",
+            "",
+            7,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_with_tuple_type_arg() {
+        expect_valid(
+            "struct Wrapper<T> { value : T }; let w : Wrapper<(I32, I32)> = Wrapper<(I32, I32)> { value : (3, 4) }; w.value.0 + w.value.1",
             "",
             7,
         );
