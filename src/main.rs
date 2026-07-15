@@ -1328,6 +1328,15 @@ fn compile_expression(
     /// Validate that a U8 literal value is within range (0-255).
 fn validate_u8_range(before: &str) -> Result<(), CompileError> {
     let num_str = before.trim_end_matches(|c: char| !c.is_ascii_digit());
+    // Check for negative values (U8 cannot be negative)
+    if num_str.starts_with('-') {
+        if let Ok(val) = num_str.parse::<i64>() {
+            return Err(format!(
+                "U8 literal out of range: {} (must be 0-255)",
+                val
+            ));
+        }
+    }
     if let Ok(val) = num_str.parse::<u64>() {
         if val > 255 {
             return Err(format!(
@@ -1834,6 +1843,11 @@ mod tests {
     #[test]
     fn test_u8_literal_out_of_range() {
         expect_invalid("256U8");
+    }
+
+    #[test]
+    fn test_u8_literal_negative() {
+        expect_invalid("-1U8");
     }
 
     #[test]
