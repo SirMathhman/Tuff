@@ -1371,6 +1371,43 @@ fn compile_expression(
     // Copy any trailing text after last read().
     copy_chars(&trimmed[last..], &mut result);
 
+    // Fourth pass: strip U8 suffix from integer literals (C doesn't support U8)
+    let mut stripped = String::new();
+    let mut skip_until = 0;
+    for (i, m) in result.match_indices("U8").enumerate() {
+        // Copy text since last position
+        let start = if i == 0 { 0 } else { skip_until };
+        if m.0 > start {
+            stripped.push_str(&result[start..m.0]);
+        }
+        // Check if the character before U8 is a digit
+        let before = &result[..m.0];
+        if let Some(last_ch) = before.chars().last() {
+            if last_ch.is_ascii_digit() {
+                let after = &result[m.0 + 2..];
+                // Only strip if followed by a non-alphanumeric char (not part of identifier)
+                if let Some(next_ch) = after.chars().next() {
+                    if !next_ch.is_alphanumeric() && next_ch != '_' {
+                        skip_until = m.0 + 2; // skip U8
+                        continue;
+                    }
+                } else {
+                    // End of string - safe to strip
+                    skip_until = m.0 + 2;
+                    continue;
+                }
+            }
+        }
+        // Not a numeric literal - keep U8
+        stripped.push_str("U8");
+        skip_until = m.0 + 2;
+    }
+    // Copy remaining text
+    if skip_until < result.len() {
+        stripped.push_str(&result[skip_until..]);
+    }
+    result = stripped;
+
     // Third pass: handle function calls (generic & non-generic) inline in the result
     // This replaces function calls in-place so surrounding expressions (e.g., "+ 1") are preserved
     let final_result = result;
@@ -1770,6 +1807,11 @@ mod tests {
     #[test]
     fn test_simple_let_exit_zero() {
         expect_valid("let x = 100;", "", 0);
+    }
+
+    #[test]
+    fn test_u8_literal() {
+        expect_valid("100U8", "", 100);
     }
 
     #[test]
