@@ -1411,8 +1411,15 @@ fn compile_expression(
             let mut seen_fields: HashSet<String> = HashSet::new();
             if !fields_str.is_empty() {
                 for field in split_top_level_commas(fields_str) {
-                    let parts: Vec<&str> = field.trim().split(':').collect();
+                    let field = field.trim();
+                    if field.is_empty() {
+                        continue;
+                    }
+                    let parts: Vec<&str> = field.split(':').collect();
                     let name = parts[0].trim().to_string();
+                    if name.is_empty() {
+                        continue;
+                    }
                     // Check for duplicate field names
                     if !seen_fields.insert(name.clone()) {
                         return Err(format!("Duplicate struct field: {}", name));
