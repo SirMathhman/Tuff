@@ -352,8 +352,8 @@ fn compile_expression(
         return Ok((String::new(), String::from("")));
     }
 
-    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if")
-    if !trimmed.starts_with("let ") && !trimmed.starts_with('{') && !trimmed.starts_with("if ") {
+    // Check for plain reassignment: "x = <expr>; <final>" (no "let", no "if", no "while")
+    if !trimmed.starts_with("let ") && !trimmed.starts_with('{') && !trimmed.starts_with("if ") && !trimmed.starts_with("while ") {
         if let Some(semi_pos) = find_top_level_semicolon(trimmed) {
             let assign_part = &trimmed[..semi_pos];
             let final_part = &trimmed[semi_pos + 1..];
@@ -545,13 +545,45 @@ fn compile_expression(
     }
 
 
+    // Helper: parse "keyword (cond) rest" → (&cond, &rest)
+    fn parse_cond_and_rest(input: &str, keyword_len: usize) -> Option<(&str, &str)> {
+        let after_kw = &input[keyword_len..];
+        let paren_end = find_matching_paren(after_kw)?;
+        let cond = &after_kw[1..paren_end];
+        let rest = &after_kw[paren_end + 2..].trim();
+        Some((cond, rest))
+    }
+
+    // Handle while loop: "while (cond) body; remaining" → "while (cond) { body; }"
+    if trimmed.starts_with("while ") {
+        let (cond, rest) = parse_cond_and_rest(trimmed, 6).unwrap();
+
+        // Check if there's a semicolon separating the loop body from what follows.
+        let (body_stmts, body_result) = if let Some(semi_pos) = find_top_level_semicolon(rest) {
+            compile_expression(&rest[..semi_pos], ctx)?
+        } else {
+            compile_expression(rest, ctx)?
+        };
+
+        let (_, cond_result) = compile_expression(cond, ctx)?;
+        let c_stmt = build_c_block("while", &cond_result, &body_stmts, &body_result);
+
+        // If there's content after the while loop (e.g., "; x"), use it as return.
+        if let Some(semi_pos) = find_top_level_semicolon(rest) {
+            let after_while = rest[semi_pos + 1..].trim();
+            if !after_while.is_empty() {
+                let (_, after_result) = compile_expression(after_while, ctx)?;
+                return Ok((c_stmt, after_result));
+            }
+        }
+
+        return Ok((c_stmt, String::new()));
+    }
+
     // Handle if/else expression: "if (cond) a else b" → "(cond ? a : b)" or block form for statements.
     // Or statement form: "if (cond) stmt;" → "if (cond) { stmt; }"
     if trimmed.starts_with("if ") {
-        let paren_start = 3; // skip "if "
-        let paren_end = find_matching_paren(&trimmed[paren_start..]).unwrap();
-        let cond = &trimmed[paren_start + 1..paren_start + paren_end];
-        let rest = &trimmed[paren_start + paren_end + 2..].trim();
+        let (cond, rest) = parse_cond_and_rest(trimmed, 3).unwrap();
 
         // Find "else" keyword (not inside parens)
         if let Some(else_pos) = find_top_level_else(rest) {
@@ -775,18 +807,21 @@ fn find_top_level_semicolon(s: &str) -> Option<usize> {
 }
 
 /// Find matching closing paren for opening paren at position 0.
+/// Skips content inside angle brackets used as type parameters (e.g., read<Bool>()),
+/// but treats standalone < and > as regular characters (comparison operators).
 fn find_matching_paren(s: &str) -> Option<usize> {
     if !s.starts_with('(') {
         return None;
     }
     let mut depth = 0;
-    let mut in_angle_bracket = false;
-    for (i, ch) in s.chars().enumerate() {
-        match ch {
-            '<' => in_angle_bracket = true,
-            '>' if in_angle_bracket => in_angle_bracket = false,
-            '(' if !in_angle_bracket => depth += 1,
-            ')' if !in_angle_bracket => {
+    let mut angle_depth = 0; // tracks nested <...> for type parameters
+    let chars: Vec<char> = s.chars().collect();
+    for (i, ch) in chars.iter().enumerate() {
+        match *ch {
+            '<' if i > 0 && chars[i - 1].is_alphanumeric() => angle_depth += 1,
+            '>' if angle_depth > 0 => angle_depth -= 1,
+            '(' if angle_depth == 0 => depth += 1,
+            ')' if angle_depth == 0 => {
                 depth -= 1;
                 if depth == 0 {
                     return Some(i);
@@ -810,6 +845,24 @@ fn find_top_level_else(s: &str) -> Option<usize> {
         }
     }
     None
+}
+
+/// Build a C block statement like "while (cond) { body; }" or "if (cond) { stmt; }".
+fn build_c_block(keyword: &str, cond_result: &str, body_stmts: &str, body_result: &str) -> String {
+    let mut c_stmt = String::new();
+    c_stmt.push_str(&format!("\t{} ({}) {{\n", keyword, cond_result));
+    if !body_stmts.is_empty() {
+        for line in body_stmts.lines() {
+            c_stmt.push('\t');
+            c_stmt.push_str(line);
+            c_stmt.push('\n');
+        }
+    }
+    if !body_result.is_empty() {
+        c_stmt.push_str(&format!("\t\t{};\n", body_result));
+    }
+    c_stmt.push_str("\t}");
+    c_stmt
 }
 
 #[allow(dead_code)]
@@ -1113,6 +1166,15 @@ mod tests {
             "let mut x = 0; if (read<Bool>()) { x = read(); } else { x = read() + 1; } x",
             "false 0 8",
             9,
+        );
+    }
+
+    #[test]
+    fn test_while_loop_with_mut_reassign() {
+        expect_valid(
+            "let mut x = 0; let total = read(); while (x < total) x += 1; x",
+            "4",
+            4,
         );
     }
 }
