@@ -628,8 +628,8 @@ fn split_top_level_commas(s: &str) -> Vec<&str> {
     while i < len {
         let ch = chars[i];
         match ch {
-            '<' | '[' | '{' => depth += 1,
-            '>' | ']' | '}' => depth -= 1,
+            '<' | '[' | '{' | '(' => depth += 1,
+            '>' | ']' | '}' | ')' => depth -= 1,
             ',' if depth == 0 => {
                 parts.push(&s[start..i]);
                 start = i + 1;
@@ -1462,6 +1462,8 @@ fn compile_expression(
 
         // Check for remaining content after the struct definition (semicolon-separated)
         let rest = &after_struct[brace_pos + brace_end + 1..].trim();
+        // Strip leading semicolons; keep trailing semicolons for let/assignment handlers
+        let rest = rest.trim_start_matches(';').trim();
         // Strip trailing semicolons only when followed by another struct definition
         let rest = if rest.starts_with("struct ") {
             rest.trim_end_matches(';').trim()
@@ -1654,7 +1656,7 @@ fn compile_expression(
                     let mut c_body = String::new();
                     let mut compiled_fields = Vec::new();
                     if !fields_str.is_empty() {
-                        for field in fields_str.split(',') {
+                        for field in split_top_level_commas(fields_str) {
                             let field = field.trim();
                             if let Some(colon_pos) = field.find(':') {
                                 let field_name = field[..colon_pos].trim();
@@ -3043,6 +3045,15 @@ mod tests {
     fn test_tuple_type_with_field_access() {
         expect_valid(
             "let x : (I32, I32) = (3, 4); x.0 + x.1",
+            "",
+            7,
+        );
+    }
+
+    #[test]
+    fn test_struct_field_with_tuple_type() {
+        expect_valid(
+            "struct Point { coords : (I32, I32) }; let p = Point { coords : (3, 4) }; p.coords.0 + p.coords.1",
             "",
             7,
         );
