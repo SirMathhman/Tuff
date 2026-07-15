@@ -23,6 +23,7 @@ struct GenericFunctionTemplate {
     type_params: Vec<String>,
     param_names: Vec<String>,
     body: String,
+    return_type: Option<String>, // optional return type annotation (may contain type params)
 }
 
 /// Shared compilation context passed between compiler functions.
@@ -43,6 +44,7 @@ struct CompileContext {
     generic_functions: Vec<GenericFunctionTemplate>, // generic function templates
     generated_function_instantiations: HashSet<String>, // already-generated monomorphized function names
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
+    function_return_types: HashMap<String, String>, // function name -> return type
 }
 
 impl CompileContext {
@@ -64,6 +66,7 @@ impl CompileContext {
             generic_functions: Vec::new(),
             generated_function_instantiations: HashSet::new(),
             generated_functions: Vec::new(),
+            function_return_types: HashMap::new(),
         }
     }
 }
@@ -223,7 +226,15 @@ fn parse_generic_params(raw: &str) -> Result<(String, Vec<String>), CompileError
             let name = raw[..angle_start].trim().to_string();
             let params: Vec<String> = raw[angle_start + 1..angle_end]
                 .split(',')
-                .map(|p| p.trim().to_string())
+                .map(|p| {
+                    // Extract just the name part, ignoring constraints like ": USize"
+                    let p = p.trim();
+                    if let Some(colon_pos) = p.find(':') {
+                        p[..colon_pos].trim().to_string()
+                    } else {
+                        p.to_string()
+                    }
+                })
                 .collect();
             Ok((name, params))
         } else {
@@ -242,13 +253,34 @@ fn build_c_function(
     fn_body_stmts: &str,
     fn_return_expr: &str,
 ) -> String {
+    build_c_function_with_return_type(func_name, param_names, fn_read_entries, fn_body_stmts, fn_return_expr, "int", None)
+}
+
+/// Build a C function with a custom return type and optional array return wrapper.
+fn build_c_function_with_return_type(
+    func_name: &str,
+    param_names: &[String],
+    fn_read_entries: &[(usize, ReadType)],
+    fn_body_stmts: &str,
+    fn_return_expr: &str,
+    return_type: &str,
+    array_size: Option<usize>,
+) -> String {
     let param_sig: Vec<String> = param_names.iter().map(|n| format!("int {}", n)).collect();
     let sig_str = if param_sig.is_empty() {
         "void"
     } else {
         &param_sig.join(", ")
     };
-    let mut c_func = format!("int {}({}) {{\n", func_name, sig_str);
+    let mut c_func = String::new();
+
+    // If returning an array, use the struct wrapper type (typedef generated elsewhere)
+    if let Some(_size) = array_size {
+        let ret_struct = format!("{}_ret", func_name);
+        c_func.push_str(&format!("{} {}({}) {{\n", ret_struct, func_name, sig_str));
+    } else {
+        c_func.push_str(&format!("{} {}({}) {{\n", return_type, func_name, sig_str));
+    }
 
     // Add local reads after parameters
     if !fn_read_entries.is_empty() {
@@ -274,7 +306,14 @@ fn build_c_function(
     if !fn_body_stmts.is_empty() {
         c_func.push_str(fn_body_stmts);
     }
-    c_func.push_str(&format!("\t\treturn {};\n}}\n", fn_return_expr));
+
+    if let Some(_size) = array_size {
+        let ret_struct = format!("{}_ret", func_name);
+        let return_line = format!("\t\treturn ({0}){{.data = {1}}};\n\t}}\n", ret_struct, fn_return_expr);
+        c_func.push_str(&return_line);
+    } else {
+        c_func.push_str(&format!("\t\treturn {};\n}}\n", fn_return_expr));
+    }
     c_func
 }
 
@@ -470,7 +509,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             ""
         };
 
-        let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
+        let (c_func_typedefs, c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions, &ctx.function_return_types);
 
         // Generate struct and union typedefs
         let (c_structs, c_unions) = generate_typedefs(&ctx);
@@ -481,8 +520,9 @@ fn compile(source: &str) -> Result<String, CompileError> {
             return_expr
         };
         Ok(format!(
-            "{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
             includes,
+            c_func_typedefs.trim(),
             format!(
                 "{}\n{}\n{}",
                 c_structs.trim(),
@@ -497,7 +537,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             final_return
         ))
     } else {
-        let (c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions);
+        let (c_func_typedefs, c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions, &ctx.function_return_types);
 
         // Generate struct and union typedefs
         let (c_structs, c_unions) = generate_typedefs(&ctx);
@@ -521,8 +561,9 @@ fn compile(source: &str) -> Result<String, CompileError> {
             return_expr
         };
         Ok(format!(
-            "{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
             includes,
+            c_func_typedefs.trim(),
             format!(
                 "{}\n{}\n{}",
                 c_structs.trim(),
@@ -537,14 +578,27 @@ fn compile(source: &str) -> Result<String, CompileError> {
 }
 
 /// Generate C function prototypes and definitions from compiled functions.
-fn generate_function_code(functions: &[(String, Vec<String>, String)]) -> (String, String) {
+fn generate_function_code(functions: &[(String, Vec<String>, String)], function_return_types: &HashMap<String, String>) -> (String, String, String) {
+    let mut c_typedefs = String::new();
     let mut c_prototypes = String::new();
     for (name, params, _func_code) in functions {
+        let return_type = if let Some(ret) = function_return_types.get(name) {
+            if ret.starts_with('[') {
+                let size = parse_array_size(ret).unwrap_or(1);
+                let ret_struct = format!("{}_ret", name);
+                c_typedefs.push_str(&format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct));
+                ret_struct
+            } else {
+                "int".to_string()
+            }
+        } else {
+            "int".to_string()
+        };
         if params.is_empty() {
-            c_prototypes.push_str(&format!("int {}(void);\n", name));
+            c_prototypes.push_str(&format!("{} {}(void);\n", return_type, name));
         } else {
             let param_sig: Vec<String> = params.iter().map(|p| format!("int {}", p)).collect();
-            c_prototypes.push_str(&format!("int {}({});\n", name, param_sig.join(", ")));
+            c_prototypes.push_str(&format!("{} {}({});\n", return_type, name, param_sig.join(", ")));
         }
     }
 
@@ -554,7 +608,7 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)]) -> (Strin
         c_functions.push('\n');
     }
 
-    (c_prototypes, c_functions)
+    (c_typedefs, c_prototypes, c_functions)
 }
 
 /// Parse a let declaration, extracting the variable name, mutability, and optional type annotation.
@@ -598,6 +652,50 @@ fn parse_array_size(ty: &str) -> Option<usize> {
     } else {
         None
     }
+}
+
+/// Extract the function name from a call expression like "get_3(100)" and look up its return type.
+/// Handles generic calls like "get<3>(100)" by looking up the template and computing the concrete return type.
+fn get_function_call_return_type(ctx: &CompileContext, expr: &str) -> Option<String> {
+    let trimmed = expr.trim();
+    if let Some(paren_pos) = trimmed.find('(') {
+        let raw_name = trimmed[..paren_pos].trim();
+        // Check if this is a generic call "get<3>"
+        if let Some(angle_start) = raw_name.find('<') {
+            if let Some(angle_end) = raw_name.find('>') {
+                let base = raw_name[..angle_start].trim();
+                let type_args_str = &raw_name[angle_start + 1..angle_end];
+                let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
+                // Look up the template
+                if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == base) {
+                    if let Some(ref ret_type) = template.return_type {
+                        let mut concrete_ret = ret_type.clone();
+                        for (type_param, concrete_type) in template.type_params.iter().zip(type_args.iter()) {
+                            concrete_ret = concrete_ret.replace(type_param, concrete_type);
+                        }
+                        return Some(concrete_ret);
+                    }
+                }
+            }
+        } else {
+            // Non-generic call - look up directly
+            if let Some(ret) = ctx.function_return_types.get(raw_name) {
+                return Some(ret.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Check if a generic function call has an array return type and return the array size.
+#[allow(dead_code)]
+fn get_generic_call_array_length(ctx: &CompileContext, expr: &str) -> Option<usize> {
+    if let Some(ret_type) = get_function_call_return_type(ctx, expr) {
+        if ret_type.starts_with('[') {
+            return parse_array_size(&ret_type);
+        }
+    }
+    None
 }
 
 /// Find the index of a character at the top level (not inside any braces or brackets).
@@ -654,6 +752,22 @@ fn parse_array_repeat(s: &str) -> Option<(&str, usize)> {
     Some((value_part, count))
 }
 
+/// Compile an array repeat expression "[value; count]" into C initializer syntax.
+/// Returns (C body statements, C initializer expression).
+fn compile_array_repeat_expr(
+    trimmed: &str,
+    ctx: &mut CompileContext,
+) -> Result<(String, String), CompileError> {
+    if let Some((repeat_value, repeat_count)) = parse_array_repeat(trimmed) {
+        let (val_body, val_result) = compile_expression(repeat_value, ctx)?;
+        let repeated: Vec<_> = (0..repeat_count).map(|_| val_result.clone()).collect();
+        let init = format!("{{{}}}", repeated.join(", "));
+        Ok((val_body, init))
+    } else {
+        Err("Not an array repeat expression".to_string())
+    }
+}
+
 /// Parse the contents of an array literal, returning the items and the closing bracket position.
 fn parse_array_items(s: &str) -> Option<(Vec<&str>, usize)> {
     let closing_bracket = find_matching_bracket(s)?;
@@ -678,10 +792,8 @@ fn compile_array_decl(
     debug_assert!(trimmed.starts_with('['));
 
     // Check for array repeat syntax: [value; count]
-    if let Some((repeat_value, repeat_count)) = parse_array_repeat(trimmed) {
-        let (val_body, val_result) = compile_expression(repeat_value, ctx)?;
-        let repeated: Vec<_> = (0..repeat_count).map(|_| val_result.clone()).collect();
-        let init = format!("{{{}}}", repeated.join(", "));
+    if let Ok((val_body, init)) = compile_array_repeat_expr(trimmed, ctx) {
+        let repeat_count = parse_array_repeat(trimmed).map(|(_, c)| c).unwrap_or(0);
         let c_decl = format!(
             "{}\n\tint {}[{}] = {};",
             val_body, var_name, repeat_count, init
@@ -1294,6 +1406,13 @@ fn compile_expression(
             ));
         }
         let arrow_pos = after_params.find("=>").unwrap();
+        let before_arrow = after_params[..arrow_pos].trim();
+        // Extract return type if present (e.g., ": [I32; L]")
+        let return_type = if let Some(colon_pos) = before_arrow.find(':') {
+            Some(before_arrow[colon_pos + 1..].trim().to_string())
+        } else {
+            None
+        };
         let body_and_rest = &after_params[arrow_pos + 2..].trim(); // skip "=>"
 
         // Find semicolon separating function definition from remaining code
@@ -1308,6 +1427,7 @@ fn compile_expression(
                     type_params,
                     param_names,
                     body: func_body.to_string(),
+                    return_type,
                 });
                 // Register the base name so we can find it during calls
                 ctx.generated_functions
@@ -1759,7 +1879,7 @@ fn compile_expression(
         return Ok((String::new(), String::from(result)));
     }
 
-    // Handle string property access: "expr.length" => "strlen(expr)" for &Str types
+    // Handle ".length" property access
     if let Some(dot_pos) = find_top_level_dot_length(trimmed) {
         let base_expr = trimmed[..dot_pos].trim();
         // Check if the base expression is a variable of type &Str
@@ -1768,6 +1888,13 @@ fn compile_expression(
             if types.iter().any(|t| t == "&Str") {
                 let (_, base_result) = compile_expression(base_expr, ctx)?;
                 return Ok((String::new(), format!("(int)strlen({})", base_result)));
+            }
+        }
+        // Check if base is a function call with an array return type (handles generic calls too)
+        if let Some(return_type) = get_function_call_return_type(ctx, base_expr) {
+            if let Some(size) = parse_array_size(&return_type) {
+                let (_, base_result) = compile_expression(base_expr, ctx)?;
+                return Ok((String::new(), format!("((void){} , {})", base_result, size)));
             }
         }
         // Fallback: treat as struct field access (pass through)
@@ -1779,6 +1906,26 @@ fn compile_expression(
     if trimmed.starts_with('!') {
         let (_, inner_result) = compile_expression(&trimmed[1..], ctx)?;
         return Ok((String::new(), format!("(!{})", inner_result)));
+    }
+
+    // Handle array literal as expression: "[1, 2, 3]" or "[value; count]"
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        // Check for array repeat syntax: [value; count]
+        if let Ok((val_body, c_init)) = compile_array_repeat_expr(trimmed, ctx) {
+            return Ok((val_body, c_init));
+        }
+        // Regular array literal: [a, b, c]
+        if let Some((items, _closing_bracket)) = parse_array_items(trimmed) {
+            let mut c_body = String::new();
+            let mut compiled_items = Vec::new();
+            for item in &items {
+                let (item_body, item_result) = compile_expression(item, ctx)?;
+                c_body.push_str(&item_body);
+                compiled_items.push(item_result);
+            }
+            let c_init = format!("{{{}}}", compiled_items.join(", "));
+            return Ok((c_body, c_init));
+        }
     }
 
     // Handle tuple literal: "(a, b)" where commas exist at top level inside parens.
@@ -1959,7 +2106,12 @@ fn compile_expression(
                     .generated_function_instantiations
                     .contains(&concrete_name)
                 {
-                    let fn_read_entries = find_reads_in_order(&template.body);
+                    // Substitute type parameters in the function body
+                    let mut substituted_body = template.body.clone();
+                    for (type_param, concrete_type) in template.type_params.iter().zip(call_type_args.iter()) {
+                        substituted_body = substituted_body.replace(type_param, concrete_type);
+                    }
+                    let fn_read_entries = find_reads_in_order(&substituted_body);
                     let mut fn_ctx = CompileContext::new(
                         (0..fn_read_entries.len())
                             .map(|i| format!("v{}", i))
@@ -1969,7 +2121,7 @@ fn compile_expression(
                         fn_ctx.declared_vars.insert(name.clone());
                     }
                     let (fn_body_stmts, fn_return_expr) =
-                        compile_expression(&template.body, &mut fn_ctx)?;
+                        compile_expression(&substituted_body, &mut fn_ctx)?;
                     let c_func = build_c_function(
                         &concrete_name,
                         &template.param_names,
@@ -1977,6 +2129,31 @@ fn compile_expression(
                         &fn_body_stmts,
                         &fn_return_expr,
                     );
+                    // Check if return type is an array - need struct wrapper for C
+                    let is_array_return = if let Some(ref ret_type) = template.return_type {
+                        let mut concrete_ret = ret_type.clone();
+                        for (type_param, concrete_type) in template.type_params.iter().zip(call_type_args.iter()) {
+                            concrete_ret = concrete_ret.replace(type_param, concrete_type);
+                        }
+                        ctx.function_return_types.insert(concrete_name.clone(), concrete_ret.clone());
+                        concrete_ret.starts_with('[')
+                    } else {
+                        false
+                    };
+                    let c_func = if is_array_return {
+                        let size = parse_array_size(&ctx.function_return_types[&concrete_name]).unwrap_or(1);
+                        build_c_function_with_return_type(
+                            &concrete_name,
+                            &template.param_names,
+                            &fn_read_entries,
+                            &fn_body_stmts,
+                            &fn_return_expr,
+                            &format!("{}_ret", concrete_name),
+                            Some(size),
+                        )
+                    } else {
+                        c_func
+                    };
                     ctx.generated_functions.push((
                         concrete_name.clone(),
                         template.param_names.clone(),
@@ -3095,6 +3272,15 @@ mod tests {
             "fn pass<T>(param : T) => param; pass<I32>(read()) + 1",
             "5",
             6,
+        );
+    }
+
+    #[test]
+    fn test_generic_function_array_length() {
+        expect_valid(
+            "fn get<L : USize>(value : I32) : [I32; L] => [value; L]; get<3>(100).length",
+            "",
+            3,
         );
     }
 
