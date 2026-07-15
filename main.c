@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdbool.h>
 typedef struct {
+} Box;
+typedef struct {
 		const char * value;
 } String;
 typedef struct {
@@ -26,7 +28,12 @@ typedef struct {
 typedef struct {
 } Vec_GenericFunctionTemplate;
 typedef struct {
-} Vec_(String_Vec_String_String);
+		String f0;
+		Vec_String f1;
+		String f2;
+} __Tuple_String_Vec_String_String;
+typedef struct {
+} Vec_Tuple_String_Vec_String_String;
 typedef struct {
 		Vec_String vars;
 		size_t var_idx;
@@ -42,7 +49,7 @@ typedef struct {
 		HashSet_String generated_instantiations;
 		Vec_GenericFunctionTemplate generic_functions;
 		HashSet_String generated_function_instantiations;
-		Vec_(String_Vec_String_String) generated_functions;
+		Vec_Tuple_String_Vec_String_String generated_functions;
 } CompileContext;
 
 

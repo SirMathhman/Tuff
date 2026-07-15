@@ -2067,6 +2067,20 @@ fn infer_literal_type(expr: &str) -> String {
             }
         }
     }
+    // Struct instantiation: "Pair<I32, Bool> { ... }" -> "Pair<I32, Bool>"
+    if let Some(brace_pos) = trimmed.find('{') {
+        let before_brace = trimmed[..brace_pos].trim();
+        // If it looks like a generic struct instantiation, return the type
+        if let Some(_angle_start) = before_brace.find('<') {
+            if let Some(angle_end) = before_brace.find('>') {
+                return before_brace[..angle_end + 1].to_string();
+            }
+        }
+        // Non-generic struct: "Point { ... }" -> "Point"
+        if !before_brace.contains(' ') {
+            return before_brace.to_string();
+        }
+    }
     "I32".to_string()
 }
 
@@ -2131,13 +2145,18 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
     }
     // Generic struct instantiation: "Wrapper<I32>" -> build concrete C name
     if let Some((base, type_args)) = parse_generic_type_args(ty) {
-        let sanitized_args: Vec<String> = type_args.iter().map(|a| sanitize_type_name(a)).collect();
-        let args_joined = sanitized_args.join("_");
-        return Ok(format!("{}_{}", base, args_joined));
+        let type_args_refs: Vec<&str> = type_args.iter().map(|s| *s).collect();
+        return monomorphize_generic_struct(ctx, base, &type_args_refs);
     }
     // Tuple type: "(I32, I32)" -> generate C struct typedef and return type name
     if let Some(elements) = parse_tuple_type(ty) {
-        let sanitized: Vec<String> = elements.iter().map(|e| sanitize_type_name(e)).collect();
+        eprintln!("[tuff_type_to_c] tuple type: '{}', elements: {:?}", ty, elements);
+        let sanitized: Vec<String> = elements.iter().map(|e| {
+            let result = sanitize_type_name(e);
+            eprintln!("[tuff_type_to_c] sanitize_type_name('{}') -> '{}'", e, result);
+            result
+        }).collect();
+        eprintln!("[tuff_type_to_c] tuple_name: '__Tuple_{}'", sanitized.join("_"));
         let tuple_name = format!("__Tuple_{}", sanitized.join("_"));
         if !ctx.defined_structs.contains(&tuple_name) {
             let mut fields = String::new();
@@ -2289,19 +2308,20 @@ fn find_matching_paren(s: &str) -> Option<usize> {
 /// Sanitize a type name for use in a C identifier (e.g. "&Str" -> "Str").
 /// Handles nested generics: "Pair<I32, Bool>" -> "Pair_I32_Bool".
 fn sanitize_type_name(ty: &str) -> String {
-    if let Some((base, type_args_str)) = parse_generic_type(ty) {
-        let sanitized_args: Vec<String> = split_top_level_commas(type_args_str)
-            .iter()
-            .map(|a| sanitize_type_name(a.trim()))
-            .collect();
-        format!("{}_{}", sanitize_type_name(base), sanitized_args.join("_"))
-    } else if let Some(tuple_types) = parse_tuple_type(ty) {
-        // Handle tuple types: "(I32, I32)" -> "Tuple_I32_I32"
+    // Check tuple types first - "(I32, Pair<I32, Bool>)" must be handled before
+    // parse_generic_type finds the '<' inside the tuple and treats "(I32, Pair" as a base.
+    if let Some(tuple_types) = parse_tuple_type(ty) {
         let sanitized_elements: Vec<String> = tuple_types
             .iter()
             .map(|e| sanitize_type_name(e.trim()))
             .collect();
         format!("Tuple_{}", sanitized_elements.join("_"))
+    } else if let Some((base, type_args_str)) = parse_generic_type(ty) {
+        let sanitized_args: Vec<String> = split_top_level_commas(type_args_str)
+            .iter()
+            .map(|a| sanitize_type_name(a.trim()))
+            .collect();
+        format!("{}_{}", sanitize_type_name(base), sanitized_args.join("_"))
     } else {
         ty.replace('&', "").replace(' ', "_")
     }
@@ -2370,9 +2390,22 @@ fn build_concrete_name(base: &str, type_args_str: &str) -> String {
 /// Parse a generic type annotation like "Wrapper<I32>" into (base, type_args_str).
 /// Handles nested generics like "Wrapper<Pair<I32, Bool>>" by finding the matching ">".
 /// Returns None if the type is not generic.
+/// Skips '<' that are inside parentheses (tuple types) to avoid matching
+/// "(I32, Pair<I32, Bool>)" as a generic type with base "(I32, Pair".
 fn parse_generic_type(ty: &str) -> Option<(&str, &str)> {
-    if let Some(angle_start) = ty.find('<') {
-        let base = &ty[..angle_start];
+    // Find the first '<' that is NOT inside parentheses
+    let mut paren_depth = 0;
+    let angle_start = ty.char_indices().find(|(_, ch)| {
+        match *ch {
+            '(' => { paren_depth += 1; false }
+            ')' => { paren_depth -= 1; false }
+            '<' if paren_depth == 0 => true,
+            _ => false,
+        }
+    }).map(|(i, _)| i);
+
+    if let Some(start) = angle_start {
+        let base = &ty[..start];
         // Find the matching '>' by tracking depth
         let mut depth = 0;
         let mut angle_end = None;
@@ -2390,7 +2423,7 @@ fn parse_generic_type(ty: &str) -> Option<(&str, &str)> {
             }
         }
         if let Some(end) = angle_end {
-            let type_args_str = &ty[angle_start + 1..end];
+            let type_args_str = &ty[start + 1..end];
             Some((base, type_args_str))
         } else {
             None
@@ -3089,6 +3122,15 @@ mod tests {
             "struct Wrapper<T> { value : T }; let w : Wrapper<(I32, I32)> = Wrapper<(I32, I32)> { value : (3, 4) }; w.value.0 + w.value.1",
             "",
             7,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_with_tuple_containing_generic() {
+        expect_valid(
+            "struct Wrapper<T> { value : T } struct Pair<A, B> { first : A, second : B }; let w : Wrapper<(I32, Pair<I32, Bool>)> = Wrapper<(I32, Pair<I32, Bool>)> { value : (5, Pair<I32, Bool> { first : 3, second : 1 }) }; w.value.0 + w.value.1.first",
+            "",
+            8,
         );
     }
 
