@@ -39,11 +39,11 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 - **Goto** — `goto label` / `label:` for low-level control flow (optional, for FFI interop)
 - **Return statements** — explicit `return expr` inside functions (currently only expression-based)
 - **Recursion** — recursive function calls (currently untested, may not work with eager read evaluation)
-- **Nested function definitions** — functions defined inside other functions with closure capture
+- **Nested function definitions** — ✅ functions defined inside other functions with closure capture
 
 ## Memory & Data Structures
 
-- **Pointers** — `let p : *I32 = &x` with dereference `*p` and indirection
+- **Pointers** — ✅ `let p : *I32 = &x` with dereference `*p`, address-of `&x`, pointer array indexing
 - **References** — `let r : &I32 = &x` for borrow semantics (read-only or mutable)
 - **Dynamic arrays** — `let mut arr = Vec::new()` with `.push()`, `.pop()`, `.len()`, `.get(i)`
 - **Hash maps** — `let mut map = HashMap::new()` with `.insert(k, v)`, `.get(k)`, `.remove(k)`
@@ -54,7 +54,7 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 
 ## Functions & Modules
 
-- **Method syntax** — `obj.method()` as syntactic sugar for `method(obj)`
+- **Method syntax** — ✅ `Factory().get()` — call methods on this-returning factory results
 - **Default parameters** — `fn greet(name : String, greeting : String = "Hello") => ...`
 - **Variadic functions** — `fn sum(values : *I32, count : I32) => ...`
 - **Function overloading** — multiple functions with the same name but different signatures
@@ -127,7 +127,7 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 ## Language Design
 
 - **Pattern matching** — `match point { Point(0, 0) => "origin", Point(x, 0) => "x-axis", _ => "other" }`
-- **Struct destructuring** — `let Point { x, y } = p` for extracting fields
+- **Struct destructuring** — ✅ `let { x, y } = Point { x : 3, y : 4 }` for extracting fields
 - **Tuple destructuring** — `let (a, b) = pair` for extracting tuple fields
 - **Operator precedence** — well-defined precedence table (currently relies on C's precedence)
 - **Comments** — `// line comment`, `/* block comment */` support
@@ -135,7 +135,7 @@ Features that Tuff should have but doesn't yet. Organized by category and rough 
 - **Visibility system** — `pub`, `pub(crate)`, `pub(super)` for module visibility
 - **Lifetime annotations** — `'a` for borrow checker (if adding references)
 - **Null/option types** — `Option<T>` with `Some(value)` and `None` variants
-- **Generics with bounds** — `fn max<T : Comparable>(a : T, b : T) => T` ✅ (partial — `T : USize` bound works for rest params)
+- **Generics with bounds** — ✅ `fn max<T : Comparable>(a : T, b : T) => T` (partial — `T : USize` bound works for rest params)
 
 ---
 
