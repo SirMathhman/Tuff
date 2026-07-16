@@ -2,52 +2,29 @@
 #include <string.h>
 #include <stdbool.h>
 
-typedef struct
-{
-} Box;
-typedef struct
-{
-	const char *value;
-} String;
-typedef struct
-{
-} Vec_String;
-typedef struct
-{
-	String name;
-	Vec_String type_params;
-	String fields_str;
-} GenericStructTemplate;
-typedef struct
-{
-	String name;
-	Vec_String type_params;
-	Vec_String param_names;
-	String body;
-} GenericFunctionTemplate;
-typedef struct
-{
+typedef struct {
 	int value;
 } Counter_ret;
 
-void add(void);
+void add(Counter_ret* instance);
 Counter_ret Counter(void);
 
-static int value;
-void add(void)
-{
 
-	value += 1;
-}
+void add(Counter_ret* instance) {
 
-Counter_ret Counter(void)
-{
+	instance->value += 1;}
 
-	value = 0;
-	return (Counter_ret){.value = value};
-}
-int main()
-{
+Counter_ret Counter(void) {
 
-	return 1;
+	 int value = 0;
+		return (Counter_ret){.value = value};
+}int main() {
+	
+	 Counter_ret first = Counter();
+	add(&first);
+	add(&first);
+
+	 Counter_ret second = Counter();
+	add(&second);
+	return first.value;
 }
