@@ -1,52 +1,9 @@
-struct Some<T> {
-    value : T
-}
-
-struct None<T> {
-}
-
-type Option<T> = Some<T> | None<T>;
-
-
-struct Box {
-
-}
-
-struct Vec<T> {
-    // items : &T
-}
-
-struct HashSet<T> {
-}
-
-struct HashMap<K, V> {
-
-}
-
-struct String {
-    value : &Str
-}
-
-struct GenericStructTemplate {
-    name : String,
-    type_params : Vec<String>,
-    fields_str : String
-}
-
-struct GenericFunctionTemplate {
-    name: String,
-    type_params: Vec<String>,
-    param_names: Vec<String>,
-    body: String
-}
-
 fn Counter() => { 
     let mut value = 0; 
     fn add() => { 
         value += 1;
     }
     this
- } 
-let counter : Counter = Counter(); 
-counter.add(); 
-counter.value
+}
+
+Counter() is Counter

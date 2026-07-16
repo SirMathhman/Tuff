@@ -1898,10 +1898,28 @@ fn compile_expression(
                 }
             }
 
-            // Detect if function returns `this` - generate struct with local vars as fields
+            // Detect if function returns `this` - generate struct with local vars as fields.
+            // Strip the outer braces and check whether the trailing expression is the
+            // bare word "this" - whitespace-agnostic (source may format "this" on its
+            // own line rather than as "... this }" on one line).
             let func_body_trimmed = func_body.trim();
-            let returns_this = func_body_trimmed.ends_with("this")
-                || func_body_trimmed.ends_with("this }");
+            let returns_this = {
+                let mut inner = func_body_trimmed;
+                if let Some(s) = inner.strip_prefix('{') {
+                    inner = s;
+                }
+                if let Some(s) = inner.strip_suffix('}') {
+                    inner = s;
+                }
+                let inner = inner.trim();
+                inner == "this"
+                    || (inner.ends_with("this")
+                        && inner[..inner.len() - "this".len()]
+                            .chars()
+                            .next_back()
+                            .map(|c| !c.is_alphanumeric() && c != '_')
+                            .unwrap_or(true))
+            };
 
             let c_func = if return_type.as_deref() == Some("Void") || fn_return_expr.is_empty() {
                 build_c_function_with_return_type(
@@ -2068,7 +2086,13 @@ fn compile_expression(
                         let ty = parts[1].trim();
                         // Validate type is known
                         if !is_valid_type(ctx, ty) {
-                            return Err(format!("Unknown type: {}", ty));
+                            let known = get_known_types(ctx);
+                            let known_list = if known.is_empty() {
+                                "(none)".to_string()
+                            } else {
+                                format!("{}", known.join(", "))
+                            };
+                            return Err(format!("Unknown type: {} (accessible types: {})", ty, known_list));
                         }
                         // Handle generic struct instantiations: "Wrapper<I32>" -> "Wrapper_I32"
                         if let Some((base, type_args)) = parse_generic_type_args(ty) {
@@ -2393,11 +2417,23 @@ fn compile_expression(
             resolved
         } else if lhs_unwrapped.starts_with("sizeOf<") && lhs_unwrapped.ends_with(">()") {
             vec!["USize".to_string()]
+        } else if let Some(paren_pos) = lhs_unwrapped.find('(') {
+            // Function call: look up return type
+            let fn_name = lhs_unwrapped[..paren_pos].trim();
+            if let Some(ret_type) = ctx.function_return_types.get(fn_name) {
+                vec![ret_type.clone()]
+            } else {
+                vec![infer_literal_type(&lhs)]
+            }
         } else {
             vec![infer_literal_type(&lhs)]
         };
         // Resolve check type through aliases
-        let check_types = resolve_type_alias_set(ctx, &check_type);
+        let mut check_types = resolve_type_alias_set(ctx, &check_type);
+        // If check type is a function name, also include its return type
+        if let Some(fn_ret) = ctx.function_return_types.get(&check_type) {
+            check_types.push(fn_ret.clone());
+        }
         // Check if any LHS type matches any check type
         let matched = lhs_types
             .iter()
@@ -2934,6 +2970,29 @@ fn infer_literal_type(expr: &str) -> String {
     "I32".to_string()
 }
 
+/// Collect all accessible user-defined type names (structs, aliases, unions, extern types).
+fn get_known_types(ctx: &CompileContext) -> Vec<String> {
+    let mut types = Vec::new();
+    for s in &ctx.defined_structs {
+        types.push(s.clone());
+    }
+    for (alias, members) in &ctx.type_aliases {
+        if members.len() == 1 {
+            types.push(alias.clone());
+        } else {
+            types.push(format!("{} (union of {})", alias, members.join(", ")));
+        }
+    }
+    for union_name in ctx.union_types.keys() {
+        types.push(union_name.clone());
+    }
+    for ext_type in &ctx.extern_types {
+        types.push(ext_type.clone());
+    }
+    types.sort();
+    types
+}
+
 /// Check if a type name is a known built-in type or a defined struct/alias.
 /// Handles generic types like `Wrapper<I32>` by extracting the base name.
 fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
@@ -3102,7 +3161,13 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         // Variable-length array without size: "[I32]" -> element type
         return tuff_type_to_c(ctx, inner.trim());
     }
-    Err(format!("Unknown type: {}", ty))
+    let known = get_known_types(ctx);
+    let known_list = if known.is_empty() {
+        "(none)".to_string()
+    } else {
+        format!("{}", known.join(", "))
+    };
+    Err(format!("Unknown type: {} (accessible types: {})", ty, known_list))
 }
 
 /// Resolve a type name, following type aliases to their underlying type(s).
@@ -4376,6 +4441,26 @@ mod tests {
     fn test_factory_with_mut_state_and_field_access() {
         expect_valid(
             "fn Counter() => { let mut value = 0; fn add() => { value += 1; }; this } let counter : Counter = Counter(); counter.add(); counter.value",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_factory_is_type_check() {
+        expect_valid(
+            "fn Counter() => { let mut value = 0; fn add() => { value += 1; }; this } Counter() is Counter",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_factory_returns_this_with_newline_before_closing_brace() {
+        // Regression test: `this` on its own line before the closing brace (rather than
+        // "... this }" on one line) must still be recognized as a this-returning function.
+        expect_valid(
+            "fn Counter() => {\n    let mut value = 0;\n    fn add() => {\n        value += 1;\n    }\n    this\n}\nCounter() is Counter",
             "",
             1,
         );
