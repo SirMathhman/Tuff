@@ -50,6 +50,7 @@ struct CompileContext {
     extern_includes: Vec<String>, // C headers to include (e.g., "stdlib.h")
     extern_types: HashSet<String>, // C type names imported via extern let { type ... }
     captured_vars: HashSet<String>, // outer variables captured by functions (need static globals)
+    this_refs: HashSet<String>, // variables that are this-references (resolve .x to variable x)
 }
 
 impl CompileContext {
@@ -76,6 +77,7 @@ impl CompileContext {
             extern_includes: Vec::new(),
             extern_types: HashSet::new(),
             captured_vars: HashSet::new(),
+            this_refs: HashSet::new(),
         }
     }
 }
@@ -1071,18 +1073,31 @@ fn compile_expression(
                 let var_name = var_name.trim();
                 // Extract base variable name (e.g., "x" from "x[0]")
                 let base_var = var_name.split('[').next().unwrap_or(var_name);
+                // Handle "this.x = val" -> resolve to "x = val"
+                let effective_var = if let Some(field) = base_var.strip_prefix("this.") {
+                    field
+                } else {
+                    base_var
+                };
                 // Check if variable was declared as mutable
-                if !ctx.mutable_vars.iter().any(|v| v == base_var) {
-                    return Err(format!("Cannot reassign immutable variable '{}'", base_var));
+                if !ctx.mutable_vars.iter().any(|v| v == effective_var) {
+                    return Err(format!("Cannot reassign immutable variable '{}'", effective_var));
                 }
                 let rhs = assign_part[rhs_start_offset..].trim();
                 let (assign_body, assign_result) = compile_expression(rhs, ctx)?;
+                // Use effective_var for C code when it's a this.x case (dots not valid in C for this),
+                // otherwise use the original var_name (e.g., for array element access like "x[0]")
+                let c_target = if base_var.starts_with("this.") {
+                    effective_var
+                } else {
+                    var_name
+                };
                 let c_body = match op {
                     Some(op_char) => format!(
                         "{}\n\t{} {}= {};",
-                        assign_body, var_name, op_char, assign_result
+                        assign_body, c_target, op_char, assign_result
                     ),
-                    None => format!("{}\n\t{} = {};", assign_body, var_name, assign_result),
+                    None => format!("{}\n\t{} = {};", assign_body, c_target, assign_result),
                 };
                 let final_result = compile_expression(final_part, ctx).map(|r| r.1)?;
                 return Ok((c_body, final_result));
@@ -1244,6 +1259,11 @@ fn compile_expression(
             } else {
                 compile_expression(after_eq, ctx)?
             };
+
+            // If RHS is "this", mark this variable as a this-reference
+            if after_eq.trim() == "this" {
+                ctx.this_refs.insert(var_name.to_string());
+            }
 
             // Handle shadowing: if variable already declared, generate assignment instead of redeclaration
             let c_decl = if ctx.declared_vars.contains(var_name) {
@@ -2361,6 +2381,31 @@ fn compile_expression(
         let tuple_name = tuff_type_to_c(ctx, &tuple_type)?;
         let c_init = format!("({}){{{}}}", tuple_name, fields_str);
         return Ok((c_body, c_init));
+    }
+
+    // Handle "this.x" - access variable x from current scope
+    if let Some(field) = trimmed.strip_prefix("this.") {
+        let var_name = field.split(|c: char| !c.is_alphanumeric() && c != '_').next().unwrap_or(field);
+        if ctx.declared_vars.contains(var_name) {
+            return Ok((String::new(), var_name.to_string()));
+        }
+        return Err(format!("Variable '{}' not found in scope", var_name));
+    }
+
+    // Handle "this" as a standalone expression
+    if trimmed == "this" {
+        return Ok((String::new(), "0".to_string()));
+    }
+
+    // Handle field access on this-refs: "temp.x" where temp is a this-ref -> just "x"
+    if let Some(dot_pos) = trimmed.find('.') {
+        let base = &trimmed[..dot_pos].trim();
+        let field = &trimmed[dot_pos + 1..].trim();
+        let base_str = base.to_string();
+        let field_str = field.to_string();
+        if ctx.this_refs.contains(&base_str) && ctx.declared_vars.contains(&field_str) {
+            return Ok((String::new(), field.to_string()));
+        }
     }
 
     // Base case: replace read<T>() and read() with variables, convert braces to parens.
@@ -3524,6 +3569,21 @@ mod tests {
     #[test]
     fn test_simple_let_exit_zero() {
         expect_valid("let x = 100;", "", 0);
+    }
+
+    #[test]
+    fn test_this_dot_field_access() {
+        expect_valid("let x = 100; this.x", "", 100);
+    }
+
+    #[test]
+    fn test_this_as_value_field_access() {
+        expect_valid("let x = 100; let temp = this; temp.x", "", 100);
+    }
+
+    #[test]
+    fn test_this_dot_mut_reassign() {
+        expect_valid("let mut x = 100; this.x = 0; x", "", 0);
     }
 
     #[test]
