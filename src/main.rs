@@ -1751,8 +1751,8 @@ fn compile_expression(
                         String::new()
                     };
                     rest_params.push((name, ptype));
-                } else if param_trimmed == "&this" {
-                    // Receiver parameter: &this - mark this function as having a this param
+                } else if param_trimmed == "&this" || param_trimmed == "&mut this" {
+                    // Receiver parameter: &this or &mut this - mark this function as having a this param
                     has_this_param = true;
                 } else if let Some(rest) = param_trimmed.strip_prefix("this") {
                     // Receiver parameter: "this : &Factory" or "this : &TypeName"
@@ -4479,6 +4479,15 @@ mod tests {
             "fn Counter() => {\n    let mut value = 0;\n    fn add() => {\n        value += 1;\n    }\n    this\n}\nlet first = Counter();\nfirst.add();\nfirst.value",
             "",
             1,
+        );
+    }
+
+    #[test]
+    fn test_factory_counter_mut_this_receiver() {
+        expect_valid(
+            "fn Counter() => {\n    let mut value = 0;\n    fn add(&mut this) => {\n        value += 1;\n    }\n    this\n}",
+            "",
+            0,
         );
     }
 }
