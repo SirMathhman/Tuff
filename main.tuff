@@ -1,5 +1,3 @@
-
-
 struct Some<T> {
     value : T
 }
@@ -42,23 +40,8 @@ struct GenericFunctionTemplate {
     body: String
 }
 
-struct CompileContext {
-    vars: Vec<String>,
-    var_idx: USize,
-    mutable_vars: Vec<String>,
-    declared_vars: HashSet<String>,
-    var_types: HashMap<String, Vec<String>>,
-    type_aliases: HashMap<String, Vec<String>>, 
-    union_types: HashMap<String, Vec<String>>,  
-    tagged_union_vars: HashSet<String>,
-    generated_structs: Vec<String>,  
-    defined_structs: HashSet<String>,   // struct names already defined
-    generic_structs: Vec<GenericStructTemplate>, // generic struct templates
-    generated_instantiations: HashSet<String>, // already-generated monomorphized names
-    generic_functions: Vec<GenericFunctionTemplate>, // generic function templates
-    generated_function_instantiations: HashSet<String>, // already-generated monomorphized function names
-    generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
-}
 
-fn Factory() => { fn get() => 100; this } 
-Factory().get()
+fn Counter() => { let mut value = 0; fn add() => { value += 1; }; this } 
+let counter : Counter = Counter(); 
+counter.add(); 
+counter.value

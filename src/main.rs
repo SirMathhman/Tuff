@@ -1747,6 +1747,18 @@ fn compile_expression(
                 } else if param_trimmed == "&this" {
                     // Receiver parameter: &this - mark this function as having a this param
                     has_this_param = true;
+                } else if let Some(rest) = param_trimmed.strip_prefix("this") {
+                    // Receiver parameter: "this : &Factory" or "this : &TypeName"
+                    let rest = rest.trim();
+                    if rest.is_empty() || rest.starts_with(':') {
+                        has_this_param = true;
+                    } else {
+                        let parts: Vec<&str> = param_trimmed.split(':').collect();
+                        let name = parts[0].trim();
+                        if !name.is_empty() {
+                            param_names.push(name.to_string());
+                        }
+                    }
                 } else {
                     let parts: Vec<&str> = param_trimmed.split(':').collect();
                     let name = parts[0].trim();
@@ -4321,6 +4333,24 @@ mod tests {
             "fn Factory() => { fn get(&this) => 100; this } Factory().get()",
             "",
             100,
+        );
+    }
+
+    #[test]
+    fn test_factory_explicit_this_type() {
+        expect_valid(
+            "fn Factory() => { fn get(this : &Factory) => 100; this } Factory().get()",
+            "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_factory_with_mut_state_and_field_access() {
+        expect_valid(
+            "fn Counter() => { let mut value = 0; fn add() => { value += 1; }; this } let counter : Counter = Counter(); counter.add(); counter.value",
+            "",
+            1,
         );
     }
 }

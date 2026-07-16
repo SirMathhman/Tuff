@@ -21,52 +21,24 @@ typedef struct {
 		String body;
 } GenericFunctionTemplate;
 typedef struct {
-} HashSet_String;
-typedef struct {
-} HashMap_String_Vec_String;
-typedef struct {
-} Vec_GenericStructTemplate;
-typedef struct {
-} Vec_GenericFunctionTemplate;
-typedef struct {
-		String f0;
-		Vec_String f1;
-		String f2;
-} __Tuple_String_Vec_String_String;
-typedef struct {
-} Vec_Tuple_String_Vec_String_String;
-typedef struct {
-		Vec_String vars;
-		size_t var_idx;
-		Vec_String mutable_vars;
-		HashSet_String declared_vars;
-		HashMap_String_Vec_String var_types;
-		HashMap_String_Vec_String type_aliases;
-		HashMap_String_Vec_String union_types;
-		HashSet_String tagged_union_vars;
-		Vec_String generated_structs;
-		HashSet_String defined_structs;
-		Vec_GenericStructTemplate generic_structs;
-		HashSet_String generated_instantiations;
-		Vec_GenericFunctionTemplate generic_functions;
-		HashSet_String generated_function_instantiations;
-		Vec_Tuple_String_Vec_String_String generated_functions;
-} CompileContext;
-typedef struct {
+	int value;
+} Counter_ret;
 
-} Factory_ret;
+void add(void);
+Counter_ret Counter(void);
 
-int get(void);
-Factory_ret Factory(void);
+static int value;
+void add(void) {
 
+	value += 1;}
 
-int get(void) {
-		return 100;
-}
+Counter_ret Counter(void) {
 
-Factory_ret Factory(void) {
-		return (Factory_ret){};
+	  value = 0;
+		return (Counter_ret){.value = value};
 }int main() {
 	
-	return get();
+	 Counter_ret counter = Counter();
+	add();
+	return value;
 }
