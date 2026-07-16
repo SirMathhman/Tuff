@@ -1378,6 +1378,13 @@ fn compile_expression(
                         let call_name = after_eq.split('(').next().unwrap_or("").trim();
                         if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
                             ret_type.clone()
+                        } else if let Some(ret_type) = ctx.function_return_types.get(call_name) {
+                            // Infer return type from user-defined function (e.g., "Counter_ret" -> "Counter")
+                            if ret_type.ends_with("_ret") {
+                                ret_type[..ret_type.len() - 4].to_string()
+                            } else {
+                                ret_type.clone()
+                            }
                         } else {
                             infer_literal_type(after_eq)
                         }
@@ -4469,7 +4476,7 @@ mod tests {
     #[test]
     fn test_factory_counter_with_add_and_field_access() {
         expect_valid(
-            "fn Counter() => {\n    let mut value = 0;\n    fn add() => {\n        value += 1;\n    }\n    this\n}\nlet first : Counter = Counter();\nfirst.add();\nfirst.value",
+            "fn Counter() => {\n    let mut value = 0;\n    fn add() => {\n        value += 1;\n    }\n    this\n}\nlet first = Counter();\nfirst.add();\nfirst.value",
             "",
             1,
         );
