@@ -2,28 +2,34 @@
 #include <string.h>
 #include <stdbool.h>
 
-typedef struct
-{
-	int value;
-} a_ret;
+typedef struct {
 
-int b(a_ret *instance);
-a_ret a(void);
+} Inner_ret;
+typedef struct {
 
-int b(a_ret *instance)
-{
-	return instance->value;
+} Outer_ret;
+
+int sum(void);
+Inner_ret Inner(int bar);
+Outer_ret Outer(int foo);
+
+static int foo;
+static int bar;
+int sum(void) {
+		return foo + bar;
 }
 
-a_ret a(void)
-{
+Inner_ret Inner(int bar_arg) {		bar = bar_arg;
 
-	int value = 100;
-	return (a_ret){.value = value};
+		return (Inner_ret){};
 }
-int main()
-{
-	a_ret _tmp = a();
 
-	return b(&_tmp);
+Outer_ret Outer(int foo_arg) {		foo = foo_arg;
+
+		return (Outer_ret){};
+}int main() {
+		Outer_ret _tmp = Outer(25);
+	Inner_ret _call_tmp = Inner(75);
+
+	return sum();
 }

@@ -1909,6 +1909,7 @@ fn compile_expression(
 
             // Save nested function info before propagation (needed for factory instance rewriting)
             let nested_fns: Vec<(String, Vec<String>, String)> = fn_ctx.generated_functions.clone();
+            let nested_parents: std::collections::HashMap<String, String> = fn_ctx.nested_function_parent.clone();
 
             // Propagate nested function definitions from fn_ctx to parent ctx
             for item in fn_ctx.generated_functions {
@@ -2009,35 +2010,43 @@ fn compile_expression(
                     .join(", ");
                 let struct_init = format!("({}){{{}}}", ret_struct, init_fields);
 
-                // Rewrite nested methods that capture factory local vars to take instance pointer.
-                // e.g., "void add(void) { value += 1; }" -> "void add(Counter_ret* instance) { instance->value += 1; }"
-                let mut rewritten_methods: Vec<(String, Vec<String>, String)> = Vec::new();
+                // Register direct child methods for dot-notation calling.
+                // Only direct children become methods (not grandchildren).
+                // For methods that capture factory local vars, they need instance->var access.
+                // For nested factories (returns_this), they remain standalone but are registered
+                // so dot notation knows to pass the instance pointer.
                 for (method_name, method_params, method_code) in &nested_fns {
                     if method_code.is_empty() { continue; }
-                    // Check if this method captures any of the factory's local vars
+                    // Only register direct children - skip functions that have their own parent
+                    let is_direct_child = !nested_parents.contains_key(method_name);
+                    if !is_direct_child { continue; }
+                    // Register this method as needing an instance pointer
+                    ctx.factory_method_instances.insert(method_name.clone(), ret_struct.clone());
+                    // If method captures factory local vars, rewrite it to use instance->var
                     let captures_factory_var = local_vars.iter().any(|v| method_code.contains(v.as_str()));
                     if captures_factory_var {
-                        // Register this method as needing an instance pointer
-                        ctx.factory_method_instances.insert(method_name.clone(), ret_struct.clone());
                         // Rewrite the C code: add instance param and replace var -> instance->var
                         let mut rewritten = method_code.clone();
+                        // Build C-typed param signatures (params are raw names like "bar", need "int bar")
+                        let c_params: Vec<String> = method_params.iter().map(|p| format!("int {}", p)).collect();
                         // Replace function signature with instance pointer parameter
-                        // Handle both void and int return types
                         for ret_type in &["void", "int"] {
                             let old_sig = if method_params.is_empty() {
                                 format!("{} {}(void)", ret_type, method_name)
                             } else {
-                                let param_sig: Vec<String> = method_params.iter().map(|p| format!("int {}", p)).collect();
-                                format!("{} {}({})", ret_type, method_name, param_sig.join(", "))
+                                format!("{} {}({})", ret_type, method_name, c_params.join(", "))
                             };
-                            let new_sig = format!("{} {}({}* instance)", ret_type, method_name, ret_struct);
+                            let new_sig = if method_params.is_empty() {
+                                format!("{} {}({}* instance)", ret_type, method_name, ret_struct)
+                            } else {
+                                format!("{} {}({}* instance, {})", ret_type, method_name, ret_struct, c_params.join(", "))
+                            };
                             if rewritten.contains(&old_sig) {
                                 rewritten = rewritten.replace(&old_sig, &new_sig);
                             }
                         }
                         // Replace captured var references with instance->var
                         for var in &local_vars {
-                            // Replace "var " and "var;" and "var}" and "var\n" but not "instance->var"
                             let from = format!("{} ", var);
                             let to = format!("instance->{} ", var);
                             rewritten = rewritten.replace(&from, &to);
@@ -2051,16 +2060,16 @@ fn compile_expression(
                             let to = format!("instance->{}\n", var);
                             rewritten = rewritten.replace(&from, &to);
                         }
-                        rewritten_methods.push((method_name.clone(), vec![format!("{}* instance", ret_struct)], rewritten));
-                    } else {
-                        rewritten_methods.push((method_name.clone(), method_params.clone(), method_code.clone()));
+                        // Build new param list: instance pointer + original params
+                        let mut new_params: Vec<String> = vec![format!("{}* instance", ret_struct)];
+                        for p in method_params {
+                            let raw_name = p.split_whitespace().last().unwrap_or(p);
+                            new_params.push(raw_name.to_string());
+                        }
+                        // Replace in generated_functions
+                        ctx.generated_functions.retain(|(n, _, _)| n != method_name);
+                        ctx.generated_functions.push((method_name.clone(), new_params, rewritten));
                     }
-                }
-                // Replace the propagated nested functions with rewritten versions
-                for (name, params, code) in rewritten_methods {
-                    // Remove old entry and add rewritten one
-                    ctx.generated_functions.retain(|(n, _, _)| n != &name);
-                    ctx.generated_functions.push((name, params, code));
                 }
                 // Remove factory local vars from captured_vars — they're now per-instance
                 for var in &local_vars {
@@ -2680,10 +2689,15 @@ fn compile_expression(
                         .map(|ret| ret == &format!("{}_ret", method_name))
                         .unwrap_or(false));
             if needs_instance {
-                // Rewrite "method()" as "method(&instance)" for factory/nested methods
+                // Check if this method actually accepts an instance pointer (was rewritten)
+                // by looking at the generated function's params
+                let method_accepts_instance = ctx.generated_functions.iter()
+                    .find(|(name, _, _)| name == method_name)
+                    .map(|(_, params, _)| params.first().map(|p| p.contains('*')).unwrap_or(false))
+                    .unwrap_or(false);
+
                 // If base is an rvalue (e.g., "a()"), introduce a temp variable
-                let (temp_decl, instance_ref) = if base_str.contains('(') {
-                    // Rvalue base: "a()" -> "a_ret _tmp = a(); b(&_tmp)"
+                let (base_temp_decl, instance_ref) = if base_str.contains('(') {
                     let temp_name = "_tmp";
                     let fn_name = &base_str[..base_str.find('(').unwrap_or(0)];
                     let ret_type = ctx.function_return_types.get(fn_name)
@@ -2693,14 +2707,76 @@ fn compile_expression(
                 } else {
                     (String::new(), base_str.to_string())
                 };
+
+                // Extract method call from after_dot: "method(args)" or "method"
                 let after_dot = &trimmed[dot_pos + 1..].trim();
-                let (method_body, method_result) = compile_expression(after_dot, ctx)?;
-                let call_with_instance = method_result.replace(
-                    &format!("{}()", method_name),
-                    &format!("{}(&{})", method_name, instance_ref),
-                );
-                let combined_body = format!("{}{}", temp_decl, method_body);
-                return Ok((combined_body, call_with_instance));
+                let method_call_str: &str;
+                let remaining_chain: &str;
+                if let Some(paren_pos) = after_dot.find('(') {
+                    let from_paren = &after_dot[paren_pos..];
+                    if let Some(paren_end) = find_matching_paren(from_paren) {
+                        method_call_str = &from_paren[..paren_end + 1];
+                        remaining_chain = from_paren[paren_end + 1..].trim_start();
+                    } else {
+                        method_call_str = after_dot;
+                        remaining_chain = "";
+                    }
+                } else {
+                    method_call_str = after_dot;
+                    remaining_chain = "";
+                };
+
+                // Extract args from method_call_str
+                let args_str: &str = if let Some(paren_pos) = method_call_str.find('(') {
+                    let from_paren = &method_call_str[paren_pos + 1..];
+                    if let Some(close) = from_paren.find(')') {
+                        &from_paren[..close]
+                    } else {
+                        ""
+                    }
+                } else {
+                    ""
+                };
+
+                // Compile args
+                let (args_body, args_result) = if !args_str.is_empty() {
+                    compile_expression(args_str.trim(), ctx)?
+                } else {
+                    (String::new(), String::new())
+                };
+
+                // Build method call - only pass instance if method accepts it
+                let method_call = if method_accepts_instance {
+                    if args_result.is_empty() {
+                        format!("{}(&{})", method_name, instance_ref)
+                    } else {
+                        format!("{}(&{}, {})", method_name, instance_ref, args_result)
+                    }
+                } else {
+                    // Nested factory called via dot notation - just call it normally
+                    if args_result.is_empty() {
+                        format!("{}()", method_name)
+                    } else {
+                        format!("{}({})", method_name, args_result)
+                    }
+                };
+
+                // Handle remaining chain
+                if !remaining_chain.is_empty() {
+                    // Store method result in temp for remaining chain
+                    let ret_type = ctx.function_return_types.get(method_name)
+                        .map(|t| t.as_str())
+                        .unwrap_or("int");
+                    let call_temp = "_call_tmp";
+                    let call_temp_decl = format!("\t{} {} = {};\n", ret_type, call_temp, method_call);
+                    let remaining_expr = format!("{}{}", call_temp, remaining_chain);
+                    let (chain_body, chain_result) = compile_expression(&remaining_expr, ctx)?;
+                    let combined_body = format!("{}{}{}{}", base_temp_decl, args_body, call_temp_decl, chain_body);
+                    return Ok((combined_body, chain_result));
+                } else {
+                    let combined_body = format!("{}{}", base_temp_decl, args_body);
+                    return Ok((combined_body, method_call));
+                }
             }
             // It's a method call — compile as a plain function call
             let after_dot = &trimmed[dot_pos + 1..].trim();
@@ -4652,6 +4728,33 @@ mod tests {
     fn test_main_tuff_method_call() {
         expect_valid(
             "fn a() => {\n    let value = 100;\n    fn b() => value;\n    this\n}\n\na().b()",
+            "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_main_tuff_let_outside_fn() {
+        expect_valid(
+            "let value = 100;\nfn a() => {\n    fn b() => value;\n    this\n}\n\na().b()",
+            "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_main_tuff_triple_nested_factory() {
+        expect_valid(
+            "fn a() => {\n    fn b() => {\n        fn c() => 100;\n\n        this    \n    }\n\n    this\n}\n\na().b().c()",
+            "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_main_tuff_nested_with_params() {
+        expect_valid(
+            "fn Outer(foo : I32) => {\n    fn Inner(bar : I32) => {\n        fn sum() => foo + bar;\n        this    \n    }\n\n    this\n}\n\nOuter(25).Inner(75).sum()",
             "",
             100,
         );
