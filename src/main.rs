@@ -208,6 +208,18 @@ fn strip_fn_bodies(source: &str) -> String {
 }
 
 fn main() {
+    // compile_expression is a deeply recursive-descent parser with large per-call
+    // stack frames; Windows' default 1 MiB main-thread stack isn't enough for
+    // realistically-sized .tuff files, so run the work on a thread with a larger stack.
+    std::thread::Builder::new()
+        .stack_size(64 * 1024 * 1024)
+        .spawn(run)
+        .expect("Failed to spawn compiler thread")
+        .join()
+        .expect("Compiler thread panicked");
+}
+
+fn run() {
     let source = std::fs::read_to_string("main.tuff")
         .expect("Failed to read main.tuff");
     let c_code = compile(&source).expect("Compilation failed");
