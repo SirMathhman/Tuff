@@ -4465,4 +4465,13 @@ mod tests {
             1,
         );
     }
+
+    #[test]
+    fn test_factory_counter_with_add_and_field_access() {
+        expect_valid(
+            "fn Counter() => {\n    let mut value = 0;\n    fn add() => {\n        value += 1;\n    }\n    this\n}\nlet first : Counter = Counter();\nfirst.add();\nfirst.value",
+            "",
+            1,
+        );
+    }
 }
