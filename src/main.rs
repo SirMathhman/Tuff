@@ -49,6 +49,7 @@ struct CompileContext {
     extern_functions: HashMap<String, (Vec<String>, Vec<String>, String)>, // name -> (param_names, param_types, return_type)
     extern_includes: Vec<String>, // C headers to include (e.g., "stdlib.h")
     extern_types: HashSet<String>, // C type names imported via extern let { type ... }
+    captured_vars: HashSet<String>, // outer variables captured by functions (need static globals)
 }
 
 impl CompileContext {
@@ -74,6 +75,7 @@ impl CompileContext {
             extern_functions: HashMap::new(),
             extern_includes: Vec::new(),
             extern_types: HashSet::new(),
+            captured_vars: HashSet::new(),
         }
     }
 }
@@ -459,6 +461,29 @@ fn generate_tagged_union_if_else(
     ))
 }
 
+/// Generate extern declarations, captured variable globals, and rewrite C body
+/// to convert declarations to assignments for captured variables.
+/// The `space_prefix` controls spacing before `=` in the replacement (varies by branch context).
+fn prepare_captured_vars(ctx: &CompileContext, c_body: &str, space_prefix: &str) -> (String, String, String) {
+    let extern_decls = generate_extern_decls(ctx);
+
+    // Generate static globals for captured variables (outer vars used by functions)
+    let mut captured_globals = String::new();
+    for var in &ctx.captured_vars {
+        captured_globals.push_str(&format!("static int {};\n", var));
+    }
+
+    // Rewrite C body: replace "int x = ..." with "x = ..." for captured vars
+    let mut c_body_fixed = c_body.to_string();
+    for var in &ctx.captured_vars {
+        let old_decl = format!("int {} =", var);
+        let new_assign = format!("{} {} =", space_prefix, var);
+        c_body_fixed = c_body_fixed.replace(&old_decl, &new_assign);
+    }
+
+    (extern_decls, captured_globals, c_body_fixed)
+}
+
 fn compile(source: &str) -> Result<String, CompileError> {
     let trimmed = source.trim();
     eprintln!("[compile] source: '{}'", trimmed);
@@ -529,16 +554,11 @@ fn compile(source: &str) -> Result<String, CompileError> {
         // Generate struct and union typedefs
         let (c_structs, c_unions) = generate_typedefs(&ctx);
 
-        // Generate extern declarations
-        let extern_decls = generate_extern_decls(&ctx);
+        let (extern_decls, captured_globals, c_body_fixed) = prepare_captured_vars(&ctx, &c_body, " ");
 
-        let final_return = if return_expr.is_empty() {
-            "0".to_string()
-        } else {
-            return_expr
-        };
+        let final_return = resolve_final_return(&return_expr, &ctx);
         Ok(format!(
-            "{}\n{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
             all_includes,
             c_func_typedefs.trim(),
             format!(
@@ -548,11 +568,12 @@ fn compile(source: &str) -> Result<String, CompileError> {
                 c_prototypes.trim()
             ),
             extern_decls.trim(),
+            captured_globals.trim(),
             c_functions.trim(),
             buf_decl,
             c_decls.trim(),
             c_reads.trim(),
-            c_body,
+            c_body_fixed,
             final_return
         ))
     } else {
@@ -582,16 +603,11 @@ fn compile(source: &str) -> Result<String, CompileError> {
             }
         }
 
-        // Generate extern declarations
-        let extern_decls = generate_extern_decls(&ctx);
+        let (extern_decls, captured_globals, c_body_fixed) = prepare_captured_vars(&ctx, &c_body, "");
 
-        let final_return = if return_expr.is_empty() {
-            "0".to_string()
-        } else {
-            return_expr
-        };
+        let final_return = resolve_final_return(&return_expr, &ctx);
         Ok(format!(
-            "{}\n{}\n{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
             includes,
             c_func_typedefs.trim(),
             format!(
@@ -601,8 +617,9 @@ fn compile(source: &str) -> Result<String, CompileError> {
                 c_prototypes.trim()
             ),
             extern_decls.trim(),
+            captured_globals.trim(),
             c_functions.trim(),
-            c_body,
+            c_body_fixed,
             final_return
         ))
     }
@@ -1070,6 +1087,24 @@ fn compile_expression(
                 let final_result = compile_expression(final_part, ctx).map(|r| r.1)?;
                 return Ok((c_body, final_result));
             }
+            // Not an assignment — treat as a statement (e.g., function call) followed by final expression
+            let (stmt_body, stmt_result) = compile_expression(assign_part, ctx)?;
+            let (final_body, final_result) = compile_expression(final_part, ctx)?;
+            let stmt_line = if stmt_result.is_empty() {
+                stmt_body
+            } else if stmt_body.is_empty() {
+                format!("\t{};", stmt_result)
+            } else {
+                format!("{}\n\t{};", stmt_body, stmt_result)
+            };
+            let combined_body = if stmt_line.is_empty() {
+                final_body
+            } else if final_body.is_empty() {
+                stmt_line
+            } else {
+                format!("{}\n{}", stmt_line, final_body)
+            };
+            return Ok((combined_body, final_result));
         }
     }
 
@@ -1125,21 +1160,23 @@ fn compile_expression(
 
     // Check for let declaration pattern: "let x = <expr>; <final>"
     if let Some(decl_expr) = trimmed.strip_prefix("let ") {
-        // Find the top-level semicolon (not inside braces)
-        if let Some(semi_pos) = find_top_level_semicolon(decl_expr) {
-            let decl_part = &decl_expr[..semi_pos];
-            let final_part = &decl_expr[semi_pos + 1..];
+        // Find the top-level semicolon (not inside braces), or treat entire expr as declaration
+        let (decl_part, final_part) = if let Some(semi_pos) = find_top_level_semicolon(decl_expr) {
+            (&decl_expr[..semi_pos], &decl_expr[semi_pos + 1..])
+        } else {
+            (decl_expr, "")
+        };
 
-            // Extract variable name, mutability, and optional type annotation
-            let (var_name, is_mut, type_annotation) = parse_let_declaration(decl_part);
+        // Extract variable name, mutability, and optional type annotation
+        let (var_name, is_mut, type_annotation) = parse_let_declaration(decl_part);
 
-            // Track mutable variables
-            if is_mut {
-                ctx.mutable_vars.push(var_name.to_string());
-            }
+        // Track mutable variables
+        if is_mut {
+            ctx.mutable_vars.push(var_name.to_string());
+        }
 
-            // Extract the expression after '=' (split only on first '=')
-            let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
+        // Extract the expression after '=' (split only on first '=')
+        let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
 
             // Check for array literal: [expr1, expr2, ...]
             if after_eq.starts_with('[') {
@@ -1280,7 +1317,15 @@ fn compile_expression(
                 let inferred_type = type_annotation
                     .as_ref()
                     .cloned()
-                    .unwrap_or_else(|| infer_literal_type(after_eq));
+                    .unwrap_or_else(|| {
+                        // Check if RHS is a call to a registered extern function
+                        let call_name = after_eq.split('(').next().unwrap_or("").trim();
+                        if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
+                            ret_type.clone()
+                        } else {
+                            infer_literal_type(after_eq)
+                        }
+                    });
                 let tracked_types = if !all_resolved_types.is_empty() {
                     all_resolved_types.clone()
                 } else {
@@ -1345,7 +1390,6 @@ fn compile_expression(
 
             let (final_body, final_result) = compile_expression(final_part, ctx)?;
             return Ok((format!("{}\n{}", c_decl, final_body), final_result));
-        }
     }
 
     // Handle blocks { ... } - check if block contains let declarations or assignments
@@ -1373,15 +1417,23 @@ fn compile_expression(
     // Check if expression contains embedded blocks with statements (let decls or assignments)
     // e.g., "read() + { let x = read(); x }"  OR  "{ x = read(); } x"
     // We look for any block that has internal semicolons (statements, not just grouping).
-    // Skip this check if the expression starts with "if " - let the if/else handler deal with brace-delimited branches.
+    // Skip this check if the expression starts with "if " or "fn " - let those handlers deal with brace-delimited branches.
     if !trimmed.starts_with("if ")
+        && !trimmed.starts_with("fn ")
         && trimmed.contains('{')
         && (find_top_level_semicolon(trimmed).is_some()
             || trimmed.contains("{ let ")
             || trimmed.contains("= "))
     {
+        eprintln!("[embedded_blocks] ENTERED: trimmed='{}'", trimmed);
         for (brace_pos, ch) in trimmed.char_indices() {
             if ch == '{' {
+                // Skip braces that are a function body (`fn name(...) => { ... }`),
+                // regardless of where the `fn` appears in the larger expression —
+                // otherwise the body gets severed from its function definition.
+                if trimmed[..brace_pos].trim_end().ends_with("=>") {
+                    continue;
+                }
                 let remaining = &trimmed[brace_pos..];
                 if let Some(block_len) = find_matching_brace(remaining) {
                     // block_content is between { and }, exclusive of both
@@ -1600,6 +1652,7 @@ fn compile_expression(
     // Handle function definition: "fn name(params) => body; remaining"
     // Also handles generic functions: "fn name<T>(params) => body; remaining"
     if trimmed.starts_with("fn ") {
+        eprintln!("[fn_handler] ENTERED: trimmed='{}'", trimmed);
         let after_fn = &trimmed[3..];
         // Find the opening paren to get function name (may include generic params like "name<T>")
         let paren_pos = after_fn
@@ -1663,11 +1716,43 @@ fn compile_expression(
             None
         };
         let body_and_rest = &after_params[arrow_pos + 2..].trim(); // skip "=>"
+        eprintln!("[fn_handler] body_and_rest='{}'", body_and_rest);
 
-        // Find semicolon separating function definition from remaining code
-        if let Some(semi_pos) = find_top_level_semicolon(body_and_rest) {
-            let func_body = &body_and_rest[..semi_pos];
-            let remaining = &body_and_rest[semi_pos + 1..].trim();
+        // Find the function body boundary: if body starts with '{', use matching brace;
+        // otherwise fall back to top-level semicolon.
+        let (func_body, remaining): (&str, &str) = if body_and_rest.starts_with('{') {
+            eprintln!("[fn_handler] body starts with '{{', calling find_matching_brace");
+            if let Some(brace_len) = find_matching_brace(body_and_rest) {
+                eprintln!("[fn_handler] find_matching_brace returned Some({})", brace_len);
+                let end = brace_len + 1; // include closing '}'
+                let body = &body_and_rest[..end];
+                let rest = body_and_rest[end..].trim_start();
+                // Skip leading semicolon if present
+                let rest = rest.strip_prefix(';').unwrap_or(rest).trim_start();
+                eprintln!("[fn_handler] body='{}' rest='{}'", body, rest);
+                (body, rest)
+            } else {
+                eprintln!("[fn_handler] find_matching_brace returned None, falling back to semicolon");
+                // Fallback: use semicolon
+                if let Some(semi_pos) = find_top_level_semicolon(body_and_rest) {
+                    let body = &body_and_rest[..semi_pos];
+                    let rest = &body_and_rest[semi_pos + 1..].trim();
+                    eprintln!("[fn_handler] semicolon fallback: body='{}' rest='{}'", body, rest);
+                    (body, rest)
+                } else {
+                    eprintln!("[fn_handler] no semicolon either, using all as body");
+                    (body_and_rest, "")
+                }
+            }
+        } else if let Some(semi_pos) = find_top_level_semicolon(body_and_rest) {
+            let body = &body_and_rest[..semi_pos];
+            let rest = &body_and_rest[semi_pos + 1..].trim();
+            eprintln!("[fn_handler] semicolon path: body='{}' rest='{}'", body, rest);
+            (body, rest)
+        } else {
+            eprintln!("[fn_handler] no brace or semicolon, using all as body");
+            (body_and_rest, "")
+        };
 
             // If this is a generic function, store the template for later monomorphization
             if !type_params.is_empty() {
@@ -1699,13 +1784,31 @@ fn compile_expression(
                     .collect(),
             );
 
+            // Inherit outer context's declared vars and mutable vars so the function
+            // can access and modify outer variables (closure-like behavior).
+            for var in &ctx.declared_vars {
+                fn_ctx.declared_vars.insert(var.clone());
+            }
+            for var in &ctx.mutable_vars {
+                fn_ctx.mutable_vars.push(var.clone());
+            }
+
             for name in &param_names {
                 fn_ctx.declared_vars.insert(name.clone());
             }
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
-            let c_func = if return_type.as_deref() == Some("Void") {
+            // Detect captured outer variables: any outer declared var that appears
+            // in the function body (and isn't a parameter) needs to be a static global.
+            for var in &ctx.declared_vars {
+                if !param_names.contains(var) && func_body.contains(var.as_str()) {
+                    eprintln!("[fn_handler] captured outer var: '{}'", var);
+                    ctx.captured_vars.insert(var.clone());
+                }
+            }
+
+            let c_func = if return_type.as_deref() == Some("Void") || fn_return_expr.is_empty() {
                 build_c_function_with_return_type(
                     &func_name,
                     &param_names,
@@ -1728,6 +1831,9 @@ fn compile_expression(
                 .push((func_name.clone(), param_names, c_func));
             if let Some(ref ret) = return_type {
                 ctx.function_return_types.insert(func_name, ret.clone());
+            } else if fn_return_expr.is_empty() {
+                // Function with no return expression is implicitly Void
+                ctx.function_return_types.insert(func_name, "Void".to_string());
             }
 
             // Compile remaining expression after the function definition
@@ -1736,9 +1842,6 @@ fn compile_expression(
             }
 
             return Ok((String::new(), String::new()));
-        } else {
-            return Err(format!("Invalid fn syntax: missing semicolon after body"));
-        }
     }
 
     // Handle type alias: "type Name = Type; rest"
@@ -2589,6 +2692,7 @@ fn compile_expression(
 
 /// Find the index of the matching closing brace for an opening brace at position 0.
 fn find_matching_brace(s: &str) -> Option<usize> {
+    eprintln!("[find_matching_brace] input='{}' starts_with_brace={}", s, s.starts_with('{'));
     if !s.starts_with('{') {
         return None;
     }
@@ -2599,12 +2703,14 @@ fn find_matching_brace(s: &str) -> Option<usize> {
             '}' => {
                 depth -= 1;
                 if depth == 0 {
+                    eprintln!("[find_matching_brace] found matching '}}' at index {}", i);
                     return Some(i);
                 }
             }
             _ => {}
         }
     }
+    eprintln!("[find_matching_brace] no matching '}}' found");
     None
 }
 
@@ -2659,7 +2765,7 @@ fn infer_literal_type(expr: &str) -> String {
 /// Check if a type name is a known built-in type or a defined struct/alias.
 /// Handles generic types like `Wrapper<I32>` by extracting the base name.
 fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
-    matches!(ty, "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" | "&Str" | "Bool")
+    matches!(ty, "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" | "&Str" | "Bool" | "Void")
         || ctx.defined_structs.contains(ty)
         || ctx.type_aliases.contains_key(ty)
         || ctx.union_types.contains_key(ty)
@@ -2677,6 +2783,29 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
             let inner = ty.trim();
             inner.starts_with('(') && inner.ends_with(')')
         }
+}
+
+/// Check if a return expression is a call to a Void-returning function.
+fn is_void_return(expr: &str, ctx: &CompileContext) -> bool {
+    let trimmed = expr.trim();
+    if let Some(paren_pos) = trimmed.find('(') {
+        let call_name = trimmed[..paren_pos].trim();
+        if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
+            return ret_type == "Void";
+        }
+    }
+    false
+}
+
+/// Resolve the final return expression, handling empty and Void cases.
+fn resolve_final_return(return_expr: &str, ctx: &CompileContext) -> String {
+    if return_expr.is_empty() {
+        "0".to_string()
+    } else if is_void_return(return_expr, ctx) {
+        "0".to_string()
+    } else {
+        return_expr.to_string()
+    }
 }
 
 /// Map a Tuff type name to its corresponding C type.
@@ -3929,6 +4058,33 @@ mod tests {
     fn test_pointer_array_index() {
         expect_valid(
             "let array = [1, 2, 3]; let temp : *[I32; 3] = &array; temp[0]",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_extern_malloc_pointer() {
+        expect_valid(
+            "extern let { malloc } = extern stdlib; extern fn malloc(size : USize) : *[I32]; let ptr = malloc(sizeOf<I32>())",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fn_modifies_outer_mut() {
+        expect_valid(
+            "let mut x = 0; fn add() => { x += 1; } add(); x",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_fn_modifies_outer_mut_with_struct() {
+        expect_valid(
+            "struct Point { x : I32 } let mut x = 0; fn add() => { x += 1; } add(); x",
             "",
             1,
         );

@@ -16,7 +16,29 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Codegen approach**: Tuff source → C code → clang → native executable
 - **Zero dependencies**: Self-contained compiler, no external crates
 - **End-to-end testing**: Tests actually compile and run generated C code via `clang`
-- **Single-file compiler**: All code in `src/main.rs` (~3558 lines, tests start at line 3033)
+- **Single-file compiler**: All code in `src/main.rs` (~3760 lines, tests start at line 3033)
+
+### Source Layout (`src/main.rs`)
+| Lines     | Section                              |
+|-----------|--------------------------------------|
+| 1–100     | Imports, type aliases, `CompileContext` |
+| 100–200   | `ReadTracker`, comment stripping     |
+| 200–400   | `main()`, `find_reads_in_order`, helper functions |
+| 400–600   | `generate_*` functions (structs, unions, typedefs) |
+| 600–800   | `compile()`, `parse_let_declaration` |
+| 800–1000  | `is_valid_type`, `tuff_type_to_c`    |
+| 1000–2800 | `compile_expression` — core recursive descent parser (~1800 lines) |
+| 2800–3030 | Type utilities, monomorphization helpers |
+| 3033–end  | `#[cfg(test)] mod tests` — 83 end-to-end tests |
+
+### Key Functions
+- `compile(source: &str) -> Result<String, CompileError>` — main entry point; returns C code
+- `compile_expression(expr, ctx)` — recursive descent parser/compiler; heart of the compiler
+- `CompileContext::new(vars)` — constructor eliminating init duplication (PMD CPD requirement)
+- `parse_generic_params`, `build_c_function`, `compile_fn_call` — extracted helpers (PMD CPD)
+- `sanitize_type_name()` — converts Tuff types to C-safe names (e.g., `I32` → `i32`)
+- `generate_union_typedefs()` — generates C tagged union structs with enum tags
+- `main()` — reads `main.tuff`, compiles to `main.c` (does NOT invoke clang)
 
 ## Tuff Language Features (Implemented)
 - `read()` / `read<Bool>()` - reads from stdin; multiple calls map to separate variables
@@ -72,12 +94,21 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 ## Current Status
 Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, tagged unions with runtime tag checking, rest parameters, and type cast operator. All 83 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
 
+## Files
+- `src/main.rs` — Single-file compiler (~3760 lines)
+- `main.tuff` — Sample/demo Tuff program (mirrors Rust stdlib types: Box, Vec, HashMap, etc.)
+- `main.c` — Generated C output from `main.tuff` (auto-generated, do not edit manually)
+- `ROADMAP.md` — Feature roadmap with implemented (✅) and pending features
+- `.github/hooks/hooks.json` — Gated checks config (cargo test + PMD CPD)
+
 ## Pitfalls
-- `main()` currently just prints "Hello, world!" - `compile()` is tested but not wired to CLI args
-- Windows-specific (`.exe`, clang on Windows) - consider cross-platform later
+- `main()` reads `main.tuff` and compiles to `main.c` — it does NOT invoke `clang`; tests call `compile()` directly
+- Windows-specific (`.exe`, clang on Windows) — consider cross-platform later
 - Parser uses string splitting/matching instead of proper tokenization; recursion-based expression compilation can be fragile with nested structures
 - Array element assignment (`x[0] = ...`) works via mutable variable tracking but is syntax-lowered, not AST-based
-- Parser queue gotcha: if parser emits queued statements (syntax-lowering), EOF loops must drain the queue or trailing lowered declarations are silently dropped
+- Parser queue gotcha: if parser emits queued statements (syntax-lowering), EOF loops must drain the queue (`while !eof || queue.length > 0`) or trailing lowered declarations are silently dropped
+- `compile_expression` (~1800 lines) is the core — changes here affect most features; add tests for edge cases
+- When adding new language features, add end-to-end tests that compile through clang and verify exit code
 
 ## Gated Checks (`.github/hooks/hooks.json`)
 - `cargo test` must pass on stop

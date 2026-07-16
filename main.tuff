@@ -60,6 +60,7 @@ struct CompileContext {
     generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
 }
 
-let array = [1, 2, 3];
-let temp : *[I32; 3] = &array;
-temp[0]
+let mut x = 0; 
+fn add() => { x += read(); } 
+add(); 
+x

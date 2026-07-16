@@ -53,13 +53,16 @@ typedef struct {
 		Vec_Tuple_String_Vec_String_String generated_functions;
 } CompileContext;
 
+void add(void);
 
+static int x;
+void add(void) {
+		int v0;
+		scanf("%d", &v0);
 
-int main() {
+	x += v0;}int main() {
 	
-	int array[3] = {1, 2, 3};
-
-	 int * temp = ((int *)(&array));
-
-	return temp[0];
+	  x = 0;
+	add();
+	return x;
 }
