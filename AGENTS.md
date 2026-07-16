@@ -6,17 +6,19 @@ Tuff is a C-like programming language designed to eliminate undefined behavior, 
 ## Build & Test
 ```bash
 cargo build    # Compile
-cargo test     # Run 83 end-to-end tests (compile Tuff → C → clang → execute)
+cargo test     # Run 101 end-to-end tests (compile Tuff → C → clang → execute)
 cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 ```
-- **Gated Checks** (`.github/hooks/hooks.json`): `cargo test` and PMD CPD (50-token minimum on `src/`) run on workspace stop. Both must pass.
+- **Gated Checks** (`.github/hooks/hooks.json`): `cargo test` and PMD CPD (50-token minimum on `src/`) run on workspace stop. Both must pass. Note: hooks.json uses `cmd /c "..."` wrapping for PowerShell commands.
 - **Watch mode**: `watch.ps1` runs `watchexec -e tuff,rs -r -- cargo run` for hot-reload development.
+- **No editor config**: No `rustfmt.toml`, `clippy.toml`, `.editorconfig`, or `.vscode/` directory — agents should respect Rust 2024 edition defaults.
 
 ## Architecture
 - **Codegen approach**: Tuff source → C code → clang → native executable
 - **Zero dependencies**: Self-contained compiler, no external crates
 - **End-to-end testing**: Tests actually compile and run generated C code via `clang`
-- **Single-file compiler**: All code in `src/main.rs` (~3760 lines, tests start at line 3033)
+- **Single-file compiler**: All code in `src/main.rs` (~4152 lines, tests start at line 3482)
+- **No external dependencies**: `Cargo.toml` `[dependencies]` section is empty — verifiable via `Cargo.lock` containing only `tuffc`
 
 ### Source Layout (`src/main.rs`)
 | Lines     | Section                              |
@@ -26,10 +28,12 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 | 200–400   | `main()`, `find_reads_in_order`, helper functions |
 | 400–600   | `generate_*` functions (structs, unions, typedefs) |
 | 600–800   | `compile()`, `parse_let_declaration` |
-| 800–1000  | `is_valid_type`, `tuff_type_to_c`    |
+| 800–1000  | `is_valid_type`, `tuff_type_to_c`, array helpers |
 | 1000–2800 | `compile_expression` — core recursive descent parser (~1800 lines) |
 | 2800–3030 | Type utilities, monomorphization helpers |
-| 3033–end  | `#[cfg(test)] mod tests` — 83 end-to-end tests |
+| 3030–3390 | Utility functions (`find_matching_*`, `sanitize_type_name`, etc.) |
+| 3392–3480 | `expect_valid`, `expect_invalid` test helpers |
+| 3482–end  | `#[cfg(test)] mod tests` — 101 end-to-end tests |
 
 ### Key Functions
 - `compile(source: &str) -> Result<String, CompileError>` — main entry point; returns C code
@@ -72,6 +76,14 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Pointer types**: `let y : *I32 = &x` — pointer type annotation with address-of operator
 - **Address-of operator**: `&x` — generates C `&x` for taking variable addresses
 - **Dereference operator**: `*y` — generates C `(*y)` for pointer dereference
+- **Struct destructuring**: `let { x, y } = Point { x : 3, y : 4 }` — extracts struct fields into individual variables
+- **Extern FFI**: `extern let { atoi } = extern stdlib; extern fn atoi(str : &Str) : I32;` — import C library functions with header includes
+- **Extern type imports**: `extern let { type uint8_t } = extern stdint;` — import C type names for use in Tuff code
+- **sizeOf operator**: `sizeOf<I32>()` → `sizeof(i32)` — returns `USize`; works with extern types
+- **Pointer array indexing**: `temp[0]` on `*[I32; 3]` — index into pointer-typed arrays
+- **Void functions**: `fn empty() : Void => {};` — functions with explicit `Void` return type
+- **Captured variables**: functions modifying outer `mut` vars — outer mutable vars become `static int` globals
+- **This references**: `this.x` — resolve `.x` to variable `x` when no struct context
 ## Key Conventions
 - Rust 2024 edition
 - `compile(source: &str) -> Result<String, CompileError>` - main compiler entry point (returns C code)
@@ -83,19 +95,26 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - Monomorphization: Runtime type substitution (e.g., `Wrapper<I32>` → `Wrapper_I32`, `pass<I32>` → `pass_I32`)
 - `union_types: HashMap<String, Vec<String>>` — tracks union aliases with struct variant names
 - `tagged_union_vars: HashSet<String>` — tracks variables using tagged union assignments
+- `extern_functions: HashMap<String, (Vec<String>, Vec<String>, String)>` — name → (param_names, param_types, return_type)
+- `extern_includes: Vec<String>` — C headers to include (e.g., `"stdlib.h"`)
+- `extern_types: HashSet<String>` — C type names imported via `extern let { type ... }`
+- `captured_vars: HashSet<String>` — outer variables captured by functions (need static globals)
+- `this_refs: HashSet<String>` — variables that are this-references
 - `generate_union_typedefs()` — generates C tagged union typedefs with enum tags and union data
 - `generate_tagged_union_if_else()` — generates if/else block with tag assignments for union variants
+- `generate_extern_decls()` — generate extern declarations
+- `prepare_captured_vars()` — generate static globals, rewrite declarations
 - `to_lower_first()` — converts struct names to lowercase-first for C field naming
-- Test helpers: `expect_valid(source, stdin_str, exit_code)` and `expect_invalid(source)`
-- Use `#[allow(dead_code)]` on test helper functions
+- Test helpers: `expect_valid(source, stdin_str, exit_code)` (positive) and `expect_invalid(source)` (negative, asserts compilation fails). Both are `#[allow(dead_code)]` functions at file scope (outside `mod tests`). Tests use `#[test]` + snake_case names with `test_` prefix, no `#[should_panic]`.
 - Temp files use atomic counter (`TEMP_COUNTER`) for thread-safe naming
 - `CompileError = String` - will need custom error enum as compiler grows
+- **Test categories**: Basic/read/let-declarations/arrays/mutability/control-flow/types/operators/edge-cases/struct-destructuring/extern-ffi/sizeof/pointer-indexing/void-fns/captured-vars/this-refs — all single-expression pattern `expect_valid("source", "stdin", expected_exit_code)`
 
 ## Current Status
-Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, tagged unions with runtime tag checking, rest parameters, and type cast operator. All 83 tests pass. Next: proper lexer → parser AST → typed codegen pipeline.
+Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, tagged unions with runtime tag checking, rest parameters, type cast operator, struct destructuring, extern FFI, sizeOf, pointer array indexing, void functions, captured variables, and this references. All **101 tests** pass. Next: proper lexer → parser AST → typed codegen pipeline.
 
 ## Files
-- `src/main.rs` — Single-file compiler (~3760 lines)
+- `src/main.rs` — Single-file compiler (~4152 lines)
 - `main.tuff` — Sample/demo Tuff program (mirrors Rust stdlib types: Box, Vec, HashMap, etc.)
 - `main.c` — Generated C output from `main.tuff` (auto-generated, do not edit manually)
 - `ROADMAP.md` — Feature roadmap with implemented (✅) and pending features

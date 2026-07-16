@@ -51,6 +51,7 @@ struct CompileContext {
     extern_types: HashSet<String>, // C type names imported via extern let { type ... }
     captured_vars: HashSet<String>, // outer variables captured by functions (need static globals)
     this_refs: HashSet<String>, // variables that are this-references (resolve .x to variable x)
+    this_param_functions: HashSet<String>, // functions that take &this as a receiver parameter
 }
 
 impl CompileContext {
@@ -78,6 +79,7 @@ impl CompileContext {
             extern_types: HashSet::new(),
             captured_vars: HashSet::new(),
             this_refs: HashSet::new(),
+            this_param_functions: HashSet::new(),
         }
     }
 }
@@ -551,7 +553,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             ""
         };
 
-        let (c_func_typedefs, c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions, &ctx.function_return_types);
+        let (c_func_typedefs, c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions, &ctx.function_return_types, &ctx.captured_vars);
 
         // Generate struct and union typedefs
         let (c_structs, c_unions) = generate_typedefs(&ctx);
@@ -579,7 +581,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             final_return
         ))
     } else {
-        let (c_func_typedefs, c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions, &ctx.function_return_types);
+        let (c_func_typedefs, c_prototypes, c_functions) = generate_function_code(&ctx.generated_functions, &ctx.function_return_types, &ctx.captured_vars);
 
         // Generate struct and union typedefs
         let (c_structs, c_unions) = generate_typedefs(&ctx);
@@ -635,7 +637,7 @@ fn generate_extern_decls(_ctx: &CompileContext) -> String {
 }
 
 /// Generate C function prototypes and definitions from compiled functions.
-fn generate_function_code(functions: &[(String, Vec<String>, String)], function_return_types: &HashMap<String, String>) -> (String, String, String) {
+fn generate_function_code(functions: &[(String, Vec<String>, String)], function_return_types: &HashMap<String, String>, captured_vars: &HashSet<String>) -> (String, String, String) {
     let mut c_typedefs = String::new();
     let mut c_prototypes = String::new();
     for (name, params, _func_code) in functions {
@@ -647,6 +649,9 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
                 let ret_struct = format!("{}_ret", name);
                 c_typedefs.push_str(&format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct));
                 ret_struct
+            } else if ret.ends_with("_ret") {
+                // Struct return type from `this`-returning functions (e.g., "Wrapper_ret")
+                ret.clone()
             } else {
                 "int".to_string()
             }
@@ -665,6 +670,14 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
     for (_name, _params, func_code) in functions {
         c_functions.push_str(func_code);
         c_functions.push('\n');
+    }
+
+    // Rewrite captured var declarations inside function bodies:
+    // "int counter =" -> "counter =" so they don't shadow the static global
+    for var in captured_vars {
+        let old_decl = format!("int {} =", var);
+        let new_assign = format!("{} {} =", "", var);
+        c_functions = c_functions.replace(&old_decl, &new_assign);
     }
 
     (c_typedefs, c_prototypes, c_functions)
@@ -1227,7 +1240,7 @@ fn compile_expression(
             // If type annotation expects an array but RHS is not an array literal, error
             // Skip this check for pointer-to-array types where RHS is an address-of expression
             if let Some(ty) = &type_annotation {
-                if ty.contains('[') && !after_eq.starts_with('[') && !ty.starts_with('*') {
+                if ty.contains('[') && !after_eq.starts_with('[') && !ty.starts_with('&') {
                     return Err(format!(
                         "Type mismatch: expected array but got {}",
                         after_eq
@@ -1263,6 +1276,17 @@ fn compile_expression(
             // If RHS is "this", mark this variable as a this-reference
             if after_eq.trim() == "this" {
                 ctx.this_refs.insert(var_name.to_string());
+            }
+            // If RHS is a call to a `this`-returning function (e.g., "Counter()"),
+            // mark this variable as a this-reference too
+            let rhs_trimmed = after_eq.trim();
+            if let Some(paren_pos) = rhs_trimmed.find('(') {
+                let call_name = rhs_trimmed[..paren_pos].trim();
+                if let Some(ret_type) = ctx.function_return_types.get(call_name) {
+                    if ret_type.ends_with("_ret") {
+                        ctx.this_refs.insert(var_name.to_string());
+                    }
+                }
             }
 
             // Handle shadowing: if variable already declared, generate assignment instead of redeclaration
@@ -1392,7 +1416,7 @@ fn compile_expression(
                     };
                     // For pointer-to-array types, cast the RHS address-of to element pointer
                     let decl_result_final = if let Some(ref ty) = type_annotation {
-                        if ty.starts_with('*') && ty[1..].trim().starts_with('[') {
+                        if ty.starts_with('&') && ty[1..].trim().starts_with('[') {
                             let target_c = tuff_type_to_c(ctx, ty).unwrap_or_else(|_| "void *".to_string());
                             format!("(({})({}))", target_c, decl_result)
                         } else {
@@ -1694,6 +1718,7 @@ fn compile_expression(
         // Parse each parameter: "name : Type", "...name : Type" (rest), or just "name"
         let mut param_names: Vec<String> = Vec::new();
         let mut rest_params: Vec<(String, String)> = Vec::new(); // (name, type) for rest params
+        let mut has_this_param = false;
         if !params_inner.is_empty() {
             for param in params_inner.split(',') {
                 let param_trimmed = param.trim();
@@ -1707,6 +1732,9 @@ fn compile_expression(
                         String::new()
                     };
                     rest_params.push((name, ptype));
+                } else if param_trimmed == "&this" {
+                    // Receiver parameter: &this - mark this function as having a this param
+                    has_this_param = true;
                 } else {
                     let parts: Vec<&str> = param_trimmed.split(':').collect();
                     let name = parts[0].trim();
@@ -1819,6 +1847,24 @@ fn compile_expression(
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
+            // Propagate nested function definitions from fn_ctx to parent ctx
+            for item in fn_ctx.generated_functions {
+                ctx.generated_functions.push(item);
+            }
+            for item in fn_ctx.generated_structs {
+                ctx.generated_structs.push(item);
+            }
+            for (k, v) in fn_ctx.function_return_types {
+                ctx.function_return_types.insert(k, v);
+            }
+            for item in fn_ctx.generated_function_instantiations {
+                ctx.generated_function_instantiations.insert(item);
+            }
+            // Propagate captured vars from nested functions (e.g., inner fn modifying outer mut)
+            for item in fn_ctx.captured_vars {
+                ctx.captured_vars.insert(item);
+            }
+
             // Detect captured outer variables: any outer declared var that appears
             // in the function body (and isn't a parameter) needs to be a static global.
             for var in &ctx.declared_vars {
@@ -1828,6 +1874,11 @@ fn compile_expression(
                 }
             }
 
+            // Detect if function returns `this` - generate struct with local vars as fields
+            let func_body_trimmed = func_body.trim();
+            let returns_this = func_body_trimmed.ends_with("this")
+                || func_body_trimmed.ends_with("this }");
+
             let c_func = if return_type.as_deref() == Some("Void") || fn_return_expr.is_empty() {
                 build_c_function_with_return_type(
                     &func_name,
@@ -1836,6 +1887,43 @@ fn compile_expression(
                     &fn_body_stmts,
                     "",
                     "void",
+                    None,
+                )
+            } else if returns_this {
+                // Collect local variables (declared in fn minus params minus outer vars)
+                let mut local_vars: Vec<String> = fn_ctx.declared_vars
+                    .iter()
+                    .filter(|v| {
+                        !param_names.contains(*v)
+                            && !ctx.declared_vars.contains(*v)
+                    })
+                    .cloned()
+                    .collect();
+                local_vars.sort(); // deterministic order
+
+                let ret_struct = format!("{}_ret", func_name);
+                // Generate struct typedef
+                let fields_str = local_vars.iter()
+                    .map(|v| format!("\tint {};", v))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let typedef = format!("typedef struct {{\n{}\n}} {};", fields_str, ret_struct);
+                ctx.generated_structs.push(typedef);
+
+                // Build struct initializer: (StructName){.field1 = field1, .field2 = field2}
+                let init_fields = local_vars.iter()
+                    .map(|v| format!(".{} = {}", v, v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let struct_init = format!("({}){{{}}}", ret_struct, init_fields);
+
+                build_c_function_with_return_type(
+                    &func_name,
+                    &param_names,
+                    &fn_read_entries,
+                    &fn_body_stmts,
+                    &struct_init,
+                    &ret_struct,
                     None,
                 )
             } else {
@@ -1854,6 +1942,8 @@ fn compile_expression(
             } else if fn_return_expr.is_empty() {
                 // Function with no return expression is implicitly Void
                 ctx.function_return_types.insert(func_name, "Void".to_string());
+            } else if returns_this {
+                ctx.function_return_types.insert(func_name.clone(), format!("{}_ret", func_name));
             }
 
             // Compile remaining expression after the function definition
@@ -2403,8 +2493,21 @@ fn compile_expression(
         let field = &trimmed[dot_pos + 1..].trim();
         let base_str = base.to_string();
         let field_str = field.to_string();
-        if ctx.this_refs.contains(&base_str) && ctx.declared_vars.contains(&field_str) {
+        if ctx.this_refs.contains(&base_str) && (ctx.declared_vars.contains(&field_str) || ctx.captured_vars.contains(&field_str)) {
             return Ok((String::new(), field.to_string()));
+        }
+        // Handle method call on this-returning function result: "Factory().get()" -> "get()"
+        // Extract the method name (strip trailing parens if present)
+        let method_name = if let Some(paren_pos) = field_str.find('(') {
+            &field_str[..paren_pos]
+        } else {
+            &field_str
+        };
+        // Check if method_name is a known generated function (nested method)
+        if ctx.generated_functions.iter().any(|(name, _, _)| name == method_name) {
+            // It's a method call — compile as a plain function call
+            let after_dot = &trimmed[dot_pos + 1..].trim();
+            return compile_expression(after_dot, ctx);
         }
     }
 
@@ -2810,10 +2913,27 @@ fn infer_literal_type(expr: &str) -> String {
 /// Check if a type name is a known built-in type or a defined struct/alias.
 /// Handles generic types like `Wrapper<I32>` by extracting the base name.
 fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
-    matches!(ty, "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" | "&Str" | "Bool" | "Void")
+    // Handle pointer types: "&I32", "&[I32; 3]", etc.
+    if let Some(inner) = ty.strip_prefix('&') {
+        let inner_trimmed = inner.trim();
+        if inner_trimmed == "Str" {
+            return true; // &Str is valid
+        }
+        // Check if inner type is valid (recursive for nested pointers)
+        if inner_trimmed.starts_with('[') {
+            // Array type like "[I32; 3]"
+            if let Some(semi_pos) = inner_trimmed.find(';') {
+                let elem_type = inner_trimmed[1..semi_pos].trim();
+                return is_valid_type(ctx, elem_type);
+            }
+        }
+        return is_valid_type(ctx, inner_trimmed);
+    }
+    matches!(ty, "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" | "Bool" | "Void")
         || ctx.defined_structs.contains(ty)
         || ctx.type_aliases.contains_key(ty)
         || ctx.union_types.contains_key(ty)
+        || ctx.function_return_types.contains_key(ty)
         || {
             // Handle generic types like "Wrapper<I32>" — extract base name
             if let Some(angle_start) = ty.find('<') {
@@ -2856,10 +2976,14 @@ fn resolve_final_return(return_expr: &str, ctx: &CompileContext) -> String {
 /// Map a Tuff type name to its corresponding C type.
 /// Returns an error for unknown types instead of defaulting to "int".
 fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileError> {
-    // Pointer types: "*I32" -> "int *", "*[I32; 3]" -> "int *"
-    if let Some(inner_type) = ty.strip_prefix('*') {
+    // Pointer types: "&I32" -> "int *", "&[I32; 3]" -> "int *"
+    if let Some(inner_type) = ty.strip_prefix('&') {
         let inner_trimmed = inner_type.trim();
-        // Pointer to array: "*[I32; 3]" -> element pointer "int *"
+        // Skip &Str — handled below as built-in
+        if inner_trimmed == "Str" {
+            return Ok("const char *".to_string());
+        }
+        // Pointer to array: "&[I32; 3]" -> element pointer "int *"
         if inner_trimmed.starts_with('[') && inner_trimmed.ends_with(']') {
             let inner = &inner_trimmed[1..inner_trimmed.len() - 1];
             if let Some(semi_pos) = inner.find(';') {
@@ -2889,6 +3013,10 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
     // User-defined struct (typedef name used as-is)
     if ctx.defined_structs.contains(ty) {
         return Ok(ty.to_string());
+    }
+    // Function returning `this` — the function name is a type alias for the return struct
+    if let Some(ret_type) = ctx.function_return_types.get(ty) {
+        return Ok(ret_type.clone());
     }
     // Type alias — resolve and recurse
     if let Some(members) = ctx.type_aliases.get(ty) {
@@ -3587,6 +3715,31 @@ mod tests {
     }
 
     #[test]
+    fn test_this_return_from_fn() {
+        expect_valid("fn Wrapper() => { let field = 100; this } Wrapper().field", "", 100);
+    }
+
+    #[test]
+    fn test_nested_fn_definition() {
+        expect_valid("fn outer() => { fn inner() => 100; inner() } outer()", "", 100);
+    }
+
+    #[test]
+    fn test_nested_fn_modifies_outer_mut() {
+        expect_valid("fn outer() => { let mut counter = 0; fn add() => { counter += 1; }; add(); counter } outer()", "", 1);
+    }
+
+    #[test]
+    fn test_this_return_method_call() {
+        expect_valid("fn Factory() => { fn get() => 100; this } Factory().get()", "", 100);
+    }
+
+    #[test]
+    fn test_this_return_with_nested_fn_and_let() {
+        expect_valid("fn Counter() => { let mut value = 0; fn add() => { value += 1; }; this } let counter : Counter = Counter(); counter.add(); counter.value", "", 1);
+    }
+
+    #[test]
     fn test_u8_literal() {
         expect_valid("100U8", "", 100);
     }
@@ -4072,7 +4225,7 @@ mod tests {
     #[test]
     fn test_pointer_deref() {
         expect_valid(
-            "let x = 100; let y : *I32 = &x; *y",
+            "let x = 100; let y : &I32 = &x; *y",
             "",
             100,
         );
@@ -4117,7 +4270,7 @@ mod tests {
     #[test]
     fn test_pointer_array_index() {
         expect_valid(
-            "let array = [1, 2, 3]; let temp : *[I32; 3] = &array; temp[0]",
+            "let array = [1, 2, 3]; let temp : &[I32; 3] = &array; temp[0]",
             "",
             1,
         );
@@ -4126,7 +4279,7 @@ mod tests {
     #[test]
     fn test_extern_malloc_pointer() {
         expect_valid(
-            "extern let { malloc } = extern stdlib; extern fn malloc(size : USize) : *[I32]; let ptr = malloc(sizeOf<I32>())",
+            "extern let { malloc } = extern stdlib; extern fn malloc(size : USize) : &[I32]; let ptr = malloc(sizeOf<I32>())",
             "",
             0,
         );
@@ -4147,6 +4300,15 @@ mod tests {
             "struct Point { x : I32 } let mut x = 0; fn add() => { x += 1; } add(); x",
             "",
             1,
+        );
+    }
+
+    #[test]
+    fn test_factory_return_with_this_call() {
+        expect_valid(
+            "fn Factory() => { fn get(&this) => 100; this } Factory().get()",
+            "",
+            100,
         );
     }
 }

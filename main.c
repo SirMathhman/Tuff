@@ -52,17 +52,21 @@ typedef struct {
 		HashSet_String generated_function_instantiations;
 		Vec_Tuple_String_Vec_String_String generated_functions;
 } CompileContext;
+typedef struct {
 
-void add(void);
+} Factory_ret;
 
-static int x;
-void add(void) {
-		int v0;
-		scanf("%d", &v0);
+int get(void);
+Factory_ret Factory(void);
 
-	x += v0;}int main() {
+
+int get(void) {
+		return 100;
+}
+
+Factory_ret Factory(void) {
+		return (Factory_ret){};
+}int main() {
 	
-	  x = 0;
-	add();
-	return x;
+	return get();
 }
