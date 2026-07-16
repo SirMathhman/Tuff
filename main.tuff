@@ -40,8 +40,13 @@ struct GenericFunctionTemplate {
     body: String
 }
 
-
-fn Counter() => { let mut value = 0; fn add() => { value += 1; }; this } 
+fn Counter() => { 
+    let mut value = 0; 
+    fn add() => { 
+        value += 1;
+    }
+    this
+ } 
 let counter : Counter = Counter(); 
 counter.add(); 
 counter.value

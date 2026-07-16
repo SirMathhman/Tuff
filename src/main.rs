@@ -3764,6 +3764,33 @@ mod tests {
     }
 
     #[test]
+    fn test_this_return_no_semicolon_after_nested_fn() {
+        expect_valid("fn Counter() => { let mut value = 0; fn add() => { value += 1; } this } let counter : Counter = Counter(); counter.add(); counter.value", "", 1);
+    }
+
+    #[test]
+    fn test_counter_after_struct_def() {
+        expect_valid("struct String { value : &Str } fn Counter() => { let mut value = 0; fn add() => { value += 1; } this } let counter : Counter = Counter(); counter.add(); counter.value", "", 1);
+    }
+
+    #[test]
+    fn test_counter_after_union_type() {
+        expect_valid("struct Some<T> { value : T } struct None<T> { } type Option<T> = Some<T> | None<T>; fn Counter() => { let mut value = 0; fn add() => { value += 1; } this } let counter : Counter = Counter(); counter.add(); counter.value", "", 1);
+    }
+
+    #[test]
+    fn test_counter_after_generic_struct_with_nested_type() {
+        // Reproduces cargo run failure: Vec<String> used as struct field type requires Vec<T> to be defined
+        expect_valid("struct String { value : &Str } struct Vec<T> { } struct GenericStructTemplate { name : String, type_params : Vec<String>, fields_str : String } fn Counter() => { let mut value = 0; fn add() => { value += 1; } this } let counter : Counter = Counter(); counter.add(); counter.value", "", 1);
+    }
+
+    #[test]
+    fn test_generic_type_in_struct_field() {
+        // Reproduces cargo run failure: generic type (Vec<String>) used as struct field type
+        expect_valid("struct String { value : &Str } struct Vec<T> { } struct Foo { items : Vec<String> }", "", 0);
+    }
+
+    #[test]
     fn test_u8_literal() {
         expect_valid("100U8", "", 100);
     }
