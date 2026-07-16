@@ -52,6 +52,7 @@ struct CompileContext {
     captured_vars: HashSet<String>, // outer variables captured by functions (need static globals)
     this_refs: HashSet<String>, // variables that are this-references (resolve .x to variable x)
     this_param_functions: HashSet<String>, // functions that take &this as a receiver parameter
+    factory_method_instances: HashMap<String, String>, // method name -> instance struct type (e.g., "add" -> "Counter_ret")
 }
 
 impl CompileContext {
@@ -80,6 +81,7 @@ impl CompileContext {
             captured_vars: HashSet::new(),
             this_refs: HashSet::new(),
             this_param_functions: HashSet::new(),
+            factory_method_instances: HashMap::new(),
         }
     }
 }
@@ -673,7 +675,13 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
         if params.is_empty() {
             c_prototypes.push_str(&format!("{} {}(void);\n", return_type, name));
         } else {
-            let param_sig: Vec<String> = params.iter().map(|p| format!("int {}", p)).collect();
+            let param_sig: Vec<String> = params.iter().map(|p| {
+                if p.contains('*') {
+                    p.clone() // Already a full type like "Counter_ret* instance"
+                } else {
+                    format!("int {}", p)
+                }
+            }).collect();
             c_prototypes.push_str(&format!("{} {}({});\n", return_type, name, param_sig.join(", ")));
         }
     }
@@ -1878,6 +1886,9 @@ fn compile_expression(
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
+            // Save nested function info before propagation (needed for factory instance rewriting)
+            let nested_fns: Vec<(String, Vec<String>, String)> = fn_ctx.generated_functions.clone();
+
             // Propagate nested function definitions from fn_ctx to parent ctx
             for item in fn_ctx.generated_functions {
                 ctx.generated_functions.push(item);
@@ -1965,6 +1976,59 @@ fn compile_expression(
                     .collect::<Vec<_>>()
                     .join(", ");
                 let struct_init = format!("({}){{{}}}", ret_struct, init_fields);
+
+                // Rewrite nested methods that capture factory local vars to take instance pointer
+                // e.g., "void add(void) { value += 1; }" -> "void add(Counter_ret* instance) { instance->value += 1; }"
+                let mut rewritten_methods: Vec<(String, Vec<String>, String)> = Vec::new();
+                for (method_name, method_params, method_code) in &nested_fns {
+                    if method_code.is_empty() { continue; }
+                    // Check if this method captures any of the factory's local vars
+                    let captures_factory_var = local_vars.iter().any(|v| method_code.contains(v.as_str()));
+                    if captures_factory_var {
+                        // Register this method as needing an instance pointer
+                        ctx.factory_method_instances.insert(method_name.clone(), ret_struct.clone());
+                        // Rewrite the C code: add instance param and replace var -> instance->var
+                        let mut rewritten = method_code.clone();
+                        // Replace "void add(void)" or "void add()" with "void add(Counter_ret* instance)"
+                        let old_sig = if method_params.is_empty() {
+                            format!("void {}(void)", method_name)
+                        } else {
+                            let param_sig: Vec<String> = method_params.iter().map(|p| format!("int {}", p)).collect();
+                            format!("void {}({})", method_name, param_sig.join(", "))
+                        };
+                        let new_sig = format!("void {}({}* instance)", method_name, ret_struct);
+                        rewritten = rewritten.replace(&old_sig, &new_sig);
+                        // Replace captured var references with instance->var
+                        for var in &local_vars {
+                            // Replace "var " and "var;" and "var}" and "var\n" but not "instance->var"
+                            let from = format!("{} ", var);
+                            let to = format!("instance->{} ", var);
+                            rewritten = rewritten.replace(&from, &to);
+                            let from = format!("{};", var);
+                            let to = format!("instance->{};", var);
+                            rewritten = rewritten.replace(&from, &to);
+                            let from = format!("{}}}", var);
+                            let to = format!("instance->{}}}", var);
+                            rewritten = rewritten.replace(&from, &to);
+                            let from = format!("{}\n", var);
+                            let to = format!("instance->{}\n", var);
+                            rewritten = rewritten.replace(&from, &to);
+                        }
+                        rewritten_methods.push((method_name.clone(), vec![format!("{}* instance", ret_struct)], rewritten));
+                    } else {
+                        rewritten_methods.push((method_name.clone(), method_params.clone(), method_code.clone()));
+                    }
+                }
+                // Replace the propagated nested functions with rewritten versions
+                for (name, params, code) in rewritten_methods {
+                    // Remove old entry and add rewritten one
+                    ctx.generated_functions.retain(|(n, _, _)| n != &name);
+                    ctx.generated_functions.push((name, params, code));
+                }
+                // Remove factory local vars from captured_vars — they're now per-instance
+                for var in &local_vars {
+                    ctx.captured_vars.remove(var);
+                }
 
                 build_c_function_with_return_type(
                     &func_name,
@@ -2572,6 +2636,18 @@ fn compile_expression(
         };
         // Check if method_name is a known generated function (nested method)
         if ctx.generated_functions.iter().any(|(name, _, _)| name == method_name) {
+            // Check if this method needs an instance pointer (factory method)
+            if let Some(_instance_type) = ctx.factory_method_instances.get(method_name) {
+                // Compile as: method(&instance) instead of method()
+                let after_dot = &trimmed[dot_pos + 1..].trim();
+                let (method_body, method_result) = compile_expression(after_dot, ctx)?;
+                // Replace "method()" with "method(&instance)"
+                let call_with_instance = method_result.replace(
+                    &format!("{}()", method_name),
+                    &format!("{}(&{})", method_name, base_str),
+                );
+                return Ok((method_body, call_with_instance));
+            }
             // It's a method call — compile as a plain function call
             let after_dot = &trimmed[dot_pos + 1..].trim();
             return compile_expression(after_dot, ctx);
@@ -4488,6 +4564,15 @@ mod tests {
             "fn Counter() => {\n    let mut value = 0;\n    fn add(&mut this) => {\n        value += 1;\n    }\n    this\n}",
             "",
             0,
+        );
+    }
+
+    #[test]
+    fn test_factory_multiple_counters_independent_state() {
+        expect_valid(
+            "fn Counter() => {\n    let mut value = 0;\n    fn add(&mut this) => {\n        value += 1;\n    }\n    this\n}\nlet mut first = Counter();\nfirst.add();\nfirst.add();\n\nlet mut second = Counter();\nsecond.add();\n\nfirst.value",
+            "",
+            2,
         );
     }
 }
