@@ -1,1 +1,7 @@
-fn Counter() => { let mut value = 0; fn add(&mut this) => { value += 1; } this } let mut first = Counter(); first.add(); first.add(); let mut second = Counter(); second.add(); first.value
+fn a() => {
+    let value = 100;
+    fn b() => value;
+    this
+}
+
+a().b()

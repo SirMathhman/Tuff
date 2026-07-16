@@ -2,29 +2,28 @@
 #include <string.h>
 #include <stdbool.h>
 
-typedef struct {
+typedef struct
+{
 	int value;
-} Counter_ret;
+} a_ret;
 
-void add(Counter_ret* instance);
-Counter_ret Counter(void);
+int b(a_ret *instance);
+a_ret a(void);
 
+int b(a_ret *instance)
+{
+	return instance->value;
+}
 
-void add(Counter_ret* instance) {
+a_ret a(void)
+{
 
-	instance->value += 1;}
+	int value = 100;
+	return (a_ret){.value = value};
+}
+int main()
+{
+	a_ret _tmp = a();
 
-Counter_ret Counter(void) {
-
-	 int value = 0;
-		return (Counter_ret){.value = value};
-}int main() {
-	
-	 Counter_ret first = Counter();
-	add(&first);
-	add(&first);
-
-	 Counter_ret second = Counter();
-	add(&second);
-	return first.value;
+	return b(&_tmp);
 }
