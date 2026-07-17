@@ -1,10 +1,4 @@
-fn Outer(foo : I32) => {
-    fn Inner(bar : I32) => {
-        fn sum() => foo + bar;
-        this    
-    }
-
-    this
+struct Wrapper { 
+    x : I32
 }
 
-Outer(25).Inner(75).sum()

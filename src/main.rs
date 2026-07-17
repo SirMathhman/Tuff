@@ -238,6 +238,9 @@ fn find_reads_in_order(source: &str) -> Vec<(usize, ReadType)> {
         if source[i..].starts_with("read<Bool>()") {
             reads.push((i, ReadType::Bool));
             i += "read<Bool>()".len();
+        } else if source[i..].starts_with("read<U64>()") {
+            reads.push((i, ReadType::Int)); // U64 uses same scanf format as I64
+            i += "read<U64>()".len();
         } else if source[i..].starts_with("read()") {
             reads.push((i, ReadType::Int));
             i += "read()".len();
@@ -726,8 +729,35 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
 
 /// Parse a let declaration, extracting the variable name, mutability, and optional type annotation.
 fn parse_let_declaration(decl: &str) -> (&str, bool, Option<String>) {
-    // Find '=' position (top-level, not inside brackets)
-    let eq_pos = find_top_level_char(decl, '=');
+    // Find '=' position (top-level, not inside brackets or `=>`)
+    // For function types like `let temp : () => I32 = get`, we need to skip `=>`
+    let eq_pos = {
+        let mut brace_depth = 0;
+        let mut bracket_depth = 0;
+        let mut paren_depth = 0;
+        let mut result = None;
+        let chars: Vec<char> = decl.chars().collect();
+        for i in 0..chars.len() {
+            match chars[i] {
+                '{' => brace_depth += 1,
+                '}' => brace_depth -= 1,
+                '[' => bracket_depth += 1,
+                ']' => bracket_depth -= 1,
+                '(' => paren_depth += 1,
+                ')' => paren_depth -= 1,
+                '=' if brace_depth == 0 && bracket_depth == 0 && paren_depth == 0 => {
+                    // Check if this is `=>`
+                    if i + 1 < chars.len() && chars[i + 1] == '>' {
+                        continue; // Skip `=>`
+                    }
+                    result = Some(i);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        result
+    };
     let before_eq = if let Some(pos) = eq_pos {
         &decl[..pos]
     } else {
@@ -742,6 +772,7 @@ fn parse_let_declaration(decl: &str) -> (&str, bool, Option<String>) {
     };
 
     // Check for type annotation: "x : Type"
+    // For function types like "temp : () => I32", find the colon before `(`
     if let Some(colon_pos) = after_mut.0.find(':') {
         let var_name = after_mut.0[..colon_pos].trim();
         let type_name = after_mut.0[colon_pos + 1..].trim();
@@ -1244,8 +1275,32 @@ fn compile_expression(
             ctx.mutable_vars.push(var_name.to_string());
         }
 
-        // Extract the expression after '=' (split only on first '=')
-        let after_eq = decl_part.splitn(2, '=').nth(1).unwrap_or("").trim();
+        // Extract the expression after '=' (skip `=>` in function types)
+        let after_eq = {
+            let chars: Vec<char> = decl_part.chars().collect();
+            let mut paren_depth = 0;
+            let mut eq_pos = None;
+            for i in 0..chars.len() {
+                match chars[i] {
+                    '(' => paren_depth += 1,
+                    ')' => paren_depth -= 1,
+                    '=' if paren_depth == 0 => {
+                        // Skip `=>`
+                        if i + 1 < chars.len() && chars[i + 1] == '>' {
+                            continue;
+                        }
+                        eq_pos = Some(i);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(pos) = eq_pos {
+                &decl_part[pos + 1..]
+            } else {
+                ""
+            }
+        }.trim();
 
             // Check for array literal: [expr1, expr2, ...]
             if after_eq.starts_with('[') {
@@ -3244,6 +3299,18 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
             let inner = ty.trim();
             inner.starts_with('(') && inner.ends_with(')')
         }
+        || {
+            // Handle function types like "() => I32" or "(I32, I32) => Bool"
+            if let Some(arrow_pos) = ty.find("=>") {
+                let params_part = ty[..arrow_pos].trim();
+                let return_part = ty[arrow_pos + 2..].trim();
+                // Check that params part is a parenthesized list (or empty parens)
+                params_part.starts_with('(') && params_part.ends_with(')')
+                    && is_valid_type(ctx, return_part)
+            } else {
+                false
+            }
+        }
 }
 
 /// Check if a return expression is a call to a Void-returning function.
@@ -3373,6 +3440,32 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         }
         // Variable-length array without size: "[I32]" -> element type
         return tuff_type_to_c(ctx, inner.trim());
+    }
+    // Function type: "() => I32" or "(I32, I32) => Bool" -> function pointer
+    if let Some(arrow_pos) = ty.find("=>") {
+        let params_part = ty[..arrow_pos].trim();
+        let return_part = ty[arrow_pos + 2..].trim();
+        let return_c = tuff_type_to_c(ctx, return_part)?;
+        // Parse params
+        let params_inner = &params_part[1..params_part.len() - 1]; // strip parens
+        let param_types: Vec<String> = if params_inner.trim().is_empty() {
+            vec![]
+        } else {
+            params_inner.split(',').map(|p| {
+                let ptype = p.trim();
+                tuff_type_to_c(ctx, ptype).unwrap_or_else(|_| "int".to_string())
+            }).collect()
+        };
+        // Generate unique function pointer typedef name
+        let fp_name = format!("__Fn_{}", ty.replace(['(', ')', ',', ' ', '>'], "_").replace("=", "_"));
+        let params_sig = if param_types.is_empty() {
+            "void".to_string()
+        } else {
+            param_types.join(", ")
+        };
+        let typedef = format!("typedef {} (*{})({});", return_c, fp_name, params_sig);
+        ctx.generated_structs.push(typedef);
+        return Ok(fp_name);
     }
     let known = get_known_types(ctx);
     let known_list = if known.is_empty() {
@@ -4756,6 +4849,24 @@ mod tests {
         expect_valid(
             "fn Outer(foo : I32) => {\n    fn Inner(bar : I32) => {\n        fn sum() => foo + bar;\n        this    \n    }\n\n    this\n}\n\nOuter(25).Inner(75).sum()",
             "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_main_tuff_function_type() {
+        expect_valid(
+            "fn get() => 100;\nlet temp : () => I32 = get;\ntemp()",
+            "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_main_tuff_generic_read() {
+        expect_valid(
+            "fn add(first : U64, second : U64) => first + second;\nadd(read<U64>(), read<U64>())",
+            "50\n50",
             100,
         );
     }
