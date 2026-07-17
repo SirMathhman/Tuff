@@ -288,6 +288,21 @@ fn parse_param_with_type(
     }
 }
 
+/// Push a parsed parameter into names, types, and type annotation vectors.
+fn push_param(
+    ctx: &mut CompileContext,
+    param: &str,
+    param_names: &mut Vec<String>,
+    param_types: &mut Vec<String>,
+    param_type_annotations: &mut Vec<String>,
+) {
+    let parts: Vec<&str> = param.split(':').collect();
+    let name = parts[0].trim();
+    param_names.push(name.to_string());
+    param_types.push(if parts.len() > 1 { tuff_type_to_c(ctx, parts[1].trim()).unwrap_or("int".to_string()) } else { "int".to_string() });
+    param_type_annotations.push(if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() });
+}
+
 /// Parse generic type parameters from a string like "name<T, U>" -> ("name", ["T", "U"]).
 fn parse_generic_params(raw: &str) -> Result<(String, Vec<String>), CompileError> {
     if let Some(angle_start) = raw.find('<') {
@@ -1641,6 +1656,16 @@ fn compile_expression(
             ctx.mutable_vars.push(var_name.to_string());
         }
 
+        // Handle inline "Type then dropFn" syntax (e.g., "let foo : I32 then drop = 100")
+        let (inline_base_type, inline_drop_fn): (Option<String>, Option<String>) = if let Some(ref ty) = type_annotation {
+            let (base, drop_fn) = parse_then_drop_fn(ty);
+            (Some(base), drop_fn)
+        } else {
+            (None, None)
+        };
+        // Use the base type (without "then dropFn") for type checking
+        let effective_type = inline_base_type.or(type_annotation.clone());
+
         // Extract the expression after '=' (skip `=>` in function types)
         let after_eq = {
             let chars: Vec<char> = decl_part.chars().collect();
@@ -1680,7 +1705,7 @@ fn compile_expression(
                     };
 
                     // If there's a non-array type annotation, this is a type error
-                    if let Some(ty) = &type_annotation {
+                    if let Some(ty) = &effective_type {
                         let upper = ty.to_uppercase();
                         if !upper.contains("ARRAY") && !upper.contains('[') {
                             return Err(format!("Type mismatch: expected {} but got array", ty));
@@ -1701,7 +1726,7 @@ fn compile_expression(
 
             // If type annotation expects an array but RHS is not an array literal, error
             // Skip this check for pointer-to-array types where RHS is an address-of expression
-            if let Some(ty) = &type_annotation {
+            if let Some(ty) = &effective_type {
                 if ty.contains('[') && !after_eq.starts_with('[') && !ty.starts_with('&') {
                     return Err(format!(
                         "Type mismatch: expected array but got {}",
@@ -1711,7 +1736,7 @@ fn compile_expression(
             }
 
             // Check if this is a union type assignment with if/else (tagged union)
-            let is_union_if_else = type_annotation
+            let is_union_if_else = effective_type
                 .as_ref()
                 .and_then(|ty| {
                     let resolved = resolve_type_alias_set(ctx, ty);
@@ -1758,7 +1783,7 @@ fn compile_expression(
                 ctx.declared_vars.insert(var_name.to_string());
                 // Resolve type annotation: handle generic types like "Wrapper<I32>" -> "Wrapper_I32"
                 // Also handle union type aliases: "Result" -> ["Ok", "Err"]
-                let all_resolved_types = type_annotation
+                let all_resolved_types = effective_type
                     .as_ref()
                     .map(|ty| resolve_type_alias_set(ctx, ty))
                     .unwrap_or_else(|| vec![]);
@@ -1815,7 +1840,7 @@ fn compile_expression(
                 });
                 // If no struct found, check for generic instantiation from type annotation
                 let resolved_generic_type = resolved_struct_type.clone().or_else(|| {
-                    type_annotation.as_ref().and_then(|ty| {
+                    effective_type.as_ref().and_then(|ty| {
                         parse_generic_type(ty).map(|(base, type_args_str)| build_concrete_name(base, type_args_str))
                     })
                 });
@@ -1828,7 +1853,7 @@ fn compile_expression(
                 if is_bare_function {
                     ctx.function_pointer_vars.insert(var_name.to_string(), rhs_trimmed.to_string());
                 }
-                let inferred_type = type_annotation
+                let inferred_type = effective_type
                     .as_ref()
                     .cloned()
                     .unwrap_or_else(|| {
@@ -1883,28 +1908,36 @@ fn compile_expression(
                 };
                 ctx.var_types.insert(var_name.to_string(), tracked_types);
                 // Track drop types - if this variable has a drop type, register it.
-                // Also covers RHS struct literals of a drop-type alias with no explicit
-                // annotation, e.g. "let box = Box { field : 100 };".
-                let drop_alias = type_annotation.clone().or_else(|| {
+                // Supports both type alias drops ("type Box = RawBox then drop;") and
+                // inline drops ("let foo : I32 then drop = 100;").
+                let drop_fn = inline_drop_fn.clone().or_else(|| {
+                    // Fallback: check if type annotation is a drop-type alias
+                    if let Some(ref ty) = effective_type {
+                        if let Some((_, dfn)) = ctx.drop_types.get(ty.as_str()) {
+                            return Some(dfn.clone());
+                        }
+                    }
+                    // Also covers RHS struct literals of a drop-type alias with no explicit
+                    // annotation, e.g. "let box = Box { field : 100 };".
                     let leading_ident: String = rhs_trimmed
                         .chars()
                         .take_while(|c| c.is_alphanumeric() || *c == '_')
                         .collect();
-                    if !leading_ident.is_empty() && ctx.drop_types.contains_key(&leading_ident) {
-                        Some(leading_ident)
-                    } else {
-                        None
+                    if !leading_ident.is_empty() {
+                        if let Some((_, dfn)) = ctx.drop_types.get(&leading_ident) {
+                            return Some(dfn.clone());
+                        }
                     }
+                    None
                 });
-                if let Some(ref ty) = drop_alias {
-                    if let Some((_, drop_fn)) = ctx.drop_types.get(ty) {
-                        eprintln!("[let_decl] drop var: {} : {} -> drop({})", var_name, ty, drop_fn);
-                        ctx.dropped_vars.push((var_name.to_string(), drop_fn.clone()));
-                    }
+                if let Some(dfn) = drop_fn {
+                    let drop_type_name = effective_type.as_deref().unwrap_or("unknown");
+                    eprintln!("[let_decl] drop var: {} : {} -> drop({})", var_name, drop_type_name, dfn);
+                    ctx.dropped_vars.push((var_name.to_string(), dfn));
                 }
                 // For union types with if/else, generate tagged union assignment
                 if is_union_if_else {
-                    if let Some(ref ty) = type_annotation {
+                    if let Some(ref ty) = effective_type {
                         let struct_members_clone = ctx.union_types.get(ty.as_str()).cloned();
                         if let Some(struct_members) = struct_members_clone {
                             // Mark this variable as a tagged union
@@ -1956,7 +1989,7 @@ fn compile_expression(
                         format!(" {}", tuff_type_to_c(ctx, &inferred_type)?)
                     };
                     // For pointer-to-array types, cast the RHS address-of to element pointer
-                    let decl_result_final = if let Some(ref ty) = type_annotation {
+                    let decl_result_final = if let Some(ref ty) = effective_type {
                         if ty.starts_with('&') && ty[1..].trim().starts_with('[') {
                             let target_c = tuff_type_to_c(ctx, ty).unwrap_or_else(|_| "void *".to_string());
                             format!("(({})({}))", target_c, decl_result)
@@ -2285,23 +2318,25 @@ fn compile_expression(
                     // Receiver parameter: &this or &mut this - mark this function as having a this param
                     has_this_param = true;
                 } else if let Some(rest) = param_trimmed.strip_prefix("this") {
-                    // Receiver parameter: "this : &Factory" or "this : &TypeName"
+                    // "this : &Factory" — receiver parameter (pointer to instance)
+                    // "this : I32" — regular parameter (e.g. drop function)
                     let rest = rest.trim();
                     if rest.is_empty() || rest.starts_with(':') {
-                        has_this_param = true;
-                    } else {
                         let parts: Vec<&str> = param_trimmed.split(':').collect();
-                        let name = parts[0].trim();
-                        param_names.push(name.to_string());
-                        param_types.push(if parts.len() > 1 { tuff_type_to_c(ctx, parts[1].trim()).unwrap_or("int".to_string()) } else { "int".to_string() });
-                        param_type_annotations.push(if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() });
+                        let ptype = if parts.len() > 1 { parts[1].trim() } else { "" };
+                        // Only treat as receiver if type is a pointer (&Type)
+                        if ptype.starts_with('&') {
+                            has_this_param = true;
+                        } else {
+                            // Regular parameter (e.g. "this : I32" for drop functions)
+                            push_param(ctx, param_trimmed, &mut param_names, &mut param_types, &mut param_type_annotations);
+                        }
+                    } else {
+                        // Not a "this" receiver — treat as regular param
+                        push_param(ctx, param_trimmed, &mut param_names, &mut param_types, &mut param_type_annotations);
                     }
                 } else {
-                    let parts: Vec<&str> = param_trimmed.split(':').collect();
-                    let name = parts[0].trim();
-                    param_names.push(name.to_string());
-                    param_types.push(if parts.len() > 1 { tuff_type_to_c(ctx, parts[1].trim()).unwrap_or("int".to_string()) } else { "int".to_string() });
-                    param_type_annotations.push(if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() });
+                    push_param(ctx, param_trimmed, &mut param_names, &mut param_types, &mut param_type_annotations);
                 }
             }
         }
@@ -3246,6 +3281,11 @@ fn compile_expression(
 
     // Handle "this" as a standalone expression
     if trimmed == "this" {
+        // If "this" is a declared variable (e.g., a function parameter like `this : I32`),
+        // treat it as a regular variable reference
+        if ctx.declared_vars.contains("this") {
+            return Ok((String::new(), "this".to_string()));
+        }
         return Ok((String::new(), "0".to_string()));
     }
 
@@ -5755,5 +5795,14 @@ mod tests {
     #[test]
     fn test_drop_type_undefined_drop_fn() {
         expect_invalid("type Temp = I32 then undefinedDropFn;");
+    }
+
+    #[test]
+    fn test_drop_with_value_param() {
+        expect_valid(
+            "let mut counter = 0;\nfn drop(this : I32) => {\n    counter += this;\n}\nlet foo : I32 then drop = 100;\ncounter",
+            "",
+            100,
+        );
     }
 }
