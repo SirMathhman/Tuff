@@ -371,17 +371,45 @@ fn replace_type_param_token(template: &str, param: &str, concrete: &str) -> Stri
 
 /// Infer a concrete return type for a call to a generic extern function
 /// (e.g. `extern fn malloc<T>(size : USize) : &[T; 1];`) so that callers can
-/// omit an explicit `let` type annotation. Currently supports the single
-/// type-param case where the call site passes `sizeOf<X>()` as an argument
-/// (e.g. `malloc(sizeOf<&Str>())` infers T = "&Str"), which is the
-/// conventional pattern for sizing an allocation to a concrete type.
+/// omit an explicit `let` type annotation. Supports explicit type args at the
+/// call site (e.g. `malloc<I32, 3>(10)` substitutes T=I32, L=3 positionally),
+/// falling back to the single type-param case where the call site passes
+/// `sizeOf<X>()` as an argument (e.g. `malloc(sizeOf<&Str>())` infers T =
+/// "&Str"), which is the conventional pattern for sizing an allocation to a
+/// concrete type.
 fn substitute_extern_generic_return(
     ret_type_template: &str,
     type_params: &[String],
     call_expr: &str,
 ) -> Option<String> {
-    let param = type_params.first()?;
     let paren_pos = call_expr.find('(')?;
+    // Explicit type args in the call syntax itself, e.g. "malloc<I32, 3>(10)"
+    // -> head "malloc<I32, 3>" -> args ["I32", "3"], substituted positionally
+    // against the declared type params ["T", "L"].
+    let head = &call_expr[..paren_pos];
+    if let Some(angle_start) = head.find('<') {
+        if let Some(angle_end) = head.rfind('>') {
+            if angle_end > angle_start {
+                let explicit_args = split_top_level_commas(&head[angle_start + 1..angle_end]);
+                if !explicit_args.is_empty() {
+                    let mut substituted = ret_type_template.to_string();
+                    let mut changed = false;
+                    for (param, arg) in type_params.iter().zip(explicit_args.iter()) {
+                        let next = replace_type_param_token(&substituted, param, arg.trim());
+                        if next != substituted {
+                            changed = true;
+                        }
+                        substituted = next;
+                    }
+                    if changed {
+                        return Some(substituted);
+                    }
+                }
+            }
+        }
+    }
+
+    let param = type_params.first()?;
     let paren_end = find_matching_paren(&call_expr[paren_pos..])?;
     let args_str = &call_expr[paren_pos + 1..paren_pos + paren_end];
     for arg in split_top_level_commas(args_str) {
@@ -2042,7 +2070,11 @@ fn compile_expression(
                             // never overwritten (e.g. the extern fn was never declared, or its
                             // name doesn't match), skip it rather than propagating an empty
                             // type string into type inference.
-                            let call_name = after_eq.split('(').next().unwrap_or("").trim();
+                            let call_name_raw = after_eq.split('(').next().unwrap_or("").trim();
+                            // Strip explicit type args (e.g. "malloc<I32, 3>" -> "malloc")
+                            // so lookups against extern_functions/extern_generic_params,
+                            // which are keyed by the bare declared name, still succeed.
+                            let call_name = call_name_raw.split('<').next().unwrap_or(call_name_raw).trim();
                             if let Some((_params, _ptypes, ret_type)) = ctx
                                 .extern_functions
                                 .get(call_name)
@@ -4030,6 +4062,12 @@ fn compile_expression(
                         .insert(concrete_name.clone());
                 }
                 Some(concrete_name)
+            } else if ctx.extern_generic_params.contains_key(&call_name) {
+                // Extern generic function called with explicit type args, e.g.
+                // `malloc<I32, 3>(10)`. C has no generic call syntax, and the
+                // extern declaration compiles to a single C prototype regardless
+                // of T/L, so just strip the type args and call the bare name.
+                Some(call_name.clone())
             } else {
                 None // Built-in generic like read<Bool> - skip
             }
@@ -5992,6 +6030,18 @@ mod tests {
              free(ptr);",
             "",
             0,
+        );
+    }
+
+    #[test]
+    fn test_extern_generic_fn_explicit_type_args() {
+        expect_valid(
+            "extern let { malloc } = extern stdlib; \
+             extern fn malloc<T, L : USize>(size : USize) : &[T; L]; \
+             let temp = malloc<I32, 3>(10); \
+             temp is &[I32; 3]",
+            "",
+            1,
         );
     }
 

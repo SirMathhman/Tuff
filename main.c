@@ -1,3 +1,13 @@
+#include <stdlib.h>
+
+
+
+
+
+
 int main() {
-	return 0;
+	
+	 int * temp = malloc(10);
+
+	return 1;
 }
