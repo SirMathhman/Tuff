@@ -1,3 +1,3 @@
-let array = [1, 2, 3];
-let temp = &array;
-temp is &[I32; 3]
+extern let { malloc } = extern stdlib;
+extern fn malloc(param : I32) : Void;
+malloc(true)

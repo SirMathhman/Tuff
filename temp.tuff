@@ -1,0 +1,3 @@
+extern let { malloc } = extern stdlib;
+extern fn malloc<T, L : USize>(size : USize) : &[T; L];
+malloc<I32, 3>() is &[I32; 3]

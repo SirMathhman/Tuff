@@ -495,6 +495,46 @@ fn compile_fn_call(
     args_str: &str,
     ctx: &mut CompileContext,
 ) -> Result<(String, String), CompileError> {
+    // Validate extern function argument types
+    if let Some((_params, param_types, _ret_type)) = ctx.extern_functions.get(func_name) {
+        let args = split_top_level_commas(args_str);
+        if args.len() != param_types.len() {
+            return Err(format!(
+                "Function '{}' expects {} arguments but got {}",
+                func_name,
+                param_types.len(),
+                args.len()
+            ));
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let arg_trimmed = arg.trim();
+            let expected_type = &param_types[i];
+            // 0 is compatible with any pointer type (null pointer)
+            if arg_trimmed == "0" && (expected_type.starts_with('&') || expected_type.starts_with('*')) {
+                continue;
+            }
+            // Skip validation for plain identifiers (variables) — infer_literal_type can't distinguish
+            // Skip if it's a plain identifier that's not a literal (not starting with digit, not a boolean)
+            if arg_trimmed != "true" && arg_trimmed != "false"
+                && arg_trimmed.chars().all(|c| c.is_alphanumeric() || c == '_')
+                && !arg_trimmed.chars().next().unwrap().is_ascii_digit()
+            {
+                continue;
+            }
+            // Infer the argument's type and check against expected
+            let arg_type = infer_literal_type(arg_trimmed);
+            if arg_type != *expected_type && !is_type_compatible(&arg_type, expected_type, ctx) {
+                return Err(format!(
+                    "Type mismatch: argument {} of '{}' expects {} but got {}",
+                    i + 1,
+                    func_name,
+                    expected_type,
+                    arg_type
+                ));
+            }
+        }
+    }
+
     let mut c_body = String::new();
     let mut compiled_args: Vec<String> = Vec::new();
     if !args_str.is_empty() {
@@ -3995,7 +4035,11 @@ fn compile_expression(
                 .any(|(name, _, _, _)| *name == call_name)
         {
             Some(call_name.clone())
-        } else if ctx.extern_functions.contains_key(&call_name) {
+        } else if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(&call_name) {
+            // Only allow the call if a matching `extern fn` declaration exists (non-empty return type)
+            if ret_type.is_empty() {
+                return Err(format!("Undefined function: {} (no extern fn declaration)", call_name));
+            }
             Some(call_name.clone())
         } else if let Some(func_name) = ctx.function_pointer_vars.get(&call_name) {
             // Call via function pointer variable — resolve to actual function name
@@ -4083,12 +4127,35 @@ fn compile_struct_fields(trimmed: &str, brace_pos: usize, struct_name: &str, ctx
     }
 }
 
+/// Check if two types are compatible for function argument passing.
+fn is_type_compatible(arg_type: &str, expected_type: &str, ctx: &CompileContext) -> bool {
+    // Same type is always compatible
+    if arg_type == expected_type {
+        return true;
+    }
+    // Resolve type aliases
+    let resolved_arg = resolve_type_alias(ctx, arg_type);
+    let resolved_expected = resolve_type_alias(ctx, expected_type);
+    if resolved_arg == resolved_expected {
+        return true;
+    }
+    false
+}
+
 /// Infer the type of a literal expression based on its suffix.
 /// "100I64" -> "I64", "100U8" -> "U8", "\"hello\"" -> "&Str", "100" -> "I32"
 fn infer_literal_type(expr: &str) -> String {
     let trimmed = expr.trim();
-    // sizeOf<T>() always returns USize
+    // Boolean literals
+    if trimmed == "true" || trimmed == "false" {
+        return "Bool".to_string();
+    }
+    // sizeOf<T>() always returns USize (Tuff syntax)
     if trimmed.starts_with("sizeOf<") && trimmed.ends_with(">()") {
+        return "USize".to_string();
+    }
+    // sizeof(...) - C output of sizeOf<T>() pass, also returns USize
+    if trimmed.starts_with("sizeof(") && trimmed.ends_with(')') {
         return "USize".to_string();
     }
     // String literal: "..." -> &Str
@@ -5783,6 +5850,20 @@ mod tests {
             "extern let { atoi } = extern stdlib; extern fn atoi(str : &Str) : I32; let x = atoi(\"42\"); x",
             "",
             42,
+        );
+    }
+
+    #[test]
+    fn test_extern_let_no_fn_declaration() {
+        expect_invalid(
+            "extern let { malloc } = extern stdlib; malloc()",
+        );
+    }
+
+    #[test]
+    fn test_extern_fn_arg_type_mismatch() {
+        expect_invalid(
+            "extern let { malloc } = extern stdlib; extern fn malloc(param : I32) : Void; malloc(true)",
         );
     }
 
