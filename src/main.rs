@@ -2440,6 +2440,13 @@ fn compile_expression(
                 parse_array_items(func_body.trim()).map(|(items, _)| format!("[I32; {}]", items.len()))
             });
 
+            // Validate explicit return type (skip for Void and generic placeholders)
+            if let Some(ref ret) = return_type {
+                if ret != "Void" && !type_params.contains(ret) {
+                    tuff_type_to_c(ctx, ret)?;
+                }
+            }
+
             // Non-generic function: generate C code immediately
             let fn_read_entries = find_reads_in_order(func_body);
             let mut fn_ctx = CompileContext::new(
@@ -5214,6 +5221,11 @@ mod tests {
     #[test]
     fn test_fn_unknown_param_type() {
         expect_invalid("fn test(random : UnknownType) => {}");
+    }
+
+    #[test]
+    fn test_fn_unknown_return_type() {
+        expect_invalid("fn get() : UnknownType => {}");
     }
 
     #[test]
