@@ -124,8 +124,8 @@ enum ReadType {
 
 static TEMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-/// Strip line comments (// ...) from source, handling string literals.
-fn strip_line_comments(source: &str) -> String {
+/// Strip line comments (// ...) and block comments (/* ... */) from source, handling string literals.
+fn strip_comments(source: &str) -> String {
     let mut result = String::new();
     let mut in_string = false;
     let mut escaped = false;
@@ -152,18 +152,35 @@ fn strip_line_comments(source: &str) -> String {
             i += 1;
             continue;
         }
-        if !in_string && ch == '/' && i + 1 < len && chars[i + 1] == '/' {
-            // Skip until end of line
-            i += 2;
-            while i < len && chars[i] != '\n' {
-                i += 1;
+        if !in_string && ch == '/' && i + 1 < len {
+            if chars[i + 1] == '/' {
+                // Line comment: skip until end of line
+                i += 2;
+                while i < len && chars[i] != '\n' {
+                    i += 1;
+                }
+                // Keep the newline
+                if i < len {
+                    result.push('\n');
+                    i += 1;
+                }
+                continue;
+            } else if chars[i + 1] == '*' {
+                // Block comment: skip until */
+                i += 2;
+                while i + 1 < len {
+                    if chars[i] == '*' && chars[i + 1] == '/' {
+                        i += 2;
+                        break;
+                    }
+                    // Preserve newlines for line number tracking
+                    if chars[i] == '\n' {
+                        result.push('\n');
+                    }
+                    i += 1;
+                }
+                continue;
             }
-            // Keep the newline
-            if i < len {
-                result.push('\n');
-                i += 1;
-            }
-            continue;
         }
         result.push(ch);
         i += 1;
@@ -744,18 +761,86 @@ fn prepare_captured_vars(ctx: &CompileContext, c_body: &str, space_prefix: &str)
     // Generate static globals for captured variables (outer vars used by functions)
     let mut captured_globals = String::new();
     for var in &ctx.captured_vars {
-        captured_globals.push_str(&format!("static int {};\n", var));
+        if let Some((elem_type, size)) = get_array_type_info(ctx, var) {
+            // For arrays, extract the initializer from the body and create a global declaration
+            let decl_pattern = format!("int {}[{}] = ", var, size);
+            if let Some(decl_start) = c_body.find(&decl_pattern) {
+                let after_pattern = &c_body[decl_start + decl_pattern.len()..];
+                if let Some(init_end) = find_array_init_end(after_pattern) {
+                    let init_text = &after_pattern[..init_end + 1];
+                    captured_globals.push_str(&format!("static {} {}[{}] = {};\n", elem_type, var, size, init_text));
+                }
+            }
+        } else {
+            captured_globals.push_str(&format!("static int {};\n", var));
+        }
     }
 
-    // Rewrite C body: replace "int x = ..." with "x = ..." for captured vars
+    // Rewrite C body:
+    // - For arrays: remove the declaration from the body (moved to globals)
+    // - For scalars: "int x = ..." -> "x = ..." (assignment to static global)
     let mut c_body_fixed = c_body.to_string();
     for var in &ctx.captured_vars {
+        if let Some((_elem_type, size)) = get_array_type_info(ctx, var) {
+            let decl_pattern = format!("int {}[{}] = ", var, size);
+            if let Some(decl_start) = c_body_fixed.find(&decl_pattern) {
+                let after_pattern = &c_body_fixed[decl_start + decl_pattern.len()..];
+                if let Some(init_end) = find_array_init_end(after_pattern) {
+                    let remove_end = decl_start + decl_pattern.len() + init_end + 2;
+                    c_body_fixed.replace_range(decl_start..remove_end, "");
+                }
+            }
+            continue;
+        }
         let old_decl = format!("int {} =", var);
         let new_assign = format!("{} {} =", space_prefix, var);
         c_body_fixed = c_body_fixed.replace(&old_decl, &new_assign);
     }
 
     (extern_decls, captured_globals, c_body_fixed)
+}
+
+/// Extract (C element type, size) from a variable's tracked type if it's an array.
+fn get_array_type_info(ctx: &CompileContext, var: &str) -> Option<(String, String)> {
+    let types = ctx.var_types.get(&var[..])?;
+    let ty = types.first()?;
+    let inner = ty.strip_prefix('[').and_then(|s| s.strip_suffix(']'))?;
+    let sep_pos = inner.rfind(';')?;
+    let elem_type = &inner[..sep_pos];
+    let size = inner[sep_pos + 1..].trim().to_string();
+    let c_elem = match elem_type {
+        "I32" => "int",
+        "U32" => "unsigned int",
+        "I64" => "long long",
+        "U64" => "unsigned long long",
+        "U8" => "unsigned char",
+        "Bool" => "int",
+        "USize" => "unsigned long long",
+        _ => "int",
+    };
+    Some((c_elem.to_string(), size))
+}
+
+/// Find the end of an array initializer (balanced braces).
+fn find_array_init_end(s: &str) -> Option<usize> {
+    let mut depth = 0;
+    let mut in_braces = false;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '{' => {
+                depth += 1;
+                in_braces = true;
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 && in_braces {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Parse the "then dropFn" suffix from a type alias string like "I32 then drop".
@@ -841,8 +926,8 @@ fn compile(source: &str) -> Result<String, CompileError> {
         return Ok(String::from("int main() {\n\treturn 0;\n}\n"));
     }
 
-    // Strip line comments before processing
-    let no_comments = strip_line_comments(trimmed);
+    // Strip comments (line and block) before processing
+    let no_comments = strip_comments(trimmed);
 
     // Strip fn bodies from source before scanning for top-level reads.
     let stripped_for_reads = strip_fn_bodies(&no_comments);
@@ -1430,6 +1515,7 @@ fn compile_array_decl(
     if let Ok((val_body, init)) = compile_array_repeat_expr(trimmed, ctx) {
         let repeat_count = parse_array_repeat(trimmed).map(|(_, c)| c).unwrap_or(0);
         ctx.var_types.insert(var_name.to_string(), vec![format!("[I32; {}]", repeat_count)]);
+        ctx.declared_vars.insert(var_name.to_string());
         let c_decl = format!(
             "{}\n\tint {}[{}] = {};",
             val_body, var_name, repeat_count, init
@@ -1465,6 +1551,7 @@ fn compile_array_decl(
             };
 
             ctx.var_types.insert(var_name.to_string(), vec![format!("[I32; {}]", len)]);
+            ctx.declared_vars.insert(var_name.to_string());
             let c_decl = format!(
                 "{}\n\tint {}{} = {{{}}};;",
                 body,
@@ -1485,6 +1572,7 @@ fn compile_array_decl(
             }
 
             ctx.var_types.insert(var_name.to_string(), vec![format!("[I32; {}]", len)]);
+            ctx.declared_vars.insert(var_name.to_string());
             let c_decl = format!(
                 "{}\n\tint {}[{}] = {{{}}};",
                 body,
@@ -3383,9 +3471,14 @@ fn compile_expression(
             let fn_name = lhs_unwrapped[..paren_pos].trim();
             if let Some(ret_type) = ctx.function_return_types.get(fn_name) {
                 vec![ret_type.clone()]
+            } else if fn_name == "sizeOf" || fn_name == "sizeof" || fn_name.starts_with("sizeOf<") || fn_name.starts_with("sizeof<") {
+                vec!["USize".to_string()]
             } else {
                 vec![infer_literal_type(&lhs)]
             }
+        } else if lhs_unwrapped.contains("sizeOf<") {
+            // Expression containing sizeOf (e.g., "sizeOf<I32>() * 10")
+            vec!["USize".to_string()]
         } else {
             vec![infer_literal_type(&lhs)]
         };
@@ -4199,6 +4292,10 @@ fn infer_literal_type(expr: &str) -> String {
     }
     // sizeof(...) - C output of sizeOf<T>() pass, also returns USize
     if trimmed.starts_with("sizeof(") && trimmed.ends_with(')') {
+        return "USize".to_string();
+    }
+    // Expressions containing sizeOf (e.g., "sizeOf<I32>() * 10") return USize
+    if trimmed.contains("sizeOf<") || trimmed.contains("sizeof(") {
         return "USize".to_string();
     }
     // String literal: "..." -> &Str
@@ -5093,6 +5190,27 @@ mod tests {
     #[test]
     fn test_line_comment() {
         expect_valid("let x = 5; // this is a comment\nx", "", 5);
+    }
+
+    #[test]
+    fn test_block_comment() {
+        expect_valid("let x = 5; /* this is a block comment */ x", "", 5);
+    }
+
+    #[test]
+    fn test_block_comment_multiline() {
+        expect_valid("let x = 5; /* this is\na multiline\nblock comment */ x", "", 5);
+    }
+
+    #[test]
+    fn test_block_comment_in_string() {
+        // Block comment inside string literal should be preserved (not stripped)
+        expect_valid(r#"let str : &Str = "/* not a comment */"; str.length"#, "", 19);
+    }
+
+    #[test]
+    fn test_block_and_line_comments() {
+        expect_valid("/* before */ let x = 5; // after\nx", "", 5);
     }
 
     #[test]
@@ -5993,6 +6111,24 @@ mod tests {
     }
 
     #[test]
+    fn test_sizeof_mul_is_usize() {
+        expect_valid(
+            "sizeOf<I32>() * 10 is USize",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_sizeof_mul_let_is_usize() {
+        expect_valid(
+            "let size = sizeOf<I32>() * 10;\nsize is USize",
+            "",
+            1,
+        );
+    }
+
+    #[test]
     fn test_pointer_array_index() {
         expect_valid(
             "let array = [1, 2, 3]; let temp : &[I32; 3] = &array; temp[0]",
@@ -6073,6 +6209,15 @@ mod tests {
             "struct Point { x : I32 } let mut x = 0; fn add() => { x += 1; } add(); x",
             "",
             1,
+        );
+    }
+
+    #[test]
+    fn test_fn_reads_outer_static_array() {
+        expect_valid(
+            "let arr = [10, 20, 30]; fn get() => { arr[1] } get()",
+            "",
+            20,
         );
     }
 

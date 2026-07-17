@@ -1,3 +1,12 @@
-extern let { malloc } = extern stdlib;
-extern fn malloc<T, L : USize>(size : USize) : &[T; L];
-malloc<I32, 3>() is &[I32; 3]
+let mut memory = [0; 1000];
+let mut counter = 0;
+
+fn alloc() : &I32 => {
+    let temp : &I32 = &memory + counter;
+    counter += 1;
+    temp
+}
+
+fn free() => {
+
+}

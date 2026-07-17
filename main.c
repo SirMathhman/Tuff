@@ -1,13 +1,17 @@
-#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
 
 
 
+int getLength(void);
 
-
-
-int main() {
+static int memory[1] = {0};
+int getLength(void) {
+		return (memory.length);
+}int main() {
 	
-	 int * temp = malloc(10);
+	
 
-	return 1;
+	return 0;
 }
