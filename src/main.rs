@@ -399,8 +399,35 @@ fn compile_fn_call(
             // create a temp variable since C can't pass {1,2,3} as an argument
             if arg_result.starts_with('{') && arg_result.ends_with('}') {
                 let tmp_name = format!("__arr{}", TEMP_COUNTER.fetch_add(1, Ordering::SeqCst));
-                let len = arg_result.matches(',').count() + 1;
-                c_body.push_str(&format!("\n\tint {}[{}] = {};", tmp_name, len, arg_result));
+                // Count top-level commas (respect brace depth) to get element count
+                let inner = arg_result.trim_start_matches('{').trim_end_matches('}').trim();
+                let len = {
+                    let mut depth = 0;
+                    let mut top_level_commas = 0;
+                    for ch in inner.chars() {
+                        match ch {
+                            '{' => depth += 1,
+                            '}' => depth -= 1,
+                            ',' if depth == 0 => top_level_commas += 1,
+                            _ => {}
+                        }
+                    }
+                    top_level_commas + 1
+                };
+                // Detect struct type from first element, e.g., "(Point){.x = 3, .y = 4}"
+                let elem_type = if let Some(paren_end) = inner.find(')') {
+                    let before_paren = inner[..paren_end].trim();
+                    // Strip leading '(' from C compound literal syntax
+                    let struct_name = before_paren.strip_prefix('(').unwrap_or(before_paren);
+                    if !struct_name.contains(' ') && ctx.defined_structs.contains(struct_name) {
+                        struct_name
+                    } else {
+                        "int"
+                    }
+                } else {
+                    "int"
+                };
+                c_body.push_str(&format!("\n\t{} {}[{}] = {};", elem_type, tmp_name, len, arg_result));
                 compiled_args.push(format!("&{}", tmp_name));
             } else {
                 compiled_args.push(arg_result);
@@ -1003,7 +1030,23 @@ fn parse_array_items(s: &str) -> Option<(Vec<&str>, usize)> {
     let items: Vec<&str> = if array_content.trim().is_empty() {
         vec![]
     } else {
-        array_content.split(',').map(|item| item.trim()).collect()
+        // Split on commas but respect brace depth (struct literals have commas inside braces)
+        let mut result = Vec::new();
+        let mut depth = 0;
+        let mut start = 0;
+        for (i, ch) in array_content.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                ',' if depth == 0 => {
+                    result.push(array_content[start..i].trim());
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        result.push(array_content[start..].trim());
+        result
     };
     Some((items, closing_bracket))
 }
@@ -4499,6 +4542,15 @@ mod tests {
             "fn sum(arr : [I32; 3]) : I32 => arr[0] + arr[1] + arr[2]; sum([1, 2, 3])",
             "",
             6,
+        );
+    }
+
+    #[test]
+    fn test_static_array_of_struct_as_function_param() {
+        expect_valid(
+            "struct Point { x : I32, y : I32 } fn sumX(pts : [Point; 2]) : I32 => pts[0].x + pts[1].x; sumX([Point { x : 3, y : 4 }, Point { x : 5, y : 6 }])",
+            "",
+            8,
         );
     }
 
