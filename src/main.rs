@@ -388,6 +388,22 @@ fn build_c_function_with_return_type(
     c_func
 }
 
+/// Create an array return struct wrapper and register it in the context.
+fn create_array_return_struct(
+    func_name: &str,
+    size: usize,
+    ctx: &mut CompileContext,
+) -> String {
+    let ret_struct = format!("{}_ret", func_name);
+    if !ctx.defined_structs.contains(&ret_struct) {
+        let typedef = format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct);
+        ctx.generated_structs.push(typedef);
+        ctx.defined_structs.insert(ret_struct.clone());
+    }
+    ctx.array_ret_structs.insert(ret_struct.clone());
+    ret_struct
+}
+
 /// Compile function arguments and generate a C function call string.
 fn compile_fn_call(
     func_name: &str,
@@ -2356,14 +2372,7 @@ fn compile_expression(
                 // Array return type: use struct wrapper
                 if ret.starts_with('[') {
                     let size = parse_array_size(ret).unwrap_or(1);
-                    let ret_struct = format!("{}_ret", func_name);
-                    // Generate struct typedef inline so it's available for let declarations
-                    if !ctx.defined_structs.contains(&ret_struct) {
-                        let typedef = format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct);
-                        ctx.generated_structs.push(typedef);
-                        ctx.defined_structs.insert(ret_struct.clone());
-                    }
-                    ctx.array_ret_structs.insert(ret_struct.clone());
+                    let ret_struct = create_array_return_struct(&func_name, size, ctx);
                     build_c_function_with_return_type(
                         &func_name,
                         &param_names,
@@ -3516,13 +3525,7 @@ fn compile_expression(
                     };
                     let c_func = if is_array_return {
                         let size = parse_array_size(&ctx.function_return_types[&concrete_name]).unwrap_or(1);
-                        let ret_struct = format!("{}_ret", concrete_name);
-                        if !ctx.defined_structs.contains(&ret_struct) {
-                            let typedef = format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct);
-                            ctx.generated_structs.push(typedef);
-                            ctx.defined_structs.insert(ret_struct.clone());
-                        }
-                        ctx.array_ret_structs.insert(ret_struct.clone());
+                        let ret_struct = create_array_return_struct(&concrete_name, size, ctx);
                         build_c_function_with_return_type(
                             &concrete_name,
                             &all_param_names,

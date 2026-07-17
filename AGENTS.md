@@ -6,7 +6,7 @@ Tuff is a C-like programming language designed to eliminate undefined behavior, 
 ## Build & Test
 ```bash
 cargo build    # Compile
-cargo test     # Run 138 end-to-end tests (compile Tuff → C → clang → execute)
+cargo test     # Run 142 end-to-end tests (compile Tuff → C → clang → execute)
 cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 ```
 - **Gated Checks** (`.github/hooks/hooks.json`): `cargo test` and PMD CPD (50-token minimum on `src/`) run on workspace stop. Both must pass. Note: hooks.json uses `cmd /c "..."` wrapping for PowerShell commands.
@@ -17,7 +17,7 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Codegen approach**: Tuff source → C code → clang → native executable
 - **Zero dependencies**: Self-contained compiler, no external crates
 - **End-to-end testing**: Tests actually compile and run generated C code via `clang`
-- **Single-file compiler**: All code in `src/main.rs` (~5355 lines, tests start at line 4390)
+- **Single-file compiler**: All code in `src/main.rs` (~5519 lines, tests start at line 4523)
 - **No external dependencies**: `Cargo.toml` `[dependencies]` section is empty — verifiable via `Cargo.lock` containing only `tuffc`
 
 ### Source Layout (`src/main.rs`)
@@ -33,7 +33,7 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 | 2800–3030 | Type utilities, monomorphization helpers |
 | 3030–3500 | Utility functions (`find_matching_*`, `sanitize_type_name`, etc.) |
 | 3500–3780 | `expect_valid`, `expect_invalid` test helpers |
-| 4390–end  | `#[cfg(test)] mod tests` — 138 end-to-end tests |
+| 4523–end  | `#[cfg(test)] mod tests` — 142 end-to-end tests |
 
 ### Key Functions
 - `compile(source: &str) -> Result<String, CompileError>` — main entry point; returns C code
@@ -120,10 +120,10 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Test categories**: Basic/read/let-declarations/arrays/mutability/control-flow/types/operators/edge-cases/struct-destructuring/extern-ffi/sizeof/pointer-indexing/void-fns/captured-vars/this-refs/nested-fn/factory/drop — all single-expression pattern `expect_valid("source", "stdin", expected_exit_code)`
 
 ## Current Status
-- **Current Status**: Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, tagged unions with runtime tag checking, rest parameters, type cast operator, struct destructuring, extern FFI, sizeOf, pointer array indexing, void functions, captured variables, this references, nested functions, factory pattern with per-instance state, drop types. All **138 tests** pass. Next: proper lexer → parser AST → typed codegen pipeline.
+- **Current Status**: 142 tests passing. Expression-level compiler with full feature set listed above. Next: proper lexer → parser AST → typed codegen pipeline.
 
 ## Files
-- `src/main.rs` — Single-file compiler (~4468 lines)
+- `src/main.rs` — Single-file compiler (~5519 lines)
 - `main.tuff` — Sample/demo Tuff program (mirrors Rust stdlib types: Box, Vec, HashMap, etc.)
 - `main.c` — Generated C output from `main.tuff` (auto-generated, do not edit manually)
 - `ROADMAP.md` — Feature roadmap with implemented (✅) and pending features
