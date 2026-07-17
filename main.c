@@ -1,13 +1,16 @@
-#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
 
 
 
+int pass(void);
+const char * pass_Str(const char * value);
 
 
-
-int main() {
+const char * pass_Str(const char * value) {
+		return value;
+}int main() {
 	
-	 int ptr = malloc<I32>(sizeof(int) * 100);
-
-	return 0;
+	return (int)strlen(pass_Str("foo"));
 }

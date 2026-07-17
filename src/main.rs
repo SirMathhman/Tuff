@@ -15,13 +15,14 @@ struct GenericStructTemplate {
     fields_str: String,
 }
 
-/// Generic function template: (name, type_params, param_names, body).
+/// Generic function template: (name, type_params, param_names, param_types, rest_params, body, return_type).
 #[allow(dead_code)]
 #[derive(Clone)]
 struct GenericFunctionTemplate {
     name: String,
     type_params: Vec<String>,
     param_names: Vec<String>,
+    param_type_annotations: Vec<String>, // raw Tuff type annotations (may contain type params like "T")
     rest_params: Vec<(String, String)>, // (name, type) for rest parameters like "...args : [I32; L]"
     body: String,
     return_type: Option<String>, // optional return type annotation (may contain type params)
@@ -850,11 +851,13 @@ fn generate_function_code(functions: &[(String, Vec<String>, Vec<String>, String
                 "void".to_string()
             } else if ret.starts_with('[') {
                 let ret_struct = format!("{}_ret", name);
-                // Skip - typedef already generated inline when function was defined
                 ret_struct
             } else if ret.ends_with("_ret") {
-                // Struct return type from `this`-returning functions (e.g., "Wrapper_ret")
                 ret.clone()
+            } else if ret == "&Str" {
+                "const char *".to_string()
+            } else if ret.starts_with('&') {
+                format!("int *")
             } else {
                 "int".to_string()
             }
@@ -998,11 +1001,8 @@ fn get_function_call_return_type(ctx: &CompileContext, expr: &str) -> Option<Str
                 let type_args: Vec<&str> = type_args_str.split(',').map(|a| a.trim()).collect();
                 // Look up the template
                 if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == base) {
-                    if let Some(ref ret_type) = template.return_type {
-                        let mut concrete_ret = ret_type.clone();
-                        for (type_param, concrete_type) in template.type_params.iter().zip(type_args.iter()) {
-                            concrete_ret = concrete_ret.replace(type_param, concrete_type);
-                        }
+                    let type_args: Vec<String> = type_args.iter().map(|a| a.to_string()).collect();
+                    if let Some(concrete_ret) = resolve_concrete_return_type(template, &type_args) {
                         return Some(concrete_ret);
                     }
                 }
@@ -1033,6 +1033,34 @@ fn get_function_call_return_type(ctx: &CompileContext, expr: &str) -> Option<Str
         }
     }
     None
+}
+
+/// Resolve the concrete return type for a generic function instantiation.
+/// Returns None if no return type can be determined.
+fn resolve_concrete_return_type(template: &GenericFunctionTemplate, effective_args: &[String]) -> Option<String> {
+    if let Some(ref ret_type) = template.return_type {
+        let mut cr = ret_type.clone();
+        for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
+            cr = cr.replace(type_param, concrete_type);
+        }
+        Some(cr)
+    } else {
+        // Infer return type from body: if body is a single param name, return param's type
+        let body_trimmed = template.body.trim();
+        if let Some(param_idx) = template.param_names.iter().position(|p| p == body_trimmed) {
+            if let Some(param_type) = template.param_type_annotations.get(param_idx) {
+                let mut cr = param_type.clone();
+                for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
+                    cr = cr.replace(type_param, concrete_type);
+                }
+                Some(cr)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 /// Infer type args for a generic function with rest params based on argument count.
@@ -2152,6 +2180,7 @@ fn compile_expression(
         // Parse each parameter: "name : Type", "...name : Type" (rest), or just "name"
         let mut param_names: Vec<String> = Vec::new();
         let mut param_types: Vec<String> = Vec::new(); // C type for each param
+        let mut param_type_annotations: Vec<String> = Vec::new(); // raw Tuff type annotations
         let mut rest_params: Vec<(String, String)> = Vec::new(); // (name, type) for rest params
         let mut has_this_param = false;
         if !params_inner.is_empty() {
@@ -2176,10 +2205,18 @@ fn compile_expression(
                     if rest.is_empty() || rest.starts_with(':') {
                         has_this_param = true;
                     } else {
-                        parse_param_with_type(param_trimmed, &mut param_names, &mut param_types, ctx, "int");
+                        let parts: Vec<&str> = param_trimmed.split(':').collect();
+                        let name = parts[0].trim();
+                        param_names.push(name.to_string());
+                        param_types.push(if parts.len() > 1 { tuff_type_to_c(ctx, parts[1].trim()).unwrap_or("int".to_string()) } else { "int".to_string() });
+                        param_type_annotations.push(if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() });
                     }
                 } else {
-                    parse_param_with_type(param_trimmed, &mut param_names, &mut param_types, ctx, "int");
+                    let parts: Vec<&str> = param_trimmed.split(':').collect();
+                    let name = parts[0].trim();
+                    param_names.push(name.to_string());
+                    param_types.push(if parts.len() > 1 { tuff_type_to_c(ctx, parts[1].trim()).unwrap_or("int".to_string()) } else { "int".to_string() });
+                    param_type_annotations.push(if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() });
                 }
             }
         }
@@ -2247,6 +2284,7 @@ fn compile_expression(
                     name: func_name.clone(),
                     type_params,
                     param_names,
+                    param_type_annotations,
                     rest_params,
                     body: func_body.to_string(),
                     return_type,
@@ -3031,6 +3069,10 @@ fn compile_expression(
                 let (_, base_result) = compile_expression(base_expr, ctx)?;
                 return Ok((String::new(), format!("((void){} , {})", base_result, size)));
             }
+            if return_type == "&Str" {
+                let (_, base_result) = compile_expression(base_expr, ctx)?;
+                return Ok((String::new(), format!("(int)strlen({})", base_result)));
+            }
         }
         // Fallback: treat as struct field access (pass through)
         let (_, base_result) = compile_expression(base_expr, ctx)?;
@@ -3385,10 +3427,20 @@ fn compile_expression(
                 if in_angle > 0 {
                     in_angle -= 1;
                 } else {
-                    break;
+                    // Unmatched '<' — check for matching '>' ahead to handle generics like pass<&Str>
+                    let after_name_start = &final_result[name_start..name_end];
+                    if let Some(rel_gt) = after_name_start.find('>') {
+                        name_start += rel_gt + 1;
+                        in_angle -= 1; // will be -1, but we'll handle below
+                    } else {
+                        break;
+                    }
                 }
                 name_start -= ch.len_utf8();
-            } else if ch.is_alphanumeric() || ch == '_' {
+            } else if (ch.is_alphanumeric() || ch == '_') && in_angle <= 0 {
+                name_start -= ch.len_utf8();
+            } else if in_angle > 0 {
+                // Inside angle brackets — include everything until we hit '<' with balanced count
                 name_start -= ch.len_utf8();
             } else {
                 break;
@@ -3445,8 +3497,15 @@ fn compile_expression(
         };
 
         let resolved_name = if let Some(effective_args) = effective_type_args {
-            if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == call_name) {
-                let concrete_name = format!("{}_{}", call_name, effective_args.join("_"));
+            // Clone the template early to avoid borrow conflicts with ctx
+            let template_opt = ctx.generic_functions.iter().find(|t| t.name == call_name).cloned();
+            if let Some(template) = template_opt {
+                // Sanitize type args for C-safe identifiers (e.g., "&Str" -> "Str")
+                let sanitized_args: Vec<String> = effective_args
+                    .iter()
+                    .map(|a| sanitize_type_name(a))
+                    .collect();
+                let concrete_name = format!("{}_{}", call_name, sanitized_args.join("_"));
                 if !ctx
                     .generated_function_instantiations
                     .contains(&concrete_name)
@@ -3460,10 +3519,11 @@ fn compile_expression(
                     // Handle rest parameters: expand ...args to individual params
                     let mut all_param_names = template.param_names.clone();
                     let mut rest_param_replacements: Vec<(String, String)> = Vec::new(); // (rest_name, array_literal)
+                    let mut rest_expanded_types: Vec<String> = Vec::new(); // C types for expanded rest params
                     for (rest_name, _rest_type) in &template.rest_params {
                         // Infer array size from rest type if it contains a type param
                         let rest_type = _rest_type;
-                        let array_size = if rest_type.starts_with('[') {
+                        let (array_size, element_type) = if rest_type.starts_with('[') {
                             // Try to extract size from type, e.g., "[I32; L]" -> look for L in type_params
                             if let Some(semi_pos) = rest_type.find(';') {
                                 let size_str = rest_type[semi_pos + 1..].trim().trim_end_matches(']');
@@ -3473,17 +3533,24 @@ fn compile_expression(
                                     resolved_size = resolved_size.replace(type_param, concrete_type);
                                 }
                                 // resolved_size is now just the number (e.g., "3"), parse directly
-                                resolved_size.parse().unwrap_or(0)
+                                let size = resolved_size.parse().unwrap_or(0);
+                                let mut elem = rest_type[1..semi_pos].trim().to_string();
+                                for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
+                                    elem = elem.replace(type_param, concrete_type);
+                                }
+                                (size, elem)
                             } else {
-                                0
+                                (0, "I32".to_string())
                             }
                         } else {
-                            0
+                            (0, "I32".to_string())
                         };
                         let expanded_params: Vec<String> = (0..array_size)
                             .map(|i| format!("{}{}", rest_name, i))
                             .collect();
                         all_param_names.extend(expanded_params.clone());
+                        let element_c_type = tuff_type_to_c(ctx, &element_type).unwrap_or("int".to_string());
+                        rest_expanded_types.extend(std::iter::repeat(element_c_type).take(expanded_params.len()));
                         let array_literal = format!("[{}]", expanded_params.join(", "));
                         rest_param_replacements.push((rest_name.clone(), array_literal));
                     }
@@ -3504,46 +3571,75 @@ fn compile_expression(
                     }
                     let (fn_body_stmts, fn_return_expr) =
                         compile_expression(&substituted_body, &mut fn_ctx)?;
+
+                    // Substitute type params in param type annotations and convert to C types
+                    let concrete_param_type_annotations: Vec<String> = template.param_type_annotations.iter()
+                        .map(|pt| {
+                            let mut concrete = pt.clone();
+                            for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
+                                concrete = concrete.replace(type_param, concrete_type);
+                            }
+                            concrete
+                        })
+                        .collect();
+                    let mut concrete_param_types: Vec<String> = Vec::new();
+                    for cpta in &concrete_param_type_annotations {
+                        concrete_param_types.push(tuff_type_to_c(ctx, cpta).unwrap_or("int".to_string()));
+                    }
+                    concrete_param_types.extend(rest_expanded_types);
+
                     let c_func = build_c_function(
                         &concrete_name,
                         &all_param_names,
-                        &vec!["int".to_string(); all_param_names.len()],
+                        &concrete_param_types,
                         &fn_read_entries,
                         &fn_body_stmts,
                         &fn_return_expr,
                     );
-                    // Check if return type is an array - need struct wrapper for C
-                    let is_array_return = if let Some(ref ret_type) = template.return_type {
-                        let mut concrete_ret = ret_type.clone();
-                        for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
-                            concrete_ret = concrete_ret.replace(type_param, concrete_type);
+                    // Resolve concrete return type for this generic instantiation
+                    let concrete_ret = resolve_concrete_return_type(&template, &effective_args);
+                    if let Some(ref cr) = concrete_ret {
+                        ctx.function_return_types.insert(concrete_name.clone(), cr.clone());
+                    }
+                    // If return type is known and not int, regenerate with correct return type
+                    let c_func = if let Some(ref cr) = concrete_ret {
+                        if cr != "I32" {
+                            if cr.starts_with('[') {
+                                let size = parse_array_size(cr).unwrap_or(1);
+                                let ret_struct = create_array_return_struct(&concrete_name, size, ctx);
+                                build_c_function_with_return_type(
+                                    &concrete_name,
+                                    &all_param_names,
+                                    &concrete_param_types,
+                                    &fn_read_entries,
+                                    &fn_body_stmts,
+                                    &fn_return_expr,
+                                    &ret_struct,
+                                    Some(size),
+                                )
+                            } else {
+                                let c_ret = tuff_type_to_c(ctx, cr).unwrap_or("int".to_string());
+                                build_c_function_with_return_type(
+                                    &concrete_name,
+                                    &all_param_names,
+                                    &concrete_param_types,
+                                    &fn_read_entries,
+                                    &fn_body_stmts,
+                                    &fn_return_expr,
+                                    &c_ret,
+                                    None,
+                                )
+                            }
+                        } else {
+                            c_func
                         }
-                        ctx.function_return_types.insert(concrete_name.clone(), concrete_ret.clone());
-                        concrete_ret.starts_with('[')
-                    } else {
-                        false
-                    };
-                    let c_func = if is_array_return {
-                        let size = parse_array_size(&ctx.function_return_types[&concrete_name]).unwrap_or(1);
-                        let ret_struct = create_array_return_struct(&concrete_name, size, ctx);
-                        build_c_function_with_return_type(
-                            &concrete_name,
-                            &all_param_names,
-                            &vec!["int".to_string(); all_param_names.len()],
-                            &fn_read_entries,
-                            &fn_body_stmts,
-                            &fn_return_expr,
-                            &ret_struct,
-                            Some(size),
-                        )
                     } else {
                         c_func
                     };
-                    let num_params = all_param_names.len();
                     ctx.generated_functions.push((
                         concrete_name.clone(),
                         all_param_names,
-                        vec!["int".to_string(); num_params],
+                        concrete_param_types,
                         c_func,
                     ));
                     ctx.generated_function_instantiations
@@ -5083,6 +5179,15 @@ mod tests {
             "fn pass<T>(param : T) => param; pass<I32>(read()) + 1",
             "5",
             6,
+        );
+    }
+
+    #[test]
+    fn test_generic_function_string_length() {
+        expect_valid(
+            r#"fn pass<T>(value : T) => value; pass<&Str>("foo").length"#,
+            "",
+            3,
         );
     }
 

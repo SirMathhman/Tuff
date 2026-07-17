@@ -1,5 +1,2 @@
-extern let { malloc, free } = extern stdlib;
-
-extern fn malloc<T>(bytes : USize) : &[T; 0];
-
-let ptr = malloc<I32>(sizeOf<I32>() * 100);
+fn pass<T>(value : T) => value;
+pass<&Str>("foo").length
