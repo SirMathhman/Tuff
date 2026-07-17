@@ -6,6 +6,34 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 type CompileError = String;
 
+/// Canonical list of Tuff primitive type names and their C equivalents.
+/// This is the single source of truth for primitive type semantics.
+const PRIMITIVE_TYPES: &[(&str, &str)] = &[
+    ("I8", "signed char"),
+    ("I16", "short"),
+    ("I32", "int"),
+    ("I64", "long long"),
+    ("U8", "unsigned char"),
+    ("U16", "unsigned short"),
+    ("U32", "unsigned int"),
+    ("U64", "unsigned long long"),
+    ("USize", "size_t"),
+    ("Bool", "int"),
+    ("&Str", "const char *"),
+    ("Void", "void"),
+];
+
+/// Check if a type name is a Tuff primitive type.
+fn is_primitive_type(ty: &str) -> bool {
+    PRIMITIVE_TYPES.iter().any(|(name, _)| *name == ty)
+}
+
+/// Map a Tuff primitive type name to its C equivalent.
+/// Returns None for non-primitive types.
+fn primitive_to_c(ty: &str) -> Option<&'static str> {
+    PRIMITIVE_TYPES.iter().find(|(name, _)| *name == ty).map(|(_, c_type)| *c_type)
+}
+
 /// Generic struct template: (name, type_params, fields_str).
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -808,16 +836,7 @@ fn get_array_type_info(ctx: &CompileContext, var: &str) -> Option<(String, Strin
     let sep_pos = inner.rfind(';')?;
     let elem_type = &inner[..sep_pos];
     let size = inner[sep_pos + 1..].trim().to_string();
-    let c_elem = match elem_type {
-        "I32" => "int",
-        "U32" => "unsigned int",
-        "I64" => "long long",
-        "U64" => "unsigned long long",
-        "U8" => "unsigned char",
-        "Bool" => "int",
-        "USize" => "unsigned long long",
-        _ => "int",
-    };
+    let c_elem = primitive_to_c(elem_type).unwrap_or("int");
     Some((c_elem.to_string(), size))
 }
 
@@ -4380,7 +4399,7 @@ fn is_valid_type(ctx: &CompileContext, ty: &str) -> bool {
         }
         return is_valid_type(ctx, inner_trimmed);
     }
-    matches!(ty, "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" | "USize" | "Bool" | "Void")
+    is_primitive_type(ty) || ty == "&Str"
         || ctx.defined_structs.contains(ty)
         || ctx.type_aliases.contains_key(ty)
         || ctx.union_types.contains_key(ty)
@@ -4508,20 +4527,9 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         let params_str = function_pointer_params_str(num_params);
         return Ok(format!("{} *({})", c_ret, params_str));
     }
-    // Built-in types
-    match ty {
-        "I8" => return Ok("signed char".to_string()),
-        "I16" => return Ok("short".to_string()),
-        "I32" => return Ok("int".to_string()),
-        "I64" => return Ok("long long".to_string()),
-        "U8" => return Ok("unsigned char".to_string()),
-        "U16" => return Ok("unsigned short".to_string()),
-        "U32" => return Ok("unsigned int".to_string()),
-        "U64" => return Ok("unsigned long long".to_string()),
-        "USize" => return Ok("size_t".to_string()),
-        "&Str" => return Ok("const char *".to_string()),
-        "Bool" => return Ok("int".to_string()),
-        _ => {}
+    // Built-in primitive types
+    if let Some(c_type) = primitive_to_c(ty) {
+        return Ok(c_type.to_string());
     }
     // User-defined struct (typedef name used as-is)
     if ctx.defined_structs.contains(ty) {
