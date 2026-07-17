@@ -1,9 +1,3 @@
-extern let { malloc, free } = extern stdlib;
-
-type Alloc<T, L : USize> = &[T; L] then free;
-
-extern fn malloc<T, L : USize>(size : USize) : Alloc<T, L>;
-extern fn free<T, L : USize>(ptr : Alloc<T, L>) : Void;
-
-let mut ptr = malloc(sizeOf<&Str>());
-ptr[0] = "foo";
+let array = [1, 2, 3];
+let temp = &array;
+temp is &[I32; 3]

@@ -1,4 +1,4 @@
-#include <stdlib.h>
+
 
 
 
@@ -7,8 +7,9 @@
 
 int main() {
 	
-	 const char * * ptr = malloc(sizeof(const char *));
+	int array[3] = {1, 2, 3};
 
-	ptr[0] = "foo";
-	return 0;
+	 int * temp = &array;
+
+	return 1;
 }

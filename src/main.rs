@@ -61,6 +61,7 @@ struct CompileContext {
     drop_types: HashMap<String, (String, String)>, // alias name -> (base_type, drop_function)
     dropped_vars: Vec<(String, String)>, // (var_name, drop_function) - in declaration order
     array_ret_structs: HashSet<String>, // "_ret" struct names that wrap a static array in a `data` field
+    fat_pointer_sources: HashMap<String, Vec<String>>, // fat pointer var -> list of source array vars (for .length resolution)
 }
 
 impl CompileContext {
@@ -97,6 +98,7 @@ impl CompileContext {
             drop_types: HashMap::new(),
             dropped_vars: Vec::new(),
             array_ret_structs: HashSet::new(),
+            fat_pointer_sources: HashMap::new(),
         }
     }
 }
@@ -931,6 +933,8 @@ fn generate_function_code(functions: &[(String, Vec<String>, Vec<String>, String
         let return_type = if let Some(ret) = function_return_types.get(name) {
             if ret == "Void" {
                 "void".to_string()
+            } else if ret == "USize" {
+                "size_t".to_string()
             } else if ret.starts_with('[') {
                 let ret_struct = format!("{}_ret", name);
                 ret_struct
@@ -1145,6 +1149,68 @@ fn resolve_concrete_return_type(template: &GenericFunctionTemplate, effective_ar
     }
 }
 
+/// Infer type args from array literal arguments (e.g., `[0]` -> L=1, `[1, 2, 3]` -> L=3).
+fn infer_array_literal_types(template: &GenericFunctionTemplate, args_str: &str) -> Option<Vec<String>> {
+    // Only works if there's exactly one type param and one array literal argument
+    if template.type_params.len() != 1 || template.param_names.is_empty() {
+        return None;
+    }
+    let type_param = &template.type_params[0];
+    // Check if the first param's type contains the type param (e.g., "[I32; L]")
+    let param_type = template.param_type_annotations.get(0)?;
+    if !param_type.contains(type_param) {
+        return None;
+    }
+    // Split args respecting brackets to get the first argument
+    let first_arg = split_args_respecting_brackets(args_str).first().copied()?;
+    let arg = first_arg.trim();
+    if let Some(inner) = arg.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let items: Vec<&str> = inner.split(';').collect();
+        let size = if items.len() == 2 {
+            // Repeat syntax: [val; count]
+            items[1].trim().parse().ok()?
+        } else {
+            // Flat array: [a, b, c] — count top-level commas
+            let inner_trimmed = inner.trim();
+            let mut depth = 0;
+            let mut count = 1;
+            for ch in inner_trimmed.chars() {
+                match ch {
+                    '[' => depth += 1,
+                    ']' => depth -= 1,
+                    ',' if depth == 0 => count += 1,
+                    _ => {}
+                }
+            }
+            count
+        };
+        let inferred = vec![size.to_string()];
+        Some(inferred)
+    } else {
+        None
+    }
+}
+
+/// Split arguments by comma, respecting bracket nesting.
+fn split_args_respecting_brackets(args_str: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, ch) in args_str.char_indices() {
+        match ch {
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                result.push(&args_str[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    result.push(&args_str[start..]);
+    result
+}
+
 /// Infer type args for a generic function with rest params based on argument count.
 /// Returns a vector of concrete type strings (e.g., ["3"] for L=3).
 fn infer_rest_param_types(template: &GenericFunctionTemplate, arg_count: usize) -> Option<Vec<String>> {
@@ -1290,6 +1356,7 @@ fn compile_array_decl(
     // Check for array repeat syntax: [value; count]
     if let Ok((val_body, init)) = compile_array_repeat_expr(trimmed, ctx) {
         let repeat_count = parse_array_repeat(trimmed).map(|(_, c)| c).unwrap_or(0);
+        ctx.var_types.insert(var_name.to_string(), vec![format!("[I32; {}]", repeat_count)]);
         let c_decl = format!(
             "{}\n\tint {}[{}] = {};",
             val_body, var_name, repeat_count, init
@@ -1324,6 +1391,7 @@ fn compile_array_decl(
                 format!("[{}]{}", len, inner_dims)
             };
 
+            ctx.var_types.insert(var_name.to_string(), vec![format!("[I32; {}]", len)]);
             let c_decl = format!(
                 "{}\n\tint {}{} = {{{}}};;",
                 body,
@@ -1343,6 +1411,7 @@ fn compile_array_decl(
                 compiled_items.push(item_result);
             }
 
+            ctx.var_types.insert(var_name.to_string(), vec![format!("[I32; {}]", len)]);
             let c_decl = format!(
                 "{}\n\tint {}[{}] = {{{}}};",
                 body,
@@ -1789,6 +1858,53 @@ fn compile_expression(
                 }
             }
 
+            // Track fat pointer sources: "let ptr : &[I32] = &array" -> record ptr -> array
+            // so .length can resolve the size from the source array
+            if let Some(ref ty) = effective_type {
+                // Type is a pointer to an array without known size (e.g., "&[I32]")
+                let ty_trimmed = ty.trim();
+                if ty_trimmed.starts_with('&') && !ty_trimmed.starts_with("&Str") {
+                    let inner = ty_trimmed.strip_prefix('&').unwrap_or(ty_trimmed);
+                    // If inner is like "[I32]" (no semicolon -> no known size), it's a fat pointer
+                    if inner.starts_with('[') && inner.ends_with(']') && !inner.contains(';') {
+                        // Extract source array variables from RHS (handles "&array", bare "array", and "if/else" branches)
+                        fn extract_fat_ptr_sources(expr: &str, var_name: &str, ctx: &mut CompileContext) {
+                            let expr = expr.trim().strip_suffix(';').unwrap_or(expr).trim();
+                            // Direct address-of: "&array"
+                            if let Some(source_var) = expr.strip_prefix('&') {
+                                let source_var = source_var.trim();
+                                ctx.fat_pointer_sources.entry(var_name.to_string())
+                                    .or_default()
+                                    .push(source_var.to_string());
+                                return;
+                            }
+                            // Bare variable name (implicit address-of for fat pointer type)
+                            if expr.chars().all(|c| c.is_alphanumeric() || c == '_') && !expr.is_empty() {
+                                ctx.fat_pointer_sources.entry(var_name.to_string())
+                                    .or_default()
+                                    .push(expr.to_string());
+                                return;
+                            }
+                            // if/else: extract from both branches
+                            if let Some(if_match) = expr.strip_prefix("if ") {
+                                // Find the closing paren of the condition
+                                if let Some(paren_end) = if_match.find(')') {
+                                    let after_condition = if_match[paren_end + 1..].trim_start_matches(')').trim();
+                                    // Find "else" in the remaining text
+                                    if let Some(else_pos) = after_condition.find(" else ") {
+                                        let then_branch = after_condition[..else_pos].trim();
+                                        let else_branch = after_condition[else_pos + 6..].trim();
+                                        extract_fat_ptr_sources(then_branch, var_name, ctx);
+                                        extract_fat_ptr_sources(else_branch, var_name, ctx);
+                                    }
+                                }
+                            }
+                        }
+                        extract_fat_ptr_sources(rhs_trimmed, var_name, ctx);
+                    }
+                }
+            }
+
             // Handle shadowing: if variable already declared, generate assignment instead of redeclaration
             let c_decl = if ctx.declared_vars.contains(var_name) {
                 format!("{}\n\t{} = {};", decl_body, var_name, decl_result)
@@ -1908,6 +2024,18 @@ fn compile_expression(
                                     format!("{}_ret", call_name)
                                 } else {
                                     ret_type.clone()
+                                }
+                            } else if let Some(inner_var) = after_eq.strip_prefix('&') {
+                                // Address-of: "&array" -> infer pointer type from the variable
+                                let inner_var = inner_var.trim();
+                                if let Some(var_types) = ctx.var_types.get(inner_var) {
+                                    if let Some(ty) = var_types.first() {
+                                        format!("&{}", ty)
+                                    } else {
+                                        infer_literal_type(after_eq)
+                                    }
+                                } else {
+                                    infer_literal_type(after_eq)
                                 }
                             } else {
                                 infer_literal_type(after_eq)
@@ -2464,8 +2592,11 @@ fn compile_expression(
                 fn_ctx.mutable_vars.push(var.clone());
             }
 
-            for name in &param_names {
+            for (idx, name) in param_names.iter().enumerate() {
                 fn_ctx.declared_vars.insert(name.clone());
+                if let Some(param_type) = param_type_annotations.get(idx) {
+                    fn_ctx.var_types.insert(name.clone(), vec![param_type.clone()]);
+                }
             }
 
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
@@ -3198,12 +3329,50 @@ fn compile_expression(
     // Handle ".length" property access
     if let Some(dot_pos) = find_top_level_dot_length(trimmed) {
         let base_expr = trimmed[..dot_pos].trim();
-        // Check if the base expression is a variable of type &Str
+        // Check if the base expression is a variable of type &Str or array type
         let base_var = base_expr.trim();
         if let Some(types) = ctx.var_types.get(base_var) {
-            if types.iter().any(|t| t == "&Str") {
-                let (_, base_result) = compile_expression(base_expr, ctx)?;
-                return Ok((String::new(), format!("(int)strlen({})", base_result)));
+            for ty in types {
+                if ty == "&Str" {
+                    let (_, base_result) = compile_expression(base_expr, ctx)?;
+                    return Ok((String::new(), format!("(int)strlen({})", base_result)));
+                }
+                // Array types: "[I32; N]" or "&[I32; N]"
+                let ty_for_parse = ty.strip_prefix('&').unwrap_or(ty);
+                if let Some(size) = parse_array_size(ty_for_parse) {
+                    let (_, base_result) = compile_expression(base_expr, ctx)?;
+                    return Ok((String::new(), format!("((void){} , {})", base_result, size)));
+                }
+                // Fat pointer without known size (e.g., "&[I32]") — resolve from source array
+                if ty.starts_with('&') && ty_for_parse.starts_with('[') && !ty_for_parse.contains(';') {
+                    if let Some(source_vars) = ctx.fat_pointer_sources.get(base_var) {
+                        eprintln!("[.length] fat pointer sources for {}: {:?}", base_var, source_vars);
+                        // Collect sizes from all source arrays
+                        let mut sizes = Vec::new();
+                        for source_var in source_vars {
+                            if let Some(source_types) = ctx.var_types.get(source_var) {
+                                for source_ty in source_types {
+                                    if let Some(size) = parse_array_size(source_ty) {
+                                        eprintln!("[.length] source {} -> size {}", source_var, size);
+                                        sizes.push((source_var.clone(), size));
+                                    }
+                                }
+                            }
+                        }
+                        eprintln!("[.length] sizes={:?}", sizes);
+                        let (_, base_result) = compile_expression(base_expr, ctx)?;
+                        // Single source: compile-time constant size
+                        if sizes.len() == 1 {
+                            return Ok((String::new(), format!("((void){} , {})", base_result, sizes[0].1)));
+                        }
+                        // Multiple sources (if/else): generate runtime size resolution
+                        let mut size_expr = "0".to_string();
+                        for (source_var, size) in &sizes {
+                            size_expr = format!("({} == {} ? {} : {})", base_result, source_var, size, size_expr);
+                        }
+                        return Ok((String::new(), format!("({})", size_expr)));
+                    }
+                }
             }
         }
         // Check if base is a function call with an array return type (handles generic calls too)
@@ -3634,13 +3803,21 @@ fn compile_expression(
         // Resolve the concrete function name to use (generic or non-generic)
         // If no explicit type args, try to infer from argument count for rest-parameter functions
         let effective_type_args = if call_type_args.is_empty() {
-            // Check if this is a generic function with rest params - infer L from arg count
+            // Check if this is a generic function - try to infer type args from arguments
             if let Some(template) = ctx.generic_functions.iter().find(|t| t.name == call_name) {
                 // Count arguments in the call
                 if let Some(paren_end_opt) = find_matching_paren(&final_result[m.0..]) {
                     let args_str = &final_result[m.0 + 1..m.0 + paren_end_opt].trim();
                     let arg_count = if args_str.is_empty() { 0 } else { args_str.split(',').count() };
-                    infer_rest_param_types(template, arg_count)
+                    // First try rest-param inference
+                    let inferred = infer_rest_param_types(template, arg_count);
+                    // If rest-param inference failed, try inferring from array literal arguments
+                    let inferred = if inferred.is_some() {
+                        inferred
+                    } else {
+                        infer_array_literal_types(template, args_str)
+                    };
+                    inferred
                 } else {
                     None
                 }
@@ -3721,8 +3898,15 @@ fn compile_expression(
                             .map(|i| format!("v{}", i))
                             .collect(),
                     );
-                    for name in &all_param_names {
+                    for (idx, name) in all_param_names.iter().enumerate() {
                         fn_ctx.declared_vars.insert(name.clone());
+                        if let Some(param_type) = template.param_type_annotations.get(idx) {
+                            let mut concrete = param_type.clone();
+                            for (type_param, concrete_type) in template.type_params.iter().zip(effective_args.iter()) {
+                                concrete = concrete.replace(type_param, concrete_type);
+                            }
+                            fn_ctx.var_types.insert(name.clone(), vec![concrete]);
+                        }
                     }
                     let (fn_body_stmts, fn_return_expr) =
                         compile_expression(&substituted_body, &mut fn_ctx)?;
@@ -5374,10 +5558,82 @@ mod tests {
     }
 
     #[test]
+    fn test_generic_function_two_type_params() {
+        expect_valid(
+            "fn pair<T, U>(a : T, b : U) => a; pair<I32, Bool>(42, read<Bool>())",
+            "true",
+            42,
+        );
+    }
+
+    #[test]
+    fn test_generic_array_length_param() {
+        expect_valid(
+            "fn getLength<L : USize>(array : [I32; L]) : USize => array.length; getLength<1>([0])",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_generic_array_length_param_inferred() {
+        expect_valid(
+            "fn getLength<L : USize>(array : [I32; L]) : USize => array.length; getLength([0])",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_generic_array_length_param_inferred_length2() {
+        expect_valid(
+            "fn getLength<L : USize>(array : [I32; L]) : USize => array.length; getLength([1, 2])",
+            "",
+            2,
+        );
+    }
+
+    #[test]
     fn test_rest_param_array_length() {
         expect_valid(
             "fn toArray<L : USize>(...args : [I32; L]) : [I32; L] => args; toArray(1, 2, 4).length",
             "",
+            3,
+        );
+    }
+
+    #[test]
+    fn test_array_param_length() {
+        expect_valid(
+            "fn get(param : &[I32; 1]) => param.length; get([0])",
+            "",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_fat_pointer_array_length() {
+        expect_valid(
+            "let array = [1, 2, 3]; let ptr : &[I32] = &array; ptr.length",
+            "",
+            3,
+        );
+    }
+
+    #[test]
+    fn test_fat_pointer_if_else_length() {
+        expect_valid(
+            "let array = [1, 2, 3]; let array2 = [4]; let ptr : &[I32] = if (read<Bool>()) array else array2; ptr.length",
+            "false",
+            1,
+        );
+    }
+
+    #[test]
+    fn test_fat_pointer_if_else_length_true() {
+        expect_valid(
+            "let array = [1, 2, 3]; let array2 = [4]; let ptr : &[I32] = if (read<Bool>()) array else array2; ptr.length",
+            "true",
             3,
         );
     }
@@ -5451,6 +5707,15 @@ mod tests {
     #[test]
     fn test_i64_literal_type_check() {
         expect_valid("let x = 100I64; x is I64", "", 1);
+    }
+
+    #[test]
+    fn test_fat_pointer_is_type_check() {
+        expect_valid(
+            "let array = [1, 2, 3]; let temp = &array; temp is &[I32; 3]",
+            "",
+            1,
+        );
     }
 
     #[test]
