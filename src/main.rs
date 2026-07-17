@@ -3270,9 +3270,16 @@ fn compile_expression(
         return Ok((c_body, c_init));
     }
 
-    // Handle "this.x" - access variable x from current scope
+    // Handle "this.x" - if `this` is a struct parameter, compile as struct field access.
+    // Otherwise, resolve x as a variable in scope (for this-ref pattern).
     if let Some(field) = trimmed.strip_prefix("this.") {
         let var_name = field.split(|c: char| !c.is_alphanumeric() && c != '_').next().unwrap_or(field);
+        // If `this` is a declared variable (e.g. struct param `this : Raw`),
+        // treat as normal struct field access: "this.field"
+        if ctx.declared_vars.contains("this") {
+            return Ok((String::new(), format!("this.{}", var_name)));
+        }
+        // For this-ref pattern: resolve x as a variable in scope
         if ctx.declared_vars.contains(var_name) {
             return Ok((String::new(), var_name.to_string()));
         }
@@ -5801,6 +5808,15 @@ mod tests {
     fn test_drop_with_value_param() {
         expect_valid(
             "let mut counter = 0;\nfn drop(this : I32) => {\n    counter += this;\n}\nlet foo : I32 then drop = 100;\ncounter",
+            "",
+            100,
+        );
+    }
+
+    #[test]
+    fn test_drop_inline_struct() {
+        expect_valid(
+            "struct Raw {\n    field : I32\n}\n\nlet mut counter = 0;\nfn drop(this : Raw) => {\n    counter += this.field;\n}\n\nlet foo : Raw then drop = Raw { field : 100 };\ncounter",
             "",
             100,
         );
