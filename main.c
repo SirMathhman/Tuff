@@ -1,22 +1,13 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdbool.h>
+#include <stdlib.h>
 
-typedef struct {
-		int field;
-} RawBox;
 
-void drop(RawBox box);
 
-static int counter;
-void drop(RawBox box) {
 
-	counter += box.field;}int main() {
+
+
+int main() {
 	
-	  counter = 0;
+	 int ptr = malloc<I32>(sizeof(int) * 100);
 
-	 RawBox box = (RawBox){.field = 100 };
-
-	drop(box);
-	return counter;
+	return 0;
 }

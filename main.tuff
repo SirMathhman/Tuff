@@ -1,13 +1,5 @@
-struct RawBox {
-    field : I32
-}
+extern let { malloc, free } = extern stdlib;
 
-let mut counter = 0;
+extern fn malloc<T>(bytes : USize) : &[T; 0];
 
-fn drop(box : Box) : Void => {
-    counter += box.field;
-}
-
-type Box = RawBox then drop;
-let box = Box { field : 100 };
-counter
+let ptr = malloc<I32>(sizeOf<I32>() * 100);

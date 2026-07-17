@@ -58,6 +58,7 @@ struct CompileContext {
     function_pointer_vars: HashMap<String, String>, // var name -> function name (for function-as-value)
     drop_types: HashMap<String, (String, String)>, // alias name -> (base_type, drop_function)
     dropped_vars: Vec<(String, String)>, // (var_name, drop_function) - in declaration order
+    array_ret_structs: HashSet<String>, // "_ret" struct names that wrap a static array in a `data` field
 }
 
 impl CompileContext {
@@ -92,6 +93,7 @@ impl CompileContext {
             function_pointer_vars: HashMap::new(),
             drop_types: HashMap::new(),
             dropped_vars: Vec::new(),
+            array_ret_structs: HashSet::new(),
         }
     }
 }
@@ -582,6 +584,44 @@ fn prepare_captured_vars(ctx: &CompileContext, c_body: &str, space_prefix: &str)
     (extern_decls, captured_globals, c_body_fixed)
 }
 
+/// Parse the "then dropFn" suffix from a type alias string like "I32 then drop".
+/// Returns (base_type_str, optional_drop_fn_name).
+fn parse_then_drop_fn(alias_type_str: &str) -> (String, Option<String>) {
+    if let Some(then_pos) = alias_type_str.find(" then ") {
+        let base = alias_type_str[..then_pos].trim().to_string();
+        let drop_fn = alias_type_str[then_pos + 6..].trim().to_string();
+        (base, Some(drop_fn))
+    } else {
+        (alias_type_str.to_string(), None)
+    }
+}
+
+/// Split a type string by '|' into member type names.
+fn split_member_types(base_type_str: &str) -> Vec<String> {
+    base_type_str
+        .split('|')
+        .map(|s| s.trim().to_string())
+        .collect()
+}
+
+/// Register a drop type alias into ctx.drop_types if it has a single member type.
+fn register_drop_type(ctx: &mut CompileContext, alias_name: &str, member_types: &[String], drop_fn: &str) {
+    if member_types.len() == 1 {
+        ctx.drop_types
+            .insert(alias_name.to_string(), (member_types[0].clone(), drop_fn.to_string()));
+    }
+}
+
+/// Generate C drop calls for variables with drop types (in reverse declaration order).
+fn generate_drop_calls(ctx: &CompileContext) -> String {
+    let mut drop_calls = String::new();
+    for (var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
+        let arg = if function_num_params(ctx, drop_fn) > 0 { var_name.as_str() } else { "" };
+        drop_calls.push_str(&format!("\t{}({});\n", drop_fn, arg));
+    }
+    drop_calls
+}
+
 /// Scan the whole source up front for "type Name = Base [then dropFn];" declarations
 /// and register them in ctx.type_aliases / ctx.drop_types before the main pass runs.
 /// This allows earlier statements (e.g. a function whose param type is the alias) to
@@ -604,24 +644,12 @@ fn prescan_type_aliases(source: &str, ctx: &mut CompileContext) {
                 // Skip generic aliases here; they're handled fine in declaration order.
                 if !alias_name_raw.contains('<') {
                     let alias_type_str = alias_part[eq_pos + 1..].trim();
-                    let (base_type_str, drop_fn) = if let Some(then_pos) = alias_type_str.find(" then ") {
-                        let base = alias_type_str[..then_pos].trim().to_string();
-                        let drop_fn = alias_type_str[then_pos + 6..].trim().to_string();
-                        (base, Some(drop_fn))
-                    } else {
-                        (alias_type_str.to_string(), None)
-                    };
-                    let member_types: Vec<String> = base_type_str
-                        .split('|')
-                        .map(|s| s.trim().to_string())
-                        .collect();
+                    let (base_type_str, drop_fn) = parse_then_drop_fn(alias_type_str);
+                    let member_types = split_member_types(&base_type_str);
                     ctx.type_aliases
                         .insert(alias_name_raw.to_string(), member_types.clone());
-                    if let Some(drop_fn) = drop_fn {
-                        if member_types.len() == 1 {
-                            ctx.drop_types
-                                .insert(alias_name_raw.to_string(), (member_types[0].clone(), drop_fn));
-                        }
+                    if let Some(ref drop_fn) = drop_fn {
+                        register_drop_type(ctx, alias_name_raw, &member_types, drop_fn);
                     }
                 }
             }
@@ -654,6 +682,15 @@ fn compile(source: &str) -> Result<String, CompileError> {
     let mut ctx = CompileContext::new(vars.clone());
     prescan_type_aliases(&no_comments, &mut ctx);
     let (c_body, return_expr) = compile_expression(&no_comments, &mut ctx)?;
+
+    // Validate that all drop functions referenced by type aliases are actually defined
+    for (alias_name, (_, drop_fn)) in &ctx.drop_types {
+        let is_defined = ctx.generated_functions.iter().any(|(n, _, _, _)| n == drop_fn)
+            || ctx.extern_functions.contains_key(drop_fn);
+        if !is_defined {
+            return Err(format!("Undefined drop function '{}' referenced by type alias '{}'", drop_fn, alias_name));
+        }
+    }
 
     if read_count > 0 {
         // Generate C code for reads in source order.
@@ -705,12 +742,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         let (extern_decls, captured_globals, c_body_fixed) = prepare_captured_vars(&ctx, &c_body, " ");
 
-        // Generate drop calls for variables with drop types (in reverse declaration order)
-        let mut drop_calls = String::new();
-        for (var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
-            let arg = if function_num_params(&ctx, drop_fn) > 0 { var_name.as_str() } else { "" };
-            drop_calls.push_str(&format!("\t{}({});\n", drop_fn, arg));
-        }
+        let drop_calls = generate_drop_calls(&ctx);
 
         let final_return = resolve_final_return(&return_expr, &ctx);
         Ok(format!(
@@ -762,13 +794,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         let (extern_decls, captured_globals, c_body_fixed) = prepare_captured_vars(&ctx, &c_body, "");
 
-        // Generate drop calls for variables with drop types (in reverse declaration order)
-        let mut drop_calls = String::new();
-        for (var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
-            let arg = if function_num_params(&ctx, drop_fn) > 0 { var_name.as_str() } else { "" };
-            eprintln!("[compile] generating drop call: {}({})", drop_fn, arg);
-            drop_calls.push_str(&format!("\t{}({});\n", drop_fn, arg));
-        }
+        let drop_calls = generate_drop_calls(&ctx);
 
         let final_return = resolve_final_return(&return_expr, &ctx);
         Ok(format!(
@@ -800,16 +826,15 @@ fn generate_extern_decls(_ctx: &CompileContext) -> String {
 
 /// Generate C function prototypes and definitions from compiled functions.
 fn generate_function_code(functions: &[(String, Vec<String>, Vec<String>, String)], function_return_types: &HashMap<String, String>, captured_vars: &HashSet<String>) -> (String, String, String) {
-    let mut c_typedefs = String::new();
+    let c_typedefs = String::new();
     let mut c_prototypes = String::new();
     for (name, params, param_types, _func_code) in functions {
         let return_type = if let Some(ret) = function_return_types.get(name) {
             if ret == "Void" {
                 "void".to_string()
             } else if ret.starts_with('[') {
-                let size = parse_array_size(ret).unwrap_or(1);
                 let ret_struct = format!("{}_ret", name);
-                c_typedefs.push_str(&format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct));
+                // Skip - typedef already generated inline when function was defined
                 ret_struct
             } else if ret.ends_with("_ret") {
                 // Struct return type from `this`-returning functions (e.g., "Wrapper_ret")
@@ -1258,12 +1283,90 @@ fn compile_array_item(
     }
 }
 
-/// Recursively compile a Tuff expression, returning (C statements, return expression).
+/// Rewrite `var[idx]` into `var.data[idx]` for variables whose tracked type is an
+/// array-returning function's `_ret` struct wrapper (which stores the array in a `data` field).
+fn rewrite_array_ret_indexing(input: &str, ctx: &CompileContext) -> String {
+    let vars: Vec<&String> = ctx
+        .var_types
+        .iter()
+        .filter(|(_, types)| types.iter().any(|t| ctx.array_ret_structs.contains(t)))
+        .map(|(name, _)| name)
+        .collect();
+    if vars.is_empty() {
+        return input.to_string();
+    }
+    let is_ident_char = |c: char| c.is_alphanumeric() || c == '_';
+    let mut result = String::with_capacity(input.len());
+    let mut i = 0;
+    'outer: while i < input.len() {
+        let rest = &input[i..];
+        for var in &vars {
+            if rest.starts_with(var.as_str()) {
+                let after = &rest[var.len()..];
+                let prev_ok = i == 0 || !is_ident_char(input[..i].chars().last().unwrap());
+                if prev_ok && after.starts_with('[') {
+                    result.push_str(var);
+                    result.push_str(".data");
+                    i += var.len();
+                    continue 'outer;
+                }
+            }
+        }
+        let ch = rest.chars().next().unwrap();
+        result.push(ch);
+        i += ch.len_utf8();
+    }
+    result
+}
+
+/// Rewrite `call(...)[idx]` into `call(...).data[idx]` when `call` is a function whose
+/// return type is a static array (wrapped in a `_ret` struct with a `data` field).
+fn rewrite_call_array_indexing(input: &str, ctx: &CompileContext) -> String {
+    let is_ident_char = |c: char| c.is_alphanumeric() || c == '_';
+    let mut result = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        let rest = &input[i..];
+        let ident_len = rest.chars().take_while(|c| is_ident_char(*c)).count();
+        if ident_len > 0 && rest[ident_len..].starts_with('(') {
+            let name = &rest[..ident_len];
+            let prev_ok = i == 0 || !is_ident_char(input[..i].chars().last().unwrap());
+            let is_array_fn = ctx
+                .function_return_types
+                .get(name)
+                .map(|ret| ret.starts_with('[') || ctx.array_ret_structs.contains(ret))
+                .unwrap_or(false);
+            if prev_ok && is_array_fn {
+                if let Some(paren_end) = find_matching_paren(&rest[ident_len..]) {
+                    let call_len = ident_len + paren_end + 1;
+                    if rest[call_len..].starts_with('[') {
+                        result.push_str(&rest[..call_len]);
+                        result.push_str(".data");
+                        i += call_len;
+                        continue;
+                    }
+                }
+            }
+        }
+        let ch = rest.chars().next().unwrap();
+        result.push(ch);
+        i += ch.len_utf8();
+    }
+    result
+}
+
 fn compile_expression(
     expr: &str,
     ctx: &mut CompileContext,
 ) -> Result<(String, String), CompileError> {
-    let trimmed = expr.trim();
+    let expr_trimmed = expr.trim();
+    let rewritten;
+    let trimmed: &str = if ctx.array_ret_structs.is_empty() {
+        expr_trimmed
+    } else {
+        rewritten = rewrite_call_array_indexing(&rewrite_array_ret_indexing(expr_trimmed, ctx), ctx);
+        &rewritten
+    };
     eprintln!("[compile_expr] expr: '{}'", trimmed);
 
     // Handle empty expressions.
@@ -1635,9 +1738,13 @@ fn compile_expression(
                             if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
                                 ret_type.clone()
                             } else if let Some(ret_type) = ctx.function_return_types.get(call_name) {
-                                // Infer return type from user-defined function (e.g., "Counter_ret" -> "Counter")
+                                // Infer return type from user-defined function
                                 if ret_type.ends_with("_ret") {
+                                    // Factory return: strip "_ret" suffix
                                     ret_type[..ret_type.len() - 4].to_string()
+                                } else if ret_type.starts_with('[') {
+                                    // Array return: use the function's struct wrapper type
+                                    format!("{}_ret", call_name)
                                 } else {
                                     ret_type.clone()
                                 }
@@ -2140,6 +2247,12 @@ fn compile_expression(
                 return Ok((String::new(), String::new()));
             }
 
+            // Infer an array return type when none was annotated but the body is
+            // directly an array literal (e.g. "fn get() => [1, 2, 3];").
+            let return_type = return_type.or_else(|| {
+                parse_array_items(func_body.trim()).map(|(items, _)| format!("[I32; {}]", items.len()))
+            });
+
             // Non-generic function: generate C code immediately
             let fn_read_entries = find_reads_in_order(func_body);
             let mut fn_ctx = CompileContext::new(
@@ -2239,6 +2352,38 @@ fn compile_expression(
                     "void",
                     None,
                 )
+            } else if let Some(ref ret) = return_type {
+                // Array return type: use struct wrapper
+                if ret.starts_with('[') {
+                    let size = parse_array_size(ret).unwrap_or(1);
+                    let ret_struct = format!("{}_ret", func_name);
+                    // Generate struct typedef inline so it's available for let declarations
+                    if !ctx.defined_structs.contains(&ret_struct) {
+                        let typedef = format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct);
+                        ctx.generated_structs.push(typedef);
+                        ctx.defined_structs.insert(ret_struct.clone());
+                    }
+                    ctx.array_ret_structs.insert(ret_struct.clone());
+                    build_c_function_with_return_type(
+                        &func_name,
+                        &param_names,
+                        &param_types,
+                        &fn_read_entries,
+                        &fn_body_stmts,
+                        &fn_return_expr,
+                        &ret_struct,
+                        Some(size),
+                    )
+                } else {
+                    build_c_function(
+                        &func_name,
+                        &param_names,
+                        &param_types,
+                        &fn_read_entries,
+                        &fn_body_stmts,
+                        &fn_return_expr,
+                    )
+                }
             } else if returns_this {
                 // Collect local variables (declared in fn minus params minus outer vars)
                 let mut local_vars: Vec<String> = fn_ctx.declared_vars
@@ -2386,19 +2531,12 @@ fn compile_expression(
                 let (alias_name, type_params) = parse_generic_type_args_vec(alias_name_raw)
                     .unwrap_or_else(|| (alias_name_raw.to_string(), Vec::new()));
                 // Check for "then dropFn" suffix
-                let (base_type_str, drop_fn) = if let Some(then_pos) = alias_type_str.find(" then ") {
-                    let base = alias_type_str[..then_pos].trim().to_string();
-                    let drop_fn = alias_type_str[then_pos + 6..].trim().to_string();
-                    eprintln!("[type_alias] drop type: {} = {} then {}", alias_name, base, drop_fn);
-                    (base, Some(drop_fn))
-                } else {
-                    (alias_type_str.to_string(), None)
-                };
+                let (base_type_str, drop_fn) = parse_then_drop_fn(&alias_type_str);
+                if let Some(ref drop_fn) = drop_fn {
+                    eprintln!("[type_alias] drop type: {} = {} then {}", alias_name, base_type_str, drop_fn);
+                }
                 // Parse union types: "I32 | Bool" -> ["I32", "Bool"]
-                let member_types: Vec<String> = base_type_str
-                    .split('|')
-                    .map(|s| s.trim().to_string())
-                    .collect();
+                let member_types = split_member_types(&base_type_str);
                 // Store generic type alias if it has type params
                 if !type_params.is_empty() {
                     eprintln!("[type_alias] generic type alias: {}<{}> = {}", alias_name, type_params.join(", "), base_type_str);
@@ -2411,7 +2549,7 @@ fn compile_expression(
                     // For single-type aliases with drop, store base type and drop function
                     if member_types.len() == 1 {
                         eprintln!("[type_alias] registered drop type: {} -> {} (drop: {})", alias_name, member_types[0], drop_fn);
-                        ctx.drop_types.insert(alias_name.to_string(), (member_types[0].clone(), drop_fn.clone()));
+                        register_drop_type(ctx, &alias_name, &member_types, drop_fn);
                     }
                 }
                 // Track union types where members are structs (for tagged union generation).
@@ -3378,6 +3516,13 @@ fn compile_expression(
                     };
                     let c_func = if is_array_return {
                         let size = parse_array_size(&ctx.function_return_types[&concrete_name]).unwrap_or(1);
+                        let ret_struct = format!("{}_ret", concrete_name);
+                        if !ctx.defined_structs.contains(&ret_struct) {
+                            let typedef = format!("typedef struct {{ int data[{}]; }} {};\n", size, ret_struct);
+                            ctx.generated_structs.push(typedef);
+                            ctx.defined_structs.insert(ret_struct.clone());
+                        }
+                        ctx.array_ret_structs.insert(ret_struct.clone());
                         build_c_function_with_return_type(
                             &concrete_name,
                             &all_param_names,
@@ -3385,7 +3530,7 @@ fn compile_expression(
                             &fn_read_entries,
                             &fn_body_stmts,
                             &fn_return_expr,
-                            &format!("{}_ret", concrete_name),
+                            &ret_struct,
                             Some(size),
                         )
                     } else {
@@ -3417,8 +3562,12 @@ fn compile_expression(
         } else if let Some(func_name) = ctx.function_pointer_vars.get(&call_name) {
             // Call via function pointer variable — resolve to actual function name
             Some(func_name.clone())
-        } else {
+        } else if call_name == "sizeOf" || call_name == "sizeof" || call_name == "read" {
+            // Built-in functions handled in earlier passes — skip
             None
+        } else {
+            // Undefined function call — return compile error
+            return Err(format!("Undefined function: {}", call_name));
         };
 
         // Replace function call in result if we resolved a name
@@ -4547,6 +4696,11 @@ mod tests {
     }
 
     #[test]
+    fn test_undefined_function_call() {
+        expect_invalid("undefinedFunction()");
+    }
+
+    #[test]
     fn test_usize_type() {
         expect_valid("let x : USize = 10; x", "", 10);
     }
@@ -4756,6 +4910,24 @@ mod tests {
             "fn get() => 100; let temp = get; temp()",
             "",
             100,
+        );
+    }
+
+    #[test]
+    fn test_function_returning_static_array() {
+        expect_valid(
+            "fn makeArray() : [I32; 3] => [1, 2, 3]; let arr = makeArray(); arr[0] + arr[1] + arr[2]",
+            "",
+            6,
+        );
+    }
+
+    #[test]
+    fn test_index_function_call_returning_static_array() {
+        expect_valid(
+            "fn get() => [1, 2, 3];\nget()[0]",
+            "",
+            1,
         );
     }
 
@@ -5060,6 +5232,15 @@ mod tests {
     }
 
     #[test]
+    fn test_extern_let_without_type() {
+        expect_valid(
+            "extern let { atoi } = extern stdlib; extern fn atoi(str : &Str) : I32; let x = atoi(\"42\"); x",
+            "",
+            42,
+        );
+    }
+
+    #[test]
     fn test_sizeof_extern_type() {
         expect_valid(
             "extern let { type uint8_t } = extern stdint; sizeOf<uint8_t>()",
@@ -5329,5 +5510,10 @@ mod tests {
             "",
             100,
         );
+    }
+
+    #[test]
+    fn test_drop_type_undefined_drop_fn() {
+        expect_invalid("type Temp = I32 then undefinedDropFn;");
     }
 }

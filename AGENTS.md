@@ -6,7 +6,7 @@ Tuff is a C-like programming language designed to eliminate undefined behavior, 
 ## Build & Test
 ```bash
 cargo build    # Compile
-cargo test     # Run 119 end-to-end tests (compile Tuff → C → clang → execute)
+cargo test     # Run 138 end-to-end tests (compile Tuff → C → clang → execute)
 cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 ```
 - **Gated Checks** (`.github/hooks/hooks.json`): `cargo test` and PMD CPD (50-token minimum on `src/`) run on workspace stop. Both must pass. Note: hooks.json uses `cmd /c "..."` wrapping for PowerShell commands.
@@ -17,7 +17,7 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Codegen approach**: Tuff source → C code → clang → native executable
 - **Zero dependencies**: Self-contained compiler, no external crates
 - **End-to-end testing**: Tests actually compile and run generated C code via `clang`
-- **Single-file compiler**: All code in `src/main.rs` (~4578 lines, tests start at line 3781)
+- **Single-file compiler**: All code in `src/main.rs` (~5355 lines, tests start at line 4390)
 - **No external dependencies**: `Cargo.toml` `[dependencies]` section is empty — verifiable via `Cargo.lock` containing only `tuffc`
 
 ### Source Layout (`src/main.rs`)
@@ -31,9 +31,9 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 | 800–1000  | `is_valid_type`, `tuff_type_to_c`, array helpers |
 | 1000–2800 | `compile_expression` — core recursive descent parser (~1800 lines) |
 | 2800–3030 | Type utilities, monomorphization helpers |
-| 3030–3390 | Utility functions (`find_matching_*`, `sanitize_type_name`, etc.) |
-| 3392–3480 | `expect_valid`, `expect_invalid` test helpers |
-| 3781–end  | `#[cfg(test)] mod tests` — 119 end-to-end tests |
+| 3030–3500 | Utility functions (`find_matching_*`, `sanitize_type_name`, etc.) |
+| 3500–3780 | `expect_valid`, `expect_invalid` test helpers |
+| 4390–end  | `#[cfg(test)] mod tests` — 138 end-to-end tests |
 
 ### Key Functions
 - `compile(source: &str) -> Result<String, CompileError>` — main entry point; returns C code
@@ -88,6 +88,7 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - **Factory pattern**: `fn Factory() => { fn get(&this) => 100; this }` — return `this` from factory, call methods via `Factory().get()`
 - **Receiver parameters**: `fn get(&this)` or `fn get(this : &Factory)` — explicit `this` receiver on nested methods
 - **Per-instance state**: factory methods use instance pointers instead of shared static globals — each factory call gets independent state
+- **Drop types**: `type Box = RawBox then drop;` — type aliases with destructor functions called on variable lifetime end
 ## Key Conventions
 - Rust 2024 edition
 - `compile(source: &str) -> Result<String, CompileError>` - main compiler entry point (returns C code)
@@ -106,6 +107,8 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - `this_refs: HashSet<String>` — variables that are this-references
 - `this_param_functions: HashSet<String>` — functions that take `&this` as a receiver parameter
 - `factory_method_instances: HashMap<String, String>` — method name → instance struct type (e.g., `"add"` → `"Counter_ret"`)
+- `drop_types: HashMap<String, (String, String)>` — alias name → (base_type, drop_function)
+- `dropped_vars: Vec<(String, String)>` — (var_name, drop_function) in declaration order
 - `generate_union_typedefs()` — generates C tagged union typedefs with enum tags and union data
 - `generate_tagged_union_if_else()` — generates if/else block with tag assignments for union variants
 - `generate_extern_decls()` — generate extern declarations
@@ -114,10 +117,10 @@ cargo run      # Compile main.tuff → main.c (doesn't invoke clang)
 - Test helpers: `expect_valid(source, stdin_str, exit_code)` (positive) and `expect_invalid(source)` (negative, asserts compilation fails). Both are `#[allow(dead_code)]` functions at file scope (outside `mod tests`). Tests use `#[test]` + snake_case names with `test_` prefix, no `#[should_panic]`.
 - Temp files use atomic counter (`TEMP_COUNTER`) for thread-safe naming
 - `CompileError = String` - will need custom error enum as compiler grows
-- **Test categories**: Basic/read/let-declarations/arrays/mutability/control-flow/types/operators/edge-cases/struct-destructuring/extern-ffi/sizeof/pointer-indexing/void-fns/captured-vars/this-refs/nested-fn/factory — all single-expression pattern `expect_valid("source", "stdin", expected_exit_code)`
+- **Test categories**: Basic/read/let-declarations/arrays/mutability/control-flow/types/operators/edge-cases/struct-destructuring/extern-ffi/sizeof/pointer-indexing/void-fns/captured-vars/this-refs/nested-fn/factory/drop — all single-expression pattern `expect_valid("source", "stdin", expected_exit_code)`
 
 ## Current Status
-- **Current Status**: Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, tagged unions with runtime tag checking, rest parameters, type cast operator, struct destructuring, extern FFI, sizeOf, pointer array indexing, void functions, captured variables, this references, nested functions, factory pattern with per-instance state. All **119 tests** pass. Next: proper lexer → parser AST → typed codegen pipeline.
+- **Current Status**: Expression-level compiler with let declarations, mutability, arrays (flat & nested), type checking, IO, control flow, functions, generic functions, structs, generic structs, logical not, type-check operator, tagged unions with runtime tag checking, rest parameters, type cast operator, struct destructuring, extern FFI, sizeOf, pointer array indexing, void functions, captured variables, this references, nested functions, factory pattern with per-instance state, drop types. All **138 tests** pass. Next: proper lexer → parser AST → typed codegen pipeline.
 
 ## Files
 - `src/main.rs` — Single-file compiler (~4468 lines)
