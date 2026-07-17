@@ -289,18 +289,31 @@ fn parse_param_with_type(
 }
 
 /// Push a parsed parameter into names, types, and type annotation vectors.
+/// If `type_param` is in `generic_type_params`, skip type validation (it's a placeholder).
 fn push_param(
     ctx: &mut CompileContext,
     param: &str,
+    generic_type_params: &[String],
     param_names: &mut Vec<String>,
     param_types: &mut Vec<String>,
     param_type_annotations: &mut Vec<String>,
-) {
+) -> Result<(), CompileError> {
     let parts: Vec<&str> = param.split(':').collect();
     let name = parts[0].trim();
     param_names.push(name.to_string());
-    param_types.push(if parts.len() > 1 { tuff_type_to_c(ctx, parts[1].trim()).unwrap_or("int".to_string()) } else { "int".to_string() });
+    param_types.push(if parts.len() > 1 {
+        let tuff_type = parts[1].trim();
+        // Generic type params (e.g. "T") are placeholders — don't validate at template time
+        if generic_type_params.contains(&tuff_type.to_string()) {
+            "int".to_string()
+        } else {
+            tuff_type_to_c(ctx, tuff_type)?
+        }
+    } else {
+        "int".to_string()
+    });
     param_type_annotations.push(if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() });
+    Ok(())
 }
 
 /// Parse generic type parameters from a string like "name<T, U>" -> ("name", ["T", "U"]).
@@ -2329,14 +2342,14 @@ fn compile_expression(
                             has_this_param = true;
                         } else {
                             // Regular parameter (e.g. "this : I32" for drop functions)
-                            push_param(ctx, param_trimmed, &mut param_names, &mut param_types, &mut param_type_annotations);
+                            push_param(ctx, param_trimmed, &type_params, &mut param_names, &mut param_types, &mut param_type_annotations)?;
                         }
                     } else {
                         // Not a "this" receiver — treat as regular param
-                        push_param(ctx, param_trimmed, &mut param_names, &mut param_types, &mut param_type_annotations);
+                        push_param(ctx, param_trimmed, &type_params, &mut param_names, &mut param_types, &mut param_type_annotations)?;
                     }
                 } else {
-                    push_param(ctx, param_trimmed, &mut param_names, &mut param_types, &mut param_type_annotations);
+                    push_param(ctx, param_trimmed, &type_params, &mut param_names, &mut param_types, &mut param_type_annotations)?;
                 }
             }
         }
@@ -5196,6 +5209,11 @@ mod tests {
     #[test]
     fn test_struct_unknown_field_type() {
         expect_invalid("struct Wrapper { field : UnknownType }");
+    }
+
+    #[test]
+    fn test_fn_unknown_param_type() {
+        expect_invalid("fn test(random : UnknownType) => {}");
     }
 
     #[test]
