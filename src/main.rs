@@ -54,6 +54,7 @@ struct CompileContext {
     this_param_functions: HashSet<String>, // functions that take &this as a receiver parameter
     factory_method_instances: HashMap<String, String>, // method name -> instance struct type (e.g., "add" -> "Counter_ret")
     nested_function_parent: HashMap<String, String>, // child function name -> parent function name
+    function_pointer_vars: HashMap<String, String>, // var name -> function name (for function-as-value)
 }
 
 impl CompileContext {
@@ -84,6 +85,7 @@ impl CompileContext {
             this_param_functions: HashSet::new(),
             factory_method_instances: HashMap::new(),
             nested_function_parent: HashMap::new(),
+            function_pointer_vars: HashMap::new(),
         }
     }
 }
@@ -1495,23 +1497,36 @@ fn compile_expression(
                     })
                 });
                 // Track all resolved types for `is` operator checks (union support)
+                // Check if RHS is a bare function name (not a call) — e.g., "let temp = get"
+                let rhs_trimmed = after_eq.trim();
+                let is_bare_function = rhs_trimmed.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    && (ctx.function_return_types.contains_key(rhs_trimmed)
+                        || ctx.generated_functions.iter().any(|(n, _, _, _)| n == rhs_trimmed));
+                if is_bare_function {
+                    ctx.function_pointer_vars.insert(var_name.to_string(), rhs_trimmed.to_string());
+                }
                 let inferred_type = type_annotation
                     .as_ref()
                     .cloned()
                     .unwrap_or_else(|| {
-                        // Check if RHS is a call to a registered extern function
-                        let call_name = after_eq.split('(').next().unwrap_or("").trim();
-                        if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
-                            ret_type.clone()
-                        } else if let Some(ret_type) = ctx.function_return_types.get(call_name) {
-                            // Infer return type from user-defined function (e.g., "Counter_ret" -> "Counter")
-                            if ret_type.ends_with("_ret") {
-                                ret_type[..ret_type.len() - 4].to_string()
-                            } else {
-                                ret_type.clone()
-                            }
+                        if is_bare_function {
+                            // Bare function name — use a function pointer type
+                            format!("fn_ptr({})", rhs_trimmed)
                         } else {
-                            infer_literal_type(after_eq)
+                            // Check if RHS is a call to a registered extern function
+                            let call_name = after_eq.split('(').next().unwrap_or("").trim();
+                            if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
+                                ret_type.clone()
+                            } else if let Some(ret_type) = ctx.function_return_types.get(call_name) {
+                                // Infer return type from user-defined function (e.g., "Counter_ret" -> "Counter")
+                                if ret_type.ends_with("_ret") {
+                                    ret_type[..ret_type.len() - 4].to_string()
+                                } else {
+                                    ret_type.clone()
+                                }
+                            } else {
+                                infer_literal_type(after_eq)
+                            }
                         }
                     });
                 let tracked_types = if !all_resolved_types.is_empty() {
@@ -1551,6 +1566,21 @@ fn compile_expression(
                             decl_body, c_type, var_name, decl_result
                         )
                     }
+                } else if is_bare_function {
+                    // Function pointer: "int (*temp)(void) = get;"
+                    let func_name = rhs_trimmed;
+                    let ret_type = ctx.function_return_types.get(func_name).cloned();
+                    let c_ret = if let Some(ret) = ret_type {
+                        if ret == "Void" { "void".to_string() } else { tuff_type_to_c(ctx, &ret).unwrap_or_else(|_| "int".to_string()) }
+                    } else {
+                        "int".to_string()
+                    };
+                    let num_params = function_num_params(ctx, func_name);
+                    let params_str = function_pointer_params_str(num_params);
+                    format!(
+                        "{}\n\t{} (*{})({}) = {};",
+                        decl_body, c_ret, var_name, params_str, decl_result
+                    )
                 } else {
                     // Use struct type name if it's a defined struct, otherwise convert type
                     let c_type = if let Some(ref ty) = resolved_generic_type {
@@ -3198,6 +3228,9 @@ fn compile_expression(
             Some(call_name.clone())
         } else if ctx.extern_functions.contains_key(&call_name) {
             Some(call_name.clone())
+        } else if let Some(func_name) = ctx.function_pointer_vars.get(&call_name) {
+            // Call via function pointer variable — resolve to actual function name
+            Some(func_name.clone())
         } else {
             None
         };
@@ -3399,6 +3432,23 @@ fn resolve_final_return(return_expr: &str, ctx: &CompileContext) -> String {
 
 /// Convert an array inner type (between brackets) to a C pointer type.
 /// e.g., "I32; 3" -> "int *", "I32" -> "int *"
+/// Build C parameter string for function pointer type declarations.
+fn function_pointer_params_str(num_params: usize) -> String {
+    if num_params == 0 {
+        "void".to_string()
+    } else {
+        (0..num_params).map(|i| format!("int arg{}", i)).collect::<Vec<_>>().join(", ")
+    }
+}
+
+/// Look up the number of parameters for a function by name.
+fn function_num_params(ctx: &CompileContext, func_name: &str) -> usize {
+    ctx.generated_functions.iter()
+        .find(|(n, _, _, _)| n == func_name)
+        .map(|(_, params, _, _)| params.len())
+        .unwrap_or(0)
+}
+
 fn array_inner_to_c_ptr(ctx: &mut CompileContext, inner: &str) -> Result<String, CompileError> {
     if let Some(semi_pos) = inner.find(';') {
         let elem_type = inner[..semi_pos].trim();
@@ -3426,6 +3476,23 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         }
         let inner_c = tuff_type_to_c(ctx, inner_trimmed)?;
         return Ok(format!("{} *", inner_c));
+    }
+    // Function pointer type: "fn_ptr(get)" -> "int (*)(void)"
+    if let Some(func_name) = ty.strip_prefix("fn_ptr(").and_then(|s| s.strip_suffix(')')) {
+        let func_name = func_name.trim();
+        let ret_type = ctx.function_return_types.get(func_name).cloned();
+        let num_params = function_num_params(ctx, func_name);
+        let c_ret = if let Some(ret) = ret_type {
+            if ret == "Void" {
+                "void".to_string()
+            } else {
+                tuff_type_to_c(ctx, &ret)?
+            }
+        } else {
+            "int".to_string()
+        };
+        let params_str = function_pointer_params_str(num_params);
+        return Ok(format!("{} *({})", c_ret, params_str));
     }
     // Built-in types
     match ty {
@@ -4432,6 +4499,15 @@ mod tests {
             "fn sum(arr : [I32; 3]) : I32 => arr[0] + arr[1] + arr[2]; sum([1, 2, 3])",
             "",
             6,
+        );
+    }
+
+    #[test]
+    fn test_function_variable_call() {
+        expect_valid(
+            "fn get() => 100; let temp = get; temp()",
+            "",
+            100,
         );
     }
 
