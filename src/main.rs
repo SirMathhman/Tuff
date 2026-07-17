@@ -36,6 +36,7 @@ struct CompileContext {
     #[allow(dead_code)]
     var_types: HashMap<String, Vec<String>>, // variable name -> list of possible types (union support)
     type_aliases: HashMap<String, Vec<String>>, // alias name -> list of member types (union support)
+    generic_type_aliases: Vec<(String, Vec<String>, String)>, // (alias_name, type_params, alias_type)
     union_types: HashMap<String, Vec<String>>,  // union alias -> list of struct variant names
     tagged_union_vars: HashSet<String>, // variables that are tagged unions (if/else with different struct variants)
     generated_structs: Vec<String>,     // C typedef structs
@@ -69,6 +70,7 @@ impl CompileContext {
             declared_vars: HashSet::new(),
             var_types: HashMap::new(),
             type_aliases: HashMap::new(),
+            generic_type_aliases: Vec::new(),
             union_types: HashMap::new(),
             tagged_union_vars: HashSet::new(),
             generated_structs: Vec::new(),
@@ -2310,10 +2312,13 @@ fn compile_expression(
         if let Some(semi_pos) = find_top_level_semicolon(after_type) {
             let alias_part = &after_type[..semi_pos];
             let rest = &after_type[semi_pos + 1..].trim();
-            // Parse "Name = Type" or "Name = Type then dropFn"
+            // Parse "Name = Type" or "Name<T> = Type" or "Name = Type then dropFn"
             if let Some(eq_pos) = find_top_level_char(alias_part, '=') {
-                let alias_name = alias_part[..eq_pos].trim();
+                let alias_name_raw = alias_part[..eq_pos].trim();
                 let alias_type_str = alias_part[eq_pos + 1..].trim();
+                // Parse generic type params: "Box<T>" -> ("Box", ["T"])
+                let (alias_name, type_params) = parse_generic_type_args_vec(alias_name_raw)
+                    .unwrap_or_else(|| (alias_name_raw.to_string(), Vec::new()));
                 // Check for "then dropFn" suffix
                 let (base_type_str, drop_fn) = if let Some(then_pos) = alias_type_str.find(" then ") {
                     let base = alias_type_str[..then_pos].trim().to_string();
@@ -2328,6 +2333,11 @@ fn compile_expression(
                     .split('|')
                     .map(|s| s.trim().to_string())
                     .collect();
+                // Store generic type alias if it has type params
+                if !type_params.is_empty() {
+                    eprintln!("[type_alias] generic type alias: {}<{}> = {}", alias_name, type_params.join(", "), base_type_str);
+                    ctx.generic_type_aliases.push((alias_name.clone(), type_params, base_type_str.clone()));
+                }
                 ctx.type_aliases
                     .insert(alias_name.to_string(), member_types.clone());
                 // Track drop types
@@ -2608,16 +2618,9 @@ fn compile_expression(
     if let Some(brace_pos) = trimmed.find('{') {
         let before_brace = &trimmed[..brace_pos].trim();
         // Parse generic type args if present: "Wrapper<I32>" -> ("Wrapper", ["I32"])
-        // Use parse_generic_type to handle nested generics like "Wrapper<Pair<I32, Bool>>"
-        let (struct_base, type_args) = if let Some((base, args_str)) = parse_generic_type(before_brace) {
-            let args: Vec<String> = split_top_level_commas(args_str)
-                .iter()
-                .map(|a| a.trim().to_string())
-                .collect();
-            (base.to_string(), args)
-        } else {
-            (before_brace.to_string(), Vec::new())
-        };
+        // Use parse_generic_type_args_vec to handle nested generics like "Wrapper<Pair<I32, Bool>>"
+        let (struct_base, type_args) = parse_generic_type_args_vec(before_brace)
+            .unwrap_or_else(|| (before_brace.to_string(), Vec::new()));
 
         // Must be a single identifier (no spaces)
         if !struct_base.contains(' ') {
@@ -2629,36 +2632,61 @@ fn compile_expression(
                 format!("{}_{}", struct_base, sanitized.join("_"))
             };
 
-            // Monomorphize generic struct if needed
+            // Check if struct_base is a generic type alias: "Box<T>" -> "RawBox<T>"
+            let mut struct_name_from_alias: Option<String> = None;
+            if !type_args.is_empty() {
+                // First check generic type aliases
+                for (alias_name, alias_params, alias_type) in &ctx.generic_type_aliases {
+                    if *alias_name == struct_base {
+                        // Substitute type args into alias type
+                        let mut substituted = alias_type.clone();
+                        for (i, param) in alias_params.iter().enumerate() {
+                            substituted = substituted.replace(param, &type_args[i]);
+                        }
+                        eprintln!("[struct_literal] generic type alias: {}<{}> -> {}", struct_base, type_args.join(", "), substituted);
+                        // Now resolve the substituted type (e.g., "RawBox<I32>")
+                        if let Some((base, args_str)) = parse_generic_type(&substituted) {
+                            let sub_args: Vec<&str> = split_top_level_commas(args_str).iter().map(|a| a.trim()).collect();
+                            monomorphize_generic_struct(ctx, base, &sub_args)?;
+                            let sanitized: Vec<String> = sub_args.iter().map(|a| sanitize_type_name(a)).collect();
+                            struct_name_from_alias = Some(format!("{}_{}", base, sanitized.join("_")));
+                        } else {
+                            // Simple type, resolve alias
+                            struct_name_from_alias = Some(resolve_type_alias(ctx, &substituted).to_string());
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // If resolved via generic type alias, use that result
+            if let Some(resolved) = struct_name_from_alias {
+                let (c_body, c_init) = compile_struct_fields(trimmed, brace_pos, &resolved, ctx)?;
+                return Ok((c_body, c_init));
+            }
+
+            // Monomorphize generic struct if needed (only if not resolved via generic type alias)
             if !type_args.is_empty() {
                 let type_args_refs: Vec<&str> = type_args.iter().map(|s| s.as_str()).collect();
                 monomorphize_generic_struct(ctx, &struct_base, &type_args_refs)?;
             }
 
+            // Resolve type alias: "Pt" -> "Point", "WrapperI32" -> "Wrapper<I32>"
+            let resolved_name = resolve_type_alias(ctx, &concrete_name);
+            eprintln!("[struct_literal] '{}' -> resolved to '{}'", concrete_name, resolved_name);
+            // If resolved name is a generic type like "Wrapper<I32>", monomorphize it
+            let struct_name = if let Some((base, type_args_str)) = parse_generic_type(&resolved_name) {
+                let type_args: Vec<&str> = split_top_level_commas(type_args_str).iter().map(|a| a.trim()).collect();
+                monomorphize_generic_struct(ctx, base, &type_args)?;
+                let sanitized: Vec<String> = type_args.iter().map(|a| sanitize_type_name(a)).collect();
+                format!("{}_{}", base, sanitized.join("_"))
+            } else {
+                resolved_name.clone()
+            };
             // Check if struct is defined (either non-generic or already monomorphized)
-            if ctx.defined_structs.contains(&concrete_name) {
-                // Find matching closing brace
-                if let Some(block_len) = find_matching_brace(&trimmed[brace_pos..]) {
-                    let fields_str = &trimmed[brace_pos + 1..brace_pos + block_len].trim();
-                    // Parse and compile each field initializer
-                    let mut c_body = String::new();
-                    let mut compiled_fields = Vec::new();
-                    if !fields_str.is_empty() {
-                        for field in split_top_level_commas(fields_str) {
-                            let field = field.trim();
-                            if let Some(colon_pos) = field.find(':') {
-                                let field_name = field[..colon_pos].trim();
-                                let field_value = field[colon_pos + 1..].trim();
-                                let (field_body, field_result) =
-                                    compile_expression(field_value, ctx)?;
-                                c_body.push_str(&field_body);
-                                compiled_fields.push(format!(".{} = {}", field_name, field_result));
-                            }
-                        }
-                    }
-                    let c_init = format!("({}){{{} }}", concrete_name, compiled_fields.join(", "));
-                    return Ok((c_body, c_init));
-                }
+            if ctx.defined_structs.contains(&struct_name) {
+                let (c_body, c_init) = compile_struct_fields(trimmed, brace_pos, &struct_name, ctx)?;
+                return Ok((c_body, c_init));
             }
         }
     }
@@ -3370,6 +3398,32 @@ fn find_matching_brace(s: &str) -> Option<usize> {
     None
 }
 
+/// Compile struct field initializers from a brace-enclosed string.
+/// Returns (c_body, c_init) with field assignments.
+fn compile_struct_fields(trimmed: &str, brace_pos: usize, struct_name: &str, ctx: &mut CompileContext) -> Result<(String, String), CompileError> {
+    if let Some(block_len) = find_matching_brace(&trimmed[brace_pos..]) {
+        let fields_str = &trimmed[brace_pos + 1..brace_pos + block_len].trim();
+        let mut c_body = String::new();
+        let mut compiled_fields = Vec::new();
+        if !fields_str.is_empty() {
+            for field in split_top_level_commas(fields_str) {
+                let field = field.trim();
+                if let Some(colon_pos) = field.find(':') {
+                    let field_name = field[..colon_pos].trim();
+                    let field_value = field[colon_pos + 1..].trim();
+                    let (field_body, field_result) = compile_expression(field_value, ctx)?;
+                    c_body.push_str(&field_body);
+                    compiled_fields.push(format!(".{} = {}", field_name, field_result));
+                }
+            }
+        }
+        let c_init = format!("({}){{{} }}", struct_name, compiled_fields.join(", "));
+        Ok((c_body, c_init))
+    } else {
+        Err("Matching closing brace not found".to_string())
+    }
+}
+
 /// Infer the type of a literal expression based on its suffix.
 /// "100I64" -> "I64", "100U8" -> "U8", "\"hello\"" -> "&Str", "100" -> "I32"
 fn infer_literal_type(expr: &str) -> String {
@@ -3624,6 +3678,19 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
     }
     // Generic struct instantiation: "Wrapper<I32>" -> build concrete C name
     if let Some((base, type_args)) = parse_generic_type_args(ty) {
+        // Check if base is a generic type alias: "Box<T>" -> "RawBox<T>"
+        for (alias_name, alias_params, alias_type) in &ctx.generic_type_aliases {
+            if *alias_name == base {
+                eprintln!("[tuff_type_to_c] generic type alias: {}<{}> -> {}", base, type_args.join(", "), alias_type);
+                // Substitute type args into alias type
+                let mut substituted = alias_type.clone();
+                for (i, param) in alias_params.iter().enumerate() {
+                    substituted = substituted.replace(param, &type_args[i]);
+                }
+                eprintln!("[tuff_type_to_c] substituted: {}", substituted);
+                return tuff_type_to_c(ctx, &substituted);
+            }
+        }
         let type_args_refs: Vec<&str> = type_args.iter().map(|s| *s).collect();
         return monomorphize_generic_struct(ctx, base, &type_args_refs);
     }
@@ -3901,6 +3968,20 @@ fn parse_tuple_type(ty: &str) -> Option<Vec<&str>> {
 fn build_concrete_name(base: &str, type_args_str: &str) -> String {
     let type_args: Vec<String> = split_top_level_commas(type_args_str).iter().map(|a| sanitize_type_name(a.trim())).collect();
     format!("{}_{}", base, type_args.join("_"))
+}
+
+/// Parse generic type args from a string like "Wrapper<I32, Bool>" into (base, args).
+/// Returns (base_name, Vec<String>) of type arguments. Returns None if not generic.
+fn parse_generic_type_args_vec(ty: &str) -> Option<(String, Vec<String>)> {
+    if let Some((base, args_str)) = parse_generic_type(ty) {
+        let args: Vec<String> = split_top_level_commas(args_str)
+            .iter()
+            .map(|a| a.trim().to_string())
+            .collect();
+        Some((base.to_string(), args))
+    } else {
+        None
+    }
 }
 
 /// Parse a generic type annotation like "Wrapper<I32>" into (base, type_args_str).
@@ -4693,6 +4774,42 @@ mod tests {
     #[test]
     fn test_empty_struct_instantiation() {
         expect_valid("struct Empty {} let empty : Empty = Empty {};", "", 0);
+    }
+
+    #[test]
+    fn test_struct_via_type_alias() {
+        expect_valid(
+            "struct Point { x : I32, y : I32 } type Pt = Point; let p : Pt = Point { x : 3, y : 4 }; p.x + p.y",
+            "",
+            7,
+        );
+    }
+
+    #[test]
+    fn test_struct_via_type_alias_construction() {
+        expect_valid(
+            "struct Point { x : I32, y : I32 } type Pt = Point; let p : Pt = Pt { x : 3, y : 4 }; p.x + p.y",
+            "",
+            7,
+        );
+    }
+
+    #[test]
+    fn test_generic_struct_via_type_alias_construction() {
+        expect_valid(
+            "struct Wrapper<T> { value : T } type WrapperI32 = Wrapper<I32>; let w : WrapperI32 = WrapperI32 { value : 42 }; w.value",
+            "",
+            42,
+        );
+    }
+
+    #[test]
+    fn test_generic_type_alias_construction() {
+        expect_valid(
+            "struct RawBox<T> { field : T } type Box<T> = RawBox<T>; let temp = Box<I32> { field : 100 }; temp.field",
+            "",
+            100,
+        );
     }
 
     #[test]
