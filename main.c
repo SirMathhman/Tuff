@@ -2,16 +2,21 @@
 #include <string.h>
 #include <stdbool.h>
 
+typedef struct {
+		int field;
+} RawBox;
 
+void drop(RawBox box);
 
-int get(void);
+static int counter;
+void drop(RawBox box) {
 
-
-int get(void) {
-		return 100;
-}int main() {
+	counter += box.field;}int main() {
 	
-	 int temp = get;
+	  counter = 0;
 
-	return temp();
+	 RawBox box = (RawBox){.field = 100 };
+
+	drop(box);
+	return counter;
 }

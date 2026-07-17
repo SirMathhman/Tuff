@@ -1,3 +1,13 @@
-fn get() => 100;
-let temp = get;
-temp()
+struct RawBox {
+    field : I32
+}
+
+let mut counter = 0;
+
+fn drop(box : Box) : Void => {
+    counter += box.field;
+}
+
+type Box = RawBox then drop;
+let box = Box { field : 100 };
+counter

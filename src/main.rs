@@ -582,6 +582,56 @@ fn prepare_captured_vars(ctx: &CompileContext, c_body: &str, space_prefix: &str)
     (extern_decls, captured_globals, c_body_fixed)
 }
 
+/// Scan the whole source up front for "type Name = Base [then dropFn];" declarations
+/// and register them in ctx.type_aliases / ctx.drop_types before the main pass runs.
+/// This allows earlier statements (e.g. a function whose param type is the alias) to
+/// resolve the alias even though it's declared later in the source.
+fn prescan_type_aliases(source: &str, ctx: &mut CompileContext) {
+    let mut search_from = 0;
+    while let Some(rel) = source[search_from..].find("type ") {
+        let pos = search_from + rel;
+        let boundary_ok = pos == 0
+            || !matches!(source[..pos].chars().last(), Some(c) if c.is_alphanumeric() || c == '_');
+        if !boundary_ok {
+            search_from = pos + 5;
+            continue;
+        }
+        let after_type = &source[pos + 5..];
+        if let Some(semi_pos) = find_top_level_semicolon(after_type) {
+            let alias_part = &after_type[..semi_pos];
+            if let Some(eq_pos) = find_top_level_char(alias_part, '=') {
+                let alias_name_raw = alias_part[..eq_pos].trim();
+                // Skip generic aliases here; they're handled fine in declaration order.
+                if !alias_name_raw.contains('<') {
+                    let alias_type_str = alias_part[eq_pos + 1..].trim();
+                    let (base_type_str, drop_fn) = if let Some(then_pos) = alias_type_str.find(" then ") {
+                        let base = alias_type_str[..then_pos].trim().to_string();
+                        let drop_fn = alias_type_str[then_pos + 6..].trim().to_string();
+                        (base, Some(drop_fn))
+                    } else {
+                        (alias_type_str.to_string(), None)
+                    };
+                    let member_types: Vec<String> = base_type_str
+                        .split('|')
+                        .map(|s| s.trim().to_string())
+                        .collect();
+                    ctx.type_aliases
+                        .insert(alias_name_raw.to_string(), member_types.clone());
+                    if let Some(drop_fn) = drop_fn {
+                        if member_types.len() == 1 {
+                            ctx.drop_types
+                                .insert(alias_name_raw.to_string(), (member_types[0].clone(), drop_fn));
+                        }
+                    }
+                }
+            }
+            search_from = pos + 5 + semi_pos + 1;
+        } else {
+            break;
+        }
+    }
+}
+
 fn compile(source: &str) -> Result<String, CompileError> {
     let trimmed = source.trim();
     eprintln!("[compile] source: '{}'", trimmed);
@@ -602,6 +652,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
     // Parse let declarations and build C body
     let mut ctx = CompileContext::new(vars.clone());
+    prescan_type_aliases(&no_comments, &mut ctx);
     let (c_body, return_expr) = compile_expression(&no_comments, &mut ctx)?;
 
     if read_count > 0 {
@@ -656,8 +707,9 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         // Generate drop calls for variables with drop types (in reverse declaration order)
         let mut drop_calls = String::new();
-        for (_var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
-            drop_calls.push_str(&format!("\t{}();\n", drop_fn));
+        for (var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
+            let arg = if function_num_params(&ctx, drop_fn) > 0 { var_name.as_str() } else { "" };
+            drop_calls.push_str(&format!("\t{}({});\n", drop_fn, arg));
         }
 
         let final_return = resolve_final_return(&return_expr, &ctx);
@@ -712,9 +764,10 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         // Generate drop calls for variables with drop types (in reverse declaration order)
         let mut drop_calls = String::new();
-        for (_var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
-            eprintln!("[compile] generating drop call: {}()", drop_fn);
-            drop_calls.push_str(&format!("\t{}();\n", drop_fn));
+        for (var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
+            let arg = if function_num_params(&ctx, drop_fn) > 0 { var_name.as_str() } else { "" };
+            eprintln!("[compile] generating drop call: {}({})", drop_fn, arg);
+            drop_calls.push_str(&format!("\t{}({});\n", drop_fn, arg));
         }
 
         let final_return = resolve_final_return(&return_expr, &ctx);
@@ -1599,8 +1652,21 @@ fn compile_expression(
                     vec![resolve_type_alias(ctx, &inferred_type)]
                 };
                 ctx.var_types.insert(var_name.to_string(), tracked_types);
-                // Track drop types - if this variable has a drop type, register it
-                if let Some(ref ty) = type_annotation {
+                // Track drop types - if this variable has a drop type, register it.
+                // Also covers RHS struct literals of a drop-type alias with no explicit
+                // annotation, e.g. "let box = Box { field : 100 };".
+                let drop_alias = type_annotation.clone().or_else(|| {
+                    let leading_ident: String = rhs_trimmed
+                        .chars()
+                        .take_while(|c| c.is_alphanumeric() || *c == '_')
+                        .collect();
+                    if !leading_ident.is_empty() && ctx.drop_types.contains_key(&leading_ident) {
+                        Some(leading_ident)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(ref ty) = drop_alias {
                     if let Some((_, drop_fn)) = ctx.drop_types.get(ty) {
                         eprintln!("[let_decl] drop var: {} : {} -> drop({})", var_name, ty, drop_fn);
                         ctx.dropped_vars.push((var_name.to_string(), drop_fn.clone()));
@@ -2348,14 +2414,20 @@ fn compile_expression(
                         ctx.drop_types.insert(alias_name.to_string(), (member_types[0].clone(), drop_fn.clone()));
                     }
                 }
-                // Track union types where members are structs (for tagged union generation)
-                let struct_members: Vec<String> = member_types
-                    .into_iter()
-                    .filter(|t| ctx.defined_structs.contains(t.as_str()))
-                    .collect();
-                if !struct_members.is_empty() {
-                    ctx.union_types
-                        .insert(alias_name.to_string(), struct_members);
+                // Track union types where members are structs (for tagged union generation).
+                // Skip this for single-struct drop-type aliases (e.g. "type Box = RawBox then drop") —
+                // those are plain aliases with a drop hook, not a tagged union, and RawBox already
+                // has its own C typedef.
+                let is_single_struct_drop_alias = drop_fn.is_some() && member_types.len() == 1;
+                if !is_single_struct_drop_alias {
+                    let struct_members: Vec<String> = member_types
+                        .into_iter()
+                        .filter(|t| ctx.defined_structs.contains(t.as_str()))
+                        .collect();
+                    if !struct_members.is_empty() {
+                        ctx.union_types
+                            .insert(alias_name.to_string(), struct_members);
+                    }
                 }
             }
             if !rest.is_empty() {
@@ -5247,6 +5319,15 @@ mod tests {
             "let mut dropped = false; fn drop() => { dropped = true; } type DroppableI32 = I32 then drop; let temp : DroppableI32 = 100; dropped",
             "",
             1,
+        );
+    }
+
+    #[test]
+    fn test_drop_type_struct_alias_with_param() {
+        expect_valid(
+            "struct RawBox {\n    field : I32\n}\n\nlet mut counter = 0;\n\nfn drop(box : Box) : Void => {\n    counter += box.field;\n}\n\ntype Box = RawBox then drop;\nlet box = Box { field : 100 };\ncounter",
+            "",
+            100,
         );
     }
 }
