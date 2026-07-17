@@ -49,6 +49,7 @@ struct CompileContext {
     generated_functions: Vec<(String, Vec<String>, Vec<String>, String)>, // (name, param_names, param_types, c_code)
     function_return_types: HashMap<String, String>, // function name -> return type
     extern_functions: HashMap<String, (Vec<String>, Vec<String>, String)>, // name -> (param_names, param_types, return_type)
+    extern_generic_params: HashMap<String, Vec<String>>, // extern fn name -> type param names (e.g. "malloc" -> ["T"])
     extern_includes: Vec<String>, // C headers to include (e.g., "stdlib.h")
     extern_types: HashSet<String>, // C type names imported via extern let { type ... }
     captured_vars: HashSet<String>, // outer variables captured by functions (need static globals)
@@ -84,6 +85,7 @@ impl CompileContext {
             generated_functions: Vec::new(),
             function_return_types: HashMap::new(),
             extern_functions: HashMap::new(),
+            extern_generic_params: HashMap::new(),
             extern_includes: Vec::new(),
             extern_types: HashSet::new(),
             captured_vars: HashSet::new(),
@@ -310,6 +312,58 @@ fn parse_generic_params(raw: &str) -> Result<(String, Vec<String>), CompileError
     } else {
         Ok((raw.to_string(), Vec::new()))
     }
+}
+
+/// Replace whole-word occurrences of `param` in `template` with `concrete`.
+/// Whole-word means the match isn't immediately preceded/followed by an
+/// identifier character, so e.g. param "T" won't match inside "TStr".
+fn replace_type_param_token(template: &str, param: &str, concrete: &str) -> String {
+    let chars: Vec<char> = template.chars().collect();
+    let param_chars: Vec<char> = param.chars().collect();
+    let mut result = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i..].starts_with(param_chars.as_slice()) {
+            let end = i + param_chars.len();
+            let before_ok = i == 0 || !(chars[i - 1].is_alphanumeric() || chars[i - 1] == '_');
+            let after_ok = end >= chars.len() || !(chars[end].is_alphanumeric() || chars[end] == '_');
+            if before_ok && after_ok {
+                result.push_str(concrete);
+                i = end;
+                continue;
+            }
+        }
+        result.push(chars[i]);
+        i += 1;
+    }
+    result
+}
+
+/// Infer a concrete return type for a call to a generic extern function
+/// (e.g. `extern fn malloc<T>(size : USize) : &[T; 1];`) so that callers can
+/// omit an explicit `let` type annotation. Currently supports the single
+/// type-param case where the call site passes `sizeOf<X>()` as an argument
+/// (e.g. `malloc(sizeOf<&Str>())` infers T = "&Str"), which is the
+/// conventional pattern for sizing an allocation to a concrete type.
+fn substitute_extern_generic_return(
+    ret_type_template: &str,
+    type_params: &[String],
+    call_expr: &str,
+) -> Option<String> {
+    let param = type_params.first()?;
+    let paren_pos = call_expr.find('(')?;
+    let paren_end = find_matching_paren(&call_expr[paren_pos..])?;
+    let args_str = &call_expr[paren_pos + 1..paren_pos + paren_end];
+    for arg in split_top_level_commas(args_str) {
+        let arg = arg.trim();
+        if let Some(inner) = arg.strip_prefix("sizeOf<").and_then(|s| s.strip_suffix(">()")) {
+            let substituted = replace_type_param_token(ret_type_template, param, inner);
+            if substituted != ret_type_template {
+                return Some(substituted);
+            }
+        }
+    }
+    None
 }
 
 /// Generate a C function string from compiled body parts and read entries.
@@ -1491,8 +1545,13 @@ fn compile_expression(
                     ),
                     None => format!("{}\n\t{} = {};", assign_body, c_target, assign_result),
                 };
-                let final_result = compile_expression(final_part, ctx).map(|r| r.1)?;
-                return Ok((c_body, final_result));
+                let (final_body, final_result) = compile_expression(final_part, ctx)?;
+                let combined_body = if final_body.is_empty() {
+                    c_body
+                } else {
+                    format!("{}\n{}", c_body, final_body)
+                };
+                return Ok((combined_body, final_result));
             }
             // Not an assignment — treat as a statement (e.g., function call) followed by final expression
             let (stmt_body, stmt_result) = compile_expression(assign_part, ctx)?;
@@ -1777,10 +1836,30 @@ fn compile_expression(
                             // Bare function name — use a function pointer type
                             format!("fn_ptr({})", rhs_trimmed)
                         } else {
-                            // Check if RHS is a call to a registered extern function
+                            // Check if RHS is a call to a registered extern function.
+                            // Note: `extern let { name } = extern header;` pre-registers a
+                            // placeholder entry with an empty return type before the matching
+                            // `extern fn name(...) : Type;` is parsed. If that placeholder is
+                            // never overwritten (e.g. the extern fn was never declared, or its
+                            // name doesn't match), skip it rather than propagating an empty
+                            // type string into type inference.
                             let call_name = after_eq.split('(').next().unwrap_or("").trim();
-                            if let Some((_params, _ptypes, ret_type)) = ctx.extern_functions.get(call_name) {
-                                ret_type.clone()
+                            if let Some((_params, _ptypes, ret_type)) = ctx
+                                .extern_functions
+                                .get(call_name)
+                                .filter(|(_, _, ret_type)| !ret_type.is_empty())
+                            {
+                                // Generic extern functions (e.g. `malloc<T>(...) : &[T; 1]`)
+                                // aren't monomorphized — try to resolve T from the call site
+                                // (e.g. `malloc(sizeOf<&Str>())`) so callers can omit an
+                                // explicit type annotation on the `let`.
+                                match ctx.extern_generic_params.get(call_name) {
+                                    Some(type_params) => {
+                                        substitute_extern_generic_return(ret_type, type_params, after_eq)
+                                            .unwrap_or_else(|| ret_type.clone())
+                                    }
+                                    None => ret_type.clone(),
+                                }
                             } else if let Some(ret_type) = ctx.function_return_types.get(call_name) {
                                 // Infer return type from user-defined function
                                 if ret_type.ends_with("_ret") {
@@ -2118,7 +2197,10 @@ fn compile_expression(
             let after_fn = after_extern[3..].trim_start();
             let paren_pos = after_fn.find('(')
                 .ok_or_else(|| format!("Invalid extern fn syntax: {}", after_fn))?;
-            let func_name = after_fn[..paren_pos].trim();
+            let func_name_raw = after_fn[..paren_pos].trim();
+            // Parse generic type parameters if present: "malloc<T>" -> name="malloc", params=["T"]
+            let (func_name, type_params) = parse_generic_params(func_name_raw)
+                .map_err(|e| format!("Invalid extern fn syntax: {}", e))?;
             let params_str_start = paren_pos + 1;
             let params_paren_end = find_matching_paren(&after_fn[params_str_start - 1..])
                 .ok_or_else(|| format!("Invalid extern fn syntax: missing closing paren"))?;
@@ -2145,8 +2227,11 @@ fn compile_expression(
                     }
                 }
             }
-            ctx.extern_functions.insert(func_name.to_string(), (param_names, param_types, ret_type.clone()));
-            ctx.function_return_types.insert(func_name.to_string(), ret_type);
+            ctx.extern_functions.insert(func_name.clone(), (param_names, param_types, ret_type.clone()));
+            ctx.function_return_types.insert(func_name.clone(), ret_type);
+            if !type_params.is_empty() {
+                ctx.extern_generic_params.insert(func_name, type_params);
+            }
             if !remaining.is_empty() {
                 return compile_expression(remaining, ctx);
             }
@@ -2676,6 +2761,9 @@ fn compile_expression(
                     // Determine field type from annotation (type is required)
                     let field_type_str: String = if parts.len() > 1 {
                         let ty = parts[1].trim();
+                        if ty.is_empty() {
+                            return Err(format!("Missing type annotation for struct field '{}'", name));
+                        }
                         // Validate type is known
                         if !is_valid_type(ctx, ty) {
                             let known = get_known_types(ctx);
@@ -3922,6 +4010,14 @@ fn array_inner_to_c_ptr(ctx: &mut CompileContext, inner: &str) -> Result<String,
 /// Map a Tuff type name to its corresponding C type.
 /// Returns an error for unknown types instead of defaulting to "int".
 fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileError> {
+    if ty.trim().is_empty() {
+        return Err(
+            "Unknown type: <empty> — a type could not be inferred (this usually means an \
+             extern function's return type was declared via `extern let` but never matched \
+             by a corresponding `extern fn` declaration)"
+                .to_string(),
+        );
+    }
     // Pointer types: "&I32" -> "int *", "&[I32; 3]" -> "int *"
     if let Some(inner_type) = ty.strip_prefix('&') {
         let inner_trimmed = inner_type.trim();
@@ -5435,6 +5531,42 @@ mod tests {
             "extern let { malloc } = extern stdlib; extern fn malloc(size : USize) : &[I32]; let ptr = malloc(sizeOf<I32>())",
             "",
             0,
+        );
+    }
+
+    // Regression test for a compiler crash: `extern let { malloc, free } = extern stdlib;`
+    // pre-registers each name with a placeholder (empty) return type, expecting the
+    // following `extern fn` declaration to overwrite it. When `extern fn malloc<T>(...)`
+    // uses generic syntax, the return type must still resolve to a real (non-empty)
+    // type for a `let` with no explicit annotation — and the inferred type must be a
+    // real pointer (not the "int" fallback), or `ptr[0] = "foo"` won't even compile as C.
+    // This also covers inferring T from a `sizeOf<T>()` call argument, and makes sure the
+    // `free(ptr);` call after the `ptr[0] = ...` assignment isn't dropped (see
+    // test_reassignment_statements_not_dropped for that bug in isolation).
+    #[test]
+    fn test_extern_generic_fn_infers_return_type() {
+        expect_valid(
+            "extern let { malloc, free } = extern stdlib; \
+             extern fn malloc<T>(size : USize) : &[T; 1]; \
+             extern fn free(ptr : &[&Str; 1]) : Void; \
+             let mut ptr = malloc(sizeOf<&Str>()); \
+             ptr[0] = \"foo\"; \
+             free(ptr);",
+            "",
+            0,
+        );
+    }
+
+    // Regression test: a statement following a plain reassignment (e.g. "x = 1;")
+    // was being silently dropped from the generated C body because the assignment
+    // branch only kept the *result* of compiling the remaining statements, not their
+    // *body*. Without the fix, "x = 2;" never executes and this returns 1 instead of 2.
+    #[test]
+    fn test_reassignment_statements_not_dropped() {
+        expect_valid(
+            "let mut x = 0; x = 1; x = 2; x",
+            "",
+            2,
         );
     }
 
