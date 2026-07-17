@@ -1,7 +1,3 @@
-struct Wrapper { 
-    x : I32
-}
-
-fn unwrap(wrapper : Wrapper) => {
-    
-}
+fn get() => 100;
+let temp = get;
+temp()

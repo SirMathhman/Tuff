@@ -2,16 +2,16 @@
 #include <string.h>
 #include <stdbool.h>
 
-typedef struct {
-		int x;
-} Wrapper;
-
-int unwrap(Wrapper wrapper);
 
 
-int unwrap(Wrapper wrapper) {
-		return ();
+int get(void);
+
+
+int get(void) {
+		return 100;
 }int main() {
 	
-	return 0;
+	 int temp = get;
+
+	return temp();
 }

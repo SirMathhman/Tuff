@@ -383,15 +383,29 @@ fn compile_fn_call(
     func_name: &str,
     args_str: &str,
     ctx: &mut CompileContext,
-) -> Result<String, CompileError> {
+) -> Result<(String, String), CompileError> {
+    let mut c_body = String::new();
     let mut compiled_args: Vec<String> = Vec::new();
     if !args_str.is_empty() {
         for arg in split_top_level_commas(args_str) {
-            let (_, arg_result) = compile_expression(arg.trim(), ctx)?;
-            compiled_args.push(arg_result);
+            let arg_trimmed = arg.trim();
+            let (arg_body, arg_result) = compile_expression(arg_trimmed, ctx)?;
+            if !arg_body.is_empty() {
+                c_body.push_str(&arg_body);
+            }
+            // If the arg result is a brace-enclosed initializer (array literal),
+            // create a temp variable since C can't pass {1,2,3} as an argument
+            if arg_result.starts_with('{') && arg_result.ends_with('}') {
+                let tmp_name = format!("__arr{}", TEMP_COUNTER.fetch_add(1, Ordering::SeqCst));
+                let len = arg_result.matches(',').count() + 1;
+                c_body.push_str(&format!("\n\tint {}[{}] = {};", tmp_name, len, arg_result));
+                compiled_args.push(format!("&{}", tmp_name));
+            } else {
+                compiled_args.push(arg_result);
+            }
         }
     }
-    Ok(format!("{}({})", func_name, compiled_args.join(", ")))
+    Ok((c_body, format!("{}({})", func_name, compiled_args.join(", "))))
 }
 
 /// Convert a struct name to lowercase-first for C field naming.
@@ -2989,6 +3003,7 @@ fn compile_expression(
     // This replaces function calls in-place so surrounding expressions (e.g., "+ 1") are preserved
     let final_result = result;
     let mut func_result = String::new();
+    let mut func_body = String::new();
     let mut func_last = 0;
 
     // Find function calls in the result (after read replacement)
@@ -3192,8 +3207,14 @@ fn compile_expression(
             if let Some(paren_end) = find_matching_paren(&final_result[m.0..]) {
                 let abs_paren_end = m.0 + paren_end;
                 let args_str = &final_result[m.0 + 1..abs_paren_end].trim();
-                let call_expr = compile_fn_call(&resolved_name, args_str, ctx)?;
+                let (call_body, call_expr) = compile_fn_call(&resolved_name, args_str, ctx)?;
                 copy_chars_preserve_braces(&final_result[func_last..name_start], &mut func_result);
+                if !call_body.is_empty() {
+                    func_body.push_str(&call_body);
+                    if !func_body.ends_with('\n') {
+                        func_body.push('\n');
+                    }
+                }
                 func_result.push_str(&call_expr);
                 func_last = abs_paren_end + 1;
             }
@@ -3203,7 +3224,7 @@ fn compile_expression(
     // Copy remaining text after last function call
     copy_chars(&final_result[func_last..], &mut func_result);
 
-    Ok((String::new(), func_result))
+    Ok((func_body, func_result))
 }
 
 /// Find the index of the matching closing brace for an opening brace at position 0.
@@ -3376,6 +3397,18 @@ fn resolve_final_return(return_expr: &str, ctx: &CompileContext) -> String {
     }
 }
 
+/// Convert an array inner type (between brackets) to a C pointer type.
+/// e.g., "I32; 3" -> "int *", "I32" -> "int *"
+fn array_inner_to_c_ptr(ctx: &mut CompileContext, inner: &str) -> Result<String, CompileError> {
+    if let Some(semi_pos) = inner.find(';') {
+        let elem_type = inner[..semi_pos].trim();
+        let elem_c = tuff_type_to_c(ctx, elem_type)?;
+        return Ok(format!("{} *", elem_c));
+    }
+    let elem_c = tuff_type_to_c(ctx, inner.trim())?;
+    Ok(format!("{} *", elem_c))
+}
+
 /// Map a Tuff type name to its corresponding C type.
 /// Returns an error for unknown types instead of defaulting to "int".
 fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileError> {
@@ -3389,11 +3422,7 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         // Pointer to array: "&[I32; 3]" -> element pointer "int *"
         if inner_trimmed.starts_with('[') && inner_trimmed.ends_with(']') {
             let inner = &inner_trimmed[1..inner_trimmed.len() - 1];
-            if let Some(semi_pos) = inner.find(';') {
-                let elem_type = inner[..semi_pos].trim();
-                let elem_c = tuff_type_to_c(ctx, elem_type)?;
-                return Ok(format!("{} *", elem_c));
-            }
+            return array_inner_to_c_ptr(ctx, inner);
         }
         let inner_c = tuff_type_to_c(ctx, inner_trimmed)?;
         return Ok(format!("{} *", inner_c));
@@ -3471,15 +3500,10 @@ fn tuff_type_to_c(ctx: &mut CompileContext, ty: &str) -> Result<String, CompileE
         }
         return Ok(tuple_name);
     }
-    // Array type: "[I32; 3]" -> "int" (arrays decay to pointers in C)
+    // Array type: "[I32; 3]" -> "int *" (arrays decay to pointers in C)
     if ty.starts_with('[') && ty.ends_with(']') {
         let inner = &ty[1..ty.len() - 1];
-        if let Some(semi_pos) = inner.find(';') {
-            let elem_type = inner[..semi_pos].trim();
-            return tuff_type_to_c(ctx, elem_type);
-        }
-        // Variable-length array without size: "[I32]" -> element type
-        return tuff_type_to_c(ctx, inner.trim());
+        return array_inner_to_c_ptr(ctx, inner);
     }
     // Function type: "() => I32" or "(I32, I32) => Bool" -> function pointer
     if let Some(arrow_pos) = ty.find("=>") {
@@ -4399,6 +4423,15 @@ mod tests {
             "struct Point { x : I32, y : I32 } fn distanceSquared(p : Point) : I32 => p.x * p.x + p.y * p.y; distanceSquared(Point { x : 3, y : 4 })",
             "",
             25,
+        );
+    }
+
+    #[test]
+    fn test_static_array_as_function_param() {
+        expect_valid(
+            "fn sum(arr : [I32; 3]) : I32 => arr[0] + arr[1] + arr[2]; sum([1, 2, 3])",
+            "",
+            6,
         );
     }
 
