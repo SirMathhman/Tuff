@@ -55,6 +55,8 @@ struct CompileContext {
     factory_method_instances: HashMap<String, String>, // method name -> instance struct type (e.g., "add" -> "Counter_ret")
     nested_function_parent: HashMap<String, String>, // child function name -> parent function name
     function_pointer_vars: HashMap<String, String>, // var name -> function name (for function-as-value)
+    drop_types: HashMap<String, (String, String)>, // alias name -> (base_type, drop_function)
+    dropped_vars: Vec<(String, String)>, // (var_name, drop_function) - in declaration order
 }
 
 impl CompileContext {
@@ -86,6 +88,8 @@ impl CompileContext {
             factory_method_instances: HashMap::new(),
             nested_function_parent: HashMap::new(),
             function_pointer_vars: HashMap::new(),
+            drop_types: HashMap::new(),
+            dropped_vars: Vec::new(),
         }
     }
 }
@@ -648,9 +652,15 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         let (extern_decls, captured_globals, c_body_fixed) = prepare_captured_vars(&ctx, &c_body, " ");
 
+        // Generate drop calls for variables with drop types (in reverse declaration order)
+        let mut drop_calls = String::new();
+        for (_var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
+            drop_calls.push_str(&format!("\t{}();\n", drop_fn));
+        }
+
         let final_return = resolve_final_return(&return_expr, &ctx);
         Ok(format!(
-            "{}\n{}\n{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}\n{}\n{}int main() {{\n{}\n{}\n\t{}\n\t{}\n{}\treturn {};\n}}\n",
             all_includes,
             c_func_typedefs.trim(),
             format!(
@@ -666,6 +676,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             c_decls.trim(),
             c_reads.trim(),
             c_body_fixed,
+            drop_calls,
             final_return
         ))
     } else {
@@ -697,9 +708,16 @@ fn compile(source: &str) -> Result<String, CompileError> {
 
         let (extern_decls, captured_globals, c_body_fixed) = prepare_captured_vars(&ctx, &c_body, "");
 
+        // Generate drop calls for variables with drop types (in reverse declaration order)
+        let mut drop_calls = String::new();
+        for (_var_name, drop_fn) in ctx.dropped_vars.iter().rev() {
+            eprintln!("[compile] generating drop call: {}()", drop_fn);
+            drop_calls.push_str(&format!("\t{}();\n", drop_fn));
+        }
+
         let final_return = resolve_final_return(&return_expr, &ctx);
         Ok(format!(
-            "{}\n{}\n{}\n{}\n{}\n{}int main() {{\n\t{}\n\treturn {};\n}}\n",
+            "{}\n{}\n{}\n{}\n{}\n{}int main() {{\n\t{}\n{}\treturn {};\n}}\n",
             includes,
             c_func_typedefs.trim(),
             format!(
@@ -712,6 +730,7 @@ fn compile(source: &str) -> Result<String, CompileError> {
             captured_globals.trim(),
             c_functions.trim(),
             c_body_fixed,
+            drop_calls,
             final_return
         ))
     }
@@ -1578,6 +1597,13 @@ fn compile_expression(
                     vec![resolve_type_alias(ctx, &inferred_type)]
                 };
                 ctx.var_types.insert(var_name.to_string(), tracked_types);
+                // Track drop types - if this variable has a drop type, register it
+                if let Some(ref ty) = type_annotation {
+                    if let Some((_, drop_fn)) = ctx.drop_types.get(ty) {
+                        eprintln!("[let_decl] drop var: {} : {} -> drop({})", var_name, ty, drop_fn);
+                        ctx.dropped_vars.push((var_name.to_string(), drop_fn.clone()));
+                    }
+                }
                 // For union types with if/else, generate tagged union assignment
                 if is_union_if_else {
                     if let Some(ref ty) = type_annotation {
@@ -2284,17 +2310,34 @@ fn compile_expression(
         if let Some(semi_pos) = find_top_level_semicolon(after_type) {
             let alias_part = &after_type[..semi_pos];
             let rest = &after_type[semi_pos + 1..].trim();
-            // Parse "Name = Type"
+            // Parse "Name = Type" or "Name = Type then dropFn"
             if let Some(eq_pos) = find_top_level_char(alias_part, '=') {
                 let alias_name = alias_part[..eq_pos].trim();
                 let alias_type_str = alias_part[eq_pos + 1..].trim();
+                // Check for "then dropFn" suffix
+                let (base_type_str, drop_fn) = if let Some(then_pos) = alias_type_str.find(" then ") {
+                    let base = alias_type_str[..then_pos].trim().to_string();
+                    let drop_fn = alias_type_str[then_pos + 6..].trim().to_string();
+                    eprintln!("[type_alias] drop type: {} = {} then {}", alias_name, base, drop_fn);
+                    (base, Some(drop_fn))
+                } else {
+                    (alias_type_str.to_string(), None)
+                };
                 // Parse union types: "I32 | Bool" -> ["I32", "Bool"]
-                let member_types: Vec<String> = alias_type_str
+                let member_types: Vec<String> = base_type_str
                     .split('|')
                     .map(|s| s.trim().to_string())
                     .collect();
                 ctx.type_aliases
                     .insert(alias_name.to_string(), member_types.clone());
+                // Track drop types
+                if let Some(ref drop_fn) = drop_fn {
+                    // For single-type aliases with drop, store base type and drop function
+                    if member_types.len() == 1 {
+                        eprintln!("[type_alias] registered drop type: {} -> {} (drop: {})", alias_name, member_types[0], drop_fn);
+                        ctx.drop_types.insert(alias_name.to_string(), (member_types[0].clone(), drop_fn.clone()));
+                    }
+                }
                 // Track union types where members are structs (for tagged union generation)
                 let struct_members: Vec<String> = member_types
                     .into_iter()
@@ -5078,6 +5121,15 @@ mod tests {
             "fn add(first : U64, second : U64) => first + second;\nadd(read<U64>(), read<U64>())",
             "50\n50",
             100,
+        );
+    }
+
+    #[test]
+    fn test_drop_type() {
+        expect_valid(
+            "let mut dropped = false; fn drop() => { dropped = true; } type DroppableI32 = I32 then drop; let temp : DroppableI32 = 100; dropped",
+            "",
+            1,
         );
     }
 }
