@@ -44,7 +44,7 @@ struct CompileContext {
     generated_instantiations: HashSet<String>, // already-generated monomorphized names
     generic_functions: Vec<GenericFunctionTemplate>, // generic function templates
     generated_function_instantiations: HashSet<String>, // already-generated monomorphized function names
-    generated_functions: Vec<(String, Vec<String>, String)>, // (name, param_names, c_code)
+    generated_functions: Vec<(String, Vec<String>, Vec<String>, String)>, // (name, param_names, param_types, c_code)
     function_return_types: HashMap<String, String>, // function name -> return type
     extern_functions: HashMap<String, (Vec<String>, Vec<String>, String)>, // name -> (param_names, param_types, return_type)
     extern_includes: Vec<String>, // C headers to include (e.g., "stdlib.h")
@@ -251,6 +251,30 @@ fn find_reads_in_order(source: &str) -> Vec<(usize, ReadType)> {
     reads
 }
 
+/// Parse a single parameter string, extracting name and type, and pushing to vectors.
+/// Handles "name" (default type) or "name : Type" patterns.
+fn parse_param_with_type(
+    param: &str,
+    param_names: &mut Vec<String>,
+    param_types: &mut Vec<String>,
+    ctx: &mut CompileContext,
+    default_type: &str,
+) {
+    let param = param.trim();
+    let parts: Vec<&str> = param.split(':').collect();
+    let name = parts[0].trim();
+    if !name.is_empty() {
+        param_names.push(name.to_string());
+        let ptype = if parts.len() > 1 {
+            let tuff_type = parts[1].trim();
+            tuff_type_to_c(ctx, tuff_type).unwrap_or(default_type.to_string())
+        } else {
+            default_type.to_string()
+        };
+        param_types.push(ptype);
+    }
+}
+
 /// Parse generic type parameters from a string like "name<T, U>" -> ("name", ["T", "U"]).
 fn parse_generic_params(raw: &str) -> Result<(String, Vec<String>), CompileError> {
     if let Some(angle_start) = raw.find('<') {
@@ -281,24 +305,26 @@ fn parse_generic_params(raw: &str) -> Result<(String, Vec<String>), CompileError
 fn build_c_function(
     func_name: &str,
     param_names: &[String],
+    param_types: &[String],
     fn_read_entries: &[(usize, ReadType)],
     fn_body_stmts: &str,
     fn_return_expr: &str,
 ) -> String {
-    build_c_function_with_return_type(func_name, param_names, fn_read_entries, fn_body_stmts, fn_return_expr, "int", None)
+    build_c_function_with_return_type(func_name, param_names, param_types, fn_read_entries, fn_body_stmts, fn_return_expr, "int", None)
 }
 
 /// Build a C function with a custom return type and optional array return wrapper.
 fn build_c_function_with_return_type(
     func_name: &str,
     param_names: &[String],
+    param_types: &[String],
     fn_read_entries: &[(usize, ReadType)],
     fn_body_stmts: &str,
     fn_return_expr: &str,
     return_type: &str,
     array_size: Option<usize>,
 ) -> String {
-    let param_sig: Vec<String> = param_names.iter().map(|n| format!("int {}", n)).collect();
+    let param_sig: Vec<String> = param_names.iter().zip(param_types.iter()).map(|(n, t)| format!("{} {}", t, n)).collect();
     let sig_str = if param_sig.is_empty() {
         "void"
     } else {
@@ -360,7 +386,7 @@ fn compile_fn_call(
 ) -> Result<String, CompileError> {
     let mut compiled_args: Vec<String> = Vec::new();
     if !args_str.is_empty() {
-        for arg in args_str.split(',') {
+        for arg in split_top_level_commas(args_str) {
             let (_, arg_result) = compile_expression(arg.trim(), ctx)?;
             compiled_args.push(arg_result);
         }
@@ -656,10 +682,10 @@ fn generate_extern_decls(_ctx: &CompileContext) -> String {
 }
 
 /// Generate C function prototypes and definitions from compiled functions.
-fn generate_function_code(functions: &[(String, Vec<String>, String)], function_return_types: &HashMap<String, String>, captured_vars: &HashSet<String>) -> (String, String, String) {
+fn generate_function_code(functions: &[(String, Vec<String>, Vec<String>, String)], function_return_types: &HashMap<String, String>, captured_vars: &HashSet<String>) -> (String, String, String) {
     let mut c_typedefs = String::new();
     let mut c_prototypes = String::new();
-    for (name, params, _func_code) in functions {
+    for (name, params, param_types, _func_code) in functions {
         let return_type = if let Some(ret) = function_return_types.get(name) {
             if ret == "Void" {
                 "void".to_string()
@@ -680,11 +706,12 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
         if params.is_empty() {
             c_prototypes.push_str(&format!("{} {}(void);\n", return_type, name));
         } else {
-            let param_sig: Vec<String> = params.iter().map(|p| {
-                if p.contains('*') {
-                    p.clone() // Already a full type like "Counter_ret* instance"
+            let param_sig: Vec<String> = params.iter().zip(param_types.iter()).map(|(p, t)| {
+                if p.contains('*') || p.contains(' ') {
+                    // Already a full type+name like "Counter_ret* instance"
+                    p.clone()
                 } else {
-                    format!("int {}", p)
+                    format!("{} {}", t, p)
                 }
             }).collect();
             c_prototypes.push_str(&format!("{} {}({});\n", return_type, name, param_sig.join(", ")));
@@ -692,7 +719,7 @@ fn generate_function_code(functions: &[(String, Vec<String>, String)], function_
     }
 
     let mut c_functions = String::new();
-    for (_name, params, func_code) in functions {
+    for (_name, params, _param_types, func_code) in functions {
         // If any parameter is a captured var, rename it in the signature to avoid shadowing
         // the static global, then insert an assignment to copy the value to the global.
         let mut rewritten = func_code.clone();
@@ -1820,6 +1847,7 @@ fn compile_expression(
 
         // Parse each parameter: "name : Type", "...name : Type" (rest), or just "name"
         let mut param_names: Vec<String> = Vec::new();
+        let mut param_types: Vec<String> = Vec::new(); // C type for each param
         let mut rest_params: Vec<(String, String)> = Vec::new(); // (name, type) for rest params
         let mut has_this_param = false;
         if !params_inner.is_empty() {
@@ -1844,18 +1872,10 @@ fn compile_expression(
                     if rest.is_empty() || rest.starts_with(':') {
                         has_this_param = true;
                     } else {
-                        let parts: Vec<&str> = param_trimmed.split(':').collect();
-                        let name = parts[0].trim();
-                        if !name.is_empty() {
-                            param_names.push(name.to_string());
-                        }
+                        parse_param_with_type(param_trimmed, &mut param_names, &mut param_types, ctx, "int");
                     }
                 } else {
-                    let parts: Vec<&str> = param_trimmed.split(':').collect();
-                    let name = parts[0].trim();
-                    if !name.is_empty() {
-                        param_names.push(name.to_string());
-                    }
+                    parse_param_with_type(param_trimmed, &mut param_names, &mut param_types, ctx, "int");
                 }
             }
         }
@@ -1929,7 +1949,7 @@ fn compile_expression(
                 });
                 // Register the base name so we can find it during calls
                 ctx.generated_functions
-                    .push((func_name, Vec::new(), String::new()));
+                    .push((func_name, Vec::new(), Vec::new(), String::new()));
 
                 // Compile remaining expression after the function definition
                 if !remaining.is_empty() {
@@ -1963,7 +1983,7 @@ fn compile_expression(
             let (fn_body_stmts, fn_return_expr) = compile_expression(func_body, &mut fn_ctx)?;
 
             // Save nested function info before propagation (needed for factory instance rewriting)
-            let nested_fns: Vec<(String, Vec<String>, String)> = fn_ctx.generated_functions.clone();
+            let nested_fns: Vec<(String, Vec<String>, Vec<String>, String)> = fn_ctx.generated_functions.clone();
             let nested_parents: std::collections::HashMap<String, String> = fn_ctx.nested_function_parent.clone();
 
             // Propagate nested function definitions from fn_ctx to parent ctx
@@ -1989,7 +2009,7 @@ fn compile_expression(
             }
 
             // Track parent-child relationships: only direct children (not already a child of another nested function)
-            for (child_name, _, _) in &nested_fns {
+            for (child_name, _, _, _) in &nested_fns {
                 // Only set parent if not already set (preserves deeper nesting like get -> Inner)
                 ctx.nested_function_parent.entry(child_name.clone())
                     .or_insert_with(|| func_name.clone());
@@ -2031,6 +2051,7 @@ fn compile_expression(
                 build_c_function_with_return_type(
                     &func_name,
                     &param_names,
+                    &param_types,
                     &fn_read_entries,
                     &fn_body_stmts,
                     "",
@@ -2070,7 +2091,7 @@ fn compile_expression(
                 // For methods that capture factory local vars, they need instance->var access.
                 // For nested factories (returns_this), they remain standalone but are registered
                 // so dot notation knows to pass the instance pointer.
-                for (method_name, method_params, method_code) in &nested_fns {
+                for (method_name, method_params, _, method_code) in &nested_fns {
                     if method_code.is_empty() { continue; }
                     // Only register direct children - skip functions that have their own parent
                     let is_direct_child = !nested_parents.contains_key(method_name);
@@ -2122,8 +2143,8 @@ fn compile_expression(
                             new_params.push(raw_name.to_string());
                         }
                         // Replace in generated_functions
-                        ctx.generated_functions.retain(|(n, _, _)| n != method_name);
-                        ctx.generated_functions.push((method_name.clone(), new_params, rewritten));
+                        ctx.generated_functions.retain(|(n, _, _, _)| n != method_name);
+                        ctx.generated_functions.push((method_name.clone(), new_params, vec!["Counter_ret*".to_string()], rewritten));
                     }
                 }
                 // Remove factory local vars from captured_vars — they're now per-instance
@@ -2134,6 +2155,7 @@ fn compile_expression(
                 build_c_function_with_return_type(
                     &func_name,
                     &param_names,
+                    &param_types,
                     &fn_read_entries,
                     &fn_body_stmts,
                     &struct_init,
@@ -2144,13 +2166,14 @@ fn compile_expression(
                 build_c_function(
                     &func_name,
                     &param_names,
+                    &param_types,
                     &fn_read_entries,
                     &fn_body_stmts,
                     &fn_return_expr,
                 )
             };
             ctx.generated_functions
-                .push((func_name.clone(), param_names, c_func));
+                .push((func_name.clone(), param_names.clone(), param_types.clone(), c_func));
             if let Some(ref ret) = return_type {
                 ctx.function_return_types.insert(func_name, ret.clone());
             } else if fn_return_expr.is_empty() {
@@ -2736,7 +2759,7 @@ fn compile_expression(
             &field_str
         };
         // Check if method_name is a known generated function (nested method)
-        if ctx.generated_functions.iter().any(|(name, _, _)| name == method_name) {
+        if ctx.generated_functions.iter().any(|(name, _, _, _)| name == method_name) {
             // Determine if this method needs an instance pointer
             let needs_instance = ctx.factory_method_instances.contains_key(method_name)
                 || (ctx.nested_function_parent.contains_key(method_name)
@@ -2747,8 +2770,8 @@ fn compile_expression(
                 // Check if this method actually accepts an instance pointer (was rewritten)
                 // by looking at the generated function's params
                 let method_accepts_instance = ctx.generated_functions.iter()
-                    .find(|(name, _, _)| name == method_name)
-                    .map(|(_, params, _)| params.first().map(|p| p.contains('*')).unwrap_or(false))
+                    .find(|(name, _, _, _)| name == method_name)
+                    .map(|(_, params, _, _)| params.first().map(|p| p.contains('*')).unwrap_or(false))
                     .unwrap_or(false);
 
                 // If base is an rvalue (e.g., "a()"), introduce a temp variable
@@ -2859,23 +2882,36 @@ fn compile_expression(
         Ok(())
     }
 
+    /// Handle dot-digit tuple field access: ".0" -> ".f0".
+    fn handle_dot_digit(chars: &mut std::iter::Peekable<std::str::Chars>, out: &mut String) {
+        out.push('.');
+        if let Some(&next_ch) = chars.peek() {
+            if next_ch.is_ascii_digit() {
+                out.push('f');
+                out.push(next_ch);
+                chars.next();
+            }
+        }
+    }
+
     fn copy_chars(s: &str, out: &mut String) {
         let mut chars = s.chars().peekable();
         while let Some(ch) = chars.next() {
             match ch {
                 '{' => out.push('('),
                 '}' => out.push(')'),
-                '.' => {
-                    out.push('.');
-                    // Check if next char is a digit (tuple field access: .0 -> .f0)
-                    if let Some(&next_ch) = chars.peek() {
-                        if next_ch.is_ascii_digit() {
-                            out.push('f');
-                            out.push(next_ch);
-                            chars.next(); // consume the digit
-                        }
-                    }
-                }
+                '.' => handle_dot_digit(&mut chars, out),
+                _ => out.push(ch),
+            }
+        }
+    }
+
+    /// Copy chars without brace-to-paren conversion (preserves struct literals).
+    fn copy_chars_preserve_braces(s: &str, out: &mut String) {
+        let mut chars = s.chars().peekable();
+        while let Some(ch) = chars.next() {
+            match ch {
+                '.' => handle_dot_digit(&mut chars, out),
                 _ => out.push(ch),
             }
         }
@@ -2884,7 +2920,7 @@ fn compile_expression(
     // First pass: handle generic reads like read<Bool>(), etc.
     let mut last = 0;
     for m in trimmed.match_indices("read<") {
-        copy_chars(&trimmed[last..m.0], &mut result);
+        copy_chars_preserve_braces(&trimmed[last..m.0], &mut result);
         let rest = &trimmed[m.0 + m.1.len()..]; // after "read<"
         if let Some(end_pos) = rest.find(">()") {
             result.push_str(&ctx.vars[ctx.var_idx]);
@@ -2904,24 +2940,24 @@ fn compile_expression(
     let remaining = &trimmed[remaining_start..];
     for (i, m) in remaining.match_indices("read()").enumerate() {
         if i == 0 && m.0 == 0 {
-            copy_chars(&remaining[..m.0], &mut result);
+            copy_chars_preserve_braces(&remaining[..m.0], &mut result);
         } else {
             // Copy text between previous match end and this one
             let prev_end = last;
-            copy_chars(&trimmed[prev_end..remaining_start + m.0], &mut result);
+            copy_chars_preserve_braces(&trimmed[prev_end..remaining_start + m.0], &mut result);
         }
         result.push_str(&ctx.vars[ctx.var_idx]);
         ctx.var_idx += 1;
         last = remaining_start + m.0 + "read()".len();
     }
     // Copy any trailing text after last read().
-    copy_chars(&trimmed[last..], &mut result);
+    copy_chars_preserve_braces(&trimmed[last..], &mut result);
 
     // Third pass: handle sizeOf<T>() -> sizeof(C_type)
     let mut sizeof_result = String::new();
     let mut sizeof_last = 0;
     for m in result.match_indices("sizeOf<") {
-        copy_chars(&result[sizeof_last..m.0], &mut sizeof_result);
+        copy_chars_preserve_braces(&result[sizeof_last..m.0], &mut sizeof_result);
         let rest = &result[m.0 + m.1.len()..]; // after "sizeOf<"
         if let Some(end_pos) = rest.find(">()") {
             let type_arg = rest[..end_pos].trim();
@@ -2941,7 +2977,7 @@ fn compile_expression(
             sizeof_last = result.len();
         }
     }
-    copy_chars(&result[sizeof_last..], &mut sizeof_result);
+    copy_chars_preserve_braces(&result[sizeof_last..], &mut sizeof_result);
     result = sizeof_result;
 
     // Strip literal suffixes from integer literals (C doesn't support U8 or I64 suffixes)
@@ -3093,6 +3129,7 @@ fn compile_expression(
                     let c_func = build_c_function(
                         &concrete_name,
                         &all_param_names,
+                        &vec!["int".to_string(); all_param_names.len()],
                         &fn_read_entries,
                         &fn_body_stmts,
                         &fn_return_expr,
@@ -3113,6 +3150,7 @@ fn compile_expression(
                         build_c_function_with_return_type(
                             &concrete_name,
                             &all_param_names,
+                            &vec!["int".to_string(); all_param_names.len()],
                             &fn_read_entries,
                             &fn_body_stmts,
                             &fn_return_expr,
@@ -3122,9 +3160,11 @@ fn compile_expression(
                     } else {
                         c_func
                     };
+                    let num_params = all_param_names.len();
                     ctx.generated_functions.push((
                         concrete_name.clone(),
                         all_param_names,
+                        vec!["int".to_string(); num_params],
                         c_func,
                     ));
                     ctx.generated_function_instantiations
@@ -3138,7 +3178,7 @@ fn compile_expression(
             && ctx
                 .generated_functions
                 .iter()
-                .any(|(name, _, _)| *name == call_name)
+                .any(|(name, _, _, _)| *name == call_name)
         {
             Some(call_name.clone())
         } else if ctx.extern_functions.contains_key(&call_name) {
@@ -3153,7 +3193,7 @@ fn compile_expression(
                 let abs_paren_end = m.0 + paren_end;
                 let args_str = &final_result[m.0 + 1..abs_paren_end].trim();
                 let call_expr = compile_fn_call(&resolved_name, args_str, ctx)?;
-                copy_chars(&final_result[func_last..name_start], &mut func_result);
+                copy_chars_preserve_braces(&final_result[func_last..name_start], &mut func_result);
                 func_result.push_str(&call_expr);
                 func_last = abs_paren_end + 1;
             }
@@ -4350,6 +4390,15 @@ mod tests {
             "fn add(offset : I32) : I32 => read() + offset; add(2)",
             "1",
             3,
+        );
+    }
+
+    #[test]
+    fn test_struct_as_function_param() {
+        expect_valid(
+            "struct Point { x : I32, y : I32 } fn distanceSquared(p : Point) : I32 => p.x * p.x + p.y * p.y; distanceSquared(Point { x : 3, y : 4 })",
+            "",
+            25,
         );
     }
 

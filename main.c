@@ -6,10 +6,12 @@ typedef struct {
 		int x;
 } Wrapper;
 
+int unwrap(Wrapper wrapper);
 
 
-
-int main() {
+int unwrap(Wrapper wrapper) {
+		return ();
+}int main() {
 	
 	return 0;
 }

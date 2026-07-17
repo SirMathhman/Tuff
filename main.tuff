@@ -2,3 +2,6 @@ struct Wrapper {
     x : I32
 }
 
+fn unwrap(wrapper : Wrapper) => {
+    
+}
