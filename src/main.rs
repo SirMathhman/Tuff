@@ -521,6 +521,11 @@ fn compile_fn_call(
             {
                 continue;
             }
+            // Plain numeric literals (digits only, no suffix) are context-dependent and compatible
+            // with any numeric type (I32, I64, U8, USize, etc.)
+            if arg_trimmed.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
             // Infer the argument's type and check against expected
             let arg_type = infer_literal_type(arg_trimmed);
             if arg_type != *expected_type && !is_type_compatible(&arg_type, expected_type, ctx) {
@@ -5864,6 +5869,16 @@ mod tests {
     fn test_extern_fn_arg_type_mismatch() {
         expect_invalid(
             "extern let { malloc } = extern stdlib; extern fn malloc(param : I32) : Void; malloc(true)",
+        );
+    }
+
+    #[test]
+    fn test_numeric_literal_context_inference() {
+        // Plain numeric literal "100" should be compatible with USize parameter
+        expect_valid(
+            "extern let { myFunc } = extern stdlib; extern fn myFunc(n : USize) : Void; myFunc(100)",
+            "",
+            0,
         );
     }
 

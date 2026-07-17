@@ -1,3 +1,0 @@
-extern let { malloc } = extern stdlib;
-extern fn malloc(param : I32) : Void;
-malloc(true)
