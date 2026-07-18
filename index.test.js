@@ -1998,4 +1998,157 @@ test("closure type annotation without assignment is invalid", () => {
   expectInvalid("let f : (I32) => I32;");
 });
 
+// For loop tests
+test("for loop basic range", () => {
+  expectValid("let mut sum = 0; for (i in 0..5) { sum = sum + i }; sum", "", 10);
+});
+
+test("for loop empty range", () => {
+  expectValid("let mut sum = 0; for (i in 5..5) { sum = sum + i }; sum", "", 0);
+});
+
+test("for loop single iteration", () => {
+  expectValid("let mut sum = 0; for (i in 0..1) { sum = sum + i }; sum", "", 0);
+});
+
+test("for loop with negative start", () => {
+  expectValid("let mut sum = 0; for (i in -2..2) { sum = sum + i }; sum", "", -2);
+});
+
+test("for loop with expression bounds", () => {
+  expectValid("let start = 1; let end = 4; let mut sum = 0; for (i in start..end) { sum = sum + i }; sum", "", 6);
+});
+
+test("for loop variable scoped to body", () => {
+  expectValid("let mut x = 0; for (i in 0..3) { x = x + i }; x", "", 3);
+});
+
+test("for loop with mut variable in body", () => {
+  expectValid("let mut count = 0; for (i in 0..3) { count = count + 1 }; count", "", 3);
+});
+
+test("for loop with compound assignment in body", () => {
+  expectValid("let mut total = 0; for (i in 0..4) { total += i }; total", "", 6);
+});
+
+test("for loop with if in body", () => {
+  expectValid("let mut count = 0; for (i in 0..5) { if (i > 2) { count = count + 1 } }; count", "", 2);
+});
+
+test("for loop with while in body", () => {
+  expectValid("let total = 0; for (i in 0..2) { let mut j = 0; while (j < i) { j = j + 1 } }; total", "", 0);
+});
+
+test("for loop nested", () => {
+  expectValid("let mut total = 0; for (i in 0..2) { for (j in 0..3) { total = total + 1 }; }; total", "", 6);
+});
+
+test("for loop as last statement returns 0", () => {
+  expectValid("for (i in 0..5) { 1 }", "", 0);
+});
+
+test("for loop with let in body", () => {
+  expectValid("let mut result = 0; for (i in 0..3) { let x = i * 2; result = result + x }; result", "", 6);
+});
+
+test("for loop with function call in body", () => {
+  expectValid("fn double(n: I32) : I32 => { n * 2 }; let mut total = 0; for (i in 0..3) { total = total + double(i) }; total", "", 6);
+});
+
+test("for loop with comparison in body", () => {
+  expectValid("let mut count = 0; for (i in 0..10) { if (i == 5) { count = count + 1 } }; count", "", 1);
+});
+
+test("for loop with struct field access in body", () => {
+  expectValid("struct S { mut val : I32 }; let mut s = S { val: 0 }; for (i in 0..3) { s.val = s.val + i }; s.val", "", 3);
+});
+
+test("for loop with array access in body", () => {
+  expectValid("let arr : [I32; 3] = [1, 2, 3]; let mut total = 0; for (i in 0..3) { total = total + arr[i] }; total", "", 6);
+});
+
+test("for loop variable not visible outside", () => {
+  expectInvalid("for (i in 0..5) { 1 }; i");
+});
+
+test("for loop without opening paren is invalid", () => {
+  expectInvalid("for i in 0..5 { 1 }");
+});
+
+test("for loop without closing paren is invalid", () => {
+  expectInvalid("for (i in 0..5 { 1 }");
+});
+
+test("for loop without in keyword is invalid", () => {
+  expectInvalid("for (i 0..5) { 1 }");
+});
+
+test("for loop without range is invalid", () => {
+  expectInvalid("for (i in) { 1 }");
+});
+
+test("for loop without closing brace is invalid", () => {
+  expectInvalid("for (i in 0..5) { 1");
+});
+
+test("for loop without opening brace is invalid", () => {
+  expectInvalid("for (i in 0..5) 1");
+});
+
+test("for loop with non-identifier variable is invalid", () => {
+  expectInvalid("for (5 in 0..5) { 1 }");
+});
+
+test("for loop with missing range end is invalid", () => {
+  expectInvalid("for (i in 0..) { 1 }");
+});
+
+test("for loop in function body", () => {
+  expectValid("fn sum(n: I32) : I32 => { let mut total = 0; for (i in 0..n) { total = total + i }; total }; sum(5)", "", 10);
+});
+
+test("for loop with block expression in body", () => {
+  expectValid("let mut result = 0; for (i in 0..3) { result = result + { let x = i; x * 2 } }; result", "", 6);
+});
+
+test("for loop with boolean expression in body", () => {
+  expectValid("let mut count = 0; for (i in 0..5) { if (i > 0 && i < 4) { count = count + 1 } }; count", "", 3);
+});
+
+test("for loop with tuple in body", () => {
+  expectValid("let mut total = 0; for (i in 0..3) { let t : (I32, I32) = (i, i * 2); total = total + t.0 + t.1 }; total", "", 9);
+});
+
+test("for loop range with variable bounds", () => {
+  expectValid("let a = 2; let b = 5; let mut sum = 0; for (i in a..b) { sum = sum + i }; sum", "", 9);
+});
+
+test("for loop range with expression bounds", () => {
+  expectValid("let n = 3; let mut sum = 0; for (i in 0..n + 1) { sum = sum + i }; sum", "", 6);
+});
+
+test("for loop with empty body", () => {
+  expectValid("for (i in 0..5) { }", "", 0);
+});
+
+test("for loop with multiple statements in body", () => {
+  expectValid("let mut a = 0; let mut b = 0; for (i in 0..3) { a = a + i; b = b + i * 2 }; a + b", "", 9);
+});
+
+test("for loop with struct instantiation in body", () => {
+  expectValid("struct S { val : I32 }; let mut last = S { val: 0 }; for (i in 0..3) { last = S { val: i } }; last.val", "", 2);
+});
+
+test("for loop with comparison in range", () => {
+  expectValid("let n = 5; let mut sum = 0; for (i in 0..n) { sum = sum + 1 }; sum", "", 5);
+});
+
+test("for loop with negated range start", () => {
+  expectValid("let mut sum = 0; for (i in 0..-(-3)) { sum = sum + i }; sum", "", 3);
+});
+
+test("for loop with boolean range is invalid", () => {
+  expectInvalid("for (i in true..false) { 1 }");
+});
+
 

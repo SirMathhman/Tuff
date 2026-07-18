@@ -1,7 +1,7 @@
 import { inferType, validateTypeAnnotation, isTupleType, splitTupleType } from "./types.js";
 import { parseType, parseTypeAnnotation } from "./types_parser.js";
 import { parseExpression, parseBinaryContinuation, setExpressionDeps } from "./expressions.js";
-import { parseIfCondition, parseIfExpressionBranch, parseIfStatementBranch, parseWhile, parseBlockStatements, parseBlock, parseIfExpression, setControlDeps } from "./control.js";
+import { parseIfCondition, parseIfExpressionBranch, parseIfStatementBranch, parseWhile, parseFor, parseBlockStatements, parseBlock, parseIfExpression, setControlDeps } from "./control.js";
 import { parseStructDefinition, parseStructInstantiation, parseFieldAccess, parseTupleIndexToken, buildFieldAccess, validateFieldMutable, setStructsDeps } from "./structs.js";
 import { parseFnSignature, skipFunctionBody, parseCompoundOrAssign, validateMutable, parseAssignmentRhs, parseFn, parseFnCall, parseArrayIndex, parseArrayLiteral, parseIdentifier, setFunctionsDeps } from "./functions.js";
 
@@ -198,6 +198,9 @@ function parseStatement(parser, variables, functions, structs) {
   }
   if (parser.peek().type === "WHILE") {
     return parseWhile(parser, variables, functions, structs);
+  }
+  if (parser.peek().type === "FOR") {
+    return parseFor(parser, variables, functions, structs);
   }
   if (parser.peek().type === "LBRACE") {
     const block = parseBlock(parser, variables, functions, structs, true);

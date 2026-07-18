@@ -135,8 +135,13 @@ export function tokenize(source) {
       continue;
     }
     if (ch === ".") {
-      tokens.push({ type: "DOT" });
-      i++;
+      if (i + 1 < source.length && source[i + 1] === ".") {
+        tokens.push({ type: "RANGE" });
+        i += 2;
+      } else {
+        tokens.push({ type: "DOT" });
+        i++;
+      }
       continue;
     }
     if (ch === "-") {
@@ -181,6 +186,10 @@ export function tokenize(source) {
         tokens.push({ type: "ELSE" });
       } else if (ident === "while") {
         tokens.push({ type: "WHILE" });
+      } else if (ident === "for") {
+        tokens.push({ type: "FOR" });
+      } else if (ident === "in") {
+        tokens.push({ type: "IN" });
       } else if (ident === "fn") {
         tokens.push({ type: "FN" });
       } else if (ident === "struct") {

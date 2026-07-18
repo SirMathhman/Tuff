@@ -66,6 +66,43 @@ export function parseWhile(parser, variables, functions, structs) {
   return { type: "whileStmt", condition, body };
 }
 
+export function parseFor(parser, variables, functions, structs) {
+  parser.advance(); // consume 'for'
+  if (parser.peek().type !== "LPAREN") {
+    throw new Error(`Expected ( after for, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '('
+  const variable = parser.advance();
+  if (variable.type !== "IDENTIFIER") {
+    throw new Error(`Expected identifier in for loop, got ${variable.type}`);
+  }
+  if (parser.peek().type !== "IN") {
+    throw new Error(`Expected in in for loop, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume 'in'
+  const start = parseExpression(parser, variables, functions, structs);
+  if (parser.peek().type !== "RANGE") {
+    throw new Error(`Expected .. in for loop range, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '..'
+  const end = parseExpression(parser, variables, functions, structs);
+  // Validate that range bounds are numeric, not boolean
+  const startType = inferType(start);
+  const endType = inferType(end);
+  if (startType === "Bool" || endType === "Bool") {
+    throw new Error("For loop range must be numeric, not boolean");
+  }
+  if (parser.peek().type !== "RPAREN") {
+    throw new Error(`Expected ) after for loop range, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ')'
+  // Create scoped variables for the for loop body with the loop variable
+  const loopVariables = new Map(variables);
+  loopVariables.set(variable.value, { mutable: true, type: "I32" });
+  const body = parseBlockStatements(parser, loopVariables, functions, structs);
+  return { type: "forStmt", variable: variable.value, start, end, body };
+}
+
 export function parseBlockStatements(parser, variables, functions, structs) {
   if (parser.peek().type !== "LBRACE") {
     throw new Error(`Expected { for if branch, got ${parser.peek().type}`);
@@ -104,7 +141,7 @@ export function parseBlock(parser, parentVariables, functions, structs, allowSta
   parser.advance(); // consume RBRACE
   // Block statement: ends with semicolon, is empty, or last stmt is a statement type
   const lastStmt = statements[statements.length - 1];
-  const isStatementType = (s) => s && (s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "blockStmt");
+  const isStatementType = (s) => s && (s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "forStmt" || s.type === "blockStmt");
   if (lastHadSemicolon || statements.length === 0 || isStatementType(lastStmt)) {
     if (!allowStatement) {
       throw new Error("Block statement cannot be used in expression context");

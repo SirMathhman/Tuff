@@ -19,6 +19,10 @@ function generateStatements(statements, functions) {
     } else if (stmt.type === "whileStmt") {
       code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body, functions)} };
 `;
+    } else if (stmt.type === "forStmt") {
+      const varName = stmt.variable;
+      code += `for (let ${varName} = ${generateExpr(stmt.start)}; ${varName} < ${generateExpr(stmt.end)}; ${varName}++) { ${generateStatements(stmt.body, functions)} };
+`;
     } else if (stmt.type === "fn") {
       code += generateFn(stmt);
     } else {
@@ -43,7 +47,7 @@ function generateFn(node, functions) {
   for (let i = 0; i < node.body.length; i++) {
     const stmt = node.body[i];
     if (i === node.body.length - 1) {
-      const isStmtType = (s) => s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "blockStmt" || s.type === "compoundAssign";
+      const isStmtType = (s) => s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "forStmt" || s.type === "blockStmt" || s.type === "compoundAssign";
       if (isStmtType(stmt)) {
         bodyCode += generateStmtCode(stmt, functions);
         bodyCode += `return 0;`;
@@ -77,6 +81,9 @@ function generateStmtCode(stmt, functions) {
     return generateIfStmt(stmt, functions);
   } else if (stmt.type === "whileStmt") {
     return `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body, functions)} };\n`;
+  } else if (stmt.type === "forStmt") {
+    const varName = stmt.variable;
+    return `for (let ${varName} = ${generateExpr(stmt.start)}; ${varName} < ${generateExpr(stmt.end)}; ${varName}++) { ${generateStatements(stmt.body, functions)} };\n`;
   } else if (stmt.type === "blockStmt") {
     return generateStatements(stmt.statements, functions);
   } else {
@@ -141,6 +148,13 @@ export function generate(statements, variables, functions) {
       if (i === statements.length - 1) {
         code += `return 0;`;
       }
+    } else if (stmt.type === "forStmt") {
+      const varName = stmt.variable;
+      code += `for (let ${varName} = ${generateExpr(stmt.start)}; ${varName} < ${generateExpr(stmt.end)}; ${varName}++) { ${generateStatements(stmt.body, functions)} };
+`;
+      if (i === statements.length - 1) {
+        code += `return 0;`;
+      }
     } else {
       const value = generateExpr(stmt);
       if (i === statements.length - 1) {
@@ -169,7 +183,13 @@ export function generateExpr(node) {
   }
   if (node.type === "unary") {
     if (node.op === "!") return `!${generateExpr(node.operand)}`;
-    return `-${generateExpr(node.operand)}`;
+    const operand = generateExpr(node.operand);
+    if (node.operand.type === "number") {
+      // -(-3) should become (3), not (--3)
+      if (node.operand.negative) return `(${node.operand.value})`;
+      return `(-${operand})`;
+    }
+    return `(-(${operand}))`;
   }
   if (node.type === "binary") {
     if (node.op === "&&" || node.op === "||") {
