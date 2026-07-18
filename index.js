@@ -59,6 +59,7 @@ function inferType(expr) {
     if (expr.op === "!") return "Bool";
     return inferType(expr.operand);
   }
+  if (expr.type === "block") return inferType(expr.finalExpr);
   return "unknown";
 }
 
@@ -89,6 +90,16 @@ function tokenize(source) {
     }
     if (ch === ")") {
       tokens.push({ type: "RPAREN" });
+      i++;
+      continue;
+    }
+    if (ch === "{") {
+      tokens.push({ type: "LBRACE" });
+      i++;
+      continue;
+    }
+    if (ch === "}") {
+      tokens.push({ type: "RBRACE" });
       i++;
       continue;
     }
@@ -244,67 +255,7 @@ function parse(tokens) {
   const variables = new Map();
   const statements = [];
   while (!parser.atEOF()) {
-    if (parser.peek().type === "LET") {
-      parser.advance();
-      const isMut = parser.peek().type === "MUT";
-      if (isMut) {
-        parser.advance();
-      }
-      const name = parseIdentifier(parser);
-      if (variables.has(name)) {
-        throw new Error(`Duplicate variable: ${name}`);
-      }
-      // Parse optional type annotation
-      let declaredType = null;
-      if (parser.peek().type === "COLON") {
-        parser.advance();
-        const typeToken = parser.peek();
-        if (typeToken.type !== "IDENTIFIER") {
-          throw new Error(`Expected type after :, got ${typeToken.type}`);
-        }
-        declaredType = typeToken.value;
-        if (!VALID_SUFFIXES.has(declaredType)) {
-          throw new Error(`Invalid type annotation: ${declaredType}`);
-        }
-        parser.advance();
-      }
-      if (parser.peek().type !== "OP" || parser.peek().value !== "=") {
-        throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
-      }
-      parser.advance();
-      const initExpr = parseExpression(parser, variables);
-      // Validate initial value against declared type
-      if (declaredType) {
-        validateTypeAnnotation(initExpr, declaredType);
-      }
-      variables.set(name, { mutable: isMut, type: declaredType });
-      statements.push({ type: "let", name, mutable: isMut, init: initExpr });
-    } else if (parser.peek().type === "IDENTIFIER") {
-      const name = parser.peek().value;
-      if (parser.peek(1)?.type === "OP" && parser.peek(1)?.value === "=") {
-        parser.advance();
-        parser.advance();
-        if (!variables.has(name)) {
-          throw new Error(`Undeclared variable: ${name}`);
-        }
-        const varInfo = variables.get(name);
-        const isMutable = typeof varInfo === "boolean" ? varInfo : varInfo.mutable;
-        if (!isMutable) {
-          throw new Error(`Cannot assign to immutable variable: ${name}`);
-        }
-        const rhs = parseExpression(parser, variables);
-        // Validate assignment against declared type
-        const declaredType = typeof varInfo === "object" ? varInfo.type : null;
-        if (declaredType) {
-          validateTypeAnnotation(rhs, declaredType);
-        }
-        statements.push({ type: "assign", name, value: rhs });
-      } else {
-        statements.push(parseExpression(parser, variables));
-      }
-    } else {
-      statements.push(parseExpression(parser, variables));
-    }
+    statements.push(parseStatement(parser, variables));
     if (parser.peek().type === "SEMICOLON") {
       parser.advance();
     }
@@ -313,6 +264,92 @@ function parse(tokens) {
     const isMutable = typeof info === "boolean" ? info : info.mutable;
     return { name, mutable: isMutable };
   }) };
+}
+
+function parseStatement(parser, variables) {
+  if (parser.peek().type === "LET") {
+    parser.advance();
+    const isMut = parser.peek().type === "MUT";
+    if (isMut) {
+      parser.advance();
+    }
+    const name = parseIdentifier(parser);
+    if (variables.has(name)) {
+      throw new Error(`Duplicate variable: ${name}`);
+    }
+    let declaredType = null;
+    if (parser.peek().type === "COLON") {
+      parser.advance();
+      const typeToken = parser.peek();
+      if (typeToken.type !== "IDENTIFIER") {
+        throw new Error(`Expected type after :, got ${typeToken.type}`);
+      }
+      declaredType = typeToken.value;
+      if (!VALID_SUFFIXES.has(declaredType)) {
+        throw new Error(`Invalid type annotation: ${declaredType}`);
+      }
+      parser.advance();
+    }
+    if (parser.peek().type !== "OP" || parser.peek().value !== "=") {
+      throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
+    }
+    parser.advance();
+    const initExpr = parseExpression(parser, variables);
+    if (declaredType) {
+      validateTypeAnnotation(initExpr, declaredType);
+    }
+    variables.set(name, { mutable: isMut, type: declaredType });
+    return { type: "let", name, mutable: isMut, init: initExpr };
+  }
+  if (parser.peek().type === "IDENTIFIER") {
+    const name = parser.peek().value;
+    if (parser.peek(1)?.type === "OP" && parser.peek(1)?.value === "=") {
+      parser.advance();
+      parser.advance();
+      if (!variables.has(name)) {
+        throw new Error(`Undeclared variable: ${name}`);
+      }
+      const varInfo = variables.get(name);
+      const isMutable = typeof varInfo === "boolean" ? varInfo : varInfo.mutable;
+      if (!isMutable) {
+        throw new Error(`Cannot assign to immutable variable: ${name}`);
+      }
+      const rhs = parseExpression(parser, variables);
+      const declaredType = typeof varInfo === "object" ? varInfo.type : null;
+      if (declaredType) {
+        validateTypeAnnotation(rhs, declaredType);
+      }
+      return { type: "assign", name, value: rhs };
+    }
+  }
+  return parseExpression(parser, variables);
+}
+
+function parseBlock(parser, parentVariables) {
+  parser.advance(); // consume LBRACE
+  const blockVars = new Map(parentVariables);
+  const statements = [];
+  let lastHadSemicolon = false;
+  while (parser.peek().type !== "RBRACE" && parser.peek().type !== "EOF") {
+    statements.push(parseStatement(parser, blockVars));
+    lastHadSemicolon = false;
+    if (parser.peek().type === "SEMICOLON") {
+      parser.advance();
+      lastHadSemicolon = true;
+    }
+  }
+  if (parser.peek().type === "EOF") {
+    throw new Error("Unclosed block");
+  }
+  parser.advance(); // consume RBRACE
+  if (lastHadSemicolon) {
+    throw new Error("Block must not end with a semicolon");
+  }
+  if (statements.length === 0) {
+    throw new Error("Empty block");
+  }
+  const finalExpr = statements.pop();
+  return { type: "block", statements, finalExpr };
 }
 
 function parseIdentifier(parser) {
@@ -461,6 +498,9 @@ function parsePrimary(parser, variables) {
     parser.advance();
     return { type: "boolean", value: token.value };
   }
+  if (token.type === "LBRACE") {
+    return parseBlock(parser, variables);
+  }
   throw new Error(`Unexpected token: ${token.type}`);
 }
 
@@ -524,6 +564,19 @@ function generateExpr(node) {
       return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
     }
     return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
+  }
+  if (node.type === "block") {
+    let code = "";
+    for (const stmt of node.statements) {
+      if (stmt.type === "let") {
+        code += `let ${stmt.name} = ${generateExpr(stmt.init)};\n`;
+      } else if (stmt.type === "assign") {
+        code += `${stmt.name} = ${generateExpr(stmt.value)};\n`;
+      } else {
+        code += `${generateExpr(stmt)};\n`;
+      }
+    }
+    return `(() => { ${code}return ${generateExpr(node.finalExpr)}; })()`;
   }
   throw new Error(`Unknown node type: ${node.type}`);
 }

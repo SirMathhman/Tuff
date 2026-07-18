@@ -610,4 +610,105 @@ test("complex comparison expression", () => {
   expectValid("let x: U8 = 10; x > 5 && x < 20", "", 1);
 });
 
+// Block expression tests
+test("simple block expression", () => {
+  expectValid("{ 42 }", "", 42);
+});
+
+test("block with let and return value", () => {
+  expectValid("{ let y = 100; y }", "", 100);
+});
+
+test("block assigned to variable", () => {
+  expectValid("let x = { let y = 100; y }; x", "", 100);
+});
+
+test("block with multiple statements", () => {
+  expectValid("{ let a = 1; let b = 2; a + b }", "", 3);
+});
+
+test("block as top-level statement", () => {
+  expectValid("{ 10; 20 }", "", 20);
+});
+
+test("nested blocks", () => {
+  expectValid("{ { 1; 2 }; 3 }", "", 3);
+});
+
+test("nested blocks inner value", () => {
+  expectValid("{ { 42 } }", "", 42);
+});
+
+test("block scoping - variable not visible outside", () => {
+  expectInvalid("{ let x = 10; x }; x");
+});
+
+test("block scoping - outer variable visible inside", () => {
+  expectValid("let x = 10; { x }", "", 10);
+});
+
+test("block duplicate variable with outer scope", () => {
+  expectInvalid("let x = 10; { let x = 20; x }");
+});
+
+test("block with expression", () => {
+  expectValid("{ 1 + 2 }", "", 3);
+});
+
+test("block with mut variable", () => {
+  expectValid("{ let mut x = 1; x = 2; x }", "", 2);
+});
+
+test("block used in binary expression", () => {
+  expectValid("{ 5 } + { 3 }", "", 8);
+});
+
+test("block in parentheses", () => {
+  expectValid("({ 42 })", "", 42);
+});
+
+test("empty block is invalid", () => {
+  expectInvalid("{}");
+});
+
+test("block with trailing semicolon is invalid", () => {
+  expectInvalid("{ 1; }");
+});
+
+test("block with two trailing semicolons is invalid", () => {
+  expectInvalid("{ 1; 2; }");
+});
+
+test("block with let only (no final expr) is invalid", () => {
+  expectInvalid("{ let x = 1; }");
+});
+
+test("block with mut and no final expr is invalid", () => {
+  expectInvalid("{ let mut x = 1; }");
+});
+
+test("deeply nested blocks", () => {
+  expectValid("{ { { 42 } } }", "", 42);
+});
+
+test("block with complex expression", () => {
+  expectValid("{ let a = 10; let b = 20; a * b + 5 }", "", 205);
+});
+
+test("block as last statement returns value", () => {
+  expectValid("10; { 20; 30 }", "", 30);
+});
+
+test("block with boolean", () => {
+  expectValid("{ true }", "", 1);
+});
+
+test("block with comparison", () => {
+  expectValid("{ 1 < 2 }", "", 1);
+});
+
+test("block with type annotation", () => {
+  expectValid("{ let x: U8 = 42; x }", "", 42);
+});
+
 
