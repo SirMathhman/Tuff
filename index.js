@@ -319,6 +319,33 @@ function parseStatement(parser, variables) {
       return { type: "assign", name, value: rhs };
     }
   }
+  if (parser.peek().type === "IF") {
+    // Parse condition first
+    const condition = parseIfCondition(parser, variables);
+
+    // Check if branch starts with LBRACE
+    if (parser.peek().type === "LBRACE") {
+      // Try parsing block to determine if it's a statement or expression
+      const savedPos = parser.pos;
+      const block = parseBlock(parser, variables, true);
+      if (block.type === "blockStmt") {
+        return parseIfStatementBranch(parser, variables, condition, block.statements);
+      }
+      // Block expression - use it as thenBranch for if-expression
+      if (parser.peek().type !== "ELSE") {
+        throw new Error(`Expected else, got ${parser.peek().type}`);
+      }
+      parser.advance(); // consume 'else'
+      return parseIfExpressionBranch(parser, variables, condition, block);
+    }
+    // Parse as if-expression (non-block branch)
+    const thenBranch = parseExpression(parser, variables);
+    if (parser.peek().type !== "ELSE") {
+      throw new Error(`Expected else, got ${parser.peek().type}`);
+    }
+    parser.advance(); // consume 'else'
+    return parseIfExpressionBranch(parser, variables, condition, thenBranch);
+  }
   if (parser.peek().type === "LBRACE") {
     const block = parseBlock(parser, variables, true);
     if (block.type === "blockStmt") {
@@ -328,6 +355,72 @@ function parseStatement(parser, variables) {
     return parseBinaryContinuation(parser, variables, block);
   }
   return parseExpression(parser, variables);
+}
+
+function parseIfCondition(parser, variables) {
+  parser.advance(); // consume 'if'
+  if (parser.peek().type !== "LPAREN") {
+    throw new Error(`Expected ( after if, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '('
+  const condition = parseExpression(parser, variables);
+  if (!isBoolType(condition, variables)) {
+    throw new Error(`Expected Bool for if condition, got ${inferType(condition)}`);
+  }
+  if (parser.peek().type !== "RPAREN") {
+    throw new Error(`Expected ) after if condition, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ')'
+  return condition;
+}
+
+function parseIfExpressionBranch(parser, variables, condition, thenBranch) {
+  const elseBranch = parseExpression(parser, variables);
+  const thenType = inferType(thenBranch);
+  const elseType = inferType(elseBranch);
+  if (thenType !== elseType && thenType !== "unknown" && elseType !== "unknown") {
+    throw new Error(`Type mismatch in if-else: then branch is ${thenType}, else branch is ${elseType}`);
+  }
+  return { type: "if", condition, thenBranch, elseBranch };
+}
+
+function parseIfStatementBranch(parser, variables, condition, thenBranch) {
+  let elseBranch = null;
+  if (parser.peek().type === "ELSE") {
+    parser.advance(); // consume 'else'
+    if (parser.peek().type === "IF") {
+      const elseIfStmt = parseIfStatement(parser, variables);
+      elseBranch = [elseIfStmt];
+    } else {
+      elseBranch = parseBlockStatements(parser, variables);
+    }
+  }
+  return { type: "ifStmt", condition, thenBranch, elseBranch };
+}
+
+function parseIfStatement(parser, variables) {
+  const condition = parseIfCondition(parser, variables);
+  const thenBranch = parseBlockStatements(parser, variables);
+  return parseIfStatementBranch(parser, variables, condition, thenBranch);
+}
+
+function parseBlockStatements(parser, variables) {
+  if (parser.peek().type !== "LBRACE") {
+    throw new Error(`Expected { for if branch, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume LBRACE
+  const statements = [];
+  while (parser.peek().type !== "RBRACE" && parser.peek().type !== "EOF") {
+    statements.push(parseStatement(parser, variables));
+    if (parser.peek().type === "SEMICOLON") {
+      parser.advance();
+    }
+  }
+  if (parser.peek().type === "EOF") {
+    throw new Error("Unclosed block");
+  }
+  parser.advance(); // consume RBRACE
+  return statements;
 }
 
 function parseBlock(parser, parentVariables, allowStatement) {
@@ -347,8 +440,9 @@ function parseBlock(parser, parentVariables, allowStatement) {
     throw new Error("Unclosed block");
   }
   parser.advance(); // consume RBRACE
-  // Block statement: ends with semicolon or is empty
-  if (lastHadSemicolon || statements.length === 0) {
+  // Block statement: ends with semicolon, is empty, or last stmt is a statement type
+  const isStatementType = (s) => s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "blockStmt";
+  if (lastHadSemicolon || statements.length === 0 || isStatementType(statements[statements.length - 1])) {
     if (!allowStatement) {
       throw new Error("Block statement cannot be used in expression context");
     }
@@ -525,32 +619,18 @@ function parsePrimary(parser, variables) {
 }
 
 function parseIfExpression(parser, variables) {
-  parser.advance(); // consume 'if'
-  if (parser.peek().type !== "LPAREN") {
-    throw new Error(`Expected ( after if, got ${parser.peek().type}`);
-  }
-  parser.advance(); // consume '('
-  const condition = parseExpression(parser, variables);
-  if (!isBoolType(condition, variables)) {
-    throw new Error(`Expected Bool for if condition, got ${inferType(condition)}`);
-  }
-  if (parser.peek().type !== "RPAREN") {
-    throw new Error(`Expected ) after if condition, got ${parser.peek().type}`);
-  }
-  parser.advance(); // consume ')'
+  const condition = parseIfCondition(parser, variables);
   const thenBranch = parseExpression(parser, variables);
   if (parser.peek().type !== "ELSE") {
     throw new Error(`Expected else, got ${parser.peek().type}`);
   }
   parser.advance(); // consume 'else'
-  const elseBranch = parseExpression(parser, variables);
-  // Type check: both branches must have the same type (unknown is allowed to match anything)
-  const thenType = inferType(thenBranch);
-  const elseType = inferType(elseBranch);
-  if (thenType !== elseType && thenType !== "unknown" && elseType !== "unknown") {
-    throw new Error(`Type mismatch in if-else: then branch is ${thenType}, else branch is ${elseType}`);
+  // Check if else branch is another if-expression (else-if chain)
+  if (parser.peek().type === "IF") {
+    const elseIfExpr = parseIfExpression(parser, variables);
+    return { type: "if", condition, thenBranch, elseBranch: elseIfExpr };
   }
-  return { type: "if", condition, thenBranch, elseBranch };
+  return parseIfExpressionBranch(parser, variables, condition, thenBranch);
 }
 
 function generateStatements(statements) {
@@ -560,9 +640,19 @@ function generateStatements(statements) {
       code += `let ${stmt.name} = ${generateExpr(stmt.init)};\n`;
     } else if (stmt.type === "assign") {
       code += `${stmt.name} = ${generateExpr(stmt.value)};\n`;
+    } else if (stmt.type === "ifStmt") {
+      code += generateIfStmt(stmt);
     } else {
       code += `${generateExpr(stmt)};\n`;
     }
+  }
+  return code;
+}
+
+function generateIfStmt(node) {
+  let code = `if (${generateExpr(node.condition)}) { ${generateStatements(node.thenBranch)} }`;
+  if (node.elseBranch) {
+    code += ` else { ${generateStatements(node.elseBranch)} }`;
   }
   return code;
 }
@@ -594,6 +684,11 @@ function generate(statements, variables) {
       code += `${stmt.name} = ${rhsValue};\n`;
     } else if (stmt.type === "blockStmt") {
       code += generateStatements(stmt.statements);
+      if (i === statements.length - 1) {
+        code += `return 0;`;
+      }
+    } else if (stmt.type === "ifStmt") {
+      code += generateIfStmt(stmt);
       if (i === statements.length - 1) {
         code += `return 0;`;
       }

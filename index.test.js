@@ -901,4 +901,77 @@ test("if-else with block statement in else branch is invalid", () => {
   expectInvalid("if (true) 1 else { 2; }");
 });
 
+// If statement tests
+test("if statement without else", () => {
+  expectValid("let mut x = 0; if (true) { x = 1; } x", "", 1);
+});
+
+test("if statement without else false branch", () => {
+  expectValid("let mut x = 0; if (false) { x = 1; } x", "", 0);
+});
+
+test("if-else statement", () => {
+  expectValid("let mut x = 0; if (true) { x = 1; } else { x = 2; } x", "", 1);
+});
+
+test("if-else statement false branch", () => {
+  expectValid("let mut x = 0; if (false) { x = 1; } else { x = 2; } x", "", 2);
+});
+
+test("if-else-if statement", () => {
+  expectValid("let mut x = 0; let y = 2; if (y == 1) { x = 10; } else if (y == 2) { x = 20; } else { x = 30; } x", "", 20);
+});
+
+test("if-else-if falls through to else", () => {
+  expectValid("let mut x = 0; let y = 5; if (y == 1) { x = 10; } else if (y == 2) { x = 20; } else { x = 30; } x", "", 30);
+});
+
+test("if statement with multiple statements", () => {
+  expectValid("let mut x = 0; let mut y = 0; if (true) { x = 1; y = 2; } x + y", "", 3);
+});
+
+test("if statement with let inside", () => {
+  expectValid("let mut x = 0; if (true) { let y = 5; x = y; } x", "", 5);
+});
+
+test("if statement with comparison condition", () => {
+  expectValid("let mut x = 0; if (1 < 2) { x = 10; } x", "", 10);
+});
+
+test("if statement with variable condition", () => {
+  expectValid("let mut x = 0; let c: Bool = true; if (c) { x = 1; } x", "", 1);
+});
+
+test("if statement with complex condition", () => {
+  expectValid("let mut x = 0; if (true && false) { x = 1; } else { x = 2; } x", "", 2);
+});
+
+test("if statement with negated condition", () => {
+  expectValid("let mut x = 0; if (!false) { x = 42; } x", "", 42);
+});
+
+test("nested if statements", () => {
+  expectValid("let mut x = 0; if (true) { if (true) { x = 1; } } x", "", 1);
+});
+
+test("if statement as last statement", () => {
+  expectValid("let mut x = 1; if (x == 1) { x = 2; }", "", 0);
+});
+
+test("if-else-if without final else", () => {
+  expectValid("let mut x = 0; let y = 2; if (y == 1) { x = 10; } else if (y == 2) { x = 20; } x", "", 20);
+});
+
+test("if-expression with block expression in branch is valid", () => {
+  expectValid("if (true) { 1 } else 2", "", 1);
+});
+
+test("if statement with non-bool condition is invalid", () => {
+  expectInvalid("if (42) { 1; }");
+});
+
+test("if statement with missing else for expression branch", () => {
+  expectInvalid("if (true) 1");
+});
+
 
