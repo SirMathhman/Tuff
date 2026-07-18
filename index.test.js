@@ -318,4 +318,61 @@ test("let mut without initializer", () => {
   expectInvalid("let mut x;");
 });
 
+// Type annotation tests
+test("let with type annotation", () => {
+  expectValid("let x: U8 = 42; x", "", 42);
+});
+
+test("let with type annotation and matching suffix", () => {
+  expectValid("let x: U8 = 42U8; x", "", 42);
+});
+
+test("let with type annotation, no suffix", () => {
+  expectValid("let x: U16 = 1000; x", "", 1000);
+});
+
+test("let with type annotation negative", () => {
+  expectValid("let x: I8 = -50; x", "", -50);
+});
+
+test("let with type annotation F32", () => {
+  expectValid("let x: F32 = 3.14; x", "", parseFloat(3.14.toPrecision(6)));
+});
+
+test("let with type annotation F64", () => {
+  expectValid("let x: F64 = 2.718; x", "", 2.718);
+});
+
+test("let with type annotation out of range", () => {
+  expectInvalid("let x: U8 = 300; x");
+});
+
+test("let with mismatched suffix and annotation", () => {
+  expectInvalid("let x: U8 = 42U16; x");
+});
+
+test("let mut with type annotation", () => {
+  expectValid("let mut x: U8 = 42; x", "", 42);
+});
+
+test("let mut with type annotation reassignment", () => {
+  expectValid("let mut x: U8 = 42; x = 100; x", "", 100);
+});
+
+test("let mut with type annotation reassignment out of range", () => {
+  expectInvalid("let mut x: U8 = 42; x = 300;");
+});
+
+test("let with type annotation expression", () => {
+  expectValid("let x: U32 = 10 + 20; x", "", 30);
+});
+
+test("let with invalid type annotation", () => {
+  expectInvalid("let x: InvalidType = 42;");
+});
+
+test("let with type annotation missing colon", () => {
+  expectInvalid("let x U8 = 42;");
+});
+
 

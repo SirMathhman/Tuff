@@ -19,6 +19,22 @@ function validateSuffix(numStr, suffix, negative) {
   }
 }
 
+function validateTypeAnnotation(expr, declaredType) {
+  // Only validate literal numbers at compile time
+  if (expr.type !== "number") return;
+  // If literal has a suffix, it must match the declared type
+  if (expr.suffix && expr.suffix !== declaredType) {
+    throw new Error(`Type mismatch: expected ${declaredType}, got ${expr.suffix}`);
+  }
+  // Validate value against declared type range
+  const range = SUFFIX_RANGES[declaredType];
+  if (!range) return; // F32/F64 don't have range constraints
+  const value = expr.negative ? -parseFloat(expr.value) : parseFloat(expr.value);
+  if (value < range.min || value > range.max) {
+    throw new Error(`Value ${value} out of range for ${declaredType} (${range.min} to ${range.max})`);
+  }
+}
+
 export function compile(source) {
   const tokens = tokenize(source);
   const { statements, variables } = parse(tokens);
@@ -51,6 +67,11 @@ function tokenize(source) {
     }
     if (ch === "+" || ch === "*" || ch === "/" || ch === "%" || ch === "=") {
       tokens.push({ type: "OP", value: ch });
+      i++;
+      continue;
+    }
+    if (ch === ":") {
+      tokens.push({ type: "COLON" });
       i++;
       continue;
     }
@@ -152,12 +173,30 @@ function parse(tokens) {
       if (variables.has(name)) {
         throw new Error(`Duplicate variable: ${name}`);
       }
-      variables.set(name, isMut);
+      // Parse optional type annotation
+      let declaredType = null;
+      if (parser.peek().type === "COLON") {
+        parser.advance();
+        const typeToken = parser.peek();
+        if (typeToken.type !== "IDENTIFIER") {
+          throw new Error(`Expected type after :, got ${typeToken.type}`);
+        }
+        declaredType = typeToken.value;
+        if (!VALID_SUFFIXES.has(declaredType)) {
+          throw new Error(`Invalid type annotation: ${declaredType}`);
+        }
+        parser.advance();
+      }
       if (parser.peek().type !== "OP" || parser.peek().value !== "=") {
         throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
       }
       parser.advance();
       const initExpr = parseExpression(parser, variables);
+      // Validate initial value against declared type
+      if (declaredType) {
+        validateTypeAnnotation(initExpr, declaredType);
+      }
+      variables.set(name, { mutable: isMut, type: declaredType });
       statements.push({ type: "let", name, mutable: isMut, init: initExpr });
     } else if (parser.peek().type === "IDENTIFIER") {
       const name = parser.peek().value;
@@ -167,10 +206,17 @@ function parse(tokens) {
         if (!variables.has(name)) {
           throw new Error(`Undeclared variable: ${name}`);
         }
-        if (!variables.get(name)) {
+        const varInfo = variables.get(name);
+        const isMutable = typeof varInfo === "boolean" ? varInfo : varInfo.mutable;
+        if (!isMutable) {
           throw new Error(`Cannot assign to immutable variable: ${name}`);
         }
         const rhs = parseExpression(parser, variables);
+        // Validate assignment against declared type
+        const declaredType = typeof varInfo === "object" ? varInfo.type : null;
+        if (declaredType) {
+          validateTypeAnnotation(rhs, declaredType);
+        }
         statements.push({ type: "assign", name, value: rhs });
       } else {
         statements.push(parseExpression(parser, variables));
@@ -182,7 +228,10 @@ function parse(tokens) {
       parser.advance();
     }
   }
-  return { statements, variables: Array.from(variables.entries()).map(([name, mutable]) => ({ name, mutable })) };
+  return { statements, variables: Array.from(variables.entries()).map(([name, info]) => {
+    const isMutable = typeof info === "boolean" ? info : info.mutable;
+    return { name, mutable: isMutable };
+  }) };
 }
 
 function parseIdentifier(parser) {
