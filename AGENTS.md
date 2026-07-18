@@ -25,10 +25,22 @@ Entry point: `compile(source)` in `index.js`.
 
 ## Architecture
 
-- `index.js` — single-file compiler (tokenizer, parser, generator)
+- `index.js` — slim entry point, imports from `src/`
+- `src/types.js` — type constants (`VALID_SUFFIXES`, `SUFFIX_RANGES`) and utilities (`parseNumberLiteral`, `validateTypeAnnotation`, `inferType`)
+- `src/tokenizer.js` — `tokenize(source)` → token array with EOF sentinel
+- `src/parser.js` — `parse(tokens)` → `{ statements, variables, functions, structs }`
+- `src/generator.js` — `generate()`, `generateExpr()` → JavaScript code string
 - `index.test.js` — test suite using Bun's test runner
 - `bunfig.toml` — test configuration (coverage settings)
 - `.github/hooks/hooks.json` — pre-commit hooks
+
+### Module Dependencies
+
+```
+index.js → tokenizer.js → types.js
+          parser.js   → types.js
+          generator.js (no imports, pure AST→code)
+```
 
 ### Parser Pattern
 
