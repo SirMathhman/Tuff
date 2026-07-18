@@ -216,4 +216,61 @@ test("unary minus in expression", () => {
   expectValid("-(1 + 2)", "", -3);
 });
 
+// Let statement tests
+test("simple let statement", () => {
+  expectValid("let x = 42; x", "", 42);
+});
+
+test("let with expression", () => {
+  expectValid("let x = 1 + 2; x * 3", "", 9);
+});
+
+test("let with suffix", () => {
+  expectValid("let x = 200U8; x + 1", "", 201);
+});
+
+test("let with negative value", () => {
+  expectValid("let x = -10; x + 5", "", -5);
+});
+
+test("multiple let statements", () => {
+  expectValid("let x = 10; let y = 20; x + y", "", 30);
+});
+
+test("let used in complex expression", () => {
+  expectValid("let x = 5; let y = 3; x * y + 1", "", 16);
+});
+
+test("let with float", () => {
+  expectValid("let x = 3.14; x * 2", "", 6.28);
+});
+
+test("let with F32 suffix", () => {
+  expectValid("let x = 3.14F32; x", "", parseFloat(3.14.toPrecision(6)));
+});
+
+test("let variable in parentheses", () => {
+  expectValid("let x = 2; (x + 3) * 4", "", 20);
+});
+
+test("let with out-of-range suffix is invalid", () => {
+  expectInvalid("let x = 300U8; x");
+});
+
+test("let with invalid identifier", () => {
+  expectInvalid("let 123 = 42;");
+});
+
+test("let without initializer", () => {
+  expectInvalid("let x;");
+});
+
+test("let with duplicate name", () => {
+  expectInvalid("let x = 1; let x = 2;");
+});
+
+test("use undeclared variable", () => {
+  expectInvalid("let x = 1; y");
+});
+
 

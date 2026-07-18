@@ -21,8 +21,8 @@ function validateSuffix(numStr, suffix, negative) {
 
 export function compile(source) {
   const tokens = tokenize(source);
-  const statements = parse(tokens);
-  return generate(statements);
+  const { statements, variables } = parse(tokens);
+  return generate(statements, variables);
 }
 
 function tokenize(source) {
@@ -49,7 +49,7 @@ function tokenize(source) {
       i++;
       continue;
     }
-    if (ch === "+" || ch === "*" || ch === "/" || ch === "%") {
+    if (ch === "+" || ch === "*" || ch === "/" || ch === "%" || ch === "=") {
       tokens.push({ type: "OP", value: ch });
       i++;
       continue;
@@ -101,6 +101,22 @@ function tokenize(source) {
       tokens.push({ type: "NUMBER", value: numStr, suffix });
       continue;
     }
+    // Handle identifiers and keywords
+    if ((ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_") {
+      let ident = "";
+      while (i < source.length && ((source[i] >= "a" && source[i] <= "z") || (source[i] >= "A" && source[i] <= "Z") || (source[i] >= "0" && source[i] <= "9") || source[i] === "_")) {
+        ident += source[i];
+        i++;
+      }
+      if (ident === "let") {
+        tokens.push({ type: "LET" });
+      } else if (ident === "return") {
+        tokens.push({ type: "RETURN" });
+      } else {
+        tokens.push({ type: "IDENTIFIER", value: ident });
+      }
+      continue;
+    }
     throw new Error(`Unexpected character: ${ch}`);
   }
   tokens.push({ type: "EOF" });
@@ -121,58 +137,90 @@ function parse(tokens) {
       return this.tokens[this.pos++];
     },
   };
+  const variables = new Set();
   const statements = [];
   while (!parser.atEOF()) {
-    statements.push(parseExpression(parser));
+    if (parser.peek().type === "LET") {
+      parser.advance();
+      const name = parseIdentifier(parser);
+      if (variables.has(name)) {
+        throw new Error(`Duplicate variable: ${name}`);
+      }
+      variables.add(name);
+      if (parser.peek().type !== "OP" || parser.peek().value !== "=") {
+        throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
+      }
+      parser.advance();
+      const initExpr = parseExpression(parser, variables);
+      statements.push({ type: "let", name, init: initExpr });
+    } else {
+      statements.push(parseExpression(parser, variables));
+    }
     if (parser.peek().type === "SEMICOLON") {
       parser.advance();
     }
   }
-  return statements;
+  return { statements, variables: Array.from(variables) };
 }
 
-function parseExpression(parser) {
-  return parseAddSub(parser);
+function parseIdentifier(parser) {
+  const token = parser.peek();
+  if (token.type !== "IDENTIFIER") {
+    throw new Error(`Expected identifier, got ${token.type}`);
+  }
+  parser.advance();
+  return token.value;
 }
 
-function parseAddSub(parser) {
-  let left = parseMulDivMod(parser);
+function parseExpression(parser, variables) {
+  return parseAddSub(parser, variables);
+}
+
+function parseAddSub(parser, variables) {
+  let left = parseMulDivMod(parser, variables);
   while (parser.peek().type === "OP" && (parser.peek().value === "+" || parser.peek().value === "-")) {
     const op = parser.advance().value;
-    const right = parseMulDivMod(parser);
+    const right = parseMulDivMod(parser, variables);
     left = { type: "binary", op, left, right };
   }
   return left;
 }
 
-function parseMulDivMod(parser) {
-  let left = parseUnary(parser);
+function parseMulDivMod(parser, variables) {
+  let left = parseUnary(parser, variables);
   while (parser.peek().type === "OP" && (parser.peek().value === "*" || parser.peek().value === "/" || parser.peek().value === "%")) {
     const op = parser.advance().value;
-    const right = parseUnary(parser);
+    const right = parseUnary(parser, variables);
     left = { type: "binary", op, left, right };
   }
   return left;
 }
 
-function parseUnary(parser) {
+function parseUnary(parser, variables) {
   if (parser.peek().type === "OP" && parser.peek().value === "-") {
     parser.advance();
-    const operand = parseUnary(parser);
+    const operand = parseUnary(parser, variables);
     return { type: "unary", op: "-", operand };
   }
-  return parsePrimary(parser);
+  return parsePrimary(parser, variables);
 }
 
-function parsePrimary(parser) {
+function parsePrimary(parser, variables) {
   const token = parser.peek();
   if (token.type === "NUMBER") {
     parser.advance();
     return { type: "number", value: token.value, suffix: token.suffix, negative: token.negative };
   }
+  if (token.type === "IDENTIFIER") {
+    parser.advance();
+    if (!variables.has(token.value)) {
+      throw new Error(`Undeclared variable: ${token.value}`);
+    }
+    return { type: "identifier", name: token.value };
+  }
   if (token.type === "LPAREN") {
     parser.advance();
-    const expr = parseExpression(parser);
+    const expr = parseExpression(parser, variables);
     if (parser.peek().type !== "RPAREN") {
       throw new Error(`Expected ), got ${parser.peek().type}`);
     }
@@ -196,16 +244,21 @@ function clampExpr(value, suffix) {
   }
 }
 
-function generate(statements) {
+function generate(statements, variables) {
   if (statements.length === 0) return "return 0;";
   let code = "";
   for (let i = 0; i < statements.length; i++) {
-    const expr = statements[i];
-    const value = generateExpr(expr);
-    if (i === statements.length - 1) {
-      code += `return ${value};`;
+    const stmt = statements[i];
+    if (stmt.type === "let") {
+      const initValue = generateExpr(stmt.init);
+      code += `let ${stmt.name} = ${initValue};\n`;
     } else {
-      code += `${value};`;
+      const value = generateExpr(stmt);
+      if (i === statements.length - 1) {
+        code += `return ${value};`;
+      } else {
+        code += `${value};`;
+      }
     }
   }
   return code;
@@ -218,6 +271,9 @@ function generateExpr(node) {
       value = `-${value}`;
     }
     return clampExpr(value, node.suffix);
+  }
+  if (node.type === "identifier") {
+    return node.name;
   }
   if (node.type === "unary") {
     return `-${generateExpr(node.operand)}`;
