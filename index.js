@@ -110,6 +110,8 @@ function tokenize(source) {
       }
       if (ident === "let") {
         tokens.push({ type: "LET" });
+      } else if (ident === "mut") {
+        tokens.push({ type: "MUT" });
       } else if (ident === "return") {
         tokens.push({ type: "RETURN" });
       } else {
@@ -130,29 +132,49 @@ function parse(tokens) {
     atEOF: function () {
       return this.peek().type === "EOF";
     },
-    peek: function () {
-      return this.tokens[this.pos];
+    peek: function (offset) {
+      return this.tokens[this.pos + (offset || 0)];
     },
     advance: function () {
       return this.tokens[this.pos++];
     },
   };
-  const variables = new Set();
+  const variables = new Map();
   const statements = [];
   while (!parser.atEOF()) {
     if (parser.peek().type === "LET") {
       parser.advance();
+      const isMut = parser.peek().type === "MUT";
+      if (isMut) {
+        parser.advance();
+      }
       const name = parseIdentifier(parser);
       if (variables.has(name)) {
         throw new Error(`Duplicate variable: ${name}`);
       }
-      variables.add(name);
+      variables.set(name, isMut);
       if (parser.peek().type !== "OP" || parser.peek().value !== "=") {
         throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
       }
       parser.advance();
       const initExpr = parseExpression(parser, variables);
-      statements.push({ type: "let", name, init: initExpr });
+      statements.push({ type: "let", name, mutable: isMut, init: initExpr });
+    } else if (parser.peek().type === "IDENTIFIER") {
+      const name = parser.peek().value;
+      if (parser.peek(1)?.type === "OP" && parser.peek(1)?.value === "=") {
+        parser.advance();
+        parser.advance();
+        if (!variables.has(name)) {
+          throw new Error(`Undeclared variable: ${name}`);
+        }
+        if (!variables.get(name)) {
+          throw new Error(`Cannot assign to immutable variable: ${name}`);
+        }
+        const rhs = parseExpression(parser, variables);
+        statements.push({ type: "assign", name, value: rhs });
+      } else {
+        statements.push(parseExpression(parser, variables));
+      }
     } else {
       statements.push(parseExpression(parser, variables));
     }
@@ -160,7 +182,7 @@ function parse(tokens) {
       parser.advance();
     }
   }
-  return { statements, variables: Array.from(variables) };
+  return { statements, variables: Array.from(variables.entries()).map(([name, mutable]) => ({ name, mutable })) };
 }
 
 function parseIdentifier(parser) {
@@ -252,6 +274,9 @@ function generate(statements, variables) {
     if (stmt.type === "let") {
       const initValue = generateExpr(stmt.init);
       code += `let ${stmt.name} = ${initValue};\n`;
+    } else if (stmt.type === "assign") {
+      const rhsValue = generateExpr(stmt.value);
+      code += `${stmt.name} = ${rhsValue};\n`;
     } else {
       const value = generateExpr(stmt);
       if (i === statements.length - 1) {

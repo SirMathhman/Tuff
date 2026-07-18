@@ -273,4 +273,49 @@ test("use undeclared variable", () => {
   expectInvalid("let x = 1; y");
 });
 
+// let mut and assignment tests
+test("let mut declaration", () => {
+  expectValid("let mut x = 42; x", "", 42);
+});
+
+test("let mut reassignment", () => {
+  expectValid("let mut x = 42; x = 10; x", "", 10);
+});
+
+test("let mut multiple reassignments", () => {
+  expectValid("let mut x = 1; x = 2; x = 3; x", "", 3);
+});
+
+test("let mut with expression", () => {
+  expectValid("let mut x = 1; x = x + 1; x", "", 2);
+});
+
+test("let mut with complex expression", () => {
+  expectValid("let mut x = 5; x = x * 2 + 3; x", "", 13);
+});
+
+test("let mut with suffix", () => {
+  expectValid("let mut x = 200U8; x = 100U8; x", "", 100);
+});
+
+test("let mut with negative value", () => {
+  expectValid("let mut x = 10; x = -5; x", "", -5);
+});
+
+test("let mut used in expression after reassignment", () => {
+  expectValid("let mut x = 10; let y = 20; x = y; x + x", "", 40);
+});
+
+test("assign to immutable variable is invalid", () => {
+  expectInvalid("let x = 42; x = 10;");
+});
+
+test("let mut with out-of-range reassignment is invalid", () => {
+  expectInvalid("let mut x = 200U8; x = 300U8;");
+});
+
+test("let mut without initializer", () => {
+  expectInvalid("let mut x;");
+});
+
 
