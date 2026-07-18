@@ -1,4 +1,4 @@
-import { VALID_SUFFIXES, inferType, validateTypeAnnotation } from "./types.js";
+import { VALID_SUFFIXES, inferType, validateTypeAnnotation, isTupleType, splitTupleType, getTupleElementType } from "./types.js";
 
 export function parse(tokens) {
   const parser = {
@@ -135,6 +135,10 @@ function parseType(parser, structs) {
   if (parser.peek().type === "LBRACKET") {
     return parseArrayType(parser, structs);
   }
+  // Check for tuple type (Type1, Type2, ...)
+  if (parser.peek().type === "LPAREN") {
+    return parseTupleType(parser, structs);
+  }
   const typeToken = parser.peek();
   if (typeToken.type !== "IDENTIFIER") {
     throw new Error(`Expected type, got ${typeToken.type}`);
@@ -145,6 +149,25 @@ function parseType(parser, structs) {
   }
   parser.advance();
   return typeVal;
+}
+
+function parseTupleType(parser, structs) {
+  parser.advance(); // consume '('
+  if (parser.peek().type === "RPAREN") {
+    throw new Error("Empty tuple type is not allowed");
+  }
+  const elementTypes = [];
+  while (parser.peek().type !== "RPAREN") {
+    if (elementTypes.length > 0 && parser.peek().type === "COMMA") {
+      parser.advance(); // consume ','
+    }
+    elementTypes.push(parseType(parser, structs));
+  }
+  if (elementTypes.length === 0) {
+    throw new Error("Empty tuple type is not allowed");
+  }
+  parser.advance(); // consume ')'
+  return `(${elementTypes.join(", ")})`;
 }
 
 function parseArrayType(parser, structs) {
@@ -247,6 +270,15 @@ function parseReturnType(parser, structs) {
     throw new Error(`Expected : for return type, got ${parser.peek().type}`);
   }
   parser.advance(); // consume ':'
+  // Handle tuple return types like (I32, I32)
+  if (parser.peek().type === "LPAREN") {
+    const tupleType = parseTupleType(parser, structs);
+    if (parser.peek().type !== "ARROW") {
+      throw new Error(`Expected => after return type, got ${parser.peek().type}`);
+    }
+    parser.advance(); // consume '=>'
+    return tupleType;
+  }
   const retTypeToken = parser.peek();
   if (retTypeToken.type !== "IDENTIFIER") {
     throw new Error(`Expected return type after :, got ${retTypeToken.type}`);
@@ -288,19 +320,30 @@ function skipFunctionBody(parser) {
 function parseFieldAccess(parser, name, variables, functions, structs) {
   parser.advance(); // consume name
   parser.advance(); // consume DOT
+  let current = { type: "identifier", name };
   const fieldToken = parser.peek();
-  if (fieldToken.type !== "IDENTIFIER") {
-    throw new Error(`Expected field name, got ${fieldToken.type}`);
+  if (fieldToken.type === "NUMBER") {
+    // Tuple index access: x.0, x.1, etc.
+    current = parseTupleIndexToken(parser, current, variables, structs);
+  } else if (fieldToken.type === "IDENTIFIER") {
+    parser.advance();
+    current = buildFieldAccess(current, fieldToken.value, variables, structs);
+  } else {
+    throw new Error(`Expected field name or tuple index, got ${fieldToken.type}`);
   }
-  const field = fieldToken.value;
-  parser.advance();
-  // Check for chained field access: obj.field.subfield or obj.field[index]
-  let current = { type: "fieldAccess", object: { type: "identifier", name }, field };
+  // Check for chained access: obj.field.subfield, obj.0.1, obj.field[index], etc.
   while (parser.peek().type === "DOT" || parser.peek().type === "LBRACKET") {
     if (parser.peek().type === "DOT") {
       parser.advance(); // consume DOT
-      const nextField = parseIdentifier(parser);
-      current = { type: "fieldAccess", object: current, field: nextField };
+      const nextToken = parser.peek();
+      if (nextToken.type === "NUMBER") {
+        current = parseTupleIndexToken(parser, current, variables, structs);
+      } else if (nextToken.type === "IDENTIFIER") {
+        const nextField = parseIdentifier(parser);
+        current = buildFieldAccess(current, nextField, variables, structs);
+      } else {
+        throw new Error(`Expected field name or tuple index, got ${nextToken.type}`);
+      }
     } else {
       current = parseArrayIndexChain(parser, current, variables, functions, structs);
     }
@@ -316,6 +359,71 @@ function parseArrayIndexChain(parser, base, variables, functions, structs) {
   }
   parser.advance(); // consume ']'
   return { type: "arrayIndex", name: base, index };
+}
+
+// Resolves the static type of an expression using variable/struct declarations,
+// unlike inferType which has no access to declared variable types.
+function resolveExprType(expr, variables, structs) {
+  if (expr.type === "identifier") {
+    const info = variables.get(expr.name);
+    return typeof info === "object" ? info.type : "unknown";
+  }
+  if (expr.type === "tupleIndex") {
+    const baseType = resolveExprType(expr.tuple, variables, structs);
+    if (isTupleType(baseType)) {
+      return getTupleElementType(baseType, expr.index);
+    }
+    return "unknown";
+  }
+  if (expr.type === "fieldAccess") {
+    const baseType = resolveExprType(expr.object, variables, structs);
+    if (structs.has(baseType)) {
+      const fieldDef = structs.get(baseType).fields.find((f) => f.name === expr.field);
+      return fieldDef ? fieldDef.type : "unknown";
+    }
+    return "unknown";
+  }
+  if (expr.type === "tupleLiteral") {
+    return `(${expr.elements.map((e) => resolveExprType(e, variables, structs)).join(", ")})`;
+  }
+  return inferType(expr);
+}
+
+// Consumes a (possibly dot-chained, e.g. "0.1") tuple index NUMBER token and
+// builds the corresponding chain of tupleIndex nodes on top of `base`.
+function parseTupleIndexToken(parser, base, variables, structs) {
+  const token = parser.peek();
+  if (token.suffix) {
+    throw new Error(`Tuple index must be a plain integer, got ${token.value}${token.suffix}`);
+  }
+  if (token.negative) {
+    throw new Error(`Tuple index must be non-negative, got ${token.value}`);
+  }
+  parser.advance(); // consume NUMBER
+  let current = base;
+  for (const part of token.value.split(".")) {
+    const index = parseInt(part, 10);
+    if (index < 0) {
+      throw new Error(`Tuple index must be non-negative, got ${part}`);
+    }
+    const baseType = resolveExprType(current, variables, structs);
+    if (isTupleType(baseType)) {
+      const elTypes = splitTupleType(baseType);
+      if (index >= elTypes.length) {
+        throw new Error(`Tuple index ${index} out of bounds (length ${elTypes.length})`);
+      }
+    }
+    current = { type: "tupleIndex", tuple: current, index };
+  }
+  return current;
+}
+
+function buildFieldAccess(objExpr, fieldName, variables, structs) {
+  const baseType = resolveExprType(objExpr, variables, structs);
+  if (isTupleType(baseType)) {
+    throw new Error(`Tuple index must be a constant integer, got field '${fieldName}'`);
+  }
+  return { type: "fieldAccess", object: objExpr, field: fieldName };
 }
 
 function validateFieldMutable(fieldExpr, variables, structs) {
@@ -387,15 +495,17 @@ function validateStructFieldValue(value, expectedType, structs) {
   }
 }
 
-function parseCompoundOrAssign(parser, variables, functions, structs, target, assignFn) {
+function parseCompoundOrAssign(parser, variables, functions, structs, target, validateFn, assignFn) {
   if (parser.peek().type === "COMPOUND") {
     const op = parser.peek().value;
     parser.advance();
+    validateFn();
     const rhs = parseExpression(parser, variables, functions, structs);
     return { type: "compoundAssign", target, op, value: rhs };
   }
   if (parser.peek().type === "OP" && parser.peek().value === "=") {
     parser.advance();
+    validateFn();
     return assignFn();
   }
   return null;
@@ -424,7 +534,12 @@ function parseStatement(parser, variables, functions, structs) {
       throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
     }
     parser.advance();
-    const initExpr = parseExpression(parser, variables, functions, structs);
+    let initExpr = parseExpression(parser, variables, functions, structs);
+    // A parenthesized single expression like `(42)` parses as a plain group,
+    // not a tupleLiteral; coerce it when the declared type is a 1-tuple.
+    if (declaredType && isTupleType(declaredType) && initExpr.type !== "tupleLiteral" && splitTupleType(declaredType).length === 1) {
+      initExpr = { type: "tupleLiteral", elements: [initExpr] };
+    }
     if (declaredType) {
       validateTypeAnnotation(initExpr, declaredType, structs);
     }
@@ -437,20 +552,22 @@ function parseStatement(parser, variables, functions, structs) {
     // Check for struct field access: obj.field or obj.field = value
     if (parser.peek(1)?.type === "DOT") {
       const fieldExpr = parseFieldAccess(parser, name, variables, functions, structs);
-      const assignResult = parseCompoundOrAssign(parser, variables, functions, structs, fieldExpr, () => {
-        validateFieldMutable(fieldExpr, variables, structs);
-        return { type: "fieldAssign", target: fieldExpr, value: parseExpression(parser, variables, functions, structs) };
-      });
+      const assignResult = parseCompoundOrAssign(
+        parser, variables, functions, structs, fieldExpr,
+        () => validateFieldMutable(fieldExpr, variables, structs),
+        () => ({ type: "fieldAssign", target: fieldExpr, value: parseExpression(parser, variables, functions, structs) }),
+      );
       if (assignResult) return assignResult;
       return parseBinaryContinuation(parser, variables, functions, structs, fieldExpr);
     }
     // Check for array index assignment: arr[index] = value or arr[index] op= value
     if (parser.peek(1)?.type === "LBRACKET") {
       const idxExpr = parseArrayIndex(parser, name, variables, functions, structs);
-      const assignResult = parseCompoundOrAssign(parser, variables, functions, structs, idxExpr, () => {
-        validateMutable(name, variables);
-        return { type: "arrayAssign", name, index: idxExpr.index, value: parseExpression(parser, variables, functions, structs) };
-      });
+      const assignResult = parseCompoundOrAssign(
+        parser, variables, functions, structs, idxExpr,
+        () => validateMutable(name, variables),
+        () => ({ type: "arrayAssign", name, index: idxExpr.index, value: parseExpression(parser, variables, functions, structs) }),
+      );
       if (assignResult) return assignResult;
       return parseBinaryContinuation(parser, variables, functions, structs, idxExpr);
     }
@@ -551,6 +668,13 @@ function parseFn(parser, variables, functions, structs) {
     fnVars.set(p, { mutable: true, type: sigParts.paramTypes[p] });
   }
   const body = parseBlockStatements(parser, fnVars, functions, structs);
+  if (isTupleType(sigParts.retType)) {
+    const lastStmt = body[body.length - 1];
+    const isStmtType = (s) => s && (s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "blockStmt" || s.type === "compoundAssign");
+    if (lastStmt && !isStmtType(lastStmt)) {
+      validateTypeAnnotation(lastStmt, sigParts.retType, structs);
+    }
+  }
   return { type: "fn", name, params: sigParts.params, paramTypes: sigParts.paramTypes, retType: sigParts.retType, body };
 }
 
@@ -575,6 +699,12 @@ function parseFnCall(parser, name, variables, functions, structs) {
   const fn = functions.get(name);
   if (args.length !== fn.params.length) {
     throw new Error(`Function ${name} expects ${fn.params.length} arguments, got ${args.length}`);
+  }
+  for (let i = 0; i < args.length; i++) {
+    const paramType = fn.paramTypes[fn.params[i]];
+    if (isTupleType(paramType)) {
+      validateTypeAnnotation(args[i], paramType, structs);
+    }
   }
   return { type: "fnCall", name, args };
 }
@@ -755,13 +885,7 @@ function parseExpression(parser, variables, functions, structs) {
 }
 
 function parseBinaryContinuation(parser, variables, functions, structs, left) {
-  let current = left;
-  while (parser.peek().type === "OP" && parser.peek().value === "+") {
-    parser.advance();
-    const right = parsePrimary(parser, variables, functions, structs);
-    current = { type: "binary", op: "+", left: current, right };
-  }
-  return current;
+  return parseOr(parser, variables, functions, structs, left);
 }
 
 function isBoolType(expr, variables, functions) {
@@ -779,8 +903,8 @@ function isBoolType(expr, variables, functions) {
   return false;
 }
 
-function parseOr(parser, variables, functions, structs) {
-  let left = parseAnd(parser, variables, functions, structs);
+function parseOr(parser, variables, functions, structs, left) {
+  left = parseAnd(parser, variables, functions, structs, left);
   while (parser.peek().type === "OR") {
     parser.advance();
     const right = parseAnd(parser, variables, functions, structs);
@@ -795,8 +919,8 @@ function parseOr(parser, variables, functions, structs) {
   return left;
 }
 
-function parseAnd(parser, variables, functions, structs) {
-  let left = parseComparison(parser, variables, functions, structs);
+function parseAnd(parser, variables, functions, structs, left) {
+  left = parseComparison(parser, variables, functions, structs, left);
   while (parser.peek().type === "AND") {
     parser.advance();
     const right = parseComparison(parser, variables, functions, structs);
@@ -811,8 +935,8 @@ function parseAnd(parser, variables, functions, structs) {
   return left;
 }
 
-function parseComparison(parser, variables, functions, structs) {
-  let left = parseAddSub(parser, variables, functions, structs);
+function parseComparison(parser, variables, functions, structs, left) {
+  left = parseAddSub(parser, variables, functions, structs, left);
   while (parser.peek().type === "CMP") {
     const op = parser.advance().value;
     const right = parseAddSub(parser, variables, functions, structs);
@@ -838,8 +962,8 @@ function parseComparison(parser, variables, functions, structs) {
   return left;
 }
 
-function parseAddSub(parser, variables, functions, structs) {
-  let left = parseMulDivMod(parser, variables, functions, structs);
+function parseAddSub(parser, variables, functions, structs, left) {
+  left = parseMulDivMod(parser, variables, functions, structs, left);
   while (parser.peek().type === "OP" && (parser.peek().value === "+" || parser.peek().value === "-")) {
     const op = parser.advance().value;
     const right = parseMulDivMod(parser, variables, functions, structs);
@@ -848,8 +972,8 @@ function parseAddSub(parser, variables, functions, structs) {
   return left;
 }
 
-function parseMulDivMod(parser, variables, functions, structs) {
-  let left = parseUnary(parser, variables, functions, structs);
+function parseMulDivMod(parser, variables, functions, structs, left) {
+  if (left === undefined) left = parseUnary(parser, variables, functions, structs);
   while (parser.peek().type === "OP" && (parser.peek().value === "*" || parser.peek().value === "/" || parser.peek().value === "%")) {
     const op = parser.advance().value;
     const right = parseUnary(parser, variables, functions);
@@ -873,6 +997,51 @@ function parseUnary(parser, variables, functions, structs) {
     return { type: "unary", op: "!", operand };
   }
   return parsePrimary(parser, variables, functions, structs);
+}
+
+function hasTopLevelComma(parser) {
+  // Check if content between ( and ) has a comma at the top level
+  const start = parser.pos;
+  parser.advance(); // skip '('
+  let depth = 0;
+  while (parser.peek().type !== "EOF") {
+    const t = parser.peek();
+    if (t.type === "LPAREN" || t.type === "LBRACE" || t.type === "LBRACKET") {
+      depth++;
+      parser.advance();
+    } else if (t.type === "RPAREN" || t.type === "RBRACE" || t.type === "RBRACKET") {
+      depth--;
+      parser.advance();
+    } else if (t.type === "COMMA" && depth === 0) {
+      parser.pos = start;
+      return true;
+    } else if (t.type === "RPAREN") {
+      parser.pos = start;
+      return false;
+    } else {
+      parser.advance();
+    }
+  }
+  parser.pos = start;
+  return false;
+}
+
+function parseTupleLiteral(parser, variables, functions, structs) {
+  parser.advance(); // consume '('
+  const elements = [];
+  if (parser.peek().type === "RPAREN") {
+    throw new Error("Empty tuple is not allowed");
+  }
+  elements.push(parseExpression(parser, variables, functions, structs));
+  while (parser.peek().type === "COMMA") {
+    parser.advance(); // consume ','
+    elements.push(parseExpression(parser, variables, functions, structs));
+  }
+  if (parser.peek().type !== "RPAREN") {
+    throw new Error(`Expected ) after tuple literal, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ')'
+  return { type: "tupleLiteral", elements };
 }
 
 function parsePrimary(parser, variables, functions, structs) {
@@ -901,12 +1070,18 @@ function parsePrimary(parser, variables, functions, structs) {
       result = { type: "identifier", name: token.value };
     }
   } else if (token.type === "LPAREN") {
-    parser.advance();
-    result = parseExpression(parser, variables, functions, structs);
-    if (parser.peek().type !== "RPAREN") {
-      throw new Error(`Expected ), got ${parser.peek().type}`);
+    // Distinguish tuple literal `(1, 2)` from parenthesized expression `(expr)`
+    // A tuple literal has a comma at the top level inside the parentheses
+    if (hasTopLevelComma(parser)) {
+      result = parseTupleLiteral(parser, variables, functions, structs);
+    } else {
+      parser.advance();
+      result = parseExpression(parser, variables, functions, structs);
+      if (parser.peek().type !== "RPAREN") {
+        throw new Error(`Expected ), got ${parser.peek().type}`);
+      }
+      parser.advance();
     }
-    parser.advance();
   } else if (token.type === "BOOL") {
     parser.advance();
     result = { type: "boolean", value: token.value };
@@ -925,12 +1100,15 @@ function parsePrimary(parser, variables, functions, structs) {
       const obj = result;
       parser.advance(); // consume DOT
       const fieldToken = parser.peek();
-      if (fieldToken.type !== "IDENTIFIER") {
-        throw new Error(`Expected field name, got ${fieldToken.type}`);
+      if (fieldToken.type === "NUMBER") {
+        // Tuple index access: x.0, x.1, etc.
+        result = parseTupleIndexToken(parser, obj, variables, structs);
+      } else if (fieldToken.type === "IDENTIFIER") {
+        parser.advance();
+        result = buildFieldAccess(obj, fieldToken.value, variables, structs);
+      } else {
+        throw new Error(`Expected field name or tuple index, got ${fieldToken.type}`);
       }
-      const field = fieldToken.value;
-      parser.advance();
-      result = { type: "fieldAccess", object: obj, field };
     } else {
       result = parseArrayIndexChain(parser, result, variables, functions, structs);
     }

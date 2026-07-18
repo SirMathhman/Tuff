@@ -11,7 +11,11 @@ export const SUFFIX_RANGES = {
 
 export function parseNumberLiteral(source, i, negative) {
   let numStr = "";
-  while (i < source.length && ((source[i] >= "0" && source[i] <= "9") || source[i] === ".")) {
+  while (
+    i < source.length &&
+    ((source[i] >= "0" && source[i] <= "9") ||
+      (source[i] === "." && i + 1 < source.length && source[i + 1] >= "0" && source[i + 1] <= "9"))
+  ) {
     numStr += source[i];
     i++;
   }
@@ -41,7 +45,7 @@ function validateSuffix(numStr, suffix, negative) {
   }
 }
 
-export function validateTypeAnnotation(expr, declaredType) {
+export function validateTypeAnnotation(expr, declaredType, structs) {
   const exprType = inferType(expr);
   // Validate Bool type
   if (declaredType === "Bool") {
@@ -53,6 +57,20 @@ export function validateTypeAnnotation(expr, declaredType) {
   // Reject boolean values for non-Bool types
   if (exprType === "Bool") {
     throw new Error(`Type mismatch: expected ${declaredType}, got Bool`);
+  }
+  // Handle tuple type validation
+  if (isTupleType(declaredType)) {
+    if (expr.type !== "tupleLiteral") {
+      throw new Error(`Type mismatch: expected tuple, got ${exprType}`);
+    }
+    const tupleElementTypes = splitTupleType(declaredType);
+    if (expr.elements.length !== tupleElementTypes.length) {
+      throw new Error(`Tuple length mismatch: expected ${tupleElementTypes.length}, got ${expr.elements.length}`);
+    }
+    for (let i = 0; i < expr.elements.length; i++) {
+      validateTypeAnnotation(expr.elements[i], tupleElementTypes[i], structs);
+    }
+    return;
   }
   // Handle array type validation
   if (declaredType.startsWith("[")) {
@@ -93,11 +111,52 @@ export function validateTypeAnnotation(expr, declaredType) {
   }
 }
 
+export function isTupleType(typeStr) {
+  return typeof typeStr === "string" && typeStr.startsWith("(") && typeStr.endsWith(")");
+}
+
+export function splitTupleType(typeStr) {
+  const inner = typeStr.slice(1, -1);
+  const parts = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (ch === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+export function getTupleElementType(tupleType, index) {
+  const parts = splitTupleType(tupleType);
+  if (index < 0 || index >= parts.length) return null;
+  return parts[index];
+}
+
 export function inferType(expr) {
   if (expr.type === "boolean") return "Bool";
   if (expr.type === "number") return expr.suffix || "number";
   if (expr.type === "identifier") return "unknown";
   if (expr.type === "structInstantiation") return expr.structName;
+  if (expr.type === "tupleLiteral") {
+    const elTypes = expr.elements.map(e => inferType(e));
+    return `(${elTypes.join(", ")})`;
+  }
+  if (expr.type === "tupleIndex") {
+    const baseType = inferType(expr.tuple);
+    if (isTupleType(baseType)) {
+      return getTupleElementType(baseType, expr.index);
+    }
+    return "unknown";
+  }
   if (expr.type === "arrayLiteral") {
     const elType = expr.elements.length > 0 ? inferType(expr.elements[0]) : "unknown";
     return `[${elType}; ${expr.elements.length}]`;

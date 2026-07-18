@@ -1143,6 +1143,164 @@ test("while with nested while", () => {
   expectValid("let mut x = 0; let mut y = 0; while (x < 2) { while (y < 3) { y = y + 1; }; x = x + 1; } x + y", "", 5);
 });
 
+// ==================== Tuple Types ====================
+
+test("tuple literal two elements", () => {
+  expectValid("let x: (I32, I32) = (1, 2); x.0", "", 1);
+});
+
+test("tuple literal three elements", () => {
+  expectValid("let x: (I32, Bool, I32) = (1, true, 2); x.1", "", 1);
+});
+
+test("tuple element access by index", () => {
+  expectValid("let x: (I32, I32, I32) = (10, 20, 30); x.0 + x.1 + x.2", "", 60);
+});
+
+test("tuple element access second index", () => {
+  expectValid("let x: (I32, I32) = (1, 2); x.1", "", 2);
+});
+
+test("tuple with heterogeneous types", () => {
+  expectValid("let x: (I32, Bool) = (42, false); x.0", "", 42);
+});
+
+test("tuple with bool element", () => {
+  expectValid("let x: (Bool, I32) = (true, 5); x.0", "", 1);
+});
+
+test("tuple used in expression", () => {
+  expectValid("let x: (I32, I32) = (3, 7); x.0 * x.1", "", 21);
+});
+
+test("tuple with F32 element", () => {
+  expectValid("let x: (F32, I32) = (2.5F32, 2); x.0", "", 2.5);
+});
+
+test("tuple type mismatch throws", () => {
+  expectInvalid("let x: (I32, I32) = (1, true)");
+});
+
+test("tuple length mismatch too few throws", () => {
+  expectInvalid("let x: (I32, I32, I32) = (1, 2)");
+});
+
+test("tuple length mismatch too many throws", () => {
+  expectInvalid("let x: (I32, I32) = (1, 2, 3)");
+});
+
+test("tuple without type annotation inferred", () => {
+  expectValid("let x = (1, 2); x.0", "", 1);
+});
+
+test("tuple immutable no assignment", () => {
+  expectInvalid("let x: (I32, I32) = (1, 2); x.0 = 5");
+});
+
+test("tuple immutable no compound assignment", () => {
+  expectInvalid("let x: (I32, I32) = (1, 2); x.0 += 5");
+});
+
+test("tuple as function parameter", () => {
+  expectValid("fn first(x: (I32, I32)) : I32 => { x.0 }; first((10, 20))", "", 10);
+});
+
+test("tuple as function return type", () => {
+  expectValid("fn makePair() : (I32, I32) => { (3, 4) }; makePair().0", "", 3);
+});
+
+test("tuple as function return type second element", () => {
+  expectValid("fn makePair() : (I32, I32) => { (3, 4) }; makePair().1", "", 4);
+});
+
+test("nested tuple", () => {
+  expectValid("let x: ((I32, I32), I32) = ((1, 2), 3); x.0.1", "", 2);
+});
+
+test("nested tuple outer access", () => {
+  expectValid("let x: ((I32, I32), I32) = ((1, 2), 3); x.1", "", 3);
+});
+
+test("tuple with struct element", () => {
+  expectValid("struct Point { x : I32, y : I32 }; let p = Point { x: 10, y: 20 }; let t: (Point, I32) = (p, 5); t.0.x", "", 10);
+});
+
+test("tuple in if expression", () => {
+  expectValid("let x: (I32, I32) = (if (true) { 1 } else { 2 }, 3); x.0", "", 1);
+});
+
+test("tuple empty is invalid", () => {
+  expectInvalid("let x: () = ()");
+});
+
+test("tuple single element", () => {
+  expectValid("let x: (I32) = (42); x.0", "", 42);
+});
+
+test("tuple out of bounds index throws", () => {
+  expectInvalid("let x: (I32, I32) = (1, 2); x.2");
+});
+
+test("tuple negative index throws", () => {
+  expectInvalid("let x: (I32, I32) = (1, 2); x.-1");
+});
+
+test("tuple function param type mismatch", () => {
+  expectInvalid("fn foo(x: (I32, I32)) : I32 => { x.0 }; foo((1, true))");
+});
+
+test("tuple return type mismatch", () => {
+  expectInvalid("fn foo() : (I32, I32) => { (1, true) }");
+});
+
+test("tuple with array element", () => {
+  expectValid("let x: (I32, [I32; 2]) = (1, [2, 3]); x.0", "", 1);
+});
+
+test("tuple literal in expression", () => {
+  expectValid("(1, 2).0", "", 1);
+});
+
+test("tuple literal in expression second element", () => {
+  expectValid("(1, 2).1", "", 2);
+});
+
+test("tuple of bools", () => {
+  expectValid("let x: (Bool, Bool) = (true, false); x.0", "", 1);
+});
+
+test("tuple with multiple bool elements", () => {
+  expectValid("let x: (Bool, Bool, Bool) = (true, false, true); x.2", "", 1);
+});
+
+test("tuple element used in binary expression", () => {
+  expectValid("let x: (I32, I32) = (10, 3); x.0 - x.1", "", 7);
+});
+
+test("tuple element in comparison", () => {
+  expectValid("let x: (I32, I32) = (5, 10); x.0 < x.1", "", 1);
+});
+
+test("tuple element access on function result", () => {
+  expectValid("fn getTuple() : (I32, I32) => { (7, 8) }; getTuple().0 + getTuple().1", "", 15);
+});
+
+test("tuple with F64 element", () => {
+  expectValid("let x: (F64, I32) = (3.14F64, 2); x.0", "", 3.14);
+});
+
+test("tuple type annotation with struct", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 1 }; let t: (S, S) = (s, s); t.0.x", "", 1);
+});
+
+test("tuple with mut instance field access", () => {
+  expectValid("struct S { mut x : I32 }; let mut s = S { x: 1 }; let t: (S, I32) = (s, 2); t.0.x", "", 1);
+});
+
+test("tuple element index must be constant", () => {
+  expectInvalid("let x: (I32, I32) = (1, 2); let i = 0; x.i");
+});
+
 test("while loop with let inside body", () => {
   expectValid("let mut x = 0; while (x < 2) { let y = 10; x = x + y; } x", "", 10);
 });

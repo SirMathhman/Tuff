@@ -211,5 +211,12 @@ export function generateExpr(node) {
   if (node.type === "fieldAssign") {
     return `${generateExpr(node.target)} = ${generateExpr(node.value)}`;
   }
+  if (node.type === "tupleLiteral") {
+    const elements = node.elements.map((e) => generateExpr(e)).join(", ");
+    return `[${elements}]`;
+  }
+  if (node.type === "tupleIndex") {
+    return `${generateExpr(node.tuple)}[${node.index}]`;
+  }
   throw new Error(`Unknown node type: ${node.type}`);
 }
