@@ -20,8 +20,44 @@ function tokenize(source) {
       i++;
       continue;
     }
+    if (ch === "(") {
+      tokens.push({ type: "LPAREN" });
+      i++;
+      continue;
+    }
+    if (ch === ")") {
+      tokens.push({ type: "RPAREN" });
+      i++;
+      continue;
+    }
+    if (ch === "+" || ch === "*" || ch === "/" || ch === "%") {
+      tokens.push({ type: "OP", value: ch });
+      i++;
+      continue;
+    }
     if (ch === "-") {
-      tokens.push({ type: "MINUS" });
+      // Check if this is a negative number literal (followed by digit)
+      if (i + 1 < source.length && source[i + 1] >= "0" && source[i + 1] <= "9") {
+        i++; // skip '-'
+        let numStr = "";
+        while (i < source.length && ((source[i] >= "0" && source[i] <= "9") || source[i] === ".")) {
+          numStr += source[i];
+          i++;
+        }
+        let suffix = "";
+        if (i < source.length && "UIF".includes(source[i])) {
+          while (i < source.length && ((source[i] >= "A" && source[i] <= "Z") || (source[i] >= "0" && source[i] <= "9"))) {
+            suffix += source[i];
+            i++;
+          }
+        }
+        if (suffix && !VALID_SUFFIXES.has(suffix)) {
+          throw new Error(`Invalid suffix: ${suffix}`);
+        }
+        tokens.push({ type: "NUMBER", value: numStr, suffix, negative: true });
+        continue;
+      }
+      tokens.push({ type: "OP", value: "-" });
       i++;
       continue;
     }
@@ -51,25 +87,78 @@ function tokenize(source) {
 }
 
 function parse(tokens) {
+  const parser = {
+    tokens,
+    pos: 0,
+    atEOF: function () {
+      return this.peek().type === "EOF";
+    },
+    peek: function () {
+      return this.tokens[this.pos];
+    },
+    advance: function () {
+      return this.tokens[this.pos++];
+    },
+  };
   const statements = [];
-  let i = 0;
-  while (tokens[i].type !== "EOF") {
-    let negative = false;
-    if (tokens[i].type === "MINUS") {
-      negative = true;
-      i++;
-    }
-    if (tokens[i].type !== "NUMBER") {
-      throw new Error(`Expected number, got ${tokens[i].type}`);
-    }
-    const numToken = tokens[i];
-    i++;
-    statements.push({ negative, value: numToken.value, suffix: numToken.suffix });
-    if (tokens[i].type === "SEMICOLON") {
-      i++;
+  while (!parser.atEOF()) {
+    statements.push(parseExpression(parser));
+    if (parser.peek().type === "SEMICOLON") {
+      parser.advance();
     }
   }
   return statements;
+}
+
+function parseExpression(parser) {
+  return parseAddSub(parser);
+}
+
+function parseAddSub(parser) {
+  let left = parseMulDivMod(parser);
+  while (parser.peek().type === "OP" && (parser.peek().value === "+" || parser.peek().value === "-")) {
+    const op = parser.advance().value;
+    const right = parseMulDivMod(parser);
+    left = { type: "binary", op, left, right };
+  }
+  return left;
+}
+
+function parseMulDivMod(parser) {
+  let left = parseUnary(parser);
+  while (parser.peek().type === "OP" && (parser.peek().value === "*" || parser.peek().value === "/" || parser.peek().value === "%")) {
+    const op = parser.advance().value;
+    const right = parseUnary(parser);
+    left = { type: "binary", op, left, right };
+  }
+  return left;
+}
+
+function parseUnary(parser) {
+  if (parser.peek().type === "OP" && parser.peek().value === "-") {
+    parser.advance();
+    const operand = parseUnary(parser);
+    return { type: "unary", op: "-", operand };
+  }
+  return parsePrimary(parser);
+}
+
+function parsePrimary(parser) {
+  const token = parser.peek();
+  if (token.type === "NUMBER") {
+    parser.advance();
+    return { type: "number", value: token.value, suffix: token.suffix, negative: token.negative };
+  }
+  if (token.type === "LPAREN") {
+    parser.advance();
+    const expr = parseExpression(parser);
+    if (parser.peek().type !== "RPAREN") {
+      throw new Error(`Expected ), got ${parser.peek().type}`);
+    }
+    parser.advance();
+    return expr;
+  }
+  throw new Error(`Unexpected token: ${token.type}`);
 }
 
 function clampExpr(value, suffix) {
@@ -101,9 +190,8 @@ function generate(statements) {
   if (statements.length === 0) return "return 0;";
   let code = "";
   for (let i = 0; i < statements.length; i++) {
-    const stmt = statements[i];
-    let value = stmt.negative ? `-${stmt.value}` : stmt.value;
-    value = clampExpr(value, stmt.suffix);
+    const expr = statements[i];
+    const value = generateExpr(expr);
     if (i === statements.length - 1) {
       code += `return ${value};`;
     } else {
@@ -111,4 +199,21 @@ function generate(statements) {
     }
   }
   return code;
+}
+
+function generateExpr(node) {
+  if (node.type === "number") {
+    let value = node.value;
+    if (node.negative) {
+      value = `-${value}`;
+    }
+    return clampExpr(value, node.suffix);
+  }
+  if (node.type === "unary") {
+    return `-${generateExpr(node.operand)}`;
+  }
+  if (node.type === "binary") {
+    return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
+  }
+  throw new Error(`Unknown node type: ${node.type}`);
 }

@@ -111,4 +111,105 @@ test("minus without number throws", () => {
   expectInvalid("-");
 });
 
+// Arithmetic tests
+test("addition", () => {
+  expectValid("1 + 2", "", 3);
+});
+
+test("subtraction", () => {
+  expectValid("10 - 3", "", 7);
+});
+
+test("multiplication", () => {
+  expectValid("4 * 5", "", 20);
+});
+
+test("division", () => {
+  expectValid("10 / 2", "", 5);
+});
+
+test("modulo", () => {
+  expectValid("10 % 3", "", 1);
+});
+
+test("operator precedence", () => {
+  expectValid("2 + 3 * 4", "", 14);
+});
+
+test("parentheses override precedence", () => {
+  expectValid("(2 + 3) * 4", "", 20);
+});
+
+test("chained addition", () => {
+  expectValid("1 + 2 + 3", "", 6);
+});
+
+test("chained subtraction", () => {
+  expectValid("10 - 2 - 3", "", 5);
+});
+
+test("mixed operators", () => {
+  expectValid("2 * 3 + 4 * 5", "", 26);
+});
+
+test("division with floats", () => {
+  expectValid("7 / 2", "", 3.5);
+});
+
+test("modulo with floats", () => {
+  expectValid("7.5 % 2", "", 1.5);
+});
+
+test("negative in expression", () => {
+  expectValid("-5 + 3", "", -2);
+});
+
+test("expression with suffix", () => {
+  expectValid("300U8 + 1", "", 256);
+});
+
+test("both operands with suffix", () => {
+  expectValid("300U8 + 300U8", "", 510);
+});
+
+test("nested parentheses", () => {
+  expectValid("((2 + 3)) * 4", "", 20);
+});
+
+test("complex expression", () => {
+  expectValid("(1 + 2) * (3 + 4)", "", 21);
+});
+
+test("expression with semicolon", () => {
+  expectValid("1 + 2;", "", 3);
+});
+
+test("multiple expressions last wins", () => {
+  expectValid("1 + 2; 3 + 4", "", 7);
+});
+
+test("invalid expression: missing operand", () => {
+  expectInvalid("1 +");
+});
+
+test("invalid expression: missing operand right", () => {
+  expectInvalid("+ 1");
+});
+
+test("invalid expression: empty parentheses", () => {
+  expectInvalid("()");
+});
+
+test("invalid expression: unclosed parenthesis", () => {
+  expectInvalid("(1 + 2");
+});
+
+test("invalid suffix on negative number", () => {
+  expectInvalid("-42U99");
+});
+
+test("unary minus in expression", () => {
+  expectValid("-(1 + 2)", "", -3);
+});
+
 
