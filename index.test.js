@@ -1151,4 +1151,197 @@ test("while with Bool-typed condition variable", () => {
   expectValid("let mut flag: Bool = true; let mut x = 0; while (flag) { x = x + 1; if (x >= 2) { flag = false; } } x", "", 2);
 });
 
+// Function tests
+test("simple function call", () => {
+  expectValid("fn add(a: U8, b: U8) : U8 => { a + b }; add(1, 2)", "", 3);
+});
+
+test("function with no parameters", () => {
+  expectValid("fn fortyTwo() : U8 => { 42 }; fortyTwo()", "", 42);
+});
+
+test("function with one parameter", () => {
+  expectValid("fn double(x: U8) : U8 => { x * 2 }; double(7)", "", 14);
+});
+
+test("function with three parameters", () => {
+  expectValid("fn sum(a: U8, b: U8, c: U8) : U8 => { a + b + c }; sum(1, 2, 3)", "", 6);
+});
+
+test("function returning Bool", () => {
+  expectValid("fn isPositive(x: U8) : Bool => { x > 0 }; isPositive(5)", "", 1);
+});
+
+test("function with Bool parameter", () => {
+  expectValid("fn notBool(x: Bool) : Bool => { !x }; notBool(true)", "", 0);
+});
+
+test("function called multiple times", () => {
+  expectValid("fn inc(x: U8) : U8 => { x + 1 }; inc(inc(0))", "", 2);
+});
+
+test("function with complex body", () => {
+  expectValid("fn max(a: U8, b: U8) : U8 => { if (a > b) a else b }; max(3, 7)", "", 7);
+});
+
+test("function with let inside body", () => {
+  expectValid("fn square(x: U8) : U8 => { let y = x * x; y }; square(5)", "", 25);
+});
+
+test("function with while inside body", () => {
+  expectValid("fn factorial(n: U8) : U8 => { let mut result = 1; let mut i = 1; while (i <= n) { result = result * i; i = i + 1; } result }; factorial(5)", "", 120);
+});
+
+test("function with compound assignment in body", () => {
+  expectValid("fn addTen(x: U8) : U8 => { x += 10; x }; addTen(5)", "", 15);
+});
+
+test("function with float return", () => {
+  expectValid("fn half(x: F64) : F64 => { x / 2.0 }; half(7.0)", "", 3.5);
+});
+
+test("function with F32 return", () => {
+  expectValid("fn pi() : F32 => { 3.14 }; pi()", "", parseFloat(3.14.toPrecision(6)));
+});
+
+test("function used in expression", () => {
+  expectValid("fn inc(x: U8) : U8 => { x + 1 }; inc(1) + inc(2)", "", 5);
+});
+
+test("function assigned to variable", () => {
+  expectValid("fn getVal() : U8 => { 42 }; let x = getVal(); x", "", 42);
+});
+
+test("function with comparison in body", () => {
+  expectValid("fn isEven(x: U8) : Bool => { x % 2 == 0 }; isEven(4)", "", 1);
+});
+
+test("function with nested function call", () => {
+  expectValid("fn addOne(x: U8) : U8 => { x + 1 }; fn addTwo(x: U8) : U8 => { addOne(addOne(x)) }; addTwo(5)", "", 7);
+});
+
+test("forward reference to function", () => {
+  expectValid("fn addTwo(x: U8) : U8 => { addOne(addOne(x)) }; fn addOne(x: U8) : U8 => { x + 1 }; addTwo(5)", "", 7);
+});
+
+test("mutual recursion", () => {
+  expectValid("fn isEven(x: U8) : Bool => { if (x == 0) true else isOdd(x - 1) }; fn isOdd(x: U8) : Bool => { if (x == 0) false else isEven(x - 1) }; isEven(4)", "", 1);
+});
+
+test("function with block expression in body", () => {
+  expectValid("fn getVal() : U8 => { { 42 } }; getVal()", "", 42);
+});
+
+test("function with if-else in body", () => {
+  expectValid("fn abs(x: I8) : I8 => { if (x >= 0) x else -x }; abs(-5)", "", 5);
+});
+
+test("function with multiple statements in body", () => {
+  expectValid("fn swapSum(a: U8, b: U8) : U8 => { let s = a + b; let d = a - b; s + d }; swapSum(3, 4)", "", 6);
+});
+
+test("function with Bool return and complex condition", () => {
+  expectValid("fn inRange(x: U8, lo: U8, hi: U8) : Bool => { x >= lo && x <= hi }; inRange(5, 1, 10)", "", 1);
+});
+
+test("function with I32 parameter", () => {
+  expectValid("fn negate(x: I32) : I32 => { -x }; negate(42)", "", -42);
+});
+
+test("function with U16 parameter", () => {
+  expectValid("fn addU16(a: U16, b: U16) : U16 => { a + b }; addU16(1000, 2000)", "", 3000);
+});
+
+test("function with U32 parameter", () => {
+  expectValid("fn addU32(a: U32, b: U32) : U32 => { a + b }; addU32(100, 200)", "", 300);
+});
+
+test("function with I16 parameter", () => {
+  expectValid("fn subI16(a: I16, b: I16) : I16 => { a - b }; subI16(10, 3)", "", 7);
+});
+
+test("function with I8 parameter", () => {
+  expectValid("fn addI8(a: I8, b: I8) : I8 => { a + b }; addI8(50, 30)", "", 80);
+});
+
+test("function with no return type annotation", () => {
+  expectInvalid("fn bad() => { 42 }; bad()");
+});
+
+test("function with missing parameter type", () => {
+  expectInvalid("fn bad(x) : U8 => { x }; bad(1)");
+});
+
+test("function with duplicate parameter name", () => {
+  expectInvalid("fn bad(x: U8, x: U8) : U8 => { x }; bad(1, 2)");
+});
+
+test("function with duplicate name", () => {
+  expectInvalid("fn f() : U8 => { 1 }; fn f() : U8 => { 2 }; f()");
+});
+
+test("function call with wrong number of args (too few)", () => {
+  expectInvalid("fn add(a: U8, b: U8) : U8 => { a + b }; add(1)");
+});
+
+test("function call with wrong number of args (too many)", () => {
+  expectInvalid("fn add(a: U8, b: U8) : U8 => { a + b }; add(1, 2, 3)");
+});
+
+test("function call with undeclared function", () => {
+  expectInvalid("undefinedFunc()");
+});
+
+test("function with missing opening brace", () => {
+  expectInvalid("fn f(x: U8) : U8 => x; f(1)");
+});
+
+test("function with missing closing brace", () => {
+  expectInvalid("fn f(x: U8) : U8 => { x; f(1)");
+});
+
+test("function with missing return type colon", () => {
+  expectInvalid("fn f(x: U8) U8 => { x }; f(1)");
+});
+
+test("function with missing arrow", () => {
+  expectInvalid("fn f(x: U8) : U8 { x }; f(1)");
+});
+
+test("function with missing LPAREN", () => {
+  expectInvalid("fn f : U8 => { 1 }; f()");
+});
+
+test("function with missing RPAREN", () => {
+  expectInvalid("fn f(x: U8 : U8 => { x }; f(1)");
+});
+
+test("function using variable from outer scope is invalid", () => {
+  expectInvalid("let x = 10; fn f() : U8 => { x }; f()");
+});
+
+test("function parameter shadows top-level variable is invalid", () => {
+  expectInvalid("let x = 10; fn f(x: U8) : U8 => { x }; f(5)");
+});
+
+test("function call in while condition", () => {
+  expectValid("fn isDone(x: U8) : Bool => { x >= 3 }; let mut i = 0; while (!isDone(i)) { i = i + 1; } i", "", 3);
+});
+
+test("function returning if-else expression", () => {
+  expectValid("fn sign(x: I8) : I8 => { if (x > 0) 1 else if (x < 0) -1 else 0 }; sign(-5)", "", -1);
+});
+
+test("function with empty body returns 0", () => {
+  expectValid("fn nothing() : U8 => { }; nothing()", "", 0);
+});
+
+test("function with semicolon in body", () => {
+  expectValid("fn f() : U8 => { 1; 2 }; f()", "", 2);
+});
+
+test("function call as argument to another function", () => {
+  expectValid("fn inc(x: U8) : U8 => { x + 1 }; fn add(a: U8, b: U8) : U8 => { a + b }; add(inc(1), inc(2))", "", 5);
+});
+
 

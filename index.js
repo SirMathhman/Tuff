@@ -88,8 +88,8 @@ function inferType(expr) {
 
 export function compile(source) {
   const tokens = tokenize(source);
-  const { statements, variables } = parse(tokens);
-  return generate(statements, variables);
+  const { statements, variables, functions } = parse(tokens);
+  return generate(statements, variables, functions);
 }
 
 function tokenize(source) {
@@ -196,6 +196,11 @@ function tokenize(source) {
       }
       continue;
     }
+    if (ch === "=" && i + 1 < source.length && source[i + 1] === ">") {
+      tokens.push({ type: "ARROW" });
+      i += 2;
+      continue;
+    }
     if (ch === "=") {
       tokens.push({ type: "OP", value: ch });
       i++;
@@ -203,6 +208,11 @@ function tokenize(source) {
     }
     if (ch === ":") {
       tokens.push({ type: "COLON" });
+      i++;
+      continue;
+    }
+    if (ch === ",") {
+      tokens.push({ type: "COMMA" });
       i++;
       continue;
     }
@@ -248,6 +258,8 @@ function tokenize(source) {
         tokens.push({ type: "ELSE" });
       } else if (ident === "while") {
         tokens.push({ type: "WHILE" });
+      } else if (ident === "fn") {
+        tokens.push({ type: "FN" });
       } else if (ident === "true") {
         tokens.push({ type: "BOOL", value: true });
       } else if (ident === "false") {
@@ -278,9 +290,12 @@ function parse(tokens) {
     },
   };
   const variables = new Map();
+  const functions = new Map();
+  // First pass: register all function signatures for forward references
+  registerFunctionSignatures(parser, functions);
   const statements = [];
   while (!parser.atEOF()) {
-    statements.push(parseStatement(parser, variables));
+    statements.push(parseStatement(parser, variables, functions));
     if (parser.peek().type === "SEMICOLON") {
       parser.advance();
     }
@@ -288,10 +303,120 @@ function parse(tokens) {
   return { statements, variables: Array.from(variables.entries()).map(([name, info]) => {
     const isMutable = typeof info === "boolean" ? info : info.mutable;
     return { name, mutable: isMutable };
-  }) };
+  }), functions: functions };
 }
 
-function parseStatement(parser, variables) {
+function registerFunctionSignatures(parser, functions) {
+  const savedPos = parser.pos;
+  while (!parser.atEOF()) {
+    if (parser.peek().type === "FN") {
+      const fnName = parseFnSignature(parser, functions);
+      // Skip the body
+      skipFunctionBody(parser);
+    } else {
+      parser.advance();
+    }
+  }
+  parser.pos = savedPos;
+}
+
+function parseFnSignature(parser, functions) {
+  parser.advance(); // consume 'fn'
+  const name = parseIdentifier(parser);
+  if (functions.has(name)) {
+    throw new Error(`Duplicate function: ${name}`);
+  }
+  const { params, paramTypes, retType } = parseFnSignatureParts(parser);
+  functions.set(name, { params, paramTypes, retType });
+  return name;
+}
+
+function parseFnSignatureParts(parser) {
+  if (parser.peek().type !== "LPAREN") {
+    throw new Error(`Expected ( after function name, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '('
+  const params = [];
+  const paramTypes = {};
+  while (parser.peek().type !== "RPAREN") {
+    if (params.length > 0 && parser.peek().type === "COMMA") {
+      parser.advance(); // consume ','
+    }
+    const paramName = parseIdentifier(parser);
+    if (params.includes(paramName)) {
+      throw new Error(`Duplicate parameter: ${paramName}`);
+    }
+    paramTypes[paramName] = parseTypeAnnotation(parser);
+    params.push(paramName);
+  }
+  parser.advance(); // consume ')'
+  const retType = parseReturnType(parser);
+  return { params, paramTypes, retType };
+}
+
+function parseTypeAnnotation(parser) {
+  if (parser.peek().type !== "COLON") {
+    throw new Error(`Expected : for type, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ':'
+  const typeToken = parser.peek();
+  if (typeToken.type !== "IDENTIFIER") {
+    throw new Error(`Expected type after :, got ${typeToken.type}`);
+  }
+  const typeVal = typeToken.value;
+  if (!VALID_SUFFIXES.has(typeVal)) {
+    throw new Error(`Invalid type annotation: ${typeVal}`);
+  }
+  parser.advance();
+  return typeVal;
+}
+
+function parseReturnType(parser) {
+  if (parser.peek().type !== "COLON") {
+    throw new Error(`Expected : for return type, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ':'
+  const retTypeToken = parser.peek();
+  if (retTypeToken.type !== "IDENTIFIER") {
+    throw new Error(`Expected return type after :, got ${retTypeToken.type}`);
+  }
+  const retType = retTypeToken.value;
+  if (!VALID_SUFFIXES.has(retType)) {
+    throw new Error(`Invalid return type annotation: ${retType}`);
+  }
+  parser.advance();
+  // Expect =>
+  if (parser.peek().type !== "ARROW") {
+    throw new Error(`Expected => after return type, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '=>'
+  return retType;
+}
+
+function skipFunctionBody(parser) {
+  if (parser.peek().type !== "LBRACE") {
+    throw new Error(`Expected { for function body, got ${parser.peek().type}`);
+  }
+  let depth = 0;
+  while (!parser.atEOF()) {
+    if (parser.peek().type === "LBRACE") {
+      depth++;
+    } else if (parser.peek().type === "RBRACE") {
+      depth--;
+      if (depth === 0) {
+        parser.advance(); // consume RBRACE
+        return;
+      }
+    }
+    parser.advance();
+  }
+  throw new Error("Unclosed function body");
+}
+
+function parseStatement(parser, variables, functions) {
+  if (parser.peek().type === "FN") {
+    return parseFn(parser, variables, functions);
+  }
   if (parser.peek().type === "LET") {
     parser.advance();
     const isMut = parser.peek().type === "MUT";
@@ -319,7 +444,7 @@ function parseStatement(parser, variables) {
       throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
     }
     parser.advance();
-    const initExpr = parseExpression(parser, variables);
+    const initExpr = parseExpression(parser, variables, functions);
     if (declaredType) {
       validateTypeAnnotation(initExpr, declaredType);
     }
@@ -332,58 +457,58 @@ function parseStatement(parser, variables) {
       const op = parser.peek(1).value;
       parser.advance();
       parser.advance();
-      const rhs = parseAssignmentRhs(parser, name, variables);
+      const rhs = parseAssignmentRhs(parser, name, variables, functions);
       return { type: "compoundAssign", name, op, value: rhs };
     }
     if (parser.peek(1)?.type === "OP" && parser.peek(1)?.value === "=") {
       parser.advance();
       parser.advance();
-      const rhs = parseAssignmentRhs(parser, name, variables);
+      const rhs = parseAssignmentRhs(parser, name, variables, functions);
       return { type: "assign", name, value: rhs };
     }
   }
   if (parser.peek().type === "IF") {
     // Parse condition first
-    const condition = parseIfCondition(parser, variables);
+    const condition = parseIfCondition(parser, variables, functions);
 
     // Check if branch starts with LBRACE
     if (parser.peek().type === "LBRACE") {
       // Try parsing block to determine if it's a statement or expression
       const savedPos = parser.pos;
-      const block = parseBlock(parser, variables, true);
+      const block = parseBlock(parser, variables, functions, true);
       if (block.type === "blockStmt") {
-        return parseIfStatementBranch(parser, variables, condition, block.statements);
+        return parseIfStatementBranch(parser, variables, functions, condition, block.statements);
       }
       // Block expression - use it as thenBranch for if-expression
       if (parser.peek().type !== "ELSE") {
         throw new Error(`Expected else, got ${parser.peek().type}`);
       }
       parser.advance(); // consume 'else'
-      return parseIfExpressionBranch(parser, variables, condition, block);
+      return parseIfExpressionBranch(parser, variables, functions, condition, block);
     }
     // Parse as if-expression (non-block branch)
-    const thenBranch = parseExpression(parser, variables);
+    const thenBranch = parseExpression(parser, variables, functions);
     if (parser.peek().type !== "ELSE") {
       throw new Error(`Expected else, got ${parser.peek().type}`);
     }
     parser.advance(); // consume 'else'
-    return parseIfExpressionBranch(parser, variables, condition, thenBranch);
+    return parseIfExpressionBranch(parser, variables, functions, condition, thenBranch);
   }
   if (parser.peek().type === "WHILE") {
-    return parseWhile(parser, variables);
+    return parseWhile(parser, variables, functions);
   }
   if (parser.peek().type === "LBRACE") {
-    const block = parseBlock(parser, variables, true);
+    const block = parseBlock(parser, variables, functions, true);
     if (block.type === "blockStmt") {
       return block;
     }
     /* block expression - continue parsing binary ops */
-    return parseBinaryContinuation(parser, variables, block);
+    return parseBinaryContinuation(parser, variables, functions, block);
   }
-  return parseExpression(parser, variables);
+  return parseExpression(parser, variables, functions);
 }
 
-function parseAssignmentRhs(parser, name, variables) {
+function parseAssignmentRhs(parser, name, variables, functions) {
   if (!variables.has(name)) {
     throw new Error(`Undeclared variable: ${name}`);
   }
@@ -392,7 +517,7 @@ function parseAssignmentRhs(parser, name, variables) {
   if (!isMutable) {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
   }
-  const rhs = parseExpression(parser, variables);
+  const rhs = parseExpression(parser, variables, functions);
   const declaredType = typeof varInfo === "object" ? varInfo.type : null;
   if (declaredType) {
     validateTypeAnnotation(rhs, declaredType);
@@ -400,14 +525,62 @@ function parseAssignmentRhs(parser, name, variables) {
   return rhs;
 }
 
-function parseIfCondition(parser, variables) {
+function parseFn(parser, variables, functions) {
+  parser.advance(); // consume 'fn'
+  const name = parseIdentifier(parser);
+  // Check for variable shadowing before parsing signature parts
+  const sigParts = parseFnSignatureParts(parser);
+  for (const p of sigParts.params) {
+    if (variables.has(p)) {
+      throw new Error(`Parameter ${p} shadows a top-level variable`);
+    }
+  }
+  // Parse body block
+  if (parser.peek().type !== "LBRACE") {
+    throw new Error(`Expected { for function body, got ${parser.peek().type}`);
+  }
+  // Create scoped variables for function body (only params, no outer scope)
+  const fnVars = new Map();
+  for (const p of sigParts.params) {
+    fnVars.set(p, { mutable: true, type: sigParts.paramTypes[p] });
+  }
+  const body = parseBlockStatements(parser, fnVars, functions);
+  return { type: "fn", name, params: sigParts.params, paramTypes: sigParts.paramTypes, retType: sigParts.retType, body };
+}
+
+function parseFnCall(parser, name, variables, functions) {
+  parser.advance(); // consume identifier
+  if (parser.peek().type !== "LPAREN") {
+    throw new Error(`Expected ( for function call, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '('
+  const args = [];
+  while (parser.peek().type !== "RPAREN") {
+    if (args.length > 0 && parser.peek().type === "COMMA") {
+      parser.advance(); // consume ','
+    }
+    args.push(parseExpression(parser, variables, functions));
+  }
+  parser.advance(); // consume ')'
+  // Validate function exists
+  if (!functions.has(name)) {
+    throw new Error(`Undeclared function: ${name}`);
+  }
+  const fn = functions.get(name);
+  if (args.length !== fn.params.length) {
+    throw new Error(`Function ${name} expects ${fn.params.length} arguments, got ${args.length}`);
+  }
+  return { type: "fnCall", name, args };
+}
+
+function parseIfCondition(parser, variables, functions) {
   parser.advance(); // consume 'if'
   if (parser.peek().type !== "LPAREN") {
     throw new Error(`Expected ( after if, got ${parser.peek().type}`);
   }
   parser.advance(); // consume '('
-  const condition = parseExpression(parser, variables);
-  if (!isBoolType(condition, variables)) {
+  const condition = parseExpression(parser, variables, functions);
+  if (!isBoolType(condition, variables, functions)) {
     throw new Error(`Expected Bool for if condition, got ${inferType(condition)}`);
   }
   if (parser.peek().type !== "RPAREN") {
@@ -417,8 +590,8 @@ function parseIfCondition(parser, variables) {
   return condition;
 }
 
-function parseIfExpressionBranch(parser, variables, condition, thenBranch) {
-  const elseBranch = parseExpression(parser, variables);
+function parseIfExpressionBranch(parser, variables, functions, condition, thenBranch) {
+  const elseBranch = parseExpression(parser, variables, functions);
   const thenType = inferType(thenBranch);
   const elseType = inferType(elseBranch);
   if (thenType !== elseType && thenType !== "unknown" && elseType !== "unknown") {
@@ -427,52 +600,52 @@ function parseIfExpressionBranch(parser, variables, condition, thenBranch) {
   return { type: "if", condition, thenBranch, elseBranch };
 }
 
-function parseIfStatementBranch(parser, variables, condition, thenBranch) {
+function parseIfStatementBranch(parser, variables, functions, condition, thenBranch) {
   let elseBranch = null;
   if (parser.peek().type === "ELSE") {
     parser.advance(); // consume 'else'
     if (parser.peek().type === "IF") {
-      const elseIfStmt = parseIfStatement(parser, variables);
+      const elseIfStmt = parseIfStatement(parser, variables, functions);
       elseBranch = [elseIfStmt];
     } else {
-      elseBranch = parseBlockStatements(parser, variables);
+      elseBranch = parseBlockStatements(parser, variables, functions);
     }
   }
   return { type: "ifStmt", condition, thenBranch, elseBranch };
 }
 
-function parseIfStatement(parser, variables) {
-  const condition = parseIfCondition(parser, variables);
-  const thenBranch = parseBlockStatements(parser, variables);
-  return parseIfStatementBranch(parser, variables, condition, thenBranch);
+function parseIfStatement(parser, variables, functions) {
+  const condition = parseIfCondition(parser, variables, functions);
+  const thenBranch = parseBlockStatements(parser, variables, functions);
+  return parseIfStatementBranch(parser, variables, functions, condition, thenBranch);
 }
 
-function parseWhile(parser, variables) {
+function parseWhile(parser, variables, functions) {
   parser.advance(); // consume 'while'
   if (parser.peek().type !== "LPAREN") {
     throw new Error(`Expected ( after while, got ${parser.peek().type}`);
   }
   parser.advance(); // consume '('
-  const condition = parseExpression(parser, variables);
-  if (!isBoolType(condition, variables)) {
+  const condition = parseExpression(parser, variables, functions);
+  if (!isBoolType(condition, variables, functions)) {
     throw new Error(`Expected Bool for while condition, got ${inferType(condition)}`);
   }
   if (parser.peek().type !== "RPAREN") {
     throw new Error(`Expected ) after while condition, got ${parser.peek().type}`);
   }
   parser.advance(); // consume ')'
-  const body = parseBlockStatements(parser, variables);
+  const body = parseBlockStatements(parser, variables, functions);
   return { type: "whileStmt", condition, body };
 }
 
-function parseBlockStatements(parser, variables) {
+function parseBlockStatements(parser, variables, functions) {
   if (parser.peek().type !== "LBRACE") {
     throw new Error(`Expected { for if branch, got ${parser.peek().type}`);
   }
   parser.advance(); // consume LBRACE
   const statements = [];
   while (parser.peek().type !== "RBRACE" && parser.peek().type !== "EOF") {
-    statements.push(parseStatement(parser, variables));
+    statements.push(parseStatement(parser, variables, functions));
     if (parser.peek().type === "SEMICOLON") {
       parser.advance();
     }
@@ -484,13 +657,13 @@ function parseBlockStatements(parser, variables) {
   return statements;
 }
 
-function parseBlock(parser, parentVariables, allowStatement) {
+function parseBlock(parser, parentVariables, functions, allowStatement) {
   parser.advance(); // consume LBRACE
   const blockVars = new Map(parentVariables);
   const statements = [];
   let lastHadSemicolon = false;
   while (parser.peek().type !== "RBRACE" && parser.peek().type !== "EOF") {
-    statements.push(parseStatement(parser, blockVars));
+    statements.push(parseStatement(parser, blockVars, functions));
     lastHadSemicolon = false;
     if (parser.peek().type === "SEMICOLON") {
       parser.advance();
@@ -523,21 +696,21 @@ function parseIdentifier(parser) {
   return token.value;
 }
 
-function parseExpression(parser, variables) {
-  return parseOr(parser, variables);
+function parseExpression(parser, variables, functions) {
+  return parseOr(parser, variables, functions);
 }
 
-function parseBinaryContinuation(parser, variables, left) {
+function parseBinaryContinuation(parser, variables, functions, left) {
   let current = left;
   while (parser.peek().type === "OP" && parser.peek().value === "+") {
     parser.advance();
-    const right = parsePrimary(parser, variables);
+    const right = parsePrimary(parser, variables, functions);
     current = { type: "binary", op: "+", left: current, right };
   }
   return current;
 }
 
-function isBoolType(expr, variables) {
+function isBoolType(expr, variables, functions) {
   if (expr.type === "boolean") return true;
   if (expr.type === "binary" && (expr.op === "&&" || expr.op === "||" || expr.op === "==" || expr.op === "!=" || expr.op === "<" || expr.op === ">" || expr.op === "<=" || expr.op === ">=")) return true;
   if (expr.type === "unary" && expr.op === "!") return true;
@@ -545,18 +718,22 @@ function isBoolType(expr, variables) {
     const varInfo = variables.get(expr.name);
     if (typeof varInfo === "object" && varInfo.type === "Bool") return true;
   }
+  if (expr.type === "fnCall" && functions && functions.has(expr.name)) {
+    const fn = functions.get(expr.name);
+    if (fn.retType === "Bool") return true;
+  }
   return false;
 }
 
-function parseOr(parser, variables) {
-  let left = parseAnd(parser, variables);
+function parseOr(parser, variables, functions) {
+  let left = parseAnd(parser, variables, functions);
   while (parser.peek().type === "OR") {
     parser.advance();
-    const right = parseAnd(parser, variables);
-    if (!isBoolType(left, variables)) {
+    const right = parseAnd(parser, variables, functions);
+    if (!isBoolType(left, variables, functions)) {
       throw new Error(`Expected Bool for ||, got ${inferType(left)}`);
     }
-    if (!isBoolType(right, variables)) {
+    if (!isBoolType(right, variables, functions)) {
       throw new Error(`Expected Bool for ||, got ${inferType(right)}`);
     }
     left = { type: "binary", op: "||", left, right };
@@ -564,15 +741,15 @@ function parseOr(parser, variables) {
   return left;
 }
 
-function parseAnd(parser, variables) {
-  let left = parseComparison(parser, variables);
+function parseAnd(parser, variables, functions) {
+  let left = parseComparison(parser, variables, functions);
   while (parser.peek().type === "AND") {
     parser.advance();
-    const right = parseComparison(parser, variables);
-    if (!isBoolType(left, variables)) {
+    const right = parseComparison(parser, variables, functions);
+    if (!isBoolType(left, variables, functions)) {
       throw new Error(`Expected Bool for &&, got ${inferType(left)}`);
     }
-    if (!isBoolType(right, variables)) {
+    if (!isBoolType(right, variables, functions)) {
       throw new Error(`Expected Bool for &&, got ${inferType(right)}`);
     }
     left = { type: "binary", op: "&&", left, right };
@@ -580,11 +757,11 @@ function parseAnd(parser, variables) {
   return left;
 }
 
-function parseComparison(parser, variables) {
-  let left = parseAddSub(parser, variables);
+function parseComparison(parser, variables, functions) {
+  let left = parseAddSub(parser, variables, functions);
   while (parser.peek().type === "CMP") {
     const op = parser.advance().value;
-    const right = parseAddSub(parser, variables);
+    const right = parseAddSub(parser, variables, functions);
     // Type checking: ordering ops require numeric, == and != allow bool
     const isOrdering = op === "<" || op === ">" || op === "<=" || op === ">=";
     const leftType = inferType(left);
@@ -607,50 +784,54 @@ function parseComparison(parser, variables) {
   return left;
 }
 
-function parseAddSub(parser, variables) {
-  let left = parseMulDivMod(parser, variables);
+function parseAddSub(parser, variables, functions) {
+  let left = parseMulDivMod(parser, variables, functions);
   while (parser.peek().type === "OP" && (parser.peek().value === "+" || parser.peek().value === "-")) {
     const op = parser.advance().value;
-    const right = parseMulDivMod(parser, variables);
+    const right = parseMulDivMod(parser, variables, functions);
     left = { type: "binary", op, left, right };
   }
   return left;
 }
 
-function parseMulDivMod(parser, variables) {
-  let left = parseUnary(parser, variables);
+function parseMulDivMod(parser, variables, functions) {
+  let left = parseUnary(parser, variables, functions);
   while (parser.peek().type === "OP" && (parser.peek().value === "*" || parser.peek().value === "/" || parser.peek().value === "%")) {
     const op = parser.advance().value;
-    const right = parseUnary(parser, variables);
+    const right = parseUnary(parser, variables, functions);
     left = { type: "binary", op, left, right };
   }
   return left;
 }
 
-function parseUnary(parser, variables) {
+function parseUnary(parser, variables, functions) {
   if (parser.peek().type === "OP" && parser.peek().value === "-") {
     parser.advance();
-    const operand = parseUnary(parser, variables);
+    const operand = parseUnary(parser, variables, functions);
     return { type: "unary", op: "-", operand };
   }
   if (parser.peek().type === "NOT") {
     parser.advance();
-    const operand = parseUnary(parser, variables);
-    if (!isBoolType(operand, variables)) {
+    const operand = parseUnary(parser, variables, functions);
+    if (!isBoolType(operand, variables, functions)) {
       throw new Error(`Expected Bool for !, got ${inferType(operand)}`);
     }
     return { type: "unary", op: "!", operand };
   }
-  return parsePrimary(parser, variables);
+  return parsePrimary(parser, variables, functions);
 }
 
-function parsePrimary(parser, variables) {
+function parsePrimary(parser, variables, functions) {
   const token = parser.peek();
   if (token.type === "NUMBER") {
     parser.advance();
     return { type: "number", value: token.value, suffix: token.suffix, negative: token.negative };
   }
   if (token.type === "IDENTIFIER") {
+    // Check if this is a function call
+    if (parser.peek(1)?.type === "LPAREN") {
+      return parseFnCall(parser, token.value, variables, functions);
+    }
     parser.advance();
     if (!variables.has(token.value)) {
       throw new Error(`Undeclared variable: ${token.value}`);
@@ -659,7 +840,7 @@ function parsePrimary(parser, variables) {
   }
   if (token.type === "LPAREN") {
     parser.advance();
-    const expr = parseExpression(parser, variables);
+    const expr = parseExpression(parser, variables, functions);
     if (parser.peek().type !== "RPAREN") {
       throw new Error(`Expected ), got ${parser.peek().type}`);
     }
@@ -671,30 +852,30 @@ function parsePrimary(parser, variables) {
     return { type: "boolean", value: token.value };
   }
   if (token.type === "LBRACE") {
-    return parseBlock(parser, variables, false);
+    return parseBlock(parser, variables, functions, false);
   }
   if (token.type === "IF") {
-    return parseIfExpression(parser, variables);
+    return parseIfExpression(parser, variables, functions);
   }
   throw new Error(`Unexpected token: ${token.type}`);
 }
 
-function parseIfExpression(parser, variables) {
-  const condition = parseIfCondition(parser, variables);
-  const thenBranch = parseExpression(parser, variables);
+function parseIfExpression(parser, variables, functions) {
+  const condition = parseIfCondition(parser, variables, functions);
+  const thenBranch = parseExpression(parser, variables, functions);
   if (parser.peek().type !== "ELSE") {
     throw new Error(`Expected else, got ${parser.peek().type}`);
   }
   parser.advance(); // consume 'else'
   // Check if else branch is another if-expression (else-if chain)
   if (parser.peek().type === "IF") {
-    const elseIfExpr = parseIfExpression(parser, variables);
+    const elseIfExpr = parseIfExpression(parser, variables, functions);
     return { type: "if", condition, thenBranch, elseBranch: elseIfExpr };
   }
-  return parseIfExpressionBranch(parser, variables, condition, thenBranch);
+  return parseIfExpressionBranch(parser, variables, functions, condition, thenBranch);
 }
 
-function generateStatements(statements) {
+function generateStatements(statements, functions) {
   let code = "";
   for (const stmt of statements) {
     if (stmt.type === "let") {
@@ -705,10 +886,12 @@ function generateStatements(statements) {
       const op = stmt.op.replace("=", "");
       code += `${stmt.name} = ${stmt.name} ${op} ${generateExpr(stmt.value)};\n`;
     } else if (stmt.type === "ifStmt") {
-      code += generateIfStmt(stmt);
+      code += generateIfStmt(stmt, functions);
     } else if (stmt.type === "whileStmt") {
-      code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body)} };
+      code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body, functions)} };
 `;
+    } else if (stmt.type === "fn") {
+      code += generateFn(stmt);
     } else {
       code += `${generateExpr(stmt)};\n`;
     }
@@ -716,12 +899,55 @@ function generateStatements(statements) {
   return code;
 }
 
-function generateIfStmt(node) {
-  let code = `if (${generateExpr(node.condition)}) { ${generateStatements(node.thenBranch)} }`;
+function generateIfStmt(node, functions) {
+  let code = `if (${generateExpr(node.condition)}) { ${generateStatements(node.thenBranch, functions)} }`;
   if (node.elseBranch) {
-    code += ` else { ${generateStatements(node.elseBranch)} }`;
+    code += ` else { ${generateStatements(node.elseBranch, functions)} }`;
   }
   return code;
+}
+
+function generateFn(node, functions) {
+  const paramStr = node.params.join(", ");
+  // Generate body: last expression is returned, rest are statements
+  let bodyCode = "";
+  for (let i = 0; i < node.body.length; i++) {
+    const stmt = node.body[i];
+    if (i === node.body.length - 1) {
+      const isStmtType = (s) => s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "blockStmt" || s.type === "compoundAssign";
+      if (isStmtType(stmt)) {
+        bodyCode += generateStmtCode(stmt, functions);
+        bodyCode += `return 0;`;
+      } else {
+        bodyCode += `return ${generateExpr(stmt)};`;
+      }
+    } else {
+      bodyCode += generateStmtCode(stmt, functions);
+    }
+  }
+  if (node.body.length === 0) {
+    bodyCode = "return 0;";
+  }
+  return `function ${node.name}(${paramStr}) { ${bodyCode} }\n`;
+}
+
+function generateStmtCode(stmt, functions) {
+  if (stmt.type === "let") {
+    return `let ${stmt.name} = ${generateExpr(stmt.init)};\n`;
+  } else if (stmt.type === "assign") {
+    return `${stmt.name} = ${generateExpr(stmt.value)};\n`;
+  } else if (stmt.type === "compoundAssign") {
+    const op = stmt.op.replace("=", "");
+    return `${stmt.name} = ${stmt.name} ${op} ${generateExpr(stmt.value)};\n`;
+  } else if (stmt.type === "ifStmt") {
+    return generateIfStmt(stmt, functions);
+  } else if (stmt.type === "whileStmt") {
+    return `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body, functions)} };\n`;
+  } else if (stmt.type === "blockStmt") {
+    return generateStatements(stmt.statements, functions);
+  } else {
+    return `${generateExpr(stmt)};\n`;
+  }
 }
 
 function clampExpr(value, suffix) {
@@ -738,11 +964,19 @@ function clampExpr(value, suffix) {
   }
 }
 
-function generate(statements, variables) {
+function generate(statements, variables, functions) {
   if (statements.length === 0) return "return 0;";
   let code = "";
+  // Generate function definitions first
+  for (const stmt of statements) {
+    if (stmt.type === "fn") {
+      code += generateFn(stmt, functions);
+    }
+  }
+  // Generate non-function statements
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
+    if (stmt.type === "fn") continue;
     if (stmt.type === "let") {
       const initValue = generateExpr(stmt.init);
       code += `let ${stmt.name} = ${initValue};\n`;
@@ -754,17 +988,17 @@ function generate(statements, variables) {
       const rhsValue = generateExpr(stmt.value);
       code += `${stmt.name} = ${stmt.name} ${op} ${rhsValue};\n`;
     } else if (stmt.type === "blockStmt") {
-      code += generateStatements(stmt.statements);
+      code += generateStatements(stmt.statements, functions);
       if (i === statements.length - 1) {
         code += `return 0;`;
       }
     } else if (stmt.type === "ifStmt") {
-      code += generateIfStmt(stmt);
+      code += generateIfStmt(stmt, functions);
       if (i === statements.length - 1) {
         code += `return 0;`;
       }
     } else if (stmt.type === "whileStmt") {
-      code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body)} };
+      code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body, functions)} };
 `;
       if (i === statements.length - 1) {
         code += `return 0;`;
@@ -806,13 +1040,17 @@ function generateExpr(node) {
     return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
   }
   if (node.type === "block") {
-    return `(() => { ${generateStatements(node.statements)}return ${generateExpr(node.finalExpr)}; })()`;
+    return `(() => { ${generateStatements(node.statements, null)}return ${generateExpr(node.finalExpr)}; })()`;
   }
   if (node.type === "if") {
     return `(${generateExpr(node.condition)} ? ${generateExpr(node.thenBranch)} : ${generateExpr(node.elseBranch)})`;
   }
   if (node.type === "blockStmt") {
-    return `(() => { ${generateStatements(node.statements)} })()`;
+    return `(() => { ${generateStatements(node.statements, null)} })()`;
+  }
+  if (node.type === "fnCall") {
+    const args = node.args.map((a) => generateExpr(a)).join(", ");
+    return `${node.name}(${args})`;
   }
   throw new Error(`Unknown node type: ${node.type}`);
 }
