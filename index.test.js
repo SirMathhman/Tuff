@@ -416,4 +416,97 @@ test("invalid Bool reassignment with number", () => {
   expectInvalid("let mut x: Bool = true; x = 10;");
 });
 
+// Boolean operator tests
+test("&& operator true and true", () => {
+  expectValid("true && true", "", 1);
+});
+
+test("&& operator true and false", () => {
+  expectValid("true && false", "", 0);
+});
+
+test("&& operator false and true", () => {
+  expectValid("false && true", "", 0);
+});
+
+test("&& operator false and false", () => {
+  expectValid("false && false", "", 0);
+});
+
+test("|| operator true or false", () => {
+  expectValid("true || false", "", 1);
+});
+
+test("|| operator false or false", () => {
+  expectValid("false || false", "", 0);
+});
+
+test("|| operator true or true", () => {
+  expectValid("true || true", "", 1);
+});
+
+test("! operator not true", () => {
+  expectValid("!true", "", 0);
+});
+
+test("! operator not false", () => {
+  expectValid("!false", "", 1);
+});
+
+test("double ! operator", () => {
+  expectValid("!!true", "", 1);
+});
+
+test("&& with variables", () => {
+  expectValid("let a: Bool = true; let b: Bool = false; a && b", "", 0);
+});
+
+test("|| with variables", () => {
+  expectValid("let a: Bool = true; let b: Bool = false; a || b", "", 1);
+});
+
+test("! with variables", () => {
+  expectValid("let a: Bool = true; !a", "", 0);
+});
+
+test("complex boolean expression", () => {
+  expectValid("true && false || true", "", 1);
+});
+
+test("&& has higher precedence than ||", () => {
+  expectValid("false || true && false", "", 0);
+});
+
+test("boolean expression in parentheses", () => {
+  expectValid("(true || false) && true", "", 1);
+});
+
+test("&& with numeric operand is invalid", () => {
+  expectInvalid("true && 42");
+});
+
+test("|| with numeric operand is invalid", () => {
+  expectInvalid("false || 10");
+});
+
+test("! on numeric is invalid", () => {
+  expectInvalid("!42");
+});
+
+test("&& with Bool type annotation", () => {
+  expectValid("let x: Bool = true && false; x", "", 0);
+});
+
+test("|| with Bool type annotation", () => {
+  expectValid("let x: Bool = true || false; x", "", 1);
+});
+
+test("! with Bool type annotation", () => {
+  expectValid("let x: Bool = !true; x", "", 0);
+});
+
+test("&& result in numeric context is invalid", () => {
+  expectInvalid("let x: U8 = true && false;");
+});
+
 

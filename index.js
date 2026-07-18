@@ -20,15 +20,16 @@ function validateSuffix(numStr, suffix, negative) {
 }
 
 function validateTypeAnnotation(expr, declaredType) {
+  const exprType = inferType(expr);
   // Validate Bool type
   if (declaredType === "Bool") {
-    if (expr.type !== "boolean") {
-      throw new Error(`Type mismatch: expected Bool, got ${expr.type === "number" ? "numeric" : expr.type}`);
+    if (exprType !== "Bool") {
+      throw new Error(`Type mismatch: expected Bool, got ${exprType}`);
     }
     return;
   }
   // Reject boolean values for non-Bool types
-  if (expr.type === "boolean") {
+  if (exprType === "Bool") {
     throw new Error(`Type mismatch: expected ${declaredType}, got Bool`);
   }
   // Only validate literal numbers at compile time
@@ -44,6 +45,21 @@ function validateTypeAnnotation(expr, declaredType) {
   if (value < range.min || value > range.max) {
     throw new Error(`Value ${value} out of range for ${declaredType} (${range.min} to ${range.max})`);
   }
+}
+
+function inferType(expr) {
+  if (expr.type === "boolean") return "Bool";
+  if (expr.type === "number") return expr.suffix || "number";
+  if (expr.type === "identifier") return "unknown";
+  if (expr.type === "binary") {
+    if (expr.op === "&&" || expr.op === "||") return "Bool";
+    return inferType(expr.left);
+  }
+  if (expr.type === "unary") {
+    if (expr.op === "!") return "Bool";
+    return inferType(expr.operand);
+  }
+  return "unknown";
 }
 
 export function compile(source) {
@@ -78,6 +94,21 @@ function tokenize(source) {
     }
     if (ch === "+" || ch === "*" || ch === "/" || ch === "%" || ch === "=") {
       tokens.push({ type: "OP", value: ch });
+      i++;
+      continue;
+    }
+    if (ch === "&" && i + 1 < source.length && source[i + 1] === "&") {
+      tokens.push({ type: "AND" });
+      i += 2;
+      continue;
+    }
+    if (ch === "|" && i + 1 < source.length && source[i + 1] === "|") {
+      tokens.push({ type: "OR" });
+      i += 2;
+      continue;
+    }
+    if (ch === "!") {
+      tokens.push({ type: "NOT" });
       i++;
       continue;
     }
@@ -259,7 +290,50 @@ function parseIdentifier(parser) {
 }
 
 function parseExpression(parser, variables) {
-  return parseAddSub(parser, variables);
+  return parseOr(parser, variables);
+}
+
+function isBoolType(expr, variables) {
+  if (expr.type === "boolean") return true;
+  if (expr.type === "binary" && (expr.op === "&&" || expr.op === "||")) return true;
+  if (expr.type === "unary" && expr.op === "!") return true;
+  if (expr.type === "identifier") {
+    const varInfo = variables.get(expr.name);
+    if (typeof varInfo === "object" && varInfo.type === "Bool") return true;
+  }
+  return false;
+}
+
+function parseOr(parser, variables) {
+  let left = parseAnd(parser, variables);
+  while (parser.peek().type === "OR") {
+    parser.advance();
+    const right = parseAnd(parser, variables);
+    if (!isBoolType(left, variables)) {
+      throw new Error(`Expected Bool for ||, got ${inferType(left)}`);
+    }
+    if (!isBoolType(right, variables)) {
+      throw new Error(`Expected Bool for ||, got ${inferType(right)}`);
+    }
+    left = { type: "binary", op: "||", left, right };
+  }
+  return left;
+}
+
+function parseAnd(parser, variables) {
+  let left = parseAddSub(parser, variables);
+  while (parser.peek().type === "AND") {
+    parser.advance();
+    const right = parseAddSub(parser, variables);
+    if (!isBoolType(left, variables)) {
+      throw new Error(`Expected Bool for &&, got ${inferType(left)}`);
+    }
+    if (!isBoolType(right, variables)) {
+      throw new Error(`Expected Bool for &&, got ${inferType(right)}`);
+    }
+    left = { type: "binary", op: "&&", left, right };
+  }
+  return left;
 }
 
 function parseAddSub(parser, variables) {
@@ -287,6 +361,14 @@ function parseUnary(parser, variables) {
     parser.advance();
     const operand = parseUnary(parser, variables);
     return { type: "unary", op: "-", operand };
+  }
+  if (parser.peek().type === "NOT") {
+    parser.advance();
+    const operand = parseUnary(parser, variables);
+    if (!isBoolType(operand, variables)) {
+      throw new Error(`Expected Bool for !, got ${inferType(operand)}`);
+    }
+    return { type: "unary", op: "!", operand };
   }
   return parsePrimary(parser, variables);
 }
@@ -372,9 +454,13 @@ function generateExpr(node) {
     return node.value ? "1" : "0";
   }
   if (node.type === "unary") {
+    if (node.op === "!") return `!${generateExpr(node.operand)}`;
     return `-${generateExpr(node.operand)}`;
   }
   if (node.type === "binary") {
+    if (node.op === "&&" || node.op === "||") {
+      return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
+    }
     return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
   }
   throw new Error(`Unknown node type: ${node.type}`);
