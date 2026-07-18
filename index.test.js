@@ -1671,4 +1671,77 @@ test("struct field access on function result", () => {
   expectValid("struct Point { x : I32, y : I32 }; fn getPoint() : Point => { Point { x: 15, y: 25 } }; getPoint().x", "", 15);
 });
 
+// Closure type tests
+test("closure type annotation with function assignment", () => {
+  expectValid("fn add(a: I32, b: I32) : I32 => { a + b }; let addFn : (I32, I32) => I32 = add; addFn(3, 4)", "", 7);
+});
+
+test("closure type with zero parameters", () => {
+  expectValid("fn getVal() : I32 => { 42 }; let getter : () => I32 = getVal; getter()", "", 42);
+});
+
+test("closure type with one parameter", () => {
+  expectValid("fn double(x: I32) : I32 => { x * 2 }; let d : (I32) => I32 = double; d(7)", "", 14);
+});
+
+test("closure type with three parameters", () => {
+  expectValid("fn sum(a: I32, b: I32, c: I32) : I32 => { a + b + c }; let s : (I32, I32, I32) => I32 = sum; s(1, 2, 3)", "", 6);
+});
+
+test("closure type with Bool return", () => {
+  expectValid("fn isPositive(x: I32) : Bool => { x > 0 }; let f : (I32) => Bool = isPositive; f(5)", "", 1);
+});
+
+test("closure type with Bool parameter", () => {
+  expectValid("fn notBool(x: Bool) : Bool => { !x }; let f : (Bool) => Bool = notBool; f(true)", "", 0);
+});
+
+test("closure type with mixed parameter types", () => {
+  expectValid("fn compare(a: I32, b: I32) : Bool => { a > b }; let f : (I32, I32) => Bool = compare; f(5, 3)", "", 1);
+});
+
+test("closure type with F64 parameters", () => {
+  expectValid("fn half(x: F64) : F64 => { x / 2.0 }; let f : (F64) => F64 = half; f(7.0)", "", 3.5);
+});
+
+test("closure type called multiple times", () => {
+  expectValid("fn inc(x: I32) : I32 => { x + 1 }; let f : (I32) => I32 = inc; f(f(0))", "", 2);
+});
+
+test("closure type used in expression", () => {
+  expectValid("fn addOne(x: I32) : I32 => { x + 1 }; let f : (I32) => I32 = addOne; f(1) + f(2)", "", 5);
+});
+
+test("closure type with U8 parameters", () => {
+  expectValid("fn add(a: U8, b: U8) : U8 => { a + b }; let f : (U8, U8) => U8 = add; f(10, 20)", "", 30);
+});
+
+test("closure type with U16 return", () => {
+  expectValid("fn toU16(x: I32) : U16 => { x }; let f : (I32) => U16 = toU16; f(1000)", "", 1000);
+});
+
+test("closure type mismatch - wrong param count is invalid", () => {
+  expectInvalid("fn add(a: I32, b: I32) : I32 => { a + b }; let f : (I32) => I32 = add;");
+});
+
+test("closure type mismatch - wrong param type is invalid", () => {
+  expectInvalid("fn add(a: I32, b: I32) : I32 => { a + b }; let f : (Bool, I32) => I32 = add;");
+});
+
+test("closure type mismatch - wrong return type is invalid", () => {
+  expectInvalid("fn add(a: I32, b: I32) : I32 => { a + b }; let f : (I32, I32) => Bool = add;");
+});
+
+test("closure type with non-function value is invalid", () => {
+  expectInvalid("let f : (I32) => I32 = 42;");
+});
+
+test("closure type with zero params and zero args", () => {
+  expectValid("fn greet() : I32 => { 1 }; let g : () => I32 = greet; g()", "", 1);
+});
+
+test("closure type annotation without assignment is invalid", () => {
+  expectInvalid("let f : (I32) => I32;");
+});
+
 

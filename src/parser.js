@@ -1,4 +1,4 @@
-import { VALID_SUFFIXES, inferType, validateTypeAnnotation, isTupleType, splitTupleType, getTupleElementType } from "./types.js";
+import { VALID_SUFFIXES, inferType, validateTypeAnnotation, isTupleType, splitTupleType, getTupleElementType, isClosureType, parseClosureType } from "./types.js";
 
 export function parse(tokens) {
   const parser = {
@@ -135,9 +135,9 @@ function parseType(parser, structs) {
   if (parser.peek().type === "LBRACKET") {
     return parseArrayType(parser, structs);
   }
-  // Check for tuple type (Type1, Type2, ...)
+  // Check for closure type (T1, T2) => ReturnType or tuple type (Type1, Type2, ...)
   if (parser.peek().type === "LPAREN") {
-    return parseTupleType(parser, structs);
+    return parseClosureOrTupleType(parser, structs, true);
   }
   const typeToken = parser.peek();
   if (typeToken.type !== "IDENTIFIER") {
@@ -151,9 +151,17 @@ function parseType(parser, structs) {
   return typeVal;
 }
 
-function parseTupleType(parser, structs) {
+function parseClosureOrTupleType(parser, structs, allowClosure) {
   parser.advance(); // consume '('
+  // Check for empty params () => ReturnType
   if (parser.peek().type === "RPAREN") {
+    parser.advance(); // consume ')'
+    // Check if this is a closure type
+    if (allowClosure && parser.peek().type === "ARROW") {
+      parser.advance(); // consume '=>'
+      const retType = parseType(parser, structs);
+      return `() => ${retType}`;
+    }
     throw new Error("Empty tuple type is not allowed");
   }
   const elementTypes = [];
@@ -163,10 +171,17 @@ function parseTupleType(parser, structs) {
     }
     elementTypes.push(parseType(parser, structs));
   }
+  parser.advance(); // consume ')'
+  // Check if this is a closure type (T1, T2) => ReturnType
+  if (allowClosure && parser.peek().type === "ARROW") {
+    parser.advance(); // consume '=>'
+    const retType = parseType(parser, structs);
+    return `(${elementTypes.join(", ")}) => ${retType}`;
+  }
+  // Regular tuple type
   if (elementTypes.length === 0) {
     throw new Error("Empty tuple type is not allowed");
   }
-  parser.advance(); // consume ')'
   return `(${elementTypes.join(", ")})`;
 }
 
@@ -272,7 +287,7 @@ function parseReturnType(parser, structs) {
   parser.advance(); // consume ':'
   // Handle tuple return types like (I32, I32)
   if (parser.peek().type === "LPAREN") {
-    const tupleType = parseTupleType(parser, structs);
+    const tupleType = parseClosureOrTupleType(parser, structs, false);
     if (parser.peek().type !== "ARROW") {
       throw new Error(`Expected => after return type, got ${parser.peek().type}`);
     }
@@ -541,7 +556,7 @@ function parseStatement(parser, variables, functions, structs) {
       initExpr = { type: "tupleLiteral", elements: [initExpr] };
     }
     if (declaredType) {
-      validateTypeAnnotation(initExpr, declaredType, structs);
+      validateTypeAnnotation(initExpr, declaredType, structs, functions);
     }
     const inferred = declaredType || inferType(initExpr);
     variables.set(name, { mutable: isMut, type: inferred });
@@ -643,7 +658,7 @@ function parseAssignmentRhs(parser, name, variables, functions, structs) {
   const rhs = parseExpression(parser, variables, functions, structs);
   const declaredType = typeof varInfo === "object" ? varInfo.type : null;
   if (declaredType) {
-    validateTypeAnnotation(rhs, declaredType, structs);
+    validateTypeAnnotation(rhs, declaredType, structs, functions);
   }
   return rhs;
 }
@@ -672,7 +687,7 @@ function parseFn(parser, variables, functions, structs) {
     const lastStmt = body[body.length - 1];
     const isStmtType = (s) => s && (s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "blockStmt" || s.type === "compoundAssign");
     if (lastStmt && !isStmtType(lastStmt)) {
-      validateTypeAnnotation(lastStmt, sigParts.retType, structs);
+      validateTypeAnnotation(lastStmt, sigParts.retType, structs, functions);
     }
   }
   return { type: "fn", name, params: sigParts.params, paramTypes: sigParts.paramTypes, retType: sigParts.retType, body };
@@ -692,18 +707,35 @@ function parseFnCall(parser, name, variables, functions, structs) {
     args.push(parseExpression(parser, variables, functions, structs));
   }
   parser.advance(); // consume ')'
-  // Validate function exists
-  if (!functions.has(name)) {
-    throw new Error(`Undeclared function: ${name}`);
+  // Validate function exists (either in functions map or as a closure-typed variable)
+  let fn = functions.get(name);
+  let isClosureCall = false;
+  if (!fn) {
+    // Check if this is a closure-typed variable
+    if (variables.has(name)) {
+      const varInfo = variables.get(name);
+      if (varInfo && isClosureType(varInfo.type)) {
+        isClosureCall = true;
+        fn = { params: [], paramTypes: {}, retType: varInfo.type };
+        const closureInfo = parseClosureType(varInfo.type);
+        // Create synthetic function info for validation
+        fn.params = closureInfo.paramTypes.map((_, i) => `arg${i}`);
+        fn.paramTypes = {};
+        closureInfo.paramTypes.forEach((t, i) => { fn.paramTypes[`arg${i}`] = t; });
+      } else {
+        throw new Error(`Undeclared function: ${name}`);
+      }
+    } else {
+      throw new Error(`Undeclared function: ${name}`);
+    }
   }
-  const fn = functions.get(name);
   if (args.length !== fn.params.length) {
     throw new Error(`Function ${name} expects ${fn.params.length} arguments, got ${args.length}`);
   }
   for (let i = 0; i < args.length; i++) {
     const paramType = fn.paramTypes[fn.params[i]];
     if (isTupleType(paramType)) {
-      validateTypeAnnotation(args[i], paramType, structs);
+      validateTypeAnnotation(args[i], paramType, structs, functions);
     }
   }
   return { type: "fnCall", name, args };
@@ -1064,7 +1096,7 @@ function parsePrimary(parser, variables, functions, structs) {
       result = parseStructInstantiation(parser, token.value, variables, functions, structs);
     } else {
       parser.advance();
-      if (!variables.has(token.value)) {
+      if (!variables.has(token.value) && !functions.has(token.value)) {
         throw new Error(`Undeclared variable: ${token.value}`);
       }
       result = { type: "identifier", name: token.value };

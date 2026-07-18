@@ -45,7 +45,7 @@ function validateSuffix(numStr, suffix, negative) {
   }
 }
 
-export function validateTypeAnnotation(expr, declaredType, structs) {
+export function validateTypeAnnotation(expr, declaredType, structs, functions) {
   const exprType = inferType(expr);
   // Validate Bool type
   if (declaredType === "Bool") {
@@ -57,6 +57,33 @@ export function validateTypeAnnotation(expr, declaredType, structs) {
   // Reject boolean values for non-Bool types
   if (exprType === "Bool") {
     throw new Error(`Type mismatch: expected ${declaredType}, got Bool`);
+  }
+  // Handle closure type validation
+  if (isClosureType(declaredType)) {
+    // The expression should be a function reference (identifier)
+    if (expr.type !== "identifier") {
+      throw new Error(`Type mismatch: expected closure, got ${exprType}`);
+    }
+    // Validate against function signature if available
+    if (functions && functions.has(expr.name)) {
+      const closureInfo = parseClosureType(declaredType);
+      const fnInfo = functions.get(expr.name);
+      // Check parameter count
+      if (closureInfo.paramTypes.length !== fnInfo.params.length) {
+        throw new Error(`Type mismatch: expected closure with ${closureInfo.paramTypes.length} params, got function with ${fnInfo.params.length} params`);
+      }
+      // Check parameter types
+      for (let i = 0; i < closureInfo.paramTypes.length; i++) {
+        if (closureInfo.paramTypes[i] !== fnInfo.paramTypes[fnInfo.params[i]]) {
+          throw new Error(`Type mismatch: expected param type ${closureInfo.paramTypes[i]}, got ${fnInfo.paramTypes[fnInfo.params[i]]}`);
+        }
+      }
+      // Check return type
+      if (closureInfo.retType !== fnInfo.retType) {
+        throw new Error(`Type mismatch: expected return type ${closureInfo.retType}, got ${fnInfo.retType}`);
+      }
+    }
+    return;
   }
   // Handle tuple type validation
   if (isTupleType(declaredType)) {
@@ -109,6 +136,19 @@ export function validateTypeAnnotation(expr, declaredType, structs) {
   if (value < range.min || value > range.max) {
     throw new Error(`Value ${value} out of range for ${declaredType} (${range.min} to ${range.max})`);
   }
+}
+
+export function isClosureType(typeStr) {
+  return typeof typeStr === "string" && typeStr.includes("=>");
+}
+
+export function parseClosureType(typeStr) {
+  const arrowIdx = typeStr.lastIndexOf("=>");
+  const paramsStr = typeStr.slice(0, arrowIdx).trim();
+  const retType = typeStr.slice(arrowIdx + 2).trim();
+  const paramsInner = paramsStr.slice(1, -1).trim();
+  const paramTypes = paramsInner.length === 0 ? [] : paramsInner.split(",").map(p => p.trim());
+  return { paramTypes, retType };
 }
 
 export function isTupleType(typeStr) {

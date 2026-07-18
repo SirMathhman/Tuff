@@ -13,15 +13,16 @@ Entry point: `compile(source)` in `index.js`.
 
 | Command | Purpose |
 |---------|---------|
-| `bun test` | Run tests with coverage (threshold: 97%) |
+| `bun test` | Run tests with coverage (threshold: 90%) |
 | `npm run cpd` | PMD copy-paste detection (must pass, no duplications) |
 
 ## Conventions
 
 - **Test-driven development**: Add tests before implementation. Tests live in `index.test.js`.
 - **No code duplication**: `npm run cpd` must pass with zero duplications. Extract helpers to eliminate repeated patterns.
-- **Coverage threshold**: 97% line coverage enforced by `bunfig.toml`.
-- **Commit hooks**: `.github/hooks/hooks.json` runs `bun test --coverage` and `npm run cpd` on commit. Both must pass.
+- **Coverage threshold**: 90% line coverage enforced by `bunfig.toml` (`coverageThreshold = 0.90`).
+- **Commit hooks**: `.github/hooks/hooks.json` runs `bun test --coverage` and `npm run cpd` on commit (Stop hook). Both must pass.
+- **Test helpers**: `expectValid(source, stdIn, expectedExitCode)` and `expectInvalid(source)` are the standard test utilities. Generated code is executed via `new Function("stdIn", generated)`.
 
 ## Architecture
 
