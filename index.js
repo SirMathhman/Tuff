@@ -1,5 +1,24 @@
 const VALID_SUFFIXES = new Set(["U8", "U16", "U32", "I8", "I16", "I32", "F32", "F64"]);
 
+const SUFFIX_RANGES = {
+  U8: { min: 0, max: 255 },
+  U16: { min: 0, max: 65535 },
+  U32: { min: 0, max: 4294967295 },
+  I8: { min: -128, max: 127 },
+  I16: { min: -32768, max: 32767 },
+  I32: { min: -2147483648, max: 2147483647 },
+};
+
+function validateSuffix(numStr, suffix, negative) {
+  if (!suffix) return;
+  const range = SUFFIX_RANGES[suffix];
+  if (!range) return; // F32/F64 don't have range constraints
+  const value = negative ? -parseFloat(numStr) : parseFloat(numStr);
+  if (value < range.min || value > range.max) {
+    throw new Error(`Value ${value} out of range for ${suffix} (${range.min} to ${range.max})`);
+  }
+}
+
 export function compile(source) {
   const tokens = tokenize(source);
   const statements = parse(tokens);
@@ -54,6 +73,7 @@ function tokenize(source) {
         if (suffix && !VALID_SUFFIXES.has(suffix)) {
           throw new Error(`Invalid suffix: ${suffix}`);
         }
+        validateSuffix(numStr, suffix, true);
         tokens.push({ type: "NUMBER", value: numStr, suffix, negative: true });
         continue;
       }
@@ -77,6 +97,7 @@ function tokenize(source) {
       if (suffix && !VALID_SUFFIXES.has(suffix)) {
         throw new Error(`Invalid suffix: ${suffix}`);
       }
+      validateSuffix(numStr, suffix, false);
       tokens.push({ type: "NUMBER", value: numStr, suffix });
       continue;
     }
@@ -163,18 +184,6 @@ function parsePrimary(parser) {
 
 function clampExpr(value, suffix) {
   switch (suffix) {
-    case "U8":
-      return `Math.max(0, Math.min(255, ${value}))`;
-    case "U16":
-      return `Math.max(0, Math.min(65535, ${value}))`;
-    case "U32":
-      return `Math.max(0, Math.min(4294967295, ${value}))`;
-    case "I8":
-      return `Math.max(-128, Math.min(127, ${value}))`;
-    case "I16":
-      return `Math.max(-32768, Math.min(32767, ${value}))`;
-    case "I32":
-      return `Math.max(-2147483648, Math.min(2147483647, ${value}))`;
     case "F32":
       return `parseFloat(${value}.toPrecision(6))`;
     case "F64":
@@ -182,7 +191,8 @@ function clampExpr(value, suffix) {
     case "":
       return value;
     default:
-      throw new Error(`Unknown suffix: ${suffix}`);
+      // Integer types validated at compile time, no runtime clamping needed
+      return value;
   }
 }
 

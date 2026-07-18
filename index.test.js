@@ -51,8 +51,12 @@ test("U8 suffix", () => {
   expectValid("255U8", "", 255);
 });
 
+test("U8 out of range is invalid", () => {
+  expectInvalid("256U8");
+});
+
 test("U8 clamping", () => {
-  expectValid("300U8", "", 255);
+  expectInvalid("300U8");
 });
 
 test("U16 suffix", () => {
@@ -165,11 +169,11 @@ test("negative in expression", () => {
 });
 
 test("expression with suffix", () => {
-  expectValid("300U8 + 1", "", 256);
+  expectValid("200U8 + 1", "", 201);
 });
 
 test("both operands with suffix", () => {
-  expectValid("300U8 + 300U8", "", 510);
+  expectValid("200U8 + 100U8", "", 300);
 });
 
 test("nested parentheses", () => {
