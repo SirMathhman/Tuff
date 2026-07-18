@@ -1,4 +1,0 @@
-let mut memory = [0; 1];
-fn getLength() => {
-    memory.length
-}
