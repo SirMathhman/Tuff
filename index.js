@@ -314,10 +314,18 @@ function parseStatement(parser, variables) {
       return { type: "assign", name, value: rhs };
     }
   }
+  if (parser.peek().type === "LBRACE") {
+    const block = parseBlock(parser, variables, true);
+    if (block.type === "blockStmt") {
+      return block;
+    }
+    /* block expression - continue parsing binary ops */
+    return parseBinaryContinuation(parser, variables, block);
+  }
   return parseExpression(parser, variables);
 }
 
-function parseBlock(parser, parentVariables) {
+function parseBlock(parser, parentVariables, allowStatement) {
   parser.advance(); // consume LBRACE
   const blockVars = new Map(parentVariables);
   const statements = [];
@@ -334,12 +342,14 @@ function parseBlock(parser, parentVariables) {
     throw new Error("Unclosed block");
   }
   parser.advance(); // consume RBRACE
-  if (lastHadSemicolon) {
-    throw new Error("Block must not end with a semicolon");
+  // Block statement: ends with semicolon or is empty
+  if (lastHadSemicolon || statements.length === 0) {
+    if (!allowStatement) {
+      throw new Error("Block statement cannot be used in expression context");
+    }
+    return { type: "blockStmt", statements };
   }
-  if (statements.length === 0) {
-    throw new Error("Empty block");
-  }
+  // Block expression: ends with expression
   const finalExpr = statements.pop();
   return { type: "block", statements, finalExpr };
 }
@@ -355,6 +365,16 @@ function parseIdentifier(parser) {
 
 function parseExpression(parser, variables) {
   return parseOr(parser, variables);
+}
+
+function parseBinaryContinuation(parser, variables, left) {
+  let current = left;
+  while (parser.peek().type === "OP" && parser.peek().value === "+") {
+    parser.advance();
+    const right = parsePrimary(parser, variables);
+    current = { type: "binary", op: "+", left: current, right };
+  }
+  return current;
 }
 
 function isBoolType(expr, variables) {
@@ -491,9 +511,23 @@ function parsePrimary(parser, variables) {
     return { type: "boolean", value: token.value };
   }
   if (token.type === "LBRACE") {
-    return parseBlock(parser, variables);
+    return parseBlock(parser, variables, false);
   }
   throw new Error(`Unexpected token: ${token.type}`);
+}
+
+function generateStatements(statements) {
+  let code = "";
+  for (const stmt of statements) {
+    if (stmt.type === "let") {
+      code += `let ${stmt.name} = ${generateExpr(stmt.init)};\n`;
+    } else if (stmt.type === "assign") {
+      code += `${stmt.name} = ${generateExpr(stmt.value)};\n`;
+    } else {
+      code += `${generateExpr(stmt)};\n`;
+    }
+  }
+  return code;
 }
 
 function clampExpr(value, suffix) {
@@ -521,6 +555,11 @@ function generate(statements, variables) {
     } else if (stmt.type === "assign") {
       const rhsValue = generateExpr(stmt.value);
       code += `${stmt.name} = ${rhsValue};\n`;
+    } else if (stmt.type === "blockStmt") {
+      code += generateStatements(stmt.statements);
+      if (i === statements.length - 1) {
+        code += `return 0;`;
+      }
     } else {
       const value = generateExpr(stmt);
       if (i === statements.length - 1) {
@@ -558,17 +597,10 @@ function generateExpr(node) {
     return `(${generateExpr(node.left)} ${node.op} ${generateExpr(node.right)})`;
   }
   if (node.type === "block") {
-    let code = "";
-    for (const stmt of node.statements) {
-      if (stmt.type === "let") {
-        code += `let ${stmt.name} = ${generateExpr(stmt.init)};\n`;
-      } else if (stmt.type === "assign") {
-        code += `${stmt.name} = ${generateExpr(stmt.value)};\n`;
-      } else {
-        code += `${generateExpr(stmt)};\n`;
-      }
-    }
-    return `(() => { ${code}return ${generateExpr(node.finalExpr)}; })()`;
+    return `(() => { ${generateStatements(node.statements)}return ${generateExpr(node.finalExpr)}; })()`;
+  }
+  if (node.type === "blockStmt") {
+    return `(() => { ${generateStatements(node.statements)} })()`;
   }
   throw new Error(`Unknown node type: ${node.type}`);
 }

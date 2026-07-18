@@ -667,24 +667,24 @@ test("block in parentheses", () => {
   expectValid("({ 42 })", "", 42);
 });
 
-test("empty block is invalid", () => {
-  expectInvalid("{}");
+test("empty block statement", () => {
+  expectValid("let x = 42; {} x", "", 42);
 });
 
-test("block with trailing semicolon is invalid", () => {
-  expectInvalid("{ 1; }");
+test("block statement with trailing semicolon", () => {
+  expectValid("let mut x = 0; { x = 1; } x", "", 1);
 });
 
-test("block with two trailing semicolons is invalid", () => {
-  expectInvalid("{ 1; 2; }");
+test("block statement with two trailing semicolons", () => {
+  expectValid("let mut x = 0; { x = 1; x = 2; } x", "", 2);
 });
 
-test("block with let only (no final expr) is invalid", () => {
-  expectInvalid("{ let x = 1; }");
+test("block statement with let only", () => {
+  expectValid("let mut x = 0; { let y = 10; x = y; } x", "", 10);
 });
 
-test("block with mut and no final expr is invalid", () => {
-  expectInvalid("{ let mut x = 1; }");
+test("block statement with mut and no final expr", () => {
+  expectValid("let mut x = 0; { let mut y = 1; y = 2; x = y; } x", "", 2);
 });
 
 test("deeply nested blocks", () => {
@@ -709,6 +709,63 @@ test("block with comparison", () => {
 
 test("block with type annotation", () => {
   expectValid("{ let x: U8 = 42; x }", "", 42);
+});
+
+// Block statement tests
+test("block statement with assignment", () => {
+  expectValid("let mut x = 0; { x = 1; } x", "", 1);
+});
+
+test("block statement with let", () => {
+  expectValid("let mut x = 0; { let y = 10; x = y; } x", "", 10);
+});
+
+test("empty block statement", () => {
+  expectValid("let x = 42; {} x", "", 42);
+});
+
+test("block statement with multiple statements", () => {
+  expectValid("let mut x = 0; { x = 1; x = 2; } x", "", 2);
+});
+
+test("block statement as last statement", () => {
+  expectValid("let mut x = 0; { x = 1; }", "", 0);
+});
+
+test("block statement with nested block", () => {
+  expectValid("let mut x = 0; { { x = 1; } } x", "", 1);
+});
+
+test("block statement with expression inside", () => {
+  expectValid("let mut x = 0; { x = 1 + 2; } x", "", 3);
+});
+
+test("block statement with boolean", () => {
+  expectValid("let mut x: Bool = false; { x = true; } x", "", 1);
+});
+
+test("block statement with comparison", () => {
+  expectValid("let mut x: Bool = false; { x = 1 < 2; } x", "", 1);
+});
+
+test("block statement with type annotation", () => {
+  expectValid("let mut x: U8 = 0; { let y: U8 = 42; x = y; } x", "", 42);
+});
+
+test("block statement with mut inside", () => {
+  expectValid("let mut x = 0; { let mut y = 1; y = 2; x = y; } x", "", 2);
+});
+
+test("block statement scoping", () => {
+  expectInvalid("let x = 0; { let y = 10; }; y");
+});
+
+test("block statement in expression context is invalid", () => {
+  expectInvalid("let x = 0; { x = 1; } + 2");
+});
+
+test("block statement with trailing semicolon in expression context is invalid", () => {
+  expectInvalid("let x = 0; let y = { x = 1; }");
 });
 
 
