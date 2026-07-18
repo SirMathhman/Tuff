@@ -1344,4 +1344,72 @@ test("function call as argument to another function", () => {
   expectValid("fn inc(x: U8) : U8 => { x + 1 }; fn add(a: U8, b: U8) : U8 => { a + b }; add(inc(1), inc(2))", "", 5);
 });
 
+test("array literal", () => {
+  expectValid("let arr = [1, 2, 3]; arr[1]", "", 2);
+});
+
+test("array with type annotation", () => {
+  expectValid("let arr: [U8; 3] = [1, 2, 3]; arr[0]", "", 1);
+});
+
+test("array indexing with variable", () => {
+  expectValid("let arr = [10, 20, 30]; let i = 2; arr[i]", "", 30);
+});
+
+test("array in expression", () => {
+  expectValid("let arr = [5, 10]; arr[0] + arr[1]", "", 15);
+});
+
+test("array with different types", () => {
+  expectValid("let arr = [1.5, 2.5]; arr[0]", "", 1.5);
+});
+
+test("array with Bool elements", () => {
+  expectValid("let arr = [true, false]; arr[0]", "", 1);
+});
+
+test("array length 1", () => {
+  expectValid("let arr = [42]; arr[0]", "", 42);
+});
+
+test("array with expressions", () => {
+  expectValid("let arr = [1 + 2, 3 * 4]; arr[1]", "", 12);
+});
+
+test("array assigned to mut variable", () => {
+  expectValid("let mut arr = [1, 2, 3]; arr[0] = 10; arr[0]", "", 10);
+});
+
+test("array indexing in function", () => {
+  expectValid("fn getFirst(arr: [U8; 3]) : U8 => { arr[0] }; getFirst([5, 6, 7])", "", 5);
+});
+
+test("array with type annotation wrong length is invalid", () => {
+  expectInvalid("let arr: [U8; 2] = [1, 2, 3]; arr[0]");
+});
+
+test("array with type annotation wrong element type is invalid", () => {
+  expectInvalid("let arr: [Bool; 2] = [1, 2]; arr[0]");
+});
+
+test("array index out of bounds is invalid", () => {
+  expectInvalid("let arr = [1, 2, 3]; arr[5]");
+});
+
+test("array index negative is invalid", () => {
+  expectInvalid("let arr = [1, 2, 3]; arr[-1]");
+});
+
+test("array with non-constant length is invalid", () => {
+  expectInvalid("let x = 3; let arr: [U8; x] = [1, 2, 3]");
+});
+
+test("array with function call in literal", () => {
+  expectValid("fn getVal() : U8 => { 99 }; let arr = [getVal(), 1]; arr[0]", "", 99);
+});
+
+test("array of arrays not supported", () => {
+  expectInvalid("let arr = [[1, 2], [3, 4]]");
+});
+
 

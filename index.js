@@ -54,6 +54,30 @@ function validateTypeAnnotation(expr, declaredType) {
   if (exprType === "Bool") {
     throw new Error(`Type mismatch: expected ${declaredType}, got Bool`);
   }
+  // Handle array type validation
+  if (declaredType.startsWith("[")) {
+    if (expr.type !== "arrayLiteral") {
+      throw new Error(`Type mismatch: expected array, got ${exprType}`);
+    }
+    const match = declaredType.match(/^\[(\w+); (\d+)\]$/);
+    if (!match) throw new Error(`Invalid array type: ${declaredType}`);
+    const [_, elementType, lengthStr] = match;
+    const length = parseInt(lengthStr);
+    if (expr.elements.length !== length) {
+      throw new Error(`Array length mismatch: expected ${length}, got ${expr.elements.length}`);
+    }
+    for (const el of expr.elements) {
+      const elType = inferType(el);
+      if (elementType === "Bool") {
+        if (elType !== "Bool") {
+          throw new Error(`Type mismatch: expected Bool element, got ${elType}`);
+        }
+      } else if (elType === "Bool") {
+        throw new Error(`Type mismatch: expected ${elementType} element, got Bool`);
+      }
+    }
+    return;
+  }
   // Only validate literal numbers at compile time
   if (expr.type !== "number") return;
   // If literal has a suffix, it must match the declared type
@@ -73,6 +97,11 @@ function inferType(expr) {
   if (expr.type === "boolean") return "Bool";
   if (expr.type === "number") return expr.suffix || "number";
   if (expr.type === "identifier") return "unknown";
+  if (expr.type === "arrayLiteral") {
+    const elType = expr.elements.length > 0 ? inferType(expr.elements[0]) : "unknown";
+    return `[${elType}; ${expr.elements.length}]`;
+  }
+  if (expr.type === "arrayIndex") return "unknown";
   if (expr.type === "binary") {
     if (expr.op === "&&" || expr.op === "||" || expr.op === "==" || expr.op === "!=" || expr.op === "<" || expr.op === ">" || expr.op === "<=" || expr.op === ">=") return "Bool";
     return inferType(expr.left);
@@ -123,6 +152,16 @@ function tokenize(source) {
     }
     if (ch === "}") {
       tokens.push({ type: "RBRACE" });
+      i++;
+      continue;
+    }
+    if (ch === "[") {
+      tokens.push({ type: "LBRACKET" });
+      i++;
+      continue;
+    }
+    if (ch === "]") {
+      tokens.push({ type: "RBRACKET" });
       i++;
       continue;
     }
@@ -359,9 +398,17 @@ function parseTypeAnnotation(parser) {
     throw new Error(`Expected : for type, got ${parser.peek().type}`);
   }
   parser.advance(); // consume ':'
+  return parseType(parser);
+}
+
+function parseType(parser) {
+  // Check for array type [Type; Length]
+  if (parser.peek().type === "LBRACKET") {
+    return parseArrayType(parser);
+  }
   const typeToken = parser.peek();
   if (typeToken.type !== "IDENTIFIER") {
-    throw new Error(`Expected type after :, got ${typeToken.type}`);
+    throw new Error(`Expected type, got ${typeToken.type}`);
   }
   const typeVal = typeToken.value;
   if (!VALID_SUFFIXES.has(typeVal)) {
@@ -369,6 +416,26 @@ function parseTypeAnnotation(parser) {
   }
   parser.advance();
   return typeVal;
+}
+
+function parseArrayType(parser) {
+  parser.advance(); // consume '['
+  const elementType = parseType(parser);
+  if (parser.peek().type !== "SEMICOLON") {
+    throw new Error(`Expected ; in array type, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ';'
+  const lengthToken = parser.peek();
+  if (lengthToken.type !== "NUMBER") {
+    throw new Error(`Expected constant length in array type, got ${lengthToken.type}`);
+  }
+  const length = parseInt(lengthToken.value);
+  parser.advance();
+  if (parser.peek().type !== "RBRACKET") {
+    throw new Error(`Expected ] in array type, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ']'
+  return `[${elementType}; ${length}]`;
 }
 
 function parseReturnType(parser) {
@@ -397,16 +464,17 @@ function skipFunctionBody(parser) {
   if (parser.peek().type !== "LBRACE") {
     throw new Error(`Expected { for function body, got ${parser.peek().type}`);
   }
-  let depth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
   while (!parser.atEOF()) {
-    if (parser.peek().type === "LBRACE") {
-      depth++;
-    } else if (parser.peek().type === "RBRACE") {
-      depth--;
-      if (depth === 0) {
-        parser.advance(); // consume RBRACE
-        return;
-      }
+    const t = parser.peek().type;
+    if (t === "LBRACE") braceDepth++;
+    else if (t === "RBRACE") braceDepth--;
+    else if (t === "LBRACKET") bracketDepth++;
+    else if (t === "RBRACKET") bracketDepth--;
+    if (braceDepth === 0 && bracketDepth === 0) {
+      parser.advance(); // consume RBRACE
+      return;
     }
     parser.advance();
   }
@@ -430,15 +498,7 @@ function parseStatement(parser, variables, functions) {
     let declaredType = null;
     if (parser.peek().type === "COLON") {
       parser.advance();
-      const typeToken = parser.peek();
-      if (typeToken.type !== "IDENTIFIER") {
-        throw new Error(`Expected type after :, got ${typeToken.type}`);
-      }
-      declaredType = typeToken.value;
-      if (!VALID_SUFFIXES.has(declaredType)) {
-        throw new Error(`Invalid type annotation: ${declaredType}`);
-      }
-      parser.advance();
+      declaredType = parseType(parser);
     }
     if (parser.peek().type !== "OP" || parser.peek().value !== "=") {
       throw new Error(`Expected = in let statement, got ${parser.peek().type}`);
@@ -448,11 +508,33 @@ function parseStatement(parser, variables, functions) {
     if (declaredType) {
       validateTypeAnnotation(initExpr, declaredType);
     }
-    variables.set(name, { mutable: isMut, type: declaredType });
+    const inferred = declaredType || inferType(initExpr);
+    variables.set(name, { mutable: isMut, type: inferred });
     return { type: "let", name, mutable: isMut, init: initExpr };
   }
   if (parser.peek().type === "IDENTIFIER") {
     const name = parser.peek().value;
+    // Check for array index assignment: arr[index] = value or arr[index] op= value
+    if (parser.peek(1)?.type === "LBRACKET") {
+      // Parse arr[index]
+      const idxExpr = parseArrayIndex(parser, name, variables, functions);
+      // Check for compound assignment: arr[index] += value
+      if (parser.peek().type === "COMPOUND") {
+        const op = parser.peek().value;
+        parser.advance();
+        const rhs = parseExpression(parser, variables, functions);
+        return { type: "compoundAssign", name, index: idxExpr.index, op, value: rhs };
+      }
+      // Check for = after ]
+      if (parser.peek().type === "OP" && parser.peek().value === "=") {
+        parser.advance(); // consume '='
+        const rhs = parseExpression(parser, variables, functions);
+        validateMutable(name, variables);
+        return { type: "arrayAssign", name, index: idxExpr.index, value: rhs };
+      }
+      // Not an assignment, it's just an array index expression (possibly part of a larger expression)
+      return parseBinaryContinuation(parser, variables, functions, idxExpr);
+    }
     if (parser.peek(1)?.type === "COMPOUND") {
       const op = parser.peek(1).value;
       parser.advance();
@@ -508,7 +590,7 @@ function parseStatement(parser, variables, functions) {
   return parseExpression(parser, variables, functions);
 }
 
-function parseAssignmentRhs(parser, name, variables, functions) {
+function validateMutable(name, variables) {
   if (!variables.has(name)) {
     throw new Error(`Undeclared variable: ${name}`);
   }
@@ -517,6 +599,11 @@ function parseAssignmentRhs(parser, name, variables, functions) {
   if (!isMutable) {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
   }
+}
+
+function parseAssignmentRhs(parser, name, variables, functions) {
+  validateMutable(name, variables);
+  const varInfo = variables.get(name);
   const rhs = parseExpression(parser, variables, functions);
   const declaredType = typeof varInfo === "object" ? varInfo.type : null;
   if (declaredType) {
@@ -571,6 +658,53 @@ function parseFnCall(parser, name, variables, functions) {
     throw new Error(`Function ${name} expects ${fn.params.length} arguments, got ${args.length}`);
   }
   return { type: "fnCall", name, args };
+}
+
+function parseArrayIndex(parser, name, variables, functions) {
+  parser.advance(); // consume identifier
+  if (parser.peek().type !== "LBRACKET") {
+    throw new Error(`Expected [ for array index, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '['
+  const index = parseExpression(parser, variables, functions);
+  if (parser.peek().type !== "RBRACKET") {
+    throw new Error(`Expected ] for array index, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ']'
+  // Validate array access
+  if (!variables.has(name)) {
+    throw new Error(`Undeclared variable: ${name}`);
+  }
+  const varInfo = variables.get(name);
+  const arrType = typeof varInfo === "object" ? varInfo.type : null;
+  if (arrType && arrType.startsWith("[")) {
+    const length = parseInt(arrType.match(/\[(\w+; (\d+))\]/)[2]);
+    // Validate index at compile time if it's a constant
+    if (index.type === "number") {
+      const idxVal = index.negative ? -parseFloat(index.value) : parseFloat(index.value);
+      if (idxVal < 0 || idxVal >= length) {
+        throw new Error(`Array index ${idxVal} out of bounds (length ${length})`);
+      }
+    }
+  }
+  return { type: "arrayIndex", name, index };
+}
+
+function parseArrayLiteral(parser, variables, functions) {
+  parser.advance(); // consume '['
+  const elements = [];
+  while (parser.peek().type !== "RBRACKET") {
+    if (elements.length > 0 && parser.peek().type === "COMMA") {
+      parser.advance(); // consume ','
+    }
+    // Reject nested array literals
+    if (parser.peek().type === "LBRACKET") {
+      throw new Error("Nested arrays are not supported");
+    }
+    elements.push(parseExpression(parser, variables, functions));
+  }
+  parser.advance(); // consume ']'
+  return { type: "arrayLiteral", elements };
 }
 
 function parseIfCondition(parser, variables, functions) {
@@ -832,6 +966,10 @@ function parsePrimary(parser, variables, functions) {
     if (parser.peek(1)?.type === "LPAREN") {
       return parseFnCall(parser, token.value, variables, functions);
     }
+    // Check if this is an array index
+    if (parser.peek(1)?.type === "LBRACKET") {
+      return parseArrayIndex(parser, token.value, variables, functions);
+    }
     parser.advance();
     if (!variables.has(token.value)) {
       throw new Error(`Undeclared variable: ${token.value}`);
@@ -856,6 +994,9 @@ function parsePrimary(parser, variables, functions) {
   }
   if (token.type === "IF") {
     return parseIfExpression(parser, variables, functions);
+  }
+  if (token.type === "LBRACKET") {
+    return parseArrayLiteral(parser, variables, functions);
   }
   throw new Error(`Unexpected token: ${token.type}`);
 }
@@ -939,6 +1080,8 @@ function generateStmtCode(stmt, functions) {
   } else if (stmt.type === "compoundAssign") {
     const op = stmt.op.replace("=", "");
     return `${stmt.name} = ${stmt.name} ${op} ${generateExpr(stmt.value)};\n`;
+  } else if (stmt.type === "arrayAssign") {
+    return `${stmt.name}[${generateExpr(stmt.index)}] = ${generateExpr(stmt.value)};\n`;
   } else if (stmt.type === "ifStmt") {
     return generateIfStmt(stmt, functions);
   } else if (stmt.type === "whileStmt") {
@@ -1051,6 +1194,16 @@ function generateExpr(node) {
   if (node.type === "fnCall") {
     const args = node.args.map((a) => generateExpr(a)).join(", ");
     return `${node.name}(${args})`;
+  }
+  if (node.type === "arrayLiteral") {
+    const elements = node.elements.map((e) => generateExpr(e)).join(", ");
+    return `[${elements}]`;
+  }
+  if (node.type === "arrayIndex") {
+    return `${node.name}[${generateExpr(node.index)}]`;
+  }
+  if (node.type === "arrayAssign") {
+    return `${node.name}[${generateExpr(node.index)}] = ${generateExpr(node.value)}`;
   }
   throw new Error(`Unknown node type: ${node.type}`);
 }
