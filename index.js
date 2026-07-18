@@ -126,6 +126,26 @@ function tokenize(source) {
       i++;
       continue;
     }
+    if (ch === "+" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "COMPOUND", value: "+=" });
+      i += 2;
+      continue;
+    }
+    if (ch === "*" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "COMPOUND", value: "*=" });
+      i += 2;
+      continue;
+    }
+    if (ch === "/" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "COMPOUND", value: "/=" });
+      i += 2;
+      continue;
+    }
+    if (ch === "%" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "COMPOUND", value: "%=" });
+      i += 2;
+      continue;
+    }
     if (ch === "+" || ch === "*" || ch === "/" || ch === "%") {
       tokens.push({ type: "OP", value: ch });
       i++;
@@ -187,6 +207,12 @@ function tokenize(source) {
       continue;
     }
     if (ch === "-") {
+      // Check if this is -= compound assignment
+      if (i + 1 < source.length && source[i + 1] === "=") {
+        tokens.push({ type: "COMPOUND", value: "-=" });
+        i += 2;
+        continue;
+      }
       // Check if this is a negative number literal (followed by digit)
       if (i + 1 < source.length && source[i + 1] >= "0" && source[i + 1] <= "9") {
         i++; // skip '-'
@@ -300,22 +326,17 @@ function parseStatement(parser, variables) {
   }
   if (parser.peek().type === "IDENTIFIER") {
     const name = parser.peek().value;
+    if (parser.peek(1)?.type === "COMPOUND") {
+      const op = parser.peek(1).value;
+      parser.advance();
+      parser.advance();
+      const rhs = parseAssignmentRhs(parser, name, variables);
+      return { type: "compoundAssign", name, op, value: rhs };
+    }
     if (parser.peek(1)?.type === "OP" && parser.peek(1)?.value === "=") {
       parser.advance();
       parser.advance();
-      if (!variables.has(name)) {
-        throw new Error(`Undeclared variable: ${name}`);
-      }
-      const varInfo = variables.get(name);
-      const isMutable = typeof varInfo === "boolean" ? varInfo : varInfo.mutable;
-      if (!isMutable) {
-        throw new Error(`Cannot assign to immutable variable: ${name}`);
-      }
-      const rhs = parseExpression(parser, variables);
-      const declaredType = typeof varInfo === "object" ? varInfo.type : null;
-      if (declaredType) {
-        validateTypeAnnotation(rhs, declaredType);
-      }
+      const rhs = parseAssignmentRhs(parser, name, variables);
       return { type: "assign", name, value: rhs };
     }
   }
@@ -355,6 +376,23 @@ function parseStatement(parser, variables) {
     return parseBinaryContinuation(parser, variables, block);
   }
   return parseExpression(parser, variables);
+}
+
+function parseAssignmentRhs(parser, name, variables) {
+  if (!variables.has(name)) {
+    throw new Error(`Undeclared variable: ${name}`);
+  }
+  const varInfo = variables.get(name);
+  const isMutable = typeof varInfo === "boolean" ? varInfo : varInfo.mutable;
+  if (!isMutable) {
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  }
+  const rhs = parseExpression(parser, variables);
+  const declaredType = typeof varInfo === "object" ? varInfo.type : null;
+  if (declaredType) {
+    validateTypeAnnotation(rhs, declaredType);
+  }
+  return rhs;
 }
 
 function parseIfCondition(parser, variables) {
@@ -640,6 +678,9 @@ function generateStatements(statements) {
       code += `let ${stmt.name} = ${generateExpr(stmt.init)};\n`;
     } else if (stmt.type === "assign") {
       code += `${stmt.name} = ${generateExpr(stmt.value)};\n`;
+    } else if (stmt.type === "compoundAssign") {
+      const op = stmt.op.replace("=", "");
+      code += `${stmt.name} = ${stmt.name} ${op} ${generateExpr(stmt.value)};\n`;
     } else if (stmt.type === "ifStmt") {
       code += generateIfStmt(stmt);
     } else {
@@ -682,6 +723,10 @@ function generate(statements, variables) {
     } else if (stmt.type === "assign") {
       const rhsValue = generateExpr(stmt.value);
       code += `${stmt.name} = ${rhsValue};\n`;
+    } else if (stmt.type === "compoundAssign") {
+      const op = stmt.op.replace("=", "");
+      const rhsValue = generateExpr(stmt.value);
+      code += `${stmt.name} = ${stmt.name} ${op} ${rhsValue};\n`;
     } else if (stmt.type === "blockStmt") {
       code += generateStatements(stmt.statements);
       if (i === statements.length - 1) {

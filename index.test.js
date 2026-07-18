@@ -974,4 +974,64 @@ test("if statement with missing else for expression branch", () => {
   expectInvalid("if (true) 1");
 });
 
+// Compound assignment tests
+test("+= compound assignment", () => {
+  expectValid("let mut x = 1; x += 2; x", "", 3);
+});
+
+test("-= compound assignment", () => {
+  expectValid("let mut x = 10; x -= 3; x", "", 7);
+});
+
+test("*= compound assignment", () => {
+  expectValid("let mut x = 4; x *= 5; x", "", 20);
+});
+
+test("/= compound assignment", () => {
+  expectValid("let mut x = 10; x /= 2; x", "", 5);
+});
+
+test("%= compound assignment", () => {
+  expectValid("let mut x = 10; x %= 3; x", "", 1);
+});
+
+test("compound assignment with expression", () => {
+  expectValid("let mut x = 1; x += 2 + 3; x", "", 6);
+});
+
+test("compound assignment chained", () => {
+  expectValid("let mut x = 1; x += 2; x *= 3; x", "", 9);
+});
+
+test("compound assignment with suffix", () => {
+  expectValid("let mut x = 100U8; x += 50; x", "", 150);
+});
+
+test("compound assignment with float", () => {
+  const generated = compile("let mut x = 3.14; x += 1; x");
+  const fn = new Function(generated);
+  const result = fn();
+  expect(Math.abs(result - 4.14)).toBeLessThan(0.001);
+});
+
+test("compound assignment with type annotation", () => {
+  expectValid("let mut x: U8 = 100; x += 50; x", "", 150);
+});
+
+test("compound assignment RHS type mismatch", () => {
+  expectInvalid("let mut x: U8 = 100; x += true;");
+});
+
+test("compound assignment to immutable variable is invalid", () => {
+  expectInvalid("let x = 1; x += 2;");
+});
+
+test("compound assignment with Bool type mismatch", () => {
+  expectInvalid("let mut x: Bool = true; x += 1;");
+});
+
+test("compound assignment with non-bool to Bool variable", () => {
+  expectInvalid("let mut x: Bool = true; x = false; x += 1;");
+});
+
 
