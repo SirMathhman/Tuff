@@ -52,7 +52,7 @@ function inferType(expr) {
   if (expr.type === "number") return expr.suffix || "number";
   if (expr.type === "identifier") return "unknown";
   if (expr.type === "binary") {
-    if (expr.op === "&&" || expr.op === "||") return "Bool";
+    if (expr.op === "&&" || expr.op === "||" || expr.op === "==" || expr.op === "!=" || expr.op === "<" || expr.op === ">" || expr.op === "<=" || expr.op === ">=") return "Bool";
     return inferType(expr.left);
   }
   if (expr.type === "unary") {
@@ -92,7 +92,7 @@ function tokenize(source) {
       i++;
       continue;
     }
-    if (ch === "+" || ch === "*" || ch === "/" || ch === "%" || ch === "=") {
+    if (ch === "+" || ch === "*" || ch === "/" || ch === "%") {
       tokens.push({ type: "OP", value: ch });
       i++;
       continue;
@@ -107,8 +107,43 @@ function tokenize(source) {
       i += 2;
       continue;
     }
+    if (ch === "<" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "CMP", value: "<=" });
+      i += 2;
+      continue;
+    }
+    if (ch === ">" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "CMP", value: ">=" });
+      i += 2;
+      continue;
+    }
+    if (ch === "<") {
+      tokens.push({ type: "CMP", value: "<" });
+      i++;
+      continue;
+    }
+    if (ch === ">") {
+      tokens.push({ type: "CMP", value: ">" });
+      i++;
+      continue;
+    }
+    if (ch === "=" && i + 1 < source.length && source[i + 1] === "=") {
+      tokens.push({ type: "CMP", value: "==" });
+      i += 2;
+      continue;
+    }
     if (ch === "!") {
-      tokens.push({ type: "NOT" });
+      if (i + 1 < source.length && source[i + 1] === "=") {
+        tokens.push({ type: "CMP", value: "!=" });
+        i += 2;
+      } else {
+        tokens.push({ type: "NOT" });
+        i++;
+      }
+      continue;
+    }
+    if (ch === "=") {
+      tokens.push({ type: "OP", value: ch });
       i++;
       continue;
     }
@@ -295,7 +330,7 @@ function parseExpression(parser, variables) {
 
 function isBoolType(expr, variables) {
   if (expr.type === "boolean") return true;
-  if (expr.type === "binary" && (expr.op === "&&" || expr.op === "||")) return true;
+  if (expr.type === "binary" && (expr.op === "&&" || expr.op === "||" || expr.op === "==" || expr.op === "!=" || expr.op === "<" || expr.op === ">" || expr.op === "<=" || expr.op === ">=")) return true;
   if (expr.type === "unary" && expr.op === "!") return true;
   if (expr.type === "identifier") {
     const varInfo = variables.get(expr.name);
@@ -321,10 +356,10 @@ function parseOr(parser, variables) {
 }
 
 function parseAnd(parser, variables) {
-  let left = parseAddSub(parser, variables);
+  let left = parseComparison(parser, variables);
   while (parser.peek().type === "AND") {
     parser.advance();
-    const right = parseAddSub(parser, variables);
+    const right = parseComparison(parser, variables);
     if (!isBoolType(left, variables)) {
       throw new Error(`Expected Bool for &&, got ${inferType(left)}`);
     }
@@ -332,6 +367,33 @@ function parseAnd(parser, variables) {
       throw new Error(`Expected Bool for &&, got ${inferType(right)}`);
     }
     left = { type: "binary", op: "&&", left, right };
+  }
+  return left;
+}
+
+function parseComparison(parser, variables) {
+  let left = parseAddSub(parser, variables);
+  while (parser.peek().type === "CMP") {
+    const op = parser.advance().value;
+    const right = parseAddSub(parser, variables);
+    // Type checking: ordering ops require numeric, == and != allow bool
+    const isOrdering = op === "<" || op === ">" || op === "<=" || op === ">=";
+    const leftType = inferType(left);
+    const rightType = inferType(right);
+    if (isOrdering) {
+      if (leftType === "Bool" || rightType === "Bool") {
+        throw new Error(`Ordering operator ${op} requires numeric operands`);
+      }
+    } else {
+      // == and !=: allow numeric or bool, but both sides must match
+      if (leftType === "Bool" && rightType !== "Bool") {
+        throw new Error(`Type mismatch in ==: Bool and ${rightType}`);
+      }
+      if (leftType !== "Bool" && rightType === "Bool") {
+        throw new Error(`Type mismatch in ==: ${leftType} and Bool`);
+      }
+    }
+    left = { type: "binary", op, left, right };
   }
   return left;
 }

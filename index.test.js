@@ -509,4 +509,105 @@ test("&& result in numeric context is invalid", () => {
   expectInvalid("let x: U8 = true && false;");
 });
 
+// Comparison operator tests
+test("== equality true", () => {
+  expectValid("1 == 1", "", 1);
+});
+
+test("== equality false", () => {
+  expectValid("1 == 2", "", 0);
+});
+
+test("!= inequality true", () => {
+  expectValid("1 != 2", "", 1);
+});
+
+test("!= inequality false", () => {
+  expectValid("1 != 1", "", 0);
+});
+
+test("< less than true", () => {
+  expectValid("1 < 2", "", 1);
+});
+
+test("< less than false", () => {
+  expectValid("2 < 1", "", 0);
+});
+
+test("> greater than true", () => {
+  expectValid("2 > 1", "", 1);
+});
+
+test("> greater than false", () => {
+  expectValid("1 > 2", "", 0);
+});
+
+test("<= less or equal true", () => {
+  expectValid("1 <= 1", "", 1);
+});
+
+test("<= less or equal false", () => {
+  expectValid("2 <= 1", "", 0);
+});
+
+test(">= greater or equal true", () => {
+  expectValid("1 >= 1", "", 1);
+});
+
+test(">= greater or equal false", () => {
+  expectValid("1 >= 2", "", 0);
+});
+
+test("== with bools", () => {
+  expectValid("true == true", "", 1);
+});
+
+test("!= with bools", () => {
+  expectValid("true != false", "", 1);
+});
+
+test("comparison with variables", () => {
+  expectValid("let x: U8 = 5; x == 5", "", 1);
+});
+
+test("comparison in let statement", () => {
+  expectValid("let x: Bool = 1 < 2; x", "", 1);
+});
+
+test("comparison with float", () => {
+  expectValid("1.5 < 2.0", "", 1);
+});
+
+test("comparison chaining with &&", () => {
+  expectValid("1 < 2 && 3 > 2", "", 1);
+});
+
+test("comparison result in Bool annotation", () => {
+  expectValid("let x: Bool = 1 == 1; x", "", 1);
+});
+
+test("comparison result in numeric context is invalid", () => {
+  expectInvalid("let x: U8 = 1 == 2;");
+});
+
+test("ordering op with bool is invalid", () => {
+  expectInvalid("true < false");
+});
+
+test("ordering op with bool >= is invalid", () => {
+  expectInvalid("true >= false");
+});
+
+test("comparison with negative numbers", () => {
+  expectValid("-1 < 0", "", 1);
+});
+
+test("comparison with expressions", () => {
+  expectValid("1 + 2 == 3", "", 1);
+});
+
+test("complex comparison expression", () => {
+  expectValid("let x: U8 = 10; x > 5 && x < 20", "", 1);
+});
+
 
