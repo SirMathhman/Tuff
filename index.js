@@ -1,4 +1,4 @@
-const VALID_SUFFIXES = new Set(["U8", "U16", "U32", "I8", "I16", "I32", "F32", "F64"]);
+const VALID_SUFFIXES = new Set(["U8", "U16", "U32", "I8", "I16", "I32", "F32", "F64", "Bool"]);
 
 const SUFFIX_RANGES = {
   U8: { min: 0, max: 255 },
@@ -20,6 +20,17 @@ function validateSuffix(numStr, suffix, negative) {
 }
 
 function validateTypeAnnotation(expr, declaredType) {
+  // Validate Bool type
+  if (declaredType === "Bool") {
+    if (expr.type !== "boolean") {
+      throw new Error(`Type mismatch: expected Bool, got ${expr.type === "number" ? "numeric" : expr.type}`);
+    }
+    return;
+  }
+  // Reject boolean values for non-Bool types
+  if (expr.type === "boolean") {
+    throw new Error(`Type mismatch: expected ${declaredType}, got Bool`);
+  }
   // Only validate literal numbers at compile time
   if (expr.type !== "number") return;
   // If literal has a suffix, it must match the declared type
@@ -135,6 +146,10 @@ function tokenize(source) {
         tokens.push({ type: "MUT" });
       } else if (ident === "return") {
         tokens.push({ type: "RETURN" });
+      } else if (ident === "true") {
+        tokens.push({ type: "BOOL", value: true });
+      } else if (ident === "false") {
+        tokens.push({ type: "BOOL", value: false });
       } else {
         tokens.push({ type: "IDENTIFIER", value: ident });
       }
@@ -298,6 +313,10 @@ function parsePrimary(parser, variables) {
     parser.advance();
     return expr;
   }
+  if (token.type === "BOOL") {
+    parser.advance();
+    return { type: "boolean", value: token.value };
+  }
   throw new Error(`Unexpected token: ${token.type}`);
 }
 
@@ -348,6 +367,9 @@ function generateExpr(node) {
   }
   if (node.type === "identifier") {
     return node.name;
+  }
+  if (node.type === "boolean") {
+    return node.value ? "1" : "0";
   }
   if (node.type === "unary") {
     return `-${generateExpr(node.operand)}`;

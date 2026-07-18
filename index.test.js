@@ -375,4 +375,45 @@ test("let with type annotation missing colon", () => {
   expectInvalid("let x U8 = 42;");
 });
 
+// Boolean literal tests
+test("true literal", () => {
+  expectValid("true", "", 1);
+});
+
+test("false literal", () => {
+  expectValid("false", "", 0);
+});
+
+test("let with true", () => {
+  expectValid("let x = true; x", "", 1);
+});
+
+test("let with false", () => {
+  expectValid("let x = false; x", "", 0);
+});
+
+test("let with Bool type annotation true", () => {
+  expectValid("let x: Bool = true; x", "", 1);
+});
+
+test("let with Bool type annotation false", () => {
+  expectValid("let x: Bool = false; x", "", 0);
+});
+
+test("let mut Bool reassignment", () => {
+  expectValid("let mut x: Bool = true; x = false; x", "", 0);
+});
+
+test("Bool type mismatch with number", () => {
+  expectInvalid("let x: Bool = 42;");
+});
+
+test("Bool type mismatch with true in numeric type", () => {
+  expectInvalid("let x: U8 = true;");
+});
+
+test("invalid Bool reassignment with number", () => {
+  expectInvalid("let mut x: Bool = true; x = 10;");
+});
+
 
