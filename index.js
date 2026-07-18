@@ -82,6 +82,7 @@ function inferType(expr) {
     return inferType(expr.operand);
   }
   if (expr.type === "block") return inferType(expr.finalExpr);
+  if (expr.type === "if") return inferType(expr.thenBranch);
   return "unknown";
 }
 
@@ -215,6 +216,10 @@ function tokenize(source) {
         tokens.push({ type: "MUT" });
       } else if (ident === "return") {
         tokens.push({ type: "RETURN" });
+      } else if (ident === "if") {
+        tokens.push({ type: "IF" });
+      } else if (ident === "else") {
+        tokens.push({ type: "ELSE" });
       } else if (ident === "true") {
         tokens.push({ type: "BOOL", value: true });
       } else if (ident === "false") {
@@ -513,7 +518,39 @@ function parsePrimary(parser, variables) {
   if (token.type === "LBRACE") {
     return parseBlock(parser, variables, false);
   }
+  if (token.type === "IF") {
+    return parseIfExpression(parser, variables);
+  }
   throw new Error(`Unexpected token: ${token.type}`);
+}
+
+function parseIfExpression(parser, variables) {
+  parser.advance(); // consume 'if'
+  if (parser.peek().type !== "LPAREN") {
+    throw new Error(`Expected ( after if, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '('
+  const condition = parseExpression(parser, variables);
+  if (!isBoolType(condition, variables)) {
+    throw new Error(`Expected Bool for if condition, got ${inferType(condition)}`);
+  }
+  if (parser.peek().type !== "RPAREN") {
+    throw new Error(`Expected ) after if condition, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ')'
+  const thenBranch = parseExpression(parser, variables);
+  if (parser.peek().type !== "ELSE") {
+    throw new Error(`Expected else, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume 'else'
+  const elseBranch = parseExpression(parser, variables);
+  // Type check: both branches must have the same type (unknown is allowed to match anything)
+  const thenType = inferType(thenBranch);
+  const elseType = inferType(elseBranch);
+  if (thenType !== elseType && thenType !== "unknown" && elseType !== "unknown") {
+    throw new Error(`Type mismatch in if-else: then branch is ${thenType}, else branch is ${elseType}`);
+  }
+  return { type: "if", condition, thenBranch, elseBranch };
 }
 
 function generateStatements(statements) {
@@ -598,6 +635,9 @@ function generateExpr(node) {
   }
   if (node.type === "block") {
     return `(() => { ${generateStatements(node.statements)}return ${generateExpr(node.finalExpr)}; })()`;
+  }
+  if (node.type === "if") {
+    return `(${generateExpr(node.condition)} ? ${generateExpr(node.thenBranch)} : ${generateExpr(node.elseBranch)})`;
   }
   if (node.type === "blockStmt") {
     return `(() => { ${generateStatements(node.statements)} })()`;

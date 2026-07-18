@@ -768,4 +768,137 @@ test("block statement with trailing semicolon in expression context is invalid",
   expectInvalid("let x = 0; let y = { x = 1; }");
 });
 
+// If expression tests
+test("basic if-else true branch", () => {
+  expectValid("if (true) 1 else 2", "", 1);
+});
+
+test("basic if-else false branch", () => {
+  expectValid("if (false) 1 else 2", "", 2);
+});
+
+test("if-else with variable condition", () => {
+  expectValid("let x: Bool = true; if (x) 10 else 20", "", 10);
+});
+
+test("if-else with comparison condition", () => {
+  expectValid("if (1 < 2) 100 else 200", "", 100);
+});
+
+test("if-else assigned to variable", () => {
+  expectValid("let x = if (true) 1 else 2; x", "", 1);
+});
+
+test("if-else in expression", () => {
+  expectValid("if (true) 1 else 2 + 3", "", 1);
+});
+
+test("if-else-if chain", () => {
+  expectValid("let x = 2; if (x == 1) 10 else if (x == 2) 20 else 30", "", 20);
+});
+
+test("if-else-if falls through to else", () => {
+  expectValid("let x = 5; if (x == 1) 10 else if (x == 2) 20 else 30", "", 30);
+});
+
+test("nested if expressions", () => {
+  expectValid("if (true) if (false) 1 else 2 else 3", "", 2);
+});
+
+test("if-else with block in branch", () => {
+  expectValid("if (true) { 1 + 2 } else { 3 + 4 }", "", 3);
+});
+
+test("if-else with expressions in branches", () => {
+  expectValid("if (true) 10 * 2 else 20 / 2", "", 20);
+});
+
+test("if-else with boolean branches", () => {
+  expectValid("if (true) true else false", "", 1);
+});
+
+test("if-else false branch boolean", () => {
+  expectValid("if (false) true else false", "", 0);
+});
+
+test("if-else with complex condition", () => {
+  expectValid("if (true && false) 1 else 2", "", 2);
+});
+
+test("if-else with negated condition", () => {
+  expectValid("if (!false) 42 else 0", "", 42);
+});
+
+test("if-else as last statement", () => {
+  expectValid("let a = 1; if (a == 1) 100 else 200", "", 100);
+});
+
+test("if-else with let in branch block", () => {
+  expectValid("if (true) { let y = 5; y * 2 } else 0", "", 10);
+});
+
+test("if-else-if multiple conditions", () => {
+  expectValid("let x = 3; if (x == 1) 1 else if (x == 2) 2 else if (x == 3) 3 else 0", "", 3);
+});
+
+test("if-else with parentheses around branches", () => {
+  expectValid("if (true) (1) else (2)", "", 1);
+});
+
+test("if-else in let with type annotation", () => {
+  expectValid("let x: U8 = if (true) 10 else 20; x", "", 10);
+});
+
+test("if-else with mut variable condition", () => {
+  expectValid("let mut x: Bool = false; x = true; if (x) 1 else 2", "", 1);
+});
+
+test("if-else chained with arithmetic", () => {
+  expectValid("let x = if (true) 5 else 10; x + 1", "", 6);
+});
+
+test("if-else with comparison in branches", () => {
+  expectValid("if (true) 1 < 2 else 3 > 4", "", 1);
+});
+
+test("if without else is invalid", () => {
+  expectInvalid("if (true) 1");
+});
+
+test("if with non-bool condition is invalid", () => {
+  expectInvalid("if (42) 1 else 2");
+});
+
+test("if with numeric condition is invalid", () => {
+  expectInvalid("if (1 + 2) 1 else 2");
+});
+
+test("if with mismatched branch types - number vs bool", () => {
+  expectInvalid("if (true) 1 else true");
+});
+
+test("if with mismatched branch types - bool vs number", () => {
+  expectInvalid("if (true) true else 1");
+});
+
+test("if-else-if without final else is invalid", () => {
+  expectInvalid("if (true) 1 else if (false) 2");
+});
+
+test("if with missing closing paren", () => {
+  expectInvalid("if true) 1 else 2");
+});
+
+test("if with missing else keyword", () => {
+  expectInvalid("if (true) 1 2");
+});
+
+test("if-else with block statement in then branch is invalid", () => {
+  expectInvalid("if (true) { 1; } else 2");
+});
+
+test("if-else with block statement in else branch is invalid", () => {
+  expectInvalid("if (true) 1 else { 2; }");
+});
+
 
