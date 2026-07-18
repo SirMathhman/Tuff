@@ -1412,4 +1412,105 @@ test("array of arrays not supported", () => {
   expectInvalid("let arr = [[1, 2], [3, 4]]");
 });
 
+// Struct tests
+test("struct definition and instantiation", () => {
+  expectValid("struct Point { x : I32, y : I32 }; let p = Point { x: 1, y: 2 }; p.x", "", 1);
+});
+
+test("struct field access", () => {
+  expectValid("struct Point { x : I32, y : I32 }; let p = Point { x: 10, y: 20 }; p.y", "", 20);
+});
+
+test("struct with type annotation", () => {
+  expectValid("struct Point { x : I32, y : I32 }; let p: Point = Point { x: 5, y: 10 }; p.x", "", 5);
+});
+
+test("struct mut field assignment", () => {
+  expectValid("struct S { mut x : I32 }; let mut s = S { x: 1 }; s.x = 10; s.x", "", 10);
+});
+
+test("struct immutable field cannot be assigned", () => {
+  expectInvalid("struct S { x : I32 }; let mut s = S { x: 1 }; s.x = 10");
+});
+
+test("struct immutable instance cannot have field assigned", () => {
+  expectInvalid("struct S { mut x : I32 }; let s = S { x: 1 }; s.x = 10");
+});
+
+test("struct as function parameter", () => {
+  expectValid("struct Point { x : I32, y : I32 }; fn distX(p: Point) : I32 => { p.x }; distX(Point { x: 42, y: 0 })", "", 42);
+});
+
+test("struct as function return type", () => {
+  expectValid("struct Point { x : I32, y : I32 }; fn makePoint() : Point => { Point { x: 7, y: 8 } }; let p = makePoint(); p.x", "", 7);
+});
+
+test("struct with multiple fields", () => {
+  expectValid("struct Rect { x : I32, y : I32, w : I32, h : I32 }; let r = Rect { x: 0, y: 0, w: 100, h: 50 }; r.w", "", 100);
+});
+
+test("struct with Bool field", () => {
+  expectValid("struct Flag { active : Bool }; let f = Flag { active: true }; f.active", "", 1);
+});
+
+test("struct with F64 field", () => {
+  expectValid("struct Vec { x : F64, y : F64 }; let v = Vec { x: 3.14, y: 2.71 }; v.x", "", 3.14);
+});
+
+test("struct field in expression", () => {
+  expectValid("struct Point { x : I32, y : I32 }; let p = Point { x: 3, y: 4 }; p.x + p.y", "", 7);
+});
+
+test("struct nested field access", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; let o = Outer { inner: Inner { val: 42 } }; o.inner.val", "", 42);
+});
+
+test("struct with array field", () => {
+  expectValid("struct S { arr: [I32; 2] }; let s = S { arr: [10, 20] }; s.arr[0]", "", 10);
+});
+
+test("struct field assignment with expression", () => {
+  expectValid("struct S { mut x : I32 }; let mut s = S { x: 1 }; s.x = 5 + 3; s.x", "", 8);
+});
+
+test("struct duplicate field in instantiation is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: 1, x: 2 }");
+});
+
+test("struct missing field in instantiation is invalid", () => {
+  expectInvalid("struct S { x : I32, y : I32 }; let s = S { x: 1 }");
+});
+
+test("struct unknown struct name is invalid", () => {
+  expectInvalid("let p = Point { x: 1, y: 2 }");
+});
+
+test("struct unknown field in instantiation is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: 1, z: 2 }");
+});
+
+test("struct wrong field type is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: true }");
+});
+
+test("struct definition duplicate name is invalid", () => {
+  expectInvalid("struct S { x : I32 }; struct S { y : I32 }");
+});
+
+test("struct with single field", () => {
+  expectValid("struct Wrapper { val : I32 }; let w = Wrapper { val: 99 }; w.val", "", 99);
+});
+
+test("struct used in if-else", () => {
+  expectValid("struct Point { x : I32 }; let p = if (true) { Point { x: 1 } } else { Point { x: 2 } }; p.x", "", 1);
+});
+
+test("struct field compound assignment", () => {
+  expectValid("struct S { mut x : I32 }; let mut s = S { x: 5 }; s.x += 3; s.x", "", 8);
+});
+
+test("struct field access on function result", () => {
+  expectValid("struct Point { x : I32, y : I32 }; fn getPoint() : Point => { Point { x: 15, y: 25 } }; getPoint().x", "", 15);
+});
+
 
