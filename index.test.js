@@ -1034,4 +1034,121 @@ test("compound assignment with non-bool to Bool variable", () => {
   expectInvalid("let mut x: Bool = true; x = false; x += 1;");
 });
 
+// While statement tests
+test("basic while loop", () => {
+  expectValid("let mut x = 0; while (x < 3) { x = x + 1; } x", "", 3);
+});
+
+test("while loop with counter", () => {
+  expectValid("let mut i = 0; let mut sum = 0; while (i < 5) { sum = sum + i; i = i + 1; } sum", "", 10);
+});
+
+test("while loop that never executes", () => {
+  expectValid("let mut x = 0; while (x > 1) { x = x + 1; } x", "", 0);
+});
+
+test("while loop with comparison condition", () => {
+  expectValid("let mut x = 10; while (x > 5) { x = x - 1; } x", "", 5);
+});
+
+test("while loop with boolean variable", () => {
+  expectValid("let mut running: Bool = true; let mut count = 0; while (running) { count = count + 1; if (count == 3) { running = false; } } count", "", 3);
+});
+
+test("while loop with compound assignment", () => {
+  expectValid("let mut x = 0; while (x < 4) { x += 2; } x", "", 4);
+});
+
+test("while loop with <= condition", () => {
+  expectValid("let mut x = 0; while (x <= 2) { x = x + 1; } x", "", 3);
+});
+
+test("while loop with >= condition", () => {
+  expectValid("let mut x = 10; while (x >= 8) { x = x - 1; } x", "", 7);
+});
+
+test("while loop with == condition", () => {
+  expectValid("let mut x = 0; while (x == 0) { x = 1; } x", "", 1);
+});
+
+test("while loop with != condition", () => {
+  expectValid("let mut x = 0; while (x != 2) { x = x + 1; } x", "", 2);
+});
+
+test("while loop with && condition", () => {
+  expectValid("let mut x = 0; let mut y = 0; while (x < 3 && y < 3) { x = x + 1; y = y + 1; } x", "", 3);
+});
+
+test("while loop with || condition", () => {
+  expectValid("let mut x = 0; let mut y = 5; while (x < 3 || y > 10) { x = x + 1; y = y - 1; } x", "", 3);
+});
+
+test("while loop with ! condition", () => {
+  expectValid("let mut done: Bool = false; let mut x = 0; while (!done) { x = x + 1; if (x >= 3) { done = true; } } x", "", 3);
+});
+
+test("while loop nested in block", () => {
+  expectValid("{ let mut x = 0; while (x < 2) { x = x + 1; } x }", "", 2);
+});
+
+test("while loop as last statement returns 0", () => {
+  expectValid("let mut x = 0; while (x < 1) { x = x + 1; }", "", 0);
+});
+
+test("while loop with expression in body", () => {
+  expectValid("let mut x = 0; while (x < 3) { x = x * 2 + 1; } x", "", 3);
+});
+
+test("while loop with float", () => {
+  expectValid("let mut x = 0.0; while (x < 2.5) { x = x + 1.0; } x", "", 3.0);
+});
+
+test("while loop with complex condition", () => {
+  expectValid("let mut x = 0; while (x + 1 < 4) { x = x + 1; } x", "", 3);
+});
+
+test("while with non-bool condition is invalid", () => {
+  expectInvalid("let mut x = 0; while (x) { x = x + 1; }");
+});
+
+test("while with string-like condition is invalid", () => {
+  expectInvalid("while (42) { }");
+});
+
+test("while missing opening paren is invalid", () => {
+  expectInvalid("while true { }");
+});
+
+test("while missing closing paren is invalid", () => {
+  expectInvalid("let mut x = 0; while (x < 3 { x = x + 1; }");
+});
+
+test("while missing opening brace is invalid", () => {
+  expectInvalid("let mut x = 0; while (x < 3) x = x + 1;");
+});
+
+test("while missing closing brace is invalid", () => {
+  expectInvalid("let mut x = 0; while (x < 3) { x = x + 1");
+});
+
+test("empty while body", () => {
+  expectValid("let mut x = 0; while (x < 0) { } x", "", 0);
+});
+
+test("while with multiple statements in body", () => {
+  expectValid("let mut x = 0; let mut y = 0; while (x < 3) { x = x + 1; y = y + 10; } y", "", 30);
+});
+
+test("while with nested while", () => {
+  expectValid("let mut x = 0; let mut y = 0; while (x < 2) { while (y < 3) { y = y + 1; }; x = x + 1; } x + y", "", 5);
+});
+
+test("while loop with let inside body", () => {
+  expectValid("let mut x = 0; while (x < 2) { let y = 10; x = x + y; } x", "", 10);
+});
+
+test("while with Bool-typed condition variable", () => {
+  expectValid("let mut flag: Bool = true; let mut x = 0; while (flag) { x = x + 1; if (x >= 2) { flag = false; } } x", "", 2);
+});
+
 

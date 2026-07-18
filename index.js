@@ -246,6 +246,8 @@ function tokenize(source) {
         tokens.push({ type: "IF" });
       } else if (ident === "else") {
         tokens.push({ type: "ELSE" });
+      } else if (ident === "while") {
+        tokens.push({ type: "WHILE" });
       } else if (ident === "true") {
         tokens.push({ type: "BOOL", value: true });
       } else if (ident === "false") {
@@ -367,6 +369,9 @@ function parseStatement(parser, variables) {
     parser.advance(); // consume 'else'
     return parseIfExpressionBranch(parser, variables, condition, thenBranch);
   }
+  if (parser.peek().type === "WHILE") {
+    return parseWhile(parser, variables);
+  }
   if (parser.peek().type === "LBRACE") {
     const block = parseBlock(parser, variables, true);
     if (block.type === "blockStmt") {
@@ -442,6 +447,24 @@ function parseIfStatement(parser, variables) {
   return parseIfStatementBranch(parser, variables, condition, thenBranch);
 }
 
+function parseWhile(parser, variables) {
+  parser.advance(); // consume 'while'
+  if (parser.peek().type !== "LPAREN") {
+    throw new Error(`Expected ( after while, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume '('
+  const condition = parseExpression(parser, variables);
+  if (!isBoolType(condition, variables)) {
+    throw new Error(`Expected Bool for while condition, got ${inferType(condition)}`);
+  }
+  if (parser.peek().type !== "RPAREN") {
+    throw new Error(`Expected ) after while condition, got ${parser.peek().type}`);
+  }
+  parser.advance(); // consume ')'
+  const body = parseBlockStatements(parser, variables);
+  return { type: "whileStmt", condition, body };
+}
+
 function parseBlockStatements(parser, variables) {
   if (parser.peek().type !== "LBRACE") {
     throw new Error(`Expected { for if branch, got ${parser.peek().type}`);
@@ -479,7 +502,7 @@ function parseBlock(parser, parentVariables, allowStatement) {
   }
   parser.advance(); // consume RBRACE
   // Block statement: ends with semicolon, is empty, or last stmt is a statement type
-  const isStatementType = (s) => s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "blockStmt";
+  const isStatementType = (s) => s.type === "let" || s.type === "assign" || s.type === "ifStmt" || s.type === "whileStmt" || s.type === "blockStmt";
   if (lastHadSemicolon || statements.length === 0 || isStatementType(statements[statements.length - 1])) {
     if (!allowStatement) {
       throw new Error("Block statement cannot be used in expression context");
@@ -683,6 +706,9 @@ function generateStatements(statements) {
       code += `${stmt.name} = ${stmt.name} ${op} ${generateExpr(stmt.value)};\n`;
     } else if (stmt.type === "ifStmt") {
       code += generateIfStmt(stmt);
+    } else if (stmt.type === "whileStmt") {
+      code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body)} };
+`;
     } else {
       code += `${generateExpr(stmt)};\n`;
     }
@@ -734,6 +760,12 @@ function generate(statements, variables) {
       }
     } else if (stmt.type === "ifStmt") {
       code += generateIfStmt(stmt);
+      if (i === statements.length - 1) {
+        code += `return 0;`;
+      }
+    } else if (stmt.type === "whileStmt") {
+      code += `while (${generateExpr(stmt.condition)}) { ${generateStatements(stmt.body)} };
+`;
       if (i === statements.length - 1) {
         code += `return 0;`;
       }
