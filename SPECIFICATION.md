@@ -7,11 +7,15 @@ Tuff is a systems programming language designed for experienced C/C++ developers
 **Core Design Principles:**
 - Zero undefined behavior (except FFI boundaries)
 - Ownership and borrowing for memory safety
+- Refinement types for compile-time value proofs
 - Modern C-like syntax with familiar constructs
 - Freestanding design (language core separate from libraries)
 - Cross-platform compilation (Windows, Linux, macOS, WebAssembly, Embedded)
 
 **Target Audience:** Experienced C/C++ developers seeking a safer systems programming language without sacrificing control or performance.
+
+**Related Documents:**
+- `UB_PREVENTION.md` — Detailed specification of how each category of undefined behavior is prevented. This document states *what* the language guarantees; that document specifies *how* the guarantees are enforced.
 
 ---
 
@@ -35,8 +39,41 @@ Tuff is a systems programming language designed for experienced C/C++ developers
 | `F64` | 64-bit floating-point | 8 bytes |
 | `Bool` | Boolean value | 1 byte |
 | `Char` | UTF-8 byte | 1 byte |
+| `USize` | Pointer-sized unsigned integer | Platform (4 or 8 bytes) |
 | `Null` | Null type (bottom type) | 0 bytes |
 | `Void` | Unit type (no value) | 0 bytes |
+
+The `USize` type is used for sizes, lengths, and indices. Its size matches the platform pointer width.
+
+#### 2.1.1a Refinement Types
+
+Any primitive type may be refined with compile-time predicates:
+
+```tuff
+USize < 10                  // 0 <= x < 10 (lower bound inferred from unsigned)
+I32 != 0                    // Non-zero
+USize < arr.length          // Bound to runtime value
+USize < 10 && USize != 5    // Composite refinement
+F64 >= -2147483648.0 && F64 <= 2147483647.0  // Range
+```
+
+Refinements are part of the type — they are preserved through references, function pointers, and struct fields, and are enforced on every write. Full semantics are specified in `UB_PREVENTION.md` (Section 8).
+
+#### 2.1.1b The `uninit` Type Qualifier
+
+The `uninit` qualifier marks uninitialized memory:
+
+```tuff
+&mut uninit [T; L]  // Uninitialized array
+```
+
+Rules:
+- `uninit` values **cannot be read**, only written to
+- Individual elements cannot be written or referenced
+- Full initialization happens at once via closure: `arr[..] = (index : USize < arr.length) : T => value;`
+- After full initialization, the `uninit` qualifier is removed from the type
+
+Full semantics are specified in `UB_PREVENTION.md` (Section 1.5).
 
 #### 2.1.2 String Types
 
@@ -65,6 +102,7 @@ String literals (`"hello"`) have type `&Str`.
 - **Arrays**: Fixed-size arrays (`[Type; Length]`) and array literals
 - **Slices**: Fat pointers to arrays (`&[Type]` or `&[Type; Length]`)
 - **Function Pointers**: `&(ParamTypes) => ReturnType`
+- **Closures**: Anonymous functions with capture modes (see 3.1.7a)
 - **Generics**: Parametric types with monomorphization
 
 #### 2.1.4 Type Aliases
@@ -214,7 +252,34 @@ let fn_ptr : &(I32, I32) => I32 = &add;
 let result = fn_ptr(1, 2);
 ```
 
-Function pointer types use `=>` to separate parameters from return type, matching the function declaration syntax.
+Function pointer types use `=>` to separate parameters from return type, matching the function declaration syntax. Function pointer types include full parameter refinements — a function with refined parameters cannot be coerced to a function pointer type with weaker refinements.
+
+#### 3.1.7a Closures
+
+Closures are anonymous functions that capture variables from their enclosing scope. Three closure variants exist, distinguished by capture mode:
+
+```tuff
+// Immutable captures (like Rust's Fn)
+let f = (x : I32) => x + captured;
+
+// Mutable captures (like Rust's FnMut)
+let g = (&mut, x : I32) => { captured = x; };
+
+// Move captures (like Rust's FnOnce)
+let h = (move, x : I32) => x + captured;
+```
+
+**Rules**:
+- Closure captures are checked by the same borrow checker as normal references
+- A closure holding a borrow cannot escape the scope of the borrowed value
+- `(move, ...)` closures take ownership of captures — moved values live as long as the closure
+
+**Generators** are closures with the signature `() => (T, Bool)`:
+- The `Bool` indicates whether `T` is valid (`true`) or the generator is exhausted (`false`)
+- The tuple is `(element, hasValidElement)` — **not** `hasNextElement`
+- This design avoids ambiguity with empty generators (e.g., `3..3` must produce nothing on first call)
+- After exhaustion, calling the generator again has deterministic behavior (see `UB_PREVENTION.md` Section 9.8)
+- Used by for loops: `for (x in gen)` calls the generator until `false` is returned
 
 #### 3.1.8 Generics
 
@@ -305,7 +370,7 @@ if (result is Ok { field }) {
 type Box<T> = &T then free;
 ```
 
-The `then` keyword attaches a cleanup function that runs on scope exit. No explicit `drop` call is needed.
+The `then` keyword attaches a cleanup function that runs on scope exit. No explicit `drop` call is needed. Cleanup functions run in **reverse declaration order** (LIFO) — see `UB_PREVENTION.md` Section 9.11 for the full ordering semantics.
 
 ### 3.3 Business Rules
 
@@ -329,10 +394,10 @@ The `then` keyword attaches a cleanup function that runs on scope exit. No expli
 
 #### 3.3.3 Memory Rules
 
-- Stack-only allocation (MVP)
-- No built-in heap allocation
+- Stack allocation for local values
+- Heap allocation available via FFI (e.g., `malloc` returns `&mut uninit [T; L]`)
 - Values dropped on scope exit
-- Cleanup functions run on scope exit
+- Cleanup functions (`then`) run on scope exit in reverse declaration order (LIFO)
 - Automatic memory layout (compiler decides)
 
 ### 3.4 Workflows
@@ -380,10 +445,13 @@ FFI calls are the only source of potential undefined behavior.
 | Use of moved value | Compile-time error (ownership violation) |
 | Mutable + immutable refs | Compile-time error (borrow checker) |
 | Reference outlives referent | Compile-time error (lifetime check) |
-| Array index out of bounds | Runtime error (bounds checking) |
+| Array index out of bounds | Compile-time error (refinement proof required) |
 | Null dereference | Compile-time error (Null type must be handled via union) |
 | Type mismatch | Compile-time error (strict typing) |
-| Integer overflow | Unspecified (MVP) |
+| Refinement violation | Compile-time error (proof failure) |
+| Uninitialized read | Compile-time error (`uninit` tracking) |
+| Integer overflow (unsigned) | Unspecified (MVP) |
+| Stack overflow | Unspecified (not UB; see `UB_PREVENTION.md` §10.5) |
 
 ### 4.2 Boundary Conditions
 
@@ -476,8 +544,7 @@ FFI calls are the only source of potential undefined behavior.
 ### 8.1 Technical Constraints
 
 - No standard library bundled (freestanding)
-- Stack-only memory allocation (MVP)
-- No heap allocation primitives
+- No built-in heap allocation primitives (heap access via FFI)
 - No non-lexical lifetimes (NLL)
 - No function overloading
 - No macros or metaprogramming
@@ -514,8 +581,8 @@ FFI calls are the only source of potential undefined behavior.
 
 - [ ] All primitive types compile to correct sizes
 - [ ] Union types support pattern matching
-- [ ] Function pointers type-check correctly
-- [ ] Array bounds are checked at runtime
+- [ ] Function pointers type-check correctly (including refinements)
+- [ ] Array bounds are proven at compile time via refinement types
 - [ ] String types distinguish between borrowed and owned
 
 ### 9.3 Memory Safety
@@ -539,11 +606,11 @@ FFI calls are the only source of potential undefined behavior.
 
 ### 10.1 Deferred Features
 
-1. **Heap allocation**: No built-in heap allocation in MVP
-2. **Concurrency**: Basic threading model TBD
-3. **Integer overflow**: Behavior unspecified for MVP
-4. **Linking**: Build system responsibility, details TBD
-5. **Standard library**: Provided separately, not bundled
+1. **Concurrency**: Basic threading model TBD
+2. **Integer overflow (unsigned)**: Behavior unspecified for MVP (see `UB_PREVENTION.md` §3.1 for signed integer handling)
+3. **Linking**: Build system responsibility, details TBD
+4. **Standard library**: Provided separately, not bundled
+5. **Refinement verification engine**: Implementation approach left to compiler designers (SMT solver, abstract interpretation, etc. — see `UB_PREVENTION.md` §8.5)
 
 ### 10.2 Future Considerations
 
@@ -554,6 +621,7 @@ FFI calls are the only source of potential undefined behavior.
 5. Operator overloading
 6. Custom operators
 7. Unsafe blocks (if needed for advanced use cases)
+8. Type-state refinements (e.g., statically-tracked generator exhaustion)
 
 ---
 
@@ -561,7 +629,7 @@ FFI calls are the only source of potential undefined behavior.
 
 ### A.1 Keywords
 
-`let`, `mut`, `fn`, `struct`, `enum`, `type`, `match`, `case`, `if`, `else`, `while`, `for`, `in`, `return`, `out`, `extern`, `then`, `is`, `as`, `true`, `false`, `null`, `Void`, `Ok`, `Err`
+`let`, `mut`, `fn`, `struct`, `enum`, `type`, `match`, `case`, `if`, `else`, `while`, `for`, `in`, `return`, `out`, `extern`, `then`, `is`, `as`, `true`, `false`, `null`, `move`, `uninit`, `Void`, `Ok`, `Err`
 
 ### A.2 Operators
 
