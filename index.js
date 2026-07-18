@@ -9,6 +9,28 @@ const SUFFIX_RANGES = {
   I32: { min: -2147483648, max: 2147483647 },
 };
 
+function parseNumberLiteral(source, i, negative) {
+  let numStr = "";
+  while (i < source.length && ((source[i] >= "0" && source[i] <= "9") || source[i] === ".")) {
+    numStr += source[i];
+    i++;
+  }
+  let suffix = "";
+  if (i < source.length && "UIF".includes(source[i])) {
+    while (i < source.length && ((source[i] >= "A" && source[i] <= "Z") || (source[i] >= "0" && source[i] <= "9"))) {
+      suffix += source[i];
+      i++;
+    }
+  }
+  if (suffix && !VALID_SUFFIXES.has(suffix)) {
+    throw new Error(`Invalid suffix: ${suffix}`);
+  }
+  validateSuffix(numStr, suffix, negative);
+  const token = { type: "NUMBER", value: numStr, suffix, _end: i };
+  if (negative) token.negative = true;
+  return token;
+}
+
 function validateSuffix(numStr, suffix, negative) {
   if (!suffix) return;
   const range = SUFFIX_RANGES[suffix];
@@ -167,23 +189,8 @@ function tokenize(source) {
       // Check if this is a negative number literal (followed by digit)
       if (i + 1 < source.length && source[i + 1] >= "0" && source[i + 1] <= "9") {
         i++; // skip '-'
-        let numStr = "";
-        while (i < source.length && ((source[i] >= "0" && source[i] <= "9") || source[i] === ".")) {
-          numStr += source[i];
-          i++;
-        }
-        let suffix = "";
-        if (i < source.length && "UIF".includes(source[i])) {
-          while (i < source.length && ((source[i] >= "A" && source[i] <= "Z") || (source[i] >= "0" && source[i] <= "9"))) {
-            suffix += source[i];
-            i++;
-          }
-        }
-        if (suffix && !VALID_SUFFIXES.has(suffix)) {
-          throw new Error(`Invalid suffix: ${suffix}`);
-        }
-        validateSuffix(numStr, suffix, true);
-        tokens.push({ type: "NUMBER", value: numStr, suffix, negative: true });
+        tokens.push(parseNumberLiteral(source, i, true));
+        i = tokens[tokens.length - 1]._end;
         continue;
       }
       tokens.push({ type: "OP", value: "-" });
@@ -191,23 +198,8 @@ function tokenize(source) {
       continue;
     }
     if (ch >= "0" && ch <= "9") {
-      let numStr = "";
-      while (i < source.length && ((source[i] >= "0" && source[i] <= "9") || source[i] === ".")) {
-        numStr += source[i];
-        i++;
-      }
-      let suffix = "";
-      if (i < source.length && "UIF".includes(source[i])) {
-        while (i < source.length && ((source[i] >= "A" && source[i] <= "Z") || (source[i] >= "0" && source[i] <= "9"))) {
-          suffix += source[i];
-          i++;
-        }
-      }
-      if (suffix && !VALID_SUFFIXES.has(suffix)) {
-        throw new Error(`Invalid suffix: ${suffix}`);
-      }
-      validateSuffix(numStr, suffix, false);
-      tokens.push({ type: "NUMBER", value: numStr, suffix });
+      tokens.push(parseNumberLiteral(source, i, false));
+      i = tokens[tokens.length - 1]._end;
       continue;
     }
     // Handle identifiers and keywords
