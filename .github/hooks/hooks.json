@@ -7,7 +7,7 @@
       },
         {
         "type": "command",
-        "command": "cmd /c \"npn run cpd 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"npm run cpd 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
