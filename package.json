@@ -16,6 +16,6 @@
   "main": "index.js",
   "scripts": {
     "test": "bun test",
-    "cpd" : "pmd cpd index.js index.test.js src/types.js src/tokenizer.js src/parser.js src/generator.js --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers"
+    "cpd" : "pmd cpd index.js index.test.js src/types.js src/types_parser.js src/tokenizer.js src/parser.js src/generator.js src/expressions.js src/control.js src/structs.js src/functions.js --language ecmascript --minimum-tokens 50 --ignore-literals --ignore-identifiers"
   }
 }

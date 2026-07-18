@@ -1655,6 +1655,102 @@ test("struct definition duplicate name is invalid", () => {
   expectInvalid("struct S { x : I32 }; struct S { y : I32 }");
 });
 
+test("struct definition without name is invalid", () => {
+  expectInvalid("struct { x : I32 }");
+});
+
+test("struct definition without opening brace is invalid", () => {
+  expectInvalid("struct S x : I32 }");
+});
+
+test("struct instantiation without opening brace is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S x: 5");
+});
+
+test("struct instantiation with unknown field is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { y: 5 }");
+});
+
+test("struct instantiation with duplicate field is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: 5, x: 10 }");
+});
+
+test("struct instantiation with missing colon is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x 5 }");
+});
+
+test("struct instantiation with missing field is invalid", () => {
+  expectInvalid("struct S { x : I32, y : I32 }; let s = S { x: 5 }");
+});
+
+test("struct field access with invalid token is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: 5 }; s.");
+});
+
+test("struct field access chained with invalid token is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: 5 }; s.x.");
+});
+
+test("struct field access with array index missing bracket is invalid", () => {
+  expectInvalid("struct S { items : [I32; 2] }; let s = S { items: [1, 2] }; s.items[");
+});
+
+test("struct tuple index with suffix is invalid", () => {
+  expectInvalid("let t : (I32, I32) = (1, 2); t.0u8");
+});
+
+test("struct tuple index negative is invalid", () => {
+  expectInvalid("let t : (I32, I32) = (1, 2); t.-1");
+});
+
+test("struct tuple index out of bounds is invalid", () => {
+  expectInvalid("let t : (I32, I32) = (1, 2); t.5");
+});
+
+test("struct field access on tuple type is invalid", () => {
+  expectInvalid("let t : (I32, I32) = (1, 2); t.x");
+});
+
+test("struct field assignment to non-mutable variable is invalid", () => {
+  expectInvalid("struct S { mut x : I32 }; let s = S { x: 5 }; s.x = 10");
+});
+
+test("struct field assignment to non-mutable field is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let mut s = S { x: 5 }; s.x = 10");
+});
+
+test("struct field assignment to unknown struct type is invalid", () => {
+  expectInvalid("struct S { mut x : I32 }; let mut s = S { x: 5 }; s.y = 10");
+});
+
+test("struct field compound assignment to non-mutable variable is invalid", () => {
+  expectInvalid("struct S { mut x : I32 }; let s = S { x: 5 }; s.x += 3");
+});
+
+test("struct field compound assignment to non-mutable field is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let mut s = S { x: 5 }; s.x += 3");
+});
+
+test("struct instantiation with nested struct type mismatch is invalid", () => {
+  expectInvalid("struct Inner { val : I32 }; struct Outer { inner : Inner }; let o = Outer { inner: 5 }");
+});
+
+test("struct instantiation with array type mismatch is invalid", () => {
+  expectInvalid("struct S { items : [I32; 2] }; let s = S { items: 5 }");
+});
+
+test("struct instantiation with Bool field type mismatch is invalid", () => {
+  expectInvalid("struct S { flag : Bool }; let s = S { flag: 5 }");
+});
+
+test("struct instantiation with numeric field and Bool value is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: true }");
+});
+
+test("struct instantiation with mismatched suffix is invalid", () => {
+  expectInvalid("struct S { x : I32 }; let s = S { x: 5u8 }");
+});
+
 test("struct with single field", () => {
   expectValid("struct Wrapper { val : I32 }; let w = Wrapper { val: 99 }; w.val", "", 99);
 });
@@ -1669,6 +1765,164 @@ test("struct field compound assignment", () => {
 
 test("struct field access on function result", () => {
   expectValid("struct Point { x : I32, y : I32 }; fn getPoint() : Point => { Point { x: 15, y: 25 } }; getPoint().x", "", 15);
+});
+
+test("struct field access with array index chain", () => {
+  expectValid("struct Container { items : [I32; 3] }; let mut c = Container { items: [1, 2, 3] }; c.items[1]", "", 2);
+});
+
+test("struct nested field access", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; let o = Outer { inner: Inner { val: 42 } }; o.inner.val", "", 42);
+});
+
+test("struct field access chained with array index", () => {
+  expectValid("struct Container { items : [I32; 2] }; let c = Container { items: [10, 20] }; c.items[0]", "", 10);
+});
+
+test("struct instantiation with nested struct value", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; let o = Outer { inner: Inner { val: 7 } }; o.inner.val", "", 7);
+});
+
+test("struct instantiation with array value", () => {
+  expectValid("struct Container { items : [I32; 2] }; let c = Container { items: [1, 2] }; c.items[0]", "", 1);
+});
+
+test("struct instantiation with Bool field value", () => {
+  expectValid("struct Flag { active : Bool }; let f = Flag { active: true }; f.active", "", 1);
+});
+
+test("struct instantiation with function call as field value", () => {
+  expectValid("struct S { x : I32 }; fn getVal() : I32 => { 99 }; let s = S { x: getVal() }; s.x", "", 99);
+});
+
+test("struct instantiation with expression as field value", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 3 * 4 }; s.x", "", 12);
+});
+
+test("struct instantiation with if-else as field value", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: if (true) { 1 } else { 2 } }; s.x", "", 1);
+});
+
+test("struct instantiation with block expression as field value", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: { let y = 5; y + 1 } }; s.x", "", 6);
+});
+
+test("struct instantiation with tuple element access", () => {
+  expectValid("struct S { x : I32 }; let t : (I32, I32) = (10, 20); let s = S { x: t.0 }; s.x", "", 10);
+});
+
+test("struct instantiation with comparison as field value", () => {
+  expectValid("struct S { x : Bool }; let s = S { x: 5 > 3 }; s.x", "", 1);
+});
+
+test("struct instantiation with boolean expression as field value", () => {
+  expectValid("struct S { x : Bool }; let s = S { x: true && false }; s.x", "", 0);
+});
+
+test("struct instantiation with negation as field value", () => {
+  expectValid("struct S { x : Bool }; let s = S { x: !true }; s.x", "", 0);
+});
+
+test("struct instantiation with unary minus as field value", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: -5 }; s.x", "", -5);
+});
+
+test("struct instantiation with let variable as field value", () => {
+  expectValid("struct S { x : I32 }; let y = 42; let s = S { x: y }; s.x", "", 42);
+});
+
+test("struct instantiation with mut variable as field value", () => {
+  expectValid("struct S { x : I32 }; let mut y = 42; let s = S { x: y }; s.x", "", 42);
+});
+
+test("struct instantiation with compound assignment in field value", () => {
+  expectValid("struct S { x : I32 }; let mut y = 5; let s = S { x: y + 1 }; s.x", "", 6);
+});
+
+test("struct instantiation with while loop result as field value", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 0 }; s.x", "", 0);
+});
+
+test("struct instantiation with nested struct field access", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; let o = Outer { inner: Inner { val: 7 } }; o.inner.val", "", 7);
+});
+
+
+test("struct instantiation with array field and function call", () => {
+  expectValid("struct S { items : [I32; 2] }; fn getVal() : I32 => { 42 }; let s = S { items: [getVal(), 1] }; s.items[0]", "", 42);
+});
+
+test("struct instantiation with multiple fields in different order", () => {
+  expectValid("struct S { x : I32, y : I32 }; let s = S { y: 20, x: 10 }; s.x", "", 10);
+});
+
+
+test("struct instantiation with tuple literal as field value", () => {
+  expectValid("struct S { t : (I32, I32) }; let s = S { t: (1, 2) }; s.t.0", "", 1);
+});
+
+test("struct instantiation with struct field in expression", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; let o = Outer { inner: Inner { val: 5 } }; let x = o.inner.val + 1; x", "", 6);
+});
+
+test("struct instantiation with struct field in comparison", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 5 }; s.x > 3", "", 1);
+});
+
+
+
+
+test("struct instantiation with struct field as function argument", () => {
+  expectValid("struct S { x : I32 }; fn double(n: I32) : I32 => { n * 2 }; let s = S { x: 5 }; double(s.x)", "", 10);
+});
+
+test("struct instantiation with struct field in array literal", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 5 }; let arr : [I32; 2] = [s.x, 10]; arr[0]", "", 5);
+});
+
+test("struct instantiation with struct field in tuple literal", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 5 }; let t : (I32, I32) = (s.x, 10); t.0", "", 5);
+});
+
+test("struct instantiation with struct field in block expression", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 5 }; { s.x }", "", 5);
+});
+
+test("struct instantiation with struct field in nested block", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 5 }; { { s.x } }", "", 5);
+});
+
+test("struct instantiation with struct field in nested function call", () => {
+  expectValid("struct S { x : I32 }; fn add(a: I32, b: I32) : I32 => { a + b }; let s = S { x: 5 }; add(s.x, 10)", "", 15);
+});
+
+test("struct instantiation with struct field in nested if-else", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 5 }; if (s.x > 3) { 1 } else { 0 }", "", 1);
+});
+
+
+test("struct instantiation with struct field in nested compound assignment", () => {
+  expectValid("struct S { mut x : I32 }; let mut s = S { x: 5 }; s.x += 3; s.x", "", 8);
+});
+
+test("struct instantiation with struct field in nested array index", () => {
+  expectValid("struct S { x : I32 }; let s = S { x: 1 }; let arr : [I32; 2] = [10, 20]; arr[s.x]", "", 20);
+});
+
+
+
+test("struct instantiation with struct field in nested struct field access", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; struct Container { outer : Outer }; let c = Container { outer: Outer { inner: Inner { val: 7 } } }; c.outer.inner.val", "", 7);
+});
+
+
+
+test("struct instantiation with struct field in nested struct field access on function result", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; fn getOuter() : Outer => { Outer { inner: Inner { val: 99 } } }; getOuter().inner.val", "", 99);
+});
+
+test("struct instantiation with struct field in nested struct field access on nested function result", () => {
+  expectValid("struct Inner { val : I32 }; struct Outer { inner : Inner }; struct Container { outer : Outer }; fn getContainer() : Container => { Container { outer: Outer { inner: Inner { val: 99 } } } }; getContainer().outer.inner.val", "", 99);
 });
 
 // Closure type tests
