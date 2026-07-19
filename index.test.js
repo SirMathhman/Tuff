@@ -255,3 +255,11 @@ test("evaluate is type check with typed literal", () => {
 test("evaluate is type check with parenthesized expression", () => {
   expect(evaluate("(100U8) is U8")).toBe(1);
 });
+
+test("evaluate generic function definition and call", () => {
+  expect(evaluate("fn identity<T>(x : T) => x; identity(100)")).toBe(100);
+});
+
+test("evaluate generic function with typed argument", () => {
+  expect(evaluate("fn identity<T>(x : T) => x; identity(100U8)")).toBe(100);
+});

@@ -310,6 +310,33 @@ export function evaluate(source, scope) {
     return new TypedValue(fields, name);
   }
 
+  function resolveGenericTypes(fn, args) {
+    const typeMap = {};
+    if (!fn.typeParams) return typeMap;
+    for (let p = 0; p < fn.params.length; p++) {
+      const param = fn.params[p];
+      const arg = args[p];
+      if (param.type && fn.typeParams.includes(param.type)) {
+        const argType = arg instanceof TypedValue ? arg.type : "number";
+        typeMap[param.type] = argType;
+      }
+    }
+    return typeMap;
+  }
+
+  function bindFunctionArgs(fn, args, typeMap) {
+    const fnScope = { ...fn.scope };
+    for (let p = 0; p < fn.params.length; p++) {
+      const param = fn.params[p];
+      const arg = args[p];
+      let resolvedType = param.type;
+      if (resolvedType && typeMap[resolvedType]) resolvedType = typeMap[resolvedType];
+      if (resolvedType) checkType(resolvedType, arg);
+      fnScope[param.name] = arg;
+    }
+    return fnScope;
+  }
+
   function callFunction(name) {
     i++; // skip identifier
     i++; // skip "("
@@ -321,15 +348,14 @@ export function evaluate(source, scope) {
     i++; // skip ")"
     const fn = lookup(name);
     if (!fn || !fn.isFn) throw new Error(`Not a function: ${name}`);
-    const fnScope = { ...fn.scope };
-    for (let p = 0; p < fn.params.length; p++) {
-      const param = fn.params[p];
-      const arg = args[p];
-      if (param.type) checkType(param.type, arg);
-      fnScope[param.name] = arg;
-    }
+    const typeMap = resolveGenericTypes(fn, args);
+    const fnScope = bindFunctionArgs(fn, args, typeMap);
     const result = evaluate(fn.body, fnScope);
-    if (fn.returnType) checkType(fn.returnType, result);
+    if (fn.returnType) {
+      let resolvedRetType = fn.returnType;
+      if (typeMap[resolvedRetType]) resolvedRetType = typeMap[resolvedRetType];
+      checkType(resolvedRetType, result);
+    }
     return result;
   }
 
@@ -486,9 +512,20 @@ export function evaluate(source, scope) {
     return value;
   }
 
-  function parseFnDeclaration() {
-    i++; // skip "fn"
-    const name = tokens[i++];
+  function parseTypeParams() {
+    const typeParams = [];
+    if (tokens[i] === "<") {
+      i++; // skip "<"
+      while (tokens[i] !== ">") {
+        typeParams.push(tokens[i++]);
+        if (tokens[i] === ",") i++; // skip ","
+      }
+      i++; // skip ">"
+    }
+    return typeParams;
+  }
+
+  function parseFnParams() {
     if (tokens[i] !== "(") throw new Error("Expected '(' after function name");
     i++; // skip "("
     const params = [];
@@ -503,6 +540,14 @@ export function evaluate(source, scope) {
       if (tokens[i] === ",") i++; // skip ","
     }
     i++; // skip ")"
+    return params;
+  }
+
+  function parseFnDeclaration() {
+    i++; // skip "fn"
+    const name = tokens[i++];
+    const typeParams = parseTypeParams();
+    const params = parseFnParams();
     let returnType = undefined;
     if (tokens[i] === ":") {
       i++; // skip ":"
@@ -519,7 +564,7 @@ export function evaluate(source, scope) {
     parseOrExpr();
     const bodyEnd = i;
     const bodySource = tokens.slice(bodyStart, bodyEnd).join(" ");
-    scopeStack[scopeStack.length - 1].vars[name] = { isFn: true, body: bodySource, scope: { ...scopeStack[scopeStack.length - 1].vars }, params, returnType };
+    scopeStack[scopeStack.length - 1].vars[name] = { isFn: true, body: bodySource, scope: { ...scopeStack[scopeStack.length - 1].vars }, params, returnType, typeParams };
     if (tokens[i] === ";") i++;
     return 0;
   }
