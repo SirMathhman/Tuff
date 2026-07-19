@@ -208,3 +208,7 @@ test("evaluate empty struct definition", () => {
 test("evaluate struct with fields", () => {
   expect(evaluate("struct Wrapper { field : I32 }")).toBe(0);
 });
+
+test("evaluate struct with duplicate fields throws error", () => {
+  expect(() => evaluate("struct Wrapper { field : I32, field : I32 }")).toThrow();
+});

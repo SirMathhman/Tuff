@@ -372,14 +372,25 @@ export function evaluate(source, scope) {
     const name = tokens[i++];
     if (tokens[i] !== "{") throw new Error("Expected '{' after struct name");
     i++; // skip "{"
-    if (tokens[i] === "}") {
-      i++; // skip "}"
-    } else {
-      // Future: parse struct fields here
-      while (tokens[i] !== "}" && tokens[i]) i++;
-      if (tokens[i] === "}") i++;
+    const fields = [];
+    const fieldNames = new Set();
+    if (tokens[i] !== "}") {
+      while (tokens[i]) {
+        const fieldName = tokens[i++];
+        if (fieldNames.has(fieldName)) throw new Error(`Duplicate field: ${fieldName}`);
+        fieldNames.add(fieldName);
+        if (tokens[i] === ":") i++;
+        const fieldType = tokens[i++];
+        fields.push({ name: fieldName, type: fieldType });
+        if (tokens[i] === ",") {
+          i++;
+        } else {
+          break;
+        }
+      }
     }
-    scopeStack[scopeStack.length - 1].vars[name] = { isStruct: true };
+    if (tokens[i] === "}") i++; // skip "}"
+    scopeStack[scopeStack.length - 1].vars[name] = { isStruct: true, fields };
     if (tokens[i] === ";") i++;
     return 0;
   }
