@@ -8,9 +8,26 @@ export function evaluate(source, scope) {
     I8: [-128, 127], I16: [-32768, 32767], I32: [-2147483648, 2147483647],
   };
 
+  class TypedValue {
+    constructor(value, type) {
+      this.value = value;
+      this.type = type;
+    }
+  }
+
   function validateTypeRange(value, type) {
     const range = typeRanges[type];
     if (range && (value < range[0] || value > range[1])) throw new Error(`Value ${value} out of range for ${type}`);
+  }
+
+  function checkType(expectedType, actual) {
+    if (actual instanceof TypedValue && actual.type && actual.type !== expectedType) {
+      throw new Error(`Type mismatch: expected ${expectedType} but got ${actual.type}`);
+    }
+  }
+
+  function unwrap(val) {
+    return val instanceof TypedValue ? val.value : val;
   }
   let i = 0;
   let scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
@@ -50,7 +67,7 @@ export function evaluate(source, scope) {
     let left = parseAndExpr();
     while (i < tokens.length && tokens[i] === "||") {
       i++;
-      left = left || parseAndExpr();
+      left = unwrap(left) || unwrap(parseAndExpr());
     }
     return left;
   }
@@ -69,7 +86,7 @@ export function evaluate(source, scope) {
   };
 
   function compare(left, op, right) {
-    return comparators[op](left, right) ? 1 : 0;
+    return comparators[op](unwrap(left), unwrap(right)) ? 1 : 0;
   }
 
   function parseComparison() {
@@ -77,7 +94,7 @@ export function evaluate(source, scope) {
     while (i < tokens.length && isComparisonOp(tokens[i])) {
       const op = tokens[i++];
       const right = parseExpr();
-      left = compare(left, op, right);
+      left = compare(unwrap(left), op, unwrap(right));
     }
     return left;
   }
@@ -86,7 +103,7 @@ export function evaluate(source, scope) {
     let left = parseComparison();
     while (i < tokens.length && tokens[i] === "&&") {
       i++;
-      left = left && parseComparison();
+      left = unwrap(left) && unwrap(parseComparison());
     }
     return left;
   }
@@ -95,7 +112,7 @@ export function evaluate(source, scope) {
     let left = parseTerm();
     while (i < tokens.length && (tokens[i] === "+" || tokens[i] === "-")) {
       const op = tokens[i++];
-      left = op === "+" ? left + parseTerm() : left - parseTerm();
+      left = op === "+" ? unwrap(left) + unwrap(parseTerm()) : unwrap(left) - unwrap(parseTerm());
     }
     return left;
   }
@@ -104,7 +121,7 @@ export function evaluate(source, scope) {
     let left = parseFactor();
     while (i < tokens.length && (tokens[i] === "*" || tokens[i] === "/")) {
       const op = tokens[i++];
-      left = op === "*" ? left * parseFactor() : left / parseFactor();
+      left = op === "*" ? unwrap(left) * unwrap(parseFactor()) : unwrap(left) / unwrap(parseFactor());
     }
     return left;
   }
@@ -145,11 +162,11 @@ export function evaluate(source, scope) {
 
   function parseIfExpr() {
     i++; // skip "if"
-    const condition = parseIfCondition();
-    const thenValue = parseOrExpr();
+    const condition = unwrap(parseIfCondition());
+    const thenValue = unwrap(parseOrExpr());
     if (tokens[i] !== "else") throw new Error("Expected 'else'");
     i++; // skip "else"
-    const elseValue = parseOrExpr();
+    const elseValue = unwrap(parseOrExpr());
     return condition ? thenValue : elseValue;
   }
 
@@ -158,7 +175,7 @@ export function evaluate(source, scope) {
     const val = lookup(token);
     if (val !== undefined) {
       i++;
-      return val;
+      return unwrap(val);
     }
     throw new Error(`Undefined identifier: ${token}`);
   }
@@ -172,7 +189,7 @@ export function evaluate(source, scope) {
     if (isNaN(value)) throw new Error(`Unexpected token: ${raw}`);
     const type = match[2];
     if (type) validateTypeRange(value, type);
-    return value;
+    return type ? new TypedValue(value, type) : value;
   }
 
   function parseFactor() {
@@ -221,7 +238,11 @@ export function evaluate(source, scope) {
     }
     i++; // skip "="
     const value = parseOrExpr();
-    if (type) validateTypeRange(value, type);
+    if (type) {
+      checkType(type, value);
+      const numValue = value instanceof TypedValue ? value.value : value;
+      validateTypeRange(numValue, type);
+    }
     scopeStack[scopeStack.length - 1].vars[name] = value;
     if (isMut) scopeStack[scopeStack.length - 1].mutVars.add(name);
     if (tokens[i] === ";") i++; // skip ";"
@@ -237,10 +258,10 @@ export function evaluate(source, scope) {
     i++; // skip operator
     const value = parseOrExpr();
     if (op === "+=") {
-      const current = lookup(name);
-      findAndSet(name, current + value);
+      const current = unwrap(lookup(name));
+      findAndSet(name, current + unwrap(value));
       if (tokens[i] === ";") i++; // skip ";"
-      return current + value;
+      return current + unwrap(value);
     }
     findAndSet(name, value);
     if (tokens[i] === ";") i++; // skip ";"
@@ -300,7 +321,7 @@ export function evaluate(source, scope) {
 
   function parseIfStatement() {
     i++; // skip "if"
-    const condition = parseIfCondition();
+    const condition = unwrap(parseIfCondition());
     if (condition) {
       const thenValue = parseStatement();
       if (tokens[i] === "else") {
@@ -323,7 +344,7 @@ export function evaluate(source, scope) {
     if (tokens[i] !== "(") throw new Error("Expected '(' after 'while'");
     i++; // skip "("
     const condStart = i;
-    let condition = parseOrExpr();
+    let condition = unwrap(parseOrExpr());
     if (tokens[i] !== ")") throw new Error("Expected ')' after condition");
     i++; // skip ")"
     const bodyStart = i;
@@ -333,7 +354,7 @@ export function evaluate(source, scope) {
       parseStatement();
       bodyEnd = i;
       i = condStart;
-      condition = parseOrExpr();
+      condition = unwrap(parseOrExpr());
     }
     i = bodyEnd;
     return 0;
@@ -343,5 +364,5 @@ export function evaluate(source, scope) {
   while (i < tokens.length) {
     result = parseStatement();
   }
-  return result;
+  return unwrap(result);
 }
