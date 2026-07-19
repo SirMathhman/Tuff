@@ -44,3 +44,7 @@ test("evaluate unmatched parenthesis throws error", () => {
 test("evaluate curly braces grouping", () => {
   expect(evaluate("{ 3 + 4 } * 5")).toBe(35);
 });
+
+test("evaluate curly braces with let declaration", () => {
+  expect(evaluate("{ let x = 3 + 4; x } * 5")).toBe(35);
+});
