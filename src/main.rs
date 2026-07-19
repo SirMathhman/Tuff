@@ -57,6 +57,11 @@ fn parse_one_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv, c_stmts: 
         c_stmts.push(stmt);
         return Ok(true);
     }
+    if is_compound_assign_start(tokens, *pos) {
+        let stmt = parse_compound_assign_stmt(tokens, pos, env)?;
+        c_stmts.push(stmt);
+        return Ok(true);
+    }
     if is_assignment_start(tokens, *pos) {
         let stmt = parse_assign_stmt(tokens, pos, env)?;
         c_stmts.push(stmt);
@@ -105,6 +110,13 @@ fn is_assignment_start(tokens: &[Token], pos: usize) -> bool {
     matches!(&tokens[pos], Token::Ident(_))
         && pos + 1 < tokens.len()
         && tokens[pos + 1] == Token::Equals
+}
+
+fn is_compound_assign_start(tokens: &[Token], pos: usize) -> bool {
+    if pos + 1 >= tokens.len() || !matches!(&tokens[pos], Token::Ident(_)) {
+        return false;
+    }
+    matches!(&tokens[pos + 1], Token::PlusEq | Token::MinusEq | Token::StarEq | Token::SlashEq | Token::PercentEq)
 }
 
 fn parse_let_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
@@ -168,18 +180,21 @@ fn parse_let_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result
     Ok(format!("{} {} = {}", c_type, c_name, raw_value))
 }
 
-fn parse_assign_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
+fn parse_mutable_var_ref(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<(String, TypedValue), Error> {
     let name = match &tokens[*pos] {
         Token::Ident(n) => n.clone(),
         _ => return Err(Error),
     };
     *pos += 1;
-
-    // Check variable exists and is mutable
-    let var = env.get(&name).ok_or(Error)?;
+    let var = env.get(&name).ok_or(Error)?.clone();
     if !var.is_mut {
         return Err(Error);
     }
+    Ok((name, var))
+}
+
+fn parse_assign_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
+    let (name, var) = parse_mutable_var_ref(tokens, pos, env)?;
 
     // equals
     expect_token(tokens, pos, Token::Equals)?;
@@ -195,6 +210,41 @@ fn parse_assign_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Res
 
     let c_name = env.get_c_name(&name);
     Ok(format!("{} = {}", c_name, value.value))
+}
+
+fn parse_compound_assign_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
+    let (name, var) = parse_mutable_var_ref(tokens, pos, env)?;
+
+    // Get the compound operator
+    let op_fn = match &tokens[*pos] {
+        Token::PlusEq => bin_op_add as fn(i128, i128) -> i128,
+        Token::MinusEq => bin_op_sub as fn(i128, i128) -> i128,
+        Token::StarEq => bin_op_star as fn(i128, i128) -> i128,
+        Token::SlashEq => bin_op_slash as fn(i128, i128) -> i128,
+        Token::PercentEq => bin_op_percent as fn(i128, i128) -> i128,
+        _ => return Err(Error),
+    };
+    let is_div_or_mod = matches!(&tokens[*pos], Token::SlashEq | Token::PercentEq);
+    *pos += 1;
+
+    // value expression
+    let rhs = parse_expression(tokens, pos, env)?;
+
+    // semicolon
+    expect_token(tokens, pos, Token::Semicolon)?;
+
+    // Check div/mod by zero
+    check_div_by_zero(is_div_or_mod, rhs.value)?;
+
+    // Compute compound result (same type rules as binary op)
+    let lhs = var.clone();
+    let result = apply_bin_op(lhs, rhs, op_fn)?;
+
+    // update environment
+    env.set(name.clone(), TypedValue { value: result.value, type_name: var.type_name.clone(), is_mut: true });
+
+    let c_name = env.get_c_name(&name);
+    Ok(format!("{} = {}", c_name, result.value))
 }
 
 fn expect_token(tokens: &[Token], pos: &mut usize, expected: Token) -> Result<(), Error> {
@@ -234,6 +284,11 @@ enum Token {
     Le,
     Gt,
     Ge,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
+    PercentEq,
 }
 
 fn tokenize(s: &str) -> Result<Vec<Token>, Error> {
@@ -307,6 +362,11 @@ fn try_multi_char_token(chars: &[char], i: usize) -> Option<Token> {
         ['!', '='] => Some(Token::Neq),
         ['<', '='] => Some(Token::Le),
         ['>', '='] => Some(Token::Ge),
+        ['+', '='] => Some(Token::PlusEq),
+        ['-', '='] => Some(Token::MinusEq),
+        ['*', '='] => Some(Token::StarEq),
+        ['/', '='] => Some(Token::SlashEq),
+        ['%', '='] => Some(Token::PercentEq),
         _ => None,
     }
 }
@@ -1312,5 +1372,84 @@ mod tests {
     #[test]
     fn bool_cmp_bool_with_int() {
         expect_invalid("true == 1");
+    }
+
+    // --- Positive: compound assignments ---
+
+    #[test]
+    fn compound_add() {
+        expect_valid("let mut x: I32 = 10; x += 5; x", vec![], 15);
+    }
+
+    #[test]
+    fn compound_sub() {
+        expect_valid("let mut x: I32 = 10; x -= 3; x", vec![], 7);
+    }
+
+    #[test]
+    fn compound_mul() {
+        expect_valid("let mut x: I32 = 3; x *= 4; x", vec![], 12);
+    }
+
+    #[test]
+    fn compound_div() {
+        expect_valid("let mut x: I32 = 10; x /= 3; x", vec![], 3);
+    }
+
+    #[test]
+    fn compound_mod() {
+        expect_valid("let mut x: I32 = 10; x %= 3; x", vec![], 1);
+    }
+
+    #[test]
+    fn compound_chained() {
+        expect_valid("let mut x: I32 = 5; x += 3; x *= 2; x", vec![], 16);
+    }
+
+    #[test]
+    fn compound_with_expression() {
+        expect_valid("let mut x: I32 = 5; x += 2 * 3; x", vec![], 11);
+    }
+
+    #[test]
+    fn compound_u8() {
+        expect_valid("let mut x: U8 = 100; x += 50; x", vec![], 150);
+    }
+
+    #[test]
+    fn compound_with_var() {
+        expect_valid("let mut x: I32 = 10; let y: I32 = 5; x += y; x", vec![], 15);
+    }
+
+    // --- Negative: compound assignments ---
+
+    #[test]
+    fn compound_immutable() {
+        expect_invalid("let x: I32 = 10; x += 5; x");
+    }
+
+    #[test]
+    fn compound_overflow_u8() {
+        expect_invalid("let mut x: U8 = 200; x += 100; x");
+    }
+
+    #[test]
+    fn compound_div_by_zero() {
+        expect_invalid("let mut x: I32 = 10; x /= 0; x");
+    }
+
+    #[test]
+    fn compound_mod_by_zero() {
+        expect_invalid("let mut x: I32 = 10; x %= 0; x");
+    }
+
+    #[test]
+    fn compound_undeclared_var() {
+        expect_invalid("x += 5; x");
+    }
+
+    #[test]
+    fn compound_underflow_i8() {
+        expect_invalid("let mut x: I8 = -128; x -= 1; x");
     }
 }
