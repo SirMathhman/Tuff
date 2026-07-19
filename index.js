@@ -204,16 +204,18 @@ export function evaluate(source, scope) {
   function skipStatement() {
     let depth = 0;
     while (i < tokens.length) {
-      if (tokens[i] === "{") depth++;
+      if (tokens[i] === "{") { depth++; i++; }
       else if (tokens[i] === "}") {
         if (depth === 0) { i++; return; }
         depth--;
         i++;
+        if (depth === 0) return;
       } else if (tokens[i] === ";" && depth === 0) {
         i++;
         return;
+      } else {
+        i++;
       }
-      i++;
     }
   }
 
@@ -231,16 +233,21 @@ export function evaluate(source, scope) {
   function parseIfStatement() {
     i++; // skip "if"
     const condition = parseIfCondition();
-    const thenValue = parseStatement();
-    if (tokens[i] === "else") {
-      i++; // skip "else"
-      if (condition) {
+    if (condition) {
+      const thenValue = parseStatement();
+      if (tokens[i] === "else") {
+        i++; // skip "else"
         skipStatement();
         return thenValue;
       }
+      return thenValue;
+    }
+    skipStatement();
+    if (tokens[i] === "else") {
+      i++; // skip "else"
       return parseStatement();
     }
-    return condition ? thenValue : 0;
+    return 0;
   }
 
   let result = 0;
