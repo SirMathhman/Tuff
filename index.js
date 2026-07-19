@@ -276,16 +276,14 @@ export function evaluate(source, scope) {
     const token = tokens[i];
     const val = lookup(token);
     if (val !== undefined && tokens[i + 1] === "(") return callFunction(token);
-    if (val !== undefined && val.isStruct && tokens[i + 1] === "{") return parseStructLiteral(token);
+    if (val !== undefined && val.isStruct && tokens[i + 1] === "<") return parseStructLiteral(token, true);
+    if (val !== undefined && val.isStruct && tokens[i + 1] === "{") return parseStructLiteral(token, false);
     const result = parseIdentifier();
     if (tokens[i] === "[") return parseArrayIndex(result);
     return result;
   }
 
-  function parseStructLiteral(name) {
-    i++; // skip identifier
-    i++; // skip "{"
-    const structDef = lookup(name);
+  function parseStructFields(structDef, typeMap) {
     const fields = {};
     if (tokens[i] !== "}") {
       while (tokens[i]) {
@@ -294,7 +292,8 @@ export function evaluate(source, scope) {
         const fieldValue = parseOrExpr();
         const fieldDef = structDef.fields.find(f => f.name === fieldName);
         if (!fieldDef) throw new Error(`Unknown field: ${fieldName}`);
-        if (fieldDef.type) checkType(fieldDef.type, fieldValue);
+        const resolvedType = resolveStructFieldType(fieldDef.type, typeMap);
+        if (resolvedType) checkType(resolvedType, fieldValue);
         fields[fieldName] = fieldValue;
         if (tokens[i] === ",") {
           i++;
@@ -303,11 +302,33 @@ export function evaluate(source, scope) {
         }
       }
     }
-    if (tokens[i] === "}") i++; // skip "}"
+    return fields;
+  }
+
+  function validateStructFields(structDef, fields) {
     for (const fieldDef of structDef.fields) {
       if (!(fieldDef.name in fields)) throw new Error(`Missing field: ${fieldDef.name}`);
     }
-    return new TypedValue(fields, name);
+  }
+
+  function parseStructLiteral(name, hasTypeArgs) {
+    i++; // skip identifier
+    let typeArgs = [];
+    if (hasTypeArgs) {
+      typeArgs = parseStructTypeArgs();
+    }
+    if (tokens[i] !== "{") throw new Error("Expected '{' after struct name");
+    i++; // skip "{"
+    const structDef = lookup(name);
+    if (structDef.typeParams && structDef.typeParams.length > 0 && typeArgs.length === 0) {
+      throw new Error(`Missing type arguments for generic struct: ${name}`);
+    }
+    const typeMap = resolveStructTypes(structDef, typeArgs);
+    const fields = parseStructFields(structDef, typeMap);
+    if (tokens[i] === "}") i++; // skip "}"
+    validateStructFields(structDef, fields);
+    const resolvedTypeName = typeArgs.length > 0 ? `${name}<${typeArgs.join(", ")}>` : name;
+    return new TypedValue(fields, resolvedTypeName);
   }
 
   function resolveGenericTypes(fn, args) {
@@ -382,6 +403,11 @@ export function evaluate(source, scope) {
         type = parseArrayType();
       } else {
         type = tokens[i++];
+        // Handle generic type args: Point<U8, U16>
+        if (tokens[i] === "<") {
+          const typeArgs = parseStructTypeArgs();
+          type = `${type}<${typeArgs.join(", ")}>`;
+        }
       }
     }
     if (tokens[i] !== "=") {
@@ -467,9 +493,38 @@ export function evaluate(source, scope) {
     return isStructFieldAssignment();
   }
 
+  function parseStructTypeArgs() {
+    const typeArgs = [];
+    if (tokens[i] === "<") {
+      i++; // skip "<"
+      while (tokens[i] !== ">") {
+        typeArgs.push(tokens[i++]);
+        if (tokens[i] === ",") i++; // skip ","
+      }
+      i++; // skip ">"
+    }
+    return typeArgs;
+  }
+
+  function resolveStructTypes(structDef, typeArgs) {
+    const typeMap = {};
+    if (structDef.typeParams && typeArgs.length === structDef.typeParams.length) {
+      for (let t = 0; t < structDef.typeParams.length; t++) {
+        typeMap[structDef.typeParams[t]] = typeArgs[t];
+      }
+    }
+    return typeMap;
+  }
+
+  function resolveStructFieldType(fieldType, typeMap) {
+    if (typeMap[fieldType]) return typeMap[fieldType];
+    return fieldType;
+  }
+
   function parseStructDeclaration() {
     i++; // skip "struct"
     const name = tokens[i++];
+    const typeParams = parseTypeParams();
     if (tokens[i] !== "{") throw new Error("Expected '{' after struct name");
     i++; // skip "{"
     const fields = [];
@@ -495,7 +550,7 @@ export function evaluate(source, scope) {
       }
     }
     if (tokens[i] === "}") i++; // skip "}"
-    scopeStack[scopeStack.length - 1].vars[name] = { isStruct: true, fields };
+    scopeStack[scopeStack.length - 1].vars[name] = { isStruct: true, fields, typeParams };
     if (tokens[i] === ";") i++;
     return 0;
   }

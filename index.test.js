@@ -263,3 +263,23 @@ test("evaluate generic function definition and call", () => {
 test("evaluate generic function with typed argument", () => {
   expect(evaluate("fn identity<T>(x : T) => x; identity(100U8)")).toBe(100);
 });
+
+test("evaluate generic struct definition", () => {
+  expect(evaluate("struct Point<T> { x : T, y : T }")).toBe(0);
+});
+
+test("evaluate generic struct with multiple type params", () => {
+  expect(evaluate("struct Point<T, U> { x : T, y : U }")).toBe(0);
+});
+
+test("evaluate generic struct instance declaration", () => {
+  expect(evaluate("struct Point<T, U> { x : T, y : U } let p : Point<U8, U16> = Point<U8, U16> { x : 100, y : 200 };")).toBe(0);
+});
+
+test("evaluate generic struct instance field type mismatch throws error", () => {
+  expect(() => evaluate("struct Point<T> { x : T, y : T } let p : Point<U8> = Point<U8> { x : 100, y : 200U16 };")).toThrow();
+});
+
+test("evaluate generic struct instance missing type args throws error", () => {
+  expect(() => evaluate("struct Point<T> { x : T } let p : Point<U8> = Point { x : 100 };")).toThrow();
+});
