@@ -212,3 +212,7 @@ test("evaluate struct with fields", () => {
 test("evaluate struct with duplicate fields throws error", () => {
   expect(() => evaluate("struct Wrapper { field : I32, field : I32 }")).toThrow();
 });
+
+test("evaluate struct instance declaration", () => {
+  expect(evaluate("struct Empty {} let empty : Empty = Empty {};")).toBe(0);
+});

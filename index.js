@@ -257,9 +257,32 @@ export function evaluate(source, scope) {
     const token = tokens[i];
     const val = lookup(token);
     if (val !== undefined && tokens[i + 1] === "(") return callFunction(token);
+    if (val !== undefined && val.isStruct && tokens[i + 1] === "{") return parseStructLiteral(token);
     const result = parseIdentifier();
     if (tokens[i] === "[") return parseArrayIndex(result);
     return result;
+  }
+
+  function parseStructLiteral(name) {
+    i++; // skip identifier
+    i++; // skip "{"
+    const structDef = lookup(name);
+    const fields = {};
+    if (tokens[i] !== "}") {
+      while (tokens[i]) {
+        const fieldName = tokens[i++];
+        if (tokens[i] === ":") i++; // skip ":"
+        const fieldValue = parseOrExpr();
+        fields[fieldName] = fieldValue;
+        if (tokens[i] === ",") {
+          i++;
+        } else {
+          break;
+        }
+      }
+    }
+    if (tokens[i] === "}") i++; // skip "}"
+    return new TypedValue(fields, name);
   }
 
   function callFunction(name) {
