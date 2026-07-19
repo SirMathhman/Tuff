@@ -140,3 +140,7 @@ test("evaluate while loop", () => {
 test("evaluate function definition and call", () => {
   expect(evaluate("fn get() => 100; get()")).toBe(100);
 });
+
+test("evaluate typed number literal", () => {
+  expect(evaluate("100U8")).toBe(100);
+});

@@ -156,10 +156,11 @@ export function evaluate(source, scope) {
 
   function parseNumber() {
     i++;
-    const value = Number(tokens[i - 1]);
-    if (isNaN(value)) {
-      throw new Error(`Unexpected token: ${tokens[i - 1]}`);
-    }
+    const raw = tokens[i - 1];
+    const match = raw.match(/^(\d+)(U8|U16|U32|I8|I16|I32)?$/);
+    if (!match) throw new Error(`Unexpected token: ${raw}`);
+    const value = Number(match[1]);
+    if (isNaN(value)) throw new Error(`Unexpected token: ${raw}`);
     return value;
   }
 
