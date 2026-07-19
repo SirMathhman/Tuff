@@ -196,3 +196,7 @@ test("evaluate typed array declaration and indexing", () => {
 test("evaluate array element type mismatch throws error", () => {
   expect(() => evaluate("let x : [U8; 2] = [0U16, 1U16];")).toThrow();
 });
+
+test("evaluate array length mismatch throws error", () => {
+  expect(() => evaluate("let x : [U8; 3] = [1U8, 2U8];")).toThrow();
+});

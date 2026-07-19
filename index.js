@@ -20,18 +20,25 @@ export function evaluate(source, scope) {
     if (range && (value < range[0] || value > range[1])) throw new Error(`Value ${value} out of range for ${type}`);
   }
 
+  function checkArrayType(expectedType, actual) {
+    const match = expectedType.match(/^\[(.+); (\d+)\]$/);
+    if (!match) return false;
+    const elemType = match[1];
+    const expectedLen = Number(match[2]);
+    const elements = actual.value;
+    if (elements.length !== expectedLen) {
+      throw new Error(`Array length mismatch: expected ${expectedLen} but got ${elements.length}`);
+    }
+    for (const elem of elements) {
+      checkType(elemType, elem);
+    }
+    return true;
+  }
+
   function checkType(expectedType, actual) {
     if (actual instanceof TypedValue && actual.type && actual.type !== expectedType) {
       if (actual.type === "array" && expectedType.startsWith("[")) {
-        const match = expectedType.match(/^\[(.+);/);
-        if (match) {
-          const elemType = match[1];
-          const elements = actual.value;
-          for (const elem of elements) {
-            checkType(elemType, elem);
-          }
-        }
-        return;
+        if (checkArrayType(expectedType, actual)) return;
       }
       throw new Error(`Type mismatch: expected ${expectedType} but got ${actual.type}`);
     }
