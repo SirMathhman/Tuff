@@ -225,6 +225,15 @@ enum Token {
     Colon,
     Semicolon,
     Equals,
+    And,
+    Or,
+    Not,
+    Eq,
+    Neq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }
 
 fn tokenize(s: &str) -> Result<Vec<Token>, Error> {
@@ -290,7 +299,24 @@ fn tokenize_number(chars: &[char], start: usize) -> Result<(Token, usize), Error
     Ok((Token::Lit { value, suffix }, i))
 }
 
+fn try_multi_char_token(chars: &[char], i: usize) -> Option<Token> {
+    match &chars[i..=i + 1] {
+        ['&', '&'] => Some(Token::And),
+        ['|', '|'] => Some(Token::Or),
+        ['=', '='] => Some(Token::Eq),
+        ['!', '='] => Some(Token::Neq),
+        ['<', '='] => Some(Token::Le),
+        ['>', '='] => Some(Token::Ge),
+        _ => None,
+    }
+}
+
 fn tokenize_symbol(chars: &[char], i: usize) -> Result<(Token, usize), Error> {
+    // Multi-character operators
+    if i + 1 < chars.len() && let Some(tok) = try_multi_char_token(chars, i) {
+        return Ok((tok, i + 2));
+    }
+    // Single-character operators
     let tok = match chars[i] {
         '+' => Token::Plus,
         '-' => Token::Minus,
@@ -304,6 +330,9 @@ fn tokenize_symbol(chars: &[char], i: usize) -> Result<(Token, usize), Error> {
         ':' => Token::Colon,
         ';' => Token::Semicolon,
         '=' => Token::Equals,
+        '!' => Token::Not,
+        '<' => Token::Lt,
+        '>' => Token::Gt,
         _ => return Err(Error),
     };
     Ok((tok, i + 1))
@@ -357,6 +386,89 @@ fn shadow_name(name: &str, count: u32) -> String {
 }
 
 fn parse_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    parse_or_expression(tokens, pos, env)
+}
+
+fn parse_or_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    let mut left = parse_and_expression(tokens, pos, env)?;
+    while *pos < tokens.len() && tokens[*pos] == Token::Or {
+        *pos += 1;
+        let right = parse_and_expression(tokens, pos, env)?;
+        check_bool_type(&left, &right)?;
+        left = bool_tv(left.value != 0 || right.value != 0);
+    }
+    Ok(left)
+}
+
+fn parse_and_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    let mut left = parse_equality_expression(tokens, pos, env)?;
+    while *pos < tokens.len() && tokens[*pos] == Token::And {
+        *pos += 1;
+        let right = parse_equality_expression(tokens, pos, env)?;
+        check_bool_type(&left, &right)?;
+        left = bool_tv(left.value != 0 && right.value != 0);
+    }
+    Ok(left)
+}
+
+fn bool_tv(b: bool) -> TypedValue {
+    TypedValue { value: if b { 1 } else { 0 }, type_name: "Bool".to_string(), is_mut: false }
+}
+
+fn parse_equality_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    let mut left = parse_comparison_expression(tokens, pos, env)?;
+    while *pos < tokens.len() {
+        let op = match &tokens[*pos] {
+            Token::Eq => cmp_eq as fn(i128, i128) -> i128,
+            Token::Neq => cmp_neq as fn(i128, i128) -> i128,
+            _ => break,
+        };
+        *pos += 1;
+        let right = parse_comparison_expression(tokens, pos, env)?;
+        left = apply_eq(left, right, op)?;
+    }
+    Ok(left)
+}
+
+fn apply_eq(left: TypedValue, right: TypedValue, op: fn(i128, i128) -> i128) -> Result<TypedValue, Error> {
+    let result = op(left.value, right.value);
+    if left.type_name == "Bool" && right.type_name == "Bool" {
+        return Ok(bool_tv(result != 0));
+    }
+    if left.type_name != "Bool" && right.type_name != "Bool" {
+        promote_type(&left.type_name, &right.type_name);
+        return Ok(bool_tv(result != 0));
+    }
+    Err(Error)
+}
+
+fn cmp_eq(a: i128, b: i128) -> i128 { if a == b { 1 } else { 0 } }
+fn cmp_neq(a: i128, b: i128) -> i128 { if a != b { 1 } else { 0 } }
+
+fn parse_comparison_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    let mut left = parse_additive_expression(tokens, pos, env)?;
+    while *pos < tokens.len() {
+        let op = match &tokens[*pos] {
+            Token::Lt => cmp_lt as fn(i128, i128) -> i128,
+            Token::Le => cmp_le as fn(i128, i128) -> i128,
+            Token::Gt => cmp_gt as fn(i128, i128) -> i128,
+            Token::Ge => cmp_ge as fn(i128, i128) -> i128,
+            _ => break,
+        };
+        *pos += 1;
+        let right = parse_additive_expression(tokens, pos, env)?;
+        reject_bool_operand(&left, &right)?;
+        left = bool_tv(op(left.value, right.value) != 0);
+    }
+    Ok(left)
+}
+
+fn cmp_lt(a: i128, b: i128) -> i128 { if a < b { 1 } else { 0 } }
+fn cmp_le(a: i128, b: i128) -> i128 { if a <= b { 1 } else { 0 } }
+fn cmp_gt(a: i128, b: i128) -> i128 { if a > b { 1 } else { 0 } }
+fn cmp_ge(a: i128, b: i128) -> i128 { if a >= b { 1 } else { 0 } }
+
+fn parse_additive_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
     let mut left = parse_term(tokens, pos, env)?;
     while *pos < tokens.len() {
         let op = match &tokens[*pos] {
@@ -369,6 +481,20 @@ fn parse_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<T
         left = apply_bin_op(left, right, op)?;
     }
     Ok(left)
+}
+
+fn check_bool_type(a: &TypedValue, b: &TypedValue) -> Result<(), Error> {
+    if a.type_name != "Bool" || b.type_name != "Bool" {
+        return Err(Error);
+    }
+    Ok(())
+}
+
+fn reject_bool_operand(a: &TypedValue, b: &TypedValue) -> Result<(), Error> {
+    if a.type_name == "Bool" || b.type_name == "Bool" {
+        return Err(Error);
+    }
+    Ok(())
 }
 
 fn bin_op_add(a: i128, b: i128) -> i128 { a + b }
@@ -410,6 +536,9 @@ fn parse_factor(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<Typed
     if tokens[*pos] == Token::Minus {
         return parse_negated_factor(tokens, pos, env);
     }
+    if tokens[*pos] == Token::Not {
+        return parse_not_factor(tokens, pos, env);
+    }
     if tokens[*pos] == Token::LParen {
         return parse_parenthesized(tokens, pos, env);
     }
@@ -434,6 +563,16 @@ fn parse_factor(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<Typed
         }
         _ => Err(Error),
     }
+}
+
+fn parse_not_factor(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    *pos += 1;
+    let inner = parse_factor(tokens, pos, env)?;
+    if inner.type_name != "Bool" {
+        return Err(Error);
+    }
+    let result = if inner.value == 0 { 1 } else { 0 };
+    Ok(TypedValue { value: result, type_name: "Bool".to_string(), is_mut: false })
 }
 
 fn parse_parenthesized(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
@@ -1042,5 +1181,136 @@ mod tests {
     #[test]
     fn bool_not_keyword() {
         expect_invalid("let true: I32 = 42;");
+    }
+
+    // --- Positive: bool operators ---
+
+    #[test]
+    fn bool_and() {
+        expect_valid("true && true", vec![], 1);
+    }
+
+    #[test]
+    fn bool_and_false() {
+        expect_valid("true && false", vec![], 0);
+    }
+
+    #[test]
+    fn bool_or() {
+        expect_valid("false || true", vec![], 1);
+    }
+
+    #[test]
+    fn bool_or_false() {
+        expect_valid("false || false", vec![], 0);
+    }
+
+    #[test]
+    fn bool_not() {
+        expect_valid("!false", vec![], 1);
+    }
+
+    #[test]
+    fn bool_not_true() {
+        expect_valid("!true", vec![], 0);
+    }
+
+    #[test]
+    fn bool_not_not() {
+        expect_valid("!!true", vec![], 1);
+    }
+
+    #[test]
+    fn bool_and_or_precedence() {
+        expect_valid("true || false && false", vec![], 1);
+    }
+
+    #[test]
+    fn bool_not_precedence() {
+        expect_valid("!false && true", vec![], 1);
+    }
+
+    #[test]
+    fn bool_eq_true() {
+        expect_valid("true == true", vec![], 1);
+    }
+
+    #[test]
+    fn bool_eq_false() {
+        expect_valid("true == false", vec![], 0);
+    }
+
+    #[test]
+    fn bool_neq() {
+        expect_valid("true != false", vec![], 1);
+    }
+
+    #[test]
+    fn bool_with_vars() {
+        expect_valid("let x: Bool = true; let y: Bool = false; x && y", vec![], 0);
+    }
+
+    // --- Positive: comparison operators on integers ---
+
+    #[test]
+    fn cmp_lt() {
+        expect_valid("1 < 2", vec![], 1);
+    }
+
+    #[test]
+    fn cmp_lt_false() {
+        expect_valid("3 < 2", vec![], 0);
+    }
+
+    #[test]
+    fn cmp_gt() {
+        expect_valid("3 > 2", vec![], 1);
+    }
+
+    #[test]
+    fn cmp_le() {
+        expect_valid("2 <= 2", vec![], 1);
+    }
+
+    #[test]
+    fn cmp_ge() {
+        expect_valid("2 >= 3", vec![], 0);
+    }
+
+    #[test]
+    fn cmp_chain() {
+        expect_valid("1 < 2 && 2 < 3", vec![], 1);
+    }
+
+    #[test]
+    fn cmp_precedence() {
+        expect_valid("1 + 2 == 3", vec![], 1);
+    }
+
+    #[test]
+    fn cmp_with_arithmetic() {
+        expect_valid("1 + 2 * 3 > 5", vec![], 1);
+    }
+
+    // --- Negative: bool operator misuse ---
+
+    #[test]
+    fn bool_and_non_bool() {
+        expect_invalid("1 && true");
+    }
+
+    #[test]
+    fn bool_or_non_bool() {
+        expect_invalid("true || 42");
+    }
+
+    #[test]
+    fn bool_not_non_bool() {
+        expect_invalid("!42");
+    }
+
+    #[test]
+    fn bool_cmp_bool_with_int() {
+        expect_invalid("true == 1");
     }
 }
