@@ -1,7 +1,7 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  let tokens = source.trim().replace(/(&&|\|\||\+=|=>|[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
+  let tokens = source.trim().replace(/(&&|\|\||\+=|=>|[<>=]|[()+*/{};=|&:-])/g, " $1 ").trim().split(/\s+/);
   const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "true", "false"]);
   let i = 0;
   let scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
@@ -213,11 +213,27 @@ export function evaluate(source, scope) {
     const isMut = tokens[i] === "mut";
     if (isMut) i++; // skip "mut"
     const name = tokens[i++];
+    let type = undefined;
+    if (tokens[i] === ":") {
+      i++; // skip ":"
+      type = tokens[i++];
+    }
     if (tokens[i] !== "=") {
       throw new Error("Expected '=' after variable name");
     }
     i++; // skip "="
-    scopeStack[scopeStack.length - 1].vars[name] = parseOrExpr();
+    const value = parseOrExpr();
+    if (type) {
+      const ranges = {
+        U8: [0, 255], U16: [0, 65535], U32: [0, 4294967295],
+        I8: [-128, 127], I16: [-32768, 32767], I32: [-2147483648, 2147483647],
+      };
+      if (ranges[type]) {
+        const [min, max] = ranges[type];
+        if (value < min || value > max) throw new Error(`Value ${value} out of range for ${type}`);
+      }
+    }
+    scopeStack[scopeStack.length - 1].vars[name] = value;
     if (isMut) scopeStack[scopeStack.length - 1].mutVars.add(name);
     if (tokens[i] === ";") i++; // skip ";"
     return scopeStack[scopeStack.length - 1].vars[name];

@@ -148,3 +148,7 @@ test("evaluate typed number literal", () => {
 test("evaluate typed number literal out of range throws error", () => {
   expect(() => evaluate("256U8")).toThrow();
 });
+
+test("evaluate typed variable declaration", () => {
+  expect(evaluate("let x : U8 = 100U8; x")).toBe(100);
+});
