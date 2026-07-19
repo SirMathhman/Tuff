@@ -1,7 +1,7 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  let tokens = source.trim().replace(/(&&|\|\||\+=|=>|[<>=]|[()+*/{};=|&:-])/g, " $1 ").trim().split(/\s+/);
+  let tokens = source.trim().replace(/(&&|\|\||\+=|=>|[<>=]|[()+*/{};=|&:,.-])/g, " $1 ").trim().split(/\s+/);
   const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "true", "false"]);
   const typeRanges = {
     U8: [0, 255], U16: [0, 65535], U32: [0, 4294967295],
@@ -223,14 +223,24 @@ export function evaluate(source, scope) {
   function callFunction(name) {
     i++; // skip identifier
     i++; // skip "("
-    const arg = tokens[i] === ")" ? undefined : parseOrExpr();
-    if (tokens[i] !== ")") throw new Error("Missing closing parenthesis");
-    i++;
+    const args = [];
+    while (tokens[i] !== ")") {
+      args.push(parseOrExpr());
+      if (tokens[i] === ",") i++; // skip ","
+    }
+    i++; // skip ")"
     const fn = lookup(name);
     if (!fn || !fn.isFn) throw new Error(`Not a function: ${name}`);
     const fnScope = { ...fn.scope };
-    if (arg !== undefined) fnScope.arg = arg;
-    return evaluate(fn.body, fnScope);
+    for (let p = 0; p < fn.params.length; p++) {
+      const param = fn.params[p];
+      const arg = args[p];
+      if (param.type) checkType(param.type, arg);
+      fnScope[param.name] = arg;
+    }
+    const result = evaluate(fn.body, fnScope);
+    if (fn.returnType) checkType(fn.returnType, result);
+    return result;
   }
 
   function parseLetDeclaration() {
@@ -316,17 +326,37 @@ export function evaluate(source, scope) {
     const name = tokens[i++];
     if (tokens[i] !== "(") throw new Error("Expected '(' after function name");
     i++; // skip "("
-    if (tokens[i] !== ")") throw new Error("Expected ')' for empty params");
+    const params = [];
+    while (tokens[i] !== ")") {
+      const paramName = tokens[i++];
+      let paramType = undefined;
+      if (tokens[i] === ":") {
+        i++; // skip ":"
+        paramType = tokens[i++];
+      }
+      params.push({ name: paramName, type: paramType });
+      if (tokens[i] === ",") i++; // skip ","
+    }
     i++; // skip ")"
+    let returnType = undefined;
+    if (tokens[i] === ":") {
+      i++; // skip ":"
+      returnType = tokens[i++];
+    }
     if (tokens[i] !== "=>") throw new Error("Expected '=>' after parameters");
     i++; // skip "=>"
+    // Temporarily add params to scope so body can be parsed
+    const currentScope = scopeStack[scopeStack.length - 1];
+    for (const param of params) {
+      currentScope.vars[param.name] = 0;
+    }
     const bodyStart = i;
-    const bodyValue = parseOrExpr();
+    parseOrExpr();
     const bodyEnd = i;
     const bodySource = tokens.slice(bodyStart, bodyEnd).join(" ");
-    scopeStack[scopeStack.length - 1].vars[name] = { isFn: true, body: bodySource, scope: { ...scopeStack[scopeStack.length - 1].vars } };
+    scopeStack[scopeStack.length - 1].vars[name] = { isFn: true, body: bodySource, scope: { ...scopeStack[scopeStack.length - 1].vars }, params, returnType };
     if (tokens[i] === ";") i++;
-    return bodyValue;
+    return 0;
   }
 
   function parseIfStatement() {

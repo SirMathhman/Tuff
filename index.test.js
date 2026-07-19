@@ -184,3 +184,7 @@ test("evaluate Bool typed variable with integer RHS throws error", () => {
 test("evaluate || with non-bool operand throws error", () => {
   expect(() => evaluate("true || 1")).toThrow();
 });
+
+test("evaluate typed function definition and call", () => {
+  expect(evaluate("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toBe(7);
+});
