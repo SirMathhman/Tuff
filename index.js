@@ -274,7 +274,8 @@ export function evaluate(source, scope) {
         if (tokens[i] === ":") i++; // skip ":"
         const fieldValue = parseOrExpr();
         const fieldDef = structDef.fields.find(f => f.name === fieldName);
-        if (fieldDef && fieldDef.type) checkType(fieldDef.type, fieldValue);
+        if (!fieldDef) throw new Error(`Unknown field: ${fieldName}`);
+        if (fieldDef.type) checkType(fieldDef.type, fieldValue);
         fields[fieldName] = fieldValue;
         if (tokens[i] === ",") {
           i++;
