@@ -283,3 +283,23 @@ test("evaluate generic struct instance field type mismatch throws error", () => 
 test("evaluate generic struct instance missing type args throws error", () => {
   expect(() => evaluate("struct Point<T> { x : T } let p : Point<U8> = Point { x : 100 };")).toThrow();
 });
+
+test("evaluate simple type alias", () => {
+  expect(evaluate("type MyType = U8; let x : MyType = 100;")).toBe(0);
+});
+
+test("evaluate generic type alias", () => {
+  expect(evaluate("struct Point<T, U> { x : T, y : U } type MyPoint<T> = Point<T, U8>; let p : MyPoint<U16> = Point<U16, U8> { x : 200, y : 100 };")).toBe(0);
+});
+
+test("evaluate type alias with type mismatch throws error", () => {
+  expect(() => evaluate("type MyType = U8; let x : MyType = 100U16;")).toThrow();
+});
+
+test("evaluate unknown type alias throws error", () => {
+  expect(() => evaluate("let x : UnknownType = 100;")).toThrow();
+});
+
+test("evaluate generic type alias missing type args throws error", () => {
+  expect(() => evaluate("type MyPoint<T> = Point<T, U8>; let p : MyPoint = Point<U16, U8> { x : 200, y : 100 };")).toThrow();
+});

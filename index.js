@@ -2,7 +2,7 @@ export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
   let tokens = source.trim().replace(new RegExp("(&&|\\|\\||\\+=|=>|[<>=]|[()+*/{};=|&:,.-]|[\\[\\]])", "g"), " $1 ").trim().split(/\s+/);
-  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "struct", "is", "true", "false"]);
+  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "struct", "is", "true", "false", "type"]);
   const typeRanges = {
     U8: [0, 255], U16: [0, 65535], U32: [0, 4294967295],
     I8: [-128, 127], I16: [-32768, 32767], I32: [-2147483648, 2147483647],
@@ -55,10 +55,10 @@ export function evaluate(source, scope) {
     return val instanceof TypedValue ? val.value : val;
   }
   let i = 0;
-  let scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
+  let scopeStack = [{ vars: scope || {}, mutVars: new Set(), typeAliases: {} }];
 
   function enterScope() {
-    scopeStack.push({ vars: {}, mutVars: new Set() });
+    scopeStack.push({ vars: {}, mutVars: new Set(), typeAliases: {} });
   }
 
   function exitScope() {
@@ -391,25 +391,44 @@ export function evaluate(source, scope) {
     return `[${elemType}; ${len}]`;
   }
 
-  function parseLetDeclaration() {
-    i++; // skip "let"
-    const isMut = tokens[i] === "mut";
-    if (isMut) i++; // skip "mut"
-    const name = tokens[i++];
+  function parseLetType() {
     let type = undefined;
+    let typeArgs = [];
     if (tokens[i] === ":") {
       i++; // skip ":"
       if (tokens[i] === "[") {
         type = parseArrayType();
       } else {
         type = tokens[i++];
-        // Handle generic type args: Point<U8, U16>
         if (tokens[i] === "<") {
-          const typeArgs = parseStructTypeArgs();
+          typeArgs = parseStructTypeArgs();
           type = `${type}<${typeArgs.join(", ")}>`;
         }
       }
     }
+    return { type, typeArgs };
+  }
+
+  function resolveLetType(type, typeArgs) {
+    if (!type || type.startsWith("[")) return type;
+    const baseTypeName = type.includes("<") ? type.split("<")[0] : type;
+    const alias = lookupTypeAlias(baseTypeName);
+    if (alias) {
+      return resolveTypeAlias(baseTypeName, typeArgs);
+    }
+    if (!typeRanges[baseTypeName] && baseTypeName !== "Bool" && !lookup(baseTypeName)) {
+      throw new Error(`Unknown type: ${baseTypeName}`);
+    }
+    return type;
+  }
+
+  function parseLetDeclaration() {
+    i++; // skip "let"
+    const isMut = tokens[i] === "mut";
+    if (isMut) i++; // skip "mut"
+    const name = tokens[i++];
+    const { type: rawType, typeArgs } = parseLetType();
+    const type = resolveLetType(rawType, typeArgs);
     if (tokens[i] !== "=") {
       throw new Error("Expected '=' after variable name");
     }
@@ -561,10 +580,53 @@ export function evaluate(source, scope) {
     if (tokens[i] === "while") return parseWhileStatement();
     if (tokens[i] === "fn") return parseFnDeclaration();
     if (tokens[i] === "struct") return parseStructDeclaration();
+    if (tokens[i] === "type") return parseTypeAliasDeclaration();
     if (isAssignment()) return parseAssignment();
     const value = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
     return value;
+  }
+
+  function lookupTypeAlias(name) {
+    for (let s = scopeStack.length - 1; s >= 0; s--) {
+      if (name in scopeStack[s].typeAliases) return scopeStack[s].typeAliases[name];
+    }
+    return undefined;
+  }
+
+  function parseTypeAliasDeclaration() {
+    i++; // skip "type"
+    const name = tokens[i++];
+    const typeParams = parseTypeParams();
+    if (tokens[i] !== "=") throw new Error("Expected '=' after type alias name");
+    i++; // skip "="
+    let aliasType = tokens[i++];
+    // Handle generic type args in alias: Point<T, U8>
+    if (tokens[i] === "<") {
+      const typeArgs = parseStructTypeArgs();
+      aliasType = `${aliasType}<${typeArgs.join(", ")}>`;
+    }
+    scopeStack[scopeStack.length - 1].typeAliases[name] = { aliasType, typeParams };
+    if (tokens[i] === ";") i++;
+    return 0;
+  }
+
+  function resolveTypeAlias(typeName, typeArgs) {
+    const alias = lookupTypeAlias(typeName);
+    if (!alias) return typeName;
+    // Resolve type params from type args
+    const typeMap = {};
+    if (alias.typeParams && typeArgs.length === alias.typeParams.length) {
+      for (let t = 0; t < alias.typeParams.length; t++) {
+        typeMap[alias.typeParams[t]] = typeArgs[t];
+      }
+    }
+    let resolved = alias.aliasType;
+    // Apply type map to resolve generic params in alias type
+    for (const [param, concrete] of Object.entries(typeMap)) {
+      resolved = resolved.replace(new RegExp(`\\b${param}\\b`, 'g'), concrete);
+    }
+    return resolved;
   }
 
   function parseTypeParams() {
