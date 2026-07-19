@@ -226,13 +226,15 @@ export function evaluate(source, scope) {
     }
   }
 
+  function isAssignment() {
+    return tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=");
+  }
+
   function parseStatement() {
     if (tokens[i] === "let") return parseLetDeclaration();
     if (tokens[i] === "if") return parseIfStatement();
     if (tokens[i] === "while") return parseWhileStatement();
-    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=")) {
-      return parseAssignment();
-    }
+    if (isAssignment()) return parseAssignment();
     const value = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
     return value;
