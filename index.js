@@ -371,7 +371,7 @@ export function evaluate(source, scope) {
     checkType(fieldDef.type, value);
     structVal.value[fieldName] = unwrap(value);
     if (tokens[i] === ";") i++;
-    return unwrap(value);
+    return 0;
   }
 
   function parseAssignment() {
@@ -386,11 +386,11 @@ export function evaluate(source, scope) {
       const current = unwrap(lookup(name));
       findAndSet(name, current + unwrap(value));
       if (tokens[i] === ";") i++;
-      return current + unwrap(value);
+      return 0;
     }
     findAndSet(name, value);
     if (tokens[i] === ";") i++;
-    return value;
+    return 0;
   }
 
   function skipStatement() {
