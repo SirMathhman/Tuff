@@ -211,6 +211,8 @@ enum Token {
     Ident(String),
     Let,
     Mut,
+    True,
+    False,
     Plus,
     Minus,
     Star,
@@ -263,6 +265,8 @@ fn tokenize_ident_or_keyword(chars: &[char], start: usize) -> Result<(Token, usi
     let token = match word.as_str() {
         "let" => Token::Let,
         "mut" => Token::Mut,
+        "true" => Token::True,
+        "false" => Token::False,
         _ => Token::Ident(word),
     };
     Ok((token, i))
@@ -409,6 +413,14 @@ fn parse_factor(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<Typed
     if tokens[*pos] == Token::LParen {
         return parse_parenthesized(tokens, pos, env);
     }
+    if tokens[*pos] == Token::True {
+        *pos += 1;
+        return Ok(TypedValue { value: 1, type_name: "Bool".to_string(), is_mut: false });
+    }
+    if tokens[*pos] == Token::False {
+        *pos += 1;
+        return Ok(TypedValue { value: 0, type_name: "Bool".to_string(), is_mut: false });
+    }
     match &tokens[*pos] {
         Token::Lit { value, suffix } => {
             let type_name = suffix_to_type_name(suffix);
@@ -457,6 +469,11 @@ fn apply_bin_op(
     right: TypedValue,
     op: fn(i128, i128) -> i128,
 ) -> Result<TypedValue, Error> {
+    // Reject arithmetic on Bool values
+    if left.type_name == "Bool" || right.type_name == "Bool" {
+        return Err(Error);
+    }
+
     let result_type = promote_type(&left.type_name, &right.type_name);
     let (min, max) = type_bounds(&result_type);
 
@@ -478,8 +495,9 @@ fn apply_bin_op(
 
 fn type_rank(name: &str) -> u32 {
     match name {
-        "U8" => 0,
-        "I8" => 1,
+        "Bool" => 0,
+        "U8" => 1,
+        "I8" => 2,
         "I16" => 2,
         "I32" => 3,
         "U32" => 4,
@@ -499,6 +517,7 @@ fn promote_type(a: &str, b: &str) -> String {
 
 fn type_bounds(name: &str) -> (i128, i128) {
     match name {
+        "Bool" => (0, 1),
         "U8" => (0, u8::MAX as i128),
         "I8" => (i8::MIN as i128, i8::MAX as i128),
         "I16" => (i16::MIN as i128, i16::MAX as i128),
@@ -512,6 +531,7 @@ fn type_bounds(name: &str) -> (i128, i128) {
 
 fn type_to_c_type(name: &str) -> &str {
     match name {
+        "Bool" => "int",
         "U8" => "unsigned char",
         "I8" => "signed char",
         "I16" => "short",
@@ -988,5 +1008,39 @@ mod tests {
     #[test]
     fn block_missing_close() {
         expect_invalid("{ let x: I32 = 42;");
+    }
+
+    // --- Positive: Bool literals ---
+
+    #[test]
+    fn bool_true() {
+        expect_valid("true", vec![], 1);
+    }
+
+    #[test]
+    fn bool_false() {
+        expect_valid("false", vec![], 0);
+    }
+
+    #[test]
+    fn bool_typed_let() {
+        expect_valid("let x: Bool = true; x", vec![], 1);
+    }
+
+    #[test]
+    fn bool_false_let() {
+        expect_valid("let x: Bool = false; x", vec![], 0);
+    }
+
+    // --- Negative: Bool ---
+
+    #[test]
+    fn bool_arithmetic() {
+        expect_invalid("true + false");
+    }
+
+    #[test]
+    fn bool_not_keyword() {
+        expect_invalid("let true: I32 = 42;");
     }
 }
