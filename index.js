@@ -284,6 +284,9 @@ export function evaluate(source, scope) {
       }
     }
     if (tokens[i] === "}") i++; // skip "}"
+    for (const fieldDef of structDef.fields) {
+      if (!(fieldDef.name in fields)) throw new Error(`Missing field: ${fieldDef.name}`);
+    }
     return new TypedValue(fields, name);
   }
 

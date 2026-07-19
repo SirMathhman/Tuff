@@ -220,3 +220,7 @@ test("evaluate struct instance declaration", () => {
 test("evaluate struct instance field type mismatch throws error", () => {
   expect(() => evaluate("struct Wrapper { field : I32 } let w : Wrapper = Wrapper { field : 1U8 };")).toThrow();
 });
+
+test("evaluate struct instance missing field throws error", () => {
+  expect(() => evaluate("struct Wrapper { field : I32 } let w : Wrapper = Wrapper {};")).toThrow();
+});
