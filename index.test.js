@@ -144,3 +144,7 @@ test("evaluate function definition and call", () => {
 test("evaluate typed number literal", () => {
   expect(evaluate("100U8")).toBe(100);
 });
+
+test("evaluate typed number literal out of range throws error", () => {
+  expect(() => evaluate("256U8")).toThrow();
+});

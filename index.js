@@ -161,6 +161,19 @@ export function evaluate(source, scope) {
     if (!match) throw new Error(`Unexpected token: ${raw}`);
     const value = Number(match[1]);
     if (isNaN(value)) throw new Error(`Unexpected token: ${raw}`);
+    const type = match[2];
+    if (type) {
+      const ranges = {
+        U8: [0, 255],
+        U16: [0, 65535],
+        U32: [0, 4294967295],
+        I8: [-128, 127],
+        I16: [-32768, 32767],
+        I32: [-2147483648, 2147483647],
+      };
+      const [min, max] = ranges[type];
+      if (value < min || value > max) throw new Error(`Value ${value} out of range for ${type}`);
+    }
     return value;
   }
 
