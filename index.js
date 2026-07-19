@@ -1,10 +1,10 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  const tokens = source.trim().replace(/(&&|\|\||\+=|[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
-  const keywords = new Set(["let", "mut", "if", "else", "while", "true", "false"]);
+  let tokens = source.trim().replace(/(&&|\|\||\+=|=>|[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
+  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "true", "false"]);
   let i = 0;
-  const scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
+  let scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
 
   function enterScope() {
     scopeStack.push({ vars: {}, mutVars: new Set() });
@@ -170,8 +170,27 @@ export function evaluate(source, scope) {
     if (token === "if") return parseIfExpr();
     if (token === "true") { i++; return 1; }
     if (token === "false") { i++; return 0; }
-    if (token && /^[a-zA-Z_]\w*$/.test(token) && !keywords.has(token)) return parseIdentifier();
+    if (token && /^[a-zA-Z_]\w*$/.test(token) && !keywords.has(token)) {
+      const val = lookup(token);
+      if (val !== undefined && tokens[i + 1] === "(") {
+        return callFunction(token);
+      }
+      return parseIdentifier();
+    }
     return parseNumber();
+  }
+
+  function callFunction(name) {
+    i++; // skip identifier
+    i++; // skip "("
+    const arg = tokens[i] === ")" ? undefined : parseOrExpr();
+    if (tokens[i] !== ")") throw new Error("Missing closing parenthesis");
+    i++;
+    const fn = lookup(name);
+    if (!fn || !fn.isFn) throw new Error(`Not a function: ${name}`);
+    const fnScope = { ...fn.scope };
+    if (arg !== undefined) fnScope.arg = arg;
+    return evaluate(fn.body, fnScope);
   }
 
   function parseLetDeclaration() {
@@ -234,10 +253,29 @@ export function evaluate(source, scope) {
     if (tokens[i] === "let") return parseLetDeclaration();
     if (tokens[i] === "if") return parseIfStatement();
     if (tokens[i] === "while") return parseWhileStatement();
+    if (tokens[i] === "fn") return parseFnDeclaration();
     if (isAssignment()) return parseAssignment();
     const value = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
     return value;
+  }
+
+  function parseFnDeclaration() {
+    i++; // skip "fn"
+    const name = tokens[i++];
+    if (tokens[i] !== "(") throw new Error("Expected '(' after function name");
+    i++; // skip "("
+    if (tokens[i] !== ")") throw new Error("Expected ')' for empty params");
+    i++; // skip ")"
+    if (tokens[i] !== "=>") throw new Error("Expected '=>' after parameters");
+    i++; // skip "=>"
+    const bodyStart = i;
+    const bodyValue = parseOrExpr();
+    const bodyEnd = i;
+    const bodySource = tokens.slice(bodyStart, bodyEnd).join(" ");
+    scopeStack[scopeStack.length - 1].vars[name] = { isFn: true, body: bodySource, scope: { ...scopeStack[scopeStack.length - 1].vars } };
+    if (tokens[i] === ";") i++;
+    return bodyValue;
   }
 
   function parseIfStatement() {

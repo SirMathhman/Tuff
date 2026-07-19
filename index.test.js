@@ -136,3 +136,7 @@ test("evaluate compound assignment on immutable variable throws error", () => {
 test("evaluate while loop", () => {
   expect(evaluate("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
 });
+
+test("evaluate function definition and call", () => {
+  expect(evaluate("fn get() => 100; get()")).toBe(100);
+});
