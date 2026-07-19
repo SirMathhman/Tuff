@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "cpd" : "pmd cpd index.js index.test.js --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
     "@types/bun": "latest"
