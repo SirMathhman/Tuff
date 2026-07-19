@@ -60,3 +60,15 @@ test("evaluate let without assignment throws error", () => {
 test("evaluate undefined identifier throws error", () => {
   expect(() => evaluate("undefinedIdentifier")).toThrow();
 });
+
+test("evaluate mutable variable assignment", () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+});
+
+test("evaluate assignment to immutable variable throws error", () => {
+  expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
+});
+
+test("evaluate assignment to undefined variable throws error", () => {
+  expect(() => evaluate("x = 1; x")).toThrow();
+});

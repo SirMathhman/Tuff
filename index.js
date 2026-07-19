@@ -4,6 +4,7 @@ export function evaluate(source, scope) {
   const tokens = source.trim().replace(/([()+*/{};=-])/g, " $1 ").trim().split(/\s+/);
   let i = 0;
   const vars = scope || {};
+  const mutVars = new Set();
 
   function parseExpr() {
     let left = parseTerm();
@@ -65,17 +66,36 @@ export function evaluate(source, scope) {
     return value;
   }
 
+  function parseLetDeclaration() {
+    i++; // skip "let"
+    const isMut = tokens[i] === "mut";
+    if (isMut) i++; // skip "mut"
+    const name = tokens[i++];
+    if (tokens[i] !== "=") {
+      throw new Error("Expected '=' after variable name");
+    }
+    i++; // skip "="
+    vars[name] = parseExpr();
+    if (isMut) mutVars.add(name);
+    if (tokens[i] === ";") i++; // skip ";"
+    return vars[name];
+  }
+
+  function parseAssignment() {
+    const name = tokens[i++];
+    if (!mutVars.has(name)) {
+      throw new Error(`Cannot assign to immutable variable: ${name}`);
+    }
+    i++; // skip "="
+    vars[name] = parseExpr();
+    if (tokens[i] === ";") i++; // skip ";"
+    return vars[name];
+  }
+
   function parseStatement() {
-    if (tokens[i] === "let") {
-      i++; // skip "let"
-      const name = tokens[i++];
-      if (tokens[i] !== "=") {
-        throw new Error("Expected '=' after variable name");
-      }
-      i++; // skip "="
-      vars[name] = parseExpr();
-      if (tokens[i] === ";") i++; // skip ";"
-      return vars[name];
+    if (tokens[i] === "let") return parseLetDeclaration();
+    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && tokens[i] in vars && tokens[i + 1] === "=") {
+      return parseAssignment();
     }
     const value = parseExpr();
     if (tokens[i] === ";") i++; // skip ";"
