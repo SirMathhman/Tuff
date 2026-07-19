@@ -172,3 +172,7 @@ test("evaluate typed let declaration type mismatch throws error", () => {
 test("evaluate typed let declaration from typed variable type mismatch throws error", () => {
   expect(() => evaluate("let x = 0U16; let y : U8 = x;")).toThrow();
 });
+
+test("evaluate Bool typed variable declaration", () => {
+  expect(evaluate("let x : Bool = true; x")).toBe(1);
+});
