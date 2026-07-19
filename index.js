@@ -1,7 +1,7 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  const tokens = source.trim().replace(/(&&|\|\||[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
+  const tokens = source.trim().replace(/(&&|\|\||\+=|[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
   const keywords = new Set(["let", "mut", "if", "else", "true", "false"]);
   let i = 0;
   const scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
@@ -194,8 +194,15 @@ export function evaluate(source, scope) {
     if (!isMutable(name)) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
     }
-    i++; // skip "="
+    const op = tokens[i];
+    i++; // skip operator
     const value = parseOrExpr();
+    if (op === "+=") {
+      const current = lookup(name);
+      findAndSet(name, current + value);
+      if (tokens[i] === ";") i++; // skip ";"
+      return current + value;
+    }
     findAndSet(name, value);
     if (tokens[i] === ";") i++; // skip ";"
     return value;
@@ -222,7 +229,7 @@ export function evaluate(source, scope) {
   function parseStatement() {
     if (tokens[i] === "let") return parseLetDeclaration();
     if (tokens[i] === "if") return parseIfStatement();
-    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && tokens[i + 1] === "=") {
+    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=")) {
       return parseAssignment();
     }
     const value = parseOrExpr();

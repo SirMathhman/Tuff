@@ -124,3 +124,7 @@ test("evaluate chained if else statement with braces", () => {
 test("evaluate if false with braces does not execute then branch", () => {
   expect(evaluate("let mut x = 0; if (false) { x = 7; } x")).toBe(0);
 });
+
+test("evaluate compound assignment +=", () => {
+  expect(evaluate("let mut x = 1; x += 3; x")).toBe(4);
+});
