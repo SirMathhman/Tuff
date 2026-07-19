@@ -96,3 +96,7 @@ test("evaluate mutable variable assignment in block", () => {
 test("evaluate block variable shadowing", () => {
   expect(evaluate("let x = 1; { let x = 0; } x")).toBe(1);
 });
+
+test("evaluate less than comparison", () => {
+  expect(evaluate("1 < 2")).toBe(1);
+});

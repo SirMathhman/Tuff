@@ -1,7 +1,7 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  const tokens = source.trim().replace(/(&&|\|\||[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
+  const tokens = source.trim().replace(/(&&|\|\||[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
   let i = 0;
   const scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
 
@@ -45,11 +45,38 @@ export function evaluate(source, scope) {
     return left;
   }
 
-  function parseAndExpr() {
+  function isComparisonOp(op) {
+    return ["<", ">", "<=", ">=", "==", "!="].includes(op);
+  }
+
+  const comparators = {
+    "<": (a, b) => a < b,
+    ">": (a, b) => a > b,
+    "<=": (a, b) => a <= b,
+    ">=": (a, b) => a >= b,
+    "==": (a, b) => a === b,
+    "!=": (a, b) => a !== b,
+  };
+
+  function compare(left, op, right) {
+    return comparators[op](left, right) ? 1 : 0;
+  }
+
+  function parseComparison() {
     let left = parseExpr();
+    while (i < tokens.length && isComparisonOp(tokens[i])) {
+      const op = tokens[i++];
+      const right = parseExpr();
+      left = compare(left, op, right);
+    }
+    return left;
+  }
+
+  function parseAndExpr() {
+    let left = parseComparison();
     while (i < tokens.length && tokens[i] === "&&") {
       i++;
-      left = left && parseExpr();
+      left = left && parseComparison();
     }
     return left;
   }
