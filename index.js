@@ -24,6 +24,9 @@ export function evaluate(source, scope) {
     if (actual instanceof TypedValue && actual.type && actual.type !== expectedType) {
       throw new Error(`Type mismatch: expected ${expectedType} but got ${actual.type}`);
     }
+    if (expectedType === "Bool" && !(actual instanceof TypedValue)) {
+      throw new Error(`Type mismatch: expected ${expectedType} but got number`);
+    }
   }
 
   function unwrap(val) {
@@ -197,8 +200,8 @@ export function evaluate(source, scope) {
     if (token === "(") return parseParenExpr();
     if (token === "{") return parseBlock();
     if (token === "if") return parseIfExpr();
-    if (token === "true") { i++; return 1; }
-    if (token === "false") { i++; return 0; }
+    if (token === "true") { i++; return new TypedValue(1, "Bool"); }
+    if (token === "false") { i++; return new TypedValue(0, "Bool"); }
     if (token && /^[a-zA-Z_]\w*$/.test(token) && !keywords.has(token)) return parseIdentifierOrCall();
     return parseNumber();
   }
