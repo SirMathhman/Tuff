@@ -2,7 +2,7 @@ export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
   const tokens = source.trim().replace(/(&&|\|\||\+=|[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
-  const keywords = new Set(["let", "mut", "if", "else", "true", "false"]);
+  const keywords = new Set(["let", "mut", "if", "else", "while", "true", "false"]);
   let i = 0;
   const scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
 
@@ -229,6 +229,7 @@ export function evaluate(source, scope) {
   function parseStatement() {
     if (tokens[i] === "let") return parseLetDeclaration();
     if (tokens[i] === "if") return parseIfStatement();
+    if (tokens[i] === "while") return parseWhileStatement();
     if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=")) {
       return parseAssignment();
     }
@@ -254,6 +255,27 @@ export function evaluate(source, scope) {
       i++; // skip "else"
       return parseStatement();
     }
+    return 0;
+  }
+
+  function parseWhileStatement() {
+    i++; // skip "while"
+    if (tokens[i] !== "(") throw new Error("Expected '(' after 'while'");
+    i++; // skip "("
+    const condStart = i;
+    let condition = parseOrExpr();
+    if (tokens[i] !== ")") throw new Error("Expected ')' after condition");
+    i++; // skip ")"
+    const bodyStart = i;
+    let bodyEnd = bodyStart;
+    while (condition) {
+      i = bodyStart;
+      parseStatement();
+      bodyEnd = i;
+      i = condStart;
+      condition = parseOrExpr();
+    }
+    i = bodyEnd;
     return 0;
   }
 

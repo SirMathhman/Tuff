@@ -132,3 +132,7 @@ test("evaluate compound assignment +=", () => {
 test("evaluate compound assignment on immutable variable throws error", () => {
   expect(() => evaluate("let x = 1; x += 3; x")).toThrow();
 });
+
+test("evaluate while loop", () => {
+  expect(evaluate("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+});
