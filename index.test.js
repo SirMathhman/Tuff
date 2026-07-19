@@ -216,3 +216,7 @@ test("evaluate struct with duplicate fields throws error", () => {
 test("evaluate struct instance declaration", () => {
   expect(evaluate("struct Empty {} let empty : Empty = Empty {};")).toBe(0);
 });
+
+test("evaluate struct instance field type mismatch throws error", () => {
+  expect(() => evaluate("struct Wrapper { field : I32 } let w : Wrapper = Wrapper { field : 1U8 };")).toThrow();
+});

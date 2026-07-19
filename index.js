@@ -266,12 +266,15 @@ export function evaluate(source, scope) {
   function parseStructLiteral(name) {
     i++; // skip identifier
     i++; // skip "{"
+    const structDef = lookup(name);
     const fields = {};
     if (tokens[i] !== "}") {
       while (tokens[i]) {
         const fieldName = tokens[i++];
         if (tokens[i] === ":") i++; // skip ":"
         const fieldValue = parseOrExpr();
+        const fieldDef = structDef.fields.find(f => f.name === fieldName);
+        if (fieldDef && fieldDef.type) checkType(fieldDef.type, fieldValue);
         fields[fieldName] = fieldValue;
         if (tokens[i] === ",") {
           i++;
