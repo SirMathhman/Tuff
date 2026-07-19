@@ -355,42 +355,41 @@ export function evaluate(source, scope) {
     return 0;
   }
 
+  function parseStructFieldAssignment() {
+    const structName = tokens[i++];
+    i++; // skip "."
+    const fieldName = tokens[i++];
+    i++; // skip "="
+    const value = parseOrExpr();
+    const structVal = lookup(structName);
+    if (!structVal || !(structVal instanceof TypedValue)) throw new Error(`Not a struct: ${structName}`);
+    if (!isMutable(structName)) throw new Error(`Cannot assign to field of immutable struct: ${structName}`);
+    const structDef = lookup(structVal.type);
+    const fieldDef = structDef.fields.find(f => f.name === fieldName);
+    if (!fieldDef) throw new Error(`Unknown field: ${fieldName}`);
+    if (!fieldDef.mut) throw new Error(`Cannot assign to immutable field: ${fieldName}`);
+    checkType(fieldDef.type, value);
+    structVal.value[fieldName] = unwrap(value);
+    if (tokens[i] === ";") i++;
+    return unwrap(value);
+  }
+
   function parseAssignment() {
     const token = tokens[i];
-    if (/^[a-zA-Z_]\w*$/.test(token) && tokens[i + 1] === ".") {
-      // Struct field assignment: id . field = value
-      const structName = tokens[i++];
-      i++; // skip "."
-      const fieldName = tokens[i++];
-      i++; // skip "="
-      const value = parseOrExpr();
-      const structVal = lookup(structName);
-      if (!structVal || !(structVal instanceof TypedValue)) throw new Error(`Not a struct: ${structName}`);
-      if (!isMutable(structName)) throw new Error(`Cannot assign to field of immutable struct: ${structName}`);
-      const structDef = lookup(structVal.type);
-      const fieldDef = structDef.fields.find(f => f.name === fieldName);
-      if (!fieldDef) throw new Error(`Unknown field: ${fieldName}`);
-      if (!fieldDef.mut) throw new Error(`Cannot assign to immutable field: ${fieldName}`);
-      checkType(fieldDef.type, value);
-      structVal.value[fieldName] = unwrap(value);
-      if (tokens[i] === ";") i++; // skip ";"
-      return unwrap(value);
-    }
+    if (/^[a-zA-Z_]\w*$/.test(token) && tokens[i + 1] === ".") return parseStructFieldAssignment();
     const name = tokens[i++];
-    if (!isMutable(name)) {
-      throw new Error(`Cannot assign to immutable variable: ${name}`);
-    }
+    if (!isMutable(name)) throw new Error(`Cannot assign to immutable variable: ${name}`);
     const op = tokens[i];
     i++; // skip operator
     const value = parseOrExpr();
     if (op === "+=") {
       const current = unwrap(lookup(name));
       findAndSet(name, current + unwrap(value));
-      if (tokens[i] === ";") i++; // skip ";"
+      if (tokens[i] === ";") i++;
       return current + unwrap(value);
     }
     findAndSet(name, value);
-    if (tokens[i] === ";") i++; // skip ";"
+    if (tokens[i] === ";") i++;
     return value;
   }
 
@@ -412,13 +411,15 @@ export function evaluate(source, scope) {
     }
   }
 
+  function isStructFieldAssignment() {
+    return /^[a-zA-Z_]\w*$/.test(tokens[i]) && tokens[i + 1] === "." && tokens[i + 2] && /^[a-zA-Z_]\w*$/.test(tokens[i + 2]) && tokens[i + 3] === "=";
+  }
+
   function isAssignment() {
     if (!tokens[i] || keywords.has(tokens[i])) return false;
     const token = tokens[i];
     if (/^[a-zA-Z_]\w*$/.test(token) && lookup(token) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=")) return true;
-    // Check for struct field assignment: id . field = ...
-    if (/^[a-zA-Z_]\w*$/.test(token) && tokens[i + 1] === "." && tokens[i + 2] && /^[a-zA-Z_]\w*$/.test(tokens[i + 2]) && tokens[i + 3] === "=") return true;
-    return false;
+    return isStructFieldAssignment();
   }
 
   function parseStructDeclaration() {
