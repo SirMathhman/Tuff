@@ -152,3 +152,11 @@ test("evaluate typed number literal out of range throws error", () => {
 test("evaluate typed variable declaration", () => {
   expect(evaluate("let x : U8 = 100U8; x")).toBe(100);
 });
+
+test("evaluate untyped let declaration returns 0", () => {
+  expect(evaluate("let x = 100;")).toBe(0);
+});
+
+test("evaluate typed let declaration returns 0", () => {
+  expect(evaluate("let x : U8 = 100;")).toBe(0);
+});

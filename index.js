@@ -225,7 +225,7 @@ export function evaluate(source, scope) {
     scopeStack[scopeStack.length - 1].vars[name] = value;
     if (isMut) scopeStack[scopeStack.length - 1].mutVars.add(name);
     if (tokens[i] === ";") i++; // skip ";"
-    return scopeStack[scopeStack.length - 1].vars[name];
+    return 0;
   }
 
   function parseAssignment() {
