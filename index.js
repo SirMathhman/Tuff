@@ -1,7 +1,7 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  let tokens = source.trim().replace(/(&&|\|\||\+=|=>|[<>=]|[()+*/{};=|&:,.-])/g, " $1 ").trim().split(/\s+/);
+  let tokens = source.trim().replace(new RegExp("(&&|\\|\\||\\+=|=>|[<>=]|[()+*/{};=|&:,.-]|[\\[\\]])", "g"), " $1 ").trim().split(/\s+/);
   const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "true", "false"]);
   const typeRanges = {
     U8: [0, 255], U16: [0, 65535], U32: [0, 4294967295],
@@ -22,6 +22,7 @@ export function evaluate(source, scope) {
 
   function checkType(expectedType, actual) {
     if (actual instanceof TypedValue && actual.type && actual.type !== expectedType) {
+      if (actual.type === "array" && expectedType.startsWith("[")) return; // Array type match
       throw new Error(`Type mismatch: expected ${expectedType} but got ${actual.type}`);
     }
     if (expectedType === "Bool" && !(actual instanceof TypedValue)) {
@@ -202,10 +203,32 @@ export function evaluate(source, scope) {
     return type ? new TypedValue(value, type) : value;
   }
 
+  function parseArrayLiteral() {
+    i++; // skip "["
+    const elements = [];
+    while (tokens[i] !== "]") {
+      elements.push(parseOrExpr());
+      if (tokens[i] === ",") i++; // skip ","
+    }
+    i++; // skip "]"
+    return new TypedValue(elements, "array");
+  }
+
+  function parseArrayIndex(base) {
+    i++; // skip "["
+    const index = parseOrExpr();
+    if (tokens[i] !== "]") throw new Error("Expected ']' after array index");
+    i++; // skip "]"
+    const arr = base instanceof TypedValue ? base.value : base;
+    const idx = unwrap(index);
+    return arr[idx];
+  }
+
   function parseFactor() {
     const token = tokens[i];
     if (token === "(") return parseParenExpr();
     if (token === "{") return parseBlock();
+    if (token === "[") return parseArrayLiteral();
     if (token === "if") return parseIfExpr();
     if (token === "true") { i++; return new TypedValue(1, "Bool"); }
     if (token === "false") { i++; return new TypedValue(0, "Bool"); }
@@ -217,7 +240,9 @@ export function evaluate(source, scope) {
     const token = tokens[i];
     const val = lookup(token);
     if (val !== undefined && tokens[i + 1] === "(") return callFunction(token);
-    return parseIdentifier();
+    const result = parseIdentifier();
+    if (tokens[i] === "[") return parseArrayIndex(result);
+    return result;
   }
 
   function callFunction(name) {
@@ -243,6 +268,17 @@ export function evaluate(source, scope) {
     return result;
   }
 
+  function parseArrayType() {
+    i++; // skip "["
+    const elemType = tokens[i++];
+    if (tokens[i] !== ";") throw new Error("Expected ';' in array type");
+    i++; // skip ";"
+    const len = Number(tokens[i++]);
+    if (tokens[i] !== "]") throw new Error("Expected ']' in array type");
+    i++; // skip "]"
+    return `[${elemType}; ${len}]`;
+  }
+
   function parseLetDeclaration() {
     i++; // skip "let"
     const isMut = tokens[i] === "mut";
@@ -251,7 +287,11 @@ export function evaluate(source, scope) {
     let type = undefined;
     if (tokens[i] === ":") {
       i++; // skip ":"
-      type = tokens[i++];
+      if (tokens[i] === "[") {
+        type = parseArrayType();
+      } else {
+        type = tokens[i++];
+      }
     }
     if (tokens[i] !== "=") {
       throw new Error("Expected '=' after variable name");

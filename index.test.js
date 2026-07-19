@@ -188,3 +188,7 @@ test("evaluate || with non-bool operand throws error", () => {
 test("evaluate typed function definition and call", () => {
   expect(evaluate("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toBe(7);
 });
+
+test("evaluate typed array declaration and indexing", () => {
+  expect(evaluate("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+});
