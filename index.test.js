@@ -168,3 +168,7 @@ test("evaluate typed let declaration out of range throws error", () => {
 test("evaluate typed let declaration type mismatch throws error", () => {
   expect(() => evaluate("let x : U8 = 0U16;")).toThrow();
 });
+
+test("evaluate typed let declaration from typed variable type mismatch throws error", () => {
+  expect(() => evaluate("let x = 0U16; let y : U8 = x;")).toThrow();
+});

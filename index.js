@@ -67,7 +67,7 @@ export function evaluate(source, scope) {
     let left = parseAndExpr();
     while (i < tokens.length && tokens[i] === "||") {
       i++;
-      left = unwrap(left) || unwrap(parseAndExpr());
+      left = unwrap(left) ? left : parseAndExpr();
     }
     return left;
   }
@@ -103,7 +103,7 @@ export function evaluate(source, scope) {
     let left = parseComparison();
     while (i < tokens.length && tokens[i] === "&&") {
       i++;
-      left = unwrap(left) && unwrap(parseComparison());
+      left = unwrap(left) ? parseComparison() : left;
     }
     return left;
   }
@@ -175,7 +175,7 @@ export function evaluate(source, scope) {
     const val = lookup(token);
     if (val !== undefined) {
       i++;
-      return unwrap(val);
+      return val;
     }
     throw new Error(`Undefined identifier: ${token}`);
   }
