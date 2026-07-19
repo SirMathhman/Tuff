@@ -180,3 +180,7 @@ test("evaluate Bool typed variable declaration", () => {
 test("evaluate Bool typed variable with integer RHS throws error", () => {
   expect(() => evaluate("let x : Bool = 1;")).toThrow();
 });
+
+test("evaluate || with non-bool operand throws error", () => {
+  expect(() => evaluate("true || 1")).toThrow();
+});

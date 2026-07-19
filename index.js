@@ -29,6 +29,10 @@ export function evaluate(source, scope) {
     }
   }
 
+  function checkBool(val) {
+    checkType("Bool", val);
+  }
+
   function unwrap(val) {
     return val instanceof TypedValue ? val.value : val;
   }
@@ -70,7 +74,10 @@ export function evaluate(source, scope) {
     let left = parseAndExpr();
     while (i < tokens.length && tokens[i] === "||") {
       i++;
-      left = unwrap(left) ? left : parseAndExpr();
+      checkBool(left);
+      const right = parseAndExpr();
+      checkBool(right);
+      left = unwrap(left) ? left : right;
     }
     return left;
   }
