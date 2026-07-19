@@ -128,3 +128,7 @@ test("evaluate if false with braces does not execute then branch", () => {
 test("evaluate compound assignment +=", () => {
   expect(evaluate("let mut x = 1; x += 3; x")).toBe(4);
 });
+
+test("evaluate compound assignment on immutable variable throws error", () => {
+  expect(() => evaluate("let x = 1; x += 3; x")).toThrow();
+});
