@@ -170,14 +170,15 @@ export function evaluate(source, scope) {
     if (token === "if") return parseIfExpr();
     if (token === "true") { i++; return 1; }
     if (token === "false") { i++; return 0; }
-    if (token && /^[a-zA-Z_]\w*$/.test(token) && !keywords.has(token)) {
-      const val = lookup(token);
-      if (val !== undefined && tokens[i + 1] === "(") {
-        return callFunction(token);
-      }
-      return parseIdentifier();
-    }
+    if (token && /^[a-zA-Z_]\w*$/.test(token) && !keywords.has(token)) return parseIdentifierOrCall();
     return parseNumber();
+  }
+
+  function parseIdentifierOrCall() {
+    const token = tokens[i];
+    const val = lookup(token);
+    if (val !== undefined && tokens[i + 1] === "(") return callFunction(token);
+    return parseIdentifier();
   }
 
   function callFunction(name) {
