@@ -48,3 +48,7 @@ test("evaluate curly braces grouping", () => {
 test("evaluate curly braces with let declaration", () => {
   expect(evaluate("{ let x = 3 + 4; x } * 5")).toBe(35);
 });
+
+test("evaluate top-level let with nested block", () => {
+  expect(evaluate("let y = { let x = 3 + 4; x } * 5; y")).toBe(35);
+});

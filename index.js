@@ -1,7 +1,7 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  const tokens = source.trim().replace(/([()+*\/\-{};=])/g, " $1 ").trim().split(/\s+/);
+  const tokens = source.trim().replace(/([()+*/{};=-])/g, " $1 ").trim().split(/\s+/);
   let i = 0;
   const vars = scope || {};
 
@@ -23,41 +23,33 @@ export function evaluate(source, scope) {
     return left;
   }
 
+  function parseParenExpr() {
+    i++; // skip "("
+    const value = parseExpr();
+    if (tokens[i] !== ")") {
+      throw new Error("Missing closing parenthesis");
+    }
+    i++;
+    return value;
+  }
+
+  function parseBlock() {
+    i++; // skip "{"
+    let lastValue = 0;
+    while (i < tokens.length && tokens[i] !== "}") {
+      lastValue = parseStatement();
+    }
+    if (tokens[i] !== "}") {
+      throw new Error("Missing closing brace");
+    }
+    i++;
+    return lastValue;
+  }
+
   function parseFactor() {
     const token = tokens[i];
-    if (token === "(") {
-      i++;
-      const value = parseExpr();
-      if (tokens[i] !== ")") {
-        throw new Error("Missing closing parenthesis");
-      }
-      i++;
-      return value;
-    }
-    if (token === "{") {
-      i++;
-      let lastValue = 0;
-      while (i < tokens.length && tokens[i] !== "}") {
-        if (tokens[i] === "let") {
-          i++; // skip "let"
-          const name = tokens[i++];
-          if (tokens[i] !== "=") {
-            throw new Error("Expected '=' after variable name");
-          }
-          i++; // skip "="
-          vars[name] = parseExpr();
-          if (tokens[i] === ";") i++; // skip ";"
-        } else {
-          lastValue = parseExpr();
-          if (tokens[i] === ";") i++; // skip ";"
-        }
-      }
-      if (tokens[i] !== "}") {
-        throw new Error("Missing closing brace");
-      }
-      i++;
-      return lastValue;
-    }
+    if (token === "(") return parseParenExpr();
+    if (token === "{") return parseBlock();
     if (token && /^[a-zA-Z_]\w*$/.test(token) && token in vars) {
       i++;
       return vars[token];
@@ -70,9 +62,26 @@ export function evaluate(source, scope) {
     return value;
   }
 
-  const result = parseExpr();
-  if (i < tokens.length) {
-    throw new Error(`Unexpected token: ${tokens[i]}`);
+  function parseStatement() {
+    if (tokens[i] === "let") {
+      i++; // skip "let"
+      const name = tokens[i++];
+      if (tokens[i] !== "=") {
+        throw new Error("Expected '=' after variable name");
+      }
+      i++; // skip "="
+      vars[name] = parseExpr();
+      if (tokens[i] === ";") i++; // skip ";"
+      return vars[name];
+    }
+    const value = parseExpr();
+    if (tokens[i] === ";") i++; // skip ";"
+    return value;
+  }
+
+  let result = 0;
+  while (i < tokens.length) {
+    result = parseStatement();
   }
   return result;
 }

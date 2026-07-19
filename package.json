@@ -5,10 +5,14 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "cpd" : "pmd cpd index.js index.test.js --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
+    "cpd": "pmd cpd index.js index.test.js --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "lint": "eslint . --fix"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "latest",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0"
   },
   "peerDependencies": {
     "typescript": "^5"
