@@ -52,3 +52,11 @@ test("evaluate curly braces with let declaration", () => {
 test("evaluate top-level let with nested block", () => {
   expect(evaluate("let y = { let x = 3 + 4; x } * 5; y")).toBe(35);
 });
+
+test("evaluate let without assignment throws error", () => {
+  expect(() => evaluate("let x;")).toThrow();
+});
+
+test("evaluate undefined identifier throws error", () => {
+  expect(() => evaluate("undefinedIdentifier")).toThrow();
+});

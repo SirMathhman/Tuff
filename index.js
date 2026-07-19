@@ -50,9 +50,12 @@ export function evaluate(source, scope) {
     const token = tokens[i];
     if (token === "(") return parseParenExpr();
     if (token === "{") return parseBlock();
-    if (token && /^[a-zA-Z_]\w*$/.test(token) && token in vars) {
-      i++;
-      return vars[token];
+    if (token && /^[a-zA-Z_]\w*$/.test(token)) {
+      if (token in vars) {
+        i++;
+        return vars[token];
+      }
+      throw new Error(`Undefined identifier: ${token}`);
     }
     i++;
     const value = Number(token);
