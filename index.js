@@ -356,6 +356,26 @@ export function evaluate(source, scope) {
   }
 
   function parseAssignment() {
+    const token = tokens[i];
+    if (/^[a-zA-Z_]\w*$/.test(token) && tokens[i + 1] === ".") {
+      // Struct field assignment: id . field = value
+      const structName = tokens[i++];
+      i++; // skip "."
+      const fieldName = tokens[i++];
+      i++; // skip "="
+      const value = parseOrExpr();
+      const structVal = lookup(structName);
+      if (!structVal || !(structVal instanceof TypedValue)) throw new Error(`Not a struct: ${structName}`);
+      if (!isMutable(structName)) throw new Error(`Cannot assign to field of immutable struct: ${structName}`);
+      const structDef = lookup(structVal.type);
+      const fieldDef = structDef.fields.find(f => f.name === fieldName);
+      if (!fieldDef) throw new Error(`Unknown field: ${fieldName}`);
+      if (!fieldDef.mut) throw new Error(`Cannot assign to immutable field: ${fieldName}`);
+      checkType(fieldDef.type, value);
+      structVal.value[fieldName] = unwrap(value);
+      if (tokens[i] === ";") i++; // skip ";"
+      return unwrap(value);
+    }
     const name = tokens[i++];
     if (!isMutable(name)) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
@@ -393,7 +413,12 @@ export function evaluate(source, scope) {
   }
 
   function isAssignment() {
-    return tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=");
+    if (!tokens[i] || keywords.has(tokens[i])) return false;
+    const token = tokens[i];
+    if (/^[a-zA-Z_]\w*$/.test(token) && lookup(token) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=")) return true;
+    // Check for struct field assignment: id . field = ...
+    if (/^[a-zA-Z_]\w*$/.test(token) && tokens[i + 1] === "." && tokens[i + 2] && /^[a-zA-Z_]\w*$/.test(tokens[i + 2]) && tokens[i + 3] === "=") return true;
+    return false;
   }
 
   function parseStructDeclaration() {
@@ -405,12 +430,17 @@ export function evaluate(source, scope) {
     const fieldNames = new Set();
     if (tokens[i] !== "}") {
       while (tokens[i]) {
+        let fieldMut = false;
+        if (tokens[i] === "mut") {
+          fieldMut = true;
+          i++;
+        }
         const fieldName = tokens[i++];
         if (fieldNames.has(fieldName)) throw new Error(`Duplicate field: ${fieldName}`);
         fieldNames.add(fieldName);
         if (tokens[i] === ":") i++;
         const fieldType = tokens[i++];
-        fields.push({ name: fieldName, type: fieldType });
+        fields.push({ name: fieldName, type: fieldType, mut: fieldMut });
         if (tokens[i] === ",") {
           i++;
         } else {

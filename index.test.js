@@ -228,3 +228,14 @@ test("evaluate struct instance missing field throws error", () => {
 test("evaluate struct instance extra field throws error", () => {
   expect(() => evaluate("struct Wrapper { field : I32 } let w : Wrapper = Wrapper { field : 0, extra : 0 };")).toThrow();
 });
+test("evaluate mutable struct field assignment", () => {
+  expect(evaluate("struct Wrapper { mut field : I32 } let mut w = Wrapper { field : 0 }; w.field = 5;")).toBe(5);
+});
+
+test("evaluate immutable struct field assignment throws error", () => {
+  expect(() => evaluate("struct Wrapper { field : I32 } let mut w = Wrapper { field : 0 }; w.field = 5;")).toThrow();
+});
+
+test("evaluate mutable struct field on immutable instance throws error", () => {
+  expect(() => evaluate("struct Wrapper { mut field : I32 } let w = Wrapper { field : 0 }; w.field = 5;")).toThrow();
+});
