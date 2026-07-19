@@ -200,3 +200,7 @@ test("evaluate array element type mismatch throws error", () => {
 test("evaluate array length mismatch throws error", () => {
   expect(() => evaluate("let x : [U8; 3] = [1U8, 2U8];")).toThrow();
 });
+
+test("evaluate empty struct definition", () => {
+  expect(evaluate("struct Empty {}")).toBe(0);
+});

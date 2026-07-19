@@ -2,7 +2,7 @@ export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
   let tokens = source.trim().replace(new RegExp("(&&|\\|\\||\\+=|=>|[<>=]|[()+*/{};=|&:,.-]|[\\[\\]])", "g"), " $1 ").trim().split(/\s+/);
-  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "true", "false"]);
+  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "struct", "true", "false"]);
   const typeRanges = {
     U8: [0, 255], U16: [0, 65535], U32: [0, 4294967295],
     I8: [-128, 127], I16: [-32768, 32767], I32: [-2147483648, 2147483647],
@@ -367,11 +367,29 @@ export function evaluate(source, scope) {
     return tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && (tokens[i + 1] === "=" || tokens[i + 1] === "+=");
   }
 
+  function parseStructDeclaration() {
+    i++; // skip "struct"
+    const name = tokens[i++];
+    if (tokens[i] !== "{") throw new Error("Expected '{' after struct name");
+    i++; // skip "{"
+    if (tokens[i] === "}") {
+      i++; // skip "}"
+    } else {
+      // Future: parse struct fields here
+      while (tokens[i] !== "}" && tokens[i]) i++;
+      if (tokens[i] === "}") i++;
+    }
+    scopeStack[scopeStack.length - 1].vars[name] = { isStruct: true };
+    if (tokens[i] === ";") i++;
+    return 0;
+  }
+
   function parseStatement() {
     if (tokens[i] === "let") return parseLetDeclaration();
     if (tokens[i] === "if") return parseIfStatement();
     if (tokens[i] === "while") return parseWhileStatement();
     if (tokens[i] === "fn") return parseFnDeclaration();
+    if (tokens[i] === "struct") return parseStructDeclaration();
     if (isAssignment()) return parseAssignment();
     const value = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
