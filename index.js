@@ -1,10 +1,28 @@
 export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
-  const tokens = source.trim().replace(/([()+*/{};=-])/g, " $1 ").trim().split(/\s+/);
+  const tokens = source.trim().replace(/(&&|\|\||[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
   let i = 0;
   const vars = scope || {};
   const mutVars = new Set();
+
+  function parseOrExpr() {
+    let left = parseAndExpr();
+    while (i < tokens.length && tokens[i] === "||") {
+      i++;
+      left = left || parseAndExpr();
+    }
+    return left;
+  }
+
+  function parseAndExpr() {
+    let left = parseExpr();
+    while (i < tokens.length && tokens[i] === "&&") {
+      i++;
+      left = left && parseExpr();
+    }
+    return left;
+  }
 
   function parseExpr() {
     let left = parseTerm();
@@ -26,7 +44,7 @@ export function evaluate(source, scope) {
 
   function parseParenExpr() {
     i++; // skip "("
-    const value = parseExpr();
+    const value = parseOrExpr();
     if (tokens[i] !== ")") {
       throw new Error("Missing closing parenthesis");
     }
@@ -51,6 +69,8 @@ export function evaluate(source, scope) {
     const token = tokens[i];
     if (token === "(") return parseParenExpr();
     if (token === "{") return parseBlock();
+    if (token === "true") { i++; return 1; }
+    if (token === "false") { i++; return 0; }
     if (token && /^[a-zA-Z_]\w*$/.test(token)) {
       if (token in vars) {
         i++;
@@ -75,7 +95,7 @@ export function evaluate(source, scope) {
       throw new Error("Expected '=' after variable name");
     }
     i++; // skip "="
-    vars[name] = parseExpr();
+vars[name] = parseOrExpr();
     if (isMut) mutVars.add(name);
     if (tokens[i] === ";") i++; // skip ";"
     return vars[name];
@@ -87,7 +107,7 @@ export function evaluate(source, scope) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
     }
     i++; // skip "="
-    vars[name] = parseExpr();
+    vars[name] = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
     return vars[name];
   }
@@ -97,7 +117,7 @@ export function evaluate(source, scope) {
     if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && tokens[i] in vars && tokens[i + 1] === "=") {
       return parseAssignment();
     }
-    const value = parseExpr();
+    const value = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
     return value;
   }

@@ -72,3 +72,15 @@ test("evaluate assignment to immutable variable throws error", () => {
 test("evaluate assignment to undefined variable throws error", () => {
   expect(() => evaluate("x = 1; x")).toThrow();
 });
+
+test("evaluate boolean true", () => {
+  expect(evaluate("let x = true; x")).toBe(1);
+});
+
+test("evaluate or operator", () => {
+  expect(evaluate("true || true")).toBe(1);
+});
+
+test("evaluate and operator", () => {
+  expect(evaluate("true && false")).toBe(0);
+});
