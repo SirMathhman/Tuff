@@ -1,4 +1,5 @@
 use core::panic;
+use std::collections::HashMap;
 use std::fmt::Error;
 use std::process::Command;
 use std::io::Write;
@@ -16,7 +17,12 @@ fn compile_tuff_to_c(tuff_source_code: &str) -> Result<String, Error> {
 
     let tokens = tokenize(s)?;
     let mut pos = 0;
-    let result = parse_expression(&tokens, &mut pos)?;
+    let mut env = VarEnv::new();
+    let mut c_stmts: Vec<String> = Vec::new();
+
+    parse_stmts(&tokens, &mut pos, &mut env, &mut c_stmts)?;
+
+    let result = parse_expression(&tokens, &mut pos, &env)?;
     if pos != tokens.len() {
         return Err(Error);
     }
@@ -27,16 +33,145 @@ fn compile_tuff_to_c(tuff_source_code: &str) -> Result<String, Error> {
     }
 
     let c_type = type_to_c_type(&result.type_name);
-    let c_code = format!(
-        "int main() {{\n    return ({})({});\n}}\n",
-        c_type, result.value
-    );
+    let mut c_code = String::from("int main() {\n");
+    for stmt in &c_stmts {
+        c_code.push_str(&format!("    {};\n", stmt));
+    }
+    c_code.push_str(&format!("    return ({})({});\n}}\n", c_type, result.value));
     Ok(c_code)
+}
+
+fn parse_stmts(tokens: &[Token], pos: &mut usize, env: &mut VarEnv, c_stmts: &mut Vec<String>) -> Result<(), Error> {
+    while *pos < tokens.len() && parse_one_stmt(tokens, pos, env, c_stmts)? {
+        // continue parsing statements
+    }
+    Ok(())
+}
+
+fn parse_one_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv, c_stmts: &mut Vec<String>) -> Result<bool, Error> {
+    if tokens[*pos] == Token::Let {
+        let stmt = parse_let_stmt(tokens, pos, env)?;
+        c_stmts.push(stmt);
+        return Ok(true);
+    }
+    if is_assignment_start(tokens, *pos) {
+        let stmt = parse_assign_stmt(tokens, pos, env)?;
+        c_stmts.push(stmt);
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn is_assignment_start(tokens: &[Token], pos: usize) -> bool {
+    matches!(&tokens[pos], Token::Ident(_))
+        && pos + 1 < tokens.len()
+        && tokens[pos + 1] == Token::Equals
+}
+
+fn parse_let_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
+    // consume 'let'
+    *pos += 1;
+
+    // optional 'mut'
+    let is_mut = if *pos < tokens.len() && tokens[*pos] == Token::Mut {
+        *pos += 1;
+        true
+    } else {
+        false
+    };
+
+    // variable name
+    let name = match &tokens.get(*pos) {
+        Some(Token::Ident(n)) => {
+            *pos += 1;
+            n.clone()
+        }
+        _ => return Err(Error),
+    };
+
+    // Get a fresh C name for this variable (handles shadowing)
+    let c_name = env.fresh_c_name(&name);
+
+    // colon
+    expect_token(tokens, pos, Token::Colon)?;
+
+    // type annotation
+    let type_name = match &tokens.get(*pos) {
+        Some(Token::Ident(t)) => {
+            *pos += 1;
+            t.clone()
+        }
+        _ => return Err(Error),
+    };
+    // validate type
+    if type_bounds(&type_name).0 == i128::MAX {
+        return Err(Error);
+    }
+
+    // equals
+    expect_token(tokens, pos, Token::Equals)?;
+
+    // initializer expression
+    let value = parse_expression(tokens, pos, env)?;
+    let raw_value = value.value;
+
+    // semicolon
+    expect_token(tokens, pos, Token::Semicolon)?;
+
+    // store in environment
+    env.set(name.clone(), TypedValue {
+        value: raw_value,
+        type_name: type_name.clone(),
+        is_mut,
+    });
+
+    let c_type = type_to_c_type(&type_name);
+    Ok(format!("{} {} = {}", c_type, c_name, raw_value))
+}
+
+fn parse_assign_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
+    let name = match &tokens[*pos] {
+        Token::Ident(n) => n.clone(),
+        _ => return Err(Error),
+    };
+    *pos += 1;
+
+    // Check variable exists and is mutable
+    let var = env.get(&name).ok_or(Error)?;
+    if !var.is_mut {
+        return Err(Error);
+    }
+
+    // equals
+    expect_token(tokens, pos, Token::Equals)?;
+
+    // value expression
+    let value = parse_expression(tokens, pos, env)?;
+
+    // semicolon
+    expect_token(tokens, pos, Token::Semicolon)?;
+
+    // update environment
+    env.set(name.clone(), TypedValue { value: value.value, type_name: var.type_name.clone(), is_mut: true });
+
+    let c_name = env.get_c_name(&name);
+    Ok(format!("{} = {}", c_name, value.value))
+}
+
+fn expect_token(tokens: &[Token], pos: &mut usize, expected: Token) -> Result<(), Error> {
+    if *pos >= tokens.len() || tokens[*pos] != expected {
+        return Err(Error);
+    }
+    *pos += 1;
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     Lit { value: i128, suffix: String },
+    Ident(String),
+    Let,
+    Mut,
     Plus,
     Minus,
     Star,
@@ -44,6 +179,9 @@ enum Token {
     Percent,
     LParen,
     RParen,
+    Colon,
+    Semicolon,
+    Equals,
 }
 
 fn tokenize(s: &str) -> Result<Vec<Token>, Error> {
@@ -67,10 +205,26 @@ fn tokenize_step(chars: &[char], i: usize, tokens: &mut Vec<Token>) -> Result<us
 
 fn tokenize_one(chars: &[char], i: usize) -> Result<(Token, usize), Error> {
     if chars[i].is_ascii_digit() {
-        tokenize_number(chars, i)
-    } else {
-        tokenize_operator(chars, i)
+        return tokenize_number(chars, i);
     }
+    if chars[i].is_ascii_alphabetic() || chars[i] == '_' {
+        return tokenize_ident_or_keyword(chars, i);
+    }
+    tokenize_symbol(chars, i)
+}
+
+fn tokenize_ident_or_keyword(chars: &[char], start: usize) -> Result<(Token, usize), Error> {
+    let mut i = start;
+    while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+        i += 1;
+    }
+    let word: String = chars[start..i].iter().collect();
+    let token = match word.as_str() {
+        "let" => Token::Let,
+        "mut" => Token::Mut,
+        _ => Token::Ident(word),
+    };
+    Ok((token, i))
 }
 
 fn tokenize_number(chars: &[char], start: usize) -> Result<(Token, usize), Error> {
@@ -91,7 +245,7 @@ fn tokenize_number(chars: &[char], start: usize) -> Result<(Token, usize), Error
     Ok((Token::Lit { value, suffix }, i))
 }
 
-fn tokenize_operator(chars: &[char], i: usize) -> Result<(Token, usize), Error> {
+fn tokenize_symbol(chars: &[char], i: usize) -> Result<(Token, usize), Error> {
     let tok = match chars[i] {
         '+' => Token::Plus,
         '-' => Token::Minus,
@@ -100,6 +254,9 @@ fn tokenize_operator(chars: &[char], i: usize) -> Result<(Token, usize), Error> 
         '%' => Token::Percent,
         '(' => Token::LParen,
         ')' => Token::RParen,
+        ':' => Token::Colon,
+        ';' => Token::Semicolon,
+        '=' => Token::Equals,
         _ => return Err(Error),
     };
     Ok((tok, i + 1))
@@ -109,10 +266,51 @@ fn tokenize_operator(chars: &[char], i: usize) -> Result<(Token, usize), Error> 
 struct TypedValue {
     value: i128,
     type_name: String,
+    is_mut: bool,
 }
 
-fn parse_expression(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
-    let mut left = parse_term(tokens, pos)?;
+struct VarEnv {
+    vars: HashMap<String, TypedValue>,
+    c_names: HashMap<String, String>,
+    shadow_count: HashMap<String, u32>,
+}
+
+impl VarEnv {
+    fn new() -> Self {
+        VarEnv {
+            vars: HashMap::new(),
+            c_names: HashMap::new(),
+            shadow_count: HashMap::new(),
+        }
+    }
+
+    fn get(&self, name: &str) -> Option<&TypedValue> {
+        self.vars.get(name)
+    }
+
+    fn set(&mut self, name: String, value: TypedValue) {
+        self.vars.insert(name, value);
+    }
+
+    fn fresh_c_name(&mut self, name: &str) -> String {
+        let count = self.shadow_count.entry(name.to_string()).or_insert(0);
+        let c_name = shadow_name(name, *count);
+        *count += 1;
+        self.c_names.insert(name.to_string(), c_name.clone());
+        c_name
+    }
+
+    fn get_c_name(&self, name: &str) -> String {
+        self.c_names.get(name).cloned().unwrap_or_else(|| name.to_string())
+    }
+}
+
+fn shadow_name(name: &str, count: u32) -> String {
+    if count == 0 { name.to_string() } else { format!("{}_{}", name, count) }
+}
+
+fn parse_expression(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    let mut left = parse_term(tokens, pos, env)?;
     while *pos < tokens.len() {
         let op = match &tokens[*pos] {
             Token::Plus => bin_op_add as fn(i128, i128) -> i128,
@@ -120,7 +318,7 @@ fn parse_expression(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Err
             _ => break,
         };
         *pos += 1;
-        let right = parse_term(tokens, pos)?;
+        let right = parse_term(tokens, pos, env)?;
         left = apply_bin_op(left, right, op)?;
     }
     Ok(left)
@@ -129,8 +327,8 @@ fn parse_expression(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Err
 fn bin_op_add(a: i128, b: i128) -> i128 { a + b }
 fn bin_op_sub(a: i128, b: i128) -> i128 { a - b }
 
-fn parse_term(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
-    let mut left = parse_factor(tokens, pos)?;
+fn parse_term(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
+    let mut left = parse_factor(tokens, pos, env)?;
     while *pos < tokens.len() {
         let (op, is_div_or_mod) = match &tokens[*pos] {
             Token::Star => (bin_op_star as fn(i128, i128) -> i128, false),
@@ -139,7 +337,7 @@ fn parse_term(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
             _ => break,
         };
         *pos += 1;
-        let right = parse_factor(tokens, pos)?;
+        let right = parse_factor(tokens, pos, env)?;
         check_div_by_zero(is_div_or_mod, right.value)?;
         left = apply_bin_op(left, right, op)?;
     }
@@ -158,32 +356,37 @@ fn bin_op_star(a: i128, b: i128) -> i128 { a * b }
 fn bin_op_slash(a: i128, b: i128) -> i128 { a / b }
 fn bin_op_percent(a: i128, b: i128) -> i128 { a % b }
 
-fn parse_factor(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
+fn parse_factor(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
     if *pos >= tokens.len() {
         return Err(Error);
     }
     if tokens[*pos] == Token::Minus {
-        return parse_negated_factor(tokens, pos);
+        return parse_negated_factor(tokens, pos, env);
     }
     if tokens[*pos] == Token::LParen {
-        return parse_parenthesized(tokens, pos);
+        return parse_parenthesized(tokens, pos, env);
     }
     match &tokens[*pos] {
         Token::Lit { value, suffix } => {
             let type_name = suffix_to_type_name(suffix);
             *pos += 1;
-            Ok(TypedValue { value: *value, type_name })
+            Ok(TypedValue { value: *value, type_name, is_mut: false })
+        }
+        Token::Ident(name) => {
+            let var = env.get(name).ok_or(Error)?.clone();
+            *pos += 1;
+            Ok(var)
         }
         _ => Err(Error),
     }
 }
 
-fn parse_parenthesized(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
+fn parse_parenthesized(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
     *pos += 1; // consume (
     if *pos >= tokens.len() || tokens[*pos] == Token::RParen {
         return Err(Error);
     }
-    let result = parse_expression(tokens, pos)?;
+    let result = parse_expression(tokens, pos, env)?;
     if *pos >= tokens.len() || tokens[*pos] != Token::RParen {
         return Err(Error);
     }
@@ -191,9 +394,9 @@ fn parse_parenthesized(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, 
     Ok(result)
 }
 
-fn parse_negated_factor(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
+fn parse_negated_factor(tokens: &[Token], pos: &mut usize, env: &VarEnv) -> Result<TypedValue, Error> {
     *pos += 1;
-    let mut inner = parse_factor(tokens, pos)?;
+    let mut inner = parse_factor(tokens, pos, env)?;
     let (min, _max) = type_bounds(&inner.type_name);
     if -inner.value < min {
         return Err(Error);
@@ -226,6 +429,7 @@ fn apply_bin_op(
     Ok(TypedValue {
         value: result,
         type_name: result_type,
+        is_mut: false,
     })
 }
 
@@ -643,5 +847,64 @@ mod tests {
     #[test]
     fn parens_unopened() {
         expect_invalid("1 + 2)");
+    }
+
+    // --- Positive: let statements ---
+
+    #[test]
+    fn let_simple() {
+        expect_valid("let x: I32 = 42; x", vec![], 42);
+    }
+
+    #[test]
+    fn let_multiple() {
+        expect_valid("let x: I32 = 10; let y: I32 = 20; x + y", vec![], 30);
+    }
+
+    #[test]
+    fn let_mut_reassign() {
+        expect_valid("let mut x: I32 = 10; x = 20; x", vec![], 20);
+    }
+
+    #[test]
+    fn let_in_expression() {
+        expect_valid("let x: I32 = 5; let y: I32 = 10; x * y + 2", vec![], 52);
+    }
+
+    #[test]
+    fn let_shadow() {
+        expect_valid("let x: I32 = 10; let x: I32 = 20; x", vec![], 20);
+    }
+
+    #[test]
+    fn let_typed_u8() {
+        expect_valid("let x: U8 = 200U8; let y: U8 = 55U8; x + y", vec![], 255);
+    }
+
+    // --- Negative: let statements ---
+
+    #[test]
+    fn let_missing_semicolon() {
+        expect_invalid("let x: I32 = 42");
+    }
+
+    #[test]
+    fn let_undeclared_var() {
+        expect_invalid("let x: I32 = 42; y");
+    }
+
+    #[test]
+    fn let_reassign_immutable() {
+        expect_invalid("let x: I32 = 10; x = 20; x");
+    }
+
+    #[test]
+    fn let_missing_type() {
+        expect_invalid("let x = 42; x");
+    }
+
+    #[test]
+    fn let_missing_name() {
+        expect_invalid("let: I32 = 42;");
     }
 }
