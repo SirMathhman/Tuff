@@ -22,7 +22,17 @@ export function evaluate(source, scope) {
 
   function checkType(expectedType, actual) {
     if (actual instanceof TypedValue && actual.type && actual.type !== expectedType) {
-      if (actual.type === "array" && expectedType.startsWith("[")) return; // Array type match
+      if (actual.type === "array" && expectedType.startsWith("[")) {
+        const match = expectedType.match(/^\[(.+);/);
+        if (match) {
+          const elemType = match[1];
+          const elements = actual.value;
+          for (const elem of elements) {
+            checkType(elemType, elem);
+          }
+        }
+        return;
+      }
       throw new Error(`Type mismatch: expected ${expectedType} but got ${actual.type}`);
     }
     if (expectedType === "Bool" && !(actual instanceof TypedValue)) {

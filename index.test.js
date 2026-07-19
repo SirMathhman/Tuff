@@ -192,3 +192,7 @@ test("evaluate typed function definition and call", () => {
 test("evaluate typed array declaration and indexing", () => {
   expect(evaluate("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
 });
+
+test("evaluate array element type mismatch throws error", () => {
+  expect(() => evaluate("let x : [U8; 2] = [0U16, 1U16];")).toThrow();
+});
