@@ -160,3 +160,7 @@ test("evaluate untyped let declaration returns 0", () => {
 test("evaluate typed let declaration returns 0", () => {
   expect(evaluate("let x : U8 = 100;")).toBe(0);
 });
+
+test("evaluate typed let declaration out of range throws error", () => {
+  expect(() => evaluate("let x : U8 = 256;")).toThrow();
+});
