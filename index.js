@@ -3,8 +3,38 @@ export function evaluate(source, scope) {
 
   const tokens = source.trim().replace(/(&&|\|\||[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
   let i = 0;
-  const vars = scope || {};
-  const mutVars = new Set();
+  const scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
+
+  function enterScope() {
+    scopeStack.push({ vars: {}, mutVars: new Set() });
+  }
+
+  function exitScope() {
+    scopeStack.pop();
+  }
+
+  function lookup(name) {
+    for (let s = scopeStack.length - 1; s >= 0; s--) {
+      if (name in scopeStack[s].vars) return scopeStack[s].vars[name];
+    }
+    return undefined;
+  }
+
+  function isMutable(name) {
+    for (let s = scopeStack.length - 1; s >= 0; s--) {
+      if (name in scopeStack[s].vars) return scopeStack[s].mutVars.has(name);
+    }
+    return false;
+  }
+
+  function findAndSet(name, value) {
+    for (let s = scopeStack.length - 1; s >= 0; s--) {
+      if (name in scopeStack[s].vars) {
+        scopeStack[s].vars[name] = value;
+        return;
+      }
+    }
+  }
 
   function parseOrExpr() {
     let left = parseAndExpr();
@@ -54,6 +84,7 @@ export function evaluate(source, scope) {
 
   function parseBlock() {
     i++; // skip "{"
+    enterScope();
     let lastValue = 0;
     while (i < tokens.length && tokens[i] !== "}") {
       lastValue = parseStatement();
@@ -62,6 +93,7 @@ export function evaluate(source, scope) {
       throw new Error("Missing closing brace");
     }
     i++;
+    exitScope();
     return lastValue;
   }
 
@@ -72,9 +104,10 @@ export function evaluate(source, scope) {
     if (token === "true") { i++; return 1; }
     if (token === "false") { i++; return 0; }
     if (token && /^[a-zA-Z_]\w*$/.test(token)) {
-      if (token in vars) {
+      const val = lookup(token);
+      if (val !== undefined) {
         i++;
-        return vars[token];
+        return val;
       }
       throw new Error(`Undefined identifier: ${token}`);
     }
@@ -95,26 +128,27 @@ export function evaluate(source, scope) {
       throw new Error("Expected '=' after variable name");
     }
     i++; // skip "="
-vars[name] = parseOrExpr();
-    if (isMut) mutVars.add(name);
+    scopeStack[scopeStack.length - 1].vars[name] = parseOrExpr();
+    if (isMut) scopeStack[scopeStack.length - 1].mutVars.add(name);
     if (tokens[i] === ";") i++; // skip ";"
-    return vars[name];
+    return scopeStack[scopeStack.length - 1].vars[name];
   }
 
   function parseAssignment() {
     const name = tokens[i++];
-    if (!mutVars.has(name)) {
+    if (!isMutable(name)) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
     }
     i++; // skip "="
-    vars[name] = parseOrExpr();
+    const value = parseOrExpr();
+    findAndSet(name, value);
     if (tokens[i] === ";") i++; // skip ";"
-    return vars[name];
+    return value;
   }
 
   function parseStatement() {
     if (tokens[i] === "let") return parseLetDeclaration();
-    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && tokens[i] in vars && tokens[i + 1] === "=") {
+    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && lookup(tokens[i]) !== undefined && tokens[i + 1] === "=") {
       return parseAssignment();
     }
     const value = parseOrExpr();

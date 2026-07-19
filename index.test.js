@@ -84,3 +84,15 @@ test("evaluate or operator", () => {
 test("evaluate and operator", () => {
   expect(evaluate("true && false")).toBe(0);
 });
+
+test("evaluate variable redeclaration", () => {
+  expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
+});
+
+test("evaluate mutable variable assignment in block", () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+});
+
+test("evaluate block variable shadowing", () => {
+  expect(evaluate("let x = 1; { let x = 0; } x")).toBe(1);
+});
