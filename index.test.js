@@ -100,3 +100,23 @@ test("evaluate block variable shadowing", () => {
 test("evaluate less than comparison", () => {
   expect(evaluate("1 < 2")).toBe(1);
 });
+
+test("evaluate if else expression", () => {
+  expect(evaluate("let x = if (true) 3 else 5; x")).toBe(3);
+});
+
+test("evaluate chained if else expression", () => {
+  expect(evaluate("let x = if (false) 3 else if (false) 5 else 7; x")).toBe(7);
+});
+
+test("evaluate if else statement", () => {
+  expect(evaluate("let mut x = 0; if (true) x = 7; else x = 8; x")).toBe(7);
+});
+
+test("evaluate chained if else statement", () => {
+  expect(evaluate("let mut x = 0; if (false) x = 7; else if (false) x = 8; else x = 9; x")).toBe(9);
+});
+
+test("evaluate chained if else statement with braces", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 7; } else if (false) { x = 8; } else { x = 9; } x")).toBe(9);
+});

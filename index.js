@@ -2,6 +2,7 @@ export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
   const tokens = source.trim().replace(/(&&|\|\||[<>=]|[()+*/{};=|&-])/g, " $1 ").trim().split(/\s+/);
+  const keywords = new Set(["let", "mut", "if", "else", "true", "false"]);
   let i = 0;
   const scopeStack = [{ vars: scope || {}, mutVars: new Set() }];
 
@@ -124,26 +125,53 @@ export function evaluate(source, scope) {
     return lastValue;
   }
 
+  function parseIfCondition() {
+    if (tokens[i] !== "(") throw new Error("Expected '(' after 'if'");
+    i++; // skip "("
+    const condition = parseOrExpr();
+    if (tokens[i] !== ")") throw new Error("Expected ')' after condition");
+    i++; // skip ")"
+    return condition;
+  }
+
+  function parseIfExpr() {
+    i++; // skip "if"
+    const condition = parseIfCondition();
+    const thenValue = parseOrExpr();
+    if (tokens[i] !== "else") throw new Error("Expected 'else'");
+    i++; // skip "else"
+    const elseValue = parseOrExpr();
+    return condition ? thenValue : elseValue;
+  }
+
+  function parseIdentifier() {
+    const token = tokens[i];
+    const val = lookup(token);
+    if (val !== undefined) {
+      i++;
+      return val;
+    }
+    throw new Error(`Undefined identifier: ${token}`);
+  }
+
+  function parseNumber() {
+    i++;
+    const value = Number(tokens[i - 1]);
+    if (isNaN(value)) {
+      throw new Error(`Unexpected token: ${tokens[i - 1]}`);
+    }
+    return value;
+  }
+
   function parseFactor() {
     const token = tokens[i];
     if (token === "(") return parseParenExpr();
     if (token === "{") return parseBlock();
+    if (token === "if") return parseIfExpr();
     if (token === "true") { i++; return 1; }
     if (token === "false") { i++; return 0; }
-    if (token && /^[a-zA-Z_]\w*$/.test(token)) {
-      const val = lookup(token);
-      if (val !== undefined) {
-        i++;
-        return val;
-      }
-      throw new Error(`Undefined identifier: ${token}`);
-    }
-    i++;
-    const value = Number(token);
-    if (isNaN(value)) {
-      throw new Error(`Unexpected token: ${token}`);
-    }
-    return value;
+    if (token && /^[a-zA-Z_]\w*$/.test(token) && !keywords.has(token)) return parseIdentifier();
+    return parseNumber();
   }
 
   function parseLetDeclaration() {
@@ -173,14 +201,46 @@ export function evaluate(source, scope) {
     return value;
   }
 
+  function skipStatement() {
+    let depth = 0;
+    while (i < tokens.length) {
+      if (tokens[i] === "{") depth++;
+      else if (tokens[i] === "}") {
+        if (depth === 0) { i++; return; }
+        depth--;
+        i++;
+      } else if (tokens[i] === ";" && depth === 0) {
+        i++;
+        return;
+      }
+      i++;
+    }
+  }
+
   function parseStatement() {
     if (tokens[i] === "let") return parseLetDeclaration();
-    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && lookup(tokens[i]) !== undefined && tokens[i + 1] === "=") {
+    if (tokens[i] === "if") return parseIfStatement();
+    if (tokens[i] && /^[a-zA-Z_]\w*$/.test(tokens[i]) && !keywords.has(tokens[i]) && lookup(tokens[i]) !== undefined && tokens[i + 1] === "=") {
       return parseAssignment();
     }
     const value = parseOrExpr();
     if (tokens[i] === ";") i++; // skip ";"
     return value;
+  }
+
+  function parseIfStatement() {
+    i++; // skip "if"
+    const condition = parseIfCondition();
+    const thenValue = parseStatement();
+    if (tokens[i] === "else") {
+      i++; // skip "else"
+      if (condition) {
+        skipStatement();
+        return thenValue;
+      }
+      return parseStatement();
+    }
+    return condition ? thenValue : 0;
   }
 
   let result = 0;
