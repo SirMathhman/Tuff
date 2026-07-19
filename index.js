@@ -2,7 +2,7 @@ export function evaluate(source, scope) {
   if (source.trim() === "") return 0;
 
   let tokens = source.trim().replace(new RegExp("(&&|\\|\\||\\+=|=>|[<>=]|[()+*/{};=|&:,.-]|[\\[\\]])", "g"), " $1 ").trim().split(/\s+/);
-  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "struct", "true", "false"]);
+  const keywords = new Set(["let", "mut", "if", "else", "while", "fn", "struct", "is", "true", "false"]);
   const typeRanges = {
     U8: [0, 255], U16: [0, 65535], U32: [0, 4294967295],
     I8: [-128, 127], I16: [-32768, 32767], I32: [-2147483648, 2147483647],
@@ -117,6 +117,25 @@ export function evaluate(source, scope) {
     return comparators[op](unwrap(left), unwrap(right)) ? 1 : 0;
   }
 
+  function parseIsExpr() {
+    const left = parseComparison();
+    if (tokens[i] === "is") {
+      i++; // skip "is"
+      const type = tokens[i++];
+      const result = checkIsType(left, type);
+      return new TypedValue(result ? 1 : 0, "Bool");
+    }
+    return left;
+  }
+
+  function checkIsType(value, type) {
+    if (value instanceof TypedValue && value.type) {
+      return value.type === type;
+    }
+    // Untyped numbers match numeric types
+    return ["U8", "U16", "U32", "I8", "I16", "I32"].includes(type);
+  }
+
   function parseComparison() {
     let left = parseExpr();
     while (i < tokens.length && isComparisonOp(tokens[i])) {
@@ -128,10 +147,10 @@ export function evaluate(source, scope) {
   }
 
   function parseAndExpr() {
-    let left = parseComparison();
+    let left = parseIsExpr();
     while (i < tokens.length && tokens[i] === "&&") {
       i++;
-      left = unwrap(left) ? parseComparison() : left;
+      left = unwrap(left) ? parseIsExpr() : left;
     }
     return left;
   }

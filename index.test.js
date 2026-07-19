@@ -243,3 +243,7 @@ test("evaluate mutable struct field on immutable instance throws error", () => {
 test("evaluate assignment returns 0", () => {
   expect(evaluate("let mut x = 1; x = 2;")).toBe(0);
 });
+
+test("evaluate is type check", () => {
+  expect(evaluate("100 is I32")).toBe(1);
+});
