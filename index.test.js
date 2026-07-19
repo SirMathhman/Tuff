@@ -247,3 +247,7 @@ test("evaluate assignment returns 0", () => {
 test("evaluate is type check", () => {
   expect(evaluate("100 is I32")).toBe(1);
 });
+
+test("evaluate is type check with typed literal", () => {
+  expect(evaluate("100I32 is I32")).toBe(1);
+});
