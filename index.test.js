@@ -251,3 +251,7 @@ test("evaluate is type check", () => {
 test("evaluate is type check with typed literal", () => {
   expect(evaluate("100I32 is I32")).toBe(1);
 });
+
+test("evaluate is type check with parenthesized expression", () => {
+  expect(evaluate("(100U8) is U8")).toBe(1);
+});
