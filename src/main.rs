@@ -42,6 +42,8 @@ enum Token {
     Star,
     Slash,
     Percent,
+    LParen,
+    RParen,
 }
 
 fn tokenize(s: &str) -> Result<Vec<Token>, Error> {
@@ -96,6 +98,8 @@ fn tokenize_operator(chars: &[char], i: usize) -> Result<(Token, usize), Error> 
         '*' => Token::Star,
         '/' => Token::Slash,
         '%' => Token::Percent,
+        '(' => Token::LParen,
+        ')' => Token::RParen,
         _ => return Err(Error),
     };
     Ok((tok, i + 1))
@@ -161,6 +165,9 @@ fn parse_factor(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> 
     if tokens[*pos] == Token::Minus {
         return parse_negated_factor(tokens, pos);
     }
+    if tokens[*pos] == Token::LParen {
+        return parse_parenthesized(tokens, pos);
+    }
     match &tokens[*pos] {
         Token::Lit { value, suffix } => {
             let type_name = suffix_to_type_name(suffix);
@@ -169,6 +176,19 @@ fn parse_factor(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> 
         }
         _ => Err(Error),
     }
+}
+
+fn parse_parenthesized(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
+    *pos += 1; // consume (
+    if *pos >= tokens.len() || tokens[*pos] == Token::RParen {
+        return Err(Error);
+    }
+    let result = parse_expression(tokens, pos)?;
+    if *pos >= tokens.len() || tokens[*pos] != Token::RParen {
+        return Err(Error);
+    }
+    *pos += 1; // consume )
+    Ok(result)
 }
 
 fn parse_negated_factor(tokens: &[Token], pos: &mut usize) -> Result<TypedValue, Error> {
@@ -574,5 +594,54 @@ mod tests {
     #[test]
     fn arithmetic_double_op() {
         expect_invalid("1 ++ 2");
+    }
+
+    // --- Positive: parentheses ---
+
+    #[test]
+    fn parens_simple() {
+        expect_valid("(1 + 2) * 3", vec![], 9);
+    }
+
+    #[test]
+    fn parens_with_division() {
+        expect_valid("(10 + 2) / 3", vec![], 4);
+    }
+
+    #[test]
+    fn parens_nested() {
+        expect_valid("((1 + 2) * (3 + 4))", vec![], 21);
+    }
+
+    #[test]
+    fn parens_deeply_nested() {
+        expect_valid("(((1 + 2) * 3) - 4) / 5", vec![], 1);
+    }
+
+    #[test]
+    fn parens_unary_minus() {
+        expect_valid("-(2 + 3)", vec![], -5);
+    }
+
+    #[test]
+    fn parens_negated_group() {
+        expect_valid("-(2 + 3) * 4", vec![], -20);
+    }
+
+    // --- Negative: parentheses ---
+
+    #[test]
+    fn parens_empty() {
+        expect_invalid("()");
+    }
+
+    #[test]
+    fn parens_mismatched() {
+        expect_invalid("(1 + 2");
+    }
+
+    #[test]
+    fn parens_unopened() {
+        expect_invalid("1 + 2)");
     }
 }
