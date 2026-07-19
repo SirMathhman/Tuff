@@ -266,7 +266,6 @@ export function evaluate(source, scope) {
   function parseStructLiteral(name) {
     i++; // skip identifier
     i++; // skip "{"
-    const structDef = lookup(name);
     const fields = {};
     if (tokens[i] !== "}") {
       while (tokens[i]) {
