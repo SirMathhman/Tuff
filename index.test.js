@@ -204,3 +204,7 @@ test("evaluate array length mismatch throws error", () => {
 test("evaluate empty struct definition", () => {
   expect(evaluate("struct Empty {}")).toBe(0);
 });
+
+test("evaluate struct with fields", () => {
+  expect(evaluate("struct Wrapper { field : I32 }")).toBe(0);
+});
