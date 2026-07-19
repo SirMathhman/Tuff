@@ -49,6 +49,9 @@ fn parse_stmts(tokens: &[Token], pos: &mut usize, env: &mut VarEnv, c_stmts: &mu
 }
 
 fn parse_one_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv, c_stmts: &mut Vec<String>) -> Result<bool, Error> {
+    if *pos >= tokens.len() {
+        return Ok(false);
+    }
     if tokens[*pos] == Token::Let {
         let stmt = parse_let_stmt(tokens, pos, env)?;
         c_stmts.push(stmt);
@@ -59,7 +62,43 @@ fn parse_one_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv, c_stmts: 
         c_stmts.push(stmt);
         return Ok(true);
     }
+    if tokens[*pos] == Token::LBrace {
+        let stmt = parse_block_stmt(tokens, pos, env)?;
+        c_stmts.push(stmt);
+        return Ok(true);
+    }
     Ok(false)
+}
+
+fn parse_block_stmt(tokens: &[Token], pos: &mut usize, env: &mut VarEnv) -> Result<String, Error> {
+    // consume {
+    *pos += 1;
+
+    // Save the set of variable names that existed before this block
+    let outer_vars: Vec<String> = env.vars.keys().cloned().collect();
+    let outer_c_names: Vec<String> = env.c_names.keys().cloned().collect();
+    let outer_shadow: Vec<String> = env.shadow_count.keys().cloned().collect();
+
+    let mut inner_stmts: Vec<String> = Vec::new();
+    parse_stmts(tokens, pos, env, &mut inner_stmts)?;
+
+    // expect }
+    if *pos >= tokens.len() || tokens[*pos] != Token::RBrace {
+        return Err(Error);
+    }
+    *pos += 1;
+
+    // Remove variables declared inside the block (block-scoped)
+    env.vars.retain(|k, _| outer_vars.contains(k));
+    env.c_names.retain(|k, _| outer_c_names.contains(k));
+    env.shadow_count.retain(|k, _| outer_shadow.contains(k));
+
+    let mut c_block = String::from("{\n");
+    for stmt in &inner_stmts {
+        c_block.push_str(&format!("        {};\n", stmt));
+    }
+    c_block.push_str("    }");
+    Ok(c_block)
 }
 
 fn is_assignment_start(tokens: &[Token], pos: usize) -> bool {
@@ -179,6 +218,8 @@ enum Token {
     Percent,
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     Colon,
     Semicolon,
     Equals,
@@ -254,6 +295,8 @@ fn tokenize_symbol(chars: &[char], i: usize) -> Result<(Token, usize), Error> {
         '%' => Token::Percent,
         '(' => Token::LParen,
         ')' => Token::RParen,
+        '{' => Token::LBrace,
+        '}' => Token::RBrace,
         ':' => Token::Colon,
         ';' => Token::Semicolon,
         '=' => Token::Equals,
@@ -270,9 +313,9 @@ struct TypedValue {
 }
 
 struct VarEnv {
-    vars: HashMap<String, TypedValue>,
-    c_names: HashMap<String, String>,
-    shadow_count: HashMap<String, u32>,
+    pub vars: HashMap<String, TypedValue>,
+    pub c_names: HashMap<String, String>,
+    pub shadow_count: HashMap<String, u32>,
 }
 
 impl VarEnv {
@@ -906,5 +949,44 @@ mod tests {
     #[test]
     fn let_missing_name() {
         expect_invalid("let: I32 = 42;");
+    }
+
+    // --- Positive: blocks ---
+
+    #[test]
+    fn block_empty() {
+        expect_valid("let mut x: I32 = 0; { x = 1; } x", vec![], 1);
+    }
+
+    #[test]
+    fn block_scoped_var() {
+        expect_valid("{ let x: I32 = 42; } 0", vec![], 0);
+    }
+
+    #[test]
+    fn block_nested() {
+        expect_valid("let mut x: I32 = 0; { { x = 1; } } x", vec![], 1);
+    }
+
+    #[test]
+    fn block_multiple_stmts() {
+        expect_valid("let mut x: I32 = 0; { let y: I32 = 10; x = y; } x", vec![], 10);
+    }
+
+    #[test]
+    fn block_between_stmts() {
+        expect_valid("let mut x: I32 = 0; { x = 1; } let y: I32 = x + 1; y", vec![], 2);
+    }
+
+    // --- Negative: blocks ---
+
+    #[test]
+    fn block_var_not_visible() {
+        expect_invalid("{ let x: I32 = 42; } x");
+    }
+
+    #[test]
+    fn block_missing_close() {
+        expect_invalid("{ let x: I32 = 42;");
     }
 }
