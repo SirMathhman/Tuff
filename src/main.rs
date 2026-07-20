@@ -124,18 +124,42 @@ fn consume(ctx: &mut Context) -> String {
 }
 
 fn parse_expr(ctx: &mut Context) -> i32 {
-    let mut result = parse_term(ctx);
+    let mut result = parse_comparison(ctx);
     loop {
         let op = peek(ctx).cloned();
         match op.as_deref() {
             Some("+") | Some("-") => {
                 consume(ctx);
-                let right = parse_term(ctx);
+                let right = parse_comparison(ctx);
                 match op.as_deref().unwrap() {
                     "+" => result += right,
                     "-" => result -= right,
                     _ => unreachable!(),
                 }
+            }
+            _ => break,
+        }
+    }
+    result
+}
+
+fn parse_comparison(ctx: &mut Context) -> i32 {
+    let mut result = parse_term(ctx);
+    loop {
+        let op = peek(ctx).cloned();
+        match op.as_deref() {
+            Some("<") | Some(">") | Some("<=") | Some(">=") | Some("==") | Some("!=") => {
+                consume(ctx);
+                let right = parse_term(ctx);
+                result = match op.as_deref().unwrap() {
+                    "<" => (result < right) as i32,
+                    ">" => (result > right) as i32,
+                    "<=" => (result <= right) as i32,
+                    ">=" => (result >= right) as i32,
+                    "==" => (result == right) as i32,
+                    "!=" => (result != right) as i32,
+                    _ => unreachable!(),
+                };
             }
             _ => break,
         }
@@ -344,5 +368,10 @@ mod tests {
     #[test]
     fn test_boolean_literal() {
         assert_eq!(interpret("let x = true; x"), 1);
+    }
+
+    #[test]
+    fn test_less_than() {
+        assert_eq!(interpret("let x = 0; let y = 1; x < y"), 1);
     }
 }
