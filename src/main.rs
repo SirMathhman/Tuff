@@ -35,21 +35,15 @@ fn interpret(source_code: &str) -> i32 {
         mutable: HashSet::new(),
     };
     let mut last_value = 0;
-    loop {
-        if let Some(tok) = peek(&ctx) {
-            if tok == "let" {
-                last_value = parse_let_stmt(&mut ctx);
-            } else {
-                last_value = parse_expr(&mut ctx);
-            }
+    while let Some(tok) = peek(&ctx) {
+        if tok == "let" {
+            last_value = parse_let_stmt(&mut ctx);
         } else {
-            break;
+            last_value = parse_expr(&mut ctx);
         }
         // Consume optional semicolon
-        if let Some(tok) = peek(&ctx) {
-            if tok == ";" {
-                consume(&mut ctx);
-            }
+        if let Some(tok) = peek(&ctx) && tok == ";" {
+            consume(&mut ctx);
         }
     }
     last_value
@@ -208,8 +202,8 @@ fn parse_factor(ctx: &mut Context) -> i32 {
     match token.as_str() {
         "(" => {
             let result = parse_expr(ctx);
-            if let Some(close) = peek(ctx) {
-                if close == ")" { consume(ctx); }
+            if let Some(close) = peek(ctx) && close == ")" {
+                consume(ctx);
             }
             result
         }
@@ -267,11 +261,8 @@ fn parse_block(ctx: &mut Context) -> i32 {
             }
             None => break,
         }
-        // Consume optional semicolon
-        if let Some(tok) = peek(ctx) {
-            if tok == ";" {
-                consume(ctx);
-            }
+        if let Some(tok) = peek(ctx) && tok == ";" {
+            consume(ctx);
         }
     }
     ctx.scopes.pop();
@@ -293,8 +284,8 @@ fn parse_let_stmt(ctx: &mut Context) -> i32 {
         false
     };
     let identifier = consume(ctx); // variable name
-    if let Some(eq) = peek(ctx) {
-        if eq.as_str() == "=" { consume(ctx); }
+    if let Some(eq) = peek(ctx) && eq.as_str() == "=" {
+        consume(ctx);
     }
     let value = parse_expr(ctx);
     insert_scope(ctx, identifier.clone(), value);
@@ -305,69 +296,68 @@ fn parse_let_stmt(ctx: &mut Context) -> i32 {
 }
 
 fn parse_if_expr(ctx: &mut Context) -> i32 {
-    // consume "(" before condition
-    if let Some(tok) = peek(ctx) {
-        if tok == "(" { consume(ctx); }
-    }
+    consume_optional(ctx, "(");
     let condition = parse_expr(ctx);
-    // consume ")" after condition
-    if let Some(tok) = peek(ctx) {
-        if tok == ")" { consume(ctx); }
-    }
+    consume_optional(ctx, ")");
     let then_value = parse_expr(ctx);
-    // consume "else"
-    if let Some(tok) = peek(ctx) {
-        if tok == "else" { consume(ctx); }
-    }
+    consume_optional(ctx, "else");
     let else_value = parse_expr(ctx);
     if condition != 0 { then_value } else { else_value }
 }
 
-fn parse_while_expr(ctx: &mut Context) -> i32 {
-    // consume "(" before condition
-    if let Some(tok) = peek(ctx) {
-        if tok == "(" { consume(ctx); }
+fn consume_optional(ctx: &mut Context, expected: &str) {
+    if let Some(tok) = peek(ctx) && tok == expected {
+        consume(ctx);
     }
-    let cond_start = ctx.pos;
-    // Find the matching ")" to know where the body starts
+}
+
+fn skip_semicolon(ctx: &mut Context) {
+    if let Some(tok) = peek(ctx) && tok == ";" {
+        consume(ctx);
+    }
+}
+
+fn find_matching_paren(ctx: &Context, start: usize) -> usize {
     let mut depth = 0;
-    let mut cond_end = ctx.pos;
-    while let Some(tok) = ctx.tokens.get(cond_end) {
+    let mut pos = start;
+    while let Some(tok) = ctx.tokens.get(pos) {
         if tok == "(" { depth += 1; }
         if tok == ")" {
             if depth == 0 { break; }
             depth -= 1;
         }
-        cond_end += 1;
+        pos += 1;
     }
-    let body_start = cond_end + 1; // skip ")"
-    // Find where the body expression ends
-    let mut body_end = body_start;
-    while let Some(tok) = ctx.tokens.get(body_end) {
+    pos
+}
+
+fn find_body_end(ctx: &Context, start: usize) -> usize {
+    let mut pos = start;
+    while let Some(tok) = ctx.tokens.get(pos) {
         if tok == ";" || tok == "}" { break; }
-        body_end += 1;
+        pos += 1;
     }
+    pos
+}
+
+fn parse_while_expr(ctx: &mut Context) -> i32 {
+    consume_optional(ctx, "(");
+    let cond_start = ctx.pos;
+    let cond_end = find_matching_paren(ctx, ctx.pos);
+    let body_start = cond_end + 1;
+    let body_end = find_body_end(ctx, body_start);
     let mut last_value = 0;
     loop {
-        // Evaluate condition
         ctx.pos = cond_start;
         let condition = parse_expr(ctx);
-        // Advance past ")"
-        if let Some(tok) = peek(ctx) {
-            if tok == ")" { consume(ctx); }
-        }
+        consume_optional(ctx, ")");
         if condition == 0 {
             break;
         }
-        // Evaluate body expression
         ctx.pos = body_start;
         last_value = parse_expr(ctx);
-        // Consume any trailing semicolon in body
-        if let Some(tok) = peek(ctx) {
-            if tok == ";" { consume(ctx); }
-        }
+        skip_semicolon(ctx);
     }
-    // Advance past the body so interpret doesn't re-parse it
     ctx.pos = body_end;
     last_value
 }
