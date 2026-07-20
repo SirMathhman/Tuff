@@ -1,5 +1,29 @@
+use std::io::{self, Write};
+
 fn main() {
-    println!("Hello, world!");
+    println!("Tuff REPL (type 'quit' to exit)");
+    let stdin = io::stdin();
+    loop {
+        print!("> ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        if stdin.read_line(&mut input).unwrap_or(0) == 0 {
+            break;
+        }
+        let input = input.trim();
+        if input == "quit" || input == "exit" {
+            break;
+        }
+        if input.is_empty() {
+            continue;
+        }
+
+        match interpret(input) {
+            Ok(result) => println!("{}", result),
+            Err(e) => println!("Error: {}", e),
+        }
+    }
 }
 
 fn interpret(source : &str) -> Result<i32, String> {
