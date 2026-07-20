@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
+#[derive(Clone)]
 struct Func {
     body_start: usize,
+    params: Vec<String>,
 }
 
 fn main() {
@@ -62,7 +64,7 @@ fn tokenize(source: &str) -> Vec<String> {
     while i < chars.len() {
         let ch = chars[i];
         match ch {
-            '(' | ')' | '{' | '}' | ';' | ':' => {
+            '(' | ')' | '{' | '}' | ';' | ':' | ',' => {
                 if !current.is_empty() {
                     tokens.push(current.clone());
                     current.clear();
@@ -425,12 +427,26 @@ fn is_function_call(ctx: &Context) -> bool {
 
 fn parse_function_call(ctx: &mut Context, name: String) -> i32 {
     consume(ctx); // consume "("
+    let mut arg_values = Vec::new();
+    // Parse arguments until ")"
+    while let Some(tok) = peek(ctx) && tok != ")" {
+        arg_values.push(parse_expr(ctx));
+        consume_optional(ctx, ",");
+    }
     consume_optional(ctx, ")");
-    if let Some(func) = ctx.functions.get(&name) {
+    // Clone the func info to avoid borrow issues
+    if let Some(func) = ctx.functions.get(&name).cloned() {
+        // Push a new scope with parameter bindings
+        ctx.scopes.push(HashMap::new());
+        for (i, param) in func.params.iter().enumerate() {
+            let value = arg_values.get(i).copied().unwrap_or(0);
+            ctx.scopes.last_mut().unwrap().insert(param.clone(), value);
+        }
         let saved_pos = ctx.pos;
         ctx.pos = func.body_start;
         let result = parse_expr(ctx);
         ctx.pos = saved_pos;
+        ctx.scopes.pop();
         result
     } else {
         0
@@ -440,11 +456,28 @@ fn parse_function_call(ctx: &mut Context, name: String) -> i32 {
 fn parse_fn_def(ctx: &mut Context) -> i32 {
     let name = consume(ctx); // function name
     consume_optional(ctx, "(");
+    let mut params = Vec::new();
+    // Parse parameters until ")"
+    while let Some(tok) = peek(ctx) && tok != ")" {
+        let param = consume(ctx); // parameter name
+        // Skip optional ': TYPE'
+        if let Some(tok) = peek(ctx) && tok == ":" {
+            consume(ctx); // consume ":"
+            consume(ctx); // consume type name
+        }
+        params.push(param);
+        consume_optional(ctx, ",");
+    }
     consume_optional(ctx, ")");
+    // Skip optional return type annotation
+    if let Some(tok) = peek(ctx) && tok == ":" {
+        consume(ctx); // consume ":"
+        consume(ctx); // consume type name
+    }
     consume_optional(ctx, "=>");
     let body_start = ctx.pos;
     let value = parse_expr(ctx);
-    ctx.functions.insert(name, Func { body_start });
+    ctx.functions.insert(name, Func { body_start, params });
     value
 }
 
@@ -565,5 +598,10 @@ mod tests {
     #[test]
     fn test_function_definition_and_call() {
         assert_eq!(interpret("fn get() => 100; get()"), 100);
+    }
+
+    #[test]
+    fn test_function_with_parameters() {
+        assert_eq!(interpret("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)"), 7);
     }
 }
