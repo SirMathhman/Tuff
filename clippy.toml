@@ -1,1 +1,2 @@
 cognitive-complexity-threshold = 10
+type-complexity-threshold = 100

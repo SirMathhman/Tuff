@@ -40,8 +40,8 @@ fn interpret(source : &str) -> Result<i32, String> {
         return Ok(0);
     }
 
-    // Handle addition expressions: "1U8 + 2U8" => 3, "(1U8 + 2U8) + 3U8" => 6
-    if let Some(result) = try_parse_addition(source) {
+    // Handle arithmetic expressions: "1U8 + 2U8" => 3, "2 + 3 - 4" => 1
+    if let Some(result) = try_parse_arithmetic(source) {
         return result;
     }
 
@@ -51,7 +51,7 @@ fn interpret(source : &str) -> Result<i32, String> {
         let right = &source[is_pos + 4..].trim();
         
         // Parse the left side to get value and type
-        let (_value, value_type) = parse_typed_value(left.trim())?;
+        let (_value, value_type, _) = parse_typed_value(left.trim())?;
         
         // Check if the value's type matches the target type
         let result = if value_type == right.trim() { 1 } else { 0 };
@@ -59,7 +59,7 @@ fn interpret(source : &str) -> Result<i32, String> {
     }
 
     // Check for type-suffixed instructions: number U8, U16, U32, I8, I16, I32
-    if let Ok((value, type_name)) = parse_typed_value(source) {
+    if let Ok((value, type_name, _)) = parse_typed_value(source) {
         let (min, max) = match type_name.as_str() {
             "U8"  => (0, 255),
             "U16" => (0, 65535),
@@ -79,9 +79,9 @@ fn interpret(source : &str) -> Result<i32, String> {
     source.parse().map_err(|e| format!("parse error: {}", e))
 }
 
-fn try_parse_addition(source: &str) -> Option<Result<i32, String>> {
+fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
     let source = source.trim();
-    if !source.contains(" + ") {
+    if !source.contains(" + ") && !source.contains(" - ") {
         return None;
     }
     
@@ -92,20 +92,28 @@ fn try_parse_addition(source: &str) -> Option<Result<i32, String>> {
         source
     };
     
-    if !src.contains(" + ") {
+    if !src.contains(" + ") && !src.contains(" - ") {
         return None;
     }
     
-    let parts = split_addition(src);
+    let parts = split_arithmetic(src);
     if parts.len() < 2 {
         return None;
     }
     
-    let mut sum = 0i32;
-    for part in &parts {
-        sum += interpret(part).ok()?;
+    let mut result = interpret(parts[0].trim()).ok()?;
+    let mut i = 1;
+    while i < parts.len() {
+        let op = &parts[i];
+        let next = interpret(parts[i + 1].trim()).ok()?;
+        if op == "+" {
+            result += next;
+        } else if op == "-" {
+            result -= next;
+        }
+        i += 2;
     }
-    Some(Ok(sum))
+    Some(Ok(result))
 }
 
 fn type_width(type_name: &str) -> u32 {
@@ -122,6 +130,38 @@ fn is_signed(type_name: &str) -> bool {
     type_name.starts_with('I')
 }
 
+fn infer_result_type(operands: &[(i32, String, bool)]) -> (u32, bool) {
+    let mut widest = 0u32;
+    let mut has_signed = false;
+    let mut has_unsigned = false;
+
+    for (_, typ, is_plain) in operands {
+        if *is_plain {
+            continue;
+        }
+        let w = type_width(typ);
+        widest = widest.max(w);
+        if is_signed(typ) {
+            has_signed = true;
+        } else if typ != "Bool" {
+            has_unsigned = true;
+        }
+    }
+
+    // If mixing signed and unsigned at same width, promote to next wider signed type
+    if has_signed && has_unsigned {
+        match widest {
+            0 => (0, true),
+            8 => (16, true),
+            16 => (32, true),
+            32 => (32, true),
+            _ => (32, true),
+        }
+    } else {
+        (widest, has_signed)
+    }
+}
+
 fn width_to_type(width: u32, signed: bool) -> String {
     match (width, signed) {
         (0, _) => "Bool".to_string(),
@@ -135,7 +175,7 @@ fn width_to_type(width: u32, signed: bool) -> String {
     }
 }
 
-fn split_addition(source: &str) -> Vec<String> {
+fn split_arithmetic(source: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut depth = 0;
     let mut current_start = 0;
@@ -145,6 +185,12 @@ fn split_addition(source: &str) -> Vec<String> {
             ')' => depth -= 1,
             '+' if depth == 0 => {
                 parts.push(source[current_start..i].trim().to_string());
+                parts.push("+".to_string());
+                current_start = i + 1;
+            }
+            '-' if depth == 0 => {
+                parts.push(source[current_start..i].trim().to_string());
+                parts.push("-".to_string());
                 current_start = i + 1;
             }
             _ => {}
@@ -154,46 +200,47 @@ fn split_addition(source: &str) -> Vec<String> {
     parts
 }
 
-fn eval_addition(source: &str) -> Result<(i32, String), String> {
-    let parts = split_addition(source);
-    let mut sum = 0i32;
-    let mut widest = 0u32;
-    let mut has_signed = false;
-    let mut has_unsigned = false;
-    for part in &parts {
-        let (val, typ) = parse_typed_value(part)?;
-        sum += val;
-        widest = widest.max(type_width(&typ));
-        if is_signed(&typ) {
-            has_signed = true;
-        } else {
-            has_unsigned = true;
-        }
+fn eval_arithmetic(source: &str) -> Result<(i32, String), String> {
+    let parts = split_arithmetic(source);
+    
+    // First pass: collect types for promotion
+    let mut operands: Vec<(i32, String, bool)> = Vec::new();
+    let mut i = 0;
+    while i < parts.len() {
+        let (val, typ, is_plain) = parse_typed_value(&parts[i])?;
+        operands.push((val, typ, is_plain));
+        i += 2;
     }
-    // If mixing signed and unsigned at same width, promote to next wider signed type
-    let (final_width, final_signed) = if has_signed && has_unsigned {
-        match widest {
-            0 => (0, true),
-            8 => (16, true),
-            16 => (32, true),
-            32 => (32, true),
-            _ => (32, true),
+    
+    // Determine result type
+    let (final_width, final_signed) = infer_result_type(&operands);
+    
+    // Second pass: evaluate
+    let mut result = operands[0].0;
+    i = 1;
+    while i < parts.len() {
+        let op = &parts[i];
+        let next = operands[i / 2].0;
+        if op == "+" {
+            result += next;
+        } else if op == "-" {
+            result -= next;
         }
-    } else {
-        (widest, has_signed)
-    };
-    Ok((sum, width_to_type(final_width, final_signed)))
+        i += 2;
+    }
+    
+    Ok((result, width_to_type(final_width, final_signed)))
 }
 
-fn parse_typed_value(source: &str) -> Result<(i32, String), String> {
+fn parse_typed_value(source: &str) -> Result<(i32, String, bool), String> {
     let source = source.trim();
     
     // Handle boolean literals
     if source == "true" {
-        return Ok((1, "Bool".to_string()));
+        return Ok((1, "Bool".to_string(), false));
     }
     if source == "false" {
-        return Ok((0, "Bool".to_string()));
+        return Ok((0, "Bool".to_string(), false));
     }
     
     // Strip outer parentheses if present, then try to parse inner content
@@ -204,8 +251,9 @@ fn parse_typed_value(source: &str) -> Result<(i32, String), String> {
     };
     
     // If inner content contains an addition expression, evaluate and infer type
-    if inner.contains(" + ") {
-        return eval_addition(inner);
+    if inner.contains(" + ") || inner.contains(" - ") {
+        let (val, typ) = eval_arithmetic(inner)?;
+        return Ok((val, typ, false));
     }
     
     // Check for type-suffixed value
@@ -213,13 +261,13 @@ fn parse_typed_value(source: &str) -> Result<(i32, String), String> {
         if let Some(pos) = inner.find(suffix) {
             let left = inner[..pos].trim();
             let value = left.parse::<i32>().map_err(|e| format!("parse error: {}", e))?;
-            return Ok((value, suffix.to_string()));
+            return Ok((value, suffix.to_string(), false));
         }
     }
     
     // Plain number
     let value = source.parse::<i32>().map_err(|e| format!("parse error: {}", e))?;
-    Ok((value, "I32".to_string()))
+    Ok((value, "I32".to_string(), true))
 }
 
 #[cfg(test)]
@@ -314,6 +362,16 @@ mod tests {
     #[test]
     fn test_mixed_signed_unsigned_addition() {
         assert_eq!(interpret("(1U8 + 2I8) is I16"), Ok(1));
+    }
+
+    #[test]
+    fn test_add_sub() {
+        assert_eq!(interpret("2 + 3 - 4"), Ok(1));
+    }
+
+    #[test]
+    fn test_typed_plus_plain_is_type() {
+        assert_eq!(interpret("(1U8 + 1) is U8"), Ok(1));
     }
 }
 
