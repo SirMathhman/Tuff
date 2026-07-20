@@ -82,20 +82,18 @@ fn interpret(source : &str) -> Result<i32, String> {
     source.parse().map_err(|e| format!("parse error: {}", e))
 }
 
+fn has_arithmetic_op(source: &str) -> bool {
+    source.contains(" + ") || source.contains(" - ") || source.contains(" * ")
+}
+
 fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
     let source = source.trim();
-    if !source.contains(" + ") && !source.contains(" - ") && !source.contains(" * ") {
+    if !has_arithmetic_op(source) {
         return None;
     }
 
-    // Strip outer parentheses if present
-    let src = if source.starts_with('(') && source.ends_with(')') {
-        &source[1..source.len() - 1]
-    } else {
-        source
-    };
-
-    if !src.contains(" + ") && !src.contains(" - ") && !src.contains(" * ") {
+    let src = strip_outer_parens(source);
+    if !has_arithmetic_op(src) {
         return None;
     }
 
@@ -104,14 +102,26 @@ fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
         return None;
     }
 
-    // First pass: evaluate * (higher precedence)
+    let reduced = reduce_multiplications(&parts)?;
+    let result = eval_add_sub(&reduced)?;
+    Some(Ok(result))
+}
+
+fn strip_outer_parens(source: &str) -> &str {
+    if source.starts_with('(') && source.ends_with(')') {
+        &source[1..source.len() - 1]
+    } else {
+        source
+    }
+}
+
+fn reduce_multiplications(parts: &[String]) -> Option<Vec<String>> {
     let mut reduced: Vec<String> = Vec::new();
     let mut i = 0;
     while i < parts.len() {
         if parts[i] == "*" {
             let left = interpret(parts[i - 1].trim()).ok()?;
             let right = interpret(parts[i + 1].trim()).ok()?;
-            // Replace the last pushed operand with the product
             *reduced.last_mut().unwrap() = (left * right).to_string();
             i += 2;
         } else {
@@ -119,22 +129,23 @@ fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
             i += 1;
         }
     }
+    Some(reduced)
+}
 
-    // Second pass: evaluate + and -
-    let mut result = interpret(reduced[0].trim()).ok()?;
-    let mut j = 1;
-    while j < reduced.len() {
-        let op = &reduced[j];
-        let next = interpret(reduced[j + 1].trim()).ok()?;
+fn eval_add_sub(parts: &[String]) -> Option<i32> {
+    let mut result = interpret(parts[0].trim()).ok()?;
+    let mut i = 1;
+    while i < parts.len() {
+        let op = &parts[i];
+        let next = interpret(parts[i + 1].trim()).ok()?;
         if op == "+" {
             result += next;
         } else if op == "-" {
             result -= next;
         }
-        j += 2;
+        i += 2;
     }
-
-    Some(Ok(result))
+    Some(result)
 }
 
 fn type_width(type_name: &str) -> u32 {
