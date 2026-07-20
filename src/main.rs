@@ -140,32 +140,41 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
         return None;
     }
 
-    // Split on semicolons at depth 0
     let parts = split_at_semicolons(trimmed);
     if parts.len() < 2 {
         return None;
     }
 
-    let first = parts[0].trim();
-    if !first.starts_with("let ") {
-        return None;
-    }
-
-    let eq_pos = first.find(" = ")?;
-    let var_name = first[4..eq_pos].trim();
-    let expr = &first[eq_pos + 3..].trim();
-
-    let val = interpret_with_vars(expr, &[]).ok()?;
-    let vars = vec![(var_name.to_string(), val)];
-
-    // Evaluate remaining parts with the variable in scope
+    let mut vars: Vec<(String, i32)> = Vec::new();
     let mut last_result: Option<i32> = None;
-    for part in &parts[1..] {
+
+    for part in &parts {
         let part = part.trim();
         if part.is_empty() {
             continue;
         }
-        last_result = Some(interpret_with_vars(part, &vars).ok()?);
+
+        if let Some(eq_pos) = part.find(" = ") {
+            let prefix = &part[..eq_pos].trim();
+            if let Some(stripped) = prefix.strip_prefix("let ") {
+                let var_name = stripped.trim();
+                let expr = &part[eq_pos + 3..].trim();
+                if let Ok(val) = interpret_with_vars(expr, &vars) {
+                    // Shadow: replace existing binding
+                    if let Some(existing) = vars.iter_mut().find(|(name, _)| *name == var_name) {
+                        existing.1 = val;
+                    } else {
+                        vars.push((var_name.to_string(), val));
+                    }
+                } else {
+                    return Some(Err(format!("error evaluating: {}", expr)));
+                }
+            } else {
+                last_result = Some(interpret_with_vars(part, &vars).ok()?);
+            }
+        } else {
+            last_result = Some(interpret_with_vars(part, &vars).ok()?);
+        }
     }
 
     last_result.map(Ok)
@@ -564,6 +573,11 @@ mod tests {
     #[test]
     fn test_top_level_let() {
         assert_eq!(interpret("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
+    }
+
+    #[test]
+    fn test_let_shadowing() {
+        assert_eq!(interpret("let x = 0; let x = 1; x"), Ok(1));
     }
 }
 
