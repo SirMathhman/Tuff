@@ -43,6 +43,11 @@ fn interpret(source : &str) -> Result<i32, String> {
         return Ok(0);
     }
 
+    // Handle block expressions: { let x = 2 + 3; x } => 5
+    if let Some(result) = try_parse_block(source) {
+        return result;
+    }
+
     // Handle arithmetic expressions: "1U8 + 2U8" => 3, "2 + 3 - 4" => 1
     if let Some(result) = try_parse_arithmetic(source) {
         return result;
@@ -116,6 +121,62 @@ fn strip_outer_parens(source: &str) -> &str {
     } else {
         trimmed
     }
+}
+
+fn try_parse_block(source: &str) -> Option<Result<i32, String>> {
+    let trimmed = source.trim();
+    if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+        return None;
+    }
+
+    let inner = &trimmed[1..trimmed.len() - 1];
+    let statements: Vec<&str> = inner.split(';').collect();
+    if statements.is_empty() {
+        return None;
+    }
+
+    let mut vars: Vec<(String, i32)> = Vec::new();
+    let mut last_result: Option<i32> = None;
+
+    for stmt in statements {
+        let stmt = stmt.trim();
+        if stmt.is_empty() {
+            continue;
+        }
+
+        if let Some(eq_pos) = stmt.find(" = ") {
+            let prefix = &stmt[..eq_pos].trim();
+            if let Some(stripped) = prefix.strip_prefix("let ") {
+                let var_name = stripped.trim();
+                let expr = &stmt[eq_pos + 3..].trim();
+                if let Ok(val) = interpret_with_vars(expr, &vars) {
+                    vars.push((var_name.to_string(), val));
+                } else {
+                    return Some(Err(format!("error evaluating: {}", expr)));
+                }
+            } else {
+                last_result = Some(interpret_with_vars(stmt, &vars).ok()?);
+            }
+        } else {
+            last_result = Some(interpret_with_vars(stmt, &vars).ok()?);
+        }
+    }
+
+    last_result.map(Ok)
+}
+
+fn interpret_with_vars(source: &str, vars: &[(String, i32)]) -> Result<i32, String> {
+    let source = source.trim();
+
+    if source.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        for (name, val) in vars {
+            if *name == source {
+                return Ok(*val);
+            }
+        }
+    }
+
+    interpret(source)
 }
 
 fn reduce_multiplications(parts: &[String]) -> Option<Vec<String>> {
@@ -427,6 +488,11 @@ mod tests {
     #[test]
     fn test_paren_mul() {
         assert_eq!(interpret("(2 + 3) * 4"), Ok(20));
+    }
+
+    #[test]
+    fn test_block_let_mul() {
+        assert_eq!(interpret("{ let x = 2 + 3; x } * 4"), Ok(20));
     }
 }
 
