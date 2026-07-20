@@ -77,6 +77,14 @@ fn interpret(source : &str) -> Result<i32, String> {
 fn parse_typed_value(source: &str) -> Result<(i32, String), String> {
     let source = source.trim();
     
+    // Handle boolean literals
+    if source == "true" {
+        return Ok((1, "Bool".to_string()));
+    }
+    if source == "false" {
+        return Ok((0, "Bool".to_string()));
+    }
+    
     // Check for type-suffixed value
     for suffix in &["U32", "U16", "U8", "I32", "I16", "I8"] {
         if let Some(pos) = source.find(suffix) {
@@ -143,6 +151,11 @@ mod tests {
     #[test]
     fn test_is_plain_number_i32() {
         assert_eq!(interpret("1 is I32"), Ok(1));
+    }
+
+    #[test]
+    fn test_is_bool() {
+        assert_eq!(interpret("true is Bool"), Ok(1));
     }
 }
 
