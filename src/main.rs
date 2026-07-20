@@ -58,7 +58,10 @@ fn interpret(source_code: &str) -> i32 {
 fn tokenize(source: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
-    for ch in source.chars() {
+    let chars: Vec<char> = source.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
         match ch {
             '(' | ')' | '{' | '}' | ';' => {
                 if !current.is_empty() {
@@ -66,6 +69,18 @@ fn tokenize(source: &str) -> Vec<String> {
                     current.clear();
                 }
                 tokens.push(ch.to_string());
+            }
+            '+' => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+                if i + 1 < chars.len() && chars[i + 1] == '=' {
+                    tokens.push("+=".to_string());
+                    i += 1;
+                } else {
+                    tokens.push(ch.to_string());
+                }
             }
             ' ' | '\t' => {
                 if !current.is_empty() {
@@ -75,6 +90,7 @@ fn tokenize(source: &str) -> Vec<String> {
             }
             _ => current.push(ch),
         }
+        i += 1;
     }
     if !current.is_empty() {
         tokens.push(current);
@@ -305,17 +321,24 @@ fn parse_if_expr(ctx: &mut Context) -> i32 {
 }
 
 fn is_assignment(ctx: &Context, token: &str) -> bool {
-    // Check if next token is "=" and current token is not a number
-    token.parse::<i32>().is_err() && peek(ctx).map(|s| s.as_str()) == Some("=")
+    // Check if next token is "=" or "+=" and current token is not a number
+    token.parse::<i32>().is_err() && matches!(peek(ctx).map(|s| s.as_str()), Some("=") | Some("+="))
 }
 
 fn parse_assignment(ctx: &mut Context, identifier: String) -> i32 {
-    consume(ctx); // consume "="
+    let op = consume(ctx); // consume "=" or "+="
     let value = parse_expr(ctx);
     if ctx.mutable.contains(&identifier) {
-        assign(ctx, &identifier, value);
+        let new_value = if op == "+=" {
+            lookup(ctx, &identifier).unwrap_or(0) + value
+        } else {
+            value
+        };
+        assign(ctx, &identifier, new_value);
+        new_value
+    } else {
+        value
     }
-    value
 }
 
 #[cfg(test)]
@@ -415,5 +438,10 @@ mod tests {
     #[test]
     fn test_if_else_if_with_block_assignment() {
         assert_eq!(interpret("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else { x = 3; } x"), 3);
+    }
+
+    #[test]
+    fn test_add_assign() {
+        assert_eq!(interpret("let mut x = 0; x += 1; x"), 1);
     }
 }
