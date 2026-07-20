@@ -108,10 +108,13 @@ fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
 }
 
 fn strip_outer_parens(source: &str) -> &str {
-    if source.starts_with('(') && source.ends_with(')') {
-        &source[1..source.len() - 1]
+    let trimmed = source.trim();
+    if (trimmed.starts_with('(') && trimmed.ends_with(')'))
+        || (trimmed.starts_with('{') && trimmed.ends_with('}'))
+    {
+        &trimmed[1..trimmed.len() - 1]
     } else {
-        source
+        trimmed
     }
 }
 
@@ -213,8 +216,8 @@ fn split_arithmetic(source: &str) -> Vec<String> {
     let mut current_start = 0;
     for (i, ch) in source.char_indices() {
         match ch {
-            '(' => depth += 1,
-            ')' => depth -= 1,
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
             '+' if depth == 0 => {
                 parts.push(source[current_start..i].trim().to_string());
                 parts.push("+".to_string());
