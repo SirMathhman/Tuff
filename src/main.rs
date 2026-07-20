@@ -411,4 +411,9 @@ mod tests {
     fn test_if_else_if_with_assignment() {
         assert_eq!(interpret("let mut x = 0; if (false) x = 1; else if (false) x = 2; else x = 3; x"), 3);
     }
+
+    #[test]
+    fn test_if_else_if_with_block_assignment() {
+        assert_eq!(interpret("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else { x = 3; } x"), 3);
+    }
 }
