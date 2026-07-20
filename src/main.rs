@@ -29,7 +29,11 @@ fn main() {
     }
 }
 
-fn interpret(source : &str) -> Result<i32, String> {
+fn interpret(source: &str) -> Result<i32, String> {
+    interpret_impl(source, true)
+}
+
+fn interpret_impl(source: &str, allow_let: bool) -> Result<i32, String> {
     let source = source.trim();
     if source.is_empty() {
         return Ok(0);
@@ -41,6 +45,13 @@ fn interpret(source : &str) -> Result<i32, String> {
     }
     if source == "false" {
         return Ok(0);
+    }
+
+    // Handle top-level let statements: let y = expr; expr
+    if allow_let {
+        if let Some(result) = try_parse_let(source) {
+            return result;
+        }
     }
 
     // Handle block expressions: { let x = 2 + 3; x } => 5
@@ -123,6 +134,62 @@ fn strip_outer_parens(source: &str) -> &str {
     }
 }
 
+fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
+    let trimmed = source.trim();
+    if !trimmed.starts_with("let ") {
+        return None;
+    }
+
+    // Split on semicolons at depth 0
+    let parts = split_at_semicolons(trimmed);
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let first = parts[0].trim();
+    if !first.starts_with("let ") {
+        return None;
+    }
+
+    let eq_pos = first.find(" = ")?;
+    let var_name = first[4..eq_pos].trim();
+    let expr = &first[eq_pos + 3..].trim();
+
+    let val = interpret_with_vars(expr, &[]).ok()?;
+    let vars = vec![(var_name.to_string(), val)];
+
+    // Evaluate remaining parts with the variable in scope
+    let mut last_result: Option<i32> = None;
+    for part in &parts[1..] {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        last_result = Some(interpret_with_vars(part, &vars).ok()?);
+    }
+
+    last_result.map(Ok)
+}
+
+fn split_at_semicolons(source: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut current_start = 0;
+    for (i, ch) in source.char_indices() {
+        match ch {
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
+            ';' if depth == 0 => {
+                parts.push(&source[current_start..i]);
+                current_start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&source[current_start..]);
+    parts
+}
+
 fn try_parse_block(source: &str) -> Option<Result<i32, String>> {
     let trimmed = source.trim();
     if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
@@ -130,7 +197,7 @@ fn try_parse_block(source: &str) -> Option<Result<i32, String>> {
     }
 
     let inner = &trimmed[1..trimmed.len() - 1];
-    let statements: Vec<&str> = inner.split(';').collect();
+    let statements: Vec<&str> = split_at_semicolons(inner);
     if statements.is_empty() {
         return None;
     }
@@ -176,7 +243,7 @@ fn interpret_with_vars(source: &str, vars: &[(String, i32)]) -> Result<i32, Stri
         }
     }
 
-    interpret(source)
+    interpret_impl(source, false)
 }
 
 fn reduce_multiplications(parts: &[String]) -> Option<Vec<String>> {
@@ -184,8 +251,8 @@ fn reduce_multiplications(parts: &[String]) -> Option<Vec<String>> {
     let mut i = 0;
     while i < parts.len() {
         if parts[i] == "*" {
-            let left = interpret(parts[i - 1].trim()).ok()?;
-            let right = interpret(parts[i + 1].trim()).ok()?;
+            let left = interpret_impl(parts[i - 1].trim(), false).ok()?;
+            let right = interpret_impl(parts[i + 1].trim(), false).ok()?;
             *reduced.last_mut().unwrap() = (left * right).to_string();
             i += 2;
         } else {
@@ -197,11 +264,11 @@ fn reduce_multiplications(parts: &[String]) -> Option<Vec<String>> {
 }
 
 fn eval_add_sub(parts: &[String]) -> Option<i32> {
-    let mut result = interpret(parts[0].trim()).ok()?;
+    let mut result = interpret_impl(parts[0].trim(), false).ok()?;
     let mut i = 1;
     while i < parts.len() {
         let op = &parts[i];
-        let next = interpret(parts[i + 1].trim()).ok()?;
+        let next = interpret_impl(parts[i + 1].trim(), false).ok()?;
         if op == "+" {
             result += next;
         } else if op == "-" {
@@ -493,6 +560,11 @@ mod tests {
     #[test]
     fn test_block_let_mul() {
         assert_eq!(interpret("{ let x = 2 + 3; x } * 4"), Ok(20));
+    }
+
+    #[test]
+    fn test_top_level_let() {
+        assert_eq!(interpret("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
     }
 }
 
