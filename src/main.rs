@@ -401,4 +401,9 @@ mod tests {
     fn test_if_expression() {
         assert_eq!(interpret("let x = if (true) 3 else 5; x"), 3);
     }
+
+    #[test]
+    fn test_if_else_if_expression() {
+        assert_eq!(interpret("let x = if (false) 1 else if (false) 2 else 3; x"), 3);
+    }
 }
