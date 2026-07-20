@@ -1,5 +1,8 @@
 use std::io::{self, Write};
 
+type ParsedValue = (i32, String, bool);
+type ParseResult<T> = Result<T, String>;
+
 fn main() {
     println!("Tuff REPL (type 'quit' to exit)");
     let stdin = io::stdin();
@@ -81,26 +84,30 @@ fn interpret(source : &str) -> Result<i32, String> {
 
 fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
     let source = source.trim();
-    if !source.contains(" + ") && !source.contains(" - ") {
+    if !source.contains(" + ") && !source.contains(" - ") && !source.contains(" * ") {
         return None;
     }
-    
+
     // Strip outer parentheses if present
     let src = if source.starts_with('(') && source.ends_with(')') {
         &source[1..source.len() - 1]
     } else {
         source
     };
-    
-    if !src.contains(" + ") && !src.contains(" - ") {
+
+    if !src.contains(" + ") && !src.contains(" - ") && !src.contains(" * ") {
         return None;
     }
-    
-    let parts = split_arithmetic(src);
+
+    // First, evaluate multiplication (higher precedence)
+    let src = eval_multiplication(src)?;
+
+    // Then, evaluate addition/subtraction
+    let parts = split_arithmetic(&src);
     if parts.len() < 2 {
         return None;
     }
-    
+
     let mut result = interpret(parts[0].trim()).ok()?;
     let mut i = 1;
     while i < parts.len() {
@@ -114,6 +121,63 @@ fn try_parse_arithmetic(source: &str) -> Option<Result<i32, String>> {
         i += 2;
     }
     Some(Ok(result))
+}
+
+fn eval_multiplication(source: &str) -> Option<String> {
+    let mut depth = 0;
+    let mut current_start = 0;
+    let mut result = String::new();
+    let chars: Vec<char> = source.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '*' if depth == 0 => {
+                // Found a multiplication at top level
+                let left = source[current_start..i].trim().to_string();
+                // Find the right operand
+                let mut right_start = i + 1;
+                while right_start < chars.len() && chars[right_start] == ' ' {
+                    right_start += 1;
+                }
+                let mut right_end = right_start;
+                let mut right_depth = 0;
+                while right_end < chars.len() {
+                    match chars[right_end] {
+                        '(' => right_depth += 1,
+                        ')' => right_depth -= 1,
+                        '+' | '-' => {
+                            if right_depth == 0 {
+                                break;
+                            }
+                        }
+                        '*' => {
+                            if right_depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    right_end += 1;
+                }
+                let right = source[right_start..right_end].trim().to_string();
+
+                let left_val = interpret(&left).ok()?;
+                let right_val = interpret(&right).ok()?;
+                let product = left_val * right_val;
+                result.push_str(&product.to_string());
+
+                current_start = right_end;
+                i = right_end;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    result.push_str(&source[current_start..]);
+    Some(result)
 }
 
 fn type_width(type_name: &str) -> u32 {
@@ -200,7 +264,7 @@ fn split_arithmetic(source: &str) -> Vec<String> {
     parts
 }
 
-fn eval_arithmetic(source: &str) -> Result<(i32, String), String> {
+fn eval_arithmetic(source: &str) -> ParseResult<(i32, String)> {
     let parts = split_arithmetic(source);
     
     // First pass: collect types for promotion
@@ -232,7 +296,7 @@ fn eval_arithmetic(source: &str) -> Result<(i32, String), String> {
     Ok((result, width_to_type(final_width, final_signed)))
 }
 
-fn parse_typed_value(source: &str) -> Result<(i32, String, bool), String> {
+fn parse_typed_value(source: &str) -> ParseResult<ParsedValue> {
     let source = source.trim();
     
     // Handle boolean literals
@@ -372,6 +436,11 @@ mod tests {
     #[test]
     fn test_typed_plus_plain_is_type() {
         assert_eq!(interpret("(1U8 + 1) is U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_mul_add_precedence() {
+        assert_eq!(interpret("2 * 3 + 4"), Ok(10));
     }
 }
 
