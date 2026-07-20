@@ -198,19 +198,24 @@ fn split_arithmetic(source: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut depth = 0;
     let mut current_start = 0;
-    for (i, ch) in source.char_indices() {
-        match ch {
+    let chars: Vec<char> = source.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
             '(' | '{' => depth += 1,
             ')' | '}' => depth -= 1,
             '+' | '-' | '*' if depth == 0 => {
-                parts.push(source[current_start..i].trim().to_string());
-                parts.push(ch.to_string());
+                let seg: String = source[current_start..i].chars().map(|c| c).collect();
+                parts.push(seg.trim().to_string());
+                parts.push(chars[i].to_string());
                 current_start = i + 1;
             }
             _ => {}
         }
+        i += 1;
     }
-    parts.push(source[current_start..].trim().to_string());
+    let seg: String = source[current_start..].chars().map(|c| c).collect();
+    parts.push(seg.trim().to_string());
     parts
 }
 
