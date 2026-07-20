@@ -143,7 +143,7 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
         return None;
     }
 
-    let mut vars: Vec<(String, i32)> = Vec::new();
+    let mut vars: Vec<(String, i32, String)> = Vec::new();
     let mut last_result: Option<i32> = None;
 
     for part in &parts {
@@ -152,19 +152,21 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
             continue;
         }
 
-        if let Some(result) = try_parse_let_binding(part, &vars) {
+        if let Some(result) = try_parse_let_binding_typed(part, &vars) {
             match result {
-                Ok((var_name, val)) => {
-                    if let Some(existing) = vars.iter_mut().find(|(name, _)| *name == var_name) {
+                Ok((var_name, val, var_type)) => {
+                    if let Some(existing) = vars.iter_mut().find(|(name, _, _)| *name == var_name) {
                         existing.1 = val;
+                        existing.2 = var_type;
                     } else {
-                        vars.push((var_name, val));
+                        vars.push((var_name, val, var_type));
                     }
                 }
                 Err(e) => return Some(Err(e)),
             }
         } else {
-            last_result = Some(interpret_with_vars(part, &vars).ok()?);
+            let plain_vars: Vec<(String, i32)> = vars.iter().map(|(n, v, _)| (n.clone(), *v)).collect();
+            last_result = Some(interpret_with_vars(part, &plain_vars).ok()?);
         }
     }
 
@@ -189,27 +191,48 @@ fn parse_let_prefix(source: &str) -> Option<(&str, Option<&str>)> {
 }
 
 #[allow(clippy::type_complexity)]
-fn try_parse_let_binding(part: &str, vars: &[(String, i32)]) -> Option<Result<(String, i32), String>> {
+fn try_parse_let_binding_typed(part: &str, vars: &[(String, i32, String)]) -> Option<Result<(String, i32, String), String>> {
     let (var_name, type_name) = parse_let_prefix(part)?;
     let eq_pos = part.find(" = ")?;
     let expr = &part[eq_pos + 3..].trim();
 
-    let val = match interpret_with_vars(expr, vars) {
+    let plain_vars: Vec<(String, i32)> = vars.iter().map(|(n, v, _)| (n.clone(), *v)).collect();
+    let val = match interpret_with_vars(expr, &plain_vars) {
         Ok(v) => v,
         Err(e) => return Some(Err(format!("error evaluating: {}: {}", expr, e))),
     };
 
-    if let Some(declared_type) = type_name
-        && let Ok((_, expr_type, is_plain)) = parse_typed_value(expr)
-        && !is_plain
-    {
-        // Allow narrower -> wider (U8 -> U16 OK), reject wider -> narrower (U16 -> U8 error)
+    // Determine the expression's type
+    let expr_type = if let Ok((_, _, true)) = parse_typed_value(expr) {
+        // Plain number: adopt declared type if present, else I32
+        type_name.unwrap_or("I32").to_string()
+    } else if let Ok((_, t, false)) = parse_typed_value(expr) {
+        // Typed literal
+        t
+    } else {
+        // Complex expression: look up variable type from vars
+        if let Some(var_ref) = expr.split_whitespace().next() {
+            if let Some((_, _, vt)) = vars.iter().find(|(n, _, _)| *n == var_ref) {
+                vt.clone()
+            } else {
+                "I32".to_string()
+            }
+        } else {
+            "I32".to_string()
+        }
+    };
+
+    // If type annotation is present, use it as the variable's type
+    let var_type = type_name.map(|t| t.to_string()).unwrap_or(expr_type.clone());
+
+    // Check type compatibility
+    if let Some(declared_type) = type_name {
         if type_width(&expr_type) > type_width(declared_type) {
             return Some(Err(format!("type mismatch: expected {} but got {}", declared_type, expr_type)));
         }
     }
 
-    Some(Ok((var_name.to_string(), val)))
+    Some(Ok((var_name.to_string(), val, var_type)))
 }
 
 fn split_at_semicolons(source: &str) -> Vec<&str> {
@@ -451,6 +474,11 @@ fn parse_typed_value(source: &str) -> ParseResult<ParsedValue> {
         return Ok((0, "Bool".to_string(), false));
     }
     
+    // Skip block expressions - they can't be parsed as typed values
+    if source.starts_with('{') {
+        return Err("cannot parse block as typed value".to_string());
+    }
+    
     // Strip outer parentheses if present, then try to parse inner content
     let inner = if source.starts_with('(') && source.ends_with(')') {
         &source[1..source.len() - 1]
@@ -615,6 +643,11 @@ mod tests {
     #[test]
     fn test_typed_let() {
         assert_eq!(interpret("let x : U16 = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_typed_let_var_mismatch() {
+        assert_eq!(interpret("let x = 100U16; let y : U8 = x; y"), Err(String::from("type mismatch: expected U8 but got U16")));
     }
 }
 
