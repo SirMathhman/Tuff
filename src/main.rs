@@ -57,7 +57,7 @@ fn tokenize(source: &str) -> Vec<String> {
     while i < chars.len() {
         let ch = chars[i];
         match ch {
-            '(' | ')' | '{' | '}' | ';' => {
+            '(' | ')' | '{' | '}' | ';' | ':' => {
                 if !current.is_empty() {
                     tokens.push(current.clone());
                     current.clear();
@@ -229,7 +229,15 @@ fn parse_factor(ctx: &mut Context) -> i32 {
                 "true" => 1,
                 "false" => 0,
                 _ => {
-                    if let Ok(n) = token.parse::<i32>() {
+                    if let Some(suffix) = token.strip_suffix("U8") {
+                        if let Ok(n) = suffix.parse::<i32>() {
+                            n
+                        } else if is_assignment(ctx, &token) {
+                            parse_assignment(ctx, token)
+                        } else {
+                            lookup(ctx, &token).unwrap_or(0)
+                        }
+                    } else if let Ok(n) = token.parse::<i32>() {
                         n
                     } else if is_assignment(ctx, &token) {
                         parse_assignment(ctx, token)
@@ -284,6 +292,11 @@ fn parse_let_stmt(ctx: &mut Context) -> i32 {
         false
     };
     let identifier = consume(ctx); // variable name
+    // Skip optional type annotation (: TYPE)
+    if let Some(tok) = peek(ctx) && tok == ":" {
+        consume(ctx); // consume ":"
+        consume(ctx); // consume type name
+    }
     if let Some(eq) = peek(ctx) && eq.as_str() == "=" {
         consume(ctx);
     }
@@ -490,5 +503,10 @@ mod tests {
     #[test]
     fn test_while_loop() {
         assert_eq!(interpret("let mut x = 0; while (x < 4) x += 1; x"), 4);
+    }
+
+    #[test]
+    fn test_type_annotation_and_suffixed_literal() {
+        assert_eq!(interpret("let x : U8 = 100U8; x"), 100);
     }
 }
