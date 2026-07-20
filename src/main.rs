@@ -219,6 +219,9 @@ fn parse_factor(ctx: &mut Context) -> i32 {
         "if" => {
             parse_if_expr(ctx)
         }
+        "while" => {
+            parse_while_expr(ctx)
+        }
         "let" => {
             // Reuse parse_let_stmt which handles 'mut' keyword
             // We already consumed "let", so temporarily adjust
@@ -318,6 +321,55 @@ fn parse_if_expr(ctx: &mut Context) -> i32 {
     }
     let else_value = parse_expr(ctx);
     if condition != 0 { then_value } else { else_value }
+}
+
+fn parse_while_expr(ctx: &mut Context) -> i32 {
+    // consume "(" before condition
+    if let Some(tok) = peek(ctx) {
+        if tok == "(" { consume(ctx); }
+    }
+    let cond_start = ctx.pos;
+    // Find the matching ")" to know where the body starts
+    let mut depth = 0;
+    let mut cond_end = ctx.pos;
+    while let Some(tok) = ctx.tokens.get(cond_end) {
+        if tok == "(" { depth += 1; }
+        if tok == ")" {
+            if depth == 0 { break; }
+            depth -= 1;
+        }
+        cond_end += 1;
+    }
+    let body_start = cond_end + 1; // skip ")"
+    // Find where the body expression ends
+    let mut body_end = body_start;
+    while let Some(tok) = ctx.tokens.get(body_end) {
+        if tok == ";" || tok == "}" { break; }
+        body_end += 1;
+    }
+    let mut last_value = 0;
+    loop {
+        // Evaluate condition
+        ctx.pos = cond_start;
+        let condition = parse_expr(ctx);
+        // Advance past ")"
+        if let Some(tok) = peek(ctx) {
+            if tok == ")" { consume(ctx); }
+        }
+        if condition == 0 {
+            break;
+        }
+        // Evaluate body expression
+        ctx.pos = body_start;
+        last_value = parse_expr(ctx);
+        // Consume any trailing semicolon in body
+        if let Some(tok) = peek(ctx) {
+            if tok == ";" { consume(ctx); }
+        }
+    }
+    // Advance past the body so interpret doesn't re-parse it
+    ctx.pos = body_end;
+    last_value
 }
 
 fn is_assignment(ctx: &Context, token: &str) -> bool {
@@ -443,5 +495,10 @@ mod tests {
     #[test]
     fn test_add_assign() {
         assert_eq!(interpret("let mut x = 0; x += 1; x"), 1);
+    }
+
+    #[test]
+    fn test_while_loop() {
+        assert_eq!(interpret("let mut x = 0; while (x < 4) x += 1; x"), 4);
     }
 }
