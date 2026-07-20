@@ -200,6 +200,9 @@ fn parse_factor(ctx: &mut Context) -> i32 {
         "{" => {
             parse_block(ctx)
         }
+        "if" => {
+            parse_if_expr(ctx)
+        }
         "let" => {
             // Reuse parse_let_stmt which handles 'mut' keyword
             // We already consumed "let", so temporarily adjust
@@ -280,6 +283,25 @@ fn parse_let_stmt(ctx: &mut Context) -> i32 {
         ctx.mutable.insert(identifier);
     }
     value
+}
+
+fn parse_if_expr(ctx: &mut Context) -> i32 {
+    // consume "(" before condition
+    if let Some(tok) = peek(ctx) {
+        if tok == "(" { consume(ctx); }
+    }
+    let condition = parse_expr(ctx);
+    // consume ")" after condition
+    if let Some(tok) = peek(ctx) {
+        if tok == ")" { consume(ctx); }
+    }
+    let then_value = parse_expr(ctx);
+    // consume "else"
+    if let Some(tok) = peek(ctx) {
+        if tok == "else" { consume(ctx); }
+    }
+    let else_value = parse_expr(ctx);
+    if condition != 0 { then_value } else { else_value }
 }
 
 fn is_assignment(ctx: &Context, token: &str) -> bool {
@@ -373,5 +395,10 @@ mod tests {
     #[test]
     fn test_less_than() {
         assert_eq!(interpret("let x = 0; let y = 1; x < y"), 1);
+    }
+
+    #[test]
+    fn test_if_expression() {
+        assert_eq!(interpret("let x = if (true) 3 else 5; x"), 3);
     }
 }
