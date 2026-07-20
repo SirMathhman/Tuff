@@ -172,6 +172,10 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
 }
 
 fn split_at_semicolons(source: &str) -> Vec<&str> {
+    split_at_depth(source, ';')
+}
+
+fn split_at_depth(source: &str, sep: char) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut depth = 0;
     let mut current_start = 0;
@@ -179,7 +183,7 @@ fn split_at_semicolons(source: &str) -> Vec<&str> {
         match ch {
             '(' | '{' => depth += 1,
             ')' | '}' => depth -= 1,
-            ';' if depth == 0 => {
+            c if c == sep && depth == 0 => {
                 parts.push(&source[current_start..i]);
                 current_start = i + 1;
             }
@@ -187,6 +191,26 @@ fn split_at_semicolons(source: &str) -> Vec<&str> {
         }
     }
     parts.push(&source[current_start..]);
+    parts
+}
+
+fn split_arithmetic(source: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut current_start = 0;
+    for (i, ch) in source.char_indices() {
+        match ch {
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
+            '+' | '-' | '*' if depth == 0 => {
+                parts.push(source[current_start..i].trim().to_string());
+                parts.push(ch.to_string());
+                current_start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(source[current_start..].trim().to_string());
     parts
 }
 
@@ -336,36 +360,6 @@ fn width_to_type(width: u32, signed: bool) -> String {
         (32, true)  => "I32".to_string(),
         _ => "I32".to_string(),
     }
-}
-
-fn split_arithmetic(source: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut depth = 0;
-    let mut current_start = 0;
-    for (i, ch) in source.char_indices() {
-        match ch {
-            '(' | '{' => depth += 1,
-            ')' | '}' => depth -= 1,
-            '+' if depth == 0 => {
-                parts.push(source[current_start..i].trim().to_string());
-                parts.push("+".to_string());
-                current_start = i + 1;
-            }
-            '-' if depth == 0 => {
-                parts.push(source[current_start..i].trim().to_string());
-                parts.push("-".to_string());
-                current_start = i + 1;
-            }
-            '*' if depth == 0 => {
-                parts.push(source[current_start..i].trim().to_string());
-                parts.push("*".to_string());
-                current_start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    parts.push(source[current_start..].trim().to_string());
-    parts
 }
 
 fn eval_arithmetic(source: &str) -> ParseResult<(i32, String)> {
