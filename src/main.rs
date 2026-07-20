@@ -420,5 +420,10 @@ mod tests {
     fn test_add_mul_precedence() {
         assert_eq!(interpret("2 + 3 * 4"), Ok(14));
     }
+
+    #[test]
+    fn test_paren_mul() {
+        assert_eq!(interpret("(2 + 3) * 4"), Ok(20));
+    }
 }
 
