@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
 fn main() {
@@ -27,8 +28,31 @@ fn interpret(source_code: &str) -> i32 {
     if tokens.is_empty() {
         return 0;
     }
-    let mut pos = 0;
-    parse_expr(&tokens, &mut pos)
+    let mut ctx = Context {
+        tokens,
+        pos: 0,
+        scopes: vec![HashMap::new()],
+        mutable: HashSet::new(),
+    };
+    let mut last_value = 0;
+    loop {
+        if let Some(tok) = peek(&ctx) {
+            if tok == "let" {
+                last_value = parse_let_stmt(&mut ctx);
+            } else {
+                last_value = parse_expr(&mut ctx);
+            }
+        } else {
+            break;
+        }
+        // Consume optional semicolon
+        if let Some(tok) = peek(&ctx) {
+            if tok == ";" {
+                consume(&mut ctx);
+            }
+        }
+    }
+    last_value
 }
 
 fn tokenize(source: &str) -> Vec<String> {
@@ -36,7 +60,7 @@ fn tokenize(source: &str) -> Vec<String> {
     let mut current = String::new();
     for ch in source.chars() {
         match ch {
-            '(' | ')' => {
+            '(' | ')' | '{' | '}' | ';' => {
                 if !current.is_empty() {
                     tokens.push(current.clone());
                     current.clear();
@@ -58,49 +82,188 @@ fn tokenize(source: &str) -> Vec<String> {
     tokens
 }
 
-fn parse_expr(tokens: &[String], pos: &mut usize) -> i32 {
-    let mut result = parse_term(tokens, pos);
-    while *pos < tokens.len() && (tokens[*pos] == "+" || tokens[*pos] == "-") {
-        let op = &tokens[*pos];
-        *pos += 1;
-        let right = parse_term(tokens, pos);
-        match op.as_str() {
-            "+" => result += right,
-            "-" => result -= right,
-            _ => unreachable!(),
+struct Context {
+    tokens: Vec<String>,
+    pos: usize,
+    scopes: Vec<HashMap<String, i32>>,
+    mutable: HashSet<String>,
+}
+
+fn lookup(ctx: &Context, name: &str) -> Option<i32> {
+    for scope in ctx.scopes.iter().rev() {
+        if let Some(&val) = scope.get(name) {
+            return Some(val);
+        }
+    }
+    None
+}
+
+fn insert_scope(ctx: &mut Context, name: String, value: i32) {
+    if let Some(scope) = ctx.scopes.last_mut() {
+        scope.insert(name, value);
+    }
+}
+
+fn assign(ctx: &mut Context, name: &str, value: i32) {
+    for scope in ctx.scopes.iter_mut().rev() {
+        if scope.contains_key(name) {
+            scope.insert(name.to_string(), value);
+            return;
+        }
+    }
+}
+
+fn peek(ctx: &Context) -> Option<&String> {
+    ctx.tokens.get(ctx.pos)
+}
+
+fn consume(ctx: &mut Context) -> String {
+    let token = ctx.tokens[ctx.pos].clone();
+    ctx.pos += 1;
+    token
+}
+
+fn parse_expr(ctx: &mut Context) -> i32 {
+    let mut result = parse_term(ctx);
+    loop {
+        let op = peek(ctx).cloned();
+        match op.as_deref() {
+            Some("+") | Some("-") => {
+                consume(ctx);
+                let right = parse_term(ctx);
+                match op.as_deref().unwrap() {
+                    "+" => result += right,
+                    "-" => result -= right,
+                    _ => unreachable!(),
+                }
+            }
+            _ => break,
         }
     }
     result
 }
 
-fn parse_term(tokens: &[String], pos: &mut usize) -> i32 {
-    let mut result = parse_factor(tokens, pos);
-    while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/") {
-        let op = &tokens[*pos];
-        *pos += 1;
-        let right = parse_factor(tokens, pos);
-        match op.as_str() {
-            "*" => result *= right,
-            "/" => result /= right,
-            _ => unreachable!(),
+fn parse_term(ctx: &mut Context) -> i32 {
+    let mut result = parse_factor(ctx);
+    loop {
+        let op = peek(ctx).cloned();
+        match op.as_deref() {
+            Some("*") | Some("/") => {
+                consume(ctx);
+                let right = parse_factor(ctx);
+                match op.as_deref().unwrap() {
+                    "*" => result *= right,
+                    "/" => result /= right,
+                    _ => unreachable!(),
+                }
+            }
+            _ => break,
         }
     }
     result
 }
 
-fn parse_factor(tokens: &[String], pos: &mut usize) -> i32 {
-    let token = &tokens[*pos];
-    if token == "(" {
-        *pos += 1; // consume '('
-        let result = parse_expr(tokens, pos);
-        if *pos < tokens.len() && tokens[*pos] == ")" {
-            *pos += 1; // consume ')'
+fn parse_factor(ctx: &mut Context) -> i32 {
+    let token = consume(ctx);
+    match token.as_str() {
+        "(" => {
+            let result = parse_expr(ctx);
+            if let Some(close) = peek(ctx) {
+                if close == ")" { consume(ctx); }
+            }
+            result
         }
-        result
+        "{" => {
+            parse_block(ctx)
+        }
+        "let" => {
+            // Reuse parse_let_stmt which handles 'mut' keyword
+            // We already consumed "let", so temporarily adjust
+            let saved_pos = ctx.pos - 1; // Back up to "let"
+            ctx.pos = saved_pos;
+            parse_let_stmt(ctx)
+        }
+        _ => {
+            // Try as number first, then as variable
+            if let Ok(n) = token.parse::<i32>() {
+                n
+            } else if is_assignment(ctx, &token) {
+                parse_assignment(ctx, token)
+            } else {
+                lookup(ctx, &token).unwrap_or(0)
+            }
+        }
+    }
+}
+
+fn parse_block(ctx: &mut Context) -> i32 {
+    ctx.scopes.push(HashMap::new());
+    let saved_mutable = ctx.mutable.clone();
+    let mut last_value = 0;
+    loop {
+        let token = peek(ctx).cloned();
+        match token.as_deref() {
+            Some("}") => {
+                consume(ctx);
+                break;
+            }
+            Some("let") => {
+                let _ = parse_let_stmt(ctx);
+            }
+            Some(_) => {
+                last_value = parse_expr(ctx);
+            }
+            None => break,
+        }
+        // Consume optional semicolon
+        if let Some(tok) = peek(ctx) {
+            if tok == ";" {
+                consume(ctx);
+            }
+        }
+    }
+    ctx.scopes.pop();
+    ctx.mutable = saved_mutable;
+    last_value
+}
+
+fn parse_let_stmt(ctx: &mut Context) -> i32 {
+    consume(ctx); // consume "let"
+    // Check for 'mut' keyword BEFORE consuming the identifier
+    let is_mutable = if let Some(next) = peek(ctx) {
+        if next == "mut" {
+            consume(ctx);
+            true
+        } else {
+            false
+        }
     } else {
-        *pos += 1;
-        token.parse::<i32>().unwrap_or(0)
+        false
+    };
+    let identifier = consume(ctx); // variable name
+    if let Some(eq) = peek(ctx) {
+        if eq.as_str() == "=" { consume(ctx); }
     }
+    let value = parse_expr(ctx);
+    insert_scope(ctx, identifier.clone(), value);
+    if is_mutable {
+        ctx.mutable.insert(identifier);
+    }
+    value
+}
+
+fn is_assignment(ctx: &Context, token: &str) -> bool {
+    // Check if next token is "=" and current token is not a number
+    token.parse::<i32>().is_err() && peek(ctx).map(|s| s.as_str()) == Some("=")
+}
+
+fn parse_assignment(ctx: &mut Context, identifier: String) -> i32 {
+    consume(ctx); // consume "="
+    let value = parse_expr(ctx);
+    if ctx.mutable.contains(&identifier) {
+        assign(ctx, &identifier, value);
+    }
+    value
 }
 
 #[cfg(test)]
@@ -140,5 +303,35 @@ mod tests {
     #[test]
     fn test_parentheses() {
         assert_eq!(interpret("(1 + 2) * 3"), 9);
+    }
+
+    #[test]
+    fn test_braces() {
+        assert_eq!(interpret("{ 1 + 2 } * 3"), 9);
+    }
+
+    #[test]
+    fn test_block_with_let() {
+        assert_eq!(interpret("let y = { let x = 1 + 2; x } * 3; y"), 9);
+    }
+
+    #[test]
+    fn test_mutable_assignment() {
+        assert_eq!(interpret("let mut x = 0; x = 1; x"), 1);
+    }
+
+    #[test]
+    fn test_mutable_assignment_in_block() {
+        assert_eq!(interpret("let mut x = 0; { x = 1; } x"), 1);
+    }
+
+    #[test]
+    fn test_variable_redeclaration() {
+        assert_eq!(interpret("let x = 0; let x = 1; x"), 1);
+    }
+
+    #[test]
+    fn test_block_scope_shadowing() {
+        assert_eq!(interpret("let x = 1; { let x = 0; } x"), 1);
     }
 }
