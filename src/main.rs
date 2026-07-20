@@ -184,13 +184,19 @@ fn parse_factor(ctx: &mut Context) -> i32 {
             parse_let_stmt(ctx)
         }
         _ => {
-            // Try as number first, then as variable
-            if let Ok(n) = token.parse::<i32>() {
-                n
-            } else if is_assignment(ctx, &token) {
-                parse_assignment(ctx, token)
-            } else {
-                lookup(ctx, &token).unwrap_or(0)
+            // Try as boolean literal, then number, then variable/assignment
+            match token.as_str() {
+                "true" => 1,
+                "false" => 0,
+                _ => {
+                    if let Ok(n) = token.parse::<i32>() {
+                        n
+                    } else if is_assignment(ctx, &token) {
+                        parse_assignment(ctx, token)
+                    } else {
+                        lookup(ctx, &token).unwrap_or(0)
+                    }
+                }
             }
         }
     }
@@ -333,5 +339,10 @@ mod tests {
     #[test]
     fn test_block_scope_shadowing() {
         assert_eq!(interpret("let x = 1; { let x = 0; } x"), 1);
+    }
+
+    #[test]
+    fn test_boolean_literal() {
+        assert_eq!(interpret("let x = true; x"), 1);
     }
 }
