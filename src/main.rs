@@ -1,6 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
+struct Func {
+    body_start: usize,
+}
+
 fn main() {
     println!("Tuff REPL. Type 'quit' to exit.");
     let stdin = io::stdin();
@@ -33,6 +37,7 @@ fn interpret(source_code: &str) -> i32 {
         pos: 0,
         scopes: vec![HashMap::new()],
         mutable: HashSet::new(),
+        functions: HashMap::new(),
     };
     let mut last_value = 0;
     while let Some(tok) = peek(&ctx) {
@@ -63,6 +68,18 @@ fn tokenize(source: &str) -> Vec<String> {
                     current.clear();
                 }
                 tokens.push(ch.to_string());
+            }
+            '=' => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+                if i + 1 < chars.len() && chars[i + 1] == '>' {
+                    tokens.push("=>".to_string());
+                    i += 1;
+                } else {
+                    tokens.push(ch.to_string());
+                }
             }
             '+' => {
                 if !current.is_empty() {
@@ -97,6 +114,7 @@ struct Context {
     pos: usize,
     scopes: Vec<HashMap<String, i32>>,
     mutable: HashSet<String>,
+    functions: HashMap<String, Func>,
 }
 
 fn lookup(ctx: &Context, name: &str) -> Option<i32> {
@@ -216,6 +234,9 @@ fn parse_factor(ctx: &mut Context) -> i32 {
         "while" => {
             parse_while_expr(ctx)
         }
+        "fn" => {
+            parse_fn_def(ctx)
+        }
         "let" => {
             // Reuse parse_let_stmt which handles 'mut' keyword
             // We already consumed "let", so temporarily adjust
@@ -224,7 +245,7 @@ fn parse_factor(ctx: &mut Context) -> i32 {
             parse_let_stmt(ctx)
         }
         _ => {
-            // Try as boolean literal, then number, then variable/assignment
+            // Try as boolean literal, then number, then function call, then variable/assignment
             match token.as_str() {
                 "true" => 1,
                 "false" => 0,
@@ -239,6 +260,8 @@ fn parse_factor(ctx: &mut Context) -> i32 {
                         }
                     } else if let Ok(n) = token.parse::<i32>() {
                         n
+                    } else if is_function_call(ctx) {
+                        parse_function_call(ctx, token)
                     } else if is_assignment(ctx, &token) {
                         parse_assignment(ctx, token)
                     } else {
@@ -396,6 +419,35 @@ fn parse_assignment(ctx: &mut Context, identifier: String) -> i32 {
     }
 }
 
+fn is_function_call(ctx: &Context) -> bool {
+    peek(ctx).map(|s| s.as_str()) == Some("(")
+}
+
+fn parse_function_call(ctx: &mut Context, name: String) -> i32 {
+    consume(ctx); // consume "("
+    consume_optional(ctx, ")");
+    if let Some(func) = ctx.functions.get(&name) {
+        let saved_pos = ctx.pos;
+        ctx.pos = func.body_start;
+        let result = parse_expr(ctx);
+        ctx.pos = saved_pos;
+        result
+    } else {
+        0
+    }
+}
+
+fn parse_fn_def(ctx: &mut Context) -> i32 {
+    let name = consume(ctx); // function name
+    consume_optional(ctx, "(");
+    consume_optional(ctx, ")");
+    consume_optional(ctx, "=>");
+    let body_start = ctx.pos;
+    let value = parse_expr(ctx);
+    ctx.functions.insert(name, Func { body_start });
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -508,5 +560,10 @@ mod tests {
     #[test]
     fn test_type_annotation_and_suffixed_literal() {
         assert_eq!(interpret("let x : U8 = 100U8; x"), 100);
+    }
+
+    #[test]
+    fn test_function_definition_and_call() {
+        assert_eq!(interpret("fn get() => 100; get()"), 100);
     }
 }
