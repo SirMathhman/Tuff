@@ -157,7 +157,14 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
         if let Some(eq_pos) = part.find(" = ") {
             let prefix = &part[..eq_pos].trim();
             if let Some(stripped) = prefix.strip_prefix("let ") {
-                let var_name = stripped.trim();
+                // Parse "x" or "x : Type"
+                let (var_name, _type_name) = if let Some(colon_pos) = stripped.find(":") {
+                    let name = stripped[..colon_pos].trim();
+                    let typ = stripped[colon_pos + 1..].trim();
+                    (name, Some(typ))
+                } else {
+                    (stripped.trim(), None)
+                };
                 let expr = &part[eq_pos + 3..].trim();
                 if let Ok(val) = interpret_with_vars(expr, &vars) {
                     // Shadow: replace existing binding
@@ -578,6 +585,11 @@ mod tests {
     #[test]
     fn test_let_shadowing() {
         assert_eq!(interpret("let x = 0; let x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_typed_let() {
+        assert_eq!(interpret("let x : U16 = 100U8; x"), Ok(100));
     }
 }
 
