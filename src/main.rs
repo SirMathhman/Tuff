@@ -48,10 +48,8 @@ fn interpret_impl(source: &str, allow_let: bool) -> Result<i32, String> {
     }
 
     // Handle top-level let statements: let y = expr; expr
-    if allow_let {
-        if let Some(result) = try_parse_let(source) {
-            return result;
-        }
+    if allow_let && let Some(result) = try_parse_let(source) {
+        return result;
     }
 
     // Handle block expressions: { let x = 2 + 3; x } => 5
@@ -154,30 +152,16 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
             continue;
         }
 
-        if let Some(eq_pos) = part.find(" = ") {
-            let prefix = &part[..eq_pos].trim();
-            if let Some(stripped) = prefix.strip_prefix("let ") {
-                // Parse "x" or "x : Type"
-                let (var_name, _type_name) = if let Some(colon_pos) = stripped.find(":") {
-                    let name = stripped[..colon_pos].trim();
-                    let typ = stripped[colon_pos + 1..].trim();
-                    (name, Some(typ))
-                } else {
-                    (stripped.trim(), None)
-                };
-                let expr = &part[eq_pos + 3..].trim();
-                if let Ok(val) = interpret_with_vars(expr, &vars) {
-                    // Shadow: replace existing binding
+        if let Some(result) = try_parse_let_binding(part, &vars) {
+            match result {
+                Ok((var_name, val)) => {
                     if let Some(existing) = vars.iter_mut().find(|(name, _)| *name == var_name) {
                         existing.1 = val;
                     } else {
-                        vars.push((var_name.to_string(), val));
+                        vars.push((var_name, val));
                     }
-                } else {
-                    return Some(Err(format!("error evaluating: {}", expr)));
                 }
-            } else {
-                last_result = Some(interpret_with_vars(part, &vars).ok()?);
+                Err(e) => return Some(Err(e)),
             }
         } else {
             last_result = Some(interpret_with_vars(part, &vars).ok()?);
@@ -185,6 +169,47 @@ fn try_parse_let(source: &str) -> Option<Result<i32, String>> {
     }
 
     last_result.map(Ok)
+}
+
+#[allow(clippy::type_complexity)]
+fn parse_let_prefix(source: &str) -> Option<(&str, Option<&str>)> {
+    if let Some(eq_pos) = source.find(" = ") {
+        let prefix = &source[..eq_pos].trim();
+        if let Some(stripped) = prefix.strip_prefix("let ") {
+            if let Some(colon_pos) = stripped.find(":") {
+                let name = stripped[..colon_pos].trim();
+                let typ = stripped[colon_pos + 1..].trim();
+                return Some((name, Some(typ)));
+            } else {
+                return Some((stripped.trim(), None));
+            }
+        }
+    }
+    None
+}
+
+#[allow(clippy::type_complexity)]
+fn try_parse_let_binding(part: &str, vars: &[(String, i32)]) -> Option<Result<(String, i32), String>> {
+    let (var_name, type_name) = parse_let_prefix(part)?;
+    let eq_pos = part.find(" = ")?;
+    let expr = &part[eq_pos + 3..].trim();
+
+    let val = match interpret_with_vars(expr, vars) {
+        Ok(v) => v,
+        Err(e) => return Some(Err(format!("error evaluating: {}: {}", expr, e))),
+    };
+
+    if let Some(declared_type) = type_name
+        && let Ok((_, expr_type, is_plain)) = parse_typed_value(expr)
+        && !is_plain
+    {
+        // Allow narrower -> wider (U8 -> U16 OK), reject wider -> narrower (U16 -> U8 error)
+        if type_width(&expr_type) > type_width(declared_type) {
+            return Some(Err(format!("type mismatch: expected {} but got {}", declared_type, expr_type)));
+        }
+    }
+
+    Some(Ok((var_name.to_string(), val)))
 }
 
 fn split_at_semicolons(source: &str) -> Vec<&str> {
@@ -221,7 +246,7 @@ fn split_arithmetic(source: &str) -> Vec<String> {
             '(' | '{' => depth += 1,
             ')' | '}' => depth -= 1,
             '+' | '-' | '*' if depth == 0 => {
-                let seg: String = source[current_start..i].chars().map(|c| c).collect();
+                let seg: String = source[current_start..i].chars().collect();
                 parts.push(seg.trim().to_string());
                 parts.push(chars[i].to_string());
                 current_start = i + 1;
@@ -230,7 +255,7 @@ fn split_arithmetic(source: &str) -> Vec<String> {
         }
         i += 1;
     }
-    let seg: String = source[current_start..].chars().map(|c| c).collect();
+    let seg: String = source[current_start..].chars().collect();
     parts.push(seg.trim().to_string());
     parts
 }
