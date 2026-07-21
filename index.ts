@@ -299,9 +299,13 @@ function inferCallType(node: CallExpr, scopes: Scope[]): string | null {
 }
 
 function lookupFunctionReturnType(name: string, scopes: Scope[]): string | null {
+  return lookupInScopes(scopes, 'functionReturnTypes', name);
+}
+  
+function lookupInScopes(scopes: Scope[], prop: keyof Scope, name: string): string | null {
   for (let i = scopes.length - 1; i >= 0; i--) {
     const scope = scopes[i]!;
-    if (name in scope.functionReturnTypes) return scope.functionReturnTypes[name]!;
+    if (name in scope[prop]) return (scope[prop] as Record<string, string | null>)[name] ?? null;
   }
   return null;
 }
