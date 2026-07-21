@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "lint": "eslint . --fix",
+    "cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
