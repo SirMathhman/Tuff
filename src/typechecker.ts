@@ -72,19 +72,13 @@ function inferComplexExprType(
   return inferUnaryType(node, scopes);
 }
 
-function inferBlockExprType(
-  node: BlockExpr,
-  scopes: Scope[],
-): Type | null {
+function inferBlockExprType(node: BlockExpr, scopes: Scope[]): Type | null {
   if (node.body.length === 0) return null;
   const lastStmt = node.body[node.body.length - 1]!;
   return inferStatementType(lastStmt, scopes);
 }
 
-function inferStatementType(
-  node: Statement,
-  scopes: Scope[],
-): Type | null {
+function inferStatementType(node: Statement, scopes: Scope[]): Type | null {
   if (node.type === "ExprStatement")
     return inferExprType(node.expression, scopes);
   return null;
@@ -109,7 +103,9 @@ function inferClosureType(node: ClosureExpr, scopes: Scope[]): Type | null {
     tempScope.types[param.name] = param.typeAnnotation ?? { kind: "i32" };
   }
   const extendedScopes = [...scopes, tempScope];
-  const returnType = inferExprType(node.body, extendedScopes) ?? { kind: "i32" };
+  const returnType = inferExprType(node.body, extendedScopes) ?? {
+    kind: "i32",
+  };
   return { kind: "closure", paramTypes, returnType };
 }
 

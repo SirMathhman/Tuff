@@ -222,11 +222,7 @@ export type ArrayValue = (number | StructValue | ArrayValue)[];
 import type { Scope } from "./scope";
 
 export type ClosureEnvValue =
-  | number
-  | StructValue
-  | ArrayValue
-  | ClosureValue
-  | RefValue;
+  number | StructValue | ArrayValue | ClosureValue | RefValue;
 
 export type ClosureValue = {
   __closure: true;

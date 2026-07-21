@@ -15,7 +15,10 @@ export interface FunctionInfo {
 }
 
 export type Scope = {
-  env: Record<string, number | StructValue | RefValue | ArrayValue | ClosureValue>;
+  env: Record<
+    string,
+    number | StructValue | RefValue | ArrayValue | ClosureValue
+  >;
   mutable: Set<string>;
   types: Record<string, Type | null>;
   functions: Record<string, FunctionInfo>;

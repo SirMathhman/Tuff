@@ -267,6 +267,11 @@ function parseTypeAnnotation(p: Parser): Type | null {
 }
 
 function parseBlock(p: Parser): BlockStatement {
+  const { body, loc } = parseBracedBlock(p);
+  return { type: "BlockStatement", body, loc };
+}
+
+function parseBracedBlock(p: Parser): { body: Statement[]; loc: Position } {
   const loc = curPos(p);
   p.pos++; // '{'
   const body: Statement[] = [];
@@ -274,7 +279,7 @@ function parseBlock(p: Parser): BlockStatement {
     body.push(parseStatement(p));
   }
   if (at(p, "}")) p.pos++;
-  return { type: "BlockStatement", body, loc };
+  return { body, loc };
 }
 
 function parseIf(p: Parser): IfStatement {
@@ -504,13 +509,7 @@ function parseOperatorFactor(p: Parser, token: string): Expr {
 }
 
 function parseBlockExpr(p: Parser): BlockExpr {
-  const loc = curPos(p);
-  p.pos++; // '{'
-  const body: Statement[] = [];
-  while (p.pos < p.tokens.length && !at(p, "}")) {
-    body.push(parseStatement(p));
-  }
-  if (at(p, "}")) p.pos++;
+  const { body, loc } = parseBracedBlock(p);
   return { type: "BlockExpr", body, loc };
 }
 
