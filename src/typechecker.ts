@@ -22,22 +22,16 @@ export function inferExprType(node: Expr, scopes: Scope[]): Type | null {
   return inferComplexExprType(node, scopes);
 }
 
-function isLiteral(
-  node: Expr,
-): node is NumberLiteral | BooleanLiteral {
+function isLiteral(node: Expr): node is NumberLiteral | BooleanLiteral {
   return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
 }
 
-function inferLiteralType(
-  node: NumberLiteral | BooleanLiteral,
-): Type | null {
+function inferLiteralType(node: NumberLiteral | BooleanLiteral): Type | null {
   if (node.type === "NumberLiteral") return node.typeAnnotation;
   return { kind: "bool" };
 }
 
-function isSimpleExpr(
-  node: Expr,
-): node is Identifier | BinaryExpr | CallExpr {
+function isSimpleExpr(node: Expr): node is Identifier | BinaryExpr | CallExpr {
   return (
     node.type === "Identifier" ||
     node.type === "BinaryExpr" ||
