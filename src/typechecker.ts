@@ -39,7 +39,10 @@ export function inferRefType(node: RefExpr, scopes: Scope[]): string | null {
   return node.mutable ? `&mut ${innerType}` : `&${innerType}`;
 }
 
-export function inferDerefType(node: DerefExpr, scopes: Scope[]): string | null {
+export function inferDerefType(
+  node: DerefExpr,
+  scopes: Scope[],
+): string | null {
   const refType = inferExprType(node.operand, scopes);
   if (refType && refType.startsWith("&")) {
     return refType.replace(/^&mut /, "").replace(/^&/, "");
@@ -57,7 +60,10 @@ function inferCallType(node: CallExpr, scopes: Scope[]): string | null {
 export function lookupFunctionInfo(
   name: string,
   scopes: Scope[],
-): { body: Expr; params: { name: string; typeAnnotation: string | null }[] } | null {
+): {
+  body: Expr;
+  params: { name: string; typeAnnotation: string | null }[];
+} | null {
   for (let i = scopes.length - 1; i >= 0; i--) {
     const scope = scopes[i]!;
     if (name in scope.functions) return scope.functions[name]!;

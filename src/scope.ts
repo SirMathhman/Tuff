@@ -1,4 +1,10 @@
-import type { Expr, FunctionParam, StructField, StructValue, RefValue } from "./ast";
+import type {
+  Expr,
+  FunctionParam,
+  StructField,
+  StructValue,
+  RefValue,
+} from "./ast";
 
 export interface FunctionInfo {
   body: Expr;

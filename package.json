@@ -7,7 +7,8 @@
     "test": "bun test test/",
     "lint": "eslint . --fix",
     "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers",
-    "circular": "madge --circular ./src"
+    "circular": "madge --circular ./src",
+    "format": "bunx prettier ./src --write"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -16,6 +17,7 @@
     "globals": "^17.7.0",
     "jiti": "^2.7.0",
     "madge": "^8.0.0",
+    "prettier": "^3.9.6",
     "typescript-eslint": "^8.65.0"
   },
   "peerDependencies": {

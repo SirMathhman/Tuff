@@ -200,12 +200,16 @@ function validateStructFields(
   const providedFields = new Set(node.fields.map((f) => f.name));
   for (const field of providedFields) {
     if (!definedFields.has(field)) {
-      throw new RuntimeError(`unknown field "${field}" in ${node.structName} literal`);
+      throw new RuntimeError(
+        `unknown field "${field}" in ${node.structName} literal`,
+      );
     }
   }
   for (const field of definedFields) {
     if (!providedFields.has(field)) {
-      throw new RuntimeError(`missing field "${field}" in ${node.structName} literal`);
+      throw new RuntimeError(
+        `missing field "${field}" in ${node.structName} literal`,
+      );
     }
   }
 }
@@ -242,7 +246,9 @@ function evalFieldAccess(
 ): number | StructValue {
   const obj = evaluateExpr(node.object, scopes);
   if (isRefValue(obj)) {
-    throw new RuntimeError(`cannot access field ${node.field} on reference value`);
+    throw new RuntimeError(
+      `cannot access field ${node.field} on reference value`,
+    );
   }
   if (typeof obj === "object" && obj !== null) {
     const val = (obj as StructValue)[node.field];
@@ -250,7 +256,9 @@ function evalFieldAccess(
       throw new RuntimeError(`field ${node.field} not found on struct`);
     return val;
   }
-  throw new RuntimeError(`cannot access field ${node.field} on non-struct value`);
+  throw new RuntimeError(
+    `cannot access field ${node.field} on non-struct value`,
+  );
 }
 
 function evalBlock(node: BlockStatement, scopes: Scope[]): number {
@@ -389,7 +397,8 @@ function evalDerefExpr(node: DerefExpr, scopes: Scope[]): number | StructValue {
 
 function evalCall(node: CallExpr, scopes: Scope[]): number {
   const funcInfo = lookupFunctionInfo(node.name, scopes);
-  if (funcInfo === null) throw new RuntimeError(`undefined function: ${node.name}`);
+  if (funcInfo === null)
+    throw new RuntimeError(`undefined function: ${node.name}`);
   const callScope: Scope = createScope();
   for (let i = 0; i < funcInfo.params.length; i++) {
     const param = funcInfo.params[i]!;
@@ -413,8 +422,6 @@ function evalCall(node: CallExpr, scopes: Scope[]): number {
   scopes.pop();
   return typeof result === "number" ? result : 0;
 }
-
-
 
 function evalBinary(node: BinaryExpr, scopes: Scope[]): number {
   const left = evaluateExpr(node.left, scopes);
