@@ -173,3 +173,43 @@ test('interpret("fn get() : U16 => 100; let x : U8 = get();") => Error', () => {
   expect(() => interpret("fn get() : U16 => 100; let x : U8 = get();")).toThrow();
 });
 
+test('interpret("fn add(first : I32, second : I32) => first + second; add(3, 4)") => 7', () => {
+  expect(interpret("fn add(first : I32, second : I32) => first + second; add(3, 4)")).toBe(7);
+});
+
+test('interpret("fn add(x : I32, x : I32) => x + x; add(3, 4)") => Error', () => {
+  expect(() => interpret("fn add(x : I32, x : I32) => x + x; add(3, 4)")).toThrow();
+});
+
+test('interpret("fn get(x : U8) => x; let y = 100U16; get(y);") => Error', () => {
+  expect(() => interpret("fn get(x : U8) => x; let y = 100U16; get(y);")).toThrow();
+});
+
+test('interpret("struct Point { x : I32, y : I32 } let point : Point = Point { x : 3, y : 4 }; point.x + point.y") => 7', () => {
+  expect(interpret("struct Point { x : I32, y : I32 } let point : Point = Point { x : 3, y : 4 }; point.x + point.y")).toBe(7);
+});
+
+test('interpret("struct Point { x : I32 } struct Point { y : I32 }") => Error', () => {
+  expect(() => interpret("struct Point { x : I32 } struct Point { y : I32 }")).toThrow();
+});
+
+test('interpret("struct Point { x : I32, x : I32 }") => Error', () => {
+  expect(() => interpret("struct Point { x : I32, x : I32 }")).toThrow();
+});
+
+test('interpret("struct Point { x : I32, y : I32 } let p : Point = Point { x : 3 }; p.x") => Error', () => {
+  expect(() => interpret("struct Point { x : I32, y : I32 } let p : Point = Point { x : 3 }; p.x")).toThrow();
+});
+
+test('interpret("struct Point { x : I32 } let p : Point = Point { x : 3, y : 4 }; p.x") => Error', () => {
+  expect(() => interpret("struct Point { x : I32 } let p : Point = Point { x : 3, y : 4 }; p.x")).toThrow();
+});
+
+test('interpret("struct Point { x : U8 } let v = 300U16; let p : Point = Point { x : v }; p.x") => Error', () => {
+  expect(() => interpret("struct Point { x : U8 } let v = 300U16; let p : Point = Point { x : v }; p.x")).toThrow();
+});
+
+test('interpret("struct Point { x : I32, y : I32 } struct Line { start : Point, end : Point } let line : Line = Line { start : Point { x : 0, y : 0 }, end : Point { x : 10, y : 20 } }; line.start.x + line.end.y") => 20', () => {
+  expect(interpret("struct Point { x : I32, y : I32 } struct Line { start : Point, end : Point } let line : Line = Line { start : Point { x : 0, y : 0 }, end : Point { x : 10, y : 20 } }; line.start.x + line.end.y")).toBe(20);
+});
+
