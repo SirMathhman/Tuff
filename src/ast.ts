@@ -103,6 +103,7 @@ export interface WhileStatement extends Node {
 export type Expr =
   | BinaryExpr
   | NumberLiteral
+  | StringLiteral
   | Identifier
   | BooleanLiteral
   | CallExpr
@@ -176,6 +177,11 @@ export interface Identifier extends Node {
 export interface BooleanLiteral extends Node {
   type: "BooleanLiteral";
   value: boolean;
+}
+
+export interface StringLiteral extends Node {
+  type: "StringLiteral";
+  value: string;
 }
 
 export interface RefExpr extends Node {

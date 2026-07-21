@@ -821,3 +821,146 @@ test(
     ).toThrow();
   },
 );
+
+// ── String Literals (&Str) ────────────────────────────────────────────────────
+
+test('interpret("bare string literal") => Error', { timeout: 5000 }, () => {
+  // String literal cannot be final expression (not a number)
+  expect(() => interpret('"hello"')).toThrow();
+});
+
+test(
+  'interpret("let s: &Str = "hello"; s") => Error',
+  { timeout: 5000 },
+  () => {
+    // String value cannot be final expression
+    expect(() => interpret('let s: &Str = "hello"; s')).toThrow();
+  },
+);
+
+test(
+  'interpret("let s: &Str = "hello"; s.length") => 5',
+  { timeout: 5000 },
+  () => {
+    expect(interpret('let s: &Str = "hello"; s.length')).toBe(5);
+  },
+);
+
+test('interpret("string literal length") => 5', { timeout: 5000 }, () => {
+  expect(interpret('"hello".length')).toBe(5);
+});
+
+test(
+  'interpret("let s: &Str = "hello"; s[0]") => 104',
+  { timeout: 5000 },
+  () => {
+    // 'h' is code point 104
+    expect(interpret('let s: &Str = "hello"; s[0]')).toBe(104);
+  },
+);
+
+test(
+  'interpret("let s: &Str = "hello"; s[4]") => 111',
+  { timeout: 5000 },
+  () => {
+    // 'o' is code point 111
+    expect(interpret('let s: &Str = "hello"; s[4]')).toBe(111);
+  },
+);
+
+test(
+  'interpret("let s: &Str = "hello"; s[5]") => Error',
+  { timeout: 5000 },
+  () => {
+    // Index out of bounds
+    expect(() => interpret('let s: &Str = "hello"; s[5]')).toThrow();
+  },
+);
+
+test(
+  'interpret("let s: &Str = "hello"; s[-1]") => Error',
+  { timeout: 5000 },
+  () => {
+    // Negative index
+    expect(() => interpret('let s: &Str = "hello"; s[-1]')).toThrow();
+  },
+);
+
+test('interpret("string equality same") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"hello" == "hello"')).toBe(1);
+});
+
+test('interpret("string equality diff") => 0', { timeout: 5000 }, () => {
+  expect(interpret('"hello" == "world"')).toBe(0);
+});
+
+test('interpret("string inequality") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"hello" != "world"')).toBe(1);
+});
+
+test('interpret("string less than") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"a" < "b"')).toBe(1);
+});
+
+test('interpret("string greater than") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"b" > "a"')).toBe(1);
+});
+
+test('interpret("string less or equal same") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"a" <= "a"')).toBe(1);
+});
+
+test('interpret("string greater or equal") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"b" >= "a"')).toBe(1);
+});
+
+test('interpret("string less than same") => 0', { timeout: 5000 }, () => {
+  expect(interpret('"hello" < "hello"')).toBe(0);
+});
+
+test('interpret("string lexicographic") => 1', { timeout: 5000 }, () => {
+  expect(interpret('"abc" < "abd"')).toBe(1);
+});
+
+test('interpret("empty string length") => 0', { timeout: 5000 }, () => {
+  expect(interpret('"".length')).toBe(0);
+});
+
+test(
+  'interpret("string newline escape length") => 11',
+  { timeout: 5000 },
+  () => {
+    // \n is a single character
+    expect(interpret('"hello\nworld".length')).toBe(11);
+  },
+);
+
+test('interpret("string tab escape length") => 8', { timeout: 5000 }, () => {
+  expect(interpret('"tab\\there".length')).toBe(8);
+});
+
+test(
+  'interpret("string backslash escape length") => 10',
+  { timeout: 5000 },
+  () => {
+    expect(interpret('"back\\\\slash".length')).toBe(10);
+  },
+);
+
+test('interpret("string quote escape length") => 10', { timeout: 5000 }, () => {
+  expect(interpret('"quote\\"here".length')).toBe(10);
+});
+
+test(
+  'interpret("string to I32 assignment") => Error',
+  { timeout: 5000 },
+  () => {
+    // &Str is incompatible with I32
+    expect(() => interpret('let s: &Str = "hi"; let x: I32 = s;')).toThrow();
+  },
+);
+
+test('interpret("string arithmetic") => Error', { timeout: 5000 }, () => {
+  // String cannot be used in arithmetic
+  expect(() => interpret('let s: &Str = "hi"; s + 1')).toThrow();
+});

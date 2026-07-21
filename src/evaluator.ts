@@ -20,6 +20,7 @@ import type {
   BinaryExpr,
   NumberLiteral,
   BooleanLiteral,
+  StringLiteral,
   Identifier,
   StructValue,
   RefValue,
@@ -52,18 +53,20 @@ import { typeEquals, isArrayType } from "./types";
 
 // The core result type for expression evaluation.
 // This includes all possible runtime values the interpreter can produce.
-type EvalResult = number | StructValue | RefValue | ArrayValue | ClosureValue;
+type EvalResult =
+  number | string | StructValue | RefValue | ArrayValue | ClosureValue;
 
 /** Convert an EvalResult to a number (used only at the top level). */
 function toNumber(val: EvalResult): number {
   if (typeof val === "number") return val;
+  if (typeof val === "string") {
+    throw new RuntimeError("cannot return string value as program result");
+  }
   return 0;
 }
 
 /** Convert an EvalResult to a number or struct/array (for storage in structs). */
-function toNumberOrStruct(
-  val: EvalResult,
-): number | StructValue | ArrayValue {
+function toNumberOrStruct(val: EvalResult): number | StructValue | ArrayValue {
   if (typeof val === "number") return val;
   if (isRefValue(val)) return 0;
   if (isClosureValue(val)) return 0;
@@ -73,7 +76,8 @@ function toNumberOrStruct(
 export function evaluateProgram(node: Program, scopes: Scope[]): number {
   let result = 0;
   for (const stmt of node.body) {
-    result = toNumber(evaluateStatement(stmt, scopes));
+    const val = evaluateStatement(stmt, scopes);
+    result = toNumber(val);
   }
   return result;
 }
@@ -141,10 +145,7 @@ function evalControl(node: Statement, scopes: Scope[]): EvalResult {
 
 // -- Statement evaluators --
 
-function evalFuncDef(
-  node: FunctionDefStatement,
-  scopes: Scope[],
-): EvalResult {
+function evalFuncDef(node: FunctionDefStatement, scopes: Scope[]): EvalResult {
   const scope = scopes[scopes.length - 1]!;
   scope.functions[node.name] = { body: node.body, params: node.params };
   scope.functionReturnTypes[node.name] = node.returnAnnotation;
@@ -293,10 +294,7 @@ function evalIndexAssign(
   const index = evaluateExpr(indexNode.index, scopes);
   const idx = typeof index === "number" ? index : 0;
   if (idx < 0 || idx >= objVal.length) {
-    throw new RuntimeError(
-      `array index out of bounds: ${idx}`,
-      indexNode.loc,
-    );
+    throw new RuntimeError(`array index out of bounds: ${idx}`, indexNode.loc);
   }
   const value = evaluateExpr(node.value, scopes);
   objVal[idx] = toNumberOrStruct(value);
@@ -316,10 +314,7 @@ function evalBlock(node: BlockStatement, scopes: Scope[]): EvalResult {
   return evalStmtList(node.body, scopes);
 }
 
-function evalStmtList(
-  stmts: Statement[],
-  scopes: Scope[],
-): EvalResult {
+function evalStmtList(stmts: Statement[], scopes: Scope[]): EvalResult {
   scopes.push(createScope());
   let result: EvalResult = 0;
   for (const stmt of stmts) {
@@ -376,17 +371,20 @@ function validateMutableTarget(
 
 // -- Expression evaluation --
 
-export function evaluateExpr(
-  node: Expr,
-  scopes: Scope[],
-): EvalResult {
+export function evaluateExpr(node: Expr, scopes: Scope[]): EvalResult {
   if (isLiteral(node)) return evalLiteral(node);
   if (isSimpleExpr(node)) return evalSimple(node, scopes);
   return evalComplex(node, scopes);
 }
 
-function isLiteral(node: Expr): node is NumberLiteral | BooleanLiteral {
-  return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
+function isLiteral(
+  node: Expr,
+): node is NumberLiteral | BooleanLiteral | StringLiteral {
+  return (
+    node.type === "NumberLiteral" ||
+    node.type === "BooleanLiteral" ||
+    node.type === "StringLiteral"
+  );
 }
 
 function isSimpleExpr(node: Expr): node is Identifier | BinaryExpr | CallExpr {
@@ -447,9 +445,7 @@ function evalClosure(node: ClosureExpr, scopes: Scope[]): ClosureValue {
   };
 }
 
-function buildSnapshot(
-  scopes: Scope[],
-): Record<string, ClosureEnvValue> {
+function buildSnapshot(scopes: Scope[]): Record<string, ClosureEnvValue> {
   const snapshot: Record<string, ClosureEnvValue> = {};
   for (const scope of scopes) {
     for (const [name, value] of Object.entries(scope.env)) {
@@ -482,10 +478,7 @@ function evalClosureCall(
   return evaluateExpr(closure.body, newScopes);
 }
 
-function buildClosureScopes(
-  closure: ClosureValue,
-  callScope: Scope,
-): Scope[] {
+function buildClosureScopes(closure: ClosureValue, callScope: Scope): Scope[] {
   if (closure.captureMode === "move") {
     const snapshotScope: Scope = createScope();
     snapshotScope.env = { ...(closure.snapshotEnv || {}) };
@@ -496,10 +489,7 @@ function buildClosureScopes(
 
 // -- Struct --
 
-function evalStructLit(
-  node: StructLiteral,
-  scopes: Scope[],
-): StructValue {
+function evalStructLit(node: StructLiteral, scopes: Scope[]): StructValue {
   const scope = scopes[scopes.length - 1]!;
   const structDef = scope.structs[node.structName];
   if (!structDef) {
@@ -595,11 +585,16 @@ function evalArrayLit(node: ArrayLiteral, scopes: Scope[]): ArrayValue {
   return elements;
 }
 
-function evalIndex(
-  node: IndexAccess,
-  scopes: Scope[],
-): number | StructValue | ArrayValue {
+function evalIndex(node: IndexAccess, scopes: Scope[]): EvalResult {
   const obj = evaluateExpr(node.object, scopes);
+  if (typeof obj === "string") {
+    const index = evaluateExpr(node.index, scopes);
+    const idx = typeof index === "number" ? index : 0;
+    if (idx < 0 || idx >= obj.length) {
+      throw new RuntimeError(`string index out of bounds: ${idx}`, node.loc);
+    }
+    return obj.codePointAt(idx) ?? 0;
+  }
   if (!isArrayValue(obj)) {
     throw new RuntimeError("cannot index non-array value", node.loc);
   }
@@ -613,11 +608,11 @@ function evalIndex(
 
 function evalLength(node: LengthAccess, scopes: Scope[]): number {
   const obj = evaluateExpr(node.object, scopes);
+  if (typeof obj === "string") {
+    return obj.length;
+  }
   if (!isArrayValue(obj)) {
-    throw new RuntimeError(
-      "cannot access length of non-array value",
-      node.loc,
-    );
+    throw new RuntimeError("cannot access length of non-array value", node.loc);
   }
   return obj.length;
 }
@@ -642,6 +637,17 @@ function evalIdent(node: Identifier, scopes: Scope[]): EvalResult {
 function evalBinary(node: BinaryExpr, scopes: Scope[]): number {
   const left = evaluateExpr(node.left, scopes);
   const right = evaluateExpr(node.right, scopes);
+  const leftStr = typeof left === "string" ? left : null;
+  const rightStr = typeof right === "string" ? right : null;
+  if (leftStr !== null && rightStr !== null) {
+    return applyStringOp(node.op, leftStr, rightStr);
+  }
+  if (leftStr !== null || rightStr !== null) {
+    throw new RuntimeError(
+      "strings cannot be used with arithmetic operators",
+      node.loc,
+    );
+  }
   return applyOp(
     node.op,
     typeof left === "number" ? left : 0,
@@ -671,6 +677,32 @@ function compareEq(op: string, left: number, right: number): number {
   if (op === "==") return left == right ? 1 : 0;
   if (op === "!=") return left != right ? 1 : 0;
   throw new RuntimeError(`unknown operator: ${op}`);
+}
+
+function applyStringOp(op: string, left: string, right: string): number {
+  if (isEqualityOp(op)) return applyStringEquality(op, left, right);
+  if (isOrderingOp(op)) return applyStringOrdering(op, left, right);
+  throw new RuntimeError(`unknown operator: ${op}`);
+}
+
+function isEqualityOp(op: string): boolean {
+  return op === "==" || op === "!=";
+}
+
+function isOrderingOp(op: string): boolean {
+  return op === "<" || op === ">" || op === "<=" || op === ">=";
+}
+
+function applyStringEquality(op: string, left: string, right: string): number {
+  if (op === "==") return left === right ? 1 : 0;
+  return left !== right ? 1 : 0;
+}
+
+function applyStringOrdering(op: string, left: string, right: string): number {
+  if (op === "<") return left < right ? 1 : 0;
+  if (op === ">") return left > right ? 1 : 0;
+  if (op === "<=") return left <= right ? 1 : 0;
+  return left >= right ? 1 : 0;
 }
 
 // -- Call --
@@ -724,8 +756,11 @@ function evalUnary(
 
 // -- Literal --
 
-function evalLiteral(node: NumberLiteral | BooleanLiteral): number {
+function evalLiteral(
+  node: NumberLiteral | BooleanLiteral | StringLiteral,
+): EvalResult {
   if (node.type === "NumberLiteral") return node.value;
+  if (node.type === "StringLiteral") return node.value;
   return node.value ? 1 : 0;
 }
 
@@ -756,10 +791,7 @@ function evalRef(node: RefExpr, scopes: Scope[]): RefValue {
   return { __ref: true, name, mutable: node.mutable };
 }
 
-function evalDeref(
-  node: DerefExpr,
-  scopes: Scope[],
-): number | StructValue {
+function evalDeref(node: DerefExpr, scopes: Scope[]): number | StructValue {
   const val = evaluateExpr(node.operand, scopes);
   if (isRefValue(val)) {
     const scope = findScope(val.name, scopes);

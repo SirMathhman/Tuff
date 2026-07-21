@@ -10,6 +10,7 @@ import type {
   UnaryExpr,
   NumberLiteral,
   BooleanLiteral,
+  StringLiteral,
   ArrayLiteral,
   IndexAccess,
   LengthAccess,
@@ -28,12 +29,21 @@ export function inferExprType(node: Expr, scopes: Scope[]): Type | null {
   return inferComplexExprType(node, scopes);
 }
 
-function isLiteral(node: Expr): node is NumberLiteral | BooleanLiteral {
-  return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
+function isLiteral(
+  node: Expr,
+): node is NumberLiteral | BooleanLiteral | StringLiteral {
+  return (
+    node.type === "NumberLiteral" ||
+    node.type === "BooleanLiteral" ||
+    node.type === "StringLiteral"
+  );
 }
 
-function inferLiteralType(node: NumberLiteral | BooleanLiteral): Type | null {
+function inferLiteralType(
+  node: NumberLiteral | BooleanLiteral | StringLiteral,
+): Type | null {
   if (node.type === "NumberLiteral") return node.typeAnnotation;
+  if (node.type === "StringLiteral") return { kind: "str" };
   return { kind: "bool" };
 }
 
@@ -227,9 +237,48 @@ function lookupInScopes(
 function inferBinaryType(node: BinaryExpr, scopes: Scope[]): Type | null {
   const leftType = inferExprType(node.left, scopes);
   const rightType = inferExprType(node.right, scopes);
-  if (isArithmeticOp(node.op)) return leftType ?? rightType;
-  if (isComparisonOp(node.op)) return { kind: "bool" };
+  if (isArithmeticOp(node.op)) {
+    checkNoStringArithmetic(leftType, node.left.pos);
+    checkNoStringArithmetic(rightType, node.right.pos);
+    return leftType ?? rightType;
+  }
+  if (isComparisonOp(node.op)) {
+    checkStringComparison(leftType, rightType, node.left.pos, node.right.pos);
+    return { kind: "bool" };
+  }
   return null;
+}
+
+function checkNoStringArithmetic(ty: Type | null, pos?: Position): void {
+  if (ty && ty.kind === "str") {
+    throw new TypeError(
+      `strings cannot be used with arithmetic operators`,
+      pos,
+    );
+  }
+}
+
+function checkStringComparison(
+  leftType: Type | null,
+  rightType: Type | null,
+  leftPos?: Position,
+  rightPos?: Position,
+): void {
+  if (leftType && leftType.kind === "str") {
+    if (rightType && rightType.kind !== "str")
+      throw new TypeError(
+        `type mismatch: cannot compare &Str with ${typeToString(rightType)}`,
+        rightPos,
+      );
+    return;
+  }
+  if (rightType && rightType.kind === "str") {
+    if (leftType && leftType.kind !== "str")
+      throw new TypeError(
+        `type mismatch: cannot compare ${typeToString(leftType)} with &Str`,
+        leftPos,
+      );
+  }
 }
 
 function isArithmeticOp(op: string): boolean {
@@ -273,8 +322,19 @@ export function checkTypeCompatibility(
     checkArrayCompatibility(srcType, dstType, loc);
     return;
   }
+  if (isStringIncompatible(srcType, dstType)) {
+    throwTypeError(srcType, dstType, loc);
+  }
+  throwTypeError(srcType, dstType, loc);
+}
+
+function isStringIncompatible(src: Type, dst: Type): boolean {
+  return src.kind === "str" || dst.kind === "str";
+}
+
+function throwTypeError(src: Type, dst: Type, loc?: Position): never {
   throw new TypeError(
-    `type mismatch: cannot assign ${typeToString(srcType)} to ${typeToString(dstType)}`,
+    `type mismatch: cannot assign ${typeToString(src)} to ${typeToString(dst)}`,
     loc,
   );
 }

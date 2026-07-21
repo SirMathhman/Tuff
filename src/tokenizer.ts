@@ -91,6 +91,39 @@ function skipTypeAnnotation(source: string, start: number): number {
   return i;
 }
 
+function readStringLiteral(
+  source: string,
+  start: number,
+  line: number,
+  col: number,
+): { text: string; len: number } {
+  const i = start + 1; // skip opening "
+  if (i >= source.length) {
+    throw new ParseError("unterminated string literal", { line, col });
+  }
+  let end = i;
+  while (end < source.length) {
+    const ch = source[end]!;
+    if (ch === "\\") {
+      end++; // skip escape char
+      if (end >= source.length) {
+        throw new ParseError("unterminated string literal", { line, col });
+      }
+      end++; // skip escaped char
+    } else if (ch === '"') {
+      break;
+    } else {
+      end++;
+    }
+  }
+  if (end >= source.length) {
+    throw new ParseError("unterminated string literal", { line, col });
+  }
+  const inner = source.slice(start + 1, end);
+  const len = end - start + 1; // include closing "
+  return { text: '"' + inner + '"', len };
+}
+
 function isOperator(ch: string): boolean {
   return "+-*/()=;{}<>=!:,&.[\\]".includes(ch);
 }
@@ -120,31 +153,88 @@ export function tokenize(source: string): Token[] {
       advance(ch);
       i++;
     } else if (isDigit(ch)) {
-      const tokenPos = pos();
-      const numEnd = skipDigits(source, i);
-      const annEnd = skipTypeAnnotation(source, numEnd);
-      tokens.push({ text: source.slice(i, annEnd), pos: tokenPos });
-      for (let j = i; j < annEnd; j++) advance(source[j]!);
-      i = annEnd;
+      i = processNumber(source, i, tokens, pos, advance);
     } else if (isIdentStart(ch)) {
-      const tokenPos = pos();
-      const ident = readIdentifier(source, i);
-      tokens.push({ text: ident, pos: tokenPos });
-      for (let j = 0; j < ident.length; j++) advance(ident[j]!);
-      i += ident.length;
+      i = processIdent(source, i, tokens, pos, advance);
     } else if (tryMultiCharOp(source, i, tokens, pos)) {
-      const len = getMultiCharLen(tokens[tokens.length - 1]!.text);
-      for (let j = 0; j < len; j++) advance(source[i + j]!);
-      i += len;
-    } else if (isOperator(ch)) {
-      const tokenPos = pos();
-      tokens.push({ text: ch, pos: tokenPos });
-      advance(ch);
-      i++;
+      i = processMultiChar(source, tokens, i, advance);
+    } else if (ch === '"') {
+      i = processString(source, i, line, col, tokens, pos, advance);
     } else {
-      advance(ch);
+      processOther(ch, tokens, pos, advance);
       i++;
     }
   }
   return tokens;
+}
+
+function processNumber(
+  source: string,
+  i: number,
+  tokens: Token[],
+  pos: () => Position,
+  advance: (ch: string) => void,
+): number {
+  const tokenPos = pos();
+  const numEnd = skipDigits(source, i);
+  const annEnd = skipTypeAnnotation(source, numEnd);
+  tokens.push({ text: source.slice(i, annEnd), pos: tokenPos });
+  for (let j = i; j < annEnd; j++) advance(source[j]!);
+  return annEnd;
+}
+
+function processIdent(
+  source: string,
+  i: number,
+  tokens: Token[],
+  pos: () => Position,
+  advance: (ch: string) => void,
+): number {
+  const tokenPos = pos();
+  const ident = readIdentifier(source, i);
+  tokens.push({ text: ident, pos: tokenPos });
+  for (let j = 0; j < ident.length; j++) advance(ident[j]!);
+  return i + ident.length;
+}
+
+function processMultiChar(
+  source: string,
+  tokens: Token[],
+  i: number,
+  advance: (ch: string) => void,
+): number {
+  const len = getMultiCharLen(tokens[tokens.length - 1]!.text);
+  for (let j = 0; j < len; j++) advance(source[i + j]!);
+  return i + len;
+}
+
+function processString(
+  source: string,
+  i: number,
+  line: number,
+  col: number,
+  tokens: Token[],
+  pos: () => Position,
+  advance: (ch: string) => void,
+): number {
+  const tokenPos = pos();
+  const result = readStringLiteral(source, i, line, col);
+  tokens.push({ text: result.text, pos: tokenPos });
+  for (let j = 0; j < result.text.length; j++) {
+    advance(result.text[j]!);
+  }
+  return i + result.len;
+}
+
+function processOther(
+  ch: string,
+  tokens: Token[],
+  pos: () => Position,
+  advance: (ch: string) => void,
+): void {
+  if (isOperator(ch)) {
+    const tokenPos = pos();
+    tokens.push({ text: ch, pos: tokenPos });
+  }
+  advance(ch);
 }

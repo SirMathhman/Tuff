@@ -472,10 +472,84 @@ function parseFactor(p: Parser): Expr {
 
   if (isParenOrBlock(token)) return parseParenOrBlock(p, token);
   if (isBooleanToken(token)) return parseBoolean(p, token);
+  if (isStringLiteralToken(token)) return parseStringLiteral(p, token);
   if (isOperatorToken(token)) return parseOperatorFactor(p, token);
   if (isNumericToken(token)) return parseNumber(p, token);
   if (isIdentToken(token)) return parseIdentifierOrCall(p, token);
   return parseFallback(p, token);
+}
+
+function isStringLiteralToken(token: string): boolean {
+  return token.startsWith('"') && token.endsWith('"');
+}
+
+function parseStringLiteral(p: Parser, token: string): Expr {
+  const loc = curPos(p);
+  p.pos++;
+  // Extract inner content between quotes
+  const inner = token.slice(1, -1);
+  const value = decodeStringLiteral(inner);
+  const expr: Expr = { type: "StringLiteral", value, loc };
+  return parsePostfixChain(p, expr);
+}
+
+function parsePostfixChain(p: Parser, expr: Expr): Expr {
+  let current: Expr = expr;
+  while (at(p, ".") || at(p, "[")) {
+    if (at(p, ".")) {
+      const fieldLoc = curPos(p);
+      p.pos++; // '.'
+      const field = curText(p);
+      p.pos++; // field name
+      if (field === "length") {
+        current = { type: "LengthAccess", object: current, loc: fieldLoc };
+      } else {
+        current = { type: "FieldAccess", object: current, field, loc: fieldLoc };
+      }
+    } else if (at(p, "[")) {
+      const indexLoc = curPos(p);
+      p.pos++; // '['
+      const index = parseOrExpression(p);
+      if (at(p, "]")) p.pos++; // ']'
+      current = { type: "IndexAccess", object: current, index, loc: indexLoc };
+    }
+  }
+  return current;
+}
+
+function decodeStringLiteral(s: string): string {
+  let result = "";
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === "\\" && i + 1 < s.length) {
+      const next = s[i + 1];
+      switch (next) {
+        case "n":
+          result += "\n";
+          break;
+        case "t":
+          result += "\t";
+          break;
+        case "r":
+          result += "\r";
+          break;
+        case "\\":
+          result += "\\";
+          break;
+        case '"':
+          result += '"';
+          break;
+        default:
+          result += s[i];
+          break;
+      }
+      i += 2;
+    } else {
+      result += s[i]!;
+      i++;
+    }
+  }
+  return result;
 }
 
 function isBooleanToken(token: string): boolean {
@@ -658,27 +732,8 @@ function parseCall(p: Parser, name: string): CallExpr {
 
 function parseIdentifierWithChaining(p: Parser, name: string): Expr {
   const loc = curPos(p);
-  let expr: Expr = { type: "Identifier", name, loc };
-  while (at(p, ".") || at(p, "[")) {
-    if (at(p, ".")) {
-      const fieldLoc = curPos(p);
-      p.pos++; // '.'
-      const field = curText(p);
-      p.pos++; // field name
-      if (field === "length") {
-        expr = { type: "LengthAccess", object: expr, loc: fieldLoc };
-      } else {
-        expr = { type: "FieldAccess", object: expr, field, loc: fieldLoc };
-      }
-    } else if (at(p, "[")) {
-      const indexLoc = curPos(p);
-      p.pos++; // '['
-      const index = parseOrExpression(p);
-      if (at(p, "]")) p.pos++; // ']'
-      expr = { type: "IndexAccess", object: expr, index, loc: indexLoc };
-    }
-  }
-  return expr;
+  const expr: Expr = { type: "Identifier", name, loc };
+  return parsePostfixChain(p, expr);
 }
 
 function parseArrayLiteral(p: Parser): ArrayLiteral {
