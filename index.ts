@@ -10,6 +10,7 @@ type Statement =
   | LetStatement
   | AssignStatement
   | CompoundAssignStatement
+  | DerefAssignStatement
   | BlockStatement
   | IfStatement
   | WhileStatement
@@ -63,6 +64,12 @@ interface CompoundAssignStatement {
   type: "CompoundAssignStatement";
   name: string;
   op: string;
+  value: Expr;
+}
+
+interface DerefAssignStatement {
+  type: "DerefAssignStatement";
+  target: Expr;
   value: Expr;
 }
 
@@ -139,11 +146,22 @@ interface BooleanLiteral {
 interface RefExpr {
   type: "RefExpr";
   operand: Expr;
+  mutable: boolean;
 }
 
 interface DerefExpr {
   type: "DerefExpr";
   operand: Expr;
+}
+
+interface RefValue {
+  __ref: true;
+  name: string;
+  mutable: boolean;
+}
+
+function isRefValue(v: number | StructValue | RefValue): v is RefValue {
+  return typeof v === "object" && "__ref" in v;
 }
 
 // ── Scope ──────────────────────────────────────────────────────────────────
@@ -158,7 +176,7 @@ interface StructValue {
 }
 
 type Scope = {
-  env: Record<string, number | StructValue>;
+  env: Record<string, number | StructValue | RefValue>;
   mutable: Set<string>;
   types: Record<string, string | null>;
   functions: Record<string, FunctionInfo>;
@@ -195,25 +213,62 @@ function evaluateProgram(node: Program, scopes: Scope[]): number {
 }
 
 function evaluateStatement(node: Statement, scopes: Scope[]): number {
+  if (isDefStatement(node)) return evalDefStatement(node, scopes);
+  if (isAssignStatement(node)) return evalAssignStatement(node, scopes);
+  return evalControlStatement(node, scopes);
+}
+
+function isDefStatement(
+  node: Statement,
+): node is FunctionDefStatement | StructDefStatement {
+  return (
+    node.type === "FunctionDefStatement" || node.type === "StructDefStatement"
+  );
+}
+
+function evalDefStatement(
+  node: FunctionDefStatement | StructDefStatement,
+  scopes: Scope[],
+): number {
+  if (node.type === "FunctionDefStatement")
+    return evalFunctionDef(node, scopes);
+  return evalStructDef(node, scopes);
+}
+
+function isAssignStatement(
+  node: Statement,
+): node is AssignStatement | CompoundAssignStatement | DerefAssignStatement {
+  return (
+    node.type === "AssignStatement" ||
+    node.type === "CompoundAssignStatement" ||
+    node.type === "DerefAssignStatement"
+  );
+}
+
+function evalAssignStatement(
+  node: AssignStatement | CompoundAssignStatement | DerefAssignStatement,
+  scopes: Scope[],
+): number {
+  if (node.type === "AssignStatement") return evalAssign(node, scopes);
+  if (node.type === "CompoundAssignStatement")
+    return evalCompoundAssign(node, scopes);
+  return evalDerefAssign(node, scopes);
+}
+
+function evalControlStatement(node: Statement, scopes: Scope[]): number {
   switch (node.type) {
     case "ExprStatement":
       return evalExprStmt(node, scopes);
     case "LetStatement":
       return evalLet(node, scopes);
-    case "AssignStatement":
-      return evalAssign(node, scopes);
-    case "CompoundAssignStatement":
-      return evalCompoundAssign(node, scopes);
     case "BlockStatement":
       return evalBlock(node, scopes);
     case "IfStatement":
       return evalIf(node, scopes);
     case "WhileStatement":
       return evalWhile(node, scopes);
-    case "FunctionDefStatement":
-      return evalFunctionDef(node, scopes);
-    case "StructDefStatement":
-      return evalStructDef(node, scopes);
+    default:
+      return 0;
   }
 }
 
@@ -270,6 +325,23 @@ function evalCompoundAssign(
   return 0;
 }
 
+function evalDerefAssign(node: DerefAssignStatement, scopes: Scope[]): number {
+  const refVal = evaluateExpr(node.target, scopes);
+  if (!isRefValue(refVal)) {
+    throw new Error("cannot assign to non-reference value");
+  }
+  if (!refVal.mutable) {
+    throw new Error("cannot assign through immutable reference");
+  }
+  const scope = findScope(refVal.name, scopes);
+  if (!scope) {
+    throw new Error(`undefined identifier: ${refVal.name}`);
+  }
+  const value = evaluateExpr(node.value, scopes);
+  scope.env[refVal.name] = typeof value === "number" ? value : 0;
+  return 0;
+}
+
 function evalStructDef(node: StructDefStatement, scopes: Scope[]): number {
   const scope = scopes[scopes.length - 1]!;
   if (node.name in scope.structs) {
@@ -285,6 +357,14 @@ function evalStructLiteral(node: StructLiteral, scopes: Scope[]): StructValue {
   if (!structDef) {
     throw new Error(`undefined struct: ${node.structName}`);
   }
+  validateStructFields(node, structDef);
+  return buildStructFields(node, structDef, scopes);
+}
+
+function validateStructFields(
+  node: StructLiteral,
+  structDef: StructField[],
+): void {
   const definedFields = new Set(structDef.map((f) => f.name));
   const providedFields = new Set(node.fields.map((f) => f.name));
   for (const field of providedFields) {
@@ -297,6 +377,13 @@ function evalStructLiteral(node: StructLiteral, scopes: Scope[]): StructValue {
       throw new Error(`missing field "${field}" in ${node.structName} literal`);
     }
   }
+}
+
+function buildStructFields(
+  node: StructLiteral,
+  structDef: StructField[],
+  scopes: Scope[],
+): StructValue {
   const fields: StructValue = {};
   for (const field of node.fields) {
     const val = evaluateExpr(field.value, scopes);
@@ -305,9 +392,17 @@ function evalStructLiteral(node: StructLiteral, scopes: Scope[]): StructValue {
       const valType = inferExprType(field.value, scopes);
       checkTypeCompatibility(valType, defField.typeAnnotation);
     }
-    fields[field.name] = typeof val === "number" ? val : val;
+    fields[field.name] = toNumberOrStruct(val);
   }
   return fields;
+}
+
+function toNumberOrStruct(
+  val: number | StructValue | RefValue,
+): number | StructValue {
+  if (typeof val === "number") return val;
+  if (isRefValue(val)) return 0;
+  return val;
 }
 
 function evalFieldAccess(
@@ -315,6 +410,9 @@ function evalFieldAccess(
   scopes: Scope[],
 ): number | StructValue {
   const obj = evaluateExpr(node.object, scopes);
+  if (isRefValue(obj)) {
+    throw new Error(`cannot access field ${node.field} on reference value`);
+  }
   if (typeof obj === "object" && obj !== null) {
     const val = (obj as StructValue)[node.field];
     if (val === undefined)
@@ -400,7 +498,10 @@ function validateMutableTarget(name: string, scopes: Scope[]): Scope {
   return scope;
 }
 
-function evaluateExpr(node: Expr, scopes: Scope[]): number | StructValue {
+function evaluateExpr(
+  node: Expr,
+  scopes: Scope[],
+): number | StructValue | RefValue {
   switch (node.type) {
     case "NumberLiteral":
     case "BooleanLiteral":
@@ -430,7 +531,7 @@ function evalLiteral(
 function evalRefOrDeref(
   node: RefExpr | DerefExpr,
   scopes: Scope[],
-): number | StructValue {
+): number | StructValue | RefValue {
   if (node.type === "RefExpr") return evalRefExpr(node, scopes);
   return evalDerefExpr(node, scopes);
 }
@@ -438,7 +539,7 @@ function evalRefOrDeref(
 function evalStructOrField(
   node: StructLiteral | FieldAccess,
   scopes: Scope[],
-): number | StructValue {
+): number | StructValue | RefValue {
   if (node.type === "StructLiteral") return evalStructLiteral(node, scopes);
   return evalFieldAccess(node, scopes);
 }
@@ -446,19 +547,42 @@ function evalStructOrField(
 function evalIdentifier(
   node: Identifier,
   scopes: Scope[],
-): number | StructValue {
+): number | StructValue | RefValue {
   const value = lookupValue(node.name, scopes);
   if (value !== undefined) return value;
   throw new Error(`undefined identifier: ${node.name}`);
 }
 
-function evalRefExpr(node: RefExpr, scopes: Scope[]): number | StructValue {
-  const val = evaluateExpr(node.operand, scopes);
-  return val;
+function evalRefExpr(node: RefExpr, scopes: Scope[]): RefValue {
+  const operand = node.operand;
+  if (operand.type !== "Identifier") {
+    throw new Error("can only take reference of an identifier");
+  }
+  const name = operand.name;
+  const val = lookupValue(name, scopes);
+  if (val === undefined) {
+    throw new Error(`undefined identifier: ${name}`);
+  }
+  if (node.mutable) {
+    const scope = findScope(name, scopes);
+    if (!scope || !scope.mutable.has(name)) {
+      throw new Error(
+        `cannot take mutable reference to immutable variable: ${name}`,
+      );
+    }
+  }
+  return { __ref: true, name, mutable: node.mutable };
 }
 
 function evalDerefExpr(node: DerefExpr, scopes: Scope[]): number | StructValue {
   const val = evaluateExpr(node.operand, scopes);
+  if (isRefValue(val)) {
+    const scope = findScope(val.name, scopes);
+    if (scope) {
+      const stored = scope.env[val.name];
+      if (stored !== undefined && !isRefValue(stored)) return stored;
+    }
+  }
   return typeof val === "number" ? val : 0;
 }
 
@@ -477,7 +601,16 @@ function evalCall(node: CallExpr, scopes: Scope[]): number {
     const param = funcInfo.params[i]!;
     const argType = inferExprType(node.arguments[i]!, scopes);
     checkTypeCompatibility(argType, param.typeAnnotation);
-    const argValue = evaluateExpr(node.arguments[i]!, scopes);
+    let argValue = evaluateExpr(node.arguments[i]!, scopes);
+    if (isRefValue(argValue)) {
+      const scope = findScope(argValue.name, scopes);
+      if (scope) {
+        const stored = scope.env[argValue.name];
+        if (stored !== undefined && !isRefValue(stored)) {
+          argValue = stored;
+        }
+      }
+    }
     callScope.env[param.name] = argValue;
     callScope.types[param.name] = param.typeAnnotation;
   }
@@ -559,12 +692,15 @@ function inferExprType(node: Expr, scopes: Scope[]): string | null {
 
 function inferRefType(node: RefExpr, scopes: Scope[]): string | null {
   const innerType = inferExprType(node.operand, scopes);
-  return innerType ? `&${innerType}` : null;
+  if (innerType === null) return null;
+  return node.mutable ? `&mut ${innerType}` : `&${innerType}`;
 }
 
 function inferDerefType(node: DerefExpr, scopes: Scope[]): string | null {
   const refType = inferExprType(node.operand, scopes);
-  if (refType && refType.startsWith("&")) return refType.slice(1);
+  if (refType && refType.startsWith("&")) {
+    return refType.replace(/^&mut /, "").replace(/^&/, "");
+  }
   return refType;
 }
 
@@ -649,9 +785,11 @@ function checkRefTypeCompatibility(
   srcRefType: string,
   dstRefType: string,
 ): void {
-  const srcInner = srcRefType.slice(1);
-  const dstInner = dstRefType.slice(1);
-  if (srcInner !== dstInner) {
+  const srcInner = srcRefType.replace(/^&mut /, "").replace(/^&/, "");
+  const dstInner = dstRefType.replace(/^&mut /, "").replace(/^&/, "");
+  const srcMutable = srcRefType.startsWith("&mut");
+  const dstMutable = dstRefType.startsWith("&mut");
+  if (srcInner !== dstInner || srcMutable !== dstMutable) {
     throw new Error(
       `type mismatch: cannot assign ${srcRefType} to ${dstRefType}`,
     );
@@ -751,9 +889,11 @@ function parseTypeToken(p: Parser): string | null {
     const typeToken = p.tokens[p.pos]!;
     if (typeToken === "&") {
       p.pos++; // skip '&'
+      const mutable = p.tokens[p.pos] === "mut";
+      if (mutable) p.pos++; // skip 'mut'
       const innerType = p.tokens[p.pos]!;
       p.pos++; // skip inner type
-      return `&${innerType}`;
+      return mutable ? `&mut ${innerType}` : `&${innerType}`;
     }
     p.pos++; // skip type
     return typeToken;
@@ -882,7 +1022,18 @@ function parseElse(p: Parser): ExprStatement {
   };
 }
 
-function parseAssign(p: Parser): AssignStatement | CompoundAssignStatement {
+function parseAssign(
+  p: Parser,
+): AssignStatement | CompoundAssignStatement | DerefAssignStatement {
+  const token = p.tokens[p.pos]!;
+  if (token === "*") {
+    p.pos++; // '*'
+    const target = parseFactor(p);
+    p.pos++; // '='
+    const value = parseOrExpression(p);
+    if (p.tokens[p.pos] === ";") p.pos++;
+    return { type: "DerefAssignStatement", target, value };
+  }
   const name = p.tokens[p.pos]!;
   p.pos++; // name
   const op = p.tokens[p.pos]!;
@@ -903,8 +1054,18 @@ function parseExprStmt(p: Parser): ExprStatement {
 
 function isAssignable(p: Parser, pos: number): boolean {
   if (pos >= p.tokens.length) return false;
-  const nextPos = pos + 1;
   const token = p.tokens[pos]!;
+  if (token === "*") {
+    const nextPos = pos + 1;
+    if (nextPos >= p.tokens.length) return false;
+    const afterIdent = nextPos + 1;
+    return (
+      /[a-zA-Z_]/.test(p.tokens[nextPos]!) &&
+      afterIdent < p.tokens.length &&
+      p.tokens[afterIdent] === "="
+    );
+  }
+  const nextPos = pos + 1;
   if (isKeyword(token)) return false;
   return (
     /[a-zA-Z_]/.test(token) &&
@@ -983,8 +1144,10 @@ function parseFactor(p: Parser): Expr {
   }
   if (token === "&") {
     p.pos++;
+    const mutable = p.tokens[p.pos] === "mut";
+    if (mutable) p.pos++;
     const operand = parseFactor(p);
-    return { type: "RefExpr", operand };
+    return { type: "RefExpr", operand, mutable };
   }
   if (token === "*") {
     p.pos++;
@@ -1062,7 +1225,7 @@ function findScope(name: string, scopes: Scope[]): Scope | null {
 function lookupValue(
   name: string,
   scopes: Scope[],
-): number | StructValue | undefined {
+): number | StructValue | RefValue | undefined {
   for (let i = scopes.length - 1; i >= 0; i--) {
     if (scopes[i]!.env[name] !== undefined) return scopes[i]!.env[name];
   }
