@@ -37,3 +37,19 @@ test('interpret("(2 + 3) * 4") => 20', () => {
   expect(interpret("(2 + 3) * 4")).toBe(20);
 });
 
+test('interpret("let x = (2 + 3) * 4; x") => 20', () => {
+  expect(interpret("let x = (2 + 3) * 4; x")).toBe(20);
+});
+
+test('interpret("let x = (2 + 3) * 4;") => 0', () => {
+  expect(interpret("let x = (2 + 3) * 4;")).toBe(0);
+});
+
+test('interpret("let x = 0; let x = 1; x") => 1', () => {
+  expect(interpret("let x = 0; let x = 1; x")).toBe(1);
+});
+
+test('interpret("undefinedIdentifier") => Error', () => {
+  expect(() => interpret("undefinedIdentifier")).toThrow();
+});
+
