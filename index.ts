@@ -33,20 +33,12 @@ function tokenize(source: string): string[] {
     if (/\s/.test(ch)) {
       i++;
     } else if (/\d/.test(ch)) {
-      let num = '';
-      while (i < source.length && /\d/.test(source[i]!)) {
-        num += source[i]!;
-        i++;
-      }
-      tokens.push(num);
+      tokens.push(readNumber(source, i));
+      i = skipDigits(source, i);
     } else if (/[a-zA-Z_]/.test(ch)) {
-      let ident = '';
-      while (i < source.length && /[a-zA-Z0-9_]/.test(source[i]!)) {
-        ident += source[i]!;
-        i++;
-      }
-      tokens.push(ident);
-    } else if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '(' || ch === ')' || ch === '=' || ch === ';') {
+      tokens.push(readIdentifier(source, i));
+      i = skipIdentifier(source, i);
+    } else if (isOperator(ch)) {
       tokens.push(ch);
       i++;
     } else {
@@ -54,6 +46,38 @@ function tokenize(source: string): string[] {
     }
   }
   return tokens;
+}
+
+function readNumber(source: string, start: number): string {
+  let num = '';
+  for (let i = start; i < source.length && /\d/.test(source[i]!); i++) {
+    num += source[i]!;
+  }
+  return num;
+}
+
+function skipDigits(source: string, start: number): number {
+  let i = start;
+  while (i < source.length && /\d/.test(source[i]!)) i++;
+  return i;
+}
+
+function readIdentifier(source: string, start: number): string {
+  let ident = '';
+  for (let i = start; i < source.length && /[a-zA-Z0-9_]/.test(source[i]!); i++) {
+    ident += source[i]!;
+  }
+  return ident;
+}
+
+function skipIdentifier(source: string, start: number): number {
+  let i = start;
+  while (i < source.length && /[a-zA-Z0-9_]/.test(source[i]!)) i++;
+  return i;
+}
+
+function isOperator(ch: string): boolean {
+  return '+-*/()=;'.includes(ch);
 }
 
 function parseExpression(tokens: string[], ctx: { pos: number; env: Record<string, number> }): number {
