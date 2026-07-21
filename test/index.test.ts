@@ -98,7 +98,9 @@ test('interpret("let mut x = 0; if (false) x = 3; else x = 5; x") => 5', () => {
 });
 
 test('interpret("let mut x = 0; if (false) { x = 3; } else { x = 5; } x") => 5', () => {
-  expect(interpret("let mut x = 0; if (false) { x = 3; } else { x = 5; } x")).toBe(5);
+  expect(
+    interpret("let mut x = 0; if (false) { x = 3; } else { x = 5; } x"),
+  ).toBe(5);
 });
 
 test('interpret("let mut x = 0; if (false) { x = 3; } x") => 0', () => {
@@ -106,7 +108,11 @@ test('interpret("let mut x = 0; if (false) { x = 3; } x") => 0', () => {
 });
 
 test('interpret("let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x") => 2', () => {
-  expect(interpret("let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x")).toBe(2);
+  expect(
+    interpret(
+      "let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x",
+    ),
+  ).toBe(2);
 });
 
 test('interpret("let mut x = 1; x += 2; x") => 3', () => {
@@ -154,7 +160,9 @@ test('interpret("let mut x = 0; if (1) x = 1; x") => Error', () => {
 });
 
 test('interpret("let mut x: U8 = 0; if (true) x = false; x") => Error', () => {
-  expect(() => interpret("let mut x: U8 = 0; if (true) x = false; x")).toThrow();
+  expect(() =>
+    interpret("let mut x: U8 = 0; if (true) x = false; x"),
+  ).toThrow();
 });
 
 test('interpret("let mut x = 0; while (1) x += 1; x") => Error', () => {
@@ -170,27 +178,41 @@ test('interpret("fn get() : I32 => 100; get()") => 100', () => {
 });
 
 test('interpret("fn get() : U16 => 100; let x : U8 = get();") => Error', () => {
-  expect(() => interpret("fn get() : U16 => 100; let x : U8 = get();")).toThrow();
+  expect(() =>
+    interpret("fn get() : U16 => 100; let x : U8 = get();"),
+  ).toThrow();
 });
 
 test('interpret("fn add(first : I32, second : I32) => first + second; add(3, 4)") => 7', () => {
-  expect(interpret("fn add(first : I32, second : I32) => first + second; add(3, 4)")).toBe(7);
+  expect(
+    interpret("fn add(first : I32, second : I32) => first + second; add(3, 4)"),
+  ).toBe(7);
 });
 
 test('interpret("fn add(x : I32, x : I32) => x + x; add(3, 4)") => Error', () => {
-  expect(() => interpret("fn add(x : I32, x : I32) => x + x; add(3, 4)")).toThrow();
+  expect(() =>
+    interpret("fn add(x : I32, x : I32) => x + x; add(3, 4)"),
+  ).toThrow();
 });
 
 test('interpret("fn get(x : U8) => x; let y = 100U16; get(y);") => Error', () => {
-  expect(() => interpret("fn get(x : U8) => x; let y = 100U16; get(y);")).toThrow();
+  expect(() =>
+    interpret("fn get(x : U8) => x; let y = 100U16; get(y);"),
+  ).toThrow();
 });
 
 test('interpret("struct Point { x : I32, y : I32 } let point : Point = Point { x : 3, y : 4 }; point.x + point.y") => 7', () => {
-  expect(interpret("struct Point { x : I32, y : I32 } let point : Point = Point { x : 3, y : 4 }; point.x + point.y")).toBe(7);
+  expect(
+    interpret(
+      "struct Point { x : I32, y : I32 } let point : Point = Point { x : 3, y : 4 }; point.x + point.y",
+    ),
+  ).toBe(7);
 });
 
 test('interpret("struct Point { x : I32 } struct Point { y : I32 }") => Error', () => {
-  expect(() => interpret("struct Point { x : I32 } struct Point { y : I32 }")).toThrow();
+  expect(() =>
+    interpret("struct Point { x : I32 } struct Point { y : I32 }"),
+  ).toThrow();
 });
 
 test('interpret("struct Point { x : I32, x : I32 }") => Error', () => {
@@ -198,19 +220,35 @@ test('interpret("struct Point { x : I32, x : I32 }") => Error', () => {
 });
 
 test('interpret("struct Point { x : I32, y : I32 } let p : Point = Point { x : 3 }; p.x") => Error', () => {
-  expect(() => interpret("struct Point { x : I32, y : I32 } let p : Point = Point { x : 3 }; p.x")).toThrow();
+  expect(() =>
+    interpret(
+      "struct Point { x : I32, y : I32 } let p : Point = Point { x : 3 }; p.x",
+    ),
+  ).toThrow();
 });
 
 test('interpret("struct Point { x : I32 } let p : Point = Point { x : 3, y : 4 }; p.x") => Error', () => {
-  expect(() => interpret("struct Point { x : I32 } let p : Point = Point { x : 3, y : 4 }; p.x")).toThrow();
+  expect(() =>
+    interpret(
+      "struct Point { x : I32 } let p : Point = Point { x : 3, y : 4 }; p.x",
+    ),
+  ).toThrow();
 });
 
 test('interpret("struct Point { x : U8 } let v = 300U16; let p : Point = Point { x : v }; p.x") => Error', () => {
-  expect(() => interpret("struct Point { x : U8 } let v = 300U16; let p : Point = Point { x : v }; p.x")).toThrow();
+  expect(() =>
+    interpret(
+      "struct Point { x : U8 } let v = 300U16; let p : Point = Point { x : v }; p.x",
+    ),
+  ).toThrow();
 });
 
 test('interpret("struct Point { x : I32, y : I32 } struct Line { start : Point, end : Point } let line : Line = Line { start : Point { x : 0, y : 0 }, end : Point { x : 10, y : 20 } }; line.start.x + line.end.y") => 20', () => {
-  expect(interpret("struct Point { x : I32, y : I32 } struct Line { start : Point, end : Point } let line : Line = Line { start : Point { x : 0, y : 0 }, end : Point { x : 10, y : 20 } }; line.start.x + line.end.y")).toBe(20);
+  expect(
+    interpret(
+      "struct Point { x : I32, y : I32 } struct Line { start : Point, end : Point } let line : Line = Line { start : Point { x : 0, y : 0 }, end : Point { x : 10, y : 20 } }; line.start.x + line.end.y",
+    ),
+  ).toBe(20);
 });
 
 test('interpret("let x = 100; let y : &I32 = &x; *y") => 100', () => {
@@ -222,5 +260,7 @@ test('interpret("let x = 100U8; let y : &U16 = &x;") => Error', () => {
 });
 
 test('interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x") => 100', () => {
-  expect(interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x")).toBe(100);
+  expect(
+    interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x"),
+  ).toBe(100);
 });

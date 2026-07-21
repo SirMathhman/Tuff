@@ -8,7 +8,7 @@
     "lint": "eslint . --fix",
     "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers",
     "circular": "madge --circular ./src",
-    "format": "bunx prettier ./src --write"
+    "format": "bunx prettier . --write"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
