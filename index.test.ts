@@ -109,3 +109,7 @@ test('interpret("let mut x = 0; if (false) x = 1; else if (true) x = 2; else x =
   expect(interpret("let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x")).toBe(2);
 });
 
+test('interpret("let mut x = 1; x += 2; x") => 3', () => {
+  expect(interpret("let mut x = 1; x += 2; x")).toBe(3);
+});
+
