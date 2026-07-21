@@ -78,14 +78,14 @@ interface BooleanLiteral {
 
 // ── Scope ──────────────────────────────────────────────────────────────────
 
-type Scope = { env: Record<string, number>; mutable: Set<string> };
+type Scope = { env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null> };
 
 // ── Entry Point ────────────────────────────────────────────────────────────
 
 export function interpret(source: string): number {
   const tokens = tokenize(source);
   const ast = parse(tokens);
-  const scopes: Scope[] = [{ env: {}, mutable: new Set() }];
+  const scopes: Scope[] = [{ env: {}, mutable: new Set(), types: {} }];
   return evaluateProgram(ast, scopes);
 }
 
@@ -117,9 +117,12 @@ function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
 
 function evalLet(node: LetStatement, scopes: Scope[]): number {
   const value = evaluateExpr(node.value, scopes);
+  const srcType = inferExprType(node.value, scopes);
+  checkTypeCompatibility(srcType, node.typeAnnotation);
   validateTypeRange(value, node.typeAnnotation);
   const scope = scopes[scopes.length - 1]!;
   scope.env[node.name] = value;
+  scope.types[node.name] = node.typeAnnotation ?? srcType;
   if (node.mutable) scope.mutable.add(node.name);
   return 0;
 }
@@ -141,7 +144,7 @@ function evalCompoundAssign(node: CompoundAssignStatement, scopes: Scope[]): num
 }
 
 function evalBlock(node: BlockStatement, scopes: Scope[]): number {
-  scopes.push({ env: {}, mutable: new Set() });
+  scopes.push({ env: {}, mutable: new Set(), types: {} });
   let result = 0;
   for (const stmt of node.body) {
     result = evaluateStatement(stmt, scopes);
@@ -219,6 +222,45 @@ function compareEquality(op: string, left: number, right: number): number {
   if (op === '==') return left == right ? 1 : 0;
   if (op === '!=') return left != right ? 1 : 0;
   throw new Error(`unknown operator: ${op}`);
+}
+
+// ── Type Inference ─────────────────────────────────────────────────────────
+
+function inferExprType(node: Expr, scopes: Scope[]): string | null {
+  switch (node.type) {
+    case 'NumberLiteral':
+      return node.typeAnnotation;
+    case 'BooleanLiteral':
+      return null;
+    case 'Identifier':
+      return lookupType(node.name, scopes);
+    case 'BinaryExpr':
+      return inferBinaryType(node, scopes);
+  }
+}
+
+function inferBinaryType(node: BinaryExpr, scopes: Scope[]): string | null {
+  const leftType = inferExprType(node.left, scopes);
+  const rightType = inferExprType(node.right, scopes);
+  if (node.op === '+' || node.op === '-' || node.op === '*' || node.op === '/') {
+    return leftType ?? rightType;
+  }
+  return null;
+}
+
+function lookupType(name: string, scopes: Scope[]): string | null {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    const scope = scopes[i]!;
+    if (name in scope.types) return scope.types[name] ?? null;
+  }
+  return null;
+}
+
+function checkTypeCompatibility(srcType: string | null, dstType: string | null): void {
+  if (dstType === null) return;
+  if (srcType !== null && srcType !== dstType) {
+    throw new Error(`type mismatch: cannot assign ${srcType} to ${dstType}`);
+  }
 }
 
 // ── Parser ─────────────────────────────────────────────────────────────────

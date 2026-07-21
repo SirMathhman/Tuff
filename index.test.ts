@@ -133,3 +133,7 @@ test('interpret("let x: U8 = 256; x") => Error', () => {
   expect(() => interpret("let x: U8 = 256; x")).toThrow();
 });
 
+test('interpret("let x = 100U16; let y: U8 = x;") => Error', () => {
+  expect(() => interpret("let x = 100U16; let y: U8 = x;")).toThrow();
+});
+
