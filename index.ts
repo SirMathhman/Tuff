@@ -62,6 +62,7 @@ interface BinaryExpr {
 interface NumberLiteral {
   type: 'NumberLiteral';
   value: number;
+  typeAnnotation: string | null;
 }
 
 interface Identifier {
@@ -238,7 +239,7 @@ function parse(tokens: string[]): Program {
 
 function parseStatement(p: Parser): Statement {
   if (p.pos >= p.tokens.length) {
-    return { type: 'ExprStatement', expression: { type: 'NumberLiteral', value: 0 } };
+    return { type: 'ExprStatement', expression: { type: 'NumberLiteral', value: 0, typeAnnotation: null } };
   }
 
   const token = p.tokens[p.pos]!;
@@ -299,7 +300,7 @@ function parseWhile(p: Parser): WhileStatement {
 
 function parseElse(p: Parser): ExprStatement {
   p.pos++;
-  return { type: 'ExprStatement', expression: { type: 'NumberLiteral', value: 0 } };
+  return { type: 'ExprStatement', expression: { type: 'NumberLiteral', value: 0, typeAnnotation: null } };
 }
 
 function parseAssign(p: Parser): AssignStatement | CompoundAssignStatement {
@@ -367,8 +368,7 @@ function parseExpression(p: Parser, minPrec: number): Expr {
 }
 
 function parseFactor(p: Parser): Expr {
-  if (p.pos >= p.tokens.length) return { type: 'NumberLiteral', value: 0 };
-
+  if (p.pos >= p.tokens.length) return { type: 'NumberLiteral', value: 0, typeAnnotation: null };
   const token = p.tokens[p.pos]!;
 
   if (token === '(') {
@@ -388,14 +388,22 @@ function parseFactor(p: Parser): Expr {
     return { type: 'BooleanLiteral', value: false };
   }
 
+  if (/\d/.test(token[0]!)) {
+    const numVal = parseInt(token, 10);
+    const typeAnn = readTypeAnnotation(token);
+    validateTypeRange(numVal, typeAnn);
+    p.pos++;
+    return { type: 'NumberLiteral', value: numVal, typeAnnotation: typeAnn };
+  }
+
   if (/[a-zA-Z_]/.test(token)) {
     p.pos++;
     return { type: 'Identifier', name: token };
   }
 
-  // Number literal
+  // Fallback: plain number
   p.pos++;
-  return { type: 'NumberLiteral', value: parseInt(token, 10) };
+  return { type: 'NumberLiteral', value: parseInt(token, 10), typeAnnotation: null };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -432,8 +440,9 @@ function tokenize(source: string): string[] {
       i++;
     } else if (/\d/.test(ch)) {
       const numEnd = skipDigits(source, i);
-      tokens.push(readNumber(source, i));
-      i = skipTypeAnnotation(source, numEnd);
+      const annEnd = skipTypeAnnotation(source, numEnd);
+      tokens.push(source.slice(i, annEnd));
+      i = annEnd;
     } else if (/[a-zA-Z_]/.test(ch)) {
       tokens.push(readIdentifier(source, i));
       i = skipIdentifier(source, i);
@@ -474,14 +483,6 @@ function getMultiCharLen(token: string): number {
   return token.length;
 }
 
-function readNumber(source: string, start: number): string {
-  let num = '';
-  for (let i = start; i < source.length && /\d/.test(source[i]!); i++) {
-    num += source[i]!;
-  }
-  return num;
-}
-
 function skipDigits(source: string, start: number): number {
   let i = start;
   while (i < source.length && /\d/.test(source[i]!)) i++;
@@ -513,4 +514,26 @@ function skipTypeAnnotation(source: string, start: number): number {
 
 function isOperator(ch: string): boolean {
   return '+-*/()=;{}<>=!'.includes(ch);
+}
+
+function readTypeAnnotation(token: string): string | null {
+  const match = token.match(/^(\d+)(U\d+)$/);
+  return match ? (match[2] ?? null) : null;
+}
+
+function validateTypeRange(value: number, typeAnn: string | null): void {
+  if (typeAnn === null) return;
+  validateUnsigned(value, typeAnn);
+}
+
+function validateUnsigned(value: number, typeAnn: string): void {
+  if (typeAnn === 'U8' && (value < 0 || value > 255)) {
+    throw new Error(`value ${value} out of range for U8 (0-255)`);
+  }
+  if (typeAnn === 'U16' && (value < 0 || value > 65535)) {
+    throw new Error(`value ${value} out of range for U16 (0-65535)`);
+  }
+  if (typeAnn === 'U32' && (value < 0 || value > 4294967295)) {
+    throw new Error(`value ${value} out of range for U32 (0-4294967295)`);
+  }
 }
