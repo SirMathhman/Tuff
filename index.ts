@@ -171,6 +171,10 @@ function evalIf(node: IfStatement, scopes: Scope[]): number {
 }
 
 function evalWhile(node: WhileStatement, scopes: Scope[]): number {
+  const condType = inferExprType(node.condition, scopes);
+  if (condType !== 'Bool') {
+    throw new Error('while condition must be Bool');
+  }
   while (evaluateExpr(node.condition, scopes)) {
     evaluateStatement(node.body, scopes);
   }
@@ -249,10 +253,17 @@ function inferExprType(node: Expr, scopes: Scope[]): string | null {
 function inferBinaryType(node: BinaryExpr, scopes: Scope[]): string | null {
   const leftType = inferExprType(node.left, scopes);
   const rightType = inferExprType(node.right, scopes);
-  if (node.op === '+' || node.op === '-' || node.op === '*' || node.op === '/') {
-    return leftType ?? rightType;
-  }
+  if (isArithmeticOp(node.op)) return leftType ?? rightType;
+  if (isComparisonOp(node.op)) return 'Bool';
   return null;
+}
+
+function isArithmeticOp(op: string): boolean {
+  return op === '+' || op === '-' || op === '*' || op === '/';
+}
+
+function isComparisonOp(op: string): boolean {
+  return op === '<' || op === '>' || op === '<=' || op === '>=' || op === '==' || op === '!=';
 }
 
 function lookupType(name: string, scopes: Scope[]): string | null {
