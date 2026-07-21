@@ -431,8 +431,9 @@ function tokenize(source: string): string[] {
     if (/\s/.test(ch)) {
       i++;
     } else if (/\d/.test(ch)) {
+      const numEnd = skipDigits(source, i);
       tokens.push(readNumber(source, i));
-      i = skipDigits(source, i);
+      i = skipTypeAnnotation(source, numEnd);
     } else if (/[a-zA-Z_]/.test(ch)) {
       tokens.push(readIdentifier(source, i));
       i = skipIdentifier(source, i);
@@ -498,6 +499,15 @@ function readIdentifier(source: string, start: number): string {
 function skipIdentifier(source: string, start: number): number {
   let i = start;
   while (i < source.length && /[a-zA-Z0-9_]/.test(source[i]!)) i++;
+  return i;
+}
+
+function skipTypeAnnotation(source: string, start: number): number {
+  let i = start;
+  if (i < source.length && source[i] === 'U') {
+    i++;
+    while (i < source.length && /\d/.test(source[i]!)) i++;
+  }
   return i;
 }
 

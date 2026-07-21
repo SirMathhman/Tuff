@@ -117,3 +117,7 @@ test('interpret("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
   expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
 });
 
+test('interpret("100U8") => 100', () => {
+  expect(interpret("100U8")).toBe(100);
+});
+
