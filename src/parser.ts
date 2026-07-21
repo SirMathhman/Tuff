@@ -381,30 +381,10 @@ function parseFactor(p: Parser): Expr {
   const token = curText(p);
 
   if (token === "(") return parseParens(p);
-  if (token === "true") {
-    const loc = curPos(p);
-    p.pos++;
-    return { type: "BooleanLiteral", value: true, loc };
-  }
-  if (token === "false") {
-    const loc = curPos(p);
-    p.pos++;
-    return { type: "BooleanLiteral", value: false, loc };
-  }
-  if (token === "&") {
-    const loc = curPos(p);
-    p.pos++;
-    const mutable = at(p, "mut");
-    if (mutable) p.pos++;
-    const operand = parseFactor(p);
-    return { type: "RefExpr", operand, mutable, loc };
-  }
-  if (token === "*") {
-    const loc = curPos(p);
-    p.pos++;
-    const operand = parseFactor(p);
-    return { type: "DerefExpr", operand, loc };
-  }
+  if (token === "true" || token === "false") return parseBoolean(p, token);
+  if (token === "&") return parseRefExpr(p);
+  if (token === "*") return parseDerefExpr(p);
+  if (token === "-") return parseUnaryMinus(p);
   if (/\d/.test(token[0]!)) return parseNumber(p, token);
   if (/[a-zA-Z_]/.test(token)) return parseIdentifierOrCall(p, token);
 
@@ -417,6 +397,35 @@ function parseFactor(p: Parser): Expr {
     typeAnnotation: null,
     loc,
   };
+}
+
+function parseBoolean(p: Parser, token: string): Expr {
+  const loc = curPos(p);
+  p.pos++;
+  return { type: "BooleanLiteral", value: token === "true", loc };
+}
+
+function parseRefExpr(p: Parser): Expr {
+  const loc = curPos(p);
+  p.pos++;
+  const mutable = at(p, "mut");
+  if (mutable) p.pos++;
+  const operand = parseFactor(p);
+  return { type: "RefExpr", operand, mutable, loc };
+}
+
+function parseDerefExpr(p: Parser): Expr {
+  const loc = curPos(p);
+  p.pos++;
+  const operand = parseFactor(p);
+  return { type: "DerefExpr", operand, loc };
+}
+
+function parseUnaryMinus(p: Parser): Expr {
+  const loc = curPos(p);
+  p.pos++;
+  const operand = parseFactor(p);
+  return { type: "UnaryExpr", op: "-", operand, loc };
 }
 
 function parseParens(p: Parser): Expr {
@@ -436,7 +445,7 @@ function parseNumber(p: Parser, token: string): Expr {
 }
 
 function readTypeAnnotation(token: string): Type | null {
-  const match = token.match(/^(\d+)(U\d+)$/);
+  const match = token.match(/^(\d+)([UI]\d+)$/);
   if (match) return parseTypeString(match[2] ?? "");
   return null;
 }

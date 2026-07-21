@@ -6,6 +6,9 @@ import type {
   FieldAccess,
   RefExpr,
   DerefExpr,
+  UnaryExpr,
+  NumberLiteral,
+  BooleanLiteral,
 } from "./ast";
 import type { Scope } from "./scope";
 import { TypeError } from "./errors";
@@ -14,29 +17,71 @@ import type { Type } from "./types";
 import { typeEquals, isRefType, isNarrower, typeToString } from "./types";
 
 export function inferExprType(node: Expr, scopes: Scope[]): Type | null {
-  switch (node.type) {
-    case "NumberLiteral":
-      return node.typeAnnotation;
-    case "BooleanLiteral":
-      return { kind: "bool" };
-    case "Identifier":
-      return lookupType(node.name, scopes);
-    case "BinaryExpr":
-      return inferBinaryType(node, scopes);
-    case "CallExpr":
-      return inferCallType(node, scopes);
-    case "StructLiteral":
-      return inferStructLiteralType(node, scopes);
-    case "FieldAccess":
-      return inferFieldAccessType(node, scopes);
-    case "RefExpr":
-      return inferRefType(node, scopes);
-    case "DerefExpr":
-      return inferDerefType(node, scopes);
-  }
+  if (isLiteral(node)) return inferLiteralType(node);
+  if (isSimpleExpr(node)) return inferSimpleExprType(node, scopes);
+  return inferComplexExprType(node, scopes);
 }
 
-export function inferRefType(node: RefExpr, scopes: Scope[]): Type | null {
+function isLiteral(
+  node: Expr,
+): node is NumberLiteral | BooleanLiteral {
+  return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
+}
+
+function inferLiteralType(
+  node: NumberLiteral | BooleanLiteral,
+): Type | null {
+  if (node.type === "NumberLiteral") return node.typeAnnotation;
+  return { kind: "bool" };
+}
+
+function isSimpleExpr(
+  node: Expr,
+): node is Identifier | BinaryExpr | CallExpr {
+  return (
+    node.type === "Identifier" ||
+    node.type === "BinaryExpr" ||
+    node.type === "CallExpr"
+  );
+}
+
+function inferComplexExprType(
+  node: StructLiteral | FieldAccess | RefExpr | DerefExpr | UnaryExpr,
+  scopes: Scope[],
+): Type | null {
+  if (node.type === "StructLiteral")
+    return inferStructLiteralType(node, scopes);
+  if (node.type === "FieldAccess") return inferFieldAccessType(node, scopes);
+  if (node.type === "RefExpr") return inferRefType(node, scopes);
+  if (node.type === "DerefExpr") return inferDerefType(node, scopes);
+  return inferUnaryType(node, scopes);
+}
+
+function inferSimpleExprType(
+  node: Identifier | BinaryExpr | CallExpr,
+  scopes: Scope[],
+): Type | null {
+  if (node.type === "Identifier") return lookupType(node.name, scopes);
+  if (node.type === "BinaryExpr") return inferBinaryType(node, scopes);
+  return inferCallType(node, scopes);
+}
+
+function inferUnaryType(node: UnaryExpr, scopes: Scope[]): Type | null {
+  const operandType = inferExprType(node.operand, scopes);
+  // Unary minus returns I32 if operand is untyped
+  if (operandType === null) return { kind: "i32" };
+  // If operand is a numeric type, return the corresponding signed type
+  if (operandType.kind === "uint") {
+    return { kind: "signed", bits: operandType.bits };
+  }
+  if (operandType.kind === "signed") {
+    return operandType;
+  }
+  if (operandType.kind === "i32") return operandType;
+  return { kind: "i32" };
+}
+
+function inferRefType(node: RefExpr, scopes: Scope[]): Type | null {
   const innerType = inferExprType(node.operand, scopes);
   if (innerType === null) return null;
   return { kind: "ref", inner: innerType, mutable: node.mutable };
@@ -132,6 +177,8 @@ export function checkTypeCompatibility(
     return;
   }
   if (isNarrower(srcType, dstType)) return;
+  // Allow I32 (untyped numeric) to widen to any signed type
+  if (srcType.kind === "i32" && dstType.kind === "signed") return;
   throw new TypeError(
     `type mismatch: cannot assign ${typeToString(srcType)} to ${typeToString(dstType)}`,
     loc,
@@ -190,14 +237,39 @@ export function validateTypeRange(
   loc?: Position,
 ): void {
   if (typeAnn === null) return;
-  if (typeAnn.kind === "uint") {
-    const bits = typeAnn.bits;
-    const maxVal = (1 << bits) - 1;
-    if (value < 0 || value > maxVal) {
-      throw new TypeError(
-        `value ${value} out of range for U${bits} (0-${maxVal})`,
-        loc,
-      );
-    }
+  if (typeAnn.kind === "uint") validateUintRange(value, typeAnn, loc);
+  if (typeAnn.kind === "signed") validateSignedRange(value, typeAnn, loc);
+}
+
+function validateUintRange(
+  value: number,
+  typeAnn: { bits: 8 | 16 | 32 | 64 },
+  loc?: Position,
+): void {
+  const maxVal =
+    typeAnn.bits === 64 ? Number.MAX_SAFE_INTEGER + 1 : (1 << typeAnn.bits) - 1;
+  if (value < 0 || value > maxVal) {
+    throw new TypeError(
+      `value ${value} out of range for U${typeAnn.bits} (0-${maxVal})`,
+      loc,
+    );
+  }
+}
+
+function validateSignedRange(
+  value: number,
+  typeAnn: { bits: 8 | 16 | 32 | 64 },
+  loc?: Position,
+): void {
+  const bits = typeAnn.bits;
+  const maxVal =
+    bits === 64 ? Number.MAX_SAFE_INTEGER + 1 : (1 << (bits - 1)) - 1;
+  const minVal =
+    bits === 64 ? -(Number.MAX_SAFE_INTEGER + 1) : -(1 << (bits - 1));
+  if (value < minVal || value > maxVal) {
+    throw new TypeError(
+      `value ${value} out of range for I${bits} (${minVal}-${maxVal})`,
+      loc,
+    );
   }
 }

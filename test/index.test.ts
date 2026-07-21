@@ -264,3 +264,99 @@ test('interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x") => 100'
     interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x"),
   ).toBe(100);
 });
+
+// ── Signed Integer Types ──────────────────────────────────────────────────
+
+test('interpret("let x: I8 = -100; x") => -100', () => {
+  expect(interpret("let x: I8 = -100; x")).toBe(-100);
+});
+
+test('interpret("let x: I8 = 127; x") => 127', () => {
+  expect(interpret("let x: I8 = 127; x")).toBe(127);
+});
+
+test('interpret("let x: I8 = 128; x") => Error', () => {
+  expect(() => interpret("let x: I8 = 128; x")).toThrow();
+});
+
+test('interpret("let x: I8 = -129; x") => Error', () => {
+  expect(() => interpret("let x: I8 = -129; x")).toThrow();
+});
+
+test('interpret("let x: I16 = -300; x") => -300', () => {
+  expect(interpret("let x: I16 = -300; x")).toBe(-300);
+});
+
+test('interpret("let x: I32 = -1000; x") => -1000', () => {
+  expect(interpret("let x: I32 = -1000; x")).toBe(-1000);
+});
+
+test('interpret("let x: I64 = -1000000; x") => -1000000', () => {
+  expect(interpret("let x: I64 = -1000000; x")).toBe(-1000000);
+});
+
+// ── U64 Type ──────────────────────────────────────────────────────────────
+
+test('interpret("let x: U64 = 1000000; x") => 1000000', () => {
+  expect(interpret("let x: U64 = 1000000; x")).toBe(1000000);
+});
+
+test('interpret("let x: U64 = 9007199254740992; x") => 9007199254740992', () => {
+  expect(interpret("let x: U64 = 9007199254740992; x")).toBe(9007199254740992);
+});
+
+test('interpret("let x: U64 = 90071992547409920; x") => Error', () => {
+  expect(() => interpret("let x: U64 = 90071992547409920; x")).toThrow();
+});
+
+// ── Signed Type Widening ──────────────────────────────────────────────────
+
+test('interpret("let x: I8 = 100; let y: I16 = x; y") => 100', () => {
+  expect(interpret("let x: I8 = 100; let y: I16 = x; y")).toBe(100);
+});
+
+test('interpret("let x: I16 = 100; let y: I8 = x;") => Error', () => {
+  expect(() => interpret("let x: I16 = 100; let y: I8 = x;")).toThrow();
+});
+
+test('interpret("let x: U8 = 100; let y: I16 = x; y") => 100', () => {
+  expect(interpret("let x: U8 = 100; let y: I16 = x; y")).toBe(100);
+});
+
+test('interpret("let x: I8 = 100; let y: U16 = x; y") => 100', () => {
+  expect(interpret("let x: I8 = 100; let y: U16 = x; y")).toBe(100);
+});
+
+test('interpret("let x: U8 = 100; let y: U64 = x; y") => 100', () => {
+  expect(interpret("let x: U8 = 100; let y: U64 = x; y")).toBe(100);
+});
+
+test('interpret("let x: I8 = 100; let y: I64 = x; y") => 100', () => {
+  expect(interpret("let x: I8 = 100; let y: I64 = x; y")).toBe(100);
+});
+
+// ── Unary Minus ───────────────────────────────────────────────────────────
+
+test('interpret("-5") => -5', () => {
+  expect(interpret("-5")).toBe(-5);
+});
+
+test('interpret("let x = 10; -x") => -10', () => {
+  expect(interpret("let x = 10; -x")).toBe(-10);
+});
+
+test('interpret("let x = 10; -x + 5") => -5', () => {
+  expect(interpret("let x = 10; -x + 5")).toBe(-5);
+});
+
+test('interpret("let x: I8 = 5; -x") => -5', () => {
+  expect(interpret("let x: I8 = 5; -x")).toBe(-5);
+});
+
+test('interpret("let x: I8 = 5; --x") => 5', () => {
+  expect(interpret("let x: I8 = 5; --x")).toBe(5);
+});
+
+test('interpret("let x: I8 = 5; let y: I16 = -x; y") => -5', () => {
+  expect(interpret("let x: I8 = 5; let y: I16 = -x; y")).toBe(-5);
+});

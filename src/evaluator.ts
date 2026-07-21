@@ -329,23 +329,50 @@ export function evaluateExpr(
   node: Expr,
   scopes: Scope[],
 ): number | StructValue | RefValue {
-  switch (node.type) {
-    case "NumberLiteral":
-    case "BooleanLiteral":
-      return evalLiteral(node);
-    case "Identifier":
-      return evalIdentifier(node, scopes);
-    case "BinaryExpr":
-      return evalBinary(node, scopes);
-    case "CallExpr":
-      return evalCall(node, scopes);
-    case "StructLiteral":
-    case "FieldAccess":
-      return evalStructOrField(node, scopes);
-    case "RefExpr":
-    case "DerefExpr":
-      return evalRefOrDeref(node, scopes);
-  }
+  if (isLiteral(node)) return evalLiteral(node);
+  if (isSimpleExpr(node)) return evalSimpleExpr(node, scopes);
+  return evalComplexExpr(node, scopes);
+}
+
+function isLiteral(node: Expr): node is NumberLiteral | BooleanLiteral {
+  return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
+}
+
+function isSimpleExpr(node: Expr): node is Identifier | BinaryExpr | CallExpr {
+  return (
+    node.type === "Identifier" ||
+    node.type === "BinaryExpr" ||
+    node.type === "CallExpr"
+  );
+}
+
+function evalComplexExpr(
+  node: StructLiteral | FieldAccess | RefExpr | DerefExpr | UnaryExpr,
+  scopes: Scope[],
+): number | StructValue | RefValue {
+  if (node.type === "StructLiteral") return evalStructLiteral(node, scopes);
+  if (node.type === "FieldAccess") return evalFieldAccess(node, scopes);
+  if (node.type === "RefExpr") return evalRefExpr(node, scopes);
+  if (node.type === "DerefExpr") return evalDerefExpr(node, scopes);
+  return evalUnary(node, scopes);
+}
+
+function evalSimpleExpr(
+  node: Identifier | BinaryExpr | CallExpr,
+  scopes: Scope[],
+): number | StructValue | RefValue {
+  if (node.type === "Identifier") return evalIdentifier(node, scopes);
+  if (node.type === "BinaryExpr") return evalBinary(node, scopes);
+  return evalCall(node, scopes);
+}
+
+function evalUnary(
+  node: UnaryExpr,
+  scopes: Scope[],
+): number | StructValue | RefValue {
+  const operand = evaluateExpr(node.operand, scopes);
+  const numVal = typeof operand === "number" ? operand : 0;
+  return -numVal;
 }
 
 function evalLiteral(
@@ -353,22 +380,6 @@ function evalLiteral(
 ): number | StructValue {
   if (node.type === "NumberLiteral") return node.value;
   return node.value ? 1 : 0;
-}
-
-function evalRefOrDeref(
-  node: RefExpr | DerefExpr,
-  scopes: Scope[],
-): number | StructValue | RefValue {
-  if (node.type === "RefExpr") return evalRefExpr(node, scopes);
-  return evalDerefExpr(node, scopes);
-}
-
-function evalStructOrField(
-  node: StructLiteral | FieldAccess,
-  scopes: Scope[],
-): number | StructValue | RefValue {
-  if (node.type === "StructLiteral") return evalStructLiteral(node, scopes);
-  return evalFieldAccess(node, scopes);
 }
 
 function evalIdentifier(

@@ -84,7 +84,7 @@ function readIdentifier(source: string, start: number): string {
 
 function skipTypeAnnotation(source: string, start: number): number {
   let i = start;
-  if (i < source.length && source[i] === "U") {
+  if (i < source.length && (source[i] === "U" || source[i] === "I")) {
     i++;
     while (i < source.length && /\d/.test(source[i]!)) i++;
   }

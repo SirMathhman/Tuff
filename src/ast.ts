@@ -109,7 +109,14 @@ export type Expr =
   | StructLiteral
   | FieldAccess
   | RefExpr
-  | DerefExpr;
+  | DerefExpr
+  | UnaryExpr;
+
+export interface UnaryExpr extends Node {
+  type: "UnaryExpr";
+  op: "-";
+  operand: Expr;
+}
 
 export interface StructLiteral extends Node {
   type: "StructLiteral";
