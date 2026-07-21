@@ -15,6 +15,8 @@ function processStatement(tokens: string[], ctx: { pos: number; scopes: Array<{ 
   if (tokens[ctx.pos] === 'let') return processLet(tokens, ctx);
   if (isAssignment(tokens, ctx.pos)) return processAssignment(tokens, ctx);
   if (tokens[ctx.pos] === '{') return processBlock(tokens, ctx);
+  if (tokens[ctx.pos] === 'if') return processIf(tokens, ctx);
+  if (tokens[ctx.pos] === 'else') { ctx.pos++; return 0; }
   return processExpr(tokens, ctx, result);
 }
 
@@ -27,6 +29,70 @@ function processBlock(tokens: string[], ctx: { pos: number; scopes: Array<{ env:
   if (ctx.pos < tokens.length) ctx.pos++; // skip '}'
   ctx.scopes.pop();
   return 0;
+}
+
+function processIf(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
+  ctx.pos++; // skip 'if'
+  ctx.pos++; // skip '('
+  const condition = parseOrExpression(tokens, ctx);
+  ctx.pos++; // skip ')'
+  if (condition) {
+    processStatement(tokens, ctx, 0);
+    if (ctx.pos < tokens.length && tokens[ctx.pos] === 'else') {
+      ctx.pos++; // skip 'else'
+      skipStatement(tokens, ctx);
+    }
+  } else {
+    if (ctx.pos < tokens.length && tokens[ctx.pos] === 'else') {
+      ctx.pos++; // skip 'else'
+      processStatement(tokens, ctx, 0);
+    } else {
+      skipStatement(tokens, ctx); // skip the then-branch
+    }
+  }
+  return 0;
+}
+
+function skipStatement(tokens: string[], ctx: { pos: number }): void {
+  if (ctx.pos >= tokens.length) return;
+  if (tokens[ctx.pos] === '{') return skipBlock(tokens, ctx);
+  if (tokens[ctx.pos] === 'if') return skipIf(tokens, ctx);
+  skipSimple(tokens, ctx);
+}
+
+function skipBlock(tokens: string[], ctx: { pos: number }): void {
+  let depth = 1;
+  ctx.pos++;
+  while (ctx.pos < tokens.length && depth > 0) {
+    if (tokens[ctx.pos] === '{') depth++;
+    if (tokens[ctx.pos] === '}') depth--;
+    ctx.pos++;
+  }
+}
+
+function skipIf(tokens: string[], ctx: { pos: number }): void {
+  ctx.pos++; // skip 'if'
+  if (ctx.pos < tokens.length) ctx.pos++; // skip '('
+  skipParen(tokens, ctx);
+  skipStatement(tokens, ctx);
+  if (ctx.pos < tokens.length && tokens[ctx.pos] === 'else') {
+    ctx.pos++;
+    skipStatement(tokens, ctx);
+  }
+}
+
+function skipParen(tokens: string[], ctx: { pos: number }): void {
+  let depth = 1;
+  while (ctx.pos < tokens.length && depth > 0) {
+    if (tokens[ctx.pos] === '(') depth++;
+    if (tokens[ctx.pos] === ')') depth--;
+    ctx.pos++;
+  }
+}
+
+function skipSimple(tokens: string[], ctx: { pos: number }): void {
+  while (ctx.pos < tokens.length && tokens[ctx.pos] !== ';') ctx.pos++;
+  if (ctx.pos < tokens.length) ctx.pos++;
 }
 
 function processLet(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
@@ -165,7 +231,7 @@ function isOperator(ch: string): boolean {
 function isAssignment(tokens: string[], pos: number): boolean {
   if (pos >= tokens.length) return false;
   const nextPos = pos + 1;
-  if (tokens[pos] === 'let' || tokens[pos] === 'mut' || tokens[pos] === 'true' || tokens[pos] === 'false') return false;
+  if (tokens[pos] === 'let' || tokens[pos] === 'mut' || tokens[pos] === 'true' || tokens[pos] === 'false' || tokens[pos] === 'if' || tokens[pos] === 'else') return false;
   return /[a-zA-Z_]/.test(tokens[pos]!) && nextPos < tokens.length && tokens[nextPos] === '=';
 }
 

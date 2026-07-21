@@ -89,3 +89,23 @@ test('interpret("true && false") => 0', () => {
   expect(interpret("true && false")).toBe(0);
 });
 
+test('interpret("let mut x = 0; if (true) x = 3; else x = 5; x") => 3', () => {
+  expect(interpret("let mut x = 0; if (true) x = 3; else x = 5; x")).toBe(3);
+});
+
+test('interpret("let mut x = 0; if (false) x = 3; else x = 5; x") => 5', () => {
+  expect(interpret("let mut x = 0; if (false) x = 3; else x = 5; x")).toBe(5);
+});
+
+test('interpret("let mut x = 0; if (false) { x = 3; } else { x = 5; } x") => 5', () => {
+  expect(interpret("let mut x = 0; if (false) { x = 3; } else { x = 5; } x")).toBe(5);
+});
+
+test('interpret("let mut x = 0; if (false) { x = 3; } x") => 0', () => {
+  expect(interpret("let mut x = 0; if (false) { x = 3; } x")).toBe(0);
+});
+
+test('interpret("let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x") => 2', () => {
+  expect(interpret("let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x")).toBe(2);
+});
+
