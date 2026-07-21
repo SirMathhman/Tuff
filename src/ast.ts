@@ -1,8 +1,15 @@
 // ── AST Types ──────────────────────────────────────────────────────────────
 
+import type { Type } from "./types";
+import type { Position } from "./errors";
+
 export interface Program {
   type: "Program";
   body: Statement[];
+}
+
+export interface Node {
+  loc?: Position;
 }
 
 export type Statement =
@@ -19,10 +26,11 @@ export type Statement =
 
 export interface StructField {
   name: string;
-  typeAnnotation: string | null;
+  typeAnnotation: Type | null;
+  loc?: Position;
 }
 
-export interface StructDefStatement {
+export interface StructDefStatement extends Node {
   type: "StructDefStatement";
   name: string;
   fields: StructField[];
@@ -30,62 +38,63 @@ export interface StructDefStatement {
 
 export interface FunctionParam {
   name: string;
-  typeAnnotation: string | null;
+  typeAnnotation: Type | null;
+  loc?: Position;
 }
 
-export interface FunctionDefStatement {
+export interface FunctionDefStatement extends Node {
   type: "FunctionDefStatement";
   name: string;
   params: FunctionParam[];
-  returnAnnotation: string | null;
+  returnAnnotation: Type | null;
   body: Expr;
 }
 
-export interface ExprStatement {
+export interface ExprStatement extends Node {
   type: "ExprStatement";
   expression: Expr;
 }
 
-export interface LetStatement {
+export interface LetStatement extends Node {
   type: "LetStatement";
   mutable: boolean;
   name: string;
-  typeAnnotation: string | null;
+  typeAnnotation: Type | null;
   value: Expr;
 }
 
-export interface AssignStatement {
+export interface AssignStatement extends Node {
   type: "AssignStatement";
   name: string;
   value: Expr;
 }
 
-export interface CompoundAssignStatement {
+export interface CompoundAssignStatement extends Node {
   type: "CompoundAssignStatement";
   name: string;
   op: string;
   value: Expr;
 }
 
-export interface DerefAssignStatement {
+export interface DerefAssignStatement extends Node {
   type: "DerefAssignStatement";
   target: Expr;
   value: Expr;
 }
 
-export interface BlockStatement {
+export interface BlockStatement extends Node {
   type: "BlockStatement";
   body: Statement[];
 }
 
-export interface IfStatement {
+export interface IfStatement extends Node {
   type: "IfStatement";
   condition: Expr;
   thenBranch: Statement;
   elseBranch: Statement | null;
 }
 
-export interface WhileStatement {
+export interface WhileStatement extends Node {
   type: "WhileStatement";
   condition: Expr;
   body: Statement;
@@ -102,54 +111,54 @@ export type Expr =
   | RefExpr
   | DerefExpr;
 
-export interface StructLiteral {
+export interface StructLiteral extends Node {
   type: "StructLiteral";
   structName: string;
-  fields: { name: string; value: Expr }[];
+  fields: { name: string; value: Expr; loc?: Position }[];
 }
 
-export interface FieldAccess {
+export interface FieldAccess extends Node {
   type: "FieldAccess";
   object: Expr;
   field: string;
 }
 
-export interface CallExpr {
+export interface CallExpr extends Node {
   type: "CallExpr";
   name: string;
   arguments: Expr[];
 }
 
-export interface BinaryExpr {
+export interface BinaryExpr extends Node {
   type: "BinaryExpr";
   left: Expr;
   op: string;
   right: Expr;
 }
 
-export interface NumberLiteral {
+export interface NumberLiteral extends Node {
   type: "NumberLiteral";
   value: number;
-  typeAnnotation: string | null;
+  typeAnnotation: Type | null;
 }
 
-export interface Identifier {
+export interface Identifier extends Node {
   type: "Identifier";
   name: string;
 }
 
-export interface BooleanLiteral {
+export interface BooleanLiteral extends Node {
   type: "BooleanLiteral";
   value: boolean;
 }
 
-export interface RefExpr {
+export interface RefExpr extends Node {
   type: "RefExpr";
   operand: Expr;
   mutable: boolean;
 }
 
-export interface DerefExpr {
+export interface DerefExpr extends Node {
   type: "DerefExpr";
   operand: Expr;
 }

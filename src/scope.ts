@@ -5,6 +5,7 @@ import type {
   StructValue,
   RefValue,
 } from "./ast";
+import type { Type } from "./types";
 
 export interface FunctionInfo {
   body: Expr;
@@ -14,9 +15,9 @@ export interface FunctionInfo {
 export type Scope = {
   env: Record<string, number | StructValue | RefValue>;
   mutable: Set<string>;
-  types: Record<string, string | null>;
+  types: Record<string, Type | null>;
   functions: Record<string, FunctionInfo>;
-  functionReturnTypes: Record<string, string | null>;
+  functionReturnTypes: Record<string, Type | null>;
   structs: Record<string, StructField[]>;
 };
 

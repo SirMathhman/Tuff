@@ -9,13 +9,16 @@ import type {
 } from "./ast";
 import type { Scope } from "./scope";
 import { TypeError } from "./errors";
+import type { Position } from "./errors";
+import type { Type } from "./types";
+import { typeEquals, isRefType, isNarrower, typeToString } from "./types";
 
-export function inferExprType(node: Expr, scopes: Scope[]): string | null {
+export function inferExprType(node: Expr, scopes: Scope[]): Type | null {
   switch (node.type) {
     case "NumberLiteral":
       return node.typeAnnotation;
     case "BooleanLiteral":
-      return "Bool";
+      return { kind: "bool" };
     case "Identifier":
       return lookupType(node.name, scopes);
     case "BinaryExpr":
@@ -33,24 +36,21 @@ export function inferExprType(node: Expr, scopes: Scope[]): string | null {
   }
 }
 
-export function inferRefType(node: RefExpr, scopes: Scope[]): string | null {
+export function inferRefType(node: RefExpr, scopes: Scope[]): Type | null {
   const innerType = inferExprType(node.operand, scopes);
   if (innerType === null) return null;
-  return node.mutable ? `&mut ${innerType}` : `&${innerType}`;
+  return { kind: "ref", inner: innerType, mutable: node.mutable };
 }
 
-export function inferDerefType(
-  node: DerefExpr,
-  scopes: Scope[],
-): string | null {
+export function inferDerefType(node: DerefExpr, scopes: Scope[]): Type | null {
   const refType = inferExprType(node.operand, scopes);
-  if (refType && refType.startsWith("&")) {
-    return refType.replace(/^&mut /, "").replace(/^&/, "");
+  if (refType && isRefType(refType)) {
+    return refType.inner;
   }
   return refType;
 }
 
-function inferCallType(node: CallExpr, scopes: Scope[]): string | null {
+function inferCallType(node: CallExpr, scopes: Scope[]): Type | null {
   const returnType = lookupFunctionReturnType(node.name, scopes);
   if (returnType !== null) return returnType;
   const funcInfo = lookupFunctionInfo(node.name, scopes);
@@ -62,7 +62,7 @@ export function lookupFunctionInfo(
   scopes: Scope[],
 ): {
   body: Expr;
-  params: { name: string; typeAnnotation: string | null }[];
+  params: { name: string; typeAnnotation: Type | null }[];
 } | null {
   for (let i = scopes.length - 1; i >= 0; i--) {
     const scope = scopes[i]!;
@@ -71,10 +71,7 @@ export function lookupFunctionInfo(
   return null;
 }
 
-function lookupFunctionReturnType(
-  name: string,
-  scopes: Scope[],
-): string | null {
+function lookupFunctionReturnType(name: string, scopes: Scope[]): Type | null {
   return lookupInScopes(scopes, "functionReturnTypes", name);
 }
 
@@ -82,20 +79,20 @@ function lookupInScopes(
   scopes: Scope[],
   prop: keyof Scope,
   name: string,
-): string | null {
+): Type | null {
   for (let i = scopes.length - 1; i >= 0; i--) {
     const scope = scopes[i]!;
     if (name in scope[prop])
-      return (scope[prop] as Record<string, string | null>)[name] ?? null;
+      return (scope[prop] as Record<string, Type | null>)[name] ?? null;
   }
   return null;
 }
 
-function inferBinaryType(node: BinaryExpr, scopes: Scope[]): string | null {
+function inferBinaryType(node: BinaryExpr, scopes: Scope[]): Type | null {
   const leftType = inferExprType(node.left, scopes);
   const rightType = inferExprType(node.right, scopes);
   if (isArithmeticOp(node.op)) return leftType ?? rightType;
-  if (isComparisonOp(node.op)) return "Bool";
+  if (isComparisonOp(node.op)) return { kind: "bool" };
   return null;
 }
 
@@ -114,7 +111,7 @@ function isComparisonOp(op: string): boolean {
   );
 }
 
-export function lookupType(name: string, scopes: Scope[]): string | null {
+export function lookupType(name: string, scopes: Scope[]): Type | null {
   for (let i = scopes.length - 1; i >= 0; i--) {
     const scope = scopes[i]!;
     if (name in scope.types) return scope.types[name] ?? null;
@@ -123,66 +120,63 @@ export function lookupType(name: string, scopes: Scope[]): string | null {
 }
 
 export function checkTypeCompatibility(
-  srcType: string | null,
-  dstType: string | null,
+  srcType: Type | null,
+  dstType: Type | null,
+  loc?: Position,
 ): void {
   if (dstType === null) return;
   if (srcType === null) return;
-  if (srcType === dstType) return;
+  if (typeEquals(srcType, dstType)) return;
   if (isRefType(srcType) && isRefType(dstType)) {
-    checkRefTypeCompatibility(srcType, dstType);
+    checkRefTypeCompatibility(srcType, dstType, loc);
     return;
   }
   if (isNarrower(srcType, dstType)) return;
-  throw new TypeError(`type mismatch: cannot assign ${srcType} to ${dstType}`);
-}
-
-function isRefType(typeName: string): boolean {
-  return typeName.startsWith("&");
+  throw new TypeError(
+    `type mismatch: cannot assign ${typeToString(srcType)} to ${typeToString(dstType)}`,
+    loc,
+  );
 }
 
 function checkRefTypeCompatibility(
-  srcRefType: string,
-  dstRefType: string,
+  srcRefType: Type,
+  dstRefType: Type,
+  loc?: Position,
 ): void {
-  const srcInner = srcRefType.replace(/^&mut /, "").replace(/^&/, "");
-  const dstInner = dstRefType.replace(/^&mut /, "").replace(/^&/, "");
-  const srcMutable = srcRefType.startsWith("&mut");
-  const dstMutable = dstRefType.startsWith("&mut");
-  if (srcInner !== dstInner || srcMutable !== dstMutable) {
+  if (!isRefType(srcRefType) || !isRefType(dstRefType)) return;
+  const srcInner = srcRefType.inner;
+  const dstInner = dstRefType.inner;
+  const srcMutable = srcRefType.mutable;
+  const dstMutable = dstRefType.mutable;
+  if (!typeEquals(srcInner, dstInner) || srcMutable !== dstMutable) {
     throw new TypeError(
-      `type mismatch: cannot assign ${srcRefType} to ${dstRefType}`,
+      `type mismatch: cannot assign ${typeToString(srcRefType)} to ${typeToString(dstRefType)}`,
+      loc,
     );
   }
-}
-
-function isNarrower(src: string, dst: string): boolean {
-  const srcBits = parseTypeBits(src);
-  const dstBits = parseTypeBits(dst);
-  return srcBits !== null && dstBits !== null && srcBits < dstBits;
-}
-
-function parseTypeBits(typeName: string): number | null {
-  const match = typeName.match(/^U(\d+)$/);
-  return match ? parseInt(match[1]!, 10) : null;
 }
 
 export function inferStructLiteralType(
   node: StructLiteral,
   scopes: Scope[],
-): string | null {
+): Type | null {
   const scope = scopes[scopes.length - 1]!;
-  return node.structName in scope.structs ? node.structName : null;
+  return node.structName in scope.structs
+    ? { kind: "struct", name: node.structName }
+    : null;
 }
 
 export function inferFieldAccessType(
   node: FieldAccess,
   scopes: Scope[],
-): string | null {
+): Type | null {
   const objType = inferExprType(node.object, scopes);
   if (objType === null) return null;
   const scope = scopes[scopes.length - 1]!;
-  const fields = scope.structs[objType];
+  const structName = isRefType(objType)
+    ? typeToString(objType.inner)
+    : typeToString(objType);
+  const fields = scope.structs[structName];
   if (fields) {
     const field = fields.find((f) => f.name === node.field);
     return field ? field.typeAnnotation : null;
@@ -190,19 +184,20 @@ export function inferFieldAccessType(
   return null;
 }
 
-export function validateTypeRange(value: number, typeAnn: string | null): void {
+export function validateTypeRange(
+  value: number,
+  typeAnn: Type | null,
+  loc?: Position,
+): void {
   if (typeAnn === null) return;
-  validateUnsigned(value, typeAnn);
-}
-
-function validateUnsigned(value: number, typeAnn: string): void {
-  if (typeAnn === "U8" && (value < 0 || value > 255)) {
-    throw new TypeError(`value ${value} out of range for U8 (0-255)`);
-  }
-  if (typeAnn === "U16" && (value < 0 || value > 65535)) {
-    throw new TypeError(`value ${value} out of range for U16 (0-65535)`);
-  }
-  if (typeAnn === "U32" && (value < 0 || value > 4294967295)) {
-    throw new TypeError(`value ${value} out of range for U32 (0-4294967295)`);
+  if (typeAnn.kind === "uint") {
+    const bits = typeAnn.bits;
+    const maxVal = (1 << bits) - 1;
+    if (value < 0 || value > maxVal) {
+      throw new TypeError(
+        `value ${value} out of range for U${bits} (0-${maxVal})`,
+        loc,
+      );
+    }
   }
 }

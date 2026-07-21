@@ -17,9 +17,11 @@ import type {
   WhileStatement,
   ExprStatement,
 } from "./ast";
-import type { Token } from "./errors";
+import type { Token, Position } from "./errors";
 import { ParseError } from "./errors";
 import { validateTypeRange } from "./typechecker";
+import { parseTypeString } from "./types";
+import type { Type } from "./types";
 
 interface Parser {
   tokens: Token[];
@@ -32,6 +34,10 @@ export function cur(p: Parser): Token | undefined {
 
 function curText(p: Parser): string {
   return cur(p)?.text ?? "";
+}
+
+function curPos(p: Parser): Position {
+  return cur(p)?.pos ?? { line: 0, col: 0 };
 }
 
 function at(p: Parser, ...texts: string[]): boolean {
@@ -72,6 +78,7 @@ function parseStatement(p: Parser): Statement {
 }
 
 function parseFn(p: Parser): FunctionDefStatement {
+  const loc = curPos(p);
   p.pos++; // 'fn'
   const name = curText(p);
   p.pos++; // name
@@ -88,6 +95,7 @@ function parseFn(p: Parser): FunctionDefStatement {
     params,
     body,
     returnAnnotation: returnAnn,
+    loc,
   };
 }
 
@@ -95,10 +103,11 @@ function parseParams(p: Parser): FunctionParam[] {
   const params: FunctionParam[] = [];
   const seenNames = new Set<string>();
   while (p.pos < p.tokens.length && !at(p, ")")) {
+    const loc = curPos(p);
     const name = curText(p);
     p.pos++; // param name
     if (seenNames.has(name)) {
-      throw new ParseError(`duplicate parameter: ${name}`);
+      throw new ParseError(`duplicate parameter: ${name}`, loc);
     }
     seenNames.add(name);
     const typeAnn = parseTypeToken(p);
@@ -108,7 +117,7 @@ function parseParams(p: Parser): FunctionParam[] {
   return params;
 }
 
-function parseTypeToken(p: Parser): string | null {
+function parseTypeToken(p: Parser): Type | null {
   if (at(p, ":")) {
     p.pos++; // skip ':'
     const typeToken = curText(p);
@@ -118,10 +127,11 @@ function parseTypeToken(p: Parser): string | null {
       if (mutable) p.pos++; // skip 'mut'
       const innerType = curText(p);
       p.pos++; // skip inner type
-      return mutable ? `&mut ${innerType}` : `&${innerType}`;
+      const typeStr = mutable ? `&mut ${innerType}` : `&${innerType}`;
+      return parseTypeString(typeStr);
     }
     p.pos++; // skip type
-    return typeToken;
+    return parseTypeString(typeToken);
   }
   return null;
 }
@@ -136,47 +146,51 @@ function parseCallArgs(p: Parser): Expr[] {
 }
 
 function parseStructDef(p: Parser): StructDefStatement {
+  const loc = curPos(p);
   p.pos++; // 'struct'
   const name = curText(p);
   p.pos++; // name
   p.pos++; // '{'
   const fields = parseStructFields(p);
   if (at(p, "}")) p.pos++;
-  return { type: "StructDefStatement", name, fields };
+  return { type: "StructDefStatement", name, fields, loc };
 }
 
 function parseStructFields(p: Parser): StructField[] {
   const fields: StructField[] = [];
   const seen = new Set<string>();
   while (p.pos < p.tokens.length && !at(p, "}")) {
+    const loc = curPos(p);
     const name = curText(p);
     p.pos++; // field name
     if (seen.has(name)) {
-      throw new ParseError(`duplicate struct field: ${name}`);
+      throw new ParseError(`duplicate struct field: ${name}`, loc);
     }
     seen.add(name);
     const typeAnn = parseTypeToken(p);
-    fields.push({ name, typeAnnotation: typeAnn });
+    fields.push({ name, typeAnnotation: typeAnn, loc });
     if (at(p, ",")) p.pos++;
   }
   return fields;
 }
 
 function parseStructLiteral(p: Parser, structName?: string): StructLiteral {
+  const loc = curPos(p);
   const name = structName ?? curText(p);
   if (!structName) p.pos++; // struct name
   p.pos++; // '{'
-  const fields: { name: string; value: Expr }[] = [];
+  const fields: { name: string; value: Expr; loc?: Position }[] = [];
   while (p.pos < p.tokens.length && !at(p, "}")) {
+    const fieldLoc = curPos(p);
     const fieldName = curText(p);
     p.pos++; // field name
     p.pos++; // ':'
     const value = parseOrExpression(p);
-    fields.push({ name: fieldName, value });
+    fields.push({ name: fieldName, value, loc: fieldLoc });
     if (at(p, ",")) p.pos++;
   }
   if (at(p, "}")) p.pos++;
-  return { type: "StructLiteral", structName: name, fields };
+  return { type: "StructLiteral", structName: name, fields, loc };
 }
 
 function parseReturnAnnotation(p: Parser): string | null {
@@ -184,6 +198,7 @@ function parseReturnAnnotation(p: Parser): string | null {
 }
 
 function parseLet(p: Parser): LetStatement {
+  const loc = curPos(p);
   p.pos++; // 'let'
   const mutable = at(p, "mut");
   if (mutable) p.pos++;
@@ -199,24 +214,27 @@ function parseLet(p: Parser): LetStatement {
     name,
     typeAnnotation: typeAnn,
     value,
+    loc,
   };
 }
 
-function parseTypeAnnotation(p: Parser): string | null {
+function parseTypeAnnotation(p: Parser): Type | null {
   return parseTypeToken(p);
 }
 
 function parseBlock(p: Parser): BlockStatement {
+  const loc = curPos(p);
   p.pos++; // '{'
   const body: Statement[] = [];
   while (p.pos < p.tokens.length && !at(p, "}")) {
     body.push(parseStatement(p));
   }
   if (at(p, "}")) p.pos++;
-  return { type: "BlockStatement", body };
+  return { type: "BlockStatement", body, loc };
 }
 
 function parseIf(p: Parser): IfStatement {
+  const loc = curPos(p);
   p.pos++; // 'if'
   p.pos++; // '('
   const condition = parseOrExpression(p);
@@ -227,16 +245,17 @@ function parseIf(p: Parser): IfStatement {
     p.pos++;
     elseBranch = parseStatement(p);
   }
-  return { type: "IfStatement", condition, thenBranch, elseBranch };
+  return { type: "IfStatement", condition, thenBranch, elseBranch, loc };
 }
 
 function parseWhile(p: Parser): WhileStatement {
+  const loc = curPos(p);
   p.pos++; // 'while'
   p.pos++; // '('
   const condition = parseOrExpression(p);
   if (at(p, ")")) p.pos++;
   const body = parseStatement(p);
-  return { type: "WhileStatement", condition, body };
+  return { type: "WhileStatement", condition, body, loc };
 }
 
 function parseElse(p: Parser): ExprStatement {
@@ -250,6 +269,7 @@ function parseElse(p: Parser): ExprStatement {
 function parseAssign(
   p: Parser,
 ): AssignStatement | CompoundAssignStatement | DerefAssignStatement {
+  const loc = curPos(p);
   const token = curText(p);
   if (token === "*") {
     p.pos++; // '*'
@@ -257,7 +277,7 @@ function parseAssign(
     p.pos++; // '='
     const value = parseOrExpression(p);
     if (at(p, ";")) p.pos++;
-    return { type: "DerefAssignStatement", target, value };
+    return { type: "DerefAssignStatement", target, value, loc };
   }
   const name = curText(p);
   p.pos++; // name
@@ -266,15 +286,16 @@ function parseAssign(
   const value = parseOrExpression(p);
   if (at(p, ";")) p.pos++;
   if (op === "+=") {
-    return { type: "CompoundAssignStatement", name, op, value };
+    return { type: "CompoundAssignStatement", name, op, value, loc };
   }
-  return { type: "AssignStatement", name, value };
+  return { type: "AssignStatement", name, value, loc };
 }
 
 function parseExprStmt(p: Parser): ExprStatement {
+  const loc = curPos(p);
   const expr = parseOrExpression(p);
   if (at(p, ";")) p.pos++;
-  return { type: "ExprStatement", expression: expr };
+  return { type: "ExprStatement", expression: expr, loc };
 }
 
 function isAssignable(p: Parser, pos: number): boolean {
@@ -345,9 +366,10 @@ function parseExpression(p: Parser, minPrec: number): Expr {
     const op = curText(p);
     const prec = precedence[op];
     if (prec === undefined || prec <= minPrec) break;
+    const loc = curPos(p);
     p.pos++;
     const right = parseExpression(p, prec);
-    left = { type: "BinaryExpr", left, op, right };
+    left = { type: "BinaryExpr", left, op, right, loc };
   }
 
   return left;
@@ -360,34 +382,40 @@ function parseFactor(p: Parser): Expr {
 
   if (token === "(") return parseParens(p);
   if (token === "true") {
+    const loc = curPos(p);
     p.pos++;
-    return { type: "BooleanLiteral", value: true };
+    return { type: "BooleanLiteral", value: true, loc };
   }
   if (token === "false") {
+    const loc = curPos(p);
     p.pos++;
-    return { type: "BooleanLiteral", value: false };
+    return { type: "BooleanLiteral", value: false, loc };
   }
   if (token === "&") {
+    const loc = curPos(p);
     p.pos++;
     const mutable = at(p, "mut");
     if (mutable) p.pos++;
     const operand = parseFactor(p);
-    return { type: "RefExpr", operand, mutable };
+    return { type: "RefExpr", operand, mutable, loc };
   }
   if (token === "*") {
+    const loc = curPos(p);
     p.pos++;
     const operand = parseFactor(p);
-    return { type: "DerefExpr", operand };
+    return { type: "DerefExpr", operand, loc };
   }
   if (/\d/.test(token[0]!)) return parseNumber(p, token);
   if (/[a-zA-Z_]/.test(token)) return parseIdentifierOrCall(p, token);
 
   // Fallback: plain number
+  const loc = curPos(p);
   p.pos++;
   return {
     type: "NumberLiteral",
     value: parseInt(token, 10),
     typeAnnotation: null,
+    loc,
   };
 }
 
@@ -399,16 +427,18 @@ function parseParens(p: Parser): Expr {
 }
 
 function parseNumber(p: Parser, token: string): Expr {
+  const loc = curPos(p);
   const numVal = parseInt(token, 10);
   const typeAnn = readTypeAnnotation(token);
-  validateTypeRange(numVal, typeAnn);
+  validateTypeRange(numVal, typeAnn, loc);
   p.pos++;
-  return { type: "NumberLiteral", value: numVal, typeAnnotation: typeAnn };
+  return { type: "NumberLiteral", value: numVal, typeAnnotation: typeAnn, loc };
 }
 
-function readTypeAnnotation(token: string): string | null {
+function readTypeAnnotation(token: string): Type | null {
   const match = token.match(/^(\d+)(U\d+)$/);
-  return match ? (match[2] ?? null) : null;
+  if (match) return parseTypeString(match[2] ?? "");
+  return null;
 }
 
 function parseIdentifierOrCall(p: Parser, token: string): Expr {
@@ -419,19 +449,22 @@ function parseIdentifierOrCall(p: Parser, token: string): Expr {
 }
 
 function parseCall(p: Parser, name: string): CallExpr {
+  const loc = curPos(p);
   p.pos++; // '('
   const args = parseCallArgs(p);
   if (at(p, ")")) p.pos++;
-  return { type: "CallExpr", name, arguments: args };
+  return { type: "CallExpr", name, arguments: args, loc };
 }
 
 function parseIdentifierWithFields(p: Parser, name: string): Expr {
-  let expr: Expr = { type: "Identifier", name };
+  const loc = curPos(p);
+  let expr: Expr = { type: "Identifier", name, loc };
   while (at(p, ".")) {
+    const fieldLoc = curPos(p);
     p.pos++; // '.'
     const field = curText(p);
     p.pos++; // field name
-    expr = { type: "FieldAccess", object: expr, field };
+    expr = { type: "FieldAccess", object: expr, field, loc: fieldLoc };
   }
   return expr;
 }

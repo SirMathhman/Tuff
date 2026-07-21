@@ -34,6 +34,8 @@ import {
 } from "./typechecker";
 import { RuntimeError, TypeError } from "./errors";
 import { isRefValue } from "./ast";
+import type { Type } from "./types";
+import { typeEquals } from "./types";
 
 export function evaluateProgram(node: Program, scopes: Scope[]): number {
   let result = 0;
@@ -109,7 +111,7 @@ function evalFunctionDef(node: FunctionDefStatement, scopes: Scope[]): number {
   scope.functionReturnTypes[node.name] = node.returnAnnotation;
   if (node.returnAnnotation) {
     const srcType = inferExprType(node.body, scopes);
-    checkTypeCompatibility(srcType, node.returnAnnotation);
+    checkTypeCompatibility(srcType, node.returnAnnotation, node.loc);
   }
   return 0;
 }
@@ -122,8 +124,9 @@ function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
 function evalLet(node: LetStatement, scopes: Scope[]): number {
   const value = evaluateExpr(node.value, scopes);
   const srcType = inferExprType(node.value, scopes);
-  checkTypeCompatibility(srcType, node.typeAnnotation);
-  if (typeof value === "number") validateTypeRange(value, node.typeAnnotation);
+  checkTypeCompatibility(srcType, node.typeAnnotation, node.loc);
+  if (typeof value === "number")
+    validateTypeRange(value, node.typeAnnotation, node.loc);
   const scope = scopes[scopes.length - 1]!;
   scope.env[node.name] = value;
   scope.types[node.name] = node.typeAnnotation ?? srcType;
@@ -132,10 +135,10 @@ function evalLet(node: LetStatement, scopes: Scope[]): number {
 }
 
 function evalAssign(node: AssignStatement, scopes: Scope[]): number {
-  const scope = validateMutableTarget(node.name, scopes);
+  const scope = validateMutableTarget(node.name, scopes, node.loc);
   const srcType = inferExprType(node.value, scopes);
   const dstType = scope.types[node.name] ?? null;
-  checkTypeCompatibility(srcType, dstType);
+  checkTypeCompatibility(srcType, dstType, node.loc);
   const value = evaluateExpr(node.value, scopes);
   scope.env[node.name] = typeof value === "number" ? value : 0;
   return 0;
@@ -145,7 +148,7 @@ function evalCompoundAssign(
   node: CompoundAssignStatement,
   scopes: Scope[],
 ): number {
-  const scope = validateMutableTarget(node.name, scopes);
+  const scope = validateMutableTarget(node.name, scopes, node.loc);
   const value = evaluateExpr(node.value, scopes);
   if (node.op === "+=") {
     const current = scope.env[node.name]!;
@@ -159,14 +162,17 @@ function evalCompoundAssign(
 function evalDerefAssign(node: DerefAssignStatement, scopes: Scope[]): number {
   const refVal = evaluateExpr(node.target, scopes);
   if (!isRefValue(refVal)) {
-    throw new RuntimeError("cannot assign to non-reference value");
+    throw new RuntimeError("cannot assign to non-reference value", node.loc);
   }
   if (!refVal.mutable) {
-    throw new RuntimeError("cannot assign through immutable reference");
+    throw new RuntimeError(
+      "cannot assign through immutable reference",
+      node.loc,
+    );
   }
   const scope = findScope(refVal.name, scopes);
   if (!scope) {
-    throw new RuntimeError(`undefined identifier: ${refVal.name}`);
+    throw new RuntimeError(`undefined identifier: ${refVal.name}`, node.loc);
   }
   const value = evaluateExpr(node.value, scopes);
   scope.env[refVal.name] = typeof value === "number" ? value : 0;
@@ -176,7 +182,7 @@ function evalDerefAssign(node: DerefAssignStatement, scopes: Scope[]): number {
 function evalStructDef(node: StructDefStatement, scopes: Scope[]): number {
   const scope = scopes[scopes.length - 1]!;
   if (node.name in scope.structs) {
-    throw new RuntimeError(`duplicate struct: ${node.name}`);
+    throw new RuntimeError(`duplicate struct: ${node.name}`, node.loc);
   }
   scope.structs[node.name] = node.fields;
   return 0;
@@ -186,7 +192,7 @@ function evalStructLiteral(node: StructLiteral, scopes: Scope[]): StructValue {
   const scope = scopes[scopes.length - 1]!;
   const structDef = scope.structs[node.structName];
   if (!structDef) {
-    throw new RuntimeError(`undefined struct: ${node.structName}`);
+    throw new RuntimeError(`undefined struct: ${node.structName}`, node.loc);
   }
   validateStructFields(node, structDef);
   return buildStructFields(node, structDef, scopes);
@@ -194,14 +200,16 @@ function evalStructLiteral(node: StructLiteral, scopes: Scope[]): StructValue {
 
 function validateStructFields(
   node: StructLiteral,
-  structDef: { name: string; typeAnnotation: string | null }[],
+  structDef: { name: string; typeAnnotation: Type | null }[],
 ): void {
   const definedFields = new Set(structDef.map((f) => f.name));
   const providedFields = new Set(node.fields.map((f) => f.name));
   for (const field of providedFields) {
     if (!definedFields.has(field)) {
+      const fieldLoc = node.fields.find((f) => f.name === field)?.loc;
       throw new RuntimeError(
         `unknown field "${field}" in ${node.structName} literal`,
+        fieldLoc,
       );
     }
   }
@@ -209,6 +217,7 @@ function validateStructFields(
     if (!providedFields.has(field)) {
       throw new RuntimeError(
         `missing field "${field}" in ${node.structName} literal`,
+        node.loc,
       );
     }
   }
@@ -216,7 +225,7 @@ function validateStructFields(
 
 function buildStructFields(
   node: StructLiteral,
-  structDef: { name: string; typeAnnotation: string | null }[],
+  structDef: { name: string; typeAnnotation: Type | null }[],
   scopes: Scope[],
 ): StructValue {
   const fields: StructValue = {};
@@ -225,7 +234,7 @@ function buildStructFields(
     const defField = structDef.find((f) => f.name === field.name);
     if (defField && defField.typeAnnotation) {
       const valType = inferExprType(field.value, scopes);
-      checkTypeCompatibility(valType, defField.typeAnnotation);
+      checkTypeCompatibility(valType, defField.typeAnnotation, field.loc);
     }
     fields[field.name] = toNumberOrStruct(val);
   }
@@ -248,16 +257,21 @@ function evalFieldAccess(
   if (isRefValue(obj)) {
     throw new RuntimeError(
       `cannot access field ${node.field} on reference value`,
+      node.loc,
     );
   }
   if (typeof obj === "object" && obj !== null) {
     const val = (obj as StructValue)[node.field];
     if (val === undefined)
-      throw new RuntimeError(`field ${node.field} not found on struct`);
+      throw new RuntimeError(
+        `field ${node.field} not found on struct`,
+        node.loc,
+      );
     return val;
   }
   throw new RuntimeError(
     `cannot access field ${node.field} on non-struct value`,
+    node.loc,
   );
 }
 
@@ -273,8 +287,8 @@ function evalBlock(node: BlockStatement, scopes: Scope[]): number {
 
 function evalIf(node: IfStatement, scopes: Scope[]): number {
   const condType = inferExprType(node.condition, scopes);
-  if (condType !== "Bool") {
-    throw new TypeError("if condition must be Bool");
+  if (!condType || !typeEquals(condType, { kind: "bool" })) {
+    throw new TypeError("if condition must be Bool", node.loc);
   }
   const condition = evaluateExpr(node.condition, scopes);
   if (condition) {
@@ -287,8 +301,8 @@ function evalIf(node: IfStatement, scopes: Scope[]): number {
 
 function evalWhile(node: WhileStatement, scopes: Scope[]): number {
   const condType = inferExprType(node.condition, scopes);
-  if (condType !== "Bool") {
-    throw new TypeError("while condition must be Bool");
+  if (!condType || !typeEquals(condType, { kind: "bool" })) {
+    throw new TypeError("while condition must be Bool", node.loc);
   }
   while (evaluateExpr(node.condition, scopes)) {
     evaluateStatement(node.body, scopes);
@@ -296,13 +310,17 @@ function evalWhile(node: WhileStatement, scopes: Scope[]): number {
   return 0;
 }
 
-function validateMutableTarget(name: string, scopes: Scope[]): Scope {
+function validateMutableTarget(
+  name: string,
+  scopes: Scope[],
+  loc?: Position,
+): Scope {
   if (!lookup(name, scopes)) {
-    throw new RuntimeError(`undefined identifier: ${name}`);
+    throw new RuntimeError(`undefined identifier: ${name}`, loc);
   }
   const scope = findScope(name, scopes);
   if (!scope || !scope.mutable.has(name)) {
-    throw new RuntimeError(`cannot assign to immutable variable: ${name}`);
+    throw new RuntimeError(`cannot assign to immutable variable: ${name}`, loc);
   }
   return scope;
 }
@@ -359,24 +377,28 @@ function evalIdentifier(
 ): number | StructValue | RefValue {
   const value = lookupValue(node.name, scopes);
   if (value !== undefined) return value;
-  throw new RuntimeError(`undefined identifier: ${node.name}`);
+  throw new RuntimeError(`undefined identifier: ${node.name}`, node.loc);
 }
 
 function evalRefExpr(node: RefExpr, scopes: Scope[]): RefValue {
   const operand = node.operand;
   if (operand.type !== "Identifier") {
-    throw new RuntimeError("can only take reference of an identifier");
+    throw new RuntimeError(
+      "can only take reference of an identifier",
+      node.loc,
+    );
   }
   const name = operand.name;
   const val = lookupValue(name, scopes);
   if (val === undefined) {
-    throw new RuntimeError(`undefined identifier: ${name}`);
+    throw new RuntimeError(`undefined identifier: ${name}`, node.loc);
   }
   if (node.mutable) {
     const scope = findScope(name, scopes);
     if (!scope || !scope.mutable.has(name)) {
       throw new RuntimeError(
         `cannot take mutable reference to immutable variable: ${name}`,
+        node.loc,
       );
     }
   }
@@ -398,12 +420,12 @@ function evalDerefExpr(node: DerefExpr, scopes: Scope[]): number | StructValue {
 function evalCall(node: CallExpr, scopes: Scope[]): number {
   const funcInfo = lookupFunctionInfo(node.name, scopes);
   if (funcInfo === null)
-    throw new RuntimeError(`undefined function: ${node.name}`);
+    throw new RuntimeError(`undefined function: ${node.name}`, node.loc);
   const callScope: Scope = createScope();
   for (let i = 0; i < funcInfo.params.length; i++) {
     const param = funcInfo.params[i]!;
     const argType = inferExprType(node.arguments[i]!, scopes);
-    checkTypeCompatibility(argType, param.typeAnnotation);
+    checkTypeCompatibility(argType, param.typeAnnotation, node.loc);
     let argValue = evaluateExpr(node.arguments[i]!, scopes);
     if (isRefValue(argValue)) {
       const scope = findScope(argValue.name, scopes);
