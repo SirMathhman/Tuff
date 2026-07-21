@@ -8,7 +8,7 @@ A test-driven AST-based interpreter for the Tuff language, built incrementally w
 |---|---|
 | `npm test` | Run all tests (Bun test framework) |
 | `npm run lint` | Run ESLint with auto-fix |
-| `npm run cpd` | PMD CPD duplication detection (`--minimum-tokens 50 --ignore-literals`) |
+| `npm run cpd` | PMD CPD duplication detection (`--minimum-tokens 50 --ignore-literals --ignore-identifiers`) |
 
 ## Architecture
 
@@ -19,23 +19,35 @@ A test-driven AST-based interpreter for the Tuff language, built incrementally w
 `interpret(source)` → `tokenize()` → `parse()` → `evaluateProgram(ast, scopes)` → returns last expression value (or `0`).
 
 ### AST Nodes
-- **Statements**: `ExprStatement`, `LetStatement` (with `typeAnnotation`), `AssignStatement`, `CompoundAssignStatement`, `BlockStatement`, `IfStatement`, `WhileStatement`
-- **Expressions**: `BinaryExpr`, `NumberLiteral` (with `typeAnnotation`), `Identifier`, `BooleanLiteral`
+- **Statements**: `ExprStatement`, `LetStatement` (with `typeAnnotation`), `AssignStatement`, `CompoundAssignStatement`, `BlockStatement`, `IfStatement`, `WhileStatement`, `FunctionDefStatement` (with `params`, `returnAnnotation`), `StructDefStatement` (with `fields`)
+- **Expressions**: `BinaryExpr`, `NumberLiteral` (with `typeAnnotation`), `Identifier`, `BooleanLiteral`, `CallExpr` (with `arguments`), `StructLiteral` (with `structName`, `fields`), `FieldAccess` (with `object`, `field`)
 
 ### Grammar Hierarchy (highest to lowest precedence)
-`parseFactor` (literals, identifiers, parens) → `parseTerm` (`*`, `/`) → `parseExpression` (`+`, `-`) → `parseAndExpression` (`&&`) → `parseOrExpression` (`||`)
+`parseFactor` (literals, identifiers, parens, calls, struct literals, field access) → `parseTerm` (`*`, `/`) → `parseExpression` (`+`, `-`) → `parseAndExpression` (`&&`) → `parseOrExpression` (`||`)
 
 ### Scope Model
-Stack of `{ env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null> }`. Block `{}` pushes/pops. Lookup walks innermost → outermost. `let mut` adds to `mutable` set; assignment requires mutable flag.
+Stack of `{ env: Record<string, number | StructValue>; mutable: Set<string>; types: Record<string, string | null>; functions: Record<string, FunctionInfo>; functionReturnTypes: Record<string, string | null>; structs: Record<string, StructField[]> }`. Block `{}` pushes/pops. Lookup walks innermost → outermost. `let mut` adds to `mutable` set; assignment requires mutable flag. `StructValue` is a recursive type for nested structs.
 
 ### Type System
-- **Types**: `U8` (0–255), `U16` (0–65535), `U32` (0–4294967295), `Bool`
+- **Types**: `U8` (0–255), `U16` (0–65535), `U32` (0–4294967295), `Bool`, `I32` (unvalidated), user-defined struct types
 - **Literals**: `100U8`, `256U16` — range-validated at parse/eval time
 - **Declarations**: `let x: U8 = 100` — type annotation on variable
 - **Widening**: Narrower types can widen to wider types (`U8` → `U16` OK, `U16` → `U8` Error)
 - **Comparisons**: `<`, `>`, `<=`, `>=`, `==`, `!=` produce `Bool` type
 - **Control flow**: `if` and `while` conditions must be `Bool`
 - **Assignments**: Type compatibility checked at assignment site
+
+### Functions
+- **Declaration**: `fn name(params) : ReturnType => body` — stored in scope, callable via `name(args)`
+- **Parameters**: Typed with `param : Type`, duplicate param names are rejected at parse time
+- **Return type**: Optional `: Type` annotation — checked against actual return expression
+- **Arguments**: Type-checked against parameter types at call site
+
+### Structs
+- **Definition**: `struct Name { field : Type, ... }` — stored in scope, duplicate struct names rejected
+- **Literals**: `Name { field : value, ... }` — all fields required, no extra fields allowed, field types checked against definition
+- **Field access**: `obj.field` — supports nested access (`obj.inner.field`)
+- **Nested structs**: Struct fields can reference other struct types (e.g., `Line { start : Point }`)
 
 ## Conventions
 
@@ -49,3 +61,4 @@ Stack of `{ env: Record<string, number>; mutable: Set<string>; types: Record<str
 - Parser queue gotcha: if parser emits queued statements (syntax-lowering), EOF loops must drain the queue or trailing declarations are silently dropped.
 - ASI gotcha: Never format dynamically generated JS with a newline after `return`.
 - Type inference: `inferExprType` returns `null` for untyped expressions — always handle `null` in type checks.
+- Struct values: `evaluateExpr` returns `number | StructValue` — all call sites must handle both types. Use `typeof val === 'number' ? val : 0` when a number is expected.
