@@ -10,6 +10,7 @@ type Statement = ExprStatement | LetStatement | AssignStatement | CompoundAssign
 interface FunctionDefStatement {
   type: 'FunctionDefStatement';
   name: string;
+  returnAnnotation: string | null;
   body: Expr;
 }
 
@@ -126,6 +127,10 @@ function evaluateStatement(node: Statement, scopes: Scope[]): number {
 function evalFunctionDef(node: FunctionDefStatement, scopes: Scope[]): number {
   const scope = scopes[scopes.length - 1]!;
   scope.functions[node.name] = node.body;
+  if (node.returnAnnotation) {
+    const srcType = inferExprType(node.body, scopes);
+    checkTypeCompatibility(srcType, node.returnAnnotation);
+  }
   return 0;
 }
 
@@ -374,10 +379,20 @@ function parseFn(p: Parser): FunctionDefStatement {
   p.pos++; // name
   p.pos++; // '('
   p.pos++; // ')'
+  const returnAnn = parseReturnAnnotation(p);
+  if (returnAnn) p.pos++; // skip type annotation
   p.pos++; // '=>'
   const body = parseOrExpression(p);
   if (p.tokens[p.pos] === ';') p.pos++;
-  return { type: 'FunctionDefStatement', name, body };
+  return { type: 'FunctionDefStatement', name, body, returnAnnotation: returnAnn };
+}
+
+function parseReturnAnnotation(p: Parser): string | null {
+  if (p.tokens[p.pos] === ':') {
+    p.pos++; // skip ':'
+    return p.tokens[p.pos]!;
+  }
+  return null;
 }
 
 function parseLet(p: Parser): LetStatement {

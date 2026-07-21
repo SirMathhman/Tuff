@@ -165,3 +165,7 @@ test('interpret("fn get() => 100; get()") => 100', () => {
   expect(interpret("fn get() => 100; get()")).toBe(100);
 });
 
+test('interpret("fn get() : I32 => 100; get()") => 100', () => {
+  expect(interpret("fn get() : I32 => 100; get()")).toBe(100);
+});
+
