@@ -20,7 +20,6 @@ import type {
   BinaryExpr,
   NumberLiteral,
   BooleanLiteral,
-  CharLiteral,
   Identifier,
   StructValue,
   RefValue,
@@ -62,7 +61,9 @@ function toNumber(val: EvalResult): number {
 }
 
 /** Convert an EvalResult to a number or struct/array (for storage in structs). */
-function toNumberOrStruct(val: EvalResult): number | StructValue | ArrayValue {
+function toNumberOrStruct(
+  val: EvalResult,
+): number | StructValue | ArrayValue {
   if (typeof val === "number") return val;
   if (isRefValue(val)) return 0;
   if (isClosureValue(val)) return 0;
@@ -140,7 +141,10 @@ function evalControl(node: Statement, scopes: Scope[]): EvalResult {
 
 // -- Statement evaluators --
 
-function evalFuncDef(node: FunctionDefStatement, scopes: Scope[]): EvalResult {
+function evalFuncDef(
+  node: FunctionDefStatement,
+  scopes: Scope[],
+): EvalResult {
   const scope = scopes[scopes.length - 1]!;
   scope.functions[node.name] = { body: node.body, params: node.params };
   scope.functionReturnTypes[node.name] = node.returnAnnotation;
@@ -289,7 +293,10 @@ function evalIndexAssign(
   const index = evaluateExpr(indexNode.index, scopes);
   const idx = typeof index === "number" ? index : 0;
   if (idx < 0 || idx >= objVal.length) {
-    throw new RuntimeError(`array index out of bounds: ${idx}`, indexNode.loc);
+    throw new RuntimeError(
+      `array index out of bounds: ${idx}`,
+      indexNode.loc,
+    );
   }
   const value = evaluateExpr(node.value, scopes);
   objVal[idx] = toNumberOrStruct(value);
@@ -309,7 +316,10 @@ function evalBlock(node: BlockStatement, scopes: Scope[]): EvalResult {
   return evalStmtList(node.body, scopes);
 }
 
-function evalStmtList(stmts: Statement[], scopes: Scope[]): EvalResult {
+function evalStmtList(
+  stmts: Statement[],
+  scopes: Scope[],
+): EvalResult {
   scopes.push(createScope());
   let result: EvalResult = 0;
   for (const stmt of stmts) {
@@ -366,20 +376,17 @@ function validateMutableTarget(
 
 // -- Expression evaluation --
 
-export function evaluateExpr(node: Expr, scopes: Scope[]): EvalResult {
+export function evaluateExpr(
+  node: Expr,
+  scopes: Scope[],
+): EvalResult {
   if (isLiteral(node)) return evalLiteral(node);
   if (isSimpleExpr(node)) return evalSimple(node, scopes);
   return evalComplex(node, scopes);
 }
 
-function isLiteral(
-  node: Expr,
-): node is NumberLiteral | BooleanLiteral | CharLiteral {
-  return (
-    node.type === "NumberLiteral" ||
-    node.type === "BooleanLiteral" ||
-    node.type === "CharLiteral"
-  );
+function isLiteral(node: Expr): node is NumberLiteral | BooleanLiteral {
+  return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
 }
 
 function isSimpleExpr(node: Expr): node is Identifier | BinaryExpr | CallExpr {
@@ -440,7 +447,9 @@ function evalClosure(node: ClosureExpr, scopes: Scope[]): ClosureValue {
   };
 }
 
-function buildSnapshot(scopes: Scope[]): Record<string, ClosureEnvValue> {
+function buildSnapshot(
+  scopes: Scope[],
+): Record<string, ClosureEnvValue> {
   const snapshot: Record<string, ClosureEnvValue> = {};
   for (const scope of scopes) {
     for (const [name, value] of Object.entries(scope.env)) {
@@ -473,7 +482,10 @@ function evalClosureCall(
   return evaluateExpr(closure.body, newScopes);
 }
 
-function buildClosureScopes(closure: ClosureValue, callScope: Scope): Scope[] {
+function buildClosureScopes(
+  closure: ClosureValue,
+  callScope: Scope,
+): Scope[] {
   if (closure.captureMode === "move") {
     const snapshotScope: Scope = createScope();
     snapshotScope.env = { ...(closure.snapshotEnv || {}) };
@@ -484,7 +496,10 @@ function buildClosureScopes(closure: ClosureValue, callScope: Scope): Scope[] {
 
 // -- Struct --
 
-function evalStructLit(node: StructLiteral, scopes: Scope[]): StructValue {
+function evalStructLit(
+  node: StructLiteral,
+  scopes: Scope[],
+): StructValue {
   const scope = scopes[scopes.length - 1]!;
   const structDef = scope.structs[node.structName];
   if (!structDef) {
@@ -599,7 +614,10 @@ function evalIndex(
 function evalLength(node: LengthAccess, scopes: Scope[]): number {
   const obj = evaluateExpr(node.object, scopes);
   if (!isArrayValue(obj)) {
-    throw new RuntimeError("cannot access length of non-array value", node.loc);
+    throw new RuntimeError(
+      "cannot access length of non-array value",
+      node.loc,
+    );
   }
   return obj.length;
 }
@@ -706,11 +724,8 @@ function evalUnary(
 
 // -- Literal --
 
-function evalLiteral(
-  node: NumberLiteral | BooleanLiteral | CharLiteral,
-): number {
+function evalLiteral(node: NumberLiteral | BooleanLiteral): number {
   if (node.type === "NumberLiteral") return node.value;
-  if (node.type === "CharLiteral") return node.value;
   return node.value ? 1 : 0;
 }
 
@@ -741,7 +756,10 @@ function evalRef(node: RefExpr, scopes: Scope[]): RefValue {
   return { __ref: true, name, mutable: node.mutable };
 }
 
-function evalDeref(node: DerefExpr, scopes: Scope[]): number | StructValue {
+function evalDeref(
+  node: DerefExpr,
+  scopes: Scope[],
+): number | StructValue {
   const val = evaluateExpr(node.operand, scopes);
   if (isRefValue(val)) {
     const scope = findScope(val.name, scopes);

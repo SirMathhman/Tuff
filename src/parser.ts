@@ -474,50 +474,8 @@ function parseFactor(p: Parser): Expr {
   if (isBooleanToken(token)) return parseBoolean(p, token);
   if (isOperatorToken(token)) return parseOperatorFactor(p, token);
   if (isNumericToken(token)) return parseNumber(p, token);
-  if (isCharLiteralToken(token)) return parseCharLiteral(p, token);
   if (isIdentToken(token)) return parseIdentifierOrCall(p, token);
   return parseFallback(p, token);
-}
-
-function isCharLiteralToken(token: string): boolean {
-  return token.startsWith("'") && token.endsWith("'");
-}
-
-function parseCharLiteral(p: Parser, token: string): Expr {
-  const loc = curPos(p);
-  p.pos++;
-  const inner = token.slice(1, -1); // strip quotes
-  const codePoint = decodeCharLiteral(inner);
-  return { type: "CharLiteral", value: codePoint, loc };
-}
-
-function decodeCharLiteral(inner: string): number {
-  if (inner.length === 0) {
-    throw new ParseError("empty char literal", { line: 0, col: 0 });
-  }
-  if (inner[0] === "\\") {
-    return decodeEscape(inner.slice(1));
-  }
-  return inner.codePointAt(0) ?? 0;
-}
-
-function decodeEscape(s: string): number {
-  const ch = s[0];
-  if (ch === "n") return 10;
-  if (ch === "t") return 9;
-  if (ch === "r") return 13;
-  if (ch === "\\") return 92;
-  if (ch === "'") return 39;
-  if (ch === "0") return 0;
-  return decodeUnicodeEscape(s) ?? 0;
-}
-
-function decodeUnicodeEscape(s: string): number | null {
-  if (s[0] !== "u" || s[1] !== "{") return null;
-  let end = 2;
-  while (end < s.length && s[end] !== "}") end++;
-  const hex = s.slice(2, end);
-  return parseInt(hex, 16);
 }
 
 function isBooleanToken(token: string): boolean {

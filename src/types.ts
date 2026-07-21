@@ -5,7 +5,6 @@ export type Type =
   | SignedType
   | BoolType
   | I32Type
-  | CharType
   | RefType
   | StructType
   | ArrayType
@@ -33,10 +32,6 @@ export interface BoolType {
 
 export interface I32Type {
   kind: "i32";
-}
-
-export interface CharType {
-  kind: "char";
 }
 
 export interface RefType {
@@ -68,21 +63,12 @@ export function typeToString(type: Type): string {
       return "Bool";
     case "i32":
       return "I32";
-    case "char":
-      return "Char";
-    case "struct":
-      return type.name;
-    default:
-      return typeToStringComplex(type);
-  }
-}
-
-function typeToStringComplex(type: Type): string {
-  switch (type.kind) {
     case "ref":
       return type.mutable
         ? `&mut ${typeToString(type.inner)}`
         : `&${typeToString(type.inner)}`;
+    case "struct":
+      return type.name;
     case "array":
       return `[${typeToString(type.elementType)}; ${type.size}]`;
     case "closure":
@@ -95,7 +81,6 @@ function typeToStringComplex(type: Type): string {
 export function parseTypeString(str: string): Type | null {
   if (str === "Bool") return { kind: "bool" };
   if (str === "I32") return { kind: "i32" };
-  if (str === "Char") return { kind: "char" };
   const uintMatch = str.match(/^U(8|16|32|64)$/);
   if (uintMatch) return parseUintType(uintMatch[1]!);
   const signedMatch = str.match(/^I(8|16|32|64)$/);
@@ -164,8 +149,6 @@ function typeEqualsSameKind(a: Type, b: Type): boolean {
       return b.kind === "bool";
     case "i32":
       return b.kind === "i32";
-    case "char":
-      return b.kind === "char";
     case "ref":
       return equalsRef(a, b);
     case "struct":
