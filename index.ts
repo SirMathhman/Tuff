@@ -1,194 +1,427 @@
+// ── AST Types ──────────────────────────────────────────────────────────────
+
+interface Program {
+  type: 'Program';
+  body: Statement[];
+}
+
+type Statement = ExprStatement | LetStatement | AssignStatement | CompoundAssignStatement | BlockStatement | IfStatement | WhileStatement;
+
+interface ExprStatement {
+  type: 'ExprStatement';
+  expression: Expr;
+}
+
+interface LetStatement {
+  type: 'LetStatement';
+  mutable: boolean;
+  name: string;
+  value: Expr;
+}
+
+interface AssignStatement {
+  type: 'AssignStatement';
+  name: string;
+  value: Expr;
+}
+
+interface CompoundAssignStatement {
+  type: 'CompoundAssignStatement';
+  name: string;
+  op: string;
+  value: Expr;
+}
+
+interface BlockStatement {
+  type: 'BlockStatement';
+  body: Statement[];
+}
+
+interface IfStatement {
+  type: 'IfStatement';
+  condition: Expr;
+  thenBranch: Statement;
+  elseBranch: Statement | null;
+}
+
+interface WhileStatement {
+  type: 'WhileStatement';
+  condition: Expr;
+  body: Statement;
+}
+
+type Expr = BinaryExpr | NumberLiteral | Identifier | BooleanLiteral;
+
+interface BinaryExpr {
+  type: 'BinaryExpr';
+  left: Expr;
+  op: string;
+  right: Expr;
+}
+
+interface NumberLiteral {
+  type: 'NumberLiteral';
+  value: number;
+}
+
+interface Identifier {
+  type: 'Identifier';
+  name: string;
+}
+
+interface BooleanLiteral {
+  type: 'BooleanLiteral';
+  value: boolean;
+}
+
+// ── Scope ──────────────────────────────────────────────────────────────────
+
 type Scope = { env: Record<string, number>; mutable: Set<string> };
-type Ctx = { pos: number; scopes: Scope[] };
+
+// ── Entry Point ────────────────────────────────────────────────────────────
 
 export function interpret(source: string): number {
   const tokens = tokenize(source);
+  const ast = parse(tokens);
   const scopes: Scope[] = [{ env: {}, mutable: new Set() }];
-  let result = 0;
-  const ctx: Ctx = { pos: 0, scopes };
+  return evaluateProgram(ast, scopes);
+}
 
-  while (ctx.pos < tokens.length) {
-    result = processStatement(tokens, ctx, result);
+// ── Evaluator ──────────────────────────────────────────────────────────────
+
+function evaluateProgram(node: Program, scopes: Scope[]): number {
+  let result = 0;
+  for (const stmt of node.body) {
+    result = evaluateStatement(stmt, scopes);
   }
   return result;
 }
 
-function processStatement(tokens: string[], ctx: Ctx, result: number): number {
-  if (ctx.pos >= tokens.length) return result;
-  if (tokens[ctx.pos] === 'let') return processLet(tokens, ctx);
-  if (isCompoundAssignment(tokens, ctx.pos)) return processCompoundAssignment(tokens, ctx);
-  if (isAssignment(tokens, ctx.pos)) return processAssignment(tokens, ctx);
-  if (tokens[ctx.pos] === '{') return processBlock(tokens, ctx);
-  if (tokens[ctx.pos] === 'if') return processIf(tokens, ctx);
-  if (tokens[ctx.pos] === 'else') { ctx.pos++; return 0; }
-  return processExpr(tokens, ctx, result);
+function evaluateStatement(node: Statement, scopes: Scope[]): number {
+  switch (node.type) {
+    case 'ExprStatement': return evalExprStmt(node, scopes);
+    case 'LetStatement': return evalLet(node, scopes);
+    case 'AssignStatement': return evalAssign(node, scopes);
+    case 'CompoundAssignStatement': return evalCompoundAssign(node, scopes);
+    case 'BlockStatement': return evalBlock(node, scopes);
+    case 'IfStatement': return evalIf(node, scopes);
+    case 'WhileStatement': return evalWhile(node, scopes);
+  }
 }
 
-function processBlock(tokens: string[], ctx: Ctx): number {
-  ctx.pos++; // skip '{'
-  ctx.scopes.push({ env: {}, mutable: new Set() });
-  while (ctx.pos < tokens.length && tokens[ctx.pos] !== '}') {
-    processStatement(tokens, ctx, 0);
-  }
-  if (ctx.pos < tokens.length) ctx.pos++; // skip '}'
-  ctx.scopes.pop();
+function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
+  return evaluateExpr(node.expression, scopes);
+}
+
+function evalLet(node: LetStatement, scopes: Scope[]): number {
+  const value = evaluateExpr(node.value, scopes);
+  const scope = scopes[scopes.length - 1]!;
+  scope.env[node.name] = value;
+  if (node.mutable) scope.mutable.add(node.name);
   return 0;
 }
 
-function processIf(tokens: string[], ctx: Ctx): number {
-  ctx.pos++; // skip 'if'
-  ctx.pos++; // skip '('
-  const condition = parseOrExpression(tokens, ctx);
-  ctx.pos++; // skip ')'
+function evalAssign(node: AssignStatement, scopes: Scope[]): number {
+  const scope = validateMutableTarget(node.name, scopes);
+  const value = evaluateExpr(node.value, scopes);
+  scope.env[node.name] = value;
+  return 0;
+}
+
+function evalCompoundAssign(node: CompoundAssignStatement, scopes: Scope[]): number {
+  const scope = validateMutableTarget(node.name, scopes);
+  const value = evaluateExpr(node.value, scopes);
+  if (node.op === '+=') {
+    scope.env[node.name] = scope.env[node.name]! + value;
+  }
+  return 0;
+}
+
+function evalBlock(node: BlockStatement, scopes: Scope[]): number {
+  scopes.push({ env: {}, mutable: new Set() });
+  let result = 0;
+  for (const stmt of node.body) {
+    result = evaluateStatement(stmt, scopes);
+  }
+  scopes.pop();
+  return result;
+}
+
+function evalIf(node: IfStatement, scopes: Scope[]): number {
+  const condition = evaluateExpr(node.condition, scopes);
   if (condition) {
-    processStatement(tokens, ctx, 0);
-    if (ctx.pos < tokens.length && tokens[ctx.pos] === 'else') {
-      ctx.pos++; // skip 'else'
-      skipStatement(tokens, ctx);
-    }
-  } else {
-    if (ctx.pos < tokens.length && tokens[ctx.pos] === 'else') {
-      ctx.pos++; // skip 'else'
-      processStatement(tokens, ctx, 0);
-    } else {
-      skipStatement(tokens, ctx); // skip the then-branch
-    }
+    return evaluateStatement(node.thenBranch, scopes);
+  } else if (node.elseBranch) {
+    return evaluateStatement(node.elseBranch, scopes);
   }
   return 0;
 }
 
-function skipStatement(tokens: string[], ctx: { pos: number }): void {
-  if (ctx.pos >= tokens.length) return;
-  if (tokens[ctx.pos] === '{') return skipBlock(tokens, ctx);
-  if (tokens[ctx.pos] === 'if') return skipIf(tokens, ctx);
-  skipSimple(tokens, ctx);
-}
-
-function skipBlock(tokens: string[], ctx: { pos: number }): void {
-  let depth = 1;
-  ctx.pos++;
-  while (ctx.pos < tokens.length && depth > 0) {
-    if (tokens[ctx.pos] === '{') depth++;
-    if (tokens[ctx.pos] === '}') depth--;
-    ctx.pos++;
+function evalWhile(node: WhileStatement, scopes: Scope[]): number {
+  while (evaluateExpr(node.condition, scopes)) {
+    evaluateStatement(node.body, scopes);
   }
-}
-
-function skipIf(tokens: string[], ctx: { pos: number }): void {
-  ctx.pos++; // skip 'if'
-  if (ctx.pos < tokens.length) ctx.pos++; // skip '('
-  skipParen(tokens, ctx);
-  skipStatement(tokens, ctx);
-  if (ctx.pos < tokens.length && tokens[ctx.pos] === 'else') {
-    ctx.pos++;
-    skipStatement(tokens, ctx);
-  }
-}
-
-function skipParen(tokens: string[], ctx: { pos: number }): void {
-  let depth = 1;
-  while (ctx.pos < tokens.length && depth > 0) {
-    if (tokens[ctx.pos] === '(') depth++;
-    if (tokens[ctx.pos] === ')') depth--;
-    ctx.pos++;
-  }
-}
-
-function skipSimple(tokens: string[], ctx: { pos: number }): void {
-  while (ctx.pos < tokens.length && tokens[ctx.pos] !== ';') ctx.pos++;
-  if (ctx.pos < tokens.length) ctx.pos++;
-}
-
-function processLet(tokens: string[], ctx: Ctx): number {
-  ctx.pos++; // skip 'let'
-  const isMut = ctx.pos < tokens.length && tokens[ctx.pos] === 'mut';
-  if (isMut) ctx.pos++; // skip 'mut'
-  const name = tokens[ctx.pos]!;
-  ctx.pos++; // skip identifier
-  ctx.pos++; // skip '='
-  const value = parseExpression(tokens, ctx);
-  const currentScope = ctx.scopes[ctx.scopes.length - 1]!;
-  currentScope.env[name] = value;
-  if (isMut) currentScope.mutable.add(name);
-  if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
   return 0;
 }
 
-function processAssignment(tokens: string[], ctx: Ctx): number {
-  processAssignmentOp(tokens, ctx, (scope, name, value) => { scope.env[name] = value; });
-  return 0;
-}
-
-function processCompoundAssignment(tokens: string[], ctx: Ctx): number {
-  processAssignmentOp(tokens, ctx, (scope, name, value) => { scope.env[name] = scope.env[name]! + value; });
-  return 0;
-}
-
-function processAssignmentOp(tokens: string[], ctx: Ctx, writeBack: (scope: Scope, name: string, value: number) => void): void {
-  const name = readAndSkipIdentifier(tokens, ctx);
-  ctx.pos++; // skip operator
-  const scope = validateMutableTarget(name, ctx);
-  const value = parseExpression(tokens, ctx);
-  writeBack(scope, name, value);
-  if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
-}
-
-function readAndSkipIdentifier(tokens: string[], ctx: { pos: number }): string {
-  const name = tokens[ctx.pos]!;
-  ctx.pos++;
-  return name;
-}
-
-function validateMutableTarget(name: string, ctx: Ctx): Scope {
-  if (!lookup(name, ctx)) {
+function validateMutableTarget(name: string, scopes: Scope[]): Scope {
+  if (!lookup(name, scopes)) {
     throw new Error(`undefined identifier: ${name}`);
   }
-  const scope = findScope(name, ctx);
+  const scope = findScope(name, scopes);
   if (!scope || !scope.mutable.has(name)) {
     throw new Error(`cannot assign to immutable variable: ${name}`);
   }
   return scope;
 }
 
-function processExpr(tokens: string[], ctx: Ctx, result: number): number {
-  result = parseOrExpression(tokens, ctx);
-  if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
-  return result;
+function evaluateExpr(node: Expr, scopes: Scope[]): number {
+  switch (node.type) {
+    case 'NumberLiteral': return node.value;
+    case 'BooleanLiteral': return node.value ? 1 : 0;
+    case 'Identifier': {
+      const value = lookupValue(node.name, scopes);
+      if (value !== undefined) return value;
+      throw new Error(`undefined identifier: ${node.name}`);
+    }
+    case 'BinaryExpr': return evalBinary(node, scopes);
+  }
 }
 
-function parseOrExpression(tokens: string[], ctx: Ctx): number {
-  let left = parseAndExpression(tokens, ctx);
-  while (ctx.pos < tokens.length && tokens[ctx.pos] === '||') {
-    ctx.pos++;
-    const right = parseAndExpression(tokens, ctx);
-    left = left || right;
+function evalBinary(node: BinaryExpr, scopes: Scope[]): number {
+  const left = evaluateExpr(node.left, scopes);
+  const right = evaluateExpr(node.right, scopes);
+  return applyOp(node.op, left, right);
+}
+
+function applyOp(op: string, left: number, right: number): number {
+  if (op === '+') return left + right;
+  if (op === '-') return left - right;
+  if (op === '*') return left * right;
+  if (op === '/') return left / right;
+  if (op === '||') return left || right;
+  if (op === '&&') return left && right;
+  return compareOp(op, left, right);
+}
+
+function compareOp(op: string, left: number, right: number): number {
+  if (op === '<') return left < right ? 1 : 0;
+  if (op === '>') return left > right ? 1 : 0;
+  if (op === '<=') return left <= right ? 1 : 0;
+  if (op === '>=') return left >= right ? 1 : 0;
+  return compareEquality(op, left, right);
+}
+
+function compareEquality(op: string, left: number, right: number): number {
+  if (op === '==') return left == right ? 1 : 0;
+  if (op === '!=') return left != right ? 1 : 0;
+  throw new Error(`unknown operator: ${op}`);
+}
+
+// ── Parser ─────────────────────────────────────────────────────────────────
+
+interface Parser {
+  tokens: string[];
+  pos: number;
+}
+
+function parse(tokens: string[]): Program {
+  const parser: Parser = { tokens, pos: 0 };
+  const body: Statement[] = [];
+
+  while (parser.pos < tokens.length) {
+    body.push(parseStatement(parser));
   }
+
+  return { type: 'Program', body };
+}
+
+function parseStatement(p: Parser): Statement {
+  if (p.pos >= p.tokens.length) {
+    return { type: 'ExprStatement', expression: { type: 'NumberLiteral', value: 0 } };
+  }
+
+  const token = p.tokens[p.pos]!;
+
+  if (token === 'let') return parseLet(p);
+  if (token === '{') return parseBlock(p);
+  if (token === 'if') return parseIf(p);
+  if (token === 'while') return parseWhile(p);
+  if (token === 'else') return parseElse(p);
+  if (isAssignable(p, p.pos)) return parseAssign(p);
+  return parseExprStmt(p);
+}
+
+function parseLet(p: Parser): LetStatement {
+  p.pos++; // 'let'
+  const mutable = p.tokens[p.pos] === 'mut';
+  if (mutable) p.pos++;
+  const name = p.tokens[p.pos]!;
+  p.pos++; // name
+  p.pos++; // '='
+  const value = parseOrExpression(p);
+  if (p.tokens[p.pos] === ';') p.pos++;
+  return { type: 'LetStatement', mutable, name, value };
+}
+
+function parseBlock(p: Parser): BlockStatement {
+  p.pos++; // '{'
+  const body: Statement[] = [];
+  while (p.pos < p.tokens.length && p.tokens[p.pos] !== '}') {
+    body.push(parseStatement(p));
+  }
+  if (p.tokens[p.pos] === '}') p.pos++;
+  return { type: 'BlockStatement', body };
+}
+
+function parseIf(p: Parser): IfStatement {
+  p.pos++; // 'if'
+  p.pos++; // '('
+  const condition = parseOrExpression(p);
+  if (p.tokens[p.pos] === ')') p.pos++;
+  const thenBranch = parseStatement(p);
+  let elseBranch: Statement | null = null;
+  if (p.tokens[p.pos] === 'else') {
+    p.pos++;
+    elseBranch = parseStatement(p);
+  }
+  return { type: 'IfStatement', condition, thenBranch, elseBranch };
+}
+
+function parseWhile(p: Parser): WhileStatement {
+  p.pos++; // 'while'
+  p.pos++; // '('
+  const condition = parseOrExpression(p);
+  if (p.tokens[p.pos] === ')') p.pos++;
+  const body = parseStatement(p);
+  return { type: 'WhileStatement', condition, body };
+}
+
+function parseElse(p: Parser): ExprStatement {
+  p.pos++;
+  return { type: 'ExprStatement', expression: { type: 'NumberLiteral', value: 0 } };
+}
+
+function parseAssign(p: Parser): AssignStatement | CompoundAssignStatement {
+  const name = p.tokens[p.pos]!;
+  p.pos++; // name
+  const op = p.tokens[p.pos]!;
+  p.pos++; // operator
+  const value = parseOrExpression(p);
+  if (p.tokens[p.pos] === ';') p.pos++;
+  if (op === '+=') {
+    return { type: 'CompoundAssignStatement', name, op, value };
+  }
+  return { type: 'AssignStatement', name, value };
+}
+
+function parseExprStmt(p: Parser): ExprStatement {
+  const expr = parseOrExpression(p);
+  if (p.tokens[p.pos] === ';') p.pos++;
+  return { type: 'ExprStatement', expression: expr };
+}
+
+function isAssignable(p: Parser, pos: number): boolean {
+  if (pos >= p.tokens.length) return false;
+  const nextPos = pos + 1;
+  const token = p.tokens[pos]!;
+  if (isKeyword(token)) return false;
+  return /[a-zA-Z_]/.test(token) && nextPos < p.tokens.length && isAssignOp(p.tokens[nextPos]);
+}
+
+function isKeyword(token: string): boolean {
+  return token === 'let' || token === 'mut' || token === 'true' || token === 'false' || token === 'if' || token === 'else' || token === 'while';
+}
+
+function isAssignOp(token: string | undefined): boolean {
+  return token === '=' || token === '+=';
+}
+
+// ── Expression Parser (precedence climbing) ────────────────────────────────
+
+const precedence: Record<string, number> = {
+  '||': 1,
+  '&&': 2,
+  '<': 3, '<=': 3, '>': 3, '>=': 3, '==': 3, '!=': 3,
+  '+': 4, '-': 4,
+  '*': 5, '/': 5,
+};
+
+function parseOrExpression(p: Parser): Expr {
+  return parseExpression(p, 0);
+}
+
+function parseExpression(p: Parser, minPrec: number): Expr {
+  let left = parseFactor(p);
+
+  while (p.pos < p.tokens.length) {
+    const op = p.tokens[p.pos]!;
+    const prec = precedence[op];
+    if (prec === undefined || prec <= minPrec) break;
+    p.pos++;
+    const right = parseExpression(p, prec);
+    left = { type: 'BinaryExpr', left, op, right };
+  }
+
   return left;
 }
 
-function parseAndExpression(tokens: string[], ctx: Ctx): number {
-  let left = parseExpression(tokens, ctx);
-  while (ctx.pos < tokens.length && tokens[ctx.pos] === '&&') {
-    ctx.pos++;
-    const right = parseExpression(tokens, ctx);
-    left = left && right;
+function parseFactor(p: Parser): Expr {
+  if (p.pos >= p.tokens.length) return { type: 'NumberLiteral', value: 0 };
+
+  const token = p.tokens[p.pos]!;
+
+  if (token === '(') {
+    p.pos++;
+    const expr = parseOrExpression(p);
+    if (p.tokens[p.pos] === ')') p.pos++;
+    return expr;
   }
-  return left;
+
+  if (token === 'true') {
+    p.pos++;
+    return { type: 'BooleanLiteral', value: true };
+  }
+
+  if (token === 'false') {
+    p.pos++;
+    return { type: 'BooleanLiteral', value: false };
+  }
+
+  if (/[a-zA-Z_]/.test(token)) {
+    p.pos++;
+    return { type: 'Identifier', name: token };
+  }
+
+  // Number literal
+  p.pos++;
+  return { type: 'NumberLiteral', value: parseInt(token, 10) };
 }
 
-function lookup(name: string, ctx: Ctx): boolean {
-  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
-    if (ctx.scopes[i]!.env[name] !== undefined) return true;
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function lookup(name: string, scopes: Scope[]): boolean {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    if (scopes[i]!.env[name] !== undefined) return true;
   }
   return false;
 }
 
-function findScope(name: string, ctx: Ctx): Scope | null {
-  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
-    if (ctx.scopes[i]!.env[name] !== undefined) return ctx.scopes[i]!;
+function findScope(name: string, scopes: Scope[]): Scope | null {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    if (scopes[i]!.env[name] !== undefined) return scopes[i]!;
   }
   return null;
 }
+
+function lookupValue(name: string, scopes: Scope[]): number | undefined {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    if (scopes[i]!.env[name] !== undefined) return scopes[i]!.env[name];
+  }
+  return undefined;
+}
+
+// ── Tokenizer ──────────────────────────────────────────────────────────────
 
 function tokenize(source: string): string[] {
   const tokens: string[] = [];
@@ -218,10 +451,22 @@ function tokenize(source: string): string[] {
 function tryMultiCharOp(source: string, pos: number, tokens: string[]): boolean {
   const ch = source[pos]!;
   const next = source[pos + 1];
-  if (ch === '|' && next === '|') { tokens.push('||'); return true; }
-  if (ch === '&' && next === '&') { tokens.push('&&'); return true; }
-  if (ch === '+' && next === '=') { tokens.push('+='); return true; }
+  if (isLogicalOp(ch, next)) { tokens.push(ch + next); return true; }
+  if (isAssignCompound(ch, next)) { tokens.push(ch + next); return true; }
+  if (isCompareCompound(ch, next)) { tokens.push(ch + next); return true; }
   return false;
+}
+
+function isLogicalOp(ch: string, next: string | undefined): boolean {
+  return (ch === '|' && next === '|') || (ch === '&' && next === '&');
+}
+
+function isAssignCompound(ch: string, next: string | undefined): boolean {
+  return ch === '+' && next === '=';
+}
+
+function isCompareCompound(ch: string, next: string | undefined): boolean {
+  return (ch === '<' && next === '=') || (ch === '>' && next === '=') || (ch === '!' && next === '=') || (ch === '=' && next === '=');
 }
 
 function getMultiCharLen(token: string): number {
@@ -257,78 +502,5 @@ function skipIdentifier(source: string, start: number): number {
 }
 
 function isOperator(ch: string): boolean {
-  return '+-*/()=;{}'.includes(ch);
-}
-
-function isAssignment(tokens: string[], pos: number): boolean {
-  return isAssignable(tokens, pos) && tokens[pos + 1] === '=';
-}
-
-function isCompoundAssignment(tokens: string[], pos: number): boolean {
-  return isAssignable(tokens, pos) && tokens[pos + 1] === '+=';
-}
-
-function isAssignable(tokens: string[], pos: number): boolean {
-  if (pos >= tokens.length) return false;
-  const nextPos = pos + 1;
-  if (tokens[pos] === 'let' || tokens[pos] === 'mut' || tokens[pos] === 'true' || tokens[pos] === 'false' || tokens[pos] === 'if' || tokens[pos] === 'else') return false;
-  return /[a-zA-Z_]/.test(tokens[pos]!) && nextPos < tokens.length;
-}
-
-function parseExpression(tokens: string[], ctx: Ctx): number {
-  let left = parseTerm(tokens, ctx);
-  while (ctx.pos < tokens.length && (tokens[ctx.pos] === '+' || tokens[ctx.pos] === '-')) {
-    const op = tokens[ctx.pos]!;
-    ctx.pos++;
-    const right = parseTerm(tokens, ctx);
-    left = op === '+' ? left + right : left - right;
-  }
-  return left;
-}
-
-function parseTerm(tokens: string[], ctx: Ctx): number {
-  let left = parseFactor(tokens, ctx);
-  while (ctx.pos < tokens.length && (tokens[ctx.pos] === '*' || tokens[ctx.pos] === '/')) {
-    const op = tokens[ctx.pos]!;
-    ctx.pos++;
-    const right = parseFactor(tokens, ctx);
-    left = op === '*' ? left * right : left / right;
-  }
-  return left;
-}
-
-function parseFactor(tokens: string[], ctx: Ctx): number {
-  if (ctx.pos >= tokens.length) return 0;
-  const token = tokens[ctx.pos]!;
-  if (token === '(') {
-    ctx.pos++;
-    const result = parseExpression(tokens, ctx);
-    if (ctx.pos < tokens.length && tokens[ctx.pos] === ')') {
-      ctx.pos++;
-    }
-    return result;
-  }
-  if (token === 'true') {
-    ctx.pos++;
-    return 1;
-  }
-  if (token === 'false') {
-    ctx.pos++;
-    return 0;
-  }
-  if (/[a-zA-Z_]/.test(token)) {
-    ctx.pos++;
-    const value = lookupValue(token, ctx);
-    if (value !== undefined) return value;
-    throw new Error(`undefined identifier: ${token}`);
-  }
-  ctx.pos++;
-  return parseInt(token, 10);
-}
-
-function lookupValue(name: string, ctx: Ctx): number | undefined {
-  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
-    if (ctx.scopes[i]!.env[name] !== undefined) return ctx.scopes[i]!.env[name];
-  }
-  return undefined;
+  return '+-*/()=;{}<>=!'.includes(ch);
 }
