@@ -4,6 +4,7 @@ import type {
   StructField,
   StructValue,
   RefValue,
+  ArrayValue,
 } from "./ast";
 import type { Type } from "./types";
 
@@ -13,7 +14,7 @@ export interface FunctionInfo {
 }
 
 export type Scope = {
-  env: Record<string, number | StructValue | RefValue>;
+  env: Record<string, number | StructValue | RefValue | ArrayValue>;
   mutable: Set<string>;
   types: Record<string, Type | null>;
   functions: Record<string, FunctionInfo>;
@@ -49,7 +50,7 @@ export function findScope(name: string, scopes: Scope[]): Scope | null {
 export function lookupValue(
   name: string,
   scopes: Scope[],
-): number | StructValue | RefValue | undefined {
+): number | StructValue | RefValue | ArrayValue | undefined {
   for (let i = scopes.length - 1; i >= 0; i--) {
     if (scopes[i]!.env[name] !== undefined) return scopes[i]!.env[name];
   }

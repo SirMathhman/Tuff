@@ -16,6 +16,8 @@ import type {
   IfStatement,
   WhileStatement,
   ExprStatement,
+  ArrayLiteral,
+  IndexAccess,
 } from "./ast";
 import type { Token, Position } from "./errors";
 import { ParseError } from "./errors";
@@ -130,8 +132,27 @@ function parseTypeToken(p: Parser): Type | null {
       const typeStr = mutable ? `&mut ${innerType}` : `&${innerType}`;
       return parseTypeString(typeStr);
     }
+    // Array type: [Type; N]
+    if (typeToken === "[") {
+      return parseArrayType(p);
+    }
     p.pos++; // skip type
     return parseTypeString(typeToken);
+  }
+  return null;
+}
+
+function parseArrayType(p: Parser): Type | null {
+  const typeToken = curText(p);
+  if (typeToken === "[") {
+    p.pos++; // skip '['
+    const innerType = curText(p);
+    p.pos++; // skip inner type
+    if (at(p, ";")) p.pos++; // skip ';'
+    const sizeToken = curText(p);
+    p.pos++; // skip size
+    if (at(p, "]")) p.pos++; // skip ']'
+    return parseTypeString(`[${innerType}; ${sizeToken}]`);
   }
   return null;
 }
@@ -279,7 +300,26 @@ function parseAssign(
     if (at(p, ";")) p.pos++;
     return { type: "DerefAssignStatement", target, value, loc };
   }
+  // Check for array index assignment: arr[i] = ...
   const name = curText(p);
+  const nextToken = p.tokens[p.pos + 1]?.text;
+  if (/[a-zA-Z_]/.test(name) && nextToken === "[") {
+    p.pos++; // name
+    const indexLoc = curPos(p);
+    p.pos++; // '['
+    const index = parseOrExpression(p);
+    if (at(p, "]")) p.pos++; // ']'
+    p.pos++; // '='
+    const value = parseOrExpression(p);
+    if (at(p, ";")) p.pos++;
+    const target: IndexAccess = {
+      type: "IndexAccess",
+      object: { type: "Identifier", name, loc },
+      index,
+      loc: indexLoc,
+    };
+    return { type: "DerefAssignStatement", target, value, loc };
+  }
   p.pos++; // name
   const op = curText(p);
   p.pos++; // operator
@@ -301,23 +341,45 @@ function parseExprStmt(p: Parser): ExprStatement {
 function isAssignable(p: Parser, pos: number): boolean {
   if (pos >= p.tokens.length) return false;
   const token = p.tokens[pos]!.text;
-  if (token === "*") {
-    const nextPos = pos + 1;
-    if (nextPos >= p.tokens.length) return false;
-    const afterIdent = nextPos + 1;
-    return (
-      /[a-zA-Z_]/.test(p.tokens[nextPos]!.text) &&
-      afterIdent < p.tokens.length &&
-      p.tokens[afterIdent]!.text === "="
-    );
-  }
+  if (token === "*") return isDerefAssign(p, pos);
   const nextPos = pos + 1;
   if (isKeyword(token)) return false;
+  if (isIdentToken(token)) return isIdentAssign(p, nextPos);
+  return false;
+}
+
+function isDerefAssign(p: Parser, pos: number): boolean {
+  const nextPos = pos + 1;
+  if (nextPos >= p.tokens.length) return false;
+  const afterIdent = nextPos + 1;
   return (
-    /[a-zA-Z_]/.test(token) &&
-    nextPos < p.tokens.length &&
-    isAssignOp(p.tokens[nextPos]?.text)
+    isIdentToken(p.tokens[nextPos]!.text) &&
+    afterIdent < p.tokens.length &&
+    p.tokens[afterIdent]!.text === "="
   );
+}
+
+function isIdentAssign(p: Parser, nextPos: number): boolean {
+  if (nextPos >= p.tokens.length) return false;
+  const nextToken = p.tokens[nextPos]!.text;
+  if (nextToken === "[") return isArrayIndexAssign(p, nextPos);
+  return isAssignOp(nextToken);
+}
+
+function isArrayIndexAssign(p: Parser, bracketPos: number): boolean {
+  const closePos = findClosingBracket(p, bracketPos);
+  return isAssignOp(p.tokens[closePos]?.text);
+}
+
+function findClosingBracket(p: Parser, bracketPos: number): number {
+  let bracketDepth = 1;
+  let scanPos = bracketPos + 1;
+  while (scanPos < p.tokens.length && bracketDepth > 0) {
+    if (p.tokens[scanPos]?.text === "[") bracketDepth++;
+    if (p.tokens[scanPos]?.text === "]") bracketDepth--;
+    scanPos++;
+  }
+  return scanPos;
 }
 
 function isKeyword(token: string): boolean {
@@ -381,14 +443,29 @@ function parseFactor(p: Parser): Expr {
   const token = curText(p);
 
   if (token === "(") return parseParens(p);
-  if (token === "true" || token === "false") return parseBoolean(p, token);
+  if (token === "[") return parseArrayLiteral(p);
+  if (isBooleanToken(token)) return parseBoolean(p, token);
   if (token === "&") return parseRefExpr(p);
   if (token === "*") return parseDerefExpr(p);
   if (token === "-") return parseUnaryMinus(p);
-  if (/\d/.test(token[0]!)) return parseNumber(p, token);
-  if (/[a-zA-Z_]/.test(token)) return parseIdentifierOrCall(p, token);
+  if (isNumericToken(token)) return parseNumber(p, token);
+  if (isIdentToken(token)) return parseIdentifierOrCall(p, token);
+  return parseFallback(p, token);
+}
 
-  // Fallback: plain number
+function isBooleanToken(token: string): boolean {
+  return token === "true" || token === "false";
+}
+
+function isNumericToken(token: string): boolean {
+  return /\d/.test(token[0]!);
+}
+
+function isIdentToken(token: string): boolean {
+  return /[a-zA-Z_]/.test(token);
+}
+
+function parseFallback(p: Parser, token: string): Expr {
   const loc = curPos(p);
   p.pos++;
   return {
@@ -454,7 +531,7 @@ function parseIdentifierOrCall(p: Parser, token: string): Expr {
   p.pos++;
   if (at(p, "(")) return parseCall(p, token);
   if (at(p, "{")) return parseStructLiteral(p, token);
-  return parseIdentifierWithFields(p, token);
+  return parseIdentifierWithChaining(p, token);
 }
 
 function parseCall(p: Parser, name: string): CallExpr {
@@ -465,15 +542,39 @@ function parseCall(p: Parser, name: string): CallExpr {
   return { type: "CallExpr", name, arguments: args, loc };
 }
 
-function parseIdentifierWithFields(p: Parser, name: string): Expr {
+function parseIdentifierWithChaining(p: Parser, name: string): Expr {
   const loc = curPos(p);
   let expr: Expr = { type: "Identifier", name, loc };
-  while (at(p, ".")) {
-    const fieldLoc = curPos(p);
-    p.pos++; // '.'
-    const field = curText(p);
-    p.pos++; // field name
-    expr = { type: "FieldAccess", object: expr, field, loc: fieldLoc };
+  while (at(p, ".") || at(p, "[")) {
+    if (at(p, ".")) {
+      const fieldLoc = curPos(p);
+      p.pos++; // '.'
+      const field = curText(p);
+      p.pos++; // field name
+      if (field === "length") {
+        expr = { type: "LengthAccess", object: expr, loc: fieldLoc };
+      } else {
+        expr = { type: "FieldAccess", object: expr, field, loc: fieldLoc };
+      }
+    } else if (at(p, "[")) {
+      const indexLoc = curPos(p);
+      p.pos++; // '['
+      const index = parseOrExpression(p);
+      if (at(p, "]")) p.pos++; // ']'
+      expr = { type: "IndexAccess", object: expr, index, loc: indexLoc };
+    }
   }
   return expr;
+}
+
+function parseArrayLiteral(p: Parser): ArrayLiteral {
+  const loc = curPos(p);
+  p.pos++; // '['
+  const elements: Expr[] = [];
+  while (p.pos < p.tokens.length && !at(p, "]")) {
+    elements.push(parseOrExpression(p));
+    if (at(p, ",")) p.pos++;
+  }
+  if (at(p, "]")) p.pos++;
+  return { type: "ArrayLiteral", elements, loc };
 }

@@ -23,6 +23,10 @@ import type {
   Identifier,
   StructValue,
   RefValue,
+  ArrayValue,
+  ArrayLiteral,
+  IndexAccess,
+  LengthAccess,
 } from "./ast";
 import type { Scope } from "./scope";
 import { createScope, lookup, findScope, lookupValue } from "./scope";
@@ -33,9 +37,9 @@ import {
   lookupFunctionInfo,
 } from "./typechecker";
 import { RuntimeError, TypeError } from "./errors";
-import { isRefValue } from "./ast";
+import { isRefValue, isArrayValue } from "./ast";
 import type { Type } from "./types";
-import { typeEquals } from "./types";
+import { typeEquals, isArrayType } from "./types";
 
 export function evaluateProgram(node: Program, scopes: Scope[]): number {
   let result = 0;
@@ -118,6 +122,9 @@ function evalFunctionDef(node: FunctionDefStatement, scopes: Scope[]): number {
 
 function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
   const result = evaluateExpr(node.expression, scopes);
+  if (isArrayValue(result)) {
+    throw new RuntimeError("array values cannot be used as final expression", node.loc);
+  }
   return typeof result === "number" ? result : 0;
 }
 
@@ -127,11 +134,34 @@ function evalLet(node: LetStatement, scopes: Scope[]): number {
   checkTypeCompatibility(srcType, node.typeAnnotation, node.loc);
   if (typeof value === "number")
     validateTypeRange(value, node.typeAnnotation, node.loc);
+  // Validate array element types if type annotation is provided
+  if (
+    node.typeAnnotation &&
+    isArrayType(node.typeAnnotation) &&
+    isArrayValue(value)
+  ) {
+    validateArrayElements(value, node.typeAnnotation, scopes, node.loc);
+  }
   const scope = scopes[scopes.length - 1]!;
   scope.env[node.name] = value;
   scope.types[node.name] = node.typeAnnotation ?? srcType;
   if (node.mutable) scope.mutable.add(node.name);
   return 0;
+}
+
+function validateArrayElements(
+  arr: ArrayValue,
+  arrayType: Type,
+  scopes: Scope[],
+  loc?: { line: number; col: number },
+): void {
+  if (arrayType.kind !== "array") return;
+  for (let i = 0; i < arr.length; i++) {
+    const elem = arr[i]!;
+    if (typeof elem === "number") {
+      validateTypeRange(elem, arrayType.elementType, loc);
+    }
+  }
 }
 
 function evalAssign(node: AssignStatement, scopes: Scope[]): number {
@@ -161,6 +191,10 @@ function evalCompoundAssign(
 
 function evalDerefAssign(node: DerefAssignStatement, scopes: Scope[]): number {
   const refVal = evaluateExpr(node.target, scopes);
+  // Handle IndexAccess as assignment target (arr[i] = val)
+  if (node.target.type === "IndexAccess") {
+    return evalIndexAssign(node, scopes);
+  }
   if (!isRefValue(refVal)) {
     throw new RuntimeError("cannot assign to non-reference value", node.loc);
   }
@@ -176,6 +210,42 @@ function evalDerefAssign(node: DerefAssignStatement, scopes: Scope[]): number {
   }
   const value = evaluateExpr(node.value, scopes);
   scope.env[refVal.name] = typeof value === "number" ? value : 0;
+  return 0;
+}
+
+function evalIndexAssign(node: DerefAssignStatement, scopes: Scope[]): number {
+  const indexNode = node.target;
+  if (indexNode.type !== "IndexAccess") {
+    throw new RuntimeError("invalid assignment target", node.loc);
+  }
+  // Evaluate the object (should be an identifier)
+  const objExpr = indexNode.object;
+  const objName = objExpr.type === "Identifier" ? objExpr.name : "";
+  const scope = findScope(objName, scopes);
+  if (!scope) {
+    throw new RuntimeError(`undefined identifier: ${objName}`, node.loc);
+  }
+  // Check mutability
+  if (!scope.mutable.has(objName)) {
+    throw new RuntimeError(
+      `cannot assign to immutable variable: ${objName}`,
+      node.loc,
+    );
+  }
+  const objVal = scope.env[objName];
+  if (!isArrayValue(objVal)) {
+    throw new RuntimeError("cannot index non-array value", node.loc);
+  }
+  // Evaluate index
+  const index = evaluateExpr(indexNode.index, scopes);
+  const idx = typeof index === "number" ? index : 0;
+  // Validate bounds
+  if (idx < 0 || idx >= objVal.length) {
+    throw new RuntimeError(`array index out of bounds: ${idx}`, node.loc);
+  }
+  // Evaluate value and assign
+  const value = evaluateExpr(node.value, scopes);
+  objVal[idx] = toNumberOrStruct(value);
   return 0;
 }
 
@@ -242,17 +312,18 @@ function buildStructFields(
 }
 
 function toNumberOrStruct(
-  val: number | StructValue | RefValue,
-): number | StructValue {
+  val: number | StructValue | RefValue | ArrayValue,
+): number | StructValue | ArrayValue {
   if (typeof val === "number") return val;
   if (isRefValue(val)) return 0;
+  if (isArrayValue(val)) return val;
   return val;
 }
 
 function evalFieldAccess(
   node: FieldAccess,
   scopes: Scope[],
-): number | StructValue {
+): number | StructValue | ArrayValue {
   const obj = evaluateExpr(node.object, scopes);
   if (isRefValue(obj)) {
     throw new RuntimeError(
@@ -260,7 +331,20 @@ function evalFieldAccess(
       node.loc,
     );
   }
-  if (typeof obj === "object" && obj !== null) {
+  if (isArrayValue(obj)) {
+    throw new RuntimeError(
+      `cannot access field ${node.field} on array value`,
+      node.loc,
+    );
+  }
+  return evalStructFieldAccess(node, obj);
+}
+
+function evalStructFieldAccess(
+  node: FieldAccess,
+  obj: number | StructValue | ArrayValue,
+): number | StructValue | ArrayValue {
+  if (typeof obj === "object" && obj !== null && !isArrayValue(obj)) {
     const val = (obj as StructValue)[node.field];
     if (val === undefined)
       throw new RuntimeError(
@@ -328,7 +412,7 @@ function validateMutableTarget(
 export function evaluateExpr(
   node: Expr,
   scopes: Scope[],
-): number | StructValue | RefValue {
+): number | StructValue | RefValue | ArrayValue {
   if (isLiteral(node)) return evalLiteral(node);
   if (isSimpleExpr(node)) return evalSimpleExpr(node, scopes);
   return evalComplexExpr(node, scopes);
@@ -347,20 +431,68 @@ function isSimpleExpr(node: Expr): node is Identifier | BinaryExpr | CallExpr {
 }
 
 function evalComplexExpr(
-  node: StructLiteral | FieldAccess | RefExpr | DerefExpr | UnaryExpr,
+  node:
+    | StructLiteral
+    | FieldAccess
+    | RefExpr
+    | DerefExpr
+    | UnaryExpr
+    | ArrayLiteral
+    | IndexAccess
+    | LengthAccess,
   scopes: Scope[],
-): number | StructValue | RefValue {
+): number | StructValue | RefValue | ArrayValue {
   if (node.type === "StructLiteral") return evalStructLiteral(node, scopes);
   if (node.type === "FieldAccess") return evalFieldAccess(node, scopes);
   if (node.type === "RefExpr") return evalRefExpr(node, scopes);
   if (node.type === "DerefExpr") return evalDerefExpr(node, scopes);
+  if (node.type === "ArrayLiteral") return evalArrayLiteral(node, scopes);
+  if (node.type === "IndexAccess") return evalIndexAccess(node, scopes);
+  if (node.type === "LengthAccess") return evalLengthAccess(node, scopes);
   return evalUnary(node, scopes);
+}
+
+function evalArrayLiteral(node: ArrayLiteral, scopes: Scope[]): ArrayValue {
+  const elements: ArrayValue = [];
+  for (const elem of node.elements) {
+    const val = evaluateExpr(elem, scopes);
+    elements.push(toNumberOrStruct(val));
+  }
+  return elements;
+}
+
+function evalIndexAccess(
+  node: IndexAccess,
+  scopes: Scope[],
+): number | StructValue | ArrayValue {
+  const obj = evaluateExpr(node.object, scopes);
+  if (!isArrayValue(obj)) {
+    throw new RuntimeError("cannot index non-array value", node.loc);
+  }
+  const index = evaluateExpr(node.index, scopes);
+  const idx = typeof index === "number" ? index : 0;
+  // Validate bounds
+  if (idx < 0 || idx >= obj.length) {
+    throw new RuntimeError(`array index out of bounds: ${idx}`, node.loc);
+  }
+  const val = obj[idx];
+  // Handle nested arrays
+  if (isArrayValue(val)) return val;
+  return val;
+}
+
+function evalLengthAccess(node: LengthAccess, scopes: Scope[]): number {
+  const obj = evaluateExpr(node.object, scopes);
+  if (!isArrayValue(obj)) {
+    throw new RuntimeError("cannot access length of non-array value", node.loc);
+  }
+  return obj.length;
 }
 
 function evalSimpleExpr(
   node: Identifier | BinaryExpr | CallExpr,
   scopes: Scope[],
-): number | StructValue | RefValue {
+): number | StructValue | RefValue | ArrayValue {
   if (node.type === "Identifier") return evalIdentifier(node, scopes);
   if (node.type === "BinaryExpr") return evalBinary(node, scopes);
   return evalCall(node, scopes);
@@ -385,7 +517,7 @@ function evalLiteral(
 function evalIdentifier(
   node: Identifier,
   scopes: Scope[],
-): number | StructValue | RefValue {
+): number | StructValue | RefValue | ArrayValue {
   const value = lookupValue(node.name, scopes);
   if (value !== undefined) return value;
   throw new RuntimeError(`undefined identifier: ${node.name}`, node.loc);

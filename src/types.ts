@@ -1,7 +1,7 @@
 // ── Type AST ────────────────────────────────────────────────────────────────
 
 export type Type =
-  UintType | SignedType | BoolType | I32Type | RefType | StructType;
+  UintType | SignedType | BoolType | I32Type | RefType | StructType | ArrayType;
 
 export interface UintType {
   kind: "uint";
@@ -32,6 +32,12 @@ export interface StructType {
   name: string;
 }
 
+export interface ArrayType {
+  kind: "array";
+  elementType: Type;
+  size: number;
+}
+
 // ── Type Helpers ────────────────────────────────────────────────────────────
 
 export function typeToString(type: Type): string {
@@ -50,6 +56,8 @@ export function typeToString(type: Type): string {
         : `&${typeToString(type.inner)}`;
     case "struct":
       return type.name;
+    case "array":
+      return `[${typeToString(type.elementType)}; ${type.size}]`;
     default:
       return "unknown";
   }
@@ -59,29 +67,56 @@ export function parseTypeString(str: string): Type | null {
   if (str === "Bool") return { kind: "bool" };
   if (str === "I32") return { kind: "i32" };
   const uintMatch = str.match(/^U(8|16|32|64)$/);
-  if (uintMatch)
-    return {
-      kind: "uint",
-      bits: parseInt(uintMatch[1]!, 10) as 8 | 16 | 32 | 64,
-    };
+  if (uintMatch) return parseUintType(uintMatch[1]!);
   const signedMatch = str.match(/^I(8|16|32|64)$/);
-  if (signedMatch)
-    return {
-      kind: "signed",
-      bits: parseInt(signedMatch[1]!, 10) as 8 | 16 | 32 | 64,
-    };
+  if (signedMatch) return parseSignedType(signedMatch[1]!);
   const refMatch = str.match(/^&mut (.+)$/);
-  if (refMatch) {
-    const inner = parseTypeString(refMatch[1]!);
-    if (inner) return { kind: "ref", mutable: true, inner };
-  }
+  if (refMatch) return tryParseRef(refMatch[1]!, true);
   const refMatch2 = str.match(/^&(.+)$/);
-  if (refMatch2) {
-    const inner = parseTypeString(refMatch2[1]!);
-    if (inner) return { kind: "ref", mutable: false, inner };
-  }
+  if (refMatch2) return tryParseRef(refMatch2[1]!, false);
+  // Array type: [Type; N]
+  const arrayMatch = str.match(/^\[(.+);\s*(\d+)\]$/);
+  if (arrayMatch) return tryParseArray(arrayMatch[1]!, arrayMatch[2]!);
   // Treat as struct type
   return { kind: "struct", name: str };
+}
+
+function tryParseRef(innerStr: string, mutable: boolean): Type | null {
+  const inner = parseTypeString(innerStr);
+  if (inner) return parseRefType(inner, mutable);
+  return null;
+}
+
+function tryParseArray(elemStr: string, sizeStr: string): Type | null {
+  const elemType = parseTypeString(elemStr);
+  if (elemType) return parseArrayType(elemType, sizeStr);
+  return null;
+}
+
+function parseRefType(inner: Type, mutable: boolean): Type {
+  return { kind: "ref", mutable, inner };
+}
+
+function parseArrayType(elemType: Type, sizeStr: string): Type {
+  return {
+    kind: "array",
+    elementType: elemType,
+    size: parseInt(sizeStr, 10),
+  };
+}
+
+function parseUintType(bitsStr: string): Type {
+  return {
+    kind: "uint",
+    bits: parseInt(bitsStr, 10) as 8 | 16 | 32 | 64,
+  };
+}
+
+function parseSignedType(bitsStr: string): Type {
+  return {
+    kind: "signed",
+    bits: parseInt(bitsStr, 10) as 8 | 16 | 32 | 64,
+  };
 }
 
 export function typeEquals(a: Type, b: Type): boolean {
@@ -92,9 +127,9 @@ export function typeEquals(a: Type, b: Type): boolean {
 function typeEqualsSameKind(a: Type, b: Type): boolean {
   switch (a.kind) {
     case "uint":
-      return b.kind === "uint" && a.bits === b.bits;
+      return eqUint(a, b);
     case "signed":
-      return b.kind === "signed" && a.bits === b.bits;
+      return eqSigned(a, b);
     case "bool":
       return b.kind === "bool";
     case "i32":
@@ -102,10 +137,29 @@ function typeEqualsSameKind(a: Type, b: Type): boolean {
     case "ref":
       return equalsRef(a, b);
     case "struct":
-      return b.kind === "struct" && a.name === b.name;
+      return eqStruct(a, b);
+    case "array":
+      return equalsArray(a, b);
     default:
       return false;
   }
+}
+
+function eqUint(a: UintType, b: Type): boolean {
+  return b.kind === "uint" && a.bits === b.bits;
+}
+
+function eqSigned(a: SignedType, b: Type): boolean {
+  return b.kind === "signed" && a.bits === b.bits;
+}
+
+function eqStruct(a: StructType, b: Type): boolean {
+  return b.kind === "struct" && a.name === b.name;
+}
+
+function equalsArray(a: ArrayType, b: Type): boolean {
+  if (b.kind !== "array") return false;
+  return a.size === b.size && typeEquals(a.elementType, b.elementType);
 }
 
 function equalsRef(a: RefType, b: Type): boolean {
@@ -115,6 +169,10 @@ function equalsRef(a: RefType, b: Type): boolean {
 
 export function isRefType(type: Type): boolean {
   return type.kind === "ref";
+}
+
+export function isArrayType(type: Type): boolean {
+  return type.kind === "array";
 }
 
 export function typeBits(type: Type): number | null {
@@ -128,6 +186,9 @@ export function isSignedType(type: Type): boolean {
 }
 
 export function isNarrower(a: Type, b: Type): boolean {
+  if (a.kind === "array" && b.kind === "array") {
+    return isNarrower(a.elementType, b.elementType);
+  }
   const aBits = typeBits(a);
   const bBits = typeBits(b);
   if (aBits !== null && bBits !== null) {

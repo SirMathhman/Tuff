@@ -92,7 +92,7 @@ function skipTypeAnnotation(source: string, start: number): number {
 }
 
 function isOperator(ch: string): boolean {
-  return "+-*/()=;{}<>=!:,&.".includes(ch);
+  return "+-*/()=;{}<>=!:,&.[\\]".includes(ch);
 }
 
 export function tokenize(source: string): Token[] {

@@ -360,3 +360,95 @@ test('interpret("let x: I8 = 5; --x") => 5', () => {
 test('interpret("let x: I8 = 5; let y: I16 = -x; y") => -5', () => {
   expect(interpret("let x: I8 = 5; let y: I16 = -x; y")).toBe(-5);
 });
+
+// ── Arrays ────────────────────────────────────────────────────────────────
+
+test('interpret("[1, 2, 3]") => Error', () => {
+  // Bare array literal is not a valid final expression (returns array, not number)
+  expect(() => interpret("[1, 2, 3]")).toThrow();
+});
+
+test('interpret("let arr = [1, 2, 3]; arr[0]") => 1', () => {
+  expect(interpret("let arr = [1, 2, 3]; arr[0]")).toBe(1);
+});
+
+test('interpret("let arr = [1, 2, 3]; arr[1]") => 2', () => {
+  expect(interpret("let arr = [1, 2, 3]; arr[1]")).toBe(2);
+});
+
+test('interpret("let arr = [1, 2, 3]; arr[2]") => 3', () => {
+  expect(interpret("let arr = [1, 2, 3]; arr[2]")).toBe(3);
+});
+
+test('interpret("let arr = [1, 2, 3]; arr[3]") => Error', () => {
+  expect(() => interpret("let arr = [1, 2, 3]; arr[3]")).toThrow();
+});
+
+test('interpret("let arr = [1, 2, 3]; arr[-1]") => Error', () => {
+  expect(() => interpret("let arr = [1, 2, 3]; arr[-1]")).toThrow();
+});
+
+test('interpret("let arr = [1, 2, 3]; arr.length") => 3', () => {
+  expect(interpret("let arr = [1, 2, 3]; arr.length")).toBe(3);
+});
+
+test('interpret("let mut arr = [1, 2, 3]; arr[0] = 10; arr[0]") => 10', () => {
+  expect(interpret("let mut arr = [1, 2, 3]; arr[0] = 10; arr[0]")).toBe(10);
+});
+
+test('interpret("let arr = [1, 2, 3]; arr[0] = 10;") => Error', () => {
+  expect(() => interpret("let arr = [1, 2, 3]; arr[0] = 10;")).toThrow();
+});
+
+test('interpret("let arr: [I32; 3] = [1, 2, 3]; arr[0]") => 1', () => {
+  expect(interpret("let arr: [I32; 3] = [1, 2, 3]; arr[0]")).toBe(1);
+});
+
+test('interpret("let arr: [I32; 3] = [1, 2];") => Error', () => {
+  // Size mismatch: declared 3, provided 2
+  expect(() => interpret("let arr: [I32; 3] = [1, 2];")).toThrow();
+});
+
+test('interpret("let arr: [I32; 2] = [1, 2, 3];") => Error', () => {
+  // Size mismatch: declared 2, provided 3
+  expect(() => interpret("let arr: [I32; 2] = [1, 2, 3];")).toThrow();
+});
+
+test('interpret("let arr: [U8; 3] = [1, 2, 300];") => Error', () => {
+  // Element type mismatch: 300 doesn't fit in U8
+  expect(() => interpret("let arr: [U8; 3] = [1, 2, 300];")).toThrow();
+});
+
+test('interpret("let arr = [1, 2, 3]; let brr = [4, 5]; arr[0] + brr[1]") => 6', () => {
+  expect(
+    interpret("let arr = [1, 2, 3]; let brr = [4, 5]; arr[0] + brr[1]"),
+  ).toBe(6);
+});
+
+test('interpret("let arr = [[1, 2], [3, 4]]; arr[0][0]") => 1', () => {
+  expect(interpret("let arr = [[1, 2], [3, 4]]; arr[0][0]")).toBe(1);
+});
+
+test('interpret("let arr = [[1, 2], [3, 4]]; arr[1][1]") => 4', () => {
+  expect(interpret("let arr = [[1, 2], [3, 4]]; arr[1][1]")).toBe(4);
+});
+
+test('interpret("struct Point { x : I32, y : I32 } let pts = [Point { x : 1, y : 2 }, Point { x : 3, y : 4 }]; pts[0].x + pts[1].y") => 5', () => {
+  expect(
+    interpret(
+      "struct Point { x : I32, y : I32 } let pts = [Point { x : 1, y : 2 }, Point { x : 3, y : 4 }]; pts[0].x + pts[1].y",
+    ),
+  ).toBe(5);
+});
+
+test('interpret("let arr = [1, 2, 3]; let x = arr[0]; x") => 1', () => {
+  expect(interpret("let arr = [1, 2, 3]; let x = arr[0]; x")).toBe(1);
+});
+
+test('interpret("let mut arr = [1, 2, 3]; let mut i = 0; while (i < arr.length) { arr[i] = arr[i] * 2; i = i + 1; } arr[0] + arr[1] + arr[2]") => 12', () => {
+  expect(
+    interpret(
+      "let mut arr = [1, 2, 3]; let mut i = 0; while (i < arr.length) { arr[i] = arr[i] * 2; i = i + 1; } arr[0] + arr[1] + arr[2]",
+    ),
+  ).toBe(12);
+});

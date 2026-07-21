@@ -9,6 +9,9 @@ import type {
   UnaryExpr,
   NumberLiteral,
   BooleanLiteral,
+  ArrayLiteral,
+  IndexAccess,
+  LengthAccess,
 } from "./ast";
 import type { Scope } from "./scope";
 import { TypeError } from "./errors";
@@ -40,7 +43,15 @@ function isSimpleExpr(node: Expr): node is Identifier | BinaryExpr | CallExpr {
 }
 
 function inferComplexExprType(
-  node: StructLiteral | FieldAccess | RefExpr | DerefExpr | UnaryExpr,
+  node:
+    | StructLiteral
+    | FieldAccess
+    | RefExpr
+    | DerefExpr
+    | UnaryExpr
+    | ArrayLiteral
+    | IndexAccess
+    | LengthAccess,
   scopes: Scope[],
 ): Type | null {
   if (node.type === "StructLiteral")
@@ -48,7 +59,44 @@ function inferComplexExprType(
   if (node.type === "FieldAccess") return inferFieldAccessType(node, scopes);
   if (node.type === "RefExpr") return inferRefType(node, scopes);
   if (node.type === "DerefExpr") return inferDerefType(node, scopes);
+  if (node.type === "ArrayLiteral") return inferArrayLiteralType(node, scopes);
+  if (node.type === "IndexAccess") return inferIndexAccessType(node, scopes);
+  if (node.type === "LengthAccess") return inferLengthAccessType(node, scopes);
   return inferUnaryType(node, scopes);
+}
+
+function inferArrayLiteralType(
+  node: ArrayLiteral,
+  scopes: Scope[],
+): Type | null {
+  if (node.elements.length === 0) return null;
+  const elemType = inferExprType(node.elements[0], scopes);
+  // Infer common type from all elements
+  for (let i = 1; i < node.elements.length; i++) {
+    const t = inferExprType(node.elements[i]!, scopes);
+    if (t && elemType && !typeEquals(t, elemType)) {
+      // Mixed types, return null (untyped)
+      return null;
+    }
+  }
+  return {
+    kind: "array",
+    elementType: elemType ?? { kind: "i32" },
+    size: node.elements.length,
+  };
+}
+
+function inferIndexAccessType(node: IndexAccess, scopes: Scope[]): Type | null {
+  const objType = inferExprType(node.object, scopes);
+  if (objType && objType.kind === "array") {
+    return objType.elementType;
+  }
+  return null;
+}
+
+function inferLengthAccessType(_node: LengthAccess): Type | null {
+  void _node;
+  return { kind: "i32" };
 }
 
 function inferSimpleExprType(
@@ -171,12 +219,34 @@ export function checkTypeCompatibility(
     return;
   }
   if (isNarrower(srcType, dstType)) return;
-  // Allow I32 (untyped numeric) to widen to any signed type
-  if (srcType.kind === "i32" && dstType.kind === "signed") return;
+  if (isI32ToSignedWiden(srcType, dstType)) return;
+  if (isArrayToArrays(srcType, dstType)) {
+    checkArrayCompatibility(srcType, dstType, loc);
+    return;
+  }
   throw new TypeError(
     `type mismatch: cannot assign ${typeToString(srcType)} to ${typeToString(dstType)}`,
     loc,
   );
+}
+
+function isI32ToSignedWiden(src: Type, dst: Type): boolean {
+  return src.kind === "i32" && dst.kind === "signed";
+}
+
+function isArrayToArrays(src: Type, dst: Type): boolean {
+  return src.kind === "array" && dst.kind === "array";
+}
+
+function checkArrayCompatibility(src: Type, dst: Type, loc?: Position): void {
+  if (src.kind !== "array" || dst.kind !== "array") return;
+  if (src.size !== dst.size) {
+    throw new TypeError(
+      `type mismatch: array size ${src.size} does not match ${dst.size}`,
+      loc,
+    );
+  }
+  checkTypeCompatibility(src.elementType, dst.elementType, loc);
 }
 
 function checkRefTypeCompatibility(

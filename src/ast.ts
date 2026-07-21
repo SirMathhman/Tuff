@@ -110,7 +110,10 @@ export type Expr =
   | FieldAccess
   | RefExpr
   | DerefExpr
-  | UnaryExpr;
+  | UnaryExpr
+  | ArrayLiteral
+  | IndexAccess
+  | LengthAccess;
 
 export interface UnaryExpr extends Node {
   type: "UnaryExpr";
@@ -170,6 +173,22 @@ export interface DerefExpr extends Node {
   operand: Expr;
 }
 
+export interface ArrayLiteral extends Node {
+  type: "ArrayLiteral";
+  elements: Expr[];
+}
+
+export interface IndexAccess extends Node {
+  type: "IndexAccess";
+  object: Expr;
+  index: Expr;
+}
+
+export interface LengthAccess extends Node {
+  type: "LengthAccess";
+  object: Expr;
+}
+
 // ── Runtime Value Types ────────────────────────────────────────────────────
 
 export interface StructValue {
@@ -182,6 +201,16 @@ export interface RefValue {
   mutable: boolean;
 }
 
-export function isRefValue(v: number | StructValue | RefValue): v is RefValue {
+export type ArrayValue = (number | StructValue | ArrayValue)[];
+
+export function isRefValue(
+  v: number | StructValue | RefValue | ArrayValue,
+): v is RefValue {
   return typeof v === "object" && "__ref" in v;
+}
+
+export function isArrayValue(
+  v: number | StructValue | RefValue | ArrayValue,
+): v is ArrayValue {
+  return Array.isArray(v);
 }
