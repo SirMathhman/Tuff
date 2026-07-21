@@ -1,6 +1,6 @@
 # Tuff Language Interpreter
 
-A test-driven recursive-descent interpreter for the Tuff language, built incrementally with one test per feature.
+A test-driven AST-based interpreter for the Tuff language, built incrementally with one test per feature.
 
 ## Commands
 
@@ -8,32 +8,44 @@ A test-driven recursive-descent interpreter for the Tuff language, built increme
 |---|---|
 | `npm test` | Run all tests (Bun test framework) |
 | `npm run lint` | Run ESLint with auto-fix |
+| `npm run cpd` | PMD CPD duplication detection (`--minimum-tokens 50 --ignore-literals`) |
 
 ## Architecture
 
-- **`index.ts`** — Single-file interpreter: tokenizer, parser, scope manager, and executor.
+- **`index.ts`** — Single-file interpreter: tokenizer → parser (AST) → evaluator.
 - **`index.test.ts`** — Test suite. One test per feature, format: `interpret("...") => expected`.
 
 ### Core Flow
-`interpret(source)` -> `tokenize()` -> statement loop (`processStatement`) -> returns last expression value (or `0`).
+`interpret(source)` → `tokenize()` → `parse()` → `evaluateProgram(ast, scopes)` → returns last expression value (or `0`).
+
+### AST Nodes
+- **Statements**: `ExprStatement`, `LetStatement` (with `typeAnnotation`), `AssignStatement`, `CompoundAssignStatement`, `BlockStatement`, `IfStatement`, `WhileStatement`
+- **Expressions**: `BinaryExpr`, `NumberLiteral` (with `typeAnnotation`), `Identifier`, `BooleanLiteral`
 
 ### Grammar Hierarchy (highest to lowest precedence)
-`parseOrExpression` (`||`) -> `parseAndExpression` (`&&`) -> `parseExpression` (`+`, `-`) -> `parseTerm` (`*`, `/`) -> `parseFactor` (numbers, identifiers, booleans, parenthesized expressions)
+`parseFactor` (literals, identifiers, parens) → `parseTerm` (`*`, `/`) → `parseExpression` (`+`, `-`) → `parseAndExpression` (`&&`) → `parseOrExpression` (`||`)
 
 ### Scope Model
-Stack of `{ env: Record<string, number>, mutable: Set<string> }`. Block `{}` pushes/pops. Lookup walks innermost -> outermost. `let mut` adds to `mutable` set; assignment requires mutable flag.
+Stack of `{ env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null> }`. Block `{}` pushes/pops. Lookup walks innermost → outermost. `let mut` adds to `mutable` set; assignment requires mutable flag.
 
-### Skip Logic
-Unexecuted branches (skipped `if` then-branch, skipped `else` body) use `skipStatement` family to advance token position without evaluation. Must handle nested `{}`, `if/else`, and `()` correctly.
+### Type System
+- **Types**: `U8` (0–255), `U16` (0–65535), `U32` (0–4294967295), `Bool`
+- **Literals**: `100U8`, `256U16` — range-validated at parse/eval time
+- **Declarations**: `let x: U8 = 100` — type annotation on variable
+- **Widening**: Narrower types can widen to wider types (`U8` → `U16` OK, `U16` → `U8` Error)
+- **Comparisons**: `<`, `>`, `<=`, `>=`, `==`, `!=` produce `Bool` type
+- **Control flow**: `if` and `while` conditions must be `Bool`
+- **Assignments**: Type compatibility checked at assignment site
 
 ## Conventions
 
 - **TDD workflow**: User provides `interpret("...") => expected`, agent adds test, runs `npm test`, fixes implementation if needed.
 - **ESLint complexity rule**: Max complexity `10`. Refactor into small helpers when approaching limit.
-- **Boolean semantics**: `true` -> `1`, `false` -> `0` internally. Logical operators use JS `||`/`&&` on numeric values.
+- **Boolean semantics**: `true` → `1`, `false` → `0` internally. Logical operators use JS `||`/`&&` on numeric values.
 - **Result semantics**: Last expression statement's value is returned. Declarations and assignments return `0`.
 
 ## Known Pitfalls
 
 - Parser queue gotcha: if parser emits queued statements (syntax-lowering), EOF loops must drain the queue or trailing declarations are silently dropped.
 - ASI gotcha: Never format dynamically generated JS with a newline after `return`.
+- Type inference: `inferExprType` returns `null` for untyped expressions — always handle `null` in type checks.
