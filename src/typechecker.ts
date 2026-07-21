@@ -28,12 +28,21 @@ export function inferExprType(node: Expr, scopes: Scope[]): Type | null {
   return inferComplexExprType(node, scopes);
 }
 
-function isLiteral(node: Expr): node is NumberLiteral | BooleanLiteral {
-  return node.type === "NumberLiteral" || node.type === "BooleanLiteral";
+function isLiteral(
+  node: Expr,
+): node is NumberLiteral | BooleanLiteral | CharLiteral {
+  return (
+    node.type === "NumberLiteral" ||
+    node.type === "BooleanLiteral" ||
+    node.type === "CharLiteral"
+  );
 }
 
-function inferLiteralType(node: NumberLiteral | BooleanLiteral): Type | null {
+function inferLiteralType(
+  node: NumberLiteral | BooleanLiteral | CharLiteral,
+): Type | null {
   if (node.type === "NumberLiteral") return node.typeAnnotation;
+  if (node.type === "CharLiteral") return { kind: "char" };
   return { kind: "bool" };
 }
 
@@ -227,7 +236,13 @@ function lookupInScopes(
 function inferBinaryType(node: BinaryExpr, scopes: Scope[]): Type | null {
   const leftType = inferExprType(node.left, scopes);
   const rightType = inferExprType(node.right, scopes);
-  if (isArithmeticOp(node.op)) return leftType ?? rightType;
+  if (isArithmeticOp(node.op)) {
+    // Char cannot be used in arithmetic
+    if (leftType?.kind === "char" || rightType?.kind === "char") {
+      throw new TypeError(`cannot use Char in arithmetic operation`, node.loc);
+    }
+    return leftType ?? rightType;
+  }
   if (isComparisonOp(node.op)) return { kind: "bool" };
   return null;
 }
@@ -263,6 +278,7 @@ export function checkTypeCompatibility(
   if (dstType === null) return;
   if (srcType === null) return;
   if (typeEquals(srcType, dstType)) return;
+  if (isCharIncompatible(srcType, dstType, loc)) return;
   if (isRefType(srcType) && isRefType(dstType)) {
     checkRefTypeCompatibility(srcType, dstType, loc);
     return;
@@ -273,6 +289,22 @@ export function checkTypeCompatibility(
     checkArrayCompatibility(srcType, dstType, loc);
     return;
   }
+  throwTypeMismatch(srcType, dstType, loc);
+}
+
+function isCharIncompatible(
+  src: Type, dst: Type, loc?: Position,
+): boolean {
+  if (src.kind === "char" || dst.kind === "char") {
+    throwTypeMismatch(src, dst, loc);
+    return true;
+  }
+  return false;
+}
+
+function throwTypeMismatch(
+  srcType: Type, dstType: Type, loc?: Position,
+): never {
   throw new TypeError(
     `type mismatch: cannot assign ${typeToString(srcType)} to ${typeToString(dstType)}`,
     loc,

@@ -1,4 +1,5 @@
 import type { Position, Token } from "./errors";
+import { ParseError } from "./errors";
 
 function isWhitespace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\r" || ch === "\n";
@@ -91,8 +92,66 @@ function skipTypeAnnotation(source: string, start: number): number {
   return i;
 }
 
-function isOperator(ch: string): boolean {
-  return "+-*/()=;{}<>=!:,&.[\\]".includes(ch);
+function readCharLiteral(
+  source: string,
+  start: number,
+  line: number,
+  col: number,
+): { ok: true; text: string; len: number } | { ok: false } {
+  const i = start + 1; // skip opening '
+  if (i >= source.length) {
+    throw new ParseError("unterminated char literal", { line, col });
+  }
+
+  const ch = source[i]!;
+  if (ch === "'") {
+    throw new ParseError("empty char literal", { line, col });
+  }
+
+  let end: number;
+  if (ch === "\\") {
+    const escape = parseEscape(source, i + 1);
+    if (escape === null) return { ok: false };
+    end = i + 1 + escape.len;
+  } else {
+    end = i + ch.length;
+  }
+
+  // Check for closing quote
+  if (end >= source.length || source[end]! !== "'") return { ok: false };
+  end++; // skip closing '
+
+  const text = source.slice(start, end);
+  return { ok: true, text, len: end - start };
+}
+
+function parseEscape(
+  source: string,
+  start: number,
+): { codePoint: number; len: number } | null {
+  const ch = source[start]!;
+  if (ch === "n") return { codePoint: 10, len: 1 };
+  if (ch === "t") return { codePoint: 9, len: 1 };
+  if (ch === "r") return { codePoint: 13, len: 1 };
+  if (ch === "\\") return { codePoint: 92, len: 1 };
+  if (ch === "'") return { codePoint: 39, len: 1 };
+  if (ch === "0") return { codePoint: 0, len: 1 };
+  return parseUnicodeEscape(source, start);
+}
+
+function parseUnicodeEscape(
+  source: string,
+  start: number,
+): { codePoint: number; len: number } | null {
+  const ch = source[start]!;
+  if (ch !== "u" || source[start + 1] !== "{") return null;
+  let end = start + 2;
+  while (end < source.length && source[end]! !== "}") end++;
+  if (end >= source.length) return null;
+  const hex = source.slice(start + 2, end);
+  const codePoint = parseInt(hex, 16);
+  if (isNaN(codePoint)) return null;
+  return { codePoint, len: end - start + 1 };
 }
 
 export function tokenize(source: string): Token[] {
@@ -114,35 +173,68 @@ export function tokenize(source: string): Token[] {
     }
   }
 
+  function advanceText(text: string): void {
+    for (let j = 0; j < text.length; j++) {
+      advance(text[j]!);
+    }
+  }
+
+  function processCharLiteral(
+    src: string, si: number, sl: number, sc: number, p: () => Position,
+  ): { token: { text: string; pos: Position }; text: string; len: number } | null {
+    const tokenPos = p();
+    const result = readCharLiteral(src, si, sl, sc);
+    if (result.ok) {
+      return { token: { text: result.text, pos: tokenPos }, text: result.text, len: result.len };
+    }
+    return null;
+  }
+
+  function processNumber(
+    src: string, si: number, p: () => Position,
+  ): { token: { text: string; pos: Position }; text: string; len: number } {
+    const tokenPos = p();
+    const numEnd = skipDigits(src, si);
+    const annEnd = skipTypeAnnotation(src, numEnd);
+    const text = src.slice(si, annEnd);
+    return { token: { text, pos: tokenPos }, text, len: annEnd - si };
+  }
+
+  function processIdent(
+    src: string, si: number, p: () => Position,
+  ): { token: { text: string; pos: Position }; text: string; len: number } {
+    const tokenPos = p();
+    const ident = readIdentifier(src, si);
+    return { token: { text: ident, pos: tokenPos }, text: ident, len: ident.length };
+  }
+
+  function processToken(
+    src: string, si: number, sl: number, sc: number, toks: Token[], p: () => Position,
+  ): { token?: { text: string; pos: Position }; text?: string; len: number } | null {
+    const ch = src[si]!;
+    if (isWhitespace(ch)) return { len: 1 };
+    if (isDigit(ch)) return processNumber(src, si, p);
+    if (isIdentStart(ch)) return processIdent(src, si, p);
+    if (tryMultiCharOp(src, si, toks, p)) {
+      const len = getMultiCharLen(toks[toks.length - 1]!.text);
+      return { len };
+    }
+    if (ch === "'") {
+      const result = processCharLiteral(src, si, sl, sc, p);
+      if (result) return result;
+    }
+    return null;
+  }
+
   while (i < source.length) {
-    const ch = source[i]!;
-    if (isWhitespace(ch)) {
-      advance(ch);
-      i++;
-    } else if (isDigit(ch)) {
-      const tokenPos = pos();
-      const numEnd = skipDigits(source, i);
-      const annEnd = skipTypeAnnotation(source, numEnd);
-      tokens.push({ text: source.slice(i, annEnd), pos: tokenPos });
-      for (let j = i; j < annEnd; j++) advance(source[j]!);
-      i = annEnd;
-    } else if (isIdentStart(ch)) {
-      const tokenPos = pos();
-      const ident = readIdentifier(source, i);
-      tokens.push({ text: ident, pos: tokenPos });
-      for (let j = 0; j < ident.length; j++) advance(ident[j]!);
-      i += ident.length;
-    } else if (tryMultiCharOp(source, i, tokens, pos)) {
-      const len = getMultiCharLen(tokens[tokens.length - 1]!.text);
-      for (let j = 0; j < len; j++) advance(source[i + j]!);
-      i += len;
-    } else if (isOperator(ch)) {
-      const tokenPos = pos();
-      tokens.push({ text: ch, pos: tokenPos });
-      advance(ch);
-      i++;
+    const result = processToken(source, i, line, col, tokens, pos);
+    if (result) {
+      if (result.token) tokens.push(result.token);
+      if (result.text) advanceText(result.text);
+      else advance(source[i]!);
+      i += result.len;
     } else {
-      advance(ch);
+      advance(source[i]!);
       i++;
     }
   }
