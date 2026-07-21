@@ -16,6 +16,7 @@ interface LetStatement {
   type: 'LetStatement';
   mutable: boolean;
   name: string;
+  typeAnnotation: string | null;
   value: Expr;
 }
 
@@ -116,6 +117,7 @@ function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
 
 function evalLet(node: LetStatement, scopes: Scope[]): number {
   const value = evaluateExpr(node.value, scopes);
+  validateTypeRange(value, node.typeAnnotation);
   const scope = scopes[scopes.length - 1]!;
   scope.env[node.name] = value;
   if (node.mutable) scope.mutable.add(node.name);
@@ -259,10 +261,21 @@ function parseLet(p: Parser): LetStatement {
   if (mutable) p.pos++;
   const name = p.tokens[p.pos]!;
   p.pos++; // name
+  const typeAnn = parseTypeAnnotation(p);
+  if (typeAnn) p.pos++; // skip type annotation
   p.pos++; // '='
   const value = parseOrExpression(p);
   if (p.tokens[p.pos] === ';') p.pos++;
-  return { type: 'LetStatement', mutable, name, value };
+  return { type: 'LetStatement', mutable, name, typeAnnotation: typeAnn, value };
+}
+
+function parseTypeAnnotation(p: Parser): string | null {
+  if (p.tokens[p.pos] === ':') {
+    p.pos++; // skip ':'
+    const typeToken = p.tokens[p.pos]!;
+    return typeToken;
+  }
+  return null;
 }
 
 function parseBlock(p: Parser): BlockStatement {
@@ -513,7 +526,7 @@ function skipTypeAnnotation(source: string, start: number): number {
 }
 
 function isOperator(ch: string): boolean {
-  return '+-*/()=;{}<>=!'.includes(ch);
+  return '+-*/()=;{}<>=!:'.includes(ch);
 }
 
 function readTypeAnnotation(token: string): string | null {

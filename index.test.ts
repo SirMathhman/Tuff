@@ -125,3 +125,11 @@ test('interpret("256U8") => Error', () => {
   expect(() => interpret("256U8")).toThrow();
 });
 
+test('interpret("let x: U8 = 100; x") => 100', () => {
+  expect(interpret("let x: U8 = 100; x")).toBe(100);
+});
+
+test('interpret("let x: U8 = 256; x") => Error', () => {
+  expect(() => interpret("let x: U8 = 256; x")).toThrow();
+});
+
