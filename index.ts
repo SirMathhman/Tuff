@@ -5,7 +5,13 @@ interface Program {
   body: Statement[];
 }
 
-type Statement = ExprStatement | LetStatement | AssignStatement | CompoundAssignStatement | BlockStatement | IfStatement | WhileStatement;
+type Statement = ExprStatement | LetStatement | AssignStatement | CompoundAssignStatement | BlockStatement | IfStatement | WhileStatement | FunctionDefStatement;
+
+interface FunctionDefStatement {
+  type: 'FunctionDefStatement';
+  name: string;
+  body: Expr;
+}
 
 interface ExprStatement {
   type: 'ExprStatement';
@@ -51,7 +57,12 @@ interface WhileStatement {
   body: Statement;
 }
 
-type Expr = BinaryExpr | NumberLiteral | Identifier | BooleanLiteral;
+type Expr = BinaryExpr | NumberLiteral | Identifier | BooleanLiteral | CallExpr;
+
+interface CallExpr {
+  type: 'CallExpr';
+  name: string;
+}
 
 interface BinaryExpr {
   type: 'BinaryExpr';
@@ -78,14 +89,14 @@ interface BooleanLiteral {
 
 // ── Scope ──────────────────────────────────────────────────────────────────
 
-type Scope = { env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null> };
+type Scope = { env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null>; functions: Record<string, Expr> };
 
 // ── Entry Point ────────────────────────────────────────────────────────────
 
 export function interpret(source: string): number {
   const tokens = tokenize(source);
   const ast = parse(tokens);
-  const scopes: Scope[] = [{ env: {}, mutable: new Set(), types: {} }];
+  const scopes: Scope[] = [{ env: {}, mutable: new Set(), types: {}, functions: {} }];
   return evaluateProgram(ast, scopes);
 }
 
@@ -108,7 +119,14 @@ function evaluateStatement(node: Statement, scopes: Scope[]): number {
     case 'BlockStatement': return evalBlock(node, scopes);
     case 'IfStatement': return evalIf(node, scopes);
     case 'WhileStatement': return evalWhile(node, scopes);
+    case 'FunctionDefStatement': return evalFunctionDef(node, scopes);
   }
+}
+
+function evalFunctionDef(node: FunctionDefStatement, scopes: Scope[]): number {
+  const scope = scopes[scopes.length - 1]!;
+  scope.functions[node.name] = node.body;
+  return 0;
 }
 
 function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
@@ -147,7 +165,7 @@ function evalCompoundAssign(node: CompoundAssignStatement, scopes: Scope[]): num
 }
 
 function evalBlock(node: BlockStatement, scopes: Scope[]): number {
-  scopes.push({ env: {}, mutable: new Set(), types: {} });
+  scopes.push({ env: {}, mutable: new Set(), types: {}, functions: {} });
   let result = 0;
   for (const stmt of node.body) {
     result = evaluateStatement(stmt, scopes);
@@ -202,7 +220,22 @@ function evaluateExpr(node: Expr, scopes: Scope[]): number {
       throw new Error(`undefined identifier: ${node.name}`);
     }
     case 'BinaryExpr': return evalBinary(node, scopes);
+    case 'CallExpr': return evalCall(node, scopes);
   }
+}
+
+function evalCall(node: CallExpr, scopes: Scope[]): number {
+  const body = lookupFunction(node.name, scopes);
+  if (body === null) throw new Error(`undefined function: ${node.name}`);
+  return evaluateExpr(body, scopes);
+}
+
+function lookupFunction(name: string, scopes: Scope[]): Expr | null {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    const scope = scopes[i]!;
+    if (name in scope.functions) return scope.functions[name]!;
+  }
+  return null;
 }
 
 function evalBinary(node: BinaryExpr, scopes: Scope[]): number {
@@ -247,7 +280,14 @@ function inferExprType(node: Expr, scopes: Scope[]): string | null {
       return lookupType(node.name, scopes);
     case 'BinaryExpr':
       return inferBinaryType(node, scopes);
+    case 'CallExpr':
+      return inferCallType(node, scopes);
   }
+}
+
+function inferCallType(node: CallExpr, scopes: Scope[]): string | null {
+  const body = lookupFunction(node.name, scopes);
+  return body ? inferExprType(body, scopes) : null;
 }
 
 function inferBinaryType(node: BinaryExpr, scopes: Scope[]): string | null {
@@ -319,12 +359,25 @@ function parseStatement(p: Parser): Statement {
   const token = p.tokens[p.pos]!;
 
   if (token === 'let') return parseLet(p);
+  if (token === 'fn') return parseFn(p);
   if (token === '{') return parseBlock(p);
   if (token === 'if') return parseIf(p);
   if (token === 'while') return parseWhile(p);
   if (token === 'else') return parseElse(p);
   if (isAssignable(p, p.pos)) return parseAssign(p);
   return parseExprStmt(p);
+}
+
+function parseFn(p: Parser): FunctionDefStatement {
+  p.pos++; // 'fn'
+  const name = p.tokens[p.pos]!;
+  p.pos++; // name
+  p.pos++; // '('
+  p.pos++; // ')'
+  p.pos++; // '=>'
+  const body = parseOrExpression(p);
+  if (p.tokens[p.pos] === ';') p.pos++;
+  return { type: 'FunctionDefStatement', name, body };
 }
 
 function parseLet(p: Parser): LetStatement {
@@ -416,7 +469,7 @@ function isAssignable(p: Parser, pos: number): boolean {
 }
 
 function isKeyword(token: string): boolean {
-  return token === 'let' || token === 'mut' || token === 'true' || token === 'false' || token === 'if' || token === 'else' || token === 'while';
+  return token === 'let' || token === 'mut' || token === 'true' || token === 'false' || token === 'if' || token === 'else' || token === 'while' || token === 'fn';
 }
 
 function isAssignOp(token: string | undefined): boolean {
@@ -483,6 +536,11 @@ function parseFactor(p: Parser): Expr {
 
   if (/[a-zA-Z_]/.test(token)) {
     p.pos++;
+    if (p.tokens[p.pos] === '(') {
+      p.pos++; // '('
+      p.pos++; // ')'
+      return { type: 'CallExpr', name: token };
+    }
     return { type: 'Identifier', name: token };
   }
 
@@ -546,10 +604,15 @@ function tokenize(source: string): string[] {
 function tryMultiCharOp(source: string, pos: number, tokens: string[]): boolean {
   const ch = source[pos]!;
   const next = source[pos + 1];
+  if (isFatArrow(ch, next)) { tokens.push('=>'); return true; }
   if (isLogicalOp(ch, next)) { tokens.push(ch + next); return true; }
   if (isAssignCompound(ch, next)) { tokens.push(ch + next); return true; }
   if (isCompareCompound(ch, next)) { tokens.push(ch + next); return true; }
   return false;
+}
+
+function isFatArrow(ch: string, next: string | undefined): boolean {
+  return ch === '=' && next === '>';
 }
 
 function isLogicalOp(ch: string, next: string | undefined): boolean {

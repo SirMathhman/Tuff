@@ -161,3 +161,7 @@ test('interpret("let mut x = 0; while (1) x += 1; x") => Error', () => {
   expect(() => interpret("let mut x = 0; while (1) x += 1; x")).toThrow();
 });
 
+test('interpret("fn get() => 100; get()") => 100', () => {
+  expect(interpret("fn get() => 100; get()")).toBe(100);
+});
+
