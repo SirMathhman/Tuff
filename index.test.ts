@@ -73,3 +73,19 @@ test('interpret("let x = 0; { let x = 1; } x") => 0', () => {
   expect(interpret("let x = 0; { let x = 1; } x")).toBe(0);
 });
 
+test('interpret("let x = true; x") => 1', () => {
+  expect(interpret("let x = true; x")).toBe(1);
+});
+
+test('interpret("let x = false; x") => 0', () => {
+  expect(interpret("let x = false; x")).toBe(0);
+});
+
+test('interpret("true || false") => 1', () => {
+  expect(interpret("true || false")).toBe(1);
+});
+
+test('interpret("true && false") => 0', () => {
+  expect(interpret("true && false")).toBe(0);
+});
+

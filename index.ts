@@ -62,9 +62,29 @@ function processAssignment(tokens: string[], ctx: { pos: number; scopes: Array<{
 }
 
 function processExpr(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }, result: number): number {
-  result = parseExpression(tokens, ctx);
+  result = parseOrExpression(tokens, ctx);
   if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
   return result;
+}
+
+function parseOrExpression(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
+  let left = parseAndExpression(tokens, ctx);
+  while (ctx.pos < tokens.length && tokens[ctx.pos] === '||') {
+    ctx.pos++;
+    const right = parseAndExpression(tokens, ctx);
+    left = left || right;
+  }
+  return left;
+}
+
+function parseAndExpression(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
+  let left = parseExpression(tokens, ctx);
+  while (ctx.pos < tokens.length && tokens[ctx.pos] === '&&') {
+    ctx.pos++;
+    const right = parseExpression(tokens, ctx);
+    left = left && right;
+  }
+  return left;
 }
 
 function lookup(name: string, ctx: { scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): boolean {
@@ -94,6 +114,12 @@ function tokenize(source: string): string[] {
     } else if (/[a-zA-Z_]/.test(ch)) {
       tokens.push(readIdentifier(source, i));
       i = skipIdentifier(source, i);
+    } else if (ch === '|' && source[i + 1] === '|') {
+      tokens.push('||');
+      i += 2;
+    } else if (ch === '&' && source[i + 1] === '&') {
+      tokens.push('&&');
+      i += 2;
     } else if (isOperator(ch)) {
       tokens.push(ch);
       i++;
@@ -139,7 +165,7 @@ function isOperator(ch: string): boolean {
 function isAssignment(tokens: string[], pos: number): boolean {
   if (pos >= tokens.length) return false;
   const nextPos = pos + 1;
-  if (tokens[pos] === 'let' || tokens[pos] === 'mut') return false;
+  if (tokens[pos] === 'let' || tokens[pos] === 'mut' || tokens[pos] === 'true' || tokens[pos] === 'false') return false;
   return /[a-zA-Z_]/.test(tokens[pos]!) && nextPos < tokens.length && tokens[nextPos] === '=';
 }
 
@@ -175,6 +201,14 @@ function parseFactor(tokens: string[], ctx: { pos: number; scopes: Array<{ env: 
       ctx.pos++;
     }
     return result;
+  }
+  if (token === 'true') {
+    ctx.pos++;
+    return 1;
+  }
+  if (token === 'false') {
+    ctx.pos++;
+    return 0;
   }
   if (/[a-zA-Z_]/.test(token)) {
     ctx.pos++;
