@@ -91,7 +91,9 @@ type Expr =
   | BooleanLiteral
   | CallExpr
   | StructLiteral
-  | FieldAccess;
+  | FieldAccess
+  | RefExpr
+  | DerefExpr;
 
 interface StructLiteral {
   type: "StructLiteral";
@@ -132,6 +134,16 @@ interface Identifier {
 interface BooleanLiteral {
   type: "BooleanLiteral";
   value: boolean;
+}
+
+interface RefExpr {
+  type: "RefExpr";
+  operand: Expr;
+}
+
+interface DerefExpr {
+  type: "DerefExpr";
+  operand: Expr;
 }
 
 // ── Scope ──────────────────────────────────────────────────────────────────
@@ -391,23 +403,63 @@ function validateMutableTarget(name: string, scopes: Scope[]): Scope {
 function evaluateExpr(node: Expr, scopes: Scope[]): number | StructValue {
   switch (node.type) {
     case "NumberLiteral":
-      return node.value;
     case "BooleanLiteral":
-      return node.value ? 1 : 0;
-    case "Identifier": {
-      const value = lookupValue(node.name, scopes);
-      if (value !== undefined) return value;
-      throw new Error(`undefined identifier: ${node.name}`);
-    }
+      return evalLiteral(node);
+    case "Identifier":
+      return evalIdentifier(node, scopes);
     case "BinaryExpr":
       return evalBinary(node, scopes);
     case "CallExpr":
       return evalCall(node, scopes);
     case "StructLiteral":
-      return evalStructLiteral(node, scopes);
     case "FieldAccess":
-      return evalFieldAccess(node, scopes);
+      return evalStructOrField(node, scopes);
+    case "RefExpr":
+    case "DerefExpr":
+      return evalRefOrDeref(node, scopes);
   }
+}
+
+function evalLiteral(
+  node: NumberLiteral | BooleanLiteral,
+): number | StructValue {
+  if (node.type === "NumberLiteral") return node.value;
+  return node.value ? 1 : 0;
+}
+
+function evalRefOrDeref(
+  node: RefExpr | DerefExpr,
+  scopes: Scope[],
+): number | StructValue {
+  if (node.type === "RefExpr") return evalRefExpr(node, scopes);
+  return evalDerefExpr(node, scopes);
+}
+
+function evalStructOrField(
+  node: StructLiteral | FieldAccess,
+  scopes: Scope[],
+): number | StructValue {
+  if (node.type === "StructLiteral") return evalStructLiteral(node, scopes);
+  return evalFieldAccess(node, scopes);
+}
+
+function evalIdentifier(
+  node: Identifier,
+  scopes: Scope[],
+): number | StructValue {
+  const value = lookupValue(node.name, scopes);
+  if (value !== undefined) return value;
+  throw new Error(`undefined identifier: ${node.name}`);
+}
+
+function evalRefExpr(node: RefExpr, scopes: Scope[]): number | StructValue {
+  const val = evaluateExpr(node.operand, scopes);
+  return val;
+}
+
+function evalDerefExpr(node: DerefExpr, scopes: Scope[]): number | StructValue {
+  const val = evaluateExpr(node.operand, scopes);
+  return typeof val === "number" ? val : 0;
 }
 
 function evalCall(node: CallExpr, scopes: Scope[]): number {
@@ -498,7 +550,22 @@ function inferExprType(node: Expr, scopes: Scope[]): string | null {
       return inferStructLiteralType(node, scopes);
     case "FieldAccess":
       return inferFieldAccessType(node, scopes);
+    case "RefExpr":
+      return inferRefType(node, scopes);
+    case "DerefExpr":
+      return inferDerefType(node, scopes);
   }
+}
+
+function inferRefType(node: RefExpr, scopes: Scope[]): string | null {
+  const innerType = inferExprType(node.operand, scopes);
+  return innerType ? `&${innerType}` : null;
+}
+
+function inferDerefType(node: DerefExpr, scopes: Scope[]): string | null {
+  const refType = inferExprType(node.operand, scopes);
+  if (refType && refType.startsWith("&")) return refType.slice(1);
+  return refType;
 }
 
 function inferCallType(node: CallExpr, scopes: Scope[]): string | null {
@@ -566,8 +633,29 @@ function checkTypeCompatibility(
   if (dstType === null) return;
   if (srcType === null) return;
   if (srcType === dstType) return;
+  if (isRefType(srcType) && isRefType(dstType)) {
+    checkRefTypeCompatibility(srcType, dstType);
+    return;
+  }
   if (isNarrower(srcType, dstType)) return;
   throw new Error(`type mismatch: cannot assign ${srcType} to ${dstType}`);
+}
+
+function isRefType(typeName: string): boolean {
+  return typeName.startsWith("&");
+}
+
+function checkRefTypeCompatibility(
+  srcRefType: string,
+  dstRefType: string,
+): void {
+  const srcInner = srcRefType.slice(1);
+  const dstInner = dstRefType.slice(1);
+  if (srcInner !== dstInner) {
+    throw new Error(
+      `type mismatch: cannot assign ${srcRefType} to ${dstRefType}`,
+    );
+  }
 }
 
 function isNarrower(src: string, dst: string): boolean {
@@ -628,7 +716,6 @@ function parseFn(p: Parser): FunctionDefStatement {
   const params = parseParams(p);
   if (p.tokens[p.pos] === ")") p.pos++;
   const returnAnn = parseReturnAnnotation(p);
-  if (returnAnn) p.pos++; // skip type annotation
   p.pos++; // '=>'
   const body = parseOrExpression(p);
   if (p.tokens[p.pos] === ";") p.pos++;
@@ -651,18 +738,25 @@ function parseParams(p: Parser): FunctionParam[] {
       throw new Error(`duplicate parameter: ${name}`);
     }
     seenNames.add(name);
-    const typeAnn = parseParamType(p);
-    if (typeAnn) p.pos++; // skip type annotation
+    const typeAnn = parseTypeToken(p);
     params.push({ name, typeAnnotation: typeAnn });
     if (p.tokens[p.pos] === ",") p.pos++;
   }
   return params;
 }
 
-function parseParamType(p: Parser): string | null {
+function parseTypeToken(p: Parser): string | null {
   if (p.tokens[p.pos] === ":") {
     p.pos++; // skip ':'
-    return p.tokens[p.pos]!;
+    const typeToken = p.tokens[p.pos]!;
+    if (typeToken === "&") {
+      p.pos++; // skip '&'
+      const innerType = p.tokens[p.pos]!;
+      p.pos++; // skip inner type
+      return `&${innerType}`;
+    }
+    p.pos++; // skip type
+    return typeToken;
   }
   return null;
 }
@@ -696,20 +790,11 @@ function parseStructFields(p: Parser): StructField[] {
       throw new Error(`duplicate struct field: ${name}`);
     }
     seen.add(name);
-    const typeAnn = parseFieldAnnotation(p);
-    if (typeAnn) p.pos++; // skip type annotation
+    const typeAnn = parseTypeToken(p);
     fields.push({ name, typeAnnotation: typeAnn });
     if (p.tokens[p.pos] === ",") p.pos++;
   }
   return fields;
-}
-
-function parseFieldAnnotation(p: Parser): string | null {
-  if (p.tokens[p.pos] === ":") {
-    p.pos++; // skip ':'
-    return p.tokens[p.pos]!;
-  }
-  return null;
 }
 
 function parseStructLiteral(p: Parser, structName?: string): StructLiteral {
@@ -730,11 +815,7 @@ function parseStructLiteral(p: Parser, structName?: string): StructLiteral {
 }
 
 function parseReturnAnnotation(p: Parser): string | null {
-  if (p.tokens[p.pos] === ":") {
-    p.pos++; // skip ':'
-    return p.tokens[p.pos]!;
-  }
-  return null;
+  return parseTypeToken(p);
 }
 
 function parseLet(p: Parser): LetStatement {
@@ -744,7 +825,6 @@ function parseLet(p: Parser): LetStatement {
   const name = p.tokens[p.pos]!;
   p.pos++; // name
   const typeAnn = parseTypeAnnotation(p);
-  if (typeAnn) p.pos++; // skip type annotation
   p.pos++; // '='
   const value = parseOrExpression(p);
   if (p.tokens[p.pos] === ";") p.pos++;
@@ -758,12 +838,7 @@ function parseLet(p: Parser): LetStatement {
 }
 
 function parseTypeAnnotation(p: Parser): string | null {
-  if (p.tokens[p.pos] === ":") {
-    p.pos++; // skip ':'
-    const typeToken = p.tokens[p.pos]!;
-    return typeToken;
-  }
-  return null;
+  return parseTypeToken(p);
 }
 
 function parseBlock(p: Parser): BlockStatement {
@@ -905,6 +980,16 @@ function parseFactor(p: Parser): Expr {
   if (token === "false") {
     p.pos++;
     return { type: "BooleanLiteral", value: false };
+  }
+  if (token === "&") {
+    p.pos++;
+    const operand = parseFactor(p);
+    return { type: "RefExpr", operand };
+  }
+  if (token === "*") {
+    p.pos++;
+    const operand = parseFactor(p);
+    return { type: "DerefExpr", operand };
   }
   if (/\d/.test(token[0]!)) return parseNumber(p, token);
   if (/[a-zA-Z_]/.test(token)) return parseIdentifierOrCall(p, token);
@@ -1098,7 +1183,7 @@ function skipTypeAnnotation(source: string, start: number): number {
 }
 
 function isOperator(ch: string): boolean {
-  return "+-*/()=;{}<>=!:,.".includes(ch);
+  return "+-*/()=;{}<>=!:,&.".includes(ch);
 }
 
 function readTypeAnnotation(token: string): string | null {

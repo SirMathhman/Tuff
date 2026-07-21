@@ -213,3 +213,11 @@ test('interpret("struct Point { x : I32, y : I32 } struct Line { start : Point, 
   expect(interpret("struct Point { x : I32, y : I32 } struct Line { start : Point, end : Point } let line : Line = Line { start : Point { x : 0, y : 0 }, end : Point { x : 10, y : 20 } }; line.start.x + line.end.y")).toBe(20);
 });
 
+test('interpret("let x = 100; let y : &I32 = &x; *y") => 100', () => {
+  expect(interpret("let x = 100; let y : &I32 = &x; *y")).toBe(100);
+});
+
+test('interpret("let x = 100U8; let y : &U16 = &x;") => Error', () => {
+  expect(() => interpret("let x = 100U8; let y : &U16 = &x;")).toThrow();
+});
+
