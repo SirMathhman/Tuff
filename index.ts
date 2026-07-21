@@ -157,6 +157,10 @@ function evalBlock(node: BlockStatement, scopes: Scope[]): number {
 }
 
 function evalIf(node: IfStatement, scopes: Scope[]): number {
+  const condType = inferExprType(node.condition, scopes);
+  if (condType !== 'Bool') {
+    throw new Error('if condition must be Bool');
+  }
   const condition = evaluateExpr(node.condition, scopes);
   if (condition) {
     return evaluateStatement(node.thenBranch, scopes);

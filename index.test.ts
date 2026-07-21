@@ -149,3 +149,7 @@ test('interpret("let mut x: U8 = 1; x = true;") => Error', () => {
   expect(() => interpret("let mut x: U8 = 1; x = true;")).toThrow();
 });
 
+test('interpret("let mut x = 0; if (1) x = 1; x") => Error', () => {
+  expect(() => interpret("let mut x = 0; if (1) x = 1; x")).toThrow();
+});
+
