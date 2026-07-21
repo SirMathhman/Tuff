@@ -452,3 +452,92 @@ test('interpret("let mut arr = [1, 2, 3]; let mut i = 0; while (i < arr.length) 
     ),
   ).toBe(12);
 });
+
+// ── Closures ──────────────────────────────────────────────────────────────────
+
+test('interpret("let f = (x: I32) => x + 1; f(5)") => 6', () => {
+  expect(interpret("let f = (x: I32) => x + 1; f(5)")).toBe(6);
+});
+
+test('interpret("let f = (x: I32, y: I32) => x + y; f(3, 4)") => 7', () => {
+  expect(interpret("let f = (x: I32, y: I32) => x + y; f(3, 4)")).toBe(7);
+});
+
+test('interpret("let f = (x: I32) => x > 0; f(5)") => 1', () => {
+  expect(interpret("let f = (x: I32) => x > 0; f(5)")).toBe(1);
+});
+
+test('interpret("let f = (x: I32) => x > 0; f(-5)") => 0', () => {
+  expect(interpret("let f = (x: I32) => x > 0; f(-5)")).toBe(0);
+});
+
+test('interpret("let x = 10; let f = (y: I32) => x + y; f(3)") => 13', () => {
+  // Implicit &this capture (reference)
+  expect(interpret("let x = 10; let f = (y: I32) => x + y; f(3)")).toBe(13);
+});
+
+test('interpret("let mut x = 10; let f = (y: I32) => x + y; x = 20; f(3)") => 23', () => {
+  // Reference capture sees mutations
+  expect(
+    interpret("let mut x = 10; let f = (y: I32) => x + y; x = 20; f(3)"),
+  ).toBe(23);
+});
+
+test('interpret("let x = 10; let f = (&move this, y: I32) => x + y; let x = 20; f(3)") => 13', () => {
+  // Move capture snapshots value
+  expect(
+    interpret(
+      "let x = 10; let f = (&move this, y: I32) => x + y; let x = 20; f(3)",
+    ),
+  ).toBe(13);
+});
+
+test('interpret("let mut x = 10; let f = (&mut this, y: I32) => { x = x + y; x }; f(5); x") => 15', () => {
+  // Mutable capture can modify outer scope
+  expect(
+    interpret(
+      "let mut x = 10; let f = (&mut this, y: I32) => { x = x + y; x }; f(5); x",
+    ),
+  ).toBe(15);
+});
+
+test('interpret("let f = (x: I32) => x + 1; let g = f; g(10)") => 11', () => {
+  // Closure can be reassigned
+  expect(interpret("let f = (x: I32) => x + 1; let g = f; g(10)")).toBe(11);
+});
+
+test('interpret("fn make_adder(a: I32) => (b: I32) => a + b; let f = make_adder(10); f(5)") => 15', () => {
+  // Closure returned from function
+  expect(
+    interpret(
+      "fn make_adder(a: I32) => (b: I32) => a + b; let f = make_adder(10); f(5)",
+    ),
+  ).toBe(15);
+});
+
+test('interpret("let f = (x: I32) => x + 1; f(5); f(10)") => 11', () => {
+  // Closure can be called multiple times
+  expect(interpret("let f = (x: I32) => x + 1; f(5); f(10)")).toBe(11);
+});
+
+test('interpret("let f = (x: I32) => x + 1; let g = (y: I32) => f(y) * 2; g(4)") => 10', () => {
+  // Nested closures
+  expect(
+    interpret("let f = (x: I32) => x + 1; let g = (y: I32) => f(y) * 2; g(4)"),
+  ).toBe(10);
+});
+
+test('interpret("let f = (x: I32) => x + 1; f(5, 10)") => Error', () => {
+  // Wrong argument count
+  expect(() => interpret("let f = (x: I32) => x + 1; f(5, 10)")).toThrow();
+});
+
+test('interpret("let f = (x: I32) => x + 1; f") => Error', () => {
+  // Closure value cannot be final expression
+  expect(() => interpret("let f = (x: I32) => x + 1; f")).toThrow();
+});
+
+test('interpret("let f = (x: I32) => x + 1; let g = f; g") => Error', () => {
+  // Closure value cannot be final expression
+  expect(() => interpret("let f = (x: I32) => x + 1; let g = f; g")).toThrow();
+});

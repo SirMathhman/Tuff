@@ -113,7 +113,23 @@ export type Expr =
   | UnaryExpr
   | ArrayLiteral
   | IndexAccess
-  | LengthAccess;
+  | LengthAccess
+  | ClosureExpr
+  | BlockExpr;
+
+export interface BlockExpr extends Node {
+  type: "BlockExpr";
+  body: Statement[];
+}
+
+export type CaptureMode = "ref" | "mut" | "move";
+
+export interface ClosureExpr extends Node {
+  type: "ClosureExpr";
+  captureMode: CaptureMode;
+  params: FunctionParam[];
+  body: Expr;
+}
 
 export interface UnaryExpr extends Node {
   type: "UnaryExpr";
@@ -203,14 +219,38 @@ export interface RefValue {
 
 export type ArrayValue = (number | StructValue | ArrayValue)[];
 
+import type { Scope } from "./scope";
+
+export type ClosureEnvValue =
+  | number
+  | StructValue
+  | ArrayValue
+  | ClosureValue
+  | RefValue;
+
+export type ClosureValue = {
+  __closure: true;
+  params: FunctionParam[];
+  body: Expr;
+  capturedScopes: Scope[];
+  captureMode: CaptureMode;
+  snapshotEnv?: Record<string, ClosureEnvValue>;
+};
+
 export function isRefValue(
-  v: number | StructValue | RefValue | ArrayValue,
+  v: number | StructValue | RefValue | ArrayValue | ClosureValue,
 ): v is RefValue {
   return typeof v === "object" && "__ref" in v;
 }
 
 export function isArrayValue(
-  v: number | StructValue | RefValue | ArrayValue,
+  v: number | StructValue | RefValue | ArrayValue | ClosureValue,
 ): v is ArrayValue {
   return Array.isArray(v);
+}
+
+export function isClosureValue(
+  v: number | StructValue | RefValue | ArrayValue | ClosureValue,
+): v is ClosureValue {
+  return typeof v === "object" && "__closure" in v;
 }

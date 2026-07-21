@@ -1,5 +1,6 @@
 import type {
   Expr,
+  Statement,
   BinaryExpr,
   CallExpr,
   StructLiteral,
@@ -12,6 +13,8 @@ import type {
   ArrayLiteral,
   IndexAccess,
   LengthAccess,
+  ClosureExpr,
+  BlockExpr,
 } from "./ast";
 import type { Scope } from "./scope";
 import { TypeError } from "./errors";
@@ -51,7 +54,9 @@ function inferComplexExprType(
     | UnaryExpr
     | ArrayLiteral
     | IndexAccess
-    | LengthAccess,
+    | LengthAccess
+    | ClosureExpr
+    | BlockExpr,
   scopes: Scope[],
 ): Type | null {
   if (node.type === "StructLiteral")
@@ -62,7 +67,50 @@ function inferComplexExprType(
   if (node.type === "ArrayLiteral") return inferArrayLiteralType(node, scopes);
   if (node.type === "IndexAccess") return inferIndexAccessType(node, scopes);
   if (node.type === "LengthAccess") return inferLengthAccessType(node, scopes);
+  if (node.type === "ClosureExpr") return inferClosureType(node, scopes);
+  if (node.type === "BlockExpr") return inferBlockExprType(node, scopes);
   return inferUnaryType(node, scopes);
+}
+
+function inferBlockExprType(
+  node: BlockExpr,
+  scopes: Scope[],
+): Type | null {
+  if (node.body.length === 0) return null;
+  const lastStmt = node.body[node.body.length - 1]!;
+  return inferStatementType(lastStmt, scopes);
+}
+
+function inferStatementType(
+  node: Statement,
+  scopes: Scope[],
+): Type | null {
+  if (node.type === "ExprStatement")
+    return inferExprType(node.expression, scopes);
+  return null;
+}
+
+function inferClosureType(node: ClosureExpr, scopes: Scope[]): Type | null {
+  const paramTypes: Type[] = [];
+  for (const param of node.params) {
+    paramTypes.push(param.typeAnnotation ?? { kind: "i32" });
+  }
+  // Create a temporary scope with closure params for body type inference
+  const tempScope: Scope = {
+    env: {},
+    mutable: new Set(),
+    types: {},
+    functions: {},
+    functionReturnTypes: {},
+    structs: {},
+  };
+  for (let i = 0; i < node.params.length; i++) {
+    const param = node.params[i]!;
+    tempScope.types[param.name] = param.typeAnnotation ?? { kind: "i32" };
+  }
+  const extendedScopes = [...scopes, tempScope];
+  const returnType = inferExprType(node.body, extendedScopes) ?? { kind: "i32" };
+  return { kind: "closure", paramTypes, returnType };
 }
 
 function inferArrayLiteralType(
@@ -138,6 +186,11 @@ export function inferDerefType(node: DerefExpr, scopes: Scope[]): Type | null {
 }
 
 function inferCallType(node: CallExpr, scopes: Scope[]): Type | null {
+  // Check if the callee is a closure stored in a variable
+  const calleeType = lookupType(node.name, scopes);
+  if (calleeType && calleeType.kind === "closure") {
+    return calleeType.returnType;
+  }
   const returnType = lookupFunctionReturnType(node.name, scopes);
   if (returnType !== null) return returnType;
   const funcInfo = lookupFunctionInfo(node.name, scopes);

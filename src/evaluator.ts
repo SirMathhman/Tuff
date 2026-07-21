@@ -27,6 +27,9 @@ import type {
   ArrayLiteral,
   IndexAccess,
   LengthAccess,
+  ClosureExpr,
+  ClosureValue,
+  BlockExpr,
 } from "./ast";
 import type { Scope } from "./scope";
 import { createScope, lookup, findScope, lookupValue } from "./scope";
@@ -37,7 +40,7 @@ import {
   lookupFunctionInfo,
 } from "./typechecker";
 import { RuntimeError, TypeError } from "./errors";
-import { isRefValue, isArrayValue } from "./ast";
+import { isRefValue, isArrayValue, isClosureValue, type ClosureEnvValue } from "./ast";
 import type { Type } from "./types";
 import { typeEquals, isArrayType } from "./types";
 
@@ -123,7 +126,16 @@ function evalFunctionDef(node: FunctionDefStatement, scopes: Scope[]): number {
 function evalExprStmt(node: ExprStatement, scopes: Scope[]): number {
   const result = evaluateExpr(node.expression, scopes);
   if (isArrayValue(result)) {
-    throw new RuntimeError("array values cannot be used as final expression", node.loc);
+    throw new RuntimeError(
+      "array values cannot be used as final expression",
+      node.loc,
+    );
+  }
+  if (isClosureValue(result)) {
+    throw new RuntimeError(
+      "closure values cannot be used as final expression",
+      node.loc,
+    );
   }
   return typeof result === "number" ? result : 0;
 }
@@ -412,7 +424,7 @@ function validateMutableTarget(
 export function evaluateExpr(
   node: Expr,
   scopes: Scope[],
-): number | StructValue | RefValue | ArrayValue {
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
   if (isLiteral(node)) return evalLiteral(node);
   if (isSimpleExpr(node)) return evalSimpleExpr(node, scopes);
   return evalComplexExpr(node, scopes);
@@ -439,9 +451,11 @@ function evalComplexExpr(
     | UnaryExpr
     | ArrayLiteral
     | IndexAccess
-    | LengthAccess,
+    | LengthAccess
+    | ClosureExpr
+    | BlockExpr,
   scopes: Scope[],
-): number | StructValue | RefValue | ArrayValue {
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
   if (node.type === "StructLiteral") return evalStructLiteral(node, scopes);
   if (node.type === "FieldAccess") return evalFieldAccess(node, scopes);
   if (node.type === "RefExpr") return evalRefExpr(node, scopes);
@@ -449,7 +463,318 @@ function evalComplexExpr(
   if (node.type === "ArrayLiteral") return evalArrayLiteral(node, scopes);
   if (node.type === "IndexAccess") return evalIndexAccess(node, scopes);
   if (node.type === "LengthAccess") return evalLengthAccess(node, scopes);
+  if (node.type === "ClosureExpr") return evalClosureExpr(node, scopes);
+  if (node.type === "BlockExpr") return evalBlockExpr(node, scopes);
   return evalUnary(node, scopes);
+}
+
+function evalBlockExpr(
+  node: BlockExpr,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  scopes.push(createScope());
+  let result: number | StructValue | RefValue | ArrayValue | ClosureValue = 0;
+  for (const stmt of node.body) {
+    result = evaluateStatementAsExpr(stmt, scopes);
+  }
+  scopes.pop();
+  return result;
+}
+
+function evaluateStatementAsExpr(
+  node: Statement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  if (isDefStatementExpr(node)) return evalDefStatementAsExpr(node, scopes);
+  if (isAssignStatementExpr(node)) return evalAssignStatementAsExpr(node, scopes);
+  return evalControlStatementAsExpr(node, scopes);
+}
+
+function isDefStatementExpr(
+  node: Statement,
+): node is FunctionDefStatement | StructDefStatement {
+  return (
+    node.type === "FunctionDefStatement" || node.type === "StructDefStatement"
+  );
+}
+
+function evalDefStatementAsExpr(
+  node: FunctionDefStatement | StructDefStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  if (node.type === "FunctionDefStatement") return evalFunctionDefAsExpr(node, scopes);
+  return evalStructDefAsExpr(node, scopes);
+}
+
+function isAssignStatementExpr(
+  node: Statement,
+): node is AssignStatement | CompoundAssignStatement | DerefAssignStatement {
+  return (
+    node.type === "AssignStatement" ||
+    node.type === "CompoundAssignStatement" ||
+    node.type === "DerefAssignStatement"
+  );
+}
+
+function evalAssignStatementAsExpr(
+  node: AssignStatement | CompoundAssignStatement | DerefAssignStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  if (node.type === "AssignStatement") return evalAssignAsExpr(node, scopes);
+  if (node.type === "CompoundAssignStatement") return evalCompoundAssignAsExpr(node, scopes);
+  return evalDerefAssignAsExpr(node, scopes);
+}
+
+function evalControlStatementAsExpr(
+  node: Statement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  switch (node.type) {
+    case "ExprStatement":
+      return evaluateExpr(node.expression, scopes);
+    case "LetStatement":
+      return evalLetAsExpr(node, scopes);
+    case "BlockStatement":
+      return evalBlockAsExpr(node, scopes);
+    case "IfStatement":
+      return evalIfAsExpr(node, scopes);
+    case "WhileStatement":
+      return evalWhileAsExpr(node, scopes);
+    default:
+      return 0;
+  }
+}
+
+function evalLetAsExpr(
+  node: LetStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const value = evaluateExpr(node.value, scopes);
+  const srcType = inferExprType(node.value, scopes);
+  checkTypeCompatibility(srcType, node.typeAnnotation, node.loc);
+  if (typeof value === "number")
+    validateTypeRange(value, node.typeAnnotation, node.loc);
+  if (
+    node.typeAnnotation &&
+    isArrayType(node.typeAnnotation) &&
+    isArrayValue(value)
+  ) {
+    validateArrayElements(value, node.typeAnnotation, scopes, node.loc);
+  }
+  const scope = scopes[scopes.length - 1]!;
+  scope.env[node.name] = value;
+  scope.types[node.name] = node.typeAnnotation ?? srcType;
+  if (node.mutable) scope.mutable.add(node.name);
+  return 0;
+}
+
+function evalAssignAsExpr(
+  node: AssignStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const scope = validateMutableTarget(node.name, scopes, node.loc);
+  const srcType = inferExprType(node.value, scopes);
+  const dstType = scope.types[node.name] ?? null;
+  checkTypeCompatibility(srcType, dstType, node.loc);
+  const value = evaluateExpr(node.value, scopes);
+  scope.env[node.name] = value;
+  return 0;
+}
+
+function evalCompoundAssignAsExpr(
+  node: CompoundAssignStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const scope = validateMutableTarget(node.name, scopes, node.loc);
+  const value = evaluateExpr(node.value, scopes);
+  if (node.op === "+=") {
+    const current = scope.env[node.name]!;
+    const numValue = typeof value === "number" ? value : 0;
+    scope.env[node.name] =
+      (typeof current === "number" ? current : 0) + numValue;
+  }
+  return 0;
+}
+
+function evalDerefAssignAsExpr(
+  node: DerefAssignStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const refVal = evaluateExpr(node.target, scopes);
+  if (node.target.type === "IndexAccess") {
+    return evalIndexAssignAsExpr(node, scopes);
+  }
+  if (!isRefValue(refVal)) {
+    throw new RuntimeError("cannot assign to non-reference value", node.loc);
+  }
+  if (!refVal.mutable) {
+    throw new RuntimeError(
+      "cannot assign through immutable reference",
+      node.loc,
+    );
+  }
+  const scope = findScope(refVal.name, scopes);
+  if (!scope) {
+    throw new RuntimeError(`undefined identifier: ${refVal.name}`, node.loc);
+  }
+  const value = evaluateExpr(node.value, scopes);
+  scope.env[refVal.name] = value;
+  return 0;
+}
+
+function evalIndexAssignAsExpr(
+  node: DerefAssignStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const indexNode = node.target;
+  if (indexNode.type !== "IndexAccess") {
+    throw new RuntimeError("invalid assignment target", node.loc);
+  }
+  const objExpr = indexNode.object;
+  const objName = objExpr.type === "Identifier" ? objExpr.name : "";
+  const scope = findScope(objName, scopes);
+  if (!scope) {
+    throw new RuntimeError(`undefined identifier: ${objName}`, node.loc);
+  }
+  if (!scope.mutable.has(objName)) {
+    throw new RuntimeError(
+      `cannot assign to immutable variable: ${objName}`,
+      node.loc,
+    );
+  }
+  const objVal = scope.env[objName];
+  if (!isArrayValue(objVal)) {
+    throw new RuntimeError("cannot index non-array value", node.loc);
+  }
+  const index = evaluateExpr(indexNode.index, scopes);
+  const idx = typeof index === "number" ? index : 0;
+  if (idx < 0 || idx >= objVal.length) {
+    throw new RuntimeError(`array index out of bounds: ${idx}`, node.loc);
+  }
+  const value = evaluateExpr(node.value, scopes);
+  objVal[idx] = toNumberOrStruct(value);
+  return 0;
+}
+
+function evalBlockAsExpr(
+  node: BlockStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  scopes.push(createScope());
+  let result: number | StructValue | RefValue | ArrayValue | ClosureValue = 0;
+  for (const stmt of node.body) {
+    result = evaluateStatementAsExpr(stmt, scopes);
+  }
+  scopes.pop();
+  return result;
+}
+
+function evalIfAsExpr(
+  node: IfStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const condType = inferExprType(node.condition, scopes);
+  if (!condType || !typeEquals(condType, { kind: "bool" })) {
+    throw new TypeError("if condition must be Bool", node.loc);
+  }
+  const condition = evaluateExpr(node.condition, scopes);
+  if (condition) {
+    return evaluateStatementAsExpr(node.thenBranch, scopes);
+  } else if (node.elseBranch) {
+    return evaluateStatementAsExpr(node.elseBranch, scopes);
+  }
+  return 0;
+}
+
+function evalWhileAsExpr(
+  node: WhileStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const condType = inferExprType(node.condition, scopes);
+  if (!condType || !typeEquals(condType, { kind: "bool" })) {
+    throw new TypeError("while condition must be Bool", node.loc);
+  }
+  while (evaluateExpr(node.condition, scopes)) {
+    evaluateStatementAsExpr(node.body, scopes);
+  }
+  return 0;
+}
+
+function evalFunctionDefAsExpr(
+  node: FunctionDefStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const scope = scopes[scopes.length - 1]!;
+  scope.functions[node.name] = { body: node.body, params: node.params };
+  scope.functionReturnTypes[node.name] = node.returnAnnotation;
+  if (node.returnAnnotation) {
+    const srcType = inferExprType(node.body, scopes);
+    checkTypeCompatibility(srcType, node.returnAnnotation, node.loc);
+  }
+  return 0;
+}
+
+function evalStructDefAsExpr(
+  node: StructDefStatement,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  const scope = scopes[scopes.length - 1]!;
+  scope.structs[node.name] = node.fields;
+  return 0;
+}
+
+function evalClosureExpr(
+  node: ClosureExpr,
+  scopes: Scope[],
+): ClosureValue {
+  const capturedScopes = scopes.slice();
+  let snapshotEnv: Record<string, ClosureEnvValue> | undefined;
+  if (node.captureMode === "move") {
+    snapshotEnv = {};
+    for (const scope of capturedScopes) {
+      for (const [name, value] of Object.entries(scope.env)) {
+        if (!(name in snapshotEnv!)) {
+          snapshotEnv![name] = value;
+        }
+      }
+    }
+  }
+  return {
+    __closure: true,
+    params: node.params,
+    body: node.body,
+    capturedScopes,
+    captureMode: node.captureMode,
+    snapshotEnv,
+  };
+}
+
+function evalClosureCall(
+  closure: ClosureValue,
+  args: Expr[],
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  if (args.length !== closure.params.length) {
+    throw new RuntimeError(
+      `closure expects ${closure.params.length} arguments, got ${args.length}`,
+    );
+  }
+  const callScope: Scope = createScope();
+  for (let i = 0; i < closure.params.length; i++) {
+    const param = closure.params[i]!;
+    const argValue = evaluateExpr(args[i]!, scopes);
+    callScope.env[param.name] = argValue;
+    callScope.types[param.name] = param.typeAnnotation;
+  }
+  let newScopes: Scope[];
+  if (closure.captureMode === "move") {
+    const snapshotScope: Scope = createScope();
+    snapshotScope.env = { ...(closure.snapshotEnv || {}) };
+    newScopes = [snapshotScope, callScope];
+  } else {
+    newScopes = [...closure.capturedScopes, callScope];
+  }
+  return evaluateExpr(closure.body, newScopes);
 }
 
 function evalArrayLiteral(node: ArrayLiteral, scopes: Scope[]): ArrayValue {
@@ -492,7 +817,7 @@ function evalLengthAccess(node: LengthAccess, scopes: Scope[]): number {
 function evalSimpleExpr(
   node: Identifier | BinaryExpr | CallExpr,
   scopes: Scope[],
-): number | StructValue | RefValue | ArrayValue {
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
   if (node.type === "Identifier") return evalIdentifier(node, scopes);
   if (node.type === "BinaryExpr") return evalBinary(node, scopes);
   return evalCall(node, scopes);
@@ -517,7 +842,7 @@ function evalLiteral(
 function evalIdentifier(
   node: Identifier,
   scopes: Scope[],
-): number | StructValue | RefValue | ArrayValue {
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
   const value = lookupValue(node.name, scopes);
   if (value !== undefined) return value;
   throw new RuntimeError(`undefined identifier: ${node.name}`, node.loc);
@@ -560,7 +885,15 @@ function evalDerefExpr(node: DerefExpr, scopes: Scope[]): number | StructValue {
   return typeof val === "number" ? val : 0;
 }
 
-function evalCall(node: CallExpr, scopes: Scope[]): number {
+function evalCall(
+  node: CallExpr,
+  scopes: Scope[],
+): number | StructValue | RefValue | ArrayValue | ClosureValue {
+  // Check if callee is a closure stored in a variable
+  const calleeValue = lookupValue(node.name, scopes);
+  if (isClosureValue(calleeValue)) {
+    return evalClosureCall(calleeValue, node.arguments, scopes);
+  }
   const funcInfo = lookupFunctionInfo(node.name, scopes);
   if (funcInfo === null)
     throw new RuntimeError(`undefined function: ${node.name}`, node.loc);
@@ -585,7 +918,7 @@ function evalCall(node: CallExpr, scopes: Scope[]): number {
   scopes.push(callScope);
   const result = evaluateExpr(funcInfo.body, scopes);
   scopes.pop();
-  return typeof result === "number" ? result : 0;
+  return result;
 }
 
 function evalBinary(node: BinaryExpr, scopes: Scope[]): number {

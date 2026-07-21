@@ -1,7 +1,20 @@
 // ── Type AST ────────────────────────────────────────────────────────────────
 
 export type Type =
-  UintType | SignedType | BoolType | I32Type | RefType | StructType | ArrayType;
+  | UintType
+  | SignedType
+  | BoolType
+  | I32Type
+  | RefType
+  | StructType
+  | ArrayType
+  | ClosureType;
+
+export interface ClosureType {
+  kind: "closure";
+  paramTypes: Type[];
+  returnType: Type;
+}
 
 export interface UintType {
   kind: "uint";
@@ -58,6 +71,8 @@ export function typeToString(type: Type): string {
       return type.name;
     case "array":
       return `[${typeToString(type.elementType)}; ${type.size}]`;
+    case "closure":
+      return `(${type.paramTypes.map(typeToString).join(", ")}) => ${typeToString(type.returnType)}`;
     default:
       return "unknown";
   }
@@ -140,6 +155,8 @@ function typeEqualsSameKind(a: Type, b: Type): boolean {
       return eqStruct(a, b);
     case "array":
       return equalsArray(a, b);
+    case "closure":
+      return equalsClosure(a, b);
     default:
       return false;
   }
@@ -167,12 +184,25 @@ function equalsRef(a: RefType, b: Type): boolean {
   return a.mutable === b.mutable && typeEquals(a.inner, b.inner);
 }
 
+function equalsClosure(a: ClosureType, b: Type): boolean {
+  if (b.kind !== "closure") return false;
+  if (a.paramTypes.length !== b.paramTypes.length) return false;
+  for (let i = 0; i < a.paramTypes.length; i++) {
+    if (!typeEquals(a.paramTypes[i]!, b.paramTypes[i]!)) return false;
+  }
+  return typeEquals(a.returnType, b.returnType);
+}
+
 export function isRefType(type: Type): boolean {
   return type.kind === "ref";
 }
 
 export function isArrayType(type: Type): boolean {
   return type.kind === "array";
+}
+
+export function isClosureType(type: Type): boolean {
+  return type.kind === "closure";
 }
 
 export function typeBits(type: Type): number | null {
@@ -186,6 +216,9 @@ export function isSignedType(type: Type): boolean {
 }
 
 export function isNarrower(a: Type, b: Type): boolean {
+  if (a.kind === "closure" || b.kind === "closure") {
+    return typeEquals(a, b);
+  }
   if (a.kind === "array" && b.kind === "array") {
     return isNarrower(a.elementType, b.elementType);
   }

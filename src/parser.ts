@@ -18,12 +18,14 @@ import type {
   ExprStatement,
   ArrayLiteral,
   IndexAccess,
+  BlockExpr,
 } from "./ast";
 import type { Token, Position } from "./errors";
 import { ParseError } from "./errors";
 import { validateTypeRange } from "./typechecker";
 import { parseTypeString } from "./types";
 import type { Type } from "./types";
+import { parseTypeString } from "./types";
 
 interface Parser {
   tokens: Token[];
@@ -136,10 +138,31 @@ function parseTypeToken(p: Parser): Type | null {
     if (typeToken === "[") {
       return parseArrayType(p);
     }
+    // Closure type: (T1, T2) => T3
+    if (typeToken === "(") {
+      return parseClosureType(p);
+    }
     p.pos++; // skip type
     return parseTypeString(typeToken);
   }
   return null;
+}
+
+function parseClosureType(p: Parser): Type | null {
+  p.pos++; // skip '('
+  const paramTypes: Type[] = [];
+  while (!at(p, ")") && p.pos < p.tokens.length) {
+    const paramType = parseTypeToken(p);
+    if (paramType) paramTypes.push(paramType);
+    if (at(p, ",")) p.pos++;
+  }
+  if (!at(p, ")")) return null;
+  p.pos++; // skip ')'
+  if (!at(p, "=>")) return null;
+  p.pos++; // skip '=>'
+  const returnType = parseTypeToken(p);
+  if (!returnType) return null;
+  return { kind: "closure", paramTypes, returnType };
 }
 
 function parseArrayType(p: Parser): Type | null {
@@ -442,12 +465,9 @@ function parseFactor(p: Parser): Expr {
     return { type: "NumberLiteral", value: 0, typeAnnotation: null };
   const token = curText(p);
 
-  if (token === "(") return parseParens(p);
-  if (token === "[") return parseArrayLiteral(p);
+  if (isParenOrBlock(token)) return parseParenOrBlock(p, token);
   if (isBooleanToken(token)) return parseBoolean(p, token);
-  if (token === "&") return parseRefExpr(p);
-  if (token === "*") return parseDerefExpr(p);
-  if (token === "-") return parseUnaryMinus(p);
+  if (isOperatorToken(token)) return parseOperatorFactor(p, token);
   if (isNumericToken(token)) return parseNumber(p, token);
   if (isIdentToken(token)) return parseIdentifierOrCall(p, token);
   return parseFallback(p, token);
@@ -455,6 +475,43 @@ function parseFactor(p: Parser): Expr {
 
 function isBooleanToken(token: string): boolean {
   return token === "true" || token === "false";
+}
+
+function parseBoolean(p: Parser, token: string): Expr {
+  const loc = curPos(p);
+  p.pos++;
+  return { type: "BooleanLiteral", value: token === "true", loc };
+}
+
+function isParenOrBlock(token: string): boolean {
+  return token === "(" || token === "{" || token === "[";
+}
+
+function parseParenOrBlock(p: Parser, token: string): Expr {
+  if (token === "(") return tryParseClosureOrParens(p);
+  if (token === "{") return parseBlockExpr(p);
+  return parseArrayLiteral(p);
+}
+
+function isOperatorToken(token: string): boolean {
+  return token === "&" || token === "*" || token === "-";
+}
+
+function parseOperatorFactor(p: Parser, token: string): Expr {
+  if (token === "&") return parseRefExpr(p);
+  if (token === "*") return parseDerefExpr(p);
+  return parseUnaryMinus(p);
+}
+
+function parseBlockExpr(p: Parser): BlockExpr {
+  const loc = curPos(p);
+  p.pos++; // '{'
+  const body: Statement[] = [];
+  while (p.pos < p.tokens.length && !at(p, "}")) {
+    body.push(parseStatement(p));
+  }
+  if (at(p, "}")) p.pos++;
+  return { type: "BlockExpr", body, loc };
 }
 
 function isNumericToken(token: string): boolean {
@@ -474,12 +531,6 @@ function parseFallback(p: Parser, token: string): Expr {
     typeAnnotation: null,
     loc,
   };
-}
-
-function parseBoolean(p: Parser, token: string): Expr {
-  const loc = curPos(p);
-  p.pos++;
-  return { type: "BooleanLiteral", value: token === "true", loc };
 }
 
 function parseRefExpr(p: Parser): Expr {
@@ -503,6 +554,70 @@ function parseUnaryMinus(p: Parser): Expr {
   p.pos++;
   const operand = parseFactor(p);
   return { type: "UnaryExpr", op: "-", operand, loc };
+}
+
+function tryParseClosureOrParens(p: Parser): Expr {
+  const savedPos = p.pos;
+  const loc = curPos(p);
+  p.pos++; // skip '('
+
+  // Check for capture declaration
+  const captureResult = tryParseCapture(p);
+  if (captureResult === null) {
+    p.pos = savedPos;
+    return parseParens(p);
+  }
+  const captureMode = captureResult;
+
+  // Parse parameters
+  const params = parseClosureParams(p, savedPos);
+  if (params === null) return parseParens(p);
+
+  const body = parseOrExpression(p);
+  return { type: "ClosureExpr", captureMode, params, body, loc };
+}
+
+function tryParseCapture(p: Parser): "ref" | "mut" | "move" | null {
+  if (!at(p, "&")) return "ref";
+  p.pos++; // skip '&'
+  let mode: "ref" | "mut" | "move" = "ref";
+  if (at(p, "mut")) {
+    mode = "mut";
+    p.pos++;
+  } else if (at(p, "move")) {
+    mode = "move";
+    p.pos++;
+  }
+  if (!at(p, "this")) return null;
+  p.pos++; // skip 'this'
+  if (at(p, ",")) p.pos++;
+  return mode;
+}
+
+function parseClosureParams(
+  p: Parser,
+  savedPos: number,
+): FunctionParam[] | null {
+  const params: FunctionParam[] = [];
+  while (!at(p, ")") && p.pos < p.tokens.length) {
+    const paramLoc = curPos(p);
+    const paramName = curText(p);
+    p.pos++; // param name
+    const typeAnn = parseTypeToken(p);
+    params.push({ name: paramName, typeAnnotation: typeAnn, loc: paramLoc });
+    if (at(p, ",")) p.pos++;
+  }
+  if (!at(p, ")")) {
+    p.pos = savedPos;
+    return null;
+  }
+  p.pos++; // skip ')'
+  if (!at(p, "=>")) {
+    p.pos = savedPos;
+    return null;
+  }
+  p.pos++; // skip '=>'
+  return params;
 }
 
 function parseParens(p: Parser): Expr {
