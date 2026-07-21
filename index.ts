@@ -231,7 +231,7 @@ function inferExprType(node: Expr, scopes: Scope[]): string | null {
     case 'NumberLiteral':
       return node.typeAnnotation;
     case 'BooleanLiteral':
-      return null;
+      return 'Bool';
     case 'Identifier':
       return lookupType(node.name, scopes);
     case 'BinaryExpr':
