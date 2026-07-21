@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { interpret } from ".";
+import { interpret } from "../src";
 
 test('interpret("") => 0', () => {
   expect(interpret("")).toBe(0);
@@ -224,4 +224,3 @@ test('interpret("let x = 100U8; let y : &U16 = &x;") => Error', () => {
 test('interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x") => 100', () => {
   expect(interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x")).toBe(100);
 });
-

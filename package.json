@@ -1,12 +1,13 @@
 {
   "name": "tuff",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "bun test",
+    "test": "bun test test/",
     "lint": "eslint . --fix",
-    "cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers"
+    "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers",
+    "circular": "madge --circular ./src"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -14,6 +15,7 @@
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "jiti": "^2.7.0",
+    "madge": "^8.0.0",
     "typescript-eslint": "^8.65.0"
   },
   "peerDependencies": {
