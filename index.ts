@@ -1,27 +1,56 @@
 export function interpret(source: string): number {
   const tokens = tokenize(source);
   const env: Record<string, number> = {};
+  const mutable = new Set<string>();
   let result = 0;
-  const ctx = { pos: 0, env };
+  const ctx = { pos: 0, env, mutable };
 
   while (ctx.pos < tokens.length) {
-    if (tokens[ctx.pos] === 'let') {
-      ctx.pos++; // skip 'let'
-      const name = tokens[ctx.pos]!;
-      ctx.pos++; // skip identifier
-      ctx.pos++; // skip '='
-      const value = parseExpression(tokens, ctx);
-      env[name] = value;
-      if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') {
-        ctx.pos++;
-      }
-    } else {
-      result = parseExpression(tokens, ctx);
-      if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') {
-        ctx.pos++;
-      }
-    }
+    result = processStatement(tokens, ctx, result);
   }
+  return result;
+}
+
+function processStatement(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }, result: number): number {
+  if (ctx.pos >= tokens.length) return result;
+  if (tokens[ctx.pos] === 'let') return processLet(tokens, ctx);
+  if (isAssignment(tokens, ctx.pos)) return processAssignment(tokens, ctx);
+  return processExpr(tokens, ctx, result);
+}
+
+function processLet(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }): number {
+  ctx.pos++; // skip 'let'
+  const isMut = ctx.pos < tokens.length && tokens[ctx.pos] === 'mut';
+  if (isMut) ctx.pos++; // skip 'mut'
+  const name = tokens[ctx.pos]!;
+  ctx.pos++; // skip identifier
+  ctx.pos++; // skip '='
+  const value = parseExpression(tokens, ctx);
+  ctx.env[name] = value;
+  if (isMut) ctx.mutable.add(name);
+  if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
+  return 0;
+}
+
+function processAssignment(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }): number {
+  const name = tokens[ctx.pos]!;
+  ctx.pos++; // skip identifier
+  ctx.pos++; // skip '='
+  if (ctx.env[name] === undefined) {
+    throw new Error(`undefined identifier: ${name}`);
+  }
+  if (!ctx.mutable.has(name)) {
+    throw new Error(`cannot assign to immutable variable: ${name}`);
+  }
+  const value = parseExpression(tokens, ctx);
+  ctx.env[name] = value;
+  if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
+  return 0;
+}
+
+function processExpr(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }, result: number): number {
+  result = parseExpression(tokens, ctx);
+  if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
   return result;
 }
 
@@ -78,6 +107,13 @@ function skipIdentifier(source: string, start: number): number {
 
 function isOperator(ch: string): boolean {
   return '+-*/()=;'.includes(ch);
+}
+
+function isAssignment(tokens: string[], pos: number): boolean {
+  if (pos >= tokens.length) return false;
+  const nextPos = pos + 1;
+  if (tokens[pos] === 'let' || tokens[pos] === 'mut') return false;
+  return /[a-zA-Z_]/.test(tokens[pos]!) && nextPos < tokens.length && tokens[nextPos] === '=';
 }
 
 function parseExpression(tokens: string[], ctx: { pos: number; env: Record<string, number> }): number {

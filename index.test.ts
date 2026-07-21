@@ -53,3 +53,19 @@ test('interpret("undefinedIdentifier") => Error', () => {
   expect(() => interpret("undefinedIdentifier")).toThrow();
 });
 
+test('interpret("let mut x = 0; x = 1; x") => 1', () => {
+  expect(interpret("let mut x = 0; x = 1; x")).toBe(1);
+});
+
+test('interpret("let mut x = 1; x = 2;") => 0', () => {
+  expect(interpret("let mut x = 1; x = 2;")).toBe(0);
+});
+
+test('interpret("let x = 1; x = 2;") => Error', () => {
+  expect(() => interpret("let x = 1; x = 2;")).toThrow();
+});
+
+test('interpret("x = 2;") => Error', () => {
+  expect(() => interpret("x = 2;")).toThrow();
+});
+
