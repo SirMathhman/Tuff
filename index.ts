@@ -1,9 +1,8 @@
 export function interpret(source: string): number {
   const tokens = tokenize(source);
-  const env: Record<string, number> = {};
-  const mutable = new Set<string>();
+  const scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> = [{ env: {}, mutable: new Set() }];
   let result = 0;
-  const ctx = { pos: 0, env, mutable };
+  const ctx = { pos: 0, scopes };
 
   while (ctx.pos < tokens.length) {
     result = processStatement(tokens, ctx, result);
@@ -11,14 +10,26 @@ export function interpret(source: string): number {
   return result;
 }
 
-function processStatement(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }, result: number): number {
+function processStatement(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }, result: number): number {
   if (ctx.pos >= tokens.length) return result;
   if (tokens[ctx.pos] === 'let') return processLet(tokens, ctx);
   if (isAssignment(tokens, ctx.pos)) return processAssignment(tokens, ctx);
+  if (tokens[ctx.pos] === '{') return processBlock(tokens, ctx);
   return processExpr(tokens, ctx, result);
 }
 
-function processLet(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }): number {
+function processBlock(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
+  ctx.pos++; // skip '{'
+  ctx.scopes.push({ env: {}, mutable: new Set() });
+  while (ctx.pos < tokens.length && tokens[ctx.pos] !== '}') {
+    processStatement(tokens, ctx, 0);
+  }
+  if (ctx.pos < tokens.length) ctx.pos++; // skip '}'
+  ctx.scopes.pop();
+  return 0;
+}
+
+function processLet(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
   ctx.pos++; // skip 'let'
   const isMut = ctx.pos < tokens.length && tokens[ctx.pos] === 'mut';
   if (isMut) ctx.pos++; // skip 'mut'
@@ -26,32 +37,48 @@ function processLet(tokens: string[], ctx: { pos: number; env: Record<string, nu
   ctx.pos++; // skip identifier
   ctx.pos++; // skip '='
   const value = parseExpression(tokens, ctx);
-  ctx.env[name] = value;
-  if (isMut) ctx.mutable.add(name);
+  const currentScope = ctx.scopes[ctx.scopes.length - 1]!;
+  currentScope.env[name] = value;
+  if (isMut) currentScope.mutable.add(name);
   if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
   return 0;
 }
 
-function processAssignment(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }): number {
+function processAssignment(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
   const name = tokens[ctx.pos]!;
   ctx.pos++; // skip identifier
   ctx.pos++; // skip '='
-  if (ctx.env[name] === undefined) {
+  if (!lookup(name, ctx)) {
     throw new Error(`undefined identifier: ${name}`);
   }
-  if (!ctx.mutable.has(name)) {
+  const scope = findScope(name, ctx);
+  if (!scope || !scope.mutable.has(name)) {
     throw new Error(`cannot assign to immutable variable: ${name}`);
   }
   const value = parseExpression(tokens, ctx);
-  ctx.env[name] = value;
+  scope.env[name] = value;
   if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
   return 0;
 }
 
-function processExpr(tokens: string[], ctx: { pos: number; env: Record<string, number>; mutable: Set<string> }, result: number): number {
+function processExpr(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }, result: number): number {
   result = parseExpression(tokens, ctx);
   if (ctx.pos < tokens.length && tokens[ctx.pos] === ';') ctx.pos++;
   return result;
+}
+
+function lookup(name: string, ctx: { scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): boolean {
+  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    if (ctx.scopes[i]!.env[name] !== undefined) return true;
+  }
+  return false;
+}
+
+function findScope(name: string, ctx: { scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): { env: Record<string, number>; mutable: Set<string> } | null {
+  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    if (ctx.scopes[i]!.env[name] !== undefined) return ctx.scopes[i]!;
+  }
+  return null;
 }
 
 function tokenize(source: string): string[] {
@@ -106,7 +133,7 @@ function skipIdentifier(source: string, start: number): number {
 }
 
 function isOperator(ch: string): boolean {
-  return '+-*/()=;'.includes(ch);
+  return '+-*/()=;{}'.includes(ch);
 }
 
 function isAssignment(tokens: string[], pos: number): boolean {
@@ -116,7 +143,7 @@ function isAssignment(tokens: string[], pos: number): boolean {
   return /[a-zA-Z_]/.test(tokens[pos]!) && nextPos < tokens.length && tokens[nextPos] === '=';
 }
 
-function parseExpression(tokens: string[], ctx: { pos: number; env: Record<string, number> }): number {
+function parseExpression(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
   let left = parseTerm(tokens, ctx);
   while (ctx.pos < tokens.length && (tokens[ctx.pos] === '+' || tokens[ctx.pos] === '-')) {
     const op = tokens[ctx.pos]!;
@@ -127,7 +154,7 @@ function parseExpression(tokens: string[], ctx: { pos: number; env: Record<strin
   return left;
 }
 
-function parseTerm(tokens: string[], ctx: { pos: number; env: Record<string, number> }): number {
+function parseTerm(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
   let left = parseFactor(tokens, ctx);
   while (ctx.pos < tokens.length && (tokens[ctx.pos] === '*' || tokens[ctx.pos] === '/')) {
     const op = tokens[ctx.pos]!;
@@ -138,7 +165,7 @@ function parseTerm(tokens: string[], ctx: { pos: number; env: Record<string, num
   return left;
 }
 
-function parseFactor(tokens: string[], ctx: { pos: number; env: Record<string, number> }): number {
+function parseFactor(tokens: string[], ctx: { pos: number; scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number {
   if (ctx.pos >= tokens.length) return 0;
   const token = tokens[ctx.pos]!;
   if (token === '(') {
@@ -151,11 +178,17 @@ function parseFactor(tokens: string[], ctx: { pos: number; env: Record<string, n
   }
   if (/[a-zA-Z_]/.test(token)) {
     ctx.pos++;
-    if (ctx.env[token] !== undefined) {
-      return ctx.env[token];
-    }
+    const value = lookupValue(token, ctx);
+    if (value !== undefined) return value;
     throw new Error(`undefined identifier: ${token}`);
   }
   ctx.pos++;
   return parseInt(token, 10);
+}
+
+function lookupValue(name: string, ctx: { scopes: Array<{ env: Record<string, number>; mutable: Set<string> }> }): number | undefined {
+  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    if (ctx.scopes[i]!.env[name] !== undefined) return ctx.scopes[i]!.env[name];
+  }
+  return undefined;
 }

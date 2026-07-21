@@ -69,3 +69,7 @@ test('interpret("x = 2;") => Error', () => {
   expect(() => interpret("x = 2;")).toThrow();
 });
 
+test('interpret("let x = 0; { let x = 1; } x") => 0', () => {
+  expect(interpret("let x = 0; { let x = 1; } x")).toBe(0);
+});
+
