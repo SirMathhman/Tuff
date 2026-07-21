@@ -169,3 +169,7 @@ test('interpret("fn get() : I32 => 100; get()") => 100', () => {
   expect(interpret("fn get() : I32 => 100; get()")).toBe(100);
 });
 
+test('interpret("fn get() : U16 => 100; let x : U8 = get();") => Error', () => {
+  expect(() => interpret("fn get() : U16 => 100; let x : U8 = get();")).toThrow();
+});
+

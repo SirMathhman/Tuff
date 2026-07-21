@@ -90,14 +90,14 @@ interface BooleanLiteral {
 
 // ── Scope ──────────────────────────────────────────────────────────────────
 
-type Scope = { env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null>; functions: Record<string, Expr> };
+type Scope = { env: Record<string, number>; mutable: Set<string>; types: Record<string, string | null>; functions: Record<string, Expr>; functionReturnTypes: Record<string, string | null> };
 
 // ── Entry Point ────────────────────────────────────────────────────────────
 
 export function interpret(source: string): number {
   const tokens = tokenize(source);
   const ast = parse(tokens);
-  const scopes: Scope[] = [{ env: {}, mutable: new Set(), types: {}, functions: {} }];
+  const scopes: Scope[] = [{ env: {}, mutable: new Set(), types: {}, functions: {}, functionReturnTypes: {} }];
   return evaluateProgram(ast, scopes);
 }
 
@@ -127,6 +127,7 @@ function evaluateStatement(node: Statement, scopes: Scope[]): number {
 function evalFunctionDef(node: FunctionDefStatement, scopes: Scope[]): number {
   const scope = scopes[scopes.length - 1]!;
   scope.functions[node.name] = node.body;
+  scope.functionReturnTypes[node.name] = node.returnAnnotation;
   if (node.returnAnnotation) {
     const srcType = inferExprType(node.body, scopes);
     checkTypeCompatibility(srcType, node.returnAnnotation);
@@ -170,7 +171,7 @@ function evalCompoundAssign(node: CompoundAssignStatement, scopes: Scope[]): num
 }
 
 function evalBlock(node: BlockStatement, scopes: Scope[]): number {
-  scopes.push({ env: {}, mutable: new Set(), types: {}, functions: {} });
+  scopes.push({ env: {}, mutable: new Set(), types: {}, functions: {}, functionReturnTypes: {} });
   let result = 0;
   for (const stmt of node.body) {
     result = evaluateStatement(stmt, scopes);
@@ -291,8 +292,18 @@ function inferExprType(node: Expr, scopes: Scope[]): string | null {
 }
 
 function inferCallType(node: CallExpr, scopes: Scope[]): string | null {
+  const returnType = lookupFunctionReturnType(node.name, scopes);
+  if (returnType !== null) return returnType;
   const body = lookupFunction(node.name, scopes);
   return body ? inferExprType(body, scopes) : null;
+}
+
+function lookupFunctionReturnType(name: string, scopes: Scope[]): string | null {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    const scope = scopes[i]!;
+    if (name in scope.functionReturnTypes) return scope.functionReturnTypes[name]!;
+  }
+  return null;
 }
 
 function inferBinaryType(node: BinaryExpr, scopes: Scope[]): string | null {
