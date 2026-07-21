@@ -258,9 +258,21 @@ function lookupType(name: string, scopes: Scope[]): string | null {
 
 function checkTypeCompatibility(srcType: string | null, dstType: string | null): void {
   if (dstType === null) return;
-  if (srcType !== null && srcType !== dstType) {
-    throw new Error(`type mismatch: cannot assign ${srcType} to ${dstType}`);
-  }
+  if (srcType === null) return;
+  if (srcType === dstType) return;
+  if (isNarrower(srcType, dstType)) return;
+  throw new Error(`type mismatch: cannot assign ${srcType} to ${dstType}`);
+}
+
+function isNarrower(src: string, dst: string): boolean {
+  const srcBits = parseTypeBits(src);
+  const dstBits = parseTypeBits(dst);
+  return srcBits !== null && dstBits !== null && srcBits < dstBits;
+}
+
+function parseTypeBits(typeName: string): number | null {
+  const match = typeName.match(/^U(\d+)$/);
+  return match ? parseInt(match[1]!, 10) : null;
 }
 
 // ── Parser ─────────────────────────────────────────────────────────────────
