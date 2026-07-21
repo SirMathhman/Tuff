@@ -145,3 +145,7 @@ test('interpret("let x: Bool = true; x") => 1', () => {
   expect(interpret("let x: Bool = true; x")).toBe(1);
 });
 
+test('interpret("let mut x: U8 = 1; x = true;") => Error', () => {
+  expect(() => interpret("let mut x: U8 = 1; x = true;")).toThrow();
+});
+

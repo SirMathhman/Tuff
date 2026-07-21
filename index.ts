@@ -129,6 +129,9 @@ function evalLet(node: LetStatement, scopes: Scope[]): number {
 
 function evalAssign(node: AssignStatement, scopes: Scope[]): number {
   const scope = validateMutableTarget(node.name, scopes);
+  const srcType = inferExprType(node.value, scopes);
+  const dstType = scope.types[node.name] ?? null;
+  checkTypeCompatibility(srcType, dstType);
   const value = evaluateExpr(node.value, scopes);
   scope.env[node.name] = value;
   return 0;
