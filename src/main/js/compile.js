@@ -27,11 +27,22 @@ function isWhitespace(ch) {
 }
 
 function isIdentStart(ch) {
-  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_" || ch === "$";
+  return (
+    (ch >= "a" && ch <= "z") ||
+    (ch >= "A" && ch <= "Z") ||
+    ch === "_" ||
+    ch === "$"
+  );
 }
 
 function isIdentChar(ch) {
-  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_" || ch === "$";
+  return (
+    (ch >= "a" && ch <= "z") ||
+    (ch >= "A" && ch <= "Z") ||
+    (ch >= "0" && ch <= "9") ||
+    ch === "_" ||
+    ch === "$"
+  );
 }
 
 function isKeyword(ident) {
@@ -498,7 +509,7 @@ function replaceChars(str) {
     if (ch === "\\") {
       out += "\\\\";
     } else if (ch === '"') {
-      out += "\\\"";
+      out += '\\"';
     } else if (ch === "\n") {
       out += "\\n";
     } else if (ch === "\t") {

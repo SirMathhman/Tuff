@@ -18,8 +18,16 @@ export default defineConfig([
             "Do not use throw statements, use a custom result obj instead.",
         },
         {
-          selector: "RegexLiteral",
-          message: "Do not use regexes, for they hide complexity.",
+          selector: "Literal[regex]",
+          message: "Do not use regex literals, for they hide complexity.",
+        },
+        {
+          selector: "NewExpression[callee.name='RegExp']",
+          message: "Do not use `new RegExp(...)`, for it hides complexity.",
+        },
+        {
+          selector: "CallExpression[callee.name='RegExp']",
+          message: "Do not use `RegExp(...)`, for it hides complexity.",
         },
       ],
       complexity: ["error", 10],
