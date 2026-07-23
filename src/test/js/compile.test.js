@@ -41,3 +41,7 @@ test("multiple let declarations with property access", () => {
 test("let declaration with numeric literal", () => {
   expectValid("let foo = 100; foo", [], 100);
 });
+
+test("object literal with property access", () => {
+  expectValid("let obj = { field : 100 }; obj.field", [], 100);
+});

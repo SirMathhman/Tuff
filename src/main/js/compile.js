@@ -6,6 +6,9 @@ const TokenType = {
   SEMICOLON: "SEMICOLON",
   DOT: "DOT",
   ASSIGN: "ASSIGN",
+  LBRACE: "LBRACE",
+  RBRACE: "RBRACE",
+  COLON: "COLON",
   EOF: "EOF",
 };
 
@@ -63,6 +66,9 @@ function tokenize(source) {
       ";": TokenType.SEMICOLON,
       ".": TokenType.DOT,
       "=": TokenType.ASSIGN,
+      "{": TokenType.LBRACE,
+      "}": TokenType.RBRACE,
+      ":": TokenType.COLON,
     };
     if (singleCharTokens[ch]) {
       tokens.push({ type: singleCharTokens[ch], value: ch });
@@ -101,6 +107,8 @@ const NodeType = {
   Identifier: "Identifier",
   MemberExpression: "MemberExpression",
   NumberLiteral: "NumberLiteral",
+  ObjectLiteral: "ObjectLiteral",
+  ObjectProperty: "ObjectProperty",
 };
 
 // Parser helpers
@@ -142,7 +150,32 @@ function parsePrimaryExpression(ctx) {
       value: { type: NodeType.NumberLiteral, value: token.value },
     };
   }
+  if (token.type === TokenType.LBRACE) {
+    return parseObjectLiteral(ctx);
+  }
   return parseIdentifier(ctx);
+}
+
+function parseObjectLiteral(ctx) {
+  consume(ctx, TokenType.LBRACE);
+  const properties = [];
+  while (
+    peek(ctx).type !== TokenType.RBRACE &&
+    peek(ctx).type !== TokenType.EOF
+  ) {
+    const keyResult = parseIdentifier(ctx);
+    if (!keyResult.ok) return keyResult;
+    consume(ctx, TokenType.COLON);
+    const valueResult = parseExpression(ctx);
+    if (!valueResult.ok) return valueResult;
+    properties.push({
+      type: NodeType.ObjectProperty,
+      key: keyResult.value.name,
+      value: valueResult.value,
+    });
+  }
+  consume(ctx, TokenType.RBRACE);
+  return { ok: true, value: { type: NodeType.ObjectLiteral, properties } };
 }
 
 function parseMemberExpression(ctx) {
@@ -240,6 +273,12 @@ function generateExpression(node) {
   }
   if (node.type === NodeType.NumberLiteral) {
     return node.value;
+  }
+  if (node.type === NodeType.ObjectLiteral) {
+    const props = node.properties
+      .map((p) => p.key + ": " + generateExpression(p.value))
+      .join(", ");
+    return "{" + props + "}";
   }
   return "";
 }
