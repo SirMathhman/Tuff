@@ -5,6 +5,7 @@ import { defineConfig } from "eslint/config";
 export default defineConfig([
   {
     files: ["**/*.{js,mjs,cjs}"],
+    ignores: ["dist/**"],
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
@@ -17,6 +18,7 @@ export default defineConfig([
             "Do not use throw statements, use a custom result obj instead.",
         },
       ],
+      complexity: ["error", 10],
     },
   },
 ]);
