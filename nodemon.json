@@ -1,1 +1,6 @@
-{ "ignore": [".git", "node_modules/**"], "watch": ["src/"], "ext": "js tuff", "exec": "bun src/main/js/index.js" }
+{
+  "ignore": [".git", "node_modules/**"],
+  "watch": ["src/main"],
+  "ext": "js tuff",
+  "exec": "bun src/main/js/index.js"
+}
