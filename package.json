@@ -1,0 +1,11 @@
+{
+  "name": "tuff",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
