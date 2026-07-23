@@ -3,7 +3,7 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --coverage",
     "lint": "eslint . --fix",
     "cpd": "pmd cpd --dir src,test --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers",
     "format": "prettier . --write"
