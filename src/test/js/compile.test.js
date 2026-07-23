@@ -4,7 +4,7 @@ import { compile } from "../../main/js/compile";
 function expectValid(source, args, expectedExitCode) {
   const result = compile(source);
   expect(result.ok).toBe(true);
-  const actualExitCode = Function("__args__", result.code)(args);
+  const actualExitCode = Function("__args__", result.value)(args);
   expect(actualExitCode).toBe(expectedExitCode);
 }
 
