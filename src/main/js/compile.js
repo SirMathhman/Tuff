@@ -27,11 +27,11 @@ function isWhitespace(ch) {
 }
 
 function isIdentStart(ch) {
-  return /[a-zA-Z_$]/.test(ch);
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_" || ch === "$";
 }
 
 function isIdentChar(ch) {
-  return /[a-zA-Z0-9_$]/.test(ch);
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_" || ch === "$";
 }
 
 function isKeyword(ident) {
@@ -39,7 +39,7 @@ function isKeyword(ident) {
 }
 
 function isDigit(ch) {
-  return /[0-9]/.test(ch);
+  return ch >= "0" && ch <= "9";
 }
 
 function readIdentifier(source, start) {
@@ -466,11 +466,7 @@ function generateExpression(node) {
     return node.value;
   }
   if (node.type === NodeType.StringLiteral) {
-    const escaped = node.value
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, "\\n")
-      .replace(/\t/g, "\\t");
+    const escaped = replaceChars(node.value);
     return '"' + escaped + '"';
   }
   if (node.type === NodeType.ObjectLiteral) {
@@ -493,6 +489,25 @@ function generateExpression(node) {
     );
   }
   return "";
+}
+
+function replaceChars(str) {
+  let out = "";
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === "\\") {
+      out += "\\\\";
+    } else if (ch === '"') {
+      out += "\\\"";
+    } else if (ch === "\n") {
+      out += "\\n";
+    } else if (ch === "\t") {
+      out += "\\t";
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 export function compile(source) {
