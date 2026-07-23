@@ -3,7 +3,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "cmd /c \"bun test 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }",
+        "command": "cmd /c \"bun test --coverage1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }",
         "timeout": 60
       }
     ]

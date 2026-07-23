@@ -6,6 +6,10 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@eslint/js": "^10.0.1",
+    "bun-types": "latest",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "typescript-eslint": "^8.65.0"
   }
 }
