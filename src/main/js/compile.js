@@ -316,9 +316,9 @@ function parseBinaryExpression(ctx, parseLower, operators) {
         ? "+"
         : peek(ctx).type === TokenType.MINUS
           ? "-"
-        : peek(ctx).type === TokenType.STAR
-          ? "*"
-          : "/";
+          : peek(ctx).type === TokenType.STAR
+            ? "*"
+            : "/";
     advance(ctx);
     const right = parseLower(ctx);
     if (!right.ok) return right;
@@ -336,11 +336,10 @@ function parseBinaryExpression(ctx, parseLower, operators) {
 }
 
 function parseAdditiveExpression(ctx) {
-  return parseBinaryExpression(
-    ctx,
-    parseMultiplicativeExpression,
-    [TokenType.PLUS, TokenType.MINUS],
-  );
+  return parseBinaryExpression(ctx, parseMultiplicativeExpression, [
+    TokenType.PLUS,
+    TokenType.MINUS,
+  ]);
 }
 
 function parseMultiplicativeExpression(ctx) {
