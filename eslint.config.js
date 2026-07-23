@@ -19,6 +19,7 @@ export default defineConfig([
         },
       ],
       complexity: ["error", 10],
+      "max-lines-per-function": ["error", 50],
     },
   },
 ]);

@@ -2,6 +2,7 @@
 const TokenType = {
   IDENTIFIER: "IDENTIFIER",
   KEYWORD: "KEYWORD",
+  NUMBER: "NUMBER",
   SEMICOLON: "SEMICOLON",
   DOT: "DOT",
   ASSIGN: "ASSIGN",
@@ -25,6 +26,30 @@ function isKeyword(ident) {
   return ["let"].includes(ident);
 }
 
+function isDigit(ch) {
+  return /[0-9]/.test(ch);
+}
+
+function readIdentifier(source, start) {
+  let ident = "";
+  let i = start;
+  while (i < source.length && isIdentChar(source[i])) {
+    ident += source[i];
+    i++;
+  }
+  return ident.length > 0 ? ident : null;
+}
+
+function readNumber(source, start) {
+  let num = "";
+  let i = start;
+  while (i < source.length && isDigit(source[i])) {
+    num += source[i];
+    i++;
+  }
+  return num.length > 0 ? num : null;
+}
+
 function tokenize(source) {
   const tokens = [];
   let i = 0;
@@ -45,14 +70,23 @@ function tokenize(source) {
       continue;
     }
     if (isIdentStart(ch)) {
-      let ident = "";
-      while (i < source.length && isIdentChar(source[i])) {
-        ident += source[i];
-        i++;
+      const identResult = readIdentifier(source, i);
+      if (identResult) {
+        const type = isKeyword(identResult)
+          ? TokenType.KEYWORD
+          : TokenType.IDENTIFIER;
+        tokens.push({ type, value: identResult });
+        i += identResult.length;
+        continue;
       }
-      const type = isKeyword(ident) ? TokenType.KEYWORD : TokenType.IDENTIFIER;
-      tokens.push({ type, value: ident });
-      continue;
+    }
+    if (isDigit(ch)) {
+      const numResult = readNumber(source, i);
+      if (numResult) {
+        tokens.push({ type: TokenType.NUMBER, value: numResult });
+        i += numResult.length;
+        continue;
+      }
     }
     return { ok: false, error: "Unknown source code: " + source };
   }
@@ -66,97 +100,109 @@ const NodeType = {
   LetDeclaration: "LetDeclaration",
   Identifier: "Identifier",
   MemberExpression: "MemberExpression",
+  NumberLiteral: "NumberLiteral",
 };
 
-// Parser
-function parse(tokens) {
-  let pos = 0;
+// Parser helpers
+function peek(ctx) {
+  return ctx.tokens[ctx.pos];
+}
 
-  function peek() {
-    return tokens[pos];
-  }
+function advance(ctx) {
+  ctx.pos++;
+}
 
-  function consume(expectedType) {
-    const token = tokens[pos];
-    if (token.type !== expectedType) {
-      return {
-        ok: false,
-        error: "Expected " + expectedType + " but got " + token.type,
-      };
-    }
-    pos++;
-    return { ok: true, value: token };
-  }
-
-  function parseIdentifier() {
-    const result = consume(TokenType.IDENTIFIER);
-    if (!result.ok) return result;
+function consume(ctx, expectedType) {
+  const token = peek(ctx);
+  if (token.type !== expectedType) {
     return {
-      ok: true,
-      value: { type: NodeType.Identifier, name: result.value.value },
+      ok: false,
+      error: "Expected " + expectedType + " but got " + token.type,
     };
   }
+  advance(ctx);
+  return { ok: true, value: token };
+}
 
-  function parsePrimaryExpression() {
-    return parseIdentifier();
+function parseIdentifier(ctx) {
+  const result = consume(ctx, TokenType.IDENTIFIER);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    value: { type: NodeType.Identifier, name: result.value.value },
+  };
+}
+
+function parsePrimaryExpression(ctx) {
+  const token = peek(ctx);
+  if (token.type === TokenType.NUMBER) {
+    advance(ctx);
+    return {
+      ok: true,
+      value: { type: NodeType.NumberLiteral, value: token.value },
+    };
   }
+  return parseIdentifier(ctx);
+}
 
-  function parseMemberExpression() {
-    let result = parsePrimaryExpression();
-    if (!result.ok) return result;
-    let node = result.value;
-    while (peek().type === TokenType.DOT) {
-      pos++; // consume dot
-      const identResult = parseIdentifier();
-      if (!identResult.ok) return identResult;
-      node = {
-        type: NodeType.MemberExpression,
-        object: node,
-        property: identResult.value.name,
-      };
-    }
-    return { ok: true, value: node };
-  }
-
-  function parseExpression() {
-    return parseMemberExpression();
-  }
-
-  function parseLetDeclaration() {
-    const keywordResult = consume(TokenType.KEYWORD);
-    if (!keywordResult.ok) return keywordResult;
-    if (keywordResult.value.value !== "let") {
-      return { ok: false, error: "Expected 'let' keyword" };
-    }
-    const identResult = parseIdentifier();
+function parseMemberExpression(ctx) {
+  let result = parsePrimaryExpression(ctx);
+  if (!result.ok) return result;
+  let node = result.value;
+  while (peek(ctx).type === TokenType.DOT) {
+    advance(ctx);
+    const identResult = parseIdentifier(ctx);
     if (!identResult.ok) return identResult;
-    const name = identResult.value.name;
-    const eqResult = consume(TokenType.ASSIGN);
-    if (!eqResult.ok) return eqResult;
-    const exprResult = parseExpression();
-    if (!exprResult.ok) return exprResult;
-    return {
-      ok: true,
-      value: { type: NodeType.LetDeclaration, name, init: exprResult.value },
+    node = {
+      type: NodeType.MemberExpression,
+      object: node,
+      property: identResult.value.name,
     };
   }
+  return { ok: true, value: node };
+}
 
-  function parseStatement() {
-    const token = peek();
-    if (token.type === TokenType.KEYWORD && token.value === "let") {
-      return parseLetDeclaration();
-    }
-    return parseExpression();
+function parseExpression(ctx) {
+  return parseMemberExpression(ctx);
+}
+
+function parseLetDeclaration(ctx) {
+  const keywordResult = consume(ctx, TokenType.KEYWORD);
+  if (!keywordResult.ok) return keywordResult;
+  if (keywordResult.value.value !== "let") {
+    return { ok: false, error: "Expected 'let' keyword" };
   }
+  const identResult = parseIdentifier(ctx);
+  if (!identResult.ok) return identResult;
+  const name = identResult.value.name;
+  const eqResult = consume(ctx, TokenType.ASSIGN);
+  if (!eqResult.ok) return eqResult;
+  const exprResult = parseExpression(ctx);
+  if (!exprResult.ok) return exprResult;
+  return {
+    ok: true,
+    value: { type: NodeType.LetDeclaration, name, init: exprResult.value },
+  };
+}
 
-  // Parse program
+function parseStatement(ctx) {
+  const token = peek(ctx);
+  if (token.type === TokenType.KEYWORD && token.value === "let") {
+    return parseLetDeclaration(ctx);
+  }
+  return parseExpression(ctx);
+}
+
+// Parser entry point
+function parse(tokens) {
+  const ctx = { tokens, pos: 0 };
   const statements = [];
-  while (peek().type !== TokenType.EOF) {
-    const stmtResult = parseStatement();
+  while (peek(ctx).type !== TokenType.EOF) {
+    const stmtResult = parseStatement(ctx);
     if (!stmtResult.ok) return stmtResult;
     statements.push(stmtResult.value);
-    if (peek().type === TokenType.SEMICOLON) {
-      pos++; // consume semicolon
+    if (peek(ctx).type === TokenType.SEMICOLON) {
+      advance(ctx);
     }
   }
   return { ok: true, value: { type: NodeType.Program, statements } };
@@ -191,6 +237,9 @@ function generateExpression(node) {
   }
   if (node.type === NodeType.MemberExpression) {
     return generateExpression(node.object) + "." + node.property;
+  }
+  if (node.type === NodeType.NumberLiteral) {
+    return node.value;
   }
   return "";
 }

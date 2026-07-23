@@ -37,3 +37,7 @@ test("let declaration with property access", () => {
 test("multiple let declarations with property access", () => {
   expectValid("let foo = __args__; let bar = foo; bar.length", [], 2);
 });
+
+test("let declaration with numeric literal", () => {
+  expectValid("let foo = 100; foo", [], 100);
+});

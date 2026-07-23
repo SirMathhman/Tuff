@@ -1,0 +1,2 @@
+let x = __args__;
+x.length
