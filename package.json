@@ -7,10 +7,6 @@
     "watch": "nodemon"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "nodemon": "^3.1.14"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
   }
 }

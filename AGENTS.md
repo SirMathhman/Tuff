@@ -29,7 +29,6 @@ src/
 
 - **Runtime**: Bun (not Node.js). Tests use `bun:test`.
 - **Modules**: ESM (`"type": "module"`). No CommonJS.
-- **Language**: JavaScript files (`.js`) despite `tsconfig.json` being present — TypeScript config is IDE-only (`noEmit: true`).
 - **Test helpers**: `expectValid(source, args, expectedExitCode)` and `expectInvalid(source)` in `compile.test.js`.
 
 ## Pitfalls
