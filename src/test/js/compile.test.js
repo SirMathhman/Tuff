@@ -2,26 +2,24 @@ import { test, expect } from "bun:test";
 import { compile } from "../../main/js/compile";
 
 function expectValid(source, args, expectedExitCode) {
-  const generated = compile(source);
+  const result = compile(source);
+  expect(result.ok).toBe(true);
+  const actualExitCode = Function("__args__", result.code)(args);
+  expect(actualExitCode).toBe(expectedExitCode);
+}
 
-  try {
-    const actualExitCode = Function("__args__", generated)(args);
-    if (actualExitCode !== expectedExitCode) {
-      throw new Error(
-        "Expected exit code '" +
-          expectedExitCode +
-          "' but was actually '" +
-          actualExitCode +
-          "'. Generated: '" +
-          generated +
-          "'",
-      );
-    }
-  } catch (e) {
-    throw new Error("Failed to execute generated code: '" + generated + "'", e);
+function expectInvalid(source, expectedError) {
+  const result = compile(source);
+  expect(result.ok).toBe(false);
+  if (expectedError !== undefined) {
+    expect(result.error).toBe(expectedError);
   }
 }
 
-function expectInvalid(source) {
-  expect(() => compile(source)).toThrow();
-}
+test("empty source compiles to valid empty program", () => {
+  expectValid("", "", 0);
+});
+
+test("invalid source throws an error", () => {
+  expectInvalid("garbage@#!", "Unknown source code: garbage@#!");
+});
