@@ -1,0 +1,16 @@
+{
+  "name": "tuff",
+  "module": "./src/main/js/index.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "watch": "nodemon"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "nodemon": "^3.1.14"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
