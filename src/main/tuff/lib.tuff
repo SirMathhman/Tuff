@@ -1,2 +1,12 @@
-let x = __args__;
-x.length
+let TokenType = {
+  IDENTIFIER: "IDENTIFIER",
+  KEYWORD: "KEYWORD",
+  NUMBER: "NUMBER",
+  SEMICOLON: "SEMICOLON",
+  DOT: "DOT",
+  ASSIGN: "ASSIGN",
+  LBRACE: "LBRACE",
+  RBRACE: "RBRACE",
+  COLON: "COLON",
+  EOF: "EOF",
+};

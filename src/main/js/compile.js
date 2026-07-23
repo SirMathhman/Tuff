@@ -9,6 +9,8 @@ const TokenType = {
   LBRACE: "LBRACE",
   RBRACE: "RBRACE",
   COLON: "COLON",
+  COMMA: "COMMA",
+  STRING: "STRING",
   EOF: "EOF",
 };
 
@@ -53,6 +55,64 @@ function readNumber(source, start) {
   return num.length > 0 ? num : null;
 }
 
+function readString(source, start) {
+  let result = "";
+  let i = start + 1; // skip opening quote
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === '"') {
+      return { value: result, length: i - start + 1 };
+    }
+    if (ch === "\\" && i + 1 < source.length) {
+      const next = source[i + 1];
+      const escapes = { '"': '"', "\\": "\\", n: "\n", t: "\t" };
+      if (escapes[next]) {
+        result += escapes[next];
+        i += 2;
+        continue;
+      }
+    }
+    result += ch;
+    i++;
+  }
+  return null; // unterminated string
+}
+
+function readMultiCharToken(source, i) {
+  const ch = source[i];
+  if (isIdentStart(ch)) {
+    const identResult = readIdentifier(source, i);
+    if (identResult) {
+      const type = isKeyword(identResult)
+        ? TokenType.KEYWORD
+        : TokenType.IDENTIFIER;
+      return {
+        token: { type, value: identResult },
+        length: identResult.length,
+      };
+    }
+  }
+  if (isDigit(ch)) {
+    const numResult = readNumber(source, i);
+    if (numResult) {
+      return {
+        token: { type: TokenType.NUMBER, value: numResult },
+        length: numResult.length,
+      };
+    }
+  }
+  if (ch === '"') {
+    const stringResult = readString(source, i);
+    if (stringResult) {
+      return {
+        token: { type: TokenType.STRING, value: stringResult.value },
+        length: stringResult.length,
+      };
+    }
+  }
+  return null;
+}
+
 function tokenize(source) {
   const tokens = [];
   let i = 0;
@@ -69,30 +129,18 @@ function tokenize(source) {
       "{": TokenType.LBRACE,
       "}": TokenType.RBRACE,
       ":": TokenType.COLON,
+      ",": TokenType.COMMA,
     };
     if (singleCharTokens[ch]) {
       tokens.push({ type: singleCharTokens[ch], value: ch });
       i++;
       continue;
     }
-    if (isIdentStart(ch)) {
-      const identResult = readIdentifier(source, i);
-      if (identResult) {
-        const type = isKeyword(identResult)
-          ? TokenType.KEYWORD
-          : TokenType.IDENTIFIER;
-        tokens.push({ type, value: identResult });
-        i += identResult.length;
-        continue;
-      }
-    }
-    if (isDigit(ch)) {
-      const numResult = readNumber(source, i);
-      if (numResult) {
-        tokens.push({ type: TokenType.NUMBER, value: numResult });
-        i += numResult.length;
-        continue;
-      }
+    const multiResult = readMultiCharToken(source, i);
+    if (multiResult) {
+      tokens.push(multiResult.token);
+      i += multiResult.length;
+      continue;
     }
     return { ok: false, error: "Unknown source code: " + source };
   }
@@ -107,6 +155,7 @@ const NodeType = {
   Identifier: "Identifier",
   MemberExpression: "MemberExpression",
   NumberLiteral: "NumberLiteral",
+  StringLiteral: "StringLiteral",
   ObjectLiteral: "ObjectLiteral",
   ObjectProperty: "ObjectProperty",
 };
@@ -150,6 +199,13 @@ function parsePrimaryExpression(ctx) {
       value: { type: NodeType.NumberLiteral, value: token.value },
     };
   }
+  if (token.type === TokenType.STRING) {
+    advance(ctx);
+    return {
+      ok: true,
+      value: { type: NodeType.StringLiteral, value: token.value },
+    };
+  }
   if (token.type === TokenType.LBRACE) {
     return parseObjectLiteral(ctx);
   }
@@ -173,6 +229,9 @@ function parseObjectLiteral(ctx) {
       key: keyResult.value.name,
       value: valueResult.value,
     });
+    if (peek(ctx).type === TokenType.COMMA) {
+      advance(ctx);
+    }
   }
   consume(ctx, TokenType.RBRACE);
   return { ok: true, value: { type: NodeType.ObjectLiteral, properties } };
@@ -273,6 +332,14 @@ function generateExpression(node) {
   }
   if (node.type === NodeType.NumberLiteral) {
     return node.value;
+  }
+  if (node.type === NodeType.StringLiteral) {
+    const escaped = node.value
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\t/g, "\\t");
+    return '"' + escaped + '"';
   }
   if (node.type === NodeType.ObjectLiteral) {
     const props = node.properties

@@ -6,10 +6,10 @@
 
 ## Commands
 
-| Command | Purpose |
-|---------|---------|
-| `bun install` | Install dependencies |
-| `bun test` | Run all tests |
+| Command         | Purpose                                                    |
+| --------------- | ---------------------------------------------------------- |
+| `bun install`   | Install dependencies                                       |
+| `bun test`      | Run all tests                                              |
 | `bun run watch` | Watch mode (nodemon — rebuilds on `.js` / `.tuff` changes) |
 
 ## Architecture

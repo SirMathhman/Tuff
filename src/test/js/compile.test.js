@@ -45,3 +45,27 @@ test("let declaration with numeric literal", () => {
 test("object literal with property access", () => {
   expectValid("let obj = { field : 100 }; obj.field", [], 100);
 });
+
+test("object literal with multiple fields", () => {
+  expectValid("let obj = { a : 1, b : 2, c : 3 }; obj.b", [], 2);
+});
+
+test("string literal length", () => {
+  expectValid('let s = "hello"; s.length', [], 5);
+});
+
+test("string literal with escape sequences", () => {
+  expectValid('let s = "a\\nb\\tc"; s.length', [], 5);
+});
+
+test("string literal with escaped quote", () => {
+  expectValid('let s = "he said \\"hi\\""; s.length', [], 12);
+});
+
+test("string literal in object literal", () => {
+  expectValid('let obj = { name : "test" }; obj.name.length', [], 4);
+});
+
+test("empty string literal", () => {
+  expectValid('let s = ""; s.length', [], 0);
+});
