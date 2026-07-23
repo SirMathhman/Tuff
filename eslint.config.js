@@ -17,6 +17,10 @@ export default defineConfig([
           message:
             "Do not use throw statements, use a custom result obj instead.",
         },
+        {
+          selector: "RegexLiteral",
+          message: "Do not use regexes, for they hide complexity.",
+        },
       ],
       complexity: ["error", 10],
       "max-lines-per-function": ["error", 50],

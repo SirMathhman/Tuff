@@ -69,3 +69,23 @@ test("string literal in object literal", () => {
 test("empty string literal", () => {
   expectValid('let s = ""; s.length', [], 0);
 });
+
+test("simple function definition and call", () => {
+  expectValid("fn double(x) => x * 2; double(5)", [], 10);
+});
+
+test("function with no parameters", () => {
+  expectValid("fn getTen() => 10; getTen()", [], 10);
+});
+
+test("function with multiple parameters", () => {
+  expectValid("fn add(a, b) => a + b; add(3, 7)", [], 10);
+});
+
+test("function call in let declaration", () => {
+  expectValid("fn square(x) => x * x; let result = square(4); result", [], 16);
+});
+
+test("function using __args__", () => {
+  expectValid("fn argLen(args) => args.length; argLen(__args__)", [], 2);
+});
