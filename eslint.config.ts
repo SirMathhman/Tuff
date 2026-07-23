@@ -9,6 +9,18 @@ export default defineConfig([
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
+    rules: {
+      "max-lines-per-function": ["error", 50],
+      complexity: ["error", 10],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TemplateLiteral",
+          message:
+            "Do not use template literals because they false flag PMD CPD.",
+        },
+      ],
+    },
   },
   tseslint.configs.recommended,
 ]);

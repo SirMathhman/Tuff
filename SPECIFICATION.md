@@ -16,19 +16,19 @@ Tuff is a systems programming language designed for safety-critical environments
 
 ### 2.1 Entities
 
-| Entity | Description |
-|--------|-------------|
+| Entity              | Description                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
 | **Primitive types** | `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `Bool`, `Char`, `Ptr<T>` — width encoded in type name |
-| **Option<T>** | Explicit absence of value; no null |
-| **Result<T, E>** | Explicit error handling; no exceptions |
-| **Array<T, N>** | Fixed-size array with length in type |
-| **Slice<T>** | Dynamic view into contiguous memory |
-| **Struct** | Named composite types with explicit fields |
-| **Enum** | Tagged unions with exhaustive matching |
-| **Contract** | Trait-like interfaces for polymorphism |
-| **Function** | Named or anonymous (closure) code blocks |
-| **Module** | File-based code organization with FQN imports |
-| **Refinement** | First-order logic predicates attached to types |
+| **Option<T>**       | Explicit absence of value; no null                                                                          |
+| **Result<T, E>**    | Explicit error handling; no exceptions                                                                      |
+| **Array<T, N>**     | Fixed-size array with length in type                                                                        |
+| **Slice<T>**        | Dynamic view into contiguous memory                                                                         |
+| **Struct**          | Named composite types with explicit fields                                                                  |
+| **Enum**            | Tagged unions with exhaustive matching                                                                      |
+| **Contract**        | Trait-like interfaces for polymorphism                                                                      |
+| **Function**        | Named or anonymous (closure) code blocks                                                                    |
+| **Module**          | File-based code organization with FQN imports                                                               |
+| **Refinement**      | First-order logic predicates attached to types                                                              |
 
 ### 2.2 Relationships
 

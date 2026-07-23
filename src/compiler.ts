@@ -57,7 +57,10 @@ export function lex(source: string): Token[] {
   function skipWhitespace() {
     let iterations = 0;
     while (i < source.length && /\s/.test(source[i])) {
-      if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+      if (++iterations > 1024)
+        throw new Error(
+          `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+        );
       if (source[i] === "\n") {
         line++;
         col = 1;
@@ -73,7 +76,10 @@ export function lex(source: string): Token[] {
       // Single-line comment
       let iterations = 0;
       while (i < source.length && source[i] !== "\n") {
-        if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+        if (++iterations > 1024)
+          throw new Error(
+            `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+          );
         i++;
         col++;
       }
@@ -82,8 +88,14 @@ export function lex(source: string): Token[] {
       i += 2;
       col += 2;
       let iterations = 0;
-      while (i < source.length - 1 && !(source[i] === "*" && source[i + 1] === "/")) {
-        if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+      while (
+        i < source.length - 1 &&
+        !(source[i] === "*" && source[i + 1] === "/")
+      ) {
+        if (++iterations > 1024)
+          throw new Error(
+            `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+          );
         if (source[i] === "\n") {
           line++;
           col = 1;
@@ -97,13 +109,21 @@ export function lex(source: string): Token[] {
     }
   }
 
-  function makeToken(type: TokenType, value: string, startLine: number, startCol: number): Token {
+  function makeToken(
+    type: TokenType,
+    value: string,
+    startLine: number,
+    startCol: number,
+  ): Token {
     return { type, value, line: startLine, col: startCol };
   }
 
   let iterations = 0;
   while (i < source.length) {
-    if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+    if (++iterations > 1024)
+      throw new Error(
+        `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+      );
     skipWhitespace();
     if (i >= source.length) break;
 
@@ -124,7 +144,10 @@ export function lex(source: string): Token[] {
       col++;
       let iterations = 0;
       while (i < source.length && source[i] !== '"') {
-        if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+        if (++iterations > 1024)
+          throw new Error(
+            `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+          );
         if (source[i] === "\\") {
           i++;
           col++;
@@ -151,7 +174,10 @@ export function lex(source: string): Token[] {
       let num = "";
       let iterations = 0;
       while (i < source.length && /[0-9.]/.test(source[i])) {
-        if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+        if (++iterations > 1024)
+          throw new Error(
+            `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+          );
         num += source[i];
         i++;
         col++;
@@ -165,7 +191,10 @@ export function lex(source: string): Token[] {
       let ident = "";
       let iterations = 0;
       while (i < source.length && /[a-zA-Z0-9_$]/.test(source[i])) {
-        if (++iterations > 1024) throw new Error(`Lexer loop exceeded 1024 iterations at line ${line}:${col}`);
+        if (++iterations > 1024)
+          throw new Error(
+            `Lexer loop exceeded 1024 iterations at line ${line}:${col}`,
+          );
         ident += source[i];
         i++;
         col++;
@@ -184,7 +213,9 @@ export function lex(source: string): Token[] {
     if (i + 1 < source.length) {
       const two = source[i] + source[i + 1];
       if (["==", "!=", "<=", ">=", "=>"].includes(two)) {
-        tokens.push(makeToken(two === "=>" ? "ARROW" : "OP", two, startLine, startCol));
+        tokens.push(
+          makeToken(two === "=>" ? "ARROW" : "OP", two, startLine, startCol),
+        );
         i += 2;
         col += 2;
         continue;
@@ -265,7 +296,7 @@ export function parse(tokens: Token[]): ASTNode {
     const token = advance();
     if (token.type !== type || (value !== undefined && token.value !== value)) {
       throw new Error(
-        `Expected ${type}${value ? ` '${value}'` : ""} at line ${token.line}:${token.col}, got '${token.value}'`
+        `Expected ${type}${value ? ` '${value}'` : ""} at line ${token.line}:${token.col}, got '${token.value}'`,
       );
     }
     return token;
@@ -283,12 +314,16 @@ export function parse(tokens: Token[]): ASTNode {
 
   let parseIterations = 0;
   function checkParseLoop() {
-    if (++parseIterations > 1024) throw new Error(`Parser loop exceeded 1024 iterations`);
+    if (++parseIterations > 1024)
+      throw new Error(`Parser loop exceeded 1024 iterations`);
   }
 
   function parseComparison(): ASTNode {
     let left = parseAddition();
-    while (!eof() && ["==", "!=", "<", ">", "<=", ">="].includes(peek().value)) {
+    while (
+      !eof() &&
+      ["==", "!=", "<", ">", "<=", ">="].includes(peek().value)
+    ) {
       checkParseLoop();
       const op = advance().value;
       const right = parseAddition();
@@ -378,7 +413,12 @@ export function parse(tokens: Token[]): ASTNode {
       let node: ASTNode = { kind: "Ident", name: token.value };
 
       // Handle chained postfix operators
-      while (!eof() && (peek().type === "LPAREN" || peek().type === "LBRACKET" || peek().type === "DOT")) {
+      while (
+        !eof() &&
+        (peek().type === "LPAREN" ||
+          peek().type === "LBRACKET" ||
+          peek().type === "DOT")
+      ) {
         checkParseLoop();
         if (peek().type === "LPAREN") {
           // Function call
@@ -413,7 +453,9 @@ export function parse(tokens: Token[]): ASTNode {
       return node;
     }
 
-    throw new Error(`Unexpected token '${token.value}' at line ${token.line}:${token.col}`);
+    throw new Error(
+      `Unexpected token '${token.value}' at line ${token.line}:${token.col}`,
+    );
   }
 
   function parseArrayLiteral(): ASTNode {
@@ -550,7 +592,11 @@ export function parse(tokens: Token[]): ASTNode {
           const p = expect("IDENT");
           params.push(p.value);
           // Skip optional type annotation
-          while (!eof() && peek().type !== "COMMA" && peek().type !== "RPAREN") {
+          while (
+            !eof() &&
+            peek().type !== "COMMA" &&
+            peek().type !== "RPAREN"
+          ) {
             checkParseLoop();
             advance();
           }
@@ -570,9 +616,10 @@ export function parse(tokens: Token[]): ASTNode {
     // Block body: fn foo(a, b) { ... }
     else if (peek().type === "LBRACE") {
       body = parseBlock();
-    }
-    else {
-      throw new Error(`Expected '=>' or '{' for function body at line ${peek().line}:${peek().col}`);
+    } else {
+      throw new Error(
+        `Expected '=>' or '{' for function body at line ${peek().line}:${peek().col}`,
+      );
     }
 
     return { kind: "Fn", name: nameToken.value, params, body };
@@ -679,13 +726,18 @@ export function generate(ast: ASTNode): string {
           })
           .join("\n");
 
-        const elseCode = node.elseBody.length > 0
-          ? "\n" + indentStr() + "else {\n" +
-            node.elseBody
-              .map((stmt) => indentStr() + "  " + emit(stmt) + ";")
-              .join("\n") +
-            "\n" + indentStr() + "}"
-          : "";
+        const elseCode =
+          node.elseBody.length > 0
+            ? "\n" +
+              indentStr() +
+              "else {\n" +
+              node.elseBody
+                .map((stmt) => indentStr() + "  " + emit(stmt) + ";")
+                .join("\n") +
+              "\n" +
+              indentStr() +
+              "}"
+            : "";
 
         return `${indentStr()}if (${emit(node.cond, true)}) {\n${thenCode}\n${indentStr()}}${elseCode}`;
       }

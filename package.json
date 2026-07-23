@@ -3,13 +3,18 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "lint": "eslint . --fix",
+    "cpd": "pmd cpd --dir src,test --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers",
+    "format": "prettier . --write"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "bun-types": "latest",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
+    "jiti": "^2.7.0",
+    "prettier": "^3.9.6",
     "typescript-eslint": "^8.65.0"
   }
 }
