@@ -1,5 +1,5 @@
-import { test, expect } from "bun:test";
-import { compile } from "../../main/js/compile";
+const { test, expect } = require("bun:test");
+const { compile } = require("../../main/js/compile");
 
 function expectValid(source, args, expectedExitCode) {
   const result = compile(source);

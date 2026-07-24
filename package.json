@@ -1,7 +1,6 @@
 {
   "name": "tuff",
   "module": "./src/main/js/index.js",
-  "type": "module",
   "private": true,
   "scripts": {
     "watch": "nodemon",

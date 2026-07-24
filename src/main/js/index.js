@@ -1,5 +1,5 @@
-import * as fs from "fs/promises";
-import { compile } from "./compile";
+const fs = require("fs/promises");
+const { compile } = require("./compile");
 
 async function run() {
   const source = await fs.readFile("./src/main/tuff/lib.tuff", "utf-8");

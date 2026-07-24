@@ -672,7 +672,7 @@ function replaceChars(str) {
   return out;
 }
 
-export function compile(source) {
+function compile(source) {
   if (source === "") {
     return { ok: true, value: "return 0;" };
   }
@@ -683,3 +683,5 @@ export function compile(source) {
   const code = generateCode(parseResult.value);
   return { ok: true, value: code };
 }
+
+module.exports = { compile };
