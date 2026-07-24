@@ -151,3 +151,81 @@ test("Let mut missing semicolon is invalid", () => {
 test("Let mut missing initializer is invalid", () => {
   expectInvalid("let mut x;");
 });
+
+// --- Type Annotations ---
+
+test("Typed literal with matching annotation", () => {
+  expectValid("let x : U8 = 100U8; x", [], 100);
+});
+
+test("Typed literal U32", () => {
+  expectValid("let x : U32 = 42U32; x", [], 42);
+});
+
+test("Typed literal I32", () => {
+  expectValid("let x : I32 = 42I32; x", [], 42);
+});
+
+test("Typed literal I64", () => {
+  expectValid("let x : I64 = 42I64; x", [], 42);
+});
+
+test("Typed literal U64", () => {
+  expectValid("let x : U64 = 42U64; x", [], 42);
+});
+
+test("Typed literal U16", () => {
+  expectValid("let x : U16 = 42U16; x", [], 42);
+});
+
+test("Typed literal I8", () => {
+  expectValid("let x : I8 = 42I8; x", [], 42);
+});
+
+test("Typed literal I16", () => {
+  expectValid("let x : I16 = 42I16; x", [], 42);
+});
+
+test("Typed literal U64", () => {
+  expectValid("let x : U64 = 42U64; x", [], 42);
+});
+
+test("Typed literal with mismatched annotation is invalid", () => {
+  expectInvalid("let x : U8 = 100U32;");
+});
+
+test("Typed literal without annotation is invalid", () => {
+  expectInvalid("let x : U8 = 100;");
+});
+
+test("Typed literal without suffix is invalid", () => {
+  expectInvalid("let x = 100U8;");
+});
+
+test("Typed variable assignment with matching types", () => {
+  expectValid("let x : U8 = 10U8; let y : U8 = x; y", [], 10);
+});
+
+test("Typed variable assignment with mismatched types is invalid", () => {
+  expectInvalid("let x : U8 = 10U8; let y : U32 = x;");
+});
+
+test("Untyped literal in expression", () => {
+  expectValid("42", [], 42);
+});
+
+test("Typed literal in exit expression", () => {
+  expectValid("100U8", [], 100);
+});
+
+test("Invalid type name is invalid", () => {
+  expectInvalid("let x : InvalidType = 42U8;");
+});
+
+test("Typed mutable variable with reassignment", () => {
+  expectValid("let mut x : U8 = 10U8; x = 20U8; x", [], 20);
+});
+
+test("Typed mutable reassignment with type mismatch is invalid", () => {
+  expectInvalid("let mut x : U8 = 10U8; x = 20U32;");
+});

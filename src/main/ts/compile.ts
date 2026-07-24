@@ -23,6 +23,7 @@ export interface Token {
   value: string;
   line: number;
   column: number;
+  typeSuffix?: string;
 }
 
 interface TokenizeContext {
@@ -53,7 +54,25 @@ function readNumber(ctx: TokenizeContext): Token {
     ctx.pos++;
     ctx.column++;
   }
-  return { type: "NUMBER", value: numStr, line: ctx.line, column: ctx.column };
+  // Read optional type suffix (U8, U16, U32, U64, I8, I16, I32, I64)
+  let typeSuffix = "";
+  const suffixCh = ctx.source[ctx.pos];
+  if (suffixCh && isAlpha(suffixCh)) {
+    while (ctx.pos < ctx.source.length) {
+      const sc = ctx.source[ctx.pos];
+      if (!sc || !isIdentChar(sc)) break;
+      typeSuffix += sc;
+      ctx.pos++;
+      ctx.column++;
+    }
+  }
+  return {
+    type: "NUMBER",
+    value: numStr,
+    typeSuffix,
+    line: ctx.line,
+    column: ctx.column,
+  };
 }
 
 function readIdentifier(ctx: TokenizeContext): Token {
@@ -75,7 +94,7 @@ function readIdentifier(ctx: TokenizeContext): Token {
 
 function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
   return {
-    type: ch === "=" ? "EQUALS" : "SEMICOLON",
+    type: ch === "=" ? "EQUALS" : ch === ";" ? "SEMICOLON" : "COLON",
     value: ch,
     line: ctx.line,
     column: ctx.column,
@@ -126,7 +145,7 @@ function tokenize(source: string): Result<Token[], CompileError> {
       tokens.push(token);
       continue;
     }
-    if (ch === "=" || ch === ";") {
+    if (ch === "=" || ch === ";" || ch === ":") {
       tokens.push(tokenizeOperator(ch, ctx));
       ctx.pos++;
       ctx.column++;
@@ -165,6 +184,7 @@ export interface LetDeclarationNode {
   type: "LetDeclaration";
   name: string;
   mutable: boolean;
+  typeName?: string;
   value: Expression;
   line: number;
   column: number;
@@ -181,11 +201,13 @@ export interface AssignmentNode {
 interface NumberLiteralExpr {
   type: "NumberLiteral";
   value: number;
+  typeName?: string;
 }
 
 interface IdentifierExpr {
   type: "Identifier";
   name: string;
+  typeName?: string;
 }
 
 export type Expression = NumberLiteralExpr | IdentifierExpr;
@@ -256,7 +278,11 @@ function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
     consume(ctx);
     return {
       isOk: true,
-      value: { type: "NumberLiteral", value: parseInt(token.value, 10) },
+      value: {
+        type: "NumberLiteral",
+        value: parseInt(token.value, 10),
+        typeName: token.typeSuffix || undefined,
+      },
     };
   }
   if (token.type === "IDENTIFIER") {
@@ -321,6 +347,24 @@ function expectVariableName(ctx: ParseContext): Result<Token, CompileError> {
   return { isOk: true, value: nameToken };
 }
 
+function parseTypeAnnotation(
+  ctx: ParseContext,
+): Result<string | undefined, CompileError> {
+  const colonToken = peek(ctx);
+  if (!colonToken || colonToken.type !== "COLON")
+    return { isOk: true, value: undefined };
+  consume(ctx);
+  const typeToken = peek(ctx);
+  if (!typeToken || typeToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      typeToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "type name",
+    );
+  const typeName = typeToken.value;
+  consume(ctx);
+  return { isOk: true, value: typeName };
+}
+
 function parseLetStatement(
   ctx: ParseContext,
   letToken: Token,
@@ -330,6 +374,11 @@ function parseLetStatement(
   if (mutable) consume(ctx);
   const nameResult = expectVariableName(ctx);
   if (!nameResult.isOk) return nameResult;
+
+  const typeResult = parseTypeAnnotation(ctx);
+  if (!typeResult.isOk) return typeResult;
+  const typeName = typeResult.value;
+
   const equalsResult = expectToken(ctx, "EQUALS", "=");
   if (!equalsResult.isOk) return equalsResult;
   const exprResult = parseExpression(ctx);
@@ -342,6 +391,7 @@ function parseLetStatement(
       type: "LetDeclaration",
       name: nameResult.value.value,
       mutable,
+      typeName,
       value: exprResult.value,
       line: letToken.line,
       column: letToken.column,

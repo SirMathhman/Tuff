@@ -16,7 +16,10 @@ function resolveName(name: string, declared: string[]): string {
 }
 
 function genExprScoped(expr: Expression, declared: string[]): string {
-  if (expr.type === "NumberLiteral") return String(expr.value);
+  if (expr.type === "NumberLiteral") {
+    const numExpr = expr as NumberLiteralNode;
+    return String(numExpr.value);
+  }
   return resolveName(expr.name, declared);
 }
 
