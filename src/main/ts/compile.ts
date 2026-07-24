@@ -45,6 +45,7 @@ function tokenize(source: string): Result<Token[], CompileError> {
 
   while (ctx.pos < ctx.source.length) {
     const ch = ctx.source[ctx.pos];
+    if (!ch) break;
 
     // Skip whitespace
     if (ch === " " || ch === "\t" || ch === "\r") {
@@ -66,12 +67,10 @@ function tokenize(source: string): Result<Token[], CompileError> {
       const startLine = ctx.line;
       const startCol = ctx.column;
       let numStr = "";
-      while (
-        ctx.pos < ctx.source.length &&
-        ctx.source[ctx.pos] >= "0" &&
-        ctx.source[ctx.pos] <= "9"
-      ) {
-        numStr += ctx.source[ctx.pos];
+      while (ctx.pos < ctx.source.length) {
+        const c = ctx.source[ctx.pos];
+        if (!c || c < "0" || c > "9") break;
+        numStr += c;
         ctx.pos++;
         ctx.column++;
       }
@@ -89,14 +88,19 @@ function tokenize(source: string): Result<Token[], CompileError> {
       const startLine = ctx.line;
       const startCol = ctx.column;
       let ident = "";
-      while (
-        ctx.pos < ctx.source.length &&
-        ((ctx.source[ctx.pos] >= "a" && ctx.source[ctx.pos] <= "z") ||
-          (ctx.source[ctx.pos] >= "A" && ctx.source[ctx.pos] <= "Z") ||
-          (ctx.source[ctx.pos] >= "0" && ctx.source[ctx.pos] <= "9") ||
-          ctx.source[ctx.pos] === "_")
-      ) {
-        ident += ctx.source[ctx.pos];
+      while (ctx.pos < ctx.source.length) {
+        const c = ctx.source[ctx.pos];
+        if (
+          !c ||
+          !(
+            (c >= "a" && c <= "z") ||
+            (c >= "A" && c <= "Z") ||
+            (c >= "0" && c <= "9") ||
+            c === "_"
+          )
+        )
+          break;
+        ident += c;
         ctx.pos++;
         ctx.column++;
       }
@@ -145,7 +149,7 @@ interface IdentifierNode extends ASTNode {
   column: number;
 }
 
-export type Statement = ASTNode;
+export type Statement = NumberLiteralNode | IdentifierNode;
 
 interface ParseContext {
   tokens: Token[];
@@ -174,7 +178,8 @@ function peek(ctx: ParseContext): Token | undefined {
 }
 
 function consume(ctx: ParseContext): Token {
-  return ctx.tokens[ctx.pos++];
+  const token = ctx.tokens[ctx.pos++];
+  return token!;
 }
 
 function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
@@ -226,7 +231,7 @@ function generateCode(statements: Statement[]): string {
   for (const stmt of statements) {
     if (stmt.type === "NumberLiteral") {
       const node = stmt as NumberLiteralNode;
-      lines.push(String(node.value));
+      lines.push(`process.exit(${node.value})`);
     } else if (stmt.type === "Identifier") {
       const node = stmt as IdentifierNode;
       lines.push(node.name);
