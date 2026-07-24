@@ -479,3 +479,53 @@ test("object destructuring in block", () => {
     3,
   );
 });
+
+// Pointer Tests
+
+test("pointer address-of and dereference", () => {
+  expectValid("let x = 5; let p = &x; *p", [], 5);
+});
+
+test("pointer dereference in expression", () => {
+  expectValid("let x = 10; let p = &x; *p + 3", [], 13);
+});
+
+test("pointer dereference with multiple pointers", () => {
+  expectValid(
+    "let x = 5; let y = 10; let px = &x; let py = &y; *px + *py",
+    [],
+    15,
+  );
+});
+
+test("pointer to object property", () => {
+  expectValid("let obj = { a : 42 }; let p = &(obj.a); *p", [], 42);
+});
+
+test("pointer in function call", () => {
+  expectValid("fn foo(p) => *p; let x = 7; foo(&x)", [], 7);
+});
+
+test("pointer in binary expression", () => {
+  expectValid("let x = 3; let p = &x; *p * 4", [], 12);
+});
+
+test("pointer with nested dereference", () => {
+  expectValid("let x = 5; let p = &x; *p + 1", [], 6);
+});
+
+test("pointer as last expression", () => {
+  expectValid("let x = 99; let p = &x; *p", [], 99);
+});
+
+test("pointer in block expression", () => {
+  expectValid("let x = 20; { let p = &x; *p + 5 }", [], 25);
+});
+
+test("pointer in match expression", () => {
+  expectValid(
+    "let x = 1; let p = &x; match (*p) { case 1 => 100; case _ => 200 }",
+    [],
+    100,
+  );
+});

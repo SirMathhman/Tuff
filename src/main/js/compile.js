@@ -28,6 +28,7 @@ const TokenType = {
   AND: "AND",
   OR: "OR",
   NOT: "NOT",
+  AMPERSTAND: "AMPERSTAND",
   UNDERSCORE: "UNDERSCORE",
   EOF: "EOF",
 };
@@ -252,6 +253,7 @@ function trySingleCharToken(ch) {
     "<": TokenType.LT,
     ">": TokenType.GT,
     "!": TokenType.NOT,
+    "&": TokenType.AMPERSTAND,
   };
   const type = map[ch];
   return type ? { type, value: ch } : null;
@@ -274,6 +276,8 @@ const NodeType = {
   FunctionCall: "FunctionCall",
   BinaryExpression: "BinaryExpression",
   UnaryExpression: "UnaryExpression",
+  PointerExpression: "PointerExpression",
+  DereferenceExpression: "DereferenceExpression",
   BlockExpression: "BlockExpression",
   MatchExpression: "MatchExpression",
   MatchCase: "MatchCase",
@@ -359,6 +363,15 @@ function parsePrimaryExpression(ctx) {
   if (token.type === TokenType.NOT) {
     return parseUnaryNot(ctx);
   }
+  if (token.type === TokenType.AMPERSTAND) {
+    return parsePointerExpression(ctx);
+  }
+  if (token.type === TokenType.STAR) {
+    return parseDereferenceExpression(ctx);
+  }
+  if (token.type === TokenType.LPAREN) {
+    return parseParenthesizedExpression(ctx);
+  }
   return parseKeywordOrIdentifier(ctx);
 }
 
@@ -385,6 +398,40 @@ function parseUnaryNot(ctx) {
       operand: operand.value,
     },
   };
+}
+
+function parsePointerExpression(ctx) {
+  advance(ctx); // consume '&'
+  const operand = parsePrimaryExpression(ctx);
+  if (!operand.ok) return operand;
+  return {
+    ok: true,
+    value: {
+      type: NodeType.PointerExpression,
+      operand: operand.value,
+    },
+  };
+}
+
+function parseDereferenceExpression(ctx) {
+  advance(ctx); // consume '*'
+  const operand = parsePrimaryExpression(ctx);
+  if (!operand.ok) return operand;
+  return {
+    ok: true,
+    value: {
+      type: NodeType.DereferenceExpression,
+      operand: operand.value,
+    },
+  };
+}
+
+function parseParenthesizedExpression(ctx) {
+  advance(ctx); // consume '('
+  const exprResult = parseExpression(ctx);
+  if (!exprResult.ok) return exprResult;
+  consume(ctx, TokenType.RPAREN);
+  return exprResult;
 }
 
 function parseIdentifierOrCall(ctx) {
@@ -980,6 +1027,8 @@ function generateCompoundExpression(node) {
 function generateExpression(node) {
   const compound = generateCompoundExpression(node);
   if (compound !== null) return compound;
+  const pointer = generatePointerNode(node);
+  if (pointer !== null) return pointer;
   switch (node.type) {
     case NodeType.Identifier:
       return node.name;
@@ -993,13 +1042,24 @@ function generateExpression(node) {
       return generateBooleanLiteral(node);
     case NodeType.UnaryExpression:
       return generateUnaryExpression(node);
-    case NodeType.BinaryExpression:
-      return generateBinaryExpression(node);
-    case NodeType.ObjectLiteral:
-      return generateObjectLiteral(node);
     default:
-      return generateDefaultExpression();
+      return generateBinaryOrObject(node);
   }
+}
+
+function generateBinaryOrObject(node) {
+  if (node.type === NodeType.BinaryExpression)
+    return generateBinaryExpression(node);
+  if (node.type === NodeType.ObjectLiteral) return generateObjectLiteral(node);
+  return generateDefaultExpression();
+}
+
+function generatePointerNode(node) {
+  if (node.type === NodeType.PointerExpression)
+    return generatePointerExpression(node);
+  if (node.type === NodeType.DereferenceExpression)
+    return generateDereferenceExpression(node);
+  return null;
 }
 
 function generateDefaultExpression() {
@@ -1115,6 +1175,16 @@ function generateObjectLiteral(node) {
 function generateFunctionCall(node) {
   const args = node.arguments.map((a) => generateExpression(a)).join(", ");
   return node.name + "(" + args + ")";
+}
+
+function generatePointerExpression(node) {
+  const operand = generateExpression(node.operand);
+  return "{ v: " + operand + " }";
+}
+
+function generateDereferenceExpression(node) {
+  const operand = generateExpression(node.operand);
+  return operand + ".v";
 }
 
 function replaceChars(str) {
