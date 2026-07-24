@@ -31,6 +31,7 @@ const TokenType = {
   AMPERSTAND: "AMPERSTAND",
   LSQUARE: "LSQUARE",
   RSQUARE: "RSQUARE",
+  NULL: "NULL",
   UNDERSCORE: "UNDERSCORE",
   EOF: "EOF",
 };
@@ -147,6 +148,7 @@ function readIdentifierToken(source, i) {
     };
   }
   const type = classifyIdentifier(identResult.value);
+  if (type && typeof type === "object" && !type.ok) return type;
   return {
     token: { type, value: identResult.value },
     length: identResult.value.length,
@@ -155,6 +157,13 @@ function readIdentifierToken(source, i) {
 
 function classifyIdentifier(value) {
   if (value === "true" || value === "false") return TokenType.BOOLEAN;
+  if (value === "null") return TokenType.NULL;
+  if (value === "undefined") {
+    return {
+      ok: false,
+      error: "'undefined' is not supported; use 'null' instead",
+    };
+  }
   if (isKeyword(value)) return TokenType.KEYWORD;
   return TokenType.IDENTIFIER;
 }
@@ -227,6 +236,7 @@ function tokenize(source) {
     }
     const multiResult = readMultiCharToken(source, i);
     if (multiResult) {
+      if (multiResult.ok === false) return multiResult;
       tokens.push(multiResult.token);
       i += multiResult.length;
       continue;
@@ -274,6 +284,7 @@ const NodeType = {
   NumberLiteral: "NumberLiteral",
   StringLiteral: "StringLiteral",
   BooleanLiteral: "BooleanLiteral",
+  NullLiteral: "NullLiteral",
   ObjectLiteral: "ObjectLiteral",
   ObjectProperty: "ObjectProperty",
   FunctionDeclaration: "FunctionDeclaration",
@@ -364,6 +375,13 @@ function parseLiteralToken(ctx, token) {
     return {
       ok: true,
       value: { type: NodeType.StringLiteral, value: token.value },
+    };
+  }
+  if (token.type === TokenType.NULL) {
+    advance(ctx);
+    return {
+      ok: true,
+      value: { type: NodeType.NullLiteral },
     };
   }
   if (token.type === TokenType.BOOLEAN) {
@@ -1018,6 +1036,12 @@ function generateCode(ast) {
     ) {
       code += generateStatement(lastStmt) + "; ";
     }
+    if (lastStmt.type === NodeType.NullLiteral)
+      return {
+        ok: false,
+        error:
+          "null cannot be used as a return value; it cannot be converted to a number",
+      };
     const exprCode = generateExpression(lastStmt);
     const needsBoolWrap = expressionMayBeBoolean(lastStmt);
     code += "return " + (needsBoolWrap ? "+" + exprCode : exprCode) + ";";
@@ -1118,18 +1142,35 @@ function generateExpression(node) {
     case NodeType.Identifier:
       return node.name;
     case NodeType.MemberExpression:
-      return generateExpression(node.object) + "." + node.property;
+      return (
+        "(" + generateLValue(node.object) + "." + node.property + " ?? null)"
+      );
     case NodeType.NumberLiteral:
       return node.value;
     case NodeType.StringLiteral:
       return generateStringLiteral(node);
     case NodeType.BooleanLiteral:
       return generateBooleanLiteral(node);
+    case NodeType.NullLiteral:
+      return "null";
     case NodeType.UnaryExpression:
       return generateUnaryExpression(node);
     default:
       return generateBinaryOrObject(node);
   }
+}
+
+function generateLValue(node) {
+  if (node.type === NodeType.Identifier) return node.name;
+  if (node.type === NodeType.MemberExpression)
+    return generateLValue(node.object) + "." + node.property;
+  if (node.type === NodeType.ArrayIndex)
+    return (
+      generateLValue(node.object) + "[" + generateExpression(node.index) + "]"
+    );
+  if (node.type === NodeType.DereferenceExpression)
+    return generateLValue(node.operand) + ".v";
+  return generateExpression(node);
 }
 
 function generateBinaryOrObject(node) {
@@ -1163,6 +1204,8 @@ function generateBlockExpression(node) {
     code += generateStatement(statements[i]) + "; ";
   }
   const lastStmt = statements[statements.length - 1];
+  if (lastStmt.type === NodeType.NullLiteral)
+    return "(function() { return 0; })()";
   const exprCode = generateExpression(lastStmt);
   const needsBoolWrap = expressionMayBeBoolean(lastStmt);
   code += "return " + (needsBoolWrap ? "+" + exprCode : exprCode) + "; })()";
@@ -1183,9 +1226,13 @@ function generateMatchExpression(node) {
     } else {
       code += "case " + generateExpression(c.pattern) + ": ";
     }
-    const valueCode = generateExpression(c.value);
-    const needsBoolWrap = expressionMayBeBoolean(c.value);
-    code += "return " + (needsBoolWrap ? "+" + valueCode : valueCode) + "; ";
+    if (c.value.type === NodeType.NullLiteral) {
+      code += "return 0; ";
+    } else {
+      const valueCode = generateExpression(c.value);
+      const needsBoolWrap = expressionMayBeBoolean(c.value);
+      code += "return " + (needsBoolWrap ? "+" + valueCode : valueCode) + "; ";
+    }
   }
   code += "}})(";
   code += discriminant + ")";
@@ -1207,6 +1254,8 @@ function generateLoopExpression(node) {
 
 function generateLoopStatement(node, resultVar) {
   if (node.type === NodeType.BreakStatement) {
+    if (node.value.type === NodeType.NullLiteral)
+      return resultVar + " = 0; break;";
     const valueCode = generateExpression(node.value);
     const needsBoolWrap = expressionMayBeBoolean(node.value);
     return (
@@ -1270,13 +1319,13 @@ function generateArrayLiteral(node) {
 }
 
 function generateArrayIndex(node) {
-  const obj = generateExpression(node.object);
+  const obj = generateLValue(node.object);
   const idx = generateExpression(node.index);
-  return obj + "[" + idx + "]";
+  return "(" + obj + "[" + idx + "] ?? null)";
 }
 
 function generateAssignmentExpression(node) {
-  const left = generateExpression(node.left);
+  const left = generateLValue(node.left);
   const right = generateExpression(node.right);
   return left + " = " + right;
 }
@@ -1319,6 +1368,7 @@ function compile(source) {
   const parseResult = parse(tokenResult.tokens);
   if (!parseResult.ok) return parseResult;
   const code = generateCode(parseResult.value);
+  if (code.ok === false) return code;
   return { ok: true, value: code };
 }
 

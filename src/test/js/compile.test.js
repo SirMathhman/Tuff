@@ -572,8 +572,8 @@ test("array with mixed types", () => {
   expectValid("let arr = [1, 2]; arr[0] + arr[1]", [], 3);
 });
 
-test("array out of bounds returns undefined", () => {
-  expectValid("let arr = [10]; arr[0]", [], 10);
+test("array out of bounds returns null", () => {
+  expectValid("let arr = [10]; arr[99] == null", [], 1);
 });
 
 test("array in let declaration chain", () => {
@@ -594,4 +594,52 @@ test("pointer to array with dereference", () => {
 
 test("pointer to array length", () => {
   expectValid("let arr = [1, 2, 3]; let p = &arr; (*p).length", [], 3);
+});
+
+// Null Tests
+
+test("null literal", () => {
+  expectInvalid(
+    "null",
+    "null cannot be used as a return value; it cannot be converted to a number",
+  );
+});
+
+test("null equality", () => {
+  expectValid("null == null", [], 1);
+});
+
+test("null inequality", () => {
+  expectValid("null != 5", [], 1);
+});
+
+test("null in let declaration", () => {
+  expectValid("let x = null; x == null", [], 1);
+});
+
+test("null in object literal", () => {
+  expectValid("let obj = { a : null }; obj.a == null", [], 1);
+});
+
+test("null in array", () => {
+  expectValid("let arr = [1, null, 3]; arr[1] == null", [], 1);
+});
+
+test("null returned from function", () => {
+  expectValid("fn foo() => null; foo() == null", [], 1);
+});
+
+test("missing object property returns null", () => {
+  expectValid("let obj = { a : 1 }; obj.b == null", [], 1);
+});
+
+test("out of bounds array index returns null", () => {
+  expectValid("let arr = [1, 2]; arr[99] == null", [], 1);
+});
+
+test("undefined keyword is invalid", () => {
+  expectInvalid(
+    "let x = undefined",
+    "'undefined' is not supported; use 'null' instead",
+  );
 });
