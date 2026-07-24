@@ -239,9 +239,7 @@ function parseStructDefinition(
   if (!lbraceResult.isOk) return lbraceResult;
   const fieldsResult = parseStructFields(ctx);
   if (!fieldsResult.isOk) return fieldsResult;
-  // Semicolon is optional after struct definitions
-  const afterStruct = peek(ctx);
-  if (afterStruct && afterStruct.type === "SEMICOLON") consume(ctx);
+  consumeOptionalSemicolon(ctx);
 
   return {
     isOk: true,
@@ -254,6 +252,11 @@ function parseStructDefinition(
       column: structToken.column,
     },
   };
+}
+
+function consumeOptionalSemicolon(ctx: ParseContext) {
+  const next = peek(ctx);
+  if (next && next.type === "SEMICOLON") consume(ctx);
 }
 
 function parseStructFields(
