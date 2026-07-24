@@ -1,2 +1,6 @@
+struct Ok<T> {
+    
+}
+
 let x = 42;
 x

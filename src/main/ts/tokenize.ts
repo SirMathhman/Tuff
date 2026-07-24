@@ -27,7 +27,9 @@ function isOperator(ch: string): boolean {
     ch === "{" ||
     ch === "}" ||
     ch === "," ||
-    ch === "."
+    ch === "." ||
+    ch === "<" ||
+    ch === ">"
   );
 }
 
@@ -86,6 +88,8 @@ function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
   else if (ch === "}") type_ = "RBRACE";
   else if (ch === ",") type_ = "COMMA";
   else if (ch === ".") type_ = "DOT";
+  else if (ch === "<") type_ = "LBRACKET";
+  else if (ch === ">") type_ = "RBRACKET";
   else type_ = "UNKNOWN";
   return { type: type_, value: ch, line: ctx.line, column: ctx.column };
 }

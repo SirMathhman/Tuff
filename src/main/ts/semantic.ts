@@ -7,155 +7,24 @@ import type {
   AssignmentNode,
   IdentifierNode,
   StructDefinitionNode,
-  StructField,
   MemberAssignmentNode,
 } from "./types";
 import {
-  checkStructUndefined,
-  checkStructFieldCount,
-  checkStructUnknownField,
-  checkStructFieldType,
   checkAssignmentUndeclared,
   checkAssignmentImmutable,
   checkMemberUndeclared,
   checkMemberImmutable,
 } from "./semantic-errors";
+import {
+  parseGenericTypeName,
+  checkTypeName,
+  checkExpr,
+  checkRef,
+  resolveFieldTypeWithGenerics,
+} from "./semantic-generics";
+import type { StructDef, VarEntry } from "./semantic-generics";
 
 const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
-
-function checkTypeName(
-  typeName: string,
-  structs: StructDef[],
-  loc: { line: number; column: number },
-  label: string,
-): Result<void, CompileError> {
-  const isNumeric = VALID_TYPES.includes(typeName);
-  const isStruct = structs.some((s) => s.name === typeName);
-  if (!isNumeric && !isStruct)
-    return {
-      isOk: false,
-      error: {
-        message: label + "'" + typeName + "'",
-        reason:
-          "Supported types: " + VALID_TYPES.join(", ") + " or a defined struct",
-        suggestedFix: "Use a valid numeric type or struct type.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  return { isOk: true, value: undefined };
-}
-
-interface VarEntry {
-  name: string;
-  mutable: boolean;
-  typeName: string | undefined;
-}
-
-interface StructDef {
-  name: string;
-  fields: StructField[];
-}
-
-function checkRef(
-  name: string,
-  scope: VarEntry[],
-  loc: { line: number; column: number },
-): Result<{ typeName: string | undefined }, CompileError> {
-  const entry = scope.find((e) => e.name === name);
-  if (!entry)
-    return {
-      isOk: false,
-      error: {
-        message: "Use of undeclared variable '" + name + "'",
-        reason: "Variable must be declared before use.",
-        suggestedFix: "Declare the variable with 'let' first.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  return { isOk: true, value: { typeName: entry.typeName } };
-}
-
-function checkExpr(
-  expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  if (expr.type === "NumberLiteral")
-    return { isOk: true, value: (expr as { typeName?: string }).typeName };
-  if (expr.type === "StructInstance")
-    return checkStructExpr(expr, scope, structs, loc);
-  if (expr.type === "MemberExpression")
-    return checkMemberExpr(expr, scope, structs, loc);
-  const refResult = checkRef(expr.name, scope, loc);
-  if (!refResult.isOk) return refResult;
-  return { isOk: true, value: refResult.value.typeName };
-}
-
-function checkStructExpr(
-  expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const sexpr = expr as {
-    structName: string;
-    fields: { name: string; value: Expression }[];
-  };
-  const instanceResult = checkStructInstance(
-    sexpr.structName,
-    sexpr.fields,
-    scope,
-    structs,
-    loc,
-  );
-  if (!instanceResult.isOk) return instanceResult;
-  return { isOk: true, value: sexpr.structName };
-}
-
-function checkMemberExpr(
-  expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const mexpr = expr as { object: Expression; field: string };
-  const objResult = checkExpr(mexpr.object, scope, structs, loc);
-  if (!objResult.isOk) return objResult;
-  const objType = objResult.value;
-  if (objType) {
-    const structDef = structs.find((s) => s.name === objType);
-    if (structDef) return checkStructField(structDef, mexpr.field, loc);
-  }
-  return { isOk: true, value: objType };
-}
-
-function checkStructField(
-  structDef: StructDef,
-  fieldName: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const fieldDef = structDef.fields.find((f) => f.name === fieldName);
-  if (!fieldDef)
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Unknown field '" +
-          fieldName +
-          "' on struct '" +
-          structDef.name +
-          "'",
-        reason: "Field does not exist on struct.",
-        suggestedFix: "Use a valid field name.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  return { isOk: true, value: fieldDef.typeName };
-}
 
 function checkStructDef(
   node: StructDefinitionNode,
@@ -173,49 +42,71 @@ function checkStructDef(
           column: node.column,
         },
       };
-    const fieldCheck = checkTypeName(
-      field.typeName,
-      structs,
-      node,
-      "Invalid field type ",
-    );
-    if (!fieldCheck.isOk) return fieldCheck;
+    const isTypeParam = node.typeParams.includes(field.typeName);
+    if (!isTypeParam) {
+      const { base: fieldBase, args: fieldArgs } = parseGenericTypeName(
+        field.typeName,
+      );
+      const fieldCheck = checkTypeName(
+        fieldBase,
+        structs,
+        node,
+        "Invalid field type ",
+      );
+      if (!fieldCheck.isOk) return fieldCheck;
+      for (const arg of fieldArgs) {
+        const isArgTypeParam = node.typeParams.includes(arg);
+        if (!isArgTypeParam) {
+          const argCheck = checkTypeName(
+            arg,
+            structs,
+            node,
+            "Invalid field type argument '",
+          );
+          if (!argCheck.isOk) return argCheck;
+        }
+      }
+    }
   }
-  structs.push({ name: node.name, fields: node.fields });
+  structs.push({
+    name: node.name,
+    typeParams: node.typeParams,
+    fields: node.fields,
+  });
   return { isOk: true, value: undefined };
 }
 
-function checkStructInstance(
-  structName: string,
-  fields: { name: string; value: Expression }[],
-  scope: VarEntry[],
+function checkGenericStructInstantiation(
+  node: LetDeclarationNode,
   structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const def = structs.find((s) => s.name === structName);
-  if (!def) return checkStructUndefined(structName, loc);
-  if (fields.length !== def.fields.length)
-    return checkStructFieldCount(
-      structName,
-      def.fields.length,
-      fields.length,
-      loc,
-    );
-  for (const field of fields) {
-    const defField = def.fields.find((f) => f.name === field.name);
-    if (!defField) return checkStructUnknownField(field.name, structName, loc);
-    const typeResult = checkExpr(field.value, scope, structs, loc);
-    if (!typeResult.isOk) return typeResult;
-    const fieldType = typeResult.value;
-    if (fieldType !== defField.typeName)
-      return checkStructFieldType(
-        field.name,
-        defField.typeName,
-        fieldType,
-        loc,
-      );
-  }
-  return { isOk: true, value: structName };
+): Result<void, CompileError> {
+  if (node.typeName || node.value.type !== "StructInstance")
+    return { isOk: true, value: undefined };
+  const sexpr = node.value as { structName: string; typeArgs: string[] };
+  const structDef = structs.find((s) => s.name === sexpr.structName);
+  if (
+    structDef &&
+    structDef.typeParams.length > 0 &&
+    sexpr.typeArgs.length === 0
+  )
+    return {
+      isOk: false,
+      error: {
+        message:
+          "Generic struct '" +
+          sexpr.structName +
+          "' requires explicit type annotation",
+        reason:
+          "Generic structs need type arguments to resolve type parameters.",
+        suggestedFix:
+          "Add type annotation like '" +
+          sexpr.structName +
+          "<Type>' to variable declaration.",
+        line: node.line,
+        column: node.column,
+      },
+    };
+  return { isOk: true, value: undefined };
 }
 
 function checkLetSemantics(
@@ -225,8 +116,8 @@ function checkLetSemantics(
 ): Result<void, CompileError> {
   const typeCheck = checkLetType(node, structs);
   if (!typeCheck.isOk) return typeCheck;
-  const exprCheck = checkLetExprType(node, scope, structs);
-  if (!exprCheck.isOk) return exprCheck;
+  const genericCheck = checkGenericStructInstantiation(node, structs);
+  if (!genericCheck.isOk) return genericCheck;
   const exprTypeResult = checkExpr(node.value, scope, structs, node);
   if (!exprTypeResult.isOk) return exprTypeResult;
   const exprType = exprTypeResult.value;
@@ -236,6 +127,8 @@ function checkLetSemantics(
       ? exprType
       : undefined);
   node.typeName = resolvedTypeName;
+  const exprCheck = checkLetExprType(node, scope, structs);
+  if (!exprCheck.isOk) return exprCheck;
   scope.push({
     name: node.name,
     mutable: node.mutable,
@@ -249,7 +142,44 @@ function checkLetType(
   structs: StructDef[],
 ): Result<void, CompileError> {
   if (!node.typeName) return { isOk: true, value: undefined };
-  return checkTypeName(node.typeName, structs, node, "Invalid type ");
+  const { base, args } = parseGenericTypeName(node.typeName);
+  const isNumeric = VALID_TYPES.includes(base);
+  const structDef = structs.find((s) => s.name === base);
+  if (!isNumeric && !structDef)
+    return checkTypeName(base, structs, node, "Invalid type '");
+  // Validate type args count matches struct type params
+  if (
+    structDef &&
+    args.length > 0 &&
+    args.length !== structDef.typeParams.length
+  )
+    return {
+      isOk: false,
+      error: {
+        message:
+          "Struct '" +
+          base +
+          "' expects " +
+          structDef.typeParams.length +
+          " type param(s) but got " +
+          args.length,
+        reason: "Type argument count must match type parameter count.",
+        suggestedFix:
+          "Provide " + structDef.typeParams.length + " type arguments.",
+        line: node.line,
+        column: node.column,
+      },
+    };
+  // Validate each type arg
+  for (const arg of args) {
+    const argCheck = checkTypeName(
+      arg,
+      structs,
+      node,
+      "Invalid type argument '",
+    );
+    if (!argCheck.isOk) return argCheck;
+  }
   return { isOk: true, value: undefined };
 }
 
@@ -264,6 +194,11 @@ function checkLetExprType(
   // Allow struct type inference: let p = Point { ... } infers Point type
   if (!node.typeName && exprType && structs.some((s) => s.name === exprType))
     return { isOk: true, value: undefined };
+  // For generic structs, compare base types (e.g. Point<I32> matches Point)
+  if (node.typeName && exprType) {
+    const { base } = parseGenericTypeName(node.typeName);
+    if (base === exprType) return { isOk: true, value: undefined };
+  }
   return checkTypeMatch(node.typeName, exprType, node);
 }
 
@@ -309,43 +244,17 @@ function checkMemberAssignment(
       { line: node.line, column: node.column },
       baseName,
     );
-  const fieldType = resolveFieldType(node.object, node.field, structs, scope);
-  if (!fieldType) return { isOk: true, value: undefined };
+  const fieldResult = resolveFieldTypeWithGenerics(
+    node.object,
+    node.field,
+    structs,
+    scope,
+  );
+  if (!fieldResult) return { isOk: true, value: undefined };
   const rhsTypeResult = checkExpr(node.value, scope, structs, node);
   if (!rhsTypeResult.isOk) return rhsTypeResult;
   const rhsType = rhsTypeResult.value;
-  return checkTypeMatch(fieldType, rhsType, node);
-}
-
-function resolveFieldType(
-  expr: Expression,
-  field: string,
-  structs: StructDef[],
-  scope: VarEntry[],
-): string | undefined {
-  if (expr.type === "Identifier") {
-    const idExpr = expr as { name: string };
-    const entry = scope.find((e) => e.name === idExpr.name);
-    if (entry && entry.typeName) {
-      const structDef = structs.find((s) => s.name === entry.typeName);
-      if (structDef) {
-        const f = structDef.fields.find((f) => f.name === field);
-        return f?.typeName;
-      }
-    }
-  }
-  if (expr.type === "MemberExpression") {
-    const mexpr = expr as { object: Expression; field: string };
-    const objType = resolveFieldType(mexpr.object, mexpr.field, structs, scope);
-    if (objType) {
-      const structDef = structs.find((s) => s.name === objType);
-      if (structDef) {
-        const f = structDef.fields.find((f) => f.name === field);
-        return f?.typeName;
-      }
-    }
-  }
-  return undefined;
+  return checkTypeMatch(fieldResult, rhsType, node);
 }
 
 function getBaseName(expr: Expression): string {

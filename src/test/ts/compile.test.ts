@@ -343,3 +343,95 @@ test("Struct instantiation with wrong struct type is invalid", () => {
     "struct Point { x : I32, y : I32 }; struct Color { r : U8, g : U8, b : U8 }; let p : Point = Color { r: 1U8, g: 2U8, b: 3U8 };",
   );
 });
+
+// --- Generic Struct Tests ---
+
+test("Generic struct with single type param", () => {
+  expectValid(
+    "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point<I32> { x: 42I32, y: 100I32 }; p.x",
+    [],
+    42,
+  );
+});
+
+test("Generic struct with inferred type args", () => {
+  expectValid(
+    "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point { x: 42I32, y: 100I32 }; p.y",
+    [],
+    100,
+  );
+});
+
+test("Generic struct with multiple type params", () => {
+  expectValid(
+    "struct Pair<T, U> { first : T, second : U }; let p : Pair<I32, U8> = Pair { first: 42I32, second: 255U8 }; p.first",
+    [],
+    42,
+  );
+});
+
+test("Generic struct with inferred multiple type args", () => {
+  expectValid(
+    "struct Pair<T, U> { first : T, second : U }; let p : Pair<I32, U8> = Pair { first: 10I32, second: 5U8 }; p.second",
+    [],
+    5,
+  );
+});
+
+test("Generic struct field reassignment with mut", () => {
+  expectValid(
+    "struct Point<T> { x : T, y : T }; let mut p : Point<I32> = Point { x: 1I32, y: 2I32 }; p.x = 99I32; p.x",
+    [],
+    99,
+  );
+});
+
+test("Generic struct field reassignment without mut is invalid", () => {
+  expectInvalid(
+    "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point { x: 1I32, y: 2I32 }; p.x = 99I32;",
+  );
+});
+
+test("Generic struct with wrong type arg count is invalid", () => {
+  expectInvalid(
+    "struct Point<T> { x : T, y : T }; let p : Point<I32, U8> = Point { x: 1I32, y: 2I32 };",
+  );
+});
+
+test("Generic struct field type mismatch is invalid", () => {
+  expectInvalid(
+    "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point { x: 1U8, y: 2I32 };",
+  );
+});
+
+test("Nested generic struct", () => {
+  expectValid(
+    "struct Point<T> { x : T, y : T }; struct Wrapper<T> { inner : Point<T> }; let w : Wrapper<I32> = Wrapper { inner: Point { x: 42I32, y: 100I32 } }; w.inner.x",
+    [],
+    42,
+  );
+});
+
+test("Generic struct used as exit expression", () => {
+  expectValid(
+    "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point { x: 42I32, y: 0I32 }; p",
+    [],
+    0,
+  );
+});
+
+test("Generic struct definition without usage is valid", () => {
+  expectValid("struct Point<T> { x : T, y : T }; 42", [], 42);
+});
+
+test("Generic struct with undefined type param is invalid", () => {
+  expectInvalid(
+    "struct Point<T> { x : T, y : T }; let p : Point<UnknownType> = Point { x: 1I32, y: 2I32 };",
+  );
+});
+
+test("Generic struct instantiation without type annotation is invalid", () => {
+  expectInvalid(
+    "struct Point<T> { x : T, y : T }; let p = Point { x: 1I32, y: 2I32 };",
+  );
+});

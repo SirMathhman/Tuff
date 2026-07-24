@@ -15,6 +15,10 @@
       },
       {
         "type": "command",
+        "command": "cmd /c \"npm run circular 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Do note that the formatter intentionally runs before the linter. Thus, if a file is too long, then you should faffing around with whitespace and legitimately split the file.\"; exit 2 }"
+      },
+      {
+        "type": "command",
         "command": "cmd /c \"npm run visualize 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Do note that the formatter intentionally runs before the linter. Thus, if a file is too long, then you should faffing around with whitespace and legitimately split the file.\"; exit 2 }"
       }
     ]

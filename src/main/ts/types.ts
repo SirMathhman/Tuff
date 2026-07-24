@@ -66,6 +66,7 @@ export interface StructField {
 export interface StructDefinitionNode {
   type: "StructDefinition";
   name: string;
+  typeParams: string[];
   fields: StructField[];
   line: number;
   column: number;
@@ -102,6 +103,7 @@ export interface IdentifierExpr {
 export interface StructInstanceExpr {
   type: "StructInstance";
   structName: string;
+  typeArgs: string[];
   fields: { name: string; value: Expression }[];
 }
 
