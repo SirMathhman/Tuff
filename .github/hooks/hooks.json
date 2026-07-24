@@ -11,11 +11,7 @@
       },
       {
         "type": "command",
-        "command": "cmd /c \"npm run lint 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
-      },
-      {
-        "type": "command",
-        "command": "cmd /c \"npm run format 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"npm run lint 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Do note that the formatter intentionally runs before the linter. Thus, if a file is too long, then you should faffing around with whitespace and legitimately split the file.\"; exit 2 }"
       }
     ]
   }

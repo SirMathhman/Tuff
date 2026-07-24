@@ -115,3 +115,39 @@ test("Let missing initializer is invalid", () => {
 test("Let missing semicolon is invalid", () => {
   expectInvalid("let x = 42 x");
 });
+
+test("Let mut declaration with reassignment", () => {
+  expectValid("let mut x = 42; x = 10; x", [], 10);
+});
+
+test("Let mut declaration without reassignment", () => {
+  expectValid("let mut x = 42; x", [], 42);
+});
+
+test("Let mut with variable reassignment", () => {
+  expectValid("let mut x = 1; let y = 2; x = y; x", [], 2);
+});
+
+test("Reassigning immutable variable is invalid", () => {
+  expectInvalid("let x = 42; x = 10; x");
+});
+
+test("Reassigning undeclared variable is invalid", () => {
+  expectInvalid("x = 10;");
+});
+
+test("Using undeclared variable in expression is invalid", () => {
+  expectInvalid("let y = x;");
+});
+
+test("Redeclaring variable is valid (shadowing)", () => {
+  expectValid("let x = 42; let x = 10; x", [], 10);
+});
+
+test("Let mut missing semicolon is invalid", () => {
+  expectInvalid("let mut x = 42 x");
+});
+
+test("Let mut missing initializer is invalid", () => {
+  expectInvalid("let mut x;");
+});

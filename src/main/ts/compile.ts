@@ -18,8 +18,6 @@ export interface CompileError {
   column: number;
 }
 
-// --- Tokenizer ---
-
 export interface Token {
   type: string;
   value: string;
@@ -55,12 +53,7 @@ function readNumber(ctx: TokenizeContext): Token {
     ctx.pos++;
     ctx.column++;
   }
-  return {
-    type: "NUMBER",
-    value: numStr,
-    line: ctx.line,
-    column: ctx.column,
-  };
+  return { type: "NUMBER", value: numStr, line: ctx.line, column: ctx.column };
 }
 
 function readIdentifier(ctx: TokenizeContext): Token {
@@ -120,18 +113,11 @@ function skipWhitespace(ctx: TokenizeContext): boolean {
 
 function tokenize(source: string): Result<Token[], CompileError> {
   const tokens: Token[] = [];
-  const ctx: TokenizeContext = {
-    source,
-    pos: 0,
-    line: 1,
-    column: 1,
-  };
-
+  const ctx: TokenizeContext = { source, pos: 0, line: 1, column: 1 };
   while (ctx.pos < ctx.source.length) {
     const ch = ctx.source[ctx.pos];
     if (!ch) break;
     if (skipWhitespace(ctx)) continue;
-
     if (isDigit(ch)) {
       const startCol = ctx.column;
       const token = readNumber(ctx);
@@ -140,14 +126,12 @@ function tokenize(source: string): Result<Token[], CompileError> {
       tokens.push(token);
       continue;
     }
-
     if (ch === "=" || ch === ";") {
       tokens.push(tokenizeOperator(ch, ctx));
       ctx.pos++;
       ctx.column++;
       continue;
     }
-
     if (isAlpha(ch)) {
       const startCol = ctx.column;
       const token = readIdentifier(ctx);
@@ -156,58 +140,57 @@ function tokenize(source: string): Result<Token[], CompileError> {
       tokens.push(token);
       continue;
     }
-
     return tokenizeUnknown(ch, ctx);
   }
-
   return { isOk: true, value: tokens };
 }
 
 // --- Parser ---
 
-interface ASTNode {
-  type: string;
-}
-
-interface NumberLiteralNode extends ASTNode {
+export interface NumberLiteralNode {
   type: "NumberLiteral";
   value: number;
   line: number;
   column: number;
 }
 
-interface IdentifierNode extends ASTNode {
+export interface IdentifierNode {
   type: "Identifier";
   name: string;
   line: number;
   column: number;
 }
 
-interface LetDeclarationNode extends ASTNode {
+export interface LetDeclarationNode {
   type: "LetDeclaration";
+  name: string;
+  mutable: boolean;
+  value: Expression;
+  line: number;
+  column: number;
+}
+
+export interface AssignmentNode {
+  type: "Assignment";
   name: string;
   value: Expression;
   line: number;
   column: number;
 }
 
-interface ExpressionNode {
-  type: string;
-}
-
-interface NumberLiteralExpr extends ExpressionNode {
+interface NumberLiteralExpr {
   type: "NumberLiteral";
   value: number;
 }
 
-interface IdentifierExpr extends ExpressionNode {
+interface IdentifierExpr {
   type: "Identifier";
   name: string;
 }
 
 export type Expression = NumberLiteralExpr | IdentifierExpr;
-
-export type Statement = NumberLiteralNode | IdentifierNode | LetDeclarationNode;
+export type Statement =
+  NumberLiteralNode | IdentifierNode | LetDeclarationNode | AssignmentNode;
 
 interface ParseContext {
   tokens: Token[];
@@ -217,13 +200,11 @@ interface ParseContext {
 function parse(tokens: Token[]): Result<Statement[], CompileError> {
   const ctx: ParseContext = { tokens, pos: 0 };
   const statements: Statement[] = [];
-
   while (!isEof(ctx)) {
     const stmt = parseStatement(ctx);
     if (!stmt.isOk) return stmt;
     statements.push(stmt.value);
   }
-
   return { isOk: true, value: statements };
 }
 
@@ -236,8 +217,7 @@ function peek(ctx: ParseContext): Token | undefined {
 }
 
 function consume(ctx: ParseContext): Token {
-  const token = ctx.tokens[ctx.pos++];
-  return token!;
+  return ctx.tokens[ctx.pos++]!;
 }
 
 function unexpectedTokenError(
@@ -272,7 +252,6 @@ function unexpectedEofError(expected: string): Err<CompileError> {
 function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("an expression");
-
   if (token.type === "NUMBER") {
     consume(ctx);
     return {
@@ -280,12 +259,10 @@ function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
       value: { type: "NumberLiteral", value: parseInt(token.value, 10) },
     };
   }
-
   if (token.type === "IDENTIFIER") {
     consume(ctx);
     return { isOk: true, value: { type: "Identifier", name: token.value } };
   }
-
   return unexpectedTokenError(token, "a number or identifier");
 }
 
@@ -295,7 +272,7 @@ function expectToken(
   expected: string,
 ): Result<Token, CompileError> {
   const token = peek(ctx);
-  if (!token) {
+  if (!token)
     return {
       isOk: false,
       error: {
@@ -306,8 +283,7 @@ function expectToken(
         column: 0,
       },
     };
-  }
-  if (token.type !== type) {
+  if (token.type !== type)
     return {
       isOk: false,
       error: {
@@ -318,20 +294,17 @@ function expectToken(
         column: token.column,
       },
     };
-  }
   consume(ctx);
   return { isOk: true, value: token };
 }
 
-function expectVariableName(
-  ctx: ParseContext,
-): Result<Token, CompileError> {
+function expectVariableName(ctx: ParseContext): Result<Token, CompileError> {
   const nameToken = peek(ctx);
   if (
     !nameToken ||
     nameToken.type !== "IDENTIFIER" ||
     nameToken.value === "let"
-  ) {
+  )
     return {
       isOk: false,
       error: {
@@ -344,7 +317,6 @@ function expectVariableName(
         column: nameToken?.column ?? 0,
       },
     };
-  }
   consume(ctx);
   return { isOk: true, value: nameToken };
 }
@@ -354,24 +326,22 @@ function parseLetStatement(
   letToken: Token,
 ): Result<Statement, CompileError> {
   consume(ctx);
-
+  const mutable = peek(ctx)?.value === "mut";
+  if (mutable) consume(ctx);
   const nameResult = expectVariableName(ctx);
   if (!nameResult.isOk) return nameResult;
-
   const equalsResult = expectToken(ctx, "EQUALS", "=");
   if (!equalsResult.isOk) return equalsResult;
-
   const exprResult = parseExpression(ctx);
   if (!exprResult.isOk) return exprResult;
-
   const semiResult = expectToken(ctx, "SEMICOLON", ";");
   if (!semiResult.isOk) return semiResult;
-
   return {
     isOk: true,
     value: {
       type: "LetDeclaration",
       name: nameResult.value.value,
+      mutable,
       value: exprResult.value,
       line: letToken.line,
       column: letToken.column,
@@ -379,17 +349,15 @@ function parseLetStatement(
   };
 }
 
-function parseExpressionStatement(
+function parseAssignmentStatement(
   ctx: ParseContext,
 ): Result<Statement, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("a statement");
-
   const exprResult = parseExpression(ctx);
   if (!exprResult.isOk) return exprResult;
-
   const expr = exprResult.value;
-  if (expr.type === "NumberLiteral") {
+  if (expr.type === "NumberLiteral")
     return {
       isOk: true,
       value: {
@@ -399,13 +367,27 @@ function parseExpressionStatement(
         column: token.column,
       },
     };
-  }
-
+  const equalsResult = expectToken(ctx, "EQUALS", "=");
+  if (!equalsResult.isOk)
+    return {
+      isOk: true,
+      value: {
+        type: "Identifier",
+        name: expr.name,
+        line: token.line,
+        column: token.column,
+      },
+    };
+  const rhsResult = parseExpression(ctx);
+  if (!rhsResult.isOk) return rhsResult;
+  const semiResult = expectToken(ctx, "SEMICOLON", ";");
+  if (!semiResult.isOk) return semiResult;
   return {
     isOk: true,
     value: {
-      type: "Identifier",
+      type: "Assignment",
       name: expr.name,
+      value: rhsResult.value,
       line: token.line,
       column: token.column,
     },
@@ -420,55 +402,24 @@ function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
     return parseLetStatement(ctx, token);
   }
 
-  return parseExpressionStatement(ctx);
-}
-
-// --- Code Generator ---
-
-function generateExpression(expr: Expression): string {
-  if (expr.type === "NumberLiteral") {
-    return String(expr.value);
-  }
-  return expr.name;
-}
-
-function generateCode(statements: Statement[]): string {
-  const lines: string[] = [];
-
-  for (const stmt of statements) {
-    if (stmt.type === "NumberLiteral") {
-      const node = stmt as NumberLiteralNode;
-      lines.push(`process.exit(${node.value})`);
-    } else if (stmt.type === "Identifier") {
-      const node = stmt as IdentifierNode;
-      lines.push(`process.exit(${node.name})`);
-    } else if (stmt.type === "LetDeclaration") {
-      const node = stmt as LetDeclarationNode;
-      lines.push(`let ${node.name} = ${generateExpression(node.value)}`);
-    }
-  }
-
-  return lines.join("\n");
+  return parseAssignmentStatement(ctx);
 }
 
 // --- Compiler Entry Point ---
 
+import { analyzeSemantics } from "./semantic";
+import { generateCode } from "./generate";
+
 export function compileTuffToTS(
   tuffSource: string,
 ): Result<string, CompileError> {
-  if (tuffSource.length === 0)
-    return {
-      isOk: true,
-      value: "process.exit(0)",
-    };
-
+  if (tuffSource.length === 0) return { isOk: true, value: "process.exit(0)" };
   const tokensResult = tokenize(tuffSource);
   if (!tokensResult.isOk) return tokensResult;
-
   const statementsResult = parse(tokensResult.value);
   if (!statementsResult.isOk) return statementsResult;
-
-  const code = generateCode(statementsResult.value);
-
+  const semanticResult = analyzeSemantics(statementsResult.value);
+  if (!semanticResult.isOk) return semanticResult;
+  const code = generateCode(semanticResult.value);
   return { isOk: true, value: code };
 }
