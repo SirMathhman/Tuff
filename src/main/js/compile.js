@@ -28,6 +28,7 @@ const TokenType = {
   AND: "AND",
   OR: "OR",
   NOT: "NOT",
+  UNDERSCORE: "UNDERSCORE",
   EOF: "EOF",
 };
 
@@ -56,7 +57,7 @@ function isIdentChar(ch) {
 }
 
 function isKeyword(ident) {
-  return ["let", "fn", "true", "false"].includes(ident);
+  return ["let", "fn", "match", "case", "true", "false"].includes(ident);
 }
 
 function isDigit(ch) {
@@ -70,7 +71,10 @@ function readIdentifier(source, start) {
     ident += source[i];
     i++;
   }
-  return ident.length > 0 ? ident : null;
+  if (ident === "_") {
+    return { value: "_", type: TokenType.UNDERSCORE };
+  }
+  return ident.length > 0 ? { value: ident, type: TokenType.IDENTIFIER } : null;
 }
 
 function readNumber(source, start) {
@@ -109,41 +113,55 @@ function readString(source, start) {
 function readMultiCharToken(source, i) {
   const ch = source[i];
   if (isIdentStart(ch)) {
-    const identResult = readIdentifier(source, i);
-    if (identResult) {
-      let type;
-      if (identResult === "true" || identResult === "false") {
-        type = TokenType.BOOLEAN;
-      } else if (isKeyword(identResult)) {
-        type = TokenType.KEYWORD;
-      } else {
-        type = TokenType.IDENTIFIER;
-      }
-      return {
-        token: { type, value: identResult },
-        length: identResult.length,
-      };
-    }
+    return readIdentifierToken(source, i);
   }
   if (isDigit(ch)) {
-    const numResult = readNumber(source, i);
-    if (numResult) {
-      return {
-        token: { type: TokenType.NUMBER, value: numResult },
-        length: numResult.length,
-      };
-    }
+    return readNumberToken(source, i);
   }
   if (ch === '"') {
-    const stringResult = readString(source, i);
-    if (stringResult) {
-      return {
-        token: { type: TokenType.STRING, value: stringResult.value },
-        length: stringResult.length,
-      };
-    }
+    return readStringToken(source, i);
   }
   return null;
+}
+
+function readIdentifierToken(source, i) {
+  const identResult = readIdentifier(source, i);
+  if (!identResult) return null;
+  if (identResult.type === TokenType.UNDERSCORE) {
+    return {
+      token: { type: TokenType.UNDERSCORE, value: "_" },
+      length: 1,
+    };
+  }
+  const type = classifyIdentifier(identResult.value);
+  return {
+    token: { type, value: identResult.value },
+    length: identResult.value.length,
+  };
+}
+
+function classifyIdentifier(value) {
+  if (value === "true" || value === "false") return TokenType.BOOLEAN;
+  if (isKeyword(value)) return TokenType.KEYWORD;
+  return TokenType.IDENTIFIER;
+}
+
+function readNumberToken(source, i) {
+  const numResult = readNumber(source, i);
+  if (!numResult) return null;
+  return {
+    token: { type: TokenType.NUMBER, value: numResult },
+    length: numResult.length,
+  };
+}
+
+function readStringToken(source, i) {
+  const stringResult = readString(source, i);
+  if (!stringResult) return null;
+  return {
+    token: { type: TokenType.STRING, value: stringResult.value },
+    length: stringResult.length,
+  };
 }
 
 function tryTwoCharToken(source, i, tokens) {
@@ -245,6 +263,8 @@ const NodeType = {
   BinaryExpression: "BinaryExpression",
   UnaryExpression: "UnaryExpression",
   BlockExpression: "BlockExpression",
+  MatchExpression: "MatchExpression",
+  MatchCase: "MatchCase",
 };
 
 // Parser helpers
@@ -323,6 +343,9 @@ function parsePrimaryExpression(ctx) {
   }
   if (token.type === TokenType.NOT) {
     return parseUnaryNot(ctx);
+  }
+  if (token.type === TokenType.KEYWORD && token.value === "match") {
+    return parseMatchExpression(ctx);
   }
   return parseIdentifierOrCall(ctx);
 }
@@ -405,6 +428,78 @@ function parseBlockExpression(ctx) {
     ok: true,
     value: { type: NodeType.BlockExpression, statements: statements.value },
   };
+}
+
+function parseMatchExpression(ctx) {
+  advance(ctx); // consume "match"
+  const lparenResult = consume(ctx, TokenType.LPAREN);
+  if (!lparenResult.ok) return lparenResult;
+  const discriminantResult = parseExpression(ctx);
+  if (!discriminantResult.ok) return discriminantResult;
+  const rparenResult = consume(ctx, TokenType.RPAREN);
+  if (!rparenResult.ok) return rparenResult;
+  const lbraceResult = consume(ctx, TokenType.LBRACE);
+  if (!lbraceResult.ok) return lbraceResult;
+  const casesResult = parseMatchCases(ctx);
+  if (!casesResult.ok) return casesResult;
+  const rbraceResult = consume(ctx, TokenType.RBRACE);
+  if (!rbraceResult.ok) return rbraceResult;
+  if (!casesResult.hasWildcard) {
+    return { ok: false, error: "Missing wildcard case" };
+  }
+  return {
+    ok: true,
+    value: {
+      type: NodeType.MatchExpression,
+      discriminant: discriminantResult.value,
+      cases: casesResult.cases,
+    },
+  };
+}
+
+function parseMatchCases(ctx) {
+  const cases = [];
+  let hasWildcard = false;
+  while (
+    peek(ctx).type !== TokenType.RBRACE &&
+    peek(ctx).type !== TokenType.EOF
+  ) {
+    const caseResult = consume(ctx, TokenType.KEYWORD);
+    if (!caseResult.ok) return caseResult;
+    if (caseResult.value.value !== "case") {
+      return { ok: false, error: "Expected 'case' keyword" };
+    }
+    const patternResult = parseMatchPattern(ctx);
+    if (!patternResult.ok) return patternResult;
+    if (patternResult.isWildcard) hasWildcard = true;
+    const arrowResult = consume(ctx, TokenType.ARROW);
+    if (!arrowResult.ok) return arrowResult;
+    const valueResult = parseExpression(ctx);
+    if (!valueResult.ok) return valueResult;
+    cases.push({
+      type: NodeType.MatchCase,
+      pattern: patternResult.pattern,
+      value: valueResult.value,
+    });
+    if (peek(ctx).type === TokenType.SEMICOLON) {
+      advance(ctx);
+    }
+  }
+  return { ok: true, cases, hasWildcard };
+}
+
+function parseMatchPattern(ctx) {
+  if (peek(ctx).type === TokenType.UNDERSCORE) {
+    advance(ctx);
+    return {
+      ok: true,
+      isWildcard: true,
+      pattern: { type: NodeType.BooleanLiteral, value: true },
+    };
+  }
+  const result = parsePrimaryExpression(ctx);
+  if (!result.ok) return result;
+  return { ok: true, isWildcard: false, pattern: result.value };
 }
 
 function parseStatementsUntil(ctx, stopType) {
@@ -646,6 +741,8 @@ function generateCompoundExpression(node) {
       return node.name;
     case NodeType.FunctionCall:
       return generateFunctionCall(node);
+    case NodeType.MatchExpression:
+      return generateMatchExpression(node);
     default:
       return null;
   }
@@ -693,6 +790,29 @@ function generateBlockExpression(node) {
   const exprCode = generateExpression(lastStmt);
   const needsBoolWrap = expressionMayBeBoolean(lastStmt);
   code += "return " + (needsBoolWrap ? "+" + exprCode : exprCode) + "; })()";
+  return code;
+}
+
+function generateMatchExpression(node) {
+  const discriminant = generateExpression(node.discriminant);
+  let code = "(function(v) { switch(v) { ";
+  for (let i = 0; i < node.cases.length; i++) {
+    const c = node.cases[i];
+    const isWildcard =
+      c.pattern.type === NodeType.BooleanLiteral &&
+      c.pattern.value === true &&
+      i === node.cases.length - 1;
+    if (isWildcard) {
+      code += "default: ";
+    } else {
+      code += "case " + generateExpression(c.pattern) + ": ";
+    }
+    const valueCode = generateExpression(c.value);
+    const needsBoolWrap = expressionMayBeBoolean(c.value);
+    code += "return " + (needsBoolWrap ? "+" + valueCode : valueCode) + "; ";
+  }
+  code += "}})(";
+  code += discriminant + ")";
   return code;
 }
 

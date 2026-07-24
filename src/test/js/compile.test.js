@@ -290,3 +290,80 @@ test("deeply nested blocks", () => {
 test("block as function body expression", () => {
   expectValid("fn compute(x) => { let y = x * 2; y + 1 }; compute(4)", [], 9);
 });
+
+// --- Match Expressions ---
+
+test("simple match with number literal", () => {
+  expectValid("let x = 100; match (x) { case 100 => 1; case _ => 0 }", [], 1);
+});
+
+test("match wildcard default", () => {
+  expectValid("let x = 42; match (x) { case 100 => 1; case _ => 2 }", [], 2);
+});
+
+test("match in let binding", () => {
+  expectValid(
+    "let x = 5; let result = match (x) { case 5 => 10; case _ => 20 }; result",
+    [],
+    10,
+  );
+});
+
+test("match as function argument", () => {
+  expectValid(
+    "fn identity(x) => x; let v = 1; identity(match (v) { case 1 => 99; case _ => 0 })",
+    [],
+    99,
+  );
+});
+
+test("match with string literal", () => {
+  expectValid(
+    'let s = "hello"; match (s) { case "hello" => 1; case _ => 0 }',
+    [],
+    1,
+  );
+});
+
+test("match with boolean literal", () => {
+  expectValid("let b = true; match (b) { case true => 1; case _ => 0 }", [], 1);
+});
+
+test("match with multiple cases", () => {
+  expectValid(
+    "let x = 2; match (x) { case 1 => 10; case 2 => 20; case 3 => 30; case _ => 0 }",
+    [],
+    20,
+  );
+});
+
+test("match with expression as discriminant", () => {
+  expectValid("let x = 5; match (x + 5) { case 10 => 1; case _ => 0 }", [], 1);
+});
+
+test("match without wildcard is invalid", () => {
+  expectInvalid(
+    "let x = 1; match (x) { case 1 => 10 }",
+    "Missing wildcard case",
+  );
+});
+
+test("nested match expressions", () => {
+  expectValid(
+    "let x = 1; let y = 2; match (x) { case 1 => match (y) { case 2 => 42; case _ => 0 }; case _ => 0 }",
+    [],
+    42,
+  );
+});
+
+test("match in binary expression", () => {
+  expectValid("let x = 10; match (x) { case 10 => 5; case _ => 0 } + 3", [], 8);
+});
+
+test("match with false boolean", () => {
+  expectValid(
+    "let b = false; match (b) { case true => 1; case false => 2; case _ => 0 }",
+    [],
+    2,
+  );
+});
