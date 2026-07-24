@@ -14,6 +14,14 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
     rules: {
       complexity: ["error", 10],
+      "max-lines": [
+        "error",
+        {
+          max: 500,
+          skipComments: true,
+          skipBlankLines: true,
+        },
+      ],
       "max-lines-per-function": [
         "error",
         {
