@@ -34,6 +34,60 @@ interface TokenizeContext {
   column: number;
 }
 
+function isWhitespace(ch: string): boolean {
+  return ch === " " || ch === "\t" || ch === "\r";
+}
+
+function isDigit(ch: string): boolean {
+  return ch >= "0" && ch <= "9";
+}
+
+function isAlpha(ch: string): boolean {
+  return (
+    (ch >= "a" && ch <= "z") ||
+    (ch >= "A" && ch <= "Z") ||
+    ch === "_"
+  );
+}
+
+function isIdentChar(ch: string): boolean {
+  return isDigit(ch) || isAlpha(ch);
+}
+
+function readNumber(ctx: TokenizeContext): Token {
+  let numStr = "";
+  while (ctx.pos < ctx.source.length) {
+    const c = ctx.source[ctx.pos];
+    if (!c || !isDigit(c)) break;
+    numStr += c;
+    ctx.pos++;
+    ctx.column++;
+  }
+  return {
+    type: "NUMBER",
+    value: numStr,
+    line: ctx.line,
+    column: ctx.column,
+  };
+}
+
+function readIdentifier(ctx: TokenizeContext): Token {
+  let ident = "";
+  while (ctx.pos < ctx.source.length) {
+    const c = ctx.source[ctx.pos];
+    if (!c || !isIdentChar(c)) break;
+    ident += c;
+    ctx.pos++;
+    ctx.column++;
+  }
+  return {
+    type: "IDENTIFIER",
+    value: ident,
+    line: ctx.line,
+    column: ctx.column,
+  };
+}
+
 function tokenize(source: string): Result<Token[], CompileError> {
   const tokens: Token[] = [];
   const ctx: TokenizeContext = {
@@ -47,14 +101,12 @@ function tokenize(source: string): Result<Token[], CompileError> {
     const ch = ctx.source[ctx.pos];
     if (!ch) break;
 
-    // Skip whitespace
-    if (ch === " " || ch === "\t" || ch === "\r") {
+    if (isWhitespace(ch)) {
       ctx.pos++;
       ctx.column++;
       continue;
     }
 
-    // Newline
     if (ch === "\n") {
       ctx.pos++;
       ctx.line++;
@@ -62,28 +114,15 @@ function tokenize(source: string): Result<Token[], CompileError> {
       continue;
     }
 
-    // Integer literal
-    if (ch >= "0" && ch <= "9") {
-      const startLine = ctx.line;
+    if (isDigit(ch)) {
       const startCol = ctx.column;
-      let numStr = "";
-      while (ctx.pos < ctx.source.length) {
-        const c = ctx.source[ctx.pos];
-        if (!c || c < "0" || c > "9") break;
-        numStr += c;
-        ctx.pos++;
-        ctx.column++;
-      }
-      tokens.push({
-        type: "NUMBER",
-        value: numStr,
-        line: startLine,
-        column: startCol,
-      });
+      const token = readNumber(ctx);
+      token.column = startCol;
+      token.line = ctx.line;
+      tokens.push(token);
       continue;
     }
 
-    // Operators and punctuation
     if (ch === "=" || ch === ";") {
       tokens.push({
         type: ch === "=" ? "EQUALS" : "SEMICOLON",
@@ -96,37 +135,15 @@ function tokenize(source: string): Result<Token[], CompileError> {
       continue;
     }
 
-    // Identifier
-    if ((ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_") {
-      const startLine = ctx.line;
+    if (isAlpha(ch)) {
       const startCol = ctx.column;
-      let ident = "";
-      while (ctx.pos < ctx.source.length) {
-        const c = ctx.source[ctx.pos];
-        if (
-          !c ||
-          !(
-            (c >= "a" && c <= "z") ||
-            (c >= "A" && c <= "Z") ||
-            (c >= "0" && c <= "9") ||
-            c === "_"
-          )
-        )
-          break;
-        ident += c;
-        ctx.pos++;
-        ctx.column++;
-      }
-      tokens.push({
-        type: "IDENTIFIER",
-        value: ident,
-        line: startLine,
-        column: startCol,
-      });
+      const token = readIdentifier(ctx);
+      token.column = startCol;
+      token.line = ctx.line;
+      tokens.push(token);
       continue;
     }
 
-    // Unknown character
     return {
       isOk: false,
       error: {
@@ -219,49 +236,15 @@ function consume(ctx: ParseContext): Token {
   return token!;
 }
 
-function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
-  const token = peek(ctx);
-
-  if (!token) {
-    return {
-      isOk: false,
-      error: {
-        message: "Unexpected end of input",
-        reason: "Expected an expression.",
-        suggestedFix: "Add a valid expression.",
-        line: 0,
-        column: 0,
-      },
-    };
-  }
-
-  if (token.type === "NUMBER") {
-    consume(ctx);
-    return {
-      isOk: true,
-      value: {
-        type: "NumberLiteral",
-        value: parseInt(token.value, 10),
-      },
-    };
-  }
-
-  if (token.type === "IDENTIFIER") {
-    consume(ctx);
-    return {
-      isOk: true,
-      value: {
-        type: "Identifier",
-        name: token.value,
-      },
-    };
-  }
-
+function unexpectedTokenError(
+  token: Token,
+  expected: string,
+): Err<CompileError> {
   return {
     isOk: false,
     error: {
       message: `Unexpected token: '${token.value}'`,
-      reason: "Expected a number or identifier.",
+      reason: `Expected ${expected}.`,
       suggestedFix: "Use a supported expression.",
       line: token.line,
       column: token.column,
@@ -269,97 +252,127 @@ function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
   };
 }
 
-function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
-  const token = peek(ctx);
+function unexpectedEofError(expected: string): Err<CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message: "Unexpected end of input",
+      reason: `Expected ${expected}.`,
+      suggestedFix: "Add a valid expression.",
+      line: 0,
+      column: 0,
+    },
+  };
+}
 
+function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
+  const token = peek(ctx);
+  if (!token) return unexpectedEofError("an expression");
+
+  if (token.type === "NUMBER") {
+    consume(ctx);
+    return {
+      isOk: true,
+      value: { type: "NumberLiteral", value: parseInt(token.value, 10) },
+    };
+  }
+
+  if (token.type === "IDENTIFIER") {
+    consume(ctx);
+    return { isOk: true, value: { type: "Identifier", name: token.value } };
+  }
+
+  return unexpectedTokenError(token, "a number or identifier");
+}
+
+function expectToken(
+  ctx: ParseContext,
+  type: string,
+  expected: string,
+): Result<Token, CompileError> {
+  const token = peek(ctx);
   if (!token) {
     return {
       isOk: false,
       error: {
-        message: "Unexpected end of input",
-        reason: "Expected a statement.",
-        suggestedFix: "Add a valid expression.",
+        message: `Expected '${expected}'`,
+        reason: `Missing ${expected}.`,
+        suggestedFix: `Add '${expected}'.`,
         line: 0,
         column: 0,
       },
     };
   }
-
-  // let x = expr;
-  if (token.type === "IDENTIFIER" && token.value === "let") {
-    consume(ctx);
-
-    const nameToken = peek(ctx);
-    if (
-      !nameToken ||
-      nameToken.type !== "IDENTIFIER" ||
-      nameToken.value === "let"
-    ) {
-      return {
-        isOk: false,
-        error: {
-          message: nameToken
-            ? `Expected variable name after 'let', got '${nameToken.value}'`
-            : "Expected variable name after 'let'",
-          reason: "Let declarations require a variable name.",
-          suggestedFix: "Use 'let <name> = <expression>;'.",
-          line: nameToken?.line ?? 0,
-          column: nameToken?.column ?? 0,
-        },
-      };
-    }
-    consume(ctx);
-
-    const equalsToken = peek(ctx);
-    if (!equalsToken || equalsToken.type !== "EQUALS") {
-      return {
-        isOk: false,
-        error: {
-          message: equalsToken
-            ? `Expected '=' after variable name, got '${equalsToken.value}'`
-            : "Expected '=' after variable name",
-          reason: "Let declarations require an initializer.",
-          suggestedFix: "Use 'let <name> = <expression>;'.",
-          line: equalsToken?.line ?? 0,
-          column: equalsToken?.column ?? 0,
-        },
-      };
-    }
-    consume(ctx);
-
-    const exprResult = parseExpression(ctx);
-    if (!exprResult.isOk) return exprResult;
-
-    const semiToken = peek(ctx);
-    if (!semiToken || semiToken.type !== "SEMICOLON") {
-      return {
-        isOk: false,
-        error: {
-          message: semiToken
-            ? `Expected ';' after let declaration, got '${semiToken.value}'`
-            : "Expected ';' after let declaration",
-          reason: "Let declarations must end with a semicolon.",
-          suggestedFix: "Add ';' at the end of the let declaration.",
-          line: semiToken?.line ?? 0,
-          column: semiToken?.column ?? 0,
-        },
-      };
-    }
-    consume(ctx);
-
+  if (token.type !== type) {
     return {
-      isOk: true,
-      value: {
-        type: "LetDeclaration",
-        name: nameToken.value,
-        value: exprResult.value,
+      isOk: false,
+      error: {
+        message: `Expected '${expected}', got '${token.value}'`,
+        reason: `Unexpected token.`,
+        suggestedFix: `Use '${expected}'.`,
         line: token.line,
         column: token.column,
       },
     };
   }
+  consume(ctx);
+  return { isOk: true, value: token };
+}
 
-  // Bare expression (number or identifier)
+function parseLetStatement(
+  ctx: ParseContext,
+  letToken: Token,
+): Result<Statement, CompileError> {
+  consume(ctx);
+
+  const nameToken = peek(ctx);
+  if (
+    !nameToken ||
+    nameToken.type !== "IDENTIFIER" ||
+    nameToken.value === "let"
+  ) {
+    return {
+      isOk: false,
+      error: {
+        message: nameToken
+          ? `Expected variable name after 'let', got '${nameToken.value}'`
+          : "Expected variable name after 'let'",
+        reason: "Let declarations require a variable name.",
+        suggestedFix: "Use 'let <name> = <expression>;'.",
+        line: nameToken?.line ?? 0,
+        column: nameToken?.column ?? 0,
+      },
+    };
+  }
+  consume(ctx);
+
+  const equalsResult = expectToken(ctx, "EQUALS", "=");
+  if (!equalsResult.isOk) return equalsResult;
+
+  const exprResult = parseExpression(ctx);
+  if (!exprResult.isOk) return exprResult;
+
+  const semiResult = expectToken(ctx, "SEMICOLON", ";");
+  if (!semiResult.isOk) return semiResult;
+
+  return {
+    isOk: true,
+    value: {
+      type: "LetDeclaration",
+      name: nameToken.value,
+      value: exprResult.value,
+      line: letToken.line,
+      column: letToken.column,
+    },
+  };
+}
+
+function parseExpressionStatement(
+  ctx: ParseContext,
+): Result<Statement, CompileError> {
+  const token = peek(ctx);
+  if (!token) return unexpectedEofError("a statement");
+
   const exprResult = parseExpression(ctx);
   if (!exprResult.isOk) return exprResult;
 
@@ -385,6 +398,17 @@ function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
       column: token.column,
     },
   };
+}
+
+function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
+  const token = peek(ctx);
+  if (!token) return unexpectedEofError("a statement");
+
+  if (token.type === "IDENTIFIER" && token.value === "let") {
+    return parseLetStatement(ctx, token);
+  }
+
+  return parseExpressionStatement(ctx);
 }
 
 // --- Code Generator ---
