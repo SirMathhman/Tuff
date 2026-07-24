@@ -29,6 +29,8 @@ const TokenType = {
   OR: "OR",
   NOT: "NOT",
   AMPERSTAND: "AMPERSTAND",
+  LSQUARE: "LSQUARE",
+  RSQUARE: "RSQUARE",
   UNDERSCORE: "UNDERSCORE",
   EOF: "EOF",
 };
@@ -254,6 +256,8 @@ function trySingleCharToken(ch) {
     ">": TokenType.GT,
     "!": TokenType.NOT,
     "&": TokenType.AMPERSTAND,
+    "[": TokenType.LSQUARE,
+    "]": TokenType.RSQUARE,
   };
   const type = map[ch];
   return type ? { type, value: ch } : null;
@@ -278,6 +282,9 @@ const NodeType = {
   UnaryExpression: "UnaryExpression",
   PointerExpression: "PointerExpression",
   DereferenceExpression: "DereferenceExpression",
+  ArrayLiteral: "ArrayLiteral",
+  ArrayIndex: "ArrayIndex",
+  AssignmentExpression: "AssignmentExpression",
   BlockExpression: "BlockExpression",
   MatchExpression: "MatchExpression",
   MatchCase: "MatchCase",
@@ -333,6 +340,18 @@ function isBlockExpression(ctx) {
 
 function parsePrimaryExpression(ctx) {
   const token = peek(ctx);
+  const literal = parseLiteralToken(ctx, token);
+  if (literal !== null) return literal;
+  const brace = parseBraceExpression(ctx, token);
+  if (brace !== null) return brace;
+  const unary = parseUnaryExpression(ctx, token);
+  if (unary !== null) return unary;
+  const bracket = parseBracketExpression(ctx, token);
+  if (bracket !== null) return bracket;
+  return parseKeywordOrIdentifier(ctx);
+}
+
+function parseLiteralToken(ctx, token) {
   if (token.type === TokenType.NUMBER) {
     advance(ctx);
     return {
@@ -354,25 +373,28 @@ function parsePrimaryExpression(ctx) {
       value: { type: NodeType.BooleanLiteral, value: token.value === "true" },
     };
   }
+  return null;
+}
+
+function parseBraceExpression(ctx, token) {
   if (token.type === TokenType.LBRACE) {
-    if (isBlockExpression(ctx)) {
-      return parseBlockExpression(ctx);
-    }
+    if (isBlockExpression(ctx)) return parseBlockExpression(ctx);
     return parseObjectLiteral(ctx);
   }
-  if (token.type === TokenType.NOT) {
-    return parseUnaryNot(ctx);
-  }
-  if (token.type === TokenType.AMPERSTAND) {
-    return parsePointerExpression(ctx);
-  }
-  if (token.type === TokenType.STAR) {
-    return parseDereferenceExpression(ctx);
-  }
-  if (token.type === TokenType.LPAREN) {
-    return parseParenthesizedExpression(ctx);
-  }
-  return parseKeywordOrIdentifier(ctx);
+  return null;
+}
+
+function parseUnaryExpression(ctx, token) {
+  if (token.type === TokenType.NOT) return parseUnaryNot(ctx);
+  if (token.type === TokenType.AMPERSTAND) return parsePointerExpression(ctx);
+  if (token.type === TokenType.STAR) return parseDereferenceExpression(ctx);
+  return null;
+}
+
+function parseBracketExpression(ctx, token) {
+  if (token.type === TokenType.LPAREN) return parseParenthesizedExpression(ctx);
+  if (token.type === TokenType.LSQUARE) return parseArrayLiteral(ctx);
+  return null;
 }
 
 function parseKeywordOrIdentifier(ctx) {
@@ -661,17 +683,58 @@ function parseMemberExpression(ctx) {
   let result = parsePrimaryExpression(ctx);
   if (!result.ok) return result;
   let node = result.value;
-  while (peek(ctx).type === TokenType.DOT) {
-    advance(ctx);
-    const identResult = parseIdentifier(ctx);
-    if (!identResult.ok) return identResult;
-    node = {
-      type: NodeType.MemberExpression,
-      object: node,
-      property: identResult.value.name,
-    };
+  while (
+    peek(ctx).type === TokenType.DOT ||
+    peek(ctx).type === TokenType.LSQUARE
+  ) {
+    if (peek(ctx).type === TokenType.DOT) {
+      advance(ctx);
+      const identResult = parseIdentifier(ctx);
+      if (!identResult.ok) return identResult;
+      node = {
+        type: NodeType.MemberExpression,
+        object: node,
+        property: identResult.value.name,
+      };
+    } else {
+      const indexResult = parseArrayIndex(ctx, node);
+      if (!indexResult.ok) return indexResult;
+      node = indexResult.value;
+    }
   }
   return { ok: true, value: node };
+}
+
+function parseArrayLiteral(ctx) {
+  advance(ctx); // consume '['
+  const elements = [];
+  while (
+    peek(ctx).type !== TokenType.RSQUARE &&
+    peek(ctx).type !== TokenType.EOF
+  ) {
+    const elemResult = parseExpression(ctx);
+    if (!elemResult.ok) return elemResult;
+    elements.push(elemResult.value);
+    if (peek(ctx).type === TokenType.COMMA) {
+      advance(ctx);
+    }
+  }
+  advance(ctx); // consume ']'
+  return {
+    ok: true,
+    value: { type: NodeType.ArrayLiteral, elements },
+  };
+}
+
+function parseArrayIndex(ctx, object) {
+  advance(ctx); // consume '['
+  const indexResult = parseExpression(ctx);
+  if (!indexResult.ok) return indexResult;
+  advance(ctx); // consume ']'
+  return {
+    ok: true,
+    value: { type: NodeType.ArrayIndex, object, index: indexResult.value },
+  };
 }
 
 function parseExpression(ctx) {
@@ -896,7 +959,26 @@ function parseStatement(ctx) {
   if (token.type === TokenType.KEYWORD && token.value === "fn") {
     return parseFunctionDeclaration(ctx);
   }
-  return parseExpression(ctx);
+  const leftResult = parseExpression(ctx);
+  if (!leftResult.ok) return leftResult;
+  if (peek(ctx).type === TokenType.ASSIGN) {
+    return parseAssignmentStatement(ctx, leftResult.value);
+  }
+  return leftResult;
+}
+
+function parseAssignmentStatement(ctx, left) {
+  advance(ctx); // consume '='
+  const rightResult = parseExpression(ctx);
+  if (!rightResult.ok) return rightResult;
+  return {
+    ok: true,
+    value: {
+      type: NodeType.AssignmentExpression,
+      left,
+      right: rightResult.value,
+    },
+  };
 }
 
 // Parser entry point
@@ -954,6 +1036,9 @@ function generateStatement(node) {
   }
   if (node.type === NodeType.FunctionDeclaration) {
     return generateFunctionDeclaration(node);
+  }
+  if (node.type === NodeType.AssignmentExpression) {
+    return generateAssignmentExpression(node);
   }
   return generateExpression(node);
 }
@@ -1051,6 +1136,8 @@ function generateBinaryOrObject(node) {
   if (node.type === NodeType.BinaryExpression)
     return generateBinaryExpression(node);
   if (node.type === NodeType.ObjectLiteral) return generateObjectLiteral(node);
+  if (node.type === NodeType.ArrayLiteral) return generateArrayLiteral(node);
+  if (node.type === NodeType.ArrayIndex) return generateArrayIndex(node);
   return generateDefaultExpression();
 }
 
@@ -1175,6 +1262,23 @@ function generateObjectLiteral(node) {
 function generateFunctionCall(node) {
   const args = node.arguments.map((a) => generateExpression(a)).join(", ");
   return node.name + "(" + args + ")";
+}
+
+function generateArrayLiteral(node) {
+  const elements = node.elements.map((e) => generateExpression(e)).join(", ");
+  return "[" + elements + "]";
+}
+
+function generateArrayIndex(node) {
+  const obj = generateExpression(node.object);
+  const idx = generateExpression(node.index);
+  return obj + "[" + idx + "]";
+}
+
+function generateAssignmentExpression(node) {
+  const left = generateExpression(node.left);
+  const right = generateExpression(node.right);
+  return left + " = " + right;
 }
 
 function generatePointerExpression(node) {

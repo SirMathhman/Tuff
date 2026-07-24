@@ -529,3 +529,53 @@ test("pointer in match expression", () => {
     100,
   );
 });
+
+// Array Tests
+
+test("array literal with index access", () => {
+  expectValid("let arr = [10, 20, 30]; arr[0]", [], 10);
+});
+
+test("array literal second element", () => {
+  expectValid("let arr = [10, 20, 30]; arr[1]", [], 20);
+});
+
+test("array literal last element", () => {
+  expectValid("let arr = [10, 20, 30]; arr[2]", [], 30);
+});
+
+test("array length property", () => {
+  expectValid("let arr = [1, 2, 3]; arr.length", [], 3);
+});
+
+test("array index expression", () => {
+  expectValid("let arr = [5, 10, 15]; let i = 1; arr[i]", [], 10);
+});
+
+test("array index assignment", () => {
+  expectValid("let arr = [1, 2, 3]; arr[1] = 99; arr[1]", [], 99);
+});
+
+test("array in binary expression", () => {
+  expectValid("let arr = [3, 4]; arr[0] + arr[1]", [], 7);
+});
+
+test("array as function argument", () => {
+  expectValid("fn foo(arr) => arr[0]; foo([42, 43])", [], 42);
+});
+
+test("empty array", () => {
+  expectValid("let arr = []; arr.length", [], 0);
+});
+
+test("array with mixed types", () => {
+  expectValid("let arr = [1, 2]; arr[0] + arr[1]", [], 3);
+});
+
+test("array out of bounds returns undefined", () => {
+  expectValid("let arr = [10]; arr[0]", [], 10);
+});
+
+test("array in let declaration chain", () => {
+  expectValid("let a = [1, 2]; let b = a[0]; b + 3", [], 4);
+});
