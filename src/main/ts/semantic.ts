@@ -8,6 +8,7 @@ import type {
   IdentifierNode,
   StructDefinitionNode,
   MemberAssignmentNode,
+  TypeAliasNode,
 } from "./types";
 import {
   checkAssignmentUndeclared,
@@ -21,14 +22,16 @@ import {
   checkExpr,
   checkRef,
   resolveFieldTypeWithGenerics,
+  checkCircularAlias,
+  resolveAlias,
 } from "./semantic-generics";
-import type { StructDef, VarEntry } from "./semantic-generics";
-
+import type { StructDef, VarEntry, TypeAliasDef } from "./semantic-generics";
 const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
 function checkStructDef(
   node: StructDefinitionNode,
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   for (const field of node.fields) {
     if (!field.typeName)
@@ -44,9 +47,9 @@ function checkStructDef(
       };
     const isTypeParam = node.typeParams.includes(field.typeName);
     if (!isTypeParam) {
-      const { base: fieldBase, args: fieldArgs } = parseGenericTypeName(
-        field.typeName,
-      );
+      const resolved = resolveAlias(field.typeName, aliases);
+      const { base: fieldBase, args: fieldArgs } =
+        parseGenericTypeName(resolved);
       const fieldCheck = checkTypeName(
         fieldBase,
         structs,
@@ -76,14 +79,88 @@ function checkStructDef(
   return { isOk: true, value: undefined };
 }
 
+function aliasError(
+  msg: string,
+  reason: string,
+  fix: string,
+  node: TypeAliasNode,
+): Result<void, CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message: msg,
+      reason,
+      suggestedFix: fix,
+      line: node.line,
+      column: node.column,
+    },
+  };
+}
+function checkTypeAlias(
+  node: TypeAliasNode,
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+): Result<void, CompileError> {
+  if (checkCircularAlias(node.name, node.underlyingType, aliases, []))
+    return aliasError(
+      "Circular type alias reference detected for '" + node.name + "'",
+      "Type aliases cannot reference themselves directly or indirectly.",
+      "Remove the circular reference.",
+      node,
+    );
+  const resolved = resolveAlias(node.underlyingType, aliases);
+  const { base, args } = parseGenericTypeName(resolved);
+  const isNumeric = VALID_TYPES.includes(base);
+  const structDef = structs.find((s) => s.name === base);
+  if (!isNumeric && !structDef)
+    return checkTypeName(base, structs, node, "Invalid underlying type '");
+  if (
+    structDef &&
+    args.length > 0 &&
+    args.length !== structDef.typeParams.length
+  )
+    return aliasError(
+      "Struct '" +
+        base +
+        "' expects " +
+        structDef.typeParams.length +
+        " type param(s) but got " +
+        args.length,
+      "Type argument count must match type parameter count.",
+      "Provide " + structDef.typeParams.length + " type arguments.",
+      node,
+    );
+  for (const arg of args) {
+    const isTypeParam = node.typeParams.includes(arg);
+    if (!isTypeParam) {
+      const argCheck = checkTypeName(
+        arg,
+        structs,
+        node,
+        "Invalid type argument '",
+        aliases,
+      );
+      if (!argCheck.isOk) return argCheck;
+    }
+  }
+  aliases.push({
+    name: node.name,
+    typeParams: node.typeParams,
+    underlyingType: node.underlyingType,
+  });
+  return { isOk: true, value: undefined };
+}
 function checkGenericStructInstantiation(
   node: LetDeclarationNode,
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   if (node.typeName || node.value.type !== "StructInstance")
     return { isOk: true, value: undefined };
   const sexpr = node.value as { structName: string; typeArgs: string[] };
-  const structDef = structs.find((s) => s.name === sexpr.structName);
+  const resolvedName = resolveAlias(sexpr.structName, aliases);
+  const { base } = parseGenericTypeName(resolvedName);
+  const structDef = structs.find((s) => s.name === base);
   if (
     structDef &&
     structDef.typeParams.length > 0 &&
@@ -93,14 +170,12 @@ function checkGenericStructInstantiation(
       isOk: false,
       error: {
         message:
-          "Generic struct '" +
-          sexpr.structName +
-          "' requires explicit type annotation",
+          "Generic struct '" + base + "' requires explicit type annotation",
         reason:
           "Generic structs need type arguments to resolve type parameters.",
         suggestedFix:
           "Add type annotation like '" +
-          sexpr.structName +
+          base +
           "<Type>' to variable declaration.",
         line: node.line,
         column: node.column,
@@ -108,17 +183,17 @@ function checkGenericStructInstantiation(
     };
   return { isOk: true, value: undefined };
 }
-
 function checkLetSemantics(
   node: LetDeclarationNode,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
-  const typeCheck = checkLetType(node, structs);
+  const typeCheck = checkLetType(node, structs, aliases);
   if (!typeCheck.isOk) return typeCheck;
-  const genericCheck = checkGenericStructInstantiation(node, structs);
+  const genericCheck = checkGenericStructInstantiation(node, structs, aliases);
   if (!genericCheck.isOk) return genericCheck;
-  const exprTypeResult = checkExpr(node.value, scope, structs, node);
+  const exprTypeResult = checkExpr(node.value, scope, structs, aliases, node);
   if (!exprTypeResult.isOk) return exprTypeResult;
   const exprType = exprTypeResult.value;
   const resolvedTypeName =
@@ -127,7 +202,7 @@ function checkLetSemantics(
       ? exprType
       : undefined);
   node.typeName = resolvedTypeName;
-  const exprCheck = checkLetExprType(node, scope, structs);
+  const exprCheck = checkLetExprType(node, scope, structs, aliases);
   if (!exprCheck.isOk) return exprCheck;
   scope.push({
     name: node.name,
@@ -140,9 +215,11 @@ function checkLetSemantics(
 function checkLetType(
   node: LetDeclarationNode,
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   if (!node.typeName) return { isOk: true, value: undefined };
-  const { base, args } = parseGenericTypeName(node.typeName);
+  const resolved = resolveAlias(node.typeName, aliases);
+  const { base, args } = parseGenericTypeName(resolved);
   const isNumeric = VALID_TYPES.includes(base);
   const structDef = structs.find((s) => s.name === base);
   if (!isNumeric && !structDef)
@@ -187,8 +264,9 @@ function checkLetExprType(
   node: LetDeclarationNode,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
-  const exprTypeResult = checkExpr(node.value, scope, structs, node);
+  const exprTypeResult = checkExpr(node.value, scope, structs, aliases, node);
   if (!exprTypeResult.isOk) return exprTypeResult;
   const exprType = exprTypeResult.value;
   // Allow struct type inference: let p = Point { ... } infers Point type
@@ -196,43 +274,61 @@ function checkLetExprType(
     return { isOk: true, value: undefined };
   // For generic structs, compare base types (e.g. Point<I32> matches Point)
   if (node.typeName && exprType) {
-    const { base } = parseGenericTypeName(node.typeName);
+    const resolved = resolveAlias(node.typeName, aliases);
+    const { base } = parseGenericTypeName(resolved);
     if (base === exprType) return { isOk: true, value: undefined };
   }
-  return checkTypeMatch(node.typeName, exprType, node);
+  const resolvedDecl = node.typeName
+    ? resolveAlias(node.typeName, aliases)
+    : undefined;
+  return checkTypeMatch(resolvedDecl, exprType, node);
 }
-
 function checkAssignmentSemantics(
   node: AssignmentNode,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   const entry = scope.find((e) => e.name === node.name);
   if (!entry) return checkAssignmentUndeclared(node);
   if (!entry.mutable) return checkAssignmentImmutable(node);
-  const rhsResult = checkAssignmentRhsType(node, scope, entry, structs);
+  const rhsResult = checkAssignmentRhsType(
+    node,
+    scope,
+    entry,
+    structs,
+    aliases,
+  );
   return rhsResult;
 }
-
 function checkAssignmentRhsType(
   node: AssignmentNode,
   scope: VarEntry[],
   entry: VarEntry,
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
-  const rhsTypeResult = checkExpr(node.value, scope, structs, node);
+  const rhsTypeResult = checkExpr(node.value, scope, structs, aliases, node);
   if (!rhsTypeResult.isOk) return rhsTypeResult;
   const rhsType = rhsTypeResult.value;
   if (!entry.typeName) return { isOk: true, value: undefined };
-  return checkTypeMatch(entry.typeName, rhsType, node);
+  const resolvedDecl = resolveAlias(entry.typeName, aliases);
+  return checkTypeMatch(resolvedDecl, rhsType, node);
+}
+function getExprBaseName(expr: Expression): string {
+  if (expr.type === "Identifier") return (expr as { name: string }).name;
+  if (expr.type === "MemberExpression")
+    return getExprBaseName((expr as { object: Expression }).object);
+  return "_";
 }
 
 function checkMemberAssignment(
   node: MemberAssignmentNode,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
-  const baseName = getBaseName(node.object);
+  const baseName = getExprBaseName(node.object);
   const entry = scope.find((e) => e.name === baseName);
   if (!entry)
     return checkMemberUndeclared(
@@ -249,44 +345,32 @@ function checkMemberAssignment(
     node.field,
     structs,
     scope,
+    aliases,
   );
   if (!fieldResult) return { isOk: true, value: undefined };
-  const rhsTypeResult = checkExpr(node.value, scope, structs, node);
+  const rhsTypeResult = checkExpr(node.value, scope, structs, aliases, node);
   if (!rhsTypeResult.isOk) return rhsTypeResult;
   const rhsType = rhsTypeResult.value;
   return checkTypeMatch(fieldResult, rhsType, node);
 }
 
-function getBaseName(expr: Expression): string {
-  if (expr.type === "Identifier") {
-    const idExpr = expr as { name: string };
-    return idExpr.name;
-  }
-  if (expr.type === "MemberExpression") {
-    const mexpr = expr as { object: Expression };
-    return getBaseName(mexpr.object);
-  }
-  return "_";
-}
-
-function typeError(
-  message: string,
+function typeMismatchError(
+  msg: string,
   reason: string,
-  suggestedFix: string,
+  fix: string,
   loc: { line: number; column: number },
 ): Result<void, CompileError> {
   return {
     isOk: false,
     error: {
-      message,
+      message: msg,
       reason,
-      suggestedFix,
+      suggestedFix: fix,
       line: loc.line,
       column: loc.column,
     },
   };
 }
-
 function checkTypeMatch(
   declaredType: string | undefined,
   exprType: string | undefined,
@@ -294,7 +378,7 @@ function checkTypeMatch(
 ): Result<void, CompileError> {
   if (declaredType) {
     if (!exprType)
-      return typeError(
+      return typeMismatchError(
         "Type mismatch: expected '" +
           declaredType +
           "' but literal has no type suffix",
@@ -303,7 +387,7 @@ function checkTypeMatch(
         loc,
       );
     if (exprType !== declaredType)
-      return typeError(
+      return typeMismatchError(
         "Type mismatch: expected '" +
           declaredType +
           "' but got '" +
@@ -314,7 +398,7 @@ function checkTypeMatch(
         loc,
       );
   } else if (exprType) {
-    return typeError(
+    return typeMismatchError(
       "Literal has type suffix '" + exprType + "' but no type annotation",
       "Type suffixes require a matching type annotation on the variable.",
       "Add ': " + exprType + "' type annotation to the declaration.",
@@ -329,8 +413,9 @@ export function analyzeSemantics(
 ): Result<Statement[], CompileError> {
   const scope: VarEntry[] = [];
   const structs: StructDef[] = [];
+  const aliases: TypeAliasDef[] = [];
   for (const stmt of statements) {
-    const result = analyzeStatement(stmt, scope, structs);
+    const result = analyzeStatement(stmt, scope, structs, aliases);
     if (!result.isOk) return result;
   }
   return { isOk: true, value: statements };
@@ -340,22 +425,26 @@ function analyzeStatement(
   stmt: Statement,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   if (stmt.type === "StructDefinition") {
     const node = stmt as StructDefinitionNode;
-    return checkStructDef(node, structs);
+    return checkStructDef(node, structs, aliases);
+  } else if (stmt.type === "TypeAlias") {
+    const node = stmt as TypeAliasNode;
+    return checkTypeAlias(node, structs, aliases);
   } else if (stmt.type === "LetDeclaration") {
     const node = stmt as LetDeclarationNode;
-    return checkLetSemantics(node, scope, structs);
+    return checkLetSemantics(node, scope, structs, aliases);
   } else if (stmt.type === "Assignment") {
     const node = stmt as AssignmentNode;
-    return checkAssignmentSemantics(node, scope, structs);
+    return checkAssignmentSemantics(node, scope, structs, aliases);
   } else if (stmt.type === "MemberAssignment") {
     const node = stmt as MemberAssignmentNode;
-    return checkMemberAssignment(node, scope, structs);
+    return checkMemberAssignment(node, scope, structs, aliases);
   } else if (stmt.type === "Identifier") {
     const node = stmt as IdentifierNode;
-    return checkIdentifierStatement(node, scope, structs);
+    return checkIdentifierStatement(node, scope, structs, aliases);
   }
   return { isOk: true, value: undefined };
 }
@@ -364,6 +453,7 @@ function checkIdentifierStatement(
   node: IdentifierNode,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   if (node.name.includes(".")) {
     const parts = node.name.split(".");
@@ -380,19 +470,21 @@ function checkIdentifierStatement(
           column: node.column,
         },
       };
-    return validateFieldChain(parts, entry.typeName, structs);
+    return validateFieldChain(parts, entry.typeName, structs, aliases);
   }
   const refResult = checkRef(node.name, scope, node);
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: undefined };
 }
-
 function validateFieldChain(
   parts: string[],
   initialType: string | undefined,
   structs: StructDef[],
+  aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
-  let currentType = initialType;
+  let currentType = initialType
+    ? resolveAlias(initialType, aliases)
+    : undefined;
   for (let i = 1; i < parts.length; i++) {
     if (!currentType) break;
     const structDef = structs.find((s) => s.name === currentType);

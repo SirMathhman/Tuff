@@ -40,6 +40,8 @@ export function parseStatement(
     return parseLetStatement(ctx, token);
   if (token.type === "IDENTIFIER" && token.value === "struct")
     return parseStructDefinition(ctx, token);
+  if (token.type === "IDENTIFIER" && token.value === "type")
+    return parseTypeAlias(ctx, token);
   return parseAssignmentStatement(ctx);
 }
 
@@ -257,6 +259,49 @@ function parseStructDefinition(
 function consumeOptionalSemicolon(ctx: ParseContext) {
   const next = peek(ctx);
   if (next && next.type === "SEMICOLON") consume(ctx);
+}
+
+function parseTypeAlias(
+  ctx: ParseContext,
+  typeToken: Token,
+): Result<Statement, CompileError> {
+  consume(ctx);
+  const nameToken = peek(ctx);
+  if (!nameToken || nameToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "alias name",
+    );
+  const aliasName = nameToken.value;
+  consume(ctx);
+
+  let typeParams: string[] = [];
+  const afterName = peek(ctx);
+  if (afterName && afterName.type === "LBRACKET") {
+    consume(ctx);
+    const typeParamsResult = parseBracketedList(ctx, "type parameter");
+    if (!typeParamsResult.isOk) return typeParamsResult;
+    typeParams = typeParamsResult.value;
+  }
+
+  const equalsResult = expectToken(ctx, "EQUALS", "=");
+  if (!equalsResult.isOk) return equalsResult;
+  const underlyingResult = parseTypeNameWithGenerics(ctx);
+  if (!underlyingResult.isOk) return underlyingResult;
+  const semiResult = expectToken(ctx, "SEMICOLON", ";");
+  if (!semiResult.isOk) return semiResult;
+
+  return {
+    isOk: true,
+    value: {
+      type: "TypeAlias",
+      name: aliasName,
+      typeParams,
+      underlyingType: underlyingResult.value,
+      line: typeToken.line,
+      column: typeToken.column,
+    },
+  };
 }
 
 function parseStructFields(

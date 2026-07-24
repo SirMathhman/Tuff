@@ -19,6 +19,56 @@ export interface StructDef {
   resolvedFields?: StructField[];
 }
 
+export interface TypeAliasDef {
+  name: string;
+  typeParams: string[];
+  underlyingType: string;
+}
+
+export function resolveAlias(
+  typeName: string,
+  aliases: TypeAliasDef[],
+): string {
+  const { base, args } = parseGenericTypeName(typeName);
+  const aliasDef = aliases.find((a) => a.name === base);
+  if (!aliasDef) return typeName;
+  const resolved = resolveAlias(aliasDef.underlyingType, aliases);
+  const { base: resolvedBase } = parseGenericTypeName(resolved);
+  if (aliasDef.typeParams.length > 0 && args.length > 0) {
+    let result = resolvedBase;
+    for (let i = 0; i < aliasDef.typeParams.length; i++) {
+      const param = aliasDef.typeParams[i];
+      const replacement = args[i] || param;
+      result = result.replace(
+        new RegExp("\\b" + param + "\\b"),
+        String(replacement),
+      );
+    }
+    return result;
+  }
+  return resolved;
+}
+
+export function checkCircularAlias(
+  aliasName: string,
+  underlyingType: string,
+  aliases: TypeAliasDef[],
+  visited: string[],
+): boolean {
+  if (visited.includes(underlyingType)) return true;
+  const aliasDef = aliases.find((a) => a.name === underlyingType);
+  if (aliasDef) {
+    if (aliasDef.name === aliasName) return true;
+    return checkCircularAlias(
+      aliasName,
+      aliasDef.underlyingType,
+      aliases,
+      visited.concat([aliasDef.name]),
+    );
+  }
+  return false;
+}
+
 const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
 export function parseGenericTypeName(typeName: string): {
@@ -68,11 +118,13 @@ function resolveIdentifierFieldType(
   field: string,
   structs: StructDef[],
   scope: VarEntry[],
+  aliases: TypeAliasDef[],
 ): string | undefined {
   const idExpr = expr as { name: string };
   const entry = scope.find((e) => e.name === idExpr.name);
   if (!entry || !entry.typeName) return undefined;
-  const { base, args } = parseGenericTypeName(entry.typeName);
+  const resolved = resolveAlias(entry.typeName, aliases);
+  const { base, args } = parseGenericTypeName(resolved);
   const structDef = structs.find((s) => s.name === base);
   if (!structDef) return undefined;
   const f = structDef.fields.find((f) => f.name === field);
@@ -87,6 +139,7 @@ function resolveMemberFieldType(
   field: string,
   structs: StructDef[],
   scope: VarEntry[],
+  aliases: TypeAliasDef[],
 ): string | undefined {
   const mexpr = expr as { object: Expression; field: string };
   const objType = resolveFieldTypeWithGenerics(
@@ -94,6 +147,7 @@ function resolveMemberFieldType(
     mexpr.field,
     structs,
     scope,
+    aliases,
   );
   if (!objType) return undefined;
   const structDef = structs.find((s) => s.name === objType);
@@ -107,11 +161,12 @@ export function resolveFieldTypeWithGenerics(
   field: string,
   structs: StructDef[],
   scope: VarEntry[],
+  aliases: TypeAliasDef[],
 ): string | undefined {
   if (expr.type === "Identifier")
-    return resolveIdentifierFieldType(expr, field, structs, scope);
+    return resolveIdentifierFieldType(expr, field, structs, scope, aliases);
   if (expr.type === "MemberExpression")
-    return resolveMemberFieldType(expr, field, structs, scope);
+    return resolveMemberFieldType(expr, field, structs, scope, aliases);
   return undefined;
 }
 
@@ -120,10 +175,14 @@ export function checkTypeName(
   structs: StructDef[],
   loc: { line: number; column: number },
   label: string,
+  aliases?: TypeAliasDef[],
 ): Result<void, CompileError> {
-  const isNumeric = VALID_TYPES.includes(typeName);
-  const isStruct = structs.some((s) => s.name === typeName);
-  if (!isNumeric && !isStruct)
+  const resolved = aliases ? resolveAlias(typeName, aliases) : typeName;
+  const { base } = parseGenericTypeName(resolved);
+  const isNumeric = VALID_TYPES.includes(base);
+  const isStruct = structs.some((s) => s.name === base);
+  const isAlias = aliases ? aliases.some((a) => a.name === typeName) : false;
+  if (!isNumeric && !isStruct && !isAlias)
     return {
       isOk: false,
       error: {
@@ -162,14 +221,15 @@ export function checkExpr(
   expr: Expression,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   if (expr.type === "NumberLiteral")
     return { isOk: true, value: (expr as { typeName?: string }).typeName };
   if (expr.type === "StructInstance")
-    return checkStructExpr(expr, scope, structs, loc);
+    return checkStructExpr(expr, scope, structs, aliases, loc);
   if (expr.type === "MemberExpression")
-    return checkMemberExpr(expr, scope, structs, loc);
+    return checkMemberExpr(expr, scope, structs, aliases, loc);
   const refResult = checkRef(expr.name, scope, loc);
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: refResult.value.typeName };
@@ -179,6 +239,7 @@ export function checkStructExpr(
   expr: Expression,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   const sexpr = expr as {
@@ -192,6 +253,7 @@ export function checkStructExpr(
     sexpr.fields,
     scope,
     structs,
+    aliases,
     loc,
   );
   if (!instanceResult.isOk) return instanceResult;
@@ -206,10 +268,11 @@ export function checkMemberExpr(
   expr: Expression,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   const mexpr = expr as { object: Expression; field: string };
-  const objResult = checkExpr(mexpr.object, scope, structs, loc);
+  const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
   if (!objResult.isOk) return objResult;
   const objType = objResult.value;
   if (objType) {
@@ -249,6 +312,7 @@ export function inferTypeArgs(
   fields: { name: string; value: Expression }[],
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
   loc: { line: number; column: number },
 ): Result<string[], CompileError> {
   const inferred: string[] = [];
@@ -272,7 +336,13 @@ export function inferTypeArgs(
       inferred.push(nestedType);
       continue;
     }
-    const typeResult = checkExpr(fieldValue.value, scope, structs, loc);
+    const typeResult = checkExpr(
+      fieldValue.value,
+      scope,
+      structs,
+      aliases,
+      loc,
+    );
     if (!typeResult.isOk) return typeResult;
     inferred.push(typeResult.value || typeParam);
   }
@@ -340,6 +410,7 @@ export function checkStructFieldValues(
   structName: string,
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   for (const field of fields) {
@@ -356,10 +427,11 @@ export function checkStructFieldValues(
           column: loc.column,
         },
       };
-    const typeResult = checkExpr(field.value, scope, structs, loc);
+    const typeResult = checkExpr(field.value, scope, structs, aliases, loc);
     if (!typeResult.isOk) return typeResult;
     const fieldType = typeResult.value;
-    const expectedBase = parseGenericTypeName(defField.typeName).base;
+    const expectedResolved = resolveAlias(defField.typeName, aliases);
+    const expectedBase = parseGenericTypeName(expectedResolved).base;
     const actualBase = fieldType
       ? parseGenericTypeName(fieldType).base
       : undefined;
@@ -380,6 +452,7 @@ export function checkStructInstance(
   fields: { name: string; value: Expression }[],
   scope: VarEntry[],
   structs: StructDef[],
+  aliases: TypeAliasDef[],
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   const def = structs.find((s) => s.name === structName);
@@ -388,7 +461,14 @@ export function checkStructInstance(
   if (!countCheck.isOk) return countCheck;
   let resolvedTypeArgs = typeArgs;
   if (typeArgs.length === 0 && def.typeParams.length > 0) {
-    const inferredResult = inferTypeArgs(def, fields, scope, structs, loc);
+    const inferredResult = inferTypeArgs(
+      def,
+      fields,
+      scope,
+      structs,
+      aliases,
+      loc,
+    );
     if (!inferredResult.isOk) return inferredResult;
     resolvedTypeArgs = inferredResult.value;
   }
@@ -408,6 +488,7 @@ export function checkStructInstance(
     structName,
     scope,
     structs,
+    aliases,
     loc,
   );
   if (!valuesCheck.isOk) return valuesCheck;

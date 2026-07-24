@@ -81,13 +81,23 @@ export interface MemberAssignmentNode {
   column: number;
 }
 
+export interface TypeAliasNode {
+  type: "TypeAlias";
+  name: string;
+  typeParams: string[];
+  underlyingType: string;
+  line: number;
+  column: number;
+}
+
 export type Statement =
   | NumberLiteralNode
   | IdentifierNode
   | LetDeclarationNode
   | AssignmentNode
   | StructDefinitionNode
-  | MemberAssignmentNode;
+  | MemberAssignmentNode
+  | TypeAliasNode;
 
 export interface NumberLiteralExpr {
   type: "NumberLiteral";
