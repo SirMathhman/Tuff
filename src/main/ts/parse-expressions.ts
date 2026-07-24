@@ -19,9 +19,49 @@ export function parseExpression(
 ): Result<Expression, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("an expression");
-  if (token.type === "NUMBER") return parseNumberLiteral(ctx);
+  if (token.type === "NUMBER") {
+    const r = parseNumberLiteral(ctx);
+    if (!r.isOk) return r;
+    return parseIsExpression(ctx, r.value);
+  }
+  if (token.type === "BOOLEAN") {
+    const r = parseBooleanLiteral(ctx);
+    if (!r.isOk) return r;
+    return parseIsExpression(ctx, r.value);
+  }
   if (token.type === "IDENTIFIER") return parseIdentifierExpression(ctx);
-  return unexpectedTokenError(token, "a number or identifier");
+  return unexpectedTokenError(token, "a number, identifier, or boolean");
+}
+
+function parseBooleanLiteral(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  const token = consume(ctx);
+  return {
+    isOk: true,
+    value: { type: "BooleanLiteral", value: token.value === "true" },
+  };
+}
+
+function parseIsExpression(
+  ctx: ParseContext,
+  expr: Expression,
+): Result<Expression, CompileError> {
+  const isToken = peek(ctx);
+  if (isToken && isToken.type === "IS") {
+    consume(ctx);
+    const typeNameResult = parseTypeNameWithGenerics(ctx);
+    if (!typeNameResult.isOk) return typeNameResult;
+    return {
+      isOk: true,
+      value: {
+        type: "IsExpression",
+        operand: expr,
+        typeName: typeNameResult.value,
+      },
+    };
+  }
+  return { isOk: true, value: expr };
 }
 
 function parseNumberLiteral(
@@ -54,13 +94,20 @@ function parseIdentifierExpression(
   }
 
   const after = peek(ctx);
-  if (after && after.type === "LBRACE")
-    return parseStructInstance(ctx, name, typeArgs);
+  if (after && after.type === "LBRACE") {
+    const structResult = parseStructInstance(ctx, name, typeArgs);
+    if (!structResult.isOk) return structResult;
+    const isResult = parseIsExpression(ctx, structResult.value);
+    if (!isResult.isOk) return isResult;
+    return { isOk: true, value: isResult.value };
+  }
 
   const expr: Expression = { type: "Identifier", name };
   const memberResult = parseMemberChain(ctx, expr);
   if (!memberResult.isOk) return memberResult;
-  return { isOk: true, value: memberResult.value };
+  const isResult = parseIsExpression(ctx, memberResult.value);
+  if (!isResult.isOk) return isResult;
+  return { isOk: true, value: isResult.value };
 }
 
 function parseMemberChain(

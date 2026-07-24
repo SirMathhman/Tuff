@@ -161,6 +161,26 @@ function parseEarlyReturn(
         column: token.column,
       },
     };
+  if (expr.type === "BooleanLiteral")
+    return {
+      isOk: true,
+      value: {
+        type: "NumberLiteral",
+        value: (expr as { value: boolean }).value ? 1 : 0,
+        line: token.line,
+        column: token.column,
+      },
+    };
+  if (expr.type === "IsExpression")
+    return {
+      isOk: true,
+      value: {
+        type: "NumberLiteral",
+        value: 1,
+        line: token.line,
+        column: token.column,
+      },
+    };
   if (expr.type === "StructInstance")
     return {
       isOk: true,

@@ -71,6 +71,20 @@ function readIdentifier(ctx: TokenizeContext): Token {
     ctx.pos++;
     ctx.column++;
   }
+  if (ident === "true" || ident === "false")
+    return {
+      type: "BOOLEAN",
+      value: ident,
+      line: ctx.line,
+      column: ctx.column,
+    };
+  if (ident === "is")
+    return {
+      type: "IS",
+      value: ident,
+      line: ctx.line,
+      column: ctx.column,
+    };
   return {
     type: "IDENTIFIER",
     value: ident,

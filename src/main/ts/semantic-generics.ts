@@ -76,7 +76,17 @@ export function checkCircularAlias(
   return false;
 }
 
-const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+const VALID_TYPES = [
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "Bool",
+];
 
 export function checkTypeRef(
   typeName: string,
@@ -91,9 +101,9 @@ export function checkTypeRef(
       isOk: false,
       error: {
         message: errorMsgPrefix + typeName + "'",
-        reason: "Type must be a valid numeric type or defined struct.",
+        reason: "Type must be a valid numeric type, Bool, or defined struct.",
         suggestedFix:
-          "Use a valid type like U8, U32, or define the struct first.",
+          "Use a valid type like U8, U32, Bool, or define the struct first.",
         line: loc.line,
         column: loc.column,
       },
@@ -219,7 +229,8 @@ export function checkTypeName(
         message: label + "'" + typeName + "'",
         reason:
           "Supported types: " + VALID_TYPES.join(", ") + " or a defined struct",
-        suggestedFix: "Use a valid numeric type or struct type.",
+        suggestedFix:
+          "Use a valid type like U8, U32, Bool, or define the struct first.",
         line: loc.line,
         column: loc.column,
       },
@@ -256,6 +267,9 @@ export function checkExpr(
 ): Result<string | undefined, CompileError> {
   if (expr.type === "NumberLiteral")
     return { isOk: true, value: (expr as { typeName?: string }).typeName };
+  if (expr.type === "BooleanLiteral") return { isOk: true, value: "Bool" };
+  if (expr.type === "IsExpression")
+    return checkIsExpr(expr, scope, structs, aliases, loc);
   if (expr.type === "StructInstance")
     return checkStructExpr(expr, scope, structs, aliases, loc);
   if (expr.type === "MemberExpression")
@@ -263,6 +277,27 @@ export function checkExpr(
   const refResult = checkRef(expr.name, scope, loc);
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: refResult.value.typeName };
+}
+
+export function checkIsExpr(
+  expr: Expression,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const isexpr = expr as { operand: Expression; typeName: string };
+  const operandResult = checkExpr(isexpr.operand, scope, structs, aliases, loc);
+  if (!operandResult.isOk) return operandResult;
+  const typeCheck = checkTypeName(
+    isexpr.typeName,
+    structs,
+    loc,
+    "Invalid type '",
+    aliases,
+  );
+  if (!typeCheck.isOk) return typeCheck;
+  return { isOk: true, value: "Bool" };
 }
 
 export function checkStructExpr(

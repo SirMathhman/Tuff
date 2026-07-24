@@ -28,7 +28,7 @@
         "command": "bun ./.github/hooks/src/set-sentinel.ts"
       }
     ],
-    "PostToolUse": [
+    "PreToolUse": [
       {
         "type": "command",
         "command": "bun ./.github/hooks/src/get-elapsed.ts"

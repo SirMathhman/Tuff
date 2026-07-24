@@ -22,6 +22,20 @@ function genExprScoped(expr: Expression, declared: string[]): string {
     const numExpr = expr as NumberLiteralNode;
     return String(numExpr.value);
   }
+  if (expr.type === "BooleanLiteral") {
+    const bexpr = expr as { value: boolean };
+    return bexpr.value ? "true" : "false";
+  }
+  if (expr.type === "IsExpression") {
+    const iexpr = expr as { operand: Expression; typeName: string };
+    return (
+      "(typeof " +
+      genExprScoped(iexpr.operand, declared) +
+      " === 'object' && " +
+      genExprScoped(iexpr.operand, declared) +
+      " !== null)"
+    );
+  }
   if (expr.type === "StructInstance") {
     const sexpr = expr as {
       structName: string;

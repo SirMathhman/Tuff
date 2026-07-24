@@ -105,6 +105,11 @@ export interface NumberLiteralExpr {
   typeName?: string;
 }
 
+export interface BooleanLiteralExpr {
+  type: "BooleanLiteral";
+  value: boolean;
+}
+
 export interface IdentifierExpr {
   type: "Identifier";
   name: string;
@@ -123,8 +128,16 @@ export interface MemberExpressionExpr {
   field: string;
 }
 
+export interface IsExpressionExpr {
+  type: "IsExpression";
+  operand: Expression;
+  typeName: string;
+}
+
 export type Expression =
   | NumberLiteralExpr
+  | BooleanLiteralExpr
   | IdentifierExpr
   | StructInstanceExpr
-  | MemberExpressionExpr;
+  | MemberExpressionExpr
+  | IsExpressionExpr;
