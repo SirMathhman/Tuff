@@ -277,6 +277,21 @@ function parseIdentifier(ctx) {
   };
 }
 
+function isBlockExpression(ctx) {
+  if (peek(ctx).type !== TokenType.LBRACE) return false;
+  const nextPos = ctx.pos + 1;
+  const nextToken = ctx.tokens[nextPos];
+  if (!nextToken) return true;
+  if (nextToken.type === TokenType.RBRACE) return true;
+  if (nextToken.type === TokenType.KEYWORD) return true;
+  if (nextToken.type === TokenType.IDENTIFIER) {
+    const afterNext = ctx.tokens[nextPos + 1];
+    if (afterNext && afterNext.type === TokenType.COLON) return false;
+    return true;
+  }
+  return false;
+}
+
 function parsePrimaryExpression(ctx) {
   const token = peek(ctx);
   if (token.type === TokenType.NUMBER) {
@@ -301,6 +316,9 @@ function parsePrimaryExpression(ctx) {
     };
   }
   if (token.type === TokenType.LBRACE) {
+    if (isBlockExpression(ctx)) {
+      return parseBlockExpression(ctx);
+    }
     return parseObjectLiteral(ctx);
   }
   if (token.type === TokenType.NOT) {
@@ -376,6 +394,24 @@ function parseObjectLiteral(ctx) {
   }
   consume(ctx, TokenType.RBRACE);
   return { ok: true, value: { type: NodeType.ObjectLiteral, properties } };
+}
+
+function parseBlockExpression(ctx) {
+  consume(ctx, TokenType.LBRACE);
+  const statements = [];
+  while (peek(ctx).type !== TokenType.RBRACE && peek(ctx).type !== TokenType.EOF) {
+    const stmtResult = parseStatement(ctx);
+    if (!stmtResult.ok) return stmtResult;
+    statements.push(stmtResult.value);
+    if (peek(ctx).type === TokenType.SEMICOLON) {
+      advance(ctx);
+    }
+  }
+  consume(ctx, TokenType.RBRACE);
+  return {
+    ok: true,
+    value: { type: NodeType.BlockExpression, statements },
+  };
 }
 
 function parseMemberExpression(ctx) {
@@ -614,9 +650,27 @@ function generateExpression(node) {
       return generateObjectLiteral(node);
     case NodeType.FunctionCall:
       return generateFunctionCall(node);
+    case NodeType.BlockExpression:
+      return generateBlockExpression(node);
     default:
       return "";
   }
+}
+
+function generateBlockExpression(node) {
+  const statements = node.statements;
+  if (statements.length === 0) {
+    return "(function() { return 0; })()";
+  }
+  let code = "(function() { ";
+  for (let i = 0; i < statements.length - 1; i++) {
+    code += generateStatement(statements[i]) + "; ";
+  }
+  const lastStmt = statements[statements.length - 1];
+  const exprCode = generateExpression(lastStmt);
+  const needsBoolWrap = expressionMayBeBoolean(lastStmt);
+  code += "return " + (needsBoolWrap ? "+" + exprCode : exprCode) + "; })()";
+  return code;
 }
 
 function generateBooleanLiteral(node) {

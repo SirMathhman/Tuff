@@ -7,7 +7,16 @@ function expectValid(source, args, expectedExitCode) {
 
   const argsCopy = ["node", "test.js", ...args];
   const actualExitCode = Function("__args__", result.value)(argsCopy);
-  expect(actualExitCode).toBe(expectedExitCode);
+  if (actualExitCode !== expectedExitCode) {
+    expect(
+      "Expected '" +
+        actualExitCode +
+        "' to be '" +
+        expectedExitCode +
+        "'. Generated: " +
+        result.value,
+    ).toBeUndefined();
+  }
 }
 
 function expectInvalid(source, expectedError) {
