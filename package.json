@@ -1,0 +1,15 @@
+{
+  "name": "tuff",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun ./src/main/ts/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
