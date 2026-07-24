@@ -172,3 +172,53 @@ export function checkTypeMismatch(
     },
   };
 }
+
+export function checkTypeMatch(
+  declaredType: string | undefined,
+  exprType: string | undefined,
+  loc: { line: number; column: number },
+): Result<void, CompileError> {
+  function err(
+    msg: string,
+    reason: string,
+    fix: string,
+  ): Result<void, CompileError> {
+    return {
+      isOk: false,
+      error: {
+        message: msg,
+        reason,
+        suggestedFix: fix,
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  }
+  if (declaredType) {
+    if (!exprType)
+      return err(
+        "Type mismatch: expected '" +
+          declaredType +
+          "' but literal has no type suffix",
+        "Typed declarations require a matching type suffix on the literal.",
+        "Add '" + declaredType + "' suffix to the literal.",
+      );
+    if (exprType !== declaredType)
+      return err(
+        "Type mismatch: expected '" +
+          declaredType +
+          "' but got '" +
+          exprType +
+          "'",
+        "Literal type must match the declared type.",
+        "Change the literal suffix to '" + declaredType + "'.",
+      );
+  } else if (exprType) {
+    return err(
+      "Literal has type suffix '" + exprType + "' but no type annotation",
+      "Type suffixes require a matching type annotation on the variable.",
+      "Add ': " + exprType + "' type annotation to the declaration.",
+    );
+  }
+  return { isOk: true, value: undefined };
+}

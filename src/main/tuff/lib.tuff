@@ -1,5 +1,5 @@
 struct Ok<T> {
-    
+    field : T
 }
 
 let x = 42;

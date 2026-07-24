@@ -214,20 +214,18 @@ function getMemberName(expr: Expression): string {
   return "_";
 }
 
-function parseStructDefinition(
+function parseNameWithTypeParams(
   ctx: ParseContext,
-  structToken: Token,
-): Result<Statement, CompileError> {
-  consume(ctx);
+  expectedName: string,
+): Result<{ name: string; typeParams: string[] }, CompileError> {
   const nameToken = peek(ctx);
   if (!nameToken || nameToken.type !== "IDENTIFIER")
     return unexpectedTokenError(
       nameToken || { type: "EOF", value: "", line: 0, column: 0 },
-      "struct name",
+      expectedName,
     );
-  const structName = nameToken.value;
+  const name = nameToken.value;
   consume(ctx);
-
   let typeParams: string[] = [];
   const afterName = peek(ctx);
   if (afterName && afterName.type === "LBRACKET") {
@@ -236,6 +234,18 @@ function parseStructDefinition(
     if (!typeParamsResult.isOk) return typeParamsResult;
     typeParams = typeParamsResult.value;
   }
+  return { isOk: true, value: { name, typeParams } };
+}
+
+function parseStructDefinition(
+  ctx: ParseContext,
+  structToken: Token,
+): Result<Statement, CompileError> {
+  consume(ctx);
+  const nameResult = parseNameWithTypeParams(ctx, "struct name");
+  if (!nameResult.isOk) return nameResult;
+  const structName = nameResult.value.name;
+  const typeParams = nameResult.value.typeParams;
 
   const lbraceResult = expectToken(ctx, "LBRACE", "{");
   if (!lbraceResult.isOk) return lbraceResult;
@@ -266,23 +276,10 @@ function parseTypeAlias(
   typeToken: Token,
 ): Result<Statement, CompileError> {
   consume(ctx);
-  const nameToken = peek(ctx);
-  if (!nameToken || nameToken.type !== "IDENTIFIER")
-    return unexpectedTokenError(
-      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
-      "alias name",
-    );
-  const aliasName = nameToken.value;
-  consume(ctx);
-
-  let typeParams: string[] = [];
-  const afterName = peek(ctx);
-  if (afterName && afterName.type === "LBRACKET") {
-    consume(ctx);
-    const typeParamsResult = parseBracketedList(ctx, "type parameter");
-    if (!typeParamsResult.isOk) return typeParamsResult;
-    typeParams = typeParamsResult.value;
-  }
+  const nameResult = parseNameWithTypeParams(ctx, "alias name");
+  if (!nameResult.isOk) return nameResult;
+  const aliasName = nameResult.value.name;
+  const typeParams = nameResult.value.typeParams;
 
   const equalsResult = expectToken(ctx, "EQUALS", "=");
   if (!equalsResult.isOk) return equalsResult;

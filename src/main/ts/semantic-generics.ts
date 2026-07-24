@@ -25,6 +25,13 @@ export interface TypeAliasDef {
   underlyingType: string;
 }
 
+export interface TypeCheckCtx {
+  scope: VarEntry[];
+  structs: StructDef[];
+  aliases: TypeAliasDef[];
+  loc: { line: number; column: number };
+}
+
 export function resolveAlias(
   typeName: string,
   aliases: TypeAliasDef[],
@@ -70,6 +77,29 @@ export function checkCircularAlias(
 }
 
 const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
+export function checkTypeRef(
+  typeName: string,
+  structs: StructDef[],
+  loc: { line: number; column: number },
+  errorMsgPrefix: string,
+): Result<StructDef | undefined, CompileError> {
+  const isNumeric = VALID_TYPES.includes(typeName);
+  const structDef = structs.find((s) => s.name === typeName);
+  if (!isNumeric && !structDef)
+    return {
+      isOk: false,
+      error: {
+        message: errorMsgPrefix + typeName + "'",
+        reason: "Type must be a valid numeric type or defined struct.",
+        suggestedFix:
+          "Use a valid type like U8, U32, or define the struct first.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  return { isOk: true, value: structDef };
+}
 
 export function parseGenericTypeName(typeName: string): {
   base: string;
@@ -251,10 +281,7 @@ export function checkStructExpr(
     sexpr.structName,
     sexpr.typeArgs,
     sexpr.fields,
-    scope,
-    structs,
-    aliases,
-    loc,
+    { scope, structs, aliases, loc },
   );
   if (!instanceResult.isOk) return instanceResult;
   const returnType =
@@ -310,10 +337,7 @@ function checkStructField(
 export function inferTypeArgs(
   def: StructDef,
   fields: { name: string; value: Expression }[],
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
+  ctx: TypeCheckCtx,
 ): Result<string[], CompileError> {
   const inferred: string[] = [];
   for (const typeParam of def.typeParams) {
@@ -338,10 +362,10 @@ export function inferTypeArgs(
     }
     const typeResult = checkExpr(
       fieldValue.value,
-      scope,
-      structs,
-      aliases,
-      loc,
+      ctx.scope,
+      ctx.structs,
+      ctx.aliases,
+      ctx.loc,
     );
     if (!typeResult.isOk) return typeResult;
     inferred.push(typeResult.value || typeParam);
@@ -450,29 +474,19 @@ export function checkStructInstance(
   structName: string,
   typeArgs: string[],
   fields: { name: string; value: Expression }[],
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
+  ctx: TypeCheckCtx,
 ): Result<string | undefined, CompileError> {
-  const def = structs.find((s) => s.name === structName);
-  if (!def) return checkStructUndefined(structName, loc);
-  const countCheck = validateTypeArgCount(structName, typeArgs, def, loc);
+  const def = ctx.structs.find((s) => s.name === structName);
+  if (!def) return checkStructUndefined(structName, ctx.loc);
+  const countCheck = validateTypeArgCount(structName, typeArgs, def, ctx.loc);
   if (!countCheck.isOk) return countCheck;
   let resolvedTypeArgs = typeArgs;
   if (typeArgs.length === 0 && def.typeParams.length > 0) {
-    const inferredResult = inferTypeArgs(
-      def,
-      fields,
-      scope,
-      structs,
-      aliases,
-      loc,
-    );
+    const inferredResult = inferTypeArgs(def, fields, ctx);
     if (!inferredResult.isOk) return inferredResult;
     resolvedTypeArgs = inferredResult.value;
   }
-  const argsCheck = validateTypeArgs(resolvedTypeArgs, structs, loc);
+  const argsCheck = validateTypeArgs(resolvedTypeArgs, ctx.structs, ctx.loc);
   if (!argsCheck.isOk) return argsCheck;
   const resolvedFields = resolveStructFields(def, resolvedTypeArgs);
   if (fields.length !== resolvedFields.length)
@@ -480,16 +494,16 @@ export function checkStructInstance(
       structName,
       resolvedFields.length,
       fields.length,
-      loc,
+      ctx.loc,
     );
   const valuesCheck = checkStructFieldValues(
     fields,
     resolvedFields,
     structName,
-    scope,
-    structs,
-    aliases,
-    loc,
+    ctx.scope,
+    ctx.structs,
+    ctx.aliases,
+    ctx.loc,
   );
   if (!valuesCheck.isOk) return valuesCheck;
   return { isOk: true, value: structName };

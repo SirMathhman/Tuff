@@ -15,6 +15,7 @@ import {
   checkAssignmentImmutable,
   checkMemberUndeclared,
   checkMemberImmutable,
+  checkTypeMatch,
 } from "./semantic-errors";
 import {
   parseGenericTypeName,
@@ -24,9 +25,9 @@ import {
   resolveFieldTypeWithGenerics,
   checkCircularAlias,
   resolveAlias,
+  checkTypeRef,
 } from "./semantic-generics";
 import type { StructDef, VarEntry, TypeAliasDef } from "./semantic-generics";
-const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
 function checkStructDef(
   node: StructDefinitionNode,
@@ -96,24 +97,23 @@ function aliasError(
     },
   };
 }
-function checkTypeAlias(
-  node: TypeAliasNode,
+function checkAliasUnderlying(
+  underlyingType: string,
+  typeParams: string[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  node: TypeAliasNode,
 ): Result<void, CompileError> {
-  if (checkCircularAlias(node.name, node.underlyingType, aliases, []))
-    return aliasError(
-      "Circular type alias reference detected for '" + node.name + "'",
-      "Type aliases cannot reference themselves directly or indirectly.",
-      "Remove the circular reference.",
-      node,
-    );
-  const resolved = resolveAlias(node.underlyingType, aliases);
+  const resolved = resolveAlias(underlyingType, aliases);
   const { base, args } = parseGenericTypeName(resolved);
-  const isNumeric = VALID_TYPES.includes(base);
-  const structDef = structs.find((s) => s.name === base);
-  if (!isNumeric && !structDef)
-    return checkTypeName(base, structs, node, "Invalid underlying type '");
+  const baseCheck = checkTypeRef(
+    base,
+    structs,
+    node,
+    "Invalid underlying type '",
+  );
+  if (!baseCheck.isOk) return baseCheck;
+  const structDef = baseCheck.value;
   if (
     structDef &&
     args.length > 0 &&
@@ -131,18 +131,38 @@ function checkTypeAlias(
       node,
     );
   for (const arg of args) {
-    const isTypeParam = node.typeParams.includes(arg);
-    if (!isTypeParam) {
-      const argCheck = checkTypeName(
-        arg,
-        structs,
-        node,
-        "Invalid type argument '",
-        aliases,
-      );
-      if (!argCheck.isOk) return argCheck;
-    }
+    if (typeParams.includes(arg)) continue;
+    const argCheck = checkTypeName(
+      arg,
+      structs,
+      node,
+      "Invalid type argument '",
+      aliases,
+    );
+    if (!argCheck.isOk) return argCheck;
   }
+  return { isOk: true, value: undefined };
+}
+function checkTypeAlias(
+  node: TypeAliasNode,
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+): Result<void, CompileError> {
+  if (checkCircularAlias(node.name, node.underlyingType, aliases, []))
+    return aliasError(
+      "Circular type alias reference detected for '" + node.name + "'",
+      "Type aliases cannot reference themselves directly or indirectly.",
+      "Remove the circular reference.",
+      node,
+    );
+  const underlyingCheck = checkAliasUnderlying(
+    node.underlyingType,
+    node.typeParams,
+    structs,
+    aliases,
+    node,
+  );
+  if (!underlyingCheck.isOk) return underlyingCheck;
   aliases.push({
     name: node.name,
     typeParams: node.typeParams,
@@ -220,11 +240,9 @@ function checkLetType(
   if (!node.typeName) return { isOk: true, value: undefined };
   const resolved = resolveAlias(node.typeName, aliases);
   const { base, args } = parseGenericTypeName(resolved);
-  const isNumeric = VALID_TYPES.includes(base);
-  const structDef = structs.find((s) => s.name === base);
-  if (!isNumeric && !structDef)
-    return checkTypeName(base, structs, node, "Invalid type '");
-  // Validate type args count matches struct type params
+  const baseCheck = checkTypeRef(base, structs, node, "Invalid type '");
+  if (!baseCheck.isOk) return baseCheck;
+  const structDef = baseCheck.value;
   if (
     structDef &&
     args.length > 0 &&
@@ -350,62 +368,7 @@ function checkMemberAssignment(
   if (!fieldResult) return { isOk: true, value: undefined };
   const rhsTypeResult = checkExpr(node.value, scope, structs, aliases, node);
   if (!rhsTypeResult.isOk) return rhsTypeResult;
-  const rhsType = rhsTypeResult.value;
-  return checkTypeMatch(fieldResult, rhsType, node);
-}
-
-function typeMismatchError(
-  msg: string,
-  reason: string,
-  fix: string,
-  loc: { line: number; column: number },
-): Result<void, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message: msg,
-      reason,
-      suggestedFix: fix,
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-function checkTypeMatch(
-  declaredType: string | undefined,
-  exprType: string | undefined,
-  loc: { line: number; column: number },
-): Result<void, CompileError> {
-  if (declaredType) {
-    if (!exprType)
-      return typeMismatchError(
-        "Type mismatch: expected '" +
-          declaredType +
-          "' but literal has no type suffix",
-        "Typed declarations require a matching type suffix on the literal.",
-        "Add '" + declaredType + "' suffix to the literal.",
-        loc,
-      );
-    if (exprType !== declaredType)
-      return typeMismatchError(
-        "Type mismatch: expected '" +
-          declaredType +
-          "' but got '" +
-          exprType +
-          "'",
-        "Literal type must match the declared type.",
-        "Change the literal suffix to '" + declaredType + "'.",
-        loc,
-      );
-  } else if (exprType) {
-    return typeMismatchError(
-      "Literal has type suffix '" + exprType + "' but no type annotation",
-      "Type suffixes require a matching type annotation on the variable.",
-      "Add ': " + exprType + "' type annotation to the declaration.",
-      loc,
-    );
-  }
-  return { isOk: true, value: undefined };
+  return checkTypeMatch(fieldResult, rhsTypeResult.value, node);
 }
 
 export function analyzeSemantics(
