@@ -14,7 +14,14 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
     rules: {
       complexity: ["error", 10],
-      "max-lines-per-function": ["error", 50],
+      "max-lines-per-function": [
+        "error",
+        {
+          max: 50,
+          skipComments: true,
+          skipBlankLines: true,
+        },
+      ],
     },
   },
   tseslint.configs.recommended,

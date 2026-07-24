@@ -34,10 +34,6 @@ interface TokenizeContext {
   column: number;
 }
 
-function isWhitespace(ch: string): boolean {
-  return ch === " " || ch === "\t" || ch === "\r";
-}
-
 function isDigit(ch: string): boolean {
   return ch >= "0" && ch <= "9";
 }
@@ -106,6 +102,22 @@ function tokenizeUnknown(ch: string, ctx: TokenizeContext): Err<CompileError> {
   };
 }
 
+function skipWhitespace(ctx: TokenizeContext): boolean {
+  const ch = ctx.source[ctx.pos];
+  if (ch === " " || ch === "\t" || ch === "\r") {
+    ctx.pos++;
+    ctx.column++;
+    return true;
+  }
+  if (ch === "\n") {
+    ctx.pos++;
+    ctx.line++;
+    ctx.column = 1;
+    return true;
+  }
+  return false;
+}
+
 function tokenize(source: string): Result<Token[], CompileError> {
   const tokens: Token[] = [];
   const ctx: TokenizeContext = {
@@ -118,19 +130,7 @@ function tokenize(source: string): Result<Token[], CompileError> {
   while (ctx.pos < ctx.source.length) {
     const ch = ctx.source[ctx.pos];
     if (!ch) break;
-
-    if (isWhitespace(ch)) {
-      ctx.pos++;
-      ctx.column++;
-      continue;
-    }
-
-    if (ch === "\n") {
-      ctx.pos++;
-      ctx.line++;
-      ctx.column = 1;
-      continue;
-    }
+    if (skipWhitespace(ctx)) continue;
 
     if (isDigit(ch)) {
       const startCol = ctx.column;
