@@ -97,7 +97,7 @@ test("Let declaration with zero", () => {
 });
 
 test("Let declaration without exit expression", () => {
-  expectValid("let x = 42", [], 0);
+  expectValid("let x = 42;", [], 0);
 });
 
 test("Multiple let declarations", () => {

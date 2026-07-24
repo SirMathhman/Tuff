@@ -219,9 +219,7 @@ function consume(ctx: ParseContext): Token {
   return token!;
 }
 
-function parseExpression(
-  ctx: ParseContext,
-): Result<Expression, CompileError> {
+function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
   const token = peek(ctx);
 
   if (!token) {
