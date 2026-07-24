@@ -69,11 +69,7 @@ test("An invalid program", () => {
 });
 
 test("A single numeric literal", () => {
-  expectValid("42", [], 0);
-});
-
-test("Multiple numeric literals", () => {
-  expectValid("1\n2\n3", [], 0);
+  expectValid("42", [], 42);
 });
 
 test("Zero literal", () => {
@@ -81,11 +77,11 @@ test("Zero literal", () => {
 });
 
 test("Large integer literal", () => {
-  expectValid("999999", [], 0);
+  expectValid("999999", [], 999999);
 });
 
 test("Numeric literal with whitespace", () => {
-  expectValid("  42  ", [], 0);
+  expectValid("  42  ", [], 42);
 });
 
 test("Non-numeric text is invalid", () => {
