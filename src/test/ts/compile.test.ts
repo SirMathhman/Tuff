@@ -16,11 +16,13 @@ function expectValid(source: string, args: string[], expectedExitCode: number) {
   try {
     rawJS = transpiler.transformSync(tsCode);
   } catch (e) {
-    expect("Failed to transpile TS code: " + tsCode).toBeUndefined();
+    expect(
+      "Failed to transpile TS code: '" + tsCode + "'. Cause: " + e,
+    ).toBeUndefined();
     return;
   }
 
-  let wrappedJS =
+  const wrappedJS =
     "let __ret__ = 0;let process = { exit(code) { __ret__ = code; } }; " +
     rawJS +
     "return __ret__;";
@@ -64,4 +66,28 @@ test("An empty program", () => {
 
 test("An invalid program", () => {
   expectInvalid("~");
+});
+
+test("A single numeric literal", () => {
+  expectValid("42", [], 0);
+});
+
+test("Multiple numeric literals", () => {
+  expectValid("1\n2\n3", [], 0);
+});
+
+test("Zero literal", () => {
+  expectValid("0", [], 0);
+});
+
+test("Large integer literal", () => {
+  expectValid("999999", [], 0);
+});
+
+test("Numeric literal with whitespace", () => {
+  expectValid("  42  ", [], 0);
+});
+
+test("Non-numeric text is invalid", () => {
+  expectInvalid("hello");
 });
