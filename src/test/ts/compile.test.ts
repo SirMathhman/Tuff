@@ -435,3 +435,39 @@ test("Generic struct instantiation without type annotation is invalid", () => {
     "struct Point<T> { x : T, y : T }; let p = Point { x: 1I32, y: 2I32 };",
   );
 });
+
+test("Struct definition without semicolon is valid", () => {
+  expectValid("struct Point { x : I32, y : I32 } 42", [], 42);
+});
+
+test("Struct definition without semicolon followed by let declaration", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 } let p : Point = Point { x: 42I32, y: 100I32 }; p.x",
+    [],
+    42,
+  );
+});
+
+test("Generic struct definition without semicolon is valid", () => {
+  expectValid(
+    "struct Point<T> { x : T, y : T } let p : Point<I32> = Point { x: 42I32, y: 100I32 }; p.y",
+    [],
+    100,
+  );
+});
+
+test("Multiple struct definitions without semicolons", () => {
+  expectValid(
+    "struct Inner { v : I32 } struct Outer { inner : Inner } let o : Outer = Outer { inner: Inner { v: 77I32 } }; o.inner.v",
+    [],
+    77,
+  );
+});
+
+test("Struct definition with semicolon still works", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 42I32, y: 100I32 }; p.x",
+    [],
+    42,
+  );
+});

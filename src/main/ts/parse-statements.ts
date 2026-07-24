@@ -239,8 +239,9 @@ function parseStructDefinition(
   if (!lbraceResult.isOk) return lbraceResult;
   const fieldsResult = parseStructFields(ctx);
   if (!fieldsResult.isOk) return fieldsResult;
-  const semiResult = expectToken(ctx, "SEMICOLON", ";");
-  if (!semiResult.isOk) return semiResult;
+  // Semicolon is optional after struct definitions
+  const afterStruct = peek(ctx);
+  if (afterStruct && afterStruct.type === "SEMICOLON") consume(ctx);
 
   return {
     isOk: true,
