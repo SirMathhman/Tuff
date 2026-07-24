@@ -579,3 +579,19 @@ test("array out of bounds returns undefined", () => {
 test("array in let declaration chain", () => {
   expectValid("let a = [1, 2]; let b = a[0]; b + 3", [], 4);
 });
+
+test("pointer to array", () => {
+  expectValid("let arr = [10, 20]; let p = &arr; *p[0]", [], 10);
+});
+
+test("pointer to array element", () => {
+  expectValid("let arr = [5, 10]; let p = &arr; *p[1]", [], 10);
+});
+
+test("pointer to array with dereference", () => {
+  expectValid("let arr = [3, 4]; let p = &arr; let x = *p; x[0] + x[1]", [], 7);
+});
+
+test("pointer to array length", () => {
+  expectValid("let arr = [1, 2, 3]; let p = &arr; (*p).length", [], 3);
+});
