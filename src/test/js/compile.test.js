@@ -367,3 +367,57 @@ test("match with false boolean", () => {
     2,
   );
 });
+
+// --- Loop Expressions ---
+
+test("simple loop with break expression", () => {
+  expectValid("let x = loop { break 5 }; x", [], 5);
+});
+
+test("loop as last statement", () => {
+  expectValid("loop { break 42 }", [], 42);
+});
+
+test("loop in let binding", () => {
+  expectValid("let result = loop { break 10 }; result", [], 10);
+});
+
+test("loop as function argument", () => {
+  expectValid("fn identity(x) => x; identity(loop { break 7 })", [], 7);
+});
+
+test("loop with expression in break", () => {
+  expectValid("let x = 3; loop { break x * 2 }", [], 6);
+});
+
+test("loop without break is invalid", () => {
+  expectInvalid("loop { 42 }", "Loop must contain at least one break");
+});
+
+test("nested loop expressions", () => {
+  expectValid(
+    "let outer = loop { let inner = loop { break 5 }; break inner + 1 }",
+    [],
+    6,
+  );
+});
+
+test("loop in binary expression", () => {
+  expectValid("loop { break 3 } + loop { break 4 }", [], 7);
+});
+
+test("loop with boolean break value", () => {
+  expectValid("loop { break true }", [], 1);
+});
+
+test("loop with let and break", () => {
+  expectValid("loop { let x = 2; break x + 3 }", [], 5);
+});
+
+test("loop with match inside", () => {
+  expectValid(
+    "let x = 1; loop { break match (x) { case 1 => 10; case _ => 20 } }",
+    [],
+    10,
+  );
+});

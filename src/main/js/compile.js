@@ -57,7 +57,17 @@ function isIdentChar(ch) {
 }
 
 function isKeyword(ident) {
-  return ["let", "fn", "match", "case", "true", "false"].includes(ident);
+  return [
+    "let",
+    "fn",
+    "match",
+    "case",
+    "true",
+    "false",
+    "loop",
+    "break",
+    "continue",
+  ].includes(ident);
 }
 
 function isDigit(ch) {
@@ -265,6 +275,9 @@ const NodeType = {
   BlockExpression: "BlockExpression",
   MatchExpression: "MatchExpression",
   MatchCase: "MatchCase",
+  LoopExpression: "LoopExpression",
+  BreakStatement: "BreakStatement",
+  ContinueStatement: "ContinueStatement",
 };
 
 // Parser helpers
@@ -344,8 +357,16 @@ function parsePrimaryExpression(ctx) {
   if (token.type === TokenType.NOT) {
     return parseUnaryNot(ctx);
   }
+  return parseKeywordOrIdentifier(ctx);
+}
+
+function parseKeywordOrIdentifier(ctx) {
+  const token = peek(ctx);
   if (token.type === TokenType.KEYWORD && token.value === "match") {
     return parseMatchExpression(ctx);
+  }
+  if (token.type === TokenType.KEYWORD && token.value === "loop") {
+    return parseLoopExpression(ctx);
   }
   return parseIdentifierOrCall(ctx);
 }
@@ -500,6 +521,78 @@ function parseMatchPattern(ctx) {
   const result = parsePrimaryExpression(ctx);
   if (!result.ok) return result;
   return { ok: true, isWildcard: false, pattern: result.value };
+}
+
+function parseLoopExpression(ctx) {
+  advance(ctx); // consume "loop"
+  const lbraceResult = consume(ctx, TokenType.LBRACE);
+  if (!lbraceResult.ok) return lbraceResult;
+  const bodyResult = parseLoopBody(ctx);
+  if (!bodyResult.ok) return bodyResult;
+  const rbraceResult = consume(ctx, TokenType.RBRACE);
+  if (!rbraceResult.ok) return rbraceResult;
+  if (!bodyResult.hasBreak) {
+    return { ok: false, error: "Loop must contain at least one break" };
+  }
+  return {
+    ok: true,
+    value: {
+      type: NodeType.LoopExpression,
+      body: bodyResult.body,
+    },
+  };
+}
+
+function parseLoopBody(ctx) {
+  const statements = [];
+  let hasBreak = false;
+  while (
+    peek(ctx).type !== TokenType.RBRACE &&
+    peek(ctx).type !== TokenType.EOF
+  ) {
+    const stmtResult = parseLoopStatement(ctx);
+    if (!stmtResult.ok) return stmtResult;
+    statements.push(stmtResult.value);
+    if (stmtResult.isBreak) hasBreak = true;
+    if (peek(ctx).type === TokenType.SEMICOLON) {
+      advance(ctx);
+    }
+  }
+  return { ok: true, body: statements, hasBreak };
+}
+
+function parseLoopStatement(ctx) {
+  const token = peek(ctx);
+  if (token.type === TokenType.KEYWORD && token.value === "break") {
+    return parseBreakStatement(ctx);
+  }
+  if (token.type === TokenType.KEYWORD && token.value === "continue") {
+    return parseContinueStatement(ctx);
+  }
+  return parseStatement(ctx);
+}
+
+function parseBreakStatement(ctx) {
+  advance(ctx); // consume "break"
+  const exprResult = parseExpression(ctx);
+  if (!exprResult.ok) return exprResult;
+  return {
+    ok: true,
+    isBreak: true,
+    value: {
+      type: NodeType.BreakStatement,
+      value: exprResult.value,
+    },
+  };
+}
+
+function parseContinueStatement(ctx) {
+  advance(ctx); // consume "continue"
+  return {
+    ok: true,
+    isBreak: false,
+    value: { type: NodeType.ContinueStatement },
+  };
 }
 
 function parseStatementsUntil(ctx, stopType) {
@@ -719,18 +812,30 @@ function generateCode(ast) {
 
 function generateStatement(node) {
   if (node.type === NodeType.LetDeclaration) {
-    const initCode = generateExpression(node.init);
-    const needsCoerce = expressionMayBeBoolean(node.init);
-    return (
-      "let " + node.name + " = " + (needsCoerce ? "+" + initCode : initCode)
-    );
+    return generateDeclaration(node, "let");
   }
   if (node.type === NodeType.FunctionDeclaration) {
-    const params = node.params.join(", ");
-    const body = generateExpression(node.body);
-    return "function " + node.name + "(" + params + ") { return " + body + " }";
+    return generateFunctionDeclaration(node);
   }
   return generateExpression(node);
+}
+
+function generateDeclaration(node, keyword) {
+  const initCode = generateExpression(node.init);
+  const needsCoerce = expressionMayBeBoolean(node.init);
+  return (
+    keyword +
+    " " +
+    node.name +
+    " = " +
+    (needsCoerce ? "+" + initCode : initCode)
+  );
+}
+
+function generateFunctionDeclaration(node) {
+  const params = node.params.join(", ");
+  const body = generateExpression(node.body);
+  return "function " + node.name + "(" + params + ") { return " + body + " }";
 }
 
 function generateCompoundExpression(node) {
@@ -743,6 +848,8 @@ function generateCompoundExpression(node) {
       return generateFunctionCall(node);
     case NodeType.MatchExpression:
       return generateMatchExpression(node);
+    case NodeType.LoopExpression:
+      return generateLoopExpression(node);
     default:
       return null;
   }
@@ -814,6 +921,42 @@ function generateMatchExpression(node) {
   code += "}})(";
   code += discriminant + ")";
   return code;
+}
+
+let __loopCounter = 0;
+
+function generateLoopExpression(node) {
+  const resultVar = "__r" + __loopCounter++;
+  let code = "(function() { var " + resultVar + "; while(true) { ";
+  for (let i = 0; i < node.body.length; i++) {
+    const stmt = node.body[i];
+    code += generateLoopStatement(stmt, resultVar) + "; ";
+  }
+  code += "} return " + resultVar + "; })()";
+  return code;
+}
+
+function generateLoopStatement(node, resultVar) {
+  if (node.type === NodeType.BreakStatement) {
+    const valueCode = generateExpression(node.value);
+    const needsBoolWrap = expressionMayBeBoolean(node.value);
+    return (
+      resultVar +
+      " = " +
+      (needsBoolWrap ? "+" + valueCode : valueCode) +
+      "; break;"
+    );
+  }
+  if (node.type === NodeType.ContinueStatement) {
+    return "continue;";
+  }
+  if (node.type === NodeType.LetDeclaration) {
+    return generateDeclaration(node, "var");
+  }
+  if (node.type === NodeType.FunctionDeclaration) {
+    return generateFunctionDeclaration(node);
+  }
+  return generateExpression(node);
 }
 
 function generateBooleanLiteral(node) {
