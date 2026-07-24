@@ -243,6 +243,8 @@ const NodeType = {
   FunctionDeclaration: "FunctionDeclaration",
   FunctionCall: "FunctionCall",
   BinaryExpression: "BinaryExpression",
+  UnaryExpression: "UnaryExpression",
+  BlockExpression: "BlockExpression",
 };
 
 // Parser helpers

@@ -3,7 +3,7 @@ const { compile } = require("../../main/js/compile");
 
 function expectValid(source, args, expectedExitCode) {
   const result = compile(source);
-  expect(result.ok).toBe(true);
+  expect(result.error).toBeUndefined();
 
   const argsCopy = ["node", "test.js", ...args];
   const actualExitCode = Function("__args__", result.value)(argsCopy);
@@ -214,4 +214,70 @@ test("comparison with variable", () => {
 
 test("chained logical operators", () => {
   expectValid("true && false || true", [], 1);
+});
+
+// --- Block Expressions ---
+
+test("simple block expression with let and return value", () => {
+  expectValid("{ let x = 5; x + 1 }", [], 6);
+});
+
+test("block expression as last statement in program", () => {
+  expectValid("let a = 10; { let b = a * 2; b }", [], 20);
+});
+
+test("block expression in let binding", () => {
+  expectValid("let result = { let x = 3; x * 4 }", [], 12);
+});
+
+test("block expression in function call argument", () => {
+  expectValid("fn identity(x) => x; identity({ let y = 7; y + 3 })", [], 10);
+});
+
+test("nested block expressions", () => {
+  expectValid("{ let x = 2; { let y = x + 1; y * 3 } }", [], 9);
+});
+
+test("block with multiple let declarations", () => {
+  expectValid("{ let a = 1; let b = 2; a + b }", [], 3);
+});
+
+test("block with function declaration and call", () => {
+  expectValid("{ fn double(x) => x * 2; double(5) }", [], 10);
+});
+
+test("block with single expression (no let)", () => {
+  expectValid("{ 42 }", [], 42);
+});
+
+test("empty block returns 0", () => {
+  expectValid("{}", [], 0);
+});
+
+test("block with boolean expression", () => {
+  expectValid("{ let x = 5; x > 3 }", [], 1);
+});
+
+test("block with object literal inside", () => {
+  expectValid("{ let obj = { val : 10 }; obj.val }", [], 10);
+});
+
+test("object literal still works (not confused with block)", () => {
+  expectValid("{ a : 1, b : 2 }", [], 1);
+});
+
+test("block in binary expression", () => {
+  expectValid("{ let x = 5; x } + 1", [], 6);
+});
+
+test("block with function using __args__", () => {
+  expectValid("{ let args = __args__; args.length }", [], 2);
+});
+
+test("deeply nested blocks", () => {
+  expectValid("{ let x = 1; { let y = 2; { let z = 3; x + y + z } } }", [], 6);
+});
+
+test("block as function body expression", () => {
+  expectValid("fn compute(x) => { let y = x * 2; y + 1 }; compute(4)", [], 9);
 });
