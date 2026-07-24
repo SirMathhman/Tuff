@@ -5,6 +5,7 @@ node_modules
 out
 dist
 *.tgz
+src/main/generated-ts/
 
 # code coverage
 coverage
@@ -33,4 +34,4 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 
-./src/main/generated-ts/**
+./src/main/generated-ts/lib.ts
