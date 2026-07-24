@@ -85,5 +85,33 @@ test("Numeric literal with whitespace", () => {
 });
 
 test("Non-numeric text is invalid", () => {
-  expectInvalid("hello");
+  expectInvalid("hello!");
+});
+
+test("Let declaration with exit", () => {
+  expectValid("let x = 42; x", [], 42);
+});
+
+test("Let declaration with zero", () => {
+  expectValid("let x = 0; x", [], 0);
+});
+
+test("Let declaration without exit expression", () => {
+  expectValid("let x = 42", [], 0);
+});
+
+test("Multiple let declarations", () => {
+  expectValid("let x = 1; let y = 99; y", [], 99);
+});
+
+test("Let with variable initializer", () => {
+  expectValid("let x = 10; let y = x; y", [], 10);
+});
+
+test("Let missing initializer is invalid", () => {
+  expectInvalid("let x; x");
+});
+
+test("Let missing semicolon is invalid", () => {
+  expectInvalid("let x = 42 x");
 });
