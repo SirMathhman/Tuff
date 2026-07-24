@@ -406,16 +406,103 @@ export function inferTypeArgs(
   const inferred: string[] = [];
   for (const typeParam of def.typeParams) {
     const fieldDef = findFieldForTypeParam(def, typeParam);
-    if (!fieldDef) { inferred.push(typeParam); continue; }
+    if (!fieldDef) {
+      inferred.push(typeParam);
+      continue;
+    }
     const fieldValue = fields.find((f) => f.name === fieldDef.name);
-    if (!fieldValue) { inferred.push(typeParam); continue; }
-    const nestedType = inferTypeFromNestedInstance(fieldDef, fieldValue, typeParam);
-    if (nestedType) { inferred.push(nestedType); continue; }
-    const typeResult = checkExpr(fieldValue.value, ctx.scope, ctx.structs, ctx.aliases, ctx.loc);
+    if (!fieldValue) {
+      inferred.push(typeParam);
+      continue;
+    }
+    const nestedType = inferTypeFromNestedInstance(
+      fieldDef,
+      fieldValue,
+      typeParam,
+    );
+    if (nestedType) {
+      inferred.push(nestedType);
+      continue;
+    }
+    const typeResult = checkExpr(
+      fieldValue.value,
+      ctx.scope,
+      ctx.structs,
+      ctx.aliases,
+      ctx.loc,
+    );
     if (!typeResult.isOk) return typeResult;
     inferred.push(typeResult.value || typeParam);
   }
   return { isOk: true, value: inferred };
+}
+
+export function validateTypeArgCount(
+  structName: string,
+  typeArgs: string[],
+  def: StructDef,
+  loc: { line: number; column: number },
+): Result<void, CompileError> {
+  if (typeArgs.length > 0 && typeArgs.length !== def.typeParams.length)
+    return {
+      isOk: false,
+      error: {
+        message:
+          "Struct '" +
+          structName +
+          "' expects " +
+          def.typeParams.length +
+          " type param(s) but got " +
+          typeArgs.length,
+        reason: "Type argument count must match type parameter count.",
+        suggestedFix: "Provide " + def.typeParams.length + " type arguments.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  return { isOk: true, value: undefined };
+}
+
+export function validateTypeArgs(
+  typeArgs: string[],
+  structs: StructDef[],
+  loc: { line: number; column: number },
+): Result<void, CompileError> {
+  for (const arg of typeArgs) {
+    const argCheck = checkTypeName(
+      arg,
+      structs,
+      loc,
+      "Invalid type argument '",
+    );
+    if (!argCheck.isOk) return argCheck;
+  }
+  return { isOk: true, value: undefined };
+}
+
+function checkStructField(
+  structDef: StructDef,
+  fieldName: string,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const fieldDef = structDef.fields.find((f) => f.name === fieldName);
+  if (!fieldDef)
+    return {
+      isOk: false,
+      error: {
+        message:
+          "Unknown field '" +
+          fieldName +
+          "' on struct '" +
+          structDef.name +
+          "'",
+        reason: "Field does not exist on struct.",
+        suggestedFix: "Use a valid field name.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  return { isOk: true, value: fieldDef.typeName };
 }
 
 export function resolveStructFields(
