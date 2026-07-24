@@ -84,8 +84,8 @@ function unexpectedTokenError(
   return {
     isOk: false,
     error: {
-      message: `Unexpected token: '${token.value}'`,
-      reason: `Expected ${expected}.`,
+      message: "Unexpected token: '" + token.value + "'",
+      reason: "Expected " + expected + ".",
       suggestedFix: "Use a supported expression.",
       line: token.line,
       column: token.column,
@@ -98,7 +98,7 @@ function unexpectedEofError(expected: string): Err<CompileError> {
     isOk: false,
     error: {
       message: "Unexpected end of input",
-      reason: `Expected ${expected}.`,
+      reason: "Expected " + expected + ".",
       suggestedFix: "Add a valid expression.",
       line: 0,
       column: 0,
@@ -283,23 +283,31 @@ function parseStructField(
   return { isOk: true, value: { name: fieldName, typeName } };
 }
 
+function parseAssignmentBody(
+  ctx: ParseContext,
+): Result<{ rhs: Expression; line: number; column: number }, CompileError> {
+  const rhsResult = parseExpression(ctx);
+  if (!rhsResult.isOk) return rhsResult;
+  const semiResult = expectToken(ctx, "SEMICOLON", ";");
+  if (!semiResult.isOk) return semiResult;
+  return { isOk: true, value: { rhs: rhsResult.value, line: 0, column: 0 } };
+}
+
 function parseMemberAssignment(
   ctx: ParseContext,
   expr: MemberExpr,
   line: number,
   column: number,
 ): Result<Statement, CompileError> {
-  const rhsResult = parseExpression(ctx);
-  if (!rhsResult.isOk) return rhsResult;
-  const semiResult = expectToken(ctx, "SEMICOLON", ";");
-  if (!semiResult.isOk) return semiResult;
+  const bodyResult = parseAssignmentBody(ctx);
+  if (!bodyResult.isOk) return bodyResult;
   return {
     isOk: true,
     value: {
       type: "MemberAssignment",
       object: expr.object,
       field: expr.field,
-      value: rhsResult.value,
+      value: bodyResult.value.rhs,
       line,
       column,
     },
@@ -316,9 +324,9 @@ function expectToken(
     return {
       isOk: false,
       error: {
-        message: `Expected '${expected}'`,
-        reason: `Missing ${expected}.`,
-        suggestedFix: `Add '${expected}'.`,
+        message: "Expected '" + expected + "'",
+        reason: "Missing " + expected + ".",
+        suggestedFix: "Add '" + expected + "'.",
         line: 0,
         column: 0,
       },
@@ -327,9 +335,9 @@ function expectToken(
     return {
       isOk: false,
       error: {
-        message: `Expected '${expected}', got '${token.value}'`,
-        reason: `Unexpected token.`,
-        suggestedFix: `Use '${expected}'.`,
+        message: "Expected '" + expected + "', got '" + token.value + "'",
+        reason: "Unexpected token.",
+        suggestedFix: "Use '" + expected + "'.",
         line: token.line,
         column: token.column,
       },
@@ -349,7 +357,7 @@ function expectVariableName(ctx: ParseContext): Result<Token, CompileError> {
       isOk: false,
       error: {
         message: nameToken
-          ? `Expected variable name after 'let', got '${nameToken.value}'`
+          ? "Expected variable name after 'let', got '" + nameToken.value + "'"
           : "Expected variable name after 'let'",
         reason: "Let declarations require a variable name.",
         suggestedFix: "Use 'let <name> = <expression>;'.",
@@ -484,16 +492,14 @@ function parseRegularAssignment(
   expr: IdentifierExpr,
   token: Token,
 ): Result<Statement, CompileError> {
-  const rhsResult = parseExpression(ctx);
-  if (!rhsResult.isOk) return rhsResult;
-  const semiResult = expectToken(ctx, "SEMICOLON", ";");
-  if (!semiResult.isOk) return semiResult;
+  const bodyResult = parseAssignmentBody(ctx);
+  if (!bodyResult.isOk) return bodyResult;
   return {
     isOk: true,
     value: {
       type: "Assignment",
       name: expr.name,
-      value: rhsResult.value,
+      value: bodyResult.value.rhs,
       line: token.line,
       column: token.column,
     },
@@ -503,7 +509,7 @@ function parseRegularAssignment(
 function getMemberName(expr: Expression): string {
   if (expr.type === "MemberExpression") {
     const objName = getMemberName(expr.object);
-    return `${objName}.${expr.field}`;
+    return objName + "." + expr.field;
   }
   if (expr.type === "Identifier") return expr.name;
   return "_";

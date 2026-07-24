@@ -94,7 +94,7 @@ function tokenizeUnknown(ch: string, ctx: TokenizeContext): Err<CompileError> {
   return {
     isOk: false,
     error: {
-      message: `Unexpected character: '${ch}'`,
+      message: "Unexpected character: '" + ch + "'",
       reason: "Only digits, identifiers, and operators are supported.",
       suggestedFix: "Remove unsupported characters.",
       line: ctx.line,

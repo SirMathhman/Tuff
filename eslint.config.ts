@@ -30,6 +30,14 @@ export default defineConfig([
           skipBlankLines: true,
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TemplateLiteral",
+          message:
+            "Template literals are not allowed. Use string concatenation instead.",
+        },
+      ],
     },
   },
   tseslint.configs.recommended,

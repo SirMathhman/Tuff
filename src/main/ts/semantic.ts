@@ -23,6 +23,29 @@ import {
 
 const VALID_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
+function checkTypeName(
+  typeName: string,
+  structs: StructDef[],
+  loc: { line: number; column: number },
+  label: string,
+): Result<void, CompileError> {
+  const isNumeric = VALID_TYPES.includes(typeName);
+  const isStruct = structs.some((s) => s.name === typeName);
+  if (!isNumeric && !isStruct)
+    return {
+      isOk: false,
+      error: {
+        message: label + "'" + typeName + "'",
+        reason:
+          "Supported types: " + VALID_TYPES.join(", ") + " or a defined struct",
+        suggestedFix: "Use a valid numeric type or struct type.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  return { isOk: true, value: undefined };
+}
+
 interface VarEntry {
   name: string;
   mutable: boolean;
@@ -44,7 +67,7 @@ function checkRef(
     return {
       isOk: false,
       error: {
-        message: `Use of undeclared variable '${name}'`,
+        message: "Use of undeclared variable '" + name + "'",
         reason: "Variable must be declared before use.",
         suggestedFix: "Declare the variable with 'let' first.",
         line: loc.line,
@@ -119,7 +142,12 @@ function checkStructField(
     return {
       isOk: false,
       error: {
-        message: `Unknown field '${fieldName}' on struct '${structDef.name}'`,
+        message:
+          "Unknown field '" +
+          fieldName +
+          "' on struct '" +
+          structDef.name +
+          "'",
         reason: "Field does not exist on struct.",
         suggestedFix: "Use a valid field name.",
         line: loc.line,
@@ -138,26 +166,20 @@ function checkStructDef(
       return {
         isOk: false,
         error: {
-          message: `Struct field '${field.name}' missing type annotation`,
+          message: "Struct field '" + field.name + "' missing type annotation",
           reason: "All struct fields must have a type.",
-          suggestedFix: `Add ': <Type>' to field '${field.name}'.`,
+          suggestedFix: "Add ': <Type>' to field '" + field.name + "'.",
           line: node.line,
           column: node.column,
         },
       };
-    const isNumeric = VALID_TYPES.includes(field.typeName);
-    const isStruct = structs.some((s) => s.name === field.typeName);
-    if (!isNumeric && !isStruct)
-      return {
-        isOk: false,
-        error: {
-          message: `Invalid field type '${field.typeName}'`,
-          reason: `Supported types: ${VALID_TYPES.join(", ")} or a defined struct`,
-          suggestedFix: "Use a valid numeric type or struct type.",
-          line: node.line,
-          column: node.column,
-        },
-      };
+    const fieldCheck = checkTypeName(
+      field.typeName,
+      structs,
+      node,
+      "Invalid field type ",
+    );
+    if (!fieldCheck.isOk) return fieldCheck;
   }
   structs.push({ name: node.name, fields: node.fields });
   return { isOk: true, value: undefined };
@@ -227,19 +249,7 @@ function checkLetType(
   structs: StructDef[],
 ): Result<void, CompileError> {
   if (!node.typeName) return { isOk: true, value: undefined };
-  const isNumeric = VALID_TYPES.includes(node.typeName);
-  const isStruct = structs.some((s) => s.name === node.typeName);
-  if (!isNumeric && !isStruct)
-    return {
-      isOk: false,
-      error: {
-        message: `Invalid type '${node.typeName}'`,
-        reason: `Supported types: ${VALID_TYPES.join(", ")} or a defined struct`,
-        suggestedFix: "Use a valid type name.",
-        line: node.line,
-        column: node.column,
-      },
-    };
+  return checkTypeName(node.typeName, structs, node, "Invalid type ");
   return { isOk: true, value: undefined };
 }
 
@@ -350,6 +360,24 @@ function getBaseName(expr: Expression): string {
   return "_";
 }
 
+function typeError(
+  message: string,
+  reason: string,
+  suggestedFix: string,
+  loc: { line: number; column: number },
+): Result<void, CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message,
+      reason,
+      suggestedFix,
+      line: loc.line,
+      column: loc.column,
+    },
+  };
+}
+
 function checkTypeMatch(
   declaredType: string | undefined,
   exprType: string | undefined,
@@ -357,40 +385,32 @@ function checkTypeMatch(
 ): Result<void, CompileError> {
   if (declaredType) {
     if (!exprType)
-      return {
-        isOk: false,
-        error: {
-          message: `Type mismatch: expected '${declaredType}' but literal has no type suffix`,
-          reason:
-            "Typed declarations require a matching type suffix on the literal.",
-          suggestedFix: `Add '${declaredType}' suffix to the literal.`,
-          line: loc.line,
-          column: loc.column,
-        },
-      };
+      return typeError(
+        "Type mismatch: expected '" +
+          declaredType +
+          "' but literal has no type suffix",
+        "Typed declarations require a matching type suffix on the literal.",
+        "Add '" + declaredType + "' suffix to the literal.",
+        loc,
+      );
     if (exprType !== declaredType)
-      return {
-        isOk: false,
-        error: {
-          message: `Type mismatch: expected '${declaredType}' but got '${exprType}'`,
-          reason: "Literal type must match the declared type.",
-          suggestedFix: `Change the literal suffix to '${declaredType}'.`,
-          line: loc.line,
-          column: loc.column,
-        },
-      };
+      return typeError(
+        "Type mismatch: expected '" +
+          declaredType +
+          "' but got '" +
+          exprType +
+          "'",
+        "Literal type must match the declared type.",
+        "Change the literal suffix to '" + declaredType + "'.",
+        loc,
+      );
   } else if (exprType) {
-    return {
-      isOk: false,
-      error: {
-        message: `Literal has type suffix '${exprType}' but no type annotation`,
-        reason:
-          "Type suffixes require a matching type annotation on the variable.",
-        suggestedFix: `Add ': ${exprType}' type annotation to the declaration.`,
-        line: loc.line,
-        column: loc.column,
-      },
-    };
+    return typeError(
+      "Literal has type suffix '" + exprType + "' but no type annotation",
+      "Type suffixes require a matching type annotation on the variable.",
+      "Add ': " + exprType + "' type annotation to the declaration.",
+      loc,
+    );
   }
   return { isOk: true, value: undefined };
 }
@@ -444,7 +464,7 @@ function checkIdentifierStatement(
       return {
         isOk: false,
         error: {
-          message: `Use of undeclared variable '${baseName}'`,
+          message: "Use of undeclared variable '" + baseName + "'",
           reason: "Variable must be declared before use.",
           suggestedFix: "Declare the variable with 'let' first.",
           line: node.line,

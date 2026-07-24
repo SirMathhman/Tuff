@@ -7,9 +7,9 @@ export function checkStructUndefined(
   return {
     isOk: false,
     error: {
-      message: `Undefined struct '${structName}'`,
+      message: "Undefined struct '" + structName + "'",
       reason: "Struct must be defined before use.",
-      suggestedFix: `Add 'struct ${structName} { ... }' before this line.`,
+      suggestedFix: "Add 'struct " + structName + " { ... }' before this line.",
       line: loc.line,
       column: loc.column,
     },
@@ -25,9 +25,15 @@ export function checkStructFieldCount(
   return {
     isOk: false,
     error: {
-      message: `Struct '${structName}' expects ${expected} field(s) but got ${actual}`,
+      message:
+        "Struct '" +
+        structName +
+        "' expects " +
+        expected +
+        " field(s) but got " +
+        actual,
       reason: "Struct instance must have all fields.",
-      suggestedFix: `Provide all ${expected} fields.`,
+      suggestedFix: "Provide all " + expected + " fields.",
       line: loc.line,
       column: loc.column,
     },
@@ -42,7 +48,8 @@ export function checkStructUnknownField(
   return {
     isOk: false,
     error: {
-      message: `Unknown field '${fieldName}' on struct '${structName}'`,
+      message:
+        "Unknown field '" + fieldName + "' on struct '" + structName + "'",
       reason: "Field does not exist on struct.",
       suggestedFix: "Use a valid field name.",
       line: loc.line,
@@ -60,9 +67,16 @@ export function checkStructFieldType(
   return {
     isOk: false,
     error: {
-      message: `Type mismatch: field '${fieldName}' expects '${expected}' but got '${actual || "unknown"}'`,
+      message:
+        "Type mismatch: field '" +
+        fieldName +
+        "' expects '" +
+        expected +
+        "' but got '" +
+        (actual || "unknown") +
+        "'",
       reason: "Field value type must match struct field type.",
-      suggestedFix: `Use a value of type '${expected}'.`,
+      suggestedFix: "Use a value of type '" + expected + "'.",
       line: loc.line,
       column: loc.column,
     },
@@ -77,7 +91,7 @@ export function checkAssignmentUndeclared(node: {
   return {
     isOk: false,
     error: {
-      message: `Cannot assign to undeclared variable '${node.name}'`,
+      message: "Cannot assign to undeclared variable '" + node.name + "'",
       reason: "Variable must be declared before assignment.",
       suggestedFix: "Declare the variable with 'let' first.",
       line: node.line,
@@ -94,7 +108,7 @@ export function checkAssignmentImmutable(node: {
   return {
     isOk: false,
     error: {
-      message: `Cannot reassign immutable variable '${node.name}'`,
+      message: "Cannot reassign immutable variable '" + node.name + "'",
       reason: "Variable was declared without 'mut'.",
       suggestedFix: "Use 'let mut' to declare a mutable variable.",
       line: node.line,
@@ -110,7 +124,7 @@ export function checkMemberUndeclared(
   return {
     isOk: false,
     error: {
-      message: `Cannot access field on undeclared variable '${baseName}'`,
+      message: "Cannot access field on undeclared variable '" + baseName + "'",
       reason: "Variable must be declared before use.",
       suggestedFix: "Declare the variable with 'let' first.",
       line: loc.line,
@@ -126,7 +140,8 @@ export function checkMemberImmutable(
   return {
     isOk: false,
     error: {
-      message: `Cannot assign to field of immutable variable '${baseName}'`,
+      message:
+        "Cannot assign to field of immutable variable '" + baseName + "'",
       reason: "Variable was declared without 'mut'.",
       suggestedFix: "Use 'let mut' to declare a mutable variable.",
       line: loc.line,
@@ -144,9 +159,14 @@ export function checkTypeMismatch(
   return {
     isOk: false,
     error: {
-      message: `Type mismatch: expected '${expected}' but got '${actual || "unknown"}'`,
+      message:
+        "Type mismatch: expected '" +
+        expected +
+        "' but got '" +
+        (actual || "unknown") +
+        "'",
       reason: "Expression type does not match expected type.",
-      suggestedFix: `Use a value of type '${expected}'.`,
+      suggestedFix: "Use a value of type '" + expected + "'.",
       line: loc.line,
       column: loc.column,
     },
