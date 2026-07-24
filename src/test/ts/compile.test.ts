@@ -48,7 +48,14 @@ function expectValid(source: string, args: string[], expectedExitCode: number) {
 }
 
 function expectInvalid(source: string) {
-  expect(() => compileTuffToTS(source)).toBeUndefined();
+  const generated = compileTuffToTS(source);
+  if (generated.isOk) {
+    expect(
+      "Expected compiler to invalidate but generated unexpected: '" +
+        generated.value +
+        "'",
+    ).toBeUndefined();
+  }
 }
 
 test("An empty program", () => {
