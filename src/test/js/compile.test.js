@@ -421,3 +421,61 @@ test("loop with match inside", () => {
     10,
   );
 });
+
+// Object Destructuring Tests
+
+test("basic object destructuring shorthand", () => {
+  expectValid(
+    "let obj = { a : 10, b : 20 }; let { a, b } = obj; a + b",
+    [],
+    30,
+  );
+});
+
+test("object destructuring with alias", () => {
+  expectValid(
+    "let obj = { a : 10, b : 20 }; let { a : x, b : y } = obj; x + y",
+    [],
+    30,
+  );
+});
+
+test("object destructuring mixed shorthand and alias", () => {
+  expectValid(
+    "let obj = { a : 10, b : 20 }; let { a, b : y } = obj; a + y",
+    [],
+    30,
+  );
+});
+
+test("object destructuring single property", () => {
+  expectValid("let obj = { x : 42 }; let { x } = obj; x", [], 42);
+});
+
+test("object destructuring with nested object value", () => {
+  expectValid("let obj = { a : { b : 5 } }; let { a } = obj; a.b", [], 5);
+});
+
+test("function parameter destructuring shorthand", () => {
+  expectValid("fn foo({ a, b }) => a + b; foo({ a : 3, b : 4 })", [], 7);
+});
+
+test("function parameter destructuring with alias", () => {
+  expectValid("fn foo({ a : x }) => x * 2; foo({ a : 5 })", [], 10);
+});
+
+test("function parameter multiple destructured", () => {
+  expectValid("fn foo({ a, b }) => a - b; foo({ a : 10, b : 3 })", [], 7);
+});
+
+test("object destructuring missing property returns undefined", () => {
+  expectValid("let obj = { a : 10 }; let { a, b } = obj; a", [], 10);
+});
+
+test("object destructuring in block", () => {
+  expectValid(
+    "let obj = { x : 1, y : 2 }; { let { x, y } = obj; x + y }",
+    [],
+    3,
+  );
+});

@@ -261,6 +261,8 @@ function trySingleCharToken(ch) {
 const NodeType = {
   Program: "Program",
   LetDeclaration: "LetDeclaration",
+  DestructuringDeclaration: "DestructuringDeclaration",
+  DestructuringProperty: "DestructuringProperty",
   Identifier: "Identifier",
   MemberExpression: "MemberExpression",
   NumberLiteral: "NumberLiteral",
@@ -708,16 +710,84 @@ function parseLetDeclaration(ctx) {
   if (keywordResult.value.value !== "let") {
     return { ok: false, error: "Expected 'let' keyword" };
   }
+  if (peek(ctx).type === TokenType.LBRACE) {
+    return parseDestructuringDeclaration(ctx);
+  }
   const identResult = parseIdentifier(ctx);
   if (!identResult.ok) return identResult;
   const name = identResult.value.name;
+  const initResult = parseAssignmentExpression(ctx);
+  if (!initResult.ok) return initResult;
+  return {
+    ok: true,
+    value: { type: NodeType.LetDeclaration, name, init: initResult.value },
+  };
+}
+
+function parseDestructuringDeclaration(ctx) {
+  const propsResult = parseDestructuringProperties(ctx);
+  if (!propsResult.ok) return propsResult;
+  const sourceResult = parseAssignmentExpression(ctx);
+  if (!sourceResult.ok) return sourceResult;
+  return {
+    ok: true,
+    value: {
+      type: NodeType.DestructuringDeclaration,
+      properties: propsResult.value,
+      source: sourceResult.value,
+    },
+  };
+}
+
+function parseAssignmentExpression(ctx) {
   const eqResult = consume(ctx, TokenType.ASSIGN);
   if (!eqResult.ok) return eqResult;
   const exprResult = parseExpression(ctx);
   if (!exprResult.ok) return exprResult;
+  return { ok: true, value: exprResult.value };
+}
+
+function parseDestructuringProperties(ctx) {
+  consume(ctx, TokenType.LBRACE);
+  const properties = parseDestructuringPropertyList(ctx);
+  if (!properties.ok) return properties;
+  consume(ctx, TokenType.RBRACE);
+  return { ok: true, value: properties.value };
+}
+
+function parseDestructuringPropertyList(ctx) {
+  const properties = [];
+  while (
+    peek(ctx).type !== TokenType.RBRACE &&
+    peek(ctx).type !== TokenType.EOF
+  ) {
+    const propResult = parseDestructuringProperty(ctx);
+    if (!propResult.ok) return propResult;
+    properties.push(propResult.value);
+    if (peek(ctx).type === TokenType.COMMA) {
+      advance(ctx);
+    }
+  }
+  return { ok: true, value: properties };
+}
+
+function parseDestructuringProperty(ctx) {
+  const keyResult = parseIdentifier(ctx);
+  if (!keyResult.ok) return keyResult;
+  let variable = keyResult.value.name;
+  if (peek(ctx).type === TokenType.COLON) {
+    advance(ctx);
+    const aliasResult = parseIdentifier(ctx);
+    if (!aliasResult.ok) return aliasResult;
+    variable = aliasResult.value.name;
+  }
   return {
     ok: true,
-    value: { type: NodeType.LetDeclaration, name, init: exprResult.value },
+    value: {
+      type: NodeType.DestructuringProperty,
+      key: keyResult.value.name,
+      variable,
+    },
   };
 }
 
@@ -732,9 +802,17 @@ function parseFunctionDeclaration(ctx) {
     peek(ctx).type !== TokenType.RPAREN &&
     peek(ctx).type !== TokenType.EOF
   ) {
-    const paramResult = parseIdentifier(ctx);
-    if (!paramResult.ok) return paramResult;
-    params.push(paramResult.value.name);
+    let param;
+    if (peek(ctx).type === TokenType.LBRACE) {
+      const destructResult = parseDestructuringParam(ctx);
+      if (!destructResult.ok) return destructResult;
+      param = destructResult.value;
+    } else {
+      const paramResult = parseIdentifier(ctx);
+      if (!paramResult.ok) return paramResult;
+      param = { type: "simple", name: paramResult.value.name };
+    }
+    params.push(param);
     if (peek(ctx).type === TokenType.COMMA) {
       advance(ctx);
     }
@@ -751,6 +829,15 @@ function parseFunctionDeclaration(ctx) {
       params,
       body: bodyResult.value,
     },
+  };
+}
+
+function parseDestructuringParam(ctx) {
+  const propsResult = parseDestructuringProperties(ctx);
+  if (!propsResult.ok) return propsResult;
+  return {
+    ok: true,
+    value: { type: "destructuring", properties: propsResult.value },
   };
 }
 
@@ -797,6 +884,7 @@ function generateCode(ast) {
     const lastStmt = statements[statements.length - 1];
     if (
       lastStmt.type === NodeType.LetDeclaration ||
+      lastStmt.type === NodeType.DestructuringDeclaration ||
       lastStmt.type === NodeType.FunctionDeclaration
     ) {
       code += generateStatement(lastStmt) + "; ";
@@ -813,6 +901,9 @@ function generateCode(ast) {
 function generateStatement(node) {
   if (node.type === NodeType.LetDeclaration) {
     return generateDeclaration(node, "let");
+  }
+  if (node.type === NodeType.DestructuringDeclaration) {
+    return generateDestructuringDeclaration(node);
   }
   if (node.type === NodeType.FunctionDeclaration) {
     return generateFunctionDeclaration(node);
@@ -833,9 +924,40 @@ function generateDeclaration(node, keyword) {
 }
 
 function generateFunctionDeclaration(node) {
-  const params = node.params.join(", ");
+  const params = generateFunctionParams(node.params);
   const body = generateExpression(node.body);
   return "function " + node.name + "(" + params + ") { return " + body + " }";
+}
+
+function generateFunctionParams(params) {
+  return params
+    .map((p) => {
+      if (p.type === "destructuring") {
+        return generateDestructuringParam(p);
+      }
+      return p.name;
+    })
+    .join(", ");
+}
+
+function generateDestructuringParam(param) {
+  const props = param.properties
+    .map((p) => {
+      if (p.key === p.variable) {
+        return p.key;
+      }
+      return p.key + ": " + p.variable;
+    })
+    .join(", ");
+  return "{" + props + "}";
+}
+
+function generateDestructuringDeclaration(node) {
+  const source = generateExpression(node.source);
+  const declarations = node.properties.map((p) => {
+    return "let " + p.variable + " = " + source + "." + p.key;
+  });
+  return declarations.join("; ");
 }
 
 function generateCompoundExpression(node) {
