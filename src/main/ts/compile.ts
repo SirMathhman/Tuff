@@ -43,11 +43,7 @@ function isDigit(ch: string): boolean {
 }
 
 function isAlpha(ch: string): boolean {
-  return (
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    ch === "_"
-  );
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_";
 }
 
 function isIdentChar(ch: string): boolean {
@@ -88,6 +84,28 @@ function readIdentifier(ctx: TokenizeContext): Token {
   };
 }
 
+function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
+  return {
+    type: ch === "=" ? "EQUALS" : "SEMICOLON",
+    value: ch,
+    line: ctx.line,
+    column: ctx.column,
+  };
+}
+
+function tokenizeUnknown(ch: string, ctx: TokenizeContext): Err<CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message: `Unexpected character: '${ch}'`,
+      reason: "Only digits, identifiers, and operators are supported.",
+      suggestedFix: "Remove unsupported characters.",
+      line: ctx.line,
+      column: ctx.column,
+    },
+  };
+}
+
 function tokenize(source: string): Result<Token[], CompileError> {
   const tokens: Token[] = [];
   const ctx: TokenizeContext = {
@@ -124,12 +142,7 @@ function tokenize(source: string): Result<Token[], CompileError> {
     }
 
     if (ch === "=" || ch === ";") {
-      tokens.push({
-        type: ch === "=" ? "EQUALS" : "SEMICOLON",
-        value: ch,
-        line: ctx.line,
-        column: ctx.column,
-      });
+      tokens.push(tokenizeOperator(ch, ctx));
       ctx.pos++;
       ctx.column++;
       continue;
@@ -144,16 +157,7 @@ function tokenize(source: string): Result<Token[], CompileError> {
       continue;
     }
 
-    return {
-      isOk: false,
-      error: {
-        message: `Unexpected character: '${ch}'`,
-        reason: "Only digits, identifiers, and operators are supported.",
-        suggestedFix: "Remove unsupported characters.",
-        line: ctx.line,
-        column: ctx.column,
-      },
-    };
+    return tokenizeUnknown(ch, ctx);
   }
 
   return { isOk: true, value: tokens };
@@ -319,12 +323,9 @@ function expectToken(
   return { isOk: true, value: token };
 }
 
-function parseLetStatement(
+function expectVariableName(
   ctx: ParseContext,
-  letToken: Token,
-): Result<Statement, CompileError> {
-  consume(ctx);
-
+): Result<Token, CompileError> {
   const nameToken = peek(ctx);
   if (
     !nameToken ||
@@ -345,6 +346,17 @@ function parseLetStatement(
     };
   }
   consume(ctx);
+  return { isOk: true, value: nameToken };
+}
+
+function parseLetStatement(
+  ctx: ParseContext,
+  letToken: Token,
+): Result<Statement, CompileError> {
+  consume(ctx);
+
+  const nameResult = expectVariableName(ctx);
+  if (!nameResult.isOk) return nameResult;
 
   const equalsResult = expectToken(ctx, "EQUALS", "=");
   if (!equalsResult.isOk) return equalsResult;
@@ -359,7 +371,7 @@ function parseLetStatement(
     isOk: true,
     value: {
       type: "LetDeclaration",
-      name: nameToken.value,
+      name: nameResult.value.value,
       value: exprResult.value,
       line: letToken.line,
       column: letToken.column,
