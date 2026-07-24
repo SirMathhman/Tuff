@@ -289,7 +289,7 @@ function isBlockExpression(ctx) {
     if (afterNext && afterNext.type === TokenType.COLON) return false;
     return true;
   }
-  return false;
+  return true;
 }
 
 function parsePrimaryExpression(ctx) {
@@ -398,8 +398,18 @@ function parseObjectLiteral(ctx) {
 
 function parseBlockExpression(ctx) {
   consume(ctx, TokenType.LBRACE);
+  const statements = parseStatementsUntil(ctx, TokenType.RBRACE);
+  if (!statements.ok) return statements;
+  consume(ctx, TokenType.RBRACE);
+  return {
+    ok: true,
+    value: { type: NodeType.BlockExpression, statements: statements.value },
+  };
+}
+
+function parseStatementsUntil(ctx, stopType) {
   const statements = [];
-  while (peek(ctx).type !== TokenType.RBRACE && peek(ctx).type !== TokenType.EOF) {
+  while (peek(ctx).type !== stopType && peek(ctx).type !== TokenType.EOF) {
     const stmtResult = parseStatement(ctx);
     if (!stmtResult.ok) return stmtResult;
     statements.push(stmtResult.value);
@@ -407,11 +417,7 @@ function parseBlockExpression(ctx) {
       advance(ctx);
     }
   }
-  consume(ctx, TokenType.RBRACE);
-  return {
-    ok: true,
-    value: { type: NodeType.BlockExpression, statements },
-  };
+  return { ok: true, value: statements };
 }
 
 function parseMemberExpression(ctx) {
@@ -574,16 +580,12 @@ function parseStatement(ctx) {
 // Parser entry point
 function parse(tokens) {
   const ctx = { tokens, pos: 0 };
-  const statements = [];
-  while (peek(ctx).type !== TokenType.EOF) {
-    const stmtResult = parseStatement(ctx);
-    if (!stmtResult.ok) return stmtResult;
-    statements.push(stmtResult.value);
-    if (peek(ctx).type === TokenType.SEMICOLON) {
-      advance(ctx);
-    }
-  }
-  return { ok: true, value: { type: NodeType.Program, statements } };
+  const result = parseStatementsUntil(ctx, TokenType.EOF);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    value: { type: NodeType.Program, statements: result.value },
+  };
 }
 
 const booleanOps = new Set(["==", "!=", "<", ">", "<=", ">=", "&&", "||"]);
@@ -605,6 +607,12 @@ function generateCode(ast) {
   }
   if (statements.length > 0) {
     const lastStmt = statements[statements.length - 1];
+    if (
+      lastStmt.type === NodeType.LetDeclaration ||
+      lastStmt.type === NodeType.FunctionDeclaration
+    ) {
+      code += generateStatement(lastStmt) + "; ";
+    }
     const exprCode = generateExpression(lastStmt);
     const needsBoolWrap = expressionMayBeBoolean(lastStmt);
     code += "return " + (needsBoolWrap ? "+" + exprCode : exprCode) + ";";
@@ -630,7 +638,22 @@ function generateStatement(node) {
   return generateExpression(node);
 }
 
+function generateCompoundExpression(node) {
+  switch (node.type) {
+    case NodeType.BlockExpression:
+      return generateBlockExpression(node);
+    case NodeType.LetDeclaration:
+      return node.name;
+    case NodeType.FunctionCall:
+      return generateFunctionCall(node);
+    default:
+      return null;
+  }
+}
+
 function generateExpression(node) {
+  const compound = generateCompoundExpression(node);
+  if (compound !== null) return compound;
   switch (node.type) {
     case NodeType.Identifier:
       return node.name;
@@ -648,13 +671,13 @@ function generateExpression(node) {
       return generateBinaryExpression(node);
     case NodeType.ObjectLiteral:
       return generateObjectLiteral(node);
-    case NodeType.FunctionCall:
-      return generateFunctionCall(node);
-    case NodeType.BlockExpression:
-      return generateBlockExpression(node);
     default:
-      return "";
+      return generateDefaultExpression();
   }
+}
+
+function generateDefaultExpression() {
+  return "";
 }
 
 function generateBlockExpression(node) {

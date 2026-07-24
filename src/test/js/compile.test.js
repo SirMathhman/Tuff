@@ -272,7 +272,7 @@ test("block with object literal inside", () => {
 });
 
 test("object literal still works (not confused with block)", () => {
-  expectValid("{ a : 1, b : 2 }", [], 1);
+  expectValid("let obj = { a : 1, b : 2 }; obj.a", [], 1);
 });
 
 test("block in binary expression", () => {
