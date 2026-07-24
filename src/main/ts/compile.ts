@@ -1,202 +1,19 @@
-export interface Ok<T> {
-  isOk: true;
-  value: T;
-}
-
-export interface Err<X> {
-  isOk: false;
-  error: X;
-}
-
-export type Result<T, X> = Ok<T> | Err<X>;
-
-export interface CompileError {
-  message: string;
-  reason: string;
-  suggestedFix: string;
-  line: number;
-  column: number;
-}
-
-export interface Token {
-  type: string;
-  value: string;
-  line: number;
-  column: number;
-  typeSuffix?: string;
-}
-
-interface TokenizeContext {
-  source: string;
-  pos: number;
-  line: number;
-  column: number;
-}
-
-function isDigit(ch: string): boolean {
-  return ch >= "0" && ch <= "9";
-}
-
-function isAlpha(ch: string): boolean {
-  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_";
-}
-
-function isIdentChar(ch: string): boolean {
-  return isDigit(ch) || isAlpha(ch);
-}
-
-function readNumber(ctx: TokenizeContext): Token {
-  let numStr = "";
-  while (ctx.pos < ctx.source.length) {
-    const c = ctx.source[ctx.pos];
-    if (!c || !isDigit(c)) break;
-    numStr += c;
-    ctx.pos++;
-    ctx.column++;
-  }
-  // Read optional type suffix (U8, U16, U32, U64, I8, I16, I32, I64)
-  let typeSuffix = "";
-  const suffixCh = ctx.source[ctx.pos];
-  if (suffixCh && isAlpha(suffixCh)) {
-    while (ctx.pos < ctx.source.length) {
-      const sc = ctx.source[ctx.pos];
-      if (!sc || !isIdentChar(sc)) break;
-      typeSuffix += sc;
-      ctx.pos++;
-      ctx.column++;
-    }
-  }
-  return {
-    type: "NUMBER",
-    value: numStr,
-    typeSuffix,
-    line: ctx.line,
-    column: ctx.column,
-  };
-}
-
-function readIdentifier(ctx: TokenizeContext): Token {
-  let ident = "";
-  while (ctx.pos < ctx.source.length) {
-    const c = ctx.source[ctx.pos];
-    if (!c || !isIdentChar(c)) break;
-    ident += c;
-    ctx.pos++;
-    ctx.column++;
-  }
-  return {
-    type: "IDENTIFIER",
-    value: ident,
-    line: ctx.line,
-    column: ctx.column,
-  };
-}
-
-function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
-  return {
-    type: ch === "=" ? "EQUALS" : ch === ";" ? "SEMICOLON" : "COLON",
-    value: ch,
-    line: ctx.line,
-    column: ctx.column,
-  };
-}
-
-function tokenizeUnknown(ch: string, ctx: TokenizeContext): Err<CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message: `Unexpected character: '${ch}'`,
-      reason: "Only digits, identifiers, and operators are supported.",
-      suggestedFix: "Remove unsupported characters.",
-      line: ctx.line,
-      column: ctx.column,
-    },
-  };
-}
-
-function skipWhitespace(ctx: TokenizeContext): boolean {
-  const ch = ctx.source[ctx.pos];
-  if (ch === " " || ch === "\t" || ch === "\r") {
-    ctx.pos++;
-    ctx.column++;
-    return true;
-  }
-  if (ch === "\n") {
-    ctx.pos++;
-    ctx.line++;
-    ctx.column = 1;
-    return true;
-  }
-  return false;
-}
-
-function tokenize(source: string): Result<Token[], CompileError> {
-  const tokens: Token[] = [];
-  const ctx: TokenizeContext = { source, pos: 0, line: 1, column: 1 };
-  while (ctx.pos < ctx.source.length) {
-    const ch = ctx.source[ctx.pos];
-    if (!ch) break;
-    if (skipWhitespace(ctx)) continue;
-    if (isDigit(ch)) {
-      const startCol = ctx.column;
-      const token = readNumber(ctx);
-      token.column = startCol;
-      token.line = ctx.line;
-      tokens.push(token);
-      continue;
-    }
-    if (ch === "=" || ch === ";" || ch === ":") {
-      tokens.push(tokenizeOperator(ch, ctx));
-      ctx.pos++;
-      ctx.column++;
-      continue;
-    }
-    if (isAlpha(ch)) {
-      const startCol = ctx.column;
-      const token = readIdentifier(ctx);
-      token.column = startCol;
-      token.line = ctx.line;
-      tokens.push(token);
-      continue;
-    }
-    return tokenizeUnknown(ch, ctx);
-  }
-  return { isOk: true, value: tokens };
-}
+import { tokenize } from "./tokenize";
+import type {
+  Token,
+  Result,
+  CompileError,
+  Err,
+  StructField,
+  StructDefinitionNode,
+  MemberAssignmentNode,
+  LetDeclarationNode,
+  AssignmentNode,
+  IdentifierNode,
+  NumberLiteralNode,
+} from "./types";
 
 // --- Parser ---
-
-export interface NumberLiteralNode {
-  type: "NumberLiteral";
-  value: number;
-  line: number;
-  column: number;
-}
-
-export interface IdentifierNode {
-  type: "Identifier";
-  name: string;
-  line: number;
-  column: number;
-}
-
-export interface LetDeclarationNode {
-  type: "LetDeclaration";
-  name: string;
-  mutable: boolean;
-  typeName?: string;
-  value: Expression;
-  line: number;
-  column: number;
-}
-
-export interface AssignmentNode {
-  type: "Assignment";
-  name: string;
-  value: Expression;
-  line: number;
-  column: number;
-}
 
 interface NumberLiteralExpr {
   type: "NumberLiteral";
@@ -210,9 +27,27 @@ interface IdentifierExpr {
   typeName?: string;
 }
 
-export type Expression = NumberLiteralExpr | IdentifierExpr;
-export type Statement =
-  NumberLiteralNode | IdentifierNode | LetDeclarationNode | AssignmentNode;
+interface StructInstanceExpr {
+  type: "StructInstance";
+  structName: string;
+  fields: { name: string; value: Expression }[];
+}
+
+interface MemberExpr {
+  type: "MemberExpression";
+  object: Expression;
+  field: string;
+}
+
+type Expression =
+  NumberLiteralExpr | IdentifierExpr | StructInstanceExpr | MemberExpr;
+type Statement =
+  | NumberLiteralNode
+  | IdentifierNode
+  | LetDeclarationNode
+  | AssignmentNode
+  | StructDefinitionNode
+  | MemberAssignmentNode;
 
 interface ParseContext {
   tokens: Token[];
@@ -274,22 +109,201 @@ function unexpectedEofError(expected: string): Err<CompileError> {
 function parseExpression(ctx: ParseContext): Result<Expression, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("an expression");
-  if (token.type === "NUMBER") {
-    consume(ctx);
-    return {
-      isOk: true,
-      value: {
-        type: "NumberLiteral",
-        value: parseInt(token.value, 10),
-        typeName: token.typeSuffix || undefined,
-      },
-    };
-  }
-  if (token.type === "IDENTIFIER") {
-    consume(ctx);
-    return { isOk: true, value: { type: "Identifier", name: token.value } };
-  }
+  if (token.type === "NUMBER") return parseNumberLiteral(ctx);
+  if (token.type === "IDENTIFIER") return parseIdentifierExpression(ctx);
   return unexpectedTokenError(token, "a number or identifier");
+}
+
+function parseNumberLiteral(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  const token = consume(ctx);
+  return {
+    isOk: true,
+    value: {
+      type: "NumberLiteral",
+      value: parseInt(token.value, 10),
+      typeName: token.typeSuffix || undefined,
+    },
+  };
+}
+
+function parseIdentifierExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  const token = consume(ctx);
+  const name = token.value;
+
+  // Check for struct instance: Name { field: value, ... }
+  const next = peek(ctx);
+  if (next && next.type === "LBRACE") return parseStructInstance(ctx, name);
+
+  // Check for member access: obj.field
+  let expr: Expression = { type: "Identifier", name };
+  while (true) {
+    const dot = peek(ctx);
+    if (dot && dot.value === ".") {
+      consume(ctx);
+      const fieldToken = peek(ctx);
+      if (!fieldToken || fieldToken.type !== "IDENTIFIER")
+        return unexpectedTokenError(
+          fieldToken || { type: "EOF", value: "", line: 0, column: 0 },
+          "field name",
+        );
+      consume(ctx);
+      expr = {
+        type: "MemberExpression",
+        object: expr,
+        field: fieldToken.value,
+      };
+    } else {
+      break;
+    }
+  }
+  return { isOk: true, value: expr };
+}
+
+function parseStructInstance(
+  ctx: ParseContext,
+  structName: string,
+): Result<Expression, CompileError> {
+  consume(ctx); // consume '{'
+  const fields: { name: string; value: Expression }[] = [];
+  while (true) {
+    const next = peek(ctx);
+    if (!next) return unexpectedEofError("'}'");
+    if (next.type === "RBRACE") {
+      consume(ctx);
+      break;
+    }
+    if (next.type === "IDENTIFIER") {
+      const fieldName = next.value;
+      consume(ctx);
+      const colonResult = expectToken(ctx, "COLON", ":");
+      if (!colonResult.isOk) return colonResult;
+      const valueResult = parseExpression(ctx);
+      if (!valueResult.isOk) return valueResult;
+      fields.push({ name: fieldName, value: valueResult.value });
+      const after = peek(ctx);
+      if (after && after.type === "COMMA") {
+        consume(ctx);
+        continue;
+      }
+    } else {
+      return unexpectedTokenError(next, "field name or '}'");
+    }
+  }
+  return {
+    isOk: true,
+    value: { type: "StructInstance", structName, fields },
+  };
+}
+
+function parseStructDefinition(
+  ctx: ParseContext,
+  structToken: Token,
+): Result<Statement, CompileError> {
+  consume(ctx); // consume 'struct'
+  const nameToken = peek(ctx);
+  if (!nameToken || nameToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "struct name",
+    );
+  const structName = nameToken.value;
+  consume(ctx);
+
+  const lbraceResult = expectToken(ctx, "LBRACE", "{");
+  if (!lbraceResult.isOk) return lbraceResult;
+
+  const fieldsResult = parseStructFields(ctx);
+  if (!fieldsResult.isOk) return fieldsResult;
+
+  const semiResult = expectToken(ctx, "SEMICOLON", ";");
+  if (!semiResult.isOk) return semiResult;
+
+  return {
+    isOk: true,
+    value: {
+      type: "StructDefinition",
+      name: structName,
+      fields: fieldsResult.value,
+      line: structToken.line,
+      column: structToken.column,
+    },
+  };
+}
+
+function parseStructFields(
+  ctx: ParseContext,
+): Result<StructField[], CompileError> {
+  const fields: StructField[] = [];
+  while (true) {
+    const next = peek(ctx);
+    if (!next) return unexpectedEofError("'}'");
+    if (next.type === "RBRACE") {
+      consume(ctx);
+      break;
+    }
+    const fieldResult = parseStructField(ctx);
+    if (!fieldResult.isOk) return fieldResult;
+    fields.push(fieldResult.value);
+    const after = peek(ctx);
+    if (after && after.type === "COMMA") {
+      consume(ctx);
+      continue;
+    }
+  }
+  return { isOk: true, value: fields };
+}
+
+function parseStructField(
+  ctx: ParseContext,
+): Result<StructField, CompileError> {
+  const nameToken = peek(ctx);
+  if (!nameToken || nameToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "field name or '}'",
+    );
+  const fieldName = nameToken.value;
+  consume(ctx);
+
+  const colonResult = expectToken(ctx, "COLON", ":");
+  if (!colonResult.isOk) return colonResult;
+
+  const typeToken = peek(ctx);
+  if (!typeToken || typeToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      typeToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "field type",
+    );
+  const typeName = typeToken.value;
+  consume(ctx);
+  return { isOk: true, value: { name: fieldName, typeName } };
+}
+
+function parseMemberAssignment(
+  ctx: ParseContext,
+  expr: MemberExpr,
+  line: number,
+  column: number,
+): Result<Statement, CompileError> {
+  const rhsResult = parseExpression(ctx);
+  if (!rhsResult.isOk) return rhsResult;
+  const semiResult = expectToken(ctx, "SEMICOLON", ";");
+  if (!semiResult.isOk) return semiResult;
+  return {
+    isOk: true,
+    value: {
+      type: "MemberAssignment",
+      object: expr.object,
+      field: expr.field,
+      value: rhsResult.value,
+      line,
+      column,
+    },
+  };
 }
 
 function expectToken(
@@ -407,27 +421,69 @@ function parseAssignmentStatement(
   const exprResult = parseExpression(ctx);
   if (!exprResult.isOk) return exprResult;
   const expr = exprResult.value;
-  if (expr.type === "NumberLiteral")
-    return {
-      isOk: true,
-      value: {
-        type: "NumberLiteral",
-        value: expr.value,
-        line: token.line,
-        column: token.column,
-      },
-    };
+  if (expr.type === "NumberLiteral") return parseNumberStatement(expr, token);
+  if (expr.type === "StructInstance")
+    return parseStructInstanceStatement(token);
   const equalsResult = expectToken(ctx, "EQUALS", "=");
-  if (!equalsResult.isOk)
-    return {
-      isOk: true,
-      value: {
-        type: "Identifier",
-        name: expr.name,
-        line: token.line,
-        column: token.column,
-      },
-    };
+  if (!equalsResult.isOk) return parseExpressionAsIdentifier(expr, token);
+  if (expr.type === "MemberExpression")
+    return parseMemberAssignment(ctx, expr, token.line, token.column);
+  return parseRegularAssignment(ctx, expr, token);
+}
+
+function parseNumberStatement(
+  expr: NumberLiteralExpr,
+  token: Token,
+): Result<Statement, CompileError> {
+  return {
+    isOk: true,
+    value: {
+      type: "NumberLiteral",
+      value: expr.value,
+      line: token.line,
+      column: token.column,
+    },
+  };
+}
+
+function parseStructInstanceStatement(
+  token: Token,
+): Result<Statement, CompileError> {
+  return {
+    isOk: true,
+    value: {
+      type: "Identifier",
+      name: "_",
+      line: token.line,
+      column: token.column,
+    },
+  };
+}
+
+function parseExpressionAsIdentifier(
+  expr: Expression,
+  token: Token,
+): Result<Statement, CompileError> {
+  const name =
+    expr.type === "MemberExpression"
+      ? getMemberName(expr)
+      : (expr as IdentifierExpr).name;
+  return {
+    isOk: true,
+    value: {
+      type: "Identifier",
+      name,
+      line: token.line,
+      column: token.column,
+    },
+  };
+}
+
+function parseRegularAssignment(
+  ctx: ParseContext,
+  expr: IdentifierExpr,
+  token: Token,
+): Result<Statement, CompileError> {
   const rhsResult = parseExpression(ctx);
   if (!rhsResult.isOk) return rhsResult;
   const semiResult = expectToken(ctx, "SEMICOLON", ";");
@@ -444,12 +500,25 @@ function parseAssignmentStatement(
   };
 }
 
+function getMemberName(expr: Expression): string {
+  if (expr.type === "MemberExpression") {
+    const objName = getMemberName(expr.object);
+    return `${objName}.${expr.field}`;
+  }
+  if (expr.type === "Identifier") return expr.name;
+  return "_";
+}
+
 function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("a statement");
 
   if (token.type === "IDENTIFIER" && token.value === "let") {
     return parseLetStatement(ctx, token);
+  }
+
+  if (token.type === "IDENTIFIER" && token.value === "struct") {
+    return parseStructDefinition(ctx, token);
   }
 
   return parseAssignmentStatement(ctx);

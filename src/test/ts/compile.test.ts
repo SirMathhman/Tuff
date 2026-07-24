@@ -229,3 +229,117 @@ test("Typed mutable variable with reassignment", () => {
 test("Typed mutable reassignment with type mismatch is invalid", () => {
   expectInvalid("let mut x : U8 = 10U8; x = 20U32;");
 });
+
+// --- Struct Tests ---
+
+test("Struct definition with instantiation", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 100I32, y: 200I32 }; p.x",
+    [],
+    100,
+  );
+});
+
+test("Struct instantiation without type annotation", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let p = Point { x: 42I32, y: 0I32 }; p.x",
+    [],
+    42,
+  );
+});
+
+test("Struct field access second field", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 10I32, y: 99I32 }; p.y",
+    [],
+    99,
+  );
+});
+
+test("Struct field reassignment with mut", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let mut p : Point = Point { x: 1I32, y: 2I32 }; p.x = 42I32; p.x",
+    [],
+    42,
+  );
+});
+
+test("Struct field reassignment without mut is invalid", () => {
+  expectInvalid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 1I32, y: 2I32 }; p.x = 42I32;",
+  );
+});
+
+test("Struct field assignment type mismatch is invalid", () => {
+  expectInvalid(
+    "struct Point { x : I32, y : I32 }; let mut p : Point = Point { x: 1I32, y: 2I32 }; p.x = 42U8;",
+  );
+});
+
+test("Struct with undefined struct name is invalid", () => {
+  expectInvalid("let p : Point = Point { x: 1I32 };");
+});
+
+test("Struct with missing field is invalid", () => {
+  expectInvalid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 1I32 };",
+  );
+});
+
+test("Struct with extra field is invalid", () => {
+  expectInvalid(
+    "struct Point { x : I32 }; let p : Point = Point { x: 1I32, y: 2I32 };",
+  );
+});
+
+test("Struct field type mismatch is invalid", () => {
+  expectInvalid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 1U8, y: 2I32 };",
+  );
+});
+
+test("Struct with untyped field is invalid", () => {
+  expectInvalid("struct Point { x, y : I32 };");
+});
+
+test("Nested struct member access", () => {
+  expectValid(
+    "struct Inner { v : I32 }; struct Outer { inner : Inner }; let o : Outer = Outer { inner: Inner { v: 77I32 } }; o.inner.v",
+    [],
+    77,
+  );
+});
+
+test("Nested struct field reassignment", () => {
+  expectValid(
+    "struct Inner { v : I32 }; struct Outer { inner : Inner }; let mut o : Outer = Outer { inner: Inner { v: 1I32 } }; o.inner.v = 55I32; o.inner.v",
+    [],
+    55,
+  );
+});
+
+test("Struct used as exit expression", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 }; let p : Point = Point { x: 42I32, y: 0I32 }; p",
+    [],
+    0,
+  );
+});
+
+test("Struct definition without usage is valid", () => {
+  expectValid("struct Point { x : I32, y : I32 }; 42", [], 42);
+});
+
+test("Struct with single field", () => {
+  expectValid(
+    "struct Count { n : U8 }; let c : Count = Count { n: 255U8 }; c.n",
+    [],
+    255,
+  );
+});
+
+test("Struct instantiation with wrong struct type is invalid", () => {
+  expectInvalid(
+    "struct Point { x : I32, y : I32 }; struct Color { r : U8, g : U8, b : U8 }; let p : Point = Color { r: 1U8, g: 2U8, b: 3U8 };",
+  );
+});
