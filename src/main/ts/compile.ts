@@ -85,11 +85,7 @@ function tokenize(source: string): Result<Token[], CompileError> {
     }
 
     // Identifier
-    if (
-      (ch >= "a" && ch <= "z") ||
-      (ch >= "A" && ch <= "Z") ||
-      ch === "_"
-    ) {
+    if ((ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_") {
       const startLine = ctx.line;
       const startCol = ctx.column;
       let ident = "";
@@ -181,9 +177,7 @@ function consume(ctx: ParseContext): Token {
   return ctx.tokens[ctx.pos++];
 }
 
-function parseStatement(
-  ctx: ParseContext,
-): Result<Statement, CompileError> {
+function parseStatement(ctx: ParseContext): Result<Statement, CompileError> {
   const token = peek(ctx);
 
   if (!token) {

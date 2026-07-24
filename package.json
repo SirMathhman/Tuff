@@ -4,12 +4,22 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "test": "bun test --coverage",
     "start": "bun ./src/main/ts/index.ts",
-    "watch": "nodemon"
+    "watch": "nodemon",
+    "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "lint": "tsc --noEmit && eslint ./src --fix",
+    "format": "prettier . --write"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
-    "nodemon": "^3.1.14"
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "jiti": "^2.7.0",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0"
   },
   "peerDependencies": {
     "typescript": "^5"
