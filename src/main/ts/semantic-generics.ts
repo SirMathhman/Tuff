@@ -312,169 +312,40 @@ export function checkStructExpr(
     typeArgs: string[];
     fields: { name: string; value: Expression }[];
   };
-  const instanceResult = checkStructInstance(
+  const def = structs.find((s) => s.name === sexpr.structName);
+  if (!def) return checkStructUndefined(sexpr.structName, loc);
+  const countCheck = validateTypeArgCount(
     sexpr.structName,
     sexpr.typeArgs,
-    sexpr.fields,
-    { scope, structs, aliases, loc },
+    def,
+    loc,
   );
-  if (!instanceResult.isOk) return instanceResult;
-  const returnType =
-    sexpr.typeArgs.length > 0
-      ? sexpr.structName + "<" + sexpr.typeArgs.join(", ") + ">"
-      : sexpr.structName;
-  return { isOk: true, value: returnType };
-}
-
-export function checkMemberExpr(
-  expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const mexpr = expr as { object: Expression; field: string };
-  const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
-  if (!objResult.isOk) return objResult;
-  const objType = objResult.value;
-  if (objType) {
-    const structDef = structs.find((s) => s.name === objType);
-    if (structDef) return checkStructField(structDef, mexpr.field, loc);
-  }
-  return { isOk: true, value: objType };
-}
-
-function checkStructField(
-  structDef: StructDef,
-  fieldName: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const fieldDef = structDef.fields.find((f) => f.name === fieldName);
-  if (!fieldDef)
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Unknown field '" +
-          fieldName +
-          "' on struct '" +
-          structDef.name +
-          "'",
-        reason: "Field does not exist on struct.",
-        suggestedFix: "Use a valid field name.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  return { isOk: true, value: fieldDef.typeName };
-}
-
-export function inferTypeArgs(
-  def: StructDef,
-  fields: { name: string; value: Expression }[],
-  ctx: TypeCheckCtx,
-): Result<string[], CompileError> {
-  const inferred: string[] = [];
-  for (const typeParam of def.typeParams) {
-    const fieldDef = findFieldForTypeParam(def, typeParam);
-    if (!fieldDef) {
-      inferred.push(typeParam);
-      continue;
-    }
-    const fieldValue = fields.find((f) => f.name === fieldDef.name);
-    if (!fieldValue) {
-      inferred.push(typeParam);
-      continue;
-    }
-    const nestedType = inferTypeFromNestedInstance(
-      fieldDef,
-      fieldValue,
-      typeParam,
-    );
-    if (nestedType) {
-      inferred.push(nestedType);
-      continue;
-    }
-    const typeResult = checkExpr(
-      fieldValue.value,
-      ctx.scope,
-      ctx.structs,
-      ctx.aliases,
-      ctx.loc,
-    );
-    if (!typeResult.isOk) return typeResult;
-    inferred.push(typeResult.value || typeParam);
-  }
-  return { isOk: true, value: inferred };
-}
-
-export function validateTypeArgCount(
-  structName: string,
-  typeArgs: string[],
-  def: StructDef,
-  loc: { line: number; column: number },
-): Result<void, CompileError> {
-  if (typeArgs.length > 0 && typeArgs.length !== def.typeParams.length)
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Struct '" +
-          structName +
-          "' expects " +
-          def.typeParams.length +
-          " type param(s) but got " +
-          typeArgs.length,
-        reason: "Type argument count must match type parameter count.",
-        suggestedFix: "Provide " + def.typeParams.length + " type arguments.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  return { isOk: true, value: undefined };
-}
-
-export function validateTypeArgs(
-  typeArgs: string[],
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<void, CompileError> {
-  for (const arg of typeArgs) {
-    const argCheck = checkTypeName(
-      arg,
+  if (!countCheck.isOk) return countCheck;
+  let resolvedTypeArgs = sexpr.typeArgs;
+  if (sexpr.typeArgs.length === 0 && def.typeParams.length > 0) {
+    const inferredResult = inferTypeArgs(def, sexpr.fields, {
+      scope,
       structs,
+      aliases,
       loc,
-      "Invalid type argument '",
-    );
-    if (!argCheck.isOk) return argCheck;
+    });
+    if (!inferredResult.isOk) return inferredResult;
+    resolvedTypeArgs = inferredResult.value;
   }
-  return { isOk: true, value: undefined };
-}
-
-export function resolveStructFields(
-  def: StructDef,
-  resolvedTypeArgs: string[],
-): StructField[] {
-  return def.fields.map((f) => {
-    const paramIdx = def.typeParams.indexOf(f.typeName);
-    if (paramIdx >= 0)
-      return { name: f.name, typeName: resolvedTypeArgs[paramIdx]! };
-    return f;
-  });
-}
-
-export function checkStructFieldValues(
-  fields: { name: string; value: Expression }[],
-  resolvedFields: StructField[],
-  structName: string,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  for (const field of fields) {
+  const argsCheck = validateTypeArgs(resolvedTypeArgs, structs, loc);
+  if (!argsCheck.isOk) return argsCheck;
+  const resolvedFields = resolveStructFields(def, resolvedTypeArgs);
+  if (sexpr.fields.length !== resolvedFields.length)
+    return checkStructFieldCount(
+      sexpr.structName,
+      resolvedFields.length,
+      sexpr.fields.length,
+      loc,
+    );
+  for (const field of sexpr.fields) {
     const defField = resolvedFields.find((f) => f.name === field.name);
-    if (!defField) return checkStructUnknownField(field.name, structName, loc);
+    if (!defField)
+      return checkStructUnknownField(field.name, sexpr.structName, loc);
     if (!defField.typeName)
       return {
         isOk: false,
@@ -502,44 +373,59 @@ export function checkStructFieldValues(
         loc,
       );
   }
-  return { isOk: true, value: undefined };
+  const returnType =
+    sexpr.typeArgs.length > 0
+      ? sexpr.structName + "<" + sexpr.typeArgs.join(", ") + ">"
+      : sexpr.structName;
+  return { isOk: true, value: returnType };
 }
 
-export function checkStructInstance(
-  structName: string,
-  typeArgs: string[],
+export function checkMemberExpr(
+  expr: Expression,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const mexpr = expr as { object: Expression; field: string };
+  const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
+  if (!objResult.isOk) return objResult;
+  const objType = objResult.value;
+  if (objType) {
+    const structDef = structs.find((s) => s.name === objType);
+    if (structDef) return checkStructField(structDef, mexpr.field, loc);
+  }
+  return { isOk: true, value: objType };
+}
+
+export function inferTypeArgs(
+  def: StructDef,
   fields: { name: string; value: Expression }[],
   ctx: TypeCheckCtx,
-): Result<string | undefined, CompileError> {
-  const def = ctx.structs.find((s) => s.name === structName);
-  if (!def) return checkStructUndefined(structName, ctx.loc);
-  const countCheck = validateTypeArgCount(structName, typeArgs, def, ctx.loc);
-  if (!countCheck.isOk) return countCheck;
-  let resolvedTypeArgs = typeArgs;
-  if (typeArgs.length === 0 && def.typeParams.length > 0) {
-    const inferredResult = inferTypeArgs(def, fields, ctx);
-    if (!inferredResult.isOk) return inferredResult;
-    resolvedTypeArgs = inferredResult.value;
+): Result<string[], CompileError> {
+  const inferred: string[] = [];
+  for (const typeParam of def.typeParams) {
+    const fieldDef = findFieldForTypeParam(def, typeParam);
+    if (!fieldDef) { inferred.push(typeParam); continue; }
+    const fieldValue = fields.find((f) => f.name === fieldDef.name);
+    if (!fieldValue) { inferred.push(typeParam); continue; }
+    const nestedType = inferTypeFromNestedInstance(fieldDef, fieldValue, typeParam);
+    if (nestedType) { inferred.push(nestedType); continue; }
+    const typeResult = checkExpr(fieldValue.value, ctx.scope, ctx.structs, ctx.aliases, ctx.loc);
+    if (!typeResult.isOk) return typeResult;
+    inferred.push(typeResult.value || typeParam);
   }
-  const argsCheck = validateTypeArgs(resolvedTypeArgs, ctx.structs, ctx.loc);
-  if (!argsCheck.isOk) return argsCheck;
-  const resolvedFields = resolveStructFields(def, resolvedTypeArgs);
-  if (fields.length !== resolvedFields.length)
-    return checkStructFieldCount(
-      structName,
-      resolvedFields.length,
-      fields.length,
-      ctx.loc,
-    );
-  const valuesCheck = checkStructFieldValues(
-    fields,
-    resolvedFields,
-    structName,
-    ctx.scope,
-    ctx.structs,
-    ctx.aliases,
-    ctx.loc,
-  );
-  if (!valuesCheck.isOk) return valuesCheck;
-  return { isOk: true, value: structName };
+  return { isOk: true, value: inferred };
+}
+
+export function resolveStructFields(
+  def: StructDef,
+  resolvedTypeArgs: string[],
+): StructField[] {
+  return def.fields.map((f) => {
+    const paramIdx = def.typeParams.indexOf(f.typeName);
+    if (paramIdx >= 0)
+      return { name: f.name, typeName: resolvedTypeArgs[paramIdx]! };
+    return f;
+  });
 }

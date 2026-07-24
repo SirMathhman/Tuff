@@ -1,4 +1,4 @@
-import type { Result, CompileError } from "./types";
+import type { Result, CompileError, StructDef } from "./types";
 
 export function checkStructUndefined(
   structName: string,

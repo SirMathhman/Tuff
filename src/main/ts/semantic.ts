@@ -410,10 +410,6 @@ function analyzeStatement(
     return checkIdentifierStatement(node, scope, structs, aliases);
   } else if (stmt.type === "NumberLiteral") {
     return { isOk: true, value: undefined };
-  } else if (stmt.type === "BooleanLiteral") {
-    return { isOk: true, value: undefined };
-  } else if (stmt.type === "IsExpression") {
-    return { isOk: true, value: undefined };
   }
   return { isOk: true, value: undefined };
 }
