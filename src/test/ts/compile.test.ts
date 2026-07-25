@@ -456,3 +456,11 @@ test("String literal as exit expression", () => {
 test("String variable as exit expression", () => {
   expectInvalid('let s : &Str = "hi"; s');
 });
+
+test("&Str as type argument", () => {
+  expectValid(
+    'struct Box<T> { value: T } let b : Box<&Str> = Box { value: "hello" }; b.value.length',
+    [],
+    5,
+  );
+});

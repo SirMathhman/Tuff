@@ -243,6 +243,33 @@ function parseMemberChain(
   return { isOk: true, value: current };
 }
 
+function parseBracketedItem(
+  ctx: ParseContext,
+  label: string,
+): Result<string, CompileError> {
+  const itemToken = peek(ctx);
+  if (!itemToken)
+    return unexpectedTokenError(
+      itemToken || { type: "EOF", value: "", line: 0, column: 0 },
+      label,
+    );
+  if (itemToken.type === "AMPERSAND") {
+    consume(ctx);
+    const afterAmp = peek(ctx);
+    if (!afterAmp || afterAmp.type !== "IDENTIFIER")
+      return unexpectedTokenError(
+        afterAmp || { type: "EOF", value: "", line: 0, column: 0 },
+        label,
+      );
+    consume(ctx);
+    return { isOk: true, value: "&" + afterAmp.value };
+  }
+  if (itemToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(itemToken, label);
+  consume(ctx);
+  return { isOk: true, value: itemToken.value };
+}
+
 export function parseBracketedList(
   ctx: ParseContext,
   label: string,
@@ -259,14 +286,9 @@ export function parseBracketedList(
       const commaResult = expectToken(ctx, "COMMA", ",");
       if (!commaResult.isOk) return commaResult;
     }
-    const itemToken = peek(ctx);
-    if (!itemToken || itemToken.type !== "IDENTIFIER")
-      return unexpectedTokenError(
-        itemToken || { type: "EOF", value: "", line: 0, column: 0 },
-        label,
-      );
-    items.push(itemToken.value);
-    consume(ctx);
+    const itemResult = parseBracketedItem(ctx, label);
+    if (!itemResult.isOk) return itemResult;
+    items.push(itemResult.value);
   }
   return { isOk: true, value: items };
 }

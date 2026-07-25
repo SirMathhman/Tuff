@@ -123,8 +123,9 @@ export function checkTypeName(
 ): Result<void, CompileError> {
   const resolved = aliases ? resolveAlias(typeName, aliases) : typeName;
   const { base } = parseGenericTypeName(resolved);
-  const isNumeric = VALID_TYPES.includes(base);
-  const isStruct = structs.some((s) => s.name === base);
+  const strippedBase = base.startsWith("&") ? base.slice(1) : base;
+  const isNumeric = VALID_TYPES.includes(strippedBase);
+  const isStruct = structs.some((s) => s.name === strippedBase);
   const isAlias = aliases ? aliases.some((a) => a.name === typeName) : false;
   if (!isNumeric && !isStruct && !isAlias)
     return {
