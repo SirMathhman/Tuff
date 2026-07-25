@@ -9,7 +9,6 @@ import type {
   NumberLiteralExpr,
   IdentifierExpr,
   MemberExpressionExpr,
-  EnumDefinitionNode,
 } from "./types";
 import type { ParseContext } from "./parse-expressions";
 import {
@@ -24,6 +23,7 @@ import {
   unexpectedEofError,
   unexpectedTokenError,
 } from "./parse-helpers";
+import { parseEnumDefinition } from "./parse-enums";
 
 function expectToken(
   ctx: ParseContext,
@@ -32,139 +32,53 @@ function expectToken(
 ): Result<Token, CompileError> {
   return expectTokenHelper(ctx, type, expected);
 }
+function parseOutStatementBody(
+  ctx: ParseContext,
+  next: Token,
+): Result<Statement, CompileError> {
+  if (next.type === "IDENTIFIER" && next.value === "let")
+    return parseLetStatement(ctx, true);
+  if (next.type === "IDENTIFIER" && next.value === "struct")
+    return parseStructDefinition(ctx, true);
+  if (next.type === "IDENTIFIER" && next.value === "type")
+    return parseTypeAlias(ctx, true);
+  if (next.type === "ENUM") return parseEnumDefinition(ctx, true);
+  return unexpectedTokenError(next, "let, struct, type, or enum after 'out'");
+}
+
+function tryParseOutStatement(
+  ctx: ParseContext,
+): Result<Statement, CompileError> | undefined {
+  if (peek(ctx)?.type !== "OUT") return undefined;
+  consume(ctx);
+  const next = peek(ctx);
+  if (!next) return unexpectedEofError("a declaration after 'out'");
+  return parseOutStatementBody(ctx, next);
+}
 
 export function parseStatement(
   ctx: ParseContext,
 ): Result<Statement, CompileError> {
+  const outResult = tryParseOutStatement(ctx);
+  if (outResult !== undefined) return outResult;
   const token = peek(ctx);
   if (!token) return unexpectedEofError("a statement");
   if (token.type === "IDENTIFIER" && token.value === "let")
-    return parseLetStatement(ctx, token);
+    return parseLetStatement(ctx, false);
   if (token.type === "IDENTIFIER" && token.value === "struct")
-    return parseStructDefinition(ctx, token);
+    return parseStructDefinition(ctx, false);
   if (token.type === "IDENTIFIER" && token.value === "type")
-    return parseTypeAlias(ctx, token);
-  if (token.type === "ENUM") return parseEnumDefinition(ctx, token);
+    return parseTypeAlias(ctx, false);
+  if (token.type === "ENUM") return parseEnumDefinition(ctx, false);
   return parseAssignmentStatement(ctx);
-}
-
-function parseEnumDefinition(
-  ctx: ParseContext,
-  enumToken: Token,
-): Result<EnumDefinitionNode, CompileError> {
-  consume(ctx);
-  const nameToken = peek(ctx);
-  if (!nameToken)
-    return unexpectedTokenError(
-      { type: "EOF", value: "", line: 0, column: 0 },
-      "enum name",
-    );
-  if (nameToken.type !== "IDENTIFIER")
-    return unexpectedTokenError(nameToken, "enum name");
-  consume(ctx);
-  const braceResult = expectToken(ctx, "LBRACE", "{");
-  if (!braceResult.isOk) return braceResult;
-  const variantsResult = parseEnumVariants(ctx, nameToken.value);
-  if (!variantsResult.isOk) return variantsResult;
-  const closeResult = expectToken(ctx, "RBRACE", "}");
-  if (!closeResult.isOk) return closeResult;
-  consumeOptionalSemicolon(ctx);
-  if (variantsResult.value.length === 0)
-    return emptyEnumError(nameToken.value, enumToken);
-  return {
-    isOk: true,
-    value: {
-      type: "EnumDefinition",
-      name: nameToken.value,
-      variants: variantsResult.value,
-      line: enumToken.line,
-      column: enumToken.column,
-    },
-  };
-}
-
-function parseEnumVariants(
-  ctx: ParseContext,
-  enumName: string,
-): Result<string[], CompileError> {
-  const variants: string[] = [];
-  while (true) {
-    const next = peek(ctx);
-    if (!next) return unexpectedEofError("'}' or variant name");
-    if (next.type === "RBRACE") break;
-    const variantResult = parseEnumVariant(ctx, variants, enumName);
-    if (!variantResult.isOk) return variantResult;
-    const after = peek(ctx);
-    if (!after || after.type !== "COMMA") break;
-    consume(ctx);
-  }
-  return { isOk: true, value: variants };
-}
-
-function parseEnumVariant(
-  ctx: ParseContext,
-  variants: string[],
-  enumName: string,
-): Result<void, CompileError> {
-  const next = peek(ctx);
-  if (!next || next.type !== "IDENTIFIER")
-    return unexpectedTokenError(
-      next || { type: "EOF", value: "", line: 0, column: 0 },
-      "variant name",
-    );
-  const name = next.value;
-  if (isReservedWord(name)) return unexpectedTokenError(next, "variant name");
-  if (/^\d/.test(name)) return unexpectedTokenError(next, "variant name");
-  if (variants.includes(name))
-    return duplicateVariantError(name, enumName, next);
-  consume(ctx);
-  variants.push(name);
-  return { isOk: true, value: undefined };
-}
-
-function isReservedWord(name: string): boolean {
-  return (
-    name === "enum" || name === "let" || name === "struct" || name === "type"
-  );
-}
-
-function emptyEnumError(
-  name: string,
-  token: Token,
-): Result<never, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message: "Empty enum '" + name + "'",
-      reason: "Enums must have at least one variant.",
-      suggestedFix: "Add at least one variant.",
-      line: token.line,
-      column: token.column,
-    },
-  };
-}
-
-function duplicateVariantError(
-  name: string,
-  enumName: string,
-  token: Token,
-): Result<never, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message: "Duplicate variant '" + name + "' in enum '" + enumName + "'",
-      reason: "Enum variants must have unique names.",
-      suggestedFix: "Remove or rename the duplicate variant.",
-      line: token.line,
-      column: token.column,
-    },
-  };
 }
 
 function parseLetStatement(
   ctx: ParseContext,
-  letToken: Token,
+  exported: boolean,
 ): Result<Statement, CompileError> {
+  const letToken = peek(ctx);
+  if (!letToken) return unexpectedEofError("let");
   consume(ctx);
   const mutable = peek(ctx)?.value === "mut";
   if (mutable) consume(ctx);
@@ -186,6 +100,7 @@ function parseLetStatement(
       type: "LetDeclaration",
       name,
       mutable,
+      exported,
       typeName,
       value: exprResult.value,
       line: letToken.line,
@@ -367,8 +282,10 @@ function parseNameWithTypeParams(
 
 function parseStructDefinition(
   ctx: ParseContext,
-  structToken: Token,
+  exported: boolean,
 ): Result<Statement, CompileError> {
+  const structToken = peek(ctx);
+  if (!structToken) return unexpectedEofError("struct");
   consume(ctx);
   const nameResult = parseNameWithTypeParams(ctx, "struct name");
   if (!nameResult.isOk) return nameResult;
@@ -387,6 +304,7 @@ function parseStructDefinition(
       type: "StructDefinition",
       name: structName,
       typeParams,
+      exported,
       fields: fieldsResult.value,
       line: structToken.line,
       column: structToken.column,
@@ -401,8 +319,10 @@ function consumeOptionalSemicolon(ctx: ParseContext) {
 
 function parseTypeAlias(
   ctx: ParseContext,
-  typeToken: Token,
+  exported: boolean,
 ): Result<Statement, CompileError> {
+  const typeToken = peek(ctx);
+  if (!typeToken) return unexpectedEofError("type");
   consume(ctx);
   const nameResult = parseNameWithTypeParams(ctx, "alias name");
   if (!nameResult.isOk) return nameResult;
@@ -423,6 +343,7 @@ function parseTypeAlias(
       name: aliasName,
       typeParams,
       underlyingType: underlyingResult.value,
+      exported,
       line: typeToken.line,
       column: typeToken.column,
     },

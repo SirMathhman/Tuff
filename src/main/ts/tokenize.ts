@@ -148,6 +148,13 @@ function readIdentifier(ctx: TokenizeContext): Token {
       line: ctx.line,
       column: ctx.column,
     };
+  if (ident === "out")
+    return {
+      type: "OUT",
+      value: ident,
+      line: ctx.line,
+      column: ctx.column,
+    };
   return {
     type: "IDENTIFIER",
     value: ident,

@@ -181,10 +181,13 @@ function uniqueName(name: string, declared: string[]): string {
   return u;
 }
 
-export function generateCode(statements: Statement[]): string {
+export function generateCode(
+  statements: Statement[],
+  moduleMode = false,
+): string {
   const lines: string[] = [];
   const declared: string[] = [];
-  for (const s of statements) genStmt(s, lines, declared);
+  for (const s of statements) genStmt(s, lines, declared, moduleMode);
   return lines.join("\n");
 }
 
@@ -224,8 +227,57 @@ function genExprExitStmt(
   return false;
 }
 
-function genStmt(s: Statement, lines: string[], declared: string[]): void {
-  if (s.type === "StructDefinition" || s.type === "TypeAlias") return;
+function genExitStmt(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+): boolean {
+  const node = s as Statement;
+  if (s.type === "NumberLiteral") {
+    lines.push("process.exit(" + (node as NumberLiteralNode).value + ");");
+    return true;
+  }
+  return (
+    genBoolExitStmt(s, node, lines, declared) ||
+    genExprExitStmt(s, lines, declared)
+  );
+}
+
+function genExport(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+  moduleMode: boolean,
+): void {
+  if (!moduleMode) return;
+  const exported = (s as { exported?: boolean }).exported;
+  if (!exported) return;
+  if (s.type === "LetDeclaration") {
+    const ln = s as LetDeclarationNode;
+    const resolved = resolveName(ln.name, declared);
+    lines.push("exports." + ln.name + " = " + resolved + ";");
+  } else if (s.type === "EnumDefinition") {
+    const en = s as { name: string };
+    lines.push("exports." + en.name + " = " + en.name + ";");
+  } else if (s.type === "StructDefinition") {
+    const st = s as { name: string };
+    lines.push("exports." + st.name + " = {};");
+  } else if (s.type === "TypeAlias") {
+    const ta = s as { name: string };
+    lines.push("exports." + ta.name + " = {};");
+  }
+}
+
+function genStmt(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+  moduleMode = false,
+): void {
+  if (s.type === "StructDefinition" || s.type === "TypeAlias") {
+    genExport(s, lines, declared, moduleMode);
+    return;
+  }
   if (s.type === "EnumDefinition") {
     const en = s as { name: string; variants: string[] };
     lines.push(
@@ -235,18 +287,11 @@ function genStmt(s: Statement, lines: string[], declared: string[]): void {
         en.variants.map((v) => v + ": '" + v + "'").join(", ") +
         " };",
     );
-    return;
-  }
-  const node = s as Statement;
-
-  if (s.type === "NumberLiteral") {
-    lines.push("process.exit(" + (node as NumberLiteralNode).value + ");");
+    genExport(s, lines, declared, moduleMode);
     return;
   }
 
-  if (genBoolExitStmt(s, node, lines, declared)) return;
-
-  if (genExprExitStmt(s, lines, declared)) return;
+  if (!moduleMode && genExitStmt(s, lines, declared)) return;
 
   if (
     s.type === "LetDeclaration" ||
@@ -255,6 +300,7 @@ function genStmt(s: Statement, lines: string[], declared: string[]): void {
   ) {
     const a = s as LetDeclarationNode | AssignmentNode | MemberAssignmentNode;
     genAssignment(s, a, lines, declared);
+    genExport(s, lines, declared, moduleMode);
   }
 }
 

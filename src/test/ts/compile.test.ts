@@ -1,5 +1,9 @@
 import { test } from "bun:test";
-import { expectValid, expectInvalid } from "./test-helpers";
+import {
+  expectValid,
+  expectInvalid,
+  expectValidWithModules,
+} from "./test-helpers";
 
 test("An empty program", () => {
   expectValid("", [], 0);
@@ -551,4 +555,69 @@ test("Line comment at EOF without newline", () => {
 
 test("Block comment at EOF", () => {
   expectValid("42 /* comment at end */", [], 42);
+});
+
+test("Module with a single numeric literal exits 0", () => {
+  expectValidWithModules(["index"], { ["index"]: "100" }, [], 0);
+});
+
+// --- Module export keyword: out ---
+
+test("out let in non-module mode is a no-op", () => {
+  expectValid("out let x = 42; x", [], 42);
+});
+
+test("out struct in non-module mode is a no-op", () => {
+  expectValid("out struct Point { x : I32 } 42", [], 42);
+});
+
+test("out type alias in non-module mode is a no-op", () => {
+  expectValid("out type MyAlias = I32; 42", [], 42);
+});
+
+test("out enum in non-module mode is a no-op", () => {
+  expectValid("out enum Color { Red, Blue } 42", [], 42);
+});
+
+test("bare out without following statement is invalid", () => {
+  expectInvalid("out");
+});
+
+test("out out double keyword is invalid", () => {
+  expectInvalid("out out let x = 42;");
+});
+
+test("out followed by non-statement keyword is invalid", () => {
+  expectInvalid("out 42");
+});
+
+test("out let in module mode exits 0", () => {
+  expectValidWithModules(["index"], { ["index"]: "out let x = 42;" }, [], 0);
+});
+
+test("out struct in module mode exits 0", () => {
+  expectValidWithModules(
+    ["index"],
+    { ["index"]: "out struct Point { x : I32 }" },
+    [],
+    0,
+  );
+});
+
+test("out type alias in module mode exits 0", () => {
+  expectValidWithModules(
+    ["index"],
+    { ["index"]: "out type MyAlias = I32;" },
+    [],
+    0,
+  );
+});
+
+test("out enum in module mode exits 0", () => {
+  expectValidWithModules(
+    ["index"],
+    { ["index"]: "out enum Color { Red, Blue }" },
+    [],
+    0,
+  );
 });

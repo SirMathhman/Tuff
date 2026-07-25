@@ -21,16 +21,37 @@ function isEof(ctx: ParseContext): boolean {
 import { analyzeSemantics } from "./semantic";
 import { generateCode } from "./generate";
 
-export function compileTuffToTS(
+function compilePipeline(
   tuffSource: string,
+  moduleMode = false,
 ): Result<string, CompileError> {
-  if (tuffSource.length === 0) return { isOk: true, value: "process.exit(0)" };
   const tokensResult = tokenize(tuffSource);
   if (!tokensResult.isOk) return tokensResult;
   const statementsResult = parse(tokensResult.value);
   if (!statementsResult.isOk) return statementsResult;
   const semanticResult = analyzeSemantics(statementsResult.value);
   if (!semanticResult.isOk) return semanticResult;
-  const code = generateCode(semanticResult.value);
-  return { isOk: true, value: code };
+  return { isOk: true, value: generateCode(semanticResult.value, moduleMode) };
+}
+
+export function compileTuffToTS(
+  tuffSource: string,
+): Result<string, CompileError> {
+  if (tuffSource.length === 0) return { isOk: true, value: "process.exit(0)" };
+  return compilePipeline(tuffSource);
+}
+
+export type SourceMap = Record<string, string>;
+
+export function compileTuffToTSWithModules(
+  mainNamespace: string[],
+  sourceMap: SourceMap,
+): Result<SourceMap, CompileError> {
+  const result: SourceMap = {};
+  for (const [namespace, source] of Object.entries(sourceMap)) {
+    const compiled = compilePipeline(source, true);
+    if (!compiled.isOk) return compiled;
+    result[namespace] = compiled.value;
+  }
+  return { isOk: true, value: result };
 }

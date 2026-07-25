@@ -44,6 +44,7 @@ export interface LetDeclarationNode {
   type: "LetDeclaration";
   name: string;
   mutable: boolean;
+  exported?: boolean;
   typeName?: string;
   value: Expression;
   line: number;
@@ -68,6 +69,7 @@ export interface StructDefinitionNode {
   name: string;
   typeParams: string[];
   fields: StructField[];
+  exported?: boolean;
   line: number;
   column: number;
 }
@@ -86,6 +88,7 @@ export interface TypeAliasNode {
   name: string;
   typeParams: string[];
   underlyingType: string;
+  exported?: boolean;
   line: number;
   column: number;
 }
@@ -94,6 +97,7 @@ export interface EnumDefinitionNode {
   type: "EnumDefinition";
   name: string;
   variants: string[];
+  exported?: boolean;
   line: number;
   column: number;
 }
