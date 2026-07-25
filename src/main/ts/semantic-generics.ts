@@ -52,14 +52,13 @@ export function resolveAlias(
   const aliasDef = aliases.find((a) => a.name === base);
   if (!aliasDef) return typeName;
   const resolved = resolveAlias(aliasDef.underlyingType, aliases);
-  const { base: resolvedBase } = parseGenericTypeName(resolved);
   if (aliasDef.typeParams.length > 0 && args.length > 0) {
-    let result = resolvedBase;
+    let result = resolved;
     for (let i = 0; i < aliasDef.typeParams.length; i++) {
       const param = aliasDef.typeParams[i];
       const replacement = args[i] || param;
       result = result.replace(
-        new RegExp("\\b" + param + "\\b"),
+        new RegExp("\\b" + param + "\\b", "g"),
         String(replacement),
       );
     }

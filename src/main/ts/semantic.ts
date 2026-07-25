@@ -116,43 +116,45 @@ function checkAliasUnderlying(
   aliases: TypeAliasDef[],
   node: TypeAliasNode,
 ): Result<void, CompileError> {
-  const resolved = resolveAlias(underlyingType, aliases);
-  const { base, args } = parseGenericTypeName(resolved);
-  const baseCheck = checkTypeRef(
-    base,
-    structs,
-    node,
-    "Invalid underlying type '",
-  );
-  if (!baseCheck.isOk) return baseCheck;
-  const structDef = baseCheck.value;
-  if (
-    structDef &&
-    args.length > 0 &&
-    args.length !== structDef.typeParams.length
-  )
-    return errResult(
-      "Struct '" +
-        base +
-        "' expects " +
-        structDef.typeParams.length +
-        " type param(s) but got " +
-        args.length,
-      "Type argument count must match type parameter count.",
-      "Provide " + structDef.typeParams.length + " type arguments.",
-      node.line,
-      node.column,
-    );
-  for (const arg of args) {
-    if (typeParams.includes(arg)) continue;
-    const argCheck = checkTypeName(
-      arg,
+  for (const arm of underlyingType.split(" | ")) {
+    const resolved = resolveAlias(arm, aliases);
+    const { base, args } = parseGenericTypeName(resolved);
+    const baseCheck = checkTypeRef(
+      base,
       structs,
       node,
-      "Invalid type argument '",
-      aliases,
+      "Invalid underlying type '",
     );
-    if (!argCheck.isOk) return argCheck;
+    if (!baseCheck.isOk) return baseCheck;
+    const structDef = baseCheck.value;
+    if (
+      structDef &&
+      args.length > 0 &&
+      args.length !== structDef.typeParams.length
+    )
+      return errResult(
+        "Struct '" +
+          base +
+          "' expects " +
+          structDef.typeParams.length +
+          " type param(s) but got " +
+          args.length,
+        "Type argument count must match type parameter count.",
+        "Provide " + structDef.typeParams.length + " type arguments.",
+        node.line,
+        node.column,
+      );
+    for (const arg of args) {
+      if (typeParams.includes(arg)) continue;
+      const argCheck = checkTypeName(
+        arg,
+        structs,
+        node,
+        "Invalid type argument '",
+        aliases,
+      );
+      if (!argCheck.isOk) return argCheck;
+    }
   }
   return { isOk: true, value: undefined };
 }

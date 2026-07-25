@@ -82,3 +82,11 @@ test("Type alias in struct field type mismatch", () => {
     "type Coord = I32; struct Point { x : Coord }; let p : Point = Point { x: 10U8 };",
   );
 });
+
+test("Type alias with union of two generic types", () => {
+  expectValid(
+    "struct A<T> { x : T }; struct B<U> { y : U }; type Union<T, U> = A<T> | B<U>; let v : Union<I32, U8> = A { x: 42I32 }; v.x",
+    [],
+    42,
+  );
+});
