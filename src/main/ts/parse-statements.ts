@@ -172,6 +172,8 @@ function parseEarlyReturn(
         column: token.column,
       },
     };
+  if (expr.type === "LogicalExpression" || expr.type === "NotExpression")
+    return { isOk: true, value: expr as Statement };
   if (expr.type === "IsExpression")
     return { isOk: true, value: expr as IsExpressionExpr };
   if (expr.type === "StructInstance")

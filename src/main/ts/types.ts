@@ -98,7 +98,9 @@ export type Statement =
   | StructDefinitionNode
   | MemberAssignmentNode
   | TypeAliasNode
-  | IsExpressionExpr;
+  | IsExpressionExpr
+  | LogicalExpressionExpr
+  | NotExpressionExpr;
 
 export interface NumberLiteralExpr {
   type: "NumberLiteral";
@@ -135,13 +137,31 @@ export interface IsExpressionExpr {
   typeName: string;
 }
 
+export interface LogicalExpressionExpr {
+  type: "LogicalExpression";
+  operator: "AND" | "OR";
+  left: Expression;
+  right: Expression;
+  line: number;
+  column: number;
+}
+
+export interface NotExpressionExpr {
+  type: "NotExpression";
+  operand: Expression;
+  line: number;
+  column: number;
+}
+
 export type Expression =
   | NumberLiteralExpr
   | BooleanLiteralExpr
   | IdentifierExpr
   | StructInstanceExpr
   | MemberExpressionExpr
-  | IsExpressionExpr;
+  | IsExpressionExpr
+  | LogicalExpressionExpr
+  | NotExpressionExpr;
 
 export interface VarEntry {
   name: string;

@@ -213,7 +213,7 @@ export function checkTypeMatch(
         "Literal type must match the declared type.",
         "Change the literal suffix to '" + declaredType + "'.",
       );
-  } else if (exprType) {
+  } else if (exprType && exprType !== "Bool") {
     return err(
       "Literal has type suffix '" + exprType + "' but no type annotation",
       "Type suffixes require a matching type annotation on the variable.",

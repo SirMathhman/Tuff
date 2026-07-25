@@ -1,6 +1,8 @@
 import type {
   Expression,
   IsExpressionExpr,
+  LogicalExpressionExpr,
+  NotExpressionExpr,
   Statement,
   NumberLiteralNode,
   IdentifierNode,
@@ -88,6 +90,23 @@ function genExprScoped(expr: Expression, declared: string[]): string {
     const m = expr as { object: Expression; field: string };
     return genExprScoped(m.object, declared) + "." + m.field;
   }
+  if (expr.type === "LogicalExpression") {
+    const le = expr as LogicalExpressionExpr;
+    const op = le.operator === "AND" ? "&&" : "||";
+    return (
+      "(" +
+      genExprScoped(le.left, declared) +
+      " " +
+      op +
+      " " +
+      genExprScoped(le.right, declared) +
+      ")"
+    );
+  }
+  if (expr.type === "NotExpression") {
+    const ne = expr as NotExpressionExpr;
+    return "(!" + genExprScoped(ne.operand, declared) + ")";
+  }
   return resolveName(expr.name, declared);
 }
 
@@ -106,20 +125,30 @@ export function generateCode(statements: Statement[]): string {
   return lines.join("\n");
 }
 
+function genBoolExitStmt(
+  s: Statement,
+  node: Statement,
+  lines: string[],
+  declared: string[],
+): boolean {
+  if (s.type === "LogicalExpression" || s.type === "NotExpression") {
+    const le = node as LogicalExpressionExpr | NotExpressionExpr;
+    lines.push("process.exit(" + genExprScoped(le, declared) + " ? 1 : 0);");
+    return true;
+  }
+  return false;
+}
+
 function genStmt(s: Statement, lines: string[], declared: string[]): void {
   if (s.type === "StructDefinition" || s.type === "TypeAlias") return;
-  const node = s as
-    | NumberLiteralNode
-    | IdentifierNode
-    | LetDeclarationNode
-    | AssignmentNode
-    | MemberAssignmentNode
-    | IsExpressionExpr;
+  const node = s as Statement;
 
   if (s.type === "NumberLiteral") {
     lines.push("process.exit(" + (node as NumberLiteralNode).value + ");");
     return;
   }
+
+  if (genBoolExitStmt(s, node, lines, declared)) return;
 
   if (s.type === "IsExpression") {
     const ie = node as IsExpressionExpr;
@@ -133,18 +162,19 @@ function genStmt(s: Statement, lines: string[], declared: string[]): void {
     return;
   }
 
-  genAssignment(s, node, lines, declared);
+  if (
+    s.type === "LetDeclaration" ||
+    s.type === "Assignment" ||
+    s.type === "MemberAssignment"
+  ) {
+    const a = s as LetDeclarationNode | AssignmentNode | MemberAssignmentNode;
+    genAssignment(s, a, lines, declared);
+  }
 }
 
 function genAssignment(
   s: Statement,
-  node:
-    | NumberLiteralNode
-    | IdentifierNode
-    | LetDeclarationNode
-    | AssignmentNode
-    | MemberAssignmentNode
-    | IsExpressionExpr,
+  node: LetDeclarationNode | AssignmentNode | MemberAssignmentNode,
   lines: string[],
   declared: string[],
 ): void {

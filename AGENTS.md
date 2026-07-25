@@ -40,6 +40,7 @@ Single file: `bun run test -- src/test/ts/compile.test.ts`
 - ESLint limits: complexity ≤ 10, file ≤ 500 lines, function ≤ 50 lines (excluding comments/blanks).
 - Conventional commits: `feat:`, `fix:`, `refactor:`, etc.
 
-## Pre-commit
+## Development
 
-`.github/hooks/hooks.json` Stop hook: tests → CPD → lint → circular → visualize. All must pass.
+- `bun run watch` — nodemon watches `src/main/ts/` and `src/main/tuff/`, reruns on `.ts` or `.tuff` change.
+- Quality scripts: `cpd`, `circular`, `visualize` (see package.json). No pre-commit hooks configured.

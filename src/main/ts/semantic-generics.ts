@@ -8,6 +8,8 @@ import type {
   TypeAliasDef,
   TypeCheckCtx,
 } from "./types";
+import { checkLogicalExpr as clExpr } from "./semantic-checkers";
+import { checkNotExpr as cnExpr } from "./semantic-checkers";
 import { VALID_TYPES } from "./types";
 import {
   checkStructUndefined,
@@ -215,6 +217,10 @@ export function checkExpr(
     return checkStructExpr(expr, scope, structs, aliases, loc);
   if (expr.type === "MemberExpression")
     return checkMemberExpr(expr, scope, structs, aliases, loc);
+  if (expr.type === "LogicalExpression")
+    return clExpr(expr, checkExpr.bind(null), scope, structs, aliases, loc);
+  if (expr.type === "NotExpression")
+    return cnExpr(expr, checkExpr.bind(null), scope, structs, aliases, loc);
   const refResult = checkRef(expr.name, scope, loc);
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: refResult.value.typeName };

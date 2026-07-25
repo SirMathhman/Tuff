@@ -17,6 +17,88 @@ export { peekToken as peek, consumeToken as consume } from "./parse-helpers";
 export function parseExpression(
   ctx: ParseContext,
 ): Result<Expression, CompileError> {
+  return parseOrExpression(ctx);
+}
+
+function parseOrExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  let left = parseAndExpression(ctx);
+  if (!left.isOk) return left;
+  while (true) {
+    const tok = peek(ctx);
+    if (tok && tok.type === "OR") {
+      consume(ctx);
+      const rightResult = parseAndExpression(ctx);
+      if (!rightResult.isOk) return rightResult;
+      left = {
+        isOk: true,
+        value: {
+          type: "LogicalExpression",
+          operator: "OR" as const,
+          left: left.value,
+          right: rightResult.value,
+          line: tok.line,
+          column: tok.column,
+        },
+      };
+    } else break;
+  }
+  return left;
+}
+
+function parseAndExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  let left = parseUnaryExpression(ctx);
+  if (!left.isOk) return left;
+  while (true) {
+    const tok = peek(ctx);
+    if (tok && tok.type === "AND") {
+      consume(ctx);
+      const rightResult = parseUnaryExpression(ctx);
+      if (!rightResult.isOk) return rightResult;
+      left = {
+        isOk: true,
+        value: {
+          type: "LogicalExpression",
+          operator: "AND" as const,
+          left: left.value,
+          right: rightResult.value,
+          line: tok.line,
+          column: tok.column,
+        },
+      };
+    } else break;
+  }
+  return left;
+}
+
+function parseUnaryExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  const token = peek(ctx);
+  if (!token) return unexpectedEofError("an expression");
+  if (token.type === "NOT") {
+    consume(ctx);
+    const operandResult = parseUnaryExpression(ctx);
+    if (!operandResult.isOk) return operandResult;
+    return {
+      isOk: true,
+      value: {
+        type: "NotExpression",
+        operand: operandResult.value,
+        line: token.line,
+        column: token.column,
+      },
+    };
+  }
+  return parsePostfixExpression(ctx);
+}
+
+function parsePostfixExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("an expression");
   if (token.type === "NUMBER") {

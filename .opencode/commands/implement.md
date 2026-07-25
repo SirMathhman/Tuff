@@ -7,7 +7,7 @@ Implement the following feature using a disciplined, test-driven micro-sprint pr
 
 $ARGUMENTS
 
-Follow this step-by-step process strictly. When working through it, loudly and proudly announce what step you are on in this format:
+Follow this step-by-step process strictly. When working through it, loudly and proudly announce what step you are on in this format. Furthermore, you MUST set up your to-do list to contain each of these steps:
 
 # Step <number>: <description of the step>
 

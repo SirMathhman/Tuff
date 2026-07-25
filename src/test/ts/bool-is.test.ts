@@ -17,8 +17,12 @@ test("Let bool false", () => {
   expectValid("let b : Bool = false; b", [], 0);
 });
 
-test("Bool without type annotation is invalid", () => {
-  expectInvalid("let b = true;");
+test("Bool with inferred annotation is valid (true)", () => {
+  expectValid("let b = true; b", [], 1);
+});
+
+test("Bool with inferred annotation is valid (false)", () => {
+  expectValid("let b = false; b", [], 0);
 });
 
 test("Bool type mismatch is invalid", () => {

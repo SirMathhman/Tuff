@@ -19,18 +19,62 @@ function isIdentChar(ch: string): boolean {
   return isDigit(ch) || isAlpha(ch);
 }
 
+const OPERATOR_CHARS = new Set([
+  "=",
+  ";",
+  ":",
+  "{",
+  "}",
+  ",",
+  ".",
+  "<",
+  ">",
+  "&",
+  "|",
+  "!",
+]);
+
 function isOperator(ch: string): boolean {
-  return (
-    ch === "=" ||
-    ch === ";" ||
-    ch === ":" ||
-    ch === "{" ||
-    ch === "}" ||
-    ch === "," ||
-    ch === "." ||
-    ch === "<" ||
-    ch === ">"
-  );
+  return OPERATOR_CHARS.has(ch);
+}
+
+const OP_TYPE_MAP: Record<string, string> = {
+  "=": "EQUALS",
+  ";": "SEMICOLON",
+  ":": "COLON",
+  "{": "LBRACE",
+  "}": "RBRACE",
+  ",": "COMMA",
+  ".": "DOT",
+  "<": "LBRACKET",
+  ">": "RBRACKET",
+  "!": "NOT",
+};
+
+function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
+  const type_ = OP_TYPE_MAP[ch] || "UNKNOWN";
+  return { type: type_, value: ch, line: ctx.line, column: ctx.column };
+}
+
+const MULTI_CHAR_OPS = new Set(["&", "|"]);
+function tryReadMultiCharOp(
+  ch: string,
+  ctx: TokenizeContext,
+): Result<Token, null> {
+  if (!MULTI_CHAR_OPS.has(ch)) return { isOk: false, error: null as never };
+  const next = ctx.source[ctx.pos + 1];
+  if (next === ch) {
+    return {
+      isOk: true,
+      value: {
+        type: ch === "&" ? "AND" : "OR",
+        value: ch + next,
+        line: ctx.line,
+        column: ctx.column,
+      },
+    };
+  }
+  return { isOk: false, error: null as never };
 }
 
 function readNumber(ctx: TokenizeContext): Token {
@@ -93,21 +137,6 @@ function readIdentifier(ctx: TokenizeContext): Token {
   };
 }
 
-function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
-  let type_: string;
-  if (ch === "=") type_ = "EQUALS";
-  else if (ch === ";") type_ = "SEMICOLON";
-  else if (ch === ":") type_ = "COLON";
-  else if (ch === "{") type_ = "LBRACE";
-  else if (ch === "}") type_ = "RBRACE";
-  else if (ch === ",") type_ = "COMMA";
-  else if (ch === ".") type_ = "DOT";
-  else if (ch === "<") type_ = "LBRACKET";
-  else if (ch === ">") type_ = "RBRACKET";
-  else type_ = "UNKNOWN";
-  return { type: type_, value: ch, line: ctx.line, column: ctx.column };
-}
-
 function tokenizeUnknown(ch: string, ctx: TokenizeContext): Err<CompileError> {
   return {
     isOk: false,
@@ -150,6 +179,16 @@ export function tokenize(source: string): Result<Token[], CompileError> {
       token.line = ctx.line;
       tokens.push(token);
       continue;
+    }
+    if (MULTI_CHAR_OPS.has(ch)) {
+      const multiResult = tryReadMultiCharOp(ch, ctx);
+      if (multiResult.isOk) {
+        tokens.push(multiResult.value);
+        ctx.pos += 2;
+        ctx.column += 2;
+        continue;
+      }
+      return tokenizeUnknown(ch, ctx);
     }
     if (isOperator(ch)) {
       tokens.push(tokenizeOperator(ch, ctx));

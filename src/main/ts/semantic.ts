@@ -409,6 +409,19 @@ export function analyzeSemantics(
   return { isOk: true, value: statements };
 }
 
+function analyzeBoolStmt(
+  stmt: Statement,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+): Result<void, CompileError> {
+  const exprNode = stmt as { line: number; column: number } & Expression;
+  const loc = { line: exprNode.line, column: exprNode.column };
+  const exprResult = checkExpr(exprNode, scope, structs, aliases, loc);
+  if (!exprResult.isOk) return exprResult;
+  return { isOk: true, value: undefined };
+}
+
 function analyzeStatement(
   stmt: Statement,
   scope: VarEntry[],
@@ -433,6 +446,11 @@ function analyzeStatement(
   } else if (stmt.type === "Identifier") {
     const node = stmt as IdentifierNode;
     return checkIdentifierStatement(node, scope, structs, aliases);
+  } else if (
+    stmt.type === "LogicalExpression" ||
+    stmt.type === "NotExpression"
+  ) {
+    return analyzeBoolStmt(stmt, scope, structs, aliases);
   } else if (stmt.type === "NumberLiteral") {
     return { isOk: true, value: undefined };
   }
