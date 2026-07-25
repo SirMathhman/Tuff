@@ -377,6 +377,14 @@ test("Struct field with nested generic type arg", () => {
   );
 });
 
+test("Struct field with union type", () => {
+  expectValid(
+    "struct A { x : I32 }; struct B { x : I32 }; struct Container { f : A | B }; let c : Container = Container { f : A { x : 42I32 } }; 42",
+    [],
+    42,
+  );
+});
+
 test("Generic struct used as exit expression", () => {
   expectValid(
     "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point { x: 42I32, y: 0I32 }; p",

@@ -244,9 +244,13 @@ function validateStructField(
   const fieldType = typeResult.value;
   if (!fieldType) return { isOk: true, value: undefined };
   const expectedResolved = resolveAlias(defField.typeName, ctx.aliases);
-  const expectedBase = parseGenericTypeName(expectedResolved).base;
+  const expectedBases = expectedResolved.includes(" | ")
+    ? expectedResolved
+        .split(" | ")
+        .map((a) => parseGenericTypeName(a.trim()).base)
+    : [parseGenericTypeName(expectedResolved).base];
   const actualBase = parseGenericTypeName(fieldType).base;
-  if (actualBase !== expectedBase)
+  if (!expectedBases.includes(actualBase))
     return checkStructFieldType(
       field.name,
       defField.typeName,

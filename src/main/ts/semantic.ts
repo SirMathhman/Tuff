@@ -54,18 +54,20 @@ function checkStructDef(
     const isTypeParam = node.typeParams.includes(field.typeName);
     if (!isTypeParam) {
       const resolved = resolveAlias(field.typeName, aliases);
-      const { base: fieldBase, args: fieldArgs } =
-        parseGenericTypeName(resolved);
-      const fieldCheck = checkTypeName(
-        fieldBase,
-        structs,
-        node,
-        "Invalid field type ",
-      );
-      if (!fieldCheck.isOk) return fieldCheck;
-      for (const arg of fieldArgs) {
-        const isArgTypeParam = node.typeParams.includes(arg);
-        if (!isArgTypeParam) {
+      const types = resolved.includes(" | ")
+        ? resolved.split(" | ").map((a) => a.trim())
+        : [resolved];
+      for (const t of types) {
+        const { base, args } = parseGenericTypeName(t);
+        const baseCheck = checkTypeName(
+          base,
+          structs,
+          node,
+          "Invalid field type ",
+        );
+        if (!baseCheck.isOk) return baseCheck;
+        for (const arg of args) {
+          if (node.typeParams.includes(arg)) continue;
           const argCheck = checkTypeName(
             arg,
             structs,
@@ -380,15 +382,12 @@ export function analyzeSemantics(
   const scope: VarEntry[] = [];
   const structs: StructDef[] = [];
   const aliases: TypeAliasDef[] = [];
-  for (const stmt of statements) {
-    if (stmt.type !== "TypeAlias") continue;
-    const a = stmt as TypeAliasNode;
+  for (const s of statements.filter((x) => x.type === "TypeAlias"))
     aliases.push({
-      name: a.name,
-      typeParams: a.typeParams,
-      underlyingType: a.underlyingType,
+      name: (s as TypeAliasNode).name,
+      typeParams: (s as TypeAliasNode).typeParams,
+      underlyingType: (s as TypeAliasNode).underlyingType,
     });
-  }
   for (const stmt of statements) {
     if (stmt.type === "EnumDefinition") {
       const node = stmt as EnumDefinitionNode;
