@@ -9,7 +9,11 @@ import type {
   StructDefinitionNode,
   MemberAssignmentNode,
   TypeAliasNode,
+  StructDef,
+  VarEntry,
+  TypeAliasDef,
 } from "./types";
+import { VALID_TYPES } from "./types";
 import {
   checkAssignmentUndeclared,
   checkAssignmentImmutable,
@@ -25,9 +29,30 @@ import {
   resolveFieldTypeWithGenerics,
   checkCircularAlias,
   resolveAlias,
-  checkTypeRef,
 } from "./semantic-generics";
-import type { StructDef, VarEntry, TypeAliasDef } from "./semantic-generics";
+
+function checkTypeRef(
+  typeName: string,
+  structs: StructDef[],
+  loc: { line: number; column: number },
+  errorMsgPrefix: string,
+): Result<StructDef | undefined, CompileError> {
+  const isNumeric = VALID_TYPES.includes(typeName);
+  const structDef = structs.find((s) => s.name === typeName);
+  if (!isNumeric && !structDef)
+    return {
+      isOk: false,
+      error: {
+        message: errorMsgPrefix + typeName + "'",
+        reason: "Type must be a valid numeric type, Bool, or defined struct.",
+        suggestedFix:
+          "Use a valid type like U8, U32, Bool, or define the struct first.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  return { isOk: true, value: structDef };
+}
 
 function checkStructDef(
   node: StructDefinitionNode,

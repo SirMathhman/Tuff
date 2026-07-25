@@ -1,4 +1,4 @@
-import type { Result, CompileError } from "./types";
+import type { Result, CompileError, StructDef } from "./types";
 
 export function checkStructUndefined(
   structName: string,
@@ -220,5 +220,31 @@ export function checkTypeMatch(
       "Add ': " + exprType + "' type annotation to the declaration.",
     );
   }
+  return { isOk: true, value: undefined };
+}
+
+export function checkTypeArgCount(
+  structName: string,
+  typeArgs: string[],
+  def: StructDef,
+  loc: { line: number; column: number },
+): Result<void, CompileError> {
+  if (typeArgs.length > 0 && typeArgs.length !== def.typeParams.length)
+    return {
+      isOk: false,
+      error: {
+        message:
+          "Struct '" +
+          structName +
+          "' expects " +
+          def.typeParams.length +
+          " type param(s) but got " +
+          typeArgs.length,
+        reason: "Type argument count must match type parameter count.",
+        suggestedFix: "Provide " + def.typeParams.length + " type arguments.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
   return { isOk: true, value: undefined };
 }

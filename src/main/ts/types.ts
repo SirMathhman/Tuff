@@ -141,3 +141,41 @@ export type Expression =
   | StructInstanceExpr
   | MemberExpressionExpr
   | IsExpressionExpr;
+
+export interface VarEntry {
+  name: string;
+  mutable: boolean;
+  typeName: string | undefined;
+}
+
+export interface StructDef {
+  name: string;
+  typeParams: string[];
+  fields: StructField[];
+  resolvedFields?: StructField[];
+}
+
+export interface TypeAliasDef {
+  name: string;
+  typeParams: string[];
+  underlyingType: string;
+}
+
+export interface TypeCheckCtx {
+  scope: VarEntry[];
+  structs: StructDef[];
+  aliases: TypeAliasDef[];
+  loc: { line: number; column: number };
+}
+
+export const VALID_TYPES = [
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "Bool",
+];
