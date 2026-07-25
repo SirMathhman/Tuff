@@ -40,20 +40,15 @@ function checkTypeRef(
   const isNumeric = VALID_TYPES.includes(typeName);
   const structDef = structs.find((s) => s.name === typeName);
   if (!isNumeric && !structDef)
-    return {
-      isOk: false,
-      error: {
-        message: errorMsgPrefix + typeName + "'",
-        reason: "Type must be a valid numeric type, Bool, or defined struct.",
-        suggestedFix:
-          "Use a valid type like U8, U32, Bool, or define the struct first.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
+    return errResult(
+      errorMsgPrefix + typeName + "'",
+      "Type must be a valid numeric type, Bool, or defined struct.",
+      "Use a valid type like U8, U32, Bool, or define the struct first.",
+      loc.line,
+      loc.column,
+    );
   return { isOk: true, value: structDef };
 }
-
 function checkStructDef(
   node: StructDefinitionNode,
   structs: StructDef[],
@@ -61,16 +56,13 @@ function checkStructDef(
 ): Result<void, CompileError> {
   for (const field of node.fields) {
     if (!field.typeName)
-      return {
-        isOk: false,
-        error: {
-          message: "Struct field '" + field.name + "' missing type annotation",
-          reason: "All struct fields must have a type.",
-          suggestedFix: "Add ': <Type>' to field '" + field.name + "'.",
-          line: node.line,
-          column: node.column,
-        },
-      };
+      return errResult(
+        "Struct field '" + field.name + "' missing type annotation",
+        "All struct fields must have a type.",
+        "Add ': <Type>' to field '" + field.name + "'.",
+        node.line,
+        node.column,
+      );
     const isTypeParam = node.typeParams.includes(field.typeName);
     if (!isTypeParam) {
       const resolved = resolveAlias(field.typeName, aliases);
@@ -105,22 +97,17 @@ function checkStructDef(
   return { isOk: true, value: undefined };
 }
 
-function aliasError(
+function errResult<T = never>(
   msg: string,
   reason: string,
   fix: string,
-  node: TypeAliasNode,
-): Result<void, CompileError> {
+  line: number,
+  column: number,
+): Result<T, CompileError> {
   return {
     isOk: false,
-    error: {
-      message: msg,
-      reason,
-      suggestedFix: fix,
-      line: node.line,
-      column: node.column,
-    },
-  };
+    error: { message: msg, reason, suggestedFix: fix, line, column },
+  } as Result<T, CompileError>;
 }
 function checkAliasUnderlying(
   underlyingType: string,
@@ -144,7 +131,7 @@ function checkAliasUnderlying(
     args.length > 0 &&
     args.length !== structDef.typeParams.length
   )
-    return aliasError(
+    return errResult(
       "Struct '" +
         base +
         "' expects " +
@@ -153,7 +140,8 @@ function checkAliasUnderlying(
         args.length,
       "Type argument count must match type parameter count.",
       "Provide " + structDef.typeParams.length + " type arguments.",
-      node,
+      node.line,
+      node.column,
     );
   for (const arg of args) {
     if (typeParams.includes(arg)) continue;
@@ -174,11 +162,12 @@ function checkTypeAlias(
   aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
   if (checkCircularAlias(node.name, node.underlyingType, aliases, []))
-    return aliasError(
+    return errResult(
       "Circular type alias reference detected for '" + node.name + "'",
       "Type aliases cannot reference themselves directly or indirectly.",
       "Remove the circular reference.",
-      node,
+      node.line,
+      node.column,
     );
   const underlyingCheck = checkAliasUnderlying(
     node.underlyingType,
@@ -211,21 +200,13 @@ function checkGenericStructInstantiation(
     structDef.typeParams.length > 0 &&
     sexpr.typeArgs.length === 0
   )
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Generic struct '" + base + "' requires explicit type annotation",
-        reason:
-          "Generic structs need type arguments to resolve type parameters.",
-        suggestedFix:
-          "Add type annotation like '" +
-          base +
-          "<Type>' to variable declaration.",
-        line: node.line,
-        column: node.column,
-      },
-    };
+    return errResult(
+      "Generic struct '" + base + "' requires explicit type annotation",
+      "Generic structs need type arguments to resolve type parameters.",
+      "Add type annotation like '" + base + "<Type>' to variable declaration.",
+      node.line,
+      node.column,
+    );
   return { isOk: true, value: undefined };
 }
 function checkLetSemantics(
@@ -257,41 +238,36 @@ function checkLetSemantics(
   return { isOk: true, value: undefined };
 }
 
-function checkLetType(
-  node: LetDeclarationNode,
+function checkSingleTypeRef(
+  typeName: string,
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  node: LetDeclarationNode,
 ): Result<void, CompileError> {
-  if (!node.typeName) return { isOk: true, value: undefined };
-  const resolved = resolveAlias(node.typeName, aliases);
-  const { base, args } = parseGenericTypeName(resolved);
-  const baseCheck = checkTypeRef(base, structs, node, "Invalid type '");
+  const resolved = resolveAlias(typeName, aliases);
+  const parsed = parseGenericTypeName(resolved);
+  const baseCheck = checkTypeRef(parsed.base, structs, node, "Invalid type '");
   if (!baseCheck.isOk) return baseCheck;
   const structDef = baseCheck.value;
   if (
     structDef &&
-    args.length > 0 &&
-    args.length !== structDef.typeParams.length
-  )
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Struct '" +
-          base +
-          "' expects " +
-          structDef.typeParams.length +
-          " type param(s) but got " +
-          args.length,
-        reason: "Type argument count must match type parameter count.",
-        suggestedFix:
-          "Provide " + structDef.typeParams.length + " type arguments.",
-        line: node.line,
-        column: node.column,
-      },
-    };
-  // Validate each type arg
-  for (const arg of args) {
+    parsed.args.length > 0 &&
+    parsed.args.length !== structDef.typeParams.length
+  ) {
+    return errResult(
+      "Struct '" +
+        parsed.base +
+        "' expects " +
+        structDef.typeParams.length +
+        " type param(s) but got " +
+        parsed.args.length,
+      "Type argument count must match type parameter count.",
+      "Provide " + structDef.typeParams.length + " type arguments.",
+      node.line,
+      node.column,
+    );
+  }
+  for (const arg of parsed.args) {
     const argCheck = checkTypeName(
       arg,
       structs,
@@ -301,6 +277,26 @@ function checkLetType(
     if (!argCheck.isOk) return argCheck;
   }
   return { isOk: true, value: undefined };
+}
+
+function checkLetType(
+  node: LetDeclarationNode,
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+): Result<void, CompileError> {
+  if (!node.typeName) return { isOk: true, value: undefined };
+
+  const resolvedTypeName = resolveAlias(node.typeName, aliases);
+  if (resolvedTypeName.includes(" | ")) {
+    const arms = resolvedTypeName.split(" | ").map((a) => a.trim());
+    for (const arm of arms) {
+      const armResult = checkSingleTypeRef(arm, structs, aliases, node);
+      if (!armResult.isOk) return armResult;
+    }
+    return { isOk: true, value: undefined };
+  }
+
+  return checkSingleTypeRef(resolvedTypeName, structs, aliases, node);
 }
 
 function checkLetExprType(
@@ -468,16 +464,13 @@ function checkIdentifierStatement(
     const baseName = parts[0];
     const entry = scope.find((e) => e.name === baseName);
     if (!entry)
-      return {
-        isOk: false,
-        error: {
-          message: "Use of undeclared variable '" + baseName + "'",
-          reason: "Variable must be declared before use.",
-          suggestedFix: "Declare the variable with 'let' first.",
-          line: node.line,
-          column: node.column,
-        },
-      };
+      return errResult(
+        "Use of undeclared variable '" + baseName + "'",
+        "Variable must be declared before use.",
+        "Declare the variable with 'let' first.",
+        node.line,
+        node.column,
+      );
     return validateFieldChain(parts, entry.typeName, structs, aliases);
   }
   const refResult = checkRef(node.name, scope, node);
