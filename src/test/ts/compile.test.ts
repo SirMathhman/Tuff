@@ -369,6 +369,14 @@ test("Nested generic struct", () => {
   );
 });
 
+test("Struct field with nested generic type arg", () => {
+  expectValid(
+    "struct Inner<T> { val : T }; struct Outer<T> { inner : T }; struct Container { f : Outer<Inner<I32>> }; let c : Container = Container { f : Outer { inner : Inner { val : 42I32 } } }; c.f.inner.val",
+    [],
+    42,
+  );
+});
+
 test("Generic struct used as exit expression", () => {
   expectValid(
     "struct Point<T> { x : T, y : T }; let p : Point<I32> = Point { x: 42I32, y: 0I32 }; p",

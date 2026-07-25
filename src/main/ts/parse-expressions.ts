@@ -317,10 +317,7 @@ function parseBracketedItem(
     consume(ctx);
     return { isOk: true, value: "&" + afterAmp.value };
   }
-  if (itemToken.type !== "IDENTIFIER")
-    return unexpectedTokenError(itemToken, label);
-  consume(ctx);
-  return { isOk: true, value: itemToken.value };
+  return parseBaseTypeWithGenerics(ctx);
 }
 
 export function parseBracketedList(
