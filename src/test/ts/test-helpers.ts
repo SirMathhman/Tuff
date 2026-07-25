@@ -27,19 +27,9 @@ export function expectValid(
     "let __ret__ = 0;let process = { exit(code) { __ret__ = code; } }; " +
     rawJS +
     "return __ret__;";
+  let actualExitCode: number;
   try {
-    const actualExitCode = new Function("__args__", wrappedJS)(args);
-    if (expectedExitCode === actualExitCode) {
-      expect(
-        "Expected '" +
-          expectedExitCode +
-          "' but was actually '" +
-          actualExitCode +
-          "'. Generated: " +
-          tsCode,
-      );
-      return;
-    }
+    actualExitCode = new Function("__args__", wrappedJS)(args);
   } catch (e) {
     expect(
       "Failed to execute transpiled JS. Generated: '" +
@@ -47,7 +37,9 @@ export function expectValid(
         "'. Cause: " +
         e,
     ).toBeUndefined();
+    return;
   }
+  expect(actualExitCode).toBe(expectedExitCode);
 }
 
 export function expectInvalid(source: string) {

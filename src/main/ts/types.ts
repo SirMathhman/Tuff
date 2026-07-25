@@ -97,7 +97,8 @@ export type Statement =
   | AssignmentNode
   | StructDefinitionNode
   | MemberAssignmentNode
-  | TypeAliasNode;
+  | TypeAliasNode
+  | IsExpressionExpr;
 
 export interface NumberLiteralExpr {
   type: "NumberLiteral";

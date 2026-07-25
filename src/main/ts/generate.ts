@@ -1,13 +1,26 @@
 import type {
   Expression,
+  IsExpressionExpr,
   Statement,
   NumberLiteralNode,
   IdentifierNode,
   LetDeclarationNode,
   AssignmentNode,
-  StructDefinitionNode,
   MemberAssignmentNode,
 } from "./types";
+
+const NUMERIC_TYPES = [
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "F32",
+  "F64",
+];
 
 function resolveName(name: string, declared: string[]): string {
   for (let i = declared.length - 1; i >= 0; i--) {
@@ -17,83 +30,150 @@ function resolveName(name: string, declared: string[]): string {
   return name;
 }
 
+function genIsCheck(operand: string, typeName: string): string {
+  const baseType = (typeName.split("<") as string[])[0] || "";
+  if (baseType === "Bool") return "(typeof " + operand + " === 'boolean')";
+  if (NUMERIC_TYPES.includes(baseType))
+    return "(typeof " + operand + " === 'number')";
+  return (
+    "(typeof " +
+    operand +
+    " === 'object' && " +
+    operand +
+    " !== null && " +
+    operand +
+    ".__type === '" +
+    baseType +
+    "')"
+  );
+}
+
+function genExitCoerced(name: string): string {
+  return (
+    "process.exit(typeof " +
+    name +
+    " === 'boolean' ? +" +
+    name +
+    " : typeof " +
+    name +
+    " === 'object' ? 0 : " +
+    name +
+    ");"
+  );
+}
+
 function genExprScoped(expr: Expression, declared: string[]): string {
-  if (expr.type === "NumberLiteral") {
-    const numExpr = expr as NumberLiteralNode;
-    return String(numExpr.value);
-  }
+  if (expr.type === "NumberLiteral")
+    return String((expr as NumberLiteralNode).value);
   if (expr.type === "BooleanLiteral") {
-    const bexpr = expr as { value: boolean };
-    return bexpr.value ? "true" : "false";
+    const b = (expr as { value: boolean }).value;
+    return b ? "true" : "false";
   }
   if (expr.type === "IsExpression") {
-    const iexpr = expr as { operand: Expression; typeName: string };
-    return (
-      "(typeof " +
-      genExprScoped(iexpr.operand, declared) +
-      " === 'object' && " +
-      genExprScoped(iexpr.operand, declared) +
-      " !== null)"
-    );
+    const ie = expr as IsExpressionExpr;
+    const op = "(" + genExprScoped(ie.operand, declared) + ")";
+    return genIsCheck(op, ie.typeName);
   }
   if (expr.type === "StructInstance") {
-    const sexpr = expr as {
+    const s = expr as {
       structName: string;
       fields: { name: string; value: Expression }[];
     };
-    const fieldStrs = sexpr.fields.map(
+    const fs = s.fields.map(
       (f) => f.name + ": " + genExprScoped(f.value, declared),
     );
-    return "{ " + fieldStrs.join(", ") + " }";
+    return "{ __type: '" + s.structName + "', " + fs.join(", ") + " }";
   }
   if (expr.type === "MemberExpression") {
-    const mexpr = expr as { object: Expression; field: string };
-    return genExprScoped(mexpr.object, declared) + "." + mexpr.field;
+    const m = expr as { object: Expression; field: string };
+    return genExprScoped(m.object, declared) + "." + m.field;
   }
   return resolveName(expr.name, declared);
+}
+
+function uniqueName(name: string, declared: string[]): string {
+  let u = name;
+  let i = 1;
+  while (declared.includes(u)) u = name + "_" + i++;
+  declared.push(u);
+  return u;
 }
 
 export function generateCode(statements: Statement[]): string {
   const lines: string[] = [];
   const declared: string[] = [];
-  const structNames: string[] = [];
-  for (const stmt of statements) {
-    if (stmt.type === "StructDefinition") {
-      const node = stmt as StructDefinitionNode;
-      structNames.push(node.name);
-      // Skip interface generation - not needed at runtime
-    } else if (stmt.type === "NumberLiteral") {
-      const node = stmt as NumberLiteralNode;
-      lines.push("process.exit(" + node.value + ");");
-    } else if (stmt.type === "Identifier") {
-      const node = stmt as IdentifierNode;
-      lines.push("process.exit(" + node.name + ");");
-    } else if (stmt.type === "LetDeclaration") {
-      const node = stmt as LetDeclarationNode;
-      let unique = node.name;
-      let i = 1;
-      while (declared.includes(unique)) unique = node.name + "_" + i++;
-      declared.push(unique);
-      // Strip all type annotations - transpiler doesn't support custom types
-      lines.push(
-        "let " + unique + " = " + genExprScoped(node.value, declared) + ";",
-      );
-    } else if (stmt.type === "Assignment") {
-      const node = stmt as AssignmentNode;
-      const resolved = resolveName(node.name, declared);
-      lines.push(resolved + " = " + genExprScoped(node.value, declared) + ";");
-    } else if (stmt.type === "MemberAssignment") {
-      const node = stmt as MemberAssignmentNode;
-      const objStr = genExprScoped(node.object, declared);
-      lines.push(
-        objStr +
-          "." +
-          node.field +
-          " = " +
-          genExprScoped(node.value, declared) +
-          ";",
-      );
-    }
-  }
+  for (const s of statements) genStmt(s, lines, declared);
   return lines.join("\n");
+}
+
+function genStmt(s: Statement, lines: string[], declared: string[]): void {
+  if (s.type === "StructDefinition" || s.type === "TypeAlias") return;
+  const node = s as
+    | NumberLiteralNode
+    | IdentifierNode
+    | LetDeclarationNode
+    | AssignmentNode
+    | MemberAssignmentNode
+    | IsExpressionExpr;
+
+  if (s.type === "NumberLiteral") {
+    lines.push("process.exit(" + (node as NumberLiteralNode).value + ");");
+    return;
+  }
+
+  if (s.type === "IsExpression") {
+    const ie = node as IsExpressionExpr;
+    lines.push("process.exit(" + genExprScoped(ie, declared) + " ? 1 : 0);");
+    return;
+  }
+
+  if (s.type === "Identifier") {
+    const resolved = resolveName((node as IdentifierNode).name, declared);
+    lines.push(genExitCoerced(resolved));
+    return;
+  }
+
+  genAssignment(s, node, lines, declared);
+}
+
+function genAssignment(
+  s: Statement,
+  node:
+    | NumberLiteralNode
+    | IdentifierNode
+    | LetDeclarationNode
+    | AssignmentNode
+    | MemberAssignmentNode
+    | IsExpressionExpr,
+  lines: string[],
+  declared: string[],
+): void {
+  if (s.type === "LetDeclaration") {
+    const ln = node as LetDeclarationNode;
+    lines.push(
+      "let " +
+        uniqueName(ln.name, declared) +
+        " = " +
+        genExprScoped(ln.value, declared) +
+        ";",
+    );
+  } else if (s.type === "Assignment") {
+    const an = node as AssignmentNode;
+    lines.push(
+      resolveName(an.name, declared) +
+        " = " +
+        genExprScoped(an.value, declared) +
+        ";",
+    );
+  } else if (s.type === "MemberAssignment") {
+    const mn = node as MemberAssignmentNode;
+    lines.push(
+      genExprScoped(mn.object, declared) +
+        "." +
+        mn.field +
+        " = " +
+        genExprScoped(mn.value, declared) +
+        ";",
+    );
+  }
 }

@@ -2,6 +2,7 @@ import type {
   Token,
   Result,
   CompileError,
+  IsExpressionExpr,
   StructField,
   Expression,
   Statement,
@@ -172,21 +173,13 @@ function parseEarlyReturn(
       },
     };
   if (expr.type === "IsExpression")
-    return {
-      isOk: true,
-      value: {
-        type: "NumberLiteral",
-        value: 1,
-        line: token.line,
-        column: token.column,
-      },
-    };
+    return { isOk: true, value: expr as IsExpressionExpr };
   if (expr.type === "StructInstance")
     return {
       isOk: true,
       value: {
-        type: "Identifier",
-        name: "_",
+        type: "NumberLiteral",
+        value: 0,
         line: token.line,
         column: token.column,
       },
