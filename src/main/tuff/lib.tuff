@@ -8,5 +8,222 @@ struct Err<X> {
 
 type Result<T, X> = Ok<T> | Err<X>;
 
+struct Some<T> {
+    field : T
+}
+
+struct None {}
+
+type Option<T> = Some<T> | None;
+
+struct CompileError {
+  message: &Str,
+  reason: &Str,
+  suggestedFix: &Str,
+  line: &Str,
+  column: &Str
+}
+
+struct Token {
+  type : &Str,
+  value : &Str,
+  line : U32,
+  column : U32,
+  typeSuffix : Option<&Str>
+}
+
+/*
+
+export interface NumberLiteralNode {
+  type: "NumberLiteral";
+  value: number;
+  line: number;
+  column: number;
+}
+
+export interface IdentifierNode {
+  type: "Identifier";
+  name: string;
+  line: number;
+  column: number;
+}
+
+export interface LetDeclarationNode {
+  type: "LetDeclaration";
+  name: string;
+  mutable: boolean;
+  typeName?: string;
+  value: Expression;
+  line: number;
+  column: number;
+}
+
+export interface AssignmentNode {
+  type: "Assignment";
+  name: string;
+  value: Expression;
+  line: number;
+  column: number;
+}
+
+export interface StructField {
+  name: string;
+  typeName: string;
+}
+
+export interface StructDefinitionNode {
+  type: "StructDefinition";
+  name: string;
+  typeParams: string[];
+  fields: StructField[];
+  line: number;
+  column: number;
+}
+
+export interface MemberAssignmentNode {
+  type: "MemberAssignment";
+  object: Expression;
+  field: string;
+  value: Expression;
+  line: number;
+  column: number;
+}
+
+export interface TypeAliasNode {
+  type: "TypeAlias";
+  name: string;
+  typeParams: string[];
+  underlyingType: string;
+  line: number;
+  column: number;
+}
+
+export type Statement =
+  | NumberLiteralNode
+  | IdentifierNode
+  | StringLiteralExpr
+  | MemberExpressionExpr
+  | LetDeclarationNode
+  | AssignmentNode
+  | StructDefinitionNode
+  | MemberAssignmentNode
+  | TypeAliasNode
+  | IsExpressionExpr
+  | LogicalExpressionExpr
+  | NotExpressionExpr;
+
+export interface NumberLiteralExpr {
+  type: "NumberLiteral";
+  value: number;
+  typeName?: string;
+}
+
+export interface BooleanLiteralExpr {
+  type: "BooleanLiteral";
+  value: boolean;
+}
+
+export interface IdentifierExpr {
+  type: "Identifier";
+  name: string;
+}
+
+export interface StructInstanceExpr {
+  type: "StructInstance";
+  structName: string;
+  typeArgs: string[];
+  fields: { name: string; value: Expression }[];
+}
+
+export interface MemberExpressionExpr {
+  type: "MemberExpression";
+  object: Expression;
+  field: string;
+}
+
+export interface IsExpressionExpr {
+  type: "IsExpression";
+  operand: Expression;
+  typeName: string;
+}
+
+export interface LogicalExpressionExpr {
+  type: "LogicalExpression";
+  operator: "AND" | "OR";
+  left: Expression;
+  right: Expression;
+  line: number;
+  column: number;
+}
+
+export interface NotExpressionExpr {
+  type: "NotExpression";
+  operand: Expression;
+  line: number;
+  column: number;
+}
+
+export interface StringLiteralExpr {
+  type: "StringLiteral";
+  value: string;
+  line: number;
+  column: number;
+}
+
+export type Expression =
+  | NumberLiteralExpr
+  | BooleanLiteralExpr
+  | StringLiteralExpr
+  | IdentifierExpr
+  | StructInstanceExpr
+  | MemberExpressionExpr
+  | IsExpressionExpr
+  | LogicalExpressionExpr
+  | NotExpressionExpr;
+
+export interface VarEntry {
+  name: string;
+  mutable: boolean;
+  typeName: string | undefined;
+}
+
+export interface StructDef {
+  name: string;
+  typeParams: string[];
+  fields: StructField[];
+  resolvedFields?: StructField[];
+}
+
+export interface TypeAliasDef {
+  name: string;
+  typeParams: string[];
+  underlyingType: string;
+}
+
+export interface TypeCheckCtx {
+  scope: VarEntry[];
+  structs: StructDef[];
+  aliases: TypeAliasDef[];
+  loc: { line: number; column: number };
+}
+
+export const VALID_TYPES = [
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "Bool",
+  "Str",
+  "USize",
+];
+*/
+
+struct NumberLiteralNode {
+
+
 let x = 42;
 x
