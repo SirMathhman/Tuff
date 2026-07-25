@@ -226,6 +226,73 @@ function skipWhitespace(ctx: TokenizeContext): boolean {
   return false;
 }
 
+function skipLineComment(ctx: TokenizeContext): boolean {
+  const ch = ctx.source[ctx.pos];
+  const next = ctx.source[ctx.pos + 1];
+  if (ch === "/" && next === "/") {
+    ctx.pos += 2;
+    ctx.column += 2;
+    while (ctx.pos < ctx.source.length) {
+      const c = ctx.source[ctx.pos];
+      if (c === "\n") break;
+      ctx.pos++;
+      ctx.column++;
+    }
+    return true;
+  }
+  return false;
+}
+
+function skipBlockComment(
+  ctx: TokenizeContext,
+): Result<void, CompileError> | null {
+  const ch = ctx.source[ctx.pos];
+  const next = ctx.source[ctx.pos + 1];
+  if (ch === "/" && next === "*") {
+    ctx.pos += 2;
+    ctx.column += 2;
+    while (ctx.pos < ctx.source.length) {
+      const c = ctx.source[ctx.pos];
+      if (!c) {
+        return {
+          isOk: false,
+          error: {
+            message: "Unterminated block comment",
+            reason: "Block comment must end with */.",
+            suggestedFix: "Add */ to close the comment.",
+            line: ctx.line,
+            column: ctx.column,
+          },
+        };
+      }
+      if (c === "\n") {
+        ctx.line++;
+        ctx.column = 1;
+      } else {
+        ctx.column++;
+      }
+      const nextC = ctx.source[ctx.pos + 1];
+      if (c === "*" && nextC === "/") {
+        ctx.pos += 2;
+        ctx.column += 2;
+        return { isOk: true, value: undefined };
+      }
+      ctx.pos++;
+    }
+    return {
+      isOk: false,
+      error: {
+        message: "Unterminated block comment",
+        reason: "Block comment must end with */.",
+        suggestedFix: "Add */ to close the comment.",
+        line: ctx.line,
+        column: ctx.column,
+      },
+    };
+  }
+  return null;
+}
+
 function tryTokenizeMultiChar(
   ch: string,
   ctx: TokenizeContext,
@@ -242,10 +309,38 @@ function pushToken(token: Token, tokens: Token[], ctx: TokenizeContext): void {
   tokens.push(token);
 }
 
-function readDigitOrAlpha(ch: string, ctx: TokenizeContext): Token | null {
-  if (isDigit(ch)) return readNumber(ctx);
-  if (isAlpha(ch)) return readIdentifier(ctx);
-  return null;
+function tryTokenizeLiteral(
+  ch: string,
+  ctx: TokenizeContext,
+): Result<Token | null, CompileError> {
+  if (isDigit(ch)) return { isOk: true, value: readNumber(ctx) };
+  if (isAlpha(ch)) return { isOk: true, value: readIdentifier(ctx) };
+  if (ch === '"') {
+    const tokenResult = readString(ctx);
+    if (!tokenResult.isOk) return tokenResult;
+    return { isOk: true, value: tokenResult.value };
+  }
+  return { isOk: true, value: null };
+}
+
+function tryParseSimpleToken(
+  ch: string,
+  ctx: TokenizeContext,
+): Result<Token | null, CompileError> {
+  const multiResult = tryTokenizeMultiChar(ch, ctx);
+  if (multiResult) {
+    if (!multiResult.isOk) return multiResult;
+    return { isOk: true, value: multiResult.value };
+  }
+  if (isOperator(ch)) {
+    const token = tokenizeOperator(ch, ctx);
+    ctx.pos++;
+    ctx.column++;
+    return { isOk: true, value: token };
+  }
+  const literalResult = tryTokenizeLiteral(ch, ctx);
+  if (!literalResult.isOk) return literalResult;
+  return { isOk: true, value: literalResult.value };
 }
 
 export function tokenize(source: string): Result<Token[], CompileError> {
@@ -255,26 +350,15 @@ export function tokenize(source: string): Result<Token[], CompileError> {
     const ch = ctx.source[ctx.pos];
     if (!ch) break;
     if (skipWhitespace(ctx)) continue;
-    const multiResult = tryTokenizeMultiChar(ch, ctx);
-    if (multiResult) {
-      if (!multiResult.isOk) return multiResult;
-      tokens.push(multiResult.value);
+    if (skipLineComment(ctx)) continue;
+    const blockResult = skipBlockComment(ctx);
+    if (blockResult) {
+      if (!blockResult.isOk) return blockResult;
       continue;
     }
-    if (isOperator(ch)) {
-      tokens.push(tokenizeOperator(ch, ctx));
-      ctx.pos++;
-      ctx.column++;
-      continue;
-    }
-    const literalToken = readDigitOrAlpha(ch, ctx);
-    if (literalToken) {
-      pushToken(literalToken, tokens, ctx);
-      continue;
-    }
-    if (ch === '"') {
-      const tokenResult = readString(ctx);
-      if (!tokenResult.isOk) return tokenResult;
+    const tokenResult = tryParseSimpleToken(ch, ctx);
+    if (!tokenResult.isOk) return tokenResult;
+    if (tokenResult.value) {
       pushToken(tokenResult.value, tokens, ctx);
       continue;
     }

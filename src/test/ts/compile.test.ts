@@ -464,3 +464,59 @@ test("&Str as type argument", () => {
     5,
   );
 });
+
+test("Line comment on its own line", () => {
+  expectValid("// this is a comment\n42", [], 42);
+});
+
+test("Line comment after code", () => {
+  expectValid("42 // inline comment", [], 42);
+});
+
+test("Multiple line comments", () => {
+  expectValid("// comment 1\n// comment 2\n42", [], 42);
+});
+
+test("Block comment on its own line", () => {
+  expectValid("/* this is a block comment */\n42", [], 42);
+});
+
+test("Block comment after code", () => {
+  expectValid("42 /* inline block comment */", [], 42);
+});
+
+test("Multi-line block comment", () => {
+  expectValid("/* line 1\nline 2\nline 3 */\n42", [], 42);
+});
+
+test("Nested block comments not supported", () => {
+  expectInvalid("/* outer /* inner */ outer */");
+});
+
+test("Unclosed block comment", () => {
+  expectInvalid("/* unclosed comment");
+});
+
+test("Comment delimiters in string literal", () => {
+  expectValid(
+    'let s : &Str = "// not a comment /* also not */"; s.length',
+    [],
+    31,
+  );
+});
+
+test("Line comment inside block comment", () => {
+  expectValid("/* comment with // inside */\n42", [], 42);
+});
+
+test("Block comment inside line comment", () => {
+  expectValid("// comment with /* inside\n42", [], 42);
+});
+
+test("Line comment at EOF without newline", () => {
+  expectValid("42 // comment at end", [], 42);
+});
+
+test("Block comment at EOF", () => {
+  expectValid("42 /* comment at end */", [], 42);
+});
