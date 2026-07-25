@@ -7,7 +7,7 @@ import type {
   TypeAliasDef,
 } from "./types";
 
-const VALID_TYPES = ["U8", "U16", "U32", "I32", "F32", "Str", "USize"];
+const VALID_TYPES = ["U8", "U16", "U32", "I32", "F32", "Bool", "Str", "USize"];
 
 export { VALID_TYPES };
 

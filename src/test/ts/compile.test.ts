@@ -279,6 +279,22 @@ test("Struct with single field", () => {
   );
 });
 
+test("Struct with Bool field", () => {
+  expectValid(
+    "struct Flags { active : Bool, count : I32 }; let f : Flags = Flags { active: true, count: 42I32 }; f.active",
+    [],
+    1,
+  );
+});
+
+test("Struct with Bool field false value", () => {
+  expectValid(
+    "struct Flags { active : Bool }; let f : Flags = Flags { active: false }; f.active",
+    [],
+    0,
+  );
+});
+
 test("Struct instantiation with wrong struct type is invalid", () => {
   expectInvalid(
     "struct Point { x : I32, y : I32 }; struct Color { r : U8, g : U8, b : U8 }; let p : Point = Color { r: 1U8, g: 2U8, b: 3U8 };",

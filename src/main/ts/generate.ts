@@ -153,9 +153,7 @@ function genExprExitStmt(
   declared: string[],
 ): boolean {
   if (s.type === "StringLiteral" || s.type === "MemberExpression") {
-    lines.push(
-      "process.exit(" + genExprScoped(s as Expression, declared) + ");",
-    );
+    lines.push(genExitCoerced(genExprScoped(s as Expression, declared)));
     return true;
   }
   if (s.type === "IsExpression") {
