@@ -62,7 +62,7 @@ function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
   return { type: type_, value: ch, line: ctx.line, column: ctx.column };
 }
 
-const MULTI_CHAR_OPS = new Set(["&", "|"]);
+const MULTI_CHAR_OPS = new Set(["&", "|", ":"]);
 function tryReadMultiCharOp(
   ch: string,
   ctx: TokenizeContext,
@@ -72,20 +72,32 @@ function tryReadMultiCharOp(
   if (next === ch) {
     ctx.pos += 2;
     ctx.column += 2;
-    return {
-      isOk: true,
-      value: {
-        type: ch === "&" ? "AND" : "OR",
-        value: ch + next,
-        line: ctx.line,
-        column: ctx.column,
-      },
-    };
+    if (ch === "&")
+      return {
+        isOk: true,
+        value: { type: "AND", value: "&&", line: ctx.line, column: ctx.column },
+      };
+    if (ch === "|")
+      return {
+        isOk: true,
+        value: { type: "OR", value: "||", line: ctx.line, column: ctx.column },
+      };
+    if (ch === ":")
+      return {
+        isOk: true,
+        value: {
+          type: "DOUBLE_COLON",
+          value: "::",
+          line: ctx.line,
+          column: ctx.column,
+        },
+      };
   }
   ctx.pos++;
   ctx.column++;
   if (ch === "|") return { isOk: true, value: tokenizeOperator(ch, ctx) };
   if (ch === "&") return { isOk: true, value: tokenizeOperator(ch, ctx) };
+  if (ch === ":") return { isOk: true, value: tokenizeOperator(ch, ctx) };
   return { isOk: false, error: null as never };
 }
 

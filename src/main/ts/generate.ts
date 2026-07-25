@@ -9,12 +9,21 @@ import type {
   LetDeclarationNode,
   AssignmentNode,
   MemberAssignmentNode,
+  ModuleExportsMap,
 } from "./types";
 import {
   parseTupleTypeString,
   isEnumType,
   getEnumDef,
 } from "./semantic-generics";
+
+function isAssignmentLike(s: Statement): boolean {
+  return (
+    s.type === "LetDeclaration" ||
+    s.type === "Assignment" ||
+    s.type === "MemberAssignment"
+  );
+}
 
 const NUMERIC_TYPES = [
   "U8",
@@ -104,29 +113,52 @@ function genExitCoerced(name: string): string {
   );
 }
 
-function genLogicalExpr(le: LogicalExpressionExpr, declared: string[]): string {
+function genLogicalExpr(
+  le: LogicalExpressionExpr,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   const op = le.operator === "AND" ? "&&" : "||";
   return (
     "(" +
-    genExprScoped(le.left, declared) +
+    genExprScoped(le.left, declared, moduleExports) +
     " " +
     op +
     " " +
-    genExprScoped(le.right, declared) +
+    genExprScoped(le.right, declared, moduleExports) +
     ")"
   );
 }
 
-function genMemberAccess(expr: Expression, declared: string[]): string {
+function genMemberAccess(
+  expr: Expression,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   const m = expr as { object: Expression; field: string };
-  const obj = genExprScoped(m.object, declared);
+  // Check if this is a cross-module access (lib.foo where lib is a module)
+  if (
+    m.object.type === "Identifier" &&
+    moduleExports &&
+    moduleExports[(m.object as { name: string }).name]
+  ) {
+    const moduleName = (m.object as { name: string }).name;
+    return 'require("' + moduleName + '").' + m.field;
+  }
+  const obj = genExprScoped(m.object, declared, moduleExports);
   if (/^\d+$/.test(m.field)) return obj + "[" + m.field + "]";
   return obj + "." + m.field;
 }
 
-function genTupleExprCode(expr: Expression, declared: string[]): string {
+function genTupleExprCode(
+  expr: Expression,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   const t = expr as { elements: Expression[] };
-  const elems = t.elements.map((e) => genExprScoped(e, declared));
+  const elems = t.elements.map((e) =>
+    genExprScoped(e, declared, moduleExports),
+  );
   return "[" + elems.join(", ") + "]";
 }
 
@@ -134,43 +166,83 @@ function genBoolLitCode(expr: Expression): string {
   return (expr as { value: boolean }).value ? "true" : "false";
 }
 
-function genIsExprCode(expr: Expression, declared: string[]): string {
+function genIsExprCode(
+  expr: Expression,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   const ie = expr as IsExpressionExpr;
   return genIsCheck(
-    "(" + genExprScoped(ie.operand, declared) + ")",
+    "(" + genExprScoped(ie.operand, declared, moduleExports) + ")",
     ie.typeName,
   );
 }
 
-function genStructInstanceCode(expr: Expression, declared: string[]): string {
+function genStructInstanceCode(
+  expr: Expression,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   const s = expr as {
     structName: string;
     fields: { name: string; value: Expression }[];
   };
   const fs = s.fields.map(
-    (f) => f.name + ": " + genExprScoped(f.value, declared),
+    (f) => f.name + ": " + genExprScoped(f.value, declared, moduleExports),
   );
   return "{ __type: '" + s.structName + "', " + fs.join(", ") + " }";
 }
 
-function genExprScoped(expr: Expression, declared: string[]): string {
+function genExprScoped(
+  expr: Expression,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   if (expr.type === "NumberLiteral")
     return String((expr as NumberLiteralNode).value);
   if (expr.type === "BooleanLiteral") return genBoolLitCode(expr);
   if (expr.type === "StringLiteral")
     return JSON.stringify((expr as { value: string }).value);
-  if (expr.type === "IsExpression") return genIsExprCode(expr, declared);
+  if (expr.type === "IsExpression")
+    return genIsExprCode(expr, declared, moduleExports);
   if (expr.type === "StructInstance")
-    return genStructInstanceCode(expr, declared);
-  if (expr.type === "TupleExpr") return genTupleExprCode(expr, declared);
-  if (expr.type === "MemberExpression") return genMemberAccess(expr, declared);
+    return genStructInstanceCode(expr, declared, moduleExports);
+  if (expr.type === "TupleExpr")
+    return genTupleExprCode(expr, declared, moduleExports);
+  if (expr.type === "MemberExpression")
+    return genMemberAccess(expr, declared, moduleExports);
+  if (expr.type === "ModuleAccess") return genModuleAccess(expr);
   if (expr.type === "LogicalExpression")
-    return genLogicalExpr(expr as LogicalExpressionExpr, declared);
+    return genLogicalExpr(
+      expr as LogicalExpressionExpr,
+      declared,
+      moduleExports,
+    );
+  return genNotOrIdentifier(expr, declared, moduleExports);
+}
+
+function genNotOrIdentifier(
+  expr: Expression,
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): string {
   if (expr.type === "NotExpression")
     return (
-      "(!" + genExprScoped((expr as NotExpressionExpr).operand, declared) + ")"
+      "(!" +
+      genExprScoped(
+        (expr as NotExpressionExpr).operand,
+        declared,
+        moduleExports,
+      ) +
+      ")"
     );
-  return resolveName(expr.name, declared);
+  return resolveName((expr as { name: string }).name, declared);
+}
+
+function genModuleAccess(expr: Expression): string {
+  const ma = expr as { modulePath: string[]; field: string };
+  const modulePath = ma.modulePath.join(".");
+  return 'require("' + modulePath + '").' + ma.field;
 }
 
 function uniqueName(name: string, declared: string[]): string {
@@ -184,10 +256,12 @@ function uniqueName(name: string, declared: string[]): string {
 export function generateCode(
   statements: Statement[],
   moduleMode = false,
+  moduleExports?: ModuleExportsMap,
 ): string {
   const lines: string[] = [];
   const declared: string[] = [];
-  for (const s of statements) genStmt(s, lines, declared, moduleMode);
+  for (const s of statements)
+    genStmt(s, lines, declared, moduleMode, moduleExports);
   return lines.join("\n");
 }
 
@@ -209,14 +283,25 @@ function genExprExitStmt(
   s: Statement,
   lines: string[],
   declared: string[],
+  moduleExports?: ModuleExportsMap,
 ): boolean {
-  if (s.type === "StringLiteral" || s.type === "MemberExpression") {
-    lines.push(genExitCoerced(genExprScoped(s as Expression, declared)));
+  if (
+    s.type === "StringLiteral" ||
+    s.type === "MemberExpression" ||
+    s.type === "ModuleAccess"
+  ) {
+    lines.push(
+      genExitCoerced(genExprScoped(s as Expression, declared, moduleExports)),
+    );
     return true;
   }
   if (s.type === "IsExpression") {
     const ie = s as IsExpressionExpr;
-    lines.push("process.exit(" + genExprScoped(ie, declared) + " ? 1 : 0);");
+    lines.push(
+      "process.exit(" +
+        genExprScoped(ie, declared, moduleExports) +
+        " ? 1 : 0);",
+    );
     return true;
   }
   if (s.type === "Identifier") {
@@ -231,6 +316,7 @@ function genExitStmt(
   s: Statement,
   lines: string[],
   declared: string[],
+  moduleExports?: ModuleExportsMap,
 ): boolean {
   const node = s as Statement;
   if (s.type === "NumberLiteral") {
@@ -239,7 +325,7 @@ function genExitStmt(
   }
   return (
     genBoolExitStmt(s, node, lines, declared) ||
-    genExprExitStmt(s, lines, declared)
+    genExprExitStmt(s, lines, declared, moduleExports)
   );
 }
 
@@ -273,6 +359,7 @@ function genStmt(
   lines: string[],
   declared: string[],
   moduleMode = false,
+  moduleExports?: ModuleExportsMap,
 ): void {
   if (s.type === "StructDefinition" || s.type === "TypeAlias") {
     genExport(s, lines, declared, moduleMode);
@@ -291,15 +378,15 @@ function genStmt(
     return;
   }
 
-  if (!moduleMode && genExitStmt(s, lines, declared)) return;
+  if (s.type === "MemberExpression" || s.type === "ModuleAccess") {
+    genExprExitStmt(s, lines, declared, moduleExports);
+    return;
+  }
+  if (!moduleMode && genExitStmt(s, lines, declared, moduleExports)) return;
 
-  if (
-    s.type === "LetDeclaration" ||
-    s.type === "Assignment" ||
-    s.type === "MemberAssignment"
-  ) {
+  if (isAssignmentLike(s)) {
     const a = s as LetDeclarationNode | AssignmentNode | MemberAssignmentNode;
-    genAssignment(s, a, lines, declared);
+    genAssignment(s, a, lines, declared, moduleExports);
     genExport(s, lines, declared, moduleMode);
   }
 }
@@ -309,6 +396,7 @@ function genAssignment(
   node: LetDeclarationNode | AssignmentNode | MemberAssignmentNode,
   lines: string[],
   declared: string[],
+  moduleExports?: ModuleExportsMap,
 ): void {
   if (s.type === "LetDeclaration") {
     const ln = node as LetDeclarationNode;
@@ -316,7 +404,7 @@ function genAssignment(
       "let " +
         uniqueName(ln.name, declared) +
         " = " +
-        genExprScoped(ln.value, declared) +
+        genExprScoped(ln.value, declared, moduleExports) +
         ";",
     );
   } else if (s.type === "Assignment") {
@@ -324,17 +412,17 @@ function genAssignment(
     lines.push(
       resolveName(an.name, declared) +
         " = " +
-        genExprScoped(an.value, declared) +
+        genExprScoped(an.value, declared, moduleExports) +
         ";",
     );
   } else if (s.type === "MemberAssignment") {
     const mn = node as MemberAssignmentNode;
     lines.push(
-      genExprScoped(mn.object, declared) +
+      genExprScoped(mn.object, declared, moduleExports) +
         "." +
         mn.field +
         " = " +
-        genExprScoped(mn.value, declared) +
+        genExprScoped(mn.value, declared, moduleExports) +
         ";",
     );
   }

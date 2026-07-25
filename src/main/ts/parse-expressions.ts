@@ -6,6 +6,7 @@ import {
   unexpectedTokenError,
   unexpectedEofError,
   expectRParen,
+  parseModuleAccess as parseModuleAccessHelper,
 } from "./parse-helpers";
 
 export interface ParseContext {
@@ -239,8 +240,14 @@ function parseIdentifierExpression(
 ): Result<Expression, CompileError> {
   const token = consume(ctx);
   const name = token.value;
+  const line = token.line;
+  const column = token.column;
 
   const next = peek(ctx);
+  if (next && next.type === "DOUBLE_COLON") {
+    return parseModuleAccessHelper(ctx, name, line, column);
+  }
+
   let typeArgs: string[] = [];
   if (next && next.type === "LBRACKET") {
     consume(ctx);
@@ -251,17 +258,25 @@ function parseIdentifierExpression(
 
   const after = peek(ctx);
   if (after && after.type === "LBRACE") {
-    const structResult = parseStructInstance(ctx, name, typeArgs);
-    if (!structResult.isOk) return structResult;
-    const isResult = parseIsExpression(ctx, structResult.value);
-    if (!isResult.isOk) return isResult;
-    return { isOk: true, value: isResult.value };
+    return parseStructWithIs(ctx, name, typeArgs);
   }
 
   const expr: Expression = { type: "Identifier", name };
   const memberResult = parseMemberChain(ctx, expr);
   if (!memberResult.isOk) return memberResult;
   const isResult = parseIsExpression(ctx, memberResult.value);
+  if (!isResult.isOk) return isResult;
+  return { isOk: true, value: isResult.value };
+}
+
+function parseStructWithIs(
+  ctx: ParseContext,
+  name: string,
+  typeArgs: string[],
+): Result<Expression, CompileError> {
+  const structResult = parseStructInstance(ctx, name, typeArgs);
+  if (!structResult.isOk) return structResult;
+  const isResult = parseIsExpression(ctx, structResult.value);
   if (!isResult.isOk) return isResult;
   return { isOk: true, value: isResult.value };
 }

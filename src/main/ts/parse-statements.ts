@@ -2,7 +2,6 @@ import type {
   Token,
   Result,
   CompileError,
-  IsExpressionExpr,
   StructField,
   Expression,
   Statement,
@@ -159,6 +158,8 @@ function parseAssignmentStatement(
   if (!equalsResult.isOk) {
     if (expr.type === "MemberExpression")
       return { isOk: true, value: expr as MemberExpressionExpr };
+    if (expr.type === "ModuleAccess")
+      return { isOk: true, value: expr as Statement };
     return {
       isOk: true,
       value: {
@@ -205,27 +206,41 @@ function parseEarlyReturn(
         token,
       ),
     };
-  if (expr.type === "LogicalExpression" || expr.type === "NotExpression")
-    return { isOk: true, value: expr as Statement };
-  if (expr.type === "IsExpression")
-    return { isOk: true, value: expr as IsExpressionExpr };
-  if (expr.type === "StructInstance")
+  if (isPassThroughExpr(expr)) return { isOk: true, value: expr as Statement };
+  if (isZeroReturnExpr(expr))
     return { isOk: true, value: makeNumLiteralStmt(0, token) };
-  if (expr.type === "TupleExpr")
-    return { isOk: true, value: makeNumLiteralStmt(0, token) };
-  if (expr.type === "StringLiteral") {
-    const sl = expr as { value: string };
-    return {
-      isOk: true,
-      value: {
-        type: "StringLiteral",
-        value: sl.value,
-        line: token.line,
-        column: token.column,
-      },
-    };
-  }
+  if (expr.type === "StringLiteral")
+    return parseStringLiteralReturn(expr, token);
   return null;
+}
+
+function isPassThroughExpr(expr: Expression): boolean {
+  return (
+    expr.type === "LogicalExpression" ||
+    expr.type === "NotExpression" ||
+    expr.type === "IsExpression" ||
+    expr.type === "ModuleAccess"
+  );
+}
+
+function isZeroReturnExpr(expr: Expression): boolean {
+  return expr.type === "StructInstance" || expr.type === "TupleExpr";
+}
+
+function parseStringLiteralReturn(
+  expr: Expression,
+  token: Token,
+): Result<Statement, CompileError> {
+  const sl = expr as { value: string };
+  return {
+    isOk: true,
+    value: {
+      type: "StringLiteral",
+      value: sl.value,
+      line: token.line,
+      column: token.column,
+    },
+  };
 }
 
 function parseSimpleAssign(

@@ -116,7 +116,8 @@ export type Statement =
   | IsExpressionExpr
   | LogicalExpressionExpr
   | NotExpressionExpr
-  | TupleExpr;
+  | TupleExpr
+  | ModuleAccessExpr;
 
 export interface NumberLiteralExpr {
   type: "NumberLiteral";
@@ -174,6 +175,14 @@ export interface TupleExpr {
   elements: Expression[];
 }
 
+export interface ModuleAccessExpr {
+  type: "ModuleAccess";
+  modulePath: string[];
+  field: string;
+  line: number;
+  column: number;
+}
+
 export interface StringLiteralExpr {
   type: "StringLiteral";
   value: string;
@@ -191,7 +200,8 @@ export type Expression =
   | IsExpressionExpr
   | LogicalExpressionExpr
   | NotExpressionExpr
-  | TupleExpr;
+  | TupleExpr
+  | ModuleAccessExpr;
 
 export interface VarEntry {
   name: string;
@@ -223,6 +233,13 @@ export interface TypeCheckCtx {
   aliases: TypeAliasDef[];
   loc: { line: number; column: number };
 }
+
+export interface ModuleExportInfo {
+  name: string;
+  typeName: string | undefined;
+}
+
+export type ModuleExportsMap = Record<string, ModuleExportInfo[]>;
 
 export const VALID_TYPES = [
   "U8",

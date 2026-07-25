@@ -5,7 +5,6 @@ import type {
   Statement,
   LetDeclarationNode,
   AssignmentNode,
-  IdentifierNode,
   StructDefinitionNode,
   MemberAssignmentNode,
   TypeAliasNode,
@@ -13,6 +12,7 @@ import type {
   StructDef,
   VarEntry,
   TypeAliasDef,
+  ModuleExportsMap,
 } from "./types";
 import { isTupleType } from "./semantic-generics";
 import {
@@ -25,14 +25,13 @@ import {
   errResult,
 } from "./semantic-errors";
 import { checkExpr } from "./semantic-expr";
+import { analyzeSimpleStmt } from "./semantic-stmts";
 import {
   parseGenericTypeName,
   checkTypeName,
-  checkRef,
   resolveFieldTypeWithGenerics,
   checkCircularAlias,
   resolveAlias,
-  resolveFieldChainType,
   registerEnumDef,
   clearRegisteredEnums,
 } from "./semantic-generics";
@@ -189,12 +188,19 @@ function checkLetSemantics(
   scope: VarEntry[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
 ): Result<void, CompileError> {
   const typeCheck = checkLetType(node, structs, aliases);
   if (!typeCheck.isOk) return typeCheck;
   const genericCheck = checkGenericStructInstantiation(node, structs, aliases);
   if (!genericCheck.isOk) return genericCheck;
-  const exprTypeResult = checkExpr(node.value, scope, structs, aliases, node);
+  const exprTypeResult = checkExpr(node.value, {
+    scope,
+    structs,
+    aliases,
+    loc: node,
+    moduleExports,
+  });
   if (!exprTypeResult.isOk) return exprTypeResult;
   const exprType = exprTypeResult.value;
   const resolvedTypeName =
@@ -203,7 +209,13 @@ function checkLetSemantics(
       ? exprType
       : undefined);
   node.typeName = resolvedTypeName;
-  const exprCheck = checkLetExprType(node, scope, structs, aliases);
+  const exprCheck = checkLetExprType(
+    node,
+    scope,
+    structs,
+    aliases,
+    moduleExports,
+  );
   if (!exprCheck.isOk) return exprCheck;
   scope.push({
     name: node.name,
@@ -279,8 +291,15 @@ function checkLetExprType(
   scope: VarEntry[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
 ): Result<void, CompileError> {
-  const exprTypeResult = checkExpr(node.value, scope, structs, aliases, node);
+  const exprTypeResult = checkExpr(node.value, {
+    scope,
+    structs,
+    aliases,
+    loc: node,
+    moduleExports,
+  });
   if (!exprTypeResult.isOk) return exprTypeResult;
   const exprType = exprTypeResult.value;
   // Allow struct type inference: let p = Point { ... } infers Point type
@@ -302,6 +321,7 @@ function checkAssignmentSemantics(
   scope: VarEntry[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
 ): Result<void, CompileError> {
   const entry = scope.find((e) => e.name === node.name);
   if (!entry) return checkAssignmentUndeclared(node);
@@ -312,6 +332,7 @@ function checkAssignmentSemantics(
     entry,
     structs,
     aliases,
+    moduleExports,
   );
   return rhsResult;
 }
@@ -321,8 +342,15 @@ function checkAssignmentRhsType(
   entry: VarEntry,
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
 ): Result<void, CompileError> {
-  const rhsTypeResult = checkExpr(node.value, scope, structs, aliases, node);
+  const rhsTypeResult = checkExpr(node.value, {
+    scope,
+    structs,
+    aliases,
+    loc: node,
+    moduleExports,
+  });
   if (!rhsTypeResult.isOk) return rhsTypeResult;
   const rhsType = rhsTypeResult.value;
   if (!entry.typeName) return { isOk: true, value: undefined };
@@ -341,6 +369,7 @@ function checkMemberAssignment(
   scope: VarEntry[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
 ): Result<void, CompileError> {
   const baseName = getExprBaseName(node.object);
   const entry = scope.find((e) => e.name === baseName);
@@ -370,13 +399,20 @@ function checkMemberAssignment(
     aliases,
   );
   if (!fieldResult) return { isOk: true, value: undefined };
-  const rhsTypeResult = checkExpr(node.value, scope, structs, aliases, node);
+  const rhsTypeResult = checkExpr(node.value, {
+    scope,
+    structs,
+    aliases,
+    loc: node,
+    moduleExports,
+  });
   if (!rhsTypeResult.isOk) return rhsTypeResult;
   return checkTypeMatch(fieldResult, rhsTypeResult.value, node);
 }
 
 export function analyzeSemantics(
   statements: Statement[],
+  moduleExports?: ModuleExportsMap,
 ): Result<Statement[], CompileError> {
   clearRegisteredEnums();
   const scope: VarEntry[] = [];
@@ -397,32 +433,17 @@ export function analyzeSemantics(
       const chk = checkTypeAlias(stmt as TypeAliasNode, structs, aliases);
       if (!chk.isOk) return chk;
     } else {
-      const result = analyzeStatement(stmt, scope, structs, aliases);
+      const result = analyzeStatement(
+        stmt,
+        scope,
+        structs,
+        aliases,
+        moduleExports,
+      );
       if (!result.isOk) return result;
     }
   }
   return { isOk: true, value: statements };
-}
-
-function analyzeBoolStmt(
-  stmt: Statement,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-): Result<void, CompileError> {
-  const exprNode = stmt as { line: number; column: number } & Expression;
-  const loc = { line: exprNode.line, column: exprNode.column };
-  const exprResult = checkExpr(exprNode, scope, structs, aliases, loc);
-  if (!exprResult.isOk) return exprResult;
-  return { isOk: true, value: undefined };
-}
-
-function isBoolOrMemberExpr(stmt: Statement): boolean {
-  return (
-    stmt.type === "LogicalExpression" ||
-    stmt.type === "NotExpression" ||
-    stmt.type === "MemberExpression"
-  );
 }
 
 function analyzeStatement(
@@ -430,6 +451,7 @@ function analyzeStatement(
   scope: VarEntry[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
 ): Result<void, CompileError> {
   if (stmt.type === "StructDefinition")
     return checkStructDef(stmt as StructDefinitionNode, structs, aliases);
@@ -439,6 +461,7 @@ function analyzeStatement(
       scope,
       structs,
       aliases,
+      moduleExports,
     );
   if (stmt.type === "Assignment")
     return checkAssignmentSemantics(
@@ -446,6 +469,7 @@ function analyzeStatement(
       scope,
       structs,
       aliases,
+      moduleExports,
     );
   if (stmt.type === "MemberAssignment")
     return checkMemberAssignment(
@@ -453,63 +477,7 @@ function analyzeStatement(
       scope,
       structs,
       aliases,
+      moduleExports,
     );
-  if (stmt.type === "Identifier")
-    return checkIdentifierStatement(
-      stmt as IdentifierNode,
-      scope,
-      structs,
-      aliases,
-    );
-  if (stmt.type === "NumberLiteral") return { isOk: true, value: undefined };
-  if (stmt.type === "StringLiteral")
-    return strExitErr(stmt as { line: number; column: number });
-  if (isBoolOrMemberExpr(stmt))
-    return analyzeBoolStmt(stmt, scope, structs, aliases);
-  return { isOk: true, value: undefined };
-}
-
-function strExitErr(node: {
-  line: number;
-  column: number;
-}): Result<void, CompileError> {
-  return errResult(
-    "String value cannot be used as an exit expression",
-    "String values cannot be converted to a valid exit code.",
-    "Use a numeric, boolean, or struct expression.",
-    node.line,
-    node.column,
-  );
-}
-
-function checkIdentifierStatement(
-  node: IdentifierNode,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-): Result<void, CompileError> {
-  if (node.name.includes(".")) {
-    const parts = node.name.split(".");
-    const entry = scope.find((e) => e.name === parts[0]);
-    if (!entry)
-      return errResult(
-        "Use of undeclared variable '" + parts[0] + "'",
-        "Variable must be declared before use.",
-        "Declare the variable with 'let' first.",
-        node.line,
-        node.column,
-      );
-    const resolvedType = resolveFieldChainType(
-      parts,
-      entry.typeName,
-      structs,
-      aliases,
-    );
-    if (resolvedType === "Str") return strExitErr(node);
-    return { isOk: true, value: undefined };
-  }
-  const refResult = checkRef(node.name, scope, node);
-  if (!refResult.isOk) return refResult;
-  if (refResult.value.typeName === "Str") return strExitErr(node);
-  return { isOk: true, value: undefined };
+  return analyzeSimpleStmt(stmt, scope, structs, aliases, moduleExports);
 }

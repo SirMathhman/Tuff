@@ -6,8 +6,19 @@ import type {
   TypeAliasDef,
   LogicalExpressionExpr,
   NotExpressionExpr,
+  ModuleExportsMap,
+  ModuleAccessExpr,
 } from "./types";
 import type { Result, CompileError } from "./types";
+
+interface CheckCtx {
+  scope: VarEntry[];
+  structs: StructDef[];
+  aliases: TypeAliasDef[];
+  loc: { line: number; column: number };
+  moduleExports?: ModuleExportsMap;
+}
+
 import {
   checkTypeName,
   checkRef,
@@ -54,12 +65,25 @@ function checkBoolBinOp(
   structs: StructDef[],
   aliases: TypeAliasDef[],
   loc: { line: number; column: number },
+  moduleExports?: ModuleExportsMap,
 ): Result<string | undefined, CompileError> {
-  const leftResult = checkExpr(lexpr.left, scope, structs, aliases, loc);
+  const leftResult = checkExpr(lexpr.left, {
+    scope,
+    structs,
+    aliases,
+    loc,
+    moduleExports,
+  });
   if (!leftResult.isOk) return leftResult;
   const boolErr = checkBoolOperand(leftResult.value, loc);
   if (boolErr && !boolErr.isOk) return boolErr;
-  const rightResult = checkExpr(lexpr.right, scope, structs, aliases, loc);
+  const rightResult = checkExpr(lexpr.right, {
+    scope,
+    structs,
+    aliases,
+    loc,
+    moduleExports,
+  });
   if (!rightResult.isOk) return rightResult;
   const boolErr2 = checkBoolOperand(rightResult.value, loc);
   if (boolErr2 && !boolErr2.isOk) return boolErr2;
@@ -67,15 +91,12 @@ function checkBoolBinOp(
 }
 function checkTupleExpr(
   expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
+  ctx: CheckCtx,
 ): Result<string | undefined, CompileError> {
   const tupleExpr = expr as { elements: Expression[] };
   const elemTypes: string[] = [];
   for (const elem of tupleExpr.elements) {
-    const elemResult = checkExpr(elem, scope, structs, aliases, loc);
+    const elemResult = checkExpr(elem, ctx);
     if (!elemResult.isOk) return elemResult;
     elemTypes.push(elemResult.value || "unknown");
   }
@@ -87,8 +108,15 @@ function checkNotExpr(
   structs: StructDef[],
   aliases: TypeAliasDef[],
   loc: { line: number; column: number },
+  moduleExports?: ModuleExportsMap,
 ): Result<string | undefined, CompileError> {
-  const operandResult = checkExpr(expr.operand, scope, structs, aliases, loc);
+  const operandResult = checkExpr(expr.operand, {
+    scope,
+    structs,
+    aliases,
+    loc,
+    moduleExports,
+  });
   if (!operandResult.isOk) return operandResult;
   const notErr = checkBoolOperand(operandResult.value, loc);
   if (notErr && !notErr.isOk) return notErr;
@@ -96,29 +124,73 @@ function checkNotExpr(
 }
 export function checkExpr(
   expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
+  ctx: CheckCtx,
 ): Result<string | undefined, CompileError> {
   const literalResult = checkLiteralExpr(expr);
   if (literalResult) return literalResult;
   if (expr.type === "IsExpression")
-    return checkIsExpr(expr, scope, structs, aliases, loc);
+    return checkIsExpr(expr, ctx.scope, ctx.structs, ctx.aliases, ctx.loc);
   if (expr.type === "StructInstance")
-    return checkStructExpr(expr, scope, structs, aliases, loc);
-  if (expr.type === "MemberExpression")
-    return checkMemberExpr(expr, scope, structs, aliases, loc);
+    return checkStructExpr(expr, ctx.scope, ctx.structs, ctx.aliases, ctx.loc);
+  if (expr.type === "MemberExpression") return checkMemberExpr(expr, ctx);
+  if (expr.type === "ModuleAccess")
+    return checkModuleAccess(
+      expr as ModuleAccessExpr,
+      ctx.loc,
+      ctx.moduleExports,
+    );
   if (expr.type === "LogicalExpression")
-    return checkBoolBinOp(expr as never, scope, structs, aliases, loc);
+    return checkBoolBinOp(
+      expr as never,
+      ctx.scope,
+      ctx.structs,
+      ctx.aliases,
+      ctx.loc,
+      ctx.moduleExports,
+    );
   if (expr.type === "NotExpression")
-    return checkNotExpr(expr as never, scope, structs, aliases, loc);
-  if (expr.type === "TupleExpr")
-    return checkTupleExpr(expr, scope, structs, aliases, loc);
+    return checkNotExpr(
+      expr as never,
+      ctx.scope,
+      ctx.structs,
+      ctx.aliases,
+      ctx.loc,
+      ctx.moduleExports,
+    );
+  if (expr.type === "TupleExpr") return checkTupleExpr(expr, ctx);
   const idExpr = expr as { name: string };
-  const refResult = checkRef(idExpr.name, scope, loc);
+  const refResult = checkRef(idExpr.name, ctx.scope, ctx.loc);
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: refResult.value.typeName };
+}
+
+function checkModuleAccess(
+  expr: ModuleAccessExpr,
+  loc: { line: number; column: number },
+  moduleExports?: ModuleExportsMap,
+): Result<string | undefined, CompileError> {
+  const moduleName = expr.modulePath.join("::");
+  const exports = moduleExports?.[moduleName];
+  if (!exports) {
+    return errResult(
+      "Use of undeclared variable '" + expr.modulePath[0] + "'",
+      "Variable must be declared before use.",
+      "Declare the variable with 'let' first.",
+      loc.line,
+      loc.column,
+    );
+  }
+  const exportInfo = exports.find((e) => e.name === expr.field);
+  if (!exportInfo) {
+    return errResult(
+      "Unknown export '" + expr.field + "' from module '" + moduleName + "'",
+      "The module does not export this name.",
+      "Check the module's 'out let' declarations.",
+      loc.line,
+      loc.column,
+    );
+  }
+  return { isOk: true, value: exportInfo.typeName };
 }
 function checkEnumMember(
   objType: string,
@@ -148,36 +220,66 @@ function checkPrimitiveMember(
 
 function checkMemberExpr(
   expr: Expression,
-  scope: VarEntry[],
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-  loc: { line: number; column: number },
+  ctx: CheckCtx,
 ): Result<string | undefined, CompileError> {
   const mexpr = expr as { object: Expression; field: string };
-  const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
+  const crossModuleResult = checkCrossModuleAccess(
+    mexpr,
+    ctx.scope,
+    ctx.moduleExports,
+  );
+  if (crossModuleResult) return crossModuleResult;
+
+  const objResult = checkExpr(mexpr.object, ctx);
   if (!objResult.isOk) return objResult;
   const objType = objResult.value;
-  if (objType) {
-    if (objType === "Str") return checkStrMemberAccess(mexpr.field, loc);
-    const tupleResult = checkTupleMemberExpr(objType, mexpr.field, loc);
-    if (tupleResult) return tupleResult;
-    const nonTupleIndex = checkNonTupleIndex(objType, mexpr.field, loc);
-    if (nonTupleIndex) return nonTupleIndex;
-    const enumResult = checkEnumMember(objType, mexpr.field, loc);
-    if (enumResult) return enumResult;
-  }
-  const primResult = checkPrimitiveMember(mexpr.object.type, mexpr.field, loc);
+  const typedResult = checkTypedMember(objType, mexpr, ctx.structs, ctx.loc);
+  if (typedResult) return typedResult;
+  const primResult = checkPrimitiveMember(
+    mexpr.object.type,
+    mexpr.field,
+    ctx.loc,
+  );
   if (primResult) return primResult;
-  if (objType) {
-    const structResult = checkStructFieldRef(
-      objType,
-      mexpr.field,
-      structs,
-      loc,
-    );
-    if (structResult) return structResult;
-  }
   return { isOk: true, value: objType };
+}
+
+function checkCrossModuleAccess(
+  mexpr: { object: Expression; field: string },
+  scope: VarEntry[],
+  moduleExports?: ModuleExportsMap,
+): Result<string | undefined, CompileError> | null {
+  if (
+    mexpr.object.type !== "Identifier" ||
+    !moduleExports ||
+    scope.find((e) => e.name === (mexpr.object as { name: string }).name)
+  )
+    return null;
+  const moduleName = (mexpr.object as { name: string }).name;
+  const exports = moduleExports[moduleName];
+  if (!exports) return null;
+  const exportInfo = exports.find((e) => e.name === mexpr.field);
+  if (!exportInfo) return null;
+  return { isOk: true, value: exportInfo.typeName };
+}
+
+function checkTypedMember(
+  objType: string | undefined,
+  mexpr: { field: string },
+  structs: StructDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> | null {
+  if (!objType) return null;
+  if (objType === "Str") return checkStrMemberAccess(mexpr.field, loc);
+  const tupleResult = checkTupleMemberExpr(objType, mexpr.field, loc);
+  if (tupleResult) return tupleResult;
+  const nonTupleIndex = checkNonTupleIndex(objType, mexpr.field, loc);
+  if (nonTupleIndex) return nonTupleIndex;
+  const enumResult = checkEnumMember(objType, mexpr.field, loc);
+  if (enumResult) return enumResult;
+  const structResult = checkStructFieldRef(objType, mexpr.field, structs, loc);
+  if (structResult) return structResult;
+  return null;
 }
 function inferTypeArgs(
   def: StructDef,
@@ -201,13 +303,12 @@ function inferTypeArgs(
       inferred.push(nestedType);
       continue;
     }
-    const typeResult = checkExpr(
-      fieldValue.value,
-      ctx.scope,
-      ctx.structs,
-      ctx.aliases,
-      ctx.loc,
-    );
+    const typeResult = checkExpr(fieldValue.value, {
+      scope: ctx.scope,
+      structs: ctx.structs,
+      aliases: ctx.aliases,
+      loc: ctx.loc,
+    });
     if (!typeResult.isOk) return typeResult;
     inferred.push(typeResult.value || typeParam);
   }
@@ -233,13 +334,12 @@ function validateStructField(
         column: ctx.loc.column,
       },
     };
-  const typeResult = checkExpr(
-    field.value,
-    ctx.scope,
-    ctx.structs,
-    ctx.aliases,
-    ctx.loc,
-  );
+  const typeResult = checkExpr(field.value, {
+    scope: ctx.scope,
+    structs: ctx.structs,
+    aliases: ctx.aliases,
+    loc: ctx.loc,
+  });
   if (!typeResult.isOk) return typeResult;
   const fieldType = typeResult.value;
   if (!fieldType) return { isOk: true, value: undefined };
@@ -319,7 +419,12 @@ export function checkIsExpr(
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   const isexpr = expr as { operand: Expression; typeName: string };
-  const operandResult = checkExpr(isexpr.operand, scope, structs, aliases, loc);
+  const operandResult = checkExpr(isexpr.operand, {
+    scope,
+    structs,
+    aliases,
+    loc,
+  });
   if (!operandResult.isOk) return operandResult;
   const typeCheck = checkTypeName(
     isexpr.typeName,

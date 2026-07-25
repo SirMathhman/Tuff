@@ -1,4 +1,4 @@
-import type { Token, Result, CompileError } from "./types";
+import type { Token, Result, CompileError, Expression } from "./types";
 import type { ParseContext } from "./parse-expressions";
 
 export function expectToken(
@@ -80,4 +80,64 @@ export function expectRParen(ctx: ParseContext): Result<void, CompileError> {
     );
   consumeToken(ctx);
   return { isOk: true, value: undefined };
+}
+
+export function parseModuleAccess(
+  ctx: ParseContext,
+  firstPart: string,
+  line: number,
+  column: number,
+): Result<Expression, CompileError> {
+  const modulePath: string[] = [firstPart];
+  parseModulePathSegments(ctx, modulePath);
+  const dot = peekToken(ctx);
+  if (dot && dot.value === ".") {
+    return parseModuleField(ctx, modulePath, line, column);
+  }
+  return {
+    isOk: true,
+    value: { type: "Identifier", name: modulePath.join("::") },
+  };
+}
+
+function parseModulePathSegments(
+  ctx: ParseContext,
+  modulePath: string[],
+): void {
+  while (true) {
+    const next = peekToken(ctx);
+    if (next && next.type === "DOUBLE_COLON") {
+      consumeToken(ctx);
+      const partToken = peekToken(ctx);
+      if (!partToken || partToken.type !== "IDENTIFIER") break;
+      consumeToken(ctx);
+      modulePath.push(partToken.value);
+    } else break;
+  }
+}
+
+function parseModuleField(
+  ctx: ParseContext,
+  modulePath: string[],
+  line: number,
+  column: number,
+): Result<Expression, CompileError> {
+  consumeToken(ctx);
+  const fieldToken = peekToken(ctx);
+  if (!fieldToken || fieldToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      fieldToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "field name",
+    );
+  consumeToken(ctx);
+  return {
+    isOk: true,
+    value: {
+      type: "ModuleAccess",
+      modulePath,
+      field: fieldToken.value,
+      line,
+      column,
+    },
+  };
 }

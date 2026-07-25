@@ -1,5 +1,13 @@
 import { tokenize } from "./tokenize";
-import type { Token, Result, CompileError, Statement } from "./types";
+import type {
+  Token,
+  Result,
+  CompileError,
+  Statement,
+  ModuleExportsMap,
+  ModuleExportInfo,
+  LetDeclarationNode,
+} from "./types";
 import { parseStatement } from "./parse-statements";
 import type { ParseContext } from "./parse-expressions";
 
@@ -24,14 +32,21 @@ import { generateCode } from "./generate";
 function compilePipeline(
   tuffSource: string,
   moduleMode = false,
+  moduleExports?: ModuleExportsMap,
 ): Result<string, CompileError> {
   const tokensResult = tokenize(tuffSource);
   if (!tokensResult.isOk) return tokensResult;
   const statementsResult = parse(tokensResult.value);
   if (!statementsResult.isOk) return statementsResult;
-  const semanticResult = analyzeSemantics(statementsResult.value);
+  const semanticResult = analyzeSemantics(
+    statementsResult.value,
+    moduleMode ? moduleExports : undefined,
+  );
   if (!semanticResult.isOk) return semanticResult;
-  return { isOk: true, value: generateCode(semanticResult.value, moduleMode) };
+  return {
+    isOk: true,
+    value: generateCode(semanticResult.value, moduleMode, moduleExports),
+  };
 }
 
 export function compileTuffToTS(
@@ -43,13 +58,40 @@ export function compileTuffToTS(
 
 export type SourceMap = Record<string, string>;
 
+function collectModuleExports(
+  source: string,
+): Result<ModuleExportInfo[], CompileError> {
+  const tokensResult = tokenize(source);
+  if (!tokensResult.isOk) return tokensResult;
+  const statementsResult = parse(tokensResult.value);
+  if (!statementsResult.isOk) return statementsResult;
+  const exports: ModuleExportInfo[] = [];
+  for (const stmt of statementsResult.value) {
+    if (
+      stmt.type === "LetDeclaration" &&
+      (stmt as LetDeclarationNode).exported
+    ) {
+      const ln = stmt as LetDeclarationNode;
+      exports.push({ name: ln.name, typeName: ln.typeName });
+    }
+  }
+  return { isOk: true, value: exports };
+}
+
 export function compileTuffToTSWithModules(
   mainNamespace: string[],
   sourceMap: SourceMap,
 ): Result<SourceMap, CompileError> {
+  const moduleExports: ModuleExportsMap = {};
+  for (const [namespace, source] of Object.entries(sourceMap)) {
+    const moduleName = namespace.replace(/\./g, "::");
+    const exportsResult = collectModuleExports(source);
+    if (!exportsResult.isOk) return exportsResult;
+    moduleExports[moduleName] = exportsResult.value;
+  }
   const result: SourceMap = {};
   for (const [namespace, source] of Object.entries(sourceMap)) {
-    const compiled = compilePipeline(source, true);
+    const compiled = compilePipeline(source, true, moduleExports);
     if (!compiled.isOk) return compiled;
     result[namespace] = compiled.value;
   }
