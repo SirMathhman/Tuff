@@ -17,6 +17,12 @@ test("Type alias used in struct field", () => {
   );
 });
 
+test("Type alias defined after struct use is invalid", () => {
+  expectInvalid(
+    "struct Point { x : Coord }; type Coord = I32; let p : Point = Point { x: 1I32 };",
+  );
+});
+
 test("Generic type alias", () => {
   expectValid(
     "struct Pair<T, U> { first : T, second : U }; type IntPair = Pair<I32, I32>; let p : IntPair = Pair { first: 1I32, second: 2I32 }; p.second",
