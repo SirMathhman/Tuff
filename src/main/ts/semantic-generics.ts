@@ -6,10 +6,34 @@ import type {
   StructDef,
   TypeAliasDef,
 } from "./types";
+import type { EnumDef } from "./types";
 
 const VALID_TYPES = ["U8", "U16", "U32", "I32", "F32", "Bool", "Str", "USize"];
 
 export { VALID_TYPES };
+
+let registeredEnums: EnumDef[] = [];
+
+export function clearRegisteredEnums(): void {
+  registeredEnums = [];
+}
+
+export function registerEnumDef(def: EnumDef): void {
+  registeredEnums.push(def);
+}
+
+export function getEnumDef(name: string): EnumDef | undefined {
+  return registeredEnums.find((e) => e.name === name);
+}
+
+export function isEnumType(name: string): boolean {
+  return registeredEnums.some((e) => e.name === name);
+}
+
+export function isEnumVariant(enumName: string, variant: string): boolean {
+  const def = getEnumDef(enumName);
+  return def ? def.variants.includes(variant) : false;
+}
 
 export function resolveAlias(
   typeName: string,
@@ -164,6 +188,20 @@ export function getTupleElementType(
   return parts[index];
 }
 
+function isValidTypeRef(
+  strippedBase: string,
+  typeName: string,
+  structs: StructDef[],
+  aliases?: TypeAliasDef[],
+): boolean {
+  return (
+    VALID_TYPES.includes(strippedBase) ||
+    structs.some((s) => s.name === strippedBase) ||
+    (aliases ? aliases.some((a) => a.name === typeName) : false) ||
+    isEnumType(strippedBase)
+  );
+}
+
 export function checkTypeName(
   typeName: string,
   structs: StructDef[],
@@ -184,10 +222,7 @@ export function checkTypeName(
 
   const { base } = parseGenericTypeName(resolved);
   const strippedBase = base.startsWith("&") ? base.slice(1) : base;
-  const isNumeric = VALID_TYPES.includes(strippedBase);
-  const isStruct = structs.some((s) => s.name === strippedBase);
-  const isAlias = aliases ? aliases.some((a) => a.name === typeName) : false;
-  if (!isNumeric && !isStruct && !isAlias)
+  if (!isValidTypeRef(strippedBase, typeName, structs, aliases))
     return {
       isOk: false,
       error: {

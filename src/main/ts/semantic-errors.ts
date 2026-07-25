@@ -1,6 +1,10 @@
 import type { Result, CompileError, StructDef } from "./types";
 import { VALID_TYPES } from "./types";
-import { isTupleType, parseTupleTypeString } from "./semantic-generics";
+import {
+  isTupleType,
+  parseTupleTypeString,
+  isEnumType,
+} from "./semantic-generics";
 
 export function checkStructUndefined(
   structName: string,
@@ -175,38 +179,41 @@ export function checkTypeMismatch(
   };
 }
 
+function typeMismatch(
+  msg: string,
+  reason: string,
+  fix: string,
+  loc: { line: number; column: number },
+): Result<void, CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message: msg,
+      reason,
+      suggestedFix: fix,
+      line: loc.line,
+      column: loc.column,
+    },
+  };
+}
+
 export function checkTypeMatch(
   declaredType: string | undefined,
   exprType: string | undefined,
   loc: { line: number; column: number },
 ): Result<void, CompileError> {
-  function err(
-    msg: string,
-    reason: string,
-    fix: string,
-  ): Result<void, CompileError> {
-    return {
-      isOk: false,
-      error: {
-        message: msg,
-        reason,
-        suggestedFix: fix,
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  }
   if (declaredType) {
     if (!exprType)
-      return err(
+      return typeMismatch(
         "Type mismatch: expected '" +
           declaredType +
           "' but literal has no type suffix",
         "Typed declarations require a matching type suffix on the literal.",
         "Add '" + declaredType + "' suffix to the literal.",
+        loc,
       );
     if (exprType !== declaredType)
-      return err(
+      return typeMismatch(
         "Type mismatch: expected '" +
           declaredType +
           "' but got '" +
@@ -214,12 +221,19 @@ export function checkTypeMatch(
           "'",
         "Literal type must match the declared type.",
         "Change the literal suffix to '" + declaredType + "'.",
+        loc,
       );
-  } else if (exprType && exprType !== "Bool" && !isTupleType(exprType)) {
-    return err(
+  } else if (
+    exprType &&
+    exprType !== "Bool" &&
+    !isTupleType(exprType) &&
+    !isEnumType(exprType)
+  ) {
+    return typeMismatch(
       "Literal has type suffix '" + exprType + "' but no type annotation",
       "Type suffixes require a matching type annotation on the variable.",
       "Add ': " + exprType + "' type annotation to the declaration.",
+      loc,
     );
   }
   return { isOk: true, value: undefined };
@@ -256,11 +270,12 @@ export function checkTypeRef(
   }
   const isNumeric = VALID_TYPES.includes(typeName);
   const structDef = structs.find((s) => s.name === typeName);
-  if (!isNumeric && !structDef)
+  const isEnum = isEnumType(typeName);
+  if (!isNumeric && !structDef && !isEnum)
     return errResult(
       errorMsgPrefix + typeName + "'",
-      "Type must be a valid numeric type, Bool, or defined struct.",
-      "Use a valid type like U8, U32, Bool, or define the struct first.",
+      "Type must be a valid numeric type, Bool, defined struct, or enum.",
+      "Use a valid type like U8, U32, Bool, or define the struct or enum first.",
       loc.line,
       loc.column,
     );

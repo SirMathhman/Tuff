@@ -10,7 +10,11 @@ import type {
   AssignmentNode,
   MemberAssignmentNode,
 } from "./types";
-import { parseTupleTypeString } from "./semantic-generics";
+import {
+  parseTupleTypeString,
+  isEnumType,
+  getEnumDef,
+} from "./semantic-generics";
 
 const NUMERIC_TYPES = [
   "U8",
@@ -60,6 +64,17 @@ function genIsCheck(operand: string, typeName: string): string {
   if (baseType === "Str") return "(typeof " + operand + " === 'string')";
   if (NUMERIC_TYPES.includes(baseType))
     return "(typeof " + operand + " === 'number')";
+  if (isEnumType(baseType)) {
+    const def = getEnumDef(baseType);
+    if (def)
+      return (
+        "([" +
+        def.variants.map((v) => "'" + v + "'").join(", ") +
+        "].includes(" +
+        operand +
+        "))"
+      );
+  }
   return (
     "(typeof " +
     operand +
@@ -211,6 +226,17 @@ function genExprExitStmt(
 
 function genStmt(s: Statement, lines: string[], declared: string[]): void {
   if (s.type === "StructDefinition" || s.type === "TypeAlias") return;
+  if (s.type === "EnumDefinition") {
+    const en = s as { name: string; variants: string[] };
+    lines.push(
+      "const " +
+        en.name +
+        " = { " +
+        en.variants.map((v) => v + ": '" + v + "'").join(", ") +
+        " };",
+    );
+    return;
+  }
   const node = s as Statement;
 
   if (s.type === "NumberLiteral") {

@@ -13,6 +13,9 @@ import {
   checkRef,
   resolveAlias,
   parseGenericTypeName,
+  isEnumVariant,
+  isEnumType,
+  getEnumDef,
 } from "./semantic-generics";
 import {
   checkStructUndefined,
@@ -20,6 +23,7 @@ import {
   checkStructFieldType,
   checkTypeArgCount,
   checkStructFieldCount,
+  errResult,
 } from "./semantic-errors";
 import {
   checkBoolOperand,
@@ -116,6 +120,32 @@ export function checkExpr(
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: refResult.value.typeName };
 }
+function checkEnumMember(
+  objType: string,
+  field: string,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> | undefined {
+  if (!isEnumType(objType)) return undefined;
+  if (isEnumVariant(objType, field)) return { isOk: true, value: objType };
+  return errResult(
+    "Unknown variant '" + field + "' for enum '" + objType + "'",
+    "The enum '" + objType + "' does not have a variant named '" + field + "'.",
+    "Use one of: " + (getEnumDef(objType)?.variants.join(", ") || ""),
+    loc.line,
+    loc.column,
+  );
+}
+
+function checkPrimitiveMember(
+  exprType: string,
+  field: string,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> | undefined {
+  if (exprType !== "NumberLiteral" && exprType !== "BooleanLiteral")
+    return undefined;
+  return checkPrimMemberErr(exprType, field, loc);
+}
+
 function checkMemberExpr(
   expr: Expression,
   scope: VarEntry[],
@@ -133,11 +163,11 @@ function checkMemberExpr(
     if (tupleResult) return tupleResult;
     const nonTupleIndex = checkNonTupleIndex(objType, mexpr.field, loc);
     if (nonTupleIndex) return nonTupleIndex;
+    const enumResult = checkEnumMember(objType, mexpr.field, loc);
+    if (enumResult) return enumResult;
   }
-  if (mexpr.object.type === "NumberLiteral")
-    return checkPrimMemberErr(mexpr.object.type, mexpr.field, loc);
-  if (mexpr.object.type === "BooleanLiteral")
-    return checkPrimMemberErr(mexpr.object.type, mexpr.field, loc);
+  const primResult = checkPrimitiveMember(mexpr.object.type, mexpr.field, loc);
+  if (primResult) return primResult;
   if (objType) {
     const structResult = checkStructFieldRef(
       objType,

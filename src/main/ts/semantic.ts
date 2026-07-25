@@ -9,6 +9,7 @@ import type {
   StructDefinitionNode,
   MemberAssignmentNode,
   TypeAliasNode,
+  EnumDefinitionNode,
   StructDef,
   VarEntry,
   TypeAliasDef,
@@ -32,6 +33,8 @@ import {
   checkCircularAlias,
   resolveAlias,
   resolveFieldChainType,
+  registerEnumDef,
+  clearRegisteredEnums,
 } from "./semantic-generics";
 
 function checkStructDef(
@@ -378,12 +381,19 @@ function checkMemberAssignment(
 export function analyzeSemantics(
   statements: Statement[],
 ): Result<Statement[], CompileError> {
+  clearRegisteredEnums();
   const scope: VarEntry[] = [];
   const structs: StructDef[] = [];
   const aliases: TypeAliasDef[] = [];
   for (const stmt of statements) {
-    const result = analyzeStatement(stmt, scope, structs, aliases);
-    if (!result.isOk) return result;
+    if (stmt.type === "EnumDefinition") {
+      const node = stmt as EnumDefinitionNode;
+      registerEnumDef({ name: node.name, variants: node.variants });
+      scope.push({ name: node.name, mutable: false, typeName: node.name });
+    } else {
+      const result = analyzeStatement(stmt, scope, structs, aliases);
+      if (!result.isOk) return result;
+    }
   }
   return { isOk: true, value: statements };
 }
@@ -401,9 +411,7 @@ function analyzeBoolStmt(
   return { isOk: true, value: undefined };
 }
 
-function isBoolOrMemberExpr(stmt: Statement): stmt is typeof stmt & {
-  type: "LogicalExpression" | "NotExpression" | "MemberExpression";
-} {
+function isBoolOrMemberExpr(stmt: Statement): boolean {
   return (
     stmt.type === "LogicalExpression" ||
     stmt.type === "NotExpression" ||
@@ -449,18 +457,18 @@ function analyzeStatement(
       structs,
       aliases,
     );
-  if (isBoolOrMemberExpr(stmt))
-    return analyzeBoolStmt(stmt, scope, structs, aliases);
   if (stmt.type === "NumberLiteral") return { isOk: true, value: undefined };
   if (stmt.type === "StringLiteral")
     return strExitErr(stmt as { line: number; column: number });
+  if (isBoolOrMemberExpr(stmt))
+    return analyzeBoolStmt(stmt, scope, structs, aliases);
   return { isOk: true, value: undefined };
 }
 
 function strExitErr(node: {
   line: number;
   column: number;
-}): ReturnType<typeof errResult<void>> {
+}): Result<void, CompileError> {
   return errResult(
     "String value cannot be used as an exit expression",
     "String values cannot be converted to a valid exit code.",

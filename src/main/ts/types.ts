@@ -90,6 +90,14 @@ export interface TypeAliasNode {
   column: number;
 }
 
+export interface EnumDefinitionNode {
+  type: "EnumDefinition";
+  name: string;
+  variants: string[];
+  line: number;
+  column: number;
+}
+
 export type Statement =
   | NumberLiteralNode
   | IdentifierNode
@@ -100,6 +108,7 @@ export type Statement =
   | StructDefinitionNode
   | MemberAssignmentNode
   | TypeAliasNode
+  | EnumDefinitionNode
   | IsExpressionExpr
   | LogicalExpressionExpr
   | NotExpressionExpr
@@ -191,6 +200,11 @@ export interface StructDef {
   typeParams: string[];
   fields: StructField[];
   resolvedFields?: StructField[];
+}
+
+export interface EnumDef {
+  name: string;
+  variants: string[];
 }
 
 export interface TypeAliasDef {
