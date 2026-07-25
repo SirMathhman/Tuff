@@ -16,6 +16,7 @@ const NUMERIC_TYPES = [
   "U16",
   "U32",
   "U64",
+  "USize",
   "I8",
   "I16",
   "I32",
@@ -35,6 +36,7 @@ function resolveName(name: string, declared: string[]): string {
 function genIsCheck(operand: string, typeName: string): string {
   const baseType = (typeName.split("<") as string[])[0] || "";
   if (baseType === "Bool") return "(typeof " + operand + " === 'boolean')";
+  if (baseType === "Str") return "(typeof " + operand + " === 'string')";
   if (NUMERIC_TYPES.includes(baseType))
     return "(typeof " + operand + " === 'number')";
   return (
@@ -58,9 +60,24 @@ function genExitCoerced(name: string): string {
     name +
     " : typeof " +
     name +
+    " === 'string' ? 0 : typeof " +
+    name +
     " === 'object' ? 0 : " +
     name +
     ");"
+  );
+}
+
+function genLogicalExpr(le: LogicalExpressionExpr, declared: string[]): string {
+  const op = le.operator === "AND" ? "&&" : "||";
+  return (
+    "(" +
+    genExprScoped(le.left, declared) +
+    " " +
+    op +
+    " " +
+    genExprScoped(le.right, declared) +
+    ")"
   );
 }
 
@@ -71,6 +88,8 @@ function genExprScoped(expr: Expression, declared: string[]): string {
     const b = (expr as { value: boolean }).value;
     return b ? "true" : "false";
   }
+  if (expr.type === "StringLiteral")
+    return JSON.stringify((expr as { value: string }).value);
   if (expr.type === "IsExpression") {
     const ie = expr as IsExpressionExpr;
     const op = "(" + genExprScoped(ie.operand, declared) + ")";
@@ -90,19 +109,8 @@ function genExprScoped(expr: Expression, declared: string[]): string {
     const m = expr as { object: Expression; field: string };
     return genExprScoped(m.object, declared) + "." + m.field;
   }
-  if (expr.type === "LogicalExpression") {
-    const le = expr as LogicalExpressionExpr;
-    const op = le.operator === "AND" ? "&&" : "||";
-    return (
-      "(" +
-      genExprScoped(le.left, declared) +
-      " " +
-      op +
-      " " +
-      genExprScoped(le.right, declared) +
-      ")"
-    );
-  }
+  if (expr.type === "LogicalExpression")
+    return genLogicalExpr(expr as LogicalExpressionExpr, declared);
   if (expr.type === "NotExpression") {
     const ne = expr as NotExpressionExpr;
     return "(!" + genExprScoped(ne.operand, declared) + ")";
@@ -139,6 +147,30 @@ function genBoolExitStmt(
   return false;
 }
 
+function genExprExitStmt(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+): boolean {
+  if (s.type === "StringLiteral" || s.type === "MemberExpression") {
+    lines.push(
+      "process.exit(" + genExprScoped(s as Expression, declared) + ");",
+    );
+    return true;
+  }
+  if (s.type === "IsExpression") {
+    const ie = s as IsExpressionExpr;
+    lines.push("process.exit(" + genExprScoped(ie, declared) + " ? 1 : 0);");
+    return true;
+  }
+  if (s.type === "Identifier") {
+    const resolved = resolveName((s as IdentifierNode).name, declared);
+    lines.push(genExitCoerced(resolved));
+    return true;
+  }
+  return false;
+}
+
 function genStmt(s: Statement, lines: string[], declared: string[]): void {
   if (s.type === "StructDefinition" || s.type === "TypeAlias") return;
   const node = s as Statement;
@@ -150,17 +182,7 @@ function genStmt(s: Statement, lines: string[], declared: string[]): void {
 
   if (genBoolExitStmt(s, node, lines, declared)) return;
 
-  if (s.type === "IsExpression") {
-    const ie = node as IsExpressionExpr;
-    lines.push("process.exit(" + genExprScoped(ie, declared) + " ? 1 : 0);");
-    return;
-  }
-
-  if (s.type === "Identifier") {
-    const resolved = resolveName((node as IdentifierNode).name, declared);
-    lines.push(genExitCoerced(resolved));
-    return;
-  }
+  if (genExprExitStmt(s, lines, declared)) return;
 
   if (
     s.type === "LetDeclaration" ||

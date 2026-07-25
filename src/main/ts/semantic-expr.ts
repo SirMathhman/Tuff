@@ -89,6 +89,7 @@ function checkLiteralExpr(
   if (expr.type === "NumberLiteral")
     return { isOk: true, value: (expr as { typeName?: string }).typeName };
   if (expr.type === "BooleanLiteral") return { isOk: true, value: "Bool" };
+  if (expr.type === "StringLiteral") return { isOk: true, value: "Str" };
   return null;
 }
 
@@ -143,6 +144,66 @@ export function checkExpr(
   return { isOk: true, value: refResult.value.typeName };
 }
 
+function checkStructFieldRef(
+  objType: string,
+  field: string,
+  structs: StructDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> | null {
+  const structDef = structs.find((s) => s.name === objType);
+  if (!structDef) return null;
+  const fieldDef = structDef.fields.find((f) => f.name === field);
+  if (!fieldDef) {
+    return {
+      isOk: false,
+      error: {
+        message:
+          "Unknown field '" + field + "' on struct '" + structDef.name + "'",
+        reason: "Field does not exist on struct.",
+        suggestedFix: "Use a valid field name.",
+        line: loc.line,
+        column: loc.column,
+      },
+    };
+  }
+  return { isOk: true, value: fieldDef.typeName };
+}
+
+function checkStrFieldErr(
+  field: string,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message: "Unknown field '" + field + "' on type 'Str'",
+      reason: "String type only supports the .length property.",
+      suggestedFix: "Use .length to get the string length.",
+      line: loc.line,
+      column: loc.column,
+    },
+  };
+}
+
+function checkPrimMemberErr(
+  objNodeType: string,
+  field: string,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const typeLabel = objNodeType === "NumberLiteral" ? "number" : "boolean";
+  return {
+    isOk: false,
+    error: {
+      message:
+        "Cannot access field '" + field + "' on a " + typeLabel + " literal",
+      reason: "Only struct types and Str support member access.",
+      suggestedFix: "Use a struct or string value.",
+      line: loc.line,
+      column: loc.column,
+    },
+  };
+}
+
 function checkMemberExpr(
   expr: Expression,
   scope: VarEntry[],
@@ -154,28 +215,23 @@ function checkMemberExpr(
   const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
   if (!objResult.isOk) return objResult;
   const objType = objResult.value;
+  if (objType === "Str") {
+    if (mexpr.field === "length") return { isOk: true, value: "USize" };
+    return checkStrFieldErr(mexpr.field, loc);
+  }
+  if (
+    mexpr.object.type === "NumberLiteral" ||
+    mexpr.object.type === "BooleanLiteral"
+  )
+    return checkPrimMemberErr(mexpr.object.type, mexpr.field, loc);
   if (objType) {
-    const structDef = structs.find((s) => s.name === objType);
-    if (structDef) {
-      const fieldDef = structDef.fields.find((f) => f.name === mexpr.field);
-      if (!fieldDef)
-        return {
-          isOk: false,
-          error: {
-            message:
-              "Unknown field '" +
-              mexpr.field +
-              "' on struct '" +
-              structDef.name +
-              "'",
-            reason: "Field does not exist on struct.",
-            suggestedFix: "Use a valid field name.",
-            line: loc.line,
-            column: loc.column,
-          },
-        };
-      return { isOk: true, value: fieldDef.typeName };
-    }
+    const structResult = checkStructFieldRef(
+      objType,
+      mexpr.field,
+      structs,
+      loc,
+    );
+    if (structResult) return structResult;
   }
   return { isOk: true, value: objType };
 }

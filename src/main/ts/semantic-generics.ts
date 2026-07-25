@@ -7,7 +7,7 @@ import type {
   TypeAliasDef,
 } from "./types";
 
-const VALID_TYPES = ["U8", "U16", "U32", "I32", "F32"];
+const VALID_TYPES = ["U8", "U16", "U32", "I32", "F32", "Str", "USize"];
 
 export { VALID_TYPES };
 
@@ -140,6 +140,26 @@ export function checkTypeName(
       },
     };
   return { isOk: true, value: undefined };
+}
+
+export function resolveFieldChainType(
+  parts: string[],
+  initialType: string | undefined,
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+): string | undefined {
+  let currentType = initialType
+    ? resolveAlias(initialType, aliases)
+    : undefined;
+  for (let i = 1; i < parts.length; i++) {
+    if (!currentType) break;
+    const structDef = structs.find((s) => s.name === currentType);
+    if (!structDef) break;
+    const fieldDef = structDef.fields.find((f) => f.name === parts[i]);
+    if (!fieldDef) break;
+    currentType = fieldDef.typeName;
+  }
+  return currentType;
 }
 
 export function checkRef(

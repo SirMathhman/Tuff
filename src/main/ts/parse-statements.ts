@@ -109,6 +109,7 @@ function parseLetType(
   if (!colonToken || colonToken.type !== "COLON")
     return { isOk: true, value: undefined };
   consume(ctx);
+  if (peek(ctx)?.type === "AMPERSAND") consume(ctx);
   const typeResult = parseTypeNameWithGenerics(ctx);
   if (!typeResult.isOk) return typeResult;
   return { isOk: true, value: typeResult.value };
@@ -125,19 +126,19 @@ function parseAssignmentStatement(
   const early = parseEarlyReturn(expr, token);
   if (early) return early;
   const equalsResult = expectToken(ctx, "EQUALS", "=");
-  if (!equalsResult.isOk)
+  if (!equalsResult.isOk) {
+    if (expr.type === "MemberExpression")
+      return { isOk: true, value: expr as MemberExpressionExpr };
     return {
       isOk: true,
       value: {
         type: "Identifier",
-        name:
-          expr.type === "MemberExpression"
-            ? getMemberName(expr)
-            : (expr as IdentifierExpr).name,
+        name: (expr as IdentifierExpr).name,
         line: token.line,
         column: token.column,
       },
     };
+  }
   if (expr.type === "MemberExpression")
     return parseMemberAssignment(
       ctx,
@@ -148,6 +149,15 @@ function parseAssignmentStatement(
   return parseSimpleAssign(ctx, expr as IdentifierExpr, token);
 }
 
+function makeNumLiteralStmt(value: number, token: Token): Statement {
+  return {
+    type: "NumberLiteral",
+    value,
+    line: token.line,
+    column: token.column,
+  };
+}
+
 function parseEarlyReturn(
   expr: Expression,
   token: Token,
@@ -155,37 +165,34 @@ function parseEarlyReturn(
   if (expr.type === "NumberLiteral")
     return {
       isOk: true,
-      value: {
-        type: "NumberLiteral",
-        value: (expr as NumberLiteralExpr).value,
-        line: token.line,
-        column: token.column,
-      },
+      value: makeNumLiteralStmt((expr as NumberLiteralExpr).value, token),
     };
   if (expr.type === "BooleanLiteral")
     return {
       isOk: true,
-      value: {
-        type: "NumberLiteral",
-        value: (expr as { value: boolean }).value ? 1 : 0,
-        line: token.line,
-        column: token.column,
-      },
+      value: makeNumLiteralStmt(
+        (expr as { value: boolean }).value ? 1 : 0,
+        token,
+      ),
     };
   if (expr.type === "LogicalExpression" || expr.type === "NotExpression")
     return { isOk: true, value: expr as Statement };
   if (expr.type === "IsExpression")
     return { isOk: true, value: expr as IsExpressionExpr };
   if (expr.type === "StructInstance")
+    return { isOk: true, value: makeNumLiteralStmt(0, token) };
+  if (expr.type === "StringLiteral") {
+    const sl = expr as { value: string };
     return {
       isOk: true,
       value: {
-        type: "NumberLiteral",
-        value: 0,
+        type: "StringLiteral",
+        value: sl.value,
         line: token.line,
         column: token.column,
       },
     };
+  }
   return null;
 }
 
@@ -216,17 +223,6 @@ function parseAssignmentBody(
   const semiResult = expectToken(ctx, "SEMICOLON", ";");
   if (!semiResult.isOk) return semiResult;
   return rhsResult;
-}
-
-function getMemberName(expr: Expression): string {
-  if (expr.type === "MemberExpression")
-    return (
-      getMemberName((expr as MemberExpressionExpr).object) +
-      "." +
-      (expr as MemberExpressionExpr).field
-    );
-  if (expr.type === "Identifier") return (expr as IdentifierExpr).name;
-  return "_";
 }
 
 function parseNameWithTypeParams(
@@ -349,6 +345,7 @@ function parseSingleField(
   consume(ctx);
   const colonResult = expectToken(ctx, "COLON", ":");
   if (!colonResult.isOk) return colonResult;
+  if (peek(ctx)?.type === "AMPERSAND") consume(ctx);
   const typeName = parseTypeNameWithGenerics(ctx);
   if (!typeName.isOk) return typeName;
   return { isOk: true, value: { name: fieldName, typeName: typeName.value } };

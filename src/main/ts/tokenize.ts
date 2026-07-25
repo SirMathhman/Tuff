@@ -50,6 +50,7 @@ const OP_TYPE_MAP: Record<string, string> = {
   ">": "RBRACKET",
   "!": "NOT",
   "|": "PIPE",
+  "&": "AMPERSAND",
 };
 
 function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
@@ -65,6 +66,8 @@ function tryReadMultiCharOp(
   if (!MULTI_CHAR_OPS.has(ch)) return { isOk: false, error: null as never };
   const next = ctx.source[ctx.pos + 1];
   if (next === ch) {
+    ctx.pos += 2;
+    ctx.column += 2;
     return {
       isOk: true,
       value: {
@@ -75,8 +78,10 @@ function tryReadMultiCharOp(
       },
     };
   }
-  // Single | is PIPE (for type disjunctions)
+  ctx.pos++;
+  ctx.column++;
   if (ch === "|") return { isOk: true, value: tokenizeOperator(ch, ctx) };
+  if (ch === "&") return { isOk: true, value: tokenizeOperator(ch, ctx) };
   return { isOk: false, error: null as never };
 }
 
@@ -140,6 +145,58 @@ function readIdentifier(ctx: TokenizeContext): Token {
   };
 }
 
+function resolveEscape(next: string | undefined): string {
+  if (next === "n") return "\n";
+  if (next === "t") return "\t";
+  if (next === '"') return '"';
+  if (next === "\\") return "\\";
+  if (next === "r") return "\r";
+  return next || "";
+}
+
+function readString(ctx: TokenizeContext): Result<Token, CompileError> {
+  let str = "";
+  ctx.pos++;
+  ctx.column++;
+  while (ctx.pos < ctx.source.length) {
+    const c = ctx.source[ctx.pos];
+    if (!c) break;
+    ctx.pos++;
+    ctx.column++;
+    if (c === '"') {
+      return {
+        isOk: true,
+        value: {
+          type: "STRING_LITERAL",
+          value: str,
+          line: ctx.line,
+          column: ctx.column,
+        },
+      };
+    }
+    if (c === "\\") {
+      const next = ctx.source[ctx.pos];
+      if (next) {
+        ctx.pos++;
+        ctx.column++;
+      }
+      str += resolveEscape(next);
+      continue;
+    }
+    str += c;
+  }
+  return {
+    isOk: false,
+    error: {
+      message: "Unterminated string literal",
+      reason: "String literal must end with a double quote.",
+      suggestedFix: 'Add a closing " to the string.',
+      line: ctx.line,
+      column: ctx.column,
+    },
+  };
+}
+
 function tokenizeUnknown(ch: string, ctx: TokenizeContext): Err<CompileError> {
   return {
     isOk: false,
@@ -169,6 +226,28 @@ function skipWhitespace(ctx: TokenizeContext): boolean {
   return false;
 }
 
+function tryTokenizeMultiChar(
+  ch: string,
+  ctx: TokenizeContext,
+): Result<Token, CompileError> | null {
+  if (!MULTI_CHAR_OPS.has(ch)) return null;
+  const multiResult = tryReadMultiCharOp(ch, ctx);
+  if (!multiResult.isOk) return tokenizeUnknown(ch, ctx);
+  return { isOk: true, value: multiResult.value };
+}
+
+function pushToken(token: Token, tokens: Token[], ctx: TokenizeContext): void {
+  token.column = ctx.column;
+  token.line = ctx.line;
+  tokens.push(token);
+}
+
+function readDigitOrAlpha(ch: string, ctx: TokenizeContext): Token | null {
+  if (isDigit(ch)) return readNumber(ctx);
+  if (isAlpha(ch)) return readIdentifier(ctx);
+  return null;
+}
+
 export function tokenize(source: string): Result<Token[], CompileError> {
   const tokens: Token[] = [];
   const ctx: TokenizeContext = { source, pos: 0, line: 1, column: 1 };
@@ -176,22 +255,11 @@ export function tokenize(source: string): Result<Token[], CompileError> {
     const ch = ctx.source[ctx.pos];
     if (!ch) break;
     if (skipWhitespace(ctx)) continue;
-    if (isDigit(ch)) {
-      const token = readNumber(ctx);
-      token.column = ctx.column;
-      token.line = ctx.line;
-      tokens.push(token);
+    const multiResult = tryTokenizeMultiChar(ch, ctx);
+    if (multiResult) {
+      if (!multiResult.isOk) return multiResult;
+      tokens.push(multiResult.value);
       continue;
-    }
-    if (MULTI_CHAR_OPS.has(ch)) {
-      const multiResult = tryReadMultiCharOp(ch, ctx);
-      if (multiResult.isOk) {
-        tokens.push(multiResult.value);
-        ctx.pos += 2;
-        ctx.column += 2;
-        continue;
-      }
-      return tokenizeUnknown(ch, ctx);
     }
     if (isOperator(ch)) {
       tokens.push(tokenizeOperator(ch, ctx));
@@ -199,11 +267,15 @@ export function tokenize(source: string): Result<Token[], CompileError> {
       ctx.column++;
       continue;
     }
-    if (isAlpha(ch)) {
-      const token = readIdentifier(ctx);
-      token.column = ctx.column;
-      token.line = ctx.line;
-      tokens.push(token);
+    const literalToken = readDigitOrAlpha(ch, ctx);
+    if (literalToken) {
+      pushToken(literalToken, tokens, ctx);
+      continue;
+    }
+    if (ch === '"') {
+      const tokenResult = readString(ctx);
+      if (!tokenResult.isOk) return tokenResult;
+      pushToken(tokenResult.value, tokens, ctx);
       continue;
     }
     return tokenizeUnknown(ch, ctx);

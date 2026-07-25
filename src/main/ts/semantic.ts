@@ -13,13 +13,14 @@ import type {
   VarEntry,
   TypeAliasDef,
 } from "./types";
-import { VALID_TYPES } from "./types";
 import {
   checkAssignmentUndeclared,
   checkAssignmentImmutable,
   checkMemberUndeclared,
   checkMemberImmutable,
   checkTypeMatch,
+  checkTypeRef,
+  errResult,
 } from "./semantic-errors";
 import { checkExpr } from "./semantic-expr";
 import {
@@ -29,26 +30,9 @@ import {
   resolveFieldTypeWithGenerics,
   checkCircularAlias,
   resolveAlias,
+  resolveFieldChainType,
 } from "./semantic-generics";
 
-function checkTypeRef(
-  typeName: string,
-  structs: StructDef[],
-  loc: { line: number; column: number },
-  errorMsgPrefix: string,
-): Result<StructDef | undefined, CompileError> {
-  const isNumeric = VALID_TYPES.includes(typeName);
-  const structDef = structs.find((s) => s.name === typeName);
-  if (!isNumeric && !structDef)
-    return errResult(
-      errorMsgPrefix + typeName + "'",
-      "Type must be a valid numeric type, Bool, or defined struct.",
-      "Use a valid type like U8, U32, Bool, or define the struct first.",
-      loc.line,
-      loc.column,
-    );
-  return { isOk: true, value: structDef };
-}
 function checkStructDef(
   node: StructDefinitionNode,
   structs: StructDef[],
@@ -97,18 +81,6 @@ function checkStructDef(
   return { isOk: true, value: undefined };
 }
 
-function errResult<T = never>(
-  msg: string,
-  reason: string,
-  fix: string,
-  line: number,
-  column: number,
-): Result<T, CompileError> {
-  return {
-    isOk: false,
-    error: { message: msg, reason, suggestedFix: fix, line, column },
-  } as Result<T, CompileError>;
-}
 function checkAliasUnderlying(
   underlyingType: string,
   typeParams: string[],
@@ -420,39 +392,73 @@ function analyzeBoolStmt(
   return { isOk: true, value: undefined };
 }
 
+function isBoolOrMemberExpr(stmt: Statement): stmt is typeof stmt & {
+  type: "LogicalExpression" | "NotExpression" | "MemberExpression";
+} {
+  return (
+    stmt.type === "LogicalExpression" ||
+    stmt.type === "NotExpression" ||
+    stmt.type === "MemberExpression"
+  );
+}
+
 function analyzeStatement(
   stmt: Statement,
   scope: VarEntry[],
   structs: StructDef[],
   aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
-  if (stmt.type === "StructDefinition") {
-    const node = stmt as StructDefinitionNode;
-    return checkStructDef(node, structs, aliases);
-  } else if (stmt.type === "TypeAlias") {
-    const node = stmt as TypeAliasNode;
-    return checkTypeAlias(node, structs, aliases);
-  } else if (stmt.type === "LetDeclaration") {
-    const node = stmt as LetDeclarationNode;
-    return checkLetSemantics(node, scope, structs, aliases);
-  } else if (stmt.type === "Assignment") {
-    const node = stmt as AssignmentNode;
-    return checkAssignmentSemantics(node, scope, structs, aliases);
-  } else if (stmt.type === "MemberAssignment") {
-    const node = stmt as MemberAssignmentNode;
-    return checkMemberAssignment(node, scope, structs, aliases);
-  } else if (stmt.type === "Identifier") {
-    const node = stmt as IdentifierNode;
-    return checkIdentifierStatement(node, scope, structs, aliases);
-  } else if (
-    stmt.type === "LogicalExpression" ||
-    stmt.type === "NotExpression"
-  ) {
+  if (stmt.type === "StructDefinition")
+    return checkStructDef(stmt as StructDefinitionNode, structs, aliases);
+  if (stmt.type === "TypeAlias")
+    return checkTypeAlias(stmt as TypeAliasNode, structs, aliases);
+  if (stmt.type === "LetDeclaration")
+    return checkLetSemantics(
+      stmt as LetDeclarationNode,
+      scope,
+      structs,
+      aliases,
+    );
+  if (stmt.type === "Assignment")
+    return checkAssignmentSemantics(
+      stmt as AssignmentNode,
+      scope,
+      structs,
+      aliases,
+    );
+  if (stmt.type === "MemberAssignment")
+    return checkMemberAssignment(
+      stmt as MemberAssignmentNode,
+      scope,
+      structs,
+      aliases,
+    );
+  if (stmt.type === "Identifier")
+    return checkIdentifierStatement(
+      stmt as IdentifierNode,
+      scope,
+      structs,
+      aliases,
+    );
+  if (isBoolOrMemberExpr(stmt))
     return analyzeBoolStmt(stmt, scope, structs, aliases);
-  } else if (stmt.type === "NumberLiteral") {
-    return { isOk: true, value: undefined };
-  }
+  if (stmt.type === "NumberLiteral") return { isOk: true, value: undefined };
+  if (stmt.type === "StringLiteral")
+    return strExitErr(stmt as { line: number; column: number });
   return { isOk: true, value: undefined };
+}
+
+function strExitErr(node: {
+  line: number;
+  column: number;
+}): ReturnType<typeof errResult<void>> {
+  return errResult(
+    "String value cannot be used as an exit expression",
+    "String values cannot be converted to a valid exit code.",
+    "Use a numeric, boolean, or struct expression.",
+    node.line,
+    node.column,
+  );
 }
 
 function checkIdentifierStatement(
@@ -463,38 +469,26 @@ function checkIdentifierStatement(
 ): Result<void, CompileError> {
   if (node.name.includes(".")) {
     const parts = node.name.split(".");
-    const baseName = parts[0];
-    const entry = scope.find((e) => e.name === baseName);
+    const entry = scope.find((e) => e.name === parts[0]);
     if (!entry)
       return errResult(
-        "Use of undeclared variable '" + baseName + "'",
+        "Use of undeclared variable '" + parts[0] + "'",
         "Variable must be declared before use.",
         "Declare the variable with 'let' first.",
         node.line,
         node.column,
       );
-    return validateFieldChain(parts, entry.typeName, structs, aliases);
+    const resolvedType = resolveFieldChainType(
+      parts,
+      entry.typeName,
+      structs,
+      aliases,
+    );
+    if (resolvedType === "Str") return strExitErr(node);
+    return { isOk: true, value: undefined };
   }
   const refResult = checkRef(node.name, scope, node);
   if (!refResult.isOk) return refResult;
-  return { isOk: true, value: undefined };
-}
-function validateFieldChain(
-  parts: string[],
-  initialType: string | undefined,
-  structs: StructDef[],
-  aliases: TypeAliasDef[],
-): Result<void, CompileError> {
-  let currentType = initialType
-    ? resolveAlias(initialType, aliases)
-    : undefined;
-  for (let i = 1; i < parts.length; i++) {
-    if (!currentType) break;
-    const structDef = structs.find((s) => s.name === currentType);
-    if (!structDef) break;
-    const fieldDef = structDef.fields.find((f) => f.name === parts[i]);
-    if (!fieldDef) break;
-    currentType = fieldDef.typeName;
-  }
+  if (refResult.value.typeName === "Str") return strExitErr(node);
   return { isOk: true, value: undefined };
 }

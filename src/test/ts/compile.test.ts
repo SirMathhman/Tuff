@@ -412,3 +412,47 @@ test("Struct definition with semicolon still works", () => {
     42,
   );
 });
+
+test("String literal .length", () => {
+  expectValid('let s : &Str = "hello"; s.length', [], 5);
+});
+
+test("Empty string .length", () => {
+  expectValid('let s : &Str = ""; s.length', [], 0);
+});
+
+test("String literal with escape sequences .length", () => {
+  expectValid('let s : &Str = "a\\nb\\tc"; s.length', [], 5);
+});
+
+test("Literal string .length", () => {
+  expectValid('"hello".length', [], 5);
+});
+
+test("String literal .length returns USize", () => {
+  expectValid('let s : &Str = "hi"; let len : USize = s.length; len', [], 2);
+});
+
+test("String in is expression", () => {
+  expectValid('let s : &Str = "hi"; s is Str', [], 1);
+});
+
+test("Missing closing quote", () => {
+  expectInvalid('let s : &Str = "hello;');
+});
+
+test("Type mismatch: string assigned to I32", () => {
+  expectInvalid('let x : I32 = "hello";');
+});
+
+test("dot length on non-string", () => {
+  expectInvalid("42.length");
+});
+
+test("String literal as exit expression", () => {
+  expectInvalid('"hello"');
+});
+
+test("String variable as exit expression", () => {
+  expectInvalid('let s : &Str = "hi"; s');
+});

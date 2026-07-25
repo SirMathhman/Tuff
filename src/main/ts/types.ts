@@ -93,6 +93,8 @@ export interface TypeAliasNode {
 export type Statement =
   | NumberLiteralNode
   | IdentifierNode
+  | StringLiteralExpr
+  | MemberExpressionExpr
   | LetDeclarationNode
   | AssignmentNode
   | StructDefinitionNode
@@ -153,9 +155,17 @@ export interface NotExpressionExpr {
   column: number;
 }
 
+export interface StringLiteralExpr {
+  type: "StringLiteral";
+  value: string;
+  line: number;
+  column: number;
+}
+
 export type Expression =
   | NumberLiteralExpr
   | BooleanLiteralExpr
+  | StringLiteralExpr
   | IdentifierExpr
   | StructInstanceExpr
   | MemberExpressionExpr
@@ -199,4 +209,6 @@ export const VALID_TYPES = [
   "I32",
   "I64",
   "Bool",
+  "Str",
+  "USize",
 ];

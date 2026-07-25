@@ -96,23 +96,33 @@ function parseUnaryExpression(
   return parsePostfixExpression(ctx);
 }
 
+function parsePrimaryWithChain(
+  ctx: ParseContext,
+  parser: (ctx: ParseContext) => Result<Expression, CompileError>,
+): Result<Expression, CompileError> {
+  const r = parser(ctx);
+  if (!r.isOk) return r;
+  const memberResult = parseMemberChain(ctx, r.value);
+  if (!memberResult.isOk) return memberResult;
+  return parseIsExpression(ctx, memberResult.value);
+}
+
 function parsePostfixExpression(
   ctx: ParseContext,
 ): Result<Expression, CompileError> {
   const token = peek(ctx);
   if (!token) return unexpectedEofError("an expression");
-  if (token.type === "NUMBER") {
-    const r = parseNumberLiteral(ctx);
-    if (!r.isOk) return r;
-    return parseIsExpression(ctx, r.value);
-  }
-  if (token.type === "BOOLEAN") {
-    const r = parseBooleanLiteral(ctx);
-    if (!r.isOk) return r;
-    return parseIsExpression(ctx, r.value);
-  }
+  if (token.type === "NUMBER")
+    return parsePrimaryWithChain(ctx, parseNumberLiteral);
+  if (token.type === "BOOLEAN")
+    return parsePrimaryWithChain(ctx, parseBooleanLiteral);
+  if (token.type === "STRING_LITERAL")
+    return parsePrimaryWithChain(ctx, parseStringLiteral);
   if (token.type === "IDENTIFIER") return parseIdentifierExpression(ctx);
-  return unexpectedTokenError(token, "a number, identifier, or boolean");
+  return unexpectedTokenError(
+    token,
+    "a number, string, identifier, or boolean",
+  );
 }
 
 function parseBooleanLiteral(
@@ -156,6 +166,21 @@ function parseNumberLiteral(
       type: "NumberLiteral",
       value: parseInt(token.value, 10),
       typeName: token.typeSuffix || undefined,
+    },
+  };
+}
+
+function parseStringLiteral(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  const token = consume(ctx);
+  return {
+    isOk: true,
+    value: {
+      type: "StringLiteral",
+      value: token.value,
+      line: token.line,
+      column: token.column,
     },
   };
 }

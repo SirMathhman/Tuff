@@ -1,4 +1,5 @@
 import type { Result, CompileError, StructDef } from "./types";
+import { VALID_TYPES } from "./types";
 
 export function checkStructUndefined(
   structName: string,
@@ -221,6 +222,38 @@ export function checkTypeMatch(
     );
   }
   return { isOk: true, value: undefined };
+}
+
+export function errResult<T = never>(
+  msg: string,
+  reason: string,
+  fix: string,
+  line: number,
+  column: number,
+): Result<T, CompileError> {
+  return {
+    isOk: false,
+    error: { message: msg, reason, suggestedFix: fix, line, column },
+  } as Result<T, CompileError>;
+}
+
+export function checkTypeRef(
+  typeName: string,
+  structs: StructDef[],
+  loc: { line: number; column: number },
+  errorMsgPrefix: string,
+): Result<StructDef | undefined, CompileError> {
+  const isNumeric = VALID_TYPES.includes(typeName);
+  const structDef = structs.find((s) => s.name === typeName);
+  if (!isNumeric && !structDef)
+    return errResult(
+      errorMsgPrefix + typeName + "'",
+      "Type must be a valid numeric type, Bool, or defined struct.",
+      "Use a valid type like U8, U32, Bool, or define the struct first.",
+      loc.line,
+      loc.column,
+    );
+  return { isOk: true, value: structDef };
 }
 
 export function checkTypeArgCount(
