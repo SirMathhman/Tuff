@@ -5,5 +5,8 @@
       "rankdir": "TB",
       "splines" : "ortho"
     }
+  },
+  "detectiveOptions": {
+    "ts": { "skipTypeImports": true }
   }
 }

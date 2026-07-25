@@ -7,7 +7,7 @@ const INTERVAL_MS = 60_000;
 export const ElapsedTimeNotifier: Plugin = async ({ client }) => {
   return {
     event: async ({ event }) => {
-      if (event.type === "session.created") {
+      if (event.type === "session.idle") {
         const sessionId = event.properties.info.id;
         sessionStart.set(sessionId, Date.now());
         lastNotified.set(sessionId, 0);

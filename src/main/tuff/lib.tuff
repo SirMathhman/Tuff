@@ -6,7 +6,7 @@ struct Err<X> {
     field : X
 }
 
-
+type Result<T, X> = Ok<T> | Err<X>;
 
 let x = 42;
 x

@@ -10,8 +10,8 @@
     "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
     "lint": "npm run format && tsc --noEmit && eslint ./src --fix",
     "format": "prettier . --write",
-    "circular": "madge ./src --circular",
-    "visualize": "madge ./src --image ./docs/graph.svg --extensions ts"
+    "circular": "madge ./src --circular --extensions ts",
+    "visualize": "madge ./src/main --image ./docs/graph.svg --extensions ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

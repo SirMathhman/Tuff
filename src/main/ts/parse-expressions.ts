@@ -289,15 +289,35 @@ export function parseTypeNameWithGenerics(
       typeToken || { type: "EOF", value: "", line: 0, column: 0 },
       "type name",
     );
-  let typeName = typeToken.value;
-  consume(ctx);
-  const ltToken = peek(ctx);
-  if (ltToken && ltToken.type === "LBRACKET") {
+
+  const baseResult = parseBaseTypeWithGenerics(ctx);
+  let typeName: string = baseResult.isOk ? baseResult.value : "";
+  if (!baseResult.isOk) return baseResult;
+  // Parse disjunction arms separated by PIPE tokens (|)
+  while (peek(ctx)?.type === "PIPE") {
     consume(ctx);
-    const typeArgsResult = parseBracketedList(ctx, "type argument");
-    if (!typeArgsResult.isOk) return typeArgsResult;
-    typeName = typeName + "<" + typeArgsResult.value.join(", ") + ">";
+    const nextResult = parseTypeNameWithGenerics(ctx);
+    if (!nextResult.isOk) return nextResult;
+    typeName += " | " + nextResult.value;
   }
+
+  return { isOk: true, value: typeName };
+}
+
+function parseBaseTypeWithGenerics(
+  ctx: ParseContext,
+): Result<string, CompileError> {
+  const typeToken = peek(ctx);
+  let typeName = typeToken!.value;
+  consume(ctx);
+
+  if (peek(ctx)?.type === "LBRACKET") {
+    consume(ctx);
+    const argsResult = parseBracketedList(ctx, "type argument");
+    if (!argsResult.isOk) return argsResult;
+    typeName += "<" + argsResult.value.join(", ") + ">";
+  }
+
   return { isOk: true, value: typeName };
 }
 

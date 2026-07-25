@@ -49,6 +49,7 @@ const OP_TYPE_MAP: Record<string, string> = {
   "<": "LBRACKET",
   ">": "RBRACKET",
   "!": "NOT",
+  "|": "PIPE",
 };
 
 function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
@@ -74,6 +75,8 @@ function tryReadMultiCharOp(
       },
     };
   }
+  // Single | is PIPE (for type disjunctions)
+  if (ch === "|") return { isOk: true, value: tokenizeOperator(ch, ctx) };
   return { isOk: false, error: null as never };
 }
 
