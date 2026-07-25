@@ -6,6 +6,8 @@ import type {
   VarEntry,
   StructDef,
   TypeAliasDef,
+  LogicalExpressionExpr,
+  NotExpressionExpr,
 } from "./types";
 import {
   checkStructUndefined,
@@ -18,7 +20,7 @@ import {
   resolveAlias,
   parseGenericTypeName,
   checkTypeName,
-  checkExpr as checkExprBase,
+  checkRef,
 } from "./semantic-generics";
 
 type StructCtx = {
@@ -32,6 +34,151 @@ type Sexpr = {
   typeArgs: string[];
   fields: { name: string; value: Expression }[];
 };
+
+function typeMismatch(
+  actual: string | undefined,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  return {
+    isOk: false,
+    error: {
+      message:
+        "Type mismatch: got '" +
+        (actual || "unknown") +
+        "' but expected 'Bool'",
+      reason:
+        actual === "Bool"
+          ? "! requires a Bool operand"
+          : "&& and || require Bool operands",
+      suggestedFix: "Use a Bool value.",
+      line: loc.line,
+      column: loc.column,
+    },
+  };
+}
+
+function checkBoolOperand(
+  result: string | undefined,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> | null {
+  if (result === "Bool") return null;
+  return typeMismatch(result, loc);
+}
+
+function checkBoolBinOp(
+  lexpr: LogicalExpressionExpr,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const leftResult = checkExpr(lexpr.left, scope, structs, aliases, loc);
+  if (!leftResult.isOk) return leftResult;
+  const boolErr = checkBoolOperand(leftResult.value, loc);
+  if (boolErr && !boolErr.isOk) return boolErr;
+  const rightResult = checkExpr(lexpr.right, scope, structs, aliases, loc);
+  if (!rightResult.isOk) return rightResult;
+  const boolErr2 = checkBoolOperand(rightResult.value, loc);
+  if (boolErr2 && !boolErr2.isOk) return boolErr2;
+  return { isOk: true, value: "Bool" };
+}
+
+function checkLiteralExpr(
+  expr: Expression,
+): Result<string | undefined, CompileError> | null {
+  if (expr.type === "NumberLiteral")
+    return { isOk: true, value: (expr as { typeName?: string }).typeName };
+  if (expr.type === "BooleanLiteral") return { isOk: true, value: "Bool" };
+  return null;
+}
+
+function checkNotExpr(
+  expr: NotExpressionExpr,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const operandResult = checkExpr(expr.operand, scope, structs, aliases, loc);
+  if (!operandResult.isOk) return operandResult;
+  const notErr = checkBoolOperand(operandResult.value, loc);
+  if (notErr && !notErr.isOk) return notErr;
+  return { isOk: true, value: "Bool" };
+}
+
+export function checkExpr(
+  expr: Expression,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const literalResult = checkLiteralExpr(expr);
+  if (literalResult) return literalResult;
+  if (expr.type === "IsExpression")
+    return checkIsExpr(expr, scope, structs, aliases, loc);
+  if (expr.type === "StructInstance")
+    return checkStructExpr(expr, scope, structs, aliases, loc);
+  if (expr.type === "MemberExpression")
+    return checkMemberExpr(expr, scope, structs, aliases, loc);
+  if (expr.type === "LogicalExpression")
+    return checkBoolBinOp(
+      expr as LogicalExpressionExpr,
+      scope,
+      structs,
+      aliases,
+      loc,
+    );
+  if (expr.type === "NotExpression")
+    return checkNotExpr(
+      expr as NotExpressionExpr,
+      scope,
+      structs,
+      aliases,
+      loc,
+    );
+  const idExpr = expr as { name: string };
+  const refResult = checkRef(idExpr.name, scope, loc);
+  if (!refResult.isOk) return refResult;
+  return { isOk: true, value: refResult.value.typeName };
+}
+
+function checkMemberExpr(
+  expr: Expression,
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const mexpr = expr as { object: Expression; field: string };
+  const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
+  if (!objResult.isOk) return objResult;
+  const objType = objResult.value;
+  if (objType) {
+    const structDef = structs.find((s) => s.name === objType);
+    if (structDef) {
+      const fieldDef = structDef.fields.find((f) => f.name === mexpr.field);
+      if (!fieldDef)
+        return {
+          isOk: false,
+          error: {
+            message:
+              "Unknown field '" +
+              mexpr.field +
+              "' on struct '" +
+              structDef.name +
+              "'",
+            reason: "Field does not exist on struct.",
+            suggestedFix: "Use a valid field name.",
+            line: loc.line,
+            column: loc.column,
+          },
+        };
+      return { isOk: true, value: fieldDef.typeName };
+    }
+  }
+  return { isOk: true, value: objType };
+}
 
 function findFieldForTypeParam(
   def: StructDef,
@@ -85,7 +232,7 @@ function inferTypeArgs(
       inferred.push(nestedType);
       continue;
     }
-    const typeResult = checkExprBase(
+    const typeResult = checkExpr(
       fieldValue.value,
       ctx.scope,
       ctx.structs,
@@ -135,7 +282,7 @@ function validateStructField(
         column: ctx.loc.column,
       },
     };
-  const typeResult = checkExprBase(
+  const typeResult = checkExpr(
     field.value,
     ctx.scope,
     ctx.structs,
@@ -220,13 +367,7 @@ export function checkIsExpr(
   loc: { line: number; column: number },
 ): Result<string | undefined, CompileError> {
   const isexpr = expr as { operand: Expression; typeName: string };
-  const operandResult = checkExprBase(
-    isexpr.operand,
-    scope,
-    structs,
-    aliases,
-    loc,
-  );
+  const operandResult = checkExpr(isexpr.operand, scope, structs, aliases, loc);
   if (!operandResult.isOk) return operandResult;
   const typeCheck = checkTypeName(
     isexpr.typeName,

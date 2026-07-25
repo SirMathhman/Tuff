@@ -21,10 +21,10 @@ import {
   checkMemberImmutable,
   checkTypeMatch,
 } from "./semantic-errors";
+import { checkExpr } from "./semantic-expr";
 import {
   parseGenericTypeName,
   checkTypeName,
-  checkExpr,
   checkRef,
   resolveFieldTypeWithGenerics,
   checkCircularAlias,
