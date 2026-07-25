@@ -181,6 +181,8 @@ function parseEarlyReturn(
     return { isOk: true, value: expr as IsExpressionExpr };
   if (expr.type === "StructInstance")
     return { isOk: true, value: makeNumLiteralStmt(0, token) };
+  if (expr.type === "TupleExpr")
+    return { isOk: true, value: makeNumLiteralStmt(0, token) };
   if (expr.type === "StringLiteral") {
     const sl = expr as { value: string };
     return {

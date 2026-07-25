@@ -13,6 +13,7 @@ import type {
   VarEntry,
   TypeAliasDef,
 } from "./types";
+import { isTupleType } from "./semantic-generics";
 import {
   checkAssignmentUndeclared,
   checkAssignmentImmutable,
@@ -352,6 +353,14 @@ function checkMemberAssignment(
     return checkMemberImmutable(
       { line: node.line, column: node.column },
       baseName,
+    );
+  if (entry.typeName && isTupleType(entry.typeName))
+    return errResult(
+      "Cannot assign to tuple element",
+      "Tuple elements are immutable.",
+      "Use a struct instead or declare the tuple as mutable (not yet supported).",
+      node.line,
+      node.column,
     );
   const fieldResult = resolveFieldTypeWithGenerics(
     node.object,

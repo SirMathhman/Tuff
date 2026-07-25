@@ -5,6 +5,7 @@ import {
   consumeToken as consume,
   unexpectedTokenError,
   unexpectedEofError,
+  expectRParen,
 } from "./parse-helpers";
 
 export interface ParseContext {
@@ -119,10 +120,58 @@ function parsePostfixExpression(
   if (token.type === "STRING_LITERAL")
     return parsePrimaryWithChain(ctx, parseStringLiteral);
   if (token.type === "IDENTIFIER") return parseIdentifierExpression(ctx);
+  if (token.type === "LPAREN") return parseParenOrTupleExpr(ctx);
   return unexpectedTokenError(
     token,
-    "a number, string, identifier, or boolean",
+    "a number, string, identifier, boolean, or '('",
   );
+}
+
+function parseRemainingTupleElements(
+  ctx: ParseContext,
+  elements: Expression[],
+): Result<Expression[], CompileError> {
+  while (true) {
+    const next = peek(ctx);
+    if (next && next.type === "RPAREN") {
+      consume(ctx);
+      break;
+    }
+    const elemResult = parseExpression(ctx);
+    if (!elemResult.isOk) return elemResult;
+    elements.push(elemResult.value);
+    const comma = peek(ctx);
+    if (comma && comma.type === "COMMA") consume(ctx);
+  }
+  return { isOk: true, value: elements };
+}
+
+function parseParenOrTupleExpr(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  consume(ctx);
+  const firstResult = parseExpression(ctx);
+  if (!firstResult.isOk) return firstResult;
+  const after = peek(ctx);
+  if (after && after.type === "COMMA") {
+    consume(ctx);
+    const elementsResult = parseRemainingTupleElements(ctx, [
+      firstResult.value,
+    ]);
+    if (!elementsResult.isOk) return elementsResult;
+    const tupleExpr: Expression = {
+      type: "TupleExpr",
+      elements: elementsResult.value,
+    };
+    const memberResult = parseMemberChain(ctx, tupleExpr);
+    if (!memberResult.isOk) return memberResult;
+    return parseIsExpression(ctx, memberResult.value);
+  }
+  const rpErr = expectRParen(ctx);
+  if (!rpErr.isOk) return rpErr;
+  const memberResult = parseMemberChain(ctx, firstResult.value);
+  if (!memberResult.isOk) return memberResult;
+  return parseIsExpression(ctx, memberResult.value);
 }
 
 function parseBooleanLiteral(
@@ -227,17 +276,21 @@ function parseMemberChain(
     if (dot && dot.value === ".") {
       consume(ctx);
       const fieldToken = peek(ctx);
-      if (!fieldToken || fieldToken.type !== "IDENTIFIER")
+      if (!fieldToken)
         return unexpectedTokenError(
-          fieldToken || { type: "EOF", value: "", line: 0, column: 0 },
-          "field name",
+          { type: "EOF", value: "", line: 0, column: 0 },
+          "field name or index",
         );
-      consume(ctx);
-      current = {
-        type: "MemberExpression",
-        object: current,
-        field: fieldToken.value,
-      };
+      if (fieldToken.type === "IDENTIFIER" || fieldToken.type === "NUMBER") {
+        consume(ctx);
+        current = {
+          type: "MemberExpression",
+          object: current,
+          field: fieldToken.value,
+        };
+      } else {
+        return unexpectedTokenError(fieldToken, "field name or index");
+      }
     } else break;
   }
   return { isOk: true, value: current };
@@ -331,7 +384,10 @@ export function parseTypeNameWithGenerics(
   ctx: ParseContext,
 ): Result<string, CompileError> {
   const typeToken = peek(ctx);
-  if (!typeToken || typeToken.type !== "IDENTIFIER")
+  if (
+    !typeToken ||
+    (typeToken.type !== "IDENTIFIER" && typeToken.type !== "LPAREN")
+  )
     return unexpectedTokenError(
       typeToken || { type: "EOF", value: "", line: 0, column: 0 },
       "type name",
@@ -351,11 +407,48 @@ export function parseTypeNameWithGenerics(
   return { isOk: true, value: typeName };
 }
 
+function parseRemainingTupleTypes(
+  ctx: ParseContext,
+  types: string[],
+): Result<string[], CompileError> {
+  while (true) {
+    const next = peek(ctx);
+    if (next && next.type === "RPAREN") {
+      consume(ctx);
+      break;
+    }
+    const typeResult = parseTypeNameWithGenerics(ctx);
+    if (!typeResult.isOk) return typeResult;
+    types.push(typeResult.value);
+    const comma = peek(ctx);
+    if (comma && comma.type === "COMMA") consume(ctx);
+  }
+  return { isOk: true, value: types };
+}
+
+function parseTupleType(ctx: ParseContext): Result<string, CompileError> {
+  consume(ctx);
+  const firstResult = parseTypeNameWithGenerics(ctx);
+  if (!firstResult.isOk) return firstResult;
+  const after = peek(ctx);
+  if (after && after.type === "COMMA") {
+    consume(ctx);
+    const typesResult = parseRemainingTupleTypes(ctx, [firstResult.value]);
+    if (!typesResult.isOk) return typesResult;
+    return { isOk: true, value: "(" + typesResult.value.join(", ") + ")" };
+  }
+  const rpErr = expectRParen(ctx);
+  if (!rpErr.isOk) return rpErr;
+  return { isOk: true, value: firstResult.value };
+}
+
 function parseBaseTypeWithGenerics(
   ctx: ParseContext,
 ): Result<string, CompileError> {
   const typeToken = peek(ctx);
-  let typeName = typeToken!.value;
+  if (!typeToken) return unexpectedEofError("type name");
+  if (typeToken.type === "LPAREN") return parseTupleType(ctx);
+  let typeName = typeToken.value;
   consume(ctx);
 
   if (peek(ctx)?.type === "LBRACKET") {

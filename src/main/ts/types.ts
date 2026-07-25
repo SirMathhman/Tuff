@@ -102,7 +102,8 @@ export type Statement =
   | TypeAliasNode
   | IsExpressionExpr
   | LogicalExpressionExpr
-  | NotExpressionExpr;
+  | NotExpressionExpr
+  | TupleExpr;
 
 export interface NumberLiteralExpr {
   type: "NumberLiteral";
@@ -155,6 +156,11 @@ export interface NotExpressionExpr {
   column: number;
 }
 
+export interface TupleExpr {
+  type: "TupleExpr";
+  elements: Expression[];
+}
+
 export interface StringLiteralExpr {
   type: "StringLiteral";
   value: string;
@@ -171,7 +177,8 @@ export type Expression =
   | MemberExpressionExpr
   | IsExpressionExpr
   | LogicalExpressionExpr
-  | NotExpressionExpr;
+  | NotExpressionExpr
+  | TupleExpr;
 
 export interface VarEntry {
   name: string;

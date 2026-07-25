@@ -66,6 +66,27 @@ export function parseGenericTypeName(typeName: string): {
   return { base, args };
 }
 
+function resolveIdentifierFieldType(
+  typeName: string,
+  field: string,
+  structs: StructDef[],
+): string | undefined {
+  const tupleParts = parseTupleTypeString(typeName);
+  if (tupleParts) {
+    const idx = parseInt(field, 10);
+    if (isNaN(idx) || idx < 0 || idx >= tupleParts.length) return undefined;
+    return tupleParts[idx];
+  }
+  const { base, args } = parseGenericTypeName(typeName);
+  const structDef = structs.find((s) => s.name === base);
+  if (!structDef) return undefined;
+  const f = structDef.fields.find((f) => f.name === field);
+  if (!f) return undefined;
+  const paramIdx = structDef.typeParams.indexOf(f.typeName);
+  if (paramIdx >= 0 && args.length > paramIdx) return args[paramIdx];
+  return f.typeName;
+}
+
 export function resolveFieldTypeWithGenerics(
   expr: Expression,
   field: string,
@@ -78,14 +99,7 @@ export function resolveFieldTypeWithGenerics(
     const entry = scope.find((e) => e.name === idExpr.name);
     if (!entry || !entry.typeName) return undefined;
     const resolved = resolveAlias(entry.typeName, aliases);
-    const { base, args } = parseGenericTypeName(resolved);
-    const structDef = structs.find((s) => s.name === base);
-    if (!structDef) return undefined;
-    const f = structDef.fields.find((f) => f.name === field);
-    if (!f) return undefined;
-    const paramIdx = structDef.typeParams.indexOf(f.typeName);
-    if (paramIdx >= 0 && args.length > paramIdx) return args[paramIdx];
-    return f.typeName;
+    return resolveIdentifierFieldType(resolved, field, structs);
   }
   if (expr.type === "MemberExpression")
     return resolveMemberFieldType(expr, field, structs, scope, aliases);
@@ -114,6 +128,42 @@ function resolveMemberFieldType(
   return f?.typeName;
 }
 
+export function parseTupleTypeString(typeName: string): string[] | undefined {
+  if (!typeName.startsWith("(") || !typeName.endsWith(")")) return undefined;
+  let depth = 0;
+  const parts: string[] = [];
+  let current = "";
+  for (let i = 1; i < typeName.length - 1; i++) {
+    const ch = typeName[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  const last = current.trim();
+  if (last.length > 0) parts.push(last);
+  if (parts.length === 0) return undefined;
+  return parts;
+}
+
+export function isTupleType(typeName: string): boolean {
+  const parts = parseTupleTypeString(typeName);
+  return parts !== undefined && parts.length >= 1;
+}
+
+export function getTupleElementType(
+  typeName: string,
+  index: number,
+): string | undefined {
+  const parts = parseTupleTypeString(typeName);
+  if (!parts) return undefined;
+  return parts[index];
+}
+
 export function checkTypeName(
   typeName: string,
   structs: StructDef[],
@@ -122,6 +172,16 @@ export function checkTypeName(
   aliases?: TypeAliasDef[],
 ): Result<void, CompileError> {
   const resolved = aliases ? resolveAlias(typeName, aliases) : typeName;
+
+  const tupleParts = parseTupleTypeString(resolved);
+  if (tupleParts) {
+    for (const part of tupleParts) {
+      const partResult = checkTypeName(part, structs, loc, label, aliases);
+      if (!partResult.isOk) return partResult;
+    }
+    return { isOk: true, value: undefined };
+  }
+
   const { base } = parseGenericTypeName(resolved);
   const strippedBase = base.startsWith("&") ? base.slice(1) : base;
   const isNumeric = VALID_TYPES.includes(strippedBase);

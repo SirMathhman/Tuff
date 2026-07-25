@@ -1,6 +1,4 @@
 import type {
-  Result,
-  CompileError,
   Expression,
   StructField,
   VarEntry,
@@ -9,6 +7,13 @@ import type {
   LogicalExpressionExpr,
   NotExpressionExpr,
 } from "./types";
+import type { Result, CompileError } from "./types";
+import {
+  checkTypeName,
+  checkRef,
+  resolveAlias,
+  parseGenericTypeName,
+} from "./semantic-generics";
 import {
   checkStructUndefined,
   checkStructUnknownField,
@@ -17,12 +22,17 @@ import {
   checkStructFieldCount,
 } from "./semantic-errors";
 import {
-  resolveAlias,
-  parseGenericTypeName,
-  checkTypeName,
-  checkRef,
-} from "./semantic-generics";
-
+  checkBoolOperand,
+  checkLiteralExpr,
+  checkStructFieldRef,
+  checkPrimMemberErr,
+  checkTupleMemberExpr,
+  checkStrMemberAccess,
+  checkNonTupleIndex,
+  findFieldForTypeParam,
+  inferTypeFromNestedInstance,
+  validateTypeArgs,
+} from "./semantic-expr-helpers";
 type StructCtx = {
   scope: VarEntry[];
   structs: StructDef[];
@@ -34,37 +44,6 @@ type Sexpr = {
   typeArgs: string[];
   fields: { name: string; value: Expression }[];
 };
-
-function typeMismatch(
-  actual: string | undefined,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message:
-        "Type mismatch: got '" +
-        (actual || "unknown") +
-        "' but expected 'Bool'",
-      reason:
-        actual === "Bool"
-          ? "! requires a Bool operand"
-          : "&& and || require Bool operands",
-      suggestedFix: "Use a Bool value.",
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-
-function checkBoolOperand(
-  result: string | undefined,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> | null {
-  if (result === "Bool") return null;
-  return typeMismatch(result, loc);
-}
-
 function checkBoolBinOp(
   lexpr: LogicalExpressionExpr,
   scope: VarEntry[],
@@ -82,17 +61,22 @@ function checkBoolBinOp(
   if (boolErr2 && !boolErr2.isOk) return boolErr2;
   return { isOk: true, value: "Bool" };
 }
-
-function checkLiteralExpr(
+function checkTupleExpr(
   expr: Expression,
-): Result<string | undefined, CompileError> | null {
-  if (expr.type === "NumberLiteral")
-    return { isOk: true, value: (expr as { typeName?: string }).typeName };
-  if (expr.type === "BooleanLiteral") return { isOk: true, value: "Bool" };
-  if (expr.type === "StringLiteral") return { isOk: true, value: "Str" };
-  return null;
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> {
+  const tupleExpr = expr as { elements: Expression[] };
+  const elemTypes: string[] = [];
+  for (const elem of tupleExpr.elements) {
+    const elemResult = checkExpr(elem, scope, structs, aliases, loc);
+    if (!elemResult.isOk) return elemResult;
+    elemTypes.push(elemResult.value || "unknown");
+  }
+  return { isOk: true, value: "(" + elemTypes.join(", ") + ")" };
 }
-
 function checkNotExpr(
   expr: NotExpressionExpr,
   scope: VarEntry[],
@@ -106,7 +90,6 @@ function checkNotExpr(
   if (notErr && !notErr.isOk) return notErr;
   return { isOk: true, value: "Bool" };
 }
-
 export function checkExpr(
   expr: Expression,
   scope: VarEntry[],
@@ -123,87 +106,16 @@ export function checkExpr(
   if (expr.type === "MemberExpression")
     return checkMemberExpr(expr, scope, structs, aliases, loc);
   if (expr.type === "LogicalExpression")
-    return checkBoolBinOp(
-      expr as LogicalExpressionExpr,
-      scope,
-      structs,
-      aliases,
-      loc,
-    );
+    return checkBoolBinOp(expr as never, scope, structs, aliases, loc);
   if (expr.type === "NotExpression")
-    return checkNotExpr(
-      expr as NotExpressionExpr,
-      scope,
-      structs,
-      aliases,
-      loc,
-    );
+    return checkNotExpr(expr as never, scope, structs, aliases, loc);
+  if (expr.type === "TupleExpr")
+    return checkTupleExpr(expr, scope, structs, aliases, loc);
   const idExpr = expr as { name: string };
   const refResult = checkRef(idExpr.name, scope, loc);
   if (!refResult.isOk) return refResult;
   return { isOk: true, value: refResult.value.typeName };
 }
-
-function checkStructFieldRef(
-  objType: string,
-  field: string,
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> | null {
-  const structDef = structs.find((s) => s.name === objType);
-  if (!structDef) return null;
-  const fieldDef = structDef.fields.find((f) => f.name === field);
-  if (!fieldDef) {
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Unknown field '" + field + "' on struct '" + structDef.name + "'",
-        reason: "Field does not exist on struct.",
-        suggestedFix: "Use a valid field name.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  }
-  return { isOk: true, value: fieldDef.typeName };
-}
-
-function checkStrFieldErr(
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message: "Unknown field '" + field + "' on type 'Str'",
-      reason: "String type only supports the .length property.",
-      suggestedFix: "Use .length to get the string length.",
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-
-function checkPrimMemberErr(
-  objNodeType: string,
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const typeLabel = objNodeType === "NumberLiteral" ? "number" : "boolean";
-  return {
-    isOk: false,
-    error: {
-      message:
-        "Cannot access field '" + field + "' on a " + typeLabel + " literal",
-      reason: "Only struct types and Str support member access.",
-      suggestedFix: "Use a struct or string value.",
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-
 function checkMemberExpr(
   expr: Expression,
   scope: VarEntry[],
@@ -215,14 +127,16 @@ function checkMemberExpr(
   const objResult = checkExpr(mexpr.object, scope, structs, aliases, loc);
   if (!objResult.isOk) return objResult;
   const objType = objResult.value;
-  if (objType === "Str") {
-    if (mexpr.field === "length") return { isOk: true, value: "USize" };
-    return checkStrFieldErr(mexpr.field, loc);
+  if (objType) {
+    if (objType === "Str") return checkStrMemberAccess(mexpr.field, loc);
+    const tupleResult = checkTupleMemberExpr(objType, mexpr.field, loc);
+    if (tupleResult) return tupleResult;
+    const nonTupleIndex = checkNonTupleIndex(objType, mexpr.field, loc);
+    if (nonTupleIndex) return nonTupleIndex;
   }
-  if (
-    mexpr.object.type === "NumberLiteral" ||
-    mexpr.object.type === "BooleanLiteral"
-  )
+  if (mexpr.object.type === "NumberLiteral")
+    return checkPrimMemberErr(mexpr.object.type, mexpr.field, loc);
+  if (mexpr.object.type === "BooleanLiteral")
     return checkPrimMemberErr(mexpr.object.type, mexpr.field, loc);
   if (objType) {
     const structResult = checkStructFieldRef(
@@ -235,37 +149,6 @@ function checkMemberExpr(
   }
   return { isOk: true, value: objType };
 }
-
-function findFieldForTypeParam(
-  def: StructDef,
-  typeParam: string,
-): StructField | undefined {
-  let fieldDef = def.fields.find((f) => f.typeName === typeParam);
-  if (!fieldDef) {
-    fieldDef = def.fields.find((f) => {
-      const { args } = parseGenericTypeName(f.typeName);
-      return args.includes(typeParam);
-    });
-  }
-  return fieldDef;
-}
-
-function inferTypeFromNestedInstance(
-  fieldDef: StructField,
-  fieldValue: { value: Expression },
-  typeParam: string,
-): string | undefined {
-  const { args: fieldTypeArgs } = parseGenericTypeName(fieldDef.typeName);
-  if (fieldTypeArgs.length === 0 || fieldValue.value.type !== "StructInstance")
-    return undefined;
-  const nestedInstance = fieldValue.value as { typeArgs: string[] };
-  if (nestedInstance.typeArgs.length === 0) return undefined;
-  const paramIdx = fieldTypeArgs.indexOf(typeParam);
-  if (paramIdx >= 0 && nestedInstance.typeArgs[paramIdx])
-    return nestedInstance.typeArgs[paramIdx];
-  return undefined;
-}
-
 function inferTypeArgs(
   def: StructDef,
   fields: { name: string; value: Expression }[],
@@ -300,24 +183,6 @@ function inferTypeArgs(
   }
   return { isOk: true, value: inferred };
 }
-
-function validateTypeArgs(
-  typeArgs: string[],
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<void, CompileError> {
-  for (const arg of typeArgs) {
-    const argCheck = checkTypeName(
-      arg,
-      structs,
-      loc,
-      "Invalid type argument '",
-    );
-    if (!argCheck.isOk) return argCheck;
-  }
-  return { isOk: true, value: undefined };
-}
-
 function validateStructField(
   field: { name: string; value: Expression },
   resolvedFields: StructField[],
@@ -360,7 +225,6 @@ function validateStructField(
     );
   return { isOk: true, value: undefined };
 }
-
 function validateStructFields(
   fields: { name: string; value: Expression }[],
   resolvedFields: StructField[],
@@ -387,7 +251,6 @@ function validateStructFields(
   }
   return { isOk: true, value: undefined };
 }
-
 function resolveAndValidateStruct(
   sexpr: Sexpr,
   def: StructDef,
@@ -414,7 +277,6 @@ function resolveAndValidateStruct(
     ctx,
   );
 }
-
 export function checkIsExpr(
   expr: Expression,
   scope: VarEntry[],
@@ -435,7 +297,6 @@ export function checkIsExpr(
   if (!typeCheck.isOk) return typeCheck;
   return { isOk: true, value: "Bool" };
 }
-
 export function checkStructExpr(
   expr: Expression,
   scope: VarEntry[],

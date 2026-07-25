@@ -71,3 +71,13 @@ export function unexpectedEofError(
     },
   };
 }
+export function expectRParen(ctx: ParseContext): Result<void, CompileError> {
+  const rparen = peekToken(ctx);
+  if (!rparen || rparen.type !== "RPAREN")
+    return unexpectedTokenError(
+      rparen || { type: "EOF", value: "", line: 0, column: 0 },
+      "')' or ','",
+    );
+  consumeToken(ctx);
+  return { isOk: true, value: undefined };
+}

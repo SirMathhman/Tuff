@@ -32,6 +32,8 @@ const OPERATOR_CHARS = new Set([
   "&",
   "|",
   "!",
+  "(",
+  ")",
 ]);
 
 function isOperator(ch: string): boolean {
@@ -48,6 +50,8 @@ const OP_TYPE_MAP: Record<string, string> = {
   ".": "DOT",
   "<": "LBRACKET",
   ">": "RBRACKET",
+  "(": "LPAREN",
+  ")": "RPAREN",
   "!": "NOT",
   "|": "PIPE",
   "&": "AMPERSAND",

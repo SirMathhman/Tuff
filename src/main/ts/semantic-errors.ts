@@ -1,5 +1,6 @@
 import type { Result, CompileError, StructDef } from "./types";
 import { VALID_TYPES } from "./types";
+import { isTupleType, parseTupleTypeString } from "./semantic-generics";
 
 export function checkStructUndefined(
   structName: string,
@@ -214,7 +215,7 @@ export function checkTypeMatch(
         "Literal type must match the declared type.",
         "Change the literal suffix to '" + declaredType + "'.",
       );
-  } else if (exprType && exprType !== "Bool") {
+  } else if (exprType && exprType !== "Bool" && !isTupleType(exprType)) {
     return err(
       "Literal has type suffix '" + exprType + "' but no type annotation",
       "Type suffixes require a matching type annotation on the variable.",
@@ -243,6 +244,16 @@ export function checkTypeRef(
   loc: { line: number; column: number },
   errorMsgPrefix: string,
 ): Result<StructDef | undefined, CompileError> {
+  if (isTupleType(typeName)) {
+    const parts = parseTupleTypeString(typeName);
+    if (parts) {
+      for (const part of parts) {
+        const partResult = checkTypeRef(part, structs, loc, errorMsgPrefix);
+        if (!partResult.isOk) return partResult;
+      }
+    }
+    return { isOk: true, value: undefined };
+  }
   const isNumeric = VALID_TYPES.includes(typeName);
   const structDef = structs.find((s) => s.name === typeName);
   if (!isNumeric && !structDef)

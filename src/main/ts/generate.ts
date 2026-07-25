@@ -10,6 +10,7 @@ import type {
   AssignmentNode,
   MemberAssignmentNode,
 } from "./types";
+import { parseTupleTypeString } from "./semantic-generics";
 
 const NUMERIC_TYPES = [
   "U8",
@@ -33,7 +34,27 @@ function resolveName(name: string, declared: string[]): string {
   return name;
 }
 
+function genTupleIsCheck(operand: string, tupleType: string): string {
+  const parts = parseTupleTypeString(tupleType);
+  if (!parts) return "false";
+  const len = parts.length;
+  let checks =
+    "Array.isArray(" + operand + ") && " + operand + ".length === " + len;
+  for (let i = 0; i < len; i++) {
+    const elem = parts[i] as string;
+    const sub = operand + "[" + i + "]";
+    if (elem.startsWith("(")) {
+      checks += " && " + genTupleIsCheck(sub, elem);
+    } else {
+      checks += " && " + genIsCheck(sub, elem);
+    }
+  }
+  return "(" + checks + ")";
+}
+
 function genIsCheck(operand: string, typeName: string): string {
+  if (typeName.startsWith("(") && typeName.endsWith(")"))
+    return genTupleIsCheck(operand, typeName);
   const baseType = (typeName.split("<") as string[])[0] || "";
   if (baseType === "Bool") return "(typeof " + operand + " === 'boolean')";
   if (baseType === "Str") return "(typeof " + operand + " === 'string')";
@@ -81,40 +102,59 @@ function genLogicalExpr(le: LogicalExpressionExpr, declared: string[]): string {
   );
 }
 
+function genMemberAccess(expr: Expression, declared: string[]): string {
+  const m = expr as { object: Expression; field: string };
+  const obj = genExprScoped(m.object, declared);
+  if (/^\d+$/.test(m.field)) return obj + "[" + m.field + "]";
+  return obj + "." + m.field;
+}
+
+function genTupleExprCode(expr: Expression, declared: string[]): string {
+  const t = expr as { elements: Expression[] };
+  const elems = t.elements.map((e) => genExprScoped(e, declared));
+  return "[" + elems.join(", ") + "]";
+}
+
+function genBoolLitCode(expr: Expression): string {
+  return (expr as { value: boolean }).value ? "true" : "false";
+}
+
+function genIsExprCode(expr: Expression, declared: string[]): string {
+  const ie = expr as IsExpressionExpr;
+  return genIsCheck(
+    "(" + genExprScoped(ie.operand, declared) + ")",
+    ie.typeName,
+  );
+}
+
+function genStructInstanceCode(expr: Expression, declared: string[]): string {
+  const s = expr as {
+    structName: string;
+    fields: { name: string; value: Expression }[];
+  };
+  const fs = s.fields.map(
+    (f) => f.name + ": " + genExprScoped(f.value, declared),
+  );
+  return "{ __type: '" + s.structName + "', " + fs.join(", ") + " }";
+}
+
 function genExprScoped(expr: Expression, declared: string[]): string {
   if (expr.type === "NumberLiteral")
     return String((expr as NumberLiteralNode).value);
-  if (expr.type === "BooleanLiteral") {
-    const b = (expr as { value: boolean }).value;
-    return b ? "true" : "false";
-  }
+  if (expr.type === "BooleanLiteral") return genBoolLitCode(expr);
   if (expr.type === "StringLiteral")
     return JSON.stringify((expr as { value: string }).value);
-  if (expr.type === "IsExpression") {
-    const ie = expr as IsExpressionExpr;
-    const op = "(" + genExprScoped(ie.operand, declared) + ")";
-    return genIsCheck(op, ie.typeName);
-  }
-  if (expr.type === "StructInstance") {
-    const s = expr as {
-      structName: string;
-      fields: { name: string; value: Expression }[];
-    };
-    const fs = s.fields.map(
-      (f) => f.name + ": " + genExprScoped(f.value, declared),
-    );
-    return "{ __type: '" + s.structName + "', " + fs.join(", ") + " }";
-  }
-  if (expr.type === "MemberExpression") {
-    const m = expr as { object: Expression; field: string };
-    return genExprScoped(m.object, declared) + "." + m.field;
-  }
+  if (expr.type === "IsExpression") return genIsExprCode(expr, declared);
+  if (expr.type === "StructInstance")
+    return genStructInstanceCode(expr, declared);
+  if (expr.type === "TupleExpr") return genTupleExprCode(expr, declared);
+  if (expr.type === "MemberExpression") return genMemberAccess(expr, declared);
   if (expr.type === "LogicalExpression")
     return genLogicalExpr(expr as LogicalExpressionExpr, declared);
-  if (expr.type === "NotExpression") {
-    const ne = expr as NotExpressionExpr;
-    return "(!" + genExprScoped(ne.operand, declared) + ")";
-  }
+  if (expr.type === "NotExpression")
+    return (
+      "(!" + genExprScoped((expr as NotExpressionExpr).operand, declared) + ")"
+    );
   return resolveName(expr.name, declared);
 }
 
