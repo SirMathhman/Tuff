@@ -17,9 +17,11 @@ test("Type alias used in struct field", () => {
   );
 });
 
-test("Type alias defined after struct use is invalid", () => {
-  expectInvalid(
-    "struct Point { x : Coord }; type Coord = I32; let p : Point = Point { x: 1I32 };",
+test("Type alias defined after struct use", () => {
+  expectValid(
+    "struct Point { x : Coord }; type Coord = I32; let p : Point = Point { x: 1I32 }; p.x",
+    [],
+    1,
   );
 });
 

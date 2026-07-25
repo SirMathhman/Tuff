@@ -155,11 +155,6 @@ function checkTypeAlias(
     node,
   );
   if (!underlyingCheck.isOk) return underlyingCheck;
-  aliases.push({
-    name: node.name,
-    typeParams: node.typeParams,
-    underlyingType: node.underlyingType,
-  });
   return { isOk: true, value: undefined };
 }
 function checkGenericStructInstantiation(
@@ -386,10 +381,22 @@ export function analyzeSemantics(
   const structs: StructDef[] = [];
   const aliases: TypeAliasDef[] = [];
   for (const stmt of statements) {
+    if (stmt.type !== "TypeAlias") continue;
+    const a = stmt as TypeAliasNode;
+    aliases.push({
+      name: a.name,
+      typeParams: a.typeParams,
+      underlyingType: a.underlyingType,
+    });
+  }
+  for (const stmt of statements) {
     if (stmt.type === "EnumDefinition") {
       const node = stmt as EnumDefinitionNode;
       registerEnumDef({ name: node.name, variants: node.variants });
       scope.push({ name: node.name, mutable: false, typeName: node.name });
+    } else if (stmt.type === "TypeAlias") {
+      const chk = checkTypeAlias(stmt as TypeAliasNode, structs, aliases);
+      if (!chk.isOk) return chk;
     } else {
       const result = analyzeStatement(stmt, scope, structs, aliases);
       if (!result.isOk) return result;
@@ -427,8 +434,6 @@ function analyzeStatement(
 ): Result<void, CompileError> {
   if (stmt.type === "StructDefinition")
     return checkStructDef(stmt as StructDefinitionNode, structs, aliases);
-  if (stmt.type === "TypeAlias")
-    return checkTypeAlias(stmt as TypeAliasNode, structs, aliases);
   if (stmt.type === "LetDeclaration")
     return checkLetSemantics(
       stmt as LetDeclarationNode,
