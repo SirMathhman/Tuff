@@ -18,6 +18,10 @@ function parse(tokens: Token[]): Result<Statement[], CompileError> {
     const stmt = parseStatement(ctx);
     if (!stmt.isOk) return stmt;
     statements.push(stmt.value);
+    const next = ctx.tokens[ctx.pos];
+    if (next && next.type === "SEMICOLON") {
+      ctx.pos++;
+    }
   }
   return { isOk: true, value: statements };
 }
@@ -73,6 +77,25 @@ function collectModuleExports(
     ) {
       const ln = stmt as LetDeclarationNode;
       exports.push({ name: ln.name, typeName: ln.typeName });
+    }
+    if (
+      stmt.type === "FunctionDefinition" &&
+      (stmt as { exported?: boolean }).exported
+    ) {
+      const fn = stmt as {
+        name: string;
+        returnType: string;
+        params: Array<{ name: string; typeName: string }>;
+        typeParams?: string[];
+      };
+      exports.push({
+        name: fn.name,
+        typeName: "Function",
+        isFunction: true,
+        paramTypes: fn.params.map((p) => p.typeName),
+        returnType: fn.returnType,
+        typeParams: fn.typeParams,
+      });
     }
   }
   return { isOk: true, value: exports };

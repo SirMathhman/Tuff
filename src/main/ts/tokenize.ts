@@ -34,6 +34,11 @@ const OPERATOR_CHARS = new Set([
   "!",
   "(",
   ")",
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
 ]);
 
 function isOperator(ch: string): boolean {
@@ -55,6 +60,11 @@ const OP_TYPE_MAP: Record<string, string> = {
   "!": "NOT",
   "|": "PIPE",
   "&": "AMPERSAND",
+  "+": "PLUS",
+  "-": "MINUS",
+  "*": "STAR",
+  "/": "SLASH",
+  "%": "PERCENT",
 };
 
 function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
@@ -62,7 +72,17 @@ function tokenizeOperator(ch: string, ctx: TokenizeContext): Token {
   return { type: type_, value: ch, line: ctx.line, column: ctx.column };
 }
 
-const MULTI_CHAR_OPS = new Set(["&", "|", ":"]);
+const MULTI_CHAR_OPS = new Set(["&", "|", ":", "="]);
+function makeMultiCharToken(
+  type: string,
+  value: string,
+  ctx: TokenizeContext,
+): Result<Token, null> {
+  return {
+    isOk: true,
+    value: { type, value, line: ctx.line, column: ctx.column },
+  };
+}
 function tryReadMultiCharOp(
   ch: string,
   ctx: TokenizeContext,
@@ -72,33 +92,18 @@ function tryReadMultiCharOp(
   if (next === ch) {
     ctx.pos += 2;
     ctx.column += 2;
-    if (ch === "&")
-      return {
-        isOk: true,
-        value: { type: "AND", value: "&&", line: ctx.line, column: ctx.column },
-      };
-    if (ch === "|")
-      return {
-        isOk: true,
-        value: { type: "OR", value: "||", line: ctx.line, column: ctx.column },
-      };
-    if (ch === ":")
-      return {
-        isOk: true,
-        value: {
-          type: "DOUBLE_COLON",
-          value: "::",
-          line: ctx.line,
-          column: ctx.column,
-        },
-      };
+    if (ch === "&") return makeMultiCharToken("AND", "&&", ctx);
+    if (ch === "|") return makeMultiCharToken("OR", "||", ctx);
+    if (ch === ":") return makeMultiCharToken("DOUBLE_COLON", "::", ctx);
+  }
+  if (ch === "=" && next === ">") {
+    ctx.pos += 2;
+    ctx.column += 2;
+    return makeMultiCharToken("FAT_ARROW", "=>", ctx);
   }
   ctx.pos++;
   ctx.column++;
-  if (ch === "|") return { isOk: true, value: tokenizeOperator(ch, ctx) };
-  if (ch === "&") return { isOk: true, value: tokenizeOperator(ch, ctx) };
-  if (ch === ":") return { isOk: true, value: tokenizeOperator(ch, ctx) };
-  return { isOk: false, error: null as never };
+  return { isOk: true, value: tokenizeOperator(ch, ctx) };
 }
 
 function readNumber(ctx: TokenizeContext): Token {
@@ -130,6 +135,15 @@ function readNumber(ctx: TokenizeContext): Token {
   };
 }
 
+function keywordTypeForIdent(ident: string): string {
+  if (ident === "true" || ident === "false") return "BOOLEAN";
+  if (ident === "is") return "IS";
+  if (ident === "enum") return "ENUM";
+  if (ident === "out") return "OUT";
+  if (ident === "fn") return "FN";
+  return "IDENTIFIER";
+}
+
 function readIdentifier(ctx: TokenizeContext): Token {
   let ident = "";
   while (ctx.pos < ctx.source.length) {
@@ -139,36 +153,8 @@ function readIdentifier(ctx: TokenizeContext): Token {
     ctx.pos++;
     ctx.column++;
   }
-  if (ident === "true" || ident === "false")
-    return {
-      type: "BOOLEAN",
-      value: ident,
-      line: ctx.line,
-      column: ctx.column,
-    };
-  if (ident === "is")
-    return {
-      type: "IS",
-      value: ident,
-      line: ctx.line,
-      column: ctx.column,
-    };
-  if (ident === "enum")
-    return {
-      type: "ENUM",
-      value: ident,
-      line: ctx.line,
-      column: ctx.column,
-    };
-  if (ident === "out")
-    return {
-      type: "OUT",
-      value: ident,
-      line: ctx.line,
-      column: ctx.column,
-    };
   return {
-    type: "IDENTIFIER",
+    type: keywordTypeForIdent(ident),
     value: ident,
     line: ctx.line,
     column: ctx.column,

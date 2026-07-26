@@ -102,6 +102,23 @@ export interface EnumDefinitionNode {
   column: number;
 }
 
+export interface FunctionParam {
+  name: string;
+  typeName: string;
+}
+
+export interface FunctionDefinitionNode {
+  type: "FunctionDefinition";
+  name: string;
+  typeParams: string[];
+  params: FunctionParam[];
+  returnType: string;
+  body: Statement[];
+  exported?: boolean;
+  line: number;
+  column: number;
+}
+
 export type Statement =
   | NumberLiteralNode
   | IdentifierNode
@@ -113,11 +130,14 @@ export type Statement =
   | MemberAssignmentNode
   | TypeAliasNode
   | EnumDefinitionNode
+  | FunctionDefinitionNode
   | IsExpressionExpr
   | LogicalExpressionExpr
   | NotExpressionExpr
   | TupleExpr
-  | ModuleAccessExpr;
+  | ModuleAccessExpr
+  | BinaryExpressionExpr
+  | FunctionCallExpr;
 
 export interface NumberLiteralExpr {
   type: "NumberLiteral";
@@ -190,6 +210,25 @@ export interface StringLiteralExpr {
   column: number;
 }
 
+export interface BinaryExpressionExpr {
+  type: "BinaryExpression";
+  operator: "+" | "-" | "*" | "/" | "%";
+  left: Expression;
+  right: Expression;
+  line: number;
+  column: number;
+}
+
+export interface FunctionCallExpr {
+  type: "FunctionCall";
+  functionName: string;
+  object?: Expression;
+  typeArgs: string[];
+  args: Expression[];
+  line: number;
+  column: number;
+}
+
 export type Expression =
   | NumberLiteralExpr
   | BooleanLiteralExpr
@@ -201,7 +240,9 @@ export type Expression =
   | LogicalExpressionExpr
   | NotExpressionExpr
   | TupleExpr
-  | ModuleAccessExpr;
+  | ModuleAccessExpr
+  | BinaryExpressionExpr
+  | FunctionCallExpr;
 
 export interface VarEntry {
   name: string;
@@ -227,6 +268,13 @@ export interface TypeAliasDef {
   underlyingType: string;
 }
 
+export interface FunctionDef {
+  name: string;
+  typeParams: string[];
+  params: FunctionParam[];
+  returnType: string;
+}
+
 export interface TypeCheckCtx {
   scope: VarEntry[];
   structs: StructDef[];
@@ -237,9 +285,22 @@ export interface TypeCheckCtx {
 export interface ModuleExportInfo {
   name: string;
   typeName: string | undefined;
+  isFunction?: boolean;
+  paramTypes?: string[];
+  returnType?: string;
+  typeParams?: string[];
 }
 
 export type ModuleExportsMap = Record<string, ModuleExportInfo[]>;
+
+export interface CheckCtx {
+  scope: VarEntry[];
+  structs: StructDef[];
+  aliases: TypeAliasDef[];
+  functions: FunctionDef[];
+  loc: { line: number; column: number };
+  moduleExports?: ModuleExportsMap;
+}
 
 export const VALID_TYPES = [
   "U8",

@@ -2,189 +2,25 @@ import type {
   Result,
   CompileError,
   Expression,
-  StructField,
   StructDef,
+  CheckCtx,
 } from "./types";
 import { errResult } from "./semantic-errors";
-import {
-  parseGenericTypeName,
-  parseTupleTypeString,
-  isTupleType,
-  getTupleElementType,
-  checkTypeName,
-} from "./semantic-generics";
-function typeMismatch(
-  actual: string | undefined,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message:
-        "Type mismatch: got '" +
-        (actual || "unknown") +
-        "' but expected 'Bool'",
-      reason:
-        actual === "Bool"
-          ? "! requires a Bool operand"
-          : "&& and || require Bool operands",
-      suggestedFix: "Use a Bool value.",
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-function checkBoolOperand(
-  result: string | undefined,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> | null {
-  if (result === "Bool") return null;
-  return typeMismatch(result, loc);
-}
-function checkLiteralExpr(
-  expr: Expression,
-): Result<string | undefined, CompileError> | null {
-  if (expr.type === "NumberLiteral")
-    return { isOk: true, value: (expr as { typeName?: string }).typeName };
-  if (expr.type === "BooleanLiteral") return { isOk: true, value: "Bool" };
-  if (expr.type === "StringLiteral") return { isOk: true, value: "Str" };
-  return null;
-}
-function checkStructFieldRef(
-  objType: string,
-  field: string,
-  structs: StructDef[],
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> | null {
-  const structDef = structs.find((s) => s.name === objType);
-  if (!structDef) return null;
-  const fieldDef = structDef.fields.find((f) => f.name === field);
-  if (!fieldDef) {
-    return {
-      isOk: false,
-      error: {
-        message:
-          "Unknown field '" + field + "' on struct '" + structDef.name + "'",
-        reason: "Field does not exist on struct.",
-        suggestedFix: "Use a valid field name.",
-        line: loc.line,
-        column: loc.column,
-      },
-    };
-  }
-  return { isOk: true, value: fieldDef.typeName };
-}
-function checkStrFieldErr(
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  return {
-    isOk: false,
-    error: {
-      message: "Unknown field '" + field + "' on type 'Str'",
-      reason: "String type only supports the .length property.",
-      suggestedFix: "Use .length to get the string length.",
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-function checkPrimMemberErr(
-  objNodeType: string,
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  const typeLabel = objNodeType === "NumberLiteral" ? "number" : "boolean";
-  return {
-    isOk: false,
-    error: {
-      message:
-        "Cannot access field '" + field + "' on a " + typeLabel + " literal",
-      reason: "Only struct types and Str support member access.",
-      suggestedFix: "Use a struct or string value.",
-      line: loc.line,
-      column: loc.column,
-    },
-  };
-}
-function checkTupleMemberExpr(
-  objType: string,
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> | null {
-  if (!isTupleType(objType)) return null;
-  const idx = parseInt(field, 10);
-  if (isNaN(idx) || idx < 0)
-    return errResult(
-      "Invalid tuple index '" + field + "'",
-      "Tuple indices must be non-negative integers.",
-      "Use a numeric index like .0, .1",
-      loc.line,
-      loc.column,
-    );
-  const elemType = getTupleElementType(objType, idx);
-  if (!elemType)
-    return errResult(
-      "Tuple index " + idx + " out of bounds",
-      "Tuple type '" + objType + "' has no element at index " + idx + ".",
-      "Use an index between 0 and " +
-        (parseTupleTypeString(objType)!.length - 1) +
-        ".",
-      loc.line,
-      loc.column,
-    );
-  return { isOk: true, value: elemType };
-}
-function checkStrMemberAccess(
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> {
-  if (field === "length") return { isOk: true, value: "USize" };
-  return checkStrFieldErr(field, loc);
-}
-function checkNonTupleIndex(
-  objType: string,
-  field: string,
-  loc: { line: number; column: number },
-): Result<string | undefined, CompileError> | null {
-  if (/^\d+$/.test(field) && !isTupleType(objType))
-    return errResult(
-      "Cannot index type '" + objType + "' with ." + field,
-      "Only tuple types support numeric member access.",
-      "Use a named field or ensure the type is a tuple.",
-      loc.line,
-      loc.column,
-    );
-  return null;
-}
-function findFieldForTypeParam(
-  def: StructDef,
-  typeParam: string,
-): StructField | undefined {
-  let fieldDef = def.fields.find((f) => f.typeName === typeParam);
-  if (!fieldDef) {
-    fieldDef = def.fields.find((f) => {
-      const { args } = parseGenericTypeName(f.typeName);
-      return args.includes(typeParam);
-    });
-  }
-  return fieldDef;
-}
-function inferTypeFromNestedInstance(
-  fieldDef: StructField,
-  fieldValue: { value: Expression },
-  typeParam: string,
-): string | undefined {
-  const { args: fieldTypeArgs } = parseGenericTypeName(fieldDef.typeName);
-  if (fieldTypeArgs.length === 0 || fieldValue.value.type !== "StructInstance")
-    return undefined;
-  const nestedInstance = fieldValue.value as { typeArgs: string[] };
-  if (nestedInstance.typeArgs.length === 0) return undefined;
-  const paramIdx = fieldTypeArgs.indexOf(typeParam);
-  if (paramIdx >= 0 && nestedInstance.typeArgs[paramIdx])
-    return nestedInstance.typeArgs[paramIdx];
-  return undefined;
-}
+import { checkTypeName } from "./semantic-generics";
+import { lookupCrossModuleFn } from "./semantic-cross-module";
+export {
+  typeMismatch,
+  checkBoolOperand,
+  checkLiteralExpr,
+  checkStructFieldRef,
+  checkStrFieldErr,
+  checkPrimMemberErr,
+  checkTupleMemberExpr,
+  checkStrMemberAccess,
+  checkNonTupleIndex,
+  findFieldForTypeParam,
+  inferTypeFromNestedInstance,
+} from "./semantic-expr-errors";
 function validateTypeArgs(
   typeArgs: string[],
   structs: StructDef[],
@@ -201,17 +37,231 @@ function validateTypeArgs(
   }
   return { isOk: true, value: undefined };
 }
+const NUMERIC_TYPES = [
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "USize",
+];
+function isNumericType(t: string | undefined): boolean {
+  return t !== undefined && NUMERIC_TYPES.includes(t);
+}
+type ExprChecker = (
+  expr: Expression,
+  ctx: CheckCtx,
+) => Result<string | undefined, CompileError>;
+function checkDivisionByZero(
+  op: string,
+  right: Expression,
+  loc: { line: number; column: number },
+): Result<string | undefined, CompileError> | null {
+  if (op !== "/" && op !== "%") return null;
+  if (right.type !== "NumberLiteral") return null;
+  if ((right as { value: string | number }).value != "0") return null;
+  return errResult(
+    "Division by zero",
+    "Cannot divide by zero at compile time.",
+    "Use a non-zero divisor.",
+    loc.line,
+    loc.column,
+  );
+}
+function checkBinaryExpr(
+  expr: Expression,
+  ctx: CheckCtx,
+  checkExpr: ExprChecker,
+): Result<string | undefined, CompileError> {
+  const binExpr = expr as {
+    operator: string;
+    left: Expression;
+    right: Expression;
+    line: number;
+    column: number;
+  };
+  const leftResult = checkExpr(binExpr.left, ctx);
+  if (!leftResult.isOk) return leftResult;
+  const rightResult = checkExpr(binExpr.right, ctx);
+  if (!rightResult.isOk) return rightResult;
+  const leftType = leftResult.value;
+  const rightType = rightResult.value;
+  const divZero = checkDivisionByZero(binExpr.operator, binExpr.right, {
+    line: binExpr.line,
+    column: binExpr.column,
+  });
+  if (divZero) return divZero;
+  if (
+    isNumericType(leftType) &&
+    isNumericType(rightType) &&
+    leftType === rightType
+  ) {
+    return { isOk: true, value: leftType };
+  }
+  return errResult(
+    "Binary operator '" +
+      binExpr.operator +
+      "' requires matching numeric types but got '" +
+      leftType +
+      "' and '" +
+      rightType +
+      "'",
+    "Both operands must be the same numeric type.",
+    "Ensure both operands have the same type annotation.",
+    binExpr.line,
+    binExpr.column,
+  );
+}
+function buildTypeSubstitutions(
+  callExpr: { typeArgs?: string[] },
+  typeParams: string[] | undefined,
+): Record<string, string> {
+  const typeSubs: Record<string, string> = {};
+  if (callExpr.typeArgs && typeParams) {
+    for (let i = 0; i < callExpr.typeArgs.length; i++) {
+      typeSubs[typeParams[i]!] = callExpr.typeArgs[i]!;
+    }
+  }
+  return typeSubs;
+}
+function checkArgTypes(
+  callExpr: {
+    functionName: string;
+    args: Expression[];
+    line: number;
+    column: number;
+  },
+  paramTypes: string[],
+  typeSubs: Record<string, string>,
+  ctx: CheckCtx,
+  checkExpr: ExprChecker,
+): Result<void, CompileError> {
+  for (let i = 0; i < callExpr.args.length; i++) {
+    const arg = callExpr.args[i];
+    if (arg === undefined) continue;
+    const argResult = checkExpr(arg, ctx);
+    if (!argResult.isOk) return argResult;
+    let paramType = paramTypes[i] || "I32";
+    const substituted = typeSubs[paramType];
+    if (substituted) paramType = substituted;
+    if (argResult.value !== paramType) {
+      return errResult(
+        "Argument " +
+          (i + 1) +
+          " of '" +
+          callExpr.functionName +
+          "' expects '" +
+          paramType +
+          "' but got '" +
+          (argResult.value || "unknown") +
+          "'",
+        "Argument type must match parameter type.",
+        "Change the argument type to '" + paramType + "'.",
+        callExpr.line,
+        callExpr.column,
+      );
+    }
+  }
+  return { isOk: true, value: undefined };
+}
+function resolveSubstitutedReturn(
+  returnType: string | undefined,
+  typeSubs: Record<string, string>,
+): string {
+  let resolved = returnType || "I32";
+  const sub = typeSubs[resolved];
+  if (sub) resolved = sub;
+  return resolved;
+}
+function checkFunctionArgs(
+  callExpr: {
+    functionName: string;
+    args: Expression[];
+    line: number;
+    column: number;
+    typeArgs?: string[];
+  },
+  paramTypes: string[],
+  typeParams: string[] | undefined,
+  returnType: string | undefined,
+  ctx: CheckCtx,
+  checkExpr: ExprChecker,
+): Result<string | undefined, CompileError> {
+  if (callExpr.args.length !== paramTypes.length) {
+    return errResult(
+      "Function '" +
+        callExpr.functionName +
+        "' expects " +
+        paramTypes.length +
+        " argument(s) but got " +
+        callExpr.args.length,
+      "Argument count must match function parameter count.",
+      "Provide " + paramTypes.length + " arguments.",
+      callExpr.line,
+      callExpr.column,
+    );
+  }
+  const typeSubs = buildTypeSubstitutions(callExpr, typeParams);
+  const argCheck = checkArgTypes(
+    callExpr,
+    paramTypes,
+    typeSubs,
+    ctx,
+    checkExpr,
+  );
+  if (!argCheck.isOk) return argCheck;
+  return { isOk: true, value: resolveSubstitutedReturn(returnType, typeSubs) };
+}
+function checkFunctionCall(
+  expr: Expression,
+  ctx: CheckCtx,
+  checkExpr: ExprChecker,
+): Result<string | undefined, CompileError> {
+  const callExpr = expr as {
+    functionName: string;
+    object?: Expression;
+    typeArgs: string[];
+    args: Expression[];
+    line: number;
+    column: number;
+  };
+  if (callExpr.object) {
+    const fnResult = lookupCrossModuleFn(callExpr, ctx);
+    if (!fnResult.isOk) return fnResult;
+    return checkFunctionArgs(
+      callExpr,
+      fnResult.value.paramTypes || [],
+      fnResult.value.typeParams,
+      fnResult.value.returnType,
+      ctx,
+      checkExpr,
+    );
+  }
+  const fn = ctx.functions.find((f) => f.name === callExpr.functionName);
+  if (!fn) {
+    return errResult(
+      "Use of undeclared function '" + callExpr.functionName + "'",
+      "Function must be declared before use.",
+      "Declare the function with 'fn' first.",
+      callExpr.line,
+      callExpr.column,
+    );
+  }
+  return checkFunctionArgs(
+    callExpr,
+    fn.params.map((p) => p.typeName),
+    fn.typeParams,
+    fn.returnType,
+    ctx,
+    checkExpr,
+  );
+}
 export {
-  typeMismatch,
-  checkBoolOperand,
-  checkLiteralExpr,
-  checkStructFieldRef,
-  checkStrFieldErr,
-  checkPrimMemberErr,
-  checkTupleMemberExpr,
-  checkStrMemberAccess,
-  checkNonTupleIndex,
-  findFieldForTypeParam,
-  inferTypeFromNestedInstance,
   validateTypeArgs,
+  checkBinaryExpr,
+  checkFunctionArgs,
+  checkFunctionCall,
 };

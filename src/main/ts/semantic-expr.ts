@@ -8,16 +8,9 @@ import type {
   NotExpressionExpr,
   ModuleExportsMap,
   ModuleAccessExpr,
+  CheckCtx,
 } from "./types";
 import type { Result, CompileError } from "./types";
-
-interface CheckCtx {
-  scope: VarEntry[];
-  structs: StructDef[];
-  aliases: TypeAliasDef[];
-  loc: { line: number; column: number };
-  moduleExports?: ModuleExportsMap;
-}
 
 import {
   checkTypeName,
@@ -47,6 +40,8 @@ import {
   findFieldForTypeParam,
   inferTypeFromNestedInstance,
   validateTypeArgs,
+  checkBinaryExpr,
+  checkFunctionCall,
 } from "./semantic-expr-helpers";
 type StructCtx = {
   scope: VarEntry[];
@@ -71,6 +66,7 @@ function checkBoolBinOp(
     scope,
     structs,
     aliases,
+    functions: [],
     loc,
     moduleExports,
   });
@@ -81,6 +77,7 @@ function checkBoolBinOp(
     scope,
     structs,
     aliases,
+    functions: [],
     loc,
     moduleExports,
   });
@@ -114,6 +111,7 @@ function checkNotExpr(
     scope,
     structs,
     aliases,
+    functions: [],
     loc,
     moduleExports,
   });
@@ -128,6 +126,18 @@ export function checkExpr(
 ): Result<string | undefined, CompileError> {
   const literalResult = checkLiteralExpr(expr);
   if (literalResult) return literalResult;
+  const dispatchResult = checkExprDispatch(expr, ctx);
+  if (dispatchResult) return dispatchResult;
+  const idExpr = expr as { name: string };
+  const refResult = checkRef(idExpr.name, ctx.scope, ctx.loc);
+  if (!refResult.isOk) return refResult;
+  return { isOk: true, value: refResult.value.typeName };
+}
+
+function checkExprDispatch(
+  expr: Expression,
+  ctx: CheckCtx,
+): Result<string | undefined, CompileError> | null {
   if (expr.type === "IsExpression")
     return checkIsExpr(expr, ctx.scope, ctx.structs, ctx.aliases, ctx.loc);
   if (expr.type === "StructInstance")
@@ -158,10 +168,11 @@ export function checkExpr(
       ctx.moduleExports,
     );
   if (expr.type === "TupleExpr") return checkTupleExpr(expr, ctx);
-  const idExpr = expr as { name: string };
-  const refResult = checkRef(idExpr.name, ctx.scope, ctx.loc);
-  if (!refResult.isOk) return refResult;
-  return { isOk: true, value: refResult.value.typeName };
+  if (expr.type === "BinaryExpression")
+    return checkBinaryExpr(expr, ctx, checkExpr);
+  if (expr.type === "FunctionCall")
+    return checkFunctionCall(expr, ctx, checkExpr);
+  return null;
 }
 
 function checkModuleAccess(
@@ -307,6 +318,7 @@ function inferTypeArgs(
       scope: ctx.scope,
       structs: ctx.structs,
       aliases: ctx.aliases,
+      functions: [],
       loc: ctx.loc,
     });
     if (!typeResult.isOk) return typeResult;
@@ -338,6 +350,7 @@ function validateStructField(
     scope: ctx.scope,
     structs: ctx.structs,
     aliases: ctx.aliases,
+    functions: [],
     loc: ctx.loc,
   });
   if (!typeResult.isOk) return typeResult;
@@ -423,6 +436,7 @@ export function checkIsExpr(
     scope,
     structs,
     aliases,
+    functions: [],
     loc,
   });
   if (!operandResult.isOk) return operandResult;

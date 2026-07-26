@@ -7,11 +7,31 @@ import type {
   VarEntry,
   StructDef,
   TypeAliasDef,
+  FunctionDef,
   ModuleExportsMap,
+  CheckCtx,
 } from "./types";
 import { checkRef, resolveFieldChainType } from "./semantic-generics";
 import { errResult } from "./semantic-errors";
 import { checkExpr } from "./semantic-expr";
+
+function buildCheckCtx(
+  exprNode: { line: number; column: number },
+  scope: VarEntry[],
+  structs: StructDef[],
+  aliases: TypeAliasDef[],
+  moduleExports?: ModuleExportsMap,
+  functions?: FunctionDef[],
+): CheckCtx {
+  return {
+    scope,
+    structs,
+    aliases,
+    functions: functions || [],
+    loc: { line: exprNode.line, column: exprNode.column },
+    moduleExports,
+  };
+}
 
 function analyzeBoolStmt(
   stmt: Statement,
@@ -19,16 +39,18 @@ function analyzeBoolStmt(
   structs: StructDef[],
   aliases: TypeAliasDef[],
   moduleExports?: ModuleExportsMap,
+  functions?: FunctionDef[],
 ): Result<void, CompileError> {
   const exprNode = stmt as { line: number; column: number } & Expression;
-  const loc = { line: exprNode.line, column: exprNode.column };
-  const exprResult = checkExpr(exprNode, {
+  const ctx = buildCheckCtx(
+    exprNode,
     scope,
     structs,
     aliases,
-    loc,
     moduleExports,
-  });
+    functions,
+  );
+  const exprResult = checkExpr(exprNode, ctx);
   if (!exprResult.isOk) return exprResult;
   return { isOk: true, value: undefined };
 }
@@ -37,7 +59,9 @@ function isBoolOrMemberExpr(stmt: Statement): boolean {
   return (
     stmt.type === "LogicalExpression" ||
     stmt.type === "NotExpression" ||
-    stmt.type === "MemberExpression"
+    stmt.type === "MemberExpression" ||
+    stmt.type === "BinaryExpression" ||
+    stmt.type === "FunctionCall"
   );
 }
 
@@ -60,6 +84,7 @@ function checkIdentifierStatement(
   structs: StructDef[],
   aliases: TypeAliasDef[],
 ): Result<void, CompileError> {
+  if (!node.name) return { isOk: true, value: undefined };
   if (node.name.includes(".")) {
     const parts = node.name.split(".");
     const entry = scope.find((e) => e.name === parts[0]);
@@ -92,15 +117,17 @@ function analyzeModuleAccessStmt(
   structs: StructDef[],
   aliases: TypeAliasDef[],
   moduleExports?: ModuleExportsMap,
+  functions?: FunctionDef[],
 ): Result<void, CompileError> {
-  const loc = { line: exprNode.line, column: exprNode.column };
-  const exprResult = checkExpr(exprNode, {
+  const ctx = buildCheckCtx(
+    exprNode,
     scope,
     structs,
     aliases,
-    loc,
     moduleExports,
-  });
+    functions,
+  );
+  const exprResult = checkExpr(exprNode, ctx);
   if (!exprResult.isOk) return exprResult;
   const exprType = exprResult.value;
   if (exprType === "Str") return strExitErr(exprNode);
@@ -113,6 +140,7 @@ function analyzeSimpleStmt(
   structs: StructDef[],
   aliases: TypeAliasDef[],
   moduleExports?: ModuleExportsMap,
+  functions?: FunctionDef[],
 ): Result<void, CompileError> {
   if (stmt.type === "Identifier")
     return checkIdentifierStatement(
@@ -128,11 +156,32 @@ function analyzeSimpleStmt(
       structs,
       aliases,
       moduleExports,
+      functions,
     );
   if (stmt.type === "NumberLiteral") return { isOk: true, value: undefined };
   if (stmt.type === "StringLiteral")
     return strExitErr(stmt as { line: number; column: number });
-  return analyzeOtherStmt(stmt, scope, structs, aliases, moduleExports);
+  if (
+    stmt.type === "BinaryExpression" ||
+    stmt.type === "FunctionCall" ||
+    stmt.type === "IsExpression"
+  )
+    return analyzeBoolStmt(
+      stmt,
+      scope,
+      structs,
+      aliases,
+      moduleExports,
+      functions,
+    );
+  return analyzeOtherStmt(
+    stmt,
+    scope,
+    structs,
+    aliases,
+    moduleExports,
+    functions,
+  );
 }
 
 function analyzeOtherStmt(
@@ -141,9 +190,17 @@ function analyzeOtherStmt(
   structs: StructDef[],
   aliases: TypeAliasDef[],
   moduleExports?: ModuleExportsMap,
+  functions?: FunctionDef[],
 ): Result<void, CompileError> {
   if (isBoolOrMemberExpr(stmt))
-    return analyzeBoolStmt(stmt, scope, structs, aliases, moduleExports);
+    return analyzeBoolStmt(
+      stmt,
+      scope,
+      structs,
+      aliases,
+      moduleExports,
+      functions,
+    );
   return { isOk: true, value: undefined };
 }
 

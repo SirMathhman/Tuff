@@ -8,13 +8,21 @@ import {
   expectRParen,
   parseModuleAccess as parseModuleAccessHelper,
 } from "./parse-helpers";
+import {
+  parseOptionalTypeArgs,
+  parseIsExpression,
+} from "./parse-type-expressions";
 
 export interface ParseContext {
   tokens: Token[];
   pos: number;
 }
 
-export { peekToken as peek, consumeToken as consume } from "./parse-helpers";
+export {
+  peekToken as peek,
+  consumeToken as consume,
+  expectRParen,
+} from "./parse-helpers";
 
 export function parseExpression(
   ctx: ParseContext,
@@ -95,7 +103,66 @@ function parseUnaryExpression(
       },
     };
   }
-  return parsePostfixExpression(ctx);
+  return parseAdditiveExpression(ctx);
+}
+
+function parseAdditiveExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  let left = parseMultiplicativeExpression(ctx);
+  if (!left.isOk) return left;
+  while (true) {
+    const tok = peek(ctx);
+    if (tok && (tok.type === "PLUS" || tok.type === "MINUS")) {
+      const op = tok.type === "PLUS" ? "+" : "-";
+      consume(ctx);
+      const rightResult = parseMultiplicativeExpression(ctx);
+      if (!rightResult.isOk) return rightResult;
+      left = {
+        isOk: true,
+        value: {
+          type: "BinaryExpression",
+          operator: op as "+" | "-",
+          left: left.value,
+          right: rightResult.value,
+          line: tok.line,
+          column: tok.column,
+        },
+      };
+    } else break;
+  }
+  return left;
+}
+
+function parseMultiplicativeExpression(
+  ctx: ParseContext,
+): Result<Expression, CompileError> {
+  let left = parsePostfixExpression(ctx);
+  if (!left.isOk) return left;
+  while (true) {
+    const tok = peek(ctx);
+    if (
+      tok &&
+      (tok.type === "STAR" || tok.type === "SLASH" || tok.type === "PERCENT")
+    ) {
+      const op = tok.type === "STAR" ? "*" : tok.type === "SLASH" ? "/" : "%";
+      consume(ctx);
+      const rightResult = parsePostfixExpression(ctx);
+      if (!rightResult.isOk) return rightResult;
+      left = {
+        isOk: true,
+        value: {
+          type: "BinaryExpression",
+          operator: op as "*" | "/" | "%",
+          left: left.value,
+          right: rightResult.value,
+          line: tok.line,
+          column: tok.column,
+        },
+      };
+    } else break;
+  }
+  return left;
 }
 
 function parsePrimaryWithChain(
@@ -121,7 +188,8 @@ function parsePostfixExpression(
   if (token.type === "STRING_LITERAL")
     return parsePrimaryWithChain(ctx, parseStringLiteral);
   if (token.type === "IDENTIFIER") return parseIdentifierExpression(ctx);
-  if (token.type === "LPAREN") return parseParenOrTupleExpr(ctx);
+  if (token.type === "LPAREN")
+    return parsePrimaryWithChain(ctx, parseParenOrTupleExpr);
   return unexpectedTokenError(
     token,
     "a number, string, identifier, boolean, or '('",
@@ -160,19 +228,14 @@ function parseParenOrTupleExpr(
       firstResult.value,
     ]);
     if (!elementsResult.isOk) return elementsResult;
-    const tupleExpr: Expression = {
-      type: "TupleExpr",
-      elements: elementsResult.value,
+    return {
+      isOk: true,
+      value: { type: "TupleExpr", elements: elementsResult.value },
     };
-    const memberResult = parseMemberChain(ctx, tupleExpr);
-    if (!memberResult.isOk) return memberResult;
-    return parseIsExpression(ctx, memberResult.value);
   }
   const rpErr = expectRParen(ctx);
   if (!rpErr.isOk) return rpErr;
-  const memberResult = parseMemberChain(ctx, firstResult.value);
-  if (!memberResult.isOk) return memberResult;
-  return parseIsExpression(ctx, memberResult.value);
+  return firstResult;
 }
 
 function parseBooleanLiteral(
@@ -183,27 +246,6 @@ function parseBooleanLiteral(
     isOk: true,
     value: { type: "BooleanLiteral", value: token.value === "true" },
   };
-}
-
-function parseIsExpression(
-  ctx: ParseContext,
-  expr: Expression,
-): Result<Expression, CompileError> {
-  const isToken = peek(ctx);
-  if (isToken && isToken.type === "IS") {
-    consume(ctx);
-    const typeNameResult = parseTypeNameWithGenerics(ctx);
-    if (!typeNameResult.isOk) return typeNameResult;
-    return {
-      isOk: true,
-      value: {
-        type: "IsExpression",
-        operand: expr,
-        typeName: typeNameResult.value,
-      },
-    };
-  }
-  return { isOk: true, value: expr };
 }
 
 function parseNumberLiteral(
@@ -248,17 +290,16 @@ function parseIdentifierExpression(
     return parseModuleAccessHelper(ctx, name, line, column);
   }
 
-  let typeArgs: string[] = [];
-  if (next && next.type === "LBRACKET") {
-    consume(ctx);
-    const typeArgsResult = parseBracketedList(ctx, "type argument");
-    if (!typeArgsResult.isOk) return typeArgsResult;
-    typeArgs = typeArgsResult.value;
-  }
+  const typeArgs = parseOptionalTypeArgs(ctx);
+  if (!typeArgs.isOk) return typeArgs;
 
   const after = peek(ctx);
   if (after && after.type === "LBRACE") {
-    return parseStructWithIs(ctx, name, typeArgs);
+    return parseStructWithIs(ctx, name, typeArgs.value);
+  }
+
+  if (after && after.type === "LPAREN") {
+    return parseFunctionCallWithIs(ctx, name, typeArgs.value, line, column);
   }
 
   const expr: Expression = { type: "Identifier", name };
@@ -267,6 +308,79 @@ function parseIdentifierExpression(
   const isResult = parseIsExpression(ctx, memberResult.value);
   if (!isResult.isOk) return isResult;
   return { isOk: true, value: isResult.value };
+}
+
+function parseFunctionCallWithIs(
+  ctx: ParseContext,
+  name: string,
+  typeArgs: string[],
+  line: number,
+  column: number,
+): Result<Expression, CompileError> {
+  const callResult = parseFunctionCall(ctx, name, typeArgs, line, column);
+  if (!callResult.isOk) return callResult;
+  return parseIsExpression(ctx, callResult.value);
+}
+
+function parseFunctionCallExpr(
+  ctx: ParseContext,
+  name: string,
+  typeArgs: string[],
+  object: Expression | undefined,
+  line: number,
+  column: number,
+): Result<Expression, CompileError> {
+  consume(ctx);
+  const argsResult = parseFunctionArgs(ctx);
+  if (!argsResult.isOk) return argsResult;
+  const call: Expression = {
+    type: "FunctionCall",
+    functionName: name,
+    typeArgs,
+    args: argsResult.value,
+    line,
+    column,
+  };
+  if (object) {
+    (call as { object: Expression }).object = object;
+  }
+  return { isOk: true, value: call };
+}
+
+function parseFunctionCall(
+  ctx: ParseContext,
+  name: string,
+  typeArgs: string[],
+  line: number,
+  column: number,
+): Result<Expression, CompileError> {
+  return parseFunctionCallExpr(ctx, name, typeArgs, undefined, line, column);
+}
+
+function parseFunctionArgs(
+  ctx: ParseContext,
+): Result<Expression[], CompileError> {
+  const args: Expression[] = [];
+  const next = peek(ctx);
+  if (next && next.type === "RPAREN") {
+    consume(ctx);
+    return { isOk: true, value: args };
+  }
+  const firstResult = parseExpression(ctx);
+  if (!firstResult.isOk) return firstResult;
+  args.push(firstResult.value);
+  while (true) {
+    const comma = peek(ctx);
+    if (comma && comma.type === "COMMA") {
+      consume(ctx);
+      const argResult = parseExpression(ctx);
+      if (!argResult.isOk) return argResult;
+      args.push(argResult.value);
+    } else break;
+  }
+  const rpErr = expectRParen(ctx);
+  if (!rpErr.isOk) return rpErr;
+  return { isOk: true, value: args };
 }
 
 function parseStructWithIs(
@@ -279,83 +393,6 @@ function parseStructWithIs(
   const isResult = parseIsExpression(ctx, structResult.value);
   if (!isResult.isOk) return isResult;
   return { isOk: true, value: isResult.value };
-}
-
-function parseMemberChain(
-  ctx: ParseContext,
-  expr: Expression,
-): Result<Expression, CompileError> {
-  let current: Expression = expr;
-  while (true) {
-    const dot = peek(ctx);
-    if (dot && dot.value === ".") {
-      consume(ctx);
-      const fieldToken = peek(ctx);
-      if (!fieldToken)
-        return unexpectedTokenError(
-          { type: "EOF", value: "", line: 0, column: 0 },
-          "field name or index",
-        );
-      if (fieldToken.type === "IDENTIFIER" || fieldToken.type === "NUMBER") {
-        consume(ctx);
-        current = {
-          type: "MemberExpression",
-          object: current,
-          field: fieldToken.value,
-        };
-      } else {
-        return unexpectedTokenError(fieldToken, "field name or index");
-      }
-    } else break;
-  }
-  return { isOk: true, value: current };
-}
-
-function parseBracketedItem(
-  ctx: ParseContext,
-  label: string,
-): Result<string, CompileError> {
-  const itemToken = peek(ctx);
-  if (!itemToken)
-    return unexpectedTokenError(
-      itemToken || { type: "EOF", value: "", line: 0, column: 0 },
-      label,
-    );
-  if (itemToken.type === "AMPERSAND") {
-    consume(ctx);
-    const afterAmp = peek(ctx);
-    if (!afterAmp || afterAmp.type !== "IDENTIFIER")
-      return unexpectedTokenError(
-        afterAmp || { type: "EOF", value: "", line: 0, column: 0 },
-        label,
-      );
-    consume(ctx);
-    return { isOk: true, value: "&" + afterAmp.value };
-  }
-  return parseBaseTypeWithGenerics(ctx);
-}
-
-export function parseBracketedList(
-  ctx: ParseContext,
-  label: string,
-): Result<string[], CompileError> {
-  const items: string[] = [];
-  while (true) {
-    const next = peek(ctx);
-    if (!next) return unexpectedEofError("'>'");
-    if (next.type === "RBRACKET") {
-      consume(ctx);
-      break;
-    }
-    if (items.length > 0) {
-      const commaResult = expectToken(ctx, "COMMA", ",");
-      if (!commaResult.isOk) return commaResult;
-    }
-    const itemResult = parseBracketedItem(ctx, label);
-    if (!itemResult.isOk) return itemResult;
-    items.push(itemResult.value);
-  }
-  return { isOk: true, value: items };
 }
 
 function parseStructInstance(
@@ -392,85 +429,55 @@ function parseStructInstance(
   };
 }
 
-export function parseTypeNameWithGenerics(
+function parseMemberChain(
   ctx: ParseContext,
-): Result<string, CompileError> {
-  const typeToken = peek(ctx);
-  if (
-    !typeToken ||
-    (typeToken.type !== "IDENTIFIER" && typeToken.type !== "LPAREN")
-  )
-    return unexpectedTokenError(
-      typeToken || { type: "EOF", value: "", line: 0, column: 0 },
-      "type name",
-    );
-
-  const baseResult = parseBaseTypeWithGenerics(ctx);
-  let typeName: string = baseResult.isOk ? baseResult.value : "";
-  if (!baseResult.isOk) return baseResult;
-  // Parse disjunction arms separated by PIPE tokens (|)
-  while (peek(ctx)?.type === "PIPE") {
-    consume(ctx);
-    const nextResult = parseTypeNameWithGenerics(ctx);
-    if (!nextResult.isOk) return nextResult;
-    typeName += " | " + nextResult.value;
-  }
-
-  return { isOk: true, value: typeName };
-}
-
-function parseRemainingTupleTypes(
-  ctx: ParseContext,
-  types: string[],
-): Result<string[], CompileError> {
+  expr: Expression,
+): Result<Expression, CompileError> {
+  let current: Expression = expr;
   while (true) {
-    const next = peek(ctx);
-    if (next && next.type === "RPAREN") {
-      consume(ctx);
-      break;
-    }
-    const typeResult = parseTypeNameWithGenerics(ctx);
-    if (!typeResult.isOk) return typeResult;
-    types.push(typeResult.value);
-    const comma = peek(ctx);
-    if (comma && comma.type === "COMMA") consume(ctx);
+    const dot = peek(ctx);
+    if (dot && dot.value === ".") {
+      const memberResult = parseNextMember(ctx, current);
+      if (!memberResult.isOk) return memberResult;
+      current = memberResult.value;
+    } else break;
   }
-  return { isOk: true, value: types };
+  return { isOk: true, value: current };
 }
 
-function parseTupleType(ctx: ParseContext): Result<string, CompileError> {
-  consume(ctx);
-  const firstResult = parseTypeNameWithGenerics(ctx);
-  if (!firstResult.isOk) return firstResult;
-  const after = peek(ctx);
-  if (after && after.type === "COMMA") {
-    consume(ctx);
-    const typesResult = parseRemainingTupleTypes(ctx, [firstResult.value]);
-    if (!typesResult.isOk) return typesResult;
-    return { isOk: true, value: "(" + typesResult.value.join(", ") + ")" };
-  }
-  const rpErr = expectRParen(ctx);
-  if (!rpErr.isOk) return rpErr;
-  return { isOk: true, value: firstResult.value };
-}
-
-function parseBaseTypeWithGenerics(
+function parseNextMember(
   ctx: ParseContext,
-): Result<string, CompileError> {
-  const typeToken = peek(ctx);
-  if (!typeToken) return unexpectedEofError("type name");
-  if (typeToken.type === "LPAREN") return parseTupleType(ctx);
-  let typeName = typeToken.value;
+  current: Expression,
+): Result<Expression, CompileError> {
   consume(ctx);
-
-  if (peek(ctx)?.type === "LBRACKET") {
-    consume(ctx);
-    const argsResult = parseBracketedList(ctx, "type argument");
-    if (!argsResult.isOk) return argsResult;
-    typeName += "<" + argsResult.value.join(", ") + ">";
+  const fieldToken = peek(ctx);
+  if (!fieldToken)
+    return unexpectedTokenError(
+      { type: "EOF", value: "", line: 0, column: 0 },
+      "field name or index",
+    );
+  if (fieldToken.type !== "IDENTIFIER" && fieldToken.type !== "NUMBER") {
+    return unexpectedTokenError(fieldToken, "field name or index");
   }
-
-  return { isOk: true, value: typeName };
+  consume(ctx);
+  const field = fieldToken.value;
+  const line = fieldToken.line;
+  const column = fieldToken.column;
+  current = { type: "MemberExpression", object: current, field };
+  const typeArgsResult = parseOptionalTypeArgs(ctx);
+  if (!typeArgsResult.isOk) return typeArgsResult;
+  const after = peek(ctx);
+  if (after && after.type === "LPAREN") {
+    return parseFunctionCallExpr(
+      ctx,
+      field,
+      typeArgsResult.value,
+      current,
+      line,
+      column,
+    );
+  }
+  return { isOk: true, value: current };
 }
 
 function expectToken(

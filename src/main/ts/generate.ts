@@ -1,99 +1,23 @@
 import type {
   Expression,
-  IsExpressionExpr,
-  LogicalExpressionExpr,
-  NotExpressionExpr,
   Statement,
   NumberLiteralNode,
   IdentifierNode,
   LetDeclarationNode,
   AssignmentNode,
   MemberAssignmentNode,
+  LogicalExpressionExpr,
+  NotExpressionExpr,
+  IsExpressionExpr,
   ModuleExportsMap,
 } from "./types";
-import {
-  parseTupleTypeString,
-  isEnumType,
-  getEnumDef,
-} from "./semantic-generics";
+import { resolveName, genExprScoped } from "./generate-helpers";
 
 function isAssignmentLike(s: Statement): boolean {
   return (
     s.type === "LetDeclaration" ||
     s.type === "Assignment" ||
     s.type === "MemberAssignment"
-  );
-}
-
-const NUMERIC_TYPES = [
-  "U8",
-  "U16",
-  "U32",
-  "U64",
-  "USize",
-  "I8",
-  "I16",
-  "I32",
-  "I64",
-  "F32",
-  "F64",
-];
-
-function resolveName(name: string, declared: string[]): string {
-  for (let i = declared.length - 1; i >= 0; i--) {
-    const d = declared[i];
-    if (d && (d === name || d.startsWith(name + "_"))) return d;
-  }
-  return name;
-}
-
-function genTupleIsCheck(operand: string, tupleType: string): string {
-  const parts = parseTupleTypeString(tupleType);
-  if (!parts) return "false";
-  const len = parts.length;
-  let checks =
-    "Array.isArray(" + operand + ") && " + operand + ".length === " + len;
-  for (let i = 0; i < len; i++) {
-    const elem = parts[i] as string;
-    const sub = operand + "[" + i + "]";
-    if (elem.startsWith("(")) {
-      checks += " && " + genTupleIsCheck(sub, elem);
-    } else {
-      checks += " && " + genIsCheck(sub, elem);
-    }
-  }
-  return "(" + checks + ")";
-}
-
-function genIsCheck(operand: string, typeName: string): string {
-  if (typeName.startsWith("(") && typeName.endsWith(")"))
-    return genTupleIsCheck(operand, typeName);
-  const baseType = (typeName.split("<") as string[])[0] || "";
-  if (baseType === "Bool") return "(typeof " + operand + " === 'boolean')";
-  if (baseType === "Str") return "(typeof " + operand + " === 'string')";
-  if (NUMERIC_TYPES.includes(baseType))
-    return "(typeof " + operand + " === 'number')";
-  if (isEnumType(baseType)) {
-    const def = getEnumDef(baseType);
-    if (def)
-      return (
-        "([" +
-        def.variants.map((v) => "'" + v + "'").join(", ") +
-        "].includes(" +
-        operand +
-        "))"
-      );
-  }
-  return (
-    "(typeof " +
-    operand +
-    " === 'object' && " +
-    operand +
-    " !== null && " +
-    operand +
-    ".__type === '" +
-    baseType +
-    "')"
   );
 }
 
@@ -111,138 +35,6 @@ function genExitCoerced(name: string): string {
     name +
     ");"
   );
-}
-
-function genLogicalExpr(
-  le: LogicalExpressionExpr,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  const op = le.operator === "AND" ? "&&" : "||";
-  return (
-    "(" +
-    genExprScoped(le.left, declared, moduleExports) +
-    " " +
-    op +
-    " " +
-    genExprScoped(le.right, declared, moduleExports) +
-    ")"
-  );
-}
-
-function genMemberAccess(
-  expr: Expression,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  const m = expr as { object: Expression; field: string };
-  // Check if this is a cross-module access (lib.foo where lib is a module)
-  if (
-    m.object.type === "Identifier" &&
-    moduleExports &&
-    moduleExports[(m.object as { name: string }).name]
-  ) {
-    const moduleName = (m.object as { name: string }).name;
-    return 'require("' + moduleName + '").' + m.field;
-  }
-  const obj = genExprScoped(m.object, declared, moduleExports);
-  if (/^\d+$/.test(m.field)) return obj + "[" + m.field + "]";
-  return obj + "." + m.field;
-}
-
-function genTupleExprCode(
-  expr: Expression,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  const t = expr as { elements: Expression[] };
-  const elems = t.elements.map((e) =>
-    genExprScoped(e, declared, moduleExports),
-  );
-  return "[" + elems.join(", ") + "]";
-}
-
-function genBoolLitCode(expr: Expression): string {
-  return (expr as { value: boolean }).value ? "true" : "false";
-}
-
-function genIsExprCode(
-  expr: Expression,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  const ie = expr as IsExpressionExpr;
-  return genIsCheck(
-    "(" + genExprScoped(ie.operand, declared, moduleExports) + ")",
-    ie.typeName,
-  );
-}
-
-function genStructInstanceCode(
-  expr: Expression,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  const s = expr as {
-    structName: string;
-    fields: { name: string; value: Expression }[];
-  };
-  const fs = s.fields.map(
-    (f) => f.name + ": " + genExprScoped(f.value, declared, moduleExports),
-  );
-  return "{ __type: '" + s.structName + "', " + fs.join(", ") + " }";
-}
-
-function genExprScoped(
-  expr: Expression,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  if (expr.type === "NumberLiteral")
-    return String((expr as NumberLiteralNode).value);
-  if (expr.type === "BooleanLiteral") return genBoolLitCode(expr);
-  if (expr.type === "StringLiteral")
-    return JSON.stringify((expr as { value: string }).value);
-  if (expr.type === "IsExpression")
-    return genIsExprCode(expr, declared, moduleExports);
-  if (expr.type === "StructInstance")
-    return genStructInstanceCode(expr, declared, moduleExports);
-  if (expr.type === "TupleExpr")
-    return genTupleExprCode(expr, declared, moduleExports);
-  if (expr.type === "MemberExpression")
-    return genMemberAccess(expr, declared, moduleExports);
-  if (expr.type === "ModuleAccess") return genModuleAccess(expr);
-  if (expr.type === "LogicalExpression")
-    return genLogicalExpr(
-      expr as LogicalExpressionExpr,
-      declared,
-      moduleExports,
-    );
-  return genNotOrIdentifier(expr, declared, moduleExports);
-}
-
-function genNotOrIdentifier(
-  expr: Expression,
-  declared: string[],
-  moduleExports?: ModuleExportsMap,
-): string {
-  if (expr.type === "NotExpression")
-    return (
-      "(!" +
-      genExprScoped(
-        (expr as NotExpressionExpr).operand,
-        declared,
-        moduleExports,
-      ) +
-      ")"
-    );
-  return resolveName((expr as { name: string }).name, declared);
-}
-
-function genModuleAccess(expr: Expression): string {
-  const ma = expr as { modulePath: string[]; field: string };
-  const modulePath = ma.modulePath.join(".");
-  return 'require("' + modulePath + '").' + ma.field;
 }
 
 function uniqueName(name: string, declared: string[]): string {
@@ -288,7 +80,9 @@ function genExprExitStmt(
   if (
     s.type === "StringLiteral" ||
     s.type === "MemberExpression" ||
-    s.type === "ModuleAccess"
+    s.type === "ModuleAccess" ||
+    s.type === "BinaryExpression" ||
+    s.type === "FunctionCall"
   ) {
     lines.push(
       genExitCoerced(genExprScoped(s as Expression, declared, moduleExports)),
@@ -351,6 +145,9 @@ function genExport(
   } else if (s.type === "TypeAlias") {
     const ta = s as { name: string };
     lines.push("exports." + ta.name + " = {};");
+  } else if (s.type === "FunctionDefinition") {
+    const fn = s as { name: string };
+    lines.push("exports." + fn.name + " = " + fn.name + ";");
   }
 }
 
@@ -361,9 +158,26 @@ function genStmt(
   moduleMode = false,
   moduleExports?: ModuleExportsMap,
 ): void {
+  if (genDefinitionStmt(s, lines, declared, moduleMode, moduleExports)) return;
+  if (genExprExitStmts(s, lines, declared, moduleMode, moduleExports)) return;
+  if (!moduleMode && genExitStmt(s, lines, declared, moduleExports)) return;
+  if (isAssignmentLike(s)) {
+    const a = s as LetDeclarationNode | AssignmentNode | MemberAssignmentNode;
+    genAssignment(s, a, lines, declared, moduleExports);
+    genExport(s, lines, declared, moduleMode);
+  }
+}
+
+function genDefinitionStmt(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+  moduleMode: boolean,
+  moduleExports?: ModuleExportsMap,
+): boolean {
   if (s.type === "StructDefinition" || s.type === "TypeAlias") {
     genExport(s, lines, declared, moduleMode);
-    return;
+    return true;
   }
   if (s.type === "EnumDefinition") {
     const en = s as { name: string; variants: string[] };
@@ -375,19 +189,83 @@ function genStmt(
         " };",
     );
     genExport(s, lines, declared, moduleMode);
-    return;
+    return true;
   }
+  if (s.type === "FunctionDefinition") {
+    genFunctionDefinition(s, lines, declared, moduleMode, moduleExports);
+    return true;
+  }
+  return false;
+}
 
-  if (s.type === "MemberExpression" || s.type === "ModuleAccess") {
+function genExprExitStmts(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+  moduleMode: boolean,
+  moduleExports?: ModuleExportsMap,
+): boolean {
+  if (
+    s.type === "MemberExpression" ||
+    s.type === "ModuleAccess" ||
+    s.type === "FunctionCall"
+  ) {
     genExprExitStmt(s, lines, declared, moduleExports);
-    return;
+    return true;
   }
-  if (!moduleMode && genExitStmt(s, lines, declared, moduleExports)) return;
+  return false;
+}
 
-  if (isAssignmentLike(s)) {
-    const a = s as LetDeclarationNode | AssignmentNode | MemberAssignmentNode;
-    genAssignment(s, a, lines, declared, moduleExports);
-    genExport(s, lines, declared, moduleMode);
+function genFunctionDefinition(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+  moduleMode: boolean,
+  moduleExports?: ModuleExportsMap,
+): void {
+  const fn = s as {
+    name: string;
+    params: { name: string; typeName: string }[];
+    body: Statement[];
+    exported?: boolean;
+  };
+  const params = fn.params.map((p) => p.name).join(", ");
+  lines.push("function " + fn.name + "(" + params + ") {");
+  const fnDeclared = [...declared, ...fn.params.map((p) => p.name)];
+  const bodyLines: string[] = [];
+  for (let i = 0; i < fn.body.length; i++) {
+    const stmt = fn.body[i];
+    if (stmt === undefined) continue;
+    const isLast = i === fn.body.length - 1;
+    if (isLast) {
+      genReturnStmt(stmt, bodyLines, fnDeclared, moduleExports);
+    } else {
+      genStmt(stmt, bodyLines, fnDeclared, moduleMode, moduleExports);
+    }
+  }
+  for (const line of bodyLines) {
+    lines.push(line);
+  }
+  lines.push("}");
+  genExport(s, lines, declared, moduleMode);
+}
+
+function genReturnStmt(
+  s: Statement,
+  lines: string[],
+  declared: string[],
+  moduleExports?: ModuleExportsMap,
+): void {
+  if (s.type === "NumberLiteral") {
+    lines.push("return " + (s as { value: number }).value + ";");
+  } else if (s.type === "Identifier") {
+    lines.push(
+      "return " + resolveName((s as { name: string }).name, declared) + ";",
+    );
+  } else {
+    lines.push(
+      "return " + genExprScoped(s as Expression, declared, moduleExports) + ";",
+    );
   }
 }
 

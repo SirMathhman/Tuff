@@ -18,3 +18,12 @@ test("cross-module access via nested module path", () => {
     100,
   );
 });
+
+test("cross-module access with nested main namespace", () => {
+  expectValidWithModules(
+    ["index", "bah"],
+    { ["index.bah"]: "lib::wah.foo", ["lib.wah"]: "out let foo = 100;" },
+    [],
+    100,
+  );
+});

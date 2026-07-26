@@ -2,7 +2,6 @@ import type {
   Token,
   Result,
   CompileError,
-  StructField,
   Expression,
   Statement,
   NumberLiteralExpr,
@@ -12,10 +11,9 @@ import type {
 import type { ParseContext } from "./parse-expressions";
 import {
   parseExpression,
-  parseBracketedList,
-  parseTypeNameWithGenerics,
   peek,
   consume,
+  expectRParen,
 } from "./parse-expressions";
 import {
   expectToken as expectTokenHelper,
@@ -23,6 +21,12 @@ import {
   unexpectedTokenError,
 } from "./parse-helpers";
 import { parseEnumDefinition } from "./parse-enums";
+import {
+  parseStructDefinition,
+  parseTypeAlias,
+  parseNameWithTypeParams,
+} from "./parse-struct-defs";
+import { parseTypeNameWithGenerics } from "./parse-type-expressions";
 
 function expectToken(
   ctx: ParseContext,
@@ -30,19 +34,6 @@ function expectToken(
   expected: string,
 ): Result<Token, CompileError> {
   return expectTokenHelper(ctx, type, expected);
-}
-function parseOutStatementBody(
-  ctx: ParseContext,
-  next: Token,
-): Result<Statement, CompileError> {
-  if (next.type === "IDENTIFIER" && next.value === "let")
-    return parseLetStatement(ctx, true);
-  if (next.type === "IDENTIFIER" && next.value === "struct")
-    return parseStructDefinition(ctx, true);
-  if (next.type === "IDENTIFIER" && next.value === "type")
-    return parseTypeAlias(ctx, true);
-  if (next.type === "ENUM") return parseEnumDefinition(ctx, true);
-  return unexpectedTokenError(next, "let, struct, type, or enum after 'out'");
 }
 
 function tryParseOutStatement(
@@ -55,13 +46,28 @@ function tryParseOutStatement(
   return parseOutStatementBody(ctx, next);
 }
 
-export function parseStatement(
+function parseOutStatementBody(
   ctx: ParseContext,
+  next: Token,
 ): Result<Statement, CompileError> {
-  const outResult = tryParseOutStatement(ctx);
-  if (outResult !== undefined) return outResult;
-  const token = peek(ctx);
-  if (!token) return unexpectedEofError("a statement");
+  if (next.type === "IDENTIFIER" && next.value === "let")
+    return parseLetStatement(ctx, true);
+  if (next.type === "IDENTIFIER" && next.value === "struct")
+    return parseStructDefinition(ctx, true);
+  if (next.type === "IDENTIFIER" && next.value === "type")
+    return parseTypeAlias(ctx, true);
+  if (next.type === "ENUM") return parseEnumDefinition(ctx, true);
+  if (next.type === "FN") return parseFunctionDefinition(ctx, true);
+  return unexpectedTokenError(
+    next,
+    "let, struct, type, enum, or fn after 'out'",
+  );
+}
+
+function dispatchStatementKind(
+  ctx: ParseContext,
+  token: Token,
+): Result<Statement, CompileError> {
   if (token.type === "IDENTIFIER" && token.value === "let")
     return parseLetStatement(ctx, false);
   if (token.type === "IDENTIFIER" && token.value === "struct")
@@ -69,7 +75,18 @@ export function parseStatement(
   if (token.type === "IDENTIFIER" && token.value === "type")
     return parseTypeAlias(ctx, false);
   if (token.type === "ENUM") return parseEnumDefinition(ctx, false);
+  if (token.type === "FN") return parseFunctionDefinition(ctx, false);
   return parseAssignmentStatement(ctx);
+}
+
+export function parseStatement(
+  ctx: ParseContext,
+): Result<Statement, CompileError> {
+  const outResult = tryParseOutStatement(ctx);
+  if (outResult !== undefined) return outResult;
+  const token = peek(ctx);
+  if (!token) return unexpectedEofError("a statement");
+  return dispatchStatementKind(ctx, token);
 }
 
 function parseLetStatement(
@@ -155,21 +172,7 @@ function parseAssignmentStatement(
   const early = parseEarlyReturn(expr, token);
   if (early) return early;
   const equalsResult = expectToken(ctx, "EQUALS", "=");
-  if (!equalsResult.isOk) {
-    if (expr.type === "MemberExpression")
-      return { isOk: true, value: expr as MemberExpressionExpr };
-    if (expr.type === "ModuleAccess")
-      return { isOk: true, value: expr as Statement };
-    return {
-      isOk: true,
-      value: {
-        type: "Identifier",
-        name: (expr as IdentifierExpr).name,
-        line: token.line,
-        column: token.column,
-      },
-    };
-  }
+  if (!equalsResult.isOk) return handleNoEquals(expr, token);
   if (expr.type === "MemberExpression")
     return parseMemberAssignment(
       ctx,
@@ -178,6 +181,170 @@ function parseAssignmentStatement(
       token.column,
     );
   return parseSimpleAssign(ctx, expr as IdentifierExpr, token);
+}
+
+function handleNoEquals(
+  expr: Expression,
+  token: Token,
+): Result<Statement, CompileError> {
+  if (expr.type === "MemberExpression")
+    return { isOk: true, value: expr as MemberExpressionExpr };
+  if (expr.type === "ModuleAccess")
+    return { isOk: true, value: expr as Statement };
+  if (
+    expr.type === "FunctionCall" ||
+    expr.type === "BinaryExpression" ||
+    expr.type === "IsExpression"
+  )
+    return { isOk: true, value: expr as Statement };
+  return {
+    isOk: true,
+    value: {
+      type: "Identifier",
+      name: (expr as IdentifierExpr).name,
+      line: token.line,
+      column: token.column,
+    },
+  };
+}
+
+function parseFunctionDefinition(
+  ctx: ParseContext,
+  exported: boolean,
+): Result<Statement, CompileError> {
+  const fnToken = peek(ctx);
+  if (!fnToken) return unexpectedEofError("fn");
+  consume(ctx);
+
+  const nameResult = parseFunctionName(ctx);
+  if (!nameResult.isOk) return nameResult;
+  const name = nameResult.value.name;
+  const typeParams = nameResult.value.typeParams;
+
+  const lpErr = expectToken(ctx, "LPAREN", "(");
+  if (!lpErr.isOk) return lpErr;
+  const paramsResult = parseFunctionParams(ctx);
+  if (!paramsResult.isOk) return paramsResult;
+  const params = paramsResult.value;
+
+  const returnTypeResult = parseFunctionReturnType(ctx);
+  if (!returnTypeResult.isOk) return returnTypeResult;
+
+  const fatArrowErr = expectToken(ctx, "FAT_ARROW", "=>");
+  if (!fatArrowErr.isOk) return fatArrowErr;
+
+  const bodyResult = parseFunctionBody(ctx);
+  if (!bodyResult.isOk) return bodyResult;
+
+  return {
+    isOk: true,
+    value: {
+      type: "FunctionDefinition",
+      name,
+      typeParams,
+      params,
+      returnType: returnTypeResult.value,
+      body: bodyResult.value,
+      exported,
+      line: fnToken.line,
+      column: fnToken.column,
+    },
+  };
+}
+
+function parseFunctionReturnType(
+  ctx: ParseContext,
+): Result<string, CompileError> {
+  const colonErr = expectToken(ctx, "COLON", ":");
+  if (!colonErr.isOk) return colonErr;
+  if (peek(ctx)?.type === "AMPERSAND") consume(ctx);
+  return parseTypeNameWithGenerics(ctx);
+}
+
+function parseFunctionName(
+  ctx: ParseContext,
+): Result<{ name: string; typeParams: string[] }, CompileError> {
+  return parseNameWithTypeParams(ctx, "function name");
+}
+
+function parseFunctionParams(
+  ctx: ParseContext,
+): Result<{ name: string; typeName: string }[], CompileError> {
+  const params: { name: string; typeName: string }[] = [];
+  const next = peek(ctx);
+  if (next && next.type === "RPAREN") {
+    consume(ctx);
+    return { isOk: true, value: params };
+  }
+  const firstResult = parseSingleParam(ctx);
+  if (!firstResult.isOk) return firstResult;
+  params.push(firstResult.value);
+  while (true) {
+    const comma = peek(ctx);
+    if (comma && comma.type === "COMMA") {
+      consume(ctx);
+      const paramResult = parseSingleParam(ctx);
+      if (!paramResult.isOk) return paramResult;
+      params.push(paramResult.value);
+    } else break;
+  }
+  const rpErr = expectRParen(ctx);
+  if (!rpErr.isOk) return rpErr;
+  return { isOk: true, value: params };
+}
+
+function parseSingleParam(
+  ctx: ParseContext,
+): Result<{ name: string; typeName: string }, CompileError> {
+  const nameToken = peek(ctx);
+  if (!nameToken || nameToken.type !== "IDENTIFIER")
+    return unexpectedTokenError(
+      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
+      "parameter name",
+    );
+  const paramName = nameToken.value;
+  consume(ctx);
+  const colonErr = expectToken(ctx, "COLON", ":");
+  if (!colonErr.isOk) return colonErr;
+  if (peek(ctx)?.type === "AMPERSAND") consume(ctx);
+  const typeResult = parseTypeNameWithGenerics(ctx);
+  if (!typeResult.isOk) return typeResult;
+  return { isOk: true, value: { name: paramName, typeName: typeResult.value } };
+}
+
+function parseFunctionBody(
+  ctx: ParseContext,
+): Result<Statement[], CompileError> {
+  const next = peek(ctx);
+  if (next && next.type === "LBRACE") {
+    return parseBlockBody(ctx);
+  }
+  return parseExpressionBody(ctx);
+}
+
+function parseBlockBody(ctx: ParseContext): Result<Statement[], CompileError> {
+  consume(ctx);
+  const statements: Statement[] = [];
+  while (true) {
+    const next = peek(ctx);
+    if (!next) return unexpectedEofError("'}'");
+    if (next.type === "RBRACE") {
+      consume(ctx);
+      break;
+    }
+    const stmtResult = parseStatement(ctx);
+    if (!stmtResult.isOk) return stmtResult;
+    statements.push(stmtResult.value);
+  }
+  return { isOk: true, value: statements };
+}
+
+function parseExpressionBody(
+  ctx: ParseContext,
+): Result<Statement[], CompileError> {
+  const exprResult = parseExpression(ctx);
+  if (!exprResult.isOk) return exprResult;
+  return { isOk: true, value: [exprResult.value as Statement] };
 }
 
 function makeNumLiteralStmt(value: number, token: Token): Statement {
@@ -270,138 +437,6 @@ function parseAssignmentBody(
   const semiResult = expectToken(ctx, "SEMICOLON", ";");
   if (!semiResult.isOk) return semiResult;
   return rhsResult;
-}
-
-function parseNameWithTypeParams(
-  ctx: ParseContext,
-  expectedName: string,
-): Result<{ name: string; typeParams: string[] }, CompileError> {
-  const nameToken = peek(ctx);
-  if (!nameToken || nameToken.type !== "IDENTIFIER")
-    return unexpectedTokenError(
-      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
-      expectedName,
-    );
-  const name = nameToken.value;
-  consume(ctx);
-  let typeParams: string[] = [];
-  const afterName = peek(ctx);
-  if (afterName && afterName.type === "LBRACKET") {
-    consume(ctx);
-    const typeParamsResult = parseBracketedList(ctx, "type parameter");
-    if (!typeParamsResult.isOk) return typeParamsResult;
-    typeParams = typeParamsResult.value;
-  }
-  return { isOk: true, value: { name, typeParams } };
-}
-
-function parseStructDefinition(
-  ctx: ParseContext,
-  exported: boolean,
-): Result<Statement, CompileError> {
-  const structToken = peek(ctx);
-  if (!structToken) return unexpectedEofError("struct");
-  consume(ctx);
-  const nameResult = parseNameWithTypeParams(ctx, "struct name");
-  if (!nameResult.isOk) return nameResult;
-  const structName = nameResult.value.name;
-  const typeParams = nameResult.value.typeParams;
-
-  const lbraceResult = expectToken(ctx, "LBRACE", "{");
-  if (!lbraceResult.isOk) return lbraceResult;
-  const fieldsResult = parseStructFields(ctx);
-  if (!fieldsResult.isOk) return fieldsResult;
-  consumeOptionalSemicolon(ctx);
-
-  return {
-    isOk: true,
-    value: {
-      type: "StructDefinition",
-      name: structName,
-      typeParams,
-      exported,
-      fields: fieldsResult.value,
-      line: structToken.line,
-      column: structToken.column,
-    },
-  };
-}
-
-function consumeOptionalSemicolon(ctx: ParseContext) {
-  const next = peek(ctx);
-  if (next && next.type === "SEMICOLON") consume(ctx);
-}
-
-function parseTypeAlias(
-  ctx: ParseContext,
-  exported: boolean,
-): Result<Statement, CompileError> {
-  const typeToken = peek(ctx);
-  if (!typeToken) return unexpectedEofError("type");
-  consume(ctx);
-  const nameResult = parseNameWithTypeParams(ctx, "alias name");
-  if (!nameResult.isOk) return nameResult;
-  const aliasName = nameResult.value.name;
-  const typeParams = nameResult.value.typeParams;
-
-  const equalsResult = expectToken(ctx, "EQUALS", "=");
-  if (!equalsResult.isOk) return equalsResult;
-  const underlyingResult = parseTypeNameWithGenerics(ctx);
-  if (!underlyingResult.isOk) return underlyingResult;
-  const semiResult = expectToken(ctx, "SEMICOLON", ";");
-  if (!semiResult.isOk) return semiResult;
-
-  return {
-    isOk: true,
-    value: {
-      type: "TypeAlias",
-      name: aliasName,
-      typeParams,
-      underlyingType: underlyingResult.value,
-      exported,
-      line: typeToken.line,
-      column: typeToken.column,
-    },
-  };
-}
-
-function parseStructFields(
-  ctx: ParseContext,
-): Result<StructField[], CompileError> {
-  const fields: StructField[] = [];
-  while (true) {
-    const next = peek(ctx);
-    if (!next) return unexpectedEofError("'}'");
-    if (next.type === "RBRACE") {
-      consume(ctx);
-      break;
-    }
-    const fieldResult = parseSingleField(ctx);
-    if (!fieldResult.isOk) return fieldResult;
-    fields.push(fieldResult.value);
-    const after = peek(ctx);
-    if (after && after.type === "COMMA") consume(ctx);
-  }
-  return { isOk: true, value: fields };
-}
-
-function parseSingleField(
-  ctx: ParseContext,
-): Result<StructField, CompileError> {
-  const nameToken = peek(ctx);
-  if (!nameToken || nameToken.type !== "IDENTIFIER")
-    return unexpectedTokenError(
-      nameToken || { type: "EOF", value: "", line: 0, column: 0 },
-      "field name or '}'",
-    );
-  const fieldName = nameToken.value;
-  consume(ctx);
-  const colonResult = expectToken(ctx, "COLON", ":");
-  if (!colonResult.isOk) return colonResult;
-  if (peek(ctx)?.type === "AMPERSAND") consume(ctx);
-  const typeName = parseTypeNameWithGenerics(ctx);
-  if (!typeName.isOk) return typeName;
-  return { isOk: true, value: { name: fieldName, typeName: typeName.value } };
 }
 
 function parseMemberAssignment(
