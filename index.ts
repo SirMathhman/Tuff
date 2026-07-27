@@ -156,28 +156,66 @@ function dispatchToken(
 ): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
   if (t === "let") return dispatchLet(tokens, pos, e);
   if (t === "if") return dispatchIf(tokens, pos, e);
-  if (tokens[pos + 1] === "=" && PREC[t] === undefined) return dispatchAssign(tokens, pos, t, e);
+  if (tokens[pos + 1] === "=" && PREC[t] === undefined)
+    return dispatchAssign(tokens, pos, t, e);
   const newPos = processToken(tokens, pos, o, v, scopeStack);
   return { v, o, pos: newPos, e };
 }
 
-function dispatchLet(tokens: string[], pos: number, e: number): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+function dispatchLet(
+  tokens: string[],
+  pos: number,
+  e: number,
+): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
   const { name, es, ee } = parseLet(tokens, pos);
-  return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: name } };
-}
-
-function dispatchIf(tokens: string[], pos: number, e: number): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
-  const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
   return {
-    v: [], o: [], pos: pos + 2, e: condEnd,
-    frame: { s: elseStart, e, v: [], o: [], ifThen: thenStart, ifThenEnd: thenEnd, ifElse: elseStart, ifAfter: e },
+    v: [],
+    o: [],
+    pos: es,
+    e: ee,
+    frame: { s: ee, e, v: [], o: [], n: name },
   };
 }
 
-function dispatchAssign(tokens: string[], pos: number, t: string, e: number): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+function dispatchIf(
+  tokens: string[],
+  pos: number,
+  e: number,
+): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+  const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
+  return {
+    v: [],
+    o: [],
+    pos: pos + 2,
+    e: condEnd,
+    frame: {
+      s: elseStart,
+      e,
+      v: [],
+      o: [],
+      ifThen: thenStart,
+      ifThenEnd: thenEnd,
+      ifElse: elseStart,
+      ifAfter: e,
+    },
+  };
+}
+
+function dispatchAssign(
+  tokens: string[],
+  pos: number,
+  t: string,
+  e: number,
+): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
   const es = pos + 2;
   const ee = findExprEnd(tokens, es);
-  return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: t } };
+  return {
+    v: [],
+    o: [],
+    pos: es,
+    e: ee,
+    frame: { s: ee, e, v: [], o: [], n: t },
+  };
 }
 
 function parseLet(
