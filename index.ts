@@ -17,6 +17,12 @@ function tokenize(source: string): string[] {
         word += source[i++];
       }
       tokens.push(word);
+    } else if (ch === "|" && source[i + 1] === "|") {
+      tokens.push("||");
+      i += 2;
+    } else if (ch === "&" && source[i + 1] === "&") {
+      tokens.push("&&");
+      i += 2;
     } else {
       tokens.push(ch);
       i++;
@@ -25,13 +31,15 @@ function tokenize(source: string): string[] {
   return tokens;
 }
 
-const PREC: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
+const PREC: Record<string, number> = { "||": 0, "&&": 1, "+": 2, "-": 2, "*": 3, "/": 3 };
 
 function applyOp(op: string, a: number, b: number): number {
   if (op === "+") return a + b;
   if (op === "-") return a - b;
   if (op === "*") return a * b;
   if (op === "/") return a / b;
+  if (op === "||") return a || b ? 1 : 0;
+  if (op === "&&") return a && b ? 1 : 0;
   return b;
 }
 
