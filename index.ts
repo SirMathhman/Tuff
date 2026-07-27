@@ -25,104 +25,99 @@ function tokenize(source: string): string[] {
   return tokens;
 }
 
-class Parser {
-  private pos = 0;
-  private scope: Map<string, number> = new Map();
+function parse(tokens: string[]): number {
+  let pos = 0;
+  let scope: Map<string, number> = new Map();
 
-  constructor(private tokens: string[]) {}
-
-  peek(): string | undefined {
-    return this.tokens[this.pos];
+  function peek(): string | undefined {
+    return tokens[pos];
   }
 
-  consume(): string {
-    return this.tokens[this.pos++]!;
+  function consume(): string {
+    return tokens[pos++]!;
   }
 
-  parse(): number {
-    const result = this.parseExpression();
-    return result;
-  }
-
-  private parseExpression(): number {
-    let result = this.parseTerm();
-    while (this.peek() === "+" || this.peek() === "-") {
-      const op = this.consume();
-      const val = this.parseTerm();
+  function parseExpression(): number {
+    let result = parseTerm();
+    while (peek() === "+" || peek() === "-") {
+      const op = consume();
+      const val = parseTerm();
       result = op === "+" ? result + val : result - val;
     }
     return result;
   }
 
-  private parseTerm(): number {
-    let result = this.parseFactor();
-    while (this.peek() === "*" || this.peek() === "/") {
-      const op = this.consume();
-      const val = this.parseFactor();
+  function parseTerm(): number {
+    let result = parseFactor();
+    while (peek() === "*" || peek() === "/") {
+      const op = consume();
+      const val = parseFactor();
       result = op === "*" ? result * val : result / val;
     }
     return result;
   }
 
-  private parseFactor(): number {
-    const token = this.peek();
+  function parseFactor(): number {
+    const token = peek();
     if (token === "(") {
-      this.consume();
-      const result = this.parseExpression();
-      this.consume(); // ")"
+      consume();
+      const result = parseExpression();
+      consume(); // ")"
       return result;
     }
     if (token === "{") {
-      return this.parseBlock();
+      return parseBlock();
     }
     if (token === "let") {
-      return this.parseLetExpression();
+      return parseLetExpression();
     }
-    const val = this.consume();
-    if (this.scope.has(val)) {
-      return this.scope.get(val)!;
+    const val = consume();
+    if (scope.has(val)) {
+      return scope.get(val)!;
     }
     return Number(val);
   }
 
-  private parseBlock(): number {
-    this.consume(); // "{"
-    const childScope = new Map(this.scope);
+  function parseBlock(): number {
+    consume(); // "{"
+    const childScope = new Map(scope);
     let lastVal = 0;
-    while (this.peek() !== "}" && this.peek() !== undefined) {
-      if (this.peek() === "let") {
-        this.consume(); // "let"
-        const name = this.consume();
-        this.consume(); // "="
-        const val = this.parseAssignment(childScope);
+    while (peek() !== "}" && peek() !== undefined) {
+      if (peek() === "let") {
+        consume(); // "let"
+        const name = consume();
+        consume(); // "="
+        const val = parseWithScope(childScope);
         childScope.set(name, val);
-        if (this.peek() === ";") this.consume();
+        if (peek() === ";") consume();
       } else {
-        lastVal = this.parseAssignment(childScope);
-        if (this.peek() === ";") this.consume();
+        lastVal = parseWithScope(childScope);
+        if (peek() === ";") consume();
       }
     }
-    this.consume(); // "}"
+    consume(); // "}"
     return lastVal;
   }
 
-  private parseAssignment(scope: Map<string, number>): number {
-    const oldScope = this.scope;
-    this.scope = scope;
-    const result = this.parseExpression();
-    this.scope = oldScope;
+  function parseWithScope(newScope: Map<string, number>): number {
+    const oldScope = scope;
+    scope = newScope;
+    const result = parseExpression();
+    scope = oldScope;
     return result;
   }
 
-  private parseLetExpression(): number {
-    this.consume(); // "let"
-    const name = this.consume();
-    this.consume(); // "="
-    const val = this.parseExpression();
-    this.scope.set(name, val);
-    if (this.peek() === ";") this.consume();
+  function parseLetExpression(): number {
+    consume(); // "let"
+    const name = consume();
+    consume(); // "="
+    const val = parseExpression();
+    scope.set(name, val);
+    if (peek() === ";") consume();
     return val;
   }
+
+  return parseExpression();
 }
 
 export function evaluate(source: string): number {
@@ -132,6 +127,5 @@ export function evaluate(source: string): number {
   const tokens = tokenize(trimmed);
   if (tokens.length === 0) return 0;
 
-  const parser = new Parser(tokens);
-  return parser.parse();
+  return parse(tokens);
 }
