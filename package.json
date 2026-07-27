@@ -6,12 +6,18 @@
   "scripts": {
     "test": "bun test",
     "format": "prettier . --write",
+    "lint": "eslint . --fix",
     "validate:nonrecursive": "bun run scripts/validate-nonrecursive.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "jiti": "^2.7.0",
     "prettier": "^3.9.6",
-    "ts-morph": "^28.0.0"
+    "ts-morph": "^28.0.0",
+    "typescript-eslint": "^8.65.0"
   },
   "peerDependencies": {
     "typescript": "^5"

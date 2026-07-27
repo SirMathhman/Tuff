@@ -2,7 +2,7 @@ export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === "") return 0;
 
-  const tokens = trimmed.match(/\d+|[+\-*/()]/g);
+  const tokens = trimmed.match(/\d+|[+\-*/(){}]/g);
   if (!tokens || tokens.length === 0) return 0;
 
   const values: number[] = [];
@@ -22,17 +22,22 @@ export function evaluate(source: string): number {
   }
 
   for (const token of tokens) {
-    if (token === "(") {
+    if (token === "(" || token === "{") {
       ops.push(token);
-    } else if (token === ")") {
-      while (ops.length > 0 && ops[ops.length - 1] !== "(") {
+    } else if (token === ")" || token === "}") {
+      while (
+        ops.length > 0 &&
+        ops[ops.length - 1] !== "(" &&
+        ops[ops.length - 1] !== "{"
+      ) {
         applyOp();
       }
-      ops.pop(); // remove "("
+      ops.pop(); // remove "(" or "{"
     } else if (precedence[token] !== undefined) {
       while (
         ops.length > 0 &&
         ops[ops.length - 1] !== "(" &&
+        ops[ops.length - 1] !== "{" &&
         precedence[ops[ops.length - 1] as string]! >= precedence[token]
       ) {
         applyOp();
