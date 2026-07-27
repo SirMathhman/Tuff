@@ -4,39 +4,48 @@ export function evaluate(source: string): number {
 
   const tokens = trimmed.match(/\d+|[+\-*/()]/g);
   if (!tokens || tokens.length === 0) return 0;
-  const t = tokens;
 
-  let pos = 0;
+  const values: number[] = [];
+  const ops: string[] = [];
+  const precedence: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
 
-  function parseExpression(): number {
-    let result = parseTerm();
-    while (pos < t.length && (t[pos] === "+" || t[pos] === "-")) {
-      const op = t[pos++];
-      const val = parseTerm();
-      result = op === "+" ? result + val : result - val;
-    }
-    return result;
+  function applyOp(): void {
+    const b = values.pop()!;
+    const a = values.pop()!;
+    const op = ops.pop()!;
+    let result = 0;
+    if (op === "+") result = a + b;
+    else if (op === "-") result = a - b;
+    else if (op === "*") result = a * b;
+    else if (op === "/") result = a / b;
+    values.push(result);
   }
 
-  function parseTerm(): number {
-    let result = parseFactor();
-    while (pos < t.length && (t[pos] === "*" || t[pos] === "/")) {
-      const op = t[pos++];
-      const val = parseFactor();
-      result = op === "*" ? result * val : result / val;
+  for (const token of tokens) {
+    if (token === "(") {
+      ops.push(token);
+    } else if (token === ")") {
+      while (ops.length > 0 && ops[ops.length - 1] !== "(") {
+        applyOp();
+      }
+      ops.pop(); // remove "("
+    } else if (precedence[token] !== undefined) {
+      while (
+        ops.length > 0 &&
+        ops[ops.length - 1] !== "(" &&
+        precedence[ops[ops.length - 1] as string]! >= precedence[token]
+      ) {
+        applyOp();
+      }
+      ops.push(token);
+    } else {
+      values.push(Number(token));
     }
-    return result;
   }
 
-  function parseFactor(): number {
-    if (t[pos] === "(") {
-      pos++; // consume "("
-      const result = parseExpression();
-      pos++; // consume ")"
-      return result;
-    }
-    return Number(t[pos++]);
+  while (ops.length > 0) {
+    applyOp();
   }
 
-  return parseExpression();
+  return values[0] ?? 0;
 }
