@@ -1,3 +1,19 @@
+const PRECEDENCE: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
+const OPENERS = ["(", "{"];
+const CLOSERS = [")", "}"];
+
+function applyOp(values: number[], ops: string[]): void {
+  const b = values.pop()!;
+  const a = values.pop()!;
+  const op = ops.pop()!;
+  let result = 0;
+  if (op === "+") result = a + b;
+  else if (op === "-") result = a - b;
+  else if (op === "*") result = a * b;
+  else if (op === "/") result = a / b;
+  values.push(result);
+}
+
 export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === "") return 0;
@@ -7,40 +23,22 @@ export function evaluate(source: string): number {
 
   const values: number[] = [];
   const ops: string[] = [];
-  const precedence: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
-
-  function applyOp(): void {
-    const b = values.pop()!;
-    const a = values.pop()!;
-    const op = ops.pop()!;
-    let result = 0;
-    if (op === "+") result = a + b;
-    else if (op === "-") result = a - b;
-    else if (op === "*") result = a * b;
-    else if (op === "/") result = a / b;
-    values.push(result);
-  }
 
   for (const token of tokens) {
-    if (token === "(" || token === "{") {
+    if (OPENERS.includes(token)) {
       ops.push(token);
-    } else if (token === ")" || token === "}") {
-      while (
-        ops.length > 0 &&
-        ops[ops.length - 1] !== "(" &&
-        ops[ops.length - 1] !== "{"
-      ) {
-        applyOp();
+    } else if (CLOSERS.includes(token)) {
+      while (ops.length > 0 && !OPENERS.includes(ops[ops.length - 1]!)) {
+        applyOp(values, ops);
       }
-      ops.pop(); // remove "(" or "{"
-    } else if (precedence[token] !== undefined) {
+      ops.pop();
+    } else if (PRECEDENCE[token] !== undefined) {
       while (
         ops.length > 0 &&
-        ops[ops.length - 1] !== "(" &&
-        ops[ops.length - 1] !== "{" &&
-        precedence[ops[ops.length - 1] as string]! >= precedence[token]
+        !OPENERS.includes(ops[ops.length - 1]!) &&
+        PRECEDENCE[ops[ops.length - 1] as string]! >= PRECEDENCE[token]
       ) {
-        applyOp();
+        applyOp(values, ops);
       }
       ops.push(token);
     } else {
@@ -49,7 +47,7 @@ export function evaluate(source: string): number {
   }
 
   while (ops.length > 0) {
-    applyOp();
+    applyOp(values, ops);
   }
 
   return values[0] ?? 0;
