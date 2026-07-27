@@ -101,6 +101,12 @@ describe("evaluate", () => {
   });
 
   it('evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x") => 2', () => {
-    expect(evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x")).toBe(2);
+    expect(
+      evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x"),
+    ).toBe(2);
+  });
+
+  it('evaluate("let mut x = 0; while (x < 4) { x += 1; } x") => 4', () => {
+    expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
   });
 });

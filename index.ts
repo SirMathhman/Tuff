@@ -73,9 +73,24 @@ interface WorkFrame {
   loopBodyEnd?: number;
   loopAfter?: number;
   loopScopeDepth?: number;
+  whileCondStart?: number;
+  whileCondEnd?: number;
+  whileBodyStart?: number;
+  whileBodyEnd?: number;
+  whileAfter?: number;
+  whileOrigCondStart?: number;
+  whileOrigCondEnd?: number;
   breakValue?: number;
   breakExpr?: boolean;
 }
+
+type DispatchResult = {
+  v: number[];
+  o: string[];
+  pos: number;
+  e: number;
+  frame?: WorkFrame;
+};
 
 function applyOp(op: string, a: number, b: number): number {
   if (op === "+") return a + b;
@@ -118,23 +133,12 @@ function evalRange(
   while (true) {
     if (pos >= e) {
       reduceOps(o, v);
-      const r = v[0] ?? 0;
-      const p = work.pop();
-      if (!p) return r;
-      const resume = resumeFrame(p, r, scopeStack);
-      if (resume) {
-        v = resume.v;
-        o = resume.o;
-        pos = resume.pos;
-        e = resume.e;
-      } else if (p.breakExpr) {
-        const brk = handleBreak(work, r);
-        if (brk) return brk;
-        v = [];
-        o = [];
-        pos = e;
-        continue;
-      } else return r;
+      const outcome = advanceFrame(work, v[0] ?? 0, scopeStack);
+      if (outcome.done) return outcome.value;
+      v = outcome.v;
+      o = outcome.o;
+      pos = outcome.pos;
+      e = outcome.e;
       continue;
     }
     const t = tokens[pos]!;
@@ -155,15 +159,53 @@ function evalRange(
   }
 }
 
+function advanceFrame(
+  work: WorkFrame[],
+  startR: number,
+  scopeStack: Map<string, number>[][],
+):
+  | { done: true; value: number }
+  | { done: false; v: number[]; o: string[]; pos: number; e: number } {
+  let r = startR;
+  while (true) {
+    const p = work.pop();
+    if (!p) return { done: true, value: r };
+    const resume = resumeFrame(p, r, scopeStack, work);
+    if (resume) return { done: false, ...resume };
+    if (!p.breakExpr) return { done: true, value: r };
+    const brk = handleBreak(work, r);
+    if (brk) return { done: true, value: brk };
+    r = 0;
+  }
+}
+
 function resumeFrame(
   p: WorkFrame,
   r: number,
   scopeStack: Map<string, number>[][],
+  work: WorkFrame[],
 ): { v: number[]; o: string[]; pos: number; e: number } | null {
   if (p.breakExpr) return null;
   if (p.ifThen !== undefined) {
     const next = resumeIf(p, r);
     return { v: next.v, o: next.o, pos: next.pos, e: next.e };
+  }
+  if (p.whileCondStart !== undefined) {
+    if (r) {
+      p.whileCondStart = undefined;
+      p.whileCondEnd = undefined;
+      work.push(p);
+      return { v: [], o: [], pos: p.whileBodyStart!, e: p.whileBodyEnd! };
+    }
+    while (scopeStack[scopeStack.length - 1]!.length > (p.loopScopeDepth ?? 0))
+      popScope(scopeStack);
+    return null;
+  }
+  if (p.whileBodyStart !== undefined) {
+    p.whileCondStart = p.whileOrigCondStart!;
+    p.whileCondEnd = p.whileOrigCondEnd!;
+    work.push(p);
+    return { v: [], o: [], pos: p.whileCondStart!, e: p.whileCondEnd! };
   }
   if (p.loopBodyStart !== undefined) {
     if (p.breakValue !== undefined) {
@@ -173,6 +215,7 @@ function resumeFrame(
         popScope(scopeStack);
       return null;
     }
+    work.push(p);
     return { v: [], o: [], pos: p.loopBodyStart, e: p.loopBodyEnd! };
   }
   if (p.n) {
@@ -189,7 +232,10 @@ function resumeFrame(
 function handleBreak(work: WorkFrame[], val: number): number | null {
   for (let i = work.length - 1; i >= 0; i--) {
     const f = work[i];
-    if (f && f.loopBodyStart !== undefined) {
+    if (
+      f &&
+      (f.loopBodyStart !== undefined || f.whileCondStart !== undefined)
+    ) {
       work.length = i;
       return val;
     }
@@ -224,6 +270,7 @@ function dispatchToken(
   if (t === "let") return dispatchLet(tokens, pos, e);
   if (t === "if") return dispatchIf(tokens, pos, e);
   if (t === "loop") return dispatchLoop(tokens, pos, e, scopeStack);
+  if (t === "while") return dispatchWhile(tokens, pos, e, scopeStack);
   if (t === "break") return dispatchBreak(tokens, pos, e);
   if (tokens[pos + 1] === "+=" && PREC[t] === undefined)
     return dispatchAssign(tokens, pos, t, e, "+");
@@ -233,11 +280,7 @@ function dispatchToken(
   return { v, o, pos: newPos, e };
 }
 
-function dispatchLet(
-  tokens: string[],
-  pos: number,
-  e: number,
-): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+function dispatchLet(tokens: string[], pos: number, e: number): DispatchResult {
   const { name, es, ee } = parseLet(tokens, pos);
   return {
     v: [],
@@ -248,11 +291,7 @@ function dispatchLet(
   };
 }
 
-function dispatchIf(
-  tokens: string[],
-  pos: number,
-  e: number,
-): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+function dispatchIf(tokens: string[], pos: number, e: number): DispatchResult {
   const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
   return {
     v: [],
@@ -277,24 +316,61 @@ function dispatchLoop(
   pos: number,
   e: number,
   scopeStack: Map<string, number>[][],
-): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+): DispatchResult {
   const bodyStart = pos + 2;
   const bodyEnd = findBlockEnd(tokens, bodyStart);
-  const depth = scopeStack[scopeStack.length - 1]!.length;
   return {
     v: [],
     o: [],
     pos: bodyStart,
     e: bodyEnd,
-    frame: {
-      s: e,
-      e,
-      v: [],
-      o: [],
-      loopBodyStart: bodyStart,
-      loopBodyEnd: bodyEnd,
-      loopScopeDepth: depth,
-    },
+    frame: makeLoopFrame(e, bodyStart, bodyEnd, scopeStack),
+  };
+}
+
+function dispatchWhile(
+  tokens: string[],
+  pos: number,
+  e: number,
+  scopeStack: Map<string, number>[][],
+): DispatchResult {
+  const condStart = pos + 2;
+  const condEnd = findParenEnd(tokens, pos + 1);
+  const braceStart = condEnd + 1;
+  const bodyEnd = findBlockEnd(tokens, braceStart);
+  const bodyStart = braceStart + 1;
+  const frame = makeLoopFrame(e, bodyStart, bodyEnd, scopeStack);
+  frame.whileCondStart = condStart;
+  frame.whileCondEnd = condEnd;
+  frame.whileOrigCondStart = condStart;
+  frame.whileOrigCondEnd = condEnd;
+  frame.whileBodyStart = bodyStart;
+  frame.whileBodyEnd = bodyEnd;
+  frame.whileAfter = e;
+  return {
+    v: [],
+    o: [],
+    pos: condStart,
+    e: condEnd,
+    frame,
+  };
+}
+
+function makeLoopFrame(
+  e: number,
+  bodyStart: number,
+  bodyEnd: number,
+  scopeStack: Map<string, number>[][],
+): WorkFrame {
+  const depth = scopeStack[scopeStack.length - 1]!.length;
+  return {
+    s: e,
+    e,
+    v: [],
+    o: [],
+    loopBodyStart: bodyStart,
+    loopBodyEnd: bodyEnd,
+    loopScopeDepth: depth,
   };
 }
 
@@ -327,7 +403,7 @@ function dispatchAssign(
   t: string,
   e: number,
   compoundOp?: string,
-): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+): DispatchResult {
   const es = pos + 2;
   const ee = findExprEnd(tokens, es);
   return {
@@ -503,6 +579,7 @@ function parseToken(
   }
   if (token === "if") return parseIf(tokens, pos, values, scopeStack);
   if (token === "loop") return parseLoop(tokens, pos, values, scopeStack);
+  if (token === "while") return parseWhile(tokens, pos, values, scopeStack);
   if (token === "let") return handleLetAssign(tokens, pos, scopeStack);
   if (tokens[pos + 1] === "+=" && PREC[token] === undefined)
     return handleCompoundAssign(tokens, pos, scopeStack);
@@ -538,6 +615,19 @@ function parseLoop(
   const bodyStart = pos + 2;
   const bodyEnd = findBlockEnd(tokens, bodyStart);
   values.push(evalRange(tokens, pos, bodyEnd + 1, scopeStack));
+  return bodyEnd + 1;
+}
+
+function parseWhile(
+  tokens: string[],
+  pos: number,
+  _values: number[],
+  scopeStack: Map<string, number>[][],
+): number {
+  const condEnd = findParenEnd(tokens, pos + 1);
+  const braceStart = condEnd + 1;
+  const bodyEnd = findBlockEnd(tokens, braceStart);
+  evalRange(tokens, pos, bodyEnd + 1, scopeStack);
   return bodyEnd + 1;
 }
 
