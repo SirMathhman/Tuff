@@ -233,7 +233,10 @@ function currentScope(
 
 function resolve(token: string, scopeStack: Map<string, number>[][]): number {
   const scope = currentScope(scopeStack);
-  return scope.has(token) ? scope.get(token)! : Number(token);
+  if (scope.has(token)) return scope.get(token)!;
+  if (token === "true") return 1;
+  if (token === "false") return 0;
+  return Number(token);
 }
 
 function pushWork(
