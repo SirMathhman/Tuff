@@ -49,7 +49,7 @@ function evalWithScope(
   tokens: string[],
   start: number,
   end: number,
-  scope: Map<string, number>
+  scope: Map<string, number>,
 ): number {
   const values: number[] = [];
   const ops: string[] = [];
@@ -121,7 +121,12 @@ function parse(tokens: string[]): number {
       const name = tokens[pos + 1]!;
       const exprStart = pos + 3;
       const end = findExprEnd(tokens, exprStart);
-      const val = evalWithScope(tokens, exprStart, end, currentScope(scopeStack));
+      const val = evalWithScope(
+        tokens,
+        exprStart,
+        end,
+        currentScope(scopeStack),
+      );
       currentScope(scopeStack).set(name, val);
       pos = end + (tokens[end] === ";" ? 1 : 0);
     } else if (token === ";") {
@@ -174,7 +179,9 @@ function popScope(scopeStack: Map<string, number>[][]): void {
   scopeStack[scopeStack.length - 1]!.pop();
 }
 
-function currentScope(scopeStack: Map<string, number>[][]): Map<string, number> {
+function currentScope(
+  scopeStack: Map<string, number>[][],
+): Map<string, number> {
   const level = scopeStack[scopeStack.length - 1]!;
   return level[level.length - 1]!;
 }
