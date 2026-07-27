@@ -43,9 +43,16 @@ function tokenize(source: string): string[] {
 const PREC: Record<string, number> = {
   "||": 0,
   "&&": 1,
-  "<": 2, ">": 2, "<=": 2, ">=": 2, "==": 2, "!=": 2,
-  "+": 3, "-": 3,
-  "*": 4, "/": 4,
+  "<": 2,
+  ">": 2,
+  "<=": 2,
+  ">=": 2,
+  "==": 2,
+  "!=": 2,
+  "+": 3,
+  "-": 3,
+  "*": 4,
+  "/": 4,
 };
 
 function applyOp(op: string, a: number, b: number): number {
