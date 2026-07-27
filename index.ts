@@ -1,19 +1,3 @@
-const PRECEDENCE: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
-const OPENERS = ["(", "{"];
-const CLOSERS = [")", "}"];
-
-function applyOp(values: number[], ops: string[]): void {
-  const b = values.pop()!;
-  const a = values.pop()!;
-  const op = ops.pop()!;
-  let result = 0;
-  if (op === "+") result = a + b;
-  else if (op === "-") result = a - b;
-  else if (op === "*") result = a * b;
-  else if (op === "/") result = a / b;
-  values.push(result);
-}
-
 function tokenize(source: string): string[] {
   const tokens: string[] = [];
   let i = 0;
