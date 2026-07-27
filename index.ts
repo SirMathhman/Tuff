@@ -87,8 +87,7 @@ function evalRange(
   end: number,
   scopeStack: Map<string, number>[][],
 ): number {
-  const work: { s: number; e: number; v: number[]; o: string[]; n?: string }[] =
-    [];
+  const work: { s: number; e: number; v: number[]; o: string[]; n?: string; ifThen?: number; ifThenEnd?: number; ifElse?: number; ifAfter?: number }[] = [];
   let v: number[] = [];
   let o: string[] = [];
   let pos = start;
@@ -100,36 +99,54 @@ function evalRange(
       const r = v[0] ?? 0;
       const p = work.pop();
       if (!p) return r;
-      v = p.v;
-      o = p.o;
-      pos = p.s;
-      e = p.e;
+      if (p.ifThen !== undefined) {
+        const condVal = r;
+        if (condVal) {
+          v = []; o = []; pos = p.ifThen; e = p.ifThenEnd!;
+        } else {
+          v = []; o = []; pos = p.ifElse!; e = p.ifAfter!;
+        }
+        continue;
+      }
+      v = p.v; o = p.o; pos = p.s; e = p.e;
       if (p.n) currentScope(scopeStack).set(p.n, r);
+      if (!p.n) v.push(r);
       continue;
     }
     const t = tokens[pos]!;
     if (t === "let") {
-      const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
-      const name = tokens[pos + 1 + mutIdx]!;
-      const es = pos + 2 + mutIdx + 1;
-      const ee = findExprEnd(tokens, es);
+      const { name, es, ee } = parseLet(tokens, pos);
       pushWork(tokens, work, ee, e, v, o, name);
-      v = [];
-      o = [];
-      pos = es;
-      e = ee;
+      v = []; o = []; pos = es; e = ee;
+    } else if (t === "if") {
+      const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
+      work.push({ s: elseStart, e, v: [], o: [], ifThen: thenStart, ifThenEnd: thenEnd, ifElse: elseStart, ifAfter: e });
+      v = []; o = []; pos = pos + 2; e = condEnd;
     } else if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
       const es = pos + 2;
       const ee = findExprEnd(tokens, es);
       pushWork(tokens, work, ee, e, v, o, t);
-      v = [];
-      o = [];
-      pos = es;
-      e = ee;
+      v = []; o = []; pos = es; e = ee;
     } else {
       pos = processToken(tokens, pos, o, v, scopeStack);
     }
   }
+}
+
+function parseLet(tokens: string[], pos: number): { name: string; es: number; ee: number } {
+  const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
+  const name = tokens[pos + 1 + mutIdx]!;
+  const es = pos + 2 + mutIdx + 1;
+  const ee = findExprEnd(tokens, es);
+  return { name, es, ee };
+}
+
+function findIfParts(tokens: string[], pos: number): { condEnd: number; thenStart: number; thenEnd: number; elseStart: number } {
+  const condEnd = findParenEnd(tokens, pos + 1);
+  const thenStart = condEnd + 1;
+  const thenEnd = findElse(tokens, thenStart);
+  const elseStart = thenEnd + 1;
+  return { condEnd, thenStart, thenEnd, elseStart };
 }
 
 function processToken(
@@ -174,13 +191,47 @@ function findExprEnd(tokens: string[], start: number): number {
     const t = tokens[pos]!;
     if (t === "(" || t === "{") depth++;
     else if (t === ")" || t === "}") {
-      if (depth === 0) return pos;
+      if (depth === 0) {
+        const next = tokens[pos + 1];
+        if (next && PREC[next] !== undefined) { pos++; continue; }
+        return pos;
+      }
       depth--;
     } else if (t === ";" && depth === 0) return pos;
     pos++;
   }
   return pos;
 }
+
+function findParenEnd(tokens: string[], start: number): number {
+  let depth = 0;
+  let pos = start;
+  while (pos < tokens.length) {
+    if (tokens[pos] === "(") depth++;
+    else if (tokens[pos] === ")") {
+      depth--;
+      if (depth === 0) return pos;
+    }
+    pos++;
+  }
+  return pos;
+}
+
+function findElse(tokens: string[], start: number): number {
+  let depth = 0;
+  let pos = start;
+  while (pos < tokens.length) {
+    const t = tokens[pos]!;
+    if (t === "(" || t === "{") depth++;
+    else if (t === ")" || t === "}") {
+      depth--;
+    } else if (t === "else" && depth === 0) return pos;
+    pos++;
+  }
+  return pos;
+}
+
+
 
 function parse(tokens: string[]): number {
   const scope: Map<string, number> = new Map();
@@ -206,6 +257,12 @@ function parse(tokens: string[]): number {
       reduceUntil(ops, values, "{");
       popScope(scopeStack);
       pos++;
+    } else if (token === "if") {
+      const { elseStart } = findIfParts(tokens, pos);
+      const ifEnd = findExprEnd(tokens, elseStart);
+      const val = evalRange(tokens, pos, ifEnd, scopeStack);
+      values.push(val);
+      pos = ifEnd;
     } else if (token === "let") {
       pos = handleLetAssign(tokens, pos, scopeStack);
     } else if (tokens[pos + 1] === "=" && PREC[token] === undefined) {
