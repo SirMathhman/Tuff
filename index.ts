@@ -45,59 +45,43 @@ function reduceOps(ops: string[], values: number[]): void {
   }
 }
 
-function evalWithScope(
+function evalRange(
   tokens: string[],
   start: number,
   end: number,
-  scope: Map<string, number>,
+  scopeStack: Map<string, number>[][]
 ): number {
-  const values: number[] = [];
-  const ops: string[] = [];
-  const scopeStack: Map<string, number>[][] = [[scope]];
+  const work: { s: number; e: number; v: number[]; o: string[]; n?: string }[] = [];
+  let v: number[] = [];
+  let o: string[] = [];
   let pos = start;
+  let e = end;
 
-  while (pos < end) {
-    const token = tokens[pos]!;
-
-    if (token === "(") {
-      ops.push(token);
-      pos++;
-    } else if (token === ")") {
-      reduceUntil(ops, values, "(");
-      pos++;
-    } else if (token === "{") {
-      pushScope(scopeStack);
-      ops.push(token);
-      pos++;
-    } else if (token === "}") {
-      reduceUntil(ops, values, "{");
-      popScope(scopeStack);
-      pos++;
-    } else if (token === "let") {
-      const name = tokens[pos + 1]!;
-      const exprStart = pos + 3;
-      const exprEnd = findExprEnd(tokens, exprStart);
-      const val = evalWithScope(
-        tokens,
-        exprStart,
-        exprEnd,
-        currentScope(scopeStack),
-      );
-      currentScope(scopeStack).set(name, val);
-      pos = exprEnd + (tokens[exprEnd] === ";" ? 1 : 0);
-    } else if (token === ";") {
-      pos++;
-    } else if (PREC[token] !== undefined) {
-      pushOp(ops, values, token);
-      pos++;
-    } else {
-      values.push(resolve(token, scopeStack));
-      pos++;
+  while (true) {
+    if (pos >= e) {
+      reduceOps(o, v);
+      const r = v[0] ?? 0;
+      const p = work.pop();
+      if (!p) return r;
+      v = p.v; o = p.o; pos = p.s; e = p.e;
+      if (p.n) currentScope(scopeStack).set(p.n, r);
+      continue;
     }
+    const t = tokens[pos]!;
+    if (t === "(") { o.push(t); pos++; }
+    else if (t === ")") { reduceUntil(o, v, "("); pos++; }
+    else if (t === "{") { pushScope(scopeStack); o.push(t); pos++; }
+    else if (t === "}") { reduceUntil(o, v, "{"); popScope(scopeStack); pos++; }
+    else if (t === "let") {
+      const name = tokens[pos + 1]!;
+      const es = pos + 3;
+      const ee = findExprEnd(tokens, es);
+      work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
+      v = []; o = []; pos = es; e = ee;
+    } else if (t === ";") { pos++; }
+    else if (PREC[t] !== undefined) { pushOp(o, v, t); pos++; }
+    else { v.push(resolve(t, scopeStack)); pos++; }
   }
-
-  reduceOps(ops, values);
-  return values[0] ?? 0;
 }
 
 function findExprEnd(tokens: string[], start: number): number {
@@ -143,12 +127,7 @@ function parse(tokens: string[]): number {
       const name = tokens[pos + 1]!;
       const exprStart = pos + 3;
       const end = findExprEnd(tokens, exprStart);
-      const val = evalWithScope(
-        tokens,
-        exprStart,
-        end,
-        currentScope(scopeStack),
-      );
+      const val = evalRange(tokens, exprStart, end, scopeStack);
       currentScope(scopeStack).set(name, val);
       pos = end + (tokens[end] === ";" ? 1 : 0);
     } else if (token === ";") {

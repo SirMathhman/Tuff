@@ -7,6 +7,7 @@
     "test": "bun test",
     "format": "prettier . --write",
     "lint": "eslint . --fix",
+    "cpd": "pmd cpd index.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
     "validate:nonrecursive": "bun run scripts/validate-nonrecursive.ts"
   },
   "devDependencies": {
