@@ -73,8 +73,18 @@ function evalRange(
     }
     const t = tokens[pos]!;
     if (t === "let") {
-      const name = tokens[pos + 1]!;
-      const es = pos + 3;
+      const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
+      const name = tokens[pos + 1 + mutIdx]!;
+      const es = pos + 2 + mutIdx + 1;
+      const ee = findExprEnd(tokens, es);
+      work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
+      v = [];
+      o = [];
+      pos = es;
+      e = ee;
+    } else if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
+      const name = t;
+      const es = pos + 2;
       const ee = findExprEnd(tokens, es);
       work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
       v = [];
@@ -162,8 +172,16 @@ function parse(tokens: string[]): number {
       popScope(scopeStack);
       pos++;
     } else if (token === "let") {
-      const name = tokens[pos + 1]!;
-      const exprStart = pos + 3;
+      const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
+      const name = tokens[pos + 1 + mutIdx]!;
+      const exprStart = pos + 2 + mutIdx + 1;
+      const end = findExprEnd(tokens, exprStart);
+      const val = evalRange(tokens, exprStart, end, scopeStack);
+      currentScope(scopeStack).set(name, val);
+      pos = end + (tokens[end] === ";" ? 1 : 0);
+    } else if (tokens[pos + 1] === "=" && PREC[token] === undefined) {
+      const name = token;
+      const exprStart = pos + 2;
       const end = findExprEnd(tokens, exprStart);
       const val = evalRange(tokens, exprStart, end, scopeStack);
       currentScope(scopeStack).set(name, val);
