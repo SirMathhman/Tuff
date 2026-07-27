@@ -176,10 +176,11 @@ function resumeFrame(
     return { v: [], o: [], pos: p.loopBodyStart, e: p.loopBodyEnd! };
   }
   if (p.n) {
+    const target = findScopeFor(p.n, scopeStack) ?? currentScope(scopeStack);
     if (p.co) {
-      const cur = currentScope(scopeStack).get(p.n) ?? 0;
-      currentScope(scopeStack).set(p.n, applyOp(p.co, cur, r));
-    } else currentScope(scopeStack).set(p.n, r);
+      const cur = target.get(p.n) ?? 0;
+      target.set(p.n, applyOp(p.co, cur, r));
+    } else target.set(p.n, r);
   }
   if (!p.n) return { v: [r], o: [], pos: p.s, e: p.e };
   return { v: p.v, o: p.o, pos: p.s, e: p.e };
@@ -566,9 +567,7 @@ function pushOp(ops: string[], values: number[], token: string): void {
 }
 
 function pushScope(scopeStack: Map<string, number>[][]): void {
-  const level = scopeStack[scopeStack.length - 1]!;
-  const parent = level[level.length - 1]!;
-  scopeStack[scopeStack.length - 1] = [...level, new Map(parent)];
+  scopeStack[scopeStack.length - 1]!.push(new Map());
 }
 
 function popScope(scopeStack: Map<string, number>[][]): void {
@@ -585,9 +584,32 @@ function currentScope(
 function resolve(token: string, scopeStack: Map<string, number>[][]): number {
   const scope = currentScope(scopeStack);
   if (scope.has(token)) return scope.get(token)!;
+  for (let i = scopeStack.length - 2; i >= 0; i--) {
+    const level = scopeStack[i]!;
+    for (let j = level.length - 1; j >= 0; j--) {
+      if (level[j]!.has(token)) return level[j]!.get(token)!;
+    }
+  }
   if (token === "true") return 1;
   if (token === "false") return 0;
   return Number(token);
+}
+
+function findScopeFor(
+  name: string,
+  scopeStack: Map<string, number>[][],
+): Map<string, number> | null {
+  const level = scopeStack[scopeStack.length - 1]!;
+  for (let j = level.length - 1; j >= 0; j--) {
+    if (level[j]!.has(name)) return level[j]!;
+  }
+  for (let i = scopeStack.length - 2; i >= 0; i--) {
+    const outerLevel = scopeStack[i]!;
+    for (let j = outerLevel.length - 1; j >= 0; j--) {
+      if (outerLevel[j]!.has(name)) return outerLevel[j]!;
+    }
+  }
+  return null;
 }
 
 function handleLetAssign(
@@ -606,9 +628,7 @@ function handleAssign(
   pos: number,
   scopeStack: Map<string, number>[][],
 ): number {
-  const name = tokens[pos]!;
-  const exprStart = pos + 2;
-  return evalAndAssign(tokens, exprStart, name, scopeStack);
+  return assignExpr(tokens, pos + 2, tokens[pos]!, scopeStack, false);
 }
 
 function handleCompoundAssign(
@@ -616,13 +636,7 @@ function handleCompoundAssign(
   pos: number,
   scopeStack: Map<string, number>[][],
 ): number {
-  const name = tokens[pos]!;
-  const exprStart = pos + 2;
-  const end = findExprEnd(tokens, exprStart);
-  const val = evalRange(tokens, exprStart, end, scopeStack);
-  const cur = currentScope(scopeStack).get(name) ?? 0;
-  currentScope(scopeStack).set(name, cur + val);
-  return end + (tokens[end] === ";" ? 1 : 0);
+  return assignExpr(tokens, pos + 2, tokens[pos]!, scopeStack, true);
 }
 
 function evalAndAssign(
@@ -631,9 +645,25 @@ function evalAndAssign(
   name: string,
   scopeStack: Map<string, number>[][],
 ): number {
+  return assignExpr(tokens, start, name, scopeStack, false);
+}
+
+function assignExpr(
+  tokens: string[],
+  start: number,
+  name: string,
+  scopeStack: Map<string, number>[][],
+  compound: boolean,
+): number {
   const end = findExprEnd(tokens, start);
   const val = evalRange(tokens, start, end, scopeStack);
-  currentScope(scopeStack).set(name, val);
+  const target = findScopeFor(name, scopeStack) ?? currentScope(scopeStack);
+  if (compound) {
+    const cur = target.get(name) ?? 0;
+    target.set(name, cur + val);
+  } else {
+    target.set(name, val);
+  }
   return end + (tokens[end] === ";" ? 1 : 0);
 }
 
