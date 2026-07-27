@@ -32,6 +32,9 @@ function tokenize(source: string): string[] {
     } else if (ch === "=" && source[i + 1] === "=") {
       tokens.push("==");
       i += 2;
+    } else if (ch === "+" && source[i + 1] === "=") {
+      tokens.push("+=");
+      i += 2;
     } else {
       tokens.push(ch);
       i++;
@@ -61,10 +64,17 @@ interface WorkFrame {
   v: number[];
   o: string[];
   n?: string;
+  co?: string;
   ifThen?: number;
   ifThenEnd?: number;
   ifElse?: number;
   ifAfter?: number;
+  loopBodyStart?: number;
+  loopBodyEnd?: number;
+  loopAfter?: number;
+  loopScopeDepth?: number;
+  breakValue?: number;
+  breakExpr?: boolean;
 }
 
 function applyOp(op: string, a: number, b: number): number {
@@ -100,10 +110,10 @@ function evalRange(
   scopeStack: Map<string, number>[][],
 ): number {
   const work: WorkFrame[] = [];
-  let v: number[] = [];
-  let o: string[] = [];
-  let pos = start;
-  let e = end;
+  let v: number[] = [],
+    o: string[] = [],
+    pos = start,
+    e = end;
 
   while (true) {
     if (pos >= e) {
@@ -111,20 +121,20 @@ function evalRange(
       const r = v[0] ?? 0;
       const p = work.pop();
       if (!p) return r;
-      if (p.ifThen !== undefined) {
-        const next = resumeIf(p, r);
-        v = next.v;
-        o = next.o;
-        pos = next.pos;
-        e = next.e;
-      } else {
-        v = p.v;
-        o = p.o;
-        pos = p.s;
-        e = p.e;
-        if (p.n) currentScope(scopeStack).set(p.n, r);
-        if (!p.n) v.push(r);
-      }
+      const resume = resumeFrame(p, r, scopeStack);
+      if (resume) {
+        v = resume.v;
+        o = resume.o;
+        pos = resume.pos;
+        e = resume.e;
+      } else if (p.breakExpr) {
+        const brk = handleBreak(work, r);
+        if (brk) return brk;
+        v = [];
+        o = [];
+        pos = e;
+        continue;
+      } else return r;
       continue;
     }
     const t = tokens[pos]!;
@@ -133,8 +143,57 @@ function evalRange(
     o = next.o;
     pos = next.pos;
     e = next.e;
+    if (next.__break !== undefined) {
+      const brk = handleBreak(work, next.__break);
+      if (brk) return brk;
+      v = [];
+      o = [];
+      pos = e;
+      continue;
+    }
     if (next.frame) work.push(next.frame);
   }
+}
+
+function resumeFrame(
+  p: WorkFrame,
+  r: number,
+  scopeStack: Map<string, number>[][],
+): { v: number[]; o: string[]; pos: number; e: number } | null {
+  if (p.breakExpr) return null;
+  if (p.ifThen !== undefined) {
+    const next = resumeIf(p, r);
+    return { v: next.v, o: next.o, pos: next.pos, e: next.e };
+  }
+  if (p.loopBodyStart !== undefined) {
+    if (p.breakValue !== undefined) {
+      while (
+        scopeStack[scopeStack.length - 1]!.length > (p.loopScopeDepth ?? 0)
+      )
+        popScope(scopeStack);
+      return null;
+    }
+    return { v: [], o: [], pos: p.loopBodyStart, e: p.loopBodyEnd! };
+  }
+  if (p.n) {
+    if (p.co) {
+      const cur = currentScope(scopeStack).get(p.n) ?? 0;
+      currentScope(scopeStack).set(p.n, applyOp(p.co, cur, r));
+    } else currentScope(scopeStack).set(p.n, r);
+  }
+  if (!p.n) return { v: [r], o: [], pos: p.s, e: p.e };
+  return { v: p.v, o: p.o, pos: p.s, e: p.e };
+}
+
+function handleBreak(work: WorkFrame[], val: number): number | null {
+  for (let i = work.length - 1; i >= 0; i--) {
+    const f = work[i];
+    if (f && f.loopBodyStart !== undefined) {
+      work.length = i;
+      return val;
+    }
+  }
+  return null;
 }
 
 function resumeIf(
@@ -153,9 +212,20 @@ function dispatchToken(
   v: number[],
   o: string[],
   scopeStack: Map<string, number>[][],
-): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+): {
+  v: number[];
+  o: string[];
+  pos: number;
+  e: number;
+  frame?: WorkFrame;
+  __break?: number;
+} {
   if (t === "let") return dispatchLet(tokens, pos, e);
   if (t === "if") return dispatchIf(tokens, pos, e);
+  if (t === "loop") return dispatchLoop(tokens, pos, e, scopeStack);
+  if (t === "break") return dispatchBreak(tokens, pos, e);
+  if (tokens[pos + 1] === "+=" && PREC[t] === undefined)
+    return dispatchAssign(tokens, pos, t, e, "+");
   if (tokens[pos + 1] === "=" && PREC[t] === undefined)
     return dispatchAssign(tokens, pos, t, e);
   const newPos = processToken(tokens, pos, o, v, scopeStack);
@@ -201,11 +271,61 @@ function dispatchIf(
   };
 }
 
+function dispatchLoop(
+  tokens: string[],
+  pos: number,
+  e: number,
+  scopeStack: Map<string, number>[][],
+): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+  const bodyStart = pos + 2;
+  const bodyEnd = findBlockEnd(tokens, bodyStart);
+  const depth = scopeStack[scopeStack.length - 1]!.length;
+  return {
+    v: [],
+    o: [],
+    pos: bodyStart,
+    e: bodyEnd,
+    frame: {
+      s: e,
+      e,
+      v: [],
+      o: [],
+      loopBodyStart: bodyStart,
+      loopBodyEnd: bodyEnd,
+      loopScopeDepth: depth,
+    },
+  };
+}
+
+function dispatchBreak(
+  tokens: string[],
+  pos: number,
+  end: number,
+): {
+  v: number[];
+  o: string[];
+  pos: number;
+  e: number;
+  frame?: WorkFrame;
+  __break?: number;
+} {
+  const es = pos + 1;
+  const ee = findExprEnd(tokens, es);
+  return {
+    v: [],
+    o: [],
+    pos: es,
+    e: ee,
+    frame: { s: ee, e: end, v: [], o: [], breakExpr: true },
+  };
+}
+
 function dispatchAssign(
   tokens: string[],
   pos: number,
   t: string,
   e: number,
+  compoundOp?: string,
 ): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
   const es = pos + 2;
   const ee = findExprEnd(tokens, es);
@@ -214,7 +334,7 @@ function dispatchAssign(
     o: [],
     pos: es,
     e: ee,
-    frame: { s: ee, e, v: [], o: [], n: t },
+    frame: { s: ee, e, v: [], o: [], n: t, co: compoundOp },
   };
 }
 
@@ -325,53 +445,99 @@ function findElse(tokens: string[], start: number): number {
   return pos;
 }
 
+function findBlockEnd(tokens: string[], start: number): number {
+  let depth = 0;
+  let pos = start;
+  while (pos < tokens.length) {
+    if (tokens[pos] === "{") depth++;
+    else if (tokens[pos] === "}") {
+      depth--;
+      if (depth === 0) return pos;
+    }
+    pos++;
+  }
+  return pos;
+}
+
 function parse(tokens: string[]): number {
   const scope: Map<string, number> = new Map();
-  const values: number[] = [];
-  const ops: string[] = [];
+  const values: number[] = [],
+    ops: string[] = [];
   const scopeStack: Map<string, number>[][] = [[scope]];
   let pos = 0;
 
   while (pos < tokens.length) {
     const token = tokens[pos]!;
-
-    if (token === "(") {
-      ops.push(token);
-      pos++;
-    } else if (token === ")") {
-      reduceUntil(ops, values, "(");
-      pos++;
-    } else if (token === "{") {
-      pushScope(scopeStack);
-      ops.push(token);
-      pos++;
-    } else if (token === "}") {
-      reduceUntil(ops, values, "{");
-      popScope(scopeStack);
-      pos++;
-    } else if (token === "if") {
-      const { elseStart } = findIfParts(tokens, pos);
-      const ifEnd = findExprEnd(tokens, elseStart);
-      const val = evalRange(tokens, pos, ifEnd, scopeStack);
-      values.push(val);
-      pos = ifEnd;
-    } else if (token === "let") {
-      pos = handleLetAssign(tokens, pos, scopeStack);
-    } else if (tokens[pos + 1] === "=" && PREC[token] === undefined) {
-      pos = handleAssign(tokens, pos, scopeStack);
-    } else if (token === ";") {
-      pos++;
-    } else if (PREC[token] !== undefined) {
-      pushOp(ops, values, token);
-      pos++;
-    } else {
-      values.push(resolve(token, scopeStack));
-      pos++;
-    }
+    pos = parseToken(tokens, pos, token, values, ops, scopeStack);
   }
-
   reduceOps(ops, values);
   return values[0] ?? 0;
+}
+
+function parseToken(
+  tokens: string[],
+  pos: number,
+  token: string,
+  values: number[],
+  ops: string[],
+  scopeStack: Map<string, number>[][],
+): number {
+  if (token === "(") {
+    ops.push(token);
+    return pos + 1;
+  }
+  if (token === ")") {
+    reduceUntil(ops, values, "(");
+    return pos + 1;
+  }
+  if (token === "{") {
+    pushScope(scopeStack);
+    ops.push(token);
+    return pos + 1;
+  }
+  if (token === "}") {
+    reduceUntil(ops, values, "{");
+    popScope(scopeStack);
+    return pos + 1;
+  }
+  if (token === "if") return parseIf(tokens, pos, values, scopeStack);
+  if (token === "loop") return parseLoop(tokens, pos, values, scopeStack);
+  if (token === "let") return handleLetAssign(tokens, pos, scopeStack);
+  if (tokens[pos + 1] === "+=" && PREC[token] === undefined)
+    return handleCompoundAssign(tokens, pos, scopeStack);
+  if (tokens[pos + 1] === "=" && PREC[token] === undefined)
+    return handleAssign(tokens, pos, scopeStack);
+  if (token === ";") return pos + 1;
+  if (PREC[token] !== undefined) {
+    pushOp(ops, values, token);
+    return pos + 1;
+  }
+  values.push(resolve(token, scopeStack));
+  return pos + 1;
+}
+
+function parseIf(
+  tokens: string[],
+  pos: number,
+  values: number[],
+  scopeStack: Map<string, number>[][],
+): number {
+  const { elseStart } = findIfParts(tokens, pos);
+  const ifEnd = findExprEnd(tokens, elseStart);
+  values.push(evalRange(tokens, pos, ifEnd, scopeStack));
+  return ifEnd;
+}
+
+function parseLoop(
+  tokens: string[],
+  pos: number,
+  values: number[],
+  scopeStack: Map<string, number>[][],
+): number {
+  const bodyStart = pos + 2;
+  const bodyEnd = findBlockEnd(tokens, bodyStart);
+  values.push(evalRange(tokens, pos, bodyEnd + 1, scopeStack));
+  return bodyEnd + 1;
 }
 
 function reduceUntil(ops: string[], values: number[], stop: string): void {
@@ -443,6 +609,20 @@ function handleAssign(
   const name = tokens[pos]!;
   const exprStart = pos + 2;
   return evalAndAssign(tokens, exprStart, name, scopeStack);
+}
+
+function handleCompoundAssign(
+  tokens: string[],
+  pos: number,
+  scopeStack: Map<string, number>[][],
+): number {
+  const name = tokens[pos]!;
+  const exprStart = pos + 2;
+  const end = findExprEnd(tokens, exprStart);
+  const val = evalRange(tokens, exprStart, end, scopeStack);
+  const cur = currentScope(scopeStack).get(name) ?? 0;
+  currentScope(scopeStack).set(name, cur + val);
+  return end + (tokens[end] === ";" ? 1 : 0);
 }
 
 function evalAndAssign(
