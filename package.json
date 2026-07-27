@@ -5,11 +5,13 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "format": "prettier . --write"
+    "format": "prettier . --write",
+    "validate:nonrecursive": "bun run scripts/validate-nonrecursive.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "ts-morph": "^28.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"
