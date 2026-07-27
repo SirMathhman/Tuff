@@ -78,12 +78,18 @@ function evalRange(
       const es = pos + 2 + mutIdx + 1;
       const ee = findExprEnd(tokens, es);
       pushWork(tokens, work, ee, e, v, o, name);
-      v = []; o = []; pos = es; e = ee;
+      v = [];
+      o = [];
+      pos = es;
+      e = ee;
     } else if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
       const es = pos + 2;
       const ee = findExprEnd(tokens, es);
       pushWork(tokens, work, ee, e, v, o, t);
-      v = []; o = []; pos = es; e = ee;
+      v = [];
+      o = [];
+      pos = es;
+      e = ee;
     } else {
       pos = processToken(tokens, pos, o, v, scopeStack);
     }
@@ -233,13 +239,19 @@ function resolve(token: string, scopeStack: Map<string, number>[][]): number {
 function pushWork(
   tokens: string[],
   work: { s: number; e: number; v: number[]; o: string[]; n?: string }[],
-  ee: number, e: number, v: number[], o: string[], name: string
+  ee: number,
+  e: number,
+  v: number[],
+  o: string[],
+  name: string,
 ): void {
   work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
 }
 
 function handleLetAssign(
-  tokens: string[], pos: number, scopeStack: Map<string, number>[][]
+  tokens: string[],
+  pos: number,
+  scopeStack: Map<string, number>[][],
 ): number {
   const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
   const name = tokens[pos + 1 + mutIdx]!;
@@ -248,7 +260,9 @@ function handleLetAssign(
 }
 
 function handleAssign(
-  tokens: string[], pos: number, scopeStack: Map<string, number>[][]
+  tokens: string[],
+  pos: number,
+  scopeStack: Map<string, number>[][],
 ): number {
   const name = tokens[pos]!;
   const exprStart = pos + 2;
@@ -256,7 +270,10 @@ function handleAssign(
 }
 
 function evalAndAssign(
-  tokens: string[], start: number, name: string, scopeStack: Map<string, number>[][]
+  tokens: string[],
+  start: number,
+  name: string,
+  scopeStack: Map<string, number>[][],
 ): number {
   const end = findExprEnd(tokens, start);
   const val = evalRange(tokens, start, end, scopeStack);
