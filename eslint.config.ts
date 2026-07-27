@@ -18,6 +18,13 @@ export default defineConfig([
           skipBlankLines: true,
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ClassDeclaration",
+          message: "Do not use classes, use interfaces and functions.",
+        },
+      ],
     },
   },
   tseslint.configs.recommended,

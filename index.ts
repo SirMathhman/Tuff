@@ -25,99 +25,163 @@ function tokenize(source: string): string[] {
   return tokens;
 }
 
-function parse(tokens: string[]): number {
-  let pos = 0;
-  let scope: Map<string, number> = new Map();
+const PREC: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
 
-  function peek(): string | undefined {
-    return tokens[pos];
+function applyOp(op: string, a: number, b: number): number {
+  if (op === "+") return a + b;
+  if (op === "-") return a - b;
+  if (op === "*") return a * b;
+  if (op === "/") return a / b;
+  return b;
+}
+
+function reduceOps(ops: string[], values: number[]): void {
+  while (ops.length > 0) {
+    const op = ops.pop()!;
+    if (op === "(" || op === "{") continue;
+    const b = values.pop()!;
+    const a = values.pop()!;
+    values.push(applyOp(op, a, b));
   }
+}
 
-  function consume(): string {
-    return tokens[pos++]!;
-  }
+function evalWithScope(
+  tokens: string[],
+  start: number,
+  end: number,
+  scope: Map<string, number>
+): number {
+  const values: number[] = [];
+  const ops: string[] = [];
 
-  function parseExpression(): number {
-    let result = parseTerm();
-    while (peek() === "+" || peek() === "-") {
-      const op = consume();
-      const val = parseTerm();
-      result = op === "+" ? result + val : result - val;
-    }
-    return result;
-  }
-
-  function parseTerm(): number {
-    let result = parseFactor();
-    while (peek() === "*" || peek() === "/") {
-      const op = consume();
-      const val = parseFactor();
-      result = op === "*" ? result * val : result / val;
-    }
-    return result;
-  }
-
-  function parseFactor(): number {
-    const token = peek();
-    if (token === "(") {
-      consume();
-      const result = parseExpression();
-      consume(); // ")"
-      return result;
-    }
-    if (token === "{") {
-      return parseBlock();
-    }
-    if (token === "let") {
-      return parseLetExpression();
-    }
-    const val = consume();
-    if (scope.has(val)) {
-      return scope.get(val)!;
-    }
-    return Number(val);
-  }
-
-  function parseBlock(): number {
-    consume(); // "{"
-    const childScope = new Map(scope);
-    let lastVal = 0;
-    while (peek() !== "}" && peek() !== undefined) {
-      if (peek() === "let") {
-        consume(); // "let"
-        const name = consume();
-        consume(); // "="
-        const val = parseWithScope(childScope);
-        childScope.set(name, val);
-        if (peek() === ";") consume();
-      } else {
-        lastVal = parseWithScope(childScope);
-        if (peek() === ";") consume();
+  for (let i = start; i < end; i++) {
+    const token = tokens[i]!;
+    if (PREC[token] !== undefined) {
+      while (
+        ops.length > 0 &&
+        ops[ops.length - 1] !== "(" &&
+        ops[ops.length - 1] !== "{" &&
+        PREC[ops[ops.length - 1] as string]! >= PREC[token]
+      ) {
+        const b = values.pop()!;
+        const a = values.pop()!;
+        values.push(applyOp(ops.pop()!, a, b));
       }
+      ops.push(token);
+    } else {
+      const val = scope.has(token) ? scope.get(token)! : Number(token);
+      values.push(val);
     }
-    consume(); // "}"
-    return lastVal;
   }
 
-  function parseWithScope(newScope: Map<string, number>): number {
-    const oldScope = scope;
-    scope = newScope;
-    const result = parseExpression();
-    scope = oldScope;
-    return result;
+  reduceOps(ops, values);
+  return values[0] ?? 0;
+}
+
+function findExprEnd(tokens: string[], start: number): number {
+  let pos = start;
+  let depth = 0;
+  while (pos < tokens.length) {
+    const t = tokens[pos]!;
+    if (t === "(" || t === "{") depth++;
+    else if (t === ")" || t === "}") {
+      if (depth === 0) return pos;
+      depth--;
+    } else if (t === ";" && depth === 0) return pos;
+    pos++;
+  }
+  return pos;
+}
+
+function parse(tokens: string[]): number {
+  const scope: Map<string, number> = new Map();
+  const values: number[] = [];
+  const ops: string[] = [];
+  const scopeStack: Map<string, number>[][] = [[scope]];
+  let pos = 0;
+
+  while (pos < tokens.length) {
+    const token = tokens[pos]!;
+
+    if (token === "(") {
+      ops.push(token);
+      pos++;
+    } else if (token === ")") {
+      reduceUntil(ops, values, "(");
+      pos++;
+    } else if (token === "{") {
+      pushScope(scopeStack);
+      ops.push(token);
+      pos++;
+    } else if (token === "}") {
+      reduceUntil(ops, values, "{");
+      popScope(scopeStack);
+      pos++;
+    } else if (token === "let") {
+      const name = tokens[pos + 1]!;
+      const exprStart = pos + 3;
+      const end = findExprEnd(tokens, exprStart);
+      const val = evalWithScope(tokens, exprStart, end, currentScope(scopeStack));
+      currentScope(scopeStack).set(name, val);
+      pos = end + (tokens[end] === ";" ? 1 : 0);
+    } else if (token === ";") {
+      pos++;
+    } else if (PREC[token] !== undefined) {
+      pushOp(ops, values, token);
+      pos++;
+    } else {
+      values.push(resolve(token, scopeStack));
+      pos++;
+    }
   }
 
-  function parseLetExpression(): number {
-    consume(); // "let"
-    const name = consume();
-    consume(); // "="
-    const val = parseExpression();
-    scope.set(name, val);
-    if (peek() === ";") consume();
-    return val;
-  }
+  reduceOps(ops, values);
+  return values[0] ?? 0;
+}
 
-  return parseExpression();
+function reduceUntil(ops: string[], values: number[], stop: string): void {
+  while (ops.length > 0 && ops[ops.length - 1] !== stop) {
+    const op = ops.pop()!;
+    const b = values.pop()!;
+    const a = values.pop()!;
+    values.push(applyOp(op, a, b));
+  }
+  ops.pop();
+}
+
+function pushOp(ops: string[], values: number[], token: string): void {
+  const prec = PREC[token]!;
+  while (
+    ops.length > 0 &&
+    ops[ops.length - 1] !== "(" &&
+    ops[ops.length - 1] !== "{" &&
+    PREC[ops[ops.length - 1] as string]! >= prec
+  ) {
+    const b = values.pop()!;
+    const a = values.pop()!;
+    values.push(applyOp(ops.pop()!, a, b));
+  }
+  ops.push(token);
+}
+
+function pushScope(scopeStack: Map<string, number>[][]): void {
+  const level = scopeStack[scopeStack.length - 1]!;
+  const parent = level[level.length - 1]!;
+  scopeStack[scopeStack.length - 1] = [...level, new Map(parent)];
+}
+
+function popScope(scopeStack: Map<string, number>[][]): void {
+  scopeStack[scopeStack.length - 1]!.pop();
+}
+
+function currentScope(scopeStack: Map<string, number>[][]): Map<string, number> {
+  const level = scopeStack[scopeStack.length - 1]!;
+  return level[level.length - 1]!;
+}
+
+function resolve(token: string, scopeStack: Map<string, number>[][]): number {
+  const scope = currentScope(scopeStack);
+  return scope.has(token) ? scope.get(token)! : Number(token);
 }
 
 export function evaluate(source: string): number {
