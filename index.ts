@@ -68,20 +68,31 @@ function evalRange(
       continue;
     }
     const t = tokens[pos]!;
-    if (t === "(") { o.push(t); pos++; }
-    else if (t === ")") { reduceUntil(o, v, "("); pos++; }
-    else if (t === "{") { pushScope(scopeStack); o.push(t); pos++; }
-    else if (t === "}") { reduceUntil(o, v, "{"); popScope(scopeStack); pos++; }
-    else if (t === "let") {
+    if (t === "let") {
       const name = tokens[pos + 1]!;
       const es = pos + 3;
       const ee = findExprEnd(tokens, es);
       work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
       v = []; o = []; pos = es; e = ee;
-    } else if (t === ";") { pos++; }
-    else if (PREC[t] !== undefined) { pushOp(o, v, t); pos++; }
-    else { v.push(resolve(t, scopeStack)); pos++; }
+    } else {
+      pos = processToken(tokens, pos, o, v, scopeStack);
+    }
   }
+}
+
+function processToken(
+  tokens: string[], pos: number, o: string[], v: number[],
+  scopeStack: Map<string, number>[][]
+): number {
+  const t = tokens[pos]!;
+  if (t === "(") { o.push(t); return pos + 1; }
+  if (t === ")") { reduceUntil(o, v, "("); return pos + 1; }
+  if (t === "{") { pushScope(scopeStack); o.push(t); return pos + 1; }
+  if (t === "}") { reduceUntil(o, v, "{"); popScope(scopeStack); return pos + 1; }
+  if (t === ";") return pos + 1;
+  if (PREC[t] !== undefined) { pushOp(o, v, t); return pos + 1; }
+  v.push(resolve(t, scopeStack));
+  return pos + 1;
 }
 
 function findExprEnd(tokens: string[], start: number): number {
