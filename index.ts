@@ -31,7 +31,14 @@ function tokenize(source: string): string[] {
   return tokens;
 }
 
-const PREC: Record<string, number> = { "||": 0, "&&": 1, "+": 2, "-": 2, "*": 3, "/": 3 };
+const PREC: Record<string, number> = {
+  "||": 0,
+  "&&": 1,
+  "+": 2,
+  "-": 2,
+  "*": 3,
+  "/": 3,
+};
 
 function applyOp(op: string, a: number, b: number): number {
   if (op === "+") return a + b;
