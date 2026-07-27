@@ -53,24 +53,46 @@ function evalWithScope(
 ): number {
   const values: number[] = [];
   const ops: string[] = [];
+  const scopeStack: Map<string, number>[][] = [[scope]];
+  let pos = start;
 
-  for (let i = start; i < end; i++) {
-    const token = tokens[i]!;
-    if (PREC[token] !== undefined) {
-      while (
-        ops.length > 0 &&
-        ops[ops.length - 1] !== "(" &&
-        ops[ops.length - 1] !== "{" &&
-        PREC[ops[ops.length - 1] as string]! >= PREC[token]
-      ) {
-        const b = values.pop()!;
-        const a = values.pop()!;
-        values.push(applyOp(ops.pop()!, a, b));
-      }
+  while (pos < end) {
+    const token = tokens[pos]!;
+
+    if (token === "(") {
       ops.push(token);
+      pos++;
+    } else if (token === ")") {
+      reduceUntil(ops, values, "(");
+      pos++;
+    } else if (token === "{") {
+      pushScope(scopeStack);
+      ops.push(token);
+      pos++;
+    } else if (token === "}") {
+      reduceUntil(ops, values, "{");
+      popScope(scopeStack);
+      pos++;
+    } else if (token === "let") {
+      const name = tokens[pos + 1]!;
+      const exprStart = pos + 3;
+      const exprEnd = findExprEnd(tokens, exprStart);
+      const val = evalWithScope(
+        tokens,
+        exprStart,
+        exprEnd,
+        currentScope(scopeStack),
+      );
+      currentScope(scopeStack).set(name, val);
+      pos = exprEnd + (tokens[exprEnd] === ";" ? 1 : 0);
+    } else if (token === ";") {
+      pos++;
+    } else if (PREC[token] !== undefined) {
+      pushOp(ops, values, token);
+      pos++;
     } else {
-      const val = scope.has(token) ? scope.get(token)! : Number(token);
-      values.push(val);
+      values.push(resolve(token, scopeStack));
+      pos++;
     }
   }
 
