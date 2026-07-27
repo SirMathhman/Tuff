@@ -55,6 +55,18 @@ const PREC: Record<string, number> = {
   "/": 4,
 };
 
+interface WorkFrame {
+  s: number;
+  e: number;
+  v: number[];
+  o: string[];
+  n?: string;
+  ifThen?: number;
+  ifThenEnd?: number;
+  ifElse?: number;
+  ifAfter?: number;
+}
+
 function applyOp(op: string, a: number, b: number): number {
   if (op === "+") return a + b;
   if (op === "-") return a - b;
@@ -87,17 +99,7 @@ function evalRange(
   end: number,
   scopeStack: Map<string, number>[][],
 ): number {
-  const work: {
-    s: number;
-    e: number;
-    v: number[];
-    o: string[];
-    n?: string;
-    ifThen?: number;
-    ifThenEnd?: number;
-    ifElse?: number;
-    ifAfter?: number;
-  }[] = [];
+  const work: WorkFrame[] = [];
   let v: number[] = [];
   let o: string[] = [];
   let pos = start;
@@ -110,67 +112,54 @@ function evalRange(
       const p = work.pop();
       if (!p) return r;
       if (p.ifThen !== undefined) {
-        const condVal = r;
-        if (condVal) {
-          v = [];
-          o = [];
-          pos = p.ifThen;
-          e = p.ifThenEnd!;
-        } else {
-          v = [];
-          o = [];
-          pos = p.ifElse!;
-          e = p.ifAfter!;
-        }
-        continue;
+        const next = resumeIf(p, r);
+        v = next.v; o = next.o; pos = next.pos; e = next.e;
+      } else {
+        v = p.v; o = p.o; pos = p.s; e = p.e;
+        if (p.n) currentScope(scopeStack).set(p.n, r);
+        if (!p.n) v.push(r);
       }
-      v = p.v;
-      o = p.o;
-      pos = p.s;
-      e = p.e;
-      if (p.n) currentScope(scopeStack).set(p.n, r);
-      if (!p.n) v.push(r);
       continue;
     }
     const t = tokens[pos]!;
-    if (t === "let") {
-      const { name, es, ee } = parseLet(tokens, pos);
-      pushWork(tokens, work, ee, e, v, o, name);
-      v = [];
-      o = [];
-      pos = es;
-      e = ee;
-    } else if (t === "if") {
-      const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(
-        tokens,
-        pos,
-      );
-      work.push({
-        s: elseStart,
-        e,
-        v: [],
-        o: [],
-        ifThen: thenStart,
-        ifThenEnd: thenEnd,
-        ifElse: elseStart,
-        ifAfter: e,
-      });
-      v = [];
-      o = [];
-      pos = pos + 2;
-      e = condEnd;
-    } else if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
-      const es = pos + 2;
-      const ee = findExprEnd(tokens, es);
-      pushWork(tokens, work, ee, e, v, o, t);
-      v = [];
-      o = [];
-      pos = es;
-      e = ee;
-    } else {
-      pos = processToken(tokens, pos, o, v, scopeStack);
-    }
+    const next = dispatchToken(tokens, pos, t, e, v, o, scopeStack);
+    v = next.v; o = next.o; pos = next.pos; e = next.e;
+    if (next.frame) work.push(next.frame);
   }
+}
+
+function resumeIf(p: WorkFrame, r: number): { v: number[]; o: string[]; pos: number; e: number } {
+  if (r) return { v: [], o: [], pos: p.ifThen!, e: p.ifThenEnd! };
+  return { v: [], o: [], pos: p.ifElse!, e: p.ifAfter! };
+}
+
+function dispatchToken(
+  tokens: string[],
+  pos: number,
+  t: string,
+  e: number,
+  v: number[],
+  o: string[],
+  scopeStack: Map<string, number>[][],
+): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+  if (t === "let") {
+    const { name, es, ee } = parseLet(tokens, pos);
+    return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: name } };
+  }
+  if (t === "if") {
+    const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
+    return {
+      v: [], o: [], pos: pos + 2, e: condEnd,
+      frame: { s: elseStart, e, v: [], o: [], ifThen: thenStart, ifThenEnd: thenEnd, ifElse: elseStart, ifAfter: e },
+    };
+  }
+  if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
+    const es = pos + 2;
+    const ee = findExprEnd(tokens, es);
+    return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: t } };
+  }
+  const newPos = processToken(tokens, pos, o, v, scopeStack);
+  return { v, o, pos: newPos, e };
 }
 
 function parseLet(
@@ -379,17 +368,7 @@ function resolve(token: string, scopeStack: Map<string, number>[][]): number {
   return Number(token);
 }
 
-function pushWork(
-  tokens: string[],
-  work: { s: number; e: number; v: number[]; o: string[]; n?: string }[],
-  ee: number,
-  e: number,
-  v: number[],
-  o: string[],
-  name: string,
-): void {
-  work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
-}
+
 
 function handleLetAssign(
   tokens: string[],
