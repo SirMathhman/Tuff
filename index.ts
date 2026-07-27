@@ -77,20 +77,13 @@ function evalRange(
       const name = tokens[pos + 1 + mutIdx]!;
       const es = pos + 2 + mutIdx + 1;
       const ee = findExprEnd(tokens, es);
-      work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
-      v = [];
-      o = [];
-      pos = es;
-      e = ee;
+      pushWork(tokens, work, ee, e, v, o, name);
+      v = []; o = []; pos = es; e = ee;
     } else if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
-      const name = t;
       const es = pos + 2;
       const ee = findExprEnd(tokens, es);
-      work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
-      v = [];
-      o = [];
-      pos = es;
-      e = ee;
+      pushWork(tokens, work, ee, e, v, o, t);
+      v = []; o = []; pos = es; e = ee;
     } else {
       pos = processToken(tokens, pos, o, v, scopeStack);
     }
@@ -172,20 +165,9 @@ function parse(tokens: string[]): number {
       popScope(scopeStack);
       pos++;
     } else if (token === "let") {
-      const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
-      const name = tokens[pos + 1 + mutIdx]!;
-      const exprStart = pos + 2 + mutIdx + 1;
-      const end = findExprEnd(tokens, exprStart);
-      const val = evalRange(tokens, exprStart, end, scopeStack);
-      currentScope(scopeStack).set(name, val);
-      pos = end + (tokens[end] === ";" ? 1 : 0);
+      pos = handleLetAssign(tokens, pos, scopeStack);
     } else if (tokens[pos + 1] === "=" && PREC[token] === undefined) {
-      const name = token;
-      const exprStart = pos + 2;
-      const end = findExprEnd(tokens, exprStart);
-      const val = evalRange(tokens, exprStart, end, scopeStack);
-      currentScope(scopeStack).set(name, val);
-      pos = end + (tokens[end] === ";" ? 1 : 0);
+      pos = handleAssign(tokens, pos, scopeStack);
     } else if (token === ";") {
       pos++;
     } else if (PREC[token] !== undefined) {
@@ -246,6 +228,40 @@ function currentScope(
 function resolve(token: string, scopeStack: Map<string, number>[][]): number {
   const scope = currentScope(scopeStack);
   return scope.has(token) ? scope.get(token)! : Number(token);
+}
+
+function pushWork(
+  tokens: string[],
+  work: { s: number; e: number; v: number[]; o: string[]; n?: string }[],
+  ee: number, e: number, v: number[], o: string[], name: string
+): void {
+  work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
+}
+
+function handleLetAssign(
+  tokens: string[], pos: number, scopeStack: Map<string, number>[][]
+): number {
+  const mutIdx = tokens[pos + 1] === "mut" ? 1 : 0;
+  const name = tokens[pos + 1 + mutIdx]!;
+  const exprStart = pos + 2 + mutIdx + 1;
+  return evalAndAssign(tokens, exprStart, name, scopeStack);
+}
+
+function handleAssign(
+  tokens: string[], pos: number, scopeStack: Map<string, number>[][]
+): number {
+  const name = tokens[pos]!;
+  const exprStart = pos + 2;
+  return evalAndAssign(tokens, exprStart, name, scopeStack);
+}
+
+function evalAndAssign(
+  tokens: string[], start: number, name: string, scopeStack: Map<string, number>[][]
+): number {
+  const end = findExprEnd(tokens, start);
+  const val = evalRange(tokens, start, end, scopeStack);
+  currentScope(scopeStack).set(name, val);
+  return end + (tokens[end] === ";" ? 1 : 0);
 }
 
 export function evaluate(source: string): number {
