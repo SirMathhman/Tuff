@@ -1,1 +1,3 @@
-console.log("Hello via Bun!");
+export function evaluate(source: string) {
+  return 0;
+}
