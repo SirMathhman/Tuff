@@ -49,9 +49,10 @@ function evalRange(
   tokens: string[],
   start: number,
   end: number,
-  scopeStack: Map<string, number>[][]
+  scopeStack: Map<string, number>[][],
 ): number {
-  const work: { s: number; e: number; v: number[]; o: string[]; n?: string }[] = [];
+  const work: { s: number; e: number; v: number[]; o: string[]; n?: string }[] =
+    [];
   let v: number[] = [];
   let o: string[] = [];
   let pos = start;
@@ -63,7 +64,10 @@ function evalRange(
       const r = v[0] ?? 0;
       const p = work.pop();
       if (!p) return r;
-      v = p.v; o = p.o; pos = p.s; e = p.e;
+      v = p.v;
+      o = p.o;
+      pos = p.s;
+      e = p.e;
       if (p.n) currentScope(scopeStack).set(p.n, r);
       continue;
     }
@@ -73,7 +77,10 @@ function evalRange(
       const es = pos + 3;
       const ee = findExprEnd(tokens, es);
       work.push({ s: ee + (tokens[ee] === ";" ? 1 : 0), e, v, o, n: name });
-      v = []; o = []; pos = es; e = ee;
+      v = [];
+      o = [];
+      pos = es;
+      e = ee;
     } else {
       pos = processToken(tokens, pos, o, v, scopeStack);
     }
@@ -81,16 +88,36 @@ function evalRange(
 }
 
 function processToken(
-  tokens: string[], pos: number, o: string[], v: number[],
-  scopeStack: Map<string, number>[][]
+  tokens: string[],
+  pos: number,
+  o: string[],
+  v: number[],
+  scopeStack: Map<string, number>[][],
 ): number {
   const t = tokens[pos]!;
-  if (t === "(") { o.push(t); return pos + 1; }
-  if (t === ")") { reduceUntil(o, v, "("); return pos + 1; }
-  if (t === "{") { pushScope(scopeStack); o.push(t); return pos + 1; }
-  if (t === "}") { reduceUntil(o, v, "{"); popScope(scopeStack); return pos + 1; }
+  if (t === "(") {
+    o.push(t);
+    return pos + 1;
+  }
+  if (t === ")") {
+    reduceUntil(o, v, "(");
+    return pos + 1;
+  }
+  if (t === "{") {
+    pushScope(scopeStack);
+    o.push(t);
+    return pos + 1;
+  }
+  if (t === "}") {
+    reduceUntil(o, v, "{");
+    popScope(scopeStack);
+    return pos + 1;
+  }
   if (t === ";") return pos + 1;
-  if (PREC[t] !== undefined) { pushOp(o, v, t); return pos + 1; }
+  if (PREC[t] !== undefined) {
+    pushOp(o, v, t);
+    return pos + 1;
+  }
   v.push(resolve(t, scopeStack));
   return pos + 1;
 }

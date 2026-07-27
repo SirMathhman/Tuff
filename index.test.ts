@@ -49,4 +49,8 @@ describe("evaluate", () => {
   it('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
     expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
   });
+
+  it('evaluate("let y = 0; let y = 1; y") => 1', () => {
+    expect(evaluate("let y = 0; let y = 1; y")).toBe(1);
+  });
 });
