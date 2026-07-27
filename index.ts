@@ -113,9 +113,15 @@ function evalRange(
       if (!p) return r;
       if (p.ifThen !== undefined) {
         const next = resumeIf(p, r);
-        v = next.v; o = next.o; pos = next.pos; e = next.e;
+        v = next.v;
+        o = next.o;
+        pos = next.pos;
+        e = next.e;
       } else {
-        v = p.v; o = p.o; pos = p.s; e = p.e;
+        v = p.v;
+        o = p.o;
+        pos = p.s;
+        e = p.e;
         if (p.n) currentScope(scopeStack).set(p.n, r);
         if (!p.n) v.push(r);
       }
@@ -123,12 +129,18 @@ function evalRange(
     }
     const t = tokens[pos]!;
     const next = dispatchToken(tokens, pos, t, e, v, o, scopeStack);
-    v = next.v; o = next.o; pos = next.pos; e = next.e;
+    v = next.v;
+    o = next.o;
+    pos = next.pos;
+    e = next.e;
     if (next.frame) work.push(next.frame);
   }
 }
 
-function resumeIf(p: WorkFrame, r: number): { v: number[]; o: string[]; pos: number; e: number } {
+function resumeIf(
+  p: WorkFrame,
+  r: number,
+): { v: number[]; o: string[]; pos: number; e: number } {
   if (r) return { v: [], o: [], pos: p.ifThen!, e: p.ifThenEnd! };
   return { v: [], o: [], pos: p.ifElse!, e: p.ifAfter! };
 }
@@ -142,24 +154,30 @@ function dispatchToken(
   o: string[],
   scopeStack: Map<string, number>[][],
 ): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
-  if (t === "let") {
-    const { name, es, ee } = parseLet(tokens, pos);
-    return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: name } };
-  }
-  if (t === "if") {
-    const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
-    return {
-      v: [], o: [], pos: pos + 2, e: condEnd,
-      frame: { s: elseStart, e, v: [], o: [], ifThen: thenStart, ifThenEnd: thenEnd, ifElse: elseStart, ifAfter: e },
-    };
-  }
-  if (tokens[pos + 1] === "=" && PREC[t] === undefined) {
-    const es = pos + 2;
-    const ee = findExprEnd(tokens, es);
-    return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: t } };
-  }
+  if (t === "let") return dispatchLet(tokens, pos, e);
+  if (t === "if") return dispatchIf(tokens, pos, e);
+  if (tokens[pos + 1] === "=" && PREC[t] === undefined) return dispatchAssign(tokens, pos, t, e);
   const newPos = processToken(tokens, pos, o, v, scopeStack);
   return { v, o, pos: newPos, e };
+}
+
+function dispatchLet(tokens: string[], pos: number, e: number): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+  const { name, es, ee } = parseLet(tokens, pos);
+  return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: name } };
+}
+
+function dispatchIf(tokens: string[], pos: number, e: number): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+  const { condEnd, thenStart, thenEnd, elseStart } = findIfParts(tokens, pos);
+  return {
+    v: [], o: [], pos: pos + 2, e: condEnd,
+    frame: { s: elseStart, e, v: [], o: [], ifThen: thenStart, ifThenEnd: thenEnd, ifElse: elseStart, ifAfter: e },
+  };
+}
+
+function dispatchAssign(tokens: string[], pos: number, t: string, e: number): { v: number[]; o: string[]; pos: number; e: number; frame?: WorkFrame } {
+  const es = pos + 2;
+  const ee = findExprEnd(tokens, es);
+  return { v: [], o: [], pos: es, e: ee, frame: { s: ee, e, v: [], o: [], n: t } };
 }
 
 function parseLet(
@@ -367,8 +385,6 @@ function resolve(token: string, scopeStack: Map<string, number>[][]): number {
   if (token === "false") return 0;
   return Number(token);
 }
-
-
 
 function handleLetAssign(
   tokens: string[],
