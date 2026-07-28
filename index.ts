@@ -6,7 +6,8 @@ type Token =
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "keyword"; value: string }
   | { type: "identifier"; value: string }
-  | { type: "punctuator"; value: "=" | ";" };
+  | { type: "punctuator"; value: "=" | ";" }
+  | { type: "compound"; value: "+=" | "-=" | "*=" | "/=" };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -28,6 +29,18 @@ function tokenize(source: string): Token[] {
         }
       }
       tokens.push({ type: "number", value: Number(source.slice(start, i)) });
+    } else if (ch === "+" && source[i + 1] === "=") {
+      tokens.push({ type: "compound", value: "+=" });
+      i += 2;
+    } else if (ch === "-" && source[i + 1] === "=") {
+      tokens.push({ type: "compound", value: "-=" });
+      i += 2;
+    } else if (ch === "*" && source[i + 1] === "=") {
+      tokens.push({ type: "compound", value: "*=" });
+      i += 2;
+    } else if (ch === "/" && source[i + 1] === "=") {
+      tokens.push({ type: "compound", value: "/=" });
+      i += 2;
     } else if (ch && "+-*/".includes(ch)) {
       tokens.push({ type: "operator", value: ch as "+" | "-" | "*" | "/" });
       i++;
@@ -299,7 +312,37 @@ class Parser {
     if (token && token.type === "identifier") {
       const name = token.value;
       this.consume();
-      if (this.peek()?.type === "punctuator" && this.peek()?.value === "=") {
+      const next = this.peek();
+      if (next && next.type === "compound") {
+        this.consume(); // consume compound operator
+        const entry = this.scope.get(name);
+        if (!entry) {
+          throw new Error(`ReferenceError: '${name}' is not defined`);
+        }
+        if (!entry.mutable) {
+          throw new Error(`Cannot assign to immutable variable '${name}'`);
+        }
+        const right = this.parseAssignment();
+        const current = entry.value;
+        let result: number;
+        switch (next.value) {
+          case "+=":
+            result = current + right;
+            break;
+          case "-=":
+            result = current - right;
+            break;
+          case "*=":
+            result = current * right;
+            break;
+          case "/=":
+            result = current / right;
+            break;
+        }
+        entry.value = result;
+        return result;
+      }
+      if (next && next.type === "punctuator" && next.value === "=") {
         this.consume(); // consume "="
         const value = this.parseAssignment();
         const entry = this.scope.get(name);

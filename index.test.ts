@@ -109,6 +109,10 @@ test('evaluate("let mut x = 0; if (true) { x = 3; } x") => 3', () => {
   expect(evaluate("let mut x = 0; if (true) { x = 3; } x")).toBe(3);
 });
 
+test('evaluate("let mut counter = 0; counter += 1; counter") => 1', () => {
+  expect(evaluate("let mut counter = 0; counter += 1; counter")).toBe(1);
+});
+
 test('evaluate("let x = loop { break 3; }; x") => 3', () => {
   expect(evaluate("let x = loop { break 3; }; x")).toBe(3);
 });
