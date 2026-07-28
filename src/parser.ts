@@ -73,10 +73,9 @@ class Parser {
   /* ---- grammar rules ---- */
 
   /**
-   * Parse a block in statement context: `{ statement* }`
-   * No restrictions on the last statement.
+   * Collect statements until closing "}", consuming the brace.
    */
-  private parseBlockStmt(): AstNode {
+  private collectBlockStatements(): AstNode[] {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length) {
       if (this.match("group", "}")) {
@@ -90,6 +89,15 @@ class Parser {
       }
       statements.push(stmt);
     }
+    return statements;
+  }
+
+  /**
+   * Parse a block in statement context: `{ statement* }`
+   * No restrictions on the last statement.
+   */
+  private parseBlockStmt(): AstNode {
+    const statements = this.collectBlockStatements();
     return { kind: "block", statements };
   }
 
@@ -99,19 +107,7 @@ class Parser {
    * Skips the check when `skipBlockCheck` is true (top-level statement context).
    */
   private parseBlockExpr(): AstNode {
-    const statements: AstNode[] = [];
-    while (this.pos < this.tokens.length) {
-      if (this.match("group", "}")) {
-        this.consume();
-        break;
-      }
-      const prevPos = this.pos;
-      const stmt = this.parseStatement();
-      if (prevPos === this.pos) {
-        this.pos++;
-      }
-      statements.push(stmt);
-    }
+    const statements = this.collectBlockStatements();
     if (!this.skipBlockCheck) {
       const last = statements[statements.length - 1];
       if (last?.kind === "let") {
