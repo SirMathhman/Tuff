@@ -1,7 +1,7 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
-import { dynamic, isNumeric } from "./types";
+import { isNumeric, numeric } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
 function getMutable(name: string, env: Map<string, Value>): Value | undefined {
@@ -25,7 +25,7 @@ export function evaluate(
       return evalOk({
         kind: "number",
         value: node.value,
-        type: node.type ?? dynamic(),
+        type: node.type ?? numeric("I", 32),
       });
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value });
@@ -144,17 +144,16 @@ export function evaluate(
   return evalOk({ kind: "number", value: 0 });
 }
 
-/** Check if a runtime value matches the target type. Dynamic values match anything. */
+/** Check if a runtime value matches the target type. */
 function checkType(value: Value, targetType: Type): boolean {
   const valueType = inferRuntimeType(value);
-  if (valueType.kind === "dynamic") return true;
   return typesEqual(valueType, targetType);
 }
 
 /** Infer the type of a runtime value from its metadata. */
 function inferRuntimeType(value: Value): Type {
   if (value.kind === "boolean") return { kind: "bool" };
-  return value.type ?? dynamic();
+  return value.type ?? numeric("I", 32);
 }
 
 /** Check if two types are exactly equal. */
