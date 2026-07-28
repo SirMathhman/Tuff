@@ -56,6 +56,8 @@ function tokenize(source: string): Token[] {
       const word = source.slice(start, i);
       if (word === "let") {
         tokens.push({ type: "keyword", value: "let" });
+      } else if (word === "mut") {
+        tokens.push({ type: "keyword", value: "mut" });
       } else {
         tokens.push({ type: "identifier", value: word });
       }
@@ -66,12 +68,14 @@ function tokenize(source: string): Token[] {
   return tokens;
 }
 
+type VarEntry = { value: number; mutable: boolean };
+
 class Parser {
   private tokens: Token[];
   private pos: number;
-  private scope: Map<string, number>;
+  private scope: Map<string, VarEntry>;
 
-  constructor(tokens: Token[], scope?: Map<string, number>) {
+  constructor(tokens: Token[], scope?: Map<string, VarEntry>) {
     this.tokens = tokens;
     this.pos = 0;
     this.scope = scope || new Map();
@@ -91,7 +95,7 @@ class Parser {
   }
 
   private parseStatements(
-    scope: Map<string, number>,
+    scope: Map<string, VarEntry>,
     shouldStop: () => boolean,
   ): number {
     let lastResult = 0;
@@ -109,26 +113,34 @@ class Parser {
     return lastResult;
   }
 
-  private parseLetStatement(scope: Map<string, number>): number {
+  private parseLetStatement(scope: Map<string, VarEntry>): number {
     this.consume(); // consume "let"
+    let mutable = false;
+    const mutToken = this.peek();
+    if (mutToken && mutToken.type === "keyword" && mutToken.value === "mut") {
+      mutable = true;
+      this.consume(); // consume "mut"
+    }
     const idToken = this.peek();
     if (idToken && idToken.type === "identifier") {
       this.consume(); // consume identifier
       if (this.peek()?.type === "punctuator" && this.peek()?.value === "=") {
         this.consume(); // consume "="
         const value = this.parseExpression();
-        scope.set(idToken.value, value);
+        scope.set(idToken.value, { value, mutable });
+      } else {
+        scope.set(idToken.value, { value: 0, mutable });
       }
       if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
         this.consume(); // consume ";"
       }
-      return scope.get(idToken.value) ?? 0;
+      return scope.get(idToken.value)!.value;
     }
     return 0;
   }
 
   private parseExpression(): number {
-    let left = this.parseTerm();
+    let left = this.parseAssignment();
     while (this.pos < this.tokens.length) {
       const token = this.peek();
       if (
@@ -137,13 +149,39 @@ class Parser {
         (token.value === "+" || token.value === "-")
       ) {
         this.consume();
-        const right = this.parseTerm();
+        const right = this.parseAssignment();
         left = token.value === "+" ? left + right : left - right;
       } else {
         break;
       }
     }
     return left;
+  }
+
+  private parseAssignment(): number {
+    const token = this.peek();
+    if (token && token.type === "identifier") {
+      const name = token.value;
+      this.consume();
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === "=") {
+        this.consume(); // consume "="
+        const value = this.parseAssignment();
+        const entry = this.scope.get(name);
+        if (!entry) {
+          throw new Error(`ReferenceError: '${name}' is not defined`);
+        }
+        if (!entry.mutable) {
+          throw new Error(`Cannot assign to immutable variable '${name}'`);
+        }
+        entry.value = value;
+        return value;
+      }
+      if (!this.scope.has(name)) {
+        throw new Error(`ReferenceError: '${name}' is not defined`);
+      }
+      return this.scope.get(name)!.value;
+    }
+    return this.parseTerm();
   }
 
   private parseTerm(): number {
@@ -173,13 +211,6 @@ class Parser {
     if (token.type === "number") {
       this.consume();
       return token.value;
-    }
-    if (token.type === "identifier") {
-      this.consume();
-      if (!this.scope.has(token.value)) {
-        throw new Error(`ReferenceError: '${token.value}' is not defined`);
-      }
-      return this.scope.get(token.value)!;
     }
     if (token.type === "paren" && token.value === "(") {
       this.consume();
