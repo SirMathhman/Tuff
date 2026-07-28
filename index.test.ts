@@ -84,3 +84,7 @@ test('evaluate("let x = true; let y = false; x || y") => 1', () => {
 test('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
   expect(evaluate("let x = 0; let y = 1; x < y")).toBe(1);
 });
+
+test('evaluate("let x = if (true) 3 else 4; x") => 3', () => {
+  expect(evaluate("let x = if (true) 3 else 4; x")).toBe(3);
+});

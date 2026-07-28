@@ -84,6 +84,10 @@ function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "let" });
       } else if (word === "mut") {
         tokens.push({ type: "keyword", value: "mut" });
+      } else if (word === "if") {
+        tokens.push({ type: "keyword", value: "if" });
+      } else if (word === "else") {
+        tokens.push({ type: "keyword", value: "else" });
       } else if (word === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (word === "false") {
@@ -344,6 +348,40 @@ class Parser {
       this.consume();
       const right = this.parseFactor();
       return token.value === "+" ? right : -right;
+    }
+    if (token.type === "keyword" && token.value === "if") {
+      this.consume(); // consume "if"
+      // consume "("
+      if (
+        this.peek()?.type === "paren" &&
+        this.peek()?.value === "("
+      ) {
+        this.consume();
+      }
+      const condition = this.parseExpression();
+      // consume ")"
+      if (
+        this.peek()?.type === "paren" &&
+        this.peek()?.value === ")"
+      ) {
+        this.consume();
+      }
+      const thenValue = this.parseExpression();
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+        this.consume();
+      }
+      // consume "else"
+      if (
+        this.peek()?.type === "keyword" &&
+        this.peek()?.value === "else"
+      ) {
+        this.consume();
+      }
+      const elseValue = this.parseExpression();
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+        this.consume();
+      }
+      return condition !== 0 ? thenValue : elseValue;
     }
     this.consume();
     return 0;
