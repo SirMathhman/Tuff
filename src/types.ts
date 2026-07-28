@@ -3,6 +3,8 @@
  * Single source of truth for all types, compatibility rules, and parsing.
  */
 
+import type { TokenPos } from "./tokenizer";
+
 /** Numeric type with a prefix (U/I/F) and bit width. */
 export interface NumericType {
   kind: "numeric";
@@ -39,9 +41,30 @@ export interface ArrayType {
   length: number;
 }
 
+/** Struct type with named fields. */
+export interface StructType {
+  kind: "struct";
+  name: string;
+  fields: { name: string; type: Type }[];
+}
+
+/** Unresolved type placeholder — name string from the parser, not yet validated. */
+export interface UnresolvedType {
+  kind: "unresolved";
+  name: string;
+  pos?: TokenPos;
+}
+
 /** All possible types in the Tuff language. */
 export type Type =
-  NumericType | BoolType | VoidType | DynamicType | PointerType | ArrayType;
+  | NumericType
+  | BoolType
+  | VoidType
+  | DynamicType
+  | PointerType
+  | ArrayType
+  | StructType
+  | UnresolvedType;
 
 /** Construct a numeric type. */
 export function numeric(prefix: "U" | "I" | "F", bits: number): NumericType {
@@ -71,6 +94,14 @@ export function pointer(inner: Type, mutable: boolean = false): PointerType {
 /** Construct an array type. */
 export function arrayType(inner: Type, length: number): ArrayType {
   return { kind: "array", inner, length };
+}
+
+/** Construct a struct type. */
+export function structType(
+  name: string,
+  fields: { name: string; type: Type }[],
+): StructType {
+  return { kind: "struct", name, fields };
 }
 
 /** Check if a type is numeric. */
@@ -103,6 +134,11 @@ export function isArray(t: Type): t is ArrayType {
   return t.kind === "array";
 }
 
+/** Check if a type is a struct type. */
+export function isStruct(t: Type): t is StructType {
+  return t.kind === "struct";
+}
+
 /** Get bit width for numeric types, 0 otherwise. */
 export function getBits(t: Type): number {
   return t.kind === "numeric" ? t.bits : 0;
@@ -132,6 +168,17 @@ export function isAssignable(source: Type, target: Type): boolean {
     return isAssignable(source.inner, target.inner);
   }
   if (isArray(source)) return false;
+  if (isStruct(target)) {
+    if (!isStruct(source)) return false;
+    if (source.name !== target.name) return false;
+    if (source.fields.length !== target.fields.length) return false;
+    for (let i = 0; i < source.fields.length; i++) {
+      if (!isAssignable(source.fields[i]!.type, target.fields[i]!.type))
+        return false;
+    }
+    return true;
+  }
+  if (isStruct(source)) return false;
   if (!isNumeric(target) || !isNumeric(source)) return false;
   return source.prefix === target.prefix && source.bits <= target.bits;
 }
@@ -163,15 +210,20 @@ export function widen(a: Type, b: Type): Type {
 
 /** Parse a type name string into a Type. Supports &TypeName and &mut TypeName for pointers. */
 export function parseTypeName(name: string): Type {
+  return resolveBuiltinType(name);
+}
+
+/** Resolve a builtin type name to a Type. Does not look up user-defined types. */
+export function resolveBuiltinType(name: string): Type {
   if (name === "Bool") return bool();
   if (name === "Void") return voidType();
   const ptrMatch = name.match(/^&mut\s+(.+)$/);
   if (ptrMatch) {
-    return pointer(parseTypeName(ptrMatch[1]!), true);
+    return pointer(resolveBuiltinType(ptrMatch[1]!), true);
   }
   const ptrMatch2 = name.match(/^&(.+)$/);
   if (ptrMatch2) {
-    return pointer(parseTypeName(ptrMatch2[1]!), false);
+    return pointer(resolveBuiltinType(ptrMatch2[1]!), false);
   }
   const match = name.match(/^([UIF])(\d+)$/);
   if (match) {
@@ -189,5 +241,7 @@ export function typeName(t: Type): string {
   if (t.kind === "void") return "Void";
   if (t.kind === "pointer") return `&${typeName(t.inner)}`;
   if (t.kind === "array") return `[${typeName(t.inner)}; ${t.length}]`;
+  if (t.kind === "struct") return t.name;
+  if (t.kind === "unresolved") return t.name;
   return "dynamic";
 }

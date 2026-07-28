@@ -9,7 +9,10 @@ import {
   isAssignable,
   isDynamic,
   isPointer,
+  isStruct,
   pointer,
+  resolveBuiltinType,
+  structType,
   typeName,
   voidType,
   widen,
@@ -51,26 +54,48 @@ function checkMutable(
   }
 }
 
-/** Check that an LValue target is mutable, walking the LValue tree to find the root identifier. */
-function checkLValueMutable(
+/** Register a declaration, throwing if it already exists. */
+function registerDeclaration(
+  name: string,
+  declarations: Map<string, Declaration>,
+  decl: Declaration,
+  pos?: { line: number; column: number },
+): void {
+  const existing = declarations.get(name);
+  if (existing) {
+    throw new InterpreterError("type", `Duplicate declaration: '${name}'`, pos);
+  }
+  declarations.set(name, decl);
+}
+
+/** Validate mutability of an LValue and resolve its type. */
+function checkLValue(
   lv: LValue,
   declarations: Map<string, Declaration>,
   pos?: { line: number; column: number },
-): void {
+): Type {
   switch (lv.kind) {
     case "identifier":
       checkMutable(lv.name, declarations, pos);
-      break;
+      return resolveLValueType(lv, declarations);
     case "index":
-      checkLValueMutable(lv.target, declarations, pos);
-      break;
-    case "deref":
-      // Mutability is checked via pointer type (immutable pointer check)
-      break;
+      checkLValue(lv.target, declarations, pos);
+      return resolveLValueType(lv, declarations);
+    case "deref": {
+      const operandType = resolveType(lv.operand, declarations);
+      if (isPointer(operandType) && !operandType.mutable) {
+        throw new InterpreterError(
+          "type",
+          "Cannot assign through immutable pointer",
+          pos,
+        );
+      }
+      return resolveLValueType(lv, declarations);
+    }
   }
 }
 
-/** Resolve the type of an LValue target. */
+/** Resolve the type of an LValue target (read-only, no mutability check). */
 function resolveLValueType(
   lv: LValue,
   declarations: Map<string, Declaration>,
@@ -109,7 +134,9 @@ function resolveType(
     case "number":
       // Keep un-suffixed as dynamic so context propagation works.
       // The I32 default is applied at the typecheck site.
-      node.type = node.type ?? dynamic();
+      node.type = node.type
+        ? resolveTypeNode(node.type, declarations)
+        : dynamic();
       return node.type;
 
     case "boolean":
@@ -211,8 +238,11 @@ function resolveType(
         }
       }
       // Use declared inner type if present
-      if (node.type && node.type.kind === "array") {
-        elementType = node.type.inner;
+      const resolvedDeclType = node.type
+        ? resolveTypeNode(node.type, declarations)
+        : undefined;
+      if (resolvedDeclType && resolvedDeclType.kind === "array") {
+        elementType = resolvedDeclType.inner;
       }
       node.type = arrayType(elementType, node.elements.length);
       return node.type;
@@ -243,6 +273,7 @@ function resolveType(
           node.pos,
         );
       }
+      // Note: we allow shadowing vars with vars, so no registerDeclaration here
       // Reject void blocks (ending with declarations) as let values
       if (node.value.kind === "block") {
         const last = node.value.statements[node.value.statements.length - 1];
@@ -257,11 +288,16 @@ function resolveType(
       const valueType = resolveType(node.value, declarations);
       // Validate type compatibility
       if (node.type !== undefined) {
-        checkAssignable(valueType, node.type, node.pos);
+        checkAssignable(
+          valueType,
+          resolveTypeNode(node.type, declarations),
+          node.pos,
+        );
       }
       // Store the more specific type: declared type if present, otherwise inferred
       const resolvedType =
-        node.type ?? (isDynamic(valueType) ? undefined : valueType);
+        (node.type ? resolveTypeNode(node.type, declarations) : undefined) ??
+        (isDynamic(valueType) ? undefined : valueType);
       declarations.set(node.name, {
         kind: "var",
         type: resolvedType,
@@ -272,18 +308,9 @@ function resolveType(
     }
 
     case "assign": {
-      // Check mutability of the LValue target
-      checkLValueMutable(node.target, declarations, node.pos);
-      const targetType = resolveLValueType(node.target, declarations);
+      // Validate mutability and resolve target type in one pass
+      const targetType = checkLValue(node.target, declarations, node.pos);
       const valueType = resolveType(node.value, declarations);
-      // If target is a deref (pointer), check that the pointer is mutable
-      if (isPointer(targetType) && !targetType.mutable) {
-        throw new InterpreterError(
-          "type",
-          "Cannot assign through immutable pointer",
-          node.pos,
-        );
-      }
       // Check value compatibility with target type (or inner type if pointer)
       const checkType = isPointer(targetType) ? targetType.inner : targetType;
       if (!isDynamic(checkType)) {
@@ -329,19 +356,12 @@ function resolveType(
 
     case "typecheck": {
       resolveType(node.value, declarations);
-      // node.type holds the target type for the typecheck. Don't overwrite it.
+      // Resolve the target type from unresolved placeholder
+      node.type = resolveTypeNode(node.type, declarations);
       // The result type is always bool().
       return bool();
     }
     case "fn": {
-      const existing = declarations.get(node.name);
-      if (existing) {
-        throw new InterpreterError(
-          "type",
-          `Duplicate declaration: '${node.name}'`,
-          node.pos,
-        );
-      }
       // Check for duplicate param names
       const seenParams = new Set<string>();
       for (const param of node.params) {
@@ -357,13 +377,87 @@ function resolveType(
       const bodyType = resolveType(node.body, declarations);
       // Validate return type annotation if present
       if (node.returnType) {
-        checkAssignable(bodyType, node.returnType, node.pos);
+        checkAssignable(
+          bodyType,
+          resolveTypeNode(node.returnType, declarations),
+          node.pos,
+        );
       }
-      declarations.set(node.name, {
-        kind: "fn",
-        type: bodyType,
-        params: node.params,
-      });
+      registerDeclaration(
+        node.name,
+        declarations,
+        { kind: "fn", type: bodyType, params: node.params },
+        node.pos,
+      );
+      return dynamic();
+    }
+    case "struct": {
+      const seen = new Set<string>();
+      const resolvedFields: { name: string; type: Type }[] = [];
+      for (const field of node.fields) {
+        if (seen.has(field.name)) {
+          throw new InterpreterError(
+            "type",
+            `Duplicate field '${field.name}' in struct '${node.name}'`,
+            node.pos,
+          );
+        }
+        seen.add(field.name);
+        const fieldType = field.type
+          ? resolveTypeNode(field.type, declarations)
+          : dynamic();
+        resolvedFields.push({ name: field.name, type: fieldType });
+      }
+      const st = structType(node.name, resolvedFields);
+      registerDeclaration(
+        node.name,
+        declarations,
+        { kind: "var", type: st },
+        node.pos,
+      );
+      return st;
+    }
+    case "struct_instantiation": {
+      const decl = declarations.get(node.name);
+      if (!decl || !decl.type || !isStruct(decl.type)) {
+        throw new InterpreterError(
+          "type",
+          `Undefined struct: ${node.name}`,
+          node.pos,
+        );
+      }
+      const structTypeDecl = decl.type;
+      const fieldMap = new Map(
+        structTypeDecl.fields.map((f) => [f.name, f.type]),
+      );
+      for (const field of node.fields) {
+        const fieldType = resolveType(field.value, declarations);
+        const expectedType = fieldMap.get(field.name);
+        if (!expectedType) {
+          throw new InterpreterError(
+            "type",
+            `Unknown field '${field.name}' in struct '${node.name}'`,
+            field.value.pos,
+          );
+        }
+        checkAssignable(fieldType, expectedType, field.value.pos);
+      }
+      return structTypeDecl;
+    }
+    case "field_access": {
+      const targetType = resolveType(node.target, declarations);
+      if (isStruct(targetType)) {
+        const field = targetType.fields.find((f) => f.name === node.field);
+        if (!field) {
+          throw new InterpreterError(
+            "type",
+            `Unknown field '${node.field}' in struct '${targetType.name}'`,
+            node.pos,
+          );
+        }
+        node.type = field.type;
+        return field.type;
+      }
       return dynamic();
     }
     case "call": {
@@ -383,7 +477,11 @@ function resolveType(
         const argType = resolveType(arg, declarations);
         const param = params?.[i];
         if (param?.type) {
-          checkAssignable(argType, param.type, arg.pos);
+          checkAssignable(
+            argType,
+            resolveTypeNode(param.type, declarations),
+            arg.pos,
+          );
         }
       }
       return decl?.type ?? dynamic();
@@ -430,6 +528,40 @@ function checkAssignable(
       pos,
     );
   }
+}
+
+/** Resolve a user-defined type name from the declarations map. */
+function resolveUserType(
+  name: string,
+  declarations: Map<string, Declaration>,
+): Type | undefined {
+  const decl = declarations.get(name);
+  if (decl?.type && isStruct(decl.type)) {
+    return decl.type;
+  }
+  return undefined;
+}
+
+/** Resolve an unresolved type placeholder to a concrete type. */
+function resolveTypeNode(
+  type: Type,
+  declarations?: Map<string, Declaration>,
+): Type {
+  if (type.kind === "unresolved") {
+    // Check user-defined types first, then fall back to builtins
+    if (declarations) {
+      const userType = resolveUserType(type.name, declarations);
+      if (userType) return userType;
+    }
+    return resolveBuiltinType(type.name);
+  }
+  if (type.kind === "pointer") {
+    return pointer(resolveTypeNode(type.inner, declarations), type.mutable);
+  }
+  if (type.kind === "array") {
+    return arrayType(resolveTypeNode(type.inner, declarations), type.length);
+  }
+  return type;
 }
 
 /**

@@ -70,6 +70,26 @@ export type AstNode =
   | { kind: "call"; callee: AstNode; args: AstNode[]; pos?: TokenPos }
   | { kind: "array"; elements: AstNode[]; type?: Type; pos?: TokenPos }
   | {
+      kind: "struct";
+      name: string;
+      fields: { name: string; type?: Type }[];
+      pos?: TokenPos;
+    }
+  | {
+      kind: "struct_instantiation";
+      name: string;
+      fields: { name: string; value: AstNode }[];
+      type?: Type;
+      pos?: TokenPos;
+    }
+  | {
+      kind: "field_access";
+      target: AstNode;
+      field: string;
+      type?: Type;
+      pos?: TokenPos;
+    }
+  | {
       kind: "index";
       target: AstNode;
       index: AstNode;

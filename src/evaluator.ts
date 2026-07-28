@@ -19,6 +19,36 @@ function isBlockWithVoidType(
   );
 }
 
+/** Dereference a single pointer level, throwing if target is undefined. */
+function derefOne(
+  ptr: { kind: "pointer"; target: string },
+  env: Map<string, Value>,
+  pos?: { line: number; column: number },
+): Value {
+  const value = env.get(ptr.target);
+  if (value === undefined) {
+    throw new InterpreterError(
+      "runtime",
+      `Dereferenced pointer to undefined variable: ${ptr.target}`,
+      pos,
+    );
+  }
+  return value;
+}
+
+/** Recursively dereference all pointer levels until reaching a non-pointer value. */
+function dereferenceAll(
+  value: Value,
+  env: Map<string, Value>,
+  pos?: { line: number; column: number },
+): Value {
+  let current = value;
+  while (current.kind === "pointer") {
+    current = derefOne(current, env, pos);
+  }
+  return current;
+}
+
 /** Validate array index bounds and return the narrowed array value with index. */
 function validateArrayIndex(
   target: Value,
@@ -71,7 +101,7 @@ function resolveLValue(
     case "index": {
       const idxValue = unwrap(evaluate(lv.index, env, functions));
       const targetLoc = resolveLValue(lv.target, env, functions, pos);
-      const targetValue = targetLoc.get();
+      const targetValue = dereferenceAll(targetLoc.get(), env, pos);
       const { arr, index } = validateArrayIndex(
         targetValue,
         Math.floor(toNumber(idxValue)),
@@ -124,15 +154,7 @@ export function evaluate(
             kind: "pointer";
             target: string;
           };
-          const value = env.get(ptr.target);
-          if (value === undefined) {
-            throw new InterpreterError(
-              "runtime",
-              `Dereferenced pointer to undefined variable: ${ptr.target}`,
-              node.pos,
-            );
-          }
-          return evalOk(value);
+          return evalOk(derefOne(ptr, env, node.pos));
         }
       }
       break;
@@ -188,8 +210,45 @@ export function evaluate(
       }
       return evalOk({ kind: "array", elements, type: node.type });
     }
+    case "struct": {
+      return evalOk({ kind: "number", value: 0 });
+    }
+    case "struct_instantiation": {
+      const fields = new Map<string, Value>();
+      for (const field of node.fields) {
+        fields.set(field.name, unwrap(evaluate(field.value, env, functions)));
+      }
+      return evalOk({ kind: "struct", fields, type: node.type });
+    }
+    case "field_access": {
+      const target = dereferenceAll(
+        unwrap(evaluate(node.target, env, functions)),
+        env,
+        node.pos,
+      );
+      if (target.kind !== "struct") {
+        throw new InterpreterError(
+          "runtime",
+          `Cannot access field '${node.field}' on non-struct value`,
+          node.pos,
+        );
+      }
+      const fieldValue = target.fields.get(node.field);
+      if (fieldValue === undefined) {
+        throw new InterpreterError(
+          "runtime",
+          `Unknown field '${node.field}'`,
+          node.pos,
+        );
+      }
+      return evalOk(fieldValue);
+    }
     case "index": {
-      const target = unwrap(evaluate(node.target, env, functions));
+      const target = dereferenceAll(
+        unwrap(evaluate(node.target, env, functions)),
+        env,
+        node.pos,
+      );
       const idx = unwrap(evaluate(node.index, env, functions));
       const { arr, index } = validateArrayIndex(
         target,

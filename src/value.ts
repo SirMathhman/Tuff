@@ -9,7 +9,8 @@ export type Value =
   | { kind: "number"; value: number; type?: Type }
   | { kind: "boolean"; value: boolean; type?: Type }
   | { kind: "pointer"; target: string; type?: Type }
-  | { kind: "array"; elements: Value[]; type?: Type };
+  | { kind: "array"; elements: Value[]; type?: Type }
+  | { kind: "struct"; fields: Map<string, Value>; type?: Type };
 
 /**
  * Result of evaluating an expression.
@@ -47,6 +48,8 @@ export function toNumber(v: Value): number {
     case "pointer":
       return 0;
     case "array":
+      return 0;
+    case "struct":
       return 0;
   }
 }

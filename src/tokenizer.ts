@@ -40,11 +40,12 @@ export type Token =
         | "break"
         | "while"
         | "is"
-        | "fn";
+        | "fn"
+        | "struct";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
-  | { type: "punctuator"; value: ";" | ":" | ","; pos: TokenPos };
+  | { type: "punctuator"; value: ";" | ":" | "," | "."; pos: TokenPos };
 
 function isUnaryContext(tokens: Token[]): boolean {
   if (tokens.length === 0) return true;
@@ -204,6 +205,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "is", pos: tokenPos });
       } else if (lower === "fn") {
         tokens.push({ type: "keyword", value: "fn", pos: tokenPos });
+      } else if (lower === "struct") {
+        tokens.push({ type: "keyword", value: "struct", pos: tokenPos });
       } else {
         tokens.push({ type: "identifier", value: ident, pos: tokenPos });
       }
@@ -306,6 +309,10 @@ function matchSingleCharToken(
   }
   if (ch === ",") {
     tokens.push({ type: "punctuator", value: ",", pos });
+    return 1;
+  }
+  if (ch === ".") {
+    tokens.push({ type: "punctuator", value: ".", pos });
     return 1;
   }
   if (ch === "(") {

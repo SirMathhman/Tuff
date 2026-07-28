@@ -1,10 +1,10 @@
 import type { AstNode, LValue } from "./ast";
-import type { Token } from "./tokenizer";
+import type { Token, TokenPos } from "./tokenizer";
 import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { arrayType, parseTypeName, pointer } from "./types";
+import { arrayType, pointer } from "./types";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -23,6 +23,22 @@ class Parser {
 
   consume(): Token | undefined {
     return this.tokens[this.pos++];
+  }
+
+  /** Consume a keyword and read the following identifier name. */
+  private parseKeywordAndName(keyword: string): {
+    name: string;
+    pos: TokenPos;
+  } {
+    const pos = this.peek()?.pos;
+    this.expect("keyword", keyword);
+    const nameToken = this.peek();
+    let name = "";
+    if (nameToken?.type === "identifier") {
+      name = nameToken.value;
+      this.consume();
+    }
+    return { name, pos: pos ?? { line: 1, column: 1 } };
   }
 
   match(type: string, value?: string): boolean {
@@ -117,6 +133,7 @@ class Parser {
   private tryParseKnownStatement(): AstNode | undefined {
     if (this.match("keyword", "let")) return this.parseLetStatement();
     if (this.match("keyword", "fn")) return this.parseFnStatement();
+    if (this.match("keyword", "struct")) return this.parseStructStatement();
     if (this.match("keyword", "if")) return this.parseIfStatement();
     if (this.match("keyword", "while")) return this.parseWhileStatement();
     if (this.match("keyword", "break")) {
@@ -292,53 +309,45 @@ class Parser {
   private parseTypeAnnotation(): Type | undefined {
     if (this.match("punctuator", ":")) {
       this.consume();
-      // Array type: `[TypeName; N]`
-      if (this.match("group", "[")) {
+      return this.parseType();
+    }
+    return undefined;
+  }
+
+  /** Parse a type expression: identifier, array `[T; N]`, or pointer `&mut T` / `&T`. */
+  private parseType(): Type | undefined {
+    // Array type: `[TypeName; N]`
+    if (this.match("group", "[")) {
+      this.consume();
+      const inner = this.parseType();
+      this.expect("punctuator", ";");
+      const lengthToken = this.peek();
+      if (lengthToken?.type === "number") {
         this.consume();
-        const typeToken = this.peek();
-        if (typeToken?.type === "identifier") {
-          const inner = parseTypeName(typeToken.value);
-          this.consume();
-          this.expect("punctuator", ";");
-          const lengthToken = this.peek();
-          if (lengthToken?.type === "number") {
-            this.consume();
-            this.expect("group", "]");
-            return arrayType(inner, lengthToken.value);
-          }
-        }
+        this.expect("group", "]");
+        return arrayType(inner!, lengthToken.value);
       }
-      // Handle pointer type: `&mut TypeName` or `&TypeName`
-      if (this.match("operator", "&")) {
-        this.consume();
-        const mutable = this.match("keyword", "mut");
-        if (mutable) this.consume();
-        const typeToken = this.peek();
-        if (typeToken?.type === "identifier") {
-          this.consume();
-          return pointer(parseTypeName(typeToken.value), mutable);
-        }
-      }
-      const typeToken = this.peek();
-      if (typeToken?.type === "identifier") {
-        const type = parseTypeName(typeToken.value);
-        this.consume();
-        return type;
-      }
+    }
+    // Pointer type: `&mut T` or `&T`
+    if (this.match("operator", "&")) {
+      this.consume();
+      const mutable = this.match("keyword", "mut");
+      if (mutable) this.consume();
+      const inner = this.parseType();
+      return pointer(inner!, mutable);
+    }
+    // Simple type name — produce unresolved placeholder
+    const typeToken = this.peek();
+    if (typeToken?.type === "identifier") {
+      this.consume();
+      return { kind: "unresolved", name: typeToken.value, pos: typeToken.pos };
     }
     return undefined;
   }
 
   /** Parse `fn name(params) => body`. */
   private parseFnStatement(): AstNode {
-    const pos = this.peek()?.pos;
-    this.consume(); // eat "fn"
-    const nameToken = this.peek();
-    let name = "";
-    if (nameToken?.type === "identifier") {
-      name = nameToken.value;
-      this.consume();
-    }
+    const { name, pos } = this.parseKeywordAndName("fn");
     // Parse parameters: `(param1 : Type1, param2 : Type2, ...)`
     this.expect("group", "(");
     const params: { name: string; type?: Type }[] = [];
@@ -367,6 +376,28 @@ class Parser {
     return { kind: "fn", name, params, returnType, body, pos };
   }
 
+  /** Parse `struct Name { field1 : Type1, field2 : Type2, ... }`. */
+  private parseStructStatement(): AstNode {
+    const { name, pos } = this.parseKeywordAndName("struct");
+    this.expect("group", "{");
+    const fields: { name: string; type?: Type }[] = [];
+    while (!this.match("group", "}")) {
+      const fieldToken = this.peek();
+      if (fieldToken?.type === "identifier") {
+        this.consume();
+        const fieldType = this.parseTypeAnnotation();
+        fields.push({ name: fieldToken.value, type: fieldType });
+        if (this.match("punctuator", ",")) {
+          this.consume();
+        }
+      } else {
+        break;
+      }
+    }
+    this.expect("group", "}");
+    return { kind: "struct", name, fields, pos };
+  }
+
   private parseAtom(): AstNode {
     if (this.match("number")) {
       const t = this.consume()!;
@@ -375,7 +406,7 @@ class Parser {
       return {
         kind: "number",
         value: t.value as number,
-        type: suffix ? parseTypeName(suffix) : undefined,
+        type: suffix ? { kind: "unresolved", name: suffix, pos } : undefined,
         pos,
       };
     }
@@ -414,6 +445,32 @@ class Parser {
           kind: "call",
           callee: { kind: "identifier", name, pos },
           args,
+          pos,
+        };
+      }
+      // Check for struct instantiation: `Name { field: value, ... }`
+      if (this.match("group", "{")) {
+        this.consume();
+        const fields: { name: string; value: AstNode }[] = [];
+        while (!this.match("group", "}")) {
+          const fieldToken = this.peek();
+          if (fieldToken?.type === "identifier") {
+            this.consume();
+            this.expect("punctuator", ":");
+            const value = this.parseExpression();
+            fields.push({ name: fieldToken.value, value });
+            if (this.match("punctuator", ",")) {
+              this.consume();
+            }
+          } else {
+            break;
+          }
+        }
+        this.expect("group", "}");
+        return {
+          kind: "struct_instantiation",
+          name,
+          fields,
           pos,
         };
       }
@@ -494,9 +551,17 @@ class Parser {
       this.consume();
       const typeToken = this.peek();
       if (typeToken?.type === "identifier") {
-        const type = parseTypeName(typeToken.value);
         this.consume();
-        node = { kind: "typecheck", value: node, type, pos: node.pos };
+        node = {
+          kind: "typecheck",
+          value: node,
+          type: {
+            kind: "unresolved",
+            name: typeToken.value,
+            pos: typeToken.pos,
+          },
+          pos: node.pos,
+        };
       } else {
         break;
       }
@@ -508,6 +573,22 @@ class Parser {
       const index = this.parseExpression();
       this.expect("group", "]");
       node = { kind: "index", target: node, index, pos };
+    }
+    // Handle postfix `.field` — supports chaining: `obj.field.subfield`
+    while (this.match("punctuator", ".")) {
+      this.consume(); // .
+      const fieldToken = this.peek();
+      if (fieldToken?.type === "identifier") {
+        this.consume();
+        node = {
+          kind: "field_access",
+          target: node,
+          field: fieldToken.value,
+          pos: node.pos,
+        };
+      } else {
+        break;
+      }
     }
     return node;
   }

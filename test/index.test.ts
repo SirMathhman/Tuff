@@ -343,6 +343,10 @@ describe("binary expressions", () => {
     ).toBe(3);
   });
 
+  test('interpret("let mut x = 0; let y = &x; *y = 3;") => Error', () => {
+    expect(() => interpret("let mut x = 0; let y = &x; *y = 3;")).toThrow();
+  });
+
   test('interpret("let array : [I32; 3] = [1, 2, 3]; array[0]") => 1', () => {
     expect(interpret("let array : [I32; 3] = [1, 2, 3]; array[0]")).toBe(1);
   });
@@ -353,6 +357,52 @@ describe("binary expressions", () => {
 
   test('interpret("let mut array = [1]; array[0] += 2; array[0]") => 3', () => {
     expect(interpret("let mut array = [1]; array[0] += 2; array[0]")).toBe(3);
+  });
+
+  test('interpret("let array = [1, 2]; let ptr : &[I32; 2] = &array; ptr[0]") => 1', () => {
+    expect(
+      interpret("let array = [1, 2]; let ptr : &[I32; 2] = &array; ptr[0]"),
+    ).toBe(1);
+  });
+
+  test('interpret("let array = [1, 2]; let ptr0 = &array; let ptr1 = &ptr0; ptr1[0]") => 1', () => {
+    expect(
+      interpret(
+        "let array = [1, 2]; let ptr0 = &array; let ptr1 = &ptr0; ptr1[0]",
+      ),
+    ).toBe(1);
+  });
+
+  test('interpret("struct Empty {}") => 0', () => {
+    expect(interpret("struct Empty {}")).toBe(0);
+  });
+
+  test('interpret("struct Empty { x : I32 }") => 0', () => {
+    expect(interpret("struct Empty { x : I32 }")).toBe(0);
+  });
+
+  test('interpret("struct Empty { x : I32, y : I32 }") => 0', () => {
+    expect(interpret("struct Empty { x : I32, y : I32 }")).toBe(0);
+  });
+
+  test('interpret("struct Empty { x : I32, x : I32 }") => Error', () => {
+    expect(() => interpret("struct Empty { x : I32, x : I32 }")).toThrow();
+  });
+
+  test('interpret("struct Point { x : I32, y : I32 } let pt = Point { x : 3, y : 4 }; pt.x + pt.y") => 7', () => {
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } let pt = Point { x : 3, y : 4 }; pt.x + pt.y",
+      ),
+    ).toBe(7);
+  });
+
+  test('interpret("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y") => 7', () => {
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y",
+      ),
+    ).toBe(7);
   });
 });
 
