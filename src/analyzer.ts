@@ -6,6 +6,7 @@ import {
   isAssignable,
   isDynamic,
   typeName,
+  voidType,
   widen,
 } from "./types";
 
@@ -92,6 +93,15 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
     }
 
     case "let": {
+      // Reject void blocks (ending with declarations) as let values
+      if (node.value.kind === "block") {
+        const last = node.value.statements[node.value.statements.length - 1];
+        if (last?.kind === "let") {
+          throw new Error(
+            "Block used as expression cannot end with a declaration",
+          );
+        }
+      }
       const valueType = resolveType(node.value, symbols);
       // Validate type compatibility
       if (node.type !== undefined) {
@@ -119,6 +129,12 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
       for (const stmt of node.statements) {
         result = resolveType(stmt, symbols);
       }
+      // Blocks ending with a declaration have void type.
+      const last = node.statements[node.statements.length - 1];
+      if (last?.kind === "let") {
+        node.type = voidType();
+        return node.type;
+      }
       return result;
     }
 
@@ -145,7 +161,9 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
 
     case "typecheck": {
       resolveType(node.value, symbols);
-      return dynamic();
+      // node.type holds the target type for the typecheck. Don't overwrite it.
+      // The result type is always bool().
+      return bool();
     }
   }
 }

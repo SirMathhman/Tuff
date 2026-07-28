@@ -1,8 +1,20 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
-import { bool, isDynamic, isNumeric, numeric } from "./types";
+import { bool, isDynamic, isNumeric, isVoid, numeric } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
+
+/** Type guard for block nodes with a void type field. */
+function isBlockWithVoidType(
+  node: AstNode,
+): node is { kind: "block"; statements: AstNode[]; type: Type } {
+  return (
+    node.kind === "block" &&
+    "type" in node &&
+    node.type !== undefined &&
+    isVoid(node.type)
+  );
+}
 
 function getMutable(name: string, env: Map<string, Value>): Value | undefined {
   if (!env.has(`__mutable__${name}`)) return undefined;
@@ -135,11 +147,13 @@ export function evaluate(
     }
     case "typecheck": {
       const value = unwrap(evaluate(node.value, env));
-      // Un-suffixed numbers (dynamic) default to I32 for type checking.
+      // For void-typed blocks, use the AST node's pre-computed type.
       const resolvedType =
-        value.kind === "number" && value.type && isDynamic(value.type)
-          ? numeric("I", 32)
-          : value.type;
+        isVoid(node.type) && isBlockWithVoidType(node.value)
+          ? node.value.type
+          : value.kind === "number" && value.type && isDynamic(value.type)
+            ? numeric("I", 32)
+            : value.type;
       return evalOk({
         kind: "boolean",
         value: typesEqual(resolvedType, node.type),
@@ -155,6 +169,7 @@ function typesEqual(a: Type | undefined, b: Type): boolean {
   if (!a) return false;
   if (a.kind !== b.kind) return false;
   if (a.kind === "bool") return true;
+  if (a.kind === "void") return true;
   if (a.kind === "dynamic") return b.kind === "dynamic";
   if (isNumeric(a) && isNumeric(b))
     return a.prefix === b.prefix && a.bits === b.bits;

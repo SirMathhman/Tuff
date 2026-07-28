@@ -11,8 +11,6 @@ import { parseTypeName } from "./types";
  */
 class Parser {
   private pos = 0;
-  /** When true, skip the "block ends with declaration" check (top-level statement context). */
-  private skipBlockCheck = false;
 
   constructor(private tokens: Token[]) {}
 
@@ -63,18 +61,11 @@ class Parser {
   /**
    * Parse a top-level statement.
    * `let` is a statement; everything else (including `{ ... }`) is an expression.
-   * A standalone `{ let y = 100; }` is allowed at top level (statement context),
-   * but `{ let y = 100; }` used as an expression (e.g., RHS of `let`) is an error.
    */
   private parseTopLevelStatement(): AstNode {
     const stmt = this.tryParseKnownStatement();
     if (stmt) return stmt;
-    this.skipBlockCheck = true;
-    try {
-      return this.parseExpression();
-    } finally {
-      this.skipBlockCheck = false;
-    }
+    return this.parseExpression();
   }
 
   /* ---- grammar rules ---- */
@@ -100,36 +91,18 @@ class Parser {
   }
 
   /**
-   * Parse a block in statement context: `{ statement* }`
-   * No restrictions on the last statement.
+   * Parse a block: `{ statement* }`
+   * Semantic checks (void type, declaration restrictions) are handled by the analyzer.
    */
-  private parseBlockStmt(): AstNode {
+  private parseBlock(): AstNode {
     const statements = this.collectBlockStatements();
-    return { kind: "block", statements };
-  }
-
-  /**
-   * Parse a block in expression context: `{ statement* expression }`
-   * The last statement must be an expression, not a declaration.
-   * Skips the check when `skipBlockCheck` is true (top-level statement context).
-   */
-  private parseBlockExpr(): AstNode {
-    const statements = this.collectBlockStatements();
-    if (!this.skipBlockCheck) {
-      const last = statements[statements.length - 1];
-      if (last?.kind === "let") {
-        throw new Error(
-          "Block used as expression cannot end with a declaration",
-        );
-      }
-    }
     return { kind: "block", statements };
   }
 
   private parseStatement(): AstNode {
     if (this.match("group", "{")) {
       this.consume();
-      return this.parseBlockStmt();
+      return this.parseBlock();
     }
     const stmt = this.tryParseKnownStatement();
     if (stmt) return stmt;
@@ -241,7 +214,7 @@ class Parser {
     if (token?.type === "group" && token.value in OPENING) {
       this.consume();
       if (token.value === "{") {
-        return this.parseBlockExpr();
+        return this.parseBlock();
       }
       const node = this.parseExpression();
       if (this.match("group", OPENING[token.value])) {

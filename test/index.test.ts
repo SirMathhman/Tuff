@@ -251,4 +251,8 @@ describe("binary expressions", () => {
   test('interpret("let mut x = 0; while (x < 4) { x += 1; } x") => 4', () => {
     expect(interpret("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
   });
+
+  test('interpret("{ let x = 0; } is Void") => 1', () => {
+    expect(interpret("{ let x = 0; } is Void")).toBe(1);
+  });
 });

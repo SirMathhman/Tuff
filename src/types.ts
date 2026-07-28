@@ -15,13 +15,18 @@ export interface BoolType {
   kind: "bool";
 }
 
+/** Void type (blocks ending with declarations). */
+export interface VoidType {
+  kind: "void";
+}
+
 /** Dynamic / unknown type (no annotation, no suffix). */
 export interface DynamicType {
   kind: "dynamic";
 }
 
 /** All possible types in the Tuff language. */
-export type Type = NumericType | BoolType | DynamicType;
+export type Type = NumericType | BoolType | VoidType | DynamicType;
 
 /** Construct a numeric type. */
 export function numeric(prefix: "U" | "I" | "F", bits: number): NumericType {
@@ -31,6 +36,11 @@ export function numeric(prefix: "U" | "I" | "F", bits: number): NumericType {
 /** Construct a boolean type. */
 export function bool(): BoolType {
   return { kind: "bool" };
+}
+
+/** Construct a void type. */
+export function voidType(): VoidType {
+  return { kind: "void" };
 }
 
 /** Construct a dynamic type. */
@@ -46,6 +56,11 @@ export function isNumeric(t: Type): t is NumericType {
 /** Check if a type is boolean. */
 export function isBool(t: Type): t is BoolType {
   return t.kind === "bool";
+}
+
+/** Check if a type is void. */
+export function isVoid(t: Type): t is VoidType {
+  return t.kind === "void";
 }
 
 /** Check if a type is dynamic. */
@@ -87,6 +102,7 @@ export function widen(a: Type, b: Type): Type {
 /** Parse a type name string into a Type. Returns dynamic() for unknown names. */
 export function parseTypeName(name: string): Type {
   if (name === "Bool") return bool();
+  if (name === "Void") return voidType();
   const match = name.match(/^([UIF])(\d+)$/);
   if (match) {
     const prefix = match[1] as "U" | "I" | "F";
@@ -100,5 +116,6 @@ export function parseTypeName(name: string): Type {
 export function typeName(t: Type): string {
   if (t.kind === "numeric") return `${t.prefix}${t.bits}`;
   if (t.kind === "bool") return "Bool";
+  if (t.kind === "void") return "Void";
   return "dynamic";
 }

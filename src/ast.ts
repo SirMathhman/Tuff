@@ -22,7 +22,7 @@ export type AstNode =
     }
   | { kind: "assign"; name: string; value: AstNode }
   | { kind: "augassign"; name: string; op: "+"; value: AstNode }
-  | { kind: "block"; statements: AstNode[] }
+  | { kind: "block"; statements: AstNode[]; type?: Type }
   | {
       kind: "if";
       condition: AstNode;
