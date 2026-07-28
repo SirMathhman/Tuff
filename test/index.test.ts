@@ -83,6 +83,10 @@ describe("number literals", () => {
   test('interpret("(100) is I32") => 1', () => {
     expect(interpret("(100) is I32")).toBe(1);
   });
+
+  test('interpret("(100 + 1U8) is U8") => 1', () => {
+    expect(interpret("(100 + 1U8) is U8")).toBe(1);
+  });
 });
 
 describe("binary expressions", () => {
