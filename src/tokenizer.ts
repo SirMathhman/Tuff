@@ -22,7 +22,15 @@ export type Token =
   | {
       type: "keyword";
       value:
-        "let" | "mut" | "true" | "false" | "if" | "else" | "loop" | "break" | "while";
+        | "let"
+        | "mut"
+        | "true"
+        | "false"
+        | "if"
+        | "else"
+        | "loop"
+        | "break"
+        | "while";
     }
   | { type: "identifier"; value: string }
   | { type: "punctuator"; value: ";" };

@@ -275,22 +275,19 @@ class Parser {
     const condition = this.parseExpression();
     this.expect("group", ")");
     this.expect("group", "{");
-    const body: AstNode[] = [];
-    while (this.pos < this.tokens.length && !this.match("group", "}")) {
-      const prevPos = this.pos;
-      const stmt = this.parseStatement();
-      if (prevPos === this.pos) {
-        this.pos++;
-      }
-      body.push(stmt);
-    }
-    this.expect("group", "}");
+    const body = this.collectBody();
     return { kind: "while", condition, body };
   }
 
   private parseLoopExpression(): AstNode {
     this.consume(); // eat "loop"
     this.expect("group", "{");
+    const body = this.collectBody();
+    return { kind: "loop", body };
+  }
+
+  /** Collect body statements between `{` and `}`, consuming the closing brace. */
+  private collectBody(): AstNode[] {
     const body: AstNode[] = [];
     while (this.pos < this.tokens.length && !this.match("group", "}")) {
       const prevPos = this.pos;
@@ -301,7 +298,7 @@ class Parser {
       body.push(stmt);
     }
     this.expect("group", "}");
-    return { kind: "loop", body };
+    return body;
   }
 
   /**
