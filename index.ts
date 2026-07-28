@@ -307,6 +307,17 @@ class Parser {
     }
   }
 
+  private ensureMutable(name: string): VarEntry {
+    const entry = this.scope.get(name);
+    if (!entry) {
+      throw new Error(`ReferenceError: '${name}' is not defined`);
+    }
+    if (!entry.mutable) {
+      throw new Error(`Cannot assign to immutable variable '${name}'`);
+    }
+    return entry;
+  }
+
   private parseAssignment(): number {
     const token = this.peek();
     if (token && token.type === "identifier") {
@@ -315,13 +326,7 @@ class Parser {
       const next = this.peek();
       if (next && next.type === "compound") {
         this.consume(); // consume compound operator
-        const entry = this.scope.get(name);
-        if (!entry) {
-          throw new Error(`ReferenceError: '${name}' is not defined`);
-        }
-        if (!entry.mutable) {
-          throw new Error(`Cannot assign to immutable variable '${name}'`);
-        }
+        const entry = this.ensureMutable(name);
         const right = this.parseAssignment();
         const current = entry.value;
         let result: number;
@@ -345,13 +350,7 @@ class Parser {
       if (next && next.type === "punctuator" && next.value === "=") {
         this.consume(); // consume "="
         const value = this.parseAssignment();
-        const entry = this.scope.get(name);
-        if (!entry) {
-          throw new Error(`ReferenceError: '${name}' is not defined`);
-        }
-        if (!entry.mutable) {
-          throw new Error(`Cannot assign to immutable variable '${name}'`);
-        }
+        const entry = this.ensureMutable(name);
         entry.value = value;
         return value;
       }
