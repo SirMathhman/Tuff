@@ -96,3 +96,7 @@ test('evaluate("if (false) 1 else if (true) 2 else 3") => 2', () => {
 test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
   expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
 });
+
+test('evaluate("let x = 0; { let x = 1; } x") => 0', () => {
+  expect(evaluate("let x = 0; { let x = 1; } x")).toBe(0);
+});
