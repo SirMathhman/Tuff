@@ -30,25 +30,29 @@ All features follow this test-driven workflow:
 
 ### Source Files (`src/`)
 
-- `index.ts` — Entry point: `interpret(source)` function
-- `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens
-- `ast.ts` — `AstNode` discriminated union (number, boolean, binary, identifier, let, assign, augassign, block, if, loop, break, while, typecheck)
-- `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`). Postfix `is` handled in `parseUnary` (not in PRECEDENCE table — known limitation).
-- `analyzer.ts` — Single-pass `resolveType()`: bottom-up type resolution, context propagation, symbol table, compatibility validation. All type reasoning lives here.
+- `index.ts` — Entry point: `interpret(source)` → tokenize → parse → analyze → evaluate → coerce to number
+- `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens. `&` operator with `&&` disambiguation. All tokens carry `pos: TokenPos`.
+- `ast.ts` — `AstNode` discriminated union: number, boolean, binary, unary (`-`, `&`, `&mut`, `*`), identifier, let, assign, augassign, block, if, loop, break, while, typecheck, fn, call, array, index
+- `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`). Postfix `is` and `[index]` handled in `parseUnary`. `tryParseAssign` uses backtracking for `*expr` lookahead.
+- `analyzer.ts` — Single-pass `resolveType()`: bottom-up type resolution, context propagation, symbol table, compatibility validation. All type reasoning lives here (no runtime type checks in evaluator).
 - `evaluator.ts` — `evaluate(node, env)` returns `EvalResult`. Reads pre-computed `node.type` from AST — no type reasoning at runtime.
-- `value.ts` — `Value` discriminated union, `EvalResult` type, `evalOk()`, `evalBreak()`, `unwrap()`, `toNumber()`
-- `types.ts` — `Type` discriminated union (`NumericType`, `BoolType`, `DynamicType`), `isAssignable()`, `widen()`, `parseTypeName()`, `typeName()`
-- `grammar.ts` — `PRECEDENCE` table (5 levels), `BinaryOp` derived type, `OPENING` braces, `TYPE_SUFFIXES`
+- `value.ts` — `Value` discriminated union (number, boolean, pointer, array). `EvalResult` type, `evalOk()`, `evalBreak()`, `unwrap()`, `toNumber()`.
+- `types.ts` — `Type` discriminated union (`NumericType`, `BoolType`, `VoidType`, `DynamicType`, `PointerType`, `ArrayType`). `isAssignable()`, `widen()`, `parseTypeName()`, `typeName()`.
+- `grammar.ts` — `PRECEDENCE` table (5 levels), `BinaryOp` derived type, `OPENING` braces, `TYPE_SUFFIXES`, `OPERATORS` category map.
+- `error.ts` — `InterpreterError` class with `kind: "parse" | "type" | "runtime"` and optional `position`.
 
 ### Key Conventions
 
 - **Table-driven parser**: All binary operators defined in `PRECEDENCE` table in `grammar.ts`. `BinaryOp` type derived from table to prevent drift.
 - **EvalResult pattern**: Control flow (break) uses explicit result objects, not exceptions. Loop boundary converts break to value.
-- **Mutability tracking**: Environment uses `__mutable__${name}` convention. `getMutable()`/`setMutable()` helpers enforce immutability.
-- **Parser class**: Encapsulated state (`pos`, `skipBlockCheck`). Methods: `peek()`, `consume()`, `match()`, `expect()`, `parse()`, `parseTopLevelStatement()`, `parseStatement()`, `tryParseKnownStatement()`, `tryParseAssign()`, `parseLetStatement()`, `parseAtom()`, `parseBinary()`, `parseIfExpression()`, `parseIfStatement()`, `parseWhileStatement()`, `parseLoopExpression()`, `collectBlockStatements()`, `parseBlockStmt()`, `parseBlockExpr()`.
-- **Block validation**: Statement context (`parseBlockStmt`) allows any last statement. Expression context (`parseBlockExpr`) rejects blocks ending with declarations.
-- **Type system**: Analyzer resolves all types onto AST nodes. Evaluator reads `node.type`. Un-suffixed numbers stay `dynamic()` until `typecheck` site (I32 default). Context propagation: dynamic operands inherit from concrete siblings in binary ops.
-- **Symbol table**: `Map<string, SymbolInfo>` where `SymbolInfo = { type?: Type, mutable: boolean }`. Inferred types stored when no explicit annotation.
+- **Analyzer-first semantics**: All type reasoning lives in `analyzer.ts`. The evaluator never does type checks — it reads pre-computed `node.type` from the AST.
+- **Symbol table**: `Map<string, Declaration>` where `Declaration = { kind: "var" | "fn", type?: Type, mutable?: boolean, params?: {name, type?}[] }`.
+- **Parser class**: Encapsulated state (`pos`). Methods: `peek()`, `consume()`, `match()`, `expect()`, `parse()`, `parseTopLevelStatement()`, `parseStatement()`, `tryParseKnownStatement()`, `tryParseAssign()`, `parseLetStatement()`, `parseAtom()`, `parseBinary()`, `parseUnary()`, `parseIfExpression()`, `parseIfStatement()`, `parseWhileStatement()`, `parseLoopExpression()`, `collectBody()`, `parseBlock()`.
+- **Block validation**: Expression context rejects blocks ending with declarations (void type). Statement context allows any last statement.
+- **Type system**: Analyzer resolves all types onto AST nodes. Un-suffixed numbers stay `dynamic()` until `typecheck` site (I32 default). Context propagation: dynamic operands inherit from concrete siblings in binary ops.
+- **Pointers**: `&x` creates a pointer value. `*ptr` dereferences via `env.get(ptr.target)`. `&mut x` creates mutable pointer. Analyzer validates pointer mutability for assignments.
+- **Arrays**: `[expr, expr, ...]` literals create array values. `arr[index]` postfix syntax with bounds checking. `[TypeName; N]` type annotation syntax.
+- **Functions**: `fn name(params) => body` syntax. Functions stored in separate `functions` map from the environment. Call sites validate argument count at runtime.
 
 ### Pre-commit Hooks
 
