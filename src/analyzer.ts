@@ -191,6 +191,14 @@ function resolveType(
       if (existing) {
         throw new Error(`Duplicate declaration: '${node.name}'`);
       }
+      // Check for duplicate param names
+      const seenParams = new Set<string>();
+      for (const param of node.params) {
+        if (seenParams.has(param.name)) {
+          throw new Error(`Duplicate parameter: '${param.name}'`);
+        }
+        seenParams.add(param.name);
+      }
       const bodyType = resolveType(node.body, declarations);
       declarations.set(node.name, {
         kind: "fn",

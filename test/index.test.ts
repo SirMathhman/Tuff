@@ -309,4 +309,8 @@ describe("binary expressions", () => {
       interpret("fn accept(param : U8) => {} accept(0U16)"),
     ).toThrow();
   });
+
+  test('interpret("fn foo(x : U8, x : U16) => x") => Error (duplicate param)', () => {
+    expect(() => interpret("fn foo(x : U8, x : U16) => x")).toThrow();
+  });
 });
