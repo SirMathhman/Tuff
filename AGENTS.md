@@ -32,13 +32,13 @@ All features follow this test-driven workflow:
 
 - `index.ts` — Entry point: `interpret(source)` function
 - `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens
-- `ast.ts` — `AstNode` discriminated union (number, boolean, binary, identifier, let, assign, augassign, block, if, loop, break, while)
-- `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`)
-- `analyzer.ts` — Single-pass type resolution: resolves types bottom-up, context propagation, symbol table, compatibility validation
-- `evaluator.ts` — `evaluate(node, env)` returns `EvalResult` (`{ kind: "value", value }` | `{ kind: "break", value }`)
+- `ast.ts` — `AstNode` discriminated union (number, boolean, binary, identifier, let, assign, augassign, block, if, loop, break, while, typecheck)
+- `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`). Postfix `is` handled in `parseUnary` (not in PRECEDENCE table — known limitation).
+- `analyzer.ts` — Single-pass `resolveType()`: bottom-up type resolution, context propagation, symbol table, compatibility validation. All type reasoning lives here.
+- `evaluator.ts` — `evaluate(node, env)` returns `EvalResult`. Reads pre-computed `node.type` from AST — no type reasoning at runtime.
 - `value.ts` — `Value` discriminated union, `EvalResult` type, `evalOk()`, `evalBreak()`, `unwrap()`, `toNumber()`
 - `types.ts` — `Type` discriminated union (`NumericType`, `BoolType`, `DynamicType`), `isAssignable()`, `widen()`, `parseTypeName()`, `typeName()`
-- `grammar.ts` — `PRECEDENCE` table (6 levels), `BinaryOp` derived type, `OPENING` braces
+- `grammar.ts` — `PRECEDENCE` table (5 levels), `BinaryOp` derived type, `OPENING` braces, `TYPE_SUFFIXES`
 
 ### Key Conventions
 
@@ -47,6 +47,8 @@ All features follow this test-driven workflow:
 - **Mutability tracking**: Environment uses `__mutable__${name}` convention. `getMutable()`/`setMutable()` helpers enforce immutability.
 - **Parser class**: Encapsulated state (`pos`, `skipBlockCheck`). Methods: `peek()`, `consume()`, `match()`, `expect()`, `parse()`, `parseTopLevelStatement()`, `parseStatement()`, `tryParseKnownStatement()`, `tryParseAssign()`, `parseLetStatement()`, `parseAtom()`, `parseBinary()`, `parseIfExpression()`, `parseIfStatement()`, `parseWhileStatement()`, `parseLoopExpression()`, `collectBlockStatements()`, `parseBlockStmt()`, `parseBlockExpr()`.
 - **Block validation**: Statement context (`parseBlockStmt`) allows any last statement. Expression context (`parseBlockExpr`) rejects blocks ending with declarations.
+- **Type system**: Analyzer resolves all types onto AST nodes. Evaluator reads `node.type`. Un-suffixed numbers stay `dynamic()` until `typecheck` site (I32 default). Context propagation: dynamic operands inherit from concrete siblings in binary ops.
+- **Symbol table**: `Map<string, SymbolInfo>` where `SymbolInfo = { type?: Type, mutable: boolean }`. Inferred types stored when no explicit annotation.
 
 ### Pre-commit Hooks
 
