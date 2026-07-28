@@ -1,6 +1,7 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
 import { getOperatorCategory } from "./grammar";
+import { InterpreterError } from "./error";
 import {
   bool,
   dynamic,
@@ -99,13 +100,17 @@ function resolveType(
     case "let": {
       const existing = declarations.get(node.name);
       if (existing && existing.kind === "fn") {
-        throw new Error(`Duplicate declaration: '${node.name}'`);
+        throw new InterpreterError(
+          "type",
+          `Duplicate declaration: '${node.name}'`,
+        );
       }
       // Reject void blocks (ending with declarations) as let values
       if (node.value.kind === "block") {
         const last = node.value.statements[node.value.statements.length - 1];
         if (last?.kind === "let") {
-          throw new Error(
+          throw new InterpreterError(
+            "type",
             "Block used as expression cannot end with a declaration",
           );
         }
@@ -189,13 +194,19 @@ function resolveType(
     case "fn": {
       const existing = declarations.get(node.name);
       if (existing) {
-        throw new Error(`Duplicate declaration: '${node.name}'`);
+        throw new InterpreterError(
+          "type",
+          `Duplicate declaration: '${node.name}'`,
+        );
       }
       // Check for duplicate param names
       const seenParams = new Set<string>();
       for (const param of node.params) {
         if (seenParams.has(param.name)) {
-          throw new Error(`Duplicate parameter: '${param.name}'`);
+          throw new InterpreterError(
+            "type",
+            `Duplicate parameter: '${param.name}'`,
+          );
         }
         seenParams.add(param.name);
       }
@@ -244,7 +255,8 @@ function setNodeType(node: AstNode, type: Type): void {
 /** Reject boolean operands for arithmetic operators. */
 function checkNotBool(t: Type, op: string): void {
   if (!isDynamic(t) && t.kind === "bool")
-    throw new Error(
+    throw new InterpreterError(
+      "type",
       `Type mismatch: cannot use arithmetic operator '${op}' on ${typeName(t)}`,
     );
 }
@@ -252,7 +264,8 @@ function checkNotBool(t: Type, op: string): void {
 /** Validate that a value type is assignable to a target type. */
 function checkAssignable(valueType: Type, targetType: Type): void {
   if (!isDynamic(valueType) && !isAssignable(valueType, targetType)) {
-    throw new Error(
+    throw new InterpreterError(
+      "type",
       `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(targetType)}`,
     );
   }

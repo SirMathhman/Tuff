@@ -1,6 +1,7 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
+import { InterpreterError } from "./error";
 import { bool, isDynamic, isNumeric, isVoid, numeric } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
@@ -25,7 +26,10 @@ function getMutable(name: string, env: Map<string, Value>): Value | undefined {
 
 function setMutable(name: string, value: Value, env: Map<string, Value>): void {
   if (!env.has(`__mutable__${name}`)) {
-    throw new Error(`Cannot assign to immutable variable: ${name}`);
+    throw new InterpreterError(
+      "runtime",
+      `Cannot assign to immutable variable: ${name}`,
+    );
   }
   env.set(name, value);
 }
@@ -88,7 +92,10 @@ export function evaluate(
     case "identifier": {
       const value = env.get(node.name);
       if (value === undefined) {
-        throw new Error(`Undefined identifier: ${node.name}`);
+        throw new InterpreterError(
+          "runtime",
+          `Undefined identifier: ${node.name}`,
+        );
       }
       return evalOk(value);
     }
@@ -175,7 +182,10 @@ export function evaluate(
       const callee = node.callee as { kind: "identifier"; name: string };
       const fnDef = functions.get(callee.name);
       if (!fnDef) {
-        throw new Error(`Undefined function: ${callee.name}`);
+        throw new InterpreterError(
+          "runtime",
+          `Undefined function: ${callee.name}`,
+        );
       }
       const callEnv = new Map(env);
       for (let i = 0; i < fnDef.params.length; i++) {

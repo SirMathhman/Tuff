@@ -3,6 +3,7 @@ import type { Token } from "./tokenizer";
 import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
+import { InterpreterError } from "./error";
 import { parseTypeName } from "./types";
 
 /**
@@ -34,7 +35,8 @@ class Parser {
   expect(type: string, value?: string): Token {
     const t = this.peek();
     if (t?.type !== type || (value !== undefined && t.value !== value)) {
-      throw new Error(
+      throw new InterpreterError(
+        "parse",
         `Expected ${type}${value !== undefined ? ` '${value}'` : ""}, got ${t?.type} '${t?.value}'`,
       );
     }

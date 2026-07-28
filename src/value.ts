@@ -3,6 +3,7 @@
  * A discriminated union that replaces the raw `number` encoding.
  */
 import type { Type } from "./types";
+import { InterpreterError } from "./error";
 
 export type Value =
   | { kind: "number"; value: number; type?: Type }
@@ -29,7 +30,7 @@ export function evalBreak(value: Value): EvalResult {
 /** Unwrap an evaluation result to a value. Throws if it's a break outside a loop. */
 export function unwrap(result: EvalResult): Value {
   if (result.kind === "break") {
-    throw new Error("Unexpected break outside loop");
+    throw new InterpreterError("runtime", "Unexpected break outside loop");
   }
   return result.value;
 }

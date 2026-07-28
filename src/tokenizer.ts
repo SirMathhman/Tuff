@@ -1,4 +1,5 @@
 import { TYPE_SUFFIXES } from "./grammar";
+import { InterpreterError } from "./error";
 
 export type Token =
   | { type: "number"; value: number; typeSuffix?: string }
@@ -90,7 +91,8 @@ function parseNumberWithSuffix(
     const minVal = suffixDef.min(bits);
     const maxVal = suffixDef.max(bits);
     if (numValue < minVal || numValue > maxVal) {
-      throw new Error(
+      throw new InterpreterError(
+        "parse",
         `Value ${numValue} out of range for ${suffixDef.prefix}${suffixNum} (${minVal}-${maxVal})`,
       );
     }
