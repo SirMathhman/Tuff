@@ -21,10 +21,10 @@ interface SymbolInfo {
 }
 
 /**
- * Infer the type of an expression node.
+ * Infer the type of an expression node, using the symbol table for identifier lookups.
  * Returns a Type, or dynamic() for unknown/untyped expressions.
  */
-function inferType(node: AstNode): Type {
+function inferType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
   const d = dynamic();
   switch (node.kind) {
     case "number":
@@ -32,36 +32,38 @@ function inferType(node: AstNode): Type {
     case "boolean":
       return bool();
     case "unary":
-      return inferType(node.operand);
+      return inferType(node.operand, symbols);
     case "binary": {
-      const leftType = inferType(node.left);
-      const rightType = inferType(node.right);
+      const leftType = inferType(node.left, symbols);
+      const rightType = inferType(node.right, symbols);
       if (isDynamic(leftType)) return rightType;
       if (isDynamic(rightType)) return leftType;
       // Return the wider numeric type
       return getBits(leftType) >= getBits(rightType) ? leftType : rightType;
     }
-    case "identifier":
-      return d;
+    case "identifier": {
+      const sym = symbols.get(node.name);
+      return sym?.type ?? d;
+    }
     case "let":
-      return inferType(node.value);
+      return inferType(node.value, symbols);
     case "assign":
     case "augassign":
-      return inferType(node.value);
+      return inferType(node.value, symbols);
     case "block": {
       const last = node.statements[node.statements.length - 1];
-      return last ? inferType(last) : d;
+      return last ? inferType(last, symbols) : d;
     }
     case "if":
-      return inferType(node.then);
+      return inferType(node.then, symbols);
     case "loop":
       return d;
     case "break":
-      return inferType(node.value);
+      return inferType(node.value, symbols);
     case "while":
       return d;
     case "typecheck":
-      return inferType(node.value);
+      return inferType(node.value, symbols);
   }
 }
 
@@ -71,9 +73,10 @@ function inferType(node: AstNode): Type {
 function checkTypeCompatibility(
   node: AstNode,
   declaredType: Type | undefined,
+  symbols: Map<string, SymbolInfo>,
 ): void {
   if (!declaredType) return;
-  const valueType = inferType(node);
+  const valueType = inferType(node, symbols);
   if (isDynamic(valueType)) return; // No type on value, assume compatible
   if (!isAssignable(valueType, declaredType)) {
     throw new Error(
@@ -103,11 +106,16 @@ function analyzeNode(node: AstNode, symbols: Map<string, SymbolInfo>): void {
     case "identifier":
       break; // Resolution happens at evaluation time
 
-    case "let":
+    case "let": {
       analyzeNode(node.value, symbols);
-      checkTypeCompatibility(node.value, node.type);
-      symbols.set(node.name, { type: node.type, mutable: node.mutable });
+      const inferred = inferType(node.value, symbols);
+      checkTypeCompatibility(node.value, node.type, symbols);
+      // Store the more specific type: declared type if present, otherwise inferred
+      const resolvedType =
+        node.type ?? (isDynamic(inferred) ? undefined : inferred);
+      symbols.set(node.name, { type: resolvedType, mutable: node.mutable });
       break;
+    }
 
     case "assign":
     case "augassign":

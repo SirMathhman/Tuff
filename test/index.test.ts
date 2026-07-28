@@ -48,6 +48,10 @@ describe("number literals", () => {
     expect(() => interpret("let x : U8 = 100U16; x")).toThrow();
   });
 
+  test('interpret("let x = 100U16; let y : U8 = x;") => Error', () => {
+    expect(() => interpret("let x = 100U16; let y : U8 = x;")).toThrow();
+  });
+
   test('interpret("let x : U32 = 100U8; x") => 100', () => {
     expect(interpret("let x : U32 = 100U8; x")).toBe(100);
   });
