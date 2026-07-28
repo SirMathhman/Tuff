@@ -1,5 +1,6 @@
 import type { AstNode } from "./ast";
 import type { Token } from "./tokenizer";
+import type { BinaryOp } from "./grammar";
 import { OPENING, PRECEDENCE } from "./grammar";
 
 /**
@@ -196,7 +197,7 @@ class Parser {
         const right = this.parseBinary(level + 1, lower);
         node = {
           kind: "binary",
-          op: op.value as "+" | "-" | "*" | "/" | "||" | "&&" | "<" | ">" | "==",
+          op: op.value as BinaryOp,
           left: node,
           right,
         };

@@ -21,3 +21,6 @@ export const PRECEDENCE: readonly string[][] = [
   ["+", "-"], // additive
   ["*", "/"], // multiplicative
 ];
+
+/** All binary operators, derived from the precedence table. */
+export type BinaryOp = (typeof PRECEDENCE[number])[number];

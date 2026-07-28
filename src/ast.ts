@@ -1,9 +1,11 @@
+import type { BinaryOp } from "./grammar";
+
 export type AstNode =
   | { kind: "number"; value: number }
   | { kind: "boolean"; value: boolean }
   | {
       kind: "binary";
-      op: "+" | "-" | "*" | "/" | "||" | "&&" | "<" | ">" | "==";
+      op: BinaryOp;
       left: AstNode;
       right: AstNode;
     }
