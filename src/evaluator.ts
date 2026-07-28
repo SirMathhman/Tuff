@@ -22,8 +22,13 @@ export function evaluate(
       }
       break;
     }
-    case "identifier":
-      return env.get(node.name) ?? 0;
+    case "identifier": {
+      const value = env.get(node.name);
+      if (value === undefined) {
+        throw new Error(`Undefined identifier: ${node.name}`);
+      }
+      return value;
+    }
     case "let": {
       const value = evaluate(node.value, env);
       env.set(node.name, value);

@@ -61,4 +61,8 @@ describe("binary expressions", () => {
   test('interpret("let x = 0; let x = 1; x") => 1', () => {
     expect(interpret("let x = 0; let x = 1; x")).toBe(1);
   });
+
+  test('interpret("undefinedIdentifier") => Error', () => {
+    expect(() => interpret("undefinedIdentifier")).toThrow();
+  });
 });
