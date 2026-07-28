@@ -221,15 +221,35 @@ class Parser {
   }
 
   private parseAndExpression(): AstNode {
-    let node = this.parseAdditive();
+    let node = this.parseComparison();
     while (this.pos < this.tokens.length) {
       const op = this.peek();
       if (op?.type === "operator" && op.value === "&&") {
         this.consume();
-        const right = this.parseAdditive();
+        const right = this.parseComparison();
         node = {
           kind: "binary",
           op: "&&",
+          left: node,
+          right,
+        };
+      } else {
+        break;
+      }
+    }
+    return node;
+  }
+
+  private parseComparison(): AstNode {
+    let node = this.parseAdditive();
+    while (this.pos < this.tokens.length) {
+      const op = this.peek();
+      if (op?.type === "operator" && op.value === "<") {
+        this.consume();
+        const right = this.parseAdditive();
+        node = {
+          kind: "binary",
+          op: "<",
           left: node,
           right,
         };
@@ -245,17 +265,13 @@ class Parser {
     while (this.pos < this.tokens.length) {
       const op = this.peek();
       if (
-        op?.type === "operator" &&
-        (op.value === "+" ||
-          op.value === "-" ||
-          op.value === "*" ||
-          op.value === "/")
+        op?.type === "operator" && (op.value === "+" || op.value === "-")
       ) {
         this.consume();
         const right = this.parseTerm();
         node = {
           kind: "binary",
-          op: op.value as "+" | "-" | "*" | "/",
+          op: op.value as "+" | "-",
           left: node,
           right,
         };

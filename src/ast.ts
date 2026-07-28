@@ -3,7 +3,7 @@ export type AstNode =
   | { kind: "boolean"; value: boolean }
   | {
       kind: "binary";
-      op: "+" | "-" | "*" | "/" | "||" | "&&";
+      op: "+" | "-" | "*" | "/" | "||" | "&&" | "<";
       left: AstNode;
       right: AstNode;
     }

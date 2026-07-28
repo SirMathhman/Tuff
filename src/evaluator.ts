@@ -29,6 +29,8 @@ export function evaluate(
           return toNumber(left) !== 0 ? left : right;
         case "&&":
           return toNumber(left) !== 0 ? right : left;
+        case "<":
+          return { kind: "boolean", value: l < r };
       }
       break;
     }
