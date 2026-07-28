@@ -88,6 +88,10 @@ function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "if" });
       } else if (word === "else") {
         tokens.push({ type: "keyword", value: "else" });
+      } else if (word === "loop") {
+        tokens.push({ type: "keyword", value: "loop" });
+      } else if (word === "break") {
+        tokens.push({ type: "keyword", value: "break" });
       } else if (word === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (word === "false") {
@@ -352,18 +356,12 @@ class Parser {
     if (token.type === "keyword" && token.value === "if") {
       this.consume(); // consume "if"
       // consume "("
-      if (
-        this.peek()?.type === "paren" &&
-        this.peek()?.value === "("
-      ) {
+      if (this.peek()?.type === "paren" && this.peek()?.value === "(") {
         this.consume();
       }
       const condition = this.parseExpression();
       // consume ")"
-      if (
-        this.peek()?.type === "paren" &&
-        this.peek()?.value === ")"
-      ) {
+      if (this.peek()?.type === "paren" && this.peek()?.value === ")") {
         this.consume();
       }
       const thenValue = this.parseExpression();
@@ -371,10 +369,7 @@ class Parser {
         this.consume();
       }
       // consume "else"
-      if (
-        this.peek()?.type === "keyword" &&
-        this.peek()?.value === "else"
-      ) {
+      if (this.peek()?.type === "keyword" && this.peek()?.value === "else") {
         this.consume();
       }
       const elseValue = this.parseExpression();
@@ -382,6 +377,38 @@ class Parser {
         this.consume();
       }
       return condition !== 0 ? thenValue : elseValue;
+    }
+    if (token.type === "keyword" && token.value === "loop") {
+      this.consume(); // consume "loop"
+      // consume "{"
+      if (this.peek()?.type === "paren" && this.peek()?.value === "{") {
+        this.consume();
+      }
+      const childScope = new Map(this.scope);
+      const prevScope = this.scope;
+      this.scope = childScope;
+      let result = 0;
+      while (this.pos < this.tokens.length) {
+        const t = this.peek();
+        if (t?.type === "paren" && t.value === "}") {
+          this.consume();
+          break;
+        }
+        if (t?.type === "keyword" && t.value === "break") {
+          this.consume(); // consume "break"
+          result = this.parseExpression();
+          if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+            this.consume();
+          }
+          break;
+        }
+        result = this.parseExpression();
+        if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+          this.consume();
+        }
+      }
+      this.scope = prevScope;
+      return result;
     }
     this.consume();
     return 0;

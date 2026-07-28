@@ -92,3 +92,7 @@ test('evaluate("let x = if (true) 3 else 4; x") => 3', () => {
 test('evaluate("if (false) 1 else if (true) 2 else 3") => 2', () => {
   expect(evaluate("if (false) 1 else if (true) 2 else 3")).toBe(2);
 });
+
+test('evaluate("let x = loop { break 3; } x") => 3', () => {
+  expect(evaluate("let x = loop { break 3; } x")).toBe(3);
+});
