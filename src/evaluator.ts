@@ -31,6 +31,8 @@ export function evaluate(
           return toNumber(left) !== 0 ? right : left;
         case "<":
           return { kind: "boolean", value: l < r };
+        case ">":
+          return { kind: "boolean", value: l > r };
       }
       break;
     }

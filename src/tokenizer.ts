@@ -1,6 +1,6 @@
 export type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" | "||" | "&&" | "<" }
+  | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" | "||" | "&&" | "<" | ">" }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
   | { type: "keyword"; value: "let" | "true" | "false" }
   | { type: "identifier"; value: string }
@@ -69,6 +69,9 @@ export function tokenize(source: string): Token[] {
       }
     } else if (ch === "<") {
       tokens.push({ type: "operator", value: "<" });
+      i++;
+    } else if (ch === ">") {
+      tokens.push({ type: "operator", value: ">" });
       i++;
     } else if (ch === "=") {
       tokens.push({ type: "operator", value: "=" });
