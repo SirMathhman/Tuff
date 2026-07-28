@@ -71,21 +71,8 @@ class Parser {
     if (this.match("keyword", "if")) {
       return this.parseIfStatement();
     }
-    // Check for assignment: identifier = expression
-    if (this.match("identifier")) {
-      const nameToken = this.peek()!;
-      const nextPos = this.pos + 1;
-      const nextToken = this.tokens[nextPos];
-      if (nextToken?.type === "operator" && nextToken.value === "=") {
-        this.consume(); // identifier
-        this.consume(); // =
-        const value = this.parseExpression();
-        if (this.match("punctuator", ";")) {
-          this.consume();
-        }
-        return { kind: "assign", name: nameToken.value as string, value };
-      }
-    }
+    const assign = this.tryParseAssign();
+    if (assign) return assign;
     this.skipBlockCheck = true;
     try {
       return this.parseExpression();
@@ -154,22 +141,25 @@ class Parser {
     if (this.match("keyword", "if")) {
       return this.parseIfStatement();
     }
-    // Check for assignment: identifier = expression
-    if (this.match("identifier")) {
-      const nameToken = this.peek()!;
-      const nextPos = this.pos + 1;
-      const nextToken = this.tokens[nextPos];
-      if (nextToken?.type === "operator" && nextToken.value === "=") {
-        this.consume(); // identifier
-        this.consume(); // =
-        const value = this.parseExpression();
-        if (this.match("punctuator", ";")) {
-          this.consume();
-        }
-        return { kind: "assign", name: nameToken.value as string, value };
-      }
-    }
+    const assign = this.tryParseAssign();
+    if (assign) return assign;
     return this.parseExpression();
+  }
+
+  /** Try to parse `identifier = expression` as an assignment statement. Returns undefined if not an assignment. */
+  private tryParseAssign(): AstNode | undefined {
+    if (!this.match("identifier")) return;
+    const nameToken = this.peek()!;
+    const nextPos = this.pos + 1;
+    const nextToken = this.tokens[nextPos];
+    if (nextToken?.type !== "operator" || nextToken.value !== "=") return;
+    this.consume(); // identifier
+    this.consume(); // =
+    const value = this.parseExpression();
+    if (this.match("punctuator", ";")) {
+      this.consume();
+    }
+    return { kind: "assign", name: nameToken.value as string, value };
   }
 
   private parseLetStatement(): AstNode {
