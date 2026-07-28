@@ -41,4 +41,16 @@ describe("binary expressions", () => {
   test('interpret("(2 + 3) * 4") => 20', () => {
     expect(interpret("(2 + 3) * 4")).toBe(20);
   });
+
+  test('interpret("(2 + 3) * (1 + 2)") => 15', () => {
+    expect(interpret("(2 + 3) * (1 + 2)")).toBe(15);
+  });
+
+  test('interpret("{ 2 + 3 } * 4") => 20', () => {
+    expect(interpret("{ 2 + 3 } * 4")).toBe(20);
+  });
+
+  test('interpret("{ let x = 2 + 3; x } * 4") => 20', () => {
+    expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
+  });
 });

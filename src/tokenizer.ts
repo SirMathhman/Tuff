@@ -1,7 +1,10 @@
 export type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" }
-  | { type: "paren"; value: "(" | ")" };
+  | { type: "operator"; value: "+" | "-" | "*" | "=" }
+  | { type: "group"; value: "(" | ")" | "{" | "}" }
+  | { type: "keyword"; value: "let" }
+  | { type: "identifier"; value: string }
+  | { type: "punctuator"; value: ";" };
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -19,6 +22,24 @@ export function tokenize(source: string): Token[] {
         i++;
       }
       tokens.push({ type: "number", value: Number(numStr) });
+    } else if (
+      (ch >= "a" && ch <= "z") ||
+      ch === "_"
+    ) {
+      let ident = "";
+      while (
+        i < source.length &&
+        ((source.charAt(i) >= "a" && source.charAt(i) <= "z") ||
+          source.charAt(i) === "_")
+      ) {
+        ident += source.charAt(i);
+        i++;
+      }
+      if (ident === "let") {
+        tokens.push({ type: "keyword", value: "let" });
+      } else {
+        tokens.push({ type: "identifier", value: ident });
+      }
     } else if (ch === "+") {
       tokens.push({ type: "operator", value: "+" });
       i++;
@@ -28,11 +49,23 @@ export function tokenize(source: string): Token[] {
     } else if (ch === "*") {
       tokens.push({ type: "operator", value: "*" });
       i++;
+    } else if (ch === "=") {
+      tokens.push({ type: "operator", value: "=" });
+      i++;
+    } else if (ch === ";") {
+      tokens.push({ type: "punctuator", value: ";" });
+      i++;
     } else if (ch === "(") {
-      tokens.push({ type: "paren", value: "(" });
+      tokens.push({ type: "group", value: "(" });
       i++;
     } else if (ch === ")") {
-      tokens.push({ type: "paren", value: ")" });
+      tokens.push({ type: "group", value: ")" });
+      i++;
+    } else if (ch === "{") {
+      tokens.push({ type: "group", value: "{" });
+      i++;
+    } else if (ch === "}") {
+      tokens.push({ type: "group", value: "}" });
       i++;
     } else {
       i++;
