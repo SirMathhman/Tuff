@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --coverage",
     "lint": "tsc --noEmit && eslint .  --fix",
     "format": "prettier . --write",
     "prepare": "husky",
