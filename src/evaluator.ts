@@ -24,11 +24,17 @@ function getMutable(name: string, env: Map<string, Value>): Value | undefined {
   return env.get(name);
 }
 
-function setMutable(name: string, value: Value, env: Map<string, Value>): void {
+function setMutable(
+  name: string,
+  value: Value,
+  env: Map<string, Value>,
+  pos?: { line: number; column: number },
+): void {
   if (!env.has(`__mutable__${name}`)) {
     throw new InterpreterError(
       "runtime",
       `Cannot assign to immutable variable: ${name}`,
+      pos,
     );
   }
   env.set(name, value);
@@ -95,6 +101,7 @@ export function evaluate(
         throw new InterpreterError(
           "runtime",
           `Undefined identifier: ${node.name}`,
+          node.pos,
         );
       }
       return evalOk(value);
@@ -109,7 +116,7 @@ export function evaluate(
     }
     case "assign": {
       const value = unwrap(evaluate(node.value, env, functions));
-      setMutable(node.name, value, env);
+      setMutable(node.name, value, env, node.pos);
       return evalOk(value);
     }
     case "augassign": {
@@ -119,7 +126,7 @@ export function evaluate(
         kind: "number",
         value: toNumber(current) + toNumber(rhs),
       };
-      setMutable(node.name, newValue, env);
+      setMutable(node.name, newValue, env, node.pos);
       return evalOk(newValue);
     }
     case "block": {
@@ -185,6 +192,7 @@ export function evaluate(
         throw new InterpreterError(
           "runtime",
           `Undefined function: ${callee.name}`,
+          node.pos,
         );
       }
       const callEnv = new Map(env);

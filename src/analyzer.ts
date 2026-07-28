@@ -63,8 +63,8 @@ function resolveType(
 
       const category = getOperatorCategory(node.op);
       if (category === "arithmetic") {
-        checkNotBool(leftType, node.op);
-        checkNotBool(rightType, node.op);
+        checkNotBool(leftType, node.op, node.pos);
+        checkNotBool(rightType, node.op, node.pos);
         const result = widen(leftType, rightType);
         // Context propagation: dynamic operand inherits from concrete sibling
         if (isDynamic(leftType) && !isDynamic(rightType))
@@ -103,6 +103,7 @@ function resolveType(
         throw new InterpreterError(
           "type",
           `Duplicate declaration: '${node.name}'`,
+          node.pos,
         );
       }
       // Reject void blocks (ending with declarations) as let values
@@ -112,13 +113,14 @@ function resolveType(
           throw new InterpreterError(
             "type",
             "Block used as expression cannot end with a declaration",
+            node.pos,
           );
         }
       }
       const valueType = resolveType(node.value, declarations);
       // Validate type compatibility
       if (node.type !== undefined) {
-        checkAssignable(valueType, node.type);
+        checkAssignable(valueType, node.type, node.pos);
       }
       // Store the more specific type: declared type if present, otherwise inferred
       const resolvedType =
@@ -135,7 +137,7 @@ function resolveType(
     case "assign": {
       const valueType = resolveType(node.value, declarations);
       const decl = declarations.get(node.name);
-      if (decl?.type) checkAssignable(valueType, decl.type);
+      if (decl?.type) checkAssignable(valueType, decl.type, node.pos);
       return valueType;
     }
 
@@ -143,9 +145,9 @@ function resolveType(
       const valueType = resolveType(node.value, declarations);
       const decl = declarations.get(node.name);
       if (decl?.type) {
-        checkNotBool(decl.type, node.op);
-        checkNotBool(valueType, node.op);
-        checkAssignable(valueType, decl.type);
+        checkNotBool(decl.type, node.op, node.pos);
+        checkNotBool(valueType, node.op, node.pos);
+        checkAssignable(valueType, decl.type, node.pos);
       }
       return valueType;
     }
@@ -197,6 +199,7 @@ function resolveType(
         throw new InterpreterError(
           "type",
           `Duplicate declaration: '${node.name}'`,
+          node.pos,
         );
       }
       // Check for duplicate param names
@@ -206,6 +209,7 @@ function resolveType(
           throw new InterpreterError(
             "type",
             `Duplicate parameter: '${param.name}'`,
+            node.pos,
           );
         }
         seenParams.add(param.name);
@@ -213,7 +217,7 @@ function resolveType(
       const bodyType = resolveType(node.body, declarations);
       // Validate return type annotation if present
       if (node.returnType) {
-        checkAssignable(bodyType, node.returnType);
+        checkAssignable(bodyType, node.returnType, node.pos);
       }
       declarations.set(node.name, {
         kind: "fn",
@@ -232,7 +236,7 @@ function resolveType(
         const argType = resolveType(arg, declarations);
         const param = params?.[i];
         if (param?.type) {
-          checkAssignable(argType, param.type);
+          checkAssignable(argType, param.type, arg.pos);
         }
       }
       return decl?.type ?? dynamic();
@@ -253,20 +257,30 @@ function setNodeType(node: AstNode, type: Type): void {
 }
 
 /** Reject boolean operands for arithmetic operators. */
-function checkNotBool(t: Type, op: string): void {
+function checkNotBool(
+  t: Type,
+  op: string,
+  pos?: { line: number; column: number },
+): void {
   if (!isDynamic(t) && t.kind === "bool")
     throw new InterpreterError(
       "type",
       `Type mismatch: cannot use arithmetic operator '${op}' on ${typeName(t)}`,
+      pos,
     );
 }
 
 /** Validate that a value type is assignable to a target type. */
-function checkAssignable(valueType: Type, targetType: Type): void {
+function checkAssignable(
+  valueType: Type,
+  targetType: Type,
+  pos?: { line: number; column: number },
+): void {
   if (!isDynamic(valueType) && !isAssignable(valueType, targetType)) {
     throw new InterpreterError(
       "type",
       `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(targetType)}`,
+      pos,
     );
   }
 }

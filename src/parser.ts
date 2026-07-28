@@ -38,6 +38,7 @@ class Parser {
       throw new InterpreterError(
         "parse",
         `Expected ${type}${value !== undefined ? ` '${value}'` : ""}, got ${t?.type} '${t?.value}'`,
+        t?.pos ?? { line: 1, column: 1 },
       );
     }
     return this.consume()!;
@@ -97,8 +98,9 @@ class Parser {
    * Semantic checks (void type, declaration restrictions) are handled by the analyzer.
    */
   private parseBlock(): AstNode {
+    const token = this.peek();
     const statements = this.collectBlockStatements();
-    return { kind: "block", statements };
+    return { kind: "block", statements, pos: token?.pos };
   }
 
   private parseStatement(): AstNode {
@@ -123,7 +125,7 @@ class Parser {
       if (this.match("punctuator", ";")) {
         this.consume();
       }
-      return { kind: "break", value };
+      return { kind: "break", value, pos: value.pos };
     }
     const assign = this.tryParseAssign();
     if (assign) return assign;
@@ -133,6 +135,7 @@ class Parser {
   private tryParseAssign(): AstNode | undefined {
     if (!this.match("identifier")) return;
     const nameToken = this.peek()!;
+    const pos = (nameToken as { pos: { line: number; column: number } }).pos;
     const nextPos = this.pos + 1;
     const nextToken = this.tokens[nextPos];
     if (nextToken?.type !== "operator") return;
@@ -150,12 +153,14 @@ class Parser {
         name: nameToken.value as string,
         op: "+",
         value,
+        pos,
       };
     }
-    return { kind: "assign", name: nameToken.value as string, value };
+    return { kind: "assign", name: nameToken.value as string, value, pos };
   }
 
   private parseLetStatement(): AstNode {
+    const pos = this.peek()?.pos;
     this.consume(); // eat "let"
     const mutable = this.match("keyword", "mut");
     if (mutable) this.consume();
@@ -174,7 +179,7 @@ class Parser {
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "let", name, value, mutable, type: declaredType };
+    return { kind: "let", name, value, mutable, type: declaredType, pos };
   }
 
   /** Parse optional `: TypeName` and return the type, or undefined. */
@@ -193,6 +198,7 @@ class Parser {
 
   /** Parse `fn name(params) => body`. */
   private parseFnStatement(): AstNode {
+    const pos = this.peek()?.pos;
     this.consume(); // eat "fn"
     const nameToken = this.peek();
     let name = "";
@@ -225,26 +231,30 @@ class Parser {
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "fn", name, params, returnType, body };
+    return { kind: "fn", name, params, returnType, body, pos };
   }
 
   private parseAtom(): AstNode {
     if (this.match("number")) {
       const t = this.consume()!;
       const suffix = (t as { typeSuffix?: string }).typeSuffix;
+      const pos = (t as { pos: { line: number; column: number } }).pos;
       return {
         kind: "number",
         value: t.value as number,
         type: suffix ? parseTypeName(suffix) : undefined,
+        pos,
       };
     }
     if (this.match("keyword", "true")) {
-      this.consume();
-      return { kind: "boolean", value: true };
+      const t = this.consume()!;
+      const pos = (t as { pos: { line: number; column: number } }).pos;
+      return { kind: "boolean", value: true, pos };
     }
     if (this.match("keyword", "false")) {
-      this.consume();
-      return { kind: "boolean", value: false };
+      const t = this.consume()!;
+      const pos = (t as { pos: { line: number; column: number } }).pos;
+      return { kind: "boolean", value: false, pos };
     }
     if (this.match("keyword", "if")) {
       return this.parseIfExpression();
@@ -255,6 +265,7 @@ class Parser {
     if (this.match("identifier")) {
       const t = this.consume()!;
       const name = t.value as string;
+      const pos = (t as { pos: { line: number; column: number } }).pos;
       // Check for function call: `identifier(args)`
       if (this.match("group", "(")) {
         this.consume();
@@ -266,9 +277,14 @@ class Parser {
           }
         }
         this.expect("group", ")");
-        return { kind: "call", callee: { kind: "identifier", name }, args };
+        return {
+          kind: "call",
+          callee: { kind: "identifier", name, pos },
+          args,
+          pos,
+        };
       }
-      return { kind: "identifier", name };
+      return { kind: "identifier", name, pos };
     }
     const token = this.peek();
     if (token?.type === "group" && token.value in OPENING) {
@@ -282,15 +298,19 @@ class Parser {
       }
       return node;
     }
-    throw new Error(`Unexpected token: ${token?.value}`);
+    throw new InterpreterError(
+      "parse",
+      `Unexpected token: ${token?.value}`,
+      token?.pos ?? { line: 1, column: 1 },
+    );
   }
 
   /** Parse unary expressions: `-expr`. */
   private parseUnary(): AstNode {
     if (this.match("operator", "-")) {
-      this.consume();
+      const opToken = this.consume()!;
       const operand = this.parseUnary();
-      return { kind: "unary", op: "-", operand };
+      return { kind: "unary", op: "-", operand, pos: opToken.pos };
     }
     let node = this.parseAtom();
     // Handle postfix `is TypeName` — supports chaining: `expr is T1 is T2`
@@ -300,7 +320,7 @@ class Parser {
       if (typeToken?.type === "identifier") {
         const type = parseTypeName(typeToken.value);
         this.consume();
-        node = { kind: "typecheck", value: node, type };
+        node = { kind: "typecheck", value: node, type, pos: node.pos };
       } else {
         break;
       }
@@ -308,55 +328,61 @@ class Parser {
     return node;
   }
 
-  private parseIfExpression(): AstNode {
-    this.consume(); // eat "if"
+  private parseCondition(): AstNode {
     this.expect("group", "(");
     const condition = this.parseExpression();
     this.expect("group", ")");
+    return condition;
+  }
+
+  private parseIfExpression(): AstNode {
+    const pos = this.peek()?.pos;
+    this.consume(); // eat "if"
+    const condition = this.parseCondition();
     const thenBranch = this.parseExpression();
     this.expect("keyword", "else");
     const elseBranch = this.parseExpression();
-    return { kind: "if", condition, then: thenBranch, elseBranch };
+    return { kind: "if", condition, then: thenBranch, elseBranch, pos };
   }
 
   private parseIfStatement(): AstNode {
     this.consume(); // eat "if"
-    this.expect("group", "(");
-    const condition = this.parseExpression();
-    this.expect("group", ")");
+    const pos = this.peek()?.pos;
+    const condition = this.parseCondition();
     const thenBranch = this.parseStatement();
     if (this.match("keyword", "else")) {
       this.consume();
       if (this.match("keyword", "if")) {
         const elseBranch = this.parseIfStatement();
-        return { kind: "if", condition, then: thenBranch, elseBranch };
+        return { kind: "if", condition, then: thenBranch, elseBranch, pos };
       }
       const elseBranch = this.parseStatement();
-      return { kind: "if", condition, then: thenBranch, elseBranch };
+      return { kind: "if", condition, then: thenBranch, elseBranch, pos };
     }
     return {
       kind: "if",
       condition,
       then: thenBranch,
       elseBranch: { kind: "number", value: 0 },
+      pos,
     };
   }
 
   private parseWhileStatement(): AstNode {
+    const pos = this.peek()?.pos;
     this.consume(); // eat "while"
-    this.expect("group", "(");
-    const condition = this.parseExpression();
-    this.expect("group", ")");
+    const condition = this.parseCondition();
     this.expect("group", "{");
     const body = this.collectBody();
-    return { kind: "while", condition, body };
+    return { kind: "while", condition, body, pos };
   }
 
   private parseLoopExpression(): AstNode {
+    const pos = this.peek()?.pos;
     this.consume(); // eat "loop"
     this.expect("group", "{");
     const body = this.collectBody();
-    return { kind: "loop", body };
+    return { kind: "loop", body, pos };
   }
 
   /** Collect body statements between `{` and `}`, consuming the closing brace. */
@@ -393,6 +419,7 @@ class Parser {
           op: op.value as BinaryOp,
           left: node,
           right,
+          pos: node.pos,
         };
       } else {
         break;
