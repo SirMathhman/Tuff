@@ -46,7 +46,12 @@ class Parser {
   parse(): AstNode {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length) {
+      const prevPos = this.pos;
       statements.push(this.parseTopLevelStatement());
+      // Guard against infinite loops: if pos didn't advance, skip the token.
+      if (prevPos === this.pos) {
+        this.pos++;
+      }
     }
     if (statements.length === 0) return { kind: "number", value: 0 };
     if (statements.length === 1) return statements[0]!;

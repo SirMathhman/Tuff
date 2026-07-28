@@ -23,4 +23,4 @@ export const PRECEDENCE: readonly string[][] = [
 ];
 
 /** All binary operators, derived from the precedence table. */
-export type BinaryOp = (typeof PRECEDENCE[number])[number];
+export type BinaryOp = (typeof PRECEDENCE)[number][number];
