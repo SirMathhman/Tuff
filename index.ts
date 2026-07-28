@@ -142,15 +142,69 @@ class Parser {
     while (this.pos < this.tokens.length && !shouldStop()) {
       const t = this.peek();
       if (t && t.type === "keyword" && t.value === "let") {
-        lastResult = this.parseLetStatement(scope);
+        this.parseLetStatement(scope);
       } else {
-        lastResult = this.parseExpression();
+        try {
+          lastResult = this.parseExpression();
+        } catch (e) {
+          if (e instanceof Error && e.message.includes("void")) {
+            lastResult = 0;
+          } else {
+            throw e;
+          }
+        }
         if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
           this.consume();
         }
       }
     }
     return lastResult;
+  }
+
+  private parseBlockStatements(
+    scope: Map<string, VarEntry>,
+    shouldStop: () => boolean,
+  ): { value: number; void: boolean } {
+    let lastResult: { value: number; void: boolean } = { value: 0, void: false };
+    while (this.pos < this.tokens.length && !shouldStop()) {
+      const t = this.peek();
+      if (t && t.type === "keyword" && t.value === "let") {
+        lastResult = this.parseLetStatementResult(scope);
+      } else {
+        lastResult = { value: this.parseExpression(), void: false };
+        if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+          this.consume();
+        }
+      }
+    }
+    return lastResult;
+  }
+
+  private parseLetStatementResult(
+    scope: Map<string, VarEntry>,
+  ): { value: number; void: boolean } {
+    this.consume(); // consume "let"
+    let mutable = false;
+    const mutToken = this.peek();
+    if (mutToken && mutToken.type === "keyword" && mutToken.value === "mut") {
+      mutable = true;
+      this.consume(); // consume "mut"
+    }
+    const idToken = this.peek();
+    if (idToken && idToken.type === "identifier") {
+      this.consume(); // consume identifier
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === "=") {
+        this.consume(); // consume "="
+        const value = this.parseExpression();
+        scope.set(idToken.value, { value, mutable });
+      } else {
+        scope.set(idToken.value, { value: 0, mutable });
+      }
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+        this.consume(); // consume ";"
+      }
+    }
+    return { value: 0, void: true };
   }
 
   private parseLetStatement(scope: Map<string, VarEntry>): number {
@@ -331,7 +385,7 @@ class Parser {
       const childScope = new Map(this.scope);
       const prevScope = this.scope;
       this.scope = childScope;
-      const result = this.parseStatements(childScope, () => {
+      const blockResult = this.parseBlockStatements(childScope, () => {
         const t = this.peek();
         return t?.type === "paren" && t.value === "}";
       });
@@ -343,7 +397,10 @@ class Parser {
         this.consume();
       }
       this.scope = prevScope;
-      return result;
+      if (blockResult.void) {
+        throw new Error("Cannot use void block as a value");
+      }
+      return blockResult.value;
     }
     if (
       token.type === "operator" &&
