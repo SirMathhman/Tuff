@@ -166,7 +166,12 @@ class Parser {
       this.consume();
     }
     if (op === "+=") {
-      return { kind: "augassign", name: nameToken.value as string, op: "+", value };
+      return {
+        kind: "augassign",
+        name: nameToken.value as string,
+        op: "+",
+        value,
+      };
     }
     return { kind: "assign", name: nameToken.value as string, value };
   }

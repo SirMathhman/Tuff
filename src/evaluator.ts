@@ -2,6 +2,18 @@ import type { AstNode } from "./ast";
 import type { EvalResult, Value } from "./value";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
+function getMutable(name: string, env: Map<string, Value>): Value | undefined {
+  if (!env.has(`__mutable__${name}`)) return undefined;
+  return env.get(name);
+}
+
+function setMutable(name: string, value: Value, env: Map<string, Value>): void {
+  if (!env.has(`__mutable__${name}`)) {
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  }
+  env.set(name, value);
+}
+
 export function evaluate(
   node: AstNode,
   env: Map<string, Value> = new Map(),
@@ -60,23 +72,15 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "assign": {
-      if (!env.has(`__mutable__${node.name}`)) {
-        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
-      }
       const value = unwrap(evaluate(node.value, env));
-      env.set(node.name, value);
+      setMutable(node.name, value, env);
       return evalOk(value);
     }
     case "augassign": {
-      if (!env.has(`__mutable__${node.name}`)) {
-        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
-      }
-      const current = env.get(node.name)!;
+      const current = getMutable(node.name, env)!;
       const rhs = unwrap(evaluate(node.value, env));
-      const l = toNumber(current);
-      const r = toNumber(rhs);
-      const newValue: Value = { kind: "number", value: l + r };
-      env.set(node.name, newValue);
+      const newValue: Value = { kind: "number", value: toNumber(current) + toNumber(rhs) };
+      setMutable(node.name, newValue, env);
       return evalOk(newValue);
     }
     case "block": {
