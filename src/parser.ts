@@ -131,18 +131,21 @@ class Parser {
     if (assign) return assign;
   }
 
-  /** Try to parse `identifier = expression`, `identifier += expression`, or `*expr = expression` as an assignment statement. Returns undefined if not an assignment. */
+  /** Try to parse `identifier = expression`, `identifier += expression`, `*expr = expression`, or `*expr += expression` as an assignment statement. Returns undefined if not an assignment. */
   private tryParseAssign(): AstNode | undefined {
-    // Check for `*expr = value` (deref assignment) — look ahead without consuming
+    // Check for `*expr = value` or `*expr += value` (deref assignment) — look ahead without consuming
     if (this.match("operator", "*") && this.isUnaryContext()) {
-      // Peek ahead: check if the token after `*` and its operand is `=`
+      // Peek ahead: check if the token after `*` and its operand is `=` or `+=`
       const savedPos = this.pos;
       const starToken = this.tokens[this.pos]!;
       this.consume(); // *
       const operand = this.parseUnary();
       const nextToken = this.peek();
-      if (nextToken?.type === "operator" && nextToken.value === "=") {
-        this.consume(); // =
+      if (
+        nextToken?.type === "operator" &&
+        (nextToken.value === "=" || nextToken.value === "+=")
+      ) {
+        this.consume(); // = or +=
         const value = this.parseExpression();
         if (this.match("punctuator", ";")) {
           this.consume();
@@ -153,6 +156,17 @@ class Parser {
           operand,
           pos: starToken.pos,
         };
+        // Lower `*expr += value` to `*expr = *expr + value`
+        if (nextToken.value === "+=") {
+          const rhs: AstNode = {
+            kind: "binary",
+            op: "+",
+            left: target,
+            right: value,
+            pos: starToken.pos,
+          };
+          return { kind: "assign", target, value: rhs, pos: starToken.pos };
+        }
         return { kind: "assign", target, value, pos: starToken.pos };
       }
       // Not an assignment — restore position

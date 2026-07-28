@@ -336,6 +336,12 @@ describe("binary expressions", () => {
       interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 1; x"),
     ).toBe(1);
   });
+
+  test('interpret("let mut x = 1; let y : &mut I32 = &mut x; *y += 2; x") => 3', () => {
+    expect(
+      interpret("let mut x = 1; let y : &mut I32 = &mut x; *y += 2; x"),
+    ).toBe(3);
+  });
 });
 
 describe("error positions", () => {
