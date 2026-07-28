@@ -1,7 +1,7 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
-import { isAssignable } from "./types";
+import { dynamic, isNumeric } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
 function getMutable(name: string, env: Map<string, Value>): Value | undefined {
@@ -22,7 +22,11 @@ export function evaluate(
 ): EvalResult {
   switch (node.kind) {
     case "number":
-      return evalOk({ kind: "number", value: node.value });
+      return evalOk({
+        kind: "number",
+        value: node.value,
+        type: node.type ?? dynamic(),
+      });
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value });
     case "unary": {
@@ -140,13 +144,24 @@ export function evaluate(
   return evalOk({ kind: "number", value: 0 });
 }
 
-/** Check if a runtime value matches the target type. */
+/** Check if a runtime value has the exact target type. */
 function checkType(value: Value, targetType: Type): boolean {
-  return isAssignable(inferRuntimeType(value), targetType);
+  const valueType = inferRuntimeType(value);
+  return typesEqual(valueType, targetType);
 }
 
-/** Infer the type of a runtime value. */
+/** Infer the type of a runtime value from its metadata. */
 function inferRuntimeType(value: Value): Type {
   if (value.kind === "boolean") return { kind: "bool" };
-  return { kind: "dynamic" };
+  return value.type ?? dynamic();
+}
+
+/** Check if two types are exactly equal. */
+function typesEqual(a: Type, b: Type): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "bool") return true;
+  if (a.kind === "dynamic") return b.kind === "dynamic";
+  if (isNumeric(a) && isNumeric(b))
+    return a.prefix === b.prefix && a.bits === b.bits;
+  return false;
 }

@@ -2,8 +2,11 @@
  * Runtime value types for the Tuff interpreter.
  * A discriminated union that replaces the raw `number` encoding.
  */
+import type { Type } from "./types";
+
 export type Value =
-  { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+  | { kind: "number"; value: number; type?: Type }
+  | { kind: "boolean"; value: boolean };
 
 /**
  * Result of evaluating an expression.

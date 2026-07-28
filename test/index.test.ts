@@ -67,6 +67,10 @@ describe("number literals", () => {
   test('interpret("true is Bool") => 1', () => {
     expect(interpret("true is Bool")).toBe(1);
   });
+
+  test('interpret("5U8 is U16") => 0', () => {
+    expect(interpret("5U8 is U16")).toBe(0);
+  });
 });
 
 describe("binary expressions", () => {
