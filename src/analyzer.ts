@@ -3,15 +3,22 @@ import type { Type } from "./types";
 import {
   bool,
   dynamic,
-  getBits,
   isAssignable,
   isDynamic,
   typeName,
+  widen,
 } from "./types";
 
 /**
- * Semantic analysis stage: validates type compatibility and builds a symbol table.
- * Called after parsing, before evaluation.
+ * Semantic analysis stage: resolves all type information onto AST nodes,
+ * validates type compatibility, and builds a symbol table.
+ *
+ * Single-pass bottom-up approach:
+ * 1. Resolve child types recursively
+ * 2. Compute result type and write it onto the AST node
+ * 3. Context propagation: dynamic operands inherit from concrete siblings
+ * 4. Build symbol table with inferred types
+ * 5. Validate type compatibility on declarations
  */
 
 /** Information about a declared variable. */
@@ -21,146 +28,159 @@ interface SymbolInfo {
 }
 
 /**
- * Infer the type of an expression node, using the symbol table for identifier lookups.
- * Returns a Type, or dynamic() for unknown/untyped expressions.
+ * Resolve the type of a node, storing it on the AST where supported.
+ * Also builds the symbol table and validates type compatibility.
  */
-function inferType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
-  const d = dynamic();
+function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
   switch (node.kind) {
     case "number":
-      return node.type ?? d;
+      // Keep un-suffixed as dynamic so context propagation works.
+      // The I32 default is applied at the typecheck site.
+      node.type = node.type ?? dynamic();
+      return node.type;
+
     case "boolean":
-      return bool();
-    case "unary":
-      return inferType(node.operand, symbols);
-    case "binary": {
-      const leftType = inferType(node.left, symbols);
-      const rightType = inferType(node.right, symbols);
-      if (isDynamic(leftType)) return rightType;
-      if (isDynamic(rightType)) return leftType;
-      // Return the wider numeric type
-      return getBits(leftType) >= getBits(rightType) ? leftType : rightType;
+      node.type = bool();
+      return node.type;
+
+    case "unary": {
+      const operandType = resolveType(node.operand, symbols);
+      node.type = operandType;
+      return operandType;
     }
+
+    case "binary": {
+      const leftType = resolveType(node.left, symbols);
+      const rightType = resolveType(node.right, symbols);
+
+      // Arithmetic ops: widen operand types
+      if (isArithmeticOp(node.op)) {
+        const result = widen(leftType, rightType);
+        // Context propagation: dynamic operand inherits from concrete sibling
+        if (isDynamic(leftType) && !isDynamic(rightType))
+          setNodeType(node.left, rightType);
+        if (isDynamic(rightType) && !isDynamic(leftType))
+          setNodeType(node.right, leftType);
+        node.type = result;
+        return result;
+      }
+
+      // Comparison ops: result is bool
+      if (isComparisonOp(node.op)) {
+        node.type = bool();
+        return bool();
+      }
+
+      // Logical ops: propagate operand types through
+      if (isLogicalOp(node.op)) {
+        const result = widen(leftType, rightType);
+        node.type = result;
+        return result;
+      }
+
+      // Fallback
+      node.type = dynamic();
+      return dynamic();
+    }
+
     case "identifier": {
       const sym = symbols.get(node.name);
-      return sym?.type ?? d;
+      node.type = sym?.type ?? dynamic();
+      return node.type;
     }
-    case "let":
-      return inferType(node.value, symbols);
+
+    case "let": {
+      const valueType = resolveType(node.value, symbols);
+      // Validate type compatibility
+      if (node.type !== undefined) {
+        // node.type is the declared type annotation
+        if (!isDynamic(valueType) && !isAssignable(valueType, node.type)) {
+          throw new Error(
+            `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(node.type)}`,
+          );
+        }
+      }
+      // Store the more specific type: declared type if present, otherwise inferred
+      const resolvedType =
+        node.type ?? (isDynamic(valueType) ? undefined : valueType);
+      symbols.set(node.name, { type: resolvedType, mutable: node.mutable });
+      // Write the resolved type back onto the AST node for let
+      return resolvedType ?? dynamic();
+    }
+
     case "assign":
     case "augassign":
-      return inferType(node.value, symbols);
+      return resolveType(node.value, symbols);
+
     case "block": {
-      const last = node.statements[node.statements.length - 1];
-      return last ? inferType(last, symbols) : d;
+      let result: Type = dynamic();
+      for (const stmt of node.statements) {
+        result = resolveType(stmt, symbols);
+      }
+      return result;
     }
-    case "if":
-      return inferType(node.then, symbols);
-    case "loop":
-      return d;
+
+    case "if": {
+      resolveType(node.condition, symbols);
+      const thenType = resolveType(node.then, symbols);
+      const elseType = resolveType(node.elseBranch, symbols);
+      return widen(thenType, elseType);
+    }
+
+    case "loop": {
+      for (const stmt of node.body) resolveType(stmt, symbols);
+      return dynamic();
+    }
+
+    case "while": {
+      resolveType(node.condition, symbols);
+      for (const stmt of node.body) resolveType(stmt, symbols);
+      return dynamic();
+    }
+
     case "break":
-      return inferType(node.value, symbols);
-    case "while":
-      return d;
-    case "typecheck":
-      return inferType(node.value, symbols);
+      return resolveType(node.value, symbols);
+
+    case "typecheck": {
+      resolveType(node.value, symbols);
+      return dynamic();
+    }
   }
 }
 
-/**
- * Check that a value expression is compatible with the declared type.
- */
-function checkTypeCompatibility(
-  node: AstNode,
-  declaredType: Type | undefined,
-  symbols: Map<string, SymbolInfo>,
-): void {
-  if (!declaredType) return;
-  const valueType = inferType(node, symbols);
-  if (isDynamic(valueType)) return; // No type on value, assume compatible
-  if (!isAssignable(valueType, declaredType)) {
-    throw new Error(
-      `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(declaredType)}`,
-    );
-  }
-}
-
-/**
- * Recursively walk the AST, building a symbol table and performing semantic checks.
- */
-function analyzeNode(node: AstNode, symbols: Map<string, SymbolInfo>): void {
+/** Set type on a node if the node kind supports it. */
+function setNodeType(node: AstNode, type: Type): void {
   switch (node.kind) {
     case "number":
     case "boolean":
-      break;
-
     case "unary":
-      analyzeNode(node.operand, symbols);
-      break;
-
-    case "binary":
-      analyzeNode(node.left, symbols);
-      analyzeNode(node.right, symbols);
-      break;
-
     case "identifier":
-      break; // Resolution happens at evaluation time
-
-    case "let": {
-      analyzeNode(node.value, symbols);
-      const inferred = inferType(node.value, symbols);
-      checkTypeCompatibility(node.value, node.type, symbols);
-      // Store the more specific type: declared type if present, otherwise inferred
-      const resolvedType =
-        node.type ?? (isDynamic(inferred) ? undefined : inferred);
-      symbols.set(node.name, { type: resolvedType, mutable: node.mutable });
-      break;
-    }
-
-    case "assign":
-    case "augassign":
-      analyzeNode(node.value, symbols);
-      break;
-
-    case "block":
-      for (const stmt of node.statements) {
-        analyzeNode(stmt, symbols);
-      }
-      break;
-
-    case "if":
-      analyzeNode(node.condition, symbols);
-      analyzeNode(node.then, symbols);
-      if (node.elseBranch) {
-        analyzeNode(node.elseBranch, symbols);
-      }
-      break;
-
-    case "loop":
-      for (const stmt of node.body) {
-        analyzeNode(stmt, symbols);
-      }
-      break;
-
-    case "break":
-      analyzeNode(node.value, symbols);
-      break;
-
-    case "while":
-      analyzeNode(node.condition, symbols);
-      for (const stmt of node.body) {
-        analyzeNode(stmt, symbols);
-      }
+      node.type = type;
       break;
   }
 }
 
+/** Check if an operator is an arithmetic operation. */
+function isArithmeticOp(op: string): boolean {
+  return ["+", "-", "*", "/"].includes(op);
+}
+
+/** Check if an operator is a comparison operation. */
+function isComparisonOp(op: string): boolean {
+  return ["<", ">", "==", "!=", "<=", ">="].includes(op);
+}
+
+/** Check if an operator is a logical operation. */
+function isLogicalOp(op: string): boolean {
+  return ["||", "&&"].includes(op);
+}
+
 /**
- * Analyze an AST: validate type compatibility and build symbol table.
+ * Analyze an AST: resolve types, validate compatibility, build symbol table.
  * Throws on semantic errors.
  */
 export function analyze(ast: AstNode): Map<string, SymbolInfo> {
   const symbols = new Map<string, SymbolInfo>();
-  analyzeNode(ast, symbols);
+  resolveType(ast, symbols);
   return symbols;
 }

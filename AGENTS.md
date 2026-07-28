@@ -26,7 +26,7 @@ All features follow this test-driven workflow:
 
 ### Core Pipeline
 
-`interpret(source)` → tokenize → parse → evaluate → coerce to number
+`interpret(source)` → tokenize → parse → analyze → evaluate → coerce to number
 
 ### Source Files (`src/`)
 
@@ -34,8 +34,10 @@ All features follow this test-driven workflow:
 - `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens
 - `ast.ts` — `AstNode` discriminated union (number, boolean, binary, identifier, let, assign, augassign, block, if, loop, break, while)
 - `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`)
+- `analyzer.ts` — Single-pass type resolution: resolves types bottom-up, context propagation, symbol table, compatibility validation
 - `evaluator.ts` — `evaluate(node, env)` returns `EvalResult` (`{ kind: "value", value }` | `{ kind: "break", value }`)
 - `value.ts` — `Value` discriminated union, `EvalResult` type, `evalOk()`, `evalBreak()`, `unwrap()`, `toNumber()`
+- `types.ts` — `Type` discriminated union (`NumericType`, `BoolType`, `DynamicType`), `isAssignable()`, `widen()`, `parseTypeName()`, `typeName()`
 - `grammar.ts` — `PRECEDENCE` table (6 levels), `BinaryOp` derived type, `OPENING` braces
 
 ### Key Conventions
