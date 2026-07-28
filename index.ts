@@ -134,7 +134,6 @@ class Parser {
       if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
         this.consume(); // consume ";"
       }
-      return scope.get(idToken.value)!.value;
     }
     return 0;
   }
