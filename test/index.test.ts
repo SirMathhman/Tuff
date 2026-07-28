@@ -275,4 +275,8 @@ describe("binary expressions", () => {
   test('interpret("let x = 100; x is I32") => 1', () => {
     expect(interpret("let x = 100; x is I32")).toBe(1);
   });
+
+  test('interpret("loop { break 100U8; } is U8") => 1', () => {
+    expect(interpret("loop { break 100U8; } is U8")).toBe(1);
+  });
 });
