@@ -99,6 +99,10 @@ describe("number literals", () => {
   test('interpret("(100 + 1U8) is U8") => 1', () => {
     expect(interpret("(100 + 1U8) is U8")).toBe(1);
   });
+
+  test('interpret("true + false") => Error', () => {
+    expect(() => interpret("true + false")).toThrow();
+  });
 });
 
 describe("binary expressions", () => {

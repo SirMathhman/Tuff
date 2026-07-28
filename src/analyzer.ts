@@ -55,6 +55,14 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
 
       // Arithmetic ops: widen operand types
       if (isArithmeticOp(node.op)) {
+        if (!isDynamic(leftType) && leftType.kind === "bool")
+          throw new Error(
+            `Type mismatch: cannot use arithmetic operator '${node.op}' on ${typeName(leftType)}`,
+          );
+        if (!isDynamic(rightType) && rightType.kind === "bool")
+          throw new Error(
+            `Type mismatch: cannot use arithmetic operator '${node.op}' on ${typeName(rightType)}`,
+          );
         const result = widen(leftType, rightType);
         // Context propagation: dynamic operand inherits from concrete sibling
         if (isDynamic(leftType) && !isDynamic(rightType))
