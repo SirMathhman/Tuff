@@ -11,7 +11,11 @@ export function parse(tokens: Token[]): AstNode {
       let node = next();
       while (pos < tokens.length) {
         const op = tokens[pos];
-        if (op !== undefined && op.type === "operator" && ops.includes(op.value)) {
+        if (
+          op !== undefined &&
+          op.type === "operator" &&
+          ops.includes(op.value)
+        ) {
           pos++;
           const right = next();
           node = { kind: "binary", op: op.value, left: node, right };
@@ -33,7 +37,11 @@ export function parse(tokens: Token[]): AstNode {
       pos++;
       const node = parseExpression();
       const closing = tokens[pos];
-      if (closing !== undefined && closing.type === "paren" && closing.value === ")") {
+      if (
+        closing !== undefined &&
+        closing.type === "paren" &&
+        closing.value === ")"
+      ) {
         pos++;
       }
       return node;
