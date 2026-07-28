@@ -41,7 +41,13 @@ class Parser {
   /* ---- public entry point ---- */
 
   parse(): AstNode {
-    return this.parseExpression();
+    const statements: AstNode[] = [];
+    while (this.pos < this.tokens.length) {
+      statements.push(this.parseStatement());
+    }
+    if (statements.length === 0) return { kind: "number", value: 0 };
+    if (statements.length === 1) return statements[0]!;
+    return { kind: "block", statements };
   }
 
   /* ---- grammar rules ---- */
@@ -134,7 +140,10 @@ class Parser {
       const op = this.peek();
       if (
         op?.type === "operator" &&
-        (op.value === "+" || op.value === "-" || op.value === "*" || op.value === "/")
+        (op.value === "+" ||
+          op.value === "-" ||
+          op.value === "*" ||
+          op.value === "/")
       ) {
         this.consume();
         const right = this.parseTerm();

@@ -53,4 +53,8 @@ describe("binary expressions", () => {
   test('interpret("{ let x = 2 + 3; x } * 4") => 20', () => {
     expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
   });
+
+  test('interpret("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+    expect(interpret("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+  });
 });
