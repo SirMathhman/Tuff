@@ -108,3 +108,7 @@ test('evaluate("let x = { let y = 1; }; x") => Error', () => {
 test('evaluate("let mut x = 0; if (true) { x = 3; } x") => 3', () => {
   expect(evaluate("let mut x = 0; if (true) { x = 3; } x")).toBe(3);
 });
+
+test('evaluate("let x = loop { break 3; }; x") => 3', () => {
+  expect(evaluate("let x = loop { break 3; }; x")).toBe(3);
+});
