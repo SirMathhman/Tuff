@@ -1,6 +1,6 @@
 import type { AstNode } from "./ast";
 import type { Token } from "./tokenizer";
-import { OPENING } from "./grammar";
+import { OPENING, PRECEDENCE } from "./grammar";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -180,16 +180,23 @@ class Parser {
     return { kind: "number", value: 0 };
   }
 
-  private parseTerm(): AstNode {
-    let node = this.parseAtom();
+  /**
+   * Table-driven binary expression parser.
+   * `level` indexes into PRECEDENCE (lowest first).
+   * `lower` is the highest-precedence parser (atom).
+   */
+  private parseBinary(level: number, lower: () => AstNode): AstNode {
+    if (level >= PRECEDENCE.length) return lower();
+    const ops = PRECEDENCE[level]!;
+    let node = this.parseBinary(level + 1, lower);
     while (this.pos < this.tokens.length) {
       const op = this.peek();
-      if (op?.type === "operator" && (op.value === "*" || op.value === "/")) {
+      if (op?.type === "operator" && ops.includes(op.value as string)) {
         this.consume();
-        const right = this.parseAtom();
+        const right = this.parseBinary(level + 1, lower);
         node = {
           kind: "binary",
-          op: op.value as "+" | "-" | "*" | "/",
+          op: op.value as any,
           left: node,
           right,
         };
@@ -201,85 +208,7 @@ class Parser {
   }
 
   private parseExpression(): AstNode {
-    let node = this.parseAndExpression();
-    while (this.pos < this.tokens.length) {
-      const op = this.peek();
-      if (op?.type === "operator" && op.value === "||") {
-        this.consume();
-        const right = this.parseAndExpression();
-        node = {
-          kind: "binary",
-          op: "||",
-          left: node,
-          right,
-        };
-      } else {
-        break;
-      }
-    }
-    return node;
-  }
-
-  private parseAndExpression(): AstNode {
-    let node = this.parseComparison();
-    while (this.pos < this.tokens.length) {
-      const op = this.peek();
-      if (op?.type === "operator" && op.value === "&&") {
-        this.consume();
-        const right = this.parseComparison();
-        node = {
-          kind: "binary",
-          op: "&&",
-          left: node,
-          right,
-        };
-      } else {
-        break;
-      }
-    }
-    return node;
-  }
-
-  private parseComparison(): AstNode {
-    let node = this.parseAdditive();
-    while (this.pos < this.tokens.length) {
-      const op = this.peek();
-      if (op?.type === "operator" && op.value === "<") {
-        this.consume();
-        const right = this.parseAdditive();
-        node = {
-          kind: "binary",
-          op: "<",
-          left: node,
-          right,
-        };
-      } else {
-        break;
-      }
-    }
-    return node;
-  }
-
-  private parseAdditive(): AstNode {
-    let node = this.parseTerm();
-    while (this.pos < this.tokens.length) {
-      const op = this.peek();
-      if (
-        op?.type === "operator" && (op.value === "+" || op.value === "-")
-      ) {
-        this.consume();
-        const right = this.parseTerm();
-        node = {
-          kind: "binary",
-          op: op.value as "+" | "-",
-          left: node,
-          right,
-        };
-      } else {
-        break;
-      }
-    }
-    return node;
+    return this.parseBinary(0, () => this.parseAtom());
   }
 }
 

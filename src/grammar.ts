@@ -11,10 +11,13 @@ export const OPENING: Record<string, string> = {
 
 /**
  * Precedence levels, ordered from lowest (parsed first) to highest (parsed last).
- * Each level lists operators and their associativity.
+ * Each level lists the operators at that precedence.
  * The highest-precedence parser (atom parsing) sits below this chain.
  */
-export const PRECEDENCE = [
-  { ops: ["+", "-"] as const, associativity: "left" as const },
-  { ops: ["*", "/"] as const, associativity: "left" as const },
+export const PRECEDENCE: readonly string[][] = [
+  ["||"],       // logical OR
+  ["&&"],       // logical AND
+  ["<"],        // comparison
+  ["+", "-"],   // additive
+  ["*", "/"],   // multiplicative
 ];
