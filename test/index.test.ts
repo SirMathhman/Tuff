@@ -69,4 +69,8 @@ describe("binary expressions", () => {
   test('interpret("let x = 100;") => 0', () => {
     expect(interpret("let x = 100;")).toBe(0);
   });
+
+  test('interpret("let x = { let y = 100; };") => Error', () => {
+    expect(() => interpret("let x = { let y = 100; };")).toThrow();
+  });
 });
