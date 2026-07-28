@@ -313,4 +313,8 @@ describe("binary expressions", () => {
   test('interpret("fn foo(x : U8, x : U16) => x") => Error (duplicate param)', () => {
     expect(() => interpret("fn foo(x : U8, x : U16) => x")).toThrow();
   });
+
+  test('interpret("fn get() : U8 => 0U16;") => Error (return type mismatch)', () => {
+    expect(() => interpret("fn get() : U8 => 0U16;")).toThrow();
+  });
 });

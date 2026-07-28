@@ -37,6 +37,7 @@ export type AstNode =
       kind: "fn";
       name: string;
       params: { name: string; type?: Type }[];
+      returnType?: Type;
       body: AstNode;
     }
   | { kind: "call"; callee: AstNode; args: AstNode[] };

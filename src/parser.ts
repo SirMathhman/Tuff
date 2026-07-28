@@ -215,13 +215,15 @@ class Parser {
       }
     }
     this.expect("group", ")");
+    // Optional return type annotation: `: TypeName`
+    const returnType = this.parseTypeAnnotation();
     // Parse `=>`
     this.expect("operator", "=>");
     const body = this.parseExpression();
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "fn", name, params, body };
+    return { kind: "fn", name, params, returnType, body };
   }
 
   private parseAtom(): AstNode {

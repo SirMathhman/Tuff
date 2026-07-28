@@ -200,6 +200,10 @@ function resolveType(
         seenParams.add(param.name);
       }
       const bodyType = resolveType(node.body, declarations);
+      // Validate return type annotation if present
+      if (node.returnType) {
+        checkAssignable(bodyType, node.returnType);
+      }
       declarations.set(node.name, {
         kind: "fn",
         type: bodyType,
