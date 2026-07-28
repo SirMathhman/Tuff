@@ -2,7 +2,20 @@ export type Token =
   | { type: "number"; value: number }
   | {
       type: "operator";
-      value: "+" | "-" | "*" | "/" | "=" | "==" | "||" | "&&" | "<" | ">";
+      value:
+        | "+"
+        | "-"
+        | "*"
+        | "/"
+        | "="
+        | "=="
+        | "!="
+        | "<="
+        | ">="
+        | "||"
+        | "&&"
+        | "<"
+        | ">";
     }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
   | { type: "keyword"; value: "let" | "true" | "false" }
@@ -71,17 +84,34 @@ export function tokenize(source: string): Token[] {
         i++;
       }
     } else if (ch === "<") {
-      tokens.push({ type: "operator", value: "<" });
-      i++;
+      if (i + 1 < source.length && source.charAt(i + 1) === "=") {
+        tokens.push({ type: "operator", value: "<=" });
+        i += 2;
+      } else {
+        tokens.push({ type: "operator", value: "<" });
+        i++;
+      }
     } else if (ch === ">") {
-      tokens.push({ type: "operator", value: ">" });
-      i++;
+      if (i + 1 < source.length && source.charAt(i + 1) === "=") {
+        tokens.push({ type: "operator", value: ">=" });
+        i += 2;
+      } else {
+        tokens.push({ type: "operator", value: ">" });
+        i++;
+      }
     } else if (ch === "=") {
       if (i + 1 < source.length && source.charAt(i + 1) === "=") {
         tokens.push({ type: "operator", value: "==" });
         i += 2;
       } else {
         tokens.push({ type: "operator", value: "=" });
+        i++;
+      }
+    } else if (ch === "!") {
+      if (i + 1 < source.length && source.charAt(i + 1) === "=") {
+        tokens.push({ type: "operator", value: "!=" });
+        i += 2;
+      } else {
         i++;
       }
     } else if (ch === ";") {

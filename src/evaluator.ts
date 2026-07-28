@@ -35,6 +35,12 @@ export function evaluate(
           return { kind: "boolean", value: l > r };
         case "==":
           return { kind: "boolean", value: l === r };
+        case "!=":
+          return { kind: "boolean", value: l !== r };
+        case "<=":
+          return { kind: "boolean", value: l <= r };
+        case ">=":
+          return { kind: "boolean", value: l >= r };
       }
       break;
     }
