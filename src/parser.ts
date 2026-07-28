@@ -4,7 +4,7 @@ import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { parseTypeName } from "./types";
+import { parseTypeName, pointer } from "./types";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -182,10 +182,19 @@ class Parser {
     return { kind: "let", name, value, mutable, type: declaredType, pos };
   }
 
-  /** Parse optional `: TypeName` and return the type, or undefined. */
+  /** Parse optional `: TypeName` and return the type, or undefined. Handles `&TypeName` for pointers. */
   private parseTypeAnnotation(): Type | undefined {
     if (this.match("punctuator", ":")) {
       this.consume();
+      // Handle pointer type: `&TypeName`
+      if (this.match("operator", "&")) {
+        this.consume();
+        const typeToken = this.peek();
+        if (typeToken?.type === "identifier") {
+          this.consume();
+          return pointer(parseTypeName(typeToken.value));
+        }
+      }
       const typeToken = this.peek();
       if (typeToken?.type === "identifier") {
         const type = parseTypeName(typeToken.value);
@@ -305,12 +314,35 @@ class Parser {
     );
   }
 
-  /** Parse unary expressions: `-expr`. */
+  /** Check if the previous token indicates a unary context (start, operator, opening brace). */
+  private isUnaryContext(): boolean {
+    if (this.pos === 0) return true;
+    const prev = this.tokens[this.pos - 1];
+    if (!prev) return true;
+    if (prev.type === "operator") return true;
+    if (prev.type === "group" && (prev.value === "(" || prev.value === "{"))
+      return true;
+    if (prev.type === "punctuator") return true;
+    return false;
+  }
+
+  /** Parse unary expressions: `-expr`, `&expr` (ref), `*expr` (deref in unary context only). */
   private parseUnary(): AstNode {
     if (this.match("operator", "-")) {
       const opToken = this.consume()!;
       const operand = this.parseUnary();
       return { kind: "unary", op: "-", operand, pos: opToken.pos };
+    }
+    if (this.match("operator", "&")) {
+      const opToken = this.consume()!;
+      const operand = this.parseUnary();
+      return { kind: "unary", op: "&", operand, pos: opToken.pos };
+    }
+    // `*` is only unary (deref) in a unary context. Otherwise it's binary multiplication.
+    if (this.match("operator", "*") && this.isUnaryContext()) {
+      const opToken = this.consume()!;
+      const operand = this.parseUnary();
+      return { kind: "unary", op: "*", operand, pos: opToken.pos };
     }
     let node = this.parseAtom();
     // Handle postfix `is TypeName` — supports chaining: `expr is T1 is T2`

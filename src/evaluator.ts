@@ -51,14 +51,53 @@ export function evaluate(
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value, type: node.type });
     case "unary": {
-      const operand = unwrap(evaluate(node.operand, env, functions));
       switch (node.op) {
-        case "-":
+        case "-": {
+          const operand = unwrap(evaluate(node.operand, env, functions));
           return evalOk({
             kind: "number",
             value: -toNumber(operand),
             type: node.type,
           });
+        }
+        case "&": {
+          // Take reference: store a pointer (key into env)
+          const refTarget = node.operand as {
+            kind: "identifier";
+            name: string;
+          };
+          if (refTarget.kind !== "identifier") {
+            throw new InterpreterError(
+              "runtime",
+              "Can only take reference of an identifier",
+              node.pos,
+            );
+          }
+          return evalOk({
+            kind: "pointer",
+            target: refTarget.name,
+            type: node.type,
+          });
+        }
+        case "*": {
+          const ptr = unwrap(evaluate(node.operand, env, functions));
+          if (ptr.kind !== "pointer") {
+            throw new InterpreterError(
+              "runtime",
+              "Cannot dereference non-pointer value",
+              node.pos,
+            );
+          }
+          const value = env.get(ptr.target);
+          if (value === undefined) {
+            throw new InterpreterError(
+              "runtime",
+              `Dereferenced pointer to undefined variable: ${ptr.target}`,
+              node.pos,
+            );
+          }
+          return evalOk(value);
+        }
       }
       break;
     }

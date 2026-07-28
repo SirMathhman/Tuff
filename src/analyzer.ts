@@ -7,6 +7,8 @@ import {
   dynamic,
   isAssignable,
   isDynamic,
+  isPointer,
+  pointer,
   typeName,
   voidType,
   widen,
@@ -53,8 +55,27 @@ function resolveType(
 
     case "unary": {
       const operandType = resolveType(node.operand, declarations);
-      node.type = operandType;
-      return operandType;
+      switch (node.op) {
+        case "-":
+          node.type = operandType;
+          return operandType;
+        case "&":
+          // Reference: result is pointer to operand type
+          node.type = pointer(operandType);
+          return node.type;
+        case "*":
+          // Dereference: operand must be a pointer
+          if (!isPointer(operandType)) {
+            throw new InterpreterError(
+              "type",
+              `Cannot dereference non-pointer type: ${typeName(operandType)}`,
+              node.pos,
+            );
+          }
+          node.type = operandType.inner;
+          return operandType.inner;
+      }
+      break;
     }
 
     case "binary": {

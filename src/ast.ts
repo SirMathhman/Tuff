@@ -13,7 +13,13 @@ export type AstNode =
       type?: Type;
       pos?: TokenPos;
     }
-  | { kind: "unary"; op: "-"; operand: AstNode; type?: Type; pos?: TokenPos }
+  | {
+      kind: "unary";
+      op: "-" | "&" | "*";
+      operand: AstNode;
+      type?: Type;
+      pos?: TokenPos;
+    }
   | { kind: "identifier"; name: string; type?: Type; pos?: TokenPos }
   | {
       kind: "let";

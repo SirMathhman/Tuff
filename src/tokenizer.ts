@@ -22,7 +22,8 @@ export type Token =
         | "<"
         | ">"
         | "+="
-        | "=>";
+        | "=>"
+        | "&";
       pos: TokenPos;
     }
   | { type: "group"; value: "(" | ")" | "{" | "}"; pos: TokenPos }
@@ -241,6 +242,14 @@ function matchSingleCharToken(
     tokens.push({ type: "operator", value: "*", pos });
     return 1;
   }
+  if (ch === "&") {
+    if (i + 1 < source.length && source.charAt(i + 1) === "&") {
+      tokens.push({ type: "operator", value: "&&", pos });
+      return 2;
+    }
+    tokens.push({ type: "operator", value: "&", pos });
+    return 1;
+  }
   if (ch === "/") {
     tokens.push({ type: "operator", value: "/", pos });
     return 1;
@@ -248,13 +257,6 @@ function matchSingleCharToken(
   if (ch === "|") {
     if (i + 1 < source.length && source.charAt(i + 1) === "|") {
       tokens.push({ type: "operator", value: "||", pos });
-      return 2;
-    }
-    return 1;
-  }
-  if (ch === "&") {
-    if (i + 1 < source.length && source.charAt(i + 1) === "&") {
-      tokens.push({ type: "operator", value: "&&", pos });
       return 2;
     }
     return 1;

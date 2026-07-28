@@ -7,7 +7,8 @@ import { InterpreterError } from "./error";
 
 export type Value =
   | { kind: "number"; value: number; type?: Type }
-  | { kind: "boolean"; value: boolean; type?: Type };
+  | { kind: "boolean"; value: boolean; type?: Type }
+  | { kind: "pointer"; target: string; type?: Type };
 
 /**
  * Result of evaluating an expression.
@@ -42,5 +43,7 @@ export function toNumber(v: Value): number {
       return v.value;
     case "boolean":
       return v.value ? 1 : 0;
+    case "pointer":
+      return 0;
   }
 }

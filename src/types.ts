@@ -25,8 +25,15 @@ export interface DynamicType {
   kind: "dynamic";
 }
 
+/** Pointer type referencing another type. */
+export interface PointerType {
+  kind: "pointer";
+  inner: Type;
+}
+
 /** All possible types in the Tuff language. */
-export type Type = NumericType | BoolType | VoidType | DynamicType;
+export type Type =
+  NumericType | BoolType | VoidType | DynamicType | PointerType;
 
 /** Construct a numeric type. */
 export function numeric(prefix: "U" | "I" | "F", bits: number): NumericType {
@@ -46,6 +53,11 @@ export function voidType(): VoidType {
 /** Construct a dynamic type. */
 export function dynamic(): DynamicType {
   return { kind: "dynamic" };
+}
+
+/** Construct a pointer type. */
+export function pointer(inner: Type): PointerType {
+  return { kind: "pointer", inner };
 }
 
 /** Check if a type is numeric. */
@@ -68,6 +80,11 @@ export function isDynamic(t: Type): t is DynamicType {
   return t.kind === "dynamic";
 }
 
+/** Check if a type is a pointer type. */
+export function isPointer(t: Type): t is PointerType {
+  return t.kind === "pointer";
+}
+
 /** Get bit width for numeric types, 0 otherwise. */
 export function getBits(t: Type): number {
   return t.kind === "numeric" ? t.bits : 0;
@@ -78,12 +95,18 @@ export function getBits(t: Type): number {
  * - Dynamic → anything: always OK
  * - Bool → Bool: exact match
  * - Numeric → Numeric: same prefix family, source.bits <= target.bits
+ * - Pointer → Pointer: inner types must be compatible
  * - Bool ↔ Numeric: never OK
  */
 export function isAssignable(source: Type, target: Type): boolean {
   if (isDynamic(source)) return true;
   if (isBool(target)) return isBool(source);
   if (isBool(source)) return false;
+  if (isPointer(target)) {
+    if (!isPointer(source)) return false;
+    return isAssignable(source.inner, target.inner);
+  }
+  if (isPointer(source)) return false;
   if (!isNumeric(target) || !isNumeric(source)) return false;
   return source.prefix === target.prefix && source.bits <= target.bits;
 }
@@ -113,10 +136,14 @@ export function widen(a: Type, b: Type): Type {
   return a;
 }
 
-/** Parse a type name string into a Type. Returns dynamic() for unknown names. */
+/** Parse a type name string into a Type. Supports &TypeName for pointers. */
 export function parseTypeName(name: string): Type {
   if (name === "Bool") return bool();
   if (name === "Void") return voidType();
+  const ptrMatch = name.match(/^&(.+)$/);
+  if (ptrMatch) {
+    return pointer(parseTypeName(ptrMatch[1]!));
+  }
   const match = name.match(/^([UIF])(\d+)$/);
   if (match) {
     const prefix = match[1] as "U" | "I" | "F";
@@ -131,5 +158,6 @@ export function typeName(t: Type): string {
   if (t.kind === "numeric") return `${t.prefix}${t.bits}`;
   if (t.kind === "bool") return "Bool";
   if (t.kind === "void") return "Void";
+  if (t.kind === "pointer") return `&${typeName(t.inner)}`;
   return "dynamic";
 }

@@ -326,6 +326,10 @@ describe("binary expressions", () => {
   test('interpret("fn get() => 1; get(1)") => Error (extra param)', () => {
     expect(() => interpret("fn get() => 1; get(1)")).toThrow();
   });
+
+  test('interpret("let x = 1; let ptr : &I32 = &x; *ptr") => 1', () => {
+    expect(interpret("let x = 1; let ptr : &I32 = &x; *ptr")).toBe(1);
+  });
 });
 
 describe("error positions", () => {
