@@ -279,4 +279,28 @@ describe("binary expressions", () => {
   test('interpret("loop { break 100U8; } is U8") => 1', () => {
     expect(interpret("loop { break 100U8; } is U8")).toBe(1);
   });
+
+  test('interpret("fn get() => 100; get()") => 100', () => {
+    expect(interpret("fn get() => 100; get()")).toBe(100);
+  });
+
+  test('interpret("fn add(first : I32, second : I32) => first + second; add(3, 4)") => 7', () => {
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) => first + second; add(3, 4)",
+      ),
+    ).toBe(7);
+  });
+
+  test('interpret("fn get() => 0U16; let x : U8 = get();") => Error', () => {
+    expect(() => interpret("fn get() => 0U16; let x : U8 = get();")).toThrow();
+  });
+
+  test('interpret("let get = 0; fn get() => 100;") => Error', () => {
+    expect(() => interpret("let get = 0; fn get() => 100;")).toThrow();
+  });
+
+  test('interpret("fn get() => 100; fn get() => 200;") => Error', () => {
+    expect(() => interpret("fn get() => 100; fn get() => 200;")).toThrow();
+  });
 });

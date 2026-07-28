@@ -4,6 +4,8 @@ import type { EvalResult, Value } from "./value";
 import { bool, isDynamic, isNumeric, isVoid, numeric } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
+type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };
+
 /** Type guard for block nodes with a void type field. */
 function isBlockWithVoidType(
   node: AstNode,
@@ -31,6 +33,7 @@ function setMutable(name: string, value: Value, env: Map<string, Value>): void {
 export function evaluate(
   node: AstNode,
   env: Map<string, Value> = new Map(),
+  functions: Map<string, FnDef> = new Map(),
 ): EvalResult {
   switch (node.kind) {
     case "number":
@@ -38,7 +41,7 @@ export function evaluate(
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value, type: node.type });
     case "unary": {
-      const operand = unwrap(evaluate(node.operand, env));
+      const operand = unwrap(evaluate(node.operand, env, functions));
       switch (node.op) {
         case "-":
           return evalOk({
@@ -50,8 +53,8 @@ export function evaluate(
       break;
     }
     case "binary": {
-      const left = unwrap(evaluate(node.left, env));
-      const right = unwrap(evaluate(node.right, env));
+      const left = unwrap(evaluate(node.left, env, functions));
+      const right = unwrap(evaluate(node.right, env, functions));
       const l = toNumber(left);
       const r = toNumber(right);
       switch (node.op) {
@@ -90,7 +93,7 @@ export function evaluate(
       return evalOk(value);
     }
     case "let": {
-      const value = unwrap(evaluate(node.value, env));
+      const value = unwrap(evaluate(node.value, env, functions));
       env.set(node.name, value);
       if (node.mutable) {
         env.set(`__mutable__${node.name}`, { kind: "boolean", value: true });
@@ -98,13 +101,13 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "assign": {
-      const value = unwrap(evaluate(node.value, env));
+      const value = unwrap(evaluate(node.value, env, functions));
       setMutable(node.name, value, env);
       return evalOk(value);
     }
     case "augassign": {
       const current = getMutable(node.name, env)!;
-      const rhs = unwrap(evaluate(node.value, env));
+      const rhs = unwrap(evaluate(node.value, env, functions));
       const newValue: Value = {
         kind: "number",
         value: toNumber(current) + toNumber(rhs),
@@ -115,38 +118,42 @@ export function evaluate(
     case "block": {
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {
-        result = unwrap(evaluate(stmt, env));
+        result = unwrap(evaluate(stmt, env, functions));
       }
       return evalOk(result);
     }
     case "if": {
-      const condition = unwrap(evaluate(node.condition, env));
+      const condition = unwrap(evaluate(node.condition, env, functions));
       if (toNumber(condition) !== 0) {
-        return evaluate(node.then, env);
+        return evaluate(node.then, env, functions);
       } else {
-        return evaluate(node.elseBranch, env);
+        return evaluate(node.elseBranch, env, functions);
       }
     }
     case "loop": {
       for (const stmt of node.body) {
-        const result = evaluate(stmt, env);
+        const result = evaluate(stmt, env, functions);
         if (result.kind === "break") return evalOk(result.value);
       }
       return evalOk({ kind: "number", value: 0 });
     }
     case "break": {
-      const value = unwrap(evaluate(node.value, env));
+      const value = unwrap(evaluate(node.value, env, functions));
       return evalBreak(value);
     }
     case "while": {
-      while (toNumber(unwrap(evaluate(node.condition, env))) !== 0) {
-        const result = evaluate({ kind: "block", statements: node.body }, env);
+      while (toNumber(unwrap(evaluate(node.condition, env, functions))) !== 0) {
+        const result = evaluate(
+          { kind: "block", statements: node.body },
+          env,
+          functions,
+        );
         if (result.kind === "break") return result;
       }
       return evalOk({ kind: "number", value: 0 });
     }
     case "typecheck": {
-      const value = unwrap(evaluate(node.value, env));
+      const value = unwrap(evaluate(node.value, env, functions));
       // For void-typed blocks, use the AST node's pre-computed type.
       const resolvedType =
         isVoid(node.type) && isBlockWithVoidType(node.value)
@@ -159,6 +166,23 @@ export function evaluate(
         value: typesEqual(resolvedType, node.type),
         type: bool(),
       });
+    }
+    case "fn": {
+      functions.set(node.name, { params: node.params, body: node.body });
+      return evalOk({ kind: "number", value: 0 });
+    }
+    case "call": {
+      const callee = node.callee as { kind: "identifier"; name: string };
+      const fnDef = functions.get(callee.name);
+      if (!fnDef) {
+        throw new Error(`Undefined function: ${callee.name}`);
+      }
+      const callEnv = new Map(env);
+      for (let i = 0; i < fnDef.params.length; i++) {
+        const arg = unwrap(evaluate(node.args[i]!, env, functions));
+        callEnv.set(fnDef.params[i]!.name, arg);
+      }
+      return evaluate(fnDef.body, callEnv, functions);
     }
   }
   return evalOk({ kind: "number", value: 0 });

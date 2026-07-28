@@ -22,17 +22,21 @@ import {
  * 5. Validate type compatibility on declarations
  */
 
-/** Information about a declared variable. */
-interface SymbolInfo {
+/** A declaration in the symbol table (variable or function). */
+interface Declaration {
+  kind: "var" | "fn";
   type?: Type;
-  mutable: boolean;
+  mutable?: boolean;
 }
 
 /**
  * Resolve the type of a node, storing it on the AST where supported.
- * Also builds the symbol table and validates type compatibility.
+ * Also builds the declaration table and validates type compatibility.
  */
-function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
+function resolveType(
+  node: AstNode,
+  declarations: Map<string, Declaration>,
+): Type {
   switch (node.kind) {
     case "number":
       // Keep un-suffixed as dynamic so context propagation works.
@@ -45,14 +49,14 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
       return node.type;
 
     case "unary": {
-      const operandType = resolveType(node.operand, symbols);
+      const operandType = resolveType(node.operand, declarations);
       node.type = operandType;
       return operandType;
     }
 
     case "binary": {
-      const leftType = resolveType(node.left, symbols);
-      const rightType = resolveType(node.right, symbols);
+      const leftType = resolveType(node.left, declarations);
+      const rightType = resolveType(node.right, declarations);
 
       // Arithmetic ops: widen operand types
       if (isArithmeticOp(node.op)) {
@@ -87,12 +91,16 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
     }
 
     case "identifier": {
-      const sym = symbols.get(node.name);
-      node.type = sym?.type ?? dynamic();
+      const decl = declarations.get(node.name);
+      node.type = decl?.type ?? dynamic();
       return node.type;
     }
 
     case "let": {
+      const existing = declarations.get(node.name);
+      if (existing && existing.kind === "fn") {
+        throw new Error(`Duplicate declaration: '${node.name}'`);
+      }
       // Reject void blocks (ending with declarations) as let values
       if (node.value.kind === "block") {
         const last = node.value.statements[node.value.statements.length - 1];
@@ -102,7 +110,7 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
           );
         }
       }
-      const valueType = resolveType(node.value, symbols);
+      const valueType = resolveType(node.value, declarations);
       // Validate type compatibility
       if (node.type !== undefined) {
         checkAssignable(valueType, node.type);
@@ -110,25 +118,29 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
       // Store the more specific type: declared type if present, otherwise inferred
       const resolvedType =
         node.type ?? (isDynamic(valueType) ? undefined : valueType);
-      symbols.set(node.name, { type: resolvedType, mutable: node.mutable });
+      declarations.set(node.name, {
+        kind: "var",
+        type: resolvedType,
+        mutable: node.mutable,
+      });
       // Write the resolved type back onto the AST node for let
       return resolvedType ?? dynamic();
     }
 
     case "assign": {
-      const valueType = resolveType(node.value, symbols);
-      const sym = symbols.get(node.name);
-      if (sym?.type) checkAssignable(valueType, sym.type);
+      const valueType = resolveType(node.value, declarations);
+      const decl = declarations.get(node.name);
+      if (decl?.type) checkAssignable(valueType, decl.type);
       return valueType;
     }
 
     case "augassign": {
-      const valueType = resolveType(node.value, symbols);
-      const sym = symbols.get(node.name);
-      if (sym?.type) {
-        checkNotBool(sym.type, node.op);
+      const valueType = resolveType(node.value, declarations);
+      const decl = declarations.get(node.name);
+      if (decl?.type) {
+        checkNotBool(decl.type, node.op);
         checkNotBool(valueType, node.op);
-        checkAssignable(valueType, sym.type);
+        checkAssignable(valueType, decl.type);
       }
       return valueType;
     }
@@ -136,7 +148,7 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
     case "block": {
       let result: Type = dynamic();
       for (const stmt of node.statements) {
-        result = resolveType(stmt, symbols);
+        result = resolveType(stmt, declarations);
       }
       // Blocks ending with a declaration have void type.
       const last = node.statements[node.statements.length - 1];
@@ -148,31 +160,46 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
     }
 
     case "if": {
-      resolveType(node.condition, symbols);
-      const thenType = resolveType(node.then, symbols);
-      const elseType = resolveType(node.elseBranch, symbols);
+      resolveType(node.condition, declarations);
+      const thenType = resolveType(node.then, declarations);
+      const elseType = resolveType(node.elseBranch, declarations);
       return widen(thenType, elseType);
     }
 
     case "loop": {
-      for (const stmt of node.body) resolveType(stmt, symbols);
+      for (const stmt of node.body) resolveType(stmt, declarations);
       return dynamic();
     }
 
     case "while": {
-      resolveType(node.condition, symbols);
-      for (const stmt of node.body) resolveType(stmt, symbols);
+      resolveType(node.condition, declarations);
+      for (const stmt of node.body) resolveType(stmt, declarations);
       return dynamic();
     }
 
     case "break":
-      return resolveType(node.value, symbols);
+      return resolveType(node.value, declarations);
 
     case "typecheck": {
-      resolveType(node.value, symbols);
+      resolveType(node.value, declarations);
       // node.type holds the target type for the typecheck. Don't overwrite it.
       // The result type is always bool().
       return bool();
+    }
+    case "fn": {
+      const existing = declarations.get(node.name);
+      if (existing) {
+        throw new Error(`Duplicate declaration: '${node.name}'`);
+      }
+      const bodyType = resolveType(node.body, declarations);
+      declarations.set(node.name, { kind: "fn", type: bodyType });
+      return dynamic();
+    }
+    case "call": {
+      for (const arg of node.args) resolveType(arg, declarations);
+      const callee = node.callee as { kind: "identifier"; name: string };
+      const decl = declarations.get(callee.name);
+      return decl?.type ?? dynamic();
     }
   }
 }
@@ -225,8 +252,7 @@ function checkAssignable(valueType: Type, targetType: Type): void {
  * Analyze an AST: resolve types, validate compatibility, build symbol table.
  * Throws on semantic errors.
  */
-export function analyze(ast: AstNode): Map<string, SymbolInfo> {
-  const symbols = new Map<string, SymbolInfo>();
-  resolveType(ast, symbols);
-  return symbols;
+export function analyze(ast: AstNode): void {
+  const declarations = new Map<string, Declaration>();
+  resolveType(ast, declarations);
 }

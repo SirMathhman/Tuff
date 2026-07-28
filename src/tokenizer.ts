@@ -18,7 +18,8 @@ export type Token =
         | "&&"
         | "<"
         | ">"
-        | "+=";
+        | "+="
+        | "=>";
     }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
   | {
@@ -33,7 +34,8 @@ export type Token =
         | "loop"
         | "break"
         | "while"
-        | "is";
+        | "is"
+        | "fn";
     }
   | { type: "identifier"; value: string }
   | { type: "punctuator"; value: ";" | ":" };
@@ -154,6 +156,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "while" });
       } else if (lower === "is") {
         tokens.push({ type: "keyword", value: "is" });
+      } else if (lower === "fn") {
+        tokens.push({ type: "keyword", value: "fn" });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }
@@ -207,6 +211,9 @@ export function tokenize(source: string): Token[] {
     } else if (ch === "=") {
       if (i + 1 < source.length && source.charAt(i + 1) === "=") {
         tokens.push({ type: "operator", value: "==" });
+        i += 2;
+      } else if (i + 1 < source.length && source.charAt(i + 1) === ">") {
+        tokens.push({ type: "operator", value: "=>" });
         i += 2;
       } else {
         tokens.push({ type: "operator", value: "=" });
