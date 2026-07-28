@@ -1,6 +1,7 @@
 import { tokenize } from "./tokenizer";
 import { parse } from "./parser";
 import { evaluate } from "./evaluator";
+import { toNumber } from "./value";
 
 export function interpret(source: string): number {
   const trimmed = source.trim();
@@ -12,5 +13,5 @@ export function interpret(source: string): number {
     return 0;
   }
   const ast = parse(tokens);
-  return evaluate(ast);
+  return toNumber(evaluate(ast));
 }
