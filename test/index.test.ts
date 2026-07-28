@@ -346,6 +346,14 @@ describe("binary expressions", () => {
   test('interpret("let array : [I32; 3] = [1, 2, 3]; array[0]") => 1', () => {
     expect(interpret("let array : [I32; 3] = [1, 2, 3]; array[0]")).toBe(1);
   });
+
+  test('interpret("let mut array = [0]; array[0] = 1; array[0]") => 1', () => {
+    expect(interpret("let mut array = [0]; array[0] = 1; array[0]")).toBe(1);
+  });
+
+  test('interpret("let mut array = [1]; array[0] += 2; array[0]") => 3', () => {
+    expect(interpret("let mut array = [1]; array[0] += 2; array[0]")).toBe(3);
+  });
 });
 
 describe("error positions", () => {

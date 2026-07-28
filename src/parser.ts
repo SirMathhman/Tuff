@@ -1,4 +1,4 @@
-import type { AstNode } from "./ast";
+import type { AstNode, LValue } from "./ast";
 import type { Token } from "./tokenizer";
 import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
@@ -131,11 +131,97 @@ class Parser {
     if (assign) return assign;
   }
 
-  /** Try to parse `identifier = expression`, `identifier += expression`, `*expr = expression`, or `*expr += expression` as an assignment statement. Returns undefined if not an assignment. */
+  /**
+   * After parsing an LValue target and confirming `=` or `+=`, consume the operator,
+   * parse the RHS value, and return the final assign AST node.
+   * `+=` is lowered to `assign(target, binary("+", target, value))`.
+   */
+  private finishAssign(
+    target: LValue,
+    op: string,
+    pos: { line: number; column: number },
+  ): AstNode {
+    this.consume(); // = or +=
+    const value = this.parseExpression();
+    if (this.match("punctuator", ";")) {
+      this.consume();
+    }
+    return this.makeAssignNode(target, op, value, pos);
+  }
+
+  /** Build an assign AST node, lowering `+=` to `assign(target, binary("+", lvalue, value))`. */
+  private makeAssignNode(
+    target: LValue,
+    op: string,
+    value: AstNode,
+    pos: { line: number; column: number },
+  ): AstNode {
+    if (op === "+=") {
+      const lhs = this.lvalueToAstNode(target);
+      return {
+        kind: "assign",
+        target,
+        value: { kind: "binary", op: "+", left: lhs, right: value, pos },
+        pos,
+      };
+    }
+    return { kind: "assign", target, value, pos };
+  }
+
+  /** Convert an LValue to an AstNode for use as an expression (e.g. in += lowering). */
+  private lvalueToAstNode(lv: LValue): AstNode {
+    switch (lv.kind) {
+      case "identifier":
+        return { kind: "identifier", name: lv.name, pos: lv.pos };
+      case "index":
+        return {
+          kind: "index",
+          target: this.lvalueToAstNode(lv.target),
+          index: lv.index,
+          pos: lv.pos,
+        };
+      case "deref":
+        return { kind: "unary", op: "*", operand: lv.operand, pos: lv.pos };
+    }
+  }
+
+  /** Try to parse `identifier = expression`, `identifier += expression`, `*expr = expression`, `*expr += expression`, or `identifier[index] = expression` as an assignment statement. Returns undefined if not an assignment. */
   private tryParseAssign(): AstNode | undefined {
+    // Check for `identifier[index] = value` (array index assignment)
+    if (this.match("identifier")) {
+      const savedPos = this.pos;
+      const nameToken = this.peek()!;
+      const pos = (nameToken as { pos: { line: number; column: number } }).pos;
+      this.consume(); // identifier
+      // Check for `[index]` postfix
+      if (this.match("group", "[")) {
+        this.consume(); // [
+        const index = this.parseExpression();
+        this.expect("group", "]");
+        const nextToken = this.peek();
+        if (
+          nextToken?.type === "operator" &&
+          (nextToken.value === "=" || nextToken.value === "+=")
+        ) {
+          const target: LValue = {
+            kind: "index",
+            target: {
+              kind: "identifier",
+              name: nameToken.value as string,
+              pos,
+            },
+            index,
+            pos,
+          };
+          return this.finishAssign(target, nextToken.value, pos);
+        }
+      }
+      // Not an index assignment — restore position
+      this.pos = savedPos;
+    }
+
     // Check for `*expr = value` or `*expr += value` (deref assignment) — look ahead without consuming
     if (this.match("operator", "*") && this.isUnaryContext()) {
-      // Peek ahead: check if the token after `*` and its operand is `=` or `+=`
       const savedPos = this.pos;
       const starToken = this.tokens[this.pos]!;
       this.consume(); // *
@@ -145,29 +231,12 @@ class Parser {
         nextToken?.type === "operator" &&
         (nextToken.value === "=" || nextToken.value === "+=")
       ) {
-        this.consume(); // = or +=
-        const value = this.parseExpression();
-        if (this.match("punctuator", ";")) {
-          this.consume();
-        }
-        const target: AstNode = {
-          kind: "unary",
-          op: "*",
+        const target: LValue = {
+          kind: "deref",
           operand,
           pos: starToken.pos,
         };
-        // Lower `*expr += value` to `*expr = *expr + value`
-        if (nextToken.value === "+=") {
-          const rhs: AstNode = {
-            kind: "binary",
-            op: "+",
-            left: target,
-            right: value,
-            pos: starToken.pos,
-          };
-          return { kind: "assign", target, value: rhs, pos: starToken.pos };
-        }
-        return { kind: "assign", target, value, pos: starToken.pos };
+        return this.finishAssign(target, nextToken.value, starToken.pos);
       }
       // Not an assignment — restore position
       this.pos = savedPos;
@@ -188,21 +257,12 @@ class Parser {
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    if (op === "+=") {
-      return {
-        kind: "augassign",
-        name: nameToken.value as string,
-        op: "+",
-        value,
-        pos,
-      };
-    }
-    return {
-      kind: "assign",
-      target: { kind: "identifier", name: nameToken.value as string, pos },
-      value,
+    const target: LValue = {
+      kind: "identifier",
+      name: nameToken.value as string,
       pos,
     };
+    return this.makeAssignNode(target, op, value, pos);
   }
 
   private parseLetStatement(): AstNode {

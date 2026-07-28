@@ -2,6 +2,18 @@ import type { BinaryOp } from "./grammar";
 import type { TokenPos } from "./tokenizer";
 import type { Type } from "./types";
 
+/**
+ * LValue: a writable location in the program.
+ * Used as the assignment target in `assign` nodes.
+ * - `identifier`: simple variable (x = v)
+ * - `index`: array element (arr[i] = v), recursively targets another LValue
+ * - `deref`: pointer dereference (*ptr = v)
+ */
+export type LValue =
+  | { kind: "identifier"; name: string; pos?: TokenPos }
+  | { kind: "index"; target: LValue; index: AstNode; pos?: TokenPos }
+  | { kind: "deref"; operand: AstNode; pos?: TokenPos };
+
 export type AstNode =
   | { kind: "number"; value: number; type?: Type; pos?: TokenPos }
   | { kind: "boolean"; value: boolean; type?: Type; pos?: TokenPos }
@@ -31,11 +43,10 @@ export type AstNode =
     }
   | {
       kind: "assign";
-      target: AstNode;
+      target: LValue;
       value: AstNode;
       pos?: TokenPos;
     }
-  | { kind: "augassign"; name: string; op: "+"; value: AstNode; pos?: TokenPos }
   | { kind: "block"; statements: AstNode[]; type?: Type; pos?: TokenPos }
   | {
       kind: "if";

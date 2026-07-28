@@ -1,4 +1,4 @@
-import type { AstNode } from "./ast";
+import type { AstNode, LValue } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "./error";
@@ -17,6 +17,74 @@ function isBlockWithVoidType(
     node.type !== undefined &&
     isVoid(node.type)
   );
+}
+
+/** Validate array index bounds and return the narrowed array value with index. */
+function validateArrayIndex(
+  target: Value,
+  idx: number,
+  pos?: { line: number; column: number },
+): { arr: { kind: "array"; elements: Value[]; type?: Type }; index: number } {
+  if (target.kind !== "array") {
+    throw new InterpreterError("runtime", "Cannot index non-array value", pos);
+  }
+  if (idx < 0 || idx >= target.elements.length) {
+    throw new InterpreterError(
+      "runtime",
+      `Array index out of bounds: ${idx}`,
+      pos,
+    );
+  }
+  return { arr: target, index: idx };
+}
+
+/**
+ * Resolve an LValue to a writable location.
+ * Returns a descriptor that can be used to store a value.
+ */
+function resolveLValue(
+  lv: LValue,
+  env: Map<string, Value>,
+  functions: Map<string, FnDef>,
+  pos?: { line: number; column: number },
+): {
+  set: (value: Value) => void;
+  get: () => Value;
+} {
+  switch (lv.kind) {
+    case "identifier": {
+      return {
+        set: (value: Value) => env.set(lv.name, value),
+        get: () => env.get(lv.name)!,
+      };
+    }
+    case "deref": {
+      const ptr = unwrap(evaluate(lv.operand, env, functions)) as {
+        kind: "pointer";
+        target: string;
+      };
+      return {
+        set: (value: Value) => env.set(ptr.target, value),
+        get: () => env.get(ptr.target)!,
+      };
+    }
+    case "index": {
+      const idxValue = unwrap(evaluate(lv.index, env, functions));
+      const targetLoc = resolveLValue(lv.target, env, functions, pos);
+      const targetValue = targetLoc.get();
+      const { arr, index } = validateArrayIndex(
+        targetValue,
+        Math.floor(toNumber(idxValue)),
+        pos,
+      );
+      return {
+        set: (value: Value) => {
+          arr.elements[index] = value;
+        },
+        get: () => arr.elements[index]!,
+      };
+    }
+  }
 }
 
 export function evaluate(
@@ -123,22 +191,12 @@ export function evaluate(
     case "index": {
       const target = unwrap(evaluate(node.target, env, functions));
       const idx = unwrap(evaluate(node.index, env, functions));
-      if (target.kind !== "array") {
-        throw new InterpreterError(
-          "runtime",
-          "Cannot index non-array value",
-          node.pos,
-        );
-      }
-      const index = Math.floor(toNumber(idx));
-      if (index < 0 || index >= target.elements.length) {
-        throw new InterpreterError(
-          "runtime",
-          `Array index out of bounds: ${index}`,
-          node.pos,
-        );
-      }
-      return evalOk(target.elements[index]!);
+      const { arr, index } = validateArrayIndex(
+        target,
+        Math.floor(toNumber(idx)),
+        node.pos,
+      );
+      return evalOk(arr.elements[index]!);
     }
     case "let": {
       const value = unwrap(evaluate(node.value, env, functions));
@@ -150,27 +208,9 @@ export function evaluate(
     }
     case "assign": {
       const value = unwrap(evaluate(node.value, env, functions));
-      const target = node.target;
-      if (target.kind === "identifier") {
-        env.set(target.name, value);
-      } else if (target.kind === "unary" && target.op === "*") {
-        const ptr = unwrap(evaluate(target.operand, env, functions)) as {
-          kind: "pointer";
-          target: string;
-        };
-        env.set(ptr.target, value);
-      }
+      const loc = resolveLValue(node.target, env, functions, node.pos);
+      loc.set(value);
       return evalOk(value);
-    }
-    case "augassign": {
-      const current = env.get(node.name)!;
-      const rhs = unwrap(evaluate(node.value, env, functions));
-      const newValue: Value = {
-        kind: "number",
-        value: toNumber(current) + toNumber(rhs),
-      };
-      env.set(node.name, newValue);
-      return evalOk(newValue);
     }
     case "block": {
       let result: Value = { kind: "number", value: 0 };

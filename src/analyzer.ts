@@ -1,4 +1,4 @@
-import type { AstNode } from "./ast";
+import type { AstNode, LValue } from "./ast";
 import type { Type } from "./types";
 import { getOperatorCategory } from "./grammar";
 import { InterpreterError } from "./error";
@@ -48,6 +48,52 @@ function checkMutable(
       `Cannot assign to immutable variable: ${name}`,
       pos,
     );
+  }
+}
+
+/** Check that an LValue target is mutable, walking the LValue tree to find the root identifier. */
+function checkLValueMutable(
+  lv: LValue,
+  declarations: Map<string, Declaration>,
+  pos?: { line: number; column: number },
+): void {
+  switch (lv.kind) {
+    case "identifier":
+      checkMutable(lv.name, declarations, pos);
+      break;
+    case "index":
+      checkLValueMutable(lv.target, declarations, pos);
+      break;
+    case "deref":
+      // Mutability is checked via pointer type (immutable pointer check)
+      break;
+  }
+}
+
+/** Resolve the type of an LValue target. */
+function resolveLValueType(
+  lv: LValue,
+  declarations: Map<string, Declaration>,
+): Type {
+  switch (lv.kind) {
+    case "identifier": {
+      const decl = declarations.get(lv.name);
+      return decl?.type ?? dynamic();
+    }
+    case "index": {
+      const targetType = resolveLValueType(lv.target, declarations);
+      if (targetType.kind === "array") {
+        return targetType.inner;
+      }
+      return dynamic();
+    }
+    case "deref": {
+      const operandType = resolveType(lv.operand, declarations);
+      if (isPointer(operandType)) {
+        return operandType.inner;
+      }
+      return dynamic();
+    }
   }
 }
 
@@ -226,11 +272,9 @@ function resolveType(
     }
 
     case "assign": {
-      // Check mutability of the assignment target
-      if (node.target.kind === "identifier") {
-        checkMutable(node.target.name, declarations, node.pos);
-      }
-      const targetType = resolveType(node.target, declarations);
+      // Check mutability of the LValue target
+      checkLValueMutable(node.target, declarations, node.pos);
+      const targetType = resolveLValueType(node.target, declarations);
       const valueType = resolveType(node.value, declarations);
       // If target is a deref (pointer), check that the pointer is mutable
       if (isPointer(targetType) && !targetType.mutable) {
@@ -244,18 +288,6 @@ function resolveType(
       const checkType = isPointer(targetType) ? targetType.inner : targetType;
       if (!isDynamic(checkType)) {
         checkAssignable(valueType, checkType, node.pos);
-      }
-      return valueType;
-    }
-
-    case "augassign": {
-      const valueType = resolveType(node.value, declarations);
-      checkMutable(node.name, declarations, node.pos);
-      const decl = declarations.get(node.name);
-      if (decl?.type) {
-        checkNotBool(decl.type, node.op, node.pos);
-        checkNotBool(valueType, node.op, node.pos);
-        checkAssignable(valueType, decl.type, node.pos);
       }
       return valueType;
     }
