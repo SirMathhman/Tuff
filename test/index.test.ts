@@ -125,4 +125,10 @@ describe("binary expressions", () => {
   test('interpret("let x = if (true) 2 else 3; x") => 2', () => {
     expect(interpret("let x = if (true) 2 else 3; x")).toBe(2);
   });
+
+  test('interpret("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+    expect(
+      interpret("let x = if (false) 2 else if (false) 3 else 4; x"),
+    ).toBe(4);
+  });
 });
