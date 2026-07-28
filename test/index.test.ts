@@ -73,4 +73,16 @@ describe("binary expressions", () => {
   test('interpret("let x = { let y = 100; };") => Error', () => {
     expect(() => interpret("let x = { let y = 100; };")).toThrow();
   });
+
+  test('interpret("{ let y = 100; }") => 0 (statement context)', () => {
+    expect(interpret("{ let y = 100; }")).toBe(0);
+  });
+
+  test('interpret("{ { let x = 1; } }") => 0 (nested statement)', () => {
+    expect(interpret("{ { let x = 1; } }")).toBe(0);
+  });
+
+  test('interpret("{ let a = 1; a } * 2") => 2', () => {
+    expect(interpret("{ let a = 1; a } * 2")).toBe(2);
+  });
 });

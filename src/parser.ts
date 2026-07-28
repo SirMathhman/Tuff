@@ -8,6 +8,8 @@ import { OPENING } from "./grammar";
  */
 class Parser {
   private pos = 0;
+  /** When true, skip the "block ends with declaration" check (top-level statement context). */
+  private skipBlockCheck = false;
 
   constructor(private tokens: Token[]) {}
 
@@ -43,16 +45,38 @@ class Parser {
   parse(): AstNode {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length) {
-      statements.push(this.parseStatement());
+      statements.push(this.parseTopLevelStatement());
     }
     if (statements.length === 0) return { kind: "number", value: 0 };
     if (statements.length === 1) return statements[0]!;
     return { kind: "block", statements };
   }
 
+  /**
+   * Parse a top-level statement.
+   * `let` is a statement; everything else (including `{ ... }`) is an expression.
+   * A standalone `{ let y = 100; }` is allowed at top level (statement context),
+   * but `{ let y = 100; }` used as an expression (e.g., RHS of `let`) is an error.
+   */
+  private parseTopLevelStatement(): AstNode {
+    if (this.match("keyword", "let")) {
+      return this.parseLetStatement();
+    }
+    this.skipBlockCheck = true;
+    try {
+      return this.parseExpression();
+    } finally {
+      this.skipBlockCheck = false;
+    }
+  }
+
   /* ---- grammar rules ---- */
 
-  private parseBlock(): AstNode {
+  /**
+   * Parse a block in statement context: `{ statement* }`
+   * No restrictions on the last statement.
+   */
+  private parseBlockStmt(): AstNode {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length) {
       if (this.match("group", "}")) {
@@ -69,25 +93,63 @@ class Parser {
     return { kind: "block", statements };
   }
 
+  /**
+   * Parse a block in expression context: `{ statement* expression }`
+   * The last statement must be an expression, not a declaration.
+   * Skips the check when `skipBlockCheck` is true (top-level statement context).
+   */
+  private parseBlockExpr(): AstNode {
+    const statements: AstNode[] = [];
+    while (this.pos < this.tokens.length) {
+      if (this.match("group", "}")) {
+        this.consume();
+        break;
+      }
+      const prevPos = this.pos;
+      const stmt = this.parseStatement();
+      if (prevPos === this.pos) {
+        this.pos++;
+      }
+      statements.push(stmt);
+    }
+    if (!this.skipBlockCheck) {
+      const last = statements[statements.length - 1];
+      if (last?.kind === "let") {
+        throw new Error(
+          "Block used as expression cannot end with a declaration",
+        );
+      }
+    }
+    return { kind: "block", statements };
+  }
+
   private parseStatement(): AstNode {
-    if (this.match("keyword", "let")) {
+    if (this.match("group", "{")) {
       this.consume();
-      const nameToken = this.peek();
-      let name = "";
-      if (nameToken?.type === "identifier") {
-        name = nameToken.value;
-        this.consume();
-      }
-      if (this.match("operator", "=")) {
-        this.consume();
-      }
-      const value = this.parseExpression();
-      if (this.match("punctuator", ";")) {
-        this.consume();
-      }
-      return { kind: "let", name, value };
+      return this.parseBlockStmt();
+    }
+    if (this.match("keyword", "let")) {
+      return this.parseLetStatement();
     }
     return this.parseExpression();
+  }
+
+  private parseLetStatement(): AstNode {
+    this.consume(); // eat "let"
+    const nameToken = this.peek();
+    let name = "";
+    if (nameToken?.type === "identifier") {
+      name = nameToken.value;
+      this.consume();
+    }
+    if (this.match("operator", "=")) {
+      this.consume();
+    }
+    const value = this.parseExpression();
+    if (this.match("punctuator", ";")) {
+      this.consume();
+    }
+    return { kind: "let", name, value };
   }
 
   private parseAtom(): AstNode {
@@ -103,7 +165,7 @@ class Parser {
     if (token?.type === "group" && token.value in OPENING) {
       this.consume();
       if (token.value === "{") {
-        return this.parseBlock();
+        return this.parseBlockExpr();
       }
       const node = this.parseExpression();
       if (this.match("group", OPENING[token.value])) {

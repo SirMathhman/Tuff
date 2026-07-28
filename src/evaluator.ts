@@ -39,11 +39,6 @@ export function evaluate(
       for (const stmt of node.statements) {
         result = evaluate(stmt, env);
       }
-      // A block whose last statement is a declaration cannot be used as an expression
-      const lastStmt = node.statements[node.statements.length - 1];
-      if (lastStmt?.kind === "let") {
-        throw new Error("Block cannot end with a declaration when used as an expression");
-      }
       return result;
     }
   }
