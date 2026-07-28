@@ -503,6 +503,16 @@ function resolveType(
       }
       return dynamic();
     }
+    case "match": {
+      resolveType(node.target, declarations);
+      let resultType: Type = dynamic();
+      for (const case_ of node.cases) {
+        const bodyType = resolveType(case_.body, declarations);
+        resultType = widen(resultType, bodyType);
+      }
+      node.type = resultType;
+      return resultType;
+    }
   }
 }
 

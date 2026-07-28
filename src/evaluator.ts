@@ -344,6 +344,23 @@ export function evaluate(
       }
       return evaluate(fnDef.body, callEnv, functions);
     }
+    case "match": {
+      const targetValue = unwrap(evaluate(node.target, env, functions));
+      for (const case_ of node.cases) {
+        if (case_.pattern === "_") {
+          return evaluate(case_.body, env, functions);
+        }
+        const patternValue = unwrap(evaluate(case_.pattern, env, functions));
+        if (toNumber(targetValue) === toNumber(patternValue)) {
+          return evaluate(case_.body, env, functions);
+        }
+      }
+      throw new InterpreterError(
+        "runtime",
+        "No matching case in match expression",
+        node.pos,
+      );
+    }
   }
   return evalOk({ kind: "number", value: 0 });
 }

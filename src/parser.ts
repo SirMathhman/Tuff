@@ -376,6 +376,39 @@ class Parser {
     return { kind: "fn", name, params, returnType, body, pos };
   }
 
+  /** Parse `match (expr) { case pattern => body; ... }`. */
+  private parseMatchExpression(): AstNode {
+    const pos = this.peek()?.pos;
+    // Parse target expression: `match (expr)`
+    this.expect("group", "(");
+    const target = this.parseExpression();
+    this.expect("group", ")");
+    // Parse cases: `{ case pattern => body; ... }`
+    this.expect("group", "{");
+    const cases: { pattern: AstNode | "_"; body: AstNode }[] = [];
+    while (!this.match("group", "}")) {
+      this.expect("keyword", "case");
+      // Check for wildcard pattern
+      const next = this.peek();
+      if (next?.type === "identifier" && next.value === "_") {
+        this.consume();
+        this.expect("operator", "=>");
+        const body = this.parseExpression();
+        cases.push({ pattern: "_", body });
+      } else {
+        const pattern = this.parseExpression();
+        this.expect("operator", "=>");
+        const body = this.parseExpression();
+        cases.push({ pattern, body });
+      }
+      if (this.match("punctuator", ";")) {
+        this.consume();
+      }
+    }
+    this.expect("group", "}");
+    return { kind: "match", target, cases, pos };
+  }
+
   /** Parse `struct Name { field1 : Type1, field2 : Type2, ... }`. */
   private parseStructStatement(): AstNode {
     const { name, pos } = this.parseKeywordAndName("struct");
@@ -422,6 +455,10 @@ class Parser {
     }
     if (this.match("keyword", "if")) {
       return this.parseIfExpression();
+    }
+    if (this.match("keyword", "match")) {
+      this.consume();
+      return this.parseMatchExpression();
     }
     if (this.match("keyword", "loop")) {
       return this.parseLoopExpression();

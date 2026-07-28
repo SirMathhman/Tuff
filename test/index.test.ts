@@ -404,6 +404,12 @@ describe("binary expressions", () => {
       ),
     ).toBe(7);
   });
+
+  test('interpret("let x = match (3) { case 3 => 7; case _ => 4; }; x") => 7', () => {
+    expect(
+      interpret("let x = match (3) { case 3 => 7; case _ => 4; }; x"),
+    ).toBe(7);
+  });
 });
 
 describe("error positions", () => {

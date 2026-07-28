@@ -41,7 +41,9 @@ export type Token =
         | "while"
         | "is"
         | "fn"
-        | "struct";
+        | "struct"
+        | "match"
+        | "case";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
@@ -207,6 +209,10 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "fn", pos: tokenPos });
       } else if (lower === "struct") {
         tokens.push({ type: "keyword", value: "struct", pos: tokenPos });
+      } else if (lower === "match") {
+        tokens.push({ type: "keyword", value: "match", pos: tokenPos });
+      } else if (lower === "case") {
+        tokens.push({ type: "keyword", value: "case", pos: tokenPos });
       } else {
         tokens.push({ type: "identifier", value: ident, pos: tokenPos });
       }

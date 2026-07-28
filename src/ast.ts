@@ -95,4 +95,11 @@ export type AstNode =
       index: AstNode;
       type?: Type;
       pos?: TokenPos;
+    }
+  | {
+      kind: "match";
+      target: AstNode;
+      cases: { pattern: AstNode | "_"; body: AstNode }[];
+      type?: Type;
+      pos?: TokenPos;
     };
