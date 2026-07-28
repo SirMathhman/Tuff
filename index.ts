@@ -1,7 +1,10 @@
 type Token =
   | { type: "number"; value: number }
   | { type: "operator"; value: "+" | "-" | "*" | "/" }
-  | { type: "paren"; value: "(" | ")" };
+  | { type: "paren"; value: "(" | ")" | "{" | "}" }
+  | { type: "keyword"; value: string }
+  | { type: "identifier"; value: string }
+  | { type: "punctuator"; value: "=" | ";" };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -26,9 +29,36 @@ function tokenize(source: string): Token[] {
     } else if (ch && "+-*/".includes(ch)) {
       tokens.push({ type: "operator", value: ch as "+" | "-" | "*" | "/" });
       i++;
-    } else if (ch === "(" || ch === ")") {
-      tokens.push({ type: "paren", value: ch as "(" | ")" });
+    } else if (ch === "(" || ch === ")" || ch === "{" || ch === "}") {
+      tokens.push({ type: "paren", value: ch as "(" | ")" | "{" | "}" });
       i++;
+    } else if (ch === "=") {
+      tokens.push({ type: "punctuator", value: "=" });
+      i++;
+    } else if (ch === ";") {
+      tokens.push({ type: "punctuator", value: ";" });
+      i++;
+    } else if (
+      (ch >= "a" && ch <= "z") ||
+      (ch >= "A" && ch <= "Z") ||
+      ch === "_"
+    ) {
+      let start = i;
+      while (
+        i < source.length &&
+        ((source[i]! >= "a" && source[i]! <= "z") ||
+          (source[i]! >= "A" && source[i]! <= "Z") ||
+          (source[i]! >= "0" && source[i]! <= "9") ||
+          source[i] === "_")
+      ) {
+        i++;
+      }
+      const word = source.slice(start, i);
+      if (word === "let") {
+        tokens.push({ type: "keyword", value: "let" });
+      } else {
+        tokens.push({ type: "identifier", value: word });
+      }
     } else {
       i++;
     }
@@ -39,10 +69,12 @@ function tokenize(source: string): Token[] {
 class Parser {
   private tokens: Token[];
   private pos: number;
+  private scope: Map<string, number>;
 
-  constructor(tokens: Token[]) {
+  constructor(tokens: Token[], scope?: Map<string, number>) {
     this.tokens = tokens;
     this.pos = 0;
+    this.scope = scope || new Map();
   }
 
   private peek(): Token | undefined {
@@ -55,8 +87,44 @@ class Parser {
 
   parse(): number {
     if (this.tokens.length === 0) return 0;
-    const result = this.parseExpression();
-    return result;
+    return this.parseStatements(this.scope, () => false);
+  }
+
+  private parseStatements(
+    scope: Map<string, number>,
+    shouldStop: () => boolean
+  ): number {
+    let lastResult = 0;
+    while (this.pos < this.tokens.length && !shouldStop()) {
+      const t = this.peek();
+      if (t && t.type === "keyword" && t.value === "let") {
+        lastResult = this.parseLetStatement(scope);
+      } else {
+        lastResult = this.parseExpression();
+        if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+          this.consume();
+        }
+      }
+    }
+    return lastResult;
+  }
+
+  private parseLetStatement(scope: Map<string, number>): number {
+    this.consume(); // consume "let"
+    const idToken = this.peek();
+    if (idToken && idToken.type === "identifier") {
+      this.consume(); // consume identifier
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === "=") {
+        this.consume(); // consume "="
+        const value = this.parseExpression();
+        scope.set(idToken.value, value);
+      }
+      if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+        this.consume(); // consume ";"
+      }
+      return scope.get(idToken.value) ?? 0;
+    }
+    return 0;
   }
 
   private parseExpression(): number {
@@ -106,6 +174,10 @@ class Parser {
       this.consume();
       return token.value;
     }
+    if (token.type === "identifier") {
+      this.consume();
+      return this.scope.get(token.value) ?? 0;
+    }
     if (token.type === "paren" && token.value === "(") {
       this.consume();
       const result = this.parseExpression();
@@ -116,6 +188,25 @@ class Parser {
       ) {
         this.consume();
       }
+      return result;
+    }
+    if (token.type === "paren" && token.value === "{") {
+      this.consume();
+      const childScope = new Map(this.scope);
+      const prevScope = this.scope;
+      this.scope = childScope;
+      const result = this.parseStatements(childScope, () => {
+        const t = this.peek();
+        return t?.type === "paren" && t.value === "}";
+      });
+      if (
+        this.pos < this.tokens.length &&
+        this.peek()?.type === "paren" &&
+        this.peek()?.value === "}"
+      ) {
+        this.consume();
+      }
+      this.scope = prevScope;
       return result;
     }
     if (
