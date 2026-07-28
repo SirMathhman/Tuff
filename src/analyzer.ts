@@ -30,13 +30,22 @@ import {
  * 5. Validate type compatibility on declarations
  */
 
-/** A declaration in the symbol table (variable or function). */
-interface Declaration {
-  kind: "var" | "fn";
-  type?: Type;
-  mutable?: boolean;
-  params?: { name: string; type?: Type }[];
+/** A variable declaration in the symbol table. */
+interface VarDeclaration {
+  kind: "var";
+  type: Type;
+  mutable: boolean;
 }
+
+/** A function declaration in the symbol table. */
+interface FnDeclaration {
+  kind: "fn";
+  returnType: Type;
+  params: { name: string; type: Type }[];
+}
+
+/** A declaration in the symbol table (variable or function). */
+type Declaration = VarDeclaration | FnDeclaration;
 
 /** Check that a variable is mutable, throwing a type error if not. */
 function checkMutable(
@@ -45,7 +54,7 @@ function checkMutable(
   pos?: { line: number; column: number },
 ): void {
   const decl = declarations.get(name);
-  if (decl && !decl.mutable) {
+  if (decl && decl.kind === "var" && !decl.mutable) {
     throw new InterpreterError(
       "type",
       `Cannot assign to immutable variable: ${name}`,
@@ -103,7 +112,8 @@ function resolveLValueType(
   switch (lv.kind) {
     case "identifier": {
       const decl = declarations.get(lv.name);
-      return decl?.type ?? dynamic();
+      if (decl && decl.kind === "var") return decl.type;
+      return dynamic();
     }
     case "index": {
       const targetType = resolveLValueType(lv.target, declarations);
@@ -222,7 +232,11 @@ function resolveType(
 
     case "identifier": {
       const decl = declarations.get(node.name);
-      node.type = decl?.type ?? dynamic();
+      if (decl && decl.kind === "var") {
+        node.type = decl.type;
+        return node.type;
+      }
+      node.type = dynamic();
       return node.type;
     }
 
@@ -297,7 +311,7 @@ function resolveType(
       // Store the more specific type: declared type if present, otherwise inferred
       const resolvedType =
         (node.type ? resolveTypeNode(node.type, declarations) : undefined) ??
-        (isDynamic(valueType) ? undefined : valueType);
+        (isDynamic(valueType) ? dynamic() : valueType);
       declarations.set(node.name, {
         kind: "var",
         type: resolvedType,
@@ -386,7 +400,7 @@ function resolveType(
       registerDeclaration(
         node.name,
         declarations,
-        { kind: "fn", type: bodyType, params: node.params },
+        { kind: "fn", returnType: bodyType, params: node.params },
         node.pos,
       );
       return dynamic();
@@ -412,14 +426,14 @@ function resolveType(
       registerDeclaration(
         node.name,
         declarations,
-        { kind: "var", type: st },
+        { kind: "var", type: st, mutable: false },
         node.pos,
       );
       return st;
     }
     case "struct_instantiation": {
       const decl = declarations.get(node.name);
-      if (!decl || !decl.type || !isStruct(decl.type)) {
+      if (!decl || decl.kind !== "var" || !isStruct(decl.type)) {
         throw new InterpreterError(
           "type",
           `Undefined struct: ${node.name}`,
@@ -463,28 +477,31 @@ function resolveType(
     case "call": {
       const callee = node.callee as { kind: "identifier"; name: string };
       const decl = declarations.get(callee.name);
-      const params = decl?.params;
-      if (params && node.args.length !== params.length) {
-        throw new InterpreterError(
-          "type",
-          `Function '${callee.name}' expects ${params.length} argument(s), got ${node.args.length}`,
-          node.pos,
-        );
-      }
-      for (let i = 0; i < node.args.length; i++) {
-        const arg = node.args[i];
-        if (!arg) continue;
-        const argType = resolveType(arg, declarations);
-        const param = params?.[i];
-        if (param?.type) {
-          checkAssignable(
-            argType,
-            resolveTypeNode(param.type, declarations),
-            arg.pos,
+      if (decl && decl.kind === "fn") {
+        const params = decl.params;
+        if (node.args.length !== params.length) {
+          throw new InterpreterError(
+            "type",
+            `Function '${callee.name}' expects ${params.length} argument(s), got ${node.args.length}`,
+            node.pos,
           );
         }
+        for (let i = 0; i < node.args.length; i++) {
+          const arg = node.args[i];
+          if (!arg) continue;
+          const argType = resolveType(arg, declarations);
+          const param = params[i];
+          if (param) {
+            checkAssignable(
+              argType,
+              resolveTypeNode(param.type, declarations),
+              arg.pos,
+            );
+          }
+        }
+        return decl.returnType;
       }
-      return decl?.type ?? dynamic();
+      return dynamic();
     }
   }
 }
@@ -536,7 +553,7 @@ function resolveUserType(
   declarations: Map<string, Declaration>,
 ): Type | undefined {
   const decl = declarations.get(name);
-  if (decl?.type && isStruct(decl.type)) {
+  if (decl && decl.kind === "var" && isStruct(decl.type)) {
     return decl.type;
   }
   return undefined;

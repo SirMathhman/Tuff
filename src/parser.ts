@@ -4,7 +4,7 @@ import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { arrayType, pointer } from "./types";
+import { arrayType, dynamic, pointer } from "./types";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -350,13 +350,13 @@ class Parser {
     const { name, pos } = this.parseKeywordAndName("fn");
     // Parse parameters: `(param1 : Type1, param2 : Type2, ...)`
     this.expect("group", "(");
-    const params: { name: string; type?: Type }[] = [];
+    const params: { name: string; type: Type }[] = [];
     while (!this.match("group", ")")) {
       const paramToken = this.peek();
       if (paramToken?.type === "identifier") {
         this.consume();
         const paramType = this.parseTypeAnnotation();
-        params.push({ name: paramToken.value, type: paramType });
+        params.push({ name: paramToken.value, type: paramType ?? dynamic() });
         if (this.match("punctuator", ",")) {
           this.consume();
         }

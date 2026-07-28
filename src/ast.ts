@@ -62,7 +62,7 @@ export type AstNode =
   | {
       kind: "fn";
       name: string;
-      params: { name: string; type?: Type }[];
+      params: { name: string; type: Type }[];
       returnType?: Type;
       body: AstNode;
       pos?: TokenPos;
