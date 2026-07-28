@@ -63,6 +63,12 @@ function isBoolType(typeName: string): boolean {
   return typeName === "Bool";
 }
 
+/** Throw a type mismatch error. */
+function typeMismatch(valueType: string, declaredType: string, detail?: string): never {
+  const msg = detail ? ` (${detail})` : "";
+  throw new Error(`Type mismatch: cannot assign ${valueType} to ${declaredType}${msg}`);
+}
+
 /**
  * Check that a value expression is compatible with the declared type.
  * - Bool: must match exactly (no widening/narrowing).
@@ -78,28 +84,17 @@ function checkTypeCompatibility(
 
   // Bool must match exactly
   if (isBoolType(declaredType)) {
-    if (!isBoolType(valueType)) {
-      throw new Error(
-        `Type mismatch: cannot assign ${valueType} to ${declaredType}`,
-      );
-    }
+    if (!isBoolType(valueType)) typeMismatch(valueType, declaredType);
     return;
   }
-  if (isBoolType(valueType)) {
-    throw new Error(
-      `Type mismatch: cannot assign ${valueType} to ${declaredType}`,
-    );
-  }
+  if (isBoolType(valueType)) typeMismatch(valueType, declaredType);
 
   // Numeric types: narrower can fit in wider
   const suffixBits = getTypeBits(valueType);
   const declaredBits = getTypeBits(declaredType);
   if (suffixBits === 0 || declaredBits === 0) return; // Unknown type, skip
-  if (suffixBits > declaredBits) {
-    throw new Error(
-      `Type mismatch: cannot assign ${valueType} to ${declaredType} (wider type cannot fit)`,
-    );
-  }
+  if (suffixBits > declaredBits)
+    typeMismatch(valueType, declaredType, "wider type cannot fit");
 }
 
 /**
