@@ -65,14 +65,8 @@ class Parser {
    * but `{ let y = 100; }` used as an expression (e.g., RHS of `let`) is an error.
    */
   private parseTopLevelStatement(): AstNode {
-    if (this.match("keyword", "let")) {
-      return this.parseLetStatement();
-    }
-    if (this.match("keyword", "if")) {
-      return this.parseIfStatement();
-    }
-    const assign = this.tryParseAssign();
-    if (assign) return assign;
+    const stmt = this.tryParseKnownStatement();
+    if (stmt) return stmt;
     this.skipBlockCheck = true;
     try {
       return this.parseExpression();
@@ -135,15 +129,17 @@ class Parser {
       this.consume();
       return this.parseBlockStmt();
     }
-    if (this.match("keyword", "let")) {
-      return this.parseLetStatement();
-    }
-    if (this.match("keyword", "if")) {
-      return this.parseIfStatement();
-    }
+    const stmt = this.tryParseKnownStatement();
+    if (stmt) return stmt;
+    return this.parseExpression();
+  }
+
+  /** Try to parse a known statement (`let`, `if`, or `identifier = expr`). Returns undefined if none match. */
+  private tryParseKnownStatement(): AstNode | undefined {
+    if (this.match("keyword", "let")) return this.parseLetStatement();
+    if (this.match("keyword", "if")) return this.parseIfStatement();
     const assign = this.tryParseAssign();
     if (assign) return assign;
-    return this.parseExpression();
   }
 
   /** Try to parse `identifier = expression` as an assignment statement. Returns undefined if not an assignment. */
