@@ -1,5 +1,6 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
+import { getOperatorCategory } from "./grammar";
 import {
   bool,
   dynamic,
@@ -59,8 +60,8 @@ function resolveType(
       const leftType = resolveType(node.left, declarations);
       const rightType = resolveType(node.right, declarations);
 
-      // Arithmetic ops: widen operand types
-      if (isArithmeticOp(node.op)) {
+      const category = getOperatorCategory(node.op);
+      if (category === "arithmetic") {
         checkNotBool(leftType, node.op);
         checkNotBool(rightType, node.op);
         const result = widen(leftType, rightType);
@@ -73,14 +74,12 @@ function resolveType(
         return result;
       }
 
-      // Comparison ops: result is bool
-      if (isComparisonOp(node.op)) {
+      if (category === "comparison") {
         node.type = bool();
         return bool();
       }
 
-      // Logical ops: propagate operand types through
-      if (isLogicalOp(node.op)) {
+      if (category === "logical") {
         const result = widen(leftType, rightType);
         node.type = result;
         return result;
@@ -230,27 +229,12 @@ function setNodeType(node: AstNode, type: Type): void {
   }
 }
 
-/** Check if an operator is an arithmetic operation. */
-function isArithmeticOp(op: string): boolean {
-  return ["+", "-", "*", "/"].includes(op);
-}
-
 /** Reject boolean operands for arithmetic operators. */
 function checkNotBool(t: Type, op: string): void {
   if (!isDynamic(t) && t.kind === "bool")
     throw new Error(
       `Type mismatch: cannot use arithmetic operator '${op}' on ${typeName(t)}`,
     );
-}
-
-/** Check if an operator is a comparison operation. */
-function isComparisonOp(op: string): boolean {
-  return ["<", ">", "==", "!=", "<=", ">="].includes(op);
-}
-
-/** Check if an operator is a logical operation. */
-function isLogicalOp(op: string): boolean {
-  return ["||", "&&"].includes(op);
 }
 
 /** Validate that a value type is assignable to a target type. */

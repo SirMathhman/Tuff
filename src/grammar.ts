@@ -1,6 +1,6 @@
 /**
  * Grammar configuration for the Tuff language parser.
- * Defines grouping tokens and operator precedence levels.
+ * Defines grouping tokens, operator categories, and precedence levels.
  */
 
 /** Opening → closing group mappings. */
@@ -8,6 +8,31 @@ export const OPENING: Record<string, string> = {
   "(": ")",
   "{": "}",
 };
+
+/** Operator categories used by the analyzer for type-checking decisions. */
+export type OperatorCategory = "arithmetic" | "comparison" | "logical";
+
+/**
+ * Operator metadata: category for type-checking rules.
+ * This is the single source of truth for operator classification.
+ */
+export const OPERATORS: ReadonlyMap<string, OperatorCategory> = new Map([
+  // Arithmetic: numeric operands, widen result type
+  ["+", "arithmetic"],
+  ["-", "arithmetic"],
+  ["*", "arithmetic"],
+  ["/", "arithmetic"],
+  // Comparison: numeric operands, bool result
+  ["<", "comparison"],
+  [">", "comparison"],
+  ["==", "comparison"],
+  ["!=", "comparison"],
+  ["<=", "comparison"],
+  [">=", "comparison"],
+  // Logical: propagate operand types
+  ["||", "logical"],
+  ["&&", "logical"],
+]);
 
 /**
  * Precedence levels, ordered from lowest (parsed first) to highest (parsed last).
@@ -24,6 +49,11 @@ export const PRECEDENCE: readonly string[][] = [
 
 /** All binary operators, derived from the precedence table. */
 export type BinaryOp = (typeof PRECEDENCE)[number][number];
+
+/** Get the category of an operator, or `undefined` if not a known binary operator. */
+export function getOperatorCategory(op: string): OperatorCategory | undefined {
+  return OPERATORS.get(op);
+}
 
 /**
  * Type suffix definitions for numeric literals.
