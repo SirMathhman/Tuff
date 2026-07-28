@@ -54,7 +54,16 @@ export function evaluate(
     case "let": {
       const value = evaluate(node.value, env);
       env.set(node.name, value);
+      if (node.mutable) {
+        // Mark as mutable by storing a wrapper
+        env.set(`__mutable__${node.name}`, value);
+      }
       return { kind: "number", value: 0 };
+    }
+    case "assign": {
+      const value = evaluate(node.value, env);
+      env.set(node.name, value);
+      return value;
     }
     case "block": {
       let result: Value = { kind: "number", value: 0 };
@@ -68,7 +77,7 @@ export function evaluate(
       if (toNumber(condition) !== 0) {
         return evaluate(node.then, env);
       } else {
-        return evaluate(node["else"], env);
+        return evaluate(node.elseBranch, env);
       }
     }
   }

@@ -68,6 +68,9 @@ class Parser {
     if (this.match("keyword", "let")) {
       return this.parseLetStatement();
     }
+    if (this.match("keyword", "if")) {
+      return this.parseIfStatement();
+    }
     this.skipBlockCheck = true;
     try {
       return this.parseExpression();
@@ -133,11 +136,31 @@ class Parser {
     if (this.match("keyword", "let")) {
       return this.parseLetStatement();
     }
+    if (this.match("keyword", "if")) {
+      return this.parseIfStatement();
+    }
+    // Check for assignment: identifier = expression
+    if (this.match("identifier")) {
+      const nameToken = this.peek()!;
+      this.consume();
+      if (this.match("operator", "=")) {
+        this.consume();
+        const value = this.parseExpression();
+        if (this.match("punctuator", ";")) {
+          this.consume();
+        }
+        return { kind: "assign", name: nameToken.value as string, value };
+      }
+      // Not an assignment, parse as expression
+      return { kind: "identifier", name: nameToken.value as string };
+    }
     return this.parseExpression();
   }
 
   private parseLetStatement(): AstNode {
     this.consume(); // eat "let"
+    const mutable = this.match("keyword", "mut");
+    if (mutable) this.consume();
     const nameToken = this.peek();
     let name = "";
     if (nameToken?.type === "identifier") {
@@ -151,7 +174,7 @@ class Parser {
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "let", name, value };
+    return { kind: "let", name, value, mutable };
   }
 
   private parseAtom(): AstNode {
@@ -197,7 +220,25 @@ class Parser {
     const thenBranch = this.parseExpression();
     this.expect("keyword", "else");
     const elseBranch = this.parseExpression();
-    return { kind: "if", condition, then: thenBranch, else: elseBranch };
+    return { kind: "if", condition, then: thenBranch, elseBranch };
+  }
+
+  private parseIfStatement(): AstNode {
+    this.consume(); // eat "if"
+    this.expect("group", "(");
+    const condition = this.parseExpression();
+    this.expect("group", ")");
+    const thenBranch = this.parseStatement();
+    if (this.match("keyword", "else")) {
+      this.consume();
+      if (this.match("keyword", "if")) {
+        const elseBranch = this.parseIfStatement();
+        return { kind: "if", condition, then: thenBranch, elseBranch };
+      }
+      const elseBranch = this.parseStatement();
+      return { kind: "if", condition, then: thenBranch, elseBranch };
+    }
+    return { kind: "if", condition, then: thenBranch, elseBranch: { kind: "number", value: 0 } };
   }
 
   /**

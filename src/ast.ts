@@ -10,11 +10,12 @@ export type AstNode =
       right: AstNode;
     }
   | { kind: "identifier"; name: string }
-  | { kind: "let"; name: string; value: AstNode }
+  | { kind: "let"; name: string; value: AstNode; mutable: boolean }
+  | { kind: "assign"; name: string; value: AstNode }
   | { kind: "block"; statements: AstNode[] }
   | {
       kind: "if";
       condition: AstNode;
       then: AstNode;
-      else: AstNode;
+      elseBranch: AstNode;
     };

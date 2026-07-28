@@ -127,8 +127,16 @@ describe("binary expressions", () => {
   });
 
   test('interpret("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+    expect(interpret("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(
+      4,
+    );
+  });
+
+  test('interpret("let mut x = 0; if (false) { x = 2; } else if (false) { x = 3; } else { x = 4; } x") => 4', () => {
     expect(
-      interpret("let x = if (false) 2 else if (false) 3 else 4; x"),
+      interpret(
+        "let mut x = 0; if (false) { x = 2; } else if (false) { x = 3; } else { x = 4; } x",
+      ),
     ).toBe(4);
   });
 });
