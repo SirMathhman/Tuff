@@ -63,6 +63,14 @@ export function evaluate(
       }
       return result;
     }
+    case "if": {
+      const condition = evaluate(node.condition, env);
+      if (toNumber(condition) !== 0) {
+        return evaluate(node.then, env);
+      } else {
+        return evaluate(node["else"], env);
+      }
+    }
   }
   return { kind: "number", value: 0 };
 }

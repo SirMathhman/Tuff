@@ -167,6 +167,9 @@ class Parser {
       this.consume();
       return { kind: "boolean", value: false };
     }
+    if (this.match("keyword", "if")) {
+      return this.parseIfExpression();
+    }
     if (this.match("identifier")) {
       const t = this.consume()!;
       return { kind: "identifier", name: t.value as string };
@@ -184,6 +187,17 @@ class Parser {
       return node;
     }
     return { kind: "number", value: 0 };
+  }
+
+  private parseIfExpression(): AstNode {
+    this.consume(); // eat "if"
+    this.expect("group", "(");
+    const condition = this.parseExpression();
+    this.expect("group", ")");
+    const thenBranch = this.parseExpression();
+    this.expect("keyword", "else");
+    const elseBranch = this.parseExpression();
+    return { kind: "if", condition, then: thenBranch, else: elseBranch };
   }
 
   /**

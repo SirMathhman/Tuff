@@ -18,7 +18,7 @@ export type Token =
         | ">";
     }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
-  | { type: "keyword"; value: "let" | "true" | "false" }
+  | { type: "keyword"; value: "let" | "true" | "false" | "if" | "else" }
   | { type: "identifier"; value: string }
   | { type: "punctuator"; value: ";" };
 
@@ -54,6 +54,10 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "true" });
       } else if (ident === "false") {
         tokens.push({ type: "keyword", value: "false" });
+      } else if (ident === "if") {
+        tokens.push({ type: "keyword", value: "if" });
+      } else if (ident === "else") {
+        tokens.push({ type: "keyword", value: "else" });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }

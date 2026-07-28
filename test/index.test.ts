@@ -121,4 +121,8 @@ describe("binary expressions", () => {
   test('interpret("let x = 0; let y = 1; x >= y") => 0', () => {
     expect(interpret("let x = 0; let y = 1; x >= y")).toBe(0);
   });
+
+  test('interpret("let x = if (true) 2 else 3; x") => 2', () => {
+    expect(interpret("let x = if (true) 2 else 3; x")).toBe(2);
+  });
 });

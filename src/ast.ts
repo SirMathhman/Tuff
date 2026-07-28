@@ -11,4 +11,10 @@ export type AstNode =
     }
   | { kind: "identifier"; name: string }
   | { kind: "let"; name: string; value: AstNode }
-  | { kind: "block"; statements: AstNode[] };
+  | { kind: "block"; statements: AstNode[] }
+  | {
+      kind: "if";
+      condition: AstNode;
+      then: AstNode;
+      else: AstNode;
+    };
