@@ -15,9 +15,9 @@ export const OPENING: Record<string, string> = {
  * The highest-precedence parser (atom parsing) sits below this chain.
  */
 export const PRECEDENCE: readonly string[][] = [
-  ["||"],       // logical OR
-  ["&&"],       // logical AND
-  ["<"],        // comparison
-  ["+", "-"],   // additive
-  ["*", "/"],   // multiplicative
+  ["||"], // logical OR
+  ["&&"], // logical AND
+  ["<"], // comparison
+  ["+", "-"], // additive
+  ["*", "/"], // multiplicative
 ];
