@@ -139,4 +139,8 @@ describe("binary expressions", () => {
       ),
     ).toBe(4);
   });
+
+  test('interpret("let x = 0; x = 1; x") => Error', () => {
+    expect(() => interpret("let x = 0; x = 1; x")).toThrow();
+  });
 });

@@ -55,12 +55,14 @@ export function evaluate(
       const value = evaluate(node.value, env);
       env.set(node.name, value);
       if (node.mutable) {
-        // Mark as mutable by storing a wrapper
-        env.set(`__mutable__${node.name}`, value);
+        env.set(`__mutable__${node.name}`, { kind: "boolean", value: true });
       }
       return { kind: "number", value: 0 };
     }
     case "assign": {
+      if (!env.has(`__mutable__${node.name}`)) {
+        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
+      }
       const value = evaluate(node.value, env);
       env.set(node.name, value);
       return value;

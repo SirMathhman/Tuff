@@ -71,6 +71,21 @@ class Parser {
     if (this.match("keyword", "if")) {
       return this.parseIfStatement();
     }
+    // Check for assignment: identifier = expression
+    if (this.match("identifier")) {
+      const nameToken = this.peek()!;
+      const nextPos = this.pos + 1;
+      const nextToken = this.tokens[nextPos];
+      if (nextToken?.type === "operator" && nextToken.value === "=") {
+        this.consume(); // identifier
+        this.consume(); // =
+        const value = this.parseExpression();
+        if (this.match("punctuator", ";")) {
+          this.consume();
+        }
+        return { kind: "assign", name: nameToken.value as string, value };
+      }
+    }
     this.skipBlockCheck = true;
     try {
       return this.parseExpression();
@@ -142,17 +157,17 @@ class Parser {
     // Check for assignment: identifier = expression
     if (this.match("identifier")) {
       const nameToken = this.peek()!;
-      this.consume();
-      if (this.match("operator", "=")) {
-        this.consume();
+      const nextPos = this.pos + 1;
+      const nextToken = this.tokens[nextPos];
+      if (nextToken?.type === "operator" && nextToken.value === "=") {
+        this.consume(); // identifier
+        this.consume(); // =
         const value = this.parseExpression();
         if (this.match("punctuator", ";")) {
           this.consume();
         }
         return { kind: "assign", name: nameToken.value as string, value };
       }
-      // Not an assignment, parse as expression
-      return { kind: "identifier", name: nameToken.value as string };
     }
     return this.parseExpression();
   }
@@ -238,7 +253,12 @@ class Parser {
       const elseBranch = this.parseStatement();
       return { kind: "if", condition, then: thenBranch, elseBranch };
     }
-    return { kind: "if", condition, then: thenBranch, elseBranch: { kind: "number", value: 0 } };
+    return {
+      kind: "if",
+      condition,
+      then: thenBranch,
+      elseBranch: { kind: "number", value: 0 },
+    };
   }
 
   /**
