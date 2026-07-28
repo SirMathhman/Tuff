@@ -29,6 +29,7 @@ export interface DynamicType {
 export interface PointerType {
   kind: "pointer";
   inner: Type;
+  mutable: boolean;
 }
 
 /** All possible types in the Tuff language. */
@@ -56,8 +57,8 @@ export function dynamic(): DynamicType {
 }
 
 /** Construct a pointer type. */
-export function pointer(inner: Type): PointerType {
-  return { kind: "pointer", inner };
+export function pointer(inner: Type, mutable: boolean = false): PointerType {
+  return { kind: "pointer", inner, mutable };
 }
 
 /** Check if a type is numeric. */
@@ -136,13 +137,17 @@ export function widen(a: Type, b: Type): Type {
   return a;
 }
 
-/** Parse a type name string into a Type. Supports &TypeName for pointers. */
+/** Parse a type name string into a Type. Supports &TypeName and &mut TypeName for pointers. */
 export function parseTypeName(name: string): Type {
   if (name === "Bool") return bool();
   if (name === "Void") return voidType();
-  const ptrMatch = name.match(/^&(.+)$/);
+  const ptrMatch = name.match(/^&mut\s+(.+)$/);
   if (ptrMatch) {
-    return pointer(parseTypeName(ptrMatch[1]!));
+    return pointer(parseTypeName(ptrMatch[1]!), true);
+  }
+  const ptrMatch2 = name.match(/^&(.+)$/);
+  if (ptrMatch2) {
+    return pointer(parseTypeName(ptrMatch2[1]!), false);
   }
   const match = name.match(/^([UIF])(\d+)$/);
   if (match) {

@@ -60,8 +60,9 @@ export function evaluate(
             type: node.type,
           });
         }
-        case "&": {
-          // Take reference: store a pointer (key into env)
+        case "&":
+        case "&mut": {
+          // Take reference (immutable or mutable): store a pointer (key into env)
           const refTarget = node.operand as {
             kind: "identifier";
             name: string;
@@ -155,7 +156,28 @@ export function evaluate(
     }
     case "assign": {
       const value = unwrap(evaluate(node.value, env, functions));
-      setMutable(node.name, value, env, node.pos);
+      const target = node.target;
+      if (target.kind === "identifier") {
+        setMutable(target.name, value, env, node.pos);
+      } else if (target.kind === "unary" && target.op === "*") {
+        // Deref assignment: *ptr = value
+        const ptr = unwrap(evaluate(target.operand, env, functions));
+        if (ptr.kind !== "pointer") {
+          throw new InterpreterError(
+            "runtime",
+            "Cannot assign through non-pointer value",
+            node.pos,
+          );
+        }
+        if (!env.has(`__mutable__${ptr.target}`)) {
+          throw new InterpreterError(
+            "runtime",
+            `Cannot assign to immutable variable through pointer: ${ptr.target}`,
+            node.pos,
+          );
+        }
+        env.set(ptr.target, value);
+      }
       return evalOk(value);
     }
     case "augassign": {

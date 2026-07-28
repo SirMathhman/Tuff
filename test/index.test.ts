@@ -330,6 +330,12 @@ describe("binary expressions", () => {
   test('interpret("let x = 1; let ptr : &I32 = &x; *ptr") => 1', () => {
     expect(interpret("let x = 1; let ptr : &I32 = &x; *ptr")).toBe(1);
   });
+
+  test('interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 1; x") => 1', () => {
+    expect(
+      interpret("let mut x = 0; let y : &mut I32 = &mut x; *y = 1; x"),
+    ).toBe(1);
+  });
 });
 
 describe("error positions", () => {

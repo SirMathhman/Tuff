@@ -15,7 +15,7 @@ export type AstNode =
     }
   | {
       kind: "unary";
-      op: "-" | "&" | "*";
+      op: "-" | "&" | "&mut" | "*";
       operand: AstNode;
       type?: Type;
       pos?: TokenPos;
@@ -29,7 +29,12 @@ export type AstNode =
       type?: Type;
       pos?: TokenPos;
     }
-  | { kind: "assign"; name: string; value: AstNode; pos?: TokenPos }
+  | {
+      kind: "assign";
+      target: AstNode;
+      value: AstNode;
+      pos?: TokenPos;
+    }
   | { kind: "augassign"; name: string; op: "+"; value: AstNode; pos?: TokenPos }
   | { kind: "block"; statements: AstNode[]; type?: Type; pos?: TokenPos }
   | {

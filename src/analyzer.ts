@@ -60,8 +60,12 @@ function resolveType(
           node.type = operandType;
           return operandType;
         case "&":
-          // Reference: result is pointer to operand type
-          node.type = pointer(operandType);
+          // Reference: result is immutable pointer to operand type
+          node.type = pointer(operandType, false);
+          return node.type;
+        case "&mut":
+          // Mutable reference: result is mutable pointer to operand type
+          node.type = pointer(operandType, true);
           return node.type;
         case "*":
           // Dereference: operand must be a pointer
@@ -156,9 +160,21 @@ function resolveType(
     }
 
     case "assign": {
+      const targetType = resolveType(node.target, declarations);
       const valueType = resolveType(node.value, declarations);
-      const decl = declarations.get(node.name);
-      if (decl?.type) checkAssignable(valueType, decl.type, node.pos);
+      // If target is a deref (pointer), check that the pointer is mutable
+      if (isPointer(targetType) && !targetType.mutable) {
+        throw new InterpreterError(
+          "type",
+          "Cannot assign through immutable pointer",
+          node.pos,
+        );
+      }
+      // Check value compatibility with target type (or inner type if pointer)
+      const checkType = isPointer(targetType) ? targetType.inner : targetType;
+      if (!isDynamic(checkType)) {
+        checkAssignable(valueType, checkType, node.pos);
+      }
       return valueType;
     }
 
