@@ -25,6 +25,8 @@ export function evaluate(
           return { kind: "number", value: l * r };
         case "/":
           return { kind: "number", value: l / r };
+        case "||":
+          return toNumber(left) !== 0 ? left : right;
       }
       break;
     }
