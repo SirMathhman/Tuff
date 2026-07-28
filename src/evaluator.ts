@@ -1,6 +1,9 @@
 import type { AstNode } from "./ast";
 
-export function evaluate(node: AstNode, env: Map<string, number> = new Map()): number {
+export function evaluate(
+  node: AstNode,
+  env: Map<string, number> = new Map(),
+): number {
   switch (node.kind) {
     case "number":
       return node.value;
@@ -8,9 +11,12 @@ export function evaluate(node: AstNode, env: Map<string, number> = new Map()): n
       const left = evaluate(node.left, env);
       const right = evaluate(node.right, env);
       switch (node.op) {
-        case "+": return left + right;
-        case "-": return left - right;
-        case "*": return left * right;
+        case "+":
+          return left + right;
+        case "-":
+          return left - right;
+        case "*":
+          return left * right;
       }
       break;
     }

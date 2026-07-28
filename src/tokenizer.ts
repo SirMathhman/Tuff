@@ -22,10 +22,7 @@ export function tokenize(source: string): Token[] {
         i++;
       }
       tokens.push({ type: "number", value: Number(numStr) });
-    } else if (
-      (ch >= "a" && ch <= "z") ||
-      ch === "_"
-    ) {
+    } else if ((ch >= "a" && ch <= "z") || ch === "_") {
       let ident = "";
       while (
         i < source.length &&

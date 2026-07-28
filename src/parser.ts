@@ -1,121 +1,168 @@
-import type { Token } from "./tokenizer";
 import type { AstNode } from "./ast";
+import type { Token } from "./tokenizer";
+import { OPENING } from "./grammar";
 
-type ParseFn = () => AstNode;
+/**
+ * Recursive-descent parser for the Tuff language.
+ * Encapsulates mutable state (position, tokens) as class members.
+ */
+class Parser {
+  private pos = 0;
 
-export function parse(tokens: Token[]): AstNode {
-  let pos = 0;
-  let maxIterations = tokens.length * 100 + 1000;
+  constructor(private tokens: Token[]) {}
 
-  function parseLevel(ops: string[], next: ParseFn): ParseFn {
-    return (): AstNode => {
-      let node = next();
-      while (pos < tokens.length) {
-        maxIterations--;
-        if (maxIterations <= 0) break;
-        const op = tokens[pos];
-        if (
-          op !== undefined &&
-          op.type === "operator" &&
-          ops.includes(op.value)
-        ) {
-          pos++;
-          const right = next();
-          node = {
-            kind: "binary",
-            op: op.value as "+" | "-" | "*",
-            left: node,
-            right,
-          };
-        } else {
-          break;
-        }
-      }
-      return node;
-    };
+  /* ---- low-level token access ---- */
+
+  peek(): Token | undefined {
+    return this.tokens[this.pos];
   }
 
-  const OPENING: Record<string, string> = { "(": ")", "{": "}" };
+  consume(): Token | undefined {
+    return this.tokens[this.pos++];
+  }
 
-  function parseBlock(): AstNode {
+  match(type: string, value?: string): boolean {
+    const t = this.peek();
+    if (t?.type !== type) return false;
+    if (value !== undefined && t.value !== value) return false;
+    return true;
+  }
+
+  expect(type: string, value?: string): Token {
+    const t = this.peek();
+    if (t?.type !== type || (value !== undefined && t.value !== value)) {
+      throw new Error(
+        `Expected ${type}${value !== undefined ? ` '${value}'` : ""}, got ${t?.type} '${t?.value}'`,
+      );
+    }
+    return this.consume()!;
+  }
+
+  /* ---- public entry point ---- */
+
+  parse(): AstNode {
+    return this.parseExpression();
+  }
+
+  /* ---- grammar rules ---- */
+
+  private parseBlock(): AstNode {
     const statements: AstNode[] = [];
-    while (pos < tokens.length) {
-      maxIterations--;
-      if (maxIterations <= 0) break;
-      const token = tokens[pos];
-      if (token !== undefined && token.type === "group" && token.value === "}") {
-        pos++;
+    while (this.pos < this.tokens.length) {
+      if (this.match("group", "}")) {
+        this.consume();
         break;
       }
-      const prevPos = pos;
-      const stmt = parseStatement();
-      if (prevPos === pos) {
-        pos++;
+      const prevPos = this.pos;
+      const stmt = this.parseStatement();
+      if (prevPos === this.pos) {
+        this.pos++;
       }
       statements.push(stmt);
     }
     return { kind: "block", statements };
   }
 
-  function parseStatement(): AstNode {
-    const token = tokens[pos];
-    if (token !== undefined && token.type === "keyword" && token.value === "let") {
-      pos++;
-      const nameToken = tokens[pos];
+  private parseStatement(): AstNode {
+    if (this.match("keyword", "let")) {
+      this.consume();
+      const nameToken = this.peek();
       let name = "";
-      if (nameToken !== undefined && nameToken.type === "identifier") {
+      if (nameToken?.type === "identifier") {
         name = nameToken.value;
-        pos++;
+        this.consume();
       }
-      const assignToken = tokens[pos];
-      if (assignToken !== undefined && assignToken.type === "operator" && assignToken.value === "=") {
-        pos++;
+      if (this.match("operator", "=")) {
+        this.consume();
       }
-      const value = parseExpression();
-      const semiToken = tokens[pos];
-      if (semiToken !== undefined && semiToken.type === "punctuator" && semiToken.value === ";") {
-        pos++;
+      const value = this.parseExpression();
+      if (this.match("punctuator", ";")) {
+        this.consume();
       }
       return { kind: "let", name, value };
     }
-    return parseExpression();
+    return this.parseExpression();
   }
 
-  const parseAtom: ParseFn = (): AstNode => {
-    const token = tokens[pos];
-    if (token !== undefined && token.type === "number") {
-      pos++;
-      return { kind: "number", value: token.value };
+  private parseAtom(): AstNode {
+    if (this.match("number")) {
+      return { kind: "number", value: this.consume()!.value };
     }
-    if (token !== undefined && token.type === "identifier") {
-      pos++;
-      return { kind: "identifier", name: token.value };
+    if (this.match("identifier")) {
+      return { kind: "identifier", name: this.consume()!.value };
     }
-    if (
-      token !== undefined &&
-      token.type === "group" &&
-      token.value in OPENING
-    ) {
-      pos++;
+    const token = this.peek();
+    if (token?.type === "group" && token.value in OPENING) {
+      this.consume();
       if (token.value === "{") {
-        return parseBlock();
+        return this.parseBlock();
       }
-      const node = parseExpression();
-      const closing = tokens[pos];
-      if (
-        closing !== undefined &&
-        closing.type === "group" &&
-        closing.value === OPENING[token.value]
-      ) {
-        pos++;
+      const node = this.parseExpression();
+      if (this.match("group", OPENING[token.value])) {
+        this.consume();
       }
       return node;
     }
     return { kind: "number", value: 0 };
-  };
+  }
 
-  const parseTerm = parseLevel(["*", "/"], parseAtom);
-  const parseExpression = parseLevel(["+", "-"], parseTerm);
+  private parseTerm(): AstNode {
+    let node = this.parseAtom();
+    while (this.pos < this.tokens.length) {
+      const op = this.peek();
+      if (
+        op?.type === "operator" &&
+        (op.value === "*" || op.value === "/")
+      ) {
+        this.consume();
+        const right = this.parseAtom();
+        node = {
+          kind: "binary",
+          op: op.value as "*" | "/",
+          left: node,
+          right,
+        };
+      } else {
+        break;
+      }
+    }
+    return node;
+  }
 
-  return parseExpression();
+  private parseExpression(): AstNode {
+    let node = this.parseTerm();
+    while (this.pos < this.tokens.length) {
+      const op = this.peek();
+      if (
+        op?.type === "operator" &&
+        (op.value === "+" || op.value === "-")
+      ) {
+        this.consume();
+        const right = this.parseTerm();
+        node = {
+          kind: "binary",
+          op: op.value as "+" | "-",
+          left: node,
+          right,
+        };
+      } else {
+        break;
+      }
+    }
+    return node;
+  }
+}
+
+/**
+ * Parse a token array into an AST node using recursive descent.
+ *
+ * Grammar (simplified):
+ *   statement : let_decl | expression
+ *   let_decl  : "let" IDENT "=" expression ";"
+ *   block     : "{" statement* "}"
+ *   expression: binary_op_chain
+ *   atom      : NUMBER | IDENT | "(" expression ")" | block
+ */
+export function parse(tokens: Token[]): AstNode {
+  return new Parser(tokens).parse();
 }
