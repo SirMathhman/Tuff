@@ -2,7 +2,7 @@ export type Token =
   | { type: "number"; value: number }
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
-  | { type: "keyword"; value: "let" }
+  | { type: "keyword"; value: "let" | "true" | "false" }
   | { type: "identifier"; value: string }
   | { type: "punctuator"; value: ";" };
 
@@ -34,6 +34,10 @@ export function tokenize(source: string): Token[] {
       }
       if (ident === "let") {
         tokens.push({ type: "keyword", value: "let" });
+      } else if (ident === "true") {
+        tokens.push({ type: "keyword", value: "true" });
+      } else if (ident === "false") {
+        tokens.push({ type: "keyword", value: "false" });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }

@@ -7,6 +7,8 @@ export function evaluate(
   switch (node.kind) {
     case "number":
       return node.value;
+    case "boolean":
+      return node.value ? 1 : 0;
     case "binary": {
       const left = evaluate(node.left, env);
       const right = evaluate(node.right, env);

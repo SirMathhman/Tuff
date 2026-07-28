@@ -153,6 +153,14 @@ class Parser {
       const t = this.consume()!;
       return { kind: "number", value: t.value as number };
     }
+    if (this.match("keyword", "true")) {
+      this.consume();
+      return { kind: "boolean", value: true };
+    }
+    if (this.match("keyword", "false")) {
+      this.consume();
+      return { kind: "boolean", value: false };
+    }
     if (this.match("identifier")) {
       const t = this.consume()!;
       return { kind: "identifier", name: t.value as string };

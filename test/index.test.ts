@@ -85,4 +85,8 @@ describe("binary expressions", () => {
   test('interpret("{ let a = 1; a } * 2") => 2', () => {
     expect(interpret("{ let a = 1; a } * 2")).toBe(2);
   });
+
+  test('interpret("let x = true; x") => 1', () => {
+    expect(interpret("let x = true; x")).toBe(1);
+  });
 });
