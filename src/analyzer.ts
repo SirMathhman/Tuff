@@ -60,6 +60,8 @@ function inferType(node: AstNode): Type {
       return inferType(node.value);
     case "while":
       return d;
+    case "typecheck":
+      return inferType(node.value);
   }
 }
 
