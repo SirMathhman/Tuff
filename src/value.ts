@@ -6,7 +6,7 @@ import type { Type } from "./types";
 
 export type Value =
   | { kind: "number"; value: number; type?: Type }
-  | { kind: "boolean"; value: boolean };
+  | { kind: "boolean"; value: boolean; type?: Type };
 
 /**
  * Result of evaluating an expression.

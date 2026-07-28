@@ -3,15 +3,16 @@ import type { Type } from "./types";
 
 export type AstNode =
   | { kind: "number"; value: number; type?: Type }
-  | { kind: "boolean"; value: boolean }
+  | { kind: "boolean"; value: boolean; type?: Type }
   | {
       kind: "binary";
       op: BinaryOp;
       left: AstNode;
       right: AstNode;
+      type?: Type;
     }
-  | { kind: "unary"; op: "-"; operand: AstNode }
-  | { kind: "identifier"; name: string }
+  | { kind: "unary"; op: "-"; operand: AstNode; type?: Type }
+  | { kind: "identifier"; name: string; type?: Type }
   | {
       kind: "let";
       name: string;

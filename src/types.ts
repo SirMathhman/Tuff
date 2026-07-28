@@ -73,6 +73,17 @@ export function isAssignable(source: Type, target: Type): boolean {
   return source.prefix === target.prefix && source.bits <= target.bits;
 }
 
+/**
+ * Widen two types: if one is dynamic, use the other. If both concrete numeric, use wider.
+ * Shared by analyzer and optimizer.
+ */
+export function widen(a: Type, b: Type): Type {
+  if (isDynamic(a)) return b;
+  if (isDynamic(b)) return a;
+  if (isNumeric(a) && isNumeric(b)) return a.bits >= b.bits ? a : b;
+  return a;
+}
+
 /** Parse a type name string into a Type. Returns dynamic() for unknown names. */
 export function parseTypeName(name: string): Type {
   if (name === "Bool") return bool();
