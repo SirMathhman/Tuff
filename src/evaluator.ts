@@ -17,6 +17,8 @@ export function evaluate(
           return left - right;
         case "*":
           return left * right;
+        case "/":
+          return left / right;
       }
       break;
     }
@@ -35,4 +37,5 @@ export function evaluate(
       return result;
     }
   }
+  return 0;
 }

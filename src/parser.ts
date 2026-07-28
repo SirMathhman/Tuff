@@ -86,10 +86,12 @@ class Parser {
 
   private parseAtom(): AstNode {
     if (this.match("number")) {
-      return { kind: "number", value: this.consume()!.value };
+      const t = this.consume()!;
+      return { kind: "number", value: t.value as number };
     }
     if (this.match("identifier")) {
-      return { kind: "identifier", name: this.consume()!.value };
+      const t = this.consume()!;
+      return { kind: "identifier", name: t.value as string };
     }
     const token = this.peek();
     if (token?.type === "group" && token.value in OPENING) {
@@ -110,15 +112,12 @@ class Parser {
     let node = this.parseAtom();
     while (this.pos < this.tokens.length) {
       const op = this.peek();
-      if (
-        op?.type === "operator" &&
-        (op.value === "*" || op.value === "/")
-      ) {
+      if (op?.type === "operator" && (op.value === "*" || op.value === "/")) {
         this.consume();
         const right = this.parseAtom();
         node = {
           kind: "binary",
-          op: op.value as "*" | "/",
+          op: op.value as "+" | "-" | "*" | "/",
           left: node,
           right,
         };
@@ -135,13 +134,13 @@ class Parser {
       const op = this.peek();
       if (
         op?.type === "operator" &&
-        (op.value === "+" || op.value === "-")
+        (op.value === "+" || op.value === "-" || op.value === "*" || op.value === "/")
       ) {
         this.consume();
         const right = this.parseTerm();
         node = {
           kind: "binary",
-          op: op.value as "+" | "-",
+          op: op.value as "+" | "-" | "*" | "/",
           left: node,
           right,
         };
