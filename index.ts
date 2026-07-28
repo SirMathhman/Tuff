@@ -92,7 +92,7 @@ class Parser {
 
   private parseStatements(
     scope: Map<string, number>,
-    shouldStop: () => boolean
+    shouldStop: () => boolean,
   ): number {
     let lastResult = 0;
     while (this.pos < this.tokens.length && !shouldStop()) {
@@ -176,7 +176,10 @@ class Parser {
     }
     if (token.type === "identifier") {
       this.consume();
-      return this.scope.get(token.value) ?? 0;
+      if (!this.scope.has(token.value)) {
+        throw new Error(`ReferenceError: '${token.value}' is not defined`);
+      }
+      return this.scope.get(token.value)!;
     }
     if (token.type === "paren" && token.value === "(") {
       this.consume();
