@@ -151,4 +151,8 @@ describe("binary expressions", () => {
   test('interpret("loop { break loop { break 5; } }") => 5', () => {
     expect(interpret("loop { break loop { break 5; } }")).toBe(5);
   });
+
+  test('interpret("if (true) { let x = 1; }") => 0 (if statement without else)', () => {
+    expect(interpret("if (true) { let x = 1; }")).toBe(0);
+  });
 });

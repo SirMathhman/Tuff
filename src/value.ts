@@ -11,8 +11,7 @@ export type Value =
  * - "break": break from a loop with a value
  */
 export type EvalResult =
-  | { kind: "value"; value: Value }
-  | { kind: "break"; value: Value };
+  { kind: "value"; value: Value } | { kind: "break"; value: Value };
 
 /** Wrap a value as a successful evaluation result. */
 export function evalOk(value: Value): EvalResult {
