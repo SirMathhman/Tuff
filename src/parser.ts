@@ -131,8 +131,35 @@ class Parser {
     if (assign) return assign;
   }
 
-  /** Try to parse `identifier = expression` or `identifier += expression` as an assignment statement. Returns undefined if not an assignment. */
+  /** Try to parse `identifier = expression`, `identifier += expression`, or `*expr = expression` as an assignment statement. Returns undefined if not an assignment. */
   private tryParseAssign(): AstNode | undefined {
+    // Check for `*expr = value` (deref assignment) — look ahead without consuming
+    if (this.match("operator", "*") && this.isUnaryContext()) {
+      // Peek ahead: check if the token after `*` and its operand is `=`
+      const savedPos = this.pos;
+      const starToken = this.tokens[this.pos]!;
+      this.consume(); // *
+      const operand = this.parseUnary();
+      const nextToken = this.peek();
+      if (nextToken?.type === "operator" && nextToken.value === "=") {
+        this.consume(); // =
+        const value = this.parseExpression();
+        if (this.match("punctuator", ";")) {
+          this.consume();
+        }
+        const target: AstNode = {
+          kind: "unary",
+          op: "*",
+          operand,
+          pos: starToken.pos,
+        };
+        return { kind: "assign", target, value, pos: starToken.pos };
+      }
+      // Not an assignment — restore position
+      this.pos = savedPos;
+    }
+
+    // Check for `identifier = value` or `identifier += value`
     if (!this.match("identifier")) return;
     const nameToken = this.peek()!;
     const pos = (nameToken as { pos: { line: number; column: number } }).pos;
@@ -156,7 +183,12 @@ class Parser {
         pos,
       };
     }
-    return { kind: "assign", name: nameToken.value as string, value, pos };
+    return {
+      kind: "assign",
+      target: { kind: "identifier", name: nameToken.value as string, pos },
+      value,
+      pos,
+    };
   }
 
   private parseLetStatement(): AstNode {
@@ -182,17 +214,19 @@ class Parser {
     return { kind: "let", name, value, mutable, type: declaredType, pos };
   }
 
-  /** Parse optional `: TypeName` and return the type, or undefined. Handles `&TypeName` for pointers. */
+  /** Parse optional `: TypeName` and return the type, or undefined. Handles `&TypeName` and `&mut TypeName` for pointers. */
   private parseTypeAnnotation(): Type | undefined {
     if (this.match("punctuator", ":")) {
       this.consume();
-      // Handle pointer type: `&TypeName`
+      // Handle pointer type: `&mut TypeName` or `&TypeName`
       if (this.match("operator", "&")) {
         this.consume();
+        const mutable = this.match("keyword", "mut");
+        if (mutable) this.consume();
         const typeToken = this.peek();
         if (typeToken?.type === "identifier") {
           this.consume();
-          return pointer(parseTypeName(typeToken.value));
+          return pointer(parseTypeName(typeToken.value), mutable);
         }
       }
       const typeToken = this.peek();
@@ -326,7 +360,7 @@ class Parser {
     return false;
   }
 
-  /** Parse unary expressions: `-expr`, `&expr` (ref), `*expr` (deref in unary context only). */
+  /** Parse unary expressions: `-expr`, `&expr` (ref), `&mut expr` (mutable ref), `*expr` (deref in unary context only). */
   private parseUnary(): AstNode {
     if (this.match("operator", "-")) {
       const opToken = this.consume()!;
@@ -335,6 +369,11 @@ class Parser {
     }
     if (this.match("operator", "&")) {
       const opToken = this.consume()!;
+      if (this.match("keyword", "mut")) {
+        this.consume();
+        const operand = this.parseUnary();
+        return { kind: "unary", op: "&mut", operand, pos: opToken.pos };
+      }
       const operand = this.parseUnary();
       return { kind: "unary", op: "&", operand, pos: opToken.pos };
     }
