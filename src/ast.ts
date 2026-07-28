@@ -9,6 +9,7 @@ export type AstNode =
       left: AstNode;
       right: AstNode;
     }
+  | { kind: "unary"; op: "-"; operand: AstNode }
   | { kind: "identifier"; name: string }
   | { kind: "let"; name: string; value: AstNode; mutable: boolean }
   | { kind: "assign"; name: string; value: AstNode }

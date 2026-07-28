@@ -232,7 +232,17 @@ class Parser {
       }
       return node;
     }
-    return { kind: "number", value: 0 };
+    throw new Error(`Unexpected token: ${token?.value}`);
+  }
+
+  /** Parse unary expressions: `-expr`. */
+  private parseUnary(): AstNode {
+    if (this.match("operator", "-")) {
+      this.consume();
+      const operand = this.parseUnary();
+      return { kind: "unary", op: "-", operand };
+    }
+    return this.parseAtom();
   }
 
   private parseIfExpression(): AstNode {
@@ -329,7 +339,7 @@ class Parser {
   }
 
   private parseExpression(): AstNode {
-    return this.parseBinary(0, () => this.parseAtom());
+    return this.parseBinary(0, () => this.parseUnary());
   }
 }
 

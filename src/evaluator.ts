@@ -23,6 +23,14 @@ export function evaluate(
       return evalOk({ kind: "number", value: node.value });
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value });
+    case "unary": {
+      const operand = unwrap(evaluate(node.operand, env));
+      switch (node.op) {
+        case "-":
+          return evalOk({ kind: "number", value: -toNumber(operand) });
+      }
+      break;
+    }
     case "binary": {
       const left = unwrap(evaluate(node.left, env));
       const right = unwrap(evaluate(node.right, env));

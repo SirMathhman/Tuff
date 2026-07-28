@@ -15,6 +15,26 @@ describe("number literals", () => {
   test('interpret("1") => 1', () => {
     expect(interpret("1")).toBe(1);
   });
+
+  test('interpret("100U8") => 100', () => {
+    expect(interpret("100U8")).toBe(100);
+  });
+
+  test('interpret("256U8") => Error', () => {
+    expect(() => interpret("256U8")).toThrow();
+  });
+
+  test('interpret("-100U8") => Error', () => {
+    expect(() => interpret("-100U8")).toThrow();
+  });
+
+  test('interpret("let x = 1; -x") => -1', () => {
+    expect(interpret("let x = 1; -x")).toBe(-1);
+  });
+
+  test('interpret("-(2 + 3)") => -5', () => {
+    expect(interpret("-(2 + 3)")).toBe(-5);
+  });
 });
 
 describe("binary expressions", () => {
