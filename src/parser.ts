@@ -196,7 +196,7 @@ class Parser {
         const right = this.parseBinary(level + 1, lower);
         node = {
           kind: "binary",
-          op: op.value as "+" | "-" | "*" | "/" | "||" | "&&" | "<" | ">",
+          op: op.value as "+" | "-" | "*" | "/" | "||" | "&&" | "<" | ">" | "==",
           left: node,
           right,
         };

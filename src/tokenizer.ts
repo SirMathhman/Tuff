@@ -1,6 +1,9 @@
 export type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" | "||" | "&&" | "<" | ">" }
+  | {
+      type: "operator";
+      value: "+" | "-" | "*" | "/" | "=" | "==" | "||" | "&&" | "<" | ">";
+    }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
   | { type: "keyword"; value: "let" | "true" | "false" }
   | { type: "identifier"; value: string }
@@ -74,8 +77,13 @@ export function tokenize(source: string): Token[] {
       tokens.push({ type: "operator", value: ">" });
       i++;
     } else if (ch === "=") {
-      tokens.push({ type: "operator", value: "=" });
-      i++;
+      if (i + 1 < source.length && source.charAt(i + 1) === "=") {
+        tokens.push({ type: "operator", value: "==" });
+        i += 2;
+      } else {
+        tokens.push({ type: "operator", value: "=" });
+        i++;
+      }
     } else if (ch === ";") {
       tokens.push({ type: "punctuator", value: ";" });
       i++;

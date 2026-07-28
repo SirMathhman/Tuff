@@ -17,7 +17,7 @@ export const OPENING: Record<string, string> = {
 export const PRECEDENCE: readonly string[][] = [
   ["||"], // logical OR
   ["&&"], // logical AND
-  ["<", ">"], // comparison
+  ["<", ">", "=="], // comparison
   ["+", "-"], // additive
   ["*", "/"], // multiplicative
 ];
