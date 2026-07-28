@@ -165,7 +165,10 @@ class Parser {
     scope: Map<string, VarEntry>,
     shouldStop: () => boolean,
   ): { value: number; void: boolean } {
-    let lastResult: { value: number; void: boolean } = { value: 0, void: false };
+    let lastResult: { value: number; void: boolean } = {
+      value: 0,
+      void: false,
+    };
     while (this.pos < this.tokens.length && !shouldStop()) {
       const t = this.peek();
       if (t && t.type === "keyword" && t.value === "let") {
@@ -180,30 +183,11 @@ class Parser {
     return lastResult;
   }
 
-  private parseLetStatementResult(
-    scope: Map<string, VarEntry>,
-  ): { value: number; void: boolean } {
-    this.consume(); // consume "let"
-    let mutable = false;
-    const mutToken = this.peek();
-    if (mutToken && mutToken.type === "keyword" && mutToken.value === "mut") {
-      mutable = true;
-      this.consume(); // consume "mut"
-    }
-    const idToken = this.peek();
-    if (idToken && idToken.type === "identifier") {
-      this.consume(); // consume identifier
-      if (this.peek()?.type === "punctuator" && this.peek()?.value === "=") {
-        this.consume(); // consume "="
-        const value = this.parseExpression();
-        scope.set(idToken.value, { value, mutable });
-      } else {
-        scope.set(idToken.value, { value: 0, mutable });
-      }
-      if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
-        this.consume(); // consume ";"
-      }
-    }
+  private parseLetStatementResult(scope: Map<string, VarEntry>): {
+    value: number;
+    void: boolean;
+  } {
+    this.parseLetStatement(scope);
     return { value: 0, void: true };
   }
 
@@ -454,7 +438,10 @@ class Parser {
         if (t?.type === "keyword" && t.value === "break") {
           this.consume(); // consume "break"
           result = this.parseExpression();
-          if (this.peek()?.type === "punctuator" && this.peek()?.value === ";") {
+          if (
+            this.peek()?.type === "punctuator" &&
+            this.peek()?.value === ";"
+          ) {
             this.consume();
           }
           break;
