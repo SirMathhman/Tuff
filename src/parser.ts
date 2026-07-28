@@ -201,15 +201,35 @@ class Parser {
   }
 
   private parseExpression(): AstNode {
-    let node = this.parseAdditive();
+    let node = this.parseAndExpression();
     while (this.pos < this.tokens.length) {
       const op = this.peek();
       if (op?.type === "operator" && op.value === "||") {
         this.consume();
-        const right = this.parseAdditive();
+        const right = this.parseAndExpression();
         node = {
           kind: "binary",
           op: "||",
+          left: node,
+          right,
+        };
+      } else {
+        break;
+      }
+    }
+    return node;
+  }
+
+  private parseAndExpression(): AstNode {
+    let node = this.parseAdditive();
+    while (this.pos < this.tokens.length) {
+      const op = this.peek();
+      if (op?.type === "operator" && op.value === "&&") {
+        this.consume();
+        const right = this.parseAdditive();
+        node = {
+          kind: "binary",
+          op: "&&",
           left: node,
           right,
         };
