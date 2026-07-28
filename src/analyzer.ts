@@ -230,6 +230,13 @@ function resolveType(
       const callee = node.callee as { kind: "identifier"; name: string };
       const decl = declarations.get(callee.name);
       const params = decl?.params;
+      if (params && node.args.length !== params.length) {
+        throw new InterpreterError(
+          "type",
+          `Function '${callee.name}' expects ${params.length} argument(s), got ${node.args.length}`,
+          node.pos,
+        );
+      }
       for (let i = 0; i < node.args.length; i++) {
         const arg = node.args[i];
         if (!arg) continue;

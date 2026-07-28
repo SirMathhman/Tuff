@@ -318,6 +318,14 @@ describe("binary expressions", () => {
   test('interpret("fn get() : U8 => 0U16;") => Error (return type mismatch)', () => {
     expect(() => interpret("fn get() : U8 => 0U16;")).toThrow();
   });
+
+  test('interpret("fn add(a, b) => a + b; add(1)") => Error (missing param)', () => {
+    expect(() => interpret("fn add(a, b) => a + b; add(1)")).toThrow();
+  });
+
+  test('interpret("fn get() => 1; get(1)") => Error (extra param)', () => {
+    expect(() => interpret("fn get() => 1; get(1)")).toThrow();
+  });
 });
 
 describe("error positions", () => {
