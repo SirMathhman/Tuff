@@ -1,7 +1,7 @@
 import type { AstNode } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
-import { isDynamic, isNumeric, numeric } from "./types";
+import { bool, isDynamic, isNumeric, numeric } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
 function getMutable(name: string, env: Map<string, Value>): Value | undefined {
@@ -143,6 +143,7 @@ export function evaluate(
       return evalOk({
         kind: "boolean",
         value: typesEqual(resolvedType, node.type),
+        type: bool(),
       });
     }
   }

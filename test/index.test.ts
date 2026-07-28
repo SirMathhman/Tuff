@@ -68,6 +68,10 @@ describe("number literals", () => {
     expect(interpret("5U8 is U8")).toBe(1);
   });
 
+  test('interpret("100U8 is U8 is Bool") => 1', () => {
+    expect(interpret("100U8 is U8 is Bool")).toBe(1);
+  });
+
   test('interpret("true is Bool") => 1', () => {
     expect(interpret("true is Bool")).toBe(1);
   });

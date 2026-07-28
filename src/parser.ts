@@ -260,14 +260,16 @@ class Parser {
       return { kind: "unary", op: "-", operand };
     }
     let node = this.parseAtom();
-    // Handle postfix `is TypeName`
-    if (this.match("keyword", "is")) {
+    // Handle postfix `is TypeName` — supports chaining: `expr is T1 is T2`
+    while (this.match("keyword", "is")) {
       this.consume();
       const typeToken = this.peek();
       if (typeToken?.type === "identifier") {
         const type = parseTypeName(typeToken.value);
         this.consume();
         node = { kind: "typecheck", value: node, type };
+      } else {
+        break;
       }
     }
     return node;
