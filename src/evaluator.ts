@@ -79,7 +79,10 @@ export function evaluate(
     case "augassign": {
       const current = getMutable(node.name, env)!;
       const rhs = unwrap(evaluate(node.value, env));
-      const newValue: Value = { kind: "number", value: toNumber(current) + toNumber(rhs) };
+      const newValue: Value = {
+        kind: "number",
+        value: toNumber(current) + toNumber(rhs),
+      };
       setMutable(node.name, newValue, env);
       return evalOk(newValue);
     }
@@ -108,6 +111,13 @@ export function evaluate(
     case "break": {
       const value = unwrap(evaluate(node.value, env));
       return evalBreak(value);
+    }
+    case "while": {
+      while (toNumber(unwrap(evaluate(node.condition, env))) !== 0) {
+        const result = evaluate({ kind: "block", statements: node.body }, env);
+        if (result.kind === "break") return result;
+      }
+      return evalOk({ kind: "number", value: 0 });
     }
   }
   return evalOk({ kind: "number", value: 0 });

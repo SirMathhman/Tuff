@@ -22,7 +22,7 @@ export type Token =
   | {
       type: "keyword";
       value:
-        "let" | "mut" | "true" | "false" | "if" | "else" | "loop" | "break";
+        "let" | "mut" | "true" | "false" | "if" | "else" | "loop" | "break" | "while";
     }
   | { type: "identifier"; value: string }
   | { type: "punctuator"; value: ";" };
@@ -69,6 +69,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "loop" });
       } else if (ident === "break") {
         tokens.push({ type: "keyword", value: "break" });
+      } else if (ident === "while") {
+        tokens.push({ type: "keyword", value: "while" });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }

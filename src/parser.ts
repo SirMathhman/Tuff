@@ -134,10 +134,11 @@ class Parser {
     return this.parseExpression();
   }
 
-  /** Try to parse a known statement (`let`, `if`, `break`, or `identifier = expr`). Returns undefined if none match. */
+  /** Try to parse a known statement (`let`, `if`, `while`, `break`, or `identifier = expr`). Returns undefined if none match. */
   private tryParseKnownStatement(): AstNode | undefined {
     if (this.match("keyword", "let")) return this.parseLetStatement();
     if (this.match("keyword", "if")) return this.parseIfStatement();
+    if (this.match("keyword", "while")) return this.parseWhileStatement();
     if (this.match("keyword", "break")) {
       this.consume();
       const value = this.parseExpression();
@@ -266,6 +267,25 @@ class Parser {
       then: thenBranch,
       elseBranch: { kind: "number", value: 0 },
     };
+  }
+
+  private parseWhileStatement(): AstNode {
+    this.consume(); // eat "while"
+    this.expect("group", "(");
+    const condition = this.parseExpression();
+    this.expect("group", ")");
+    this.expect("group", "{");
+    const body: AstNode[] = [];
+    while (this.pos < this.tokens.length && !this.match("group", "}")) {
+      const prevPos = this.pos;
+      const stmt = this.parseStatement();
+      if (prevPos === this.pos) {
+        this.pos++;
+      }
+      body.push(stmt);
+    }
+    this.expect("group", "}");
+    return { kind: "while", condition, body };
   }
 
   private parseLoopExpression(): AstNode {

@@ -21,4 +21,5 @@ export type AstNode =
       elseBranch: AstNode;
     }
   | { kind: "loop"; body: AstNode[] }
-  | { kind: "break"; value: AstNode };
+  | { kind: "break"; value: AstNode }
+  | { kind: "while"; condition: AstNode; body: AstNode[] };
