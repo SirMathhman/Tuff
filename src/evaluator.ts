@@ -144,9 +144,10 @@ export function evaluate(
   return evalOk({ kind: "number", value: 0 });
 }
 
-/** Check if a runtime value has the exact target type. */
+/** Check if a runtime value matches the target type. Dynamic values match anything. */
 function checkType(value: Value, targetType: Type): boolean {
   const valueType = inferRuntimeType(value);
+  if (valueType.kind === "dynamic") return true;
   return typesEqual(valueType, targetType);
 }
 
