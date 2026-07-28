@@ -32,7 +32,8 @@ export type Token =
         | "else"
         | "loop"
         | "break"
-        | "while";
+        | "while"
+        | "is";
     }
   | { type: "identifier"; value: string }
   | { type: "punctuator"; value: ";" | ":" };
@@ -151,6 +152,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "break" });
       } else if (lower === "while") {
         tokens.push({ type: "keyword", value: "while" });
+      } else if (lower === "is") {
+        tokens.push({ type: "keyword", value: "is" });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }

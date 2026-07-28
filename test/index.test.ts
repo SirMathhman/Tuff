@@ -59,6 +59,10 @@ describe("number literals", () => {
   test('interpret("let x : Bool = 5U8;") => Error', () => {
     expect(() => interpret("let x : Bool = 5U8;")).toThrow();
   });
+
+  test('interpret("5U8 is U8") => 1', () => {
+    expect(interpret("5U8 is U8")).toBe(1);
+  });
 });
 
 describe("binary expressions", () => {

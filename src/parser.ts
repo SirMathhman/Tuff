@@ -259,7 +259,18 @@ class Parser {
       const operand = this.parseUnary();
       return { kind: "unary", op: "-", operand };
     }
-    return this.parseAtom();
+    let node = this.parseAtom();
+    // Handle postfix `is TypeName`
+    if (this.match("keyword", "is")) {
+      this.consume();
+      const typeToken = this.peek();
+      if (typeToken?.type === "identifier") {
+        const type = parseTypeName(typeToken.value);
+        this.consume();
+        node = { kind: "typecheck", value: node, type };
+      }
+    }
+    return node;
   }
 
   private parseIfExpression(): AstNode {

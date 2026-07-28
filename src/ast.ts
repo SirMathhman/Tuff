@@ -30,4 +30,5 @@ export type AstNode =
     }
   | { kind: "loop"; body: AstNode[] }
   | { kind: "break"; value: AstNode }
-  | { kind: "while"; condition: AstNode; body: AstNode[] };
+  | { kind: "while"; condition: AstNode; body: AstNode[] }
+  | { kind: "typecheck"; value: AstNode; type: Type };

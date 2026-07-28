@@ -1,5 +1,7 @@
 import type { AstNode } from "./ast";
+import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
+import { isAssignable } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
 function getMutable(name: string, env: Map<string, Value>): Value | undefined {
@@ -127,6 +129,24 @@ export function evaluate(
       }
       return evalOk({ kind: "number", value: 0 });
     }
+    case "typecheck": {
+      const value = unwrap(evaluate(node.value, env));
+      return evalOk({
+        kind: "boolean",
+        value: checkType(value, node.type),
+      });
+    }
   }
   return evalOk({ kind: "number", value: 0 });
+}
+
+/** Check if a runtime value matches the target type. */
+function checkType(value: Value, targetType: Type): boolean {
+  return isAssignable(inferRuntimeType(value), targetType);
+}
+
+/** Infer the type of a runtime value. */
+function inferRuntimeType(value: Value): Type {
+  if (value.kind === "boolean") return { kind: "bool" };
+  return { kind: "dynamic" };
 }
