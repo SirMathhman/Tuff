@@ -2,6 +2,7 @@ type Token =
   | { type: "number"; value: number }
   | { type: "boolean"; value: boolean }
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "||" | "&&" }
+  | { type: "compare"; value: "<" | ">" | "<=" | ">=" | "==" | "!=" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "keyword"; value: string }
   | { type: "identifier"; value: string }
@@ -36,6 +37,24 @@ function tokenize(source: string): Token[] {
     } else if (ch === "&" && source[i + 1] === "&") {
       tokens.push({ type: "operator", value: "&&" });
       i += 2;
+    } else if (ch === "<" && source[i + 1] === "=") {
+      tokens.push({ type: "compare", value: "<=" });
+      i += 2;
+    } else if (ch === ">" && source[i + 1] === "=") {
+      tokens.push({ type: "compare", value: ">=" });
+      i += 2;
+    } else if (ch === "=" && source[i + 1] === "=") {
+      tokens.push({ type: "compare", value: "==" });
+      i += 2;
+    } else if (ch === "!" && source[i + 1] === "=") {
+      tokens.push({ type: "compare", value: "!=" });
+      i += 2;
+    } else if (ch === "<") {
+      tokens.push({ type: "compare", value: "<" });
+      i++;
+    } else if (ch === ">") {
+      tokens.push({ type: "compare", value: ">" });
+      i++;
     } else if (ch === "(" || ch === ")" || ch === "{" || ch === "}") {
       tokens.push({ type: "paren", value: ch as "(" | ")" | "{" | "}" });
       i++;
@@ -152,24 +171,16 @@ class Parser {
   }
 
   private parseExpression(): number {
-    let left = this.parseAssignment();
+    let left = this.parseAddition();
     while (this.pos < this.tokens.length) {
       const token = this.peek();
       if (
         token &&
         token.type === "operator" &&
-        (token.value === "+" || token.value === "-")
-      ) {
-        this.consume();
-        const right = this.parseAssignment();
-        left = token.value === "+" ? left + right : left - right;
-      } else if (
-        token &&
-        token.type === "operator" &&
         (token.value === "||" || token.value === "&&")
       ) {
         this.consume();
-        const right = this.parseAssignment();
+        const right = this.parseAddition();
         if (token.value === "||") {
           left = left !== 0 || right !== 0 ? 1 : 0;
         } else {
@@ -180,6 +191,61 @@ class Parser {
       }
     }
     return left;
+  }
+
+  private parseAddition(): number {
+    let left = this.parseComparison();
+    while (this.pos < this.tokens.length) {
+      const token = this.peek();
+      if (
+        token &&
+        token.type === "operator" &&
+        (token.value === "+" || token.value === "-")
+      ) {
+        this.consume();
+        const right = this.parseComparison();
+        left = token.value === "+" ? left + right : left - right;
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private parseComparison(): number {
+    let left = this.parseAssignment();
+    while (this.pos < this.tokens.length) {
+      const token = this.peek();
+      if (token && token.type === "compare") {
+        this.consume();
+        const right = this.parseAssignment();
+        left = this.evaluateComparison(token.value, left, right);
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private evaluateComparison(
+    op: "<" | ">" | "<=" | ">=" | "==" | "!=",
+    left: number,
+    right: number,
+  ): number {
+    switch (op) {
+      case "<":
+        return left < right ? 1 : 0;
+      case ">":
+        return left > right ? 1 : 0;
+      case "<=":
+        return left <= right ? 1 : 0;
+      case ">=":
+        return left >= right ? 1 : 0;
+      case "==":
+        return left === right ? 1 : 0;
+      case "!=":
+        return left !== right ? 1 : 0;
+    }
   }
 
   private parseAssignment(): number {

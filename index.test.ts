@@ -80,3 +80,7 @@ test('evaluate("let x = true; x") => 1', () => {
 test('evaluate("let x = true; let y = false; x || y") => 1', () => {
   expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
 });
+
+test('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
+  expect(evaluate("let x = 0; let y = 1; x < y")).toBe(1);
+});
