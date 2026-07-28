@@ -303,4 +303,10 @@ describe("binary expressions", () => {
   test('interpret("fn get() => 100; fn get() => 200;") => Error', () => {
     expect(() => interpret("fn get() => 100; fn get() => 200;")).toThrow();
   });
+
+  test('interpret("fn accept(param : U8) => {} accept(0U16)") => Error', () => {
+    expect(() =>
+      interpret("fn accept(param : U8) => {} accept(0U16)"),
+    ).toThrow();
+  });
 });

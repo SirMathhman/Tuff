@@ -27,6 +27,7 @@ interface Declaration {
   kind: "var" | "fn";
   type?: Type;
   mutable?: boolean;
+  params?: { name: string; type?: Type }[];
 }
 
 /**
@@ -192,13 +193,26 @@ function resolveType(
         throw new Error(`Duplicate declaration: '${node.name}'`);
       }
       const bodyType = resolveType(node.body, declarations);
-      declarations.set(node.name, { kind: "fn", type: bodyType });
+      declarations.set(node.name, {
+        kind: "fn",
+        type: bodyType,
+        params: node.params,
+      });
       return dynamic();
     }
     case "call": {
-      for (const arg of node.args) resolveType(arg, declarations);
       const callee = node.callee as { kind: "identifier"; name: string };
       const decl = declarations.get(callee.name);
+      const params = decl?.params;
+      for (let i = 0; i < node.args.length; i++) {
+        const arg = node.args[i];
+        if (!arg) continue;
+        const argType = resolveType(arg, declarations);
+        const param = params?.[i];
+        if (param?.type) {
+          checkAssignable(argType, param.type);
+        }
+      }
       return decl?.type ?? dynamic();
     }
   }
