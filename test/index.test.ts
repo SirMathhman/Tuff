@@ -147,4 +147,8 @@ describe("binary expressions", () => {
   test('interpret("let x = loop { break 3; }; x") => 3', () => {
     expect(interpret("let x = loop { break 3; }; x")).toBe(3);
   });
+
+  test('interpret("loop { break loop { break 5; } }") => 5', () => {
+    expect(interpret("loop { break loop { break 5; } }")).toBe(5);
+  });
 });

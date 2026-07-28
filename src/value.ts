@@ -5,6 +5,33 @@
 export type Value =
   { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
 
+/**
+ * Result of evaluating an expression.
+ * - "value": normal evaluation result
+ * - "break": break from a loop with a value
+ */
+export type EvalResult =
+  | { kind: "value"; value: Value }
+  | { kind: "break"; value: Value };
+
+/** Wrap a value as a successful evaluation result. */
+export function evalOk(value: Value): EvalResult {
+  return { kind: "value", value };
+}
+
+/** Wrap a value as a break result. */
+export function evalBreak(value: Value): EvalResult {
+  return { kind: "break", value };
+}
+
+/** Unwrap an evaluation result to a value. Throws if it's a break outside a loop. */
+export function unwrap(result: EvalResult): Value {
+  if (result.kind === "break") {
+    throw new Error("Unexpected break outside loop");
+  }
+  return result.value;
+}
+
 /** Coerce a value to a number. Booleans become 1/0. */
 export function toNumber(v: Value): number {
   switch (v.kind) {

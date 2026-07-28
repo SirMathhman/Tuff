@@ -1,50 +1,46 @@
 import type { AstNode } from "./ast";
-import type { Value } from "./value";
-import { toNumber } from "./value";
-
-class BreakError {
-  constructor(public value: Value) {}
-}
+import type { EvalResult, Value } from "./value";
+import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
 export function evaluate(
   node: AstNode,
   env: Map<string, Value> = new Map(),
-): Value {
+): EvalResult {
   switch (node.kind) {
     case "number":
-      return { kind: "number", value: node.value };
+      return evalOk({ kind: "number", value: node.value });
     case "boolean":
-      return { kind: "boolean", value: node.value };
+      return evalOk({ kind: "boolean", value: node.value });
     case "binary": {
-      const left = evaluate(node.left, env);
-      const right = evaluate(node.right, env);
+      const left = unwrap(evaluate(node.left, env));
+      const right = unwrap(evaluate(node.right, env));
       const l = toNumber(left);
       const r = toNumber(right);
       switch (node.op) {
         case "+":
-          return { kind: "number", value: l + r };
+          return evalOk({ kind: "number", value: l + r });
         case "-":
-          return { kind: "number", value: l - r };
+          return evalOk({ kind: "number", value: l - r });
         case "*":
-          return { kind: "number", value: l * r };
+          return evalOk({ kind: "number", value: l * r });
         case "/":
-          return { kind: "number", value: l / r };
+          return evalOk({ kind: "number", value: l / r });
         case "||":
-          return toNumber(left) !== 0 ? left : right;
+          return evalOk(toNumber(left) !== 0 ? left : right);
         case "&&":
-          return toNumber(left) !== 0 ? right : left;
+          return evalOk(toNumber(left) !== 0 ? right : left);
         case "<":
-          return { kind: "boolean", value: l < r };
+          return evalOk({ kind: "boolean", value: l < r });
         case ">":
-          return { kind: "boolean", value: l > r };
+          return evalOk({ kind: "boolean", value: l > r });
         case "==":
-          return { kind: "boolean", value: l === r };
+          return evalOk({ kind: "boolean", value: l === r });
         case "!=":
-          return { kind: "boolean", value: l !== r };
+          return evalOk({ kind: "boolean", value: l !== r });
         case "<=":
-          return { kind: "boolean", value: l <= r };
+          return evalOk({ kind: "boolean", value: l <= r });
         case ">=":
-          return { kind: "boolean", value: l >= r };
+          return evalOk({ kind: "boolean", value: l >= r });
       }
       break;
     }
@@ -53,33 +49,33 @@ export function evaluate(
       if (value === undefined) {
         throw new Error(`Undefined identifier: ${node.name}`);
       }
-      return value;
+      return evalOk(value);
     }
     case "let": {
-      const value = evaluate(node.value, env);
+      const value = unwrap(evaluate(node.value, env));
       env.set(node.name, value);
       if (node.mutable) {
         env.set(`__mutable__${node.name}`, { kind: "boolean", value: true });
       }
-      return { kind: "number", value: 0 };
+      return evalOk({ kind: "number", value: 0 });
     }
     case "assign": {
       if (!env.has(`__mutable__${node.name}`)) {
         throw new Error(`Cannot assign to immutable variable: ${node.name}`);
       }
-      const value = evaluate(node.value, env);
+      const value = unwrap(evaluate(node.value, env));
       env.set(node.name, value);
-      return value;
+      return evalOk(value);
     }
     case "block": {
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {
-        result = evaluate(stmt, env);
+        result = unwrap(evaluate(stmt, env));
       }
-      return result;
+      return evalOk(result);
     }
     case "if": {
-      const condition = evaluate(node.condition, env);
+      const condition = unwrap(evaluate(node.condition, env));
       if (toNumber(condition) !== 0) {
         return evaluate(node.then, env);
       } else {
@@ -88,19 +84,15 @@ export function evaluate(
     }
     case "loop": {
       for (const stmt of node.body) {
-        try {
-          return evaluate(stmt, env);
-        } catch (e) {
-          if (e instanceof BreakError) return e.value;
-          throw e;
-        }
+        const result = evaluate(stmt, env);
+        if (result.kind === "break") return evalOk(result.value);
       }
-      return { kind: "number", value: 0 };
+      return evalOk({ kind: "number", value: 0 });
     }
     case "break": {
-      const value = evaluate(node.value, env);
-      throw new BreakError(value);
+      const value = unwrap(evaluate(node.value, env));
+      return evalBreak(value);
     }
   }
-  return { kind: "number", value: 0 };
+  return evalOk({ kind: "number", value: 0 });
 }
