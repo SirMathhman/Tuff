@@ -3,6 +3,7 @@ import type { Type } from "./types";
 import { getOperatorCategory } from "./grammar";
 import { InterpreterError } from "./error";
 import {
+  arrayType,
   bool,
   dynamic,
   isAssignable,
@@ -149,6 +150,41 @@ function resolveType(
     case "identifier": {
       const decl = declarations.get(node.name);
       node.type = decl?.type ?? dynamic();
+      return node.type;
+    }
+
+    case "array": {
+      // Infer element type from first element, or use declared type
+      let elementType: Type = dynamic();
+      for (const elem of node.elements) {
+        const elemType = resolveType(elem, declarations);
+        if (!isDynamic(elementType) && !isDynamic(elemType)) {
+          elementType = widen(elementType, elemType);
+        } else if (isDynamic(elementType)) {
+          elementType = elemType;
+        }
+      }
+      // Use declared inner type if present
+      if (node.type && node.type.kind === "array") {
+        elementType = node.type.inner;
+      }
+      node.type = arrayType(elementType, node.elements.length);
+      return node.type;
+    }
+
+    case "index": {
+      const targetType = resolveType(node.target, declarations);
+      const indexType = resolveType(node.index, declarations);
+      // Index must be numeric
+      if (isDynamic(indexType)) {
+        // Allow dynamic index
+      }
+      // Target must be an array type
+      if (targetType.kind === "array") {
+        node.type = targetType.inner;
+      } else {
+        node.type = dynamic();
+      }
       return node.type;
     }
 

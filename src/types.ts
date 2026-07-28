@@ -32,9 +32,16 @@ export interface PointerType {
   mutable: boolean;
 }
 
+/** Array type with element type and fixed length. */
+export interface ArrayType {
+  kind: "array";
+  inner: Type;
+  length: number;
+}
+
 /** All possible types in the Tuff language. */
 export type Type =
-  NumericType | BoolType | VoidType | DynamicType | PointerType;
+  NumericType | BoolType | VoidType | DynamicType | PointerType | ArrayType;
 
 /** Construct a numeric type. */
 export function numeric(prefix: "U" | "I" | "F", bits: number): NumericType {
@@ -59,6 +66,11 @@ export function dynamic(): DynamicType {
 /** Construct a pointer type. */
 export function pointer(inner: Type, mutable: boolean = false): PointerType {
   return { kind: "pointer", inner, mutable };
+}
+
+/** Construct an array type. */
+export function arrayType(inner: Type, length: number): ArrayType {
+  return { kind: "array", inner, length };
 }
 
 /** Check if a type is numeric. */
@@ -86,6 +98,11 @@ export function isPointer(t: Type): t is PointerType {
   return t.kind === "pointer";
 }
 
+/** Check if a type is an array type. */
+export function isArray(t: Type): t is ArrayType {
+  return t.kind === "array";
+}
+
 /** Get bit width for numeric types, 0 otherwise. */
 export function getBits(t: Type): number {
   return t.kind === "numeric" ? t.bits : 0;
@@ -97,6 +114,7 @@ export function getBits(t: Type): number {
  * - Bool → Bool: exact match
  * - Numeric → Numeric: same prefix family, source.bits <= target.bits
  * - Pointer → Pointer: inner types must be compatible
+ * - Array → Array: same length, inner types must be compatible
  * - Bool ↔ Numeric: never OK
  */
 export function isAssignable(source: Type, target: Type): boolean {
@@ -108,6 +126,12 @@ export function isAssignable(source: Type, target: Type): boolean {
     return isAssignable(source.inner, target.inner);
   }
   if (isPointer(source)) return false;
+  if (isArray(target)) {
+    if (!isArray(source)) return false;
+    if (source.length !== target.length) return false;
+    return isAssignable(source.inner, target.inner);
+  }
+  if (isArray(source)) return false;
   if (!isNumeric(target) || !isNumeric(source)) return false;
   return source.prefix === target.prefix && source.bits <= target.bits;
 }
@@ -164,5 +188,6 @@ export function typeName(t: Type): string {
   if (t.kind === "bool") return "Bool";
   if (t.kind === "void") return "Void";
   if (t.kind === "pointer") return `&${typeName(t.inner)}`;
+  if (t.kind === "array") return `[${typeName(t.inner)}; ${t.length}]`;
   return "dynamic";
 }

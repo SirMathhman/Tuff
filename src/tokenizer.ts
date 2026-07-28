@@ -26,7 +26,7 @@ export type Token =
         | "&";
       pos: TokenPos;
     }
-  | { type: "group"; value: "(" | ")" | "{" | "}"; pos: TokenPos }
+  | { type: "group"; value: "(" | ")" | "{" | "}" | "[" | "]"; pos: TokenPos }
   | {
       type: "keyword";
       value:
@@ -44,7 +44,7 @@ export type Token =
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
-  | { type: "punctuator"; value: ";" | ":"; pos: TokenPos };
+  | { type: "punctuator"; value: ";" | ":" | ","; pos: TokenPos };
 
 function isUnaryContext(tokens: Token[]): boolean {
   if (tokens.length === 0) return true;
@@ -304,6 +304,10 @@ function matchSingleCharToken(
     tokens.push({ type: "punctuator", value: ":", pos });
     return 1;
   }
+  if (ch === ",") {
+    tokens.push({ type: "punctuator", value: ",", pos });
+    return 1;
+  }
   if (ch === "(") {
     tokens.push({ type: "group", value: "(", pos });
     return 1;
@@ -318,6 +322,14 @@ function matchSingleCharToken(
   }
   if (ch === "}") {
     tokens.push({ type: "group", value: "}", pos });
+    return 1;
+  }
+  if (ch === "[") {
+    tokens.push({ type: "group", value: "[", pos });
+    return 1;
+  }
+  if (ch === "]") {
+    tokens.push({ type: "group", value: "]", pos });
     return 1;
   }
   // Unknown char — skip

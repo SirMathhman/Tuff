@@ -342,6 +342,10 @@ describe("binary expressions", () => {
       interpret("let mut x = 1; let y : &mut I32 = &mut x; *y += 2; x"),
     ).toBe(3);
   });
+
+  test('interpret("let array : [I32; 3] = [1, 2, 3]; array[0]") => 1', () => {
+    expect(interpret("let array : [I32; 3] = [1, 2, 3]; array[0]")).toBe(1);
+  });
 });
 
 describe("error positions", () => {

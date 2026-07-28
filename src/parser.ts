@@ -4,7 +4,7 @@ import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { parseTypeName, pointer } from "./types";
+import { arrayType, parseTypeName, pointer } from "./types";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -228,10 +228,26 @@ class Parser {
     return { kind: "let", name, value, mutable, type: declaredType, pos };
   }
 
-  /** Parse optional `: TypeName` and return the type, or undefined. Handles `&TypeName` and `&mut TypeName` for pointers. */
+  /** Parse optional `: TypeName`, `: &mut TypeName`, `: &TypeName`, or `: [TypeName; N]`. */
   private parseTypeAnnotation(): Type | undefined {
     if (this.match("punctuator", ":")) {
       this.consume();
+      // Array type: `[TypeName; N]`
+      if (this.match("group", "[")) {
+        this.consume();
+        const typeToken = this.peek();
+        if (typeToken?.type === "identifier") {
+          const inner = parseTypeName(typeToken.value);
+          this.consume();
+          this.expect("punctuator", ";");
+          const lengthToken = this.peek();
+          if (lengthToken?.type === "number") {
+            this.consume();
+            this.expect("group", "]");
+            return arrayType(inner, lengthToken.value);
+          }
+        }
+      }
       // Handle pointer type: `&mut TypeName` or `&TypeName`
       if (this.match("operator", "&")) {
         this.consume();
@@ -343,6 +359,21 @@ class Parser {
       }
       return { kind: "identifier", name, pos };
     }
+    // Array literal: `[expr, expr, ...]`
+    if (this.match("group", "[")) {
+      const pos = this.peek()?.pos;
+      this.consume();
+      const elements: AstNode[] = [];
+      while (!this.match("group", "]")) {
+        if (this.match("punctuator", ",")) {
+          this.consume();
+          continue;
+        }
+        elements.push(this.parseExpression());
+      }
+      this.expect("group", "]");
+      return { kind: "array", elements, pos };
+    }
     const token = this.peek();
     if (token?.type === "group" && token.value in OPENING) {
       this.consume();
@@ -409,6 +440,14 @@ class Parser {
       } else {
         break;
       }
+    }
+    // Handle postfix `[index]` — supports chaining: `arr[0][1]`
+    while (this.match("group", "[")) {
+      const pos = node.pos;
+      this.consume(); // [
+      const index = this.parseExpression();
+      this.expect("group", "]");
+      node = { kind: "index", target: node, index, pos };
     }
     return node;
   }

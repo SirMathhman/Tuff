@@ -113,6 +113,33 @@ export function evaluate(
       }
       return evalOk(value);
     }
+    case "array": {
+      const elements: Value[] = [];
+      for (const elem of node.elements) {
+        elements.push(unwrap(evaluate(elem, env, functions)));
+      }
+      return evalOk({ kind: "array", elements, type: node.type });
+    }
+    case "index": {
+      const target = unwrap(evaluate(node.target, env, functions));
+      const idx = unwrap(evaluate(node.index, env, functions));
+      if (target.kind !== "array") {
+        throw new InterpreterError(
+          "runtime",
+          "Cannot index non-array value",
+          node.pos,
+        );
+      }
+      const index = Math.floor(toNumber(idx));
+      if (index < 0 || index >= target.elements.length) {
+        throw new InterpreterError(
+          "runtime",
+          `Array index out of bounds: ${index}`,
+          node.pos,
+        );
+      }
+      return evalOk(target.elements[index]!);
+    }
     case "let": {
       const value = unwrap(evaluate(node.value, env, functions));
       env.set(node.name, value);

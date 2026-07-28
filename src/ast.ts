@@ -56,4 +56,12 @@ export type AstNode =
       body: AstNode;
       pos?: TokenPos;
     }
-  | { kind: "call"; callee: AstNode; args: AstNode[]; pos?: TokenPos };
+  | { kind: "call"; callee: AstNode; args: AstNode[]; pos?: TokenPos }
+  | { kind: "array"; elements: AstNode[]; type?: Type; pos?: TokenPos }
+  | {
+      kind: "index";
+      target: AstNode;
+      index: AstNode;
+      type?: Type;
+      pos?: TokenPos;
+    };
