@@ -35,6 +35,22 @@ describe("number literals", () => {
   test('interpret("-(2 + 3)") => -5', () => {
     expect(interpret("-(2 + 3)")).toBe(-5);
   });
+
+  test('interpret("let x : U16 = 100U16; x") => 100', () => {
+    expect(interpret("let x : U16 = 100U16; x")).toBe(100);
+  });
+
+  test('interpret("let x : U16 = 100U8; x") => 100', () => {
+    expect(interpret("let x : U16 = 100U8; x")).toBe(100);
+  });
+
+  test('interpret("let x : U8 = 100U16; x") => Error', () => {
+    expect(() => interpret("let x : U8 = 100U16; x")).toThrow();
+  });
+
+  test('interpret("let x : U32 = 100U8; x") => 100', () => {
+    expect(interpret("let x : U32 = 100U8; x")).toBe(100);
+  });
 });
 
 describe("binary expressions", () => {

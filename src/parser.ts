@@ -187,14 +187,62 @@ class Parser {
       name = nameToken.value;
       this.consume();
     }
+    // Parse optional type annotation: `: TypeName`
+    let declaredType: string | undefined;
+    if (this.match("punctuator", ":")) {
+      this.consume();
+      const typeToken = this.peek();
+      if (typeToken?.type === "identifier") {
+        declaredType = typeToken.value;
+        this.consume();
+      }
+    }
     if (this.match("operator", "=")) {
       this.consume();
     }
     const value = this.parseExpression();
+    // Check type compatibility: value's type suffix must fit in declared type
+    this.checkTypeCompatibility(value, declaredType);
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "let", name, value, mutable };
+    return { kind: "let", name, value, mutable, type: declaredType };
+  }
+
+  /** Check that a value expression is compatible with the declared type. */
+  private checkTypeCompatibility(
+    node: AstNode,
+    declaredType: string | undefined,
+  ): void {
+    if (!declaredType) return;
+    const suffix = this.extractTypeSuffix(node);
+    if (!suffix) return; // No suffix on value, assume compatible
+    const suffixBits = this.getTypeBits(suffix);
+    const declaredBits = this.getTypeBits(declaredType);
+    if (suffixBits === 0 || declaredBits === 0) return; // Unknown type, skip
+    if (suffixBits > declaredBits) {
+      throw new Error(
+        `Type mismatch: cannot assign ${suffix} to ${declaredType} (wider type cannot fit)`,
+      );
+    }
+  }
+
+  /** Recursively extract the type suffix from a numeric literal in the AST. */
+  private extractTypeSuffix(node: AstNode): string | undefined {
+    if (node.kind === "number") {
+      const token = this.tokens.find(
+        (t) => t.type === "number" && t.value === node.value,
+      );
+      return (token as { typeSuffix?: string })?.typeSuffix;
+    }
+    return undefined;
+  }
+
+  /** Extract bit width from a type name like "U16" → 16. */
+  private getTypeBits(typeName: string): number {
+    const match = typeName.match(/^([UIF])(\d+)$/);
+    if (!match) return 0;
+    return Number(match[2]);
   }
 
   private parseAtom(): AstNode {

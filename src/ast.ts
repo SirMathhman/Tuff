@@ -11,7 +11,13 @@ export type AstNode =
     }
   | { kind: "unary"; op: "-"; operand: AstNode }
   | { kind: "identifier"; name: string }
-  | { kind: "let"; name: string; value: AstNode; mutable: boolean }
+  | {
+      kind: "let";
+      name: string;
+      value: AstNode;
+      mutable: boolean;
+      type?: string;
+    }
   | { kind: "assign"; name: string; value: AstNode }
   | { kind: "augassign"; name: string; op: "+"; value: AstNode }
   | { kind: "block"; statements: AstNode[] }

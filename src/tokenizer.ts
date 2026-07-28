@@ -1,7 +1,7 @@
 import { TYPE_SUFFIXES } from "./grammar";
 
 export type Token =
-  | { type: "number"; value: number }
+  | { type: "number"; value: number; typeSuffix?: string }
   | {
       type: "operator";
       value:
@@ -35,7 +35,7 @@ export type Token =
         | "while";
     }
   | { type: "identifier"; value: string }
-  | { type: "punctuator"; value: ";" };
+  | { type: "punctuator"; value: ";" | ":" };
 
 function isUnaryContext(tokens: Token[]): boolean {
   if (tokens.length === 0) return true;
@@ -69,6 +69,7 @@ function parseNumberWithSuffix(
 ): number {
   // Validate and skip type suffixes using TYPE_SUFFIXES table
   const suffixDef = TYPE_SUFFIXES.find((s) => s.prefix === source.charAt(i));
+  let typeSuffix: string | undefined;
   if (suffixDef) {
     i++;
     let suffixNum = "";
@@ -80,6 +81,7 @@ function parseNumberWithSuffix(
       suffixNum += source.charAt(i);
       i++;
     }
+    typeSuffix = suffixDef.prefix + suffixNum;
     const numValue = Number(numStr);
     const bits = Number(suffixNum);
     const minVal = suffixDef.min(bits);
@@ -90,7 +92,7 @@ function parseNumberWithSuffix(
       );
     }
   }
-  tokens.push({ type: "number", value: Number(numStr) });
+  tokens.push({ type: "number", value: Number(numStr), typeSuffix });
   return i;
 }
 
@@ -114,33 +116,40 @@ export function tokenize(source: string): Token[] {
       i++;
       const { numStr, end } = readDigits(source, i);
       i = parseNumberWithSuffix(tokens, source, "-" + numStr, end);
-    } else if ((ch >= "a" && ch <= "z") || ch === "_") {
+    } else if (
+      (ch >= "A" && ch <= "Z") ||
+      (ch >= "a" && ch <= "z") ||
+      ch === "_"
+    ) {
       let ident = "";
       while (
         i < source.length &&
-        ((source.charAt(i) >= "a" && source.charAt(i) <= "z") ||
-          source.charAt(i) === "_")
+        ((source.charAt(i) >= "A" && source.charAt(i) <= "Z") ||
+          (source.charAt(i) >= "a" && source.charAt(i) <= "z") ||
+          source.charAt(i) === "_" ||
+          (source.charAt(i) >= "0" && source.charAt(i) <= "9"))
       ) {
         ident += source.charAt(i);
         i++;
       }
-      if (ident === "let") {
+      const lower = ident.toLowerCase();
+      if (lower === "let") {
         tokens.push({ type: "keyword", value: "let" });
-      } else if (ident === "true") {
+      } else if (lower === "true") {
         tokens.push({ type: "keyword", value: "true" });
-      } else if (ident === "false") {
+      } else if (lower === "false") {
         tokens.push({ type: "keyword", value: "false" });
-      } else if (ident === "if") {
+      } else if (lower === "if") {
         tokens.push({ type: "keyword", value: "if" });
-      } else if (ident === "else") {
+      } else if (lower === "else") {
         tokens.push({ type: "keyword", value: "else" });
-      } else if (ident === "mut") {
+      } else if (lower === "mut") {
         tokens.push({ type: "keyword", value: "mut" });
-      } else if (ident === "loop") {
+      } else if (lower === "loop") {
         tokens.push({ type: "keyword", value: "loop" });
-      } else if (ident === "break") {
+      } else if (lower === "break") {
         tokens.push({ type: "keyword", value: "break" });
-      } else if (ident === "while") {
+      } else if (lower === "while") {
         tokens.push({ type: "keyword", value: "while" });
       } else {
         tokens.push({ type: "identifier", value: ident });
@@ -209,6 +218,9 @@ export function tokenize(source: string): Token[] {
       }
     } else if (ch === ";") {
       tokens.push({ type: "punctuator", value: ";" });
+      i++;
+    } else if (ch === ":") {
+      tokens.push({ type: "punctuator", value: ":" });
       i++;
     } else if (ch === "(") {
       tokens.push({ type: "group", value: "(" });
