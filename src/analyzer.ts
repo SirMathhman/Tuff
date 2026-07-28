@@ -13,15 +13,15 @@ interface SymbolInfo {
 }
 
 /**
- * Infer the type suffix of an expression node.
- * Returns the widest type suffix found, or undefined for dynamic/unknown types.
+ * Infer the type of an expression node.
+ * Returns a type name (e.g., "U8", "Bool") or undefined for dynamic/unknown types.
  */
 function inferType(node: AstNode): string | undefined {
   switch (node.kind) {
     case "number":
       return node.typeSuffix;
     case "boolean":
-      return undefined;
+      return "Bool";
     case "unary":
       return inferType(node.operand);
     case "binary": {
@@ -58,24 +58,46 @@ function inferType(node: AstNode): string | undefined {
   }
 }
 
+/** Check if a type name is a boolean type. */
+function isBoolType(typeName: string): boolean {
+  return typeName === "Bool";
+}
+
 /**
  * Check that a value expression is compatible with the declared type.
- * A value of narrower type can be assigned to a wider declared type.
- * A value of wider type cannot be assigned to a narrower declared type.
+ * - Bool: must match exactly (no widening/narrowing).
+ * - Numeric: narrower type can be assigned to wider declared type.
  */
 function checkTypeCompatibility(
   node: AstNode,
   declaredType: string | undefined,
 ): void {
   if (!declaredType) return;
-  const valueSuffix = inferType(node);
-  if (!valueSuffix) return; // No suffix on value, assume compatible
-  const suffixBits = getTypeBits(valueSuffix);
+  const valueType = inferType(node);
+  if (!valueType) return; // No type on value, assume compatible
+
+  // Bool must match exactly
+  if (isBoolType(declaredType)) {
+    if (!isBoolType(valueType)) {
+      throw new Error(
+        `Type mismatch: cannot assign ${valueType} to ${declaredType}`,
+      );
+    }
+    return;
+  }
+  if (isBoolType(valueType)) {
+    throw new Error(
+      `Type mismatch: cannot assign ${valueType} to ${declaredType}`,
+    );
+  }
+
+  // Numeric types: narrower can fit in wider
+  const suffixBits = getTypeBits(valueType);
   const declaredBits = getTypeBits(declaredType);
   if (suffixBits === 0 || declaredBits === 0) return; // Unknown type, skip
   if (suffixBits > declaredBits) {
     throw new Error(
-      `Type mismatch: cannot assign ${valueSuffix} to ${declaredType} (wider type cannot fit)`,
+      `Type mismatch: cannot assign ${valueType} to ${declaredType} (wider type cannot fit)`,
     );
   }
 }
