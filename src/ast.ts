@@ -12,6 +12,7 @@ export type AstNode =
   | { kind: "identifier"; name: string }
   | { kind: "let"; name: string; value: AstNode; mutable: boolean }
   | { kind: "assign"; name: string; value: AstNode }
+  | { kind: "augassign"; name: string; op: "+"; value: AstNode }
   | { kind: "block"; statements: AstNode[] }
   | {
       kind: "if";

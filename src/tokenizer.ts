@@ -15,7 +15,8 @@ export type Token =
         | "||"
         | "&&"
         | "<"
-        | ">";
+        | ">"
+        | "+=";
     }
   | { type: "group"; value: "(" | ")" | "{" | "}" }
   | {
@@ -72,8 +73,13 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "identifier", value: ident });
       }
     } else if (ch === "+") {
-      tokens.push({ type: "operator", value: "+" });
-      i++;
+      if (i + 1 < source.length && source.charAt(i + 1) === "=") {
+        tokens.push({ type: "operator", value: "+=" });
+        i += 2;
+      } else {
+        tokens.push({ type: "operator", value: "+" });
+        i++;
+      }
     } else if (ch === "-") {
       tokens.push({ type: "operator", value: "-" });
       i++;

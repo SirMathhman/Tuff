@@ -150,18 +150,23 @@ class Parser {
     if (assign) return assign;
   }
 
-  /** Try to parse `identifier = expression` as an assignment statement. Returns undefined if not an assignment. */
+  /** Try to parse `identifier = expression` or `identifier += expression` as an assignment statement. Returns undefined if not an assignment. */
   private tryParseAssign(): AstNode | undefined {
     if (!this.match("identifier")) return;
     const nameToken = this.peek()!;
     const nextPos = this.pos + 1;
     const nextToken = this.tokens[nextPos];
-    if (nextToken?.type !== "operator" || nextToken.value !== "=") return;
+    if (nextToken?.type !== "operator") return;
+    const op = nextToken.value;
+    if (op !== "=" && op !== "+=") return;
     this.consume(); // identifier
-    this.consume(); // =
+    this.consume(); // operator
     const value = this.parseExpression();
     if (this.match("punctuator", ";")) {
       this.consume();
+    }
+    if (op === "+=") {
+      return { kind: "augassign", name: nameToken.value as string, op: "+", value };
     }
     return { kind: "assign", name: nameToken.value as string, value };
   }

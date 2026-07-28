@@ -67,6 +67,18 @@ export function evaluate(
       env.set(node.name, value);
       return evalOk(value);
     }
+    case "augassign": {
+      if (!env.has(`__mutable__${node.name}`)) {
+        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
+      }
+      const current = env.get(node.name)!;
+      const rhs = unwrap(evaluate(node.value, env));
+      const l = toNumber(current);
+      const r = toNumber(rhs);
+      const newValue: Value = { kind: "number", value: l + r };
+      env.set(node.name, newValue);
+      return evalOk(newValue);
+    }
     case "block": {
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {

@@ -155,4 +155,8 @@ describe("binary expressions", () => {
   test('interpret("if (true) { let x = 1; }") => 0 (if statement without else)', () => {
     expect(interpret("if (true) { let x = 1; }")).toBe(0);
   });
+
+  test('interpret("let mut x = 1; x += 2; x") => 3', () => {
+    expect(interpret("let mut x = 1; x += 2; x")).toBe(3);
+  });
 });
