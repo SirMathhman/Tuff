@@ -2,6 +2,10 @@ import type { AstNode } from "./ast";
 import type { Value } from "./value";
 import { toNumber } from "./value";
 
+class BreakError {
+  constructor(public value: Value) {}
+}
+
 export function evaluate(
   node: AstNode,
   env: Map<string, Value> = new Map(),
@@ -81,6 +85,21 @@ export function evaluate(
       } else {
         return evaluate(node.elseBranch, env);
       }
+    }
+    case "loop": {
+      for (const stmt of node.body) {
+        try {
+          return evaluate(stmt, env);
+        } catch (e) {
+          if (e instanceof BreakError) return e.value;
+          throw e;
+        }
+      }
+      return { kind: "number", value: 0 };
+    }
+    case "break": {
+      const value = evaluate(node.value, env);
+      throw new BreakError(value);
     }
   }
   return { kind: "number", value: 0 };

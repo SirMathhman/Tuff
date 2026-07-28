@@ -143,4 +143,8 @@ describe("binary expressions", () => {
   test('interpret("let x = 0; x = 1; x") => Error', () => {
     expect(() => interpret("let x = 0; x = 1; x")).toThrow();
   });
+
+  test('interpret("let x = loop { break 3; }; x") => 3', () => {
+    expect(interpret("let x = loop { break 3; }; x")).toBe(3);
+  });
 });

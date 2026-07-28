@@ -18,4 +18,6 @@ export type AstNode =
       condition: AstNode;
       then: AstNode;
       elseBranch: AstNode;
-    };
+    }
+  | { kind: "loop"; body: AstNode[] }
+  | { kind: "break"; value: AstNode };

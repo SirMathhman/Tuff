@@ -134,10 +134,18 @@ class Parser {
     return this.parseExpression();
   }
 
-  /** Try to parse a known statement (`let`, `if`, or `identifier = expr`). Returns undefined if none match. */
+  /** Try to parse a known statement (`let`, `if`, `break`, or `identifier = expr`). Returns undefined if none match. */
   private tryParseKnownStatement(): AstNode | undefined {
     if (this.match("keyword", "let")) return this.parseLetStatement();
     if (this.match("keyword", "if")) return this.parseIfStatement();
+    if (this.match("keyword", "break")) {
+      this.consume();
+      const value = this.parseExpression();
+      if (this.match("punctuator", ";")) {
+        this.consume();
+      }
+      return { kind: "break", value };
+    }
     const assign = this.tryParseAssign();
     if (assign) return assign;
   }
@@ -194,6 +202,9 @@ class Parser {
     if (this.match("keyword", "if")) {
       return this.parseIfExpression();
     }
+    if (this.match("keyword", "loop")) {
+      return this.parseLoopExpression();
+    }
     if (this.match("identifier")) {
       const t = this.consume()!;
       return { kind: "identifier", name: t.value as string };
@@ -245,6 +256,22 @@ class Parser {
       then: thenBranch,
       elseBranch: { kind: "number", value: 0 },
     };
+  }
+
+  private parseLoopExpression(): AstNode {
+    this.consume(); // eat "loop"
+    this.expect("group", "{");
+    const body: AstNode[] = [];
+    while (this.pos < this.tokens.length && !this.match("group", "}")) {
+      const prevPos = this.pos;
+      const stmt = this.parseStatement();
+      if (prevPos === this.pos) {
+        this.pos++;
+      }
+      body.push(stmt);
+    }
+    this.expect("group", "}");
+    return { kind: "loop", body };
   }
 
   /**
