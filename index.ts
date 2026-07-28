@@ -1,6 +1,7 @@
 type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" }
+  | { type: "boolean"; value: boolean }
+  | { type: "operator"; value: "+" | "-" | "*" | "/" | "||" | "&&" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "keyword"; value: string }
   | { type: "identifier"; value: string }
@@ -29,6 +30,12 @@ function tokenize(source: string): Token[] {
     } else if (ch && "+-*/".includes(ch)) {
       tokens.push({ type: "operator", value: ch as "+" | "-" | "*" | "/" });
       i++;
+    } else if (ch === "|" && source[i + 1] === "|") {
+      tokens.push({ type: "operator", value: "||" });
+      i += 2;
+    } else if (ch === "&" && source[i + 1] === "&") {
+      tokens.push({ type: "operator", value: "&&" });
+      i += 2;
     } else if (ch === "(" || ch === ")" || ch === "{" || ch === "}") {
       tokens.push({ type: "paren", value: ch as "(" | ")" | "{" | "}" });
       i++;
@@ -58,6 +65,12 @@ function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "let" });
       } else if (word === "mut") {
         tokens.push({ type: "keyword", value: "mut" });
+      } else if (word === "true") {
+        tokens.push({ type: "boolean", value: true });
+      } else if (word === "false") {
+        tokens.push({ type: "boolean", value: false });
+      } else if (word === "or") {
+        tokens.push({ type: "keyword", value: "or" });
       } else {
         tokens.push({ type: "identifier", value: word });
       }
@@ -150,6 +163,18 @@ class Parser {
         this.consume();
         const right = this.parseAssignment();
         left = token.value === "+" ? left + right : left - right;
+      } else if (
+        token &&
+        token.type === "operator" &&
+        (token.value === "||" || token.value === "&&")
+      ) {
+        this.consume();
+        const right = this.parseAssignment();
+        if (token.value === "||") {
+          left = left !== 0 || right !== 0 ? 1 : 0;
+        } else {
+          left = left !== 0 && right !== 0 ? 1 : 0;
+        }
       } else {
         break;
       }
@@ -210,6 +235,10 @@ class Parser {
     if (token.type === "number") {
       this.consume();
       return token.value;
+    }
+    if (token.type === "boolean") {
+      this.consume();
+      return token.value ? 1 : 0;
     }
     if (token.type === "paren" && token.value === "(") {
       this.consume();

@@ -72,3 +72,11 @@ test('evaluate("let x = 0; let y = { let x = 1; x }; x") => 0', () => {
 test('evaluate("let mut x = 0; let y = { x = 1; x }; x") => 1', () => {
   expect(evaluate("let mut x = 0; let y = { x = 1; x }; x")).toBe(1);
 });
+
+test('evaluate("let x = true; x") => 1', () => {
+  expect(evaluate("let x = true; x")).toBe(1);
+});
+
+test('evaluate("let x = true; let y = false; x || y") => 1', () => {
+  expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
+});
