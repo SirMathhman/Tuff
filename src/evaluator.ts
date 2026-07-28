@@ -32,7 +32,7 @@ export function evaluate(
     case "let": {
       const value = evaluate(node.value, env);
       env.set(node.name, value);
-      return value;
+      return 0;
     }
     case "block": {
       let result = 0;
