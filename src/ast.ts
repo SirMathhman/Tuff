@@ -1,7 +1,7 @@
 import type { BinaryOp } from "./grammar";
 
 export type AstNode =
-  | { kind: "number"; value: number }
+  | { kind: "number"; value: number; typeSuffix?: string }
   | { kind: "boolean"; value: boolean }
   | {
       kind: "binary";

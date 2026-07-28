@@ -1,5 +1,6 @@
 import { tokenize } from "./tokenizer";
 import { parse } from "./parser";
+import { analyze } from "./analyzer";
 import { evaluate } from "./evaluator";
 import { toNumber, unwrap } from "./value";
 
@@ -13,5 +14,6 @@ export function interpret(source: string): number {
     return 0;
   }
   const ast = parse(tokens);
+  analyze(ast);
   return toNumber(unwrap(evaluate(ast)));
 }
