@@ -1,5 +1,13 @@
 import type { AstNode } from "./ast";
-import { getTypeBits } from "./grammar";
+import type { Type } from "./types";
+import {
+  bool,
+  dynamic,
+  getBits,
+  isAssignable,
+  isDynamic,
+  typeName,
+} from "./types";
 
 /**
  * Semantic analysis stage: validates type compatibility and builds a symbol table.
@@ -8,36 +16,33 @@ import { getTypeBits } from "./grammar";
 
 /** Information about a declared variable. */
 interface SymbolInfo {
-  type?: string;
+  type?: Type;
   mutable: boolean;
 }
 
 /**
  * Infer the type of an expression node.
- * Returns a type name (e.g., "U8", "Bool") or undefined for dynamic/unknown types.
+ * Returns a Type, or dynamic() for unknown/untyped expressions.
  */
-function inferType(node: AstNode): string | undefined {
+function inferType(node: AstNode): Type {
+  const d = dynamic();
   switch (node.kind) {
     case "number":
-      return node.typeSuffix;
+      return node.type ?? d;
     case "boolean":
-      return "Bool";
+      return bool();
     case "unary":
       return inferType(node.operand);
     case "binary": {
-      // Result type is the widest of the two operands
       const leftType = inferType(node.left);
       const rightType = inferType(node.right);
-      if (!leftType) return rightType;
-      if (!rightType) return leftType;
-      // Return the wider type
-      return getTypeBits(leftType) >= getTypeBits(rightType)
-        ? leftType
-        : rightType;
+      if (isDynamic(leftType)) return rightType;
+      if (isDynamic(rightType)) return leftType;
+      // Return the wider numeric type
+      return getBits(leftType) >= getBits(rightType) ? leftType : rightType;
     }
     case "identifier":
-      // Can't resolve without symbol table — handled in analyzeLet
-      return undefined;
+      return d;
     case "let":
       return inferType(node.value);
     case "assign":
@@ -45,56 +50,34 @@ function inferType(node: AstNode): string | undefined {
       return inferType(node.value);
     case "block": {
       const last = node.statements[node.statements.length - 1];
-      return last ? inferType(last) : undefined;
+      return last ? inferType(last) : d;
     }
     case "if":
       return inferType(node.then);
     case "loop":
-      return undefined;
+      return d;
     case "break":
       return inferType(node.value);
     case "while":
-      return undefined;
+      return d;
   }
-}
-
-/** Check if a type name is a boolean type. */
-function isBoolType(typeName: string): boolean {
-  return typeName === "Bool";
-}
-
-/** Throw a type mismatch error. */
-function typeMismatch(valueType: string, declaredType: string, detail?: string): never {
-  const msg = detail ? ` (${detail})` : "";
-  throw new Error(`Type mismatch: cannot assign ${valueType} to ${declaredType}${msg}`);
 }
 
 /**
  * Check that a value expression is compatible with the declared type.
- * - Bool: must match exactly (no widening/narrowing).
- * - Numeric: narrower type can be assigned to wider declared type.
  */
 function checkTypeCompatibility(
   node: AstNode,
-  declaredType: string | undefined,
+  declaredType: Type | undefined,
 ): void {
   if (!declaredType) return;
   const valueType = inferType(node);
-  if (!valueType) return; // No type on value, assume compatible
-
-  // Bool must match exactly
-  if (isBoolType(declaredType)) {
-    if (!isBoolType(valueType)) typeMismatch(valueType, declaredType);
-    return;
+  if (isDynamic(valueType)) return; // No type on value, assume compatible
+  if (!isAssignable(valueType, declaredType)) {
+    throw new Error(
+      `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(declaredType)}`,
+    );
   }
-  if (isBoolType(valueType)) typeMismatch(valueType, declaredType);
-
-  // Numeric types: narrower can fit in wider
-  const suffixBits = getTypeBits(valueType);
-  const declaredBits = getTypeBits(declaredType);
-  if (suffixBits === 0 || declaredBits === 0) return; // Unknown type, skip
-  if (suffixBits > declaredBits)
-    typeMismatch(valueType, declaredType, "wider type cannot fit");
 }
 
 /**

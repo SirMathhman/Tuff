@@ -53,10 +53,3 @@ export const TYPE_SUFFIXES: readonly {
 
 /** Valid type suffix prefixes, derived from the table. */
 export type TypeSuffixPrefix = (typeof TYPE_SUFFIXES)[number]["prefix"];
-
-/** Extract bit width from a type name like "U16" → 16. Returns 0 for unknown types. */
-export function getTypeBits(typeName: string): number {
-  const match = typeName.match(/^([UIF])(\d+)$/);
-  if (!match) return 0;
-  return Number(match[2]);
-}

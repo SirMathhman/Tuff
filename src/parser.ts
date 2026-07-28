@@ -1,7 +1,9 @@
 import type { AstNode } from "./ast";
 import type { Token } from "./tokenizer";
 import type { BinaryOp } from "./grammar";
+import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
+import { parseTypeName } from "./types";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -188,12 +190,12 @@ class Parser {
       this.consume();
     }
     // Parse optional type annotation: `: TypeName`
-    let declaredType: string | undefined;
+    let declaredType: Type | undefined;
     if (this.match("punctuator", ":")) {
       this.consume();
       const typeToken = this.peek();
       if (typeToken?.type === "identifier") {
-        declaredType = typeToken.value;
+        declaredType = parseTypeName(typeToken.value);
         this.consume();
       }
     }
@@ -210,10 +212,11 @@ class Parser {
   private parseAtom(): AstNode {
     if (this.match("number")) {
       const t = this.consume()!;
+      const suffix = (t as { typeSuffix?: string }).typeSuffix;
       return {
         kind: "number",
         value: t.value as number,
-        typeSuffix: (t as { typeSuffix?: string }).typeSuffix,
+        type: suffix ? parseTypeName(suffix) : undefined,
       };
     }
     if (this.match("keyword", "true")) {

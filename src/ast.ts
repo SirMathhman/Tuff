@@ -1,7 +1,8 @@
 import type { BinaryOp } from "./grammar";
+import type { Type } from "./types";
 
 export type AstNode =
-  | { kind: "number"; value: number; typeSuffix?: string }
+  | { kind: "number"; value: number; type?: Type }
   | { kind: "boolean"; value: boolean }
   | {
       kind: "binary";
@@ -16,7 +17,7 @@ export type AstNode =
       name: string;
       value: AstNode;
       mutable: boolean;
-      type?: string;
+      type?: Type;
     }
   | { kind: "assign"; name: string; value: AstNode }
   | { kind: "augassign"; name: string; op: "+"; value: AstNode }
