@@ -255,4 +255,24 @@ describe("binary expressions", () => {
   test('interpret("{ let x = 0; } is Void") => 1', () => {
     expect(interpret("{ let x = 0; } is Void")).toBe(1);
   });
+
+  test('interpret("(100U8 + 100I8) is I16") => 1', () => {
+    expect(interpret("(100U8 + 100I8) is I16")).toBe(1);
+  });
+
+  test('interpret("let mut x = 0U8; x = 0U16;") => Error', () => {
+    expect(() => interpret("let mut x = 0U8; x = 0U16;")).toThrow();
+  });
+
+  test('interpret("let mut x = 0U8; x += 0U16;") => Error', () => {
+    expect(() => interpret("let mut x = 0U8; x += 0U16;")).toThrow();
+  });
+
+  test('interpret("let mut x = false; x += true;") => Error', () => {
+    expect(() => interpret("let mut x = false; x += true;")).toThrow();
+  });
+
+  test('interpret("let x = 100; x is I32") => 1', () => {
+    expect(interpret("let x = 100; x is I32")).toBe(1);
+  });
 });

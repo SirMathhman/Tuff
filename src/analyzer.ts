@@ -105,12 +105,7 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
       const valueType = resolveType(node.value, symbols);
       // Validate type compatibility
       if (node.type !== undefined) {
-        // node.type is the declared type annotation
-        if (!isDynamic(valueType) && !isAssignable(valueType, node.type)) {
-          throw new Error(
-            `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(node.type)}`,
-          );
-        }
+        checkAssignable(valueType, node.type);
       }
       // Store the more specific type: declared type if present, otherwise inferred
       const resolvedType =
@@ -120,9 +115,23 @@ function resolveType(node: AstNode, symbols: Map<string, SymbolInfo>): Type {
       return resolvedType ?? dynamic();
     }
 
-    case "assign":
-    case "augassign":
-      return resolveType(node.value, symbols);
+    case "assign": {
+      const valueType = resolveType(node.value, symbols);
+      const sym = symbols.get(node.name);
+      if (sym?.type) checkAssignable(valueType, sym.type);
+      return valueType;
+    }
+
+    case "augassign": {
+      const valueType = resolveType(node.value, symbols);
+      const sym = symbols.get(node.name);
+      if (sym?.type) {
+        checkNotBool(sym.type, node.op);
+        checkNotBool(valueType, node.op);
+        checkAssignable(valueType, sym.type);
+      }
+      return valueType;
+    }
 
     case "block": {
       let result: Type = dynamic();
@@ -201,6 +210,15 @@ function isComparisonOp(op: string): boolean {
 /** Check if an operator is a logical operation. */
 function isLogicalOp(op: string): boolean {
   return ["||", "&&"].includes(op);
+}
+
+/** Validate that a value type is assignable to a target type. */
+function checkAssignable(valueType: Type, targetType: Type): void {
+  if (!isDynamic(valueType) && !isAssignable(valueType, targetType)) {
+    throw new Error(
+      `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(targetType)}`,
+    );
+  }
 }
 
 /**

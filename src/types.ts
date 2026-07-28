@@ -89,13 +89,27 @@ export function isAssignable(source: Type, target: Type): boolean {
 }
 
 /**
- * Widen two types: if one is dynamic, use the other. If both concrete numeric, use wider.
- * Shared by analyzer and optimizer.
+ * Widen two types: if one is dynamic, use the other.
+ * If both concrete numeric, find the smallest type that can hold both ranges:
+ * - Same prefix: use the wider bit width.
+ * - Mixed signed/unsigned (U+I): result is signed (I) with doubled bits.
+ * - Any float (F): result is float with max bits.
  */
 export function widen(a: Type, b: Type): Type {
   if (isDynamic(a)) return b;
   if (isDynamic(b)) return a;
-  if (isNumeric(a) && isNumeric(b)) return a.bits >= b.bits ? a : b;
+  if (isNumeric(a) && isNumeric(b)) {
+    // Any float dominates
+    if (a.prefix === "F" || b.prefix === "F") {
+      return numeric("F", Math.max(a.bits, b.bits));
+    }
+    // Mixed signed/unsigned: result is signed with doubled bits
+    if (a.prefix !== b.prefix) {
+      return numeric("I", Math.max(a.bits, b.bits) * 2);
+    }
+    // Same prefix: use wider
+    return a.bits >= b.bits ? a : b;
+  }
   return a;
 }
 
