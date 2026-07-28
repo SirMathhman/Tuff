@@ -395,7 +395,7 @@ describe("error positions", () => {
     }
   });
 
-  test("runtime error has position (immutable assign)", () => {
+  test("type error has position (immutable assign)", () => {
     try {
       interpret("let x = 0; x = 1;");
     } catch (e) {

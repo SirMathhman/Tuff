@@ -34,6 +34,22 @@ interface Declaration {
   params?: { name: string; type?: Type }[];
 }
 
+/** Check that a variable is mutable, throwing a type error if not. */
+function checkMutable(
+  name: string,
+  declarations: Map<string, Declaration>,
+  pos?: { line: number; column: number },
+): void {
+  const decl = declarations.get(name);
+  if (decl && !decl.mutable) {
+    throw new InterpreterError(
+      "type",
+      `Cannot assign to immutable variable: ${name}`,
+      pos,
+    );
+  }
+}
+
 /**
  * Resolve the type of a node, storing it on the AST where supported.
  * Also builds the declaration table and validates type compatibility.
@@ -60,11 +76,25 @@ function resolveType(
           node.type = operandType;
           return operandType;
         case "&":
-          // Reference: result is immutable pointer to operand type
+          // Reference: operand must be an identifier
+          if (node.operand.kind !== "identifier") {
+            throw new InterpreterError(
+              "type",
+              "Can only take reference of an identifier",
+              node.pos,
+            );
+          }
           node.type = pointer(operandType, false);
           return node.type;
         case "&mut":
-          // Mutable reference: result is mutable pointer to operand type
+          // Mutable reference: operand must be an identifier
+          if (node.operand.kind !== "identifier") {
+            throw new InterpreterError(
+              "type",
+              "Can only take reference of an identifier",
+              node.pos,
+            );
+          }
           node.type = pointer(operandType, true);
           return node.type;
         case "*":
@@ -160,6 +190,10 @@ function resolveType(
     }
 
     case "assign": {
+      // Check mutability of the assignment target
+      if (node.target.kind === "identifier") {
+        checkMutable(node.target.name, declarations, node.pos);
+      }
       const targetType = resolveType(node.target, declarations);
       const valueType = resolveType(node.value, declarations);
       // If target is a deref (pointer), check that the pointer is mutable
@@ -180,6 +214,7 @@ function resolveType(
 
     case "augassign": {
       const valueType = resolveType(node.value, declarations);
+      checkMutable(node.name, declarations, node.pos);
       const decl = declarations.get(node.name);
       if (decl?.type) {
         checkNotBool(decl.type, node.op, node.pos);

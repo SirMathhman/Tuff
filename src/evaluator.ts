@@ -19,27 +19,6 @@ function isBlockWithVoidType(
   );
 }
 
-function getMutable(name: string, env: Map<string, Value>): Value | undefined {
-  if (!env.has(`__mutable__${name}`)) return undefined;
-  return env.get(name);
-}
-
-function setMutable(
-  name: string,
-  value: Value,
-  env: Map<string, Value>,
-  pos?: { line: number; column: number },
-): void {
-  if (!env.has(`__mutable__${name}`)) {
-    throw new InterpreterError(
-      "runtime",
-      `Cannot assign to immutable variable: ${name}`,
-      pos,
-    );
-  }
-  env.set(name, value);
-}
-
 export function evaluate(
   node: AstNode,
   env: Map<string, Value> = new Map(),
@@ -62,18 +41,10 @@ export function evaluate(
         }
         case "&":
         case "&mut": {
-          // Take reference (immutable or mutable): store a pointer (key into env)
           const refTarget = node.operand as {
             kind: "identifier";
             name: string;
           };
-          if (refTarget.kind !== "identifier") {
-            throw new InterpreterError(
-              "runtime",
-              "Can only take reference of an identifier",
-              node.pos,
-            );
-          }
           return evalOk({
             kind: "pointer",
             target: refTarget.name,
@@ -81,14 +52,10 @@ export function evaluate(
           });
         }
         case "*": {
-          const ptr = unwrap(evaluate(node.operand, env, functions));
-          if (ptr.kind !== "pointer") {
-            throw new InterpreterError(
-              "runtime",
-              "Cannot dereference non-pointer value",
-              node.pos,
-            );
-          }
+          const ptr = unwrap(evaluate(node.operand, env, functions)) as {
+            kind: "pointer";
+            target: string;
+          };
           const value = env.get(ptr.target);
           if (value === undefined) {
             throw new InterpreterError(
@@ -158,36 +125,24 @@ export function evaluate(
       const value = unwrap(evaluate(node.value, env, functions));
       const target = node.target;
       if (target.kind === "identifier") {
-        setMutable(target.name, value, env, node.pos);
+        env.set(target.name, value);
       } else if (target.kind === "unary" && target.op === "*") {
-        // Deref assignment: *ptr = value
-        const ptr = unwrap(evaluate(target.operand, env, functions));
-        if (ptr.kind !== "pointer") {
-          throw new InterpreterError(
-            "runtime",
-            "Cannot assign through non-pointer value",
-            node.pos,
-          );
-        }
-        if (!env.has(`__mutable__${ptr.target}`)) {
-          throw new InterpreterError(
-            "runtime",
-            `Cannot assign to immutable variable through pointer: ${ptr.target}`,
-            node.pos,
-          );
-        }
+        const ptr = unwrap(evaluate(target.operand, env, functions)) as {
+          kind: "pointer";
+          target: string;
+        };
         env.set(ptr.target, value);
       }
       return evalOk(value);
     }
     case "augassign": {
-      const current = getMutable(node.name, env)!;
+      const current = env.get(node.name)!;
       const rhs = unwrap(evaluate(node.value, env, functions));
       const newValue: Value = {
         kind: "number",
         value: toNumber(current) + toNumber(rhs),
       };
-      setMutable(node.name, newValue, env, node.pos);
+      env.set(node.name, newValue);
       return evalOk(newValue);
     }
     case "block": {
