@@ -51,6 +51,10 @@ describe("number literals", () => {
   test('interpret("let x : U32 = 100U8; x") => 100', () => {
     expect(interpret("let x : U32 = 100U8; x")).toBe(100);
   });
+
+  test('interpret("let x : Bool = true; x") => 1', () => {
+    expect(interpret("let x : Bool = true; x")).toBe(1);
+  });
 });
 
 describe("binary expressions", () => {
