@@ -3,7 +3,7 @@ import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "./error";
 import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
-import { evalBreak, evalOk, toNumber, unwrap } from "./value";
+import { evalBreak, evalOk, isPointerValue, toNumber, unwrap } from "./value";
 
 type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };
 
@@ -76,10 +76,9 @@ function resolveLValue(
       };
     }
     case "deref": {
-      const ptr = unwrap(evaluate(lv.operand, env, functions)) as {
-        kind: "pointer";
-        target: string;
-      };
+      const ptr = unwrap(evaluate(lv.operand, env, functions));
+      if (!isPointerValue(ptr))
+        throw new InterpreterError("runtime", "Cannot dereference non-pointer value", pos);
       return {
         set: (value: Value) => env.set(ptr.target, value),
         get: () => env.get(ptr.target)!,
@@ -126,21 +125,18 @@ export function evaluate(
         }
         case "&":
         case "&mut": {
-          const refTarget = node.operand as {
-            kind: "identifier";
-            name: string;
-          };
+          if (node.operand.kind !== "identifier")
+            throw new InterpreterError("runtime", "Can only take reference of an identifier", node.pos);
           return evalOk({
             kind: "pointer",
-            target: refTarget.name,
+            target: node.operand.name,
             type: node.type,
           });
         }
         case "*": {
-          const ptr = unwrap(evaluate(node.operand, env, functions)) as {
-            kind: "pointer";
-            target: string;
-          };
+          const ptr = unwrap(evaluate(node.operand, env, functions));
+          if (!isPointerValue(ptr))
+            throw new InterpreterError("runtime", "Cannot dereference non-pointer value", node.pos);
           return evalOk(derefOne(ptr, env));
         }
       }
@@ -305,12 +301,13 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "call": {
-      const callee = node.callee as { kind: "identifier"; name: string };
-      const fnDef = functions.get(callee.name);
+      if (node.callee.kind !== "identifier")
+        throw new InterpreterError("runtime", "Call target must be an identifier", node.pos);
+      const fnDef = functions.get(node.callee.name);
       if (!fnDef) {
         throw new InterpreterError(
           "runtime",
-          `Undefined function: ${callee.name}`,
+          `Undefined function: ${node.callee.name}`,
           node.pos,
         );
       }

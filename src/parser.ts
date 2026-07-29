@@ -5,6 +5,7 @@ import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
 import { arrayType, pointer } from "./types";
+import { isIdentifierToken, isNumberToken } from "./tokenizer";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -439,24 +440,21 @@ class Parser {
   private parseAtom(): AstNode {
     if (this.match("number")) {
       const t = this.consume()!;
-      const suffix = (t as { typeSuffix?: string }).typeSuffix;
-      const pos = (t as { pos: { line: number; column: number } }).pos;
+      if (!isNumberToken(t)) throw new InterpreterError("parse", "Expected number token", t.pos);
       return {
         kind: "number",
-        value: t.value as number,
-        type: suffix ? { kind: "unresolved", name: suffix, pos } : undefined,
-        pos,
+        value: t.value,
+        type: t.typeSuffix ? { kind: "unresolved", name: t.typeSuffix, pos: t.pos } : undefined,
+        pos: t.pos,
       };
     }
     if (this.match("keyword", "true")) {
       const t = this.consume()!;
-      const pos = (t as { pos: { line: number; column: number } }).pos;
-      return { kind: "boolean", value: true, pos };
+      return { kind: "boolean", value: true, pos: t.pos };
     }
     if (this.match("keyword", "false")) {
       const t = this.consume()!;
-      const pos = (t as { pos: { line: number; column: number } }).pos;
-      return { kind: "boolean", value: false, pos };
+      return { kind: "boolean", value: false, pos: t.pos };
     }
     if (this.match("keyword", "if")) {
       return this.parseIfExpression();
@@ -470,8 +468,9 @@ class Parser {
     }
     if (this.match("identifier")) {
       const t = this.consume()!;
-      const name = t.value as string;
-      const pos = (t as { pos: { line: number; column: number } }).pos;
+      if (!isIdentifierToken(t)) throw new InterpreterError("parse", "Expected identifier token", t.pos);
+      const name = t.value;
+      const pos = t.pos;
       // Check for function call: `identifier(args)`
       if (this.match("group", "(")) {
         this.consume();

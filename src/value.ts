@@ -38,6 +38,16 @@ export function unwrap(result: EvalResult): Value {
   return result.value;
 }
 
+/** Type guard: is this a pointer value? */
+export function isPointerValue(v: Value): v is Extract<Value, { kind: "pointer" }> {
+  return v.kind === "pointer";
+}
+
+/** Type guard: is this an array value? */
+export function isArrayValue(v: Value): v is Extract<Value, { kind: "array" }> {
+  return v.kind === "array";
+}
+
 /** Coerce a value to a number. Booleans become 1/0. Throws for non-coercible types. */
 export function toNumber(v: Value): number {
   switch (v.kind) {

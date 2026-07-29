@@ -2,6 +2,18 @@ import { TYPE_SUFFIXES } from "./grammar";
 
 export type TokenPos = { line: number; column: number };
 
+/** Type guard: is this a number token? */
+export function isNumberToken(t: Token): t is Extract<Token, { type: "number" }> {
+  return t.type === "number";
+}
+
+/** Type guard: is this an identifier token? */
+export function isIdentifierToken(
+  t: Token,
+): t is Extract<Token, { type: "identifier" }> {
+  return t.type === "identifier";
+}
+
 export type Token =
   | { type: "number"; value: number; typeSuffix?: string; pos: TokenPos }
   | {
