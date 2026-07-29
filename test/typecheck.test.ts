@@ -97,4 +97,20 @@ describe("typecheck expressions", () => {
       ),
     ).toThrow();
   });
+
+  test('interpret("type NullablePtr<T> = &T | Null; let x = 42; let ptr : NullablePtr<I32> = &x; if (ptr is &I32) { *ptr } else { 0 }") => 42', () => {
+    expect(
+      interpret(
+        "type NullablePtr<T> = &T | Null; let x = 42; let ptr : NullablePtr<I32> = &x; if (ptr is &I32) { *ptr } else { 0 }",
+      ),
+    ).toBe(42);
+  });
+
+  test('interpret("type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; if (ptr is &I32) { 1 } else { 2 }") => 2', () => {
+    expect(
+      interpret(
+        "type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; if (ptr is &I32) { 1 } else { 2 }",
+      ),
+    ).toBe(2);
+  });
 });
