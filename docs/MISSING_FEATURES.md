@@ -17,6 +17,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [x] `enum` type (basic enum definition and `Enum::Variant` access — no associated data)
 - [x] `union` type (`A | B` — type can be one of several types, via `type Alias = T1 | T2`)
 - [x] `type alias` (`type MyInt = I32` — AST node exists, parser/analyzer/evaluator support present)
+- [x] `generic type alias` (`type NullablePtr<T> = &T | Null` — type parameters with substitution)
 - [ ] `generic` types (`fn identity<T>(x : T) => x`)
 - [ ] `trait` / `interface` (abstract type with method signatures)
 - [ ] `impl` blocks (attach methods to existing types)

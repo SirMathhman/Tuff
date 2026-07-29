@@ -65,12 +65,12 @@ export type AstNode =
   | { kind: "return"; value: AstNode; pos?: TokenPos }
   | { kind: "continue"; pos?: TokenPos }
   | {
-    kind: "typealias";
-    name: string;
-    type: Type;
-    typeParams?: string[];
-    pos?: TokenPos;
-  }
+      kind: "typealias";
+      name: string;
+      type: Type;
+      typeParams?: string[];
+      pos?: TokenPos;
+    }
   | { kind: "while"; condition: AstNode; body: AstNode[]; pos?: TokenPos }
   | { kind: "typecheck"; value: AstNode; type: Type; pos?: TokenPos }
   | {

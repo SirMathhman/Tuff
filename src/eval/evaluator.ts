@@ -2,7 +2,7 @@ import type { AstNode, LValue } from "../core/ast";
 import type { Type } from "../core/types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
-import { bool, isDynamic, isVoid, numeric, typesEqual } from "../core/types";
+import { bool, isDynamic, isVoid, nullType, numeric, typesEqual } from "../core/types";
 import {
   evalBreak,
   evalContinue,
@@ -115,6 +115,13 @@ function resolveLValue(
     }
     case "deref": {
       const ptr = unwrap(evaluate(lv.operand, env, functions));
+      if (ptr.kind === "null") {
+        throw new InterpreterError(
+          "runtime",
+          "Cannot dereference null",
+          pos,
+        );
+      }
       if (ptr.kind !== "pointer")
         return { set: () => {}, get: () => ({ kind: "number", value: 0 }) };
       return {
@@ -175,7 +182,7 @@ export function evaluate(
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value, type: node.type });
     case "null":
-      return evalOk({ kind: "number", value: 0, type: node.type });
+      return evalOk({ kind: "null", type: node.type });
     case "unary": {
       const unaryOperand = evaluate(node.operand, env, functions);
       if (shouldPropagate(unaryOperand, "expression")) return unaryOperand;
@@ -200,6 +207,13 @@ export function evaluate(
         }
         case "*": {
           const ptr = unwrap(unaryOperand);
+          if (ptr.kind === "null") {
+            throw new InterpreterError(
+              "runtime",
+              "Cannot dereference null",
+              node.pos,
+            );
+          }
           if (ptr.kind !== "pointer")
             return evalOk({ kind: "number", value: 0 });
           return evalOk(derefOne(ptr, env));
@@ -501,6 +515,8 @@ export function evaluate(
           ? node.value.type
           : value.kind === "number" && value.type && isDynamic(value.type)
             ? numeric("I", 32)
+          : value.kind === "null"
+            ? nullType()
             : value.type;
       return evalOk({
         kind: "boolean",
