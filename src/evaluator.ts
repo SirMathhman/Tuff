@@ -3,7 +3,14 @@ import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "./error";
 import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
-import { evalBreak, evalOk, evalYield, isPointerValue, toNumber, unwrap } from "./value";
+import {
+  evalBreak,
+  evalOk,
+  evalYield,
+  isPointerValue,
+  toNumber,
+  unwrap,
+} from "./value";
 import { isBlockTerminal, isLoopTerminal } from "./controlflow";
 
 type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };

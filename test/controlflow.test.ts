@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { evalBreak, evalOk, evalYield, unwrap, type Value } from "../src/value";
-import { isBlockTerminal, isLoopTerminal, isTerminal } from "../src/controlflow";
+import {
+  isBlockTerminal,
+  isLoopTerminal,
+  isTerminal,
+} from "../src/controlflow";
 
 const numVal: Value = { kind: "number", value: 1 };
 
