@@ -22,7 +22,12 @@ type NumericType = { kind: "numeric"; prefix: string; bits: number };
 type PointerType = { kind: "pointer"; inner: Type; mutable: boolean };
 type MatcherArrayType = { kind: "array"; inner: Type; length: number };
 type MatcherTupleType = { kind: "tuple"; elements: Type[] };
-type MatcherStructType = { kind: "struct"; name: string; typeParams?: string[]; fields: { name: string; type: Type; mutable?: boolean }[] };
+type MatcherStructType = {
+  kind: "struct";
+  name: string;
+  typeParams?: string[];
+  fields: { name: string; type: Type; mutable?: boolean }[];
+};
 
 describe("valueToType", () => {
   test("number with type", () => {
@@ -120,7 +125,10 @@ describe("valueToType", () => {
   test("tuple with type", () => {
     const value: Value = {
       kind: "tuple",
-      elements: [{ kind: "number", value: 1 }, { kind: "number", value: 2 }],
+      elements: [
+        { kind: "number", value: 1 },
+        { kind: "number", value: 2 },
+      ],
       type: tupleType([numeric("I", 32), numeric("I", 32)]),
     };
     const result = valueToType(value, new Map());
@@ -141,7 +149,9 @@ describe("valueToType", () => {
     const value: Value = { kind: "enum", enum: "Color", variant: "Red" };
     const result = valueToType(value, new Map());
     expect(result.kind).toBe("enum");
-    expect((result as { kind: "enum"; name: string; variant: string }).name).toBe("Color");
+    expect(
+      (result as { kind: "enum"; name: string; variant: string }).name,
+    ).toBe("Color");
   });
 });
 
@@ -193,7 +203,9 @@ describe("valueMatchesType", () => {
       elements: [{ kind: "number", value: 1 }],
       type: arrayType(numeric("I", 32), 1),
     };
-    expect(valueMatchesType(value, arrayType(numeric("I", 32), 1), new Map())).toBe(true);
+    expect(
+      valueMatchesType(value, arrayType(numeric("I", 32), 1), new Map()),
+    ).toBe(true);
   });
 
   test("array does not match different length", () => {
@@ -202,7 +214,9 @@ describe("valueMatchesType", () => {
       elements: [{ kind: "number", value: 1 }],
       type: arrayType(numeric("I", 32), 1),
     };
-    expect(valueMatchesType(value, arrayType(numeric("I", 32), 2), new Map())).toBe(false);
+    expect(
+      valueMatchesType(value, arrayType(numeric("I", 32), 2), new Map()),
+    ).toBe(false);
   });
 
   test("struct matches same name", () => {
@@ -211,7 +225,9 @@ describe("valueMatchesType", () => {
       fields: new Map(),
       type: structType("Point", []),
     };
-    expect(valueMatchesType(value, structType("Point", []), new Map())).toBe(true);
+    expect(valueMatchesType(value, structType("Point", []), new Map())).toBe(
+      true,
+    );
   });
 
   test("struct does not match different name", () => {
@@ -220,17 +236,26 @@ describe("valueMatchesType", () => {
       fields: new Map(),
       type: structType("Point", []),
     };
-    expect(valueMatchesType(value, structType("Circle", []), new Map())).toBe(false);
+    expect(valueMatchesType(value, structType("Circle", []), new Map())).toBe(
+      false,
+    );
   });
 
   test("tuple matches same elements", () => {
     const value: Value = {
       kind: "tuple",
-      elements: [{ kind: "number", value: 1 }, { kind: "number", value: 2 }],
+      elements: [
+        { kind: "number", value: 1 },
+        { kind: "number", value: 2 },
+      ],
       type: tupleType([numeric("I", 32), numeric("I", 32)]),
     };
     expect(
-      valueMatchesType(value, tupleType([numeric("I", 32), numeric("I", 32)]), new Map()),
+      valueMatchesType(
+        value,
+        tupleType([numeric("I", 32), numeric("I", 32)]),
+        new Map(),
+      ),
     ).toBe(true);
   });
 
@@ -241,7 +266,11 @@ describe("valueMatchesType", () => {
       type: tupleType([numeric("I", 32)]),
     };
     expect(
-      valueMatchesType(value, tupleType([numeric("I", 32), numeric("I", 32)]), new Map()),
+      valueMatchesType(
+        value,
+        tupleType([numeric("I", 32), numeric("I", 32)]),
+        new Map(),
+      ),
     ).toBe(false);
   });
 
@@ -255,23 +284,31 @@ describe("matchesAnyVariant", () => {
   test("matches first variant", () => {
     const source = numeric("I", 32);
     const union = unionType([numeric("I", 32), bool()]);
-    expect(matchesAnyVariant(source, union, (a, b) => a.kind === b.kind)).toBe(true);
+    expect(matchesAnyVariant(source, union, (a, b) => a.kind === b.kind)).toBe(
+      true,
+    );
   });
 
   test("matches second variant", () => {
     const source = bool();
     const union = unionType([numeric("I", 32), bool()]);
-    expect(matchesAnyVariant(source, union, (a, b) => a.kind === b.kind)).toBe(true);
+    expect(matchesAnyVariant(source, union, (a, b) => a.kind === b.kind)).toBe(
+      true,
+    );
   });
 
   test("does not match any variant", () => {
     const source = nullType();
     const union = unionType([numeric("I", 32), bool()]);
-    expect(matchesAnyVariant(source, union, (a, b) => a.kind === b.kind)).toBe(false);
+    expect(matchesAnyVariant(source, union, (a, b) => a.kind === b.kind)).toBe(
+      false,
+    );
   });
 
   test("non-union returns false", () => {
     const source = numeric("I", 32);
-    expect(matchesAnyVariant(source, bool(), (a, b) => a.kind === b.kind)).toBe(false);
+    expect(matchesAnyVariant(source, bool(), (a, b) => a.kind === b.kind)).toBe(
+      false,
+    );
   });
 });

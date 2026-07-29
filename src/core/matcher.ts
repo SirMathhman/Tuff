@@ -30,10 +30,7 @@ import {
  * This bridges the gap between runtime values and static types,
  * enabling the `is` operator to check runtime types against static targets.
  */
-export function valueToType(
-  value: Value,
-  env: Map<string, Value>,
-): Type {
+export function valueToType(value: Value, env: Map<string, Value>): Type {
   switch (value.kind) {
     case "number":
       return value.type ?? numeric("I", 32);
@@ -46,7 +43,10 @@ export function valueToType(
     case "pointer": {
       const ptrTarget = env.get(value.target);
       if (ptrTarget && ptrTarget.kind !== "void" && ptrTarget.type) {
-        return pointer(ptrTarget.type, value.type?.kind === "pointer" ? value.type.mutable : false);
+        return pointer(
+          ptrTarget.type,
+          value.type?.kind === "pointer" ? value.type.mutable : false,
+        );
       }
       return pointer(voidType(), false);
     }
@@ -87,7 +87,9 @@ export function valueMatchesType(
   if (runtimeType.kind === "null") return true;
   // For numeric types, require exact match (prefix + bits)
   if (isNumeric(runtimeType) && isNumeric(target))
-    return runtimeType.prefix === target.prefix && runtimeType.bits === target.bits;
+    return (
+      runtimeType.prefix === target.prefix && runtimeType.bits === target.bits
+    );
   // For pointers: match if inner types are compatible (assignable)
   if (isPointer(runtimeType) && isPointer(target)) {
     return isAssignable(runtimeType.inner, target.inner);
@@ -107,7 +109,8 @@ export function valueMatchesType(
   if (isTuple(runtimeType) && isTuple(target)) {
     if (runtimeType.elements.length !== target.elements.length) return false;
     for (let i = 0; i < runtimeType.elements.length; i++) {
-      if (!isAssignable(runtimeType.elements[i]!, target.elements[i]!)) return false;
+      if (!isAssignable(runtimeType.elements[i]!, target.elements[i]!))
+        return false;
     }
     return true;
   }
