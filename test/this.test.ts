@@ -9,4 +9,8 @@ describe("this", () => {
   test('interpret("this") => Error (cannot coerce this to number)', () => {
     expect(() => interpret("this")).toThrow();
   });
+
+  test('interpret("let x = 100; let temp = this; temp.x") => 100', () => {
+    expect(interpret("let x = 100; let temp = this; temp.x")).toBe(100);
+  });
 });

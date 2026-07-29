@@ -2,7 +2,14 @@ import type { AstNode, LValue } from "../core/ast";
 import type { Type } from "../core/types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
-import { bool, dynamic, isDynamic, isVoid, numeric, typesEqual } from "../core/types";
+import {
+  bool,
+  dynamic,
+  isDynamic,
+  isVoid,
+  numeric,
+  typesEqual,
+} from "../core/types";
 import {
   evalBreak,
   evalContinue,
@@ -356,7 +363,10 @@ export function evaluate(
       }
       const fieldValue = target.fields.get(node.field)!;
       // Use the pre-computed type from the analyzer for the field access.
-      return evalOk({ ...(fieldValue as Exclude<Value, { kind: "this" }>), type: node.type });
+      return evalOk({
+        ...(fieldValue as Exclude<Value, { kind: "this" }>),
+        type: node.type,
+      });
     }
     case "index": {
       const target = dereferenceAll(
