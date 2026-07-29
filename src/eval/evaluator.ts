@@ -543,8 +543,10 @@ export function evaluate(
           : value.kind === "number" && value.type && isDynamic(value.type)
             ? numeric("I", 32)
             : value.kind === "null"
-              ? nullType()          : value.kind === "void"
-            ? voidType()              : value.type;
+              ? nullType()
+              : value.kind === "void"
+                ? voidType()
+                : value.type;
       return evalOk({
         kind: "boolean",
         value: typesEqual(resolvedType, node.type),
