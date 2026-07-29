@@ -23,4 +23,8 @@ describe("this", () => {
       0,
     );
   });
+
+  test('interpret("let mut x = 0; let temp = &mut this;") => Error', () => {
+    expect(() => interpret("let mut x = 0; let temp = &mut this;")).toThrow();
+  });
 });

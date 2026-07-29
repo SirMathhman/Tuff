@@ -134,7 +134,8 @@ function registerDeclaration(
  */
 function isNoOpAssign(lv: LValue, scope: Scope): boolean {
   if (lv.kind !== "field") return false;
-  if (lv.target.kind === "identifier" && lv.target.name === "this") return false;
+  if (lv.target.kind === "identifier" && lv.target.name === "this")
+    return false;
   if (lv.target.kind === "identifier") {
     const decl = scope.declarations.get(lv.target.name);
     if (decl && decl.kind === "var" && !decl.mutable) {
