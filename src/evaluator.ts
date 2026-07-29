@@ -245,9 +245,6 @@ export function evaluate(
     case "let": {
       const value = unwrap(evaluate(node.value, env, functions));
       env.set(node.name, value);
-      if (node.mutable) {
-        env.set(`__mutable__${node.name}`, { kind: "boolean", value: true });
-      }
       return evalOk({ kind: "number", value: 0 });
     }
     case "assign": {
