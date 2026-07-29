@@ -57,7 +57,8 @@ export type Token =
         | "struct"
         | "match"
         | "case"
-        | "yield";
+        | "yield"
+        | "return";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
@@ -219,6 +220,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "case", pos: tokenPos });
       } else if (lower === "yield") {
         tokens.push({ type: "keyword", value: "yield", pos: tokenPos });
+      } else if (lower === "return") {
+        tokens.push({ type: "keyword", value: "return", pos: tokenPos });
       } else {
         tokens.push({ type: "identifier", value: ident, pos: tokenPos });
       }

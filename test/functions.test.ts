@@ -26,6 +26,12 @@ describe("functions", () => {
     expect(() => interpret("fn get() => 100; fn get() => 200;")).toThrow();
   });
 
+  test('interpret("fn get() => { if (true) return 3; 4 } + 2; get()") => 3', () => {
+    expect(
+      interpret("fn get() => { if (true) return 3; 4 } + 2; get()"),
+    ).toBe(3);
+  });
+
   test('interpret("fn accept(param : U8) => {} accept(0U16)") => Error', () => {
     expect(() =>
       interpret("fn accept(param : U8) => {} accept(0U16)"),

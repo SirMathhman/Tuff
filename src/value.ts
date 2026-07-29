@@ -17,11 +17,14 @@ export type Value =
  * Result of evaluating an expression.
  * - "value": normal evaluation result
  * - "break": break from a loop with a value
+ * - "yield": yield from a block with a value
+ * - "return": return from a function with a value
  */
 export type EvalResult =
   | { kind: "value"; value: Value }
   | { kind: "break"; value: Value }
-  | { kind: "yield"; value: Value };
+  | { kind: "yield"; value: Value }
+  | { kind: "return"; value: Value };
 
 /** Wrap a value as a successful evaluation result. */
 export function evalOk(value: Value): EvalResult {
@@ -38,10 +41,16 @@ export function evalYield(value: Value): EvalResult {
   return { kind: "yield", value };
 }
 
+/** Wrap a value as a return result. */
+export function evalReturn(value: Value): EvalResult {
+  return { kind: "return", value };
+}
+
 /** Error messages for terminal control-flow results. */
 const TERMINAL_ERRORS: Record<string, string> = {
   break: "Unexpected break outside loop",
   yield: "Unexpected yield outside block",
+  return: "Unexpected return outside function",
 };
 
 /** Unwrap an evaluation result to a value. Throws for terminal control-flow results. */

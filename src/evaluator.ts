@@ -6,12 +6,13 @@ import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
 import {
   evalBreak,
   evalOk,
+  evalReturn,
   evalYield,
   isPointerValue,
   toNumber,
   unwrap,
 } from "./value";
-import { isBlockTerminal, isLoopTerminal } from "./controlflow";
+import { shouldPropagate } from "./controlflow";
 
 type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };
 
@@ -126,9 +127,11 @@ export function evaluate(
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value, type: node.type });
     case "unary": {
+      const unaryOperand = evaluate(node.operand, env, functions);
+      if (shouldPropagate(unaryOperand, "expression")) return unaryOperand;
       switch (node.op) {
         case "-": {
-          const operand = unwrap(evaluate(node.operand, env, functions));
+          const operand = unwrap(unaryOperand);
           return evalOk({
             kind: "number",
             value: -toNumber(operand),
@@ -150,7 +153,7 @@ export function evaluate(
           });
         }
         case "*": {
-          const ptr = unwrap(evaluate(node.operand, env, functions));
+          const ptr = unwrap(unaryOperand);
           if (!isPointerValue(ptr))
             throw new InterpreterError(
               "runtime",
@@ -163,8 +166,12 @@ export function evaluate(
       break;
     }
     case "binary": {
-      const left = unwrap(evaluate(node.left, env, functions));
-      const right = unwrap(evaluate(node.right, env, functions));
+      const leftResult = evaluate(node.left, env, functions);
+      if (shouldPropagate(leftResult, "expression")) return leftResult;
+      const rightResult = evaluate(node.right, env, functions);
+      if (shouldPropagate(rightResult, "expression")) return rightResult;
+      const left = unwrap(leftResult);
+      const right = unwrap(rightResult);
       const l = toNumber(left);
       const r = toNumber(right);
       switch (node.op) {
@@ -293,7 +300,8 @@ export function evaluate(
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {
         const evalResult = evaluate(stmt, env, functions);
-        if (isBlockTerminal(evalResult)) return evalOk(evalResult.value);
+        if (shouldPropagate(evalResult, "block")) return evalOk(evalResult.value);
+        if (shouldPropagate(evalResult, "expression")) return evalResult;
         result = evalResult.value;
       }
       return evalOk(result);
@@ -309,7 +317,7 @@ export function evaluate(
     case "loop": {
       for (const stmt of node.body) {
         const result = evaluate(stmt, env, functions);
-        if (isLoopTerminal(result)) return evalOk(result.value);
+        if (shouldPropagate(result, "loop")) return evalOk(result.value);
       }
       return evalOk({ kind: "number", value: 0 });
     }
@@ -321,6 +329,10 @@ export function evaluate(
       const value = unwrap(evaluate(node.value, env, functions));
       return evalYield(value);
     }
+    case "return": {
+      const value = unwrap(evaluate(node.value, env, functions));
+      return evalReturn(value);
+    }
     case "while": {
       while (toNumber(unwrap(evaluate(node.condition, env, functions))) !== 0) {
         const result = evaluate(
@@ -328,7 +340,7 @@ export function evaluate(
           env,
           functions,
         );
-        if (isLoopTerminal(result)) return result;
+        if (shouldPropagate(result, "loop")) return result;
       }
       return evalOk({ kind: "number", value: 0 });
     }
@@ -368,10 +380,13 @@ export function evaluate(
       }
       const callEnv = new Map(env);
       for (let i = 0; i < fnDef.params.length; i++) {
-        const arg = unwrap(evaluate(node.args[i]!, env, functions));
-        callEnv.set(fnDef.params[i]!.name, arg);
+        const argResult = evaluate(node.args[i]!, env, functions);
+        if (shouldPropagate(argResult, "expression")) return argResult;
+        callEnv.set(fnDef.params[i]!.name, unwrap(argResult));
       }
-      return evaluate(fnDef.body, callEnv, functions);
+      const callResult = evaluate(fnDef.body, callEnv, functions);
+      if (shouldPropagate(callResult, "expression")) return evalOk(callResult.value);
+      return callResult;
     }
     case "match": {
       const targetValue = unwrap(evaluate(node.target, env, functions));

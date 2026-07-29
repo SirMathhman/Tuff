@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { evalBreak, evalOk, evalYield, unwrap, type Value } from "../src/value";
-import {
-  isBlockTerminal,
-  isLoopTerminal,
-  isTerminal,
-} from "../src/controlflow";
+import { evalBreak, evalOk, evalReturn, evalYield, unwrap, type Value } from "../src/value";
+import { isTerminal, shouldPropagate } from "../src/controlflow";
 
 const numVal: Value = { kind: "number", value: 1 };
 
@@ -21,20 +17,32 @@ describe("controlflow", () => {
     expect(isTerminal(evalYield(numVal))).toBe(true);
   });
 
-  test("isBlockTerminal returns true for yield", () => {
-    expect(isBlockTerminal(evalYield(numVal))).toBe(true);
+  test("isTerminal returns true for return", () => {
+    expect(isTerminal(evalReturn(numVal))).toBe(true);
   });
 
-  test("isBlockTerminal returns false for break", () => {
-    expect(isBlockTerminal(evalBreak(numVal))).toBe(false);
+  test("shouldPropagate returns true for yield in block", () => {
+    expect(shouldPropagate(evalYield(numVal), "block")).toBe(true);
   });
 
-  test("isLoopTerminal returns true for break", () => {
-    expect(isLoopTerminal(evalBreak(numVal))).toBe(true);
+  test("shouldPropagate returns false for break in block", () => {
+    expect(shouldPropagate(evalBreak(numVal), "block")).toBe(false);
   });
 
-  test("isLoopTerminal returns false for yield", () => {
-    expect(isLoopTerminal(evalYield(numVal))).toBe(false);
+  test("shouldPropagate returns true for break in loop", () => {
+    expect(shouldPropagate(evalBreak(numVal), "loop")).toBe(true);
+  });
+
+  test("shouldPropagate returns false for yield in loop", () => {
+    expect(shouldPropagate(evalYield(numVal), "loop")).toBe(false);
+  });
+
+  test("shouldPropagate returns true for return in expression", () => {
+    expect(shouldPropagate(evalReturn(numVal), "expression")).toBe(true);
+  });
+
+  test("shouldPropagate returns false for break in expression", () => {
+    expect(shouldPropagate(evalBreak(numVal), "expression")).toBe(false);
   });
 
   test("unwrap throws for unknown result kind", () => {

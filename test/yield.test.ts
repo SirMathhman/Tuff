@@ -21,4 +21,8 @@ describe("yield", () => {
   test('interpret("{ yield yield 5 }") => Error (nested yield)', () => {
     expect(() => interpret("{ yield yield 5 }")).toThrow();
   });
+
+  test('interpret("fn get() => { if (true) yield 3; 4 } + 2; get()") => 5', () => {
+    expect(interpret("fn get() => { if (true) yield 3; 4 } + 2; get()")).toBe(5);
+  });
 });
