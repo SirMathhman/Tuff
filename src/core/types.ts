@@ -233,6 +233,9 @@ export function getBits(t: Type): number {
  */
 export function isAssignable(source: Type, target: Type): boolean {
   if (isDynamic(source)) return true;
+  if (isUnion(target)) {
+    return target.variants.some((v) => isAssignable(source, v));
+  }
   if (isNull(target)) return isNull(source);
   if (isNull(source)) return false;
   if (isBool(target)) return isBool(source);

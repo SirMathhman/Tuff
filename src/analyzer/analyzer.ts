@@ -10,6 +10,7 @@ import {
   isDynamic,
   isPointer,
   isStruct,
+  isUnion,
   nullType,
   pointer,
   resolveBuiltinType,
@@ -75,6 +76,7 @@ interface VarDeclaration {
   kind: "var";
   type: Type;
   mutable: boolean;
+  typeParams?: string[];
 }
 
 /** A function declaration in the symbol table. */
@@ -225,6 +227,9 @@ function substituteTypeParams(type: Type, subst: Map<string, Type>): Type {
   if (type.kind === "typeParam") {
     return subst.get(type.name) ?? type;
   }
+  if (type.kind === "unresolved" && subst.has(type.name)) {
+    return subst.get(type.name)!;
+  }
   if (type.kind === "pointer") {
     return { ...type, inner: substituteTypeParams(type.inner, subst) };
   }
@@ -323,13 +328,29 @@ function resolveType(node: AstNode, scope: Scope): Type {
           node.type = pointer(operandType, true);
           return node.type;
         case "*":
-          // Dereference: operand must be a pointer
+          // Dereference: operand must be a pointer or union containing a pointer
+          if (isUnion(operandType)) {
+            // Extract inner types from pointer variants in the union
+            const innerTypes: Type[] = [];
+            for (const variant of operandType.variants) {
+              if (isPointer(variant)) {
+                innerTypes.push(variant.inner);
+              }
+            }
+            if (innerTypes.length === 0) {
+              throwCannotDereference(operandType, node.pos);
+            }
+            // If all pointer variants have the same inner type, use it directly
+            if (innerTypes.length === 1) {
+              node.type = innerTypes[0]!;
+              return node.type;
+            }
+            // Otherwise, return a union of the inner types
+            node.type = unionType(innerTypes);
+            return node.type;
+          }
           if (!isPointer(operandType)) {
-            throw new InterpreterError(
-              "type",
-              `Cannot dereference non-pointer type: ${typeName(operandType)}`,
-              node.pos,
-            );
+            throwCannotDereference(operandType, node.pos);
           }
           node.type = operandType.inner;
           return operandType.inner;
@@ -530,6 +551,23 @@ function resolveType(node: AstNode, scope: Scope): Type {
       return dynamic();
 
     case "typealias": {
+      // For generic type aliases, store the unresolved type with type params
+      // so substitution happens at the use site
+      if (node.typeParams && node.typeParams.length > 0) {
+        // Register with the unresolved type so type params are substituted at use site
+        registerDeclaration(
+          node.name,
+          scope,
+          {
+            kind: "var",
+            type: node.type,
+            mutable: false,
+            typeParams: node.typeParams,
+          },
+          node.pos,
+        );
+        return node.type;
+      }
       const resolvedType = resolveTypeNode(node.type, scope);
       registerDeclaration(
         node.name,
@@ -869,6 +907,18 @@ function resolveType(node: AstNode, scope: Scope): Type {
   }
 }
 
+/** Throw a "cannot dereference" error for non-pointer types. */
+function throwCannotDereference(
+  type: Type,
+  pos?: { line: number; column: number },
+): never {
+  throw new InterpreterError(
+    "type",
+    `Cannot dereference non-pointer type: ${typeName(type)}`,
+    pos,
+  );
+}
+
 /** Set type on a node if the node kind supports it. */
 function setNodeType(node: AstNode, type: Type): void {
   switch (node.kind) {
@@ -951,6 +1001,27 @@ function resolveTypeNode(type: Type, scope?: Scope): Type {
     if (scope) {
       const userType = resolveUserType(type.name, scope);
       if (userType) {
+        // Generic type alias: substitute type params with type args
+        const decl = scope.declarations.get(type.name);
+        if (decl && decl.kind === "var" && decl.typeParams && type.typeArgs) {
+          if (decl.typeParams.length !== type.typeArgs.length) {
+            throw new InterpreterError(
+              "type",
+              `Type alias '${type.name}' expects ${decl.typeParams.length} type argument(s), got ${type.typeArgs.length}`,
+              type.pos,
+            );
+          }
+          const subst = new Map<string, Type>();
+          for (let i = 0; i < decl.typeParams.length; i++) {
+            subst.set(
+              decl.typeParams[i]!,
+              resolveTypeNode(type.typeArgs[i]!, scope),
+            );
+          }
+          const substituted = substituteTypeParams(decl.type, subst);
+          // Resolve any remaining unresolved types after substitution
+          return resolveTypeNode(substituted, scope);
+        }
         // If this is a generic struct instantiation with type args, substitute
         if (isStruct(userType) && userType.typeParams && type.typeArgs) {
           if (userType.typeParams.length !== type.typeArgs.length) {

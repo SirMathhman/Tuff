@@ -64,7 +64,13 @@ export type AstNode =
   | { kind: "yield"; value: AstNode; pos?: TokenPos }
   | { kind: "return"; value: AstNode; pos?: TokenPos }
   | { kind: "continue"; pos?: TokenPos }
-  | { kind: "typealias"; name: string; type: Type; pos?: TokenPos }
+  | {
+    kind: "typealias";
+    name: string;
+    type: Type;
+    typeParams?: string[];
+    pos?: TokenPos;
+  }
   | { kind: "while"; condition: AstNode; body: AstNode[]; pos?: TokenPos }
   | { kind: "typecheck"; value: AstNode; type: Type; pos?: TokenPos }
   | {

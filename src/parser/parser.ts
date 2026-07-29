@@ -183,12 +183,19 @@ class Parser {
         name = nameToken.value;
         this.consume();
       }
+      const typeParams = this.parseTypeParameters();
       this.expect("operator", "=");
       const type = this.parseUnionType();
       if (this.match("punctuator", ";")) {
         this.consume();
       }
-      return { kind: "typealias", name, type, pos };
+      return {
+        kind: "typealias",
+        name,
+        type,
+        typeParams: typeParams.length > 0 ? typeParams : undefined,
+        pos,
+      };
     }
     if (this.match("keyword", "enum")) {
       return this.parseEnumStatement();

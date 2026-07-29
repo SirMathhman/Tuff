@@ -73,4 +73,20 @@ describe("typecheck expressions", () => {
   test('interpret("let temp : I32 | Bool = 100; temp") => 100', () => {
     expect(interpret("let temp : I32 | Bool = 100; temp")).toBe(100);
   });
+
+  test('interpret("type NullablePtr<T> = &T | Null; let x = 1; let ptr : NullablePtr<I32> = &x; *ptr") => 1', () => {
+    expect(
+      interpret(
+        "type NullablePtr<T> = &T | Null; let x = 1; let ptr : NullablePtr<I32> = &x; *ptr",
+      ),
+    ).toBe(1);
+  });
+
+  test('interpret("type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; let x = 1; let y : &I32 = &x; let ptr2 : NullablePtr<I32> = y; *ptr2") => 1', () => {
+    expect(
+      interpret(
+        "type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; let x = 1; let y : &I32 = &x; let ptr2 : NullablePtr<I32> = y; *ptr2",
+      ),
+    ).toBe(1);
+  });
 });
