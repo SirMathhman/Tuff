@@ -25,4 +25,12 @@ describe("this", () => {
   test('interpret("let mut x = 0; let temp = &mut this;") => Error', () => {
     expect(() => interpret("let mut x = 0; let temp = &mut this;")).toThrow();
   });
+
+  test('interpret("this") => runtime error', () => {
+    expect(() => interpret("this")).toThrow();
+  });
+
+  test('interpret("fn foo(this : I32) => this + 1; 100.foo()") => 101', () => {
+    expect(interpret("fn foo(this : I32) => this + 1; 100.foo()")).toBe(101);
+  });
 });

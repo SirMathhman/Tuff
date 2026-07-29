@@ -76,6 +76,13 @@ export type AstNode =
       pos?: TokenPos;
     }
   | { kind: "call"; callee: AstNode; args: AstNode[]; pos?: TokenPos }
+  | {
+      kind: "method_call";
+      receiver: AstNode;
+      method: string;
+      args: AstNode[];
+      pos?: TokenPos;
+    }
   | { kind: "array"; elements: AstNode[]; type?: Type; pos?: TokenPos }
   | {
       kind: "struct";

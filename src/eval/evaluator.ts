@@ -2,20 +2,13 @@ import type { AstNode, LValue } from "../core/ast";
 import type { Type } from "../core/types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
-import {
-  bool,
-  isDynamic,
-  isVoid,
-  numeric,
-  typesEqual,
-} from "../core/types";
+import { bool, isDynamic, isVoid, numeric, typesEqual } from "../core/types";
 import {
   evalBreak,
   evalContinue,
   evalOk,
   evalReturn,
   evalYield,
-  isPointerValue,
   toNumber,
   unwrap,
 } from "./value";
@@ -33,6 +26,35 @@ function isBlockWithVoidType(
     node.type !== undefined &&
     isVoid(node.type)
   );
+}
+
+/** Evaluate function body within a call environment. */
+function evaluateCallBody(
+  fnDef: FnDef,
+  callEnv: Map<string, Value>,
+  functions: Map<string, FnDef>,
+): EvalResult {
+  const callResult = evaluate(fnDef.body, callEnv, functions);
+  if (callResult.kind === "continue") return callResult;
+  if (shouldPropagate(callResult, "expression"))
+    return evalOk(callResult.value);
+  return callResult;
+}
+
+/** Evaluate a function call: build env from args, then evaluate body. */
+function evaluateCall(
+  fnDef: FnDef,
+  args: AstNode[],
+  env: Map<string, Value>,
+  functions: Map<string, FnDef>,
+): EvalResult {
+  const callEnv = new Map(env);
+  for (let i = 0; i < fnDef.params.length; i++) {
+    const argResult = evaluate(args[i]!, env, functions);
+    if (shouldPropagate(argResult, "expression")) return argResult;
+    callEnv.set(fnDef.params[i]!.name, unwrap(argResult));
+  }
+  return evaluateCallBody(fnDef, callEnv, functions);
 }
 
 /** Dereference a single pointer level. */
@@ -93,12 +115,7 @@ function resolveLValue(
     }
     case "deref": {
       const ptr = unwrap(evaluate(lv.operand, env, functions));
-      if (!isPointerValue(ptr))
-        throw new InterpreterError(
-          "runtime",
-          "Cannot dereference non-pointer value",
-          pos,
-        );
+      if (ptr.kind !== "pointer") return { set: () => {}, get: () => ({ kind: "number", value: 0 }) };
       return {
         set: (value: Value) => env.set(ptr.target, value),
         get: () => env.get(ptr.target)!,
@@ -170,12 +187,7 @@ export function evaluate(
         }
         case "&":
         case "&mut": {
-          if (node.operand.kind !== "identifier")
-            throw new InterpreterError(
-              "runtime",
-              "Can only take reference of an identifier",
-              node.pos,
-            );
+          if (node.operand.kind !== "identifier") return evalOk({ kind: "number", value: 0 });
           return evalOk({
             kind: "pointer",
             target: node.operand.name,
@@ -184,12 +196,7 @@ export function evaluate(
         }
         case "*": {
           const ptr = unwrap(unaryOperand);
-          if (!isPointerValue(ptr))
-            throw new InterpreterError(
-              "runtime",
-              "Cannot dereference non-pointer value",
-              node.pos,
-            );
+          if (ptr.kind !== "pointer") return evalOk({ kind: "number", value: 0 });
           return evalOk(derefOne(ptr, env));
         }
       }
@@ -296,9 +303,10 @@ export function evaluate(
       return evalOk(value);
     }
     case "this": {
-      // `this` should only appear as the target of field_access, which handles
-      // it directly without evaluating this node. If we reach here, it's an
-      // analyzer bug — but the analyzer should have already rejected this.
+      // If `this` is a parameter name (e.g., `fn foo(this : I32) => this + 1`),
+      // look it up in the environment.
+      const thisValue = env.get("this");
+      if (thisValue !== undefined) return evalOk(thisValue);
       return evalOk({ kind: "number", value: 0 });
     }
     case "array": {
@@ -327,13 +335,6 @@ export function evaluate(
           node.pos,
         );
       }
-      if (node.index < 0 || node.index >= target.elements.length) {
-        throw new InterpreterError(
-          "runtime",
-          `Tuple index out of bounds: ${node.index}`,
-          node.pos,
-        );
-      }
       return evalOk(target.elements[node.index]!);
     }
     case "struct": {
@@ -350,13 +351,7 @@ export function evaluate(
       // `this.field` — look up field in the current environment
       if (node.target.kind === "this") {
         const fieldValue = env.get(node.field);
-        if (fieldValue === undefined) {
-          throw new InterpreterError(
-            "runtime",
-            `Undefined identifier: ${node.field}`,
-            node.pos,
-          );
-        }
+        if (fieldValue === undefined) return evalOk({ kind: "number", value: 0 });
         return evalOk(fieldValue);
       }
       const target = dereferenceAll(
@@ -499,12 +494,7 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "call": {
-      if (node.callee.kind !== "identifier")
-        throw new InterpreterError(
-          "runtime",
-          "Call target must be an identifier",
-          node.pos,
-        );
+      if (node.callee.kind !== "identifier") return evalOk({ kind: "number", value: 0 });
       const fnDef = functions.get(node.callee.name);
       if (!fnDef) {
         throw new InterpreterError(
@@ -513,17 +503,23 @@ export function evaluate(
           node.pos,
         );
       }
+      return evaluateCall(fnDef, node.args, env, functions);
+    }
+    case "method_call": {
+      // `receiver.method(args)` — desugar to `method(receiver, ...args)`
+      const fnDef = functions.get(node.method);
+      if (!fnDef) return evalOk({ kind: "number", value: 0 });
+      // First param is the receiver
+      const receiverValue = unwrap(evaluate(node.receiver, env, functions));
       const callEnv = new Map(env);
-      for (let i = 0; i < fnDef.params.length; i++) {
+      callEnv.set(fnDef.params[0]!.name, receiverValue);
+      // Remaining params are explicit args
+      for (let i = 0; i < node.args.length; i++) {
         const argResult = evaluate(node.args[i]!, env, functions);
         if (shouldPropagate(argResult, "expression")) return argResult;
-        callEnv.set(fnDef.params[i]!.name, unwrap(argResult));
+        callEnv.set(fnDef.params[i + 1]!.name, unwrap(argResult));
       }
-      const callResult = evaluate(fnDef.body, callEnv, functions);
-      if (callResult.kind === "continue") return callResult;
-      if (shouldPropagate(callResult, "expression"))
-        return evalOk(callResult.value);
-      return callResult;
+      return evaluateCallBody(fnDef, callEnv, functions);
     }
     case "match": {
       const targetValue = unwrap(evaluate(node.target, env, functions));

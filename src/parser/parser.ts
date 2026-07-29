@@ -609,7 +609,7 @@ class Parser {
     const params: { name: string; type: Type }[] = [];
     while (!this.match("group", ")")) {
       const paramToken = this.peek();
-      if (paramToken?.type === "identifier") {
+      if (paramToken?.type === "identifier" || paramToken?.type === "keyword") {
         this.consume();
         this.expect("punctuator", ":");
         const paramType = this.parseType();
@@ -735,6 +735,18 @@ class Parser {
     };
   }
 
+  /** Parse a comma-separated list of arguments (without consuming parens). */
+  private parseArguments(): AstNode[] {
+    const args: AstNode[] = [];
+    while (!this.match("group", ")")) {
+      args.push(this.parseExpression());
+      if (this.match("punctuator", ",")) {
+        this.consume();
+      }
+    }
+    return args;
+  }
+
   private parseAtom(): AstNode {
     if (this.match("number")) {
       const t = this.consume()!;
@@ -780,13 +792,7 @@ class Parser {
       // Check for function call: `identifier(args)`
       if (this.match("group", "(")) {
         this.consume();
-        const args: AstNode[] = [];
-        while (!this.match("group", ")")) {
-          args.push(this.parseExpression());
-          if (this.match("punctuator", ",")) {
-            this.consume();
-          }
-        }
+        const args = this.parseArguments();
         this.expect("group", ")");
         return {
           kind: "call",
@@ -948,12 +954,26 @@ class Parser {
         const fieldToken = this.peek();
         if (fieldToken?.type === "identifier") {
           this.consume();
-          node = {
-            kind: "field_access",
-            target: node,
-            field: fieldToken.value,
-            pos: node.pos,
-          };
+          // Check if this is a method call: `.name(`
+          if (this.match("group", "(")) {
+            this.consume(); // (
+            const args = this.parseArguments();
+            this.expect("group", ")");
+            node = {
+              kind: "method_call",
+              receiver: node,
+              method: fieldToken.value,
+              args,
+              pos: node.pos,
+            };
+          } else {
+            node = {
+              kind: "field_access",
+              target: node,
+              field: fieldToken.value,
+              pos: node.pos,
+            };
+          }
         } else if (fieldToken?.type === "number" && isNumberToken(fieldToken)) {
           this.consume();
           node = {

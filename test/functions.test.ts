@@ -38,6 +38,12 @@ describe("functions", () => {
     ).toThrow();
   });
 
+  test('interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()") => 101', () => {
+    expect(
+      interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()"),
+    ).toBe(101);
+  });
+
   test('interpret("fn foo(x : U8, x : U16) => x") => Error (duplicate param)', () => {
     expect(() => interpret("fn foo(x : U8, x : U16) => x")).toThrow();
   });

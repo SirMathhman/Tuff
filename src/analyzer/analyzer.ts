@@ -377,6 +377,13 @@ function resolveType(node: AstNode, scope: Scope): Type {
     }
 
     case "this": {
+      // If `this` is a parameter name (e.g., `fn foo(this : I32) => this + 1`),
+      // treat it as an identifier lookup.
+      const decl = scope.declarations.get("this");
+      if (decl && decl.kind === "var") {
+        node.type = decl.type;
+        return node.type;
+      }
       throw new InterpreterError(
         "type",
         "'this' can only be used as the target of a field access (e.g., this.x)",
@@ -585,6 +592,15 @@ function resolveType(node: AstNode, scope: Scope): Type {
           ? new Map(node.typeParams.map((tp) => [tp, typeParam(tp)]))
           : scope.typeParams,
       };
+      // Register function parameters in the scope
+      for (const param of node.params) {
+        const paramType = resolveTypeNode(param.type, fnScope);
+        fnScope.declarations.set(param.name, {
+          kind: "var",
+          type: paramType,
+          mutable: false,
+        });
+      }
       const bodyType = resolveType(node.body, fnScope);
       // Validate return type annotation if present
       if (node.returnType) {
@@ -760,21 +776,46 @@ function resolveType(node: AstNode, scope: Scope): Type {
           typeParams:
             callTypeParams.size > 0 ? callTypeParams : scope.typeParams,
         };
-        for (let i = 0; i < node.args.length; i++) {
-          const arg = node.args[i];
-          if (!arg) continue;
-          const argType = resolveType(arg, scope);
-          const param = params[i];
-          if (param) {
-            checkAssignable(
-              argType,
-              resolveTypeNode(param.type, callScope),
-              arg.pos,
-            );
-          }
-        }
+        checkCallArgs(
+          node.args,
+          params,
+          scope,
+          callScope,
+          0,
+        );
         // Resolve return type with type param substitutions
         return resolveTypeNode(decl.returnType, callScope);
+      }
+      return dynamic();
+    }
+    case "method_call": {
+      // `receiver.method(args)` — desugar to `method(receiver, ...args)`
+      const decl = scope.declarations.get(node.method);
+      if (decl && decl.kind === "fn") {
+        const params = decl.params;
+        // Method call: first param is the receiver, rest are explicit args
+        const expectedArgs = params.length - 1;
+        if (node.args.length !== expectedArgs) {
+          throw new InterpreterError(
+            "type",
+            `Method '${node.method}' expects ${expectedArgs} argument(s), got ${node.args.length}`,
+            node.pos,
+          );
+        }
+        // Type-check receiver against first param
+        const receiverType = resolveType(node.receiver, scope);
+        if (params[0]) {
+          checkAssignable(receiverType, params[0].type, node.pos);
+        }
+        // Type-check remaining args
+        checkCallArgs(
+          node.args,
+          params,
+          scope,
+          scope,
+          1,
+        );
+        return resolveTypeNode(decl.returnType, scope);
       }
       return dynamic();
     }
@@ -874,6 +915,29 @@ function checkAssignable(
       `Type mismatch: cannot assign ${typeName(valueType)} to ${typeName(targetType)}`,
       pos,
     );
+  }
+}
+
+/** Type-check call arguments against function parameters. */
+function checkCallArgs(
+  args: AstNode[],
+  params: { name: string; type?: Type }[],
+  scope: Scope,
+  callScope: Scope,
+  offset: number,
+): void {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg) continue;
+    const argType = resolveType(arg, scope);
+    const param = params[i + offset];
+    if (param && param.type) {
+      checkAssignable(
+        argType,
+        resolveTypeNode(param.type, callScope),
+        arg.pos,
+      );
+    }
   }
 }
 
