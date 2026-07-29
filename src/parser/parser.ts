@@ -410,7 +410,11 @@ class Parser {
     const typeToken = this.peek();
     if (typeToken?.type === "identifier") {
       this.consume();
-      const unresolved: UnresolvedType = { kind: "unresolved", name: typeToken.value, pos: typeToken.pos };
+      const unresolved: UnresolvedType = {
+        kind: "unresolved",
+        name: typeToken.value,
+        pos: typeToken.pos,
+      };
       // Check for generic type arguments: `Name<TypeArgs>`
       const savedPos = this.pos;
       const typeArgs = this.parseTypeArguments();
@@ -610,7 +614,13 @@ class Parser {
       }
     }
     this.expect("group", "}");
-    return { kind: "struct", name, typeParams: typeParams.length > 0 ? typeParams : undefined, fields, pos };
+    return {
+      kind: "struct",
+      name,
+      typeParams: typeParams.length > 0 ? typeParams : undefined,
+      fields,
+      pos,
+    };
   }
 
   private parseAtom(): AstNode {

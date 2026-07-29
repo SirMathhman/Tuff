@@ -102,7 +102,9 @@ describe("structs", () => {
 
   test('interpret("struct Wrapper<T> { field : T } let w = Wrapper<I32> { field : 1 };") => Error (wrong type arg count)', () => {
     expect(() =>
-      interpret("struct Wrapper<T> { field : T } let w = Wrapper<I32, Bool> { field : 1 };"),
+      interpret(
+        "struct Wrapper<T> { field : T } let w = Wrapper<I32, Bool> { field : 1 };",
+      ),
     ).toThrow();
   });
 });

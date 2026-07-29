@@ -623,9 +623,10 @@ function resolveType(node: AstNode, scope: Scope): Type {
         }
       }
       // Get or create memoized struct type
-      const instType = structTypeDecl.typeParams && resolvedTypeArgs.length > 0
-        ? getOrInstantiateStruct(node.name, resolvedTypeArgs, structTypeDecl)
-        : structTypeDecl;
+      const instType =
+        structTypeDecl.typeParams && resolvedTypeArgs.length > 0
+          ? getOrInstantiateStruct(node.name, resolvedTypeArgs, structTypeDecl)
+          : structTypeDecl;
       const fieldMap = new Map(instType.fields.map((f) => [f.name, f.type]));
       // Build instantiation scope with type param bindings
       const typeSubst = new Map<string, Type>();
