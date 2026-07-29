@@ -51,4 +51,34 @@ describe("control flow", () => {
       ),
     ).toBe(4);
   });
+
+  test('interpret("let x = if (false) 1 else if (false) 2 else if (false) 3 else if (true) 4 else 5; x") => 4', () => {
+    expect(
+      interpret(
+        "let x = if (false) 1 else if (false) 2 else if (false) 3 else if (true) 4 else 5; x",
+      ),
+    ).toBe(4);
+  });
+
+  test('interpret("let x = if (false) 1 else if (false) 2 else if (false) 3 else 5; x") => 5', () => {
+    expect(
+      interpret(
+        "let x = if (false) 1 else if (false) 2 else if (false) 3 else 5; x",
+      ),
+    ).toBe(5);
+  });
+
+  test('interpret("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else if (true) { x = 3; } x") => 3', () => {
+    expect(
+      interpret(
+        "let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else if (true) { x = 3; } x",
+      ),
+    ).toBe(3);
+  });
+
+  test('interpret("let x = if (true) 1 else if (true) 2 else 3; x") => 1', () => {
+    expect(
+      interpret("let x = if (true) 1 else if (true) 2 else 3; x"),
+    ).toBe(1);
+  });
 });
