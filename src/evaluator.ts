@@ -300,7 +300,8 @@ export function evaluate(
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {
         const evalResult = evaluate(stmt, env, functions);
-        if (shouldPropagate(evalResult, "block")) return evalOk(evalResult.value);
+        if (shouldPropagate(evalResult, "block"))
+          return evalOk(evalResult.value);
         if (shouldPropagate(evalResult, "expression")) return evalResult;
         result = evalResult.value;
       }
@@ -385,7 +386,8 @@ export function evaluate(
         callEnv.set(fnDef.params[i]!.name, unwrap(argResult));
       }
       const callResult = evaluate(fnDef.body, callEnv, functions);
-      if (shouldPropagate(callResult, "expression")) return evalOk(callResult.value);
+      if (shouldPropagate(callResult, "expression"))
+        return evalOk(callResult.value);
       return callResult;
     }
     case "match": {

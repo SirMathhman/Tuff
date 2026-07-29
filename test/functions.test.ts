@@ -27,9 +27,9 @@ describe("functions", () => {
   });
 
   test('interpret("fn get() => { if (true) return 3; 4 } + 2; get()") => 3', () => {
-    expect(
-      interpret("fn get() => { if (true) return 3; 4 } + 2; get()"),
-    ).toBe(3);
+    expect(interpret("fn get() => { if (true) return 3; 4 } + 2; get()")).toBe(
+      3,
+    );
   });
 
   test('interpret("fn accept(param : U8) => {} accept(0U16)") => Error', () => {
