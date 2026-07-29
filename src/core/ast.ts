@@ -19,6 +19,7 @@ export type LValue =
 export type AstNode =
   | { kind: "number"; value: number; type?: Type; pos?: TokenPos }
   | { kind: "boolean"; value: boolean; type?: Type; pos?: TokenPos }
+  | { kind: "null"; type?: Type; pos?: TokenPos }
   | {
       kind: "binary";
       op: BinaryOp;

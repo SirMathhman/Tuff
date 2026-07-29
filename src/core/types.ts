@@ -22,6 +22,11 @@ export interface VoidType {
   kind: "void";
 }
 
+/** Null type. */
+export interface NullType {
+  kind: "null";
+}
+
 /** Dynamic / unknown type (no annotation, no suffix). */
 export interface DynamicType {
   kind: "dynamic";
@@ -87,6 +92,7 @@ export type Type =
   | NumericType
   | BoolType
   | VoidType
+  | NullType
   | DynamicType
   | PointerType
   | ArrayType
@@ -110,6 +116,11 @@ export function bool(): BoolType {
 /** Construct a void type. */
 export function voidType(): VoidType {
   return { kind: "void" };
+}
+
+/** Construct a null type. */
+export function nullType(): NullType {
+  return { kind: "null" };
 }
 
 /** Construct a dynamic type. */
@@ -171,6 +182,11 @@ export function isVoid(t: Type): t is VoidType {
   return t.kind === "void";
 }
 
+/** Check if a type is null. */
+export function isNull(t: Type): t is NullType {
+  return t.kind === "null";
+}
+
 /** Check if a type is dynamic. */
 export function isDynamic(t: Type): t is DynamicType {
   return t.kind === "dynamic";
@@ -217,6 +233,8 @@ export function getBits(t: Type): number {
  */
 export function isAssignable(source: Type, target: Type): boolean {
   if (isDynamic(source)) return true;
+  if (isNull(target)) return isNull(source);
+  if (isNull(source)) return false;
   if (isBool(target)) return isBool(source);
   if (isBool(source)) return false;
   if (isPointer(target)) {
@@ -282,6 +300,7 @@ export function parseTypeName(name: string): Type {
 export function resolveBuiltinType(name: string): Type {
   if (name === "Bool") return bool();
   if (name === "Void") return voidType();
+  if (name === "Null" || name === "null") return nullType();
   const ptrMatch = name.match(/^&mut\s+(.+)$/);
   if (ptrMatch) {
     return pointer(resolveBuiltinType(ptrMatch[1]!), true);
@@ -304,6 +323,7 @@ export function typeName(t: Type): string {
   if (t.kind === "numeric") return `${t.prefix}${t.bits}`;
   if (t.kind === "bool") return "Bool";
   if (t.kind === "void") return "Void";
+  if (t.kind === "null") return "Null";
   if (t.kind === "pointer") return `&${typeName(t.inner)}`;
   if (t.kind === "array") return `[${typeName(t.inner)}; ${t.length}]`;
   if (t.kind === "struct") return t.name;

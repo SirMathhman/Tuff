@@ -514,7 +514,7 @@ class Parser {
     }
     // Simple type name — produce unresolved placeholder
     const typeToken = this.peek();
-    if (typeToken?.type === "identifier") {
+    if (typeToken?.type === "identifier" || typeToken?.type === "keyword") {
       this.consume();
       const unresolved: UnresolvedType = {
         kind: "unresolved",
@@ -768,6 +768,10 @@ class Parser {
     if (this.match("keyword", "false")) {
       const t = this.consume()!;
       return { kind: "boolean", value: false, pos: t.pos };
+    }
+    if (this.match("keyword", "null")) {
+      const t = this.consume()!;
+      return { kind: "null", pos: t.pos };
     }
     if (this.match("keyword", "if")) {
       return this.parseIfExpression();

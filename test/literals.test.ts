@@ -11,6 +11,12 @@ describe("empty/whitespace input", () => {
   });
 });
 
+describe("null literals", () => {
+  test('interpret("let temp : Null = null; temp") => 0', () => {
+    expect(interpret("let temp : Null = null; temp")).toBe(0);
+  });
+});
+
 describe("number literals", () => {
   test('interpret("1") => 1', () => {
     expect(interpret("1")).toBe(1);

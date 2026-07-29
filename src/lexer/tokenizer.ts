@@ -63,7 +63,8 @@ export type Token =
         | "continue"
         | "type"
         | "enum"
-        | "this";
+        | "this"
+        | "null";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
@@ -235,6 +236,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "type", pos: tokenPos });
       } else if (lower === "enum") {
         tokens.push({ type: "keyword", value: "enum", pos: tokenPos });
+      } else if (lower === "null") {
+        tokens.push({ type: "keyword", value: "null", pos: tokenPos });
       } else {
         tokens.push({ type: "identifier", value: ident, pos: tokenPos });
       }

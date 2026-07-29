@@ -10,6 +10,7 @@ import {
   isDynamic,
   isPointer,
   isStruct,
+  nullType,
   pointer,
   resolveBuiltinType,
   structType,
@@ -287,6 +288,10 @@ function resolveType(node: AstNode, scope: Scope): Type {
 
     case "boolean":
       node.type = bool();
+      return node.type;
+
+    case "null":
+      node.type = nullType();
       return node.type;
 
     case "unary": {

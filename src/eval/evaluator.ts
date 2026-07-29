@@ -174,6 +174,8 @@ export function evaluate(
       return evalOk({ kind: "number", value: node.value, type: node.type });
     case "boolean":
       return evalOk({ kind: "boolean", value: node.value, type: node.type });
+    case "null":
+      return evalOk({ kind: "number", value: 0, type: node.type });
     case "unary": {
       const unaryOperand = evaluate(node.operand, env, functions);
       if (shouldPropagate(unaryOperand, "expression")) return unaryOperand;
