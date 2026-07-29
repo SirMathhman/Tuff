@@ -28,10 +28,7 @@ function derefOne(
 }
 
 /** Recursively dereference all pointer levels until reaching a non-pointer value. */
-function dereferenceAll(
-  value: Value,
-  env: Map<string, Value>,
-): Value {
+function dereferenceAll(value: Value, env: Map<string, Value>): Value {
   let current = value;
   while (current.kind === "pointer") {
     current = derefOne(current, env);

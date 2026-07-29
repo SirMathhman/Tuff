@@ -23,13 +23,13 @@ Inspect uncovered code paths from LCOV coverage reports and decide whether to ad
 
 ## Classification Heuristics
 
-| Pattern | Likely Cause | Action |
-|---------|-------------|--------|
-| Error throw in evaluator that analyzer already catches | Dead code | Remove |
-| `break` after exhaustive switch | Structural | Add `break` or leave |
-| Fallback return after `throw` | Unreachable | Remove or refactor |
-| Unused function parameter | Dead code | Remove parameter |
-| Valid error path with no test | Missing coverage | Add test |
+| Pattern                                                | Likely Cause     | Action               |
+| ------------------------------------------------------ | ---------------- | -------------------- |
+| Error throw in evaluator that analyzer already catches | Dead code        | Remove               |
+| `break` after exhaustive switch                        | Structural       | Add `break` or leave |
+| Fallback return after `throw`                          | Unreachable      | Remove or refactor   |
+| Unused function parameter                              | Dead code        | Remove parameter     |
+| Valid error path with no test                          | Missing coverage | Add test             |
 
 ## Tips
 
