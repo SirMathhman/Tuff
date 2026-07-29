@@ -77,8 +77,6 @@ describe("control flow", () => {
   });
 
   test('interpret("let x = if (true) 1 else if (true) 2 else 3; x") => 1', () => {
-    expect(
-      interpret("let x = if (true) 1 else if (true) 2 else 3; x"),
-    ).toBe(1);
+    expect(interpret("let x = if (true) 1 else if (true) 2 else 3; x")).toBe(1);
   });
 });
