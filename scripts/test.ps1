@@ -1,1 +1,1 @@
-bun test --coverage --only-failures
+bun test --coverage --only-failures 2>&1 | Where-Object { $_ -notmatch '\|\s*100\.00\s*\|\s*100\.00\s*\|' }
