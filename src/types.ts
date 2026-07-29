@@ -48,6 +48,12 @@ export interface StructType {
   fields: { name: string; type: Type }[];
 }
 
+/** Tuple type with ordered element types. */
+export interface TupleType {
+  kind: "tuple";
+  elements: Type[];
+}
+
 /** Unresolved type placeholder — name string from the parser, not yet validated. */
 export interface UnresolvedType {
   kind: "unresolved";
@@ -64,6 +70,7 @@ export type Type =
   | PointerType
   | ArrayType
   | StructType
+  | TupleType
   | UnresolvedType;
 
 /** Construct a numeric type. */
@@ -104,6 +111,11 @@ export function structType(
   return { kind: "struct", name, fields };
 }
 
+/** Construct a tuple type. */
+export function tupleType(elements: Type[]): TupleType {
+  return { kind: "tuple", elements };
+}
+
 /** Check if a type is numeric. */
 export function isNumeric(t: Type): t is NumericType {
   return t.kind === "numeric";
@@ -137,6 +149,11 @@ export function isArray(t: Type): t is ArrayType {
 /** Check if a type is a struct type. */
 export function isStruct(t: Type): t is StructType {
   return t.kind === "struct";
+}
+
+/** Check if a type is a tuple type. */
+export function isTuple(t: Type): t is TupleType {
+  return t.kind === "tuple";
 }
 
 /** Get bit width for numeric types, 0 otherwise. */
@@ -179,6 +196,18 @@ export function isAssignable(source: Type, target: Type): boolean {
     return true;
   }
   if (isStruct(source)) return false;
+  if (isTuple(target)) {
+    if (!isTuple(source)) return false;
+    if (source.elements.length !== target.elements.length) return false;
+    for (let i = 0; i < source.elements.length; i++) {
+      if (
+        !isAssignable(source.elements[i]!, target.elements[i]!)
+      )
+        return false;
+    }
+    return true;
+  }
+  if (isTuple(source)) return false;
   if (!isNumeric(target) || !isNumeric(source)) return false;
   return source.prefix === target.prefix && source.bits <= target.bits;
 }
@@ -242,6 +271,8 @@ export function typeName(t: Type): string {
   if (t.kind === "pointer") return `&${typeName(t.inner)}`;
   if (t.kind === "array") return `[${typeName(t.inner)}; ${t.length}]`;
   if (t.kind === "struct") return t.name;
+  if (t.kind === "tuple")
+    return `(${t.elements.map(typeName).join(", ")})`;
   if (t.kind === "unresolved") return t.name;
   return "dynamic";
 }

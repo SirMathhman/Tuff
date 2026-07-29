@@ -4,7 +4,7 @@ import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { arrayType, pointer } from "./types";
+import { arrayType, pointer, tupleType } from "./types";
 import { isIdentifierToken, isNumberToken } from "./tokenizer";
 
 /**
@@ -320,7 +320,7 @@ class Parser {
     return undefined;
   }
 
-  /** Parse a type expression: identifier, array `[T; N]`, or pointer `&mut T` / `&T`. */
+  /** Parse a type expression: identifier, array `[T; N]`, pointer `&mut T` / `&T`, or tuple `(T1, T2, ...)`. */
   private parseType(): Type | undefined {
     // Array type: `[TypeName; N]`
     if (this.match("group", "[")) {
@@ -341,6 +341,27 @@ class Parser {
       if (mutable) this.consume();
       const inner = this.parseType();
       return pointer(inner!, mutable);
+    }
+    // Tuple type: `(T1, T2, ...)` — check for `(` followed by type and comma
+    if (this.match("group", "(")) {
+      const savedPos = this.pos;
+      this.consume();
+      const first = this.parseType();
+      if (this.match("punctuator", ",")) {
+        // Tuple type
+        this.consume(); // eat comma
+        const elements: Type[] = [first!];
+        while (!this.match("group", ")")) {
+          elements.push(this.parseType()!);
+          if (this.match("punctuator", ",")) {
+            this.consume();
+          }
+        }
+        this.expect("group", ")");
+        return tupleType(elements);
+      }
+      // Not a tuple type — restore
+      this.pos = savedPos;
     }
     // Simple type name — produce unresolved placeholder
     const typeToken = this.peek();
@@ -550,6 +571,24 @@ class Parser {
       if (token.value === "{") {
         return this.parseBlock();
       }
+      // Check if this is a tuple: `(expr, expr, ...)` vs `(expr)`
+      const savedPos = this.pos;
+      const first = this.parseExpression();
+      if (this.match("punctuator", ",")) {
+        // Tuple literal
+        this.consume(); // eat comma
+        const elements: AstNode[] = [first];
+        while (!this.match("group", ")")) {
+          elements.push(this.parseExpression());
+          if (this.match("punctuator", ",")) {
+            this.consume();
+          }
+        }
+        this.expect("group", ")");
+        return { kind: "tuple", elements, pos: first.pos };
+      }
+      // Not a tuple — restore and return parenthesized expression
+      this.pos = savedPos;
       const node = this.parseExpression();
       if (this.match("group", OPENING[token.value])) {
         this.consume();
@@ -627,7 +666,7 @@ class Parser {
       this.expect("group", "]");
       node = { kind: "index", target: node, index, pos };
     }
-    // Handle postfix `.field` — supports chaining: `obj.field.subfield`
+    // Handle postfix `.field` (struct) or `.N` (tuple index) — supports chaining
     while (this.match("punctuator", ".")) {
       this.consume(); // .
       const fieldToken = this.peek();
@@ -637,6 +676,14 @@ class Parser {
           kind: "field_access",
           target: node,
           field: fieldToken.value,
+          pos: node.pos,
+        };
+      } else if (fieldToken?.type === "number" && isNumberToken(fieldToken)) {
+        this.consume();
+        node = {
+          kind: "tuple_access",
+          target: node,
+          index: fieldToken.value,
           pos: node.pos,
         };
       } else {

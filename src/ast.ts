@@ -102,4 +102,17 @@ export type AstNode =
       cases: { pattern: AstNode | "_"; body: AstNode }[];
       type?: Type;
       pos?: TokenPos;
+    }
+  | {
+      kind: "tuple";
+      elements: AstNode[];
+      type?: Type;
+      pos?: TokenPos;
+    }
+  | {
+      kind: "tuple_access";
+      target: AstNode;
+      index: number;
+      type?: Type;
+      pos?: TokenPos;
     };

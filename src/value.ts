@@ -10,7 +10,8 @@ export type Value =
   | { kind: "boolean"; value: boolean; type?: Type }
   | { kind: "pointer"; target: string; type?: Type }
   | { kind: "array"; elements: Value[]; type?: Type }
-  | { kind: "struct"; fields: Map<string, Value>; type?: Type };
+  | { kind: "struct"; fields: Map<string, Value>; type?: Type }
+  | { kind: "tuple"; elements: Value[]; type?: Type };
 
 /**
  * Result of evaluating an expression.
@@ -63,5 +64,10 @@ export function toNumber(v: Value): number {
       throw new InterpreterError("runtime", "Cannot coerce array to number");
     case "struct":
       throw new InterpreterError("runtime", "Cannot coerce struct to number");
+    case "tuple":
+      throw new InterpreterError(
+        "runtime",
+        "Cannot coerce tuple to number",
+      );
   }
 }

@@ -13,6 +13,7 @@ import {
   pointer,
   resolveBuiltinType,
   structType,
+  tupleType,
   typeName,
   voidType,
   widen,
@@ -532,6 +533,49 @@ function resolveType(
       node.type = resultType;
       return resultType;
     }
+
+    case "tuple": {
+      const elementTypes: Type[] = [];
+      for (const elem of node.elements) {
+        const elemType = resolveType(elem, declarations);
+        elementTypes.push(elemType);
+      }
+      // Use declared type if present
+      const resolvedDeclType = node.type
+        ? resolveTypeNode(node.type, declarations)
+        : undefined;
+      if (resolvedDeclType && resolvedDeclType.kind === "tuple") {
+        // Context propagation: dynamic elements inherit from declared type
+        for (let i = 0; i < node.elements.length; i++) {
+          const declaredElem = resolvedDeclType.elements[i];
+          const elemType = elementTypes[i]!;
+          if (declaredElem && isDynamic(elemType) && !isDynamic(declaredElem)) {
+            setNodeType(node.elements[i]!, declaredElem);
+            elementTypes[i] = declaredElem;
+          }
+        }
+      }
+      node.type = { kind: "tuple", elements: elementTypes };
+      return node.type;
+    }
+
+    case "tuple_access": {
+      const targetType = resolveType(node.target, declarations);
+      if (targetType.kind === "tuple") {
+        if (node.index < 0 || node.index >= targetType.elements.length) {
+          throw new InterpreterError(
+            "type",
+            `Tuple index ${node.index} out of range (tuple has ${targetType.elements.length} elements)`,
+            node.pos,
+          );
+        }
+        const elemType = targetType.elements[node.index];
+        node.type = elemType ?? dynamic();
+        return node.type;
+      }
+      node.type = dynamic();
+      return node.type;
+    }
   }
 }
 
@@ -542,6 +586,8 @@ function setNodeType(node: AstNode, type: Type): void {
     case "boolean":
     case "unary":
     case "identifier":
+    case "tuple":
+    case "tuple_access":
       node.type = type;
       break;
   }
@@ -606,6 +652,11 @@ function resolveTypeNode(
   }
   if (type.kind === "array") {
     return arrayType(resolveTypeNode(type.inner, declarations), type.length);
+  }
+  if (type.kind === "tuple") {
+    return tupleType(
+      type.elements.map((e) => resolveTypeNode(e, declarations)),
+    );
   }
   return type;
 }

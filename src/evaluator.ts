@@ -205,6 +205,34 @@ export function evaluate(
       }
       return evalOk({ kind: "array", elements, type: node.type });
     }
+    case "tuple": {
+      const elements: Value[] = [];
+      for (const elem of node.elements) {
+        elements.push(unwrap(evaluate(elem, env, functions)));
+      }
+      return evalOk({ kind: "tuple", elements, type: node.type });
+    }
+    case "tuple_access": {
+      const target = dereferenceAll(
+        unwrap(evaluate(node.target, env, functions)),
+        env,
+      );
+      if (target.kind !== "tuple") {
+        throw new InterpreterError(
+          "runtime",
+          `Cannot access tuple index ${node.index} on non-tuple value`,
+          node.pos,
+        );
+      }
+      if (node.index < 0 || node.index >= target.elements.length) {
+        throw new InterpreterError(
+          "runtime",
+          `Tuple index out of bounds: ${node.index}`,
+          node.pos,
+        );
+      }
+      return evalOk(target.elements[node.index]!);
+    }
     case "struct": {
       return evalOk({ kind: "number", value: 0 });
     }
