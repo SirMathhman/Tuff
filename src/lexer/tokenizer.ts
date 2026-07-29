@@ -32,6 +32,7 @@ export type Token =
         | ">="
         | "||"
         | "&&"
+        | "|"
         | "<"
         | ">"
         | "+="
@@ -286,6 +287,7 @@ function matchSingleCharToken(
       tokens.push({ type: "operator", value: "||", pos });
       return 2;
     }
+    tokens.push({ type: "operator", value: "|", pos });
     return 1;
   }
   if (ch === "<") {

@@ -7,16 +7,16 @@ Features the Tuff interpreter does not yet have, organized by category.
 ### Control Flow
 
 - [ ] `for` loop syntax (`for (let i = 0; i < 10; i += 1) { ... }`)
-- [ ] `continue` statement (skip to next iteration)
-- [ ] `return` statement (early return from functions — currently only expression-based `=> body`)
+- [x] `continue` statement (skip to next iteration)
+- [x] `return` statement (early return from functions — expression-based `=> body` with `return` inside blocks)
 - [ ] `else if` as statement form (currently only expression form via chained `if`)
 - [ ] `switch` statement (alternative to `match` with fall-through semantics)
 
 ### Type System
 
-- [ ] `enum` type (named constants with optional associated data)
-- [ ] `union` type (`A | B` — type can be one of several types)
-- [ ] `type alias` (`type MyInt = I32`)
+- [x] `enum` type (basic enum definition and `Enum::Variant` access — no associated data)
+- [x] `union` type (`A | B` — type can be one of several types, via `type Alias = T1 | T2`)
+- [x] `type alias` (`type MyInt = I32` — AST node exists, parser/analyzer/evaluator support present)
 - [ ] `generic` types (`fn identity<T>(x : T) => x`)
 - [ ] `trait` / `interface` (abstract type with method signatures)
 - [ ] `impl` blocks (attach methods to existing types)
@@ -29,7 +29,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 ### Data Structures
 
 - [ ] `HashMap` / `Dictionary` type (`{ key: value, ... }` with dynamic keys)
-- [ ] `Tuple` type (`(I32, Bool)`)
+- [x] `Tuple` type (`(I32, Bool)` — literals, numeric field access via `.0`, `.1`, etc.)
 - [ ] `String` literals and concatenation
 - [ ] `Slice` type (`&[T; N]` — view into array without ownership)
 - [ ] Dynamic arrays (resizeable, not fixed-length)
@@ -77,6 +77,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 
 ### Other Expressions
 
+- [x] `yield` in blocks (early exit from block expressions — tested in `yield.test.ts`)
 - [ ] Ternary conditional (`cond ? a : b` — shorthand for `if`)
 - [ ] Spread operator (`...arr` in function calls or arrays)
 - [ ] Comma expression (`a, b, c` — evaluate all, return last)

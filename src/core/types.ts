@@ -61,6 +61,18 @@ export interface EnumType {
   variant: string;
 }
 
+/** Union type (e.g., `I32 | Bool`). */
+export interface UnionType {
+  kind: "union";
+  variants: Type[];
+}
+
+/** Generic type parameter (e.g., `T` in `fn pass<T>(value : T)`). */
+export interface TypeParamType {
+  kind: "typeParam";
+  name: string;
+}
+
 /** Unresolved type placeholder — name string from the parser, not yet validated. */
 export interface UnresolvedType {
   kind: "unresolved";
@@ -79,6 +91,8 @@ export type Type =
   | StructType
   | TupleType
   | EnumType
+  | UnionType
+  | TypeParamType
   | UnresolvedType;
 
 /** Construct a numeric type. */
@@ -124,6 +138,21 @@ export function tupleType(elements: Type[]): TupleType {
   return { kind: "tuple", elements };
 }
 
+/** Construct a union type. */
+export function unionType(variants: Type[]): UnionType {
+  return { kind: "union", variants };
+}
+
+/** Construct a type parameter. */
+export function typeParam(name: string): TypeParamType {
+  return { kind: "typeParam", name };
+}
+
+/** Check if a type is a type parameter. */
+export function isTypeParam(t: Type): t is TypeParamType {
+  return t.kind === "typeParam";
+}
+
 /** Check if a type is numeric. */
 export function isNumeric(t: Type): t is NumericType {
   return t.kind === "numeric";
@@ -147,6 +176,11 @@ export function isDynamic(t: Type): t is DynamicType {
 /** Check if a type is a pointer type. */
 export function isPointer(t: Type): t is PointerType {
   return t.kind === "pointer";
+}
+
+/** Check if a type is a union type. */
+export function isUnion(t: Type): t is UnionType {
+  return t.kind === "union";
 }
 
 /** Check if a type is an array type. */

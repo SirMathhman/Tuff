@@ -15,6 +15,8 @@ import {
   structType,
   tupleType,
   typeName,
+  typeParam,
+  unionType,
   voidType,
   widen,
 } from "../core/types";
@@ -43,18 +45,29 @@ interface FnDeclaration {
   kind: "fn";
   returnType: Type;
   params: { name: string; type: Type }[];
+  typeParams?: string[];
 }
 
 /** A declaration in the symbol table (variable or function). */
 type Declaration = VarDeclaration | FnDeclaration;
 
+/**
+ * Analysis scope: bundles declarations with optional type param bindings.
+ * Threading a single object through recursive calls avoids parameter drift
+ * and makes it impossible to forget type param context.
+ */
+interface Scope {
+  declarations: Map<string, Declaration>;
+  typeParams?: Map<string, Type>;
+}
+
 /** Check that a variable is mutable, throwing a type error if not. */
 function checkMutable(
   name: string,
-  declarations: Map<string, Declaration>,
+  scope: Scope,
   pos?: { line: number; column: number },
 ): void {
-  const decl = declarations.get(name);
+  const decl = scope.declarations.get(name);
   if (decl && decl.kind === "var" && !decl.mutable) {
     throw new InterpreterError(
       "type",
@@ -67,32 +80,32 @@ function checkMutable(
 /** Register a declaration, throwing if it already exists. */
 function registerDeclaration(
   name: string,
-  declarations: Map<string, Declaration>,
+  scope: Scope,
   decl: Declaration,
   pos?: { line: number; column: number },
 ): void {
-  const existing = declarations.get(name);
+  const existing = scope.declarations.get(name);
   if (existing) {
     throw new InterpreterError("type", `Duplicate declaration: '${name}'`, pos);
   }
-  declarations.set(name, decl);
+  scope.declarations.set(name, decl);
 }
 
 /** Validate mutability of an LValue and resolve its type. */
 function checkLValue(
   lv: LValue,
-  declarations: Map<string, Declaration>,
+  scope: Scope,
   pos?: { line: number; column: number },
 ): Type {
   switch (lv.kind) {
     case "identifier":
-      checkMutable(lv.name, declarations, pos);
-      return resolveLValueType(lv, declarations);
+      checkMutable(lv.name, scope, pos);
+      return resolveLValueType(lv, scope);
     case "index":
-      checkLValue(lv.target, declarations, pos);
-      return resolveLValueType(lv, declarations);
+      checkLValue(lv.target, scope, pos);
+      return resolveLValueType(lv, scope);
     case "deref": {
-      const operandType = resolveType(lv.operand, declarations);
+      const operandType = resolveType(lv.operand, scope);
       if (isPointer(operandType) && !operandType.mutable) {
         throw new InterpreterError(
           "type",
@@ -100,31 +113,28 @@ function checkLValue(
           pos,
         );
       }
-      return resolveLValueType(lv, declarations);
+      return resolveLValueType(lv, scope);
     }
   }
 }
 
 /** Resolve the type of an LValue target (read-only, no mutability check). */
-function resolveLValueType(
-  lv: LValue,
-  declarations: Map<string, Declaration>,
-): Type {
+function resolveLValueType(lv: LValue, scope: Scope): Type {
   switch (lv.kind) {
     case "identifier": {
-      const decl = declarations.get(lv.name);
+      const decl = scope.declarations.get(lv.name);
       if (decl && decl.kind === "var") return decl.type;
       return dynamic();
     }
     case "index": {
-      const targetType = resolveLValueType(lv.target, declarations);
+      const targetType = resolveLValueType(lv.target, scope);
       if (targetType.kind === "array") {
         return targetType.inner;
       }
       return dynamic();
     }
     case "deref": {
-      const operandType = resolveType(lv.operand, declarations);
+      const operandType = resolveType(lv.operand, scope);
       if (isPointer(operandType)) {
         return operandType.inner;
       }
@@ -137,17 +147,12 @@ function resolveLValueType(
  * Resolve the type of a node, storing it on the AST where supported.
  * Also builds the declaration table and validates type compatibility.
  */
-function resolveType(
-  node: AstNode,
-  declarations: Map<string, Declaration>,
-): Type {
+function resolveType(node: AstNode, scope: Scope): Type {
   switch (node.kind) {
     case "number": {
       // Keep un-suffixed as dynamic so context propagation works.
       // The I32 default is applied at the typecheck site.
-      node.type = node.type
-        ? resolveTypeNode(node.type, declarations)
-        : dynamic();
+      node.type = node.type ? resolveTypeNode(node.type, scope) : dynamic();
       // Validate numeric value fits within the resolved type's range.
       const resolvedType = node.type;
       if (resolvedType.kind === "numeric") {
@@ -174,7 +179,7 @@ function resolveType(
       return node.type;
 
     case "unary": {
-      const operandType = resolveType(node.operand, declarations);
+      const operandType = resolveType(node.operand, scope);
       switch (node.op) {
         case "-":
           node.type = operandType;
@@ -217,8 +222,8 @@ function resolveType(
     }
 
     case "binary": {
-      const leftType = resolveType(node.left, declarations);
-      const rightType = resolveType(node.right, declarations);
+      const leftType = resolveType(node.left, scope);
+      const rightType = resolveType(node.right, scope);
 
       const category = getOperatorCategory(node.op);
       if (category === "arithmetic") {
@@ -251,7 +256,7 @@ function resolveType(
     }
 
     case "identifier": {
-      const decl = declarations.get(node.name);
+      const decl = scope.declarations.get(node.name);
       if (decl && decl.kind === "var") {
         node.type = decl.type;
         return node.type;
@@ -264,7 +269,7 @@ function resolveType(
       // Infer element type from first element, or use declared type
       let elementType: Type = dynamic();
       for (const elem of node.elements) {
-        const elemType = resolveType(elem, declarations);
+        const elemType = resolveType(elem, scope);
         if (!isDynamic(elementType) && !isDynamic(elemType)) {
           elementType = widen(elementType, elemType);
         } else if (isDynamic(elementType)) {
@@ -273,7 +278,7 @@ function resolveType(
       }
       // Use declared inner type if present
       const resolvedDeclType = node.type
-        ? resolveTypeNode(node.type, declarations)
+        ? resolveTypeNode(node.type, scope)
         : undefined;
       if (resolvedDeclType && resolvedDeclType.kind === "array") {
         elementType = resolvedDeclType.inner;
@@ -283,8 +288,8 @@ function resolveType(
     }
 
     case "index": {
-      const targetType = resolveType(node.target, declarations);
-      const indexType = resolveType(node.index, declarations);
+      const targetType = resolveType(node.target, scope);
+      const indexType = resolveType(node.index, scope);
       // Index must be numeric
       if (isDynamic(indexType)) {
         // Allow dynamic index
@@ -299,7 +304,7 @@ function resolveType(
     }
 
     case "let": {
-      const existing = declarations.get(node.name);
+      const existing = scope.declarations.get(node.name);
       if (existing && existing.kind === "fn") {
         throw new InterpreterError(
           "type",
@@ -319,20 +324,16 @@ function resolveType(
           );
         }
       }
-      const valueType = resolveType(node.value, declarations);
+      const valueType = resolveType(node.value, scope);
       // Validate type compatibility
       if (node.type !== undefined) {
-        checkAssignable(
-          valueType,
-          resolveTypeNode(node.type, declarations),
-          node.pos,
-        );
+        checkAssignable(valueType, resolveTypeNode(node.type, scope), node.pos);
       }
       // Store the more specific type: declared type if present, otherwise inferred
       const resolvedType =
-        (node.type ? resolveTypeNode(node.type, declarations) : undefined) ??
+        (node.type ? resolveTypeNode(node.type, scope) : undefined) ??
         (isDynamic(valueType) ? dynamic() : valueType);
-      declarations.set(node.name, {
+      scope.declarations.set(node.name, {
         kind: "var",
         type: resolvedType,
         mutable: node.mutable,
@@ -343,8 +344,8 @@ function resolveType(
 
     case "assign": {
       // Validate mutability and resolve target type in one pass
-      const targetType = checkLValue(node.target, declarations, node.pos);
-      const valueType = resolveType(node.value, declarations);
+      const targetType = checkLValue(node.target, scope, node.pos);
+      const valueType = resolveType(node.value, scope);
       // Check value compatibility with target type (or inner type if pointer)
       const checkType = isPointer(targetType) ? targetType.inner : targetType;
       if (!isDynamic(checkType)) {
@@ -356,7 +357,7 @@ function resolveType(
     case "block": {
       let result: Type = dynamic();
       for (const stmt of node.statements) {
-        result = resolveType(stmt, declarations);
+        result = resolveType(stmt, scope);
       }
       // Blocks ending with a declaration have void type.
       const last = node.statements[node.statements.length - 1];
@@ -368,40 +369,40 @@ function resolveType(
     }
 
     case "if": {
-      resolveType(node.condition, declarations);
-      const thenType = resolveType(node.then, declarations);
-      const elseType = resolveType(node.elseBranch, declarations);
+      resolveType(node.condition, scope);
+      const thenType = resolveType(node.then, scope);
+      const elseType = resolveType(node.elseBranch, scope);
       return widen(thenType, elseType);
     }
 
     case "loop": {
-      for (const stmt of node.body) resolveType(stmt, declarations);
+      for (const stmt of node.body) resolveType(stmt, scope);
       return dynamic();
     }
 
     case "while": {
-      resolveType(node.condition, declarations);
-      for (const stmt of node.body) resolveType(stmt, declarations);
+      resolveType(node.condition, scope);
+      for (const stmt of node.body) resolveType(stmt, scope);
       return dynamic();
     }
 
     case "break":
-      return resolveType(node.value, declarations);
+      return resolveType(node.value, scope);
 
     case "yield":
-      return resolveType(node.value, declarations);
+      return resolveType(node.value, scope);
 
     case "return":
-      return resolveType(node.value, declarations);
+      return resolveType(node.value, scope);
 
     case "continue":
       return dynamic();
 
     case "typealias": {
-      const resolvedType = resolveTypeNode(node.type, declarations);
+      const resolvedType = resolveTypeNode(node.type, scope);
       registerDeclaration(
         node.name,
-        declarations,
+        scope,
         { kind: "var", type: resolvedType, mutable: false },
         node.pos,
       );
@@ -413,7 +414,7 @@ function resolveType(
       const enumType: Type = { kind: "enum", name: node.name, variant: "" };
       registerDeclaration(
         node.name,
-        declarations,
+        scope,
         { kind: "var", type: enumType, mutable: false },
         node.pos,
       );
@@ -421,7 +422,7 @@ function resolveType(
     }
 
     case "enum_access": {
-      const decl = declarations.get(node.enum);
+      const decl = scope.declarations.get(node.enum);
       if (!decl || decl.kind !== "var" || decl.type.kind !== "enum") {
         throw new InterpreterError(
           "type",
@@ -439,9 +440,9 @@ function resolveType(
     }
 
     case "typecheck": {
-      resolveType(node.value, declarations);
+      resolveType(node.value, scope);
       // Resolve the target type from unresolved placeholder
-      node.type = resolveTypeNode(node.type, declarations);
+      node.type = resolveTypeNode(node.type, scope);
       // The result type is always bool().
       return bool();
     }
@@ -458,19 +459,31 @@ function resolveType(
         }
         seenParams.add(param.name);
       }
-      const bodyType = resolveType(node.body, declarations);
+      // Build type param scope for generic functions
+      const fnScope: Scope = {
+        declarations: scope.declarations,
+        typeParams: node.typeParams
+          ? new Map(node.typeParams.map((tp) => [tp, typeParam(tp)]))
+          : scope.typeParams,
+      };
+      const bodyType = resolveType(node.body, fnScope);
       // Validate return type annotation if present
       if (node.returnType) {
         checkAssignable(
           bodyType,
-          resolveTypeNode(node.returnType, declarations),
+          resolveTypeNode(node.returnType, fnScope),
           node.pos,
         );
       }
       registerDeclaration(
         node.name,
-        declarations,
-        { kind: "fn", returnType: bodyType, params: node.params },
+        scope,
+        {
+          kind: "fn",
+          returnType: bodyType,
+          params: node.params,
+          typeParams: node.typeParams,
+        },
         node.pos,
       );
       return dynamic();
@@ -488,21 +501,21 @@ function resolveType(
         }
         seen.add(field.name);
         const fieldType = field.type
-          ? resolveTypeNode(field.type, declarations)
+          ? resolveTypeNode(field.type, scope)
           : dynamic();
         resolvedFields.push({ name: field.name, type: fieldType });
       }
       const st = structType(node.name, resolvedFields);
       registerDeclaration(
         node.name,
-        declarations,
+        scope,
         { kind: "var", type: st, mutable: false },
         node.pos,
       );
       return st;
     }
     case "struct_instantiation": {
-      const decl = declarations.get(node.name);
+      const decl = scope.declarations.get(node.name);
       if (!decl || decl.kind !== "var" || !isStruct(decl.type)) {
         throw new InterpreterError(
           "type",
@@ -515,7 +528,7 @@ function resolveType(
         structTypeDecl.fields.map((f) => [f.name, f.type]),
       );
       for (const field of node.fields) {
-        const fieldType = resolveType(field.value, declarations);
+        const fieldType = resolveType(field.value, scope);
         const expectedType = fieldMap.get(field.name);
         if (!expectedType) {
           throw new InterpreterError(
@@ -529,7 +542,7 @@ function resolveType(
       return structTypeDecl;
     }
     case "field_access": {
-      const targetType = resolveType(node.target, declarations);
+      const targetType = resolveType(node.target, scope);
       if (isStruct(targetType)) {
         const field = targetType.fields.find((f) => f.name === node.field);
         if (!field) {
@@ -546,7 +559,7 @@ function resolveType(
     }
     case "call": {
       const callee = node.callee as { kind: "identifier"; name: string };
-      const decl = declarations.get(callee.name);
+      const decl = scope.declarations.get(callee.name);
       if (decl && decl.kind === "fn") {
         const params = decl.params;
         if (node.args.length !== params.length) {
@@ -556,28 +569,46 @@ function resolveType(
             node.pos,
           );
         }
+        // Build type param scope for generic function calls
+        const callTypeParams = new Map<string, Type>();
+        if (decl.typeParams) {
+          for (let i = 0; i < decl.typeParams.length; i++) {
+            const arg = node.args[i];
+            if (arg) {
+              const argType = resolveType(arg, scope);
+              const tpName = decl.typeParams[i]!;
+              callTypeParams.set(tpName, argType);
+            }
+          }
+        }
+        const callScope: Scope = {
+          declarations: scope.declarations,
+          typeParams:
+            callTypeParams.size > 0 ? callTypeParams : scope.typeParams,
+        };
         for (let i = 0; i < node.args.length; i++) {
           const arg = node.args[i];
           if (!arg) continue;
-          const argType = resolveType(arg, declarations);
+          const argType = resolveType(arg, scope);
           const param = params[i];
           if (param) {
             checkAssignable(
               argType,
-              resolveTypeNode(param.type, declarations),
+              resolveTypeNode(param.type, callScope),
               arg.pos,
             );
           }
         }
-        return decl.returnType;
+        // Resolve return type with type param substitutions
+        return resolveTypeNode(decl.returnType, callScope);
       }
       return dynamic();
     }
     case "match": {
-      resolveType(node.target, declarations);
+      resolveType(node.target, scope);
       let resultType: Type = dynamic();
       for (const case_ of node.cases) {
-        const bodyType = resolveType(case_.body, declarations);
+        const bodyType = resolveType(case_.body, scope);
         resultType = widen(resultType, bodyType);
       }
       node.type = resultType;
@@ -587,12 +618,12 @@ function resolveType(
     case "tuple": {
       const elementTypes: Type[] = [];
       for (const elem of node.elements) {
-        const elemType = resolveType(elem, declarations);
+        const elemType = resolveType(elem, scope);
         elementTypes.push(elemType);
       }
       // Use declared type if present
       const resolvedDeclType = node.type
-        ? resolveTypeNode(node.type, declarations)
+        ? resolveTypeNode(node.type, scope)
         : undefined;
       if (resolvedDeclType && resolvedDeclType.kind === "tuple") {
         // Context propagation: dynamic elements inherit from declared type
@@ -610,7 +641,7 @@ function resolveType(
     }
 
     case "tuple_access": {
-      const targetType = resolveType(node.target, declarations);
+      const targetType = resolveType(node.target, scope);
       if (targetType.kind === "tuple") {
         if (node.index < 0 || node.index >= targetType.elements.length) {
           throw new InterpreterError(
@@ -672,12 +703,9 @@ function checkAssignable(
   }
 }
 
-/** Resolve a user-defined type name from the declarations map. */
-function resolveUserType(
-  name: string,
-  declarations: Map<string, Declaration>,
-): Type | undefined {
-  const decl = declarations.get(name);
+/** Resolve a user-defined type name from the scope. */
+function resolveUserType(name: string, scope: Scope): Type | undefined {
+  const decl = scope.declarations.get(name);
   if (decl && decl.kind === "var") {
     return decl.type;
   }
@@ -685,28 +713,30 @@ function resolveUserType(
 }
 
 /** Resolve an unresolved type placeholder to a concrete type. */
-function resolveTypeNode(
-  type: Type,
-  declarations?: Map<string, Declaration>,
-): Type {
+function resolveTypeNode(type: Type, scope?: Scope): Type {
   if (type.kind === "unresolved") {
+    // Check type param scope first (for generic functions)
+    if (scope?.typeParams?.has(type.name)) {
+      return scope.typeParams.get(type.name)!;
+    }
     // Check user-defined types first, then fall back to builtins
-    if (declarations) {
-      const userType = resolveUserType(type.name, declarations);
+    if (scope) {
+      const userType = resolveUserType(type.name, scope);
       if (userType) return userType;
     }
     return resolveBuiltinType(type.name);
   }
   if (type.kind === "pointer") {
-    return pointer(resolveTypeNode(type.inner, declarations), type.mutable);
+    return pointer(resolveTypeNode(type.inner, scope), type.mutable);
   }
   if (type.kind === "array") {
-    return arrayType(resolveTypeNode(type.inner, declarations), type.length);
+    return arrayType(resolveTypeNode(type.inner, scope), type.length);
   }
   if (type.kind === "tuple") {
-    return tupleType(
-      type.elements.map((e) => resolveTypeNode(e, declarations)),
-    );
+    return tupleType(type.elements.map((e) => resolveTypeNode(e, scope)));
+  }
+  if (type.kind === "union") {
+    return unionType(type.variants.map((v) => resolveTypeNode(v, scope)));
   }
   return type;
 }
@@ -716,6 +746,6 @@ function resolveTypeNode(
  * Throws on semantic errors.
  */
 export function analyze(ast: AstNode): void {
-  const declarations = new Map<string, Declaration>();
-  resolveType(ast, declarations);
+  const scope: Scope = { declarations: new Map() };
+  resolveType(ast, scope);
 }

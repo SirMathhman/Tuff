@@ -59,4 +59,8 @@ describe("functions", () => {
   test('interpret("undefinedFn()") => Error (undefined function)', () => {
     expect(() => interpret("undefinedFn()")).toThrow();
   });
+
+  test('interpret("fn pass<T>(value : T) => value; pass(100)") => 100', () => {
+    expect(interpret("fn pass<T>(value : T) => value; pass(100)")).toBe(100);
+  });
 });

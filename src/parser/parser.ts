@@ -6,10 +6,9 @@ import { OPENING, PRECEDENCE } from "../core/grammar";
 import { InterpreterError } from "../core/error";
 import {
   arrayType,
-  dynamic,
-  parseTypeName,
   pointer,
   tupleType,
+  unionType,
 } from "../core/types";
 import { isIdentifierToken, isNumberToken } from "../lexer/tokenizer";
 
@@ -190,12 +189,7 @@ class Parser {
         this.consume();
       }
       this.expect("operator", "=");
-      const typeToken = this.peek();
-      let type: Type = dynamic();
-      if (typeToken?.type === "identifier") {
-        type = parseTypeName(typeToken.value);
-        this.consume();
-      }
+      const type = this.parseUnionType();
       if (this.match("punctuator", ";")) {
         this.consume();
       }
@@ -365,11 +359,11 @@ class Parser {
     return { kind: "let", name, value, mutable, type: declaredType, pos };
   }
 
-  /** Parse optional `: TypeName`, `: &mut TypeName`, `: &TypeName`, or `: [TypeName; N]`. */
+  /** Parse optional `: TypeName`, `: &mut TypeName`, `: &TypeName`, `: [TypeName; N]`, or `: T1 | T2 | ...`. */
   private parseTypeAnnotation(): Type | undefined {
     if (this.match("punctuator", ":")) {
       this.consume();
-      return this.parseType();
+      return this.parseUnionType();
     }
     return undefined;
   }
@@ -426,9 +420,44 @@ class Parser {
     return undefined;
   }
 
-  /** Parse `fn name(params) => body`. */
+  /** Parse a union type: `Type | Type | ...` or a single type. */
+  private parseUnionType(): Type {
+    const first = this.parseType();
+    if (this.match("operator", "|")) {
+      this.consume();
+      const variants: Type[] = [first!];
+      while (!this.match("punctuator", ";") && !this.match("punctuator", ":") && !this.match("operator", "=") && !this.match("group", ")")) {
+        variants.push(this.parseType()!);
+        if (this.match("operator", "|")) {
+          this.consume();
+        }
+      }
+      return unionType(variants);
+    }
+    return first!;
+  }
+
+  /** Parse `fn name<T>(params) => body`. */
   private parseFnStatement(): AstNode {
     const { name, pos } = this.parseKeywordAndName("fn");
+    // Parse optional type parameters: `<T>` or `<T, U>`
+    const typeParams: string[] = [];
+    if (this.match("operator", "<")) {
+      this.consume();
+      while (!this.match("operator", ">")) {
+        const tpToken = this.peek();
+        if (tpToken?.type === "identifier") {
+          this.consume();
+          typeParams.push(tpToken.value);
+          if (this.match("punctuator", ",")) {
+            this.consume();
+          }
+        } else {
+          break;
+        }
+      }
+      this.expect("operator", ">");
+    }
     // Parse parameters: `(param1 : Type1, param2 : Type2, ...)`
     this.expect("group", "(");
     const params: { name: string; type: Type }[] = [];
@@ -462,7 +491,7 @@ class Parser {
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "fn", name, params, returnType, body, pos };
+    return { kind: "fn", name, typeParams: typeParams.length > 0 ? typeParams : undefined, params, returnType, body, pos };
   }
 
   /** Parse `match (expr) { case pattern => body; ... }`. */
