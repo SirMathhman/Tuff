@@ -173,33 +173,45 @@ export function evaluate(
       if (shouldPropagate(rightResult, "expression")) return rightResult;
       const left = unwrap(leftResult);
       const right = unwrap(rightResult);
-      const l = toNumber(left);
-      const r = toNumber(right);
       switch (node.op) {
+        case "==":
+          if (left.kind === "enum" && right.kind === "enum") {
+            return evalOk({
+              kind: "boolean",
+              value: left.enum === right.enum && left.variant === right.variant,
+              type: node.type,
+            });
+          }
+          return evalOk({ kind: "boolean", value: toNumber(left) === toNumber(right), type: node.type });
+        case "!=":
+          if (left.kind === "enum" && right.kind === "enum") {
+            return evalOk({
+              kind: "boolean",
+              value: left.enum !== right.enum || left.variant !== right.variant,
+              type: node.type,
+            });
+          }
+          return evalOk({ kind: "boolean", value: toNumber(left) !== toNumber(right), type: node.type });
         case "+":
-          return evalOk({ kind: "number", value: l + r, type: node.type });
+          return evalOk({ kind: "number", value: toNumber(left) + toNumber(right), type: node.type });
         case "-":
-          return evalOk({ kind: "number", value: l - r, type: node.type });
+          return evalOk({ kind: "number", value: toNumber(left) - toNumber(right), type: node.type });
         case "*":
-          return evalOk({ kind: "number", value: l * r, type: node.type });
+          return evalOk({ kind: "number", value: toNumber(left) * toNumber(right), type: node.type });
         case "/":
-          return evalOk({ kind: "number", value: l / r, type: node.type });
+          return evalOk({ kind: "number", value: toNumber(left) / toNumber(right), type: node.type });
         case "||":
           return evalOk(toNumber(left) !== 0 ? left : right);
         case "&&":
           return evalOk(toNumber(left) !== 0 ? right : left);
         case "<":
-          return evalOk({ kind: "boolean", value: l < r, type: node.type });
+          return evalOk({ kind: "boolean", value: toNumber(left) < toNumber(right), type: node.type });
         case ">":
-          return evalOk({ kind: "boolean", value: l > r, type: node.type });
-        case "==":
-          return evalOk({ kind: "boolean", value: l === r, type: node.type });
-        case "!=":
-          return evalOk({ kind: "boolean", value: l !== r, type: node.type });
+          return evalOk({ kind: "boolean", value: toNumber(left) > toNumber(right), type: node.type });
         case "<=":
-          return evalOk({ kind: "boolean", value: l <= r, type: node.type });
+          return evalOk({ kind: "boolean", value: toNumber(left) <= toNumber(right), type: node.type });
         case ">=":
-          return evalOk({ kind: "boolean", value: l >= r, type: node.type });
+          return evalOk({ kind: "boolean", value: toNumber(left) >= toNumber(right), type: node.type });
       }
       break;
     }
@@ -351,6 +363,17 @@ export function evaluate(
     }
     case "typealias": {
       return evalOk({ kind: "number", value: 0 });
+    }
+    case "enum": {
+      return evalOk({ kind: "number", value: 0 });
+    }
+    case "enum_access": {
+      return evalOk({
+        kind: "enum",
+        enum: node.enum,
+        variant: node.variant,
+        type: node.type,
+      });
     }
     case "while": {
       while (toNumber(unwrap(evaluate(node.condition, env, functions))) !== 0) {

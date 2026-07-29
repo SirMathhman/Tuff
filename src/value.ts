@@ -11,7 +11,8 @@ export type Value =
   | { kind: "pointer"; target: string; type?: Type }
   | { kind: "array"; elements: Value[]; type?: Type }
   | { kind: "struct"; fields: Map<string, Value>; type?: Type }
-  | { kind: "tuple"; elements: Value[]; type?: Type };
+  | { kind: "tuple"; elements: Value[]; type?: Type }
+  | { kind: "enum"; enum: string; variant: string; type?: Type };
 
 /**
  * Result of evaluating an expression.
@@ -96,5 +97,7 @@ export function toNumber(v: Value): number {
       throw new InterpreterError("runtime", "Cannot coerce struct to number");
     case "tuple":
       throw new InterpreterError("runtime", "Cannot coerce tuple to number");
+    case "enum":
+      throw new InterpreterError("runtime", "Cannot coerce enum to number");
   }
 }

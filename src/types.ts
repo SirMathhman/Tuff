@@ -54,6 +54,13 @@ export interface TupleType {
   elements: Type[];
 }
 
+/** Enum type with a name and variant. */
+export interface EnumType {
+  kind: "enum";
+  name: string;
+  variant: string;
+}
+
 /** Unresolved type placeholder — name string from the parser, not yet validated. */
 export interface UnresolvedType {
   kind: "unresolved";
@@ -71,6 +78,7 @@ export type Type =
   | ArrayType
   | StructType
   | TupleType
+  | EnumType
   | UnresolvedType;
 
 /** Construct a numeric type. */

@@ -114,6 +114,19 @@ export type AstNode =
       pos?: TokenPos;
     }
   | {
+      kind: "enum";
+      name: string;
+      variants: string[];
+      pos?: TokenPos;
+    }
+  | {
+      kind: "enum_access";
+      enum: string;
+      variant: string;
+      type?: Type;
+      pos?: TokenPos;
+    }
+  | {
       kind: "tuple_access";
       target: AstNode;
       index: number;

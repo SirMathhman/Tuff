@@ -57,4 +57,8 @@ describe("typecheck expressions", () => {
       ),
     ).toBe(1);
   });
+
+  test('interpret("enum Simple { First } Simple::First == Simple::First") => 1', () => {
+    expect(interpret("enum Simple { First } Simple::First == Simple::First")).toBe(1);
+  });
 });

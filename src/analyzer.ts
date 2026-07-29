@@ -408,6 +408,36 @@ function resolveType(
       return resolvedType;
     }
 
+    case "enum": {
+      // Register enum as a type in the symbol table
+      const enumType: Type = { kind: "enum", name: node.name, variant: "" };
+      registerDeclaration(
+        node.name,
+        declarations,
+        { kind: "var", type: enumType, mutable: false },
+        node.pos,
+      );
+      return enumType;
+    }
+
+    case "enum_access": {
+      const decl = declarations.get(node.enum);
+      if (!decl || decl.kind !== "var" || decl.type.kind !== "enum") {
+        throw new InterpreterError(
+          "type",
+          `Undefined enum: ${node.enum}`,
+          node.pos,
+        );
+      }
+      const enumType: Type = {
+        kind: "enum",
+        name: node.enum,
+        variant: node.variant,
+      };
+      node.type = enumType;
+      return enumType;
+    }
+
     case "typecheck": {
       resolveType(node.value, declarations);
       // Resolve the target type from unresolved placeholder

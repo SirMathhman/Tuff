@@ -195,6 +195,9 @@ class Parser {
       }
       return { kind: "typealias", name, type, pos };
     }
+    if (this.match("keyword", "enum")) {
+      return this.parseEnumStatement();
+    }
     const assign = this.tryParseAssign();
     if (assign) return assign;
   }
@@ -489,6 +492,25 @@ class Parser {
     return { kind: "match", target, cases, pos };
   }
 
+  /** Parse `enum Name { Variant1, Variant2, ... }`. */
+  private parseEnumStatement(): AstNode {
+    const { name, pos } = this.parseKeywordAndName("enum");
+    this.expect("group", "{");
+    const variants: string[] = [];
+    while (!this.match("group", "}")) {
+      const variantToken = this.peek();
+      if (variantToken?.type === "identifier") {
+        this.consume();
+        variants.push(variantToken.value);
+      }
+      if (this.match("punctuator", ",")) {
+        this.consume();
+      }
+    }
+    this.expect("group", "}");
+    return { kind: "enum", name, variants, pos };
+  }
+
   /** Parse `struct Name { field1 : Type1, field2 : Type2, ... }`. */
   private parseStructStatement(): AstNode {
     const { name, pos } = this.parseKeywordAndName("struct");
@@ -729,6 +751,28 @@ class Parser {
           kind: "tuple_access",
           target: node,
           index: fieldToken.value,
+          pos: node.pos,
+        };
+      } else {
+        break;
+      }
+    }
+    // Handle postfix `::Variant` (enum variant access)
+    while (this.match("punctuator", "::")) {
+      this.consume(); // ::
+      const variantToken = this.peek();
+      if (variantToken?.type === "identifier") {
+        this.consume();
+        const enumName =
+          node.kind === "enum_access"
+            ? node.enum
+            : node.kind === "identifier"
+              ? node.name
+              : "";
+        node = {
+          kind: "enum_access",
+          enum: enumName,
+          variant: variantToken.value,
           pos: node.pos,
         };
       } else {

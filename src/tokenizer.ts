@@ -60,11 +60,12 @@ export type Token =
         | "yield"
         | "return"
         | "continue"
-        | "type";
+        | "type"
+        | "enum";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
-  | { type: "punctuator"; value: ";" | ":" | "," | "."; pos: TokenPos };
+  | { type: "punctuator"; value: ";" | ":" | "," | "." | "::"; pos: TokenPos };
 
 function isUnaryContext(tokens: Token[]): boolean {
   if (tokens.length === 0) return true;
@@ -228,6 +229,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "continue", pos: tokenPos });
       } else if (lower === "type") {
         tokens.push({ type: "keyword", value: "type", pos: tokenPos });
+      } else if (lower === "enum") {
+        tokens.push({ type: "keyword", value: "enum", pos: tokenPos });
       } else {
         tokens.push({ type: "identifier", value: ident, pos: tokenPos });
       }
@@ -325,6 +328,10 @@ function matchSingleCharToken(
     return 1;
   }
   if (ch === ":") {
+    if (i + 1 < source.length && source.charAt(i + 1) === ":") {
+      tokens.push({ type: "punctuator", value: "::", pos });
+      return 2;
+    }
     tokens.push({ type: "punctuator", value: ":", pos });
     return 1;
   }
