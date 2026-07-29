@@ -394,6 +394,9 @@ function resolveType(
     case "return":
       return resolveType(node.value, declarations);
 
+    case "continue":
+      return dynamic();
+
     case "typecheck": {
       resolveType(node.value, declarations);
       // Resolve the target type from unresolved placeholder

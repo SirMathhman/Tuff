@@ -166,6 +166,14 @@ class Parser {
       }
       return { kind: "return", value, pos: value.pos };
     }
+    if (this.match("keyword", "continue")) {
+      const pos = this.peek()?.pos;
+      this.consume();
+      if (this.match("punctuator", ";")) {
+        this.consume();
+      }
+      return { kind: "continue", pos };
+    }
     const assign = this.tryParseAssign();
     if (assign) return assign;
   }

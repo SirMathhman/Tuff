@@ -5,6 +5,7 @@ import { InterpreterError } from "./error";
 import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
 import {
   evalBreak,
+  evalContinue,
   evalOk,
   evalReturn,
   evalYield,
@@ -300,8 +301,10 @@ export function evaluate(
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {
         const evalResult = evaluate(stmt, env, functions);
+        if (evalResult.kind === "continue") return evalResult;
         if (shouldPropagate(evalResult, "block"))
           return evalOk(evalResult.value);
+        if (shouldPropagate(evalResult, "loop")) return evalResult;
         if (shouldPropagate(evalResult, "expression")) return evalResult;
         result = evalResult.value;
       }
@@ -316,11 +319,20 @@ export function evaluate(
       }
     }
     case "loop": {
-      for (const stmt of node.body) {
-        const result = evaluate(stmt, env, functions);
+      let i = 0;
+      while (true) {
+        if (i >= node.body.length) {
+          i = 0;
+          continue;
+        }
+        const result = evaluate(node.body[i]!, env, functions);
+        i++;
+        if (result.kind === "continue") {
+          i = 0;
+          continue;
+        }
         if (shouldPropagate(result, "loop")) return evalOk(result.value);
       }
-      return evalOk({ kind: "number", value: 0 });
     }
     case "break": {
       const value = unwrap(evaluate(node.value, env, functions));
@@ -334,6 +346,9 @@ export function evaluate(
       const value = unwrap(evaluate(node.value, env, functions));
       return evalReturn(value);
     }
+    case "continue": {
+      return evalContinue();
+    }
     case "while": {
       while (toNumber(unwrap(evaluate(node.condition, env, functions))) !== 0) {
         const result = evaluate(
@@ -341,6 +356,7 @@ export function evaluate(
           env,
           functions,
         );
+        if (result.kind === "continue") continue;
         if (shouldPropagate(result, "loop")) return result;
       }
       return evalOk({ kind: "number", value: 0 });
@@ -386,6 +402,7 @@ export function evaluate(
         callEnv.set(fnDef.params[i]!.name, unwrap(argResult));
       }
       const callResult = evaluate(fnDef.body, callEnv, functions);
+      if (callResult.kind === "continue") return callResult;
       if (shouldPropagate(callResult, "expression"))
         return evalOk(callResult.value);
       return callResult;

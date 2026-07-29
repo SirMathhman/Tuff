@@ -35,4 +35,18 @@ describe("control flow", () => {
   test('interpret("let mut x = 0; while (x < 4) { x += 1; } x") => 4', () => {
     expect(interpret("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
   });
+
+  test('interpret("let mut x = 0; loop { x += 1; if (x >= 3) break x; continue; }") => 3', () => {
+    expect(
+      interpret("let mut x = 0; loop { x += 1; if (x >= 3) break x; continue; }"),
+    ).toBe(3);
+  });
+
+  test('interpret("let mut x = 0; let mut y = 0; while (x < 5) { x += 1; if (x == 3) continue; y += 1; } y") => 4', () => {
+    expect(
+      interpret(
+        "let mut x = 0; let mut y = 0; while (x < 5) { x += 1; if (x == 3) continue; y += 1; } y",
+      ),
+    ).toBe(4);
+  });
 });

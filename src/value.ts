@@ -24,7 +24,8 @@ export type EvalResult =
   | { kind: "value"; value: Value }
   | { kind: "break"; value: Value }
   | { kind: "yield"; value: Value }
-  | { kind: "return"; value: Value };
+  | { kind: "return"; value: Value }
+  | { kind: "continue" };
 
 /** Wrap a value as a successful evaluation result. */
 export function evalOk(value: Value): EvalResult {
@@ -46,9 +47,15 @@ export function evalReturn(value: Value): EvalResult {
   return { kind: "return", value };
 }
 
+/** Wrap as a continue result. */
+export function evalContinue(): EvalResult {
+  return { kind: "continue" };
+}
+
 /** Error messages for terminal control-flow results. */
 const TERMINAL_ERRORS: Record<string, string> = {
   break: "Unexpected break outside loop",
+  continue: "Unexpected continue outside loop",
   yield: "Unexpected yield outside block",
   return: "Unexpected return outside function",
 };

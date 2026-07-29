@@ -58,7 +58,8 @@ export type Token =
         | "match"
         | "case"
         | "yield"
-        | "return";
+        | "return"
+        | "continue";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
@@ -222,6 +223,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "yield", pos: tokenPos });
       } else if (lower === "return") {
         tokens.push({ type: "keyword", value: "return", pos: tokenPos });
+      } else if (lower === "continue") {
+        tokens.push({ type: "keyword", value: "continue", pos: tokenPos });
       } else {
         tokens.push({ type: "identifier", value: ident, pos: tokenPos });
       }
