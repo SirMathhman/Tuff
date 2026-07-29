@@ -122,6 +122,13 @@ function resolveLValue(
       };
     }
     case "field": {
+      // Handle `this.field` assignment: directly access env
+      if (lv.target.kind === "identifier" && lv.target.name === "this") {
+        return {
+          set: (value: Value) => env.set(lv.field, value),
+          get: () => env.get(lv.field)!,
+        };
+      }
       const targetLoc = resolveLValue(lv.target, env, functions, pos);
       const targetValue = dereferenceAll(targetLoc.get(), env);
       if (targetValue.kind !== "struct")

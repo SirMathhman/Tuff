@@ -152,6 +152,11 @@ function checkLValue(
       return resolveLValueType(lv, scope);
     }
     case "field": {
+      // If target is `this`, check the field's mutability in scope
+      if (lv.target.kind === "identifier" && lv.target.name === "this") {
+        checkMutable(lv.field, scope, pos);
+        return resolveLValueType(lv, scope);
+      }
       // First check the target's mutability (e.g., the variable must be mutable)
       checkLValue(lv.target, scope, pos);
       // Then check the field's mutability

@@ -268,12 +268,29 @@ class Parser {
     const derefResult = this.tryParseDerefAssign();
     if (derefResult) return derefResult;
 
+    // Check for `this.field = value` or `this.field += value` (this field assignment)
+    const thisResult = this.tryParseThisAssign();
+    if (thisResult) return thisResult;
+
     // Check for `identifier.field = value` or `identifier.field += value` (field assignment)
     const fieldResult = this.tryParseFieldAssign();
     if (fieldResult) return fieldResult;
 
     // Check for `identifier = value` or `identifier += value`
     return this.tryParseSimpleAssign();
+  }
+
+  /** Try to parse `this.field = value` or `this.field += value`. */
+  private tryParseThisAssign(): AstNode | undefined {
+    if (!this.match("keyword", "this")) return;
+    const savedPos = this.pos;
+    const t = this.consume()!;
+    const result = this.tryConsumeFieldAssign(
+      { kind: "identifier", name: "this", pos: t.pos },
+      t.pos,
+    );
+    if (result) return result;
+    this.pos = savedPos;
   }
 
   /** Try to parse `identifier[index] = value` or `identifier[index] += value`. */
@@ -336,12 +353,32 @@ class Parser {
     if (!this.match("identifier")) return;
     const savedPos = this.pos;
     const { nameToken, pos } = this.consumeIdentifier();
-    let target: LValue = {
-      kind: "identifier",
-      name: nameToken.value as string,
+    const result = this.tryConsumeFieldAssign(
+      { kind: "identifier", name: nameToken.value as string, pos },
       pos,
-    };
-    // Collect `.field` chain
+    );
+    if (result) return result;
+    this.pos = savedPos;
+  }
+
+  /** Collect `.field` chain then check for `=`/`+=`. Returns result or undefined. */
+  private tryConsumeFieldAssign(
+    target: LValue,
+    pos: TokenPos,
+  ): AstNode | undefined {
+    target = this.collectFieldChain(target);
+    const nextToken = this.peek();
+    if (
+      nextToken?.type === "operator" &&
+      (nextToken.value === "=" || nextToken.value === "+=")
+    ) {
+      return this.finishAssign(target, nextToken.value, pos);
+    }
+    return undefined;
+  }
+
+  /** Collect `.field` chain from current position, returning updated LValue. */
+  private collectFieldChain(target: LValue): LValue {
     while (this.match("punctuator", ".")) {
       this.consume(); // .
       const fieldToken = this.peek();
@@ -357,15 +394,7 @@ class Parser {
         break;
       }
     }
-    const nextToken = this.peek();
-    if (
-      nextToken?.type === "operator" &&
-      (nextToken.value === "=" || nextToken.value === "+=")
-    ) {
-      return this.finishAssign(target, nextToken.value, pos);
-    }
-    // Not an assignment — restore position
-    this.pos = savedPos;
+    return target;
   }
 
   /** Try to parse `identifier = value` or `identifier += value`. */
