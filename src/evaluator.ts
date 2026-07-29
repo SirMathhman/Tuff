@@ -341,5 +341,3 @@ export function evaluate(
   }
   return evalOk({ kind: "number", value: 0 });
 }
-
-

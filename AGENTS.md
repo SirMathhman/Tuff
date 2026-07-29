@@ -25,6 +25,7 @@ All features follow this test-driven workflow:
 ## Hooks
 
 Two hook systems coexist:
+
 - **`.husky/pre-commit`**: Runs `bun run format` (Prettier only) on git commit.
 - **`.github/hooks/hooks.json`**: AI agent "Stop" hook runs the full pipeline: `test` → `lint` → `cpd`. This is the validation gate for agent sessions.
 

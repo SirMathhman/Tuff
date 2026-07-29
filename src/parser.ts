@@ -692,8 +692,6 @@ class Parser {
     return { kind: "loop", body, pos };
   }
 
-
-
   /**
    * Table-driven binary expression parser.
    * `level` indexes into PRECEDENCE (lowest first).
