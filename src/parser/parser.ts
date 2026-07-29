@@ -1,7 +1,7 @@
 import type { AstNode, LValue } from "../core/ast";
 import type { Token, TokenPos } from "../lexer/tokenizer";
 import type { BinaryOp } from "../core/grammar";
-import type { Type } from "../core/types";
+import type { Type, UnresolvedType } from "../core/types";
 import { OPENING, PRECEDENCE } from "../core/grammar";
 import { InterpreterError } from "../core/error";
 import { arrayType, pointer, tupleType, unionType } from "../core/types";
@@ -410,7 +410,14 @@ class Parser {
     const typeToken = this.peek();
     if (typeToken?.type === "identifier") {
       this.consume();
-      return { kind: "unresolved", name: typeToken.value, pos: typeToken.pos };
+      const unresolved: UnresolvedType = { kind: "unresolved", name: typeToken.value, pos: typeToken.pos };
+      // Check for generic type arguments: `Name<TypeArgs>`
+      const savedPos = this.pos;
+      const typeArgs = this.parseTypeArguments();
+      if (typeArgs.length > 0) return { ...unresolved, typeArgs };
+      // Restore if < was not type arguments
+      this.pos = savedPos;
+      return unresolved;
     }
     return undefined;
   }
@@ -437,10 +444,8 @@ class Parser {
     return first!;
   }
 
-  /** Parse `fn name<T>(params) => body`. */
-  private parseFnStatement(): AstNode {
-    const { name, pos } = this.parseKeywordAndName("fn");
-    // Parse optional type parameters: `<T>` or `<T, U>`
+  /** Parse optional type parameters `<T>` or `<T, U>`. Returns array of type param names. */
+  private parseTypeParameters(): string[] {
     const typeParams: string[] = [];
     if (this.match("operator", "<")) {
       this.consume();
@@ -458,6 +463,37 @@ class Parser {
       }
       this.expect("operator", ">");
     }
+    return typeParams.length > 0 ? typeParams : [];
+  }
+
+  /** Parse type arguments `<Type1, Type2, ...>`. If `noBacktrack` is true, leaves position at failure site. */
+  private parseTypeArguments(noBacktrack = false): Type[] {
+    const typeArgs: Type[] = [];
+    if (this.match("operator", "<")) {
+      const savedPos = this.pos;
+      this.consume();
+      while (!this.match("operator", ">")) {
+        const argType = this.parseType();
+        if (!argType) break;
+        typeArgs.push(argType);
+        if (this.match("punctuator", ",")) {
+          this.consume();
+        }
+      }
+      if (this.match("operator", ">")) {
+        this.consume();
+      } else if (!noBacktrack) {
+        // No closing `>` — this was a comparison, not type args. Backtrack.
+        this.pos = savedPos;
+      }
+    }
+    return typeArgs;
+  }
+
+  /** Parse `fn name<T>(params) => body`. */
+  private parseFnStatement(): AstNode {
+    const { name, pos } = this.parseKeywordAndName("fn");
+    const typeParams = this.parseTypeParameters();
     // Parse parameters: `(param1 : Type1, param2 : Type2, ...)`
     this.expect("group", "(");
     const params: { name: string; type: Type }[] = [];
@@ -554,9 +590,10 @@ class Parser {
     return { kind: "enum", name, variants, pos };
   }
 
-  /** Parse `struct Name { field1 : Type1, field2 : Type2, ... }`. */
+  /** Parse `struct Name<T> { field1 : Type1, field2 : Type2, ... }`. */
   private parseStructStatement(): AstNode {
     const { name, pos } = this.parseKeywordAndName("struct");
+    const typeParams = this.parseTypeParameters();
     this.expect("group", "{");
     const fields: { name: string; type?: Type }[] = [];
     while (!this.match("group", "}")) {
@@ -573,7 +610,7 @@ class Parser {
       }
     }
     this.expect("group", "}");
-    return { kind: "struct", name, fields, pos };
+    return { kind: "struct", name, typeParams: typeParams.length > 0 ? typeParams : undefined, fields, pos };
   }
 
   private parseAtom(): AstNode {
@@ -632,7 +669,14 @@ class Parser {
           pos,
         };
       }
-      // Check for struct instantiation: `Name { field: value, ... }`
+      // Check for struct instantiation: `Name<TypeArgs> { field: value, ... }` or `Name { field: value, ... }`
+      // Use backtracking: only commit to `<` if followed by `{`
+      const savedPos = this.pos;
+      const typeArgs = this.parseTypeArguments();
+      if (typeArgs.length > 0 && !this.match("group", "{")) {
+        // Parsed type args but no `{` — not a struct instantiation, backtrack
+        this.pos = savedPos;
+      }
       if (this.match("group", "{")) {
         this.consume();
         const fields: { name: string; value: AstNode }[] = [];
@@ -654,10 +698,13 @@ class Parser {
         return {
           kind: "struct_instantiation",
           name,
+          typeArgs: typeArgs.length > 0 ? typeArgs : undefined,
           fields,
           pos,
         };
       }
+      // Not a struct instantiation — restore position
+      this.pos = savedPos;
       return { kind: "identifier", name, pos };
     }
     // Array literal: `[expr, expr, ...]`
@@ -748,76 +795,70 @@ class Parser {
       return { kind: "unary", op: "*", operand, pos: opToken.pos };
     }
     let node = this.parseAtom();
-    // Handle postfix `is TypeName` — supports chaining: `expr is T1 is T2`
-    while (this.match("keyword", "is")) {
-      this.consume();
-      const typeToken = this.peek();
-      if (typeToken?.type === "identifier") {
+    // Handle all postfix operators in a single loop — supports arbitrary chaining:
+    // `expr.field is T`, `arr[i].field is T`, `expr::Variant.field`, etc.
+    while (true) {
+      if (this.match("keyword", "is")) {
         this.consume();
-        node = {
-          kind: "typecheck",
-          value: node,
-          type: {
-            kind: "unresolved",
-            name: typeToken.value,
-            pos: typeToken.pos,
-          },
-          pos: node.pos,
-        };
-      } else {
-        break;
-      }
-    }
-    // Handle postfix `[index]` — supports chaining: `arr[0][1]`
-    while (this.match("group", "[")) {
-      const pos = node.pos;
-      this.consume(); // [
-      const index = this.parseExpression();
-      this.expect("group", "]");
-      node = { kind: "index", target: node, index, pos };
-    }
-    // Handle postfix `.field` (struct) or `.N` (tuple index) — supports chaining
-    while (this.match("punctuator", ".")) {
-      this.consume(); // .
-      const fieldToken = this.peek();
-      if (fieldToken?.type === "identifier") {
-        this.consume();
-        node = {
-          kind: "field_access",
-          target: node,
-          field: fieldToken.value,
-          pos: node.pos,
-        };
-      } else if (fieldToken?.type === "number" && isNumberToken(fieldToken)) {
-        this.consume();
-        node = {
-          kind: "tuple_access",
-          target: node,
-          index: fieldToken.value,
-          pos: node.pos,
-        };
-      } else {
-        break;
-      }
-    }
-    // Handle postfix `::Variant` (enum variant access)
-    while (this.match("punctuator", "::")) {
-      this.consume(); // ::
-      const variantToken = this.peek();
-      if (variantToken?.type === "identifier") {
-        this.consume();
-        const enumName =
-          node.kind === "enum_access"
-            ? node.enum
-            : node.kind === "identifier"
-              ? node.name
-              : "";
-        node = {
-          kind: "enum_access",
-          enum: enumName,
-          variant: variantToken.value,
-          pos: node.pos,
-        };
+        const checkType = this.parseType();
+        if (checkType) {
+          node = {
+            kind: "typecheck",
+            value: node,
+            type: checkType,
+            pos: node.pos,
+          };
+        } else {
+          break;
+        }
+      } else if (this.match("group", "[")) {
+        const pos = node.pos;
+        this.consume(); // [
+        const index = this.parseExpression();
+        this.expect("group", "]");
+        node = { kind: "index", target: node, index, pos };
+      } else if (this.match("punctuator", ".")) {
+        this.consume(); // .
+        const fieldToken = this.peek();
+        if (fieldToken?.type === "identifier") {
+          this.consume();
+          node = {
+            kind: "field_access",
+            target: node,
+            field: fieldToken.value,
+            pos: node.pos,
+          };
+        } else if (fieldToken?.type === "number" && isNumberToken(fieldToken)) {
+          this.consume();
+          node = {
+            kind: "tuple_access",
+            target: node,
+            index: fieldToken.value,
+            pos: node.pos,
+          };
+        } else {
+          break;
+        }
+      } else if (this.match("punctuator", "::")) {
+        this.consume(); // ::
+        const variantToken = this.peek();
+        if (variantToken?.type === "identifier") {
+          this.consume();
+          const enumName =
+            node.kind === "enum_access"
+              ? node.enum
+              : node.kind === "identifier"
+                ? node.name
+                : "";
+          node = {
+            kind: "enum_access",
+            enum: enumName,
+            variant: variantToken.value,
+            pos: node.pos,
+          };
+        } else {
+          break;
+        }
       } else {
         break;
       }

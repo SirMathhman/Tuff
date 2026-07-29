@@ -77,12 +77,14 @@ export type AstNode =
   | {
       kind: "struct";
       name: string;
+      typeParams?: string[];
       fields: { name: string; type?: Type }[];
       pos?: TokenPos;
     }
   | {
       kind: "struct_instantiation";
       name: string;
+      typeArgs?: Type[];
       fields: { name: string; value: AstNode }[];
       type?: Type;
       pos?: TokenPos;

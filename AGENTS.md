@@ -27,7 +27,7 @@ All features follow this test-driven workflow:
 Two hook systems coexist:
 
 - **`.husky/pre-commit`**: Runs `bun run format` (Prettier only) on git commit.
-- **`.github/hooks/hooks.json`**: AI agent "Stop" hook runs the full pipeline: `test` → `lint` → `cpd`. This is the validation gate for agent sessions.
+- **`.github/hooks/hooks.json`**: AI agent "Stop" hook runs the full validation pipeline: `test` → `lint` → `cpd` → `circular`. This is the validation gate for agent sessions.
 
 ## Documentation
 
@@ -82,7 +82,7 @@ Run in order: prettier → tsc --noEmit → eslint → pmd cpd (50-token minimum
 - **`interpret()` always returns `number`**: Final result coerced via `toNumber(unwrap(...))`. Non-coercible values (pointers, arrays) at top level are runtime errors.
 - **`LValue` is recursive**: Index targets can chain (`arr[i][j]`, `*ptr[i]`). Assignment targets nest through `LValue`, not `AstNode`.
 - **`UnresolvedType`**: Intermediate type state in `types.ts` — placeholder for type names parsed but not yet validated.
-- **Flat `src/` structure**: All source files live flat in `src/` — no subdirectories despite growing feature set.
+- **Parser queue gotcha**: If parser emits queued statements (syntax-lowering), EOF loops must drain the queue (`while !eof || queue.length>0`) or trailing lowered declarations are silently dropped.
 - **Multiple test files**: Tests are split by feature across `test/*.test.ts` (16+ files). Each imports `{ interpret }` from `../src`.
 - **PowerShell test wrapper**: `bun run test` invokes `scripts/test.ps1` which runs `bun test --coverage --only-failures`. Do not call `bun test` directly.
 - **`tsconfig.json`**: `module: "Preserve"` with `moduleResolution: "bundler"` — Bun-native setup, import paths have no `.ts` extension.

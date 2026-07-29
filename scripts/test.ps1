@@ -3,10 +3,10 @@ $process = Start-Process -FilePath "bun" -ArgumentList "test", "--coverage", "--
 
 $completed = $process.WaitForExit($timeoutSeconds * 1000)
 if (-not $completed) {
-  Write-Host "Tests timed out after $timeoutSeconds seconds" -ForegroundColor Red
+  Write-Error "Tests timed out after $timeoutSeconds seconds" -ForegroundColor Red
   $process.Kill($true)
   Remove-Item "$PWD/test-output.tmp", "$PWD/test-error.tmp" -Force -ErrorAction SilentlyContinue
-  exit 1
+  exit 2
 }
 
 $output = Get-Content "$PWD/test-output.tmp", "$PWD/test-error.tmp" | Where-Object { $_ -notmatch '\|\s*100\.00\s*\|\s*100\.00\s*\|' }

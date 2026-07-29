@@ -45,6 +45,7 @@ export interface ArrayType {
 export interface StructType {
   kind: "struct";
   name: string;
+  typeParams?: string[];
   fields: { name: string; type: Type }[];
 }
 
@@ -78,6 +79,7 @@ export interface UnresolvedType {
   kind: "unresolved";
   name: string;
   pos?: TokenPos;
+  typeArgs?: Type[];
 }
 
 /** All possible types in the Tuff language. */
@@ -129,8 +131,9 @@ export function arrayType(inner: Type, length: number): ArrayType {
 export function structType(
   name: string,
   fields: { name: string; type: Type }[],
+  typeParams?: string[],
 ): StructType {
-  return { kind: "struct", name, fields };
+  return { kind: "struct", name, typeParams, fields };
 }
 
 /** Construct a tuple type. */
@@ -315,6 +318,17 @@ export function typeName(t: Type): string {
   return "dynamic";
 }
 
+/** Check if two struct types are structurally equal. */
+function structsEqual(a: StructType, b: StructType): boolean {
+  if (a.name !== b.name) return false;
+  if (a.fields.length !== b.fields.length) return false;
+  for (let i = 0; i < a.fields.length; i++) {
+    if (a.fields[i]!.name !== b.fields[i]!.name) return false;
+    if (!typesEqual(a.fields[i]!.type, b.fields[i]!.type)) return false;
+  }
+  return true;
+}
+
 /** Check if two types are exactly equal (structural equality). */
 export function typesEqual(a: Type | undefined, b: Type): boolean {
   if (!a) return false;
@@ -324,5 +338,6 @@ export function typesEqual(a: Type | undefined, b: Type): boolean {
   if (a.kind === "dynamic") return b.kind === "dynamic";
   if (isNumeric(a) && isNumeric(b))
     return a.prefix === b.prefix && a.bits === b.bits;
+  if (a.kind === "struct" && b.kind === "struct") return structsEqual(a, b);
   return false;
 }

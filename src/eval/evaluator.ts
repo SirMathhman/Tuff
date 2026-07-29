@@ -323,7 +323,9 @@ export function evaluate(
           node.pos,
         );
       }
-      return evalOk(target.fields.get(node.field)!);
+      const fieldValue = target.fields.get(node.field)!;
+      // Use the pre-computed type from the analyzer for the field access.
+      return evalOk({ ...fieldValue, type: node.type });
     }
     case "index": {
       const target = dereferenceAll(

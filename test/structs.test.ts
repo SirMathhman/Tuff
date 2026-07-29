@@ -59,4 +59,50 @@ describe("structs", () => {
       interpret("struct Empty {} let empty = Empty {}; empty"),
     ).toThrow();
   });
+
+  test('interpret("struct Wrapper<T> { field : T } let wrapper : Wrapper<I32> = Wrapper<I32> { field : 100 }; wrapper.field") => 100', () => {
+    expect(
+      interpret(
+        "struct Wrapper<T> { field : T } let wrapper : Wrapper<I32> = Wrapper<I32> { field : 100 }; wrapper.field",
+      ),
+    ).toBe(100);
+  });
+
+  test('interpret("struct Wrapper<T> { field : T } let wrapper = Wrapper<U64> { field : 100 }; wrapper.field is U64") => 1', () => {
+    expect(
+      interpret(
+        "struct Wrapper<T> { field : T } let wrapper = Wrapper<U64> { field : 100 }; wrapper.field is U64",
+      ),
+    ).toBe(1);
+  });
+
+  test('interpret("struct Wrapper<T> { field : T } let a : Wrapper<I32> = Wrapper<I32> { field : 1 }; let b : Wrapper<I32> = Wrapper<I32> { field : 2 }; a is Wrapper<I32>") => 1 (type identity)', () => {
+    expect(
+      interpret(
+        "struct Wrapper<T> { field : T } let a : Wrapper<I32> = Wrapper<I32> { field : 1 }; let b : Wrapper<I32> = Wrapper<I32> { field : 2 }; a is Wrapper<I32>",
+      ),
+    ).toBe(1);
+  });
+
+  test('interpret("struct Box<T> { val : T } struct Wrapper<T> { field : T } let b : Box<Wrapper<I32>> = Box<Wrapper<I32>> { val : Wrapper<I32> { field : 5 } }; b.val.field") => 5 (nested generics)', () => {
+    expect(
+      interpret(
+        "struct Box<T> { val : T } struct Wrapper<T> { field : T } let b : Box<Wrapper<I32>> = Box<Wrapper<I32>> { val : Wrapper<I32> { field : 5 } }; b.val.field",
+      ),
+    ).toBe(5);
+  });
+
+  test('interpret("struct Ptr<T> { p : &T } let x = 42; let ptr : Ptr<I32> = Ptr<I32> { p : &x }; *ptr.p") => 42 (generic with pointer field)', () => {
+    expect(
+      interpret(
+        "struct Ptr<T> { p : &T } let x = 42; let ptr : Ptr<I32> = Ptr<I32> { p : &x }; *ptr.p",
+      ),
+    ).toBe(42);
+  });
+
+  test('interpret("struct Wrapper<T> { field : T } let w = Wrapper<I32> { field : 1 };") => Error (wrong type arg count)', () => {
+    expect(() =>
+      interpret("struct Wrapper<T> { field : T } let w = Wrapper<I32, Bool> { field : 1 };"),
+    ).toThrow();
+  });
 });

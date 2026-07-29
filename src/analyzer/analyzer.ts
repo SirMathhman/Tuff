@@ -1,5 +1,5 @@
 import type { AstNode, LValue } from "../core/ast";
-import type { Type } from "../core/types";
+import type { StructType, Type } from "../core/types";
 import { getOperatorCategory, TYPE_SUFFIXES } from "../core/grammar";
 import { InterpreterError } from "../core/error";
 import {
@@ -32,7 +32,42 @@ import {
  * 4. Build symbol table with inferred types
  * 5. Validate type compatibility on declarations
  */
+/**
+ * Cache of instantiated generic struct types, keyed by `Name|T1|T2|...`.
+ * Ensures each unique `StructName<TypeArgs>` combination produces exactly
+ * one StructType object — like C++ template instantiation.
+ */
+const instantiatedStructs = new Map<string, StructType>();
 
+/** Generate a cache key for a generic struct instantiation. */
+function structKey(name: string, typeArgs: Type[]): string {
+  return [name, ...typeArgs.map((t) => typeName(t))].join("|");
+}
+
+/** Get or create a memoized struct type for a generic instantiation. */
+function getOrInstantiateStruct(
+  name: string,
+  typeArgs: Type[],
+  template: StructType,
+): StructType {
+  const key = structKey(name, typeArgs);
+  const cached = instantiatedStructs.get(key);
+  if (cached) return cached;
+
+  const subst = new Map<string, Type>();
+  for (let i = 0; i < template.typeParams!.length; i++) {
+    subst.set(template.typeParams![i]!, typeArgs[i]!);
+  }
+  const instType = structType(
+    name,
+    template.fields.map((f) => ({
+      name: f.name,
+      type: substituteTypeParams(f.type, subst),
+    })),
+  );
+  instantiatedStructs.set(key, instType);
+  return instType;
+}
 /** A variable declaration in the symbol table. */
 interface VarDeclaration {
   kind: "var";
@@ -141,6 +176,44 @@ function resolveLValueType(lv: LValue, scope: Scope): Type {
       return dynamic();
     }
   }
+}
+
+/**
+ * Substitute type parameters in a type with concrete types.
+ * Recursively walks through nested types (pointers, arrays, structs, etc.).
+ */
+function substituteTypeParams(type: Type, subst: Map<string, Type>): Type {
+  if (type.kind === "typeParam") {
+    return subst.get(type.name) ?? type;
+  }
+  if (type.kind === "pointer") {
+    return { ...type, inner: substituteTypeParams(type.inner, subst) };
+  }
+  if (type.kind === "array") {
+    return { ...type, inner: substituteTypeParams(type.inner, subst) };
+  }
+  if (type.kind === "struct") {
+    return {
+      ...type,
+      fields: type.fields.map((f) => ({
+        ...f,
+        type: substituteTypeParams(f.type, subst),
+      })),
+    };
+  }
+  if (type.kind === "tuple") {
+    return {
+      ...type,
+      elements: type.elements.map((e) => substituteTypeParams(e, subst)),
+    };
+  }
+  if (type.kind === "union") {
+    return {
+      ...type,
+      variants: type.variants.map((v) => substituteTypeParams(v, subst)),
+    };
+  }
+  return type;
 }
 
 /**
@@ -489,6 +562,13 @@ function resolveType(node: AstNode, scope: Scope): Type {
       return dynamic();
     }
     case "struct": {
+      // Build type param scope for generic structs
+      const structScope: Scope = {
+        declarations: scope.declarations,
+        typeParams: node.typeParams
+          ? new Map(node.typeParams.map((tp) => [tp, typeParam(tp)]))
+          : scope.typeParams,
+      };
       const seen = new Set<string>();
       const resolvedFields: { name: string; type: Type }[] = [];
       for (const field of node.fields) {
@@ -501,11 +581,15 @@ function resolveType(node: AstNode, scope: Scope): Type {
         }
         seen.add(field.name);
         const fieldType = field.type
-          ? resolveTypeNode(field.type, scope)
+          ? resolveTypeNode(field.type, structScope)
           : dynamic();
         resolvedFields.push({ name: field.name, type: fieldType });
       }
-      const st = structType(node.name, resolvedFields);
+      const st = structType(
+        node.name,
+        resolvedFields,
+        node.typeParams?.length ? node.typeParams : undefined,
+      );
       registerDeclaration(
         node.name,
         scope,
@@ -524,11 +608,38 @@ function resolveType(node: AstNode, scope: Scope): Type {
         );
       }
       const structTypeDecl = decl.type;
-      const fieldMap = new Map(
-        structTypeDecl.fields.map((f) => [f.name, f.type]),
-      );
+      // Build resolved type args for generic structs
+      const resolvedTypeArgs: Type[] = [];
+      if (structTypeDecl.typeParams && node.typeArgs) {
+        if (structTypeDecl.typeParams.length !== node.typeArgs.length) {
+          throw new InterpreterError(
+            "type",
+            `Struct '${node.name}' expects ${structTypeDecl.typeParams.length} type argument(s), got ${node.typeArgs.length}`,
+            node.pos,
+          );
+        }
+        for (const typeArg of node.typeArgs) {
+          resolvedTypeArgs.push(resolveTypeNode(typeArg, scope));
+        }
+      }
+      // Get or create memoized struct type
+      const instType = structTypeDecl.typeParams && resolvedTypeArgs.length > 0
+        ? getOrInstantiateStruct(node.name, resolvedTypeArgs, structTypeDecl)
+        : structTypeDecl;
+      const fieldMap = new Map(instType.fields.map((f) => [f.name, f.type]));
+      // Build instantiation scope with type param bindings
+      const typeSubst = new Map<string, Type>();
+      if (structTypeDecl.typeParams && resolvedTypeArgs.length > 0) {
+        for (let i = 0; i < structTypeDecl.typeParams.length; i++) {
+          typeSubst.set(structTypeDecl.typeParams[i]!, resolvedTypeArgs[i]!);
+        }
+      }
+      const instScope: Scope = {
+        declarations: scope.declarations,
+        typeParams: typeSubst.size > 0 ? typeSubst : scope.typeParams,
+      };
       for (const field of node.fields) {
-        const fieldType = resolveType(field.value, scope);
+        const fieldType = resolveType(field.value, instScope);
         const expectedType = fieldMap.get(field.name);
         if (!expectedType) {
           throw new InterpreterError(
@@ -539,7 +650,8 @@ function resolveType(node: AstNode, scope: Scope): Type {
         }
         checkAssignable(fieldType, expectedType, field.value.pos);
       }
-      return structTypeDecl;
+      node.type = instType;
+      return instType;
     }
     case "field_access": {
       const targetType = resolveType(node.target, scope);
@@ -722,7 +834,23 @@ function resolveTypeNode(type: Type, scope?: Scope): Type {
     // Check user-defined types first, then fall back to builtins
     if (scope) {
       const userType = resolveUserType(type.name, scope);
-      if (userType) return userType;
+      if (userType) {
+        // If this is a generic struct instantiation with type args, substitute
+        if (isStruct(userType) && userType.typeParams && type.typeArgs) {
+          if (userType.typeParams.length !== type.typeArgs.length) {
+            throw new InterpreterError(
+              "type",
+              `Struct '${type.name}' expects ${userType.typeParams.length} type argument(s), got ${type.typeArgs.length}`,
+              type.pos,
+            );
+          }
+          const resolvedArgs = type.typeArgs.map((arg) =>
+            resolveTypeNode(arg, scope),
+          );
+          return getOrInstantiateStruct(type.name, resolvedArgs, userType);
+        }
+        return userType;
+      }
     }
     return resolveBuiltinType(type.name);
   }
