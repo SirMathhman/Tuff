@@ -371,6 +371,11 @@ function resolveType(node: AstNode, scope: Scope): Type {
       return node.type;
     }
 
+    case "this": {
+      node.type = dynamic();
+      return node.type;
+    }
+
     case "array": {
       // Infer element type from first element, or use declared type
       let elementType: Type = dynamic();
@@ -603,7 +608,8 @@ function resolveType(node: AstNode, scope: Scope): Type {
           : scope.typeParams,
       };
       const seen = new Set<string>();
-      const resolvedFields: { name: string; type: Type; mutable?: boolean }[] = [];
+      const resolvedFields: { name: string; type: Type; mutable?: boolean }[] =
+        [];
       for (const field of node.fields) {
         if (seen.has(field.name)) {
           throw new InterpreterError(
@@ -692,6 +698,16 @@ function resolveType(node: AstNode, scope: Scope): Type {
       return instType;
     }
     case "field_access": {
+      // If target is `this`, look up field in scope declarations
+      if (node.target.kind === "this") {
+        const decl = scope.declarations.get(node.field);
+        if (decl && decl.kind === "var") {
+          node.type = decl.type;
+          return node.type;
+        }
+        node.type = dynamic();
+        return node.type;
+      }
       const targetType = resolveType(node.target, scope);
       if (isStruct(targetType)) {
         const field = targetType.fields.find((f) => f.name === node.field);

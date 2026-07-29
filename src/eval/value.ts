@@ -12,7 +12,8 @@ export type Value =
   | { kind: "array"; elements: Value[]; type?: Type }
   | { kind: "struct"; fields: Map<string, Value>; type?: Type }
   | { kind: "tuple"; elements: Value[]; type?: Type }
-  | { kind: "enum"; enum: string; variant: string; type?: Type };
+  | { kind: "enum"; enum: string; variant: string; type?: Type }
+  | { kind: "this" };
 
 /**
  * Result of evaluating an expression.
@@ -99,5 +100,7 @@ export function toNumber(v: Value): number {
       throw new InterpreterError("runtime", "Cannot coerce tuple to number");
     case "enum":
       throw new InterpreterError("runtime", "Cannot coerce enum to number");
+    case "this":
+      throw new InterpreterError("runtime", "Cannot coerce 'this' to number");
   }
 }

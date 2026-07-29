@@ -684,7 +684,11 @@ class Parser {
       if (fieldToken?.type === "identifier") {
         this.consume();
         const fieldType = this.parseTypeAnnotation();
-        fields.push({ name: fieldToken.value, type: fieldType, mutable: mutable ?? undefined });
+        fields.push({
+          name: fieldToken.value,
+          type: fieldType,
+          mutable: mutable ?? undefined,
+        });
         if (this.match("punctuator", ",")) {
           this.consume();
         }
@@ -733,6 +737,10 @@ class Parser {
     }
     if (this.match("keyword", "loop")) {
       return this.parseLoopExpression();
+    }
+    if (this.match("keyword", "this")) {
+      const t = this.consume()!;
+      return { kind: "this", pos: t.pos };
     }
     if (this.match("identifier")) {
       const t = this.consume()!;

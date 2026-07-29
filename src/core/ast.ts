@@ -35,6 +35,7 @@ export type AstNode =
       pos?: TokenPos;
     }
   | { kind: "identifier"; name: string; type?: Type; pos?: TokenPos }
+  | { kind: "this"; type?: Type; pos?: TokenPos }
   | {
       kind: "let";
       name: string;

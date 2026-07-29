@@ -1,0 +1,12 @@
+import { test, expect, describe } from "bun:test";
+import { interpret } from "../src";
+
+describe("this", () => {
+  test('interpret("let x = 100; this.x") => 100', () => {
+    expect(interpret("let x = 100; this.x")).toBe(100);
+  });
+
+  test('interpret("this") => Error (cannot coerce this to number)', () => {
+    expect(() => interpret("this")).toThrow();
+  });
+});

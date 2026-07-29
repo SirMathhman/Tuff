@@ -2,7 +2,7 @@ import type { AstNode, LValue } from "../core/ast";
 import type { Type } from "../core/types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
-import { bool, isDynamic, isVoid, numeric, typesEqual } from "../core/types";
+import { bool, dynamic, isDynamic, isVoid, numeric, typesEqual } from "../core/types";
 import {
   evalBreak,
   evalContinue,
@@ -282,6 +282,9 @@ export function evaluate(
       }
       return evalOk(value);
     }
+    case "this": {
+      return evalOk({ kind: "this" });
+    }
     case "array": {
       const elements: Value[] = [];
       for (const elem of node.elements) {
@@ -332,6 +335,18 @@ export function evaluate(
         unwrap(evaluate(node.target, env, functions)),
         env,
       );
+      if (target.kind === "this") {
+        // `this.field` looks up `field` in the current environment
+        const fieldValue = env.get(node.field);
+        if (fieldValue === undefined) {
+          throw new InterpreterError(
+            "runtime",
+            `Undefined identifier: ${node.field}`,
+            node.pos,
+          );
+        }
+        return evalOk(fieldValue);
+      }
       if (target.kind !== "struct") {
         throw new InterpreterError(
           "runtime",
@@ -341,7 +356,7 @@ export function evaluate(
       }
       const fieldValue = target.fields.get(node.field)!;
       // Use the pre-computed type from the analyzer for the field access.
-      return evalOk({ ...fieldValue, type: node.type });
+      return evalOk({ ...(fieldValue as Exclude<Value, { kind: "this" }>), type: node.type });
     }
     case "index": {
       const target = dereferenceAll(
@@ -453,7 +468,9 @@ export function evaluate(
           ? node.value.type
           : value.kind === "number" && value.type && isDynamic(value.type)
             ? numeric("I", 32)
-            : value.type;
+            : value.kind === "this"
+              ? dynamic()
+              : value.type;
       return evalOk({
         kind: "boolean",
         value: typesEqual(resolvedType, node.type),

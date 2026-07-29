@@ -62,7 +62,8 @@ export type Token =
         | "return"
         | "continue"
         | "type"
-        | "enum";
+        | "enum"
+        | "this";
       pos: TokenPos;
     }
   | { type: "identifier"; value: string; pos: TokenPos }
@@ -228,6 +229,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "keyword", value: "return", pos: tokenPos });
       } else if (lower === "continue") {
         tokens.push({ type: "keyword", value: "continue", pos: tokenPos });
+      } else if (lower === "this") {
+        tokens.push({ type: "keyword", value: "this", pos: tokenPos });
       } else if (lower === "type") {
         tokens.push({ type: "keyword", value: "type", pos: tokenPos });
       } else if (lower === "enum") {
