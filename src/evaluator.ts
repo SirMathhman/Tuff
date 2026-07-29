@@ -349,6 +349,9 @@ export function evaluate(
     case "continue": {
       return evalContinue();
     }
+    case "typealias": {
+      return evalOk({ kind: "number", value: 0 });
+    }
     case "while": {
       while (toNumber(unwrap(evaluate(node.condition, env, functions))) !== 0) {
         const result = evaluate(

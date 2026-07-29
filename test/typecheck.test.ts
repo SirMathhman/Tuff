@@ -49,4 +49,12 @@ describe("typecheck expressions", () => {
   test('interpret("{ let x = 0; } is Void") => 1', () => {
     expect(interpret("{ let x = 0; } is Void")).toBe(1);
   });
+
+  test('interpret("type Temp = I32; let temp : Temp = 100; temp is Temp && temp is I32") => 1', () => {
+    expect(
+      interpret(
+        "type Temp = I32; let temp : Temp = 100; temp is Temp && temp is I32",
+      ),
+    ).toBe(1);
+  });
 });

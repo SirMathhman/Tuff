@@ -397,6 +397,17 @@ function resolveType(
     case "continue":
       return dynamic();
 
+    case "typealias": {
+      const resolvedType = resolveTypeNode(node.type, declarations);
+      registerDeclaration(
+        node.name,
+        declarations,
+        { kind: "var", type: resolvedType, mutable: false },
+        node.pos,
+      );
+      return resolvedType;
+    }
+
     case "typecheck": {
       resolveType(node.value, declarations);
       // Resolve the target type from unresolved placeholder
@@ -637,7 +648,7 @@ function resolveUserType(
   declarations: Map<string, Declaration>,
 ): Type | undefined {
   const decl = declarations.get(name);
-  if (decl && decl.kind === "var" && isStruct(decl.type)) {
+  if (decl && decl.kind === "var") {
     return decl.type;
   }
   return undefined;

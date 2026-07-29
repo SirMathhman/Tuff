@@ -4,7 +4,7 @@ import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { arrayType, pointer, tupleType } from "./types";
+import { arrayType, dynamic, parseTypeName, pointer, tupleType } from "./types";
 import { isIdentifierToken, isNumberToken } from "./tokenizer";
 
 /**
@@ -173,6 +173,27 @@ class Parser {
         this.consume();
       }
       return { kind: "continue", pos };
+    }
+    if (this.match("keyword", "type")) {
+      const pos = this.peek()?.pos;
+      this.consume(); // eat "type"
+      const nameToken = this.peek();
+      let name = "";
+      if (nameToken?.type === "identifier") {
+        name = nameToken.value;
+        this.consume();
+      }
+      this.expect("operator", "=");
+      const typeToken = this.peek();
+      let type: Type = dynamic();
+      if (typeToken?.type === "identifier") {
+        type = parseTypeName(typeToken.value);
+        this.consume();
+      }
+      if (this.match("punctuator", ";")) {
+        this.consume();
+      }
+      return { kind: "typealias", name, type, pos };
     }
     const assign = this.tryParseAssign();
     if (assign) return assign;
