@@ -19,7 +19,9 @@ export type Value =
  * - "break": break from a loop with a value
  */
 export type EvalResult =
-  { kind: "value"; value: Value } | { kind: "break"; value: Value };
+  | { kind: "value"; value: Value }
+  | { kind: "break"; value: Value }
+  | { kind: "yield"; value: Value };
 
 /** Wrap a value as a successful evaluation result. */
 export function evalOk(value: Value): EvalResult {
@@ -31,10 +33,22 @@ export function evalBreak(value: Value): EvalResult {
   return { kind: "break", value };
 }
 
-/** Unwrap an evaluation result to a value. Throws if it's a break outside a loop. */
+/** Wrap a value as a yield result. */
+export function evalYield(value: Value): EvalResult {
+  return { kind: "yield", value };
+}
+
+/** Error messages for terminal control-flow results. */
+const TERMINAL_ERRORS: Record<string, string> = {
+  break: "Unexpected break outside loop",
+  yield: "Unexpected yield outside block",
+};
+
+/** Unwrap an evaluation result to a value. Throws for terminal control-flow results. */
 export function unwrap(result: EvalResult): Value {
-  if (result.kind === "break") {
-    throw new InterpreterError("runtime", "Unexpected break outside loop");
+  if (result.kind !== "value") {
+    const msg = TERMINAL_ERRORS[result.kind] ?? `Unexpected ${result.kind}`;
+    throw new InterpreterError("runtime", msg);
   }
   return result.value;
 }

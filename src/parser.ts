@@ -135,7 +135,7 @@ class Parser {
     return this.parseExpression();
   }
 
-  /** Try to parse a known statement (`let`, `fn`, `if`, `while`, `break`, or `identifier = expr`). Returns undefined if none match. */
+  /** Try to parse a known statement (`let`, `fn`, `if`, `while`, `break`, `yield`, or `identifier = expr`). Returns undefined if none match. */
   private tryParseKnownStatement(): AstNode | undefined {
     if (this.match("keyword", "let")) return this.parseLetStatement();
     if (this.match("keyword", "fn")) return this.parseFnStatement();
@@ -149,6 +149,14 @@ class Parser {
         this.consume();
       }
       return { kind: "break", value, pos: value.pos };
+    }
+    if (this.match("keyword", "yield")) {
+      this.consume();
+      const value = this.parseExpression();
+      if (this.match("punctuator", ";")) {
+        this.consume();
+      }
+      return { kind: "yield", value, pos: value.pos };
     }
     const assign = this.tryParseAssign();
     if (assign) return assign;

@@ -57,6 +57,7 @@ export type AstNode =
     }
   | { kind: "loop"; body: AstNode[]; pos?: TokenPos }
   | { kind: "break"; value: AstNode; pos?: TokenPos }
+  | { kind: "yield"; value: AstNode; pos?: TokenPos }
   | { kind: "while"; condition: AstNode; body: AstNode[]; pos?: TokenPos }
   | { kind: "typecheck"; value: AstNode; type: Type; pos?: TokenPos }
   | {

@@ -3,7 +3,8 @@ import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "./error";
 import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
-import { evalBreak, evalOk, isPointerValue, toNumber, unwrap } from "./value";
+import { evalBreak, evalOk, evalYield, isPointerValue, toNumber, unwrap } from "./value";
+import { isBlockTerminal, isLoopTerminal } from "./controlflow";
 
 type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };
 
@@ -284,7 +285,9 @@ export function evaluate(
     case "block": {
       let result: Value = { kind: "number", value: 0 };
       for (const stmt of node.statements) {
-        result = unwrap(evaluate(stmt, env, functions));
+        const evalResult = evaluate(stmt, env, functions);
+        if (isBlockTerminal(evalResult)) return evalOk(evalResult.value);
+        result = evalResult.value;
       }
       return evalOk(result);
     }
@@ -299,13 +302,17 @@ export function evaluate(
     case "loop": {
       for (const stmt of node.body) {
         const result = evaluate(stmt, env, functions);
-        if (result.kind === "break") return evalOk(result.value);
+        if (isLoopTerminal(result)) return evalOk(result.value);
       }
       return evalOk({ kind: "number", value: 0 });
     }
     case "break": {
       const value = unwrap(evaluate(node.value, env, functions));
       return evalBreak(value);
+    }
+    case "yield": {
+      const value = unwrap(evaluate(node.value, env, functions));
+      return evalYield(value);
     }
     case "while": {
       while (toNumber(unwrap(evaluate(node.condition, env, functions))) !== 0) {
@@ -314,7 +321,7 @@ export function evaluate(
           env,
           functions,
         );
-        if (result.kind === "break") return result;
+        if (isLoopTerminal(result)) return result;
       }
       return evalOk({ kind: "number", value: 0 });
     }

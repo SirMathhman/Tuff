@@ -388,6 +388,9 @@ function resolveType(
     case "break":
       return resolveType(node.value, declarations);
 
+    case "yield":
+      return resolveType(node.value, declarations);
+
     case "typecheck": {
       resolveType(node.value, declarations);
       // Resolve the target type from unresolved placeholder
