@@ -8,7 +8,8 @@
     "lint": "tsc --noEmit && eslint .  --fix",
     "format": "prettier . --write",
     "prepare": "husky",
-    "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
+    "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "circular": "madge ./src --circular --extensions ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
