@@ -39,7 +39,9 @@ export function unwrap(result: EvalResult): Value {
 }
 
 /** Type guard: is this a pointer value? */
-export function isPointerValue(v: Value): v is Extract<Value, { kind: "pointer" }> {
+export function isPointerValue(
+  v: Value,
+): v is Extract<Value, { kind: "pointer" }> {
   return v.kind === "pointer";
 }
 

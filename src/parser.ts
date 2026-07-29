@@ -68,9 +68,13 @@ class Parser {
     while (this.pos < this.tokens.length) {
       const prevPos = this.pos;
       statements.push(this.parseTopLevelStatement());
-      // Guard against infinite loops: if pos didn't advance, skip the token.
       if (prevPos === this.pos) {
-        this.pos++;
+        const t = this.peek();
+        throw new InterpreterError(
+          "parse",
+          `Unexpected token '${t?.value ?? "EOF"}'`,
+          t?.pos ?? { line: 1, column: 1 },
+        );
       }
     }
     if (statements.length === 0) return { kind: "number", value: 0 };
@@ -99,7 +103,12 @@ class Parser {
       const prevPos = this.pos;
       const stmt = this.parseStatement();
       if (prevPos === this.pos) {
-        this.pos++;
+        const t = this.peek();
+        throw new InterpreterError(
+          "parse",
+          `Unexpected token '${t?.value ?? "EOF"}'`,
+          t?.pos ?? { line: 1, column: 1 },
+        );
       }
       statements.push(stmt);
     }
@@ -440,11 +449,14 @@ class Parser {
   private parseAtom(): AstNode {
     if (this.match("number")) {
       const t = this.consume()!;
-      if (!isNumberToken(t)) throw new InterpreterError("parse", "Expected number token", t.pos);
+      if (!isNumberToken(t))
+        throw new InterpreterError("parse", "Expected number token", t.pos);
       return {
         kind: "number",
         value: t.value,
-        type: t.typeSuffix ? { kind: "unresolved", name: t.typeSuffix, pos: t.pos } : undefined,
+        type: t.typeSuffix
+          ? { kind: "unresolved", name: t.typeSuffix, pos: t.pos }
+          : undefined,
         pos: t.pos,
       };
     }
@@ -468,7 +480,8 @@ class Parser {
     }
     if (this.match("identifier")) {
       const t = this.consume()!;
-      if (!isIdentifierToken(t)) throw new InterpreterError("parse", "Expected identifier token", t.pos);
+      if (!isIdentifierToken(t))
+        throw new InterpreterError("parse", "Expected identifier token", t.pos);
       const name = t.value;
       const pos = t.pos;
       // Check for function call: `identifier(args)`

@@ -78,7 +78,11 @@ function resolveLValue(
     case "deref": {
       const ptr = unwrap(evaluate(lv.operand, env, functions));
       if (!isPointerValue(ptr))
-        throw new InterpreterError("runtime", "Cannot dereference non-pointer value", pos);
+        throw new InterpreterError(
+          "runtime",
+          "Cannot dereference non-pointer value",
+          pos,
+        );
       return {
         set: (value: Value) => env.set(ptr.target, value),
         get: () => env.get(ptr.target)!,
@@ -126,7 +130,11 @@ export function evaluate(
         case "&":
         case "&mut": {
           if (node.operand.kind !== "identifier")
-            throw new InterpreterError("runtime", "Can only take reference of an identifier", node.pos);
+            throw new InterpreterError(
+              "runtime",
+              "Can only take reference of an identifier",
+              node.pos,
+            );
           return evalOk({
             kind: "pointer",
             target: node.operand.name,
@@ -136,7 +144,11 @@ export function evaluate(
         case "*": {
           const ptr = unwrap(evaluate(node.operand, env, functions));
           if (!isPointerValue(ptr))
-            throw new InterpreterError("runtime", "Cannot dereference non-pointer value", node.pos);
+            throw new InterpreterError(
+              "runtime",
+              "Cannot dereference non-pointer value",
+              node.pos,
+            );
           return evalOk(derefOne(ptr, env));
         }
       }
@@ -302,7 +314,11 @@ export function evaluate(
     }
     case "call": {
       if (node.callee.kind !== "identifier")
-        throw new InterpreterError("runtime", "Call target must be an identifier", node.pos);
+        throw new InterpreterError(
+          "runtime",
+          "Call target must be an identifier",
+          node.pos,
+        );
       const fnDef = functions.get(node.callee.name);
       if (!fnDef) {
         throw new InterpreterError(

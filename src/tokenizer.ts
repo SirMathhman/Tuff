@@ -3,7 +3,9 @@ import { TYPE_SUFFIXES } from "./grammar";
 export type TokenPos = { line: number; column: number };
 
 /** Type guard: is this a number token? */
-export function isNumberToken(t: Token): t is Extract<Token, { type: "number" }> {
+export function isNumberToken(
+  t: Token,
+): t is Extract<Token, { type: "number" }> {
   return t.type === "number";
 }
 
