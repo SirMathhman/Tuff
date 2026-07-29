@@ -1,6 +1,6 @@
 import type { AstNode, LValue } from "./ast";
 import type { Type } from "./types";
-import { getOperatorCategory } from "./grammar";
+import { getOperatorCategory, TYPE_SUFFIXES } from "./grammar";
 import { InterpreterError } from "./error";
 import {
   arrayType,
@@ -141,13 +141,32 @@ function resolveType(
   declarations: Map<string, Declaration>,
 ): Type {
   switch (node.kind) {
-    case "number":
+    case "number": {
       // Keep un-suffixed as dynamic so context propagation works.
       // The I32 default is applied at the typecheck site.
       node.type = node.type
         ? resolveTypeNode(node.type, declarations)
         : dynamic();
+      // Validate numeric value fits within the resolved type's range.
+      const resolvedType = node.type;
+      if (resolvedType.kind === "numeric") {
+        const suffixDef = TYPE_SUFFIXES.find(
+          (s) => s.prefix === resolvedType.prefix,
+        );
+        if (suffixDef) {
+          const minVal = suffixDef.min(resolvedType.bits);
+          const maxVal = suffixDef.max(resolvedType.bits);
+          if (node.value < minVal || node.value > maxVal) {
+            throw new InterpreterError(
+              "type",
+              `Value ${node.value} out of range for ${resolvedType.prefix}${resolvedType.bits} (${minVal}-${maxVal})`,
+              node.pos,
+            );
+          }
+        }
+      }
       return node.type;
+    }
 
     case "boolean":
       node.type = bool();

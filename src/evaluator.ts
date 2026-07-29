@@ -2,7 +2,7 @@ import type { AstNode, LValue } from "./ast";
 import type { Type } from "./types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "./error";
-import { bool, isDynamic, isNumeric, isVoid, numeric } from "./types";
+import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
 import { evalBreak, evalOk, toNumber, unwrap } from "./value";
 
 type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };
@@ -342,14 +342,4 @@ export function evaluate(
   return evalOk({ kind: "number", value: 0 });
 }
 
-/** Check if two types are exactly equal. */
-function typesEqual(a: Type | undefined, b: Type): boolean {
-  if (!a) return false;
-  if (a.kind !== b.kind) return false;
-  if (a.kind === "bool") return true;
-  if (a.kind === "void") return true;
-  if (a.kind === "dynamic") return b.kind === "dynamic";
-  if (isNumeric(a) && isNumeric(b))
-    return a.prefix === b.prefix && a.bits === b.bits;
-  return false;
-}
+

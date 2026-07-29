@@ -6,7 +6,7 @@ A test-driven interpreter for the Tuff programming language, built with TypeScri
 
 ```bash
 bun install
-bun test        # Run all tests
+bun test        # Run all tests (with 90% line coverage threshold)
 bun run index.ts  # Run interpreter
 ```
 
@@ -22,6 +22,12 @@ All features follow this test-driven workflow:
 6. Refactor to comply with hooks (prettier → tsc → eslint → pmd cpd)
 7. Suggest architecture improvements
 
+## Hooks
+
+Two hook systems coexist:
+- **`.husky/pre-commit`**: Runs `bun run format` (Prettier only) on git commit.
+- **`.github/hooks/hooks.json`**: AI agent "Stop" hook runs the full pipeline: `test` → `lint` → `cpd`. This is the validation gate for agent sessions.
+
 ## Architecture
 
 ### Core Pipeline
@@ -32,7 +38,7 @@ All features follow this test-driven workflow:
 
 - `index.ts` — Entry point: `interpret(source)` → tokenize → parse → analyze → evaluate → coerce to number
 - `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens. `&` operator with `&&` disambiguation. All tokens carry `pos: TokenPos`.
-- `ast.ts` — `AstNode` discriminated union: number, boolean, binary, unary (`-`, `&`, `&mut`, `*`), identifier, let, assign, augassign, block, if, loop, break, while, typecheck, fn, call, array, index
+- `ast.ts` — `AstNode` discriminated union: number, boolean, binary, unary (`-`, `&`, `&mut`, `*`), identifier, let, assign, augassign, block, if, loop, break, while, typecheck, fn, call, array, index, struct, struct_instantiation, field_access, match
 - `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`). Postfix `is` and `[index]` handled in `parseUnary`. `tryParseAssign` uses backtracking for `*expr` lookahead.
 - `analyzer.ts` — Single-pass `resolveType()`: bottom-up type resolution, context propagation, symbol table, compatibility validation. All type reasoning lives here (no runtime type checks in evaluator).
 - `evaluator.ts` — `evaluate(node, env)` returns `EvalResult`. Reads pre-computed `node.type` from AST — no type reasoning at runtime.
@@ -57,6 +63,16 @@ All features follow this test-driven workflow:
 ### Pre-commit Hooks
 
 Run in order: prettier → tsc --noEmit → eslint → pmd cpd (50-token minimum, ignore identifiers/literals)
+
+### Pitfalls & Gotchas
+
+- **`interpret()` always returns `number`**: Final result coerced via `toNumber(unwrap(...))`. Non-coercible values (pointers, arrays) at top level are runtime errors.
+- **`LValue` is recursive**: Index targets can chain (`arr[i][j]`, `*ptr[i]`). Assignment targets nest through `LValue`, not `AstNode`.
+- **`UnresolvedType`**: Intermediate type state in `types.ts` — placeholder for type names parsed but not yet validated.
+- **Flat `src/` structure**: All source files live flat in `src/` — no subdirectories despite growing feature set.
+- **Single test file**: All tests in `test/index.test.ts`. Tests organized in `describe` blocks with flat structure.
+- **`tsconfig.json`**: `module: "Preserve"` with `moduleResolution: "bundler"` — Bun-native setup, import paths have no `.ts` extension.
+- **Coverage threshold**: 90% line coverage (`bunfig.toml`), not 100%.
 
 ## Testing
 

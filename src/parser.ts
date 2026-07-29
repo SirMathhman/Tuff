@@ -4,7 +4,7 @@ import type { BinaryOp } from "./grammar";
 import type { Type } from "./types";
 import { OPENING, PRECEDENCE } from "./grammar";
 import { InterpreterError } from "./error";
-import { arrayType, dynamic, pointer } from "./types";
+import { arrayType, pointer } from "./types";
 
 /**
  * Recursive-descent parser for the Tuff language.
@@ -92,13 +92,9 @@ class Parser {
   /**
    * Collect statements until closing "}", consuming the brace.
    */
-  private collectBlockStatements(): AstNode[] {
+  private collectUntilBrace(): AstNode[] {
     const statements: AstNode[] = [];
-    while (this.pos < this.tokens.length) {
-      if (this.match("group", "}")) {
-        this.consume();
-        break;
-      }
+    while (this.pos < this.tokens.length && !this.match("group", "}")) {
       const prevPos = this.pos;
       const stmt = this.parseStatement();
       if (prevPos === this.pos) {
@@ -106,6 +102,7 @@ class Parser {
       }
       statements.push(stmt);
     }
+    this.expect("group", "}");
     return statements;
   }
 
@@ -115,7 +112,7 @@ class Parser {
    */
   private parseBlock(): AstNode {
     const token = this.peek();
-    const statements = this.collectBlockStatements();
+    const statements = this.collectUntilBrace();
     return { kind: "block", statements, pos: token?.pos };
   }
 
@@ -355,8 +352,16 @@ class Parser {
       const paramToken = this.peek();
       if (paramToken?.type === "identifier") {
         this.consume();
-        const paramType = this.parseTypeAnnotation();
-        params.push({ name: paramToken.value, type: paramType ?? dynamic() });
+        this.expect("punctuator", ":");
+        const paramType = this.parseType();
+        if (!paramType) {
+          throw new InterpreterError(
+            "parse",
+            "Function parameter must have a type annotation",
+            paramToken.pos,
+          );
+        }
+        params.push({ name: paramToken.value, type: paramType });
         if (this.match("punctuator", ",")) {
           this.consume();
         }
@@ -675,7 +680,7 @@ class Parser {
     this.consume(); // eat "while"
     const condition = this.parseCondition();
     this.expect("group", "{");
-    const body = this.collectBody();
+    const body = this.collectUntilBrace();
     return { kind: "while", condition, body, pos };
   }
 
@@ -683,24 +688,11 @@ class Parser {
     const pos = this.peek()?.pos;
     this.consume(); // eat "loop"
     this.expect("group", "{");
-    const body = this.collectBody();
+    const body = this.collectUntilBrace();
     return { kind: "loop", body, pos };
   }
 
-  /** Collect body statements between `{` and `}`, consuming the closing brace. */
-  private collectBody(): AstNode[] {
-    const body: AstNode[] = [];
-    while (this.pos < this.tokens.length && !this.match("group", "}")) {
-      const prevPos = this.pos;
-      const stmt = this.parseStatement();
-      if (prevPos === this.pos) {
-        this.pos++;
-      }
-      body.push(stmt);
-    }
-    this.expect("group", "}");
-    return body;
-  }
+
 
   /**
    * Table-driven binary expression parser.

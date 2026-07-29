@@ -245,3 +245,15 @@ export function typeName(t: Type): string {
   if (t.kind === "unresolved") return t.name;
   return "dynamic";
 }
+
+/** Check if two types are exactly equal (structural equality). */
+export function typesEqual(a: Type | undefined, b: Type): boolean {
+  if (!a) return false;
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "bool") return true;
+  if (a.kind === "void") return true;
+  if (a.kind === "dynamic") return b.kind === "dynamic";
+  if (isNumeric(a) && isNumeric(b))
+    return a.prefix === b.prefix && a.bits === b.bits;
+  return false;
+}

@@ -319,8 +319,8 @@ describe("binary expressions", () => {
     expect(() => interpret("fn get() : U8 => 0U16;")).toThrow();
   });
 
-  test('interpret("fn add(a, b) => a + b; add(1)") => Error (missing param)', () => {
-    expect(() => interpret("fn add(a, b) => a + b; add(1)")).toThrow();
+  test('interpret("fn add(a : I32, b : I32) => a + b; add(1)") => Error (missing param)', () => {
+    expect(() => interpret("fn add(a : I32, b : I32) => a + b; add(1)")).toThrow();
   });
 
   test('interpret("fn get() => 1; get(1)") => Error (extra param)', () => {

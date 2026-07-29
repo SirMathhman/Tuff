@@ -1,5 +1,4 @@
 import { TYPE_SUFFIXES } from "./grammar";
-import { InterpreterError } from "./error";
 
 export type TokenPos = { line: number; column: number };
 
@@ -80,7 +79,8 @@ function parseNumberWithSuffix(
   i: number,
   pos: TokenPos,
 ): number {
-  // Validate and skip type suffixes using TYPE_SUFFIXES table
+  // Recognize and skip type suffixes (e.g. U8, I32, F64).
+  // Range validation is deferred to the analyzer.
   const suffixDef = TYPE_SUFFIXES.find((s) => s.prefix === source.charAt(i));
   let typeSuffix: string | undefined;
   if (suffixDef) {
@@ -95,17 +95,6 @@ function parseNumberWithSuffix(
       i++;
     }
     typeSuffix = suffixDef.prefix + suffixNum;
-    const numValue = Number(numStr);
-    const bits = Number(suffixNum);
-    const minVal = suffixDef.min(bits);
-    const maxVal = suffixDef.max(bits);
-    if (numValue < minVal || numValue > maxVal) {
-      throw new InterpreterError(
-        "parse",
-        `Value ${numValue} out of range for ${suffixDef.prefix}${suffixNum} (${minVal}-${maxVal})`,
-        pos,
-      );
-    }
   }
   tokens.push({ type: "number", value: Number(numStr), typeSuffix, pos });
   return i;
