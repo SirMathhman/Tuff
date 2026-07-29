@@ -8,11 +8,13 @@ import type { Type } from "./types";
  * - `identifier`: simple variable (x = v)
  * - `index`: array element (arr[i] = v), recursively targets another LValue
  * - `deref`: pointer dereference (*ptr = v)
+ * - `field`: struct field (pt.x = v), recursively targets another LValue
  */
 export type LValue =
   | { kind: "identifier"; name: string; pos?: TokenPos }
   | { kind: "index"; target: LValue; index: AstNode; pos?: TokenPos }
-  | { kind: "deref"; operand: AstNode; pos?: TokenPos };
+  | { kind: "deref"; operand: AstNode; pos?: TokenPos }
+  | { kind: "field"; target: LValue; field: string; pos?: TokenPos };
 
 export type AstNode =
   | { kind: "number"; value: number; type?: Type; pos?: TokenPos }
@@ -78,7 +80,7 @@ export type AstNode =
       kind: "struct";
       name: string;
       typeParams?: string[];
-      fields: { name: string; type?: Type }[];
+      fields: { name: string; type?: Type; mutable?: boolean }[];
       pos?: TokenPos;
     }
   | {

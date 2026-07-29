@@ -46,7 +46,7 @@ export interface StructType {
   kind: "struct";
   name: string;
   typeParams?: string[];
-  fields: { name: string; type: Type }[];
+  fields: { name: string; type: Type; mutable?: boolean }[];
 }
 
 /** Tuple type with ordered element types. */

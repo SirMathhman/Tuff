@@ -248,76 +248,142 @@ class Parser {
         };
       case "deref":
         return { kind: "unary", op: "*", operand: lv.operand, pos: lv.pos };
+      case "field":
+        return {
+          kind: "field_access",
+          target: this.lvalueToAstNode(lv.target),
+          field: lv.field,
+          pos: lv.pos,
+        };
     }
   }
 
   /** Try to parse `identifier = expression`, `identifier += expression`, `*expr = expression`, `*expr += expression`, or `identifier[index] = expression` as an assignment statement. Returns undefined if not an assignment. */
   private tryParseAssign(): AstNode | undefined {
     // Check for `identifier[index] = value` (array index assignment)
-    if (this.match("identifier")) {
-      const savedPos = this.pos;
-      const nameToken = this.peek()!;
-      const pos = (nameToken as { pos: { line: number; column: number } }).pos;
-      this.consume(); // identifier
-      // Check for `[index]` postfix
-      if (this.match("group", "[")) {
-        this.consume(); // [
-        const index = this.parseExpression();
-        this.expect("group", "]");
-        const nextToken = this.peek();
-        if (
-          nextToken?.type === "operator" &&
-          (nextToken.value === "=" || nextToken.value === "+=")
-        ) {
-          const target: LValue = {
-            kind: "index",
-            target: {
-              kind: "identifier",
-              name: nameToken.value as string,
-              pos,
-            },
-            index,
-            pos,
-          };
-          return this.finishAssign(target, nextToken.value, pos);
-        }
-      }
-      // Not an index assignment — restore position
-      this.pos = savedPos;
-    }
+    const indexResult = this.tryParseIndexAssign();
+    if (indexResult) return indexResult;
 
     // Check for `*expr = value` or `*expr += value` (deref assignment) — look ahead without consuming
-    if (this.match("operator", "*") && this.isUnaryContext()) {
-      const savedPos = this.pos;
-      const starToken = this.tokens[this.pos]!;
-      this.consume(); // *
-      const operand = this.parseUnary();
+    const derefResult = this.tryParseDerefAssign();
+    if (derefResult) return derefResult;
+
+    // Check for `identifier.field = value` or `identifier.field += value` (field assignment)
+    const fieldResult = this.tryParseFieldAssign();
+    if (fieldResult) return fieldResult;
+
+    // Check for `identifier = value` or `identifier += value`
+    return this.tryParseSimpleAssign();
+  }
+
+  /** Try to parse `identifier[index] = value` or `identifier[index] += value`. */
+  private tryParseIndexAssign(): AstNode | undefined {
+    if (!this.match("identifier")) return;
+    const savedPos = this.pos;
+    const { nameToken, pos } = this.consumeIdentifier();
+    // Check for `[index]` postfix
+    if (this.match("group", "[")) {
+      this.consume(); // [
+      const index = this.parseExpression();
+      this.expect("group", "]");
       const nextToken = this.peek();
       if (
         nextToken?.type === "operator" &&
         (nextToken.value === "=" || nextToken.value === "+=")
       ) {
         const target: LValue = {
-          kind: "deref",
-          operand,
-          pos: starToken.pos,
+          kind: "index",
+          target: {
+            kind: "identifier",
+            name: nameToken.value as string,
+            pos,
+          },
+          index,
+          pos,
         };
-        return this.finishAssign(target, nextToken.value, starToken.pos);
+        return this.finishAssign(target, nextToken.value, pos);
       }
-      // Not an assignment — restore position
-      this.pos = savedPos;
     }
+    // Not an index assignment — restore position
+    this.pos = savedPos;
+  }
 
-    // Check for `identifier = value` or `identifier += value`
+  /** Try to parse `*expr = value` or `*expr += value`. */
+  private tryParseDerefAssign(): AstNode | undefined {
+    if (!this.match("operator", "*") || !this.isUnaryContext()) return;
+    const savedPos = this.pos;
+    const starToken = this.tokens[this.pos]!;
+    this.consume(); // *
+    const operand = this.parseUnary();
+    const nextToken = this.peek();
+    if (
+      nextToken?.type === "operator" &&
+      (nextToken.value === "=" || nextToken.value === "+=")
+    ) {
+      const target: LValue = {
+        kind: "deref",
+        operand,
+        pos: starToken.pos,
+      };
+      return this.finishAssign(target, nextToken.value, starToken.pos);
+    }
+    // Not an assignment — restore position
+    this.pos = savedPos;
+  }
+
+  /** Try to parse `identifier.field = value` or `identifier.field += value`. */
+  private tryParseFieldAssign(): AstNode | undefined {
     if (!this.match("identifier")) return;
-    const nameToken = this.peek()!;
-    const pos = (nameToken as { pos: { line: number; column: number } }).pos;
-    const nextPos = this.pos + 1;
-    const nextToken = this.tokens[nextPos];
-    if (nextToken?.type !== "operator") return;
+    const savedPos = this.pos;
+    const { nameToken, pos } = this.consumeIdentifier();
+    let target: LValue = {
+      kind: "identifier",
+      name: nameToken.value as string,
+      pos,
+    };
+    // Collect `.field` chain
+    while (this.match("punctuator", ".")) {
+      this.consume(); // .
+      const fieldToken = this.peek();
+      if (fieldToken?.type === "identifier") {
+        this.consume();
+        target = {
+          kind: "field",
+          target,
+          field: fieldToken.value,
+          pos: fieldToken.pos,
+        };
+      } else {
+        break;
+      }
+    }
+    const nextToken = this.peek();
+    if (
+      nextToken?.type === "operator" &&
+      (nextToken.value === "=" || nextToken.value === "+=")
+    ) {
+      return this.finishAssign(target, nextToken.value, pos);
+    }
+    // Not an assignment — restore position
+    this.pos = savedPos;
+  }
+
+  /** Try to parse `identifier = value` or `identifier += value`. */
+  private tryParseSimpleAssign(): AstNode | undefined {
+    if (!this.match("identifier")) return;
+    const savedPos = this.pos;
+    const { nameToken, pos } = this.consumeIdentifier();
+    // After consumeIdentifier(), this.pos is at the operator
+    const nextToken = this.tokens[this.pos];
+    if (nextToken?.type !== "operator") {
+      this.pos = savedPos;
+      return;
+    }
     const op = nextToken.value;
-    if (op !== "=" && op !== "+=") return;
-    this.consume(); // identifier
+    if (op !== "=" && op !== "+=") {
+      this.pos = savedPos;
+      return;
+    }
     this.consume(); // operator
     const value = this.parseExpression();
     if (this.match("punctuator", ";")) {
@@ -329,6 +395,17 @@ class Parser {
       pos,
     };
     return this.makeAssignNode(target, op, value, pos);
+  }
+
+  /** Consume the current identifier token and return its name and position. */
+  private consumeIdentifier(): {
+    nameToken: { value: string };
+    pos: { line: number; column: number };
+  } {
+    const nameToken = this.peek()!;
+    const pos = (nameToken as { pos: { line: number; column: number } }).pos;
+    this.consume();
+    return { nameToken: { value: nameToken.value as string }, pos };
   }
 
   private parseLetStatement(): AstNode {
@@ -594,18 +671,20 @@ class Parser {
     return { kind: "enum", name, variants, pos };
   }
 
-  /** Parse `struct Name<T> { field1 : Type1, field2 : Type2, ... }`. */
+  /** Parse `struct Name<T> { mut field1 : Type1, field2 : Type2, ... }`. */
   private parseStructStatement(): AstNode {
     const { name, pos } = this.parseKeywordAndName("struct");
     const typeParams = this.parseTypeParameters();
     this.expect("group", "{");
-    const fields: { name: string; type?: Type }[] = [];
+    const fields: { name: string; type?: Type; mutable?: boolean }[] = [];
     while (!this.match("group", "}")) {
+      const mutable = this.match("keyword", "mut");
+      if (mutable) this.consume();
       const fieldToken = this.peek();
       if (fieldToken?.type === "identifier") {
         this.consume();
         const fieldType = this.parseTypeAnnotation();
-        fields.push({ name: fieldToken.value, type: fieldType });
+        fields.push({ name: fieldToken.value, type: fieldType, mutable: mutable ?? undefined });
         if (this.match("punctuator", ",")) {
           this.consume();
         }

@@ -114,6 +114,22 @@ function resolveLValue(
         get: () => arr.elements[index]!,
       };
     }
+    case "field": {
+      const targetLoc = resolveLValue(lv.target, env, functions, pos);
+      const targetValue = dereferenceAll(targetLoc.get(), env);
+      if (targetValue.kind !== "struct")
+        throw new InterpreterError(
+          "runtime",
+          `Cannot access field '${lv.field}' on non-struct value`,
+          pos,
+        );
+      return {
+        set: (value: Value) => {
+          targetValue.fields.set(lv.field, value);
+        },
+        get: () => targetValue.fields.get(lv.field)!,
+      };
+    }
   }
 }
 

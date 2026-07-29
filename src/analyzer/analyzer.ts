@@ -63,6 +63,7 @@ function getOrInstantiateStruct(
     template.fields.map((f) => ({
       name: f.name,
       type: substituteTypeParams(f.type, subst),
+      mutable: f.mutable,
     })),
   );
   instantiatedStructs.set(key, instType);
@@ -150,6 +151,30 @@ function checkLValue(
       }
       return resolveLValueType(lv, scope);
     }
+    case "field": {
+      // First check the target's mutability (e.g., the variable must be mutable)
+      checkLValue(lv.target, scope, pos);
+      // Then check the field's mutability
+      const targetType = resolveLValueType(lv.target, scope);
+      if (isStruct(targetType)) {
+        const field = targetType.fields.find((f) => f.name === lv.field);
+        if (!field) {
+          throw new InterpreterError(
+            "type",
+            `Unknown field '${lv.field}' in struct '${targetType.name}'`,
+            pos,
+          );
+        }
+        if (!field.mutable) {
+          throw new InterpreterError(
+            "type",
+            `Cannot assign to immutable field '${lv.field}'`,
+            pos,
+          );
+        }
+      }
+      return resolveLValueType(lv, scope);
+    }
   }
 }
 
@@ -172,6 +197,14 @@ function resolveLValueType(lv: LValue, scope: Scope): Type {
       const operandType = resolveType(lv.operand, scope);
       if (isPointer(operandType)) {
         return operandType.inner;
+      }
+      return dynamic();
+    }
+    case "field": {
+      const targetType = resolveLValueType(lv.target, scope);
+      if (isStruct(targetType)) {
+        const field = targetType.fields.find((f) => f.name === lv.field);
+        if (field) return field.type;
       }
       return dynamic();
     }
@@ -570,7 +603,7 @@ function resolveType(node: AstNode, scope: Scope): Type {
           : scope.typeParams,
       };
       const seen = new Set<string>();
-      const resolvedFields: { name: string; type: Type }[] = [];
+      const resolvedFields: { name: string; type: Type; mutable?: boolean }[] = [];
       for (const field of node.fields) {
         if (seen.has(field.name)) {
           throw new InterpreterError(
@@ -583,7 +616,11 @@ function resolveType(node: AstNode, scope: Scope): Type {
         const fieldType = field.type
           ? resolveTypeNode(field.type, structScope)
           : dynamic();
-        resolvedFields.push({ name: field.name, type: fieldType });
+        resolvedFields.push({
+          name: field.name,
+          type: fieldType,
+          mutable: field.mutable,
+        });
       }
       const st = structType(
         node.name,

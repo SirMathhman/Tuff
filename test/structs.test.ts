@@ -107,4 +107,36 @@ describe("structs", () => {
       ),
     ).toThrow();
   });
+
+  test('interpret("struct Point { mut x : I32, y : I32 } let mut pt = Point { x : 3, y : 4 }; pt.x = 10; pt.x") => 10 (mut field + mut var)', () => {
+    expect(
+      interpret(
+        "struct Point { mut x : I32, y : I32 } let mut pt = Point { x : 3, y : 4 }; pt.x = 10; pt.x",
+      ),
+    ).toBe(10);
+  });
+
+  test('interpret("struct Point { mut x : I32 } let pt = Point { x : 3 }; pt.x = 10") => Error (immutable var)', () => {
+    expect(() =>
+      interpret(
+        "struct Point { mut x : I32 } let pt = Point { x : 3 }; pt.x = 10",
+      ),
+    ).toThrow();
+  });
+
+  test('interpret("struct Point { x : I32 } let mut pt = Point { x : 3 }; pt.x = 10") => Error (immutable field)', () => {
+    expect(() =>
+      interpret(
+        "struct Point { x : I32 } let mut pt = Point { x : 3 }; pt.x = 10",
+      ),
+    ).toThrow();
+  });
+
+  test('interpret("struct Point { mut x : I32 } let mut pt = Point { x : 3 }; pt.y = 10") => Error (unknown field)', () => {
+    expect(() =>
+      interpret(
+        "struct Point { mut x : I32 } let mut pt = Point { x : 3 }; pt.y = 10",
+      ),
+    ).toThrow();
+  });
 });
