@@ -105,21 +105,21 @@ test('interpret("source") => Error', () => {
 
 **Test file mapping:**
 
-| File | Feature |
-|---|---|
-| `arithmetic.test.ts` | `+`, `-`, `*`, `/`, precedence, blocks |
-| `arrays.test.ts` | Array literals, indexing, bounds checking |
-| `assignment.test.ts` | Assignment, augmented assignment |
-| `comparison.test.ts` | `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| `control-flow.test.ts` | `if/else`, `loop`, `break`, `while` |
-| `controlflow.test.ts` | Unit tests for `controlflow.ts` module |
-| `errors.test.ts` | Type compatibility errors, error positions |
-| `functions.test.ts` | `fn` definition, calls, `return` |
-| `literals.test.ts` | Number literals, booleans, type suffixes |
-| `logical.test.ts` | `&&`, `\|\|`, `!` |
-| `match.test.ts` | `match/case` expressions |
-| `pointers.test.ts` | `&`, `&mut`, `*`, pointer assignment |
-| `structs.test.ts` | `struct` definition, instantiation, field access |
-| `tuples.test.ts` | Tuple types, numeric field access |
-| `typecheck.test.ts` | `is` type checking operator |
-| `yield.test.ts` | `yield` in blocks, functions |
+| File                   | Feature                                          |
+| ---------------------- | ------------------------------------------------ |
+| `arithmetic.test.ts`   | `+`, `-`, `*`, `/`, precedence, blocks           |
+| `arrays.test.ts`       | Array literals, indexing, bounds checking        |
+| `assignment.test.ts`   | Assignment, augmented assignment                 |
+| `comparison.test.ts`   | `==`, `!=`, `<`, `>`, `<=`, `>=`                 |
+| `control-flow.test.ts` | `if/else`, `loop`, `break`, `while`              |
+| `controlflow.test.ts`  | Unit tests for `controlflow.ts` module           |
+| `errors.test.ts`       | Type compatibility errors, error positions       |
+| `functions.test.ts`    | `fn` definition, calls, `return`                 |
+| `literals.test.ts`     | Number literals, booleans, type suffixes         |
+| `logical.test.ts`      | `&&`, `\|\|`, `!`                                |
+| `match.test.ts`        | `match/case` expressions                         |
+| `pointers.test.ts`     | `&`, `&mut`, `*`, pointer assignment             |
+| `structs.test.ts`      | `struct` definition, instantiation, field access |
+| `tuples.test.ts`       | Tuple types, numeric field access                |
+| `typecheck.test.ts`    | `is` type checking operator                      |
+| `yield.test.ts`        | `yield` in blocks, functions                     |

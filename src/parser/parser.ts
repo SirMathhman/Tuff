@@ -4,7 +4,13 @@ import type { BinaryOp } from "../core/grammar";
 import type { Type } from "../core/types";
 import { OPENING, PRECEDENCE } from "../core/grammar";
 import { InterpreterError } from "../core/error";
-import { arrayType, dynamic, parseTypeName, pointer, tupleType } from "../core/types";
+import {
+  arrayType,
+  dynamic,
+  parseTypeName,
+  pointer,
+  tupleType,
+} from "../core/types";
 import { isIdentifierToken, isNumberToken } from "../lexer/tokenizer";
 
 /**
