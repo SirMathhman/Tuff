@@ -38,7 +38,9 @@ describe("control flow", () => {
 
   test('interpret("let mut x = 0; loop { x += 1; if (x >= 3) break x; continue; }") => 3', () => {
     expect(
-      interpret("let mut x = 0; loop { x += 1; if (x >= 3) break x; continue; }"),
+      interpret(
+        "let mut x = 0; loop { x += 1; if (x >= 3) break x; continue; }",
+      ),
     ).toBe(3);
   });
 
