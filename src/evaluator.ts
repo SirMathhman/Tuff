@@ -31,7 +31,6 @@ function derefOne(
 function dereferenceAll(
   value: Value,
   env: Map<string, Value>,
-  pos?: { line: number; column: number },
 ): Value {
   let current = value;
   while (current.kind === "pointer") {
@@ -92,7 +91,7 @@ function resolveLValue(
     case "index": {
       const idxValue = unwrap(evaluate(lv.index, env, functions));
       const targetLoc = resolveLValue(lv.target, env, functions, pos);
-      const targetValue = dereferenceAll(targetLoc.get(), env, pos);
+      const targetValue = dereferenceAll(targetLoc.get(), env);
       const { arr, index } = validateArrayIndex(
         targetValue,
         Math.floor(toNumber(idxValue)),
@@ -148,6 +147,7 @@ export function evaluate(
           return evalOk(derefOne(ptr, env));
         }
       }
+      break;
     }
     case "binary": {
       const left = unwrap(evaluate(node.left, env, functions));
@@ -214,7 +214,6 @@ export function evaluate(
       const target = dereferenceAll(
         unwrap(evaluate(node.target, env, functions)),
         env,
-        node.pos,
       );
       if (target.kind !== "struct") {
         throw new InterpreterError(
@@ -229,7 +228,6 @@ export function evaluate(
       const target = dereferenceAll(
         unwrap(evaluate(node.target, env, functions)),
         env,
-        node.pos,
       );
       const idx = unwrap(evaluate(node.index, env, functions));
       const { arr, index } = validateArrayIndex(
