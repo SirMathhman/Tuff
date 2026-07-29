@@ -91,6 +91,10 @@ describe("typecheck expressions", () => {
   });
 
   test('interpret("type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; *ptr") => Error', () => {
-    expect(() => interpret("type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; *ptr")).toThrow();
+    expect(() =>
+      interpret(
+        "type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; *ptr",
+      ),
+    ).toThrow();
   });
 });

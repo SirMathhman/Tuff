@@ -2,12 +2,21 @@ import type { AstNode, LValue } from "../core/ast";
 import type { Type } from "../core/types";
 import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
-import { bool, isDynamic, isVoid, nullType, numeric, typesEqual } from "../core/types";
+import {
+  bool,
+  isDynamic,
+  isVoid,
+  nullType,
+  numeric,
+  typesEqual,
+  voidType,
+} from "../core/types";
 import {
   evalBreak,
   evalContinue,
   evalOk,
   evalReturn,
+  evalVoid,
   evalYield,
   toNumber,
   unwrap,
@@ -116,14 +125,15 @@ function resolveLValue(
     case "deref": {
       const ptr = unwrap(evaluate(lv.operand, env, functions));
       if (ptr.kind === "null") {
+        throw new InterpreterError("runtime", "Cannot dereference null", pos);
+      }
+      if (ptr.kind !== "pointer") {
         throw new InterpreterError(
           "runtime",
-          "Cannot dereference null",
+          "Cannot dereference non-pointer value",
           pos,
         );
       }
-      if (ptr.kind !== "pointer")
-        return { set: () => {}, get: () => ({ kind: "number", value: 0 }) };
       return {
         set: (value: Value) => env.set(ptr.target, value),
         get: () => env.get(ptr.target)!,
@@ -197,8 +207,13 @@ export function evaluate(
         }
         case "&":
         case "&mut": {
-          if (node.operand.kind !== "identifier")
-            return evalOk({ kind: "number", value: 0 });
+          if (node.operand.kind !== "identifier") {
+            throw new InterpreterError(
+              "runtime",
+              "Can only take reference of an identifier",
+              node.pos,
+            );
+          }
           return evalOk({
             kind: "pointer",
             target: node.operand.name,
@@ -214,8 +229,13 @@ export function evaluate(
               node.pos,
             );
           }
-          if (ptr.kind !== "pointer")
-            return evalOk({ kind: "number", value: 0 });
+          if (ptr.kind !== "pointer") {
+            throw new InterpreterError(
+              "runtime",
+              "Cannot dereference non-pointer value",
+              node.pos,
+            );
+          }
           return evalOk(derefOne(ptr, env));
         }
       }
@@ -333,7 +353,11 @@ export function evaluate(
       // look it up in the environment.
       const thisValue = env.get("this");
       if (thisValue !== undefined) return evalOk(thisValue);
-      return evalOk({ kind: "number", value: 0 });
+      throw new InterpreterError(
+        "runtime",
+        "'this' is not defined in this context",
+        node.pos,
+      );
     }
     case "array": {
       const elements: Value[] = [];
@@ -364,7 +388,7 @@ export function evaluate(
       return evalOk(target.elements[node.index]!);
     }
     case "struct": {
-      return evalOk({ kind: "number", value: 0 });
+      return evalVoid();
     }
     case "struct_instantiation": {
       const fields = new Map<string, Value>();
@@ -384,7 +408,11 @@ export function evaluate(
         // Fallback: look up in environment (for non-struct `this`)
         const fieldValue = env.get(node.field);
         if (fieldValue === undefined)
-          return evalOk({ kind: "number", value: 0 });
+          throw new InterpreterError(
+            "runtime",
+            `Undefined field '${node.field}'`,
+            node.pos,
+          );
         return evalOk(fieldValue);
       }
       const target = dereferenceAll(
@@ -400,10 +428,9 @@ export function evaluate(
       }
       const fieldValue = target.fields.get(node.field)!;
       // Use the pre-computed type from the analyzer for the field access.
-      return evalOk({
-        ...fieldValue,
-        type: node.type,
-      });
+      const result: Value = { ...fieldValue };
+      if (result.kind !== "void") result.type = node.type;
+      return evalOk(result);
     }
     case "index": {
       const target = dereferenceAll(
@@ -421,7 +448,7 @@ export function evaluate(
     case "let": {
       const value = unwrap(evaluate(node.value, env, functions));
       env.set(node.name, value);
-      return evalOk({ kind: "number", value: 0 });
+      return evalVoid();
     }
     case "assign": {
       const value = unwrap(evaluate(node.value, env, functions));
@@ -430,7 +457,7 @@ export function evaluate(
       return evalOk(value);
     }
     case "block": {
-      let result: Value = { kind: "number", value: 0 };
+      let result: Value = { kind: "void" };
       for (const stmt of node.statements) {
         const evalResult = evaluate(stmt, env, functions);
         if (evalResult.kind === "continue") return evalResult;
@@ -482,10 +509,10 @@ export function evaluate(
       return evalContinue();
     }
     case "typealias": {
-      return evalOk({ kind: "number", value: 0 });
+      return evalVoid();
     }
     case "enum": {
-      return evalOk({ kind: "number", value: 0 });
+      return evalVoid();
     }
     case "enum_access": {
       return evalOk({
@@ -505,7 +532,7 @@ export function evaluate(
         if (result.kind === "continue") continue;
         if (shouldPropagate(result, "loop")) return result;
       }
-      return evalOk({ kind: "number", value: 0 });
+      return evalVoid();
     }
     case "typecheck": {
       const value = unwrap(evaluate(node.value, env, functions));
@@ -515,9 +542,9 @@ export function evaluate(
           ? node.value.type
           : value.kind === "number" && value.type && isDynamic(value.type)
             ? numeric("I", 32)
-          : value.kind === "null"
-            ? nullType()
-            : value.type;
+            : value.kind === "null"
+              ? nullType()          : value.kind === "void"
+            ? voidType()              : value.type;
       return evalOk({
         kind: "boolean",
         value: typesEqual(resolvedType, node.type),
@@ -526,11 +553,10 @@ export function evaluate(
     }
     case "fn": {
       functions.set(node.name, { params: node.params, body: node.body });
-      return evalOk({ kind: "number", value: 0 });
+      return evalVoid();
     }
     case "call": {
-      if (node.callee.kind !== "identifier")
-        return evalOk({ kind: "number", value: 0 });
+      if (node.callee.kind !== "identifier") return evalVoid();
       const fnDef = functions.get(node.callee.name);
       if (!fnDef) {
         throw new InterpreterError(
@@ -544,7 +570,7 @@ export function evaluate(
     case "method_call": {
       // `receiver.method(args)` — desugar to `method(receiver, ...args)`
       const fnDef = functions.get(node.method);
-      if (!fnDef) return evalOk({ kind: "number", value: 0 });
+      if (!fnDef) return evalVoid();
       // First param is the receiver
       const receiverValue = unwrap(evaluate(node.receiver, env, functions));
       const callEnv = new Map(env);
@@ -575,5 +601,5 @@ export function evaluate(
       );
     }
   }
-  return evalOk({ kind: "number", value: 0 });
+  return evalVoid();
 }

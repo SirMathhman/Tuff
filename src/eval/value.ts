@@ -13,7 +13,8 @@ export type Value =
   | { kind: "struct"; fields: Map<string, Value>; type?: Type }
   | { kind: "tuple"; elements: Value[]; type?: Type }
   | { kind: "enum"; enum: string; variant: string; type?: Type }
-  | { kind: "null"; type?: Type };
+  | { kind: "null"; type?: Type }
+  | { kind: "void" };
 
 /**
  * Result of evaluating an expression.
@@ -54,6 +55,11 @@ export function evalContinue(): EvalResult {
   return { kind: "continue" };
 }
 
+/** Wrap a void (no-op) result. */
+export function evalVoid(): EvalResult {
+  return evalOk({ kind: "void" });
+}
+
 /** Error messages for terminal control-flow results. */
 const TERMINAL_ERRORS: Record<string, string> = {
   break: "Unexpected break outside loop",
@@ -89,6 +95,8 @@ export function toNumber(v: Value): number {
     case "enum":
       throw new InterpreterError("runtime", "Cannot coerce enum to number");
     case "null":
+      return 0;
+    case "void":
       return 0;
   }
 }
