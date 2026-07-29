@@ -35,7 +35,7 @@ function dereferenceAll(
 ): Value {
   let current = value;
   while (current.kind === "pointer") {
-    current = derefOne(current, env, pos);
+    current = derefOne(current, env);
   }
   return current;
 }
@@ -180,6 +180,7 @@ export function evaluate(
         case ">=":
           return evalOk({ kind: "boolean", value: l >= r, type: node.type });
       }
+      break;
     }
     case "identifier": {
       const value = env.get(node.name);

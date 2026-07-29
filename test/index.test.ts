@@ -416,13 +416,15 @@ describe("binary expressions", () => {
   });
 
   test('interpret("match (2) { case 1 => 10; case 2 => 20; case 3 => 30; }") => 20', () => {
-    expect(interpret("match (2) { case 1 => 10; case 2 => 20; case 3 => 30; }")).toBe(
-      20,
-    );
+    expect(
+      interpret("match (2) { case 1 => 10; case 2 => 20; case 3 => 30; }"),
+    ).toBe(20);
   });
 
   test('interpret("match (5) { case 3 => 7; case 2 => 8; }") => Error (no match)', () => {
-    expect(() => interpret("match (5) { case 3 => 7; case 2 => 8; }")).toThrow();
+    expect(() =>
+      interpret("match (5) { case 3 => 7; case 2 => 8; }"),
+    ).toThrow();
   });
 
   // --- Runtime error paths ---
@@ -468,7 +470,9 @@ describe("binary expressions", () => {
   });
 
   test('interpret("struct Foo { x : I32 } let f = Foo { y : 1 };") => Error (unknown struct field)', () => {
-    expect(() => interpret("struct Foo { x : I32 } let f = Foo { y : 1 };")).toThrow();
+    expect(() =>
+      interpret("struct Foo { x : I32 } let f = Foo { y : 1 };"),
+    ).toThrow();
   });
 
   test('interpret("let x = Bar { x : 1 };") => Error (undefined struct)', () => {
