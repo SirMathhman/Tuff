@@ -4,7 +4,6 @@ import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
 import {
   bool,
-  dynamic,
   isDynamic,
   isVoid,
   numeric,
@@ -122,7 +121,7 @@ function resolveLValue(
       };
     }
     case "field": {
-      // Handle `this.field` assignment: directly access env
+      // `this.field` assignment — directly access env
       if (lv.target.kind === "identifier" && lv.target.name === "this") {
         return {
           set: (value: Value) => env.set(lv.field, value),
@@ -297,7 +296,10 @@ export function evaluate(
       return evalOk(value);
     }
     case "this": {
-      return evalOk({ kind: "this" });
+      // `this` should only appear as the target of field_access, which handles
+      // it directly without evaluating this node. If we reach here, it's an
+      // analyzer bug — but the analyzer should have already rejected this.
+      return evalOk({ kind: "number", value: 0 });
     }
     case "array": {
       const elements: Value[] = [];
@@ -345,12 +347,8 @@ export function evaluate(
       return evalOk({ kind: "struct", fields, type: node.type });
     }
     case "field_access": {
-      const target = dereferenceAll(
-        unwrap(evaluate(node.target, env, functions)),
-        env,
-      );
-      if (target.kind === "this") {
-        // `this.field` looks up `field` in the current environment
+      // `this.field` — look up field in the current environment
+      if (node.target.kind === "this") {
         const fieldValue = env.get(node.field);
         if (fieldValue === undefined) {
           throw new InterpreterError(
@@ -361,6 +359,10 @@ export function evaluate(
         }
         return evalOk(fieldValue);
       }
+      const target = dereferenceAll(
+        unwrap(evaluate(node.target, env, functions)),
+        env,
+      );
       if (target.kind !== "struct") {
         throw new InterpreterError(
           "runtime",
@@ -371,7 +373,7 @@ export function evaluate(
       const fieldValue = target.fields.get(node.field)!;
       // Use the pre-computed type from the analyzer for the field access.
       return evalOk({
-        ...(fieldValue as Exclude<Value, { kind: "this" }>),
+        ...fieldValue,
         type: node.type,
       });
     }
@@ -394,11 +396,6 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "assign": {
-      // Skip no-op assignments (e.g., through immutable `this` holders)
-      if (node.noOp) {
-        evaluate(node.value, env, functions);
-        return evalOk({ kind: "number", value: 0 });
-      }
       const value = unwrap(evaluate(node.value, env, functions));
       const loc = resolveLValue(node.target, env, functions, node.pos);
       loc.set(value);
@@ -490,9 +487,7 @@ export function evaluate(
           ? node.value.type
           : value.kind === "number" && value.type && isDynamic(value.type)
             ? numeric("I", 32)
-            : value.kind === "this"
-              ? dynamic()
-              : value.type;
+            : value.type;
       return evalOk({
         kind: "boolean",
         value: typesEqual(resolvedType, node.type),

@@ -10,18 +10,16 @@ describe("this", () => {
     expect(() => interpret("this")).toThrow();
   });
 
-  test('interpret("let x = 100; let temp = this; temp.x") => 100', () => {
-    expect(interpret("let x = 100; let temp = this; temp.x")).toBe(100);
+  test('interpret("let x = 100; let temp = this;") => Error', () => {
+    expect(() => interpret("let x = 100; let temp = this;")).toThrow();
   });
 
   test('interpret("let mut x = 0; this.x = 100; x") => 100', () => {
     expect(interpret("let mut x = 0; this.x = 100; x")).toBe(100);
   });
 
-  test('interpret("let mut x = 0; let temp = this; temp.x = 100; x") => 0', () => {
-    expect(interpret("let mut x = 0; let temp = this; temp.x = 100; x")).toBe(
-      0,
-    );
+  test('interpret("let mut x = 0; let temp = this;") => Error', () => {
+    expect(() => interpret("let mut x = 0; let temp = this;")).toThrow();
   });
 
   test('interpret("let mut x = 0; let temp = &mut this;") => Error', () => {
