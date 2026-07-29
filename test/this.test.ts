@@ -17,4 +17,10 @@ describe("this", () => {
   test('interpret("let mut x = 0; this.x = 100; x") => 100', () => {
     expect(interpret("let mut x = 0; this.x = 100; x")).toBe(100);
   });
+
+  test('interpret("let mut x = 0; let temp = this; temp.x = 100; x") => 0', () => {
+    expect(interpret("let mut x = 0; let temp = this; temp.x = 100; x")).toBe(
+      0,
+    );
+  });
 });

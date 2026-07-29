@@ -394,6 +394,11 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "assign": {
+      // Skip no-op assignments (e.g., through immutable `this` holders)
+      if (node.noOp) {
+        evaluate(node.value, env, functions);
+        return evalOk({ kind: "number", value: 0 });
+      }
       const value = unwrap(evaluate(node.value, env, functions));
       const loc = resolveLValue(node.target, env, functions, node.pos);
       loc.set(value);

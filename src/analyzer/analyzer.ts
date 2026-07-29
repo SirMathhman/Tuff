@@ -127,6 +127,24 @@ function registerDeclaration(
   scope.declarations.set(name, decl);
 }
 
+/**
+ * Detect if an LValue is a no-op assignment target.
+ * An assignment is a no-op when the target is a `field` access on a variable
+ * that holds a `this` value but is not mutable.
+ */
+function isNoOpAssign(lv: LValue, scope: Scope): boolean {
+  if (lv.kind !== "field") return false;
+  if (lv.target.kind === "identifier" && lv.target.name === "this") return false;
+  if (lv.target.kind === "identifier") {
+    const decl = scope.declarations.get(lv.target.name);
+    if (decl && decl.kind === "var" && !decl.mutable) {
+      const valType = decl.type;
+      if (valType.kind === "this") return true;
+    }
+  }
+  return false;
+}
+
 /** Validate mutability of an LValue and resolve its type. */
 function checkLValue(
   lv: LValue,
@@ -155,6 +173,12 @@ function checkLValue(
       // If target is `this`, check the field's mutability in scope
       if (lv.target.kind === "identifier" && lv.target.name === "this") {
         checkMutable(lv.field, scope, pos);
+        return resolveLValueType(lv, scope);
+      }
+      // If target resolves to `this` type (e.g., `let temp = this; temp.x = v`),
+      // this is a no-op assignment — skip mutability checks
+      const targetValType = resolveLValueType(lv.target, scope);
+      if (targetValType.kind === "this") {
         return resolveLValueType(lv, scope);
       }
       // First check the target's mutability (e.g., the variable must be mutable)
@@ -207,6 +231,12 @@ function resolveLValueType(lv: LValue, scope: Scope): Type {
     }
     case "field": {
       const targetType = resolveLValueType(lv.target, scope);
+      // If target is `this` type, look up field in scope declarations
+      if (targetType.kind === "this") {
+        const decl = scope.declarations.get(lv.field);
+        if (decl && decl.kind === "var") return decl.type;
+        return dynamic();
+      }
       if (isStruct(targetType)) {
         const field = targetType.fields.find((f) => f.name === lv.field);
         if (field) return field.type;
@@ -377,7 +407,7 @@ function resolveType(node: AstNode, scope: Scope): Type {
     }
 
     case "this": {
-      node.type = dynamic();
+      node.type = { kind: "this" };
       return node.type;
     }
 
@@ -459,6 +489,13 @@ function resolveType(node: AstNode, scope: Scope): Type {
     }
 
     case "assign": {
+      // Detect no-op: assignment through an immutable `this` holder
+      // e.g., `let temp = this; temp.x = 100` — temp is immutable and holds `this`
+      if (isNoOpAssign(node.target, scope)) {
+        node.noOp = true;
+        resolveType(node.value, scope);
+        return dynamic();
+      }
       // Validate mutability and resolve target type in one pass
       const targetType = checkLValue(node.target, scope, node.pos);
       const valueType = resolveType(node.value, scope);

@@ -48,6 +48,7 @@ export type AstNode =
       kind: "assign";
       target: LValue;
       value: AstNode;
+      noOp?: boolean;
       pos?: TokenPos;
     }
   | { kind: "block"; statements: AstNode[]; type?: Type; pos?: TokenPos }

@@ -82,6 +82,11 @@ export interface UnresolvedType {
   typeArgs?: Type[];
 }
 
+/** `this` type — refers to the current scope. Assignments through immutable `this` holders are no-ops. */
+export interface ThisType {
+  kind: "this";
+}
+
 /** All possible types in the Tuff language. */
 export type Type =
   | NumericType
@@ -95,7 +100,8 @@ export type Type =
   | EnumType
   | UnionType
   | TypeParamType
-  | UnresolvedType;
+  | UnresolvedType
+  | ThisType;
 
 /** Construct a numeric type. */
 export function numeric(prefix: "U" | "I" | "F", bits: number): NumericType {
