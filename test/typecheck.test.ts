@@ -74,18 +74,18 @@ describe("typecheck expressions", () => {
     expect(interpret("let temp : I32 | Bool = 100; temp")).toBe(100);
   });
 
-  test('interpret("type NullablePtr<T> = &T | Null; let x = 1; let ptr : NullablePtr<I32> = &x; *ptr") => 1', () => {
+  test('interpret("type NullablePtr<T> = &T | Null; let x = 1; let ptr : NullablePtr<I32> = &x; if (ptr is &I32) { *ptr } else { 0 }") => 1', () => {
     expect(
       interpret(
-        "type NullablePtr<T> = &T | Null; let x = 1; let ptr : NullablePtr<I32> = &x; *ptr",
+        "type NullablePtr<T> = &T | Null; let x = 1; let ptr : NullablePtr<I32> = &x; if (ptr is &I32) { *ptr } else { 0 }",
       ),
     ).toBe(1);
   });
 
-  test('interpret("type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; let x = 1; let y : &I32 = &x; let ptr2 : NullablePtr<I32> = y; *ptr2") => 1', () => {
+  test('interpret("type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; let x = 1; let y : &I32 = &x; let ptr2 : NullablePtr<I32> = y; if (ptr2 is &I32) { *ptr2 } else { 0 }") => 1', () => {
     expect(
       interpret(
-        "type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; let x = 1; let y : &I32 = &x; let ptr2 : NullablePtr<I32> = y; *ptr2",
+        "type NullablePtr<T> = &T | Null; let ptr : NullablePtr<I32> = null; let x = 1; let y : &I32 = &x; let ptr2 : NullablePtr<I32> = y; if (ptr2 is &I32) { *ptr2 } else { 0 }",
       ),
     ).toBe(1);
   });

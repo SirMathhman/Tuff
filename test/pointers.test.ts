@@ -37,4 +37,33 @@ describe("pointers", () => {
   test('interpret("let x = 1; &x[0]") => Error (ref index)', () => {
     expect(() => interpret("let x = 1; &x[0]")).toThrow();
   });
+
+  // Union with Null must be narrowed before dereferencing
+  test('interpret("type P = &I32 | Null; let x = 42; let p : P = &x; *p") => Error (deref union with null)', () => {
+    expect(() =>
+      interpret("type P = &I32 | Null; let x = 42; let p : P = &x; *p"),
+    ).toThrow();
+  });
+
+  test('interpret("type P = &I32 | Null; let p : P = null; *p") => Error (deref union with null)', () => {
+    expect(() =>
+      interpret("type P = &I32 | Null; let p : P = null; *p"),
+    ).toThrow();
+  });
+
+  test('interpret("type P = &I32 | Null; let x = 42; let p : P = &x; if (p is &I32) { *p } else { 0 }") => 42', () => {
+    expect(
+      interpret(
+        "type P = &I32 | Null; let x = 42; let p : P = &x; if (p is &I32) { *p } else { 0 }",
+      ),
+    ).toBe(42);
+  });
+
+  test('interpret("type P = &I32 | Null; let p : P = null; if (p is &I32) { 1 } else { 2 }") => 2', () => {
+    expect(
+      interpret(
+        "type P = &I32 | Null; let p : P = null; if (p is &I32) { 1 } else { 2 }",
+      ),
+    ).toBe(2);
+  });
 });
