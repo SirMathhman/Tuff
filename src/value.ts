@@ -38,7 +38,7 @@ export function unwrap(result: EvalResult): Value {
   return result.value;
 }
 
-/** Coerce a value to a number. Booleans become 1/0. */
+/** Coerce a value to a number. Booleans become 1/0. Throws for non-coercible types. */
 export function toNumber(v: Value): number {
   switch (v.kind) {
     case "number":
@@ -46,10 +46,10 @@ export function toNumber(v: Value): number {
     case "boolean":
       return v.value ? 1 : 0;
     case "pointer":
-      return 0;
+      throw new InterpreterError("runtime", "Cannot coerce pointer to number");
     case "array":
-      return 0;
+      throw new InterpreterError("runtime", "Cannot coerce array to number");
     case "struct":
-      return 0;
+      throw new InterpreterError("runtime", "Cannot coerce struct to number");
   }
 }

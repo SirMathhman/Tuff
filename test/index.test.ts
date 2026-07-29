@@ -410,6 +410,84 @@ describe("binary expressions", () => {
       interpret("let x = match (3) { case 3 => 7; case _ => 4; }; x"),
     ).toBe(7);
   });
+
+  test('interpret("match (5) { case 3 => 7; case _ => 4; }") => 4 (wildcard not first)', () => {
+    expect(interpret("match (5) { case 3 => 7; case _ => 4; }")).toBe(4);
+  });
+
+  test('interpret("match (2) { case 1 => 10; case 2 => 20; case 3 => 30; }") => 20', () => {
+    expect(interpret("match (2) { case 1 => 10; case 2 => 20; case 3 => 30; }")).toBe(
+      20,
+    );
+  });
+
+  test('interpret("match (5) { case 3 => 7; case 2 => 8; }") => Error (no match)', () => {
+    expect(() => interpret("match (5) { case 3 => 7; case 2 => 8; }")).toThrow();
+  });
+
+  // --- Runtime error paths ---
+
+  test('interpret("1 / 2") => 0.5 (division)', () => {
+    expect(interpret("1 / 2")).toBe(0.5);
+  });
+
+  test('interpret("let x = [1, 2]; x[99]") => Error (out of bounds)', () => {
+    expect(() => interpret("let x = [1, 2]; x[99]")).toThrow();
+  });
+
+  test('interpret("5[0]") => Error (index non-array)', () => {
+    expect(() => interpret("5[0]")).toThrow();
+  });
+
+  test('interpret("struct Point { x : I32 } let p = Point { x : 1 }; p.z") => Error (unknown field)', () => {
+    expect(() =>
+      interpret("struct Point { x : I32 } let p = Point { x : 1 }; p.z"),
+    ).toThrow();
+  });
+
+  test('interpret("let x = 1; x.y") => Error (field on non-struct)', () => {
+    expect(() => interpret("let x = 1; x.y")).toThrow();
+  });
+
+  test('interpret("undefinedFn()") => Error (undefined function)', () => {
+    expect(() => interpret("undefinedFn()")).toThrow();
+  });
+
+  // --- Analyzer error paths ---
+
+  test('interpret("&1") => Error (ref non-identifier)', () => {
+    expect(() => interpret("&1")).toThrow();
+  });
+
+  test('interpret("*5") => Error (deref non-pointer)', () => {
+    expect(() => interpret("*5")).toThrow();
+  });
+
+  test('interpret("let x = 1; &x[0]") => Error (ref index)', () => {
+    expect(() => interpret("let x = 1; &x[0]")).toThrow();
+  });
+
+  test('interpret("struct Foo { x : I32 } let f = Foo { y : 1 };") => Error (unknown struct field)', () => {
+    expect(() => interpret("struct Foo { x : I32 } let f = Foo { y : 1 };")).toThrow();
+  });
+
+  test('interpret("let x = Bar { x : 1 };") => Error (undefined struct)', () => {
+    expect(() => interpret("let x = Bar { x : 1 };")).toThrow();
+  });
+
+  test('interpret("let x = 0; let y = &x; y") => Error (pointer not coercible)', () => {
+    expect(() => interpret("let x = 0; let y = &x; y")).toThrow();
+  });
+
+  test('interpret("let x = [1, 2, 3]; x") => Error (array not coercible)', () => {
+    expect(() => interpret("let x = [1, 2, 3]; x")).toThrow();
+  });
+
+  test('interpret("struct Empty {} let empty = Empty {}; empty") => Error (struct not coercible)', () => {
+    expect(() =>
+      interpret("struct Empty {} let empty = Empty {}; empty"),
+    ).toThrow();
+  });
 });
 
 describe("error positions", () => {

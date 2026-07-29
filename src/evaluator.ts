@@ -19,21 +19,12 @@ function isBlockWithVoidType(
   );
 }
 
-/** Dereference a single pointer level, throwing if target is undefined. */
+/** Dereference a single pointer level. */
 function derefOne(
   ptr: { kind: "pointer"; target: string },
   env: Map<string, Value>,
-  pos?: { line: number; column: number },
 ): Value {
-  const value = env.get(ptr.target);
-  if (value === undefined) {
-    throw new InterpreterError(
-      "runtime",
-      `Dereferenced pointer to undefined variable: ${ptr.target}`,
-      pos,
-    );
-  }
-  return value;
+  return env.get(ptr.target)!;
 }
 
 /** Recursively dereference all pointer levels until reaching a non-pointer value. */
@@ -154,10 +145,9 @@ export function evaluate(
             kind: "pointer";
             target: string;
           };
-          return evalOk(derefOne(ptr, env, node.pos));
+          return evalOk(derefOne(ptr, env));
         }
       }
-      break;
     }
     case "binary": {
       const left = unwrap(evaluate(node.left, env, functions));
@@ -190,7 +180,6 @@ export function evaluate(
         case ">=":
           return evalOk({ kind: "boolean", value: l >= r, type: node.type });
       }
-      break;
     }
     case "identifier": {
       const value = env.get(node.name);
@@ -233,15 +222,7 @@ export function evaluate(
           node.pos,
         );
       }
-      const fieldValue = target.fields.get(node.field);
-      if (fieldValue === undefined) {
-        throw new InterpreterError(
-          "runtime",
-          `Unknown field '${node.field}'`,
-          node.pos,
-        );
-      }
-      return evalOk(fieldValue);
+      return evalOk(target.fields.get(node.field)!);
     }
     case "index": {
       const target = dereferenceAll(
