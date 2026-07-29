@@ -70,8 +70,6 @@ export function unwrap(result: EvalResult): Value {
   return result.value;
 }
 
-
-
 /** Coerce a value to a number. Booleans become 1/0. Throws for non-coercible types. */
 export function toNumber(v: Value): number {
   switch (v.kind) {

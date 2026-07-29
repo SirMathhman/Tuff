@@ -115,7 +115,8 @@ function resolveLValue(
     }
     case "deref": {
       const ptr = unwrap(evaluate(lv.operand, env, functions));
-      if (ptr.kind !== "pointer") return { set: () => {}, get: () => ({ kind: "number", value: 0 }) };
+      if (ptr.kind !== "pointer")
+        return { set: () => {}, get: () => ({ kind: "number", value: 0 }) };
       return {
         set: (value: Value) => env.set(ptr.target, value),
         get: () => env.get(ptr.target)!,
@@ -187,7 +188,8 @@ export function evaluate(
         }
         case "&":
         case "&mut": {
-          if (node.operand.kind !== "identifier") return evalOk({ kind: "number", value: 0 });
+          if (node.operand.kind !== "identifier")
+            return evalOk({ kind: "number", value: 0 });
           return evalOk({
             kind: "pointer",
             target: node.operand.name,
@@ -196,7 +198,8 @@ export function evaluate(
         }
         case "*": {
           const ptr = unwrap(unaryOperand);
-          if (ptr.kind !== "pointer") return evalOk({ kind: "number", value: 0 });
+          if (ptr.kind !== "pointer")
+            return evalOk({ kind: "number", value: 0 });
           return evalOk(derefOne(ptr, env));
         }
       }
@@ -348,10 +351,17 @@ export function evaluate(
       return evalOk({ kind: "struct", fields, type: node.type });
     }
     case "field_access": {
-      // `this.field` — look up field in the current environment
+      // `this.field` — look up field in the `this` struct value, or fall back to env
       if (node.target.kind === "this") {
+        const thisValue = env.get("this");
+        if (thisValue?.kind === "struct") {
+          const fieldValue = thisValue.fields.get(node.field);
+          if (fieldValue !== undefined) return evalOk(fieldValue);
+        }
+        // Fallback: look up in environment (for non-struct `this`)
         const fieldValue = env.get(node.field);
-        if (fieldValue === undefined) return evalOk({ kind: "number", value: 0 });
+        if (fieldValue === undefined)
+          return evalOk({ kind: "number", value: 0 });
         return evalOk(fieldValue);
       }
       const target = dereferenceAll(
@@ -494,7 +504,8 @@ export function evaluate(
       return evalOk({ kind: "number", value: 0 });
     }
     case "call": {
-      if (node.callee.kind !== "identifier") return evalOk({ kind: "number", value: 0 });
+      if (node.callee.kind !== "identifier")
+        return evalOk({ kind: "number", value: 0 });
       const fnDef = functions.get(node.callee.name);
       if (!fnDef) {
         throw new InterpreterError(

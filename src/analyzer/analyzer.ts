@@ -776,13 +776,7 @@ function resolveType(node: AstNode, scope: Scope): Type {
           typeParams:
             callTypeParams.size > 0 ? callTypeParams : scope.typeParams,
         };
-        checkCallArgs(
-          node.args,
-          params,
-          scope,
-          callScope,
-          0,
-        );
+        checkCallArgs(node.args, params, scope, callScope, 0);
         // Resolve return type with type param substitutions
         return resolveTypeNode(decl.returnType, callScope);
       }
@@ -805,16 +799,11 @@ function resolveType(node: AstNode, scope: Scope): Type {
         // Type-check receiver against first param
         const receiverType = resolveType(node.receiver, scope);
         if (params[0]) {
-          checkAssignable(receiverType, params[0].type, node.pos);
+          const resolvedParamType = resolveTypeNode(params[0].type, scope);
+          checkAssignable(receiverType, resolvedParamType, node.pos);
         }
         // Type-check remaining args
-        checkCallArgs(
-          node.args,
-          params,
-          scope,
-          scope,
-          1,
-        );
+        checkCallArgs(node.args, params, scope, scope, 1);
         return resolveTypeNode(decl.returnType, scope);
       }
       return dynamic();
@@ -932,11 +921,7 @@ function checkCallArgs(
     const argType = resolveType(arg, scope);
     const param = params[i + offset];
     if (param && param.type) {
-      checkAssignable(
-        argType,
-        resolveTypeNode(param.type, callScope),
-        arg.pos,
-      );
+      checkAssignable(argType, resolveTypeNode(param.type, callScope), arg.pos);
     }
   }
 }

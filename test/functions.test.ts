@@ -39,9 +39,9 @@ describe("functions", () => {
   });
 
   test('interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()") => 101', () => {
-    expect(
-      interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()"),
-    ).toBe(101);
+    expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(
+      101,
+    );
   });
 
   test('interpret("fn foo(x : U8, x : U16) => x") => Error (duplicate param)', () => {
@@ -68,5 +68,13 @@ describe("functions", () => {
 
   test('interpret("fn pass<T>(value : T) => value; pass(100)") => 100', () => {
     expect(interpret("fn pass<T>(value : T) => value; pass(100)")).toBe(100);
+  });
+
+  test('interpret("struct Counter { value : I32 } fn increment(this : Counter) => this.value + 1; let c = Counter { value : 10 }; c.increment()") => 11', () => {
+    expect(
+      interpret(
+        "struct Counter { value : I32 } fn increment(this : Counter) => this.value + 1; let c = Counter { value : 10 }; c.increment()",
+      ),
+    ).toBe(11);
   });
 });

@@ -232,13 +232,7 @@ export function isAssignable(source: Type, target: Type): boolean {
   if (isArray(source)) return false;
   if (isStruct(target)) {
     if (!isStruct(source)) return false;
-    if (source.name !== target.name) return false;
-    if (source.fields.length !== target.fields.length) return false;
-    for (let i = 0; i < source.fields.length; i++) {
-      if (!isAssignable(source.fields[i]!.type, target.fields[i]!.type))
-        return false;
-    }
-    return true;
+    return source.name === target.name;
   }
   if (isStruct(source)) return false;
   if (isTuple(target)) {
