@@ -1,5 +1,5 @@
 import type { AstNode, LValue } from "../core/ast";
-import type { StructType, Type } from "../core/types";
+import type { Declaration, Scope, StructType, Type } from "../core/types";
 import { getOperatorCategory, TYPE_SUFFIXES } from "../core/grammar";
 import { InterpreterError } from "../core/error";
 import {
@@ -23,10 +23,7 @@ import {
   voidType,
   widen,
 } from "../core/types";
-import {
-  extractNarrowing,
-  narrowedScope,
-} from "../core/narrowing";
+import { extractNarrowing, narrowedScope } from "../core/narrowing";
 
 /**
  * Semantic analysis stage: resolves all type information onto AST nodes,
@@ -75,34 +72,6 @@ function getOrInstantiateStruct(
   );
   instantiatedStructs.set(key, instType);
   return instType;
-}
-/** A variable declaration in the symbol table. */
-interface VarDeclaration {
-  kind: "var";
-  type: Type;
-  mutable: boolean;
-  typeParams?: string[];
-}
-
-/** A function declaration in the symbol table. */
-interface FnDeclaration {
-  kind: "fn";
-  returnType: Type;
-  params: { name: string; type: Type }[];
-  typeParams?: string[];
-}
-
-/** A declaration in the symbol table (variable or function). */
-type Declaration = VarDeclaration | FnDeclaration;
-
-/**
- * Analysis scope: bundles declarations with optional type param bindings.
- * Threading a single object through recursive calls avoids parameter drift
- * and makes it impossible to forget type param context.
- */
-export interface Scope {
-  declarations: Map<string, Declaration>;
-  typeParams?: Map<string, Type>;
 }
 
 /** Check that a variable is mutable, throwing a type error if not. */

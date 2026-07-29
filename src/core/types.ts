@@ -364,3 +364,32 @@ export function typesEqual(a: Type | undefined, b: Type): boolean {
     return a.length === b.length && typesEqual(a.inner, b.inner);
   return false;
 }
+
+/** A variable declaration in the symbol table. */
+export interface VarDeclaration {
+  kind: "var";
+  type: Type;
+  mutable: boolean;
+  typeParams?: string[];
+}
+
+/** A function declaration in the symbol table. */
+export interface FnDeclaration {
+  kind: "fn";
+  returnType: Type;
+  params: { name: string; type: Type }[];
+  typeParams?: string[];
+}
+
+/** A declaration in the symbol table (variable or function). */
+export type Declaration = VarDeclaration | FnDeclaration;
+
+/**
+ * Analysis scope: bundles declarations with optional type param bindings.
+ * Threading a single object through recursive calls avoids parameter drift
+ * and makes it impossible to forget type param context.
+ */
+export interface Scope {
+  declarations: Map<string, Declaration>;
+  typeParams?: Map<string, Type>;
+}

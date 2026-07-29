@@ -4,9 +4,8 @@ import {
   computeNegativeType,
   narrowedScope,
 } from "../src/core/narrowing";
-import type { Scope } from "../src/analyzer/analyzer";
+import type { Scope, Type } from "../src/core/types";
 import type { AstNode } from "../src/core/ast";
-import type { Type } from "../src/core/types";
 import {
   pointer,
   nullType,
@@ -76,9 +75,7 @@ describe("extractNarrowing", () => {
 
   test("typecheck on non-union variable returns narrowing with original negative", () => {
     const scope = makeScope(
-      new Map([
-        ["x", { kind: "var", type: numeric("I", 32), mutable: false }],
-      ]),
+      new Map([["x", { kind: "var", type: numeric("I", 32), mutable: false }]]),
     );
     const node: AstNode = {
       kind: "typecheck",
@@ -107,11 +104,7 @@ describe("computeNegativeType", () => {
   });
 
   test("returns union when multiple variants remain", () => {
-    const original = unionType([
-      pointer(numeric("I", 32)),
-      nullType(),
-      bool(),
-    ]);
+    const original = unionType([pointer(numeric("I", 32)), nullType(), bool()]);
     const positive = bool();
     const result = computeNegativeType(original, positive);
     expect(result.kind).toBe("union");
@@ -139,7 +132,14 @@ describe("narrowedScope", () => {
   test("creates new scope with narrowed variable", () => {
     const base = makeScope(
       new Map([
-        ["ptr", { kind: "var", type: unionType([pointer(numeric("I", 32)), nullType()]), mutable: false }],
+        [
+          "ptr",
+          {
+            kind: "var",
+            type: unionType([pointer(numeric("I", 32)), nullType()]),
+            mutable: false,
+          },
+        ],
       ]),
     );
     const result = narrowedScope(base, "ptr", pointer(numeric("I", 32)));
@@ -151,7 +151,14 @@ describe("narrowedScope", () => {
   test("does not mutate base scope", () => {
     const base = makeScope(
       new Map([
-        ["ptr", { kind: "var", type: unionType([pointer(numeric("I", 32)), nullType()]), mutable: false }],
+        [
+          "ptr",
+          {
+            kind: "var",
+            type: unionType([pointer(numeric("I", 32)), nullType()]),
+            mutable: false,
+          },
+        ],
       ]),
     );
     narrowedScope(base, "ptr", pointer(numeric("I", 32)));
@@ -162,7 +169,10 @@ describe("narrowedScope", () => {
   test("preserves other declarations", () => {
     const base = makeScope(
       new Map([
-        ["ptr", { kind: "var", type: pointer(numeric("I", 32)), mutable: false }],
+        [
+          "ptr",
+          { kind: "var", type: pointer(numeric("I", 32)), mutable: false },
+        ],
         ["x", { kind: "var", type: numeric("I", 32), mutable: false }],
       ]),
     );

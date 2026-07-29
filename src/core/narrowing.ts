@@ -9,8 +9,7 @@
  */
 
 import type { AstNode } from "./ast";
-import type { Scope } from "../analyzer/analyzer";
-import type { Type } from "./types";
+import type { Scope, Type } from "./types";
 import { dynamic, isUnion, typesEqual, unionType } from "./types";
 
 /** Describes how a variable is narrowed in a branch. */
@@ -60,10 +59,7 @@ function extractTypecheckNarrowing(
  * Compute the negative type: original type minus the positive type.
  * For unions, removes the matching variant. Returns dynamic() if empty.
  */
-export function computeNegativeType(
-  original: Type,
-  positive: Type,
-): Type {
+export function computeNegativeType(original: Type, positive: Type): Type {
   if (isUnion(original)) {
     const remaining = original.variants.filter((v) => !typesEqual(v, positive));
     if (remaining.length === 0) return dynamic();
