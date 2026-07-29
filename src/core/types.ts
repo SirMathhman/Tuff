@@ -353,9 +353,14 @@ export function typesEqual(a: Type | undefined, b: Type): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "bool") return true;
   if (a.kind === "void") return true;
+  if (a.kind === "null") return true;
   if (a.kind === "dynamic") return b.kind === "dynamic";
   if (isNumeric(a) && isNumeric(b))
     return a.prefix === b.prefix && a.bits === b.bits;
   if (a.kind === "struct" && b.kind === "struct") return structsEqual(a, b);
+  if (a.kind === "pointer" && b.kind === "pointer")
+    return a.mutable === b.mutable && typesEqual(a.inner, b.inner);
+  if (a.kind === "array" && b.kind === "array")
+    return a.length === b.length && typesEqual(a.inner, b.inner);
   return false;
 }

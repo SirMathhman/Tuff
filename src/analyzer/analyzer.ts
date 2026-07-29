@@ -23,6 +23,10 @@ import {
   voidType,
   widen,
 } from "../core/types";
+import {
+  extractNarrowing,
+  narrowedScope,
+} from "../core/narrowing";
 
 /**
  * Semantic analysis stage: resolves all type information onto AST nodes,
@@ -96,7 +100,7 @@ type Declaration = VarDeclaration | FnDeclaration;
  * Threading a single object through recursive calls avoids parameter drift
  * and makes it impossible to forget type param context.
  */
-interface Scope {
+export interface Scope {
   declarations: Map<string, Declaration>;
   typeParams?: Map<string, Type>;
 }
@@ -533,25 +537,15 @@ function resolveType(node: AstNode, scope: Scope): Type {
 
     case "if": {
       resolveType(node.condition, scope);
-      // If condition is a typecheck (`x is T`), narrow the variable in the then-branch
-      let thenScope = scope;
-      if (node.condition.kind === "typecheck") {
-        const checked = node.condition.value;
-        if (checked.kind === "identifier") {
-          const narrowedType = resolveTypeNode(node.condition.type, scope);
-          thenScope = {
-            declarations: new Map(scope.declarations),
-            typeParams: scope.typeParams,
-          };
-          thenScope.declarations.set(checked.name, {
-            kind: "var",
-            type: narrowedType,
-            mutable: false,
-          });
-        }
-      }
+      const narrowing = extractNarrowing(node.condition, scope);
+      const thenScope = narrowing
+        ? narrowedScope(scope, narrowing.variable, narrowing.positiveType)
+        : scope;
+      const elseScope = narrowing
+        ? narrowedScope(scope, narrowing.variable, narrowing.negativeType)
+        : scope;
       const thenType = resolveType(node.then, thenScope);
-      const elseType = resolveType(node.elseBranch, scope);
+      const elseType = resolveType(node.elseBranch, elseScope);
       return widen(thenType, elseType);
     }
 
@@ -562,7 +556,11 @@ function resolveType(node: AstNode, scope: Scope): Type {
 
     case "while": {
       resolveType(node.condition, scope);
-      for (const stmt of node.body) resolveType(stmt, scope);
+      const narrowing = extractNarrowing(node.condition, scope);
+      const bodyScope = narrowing
+        ? narrowedScope(scope, narrowing.variable, narrowing.positiveType)
+        : scope;
+      for (const stmt of node.body) resolveType(stmt, bodyScope);
       return dynamic();
     }
 
