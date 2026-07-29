@@ -61,21 +61,30 @@ class Parser {
     return this.consume()!;
   }
 
+  /**
+   * Parse the next statement using the provided parser function.
+   * Throws if no tokens were consumed (no progress).
+   */
+  private parseNext(fn: () => AstNode): AstNode {
+    const prevPos = this.pos;
+    const result = fn();
+    if (prevPos === this.pos) {
+      const t = this.peek();
+      throw new InterpreterError(
+        "parse",
+        `Unexpected token '${t?.value ?? "EOF"}'`,
+        t?.pos ?? { line: 1, column: 1 },
+      );
+    }
+    return result;
+  }
+
   /* ---- public entry point ---- */
 
   parse(): AstNode {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length) {
-      const prevPos = this.pos;
-      statements.push(this.parseTopLevelStatement());
-      if (prevPos === this.pos) {
-        const t = this.peek();
-        throw new InterpreterError(
-          "parse",
-          `Unexpected token '${t?.value ?? "EOF"}'`,
-          t?.pos ?? { line: 1, column: 1 },
-        );
-      }
+      statements.push(this.parseNext(() => this.parseTopLevelStatement()));
     }
     if (statements.length === 0) return { kind: "number", value: 0 };
     if (statements.length === 1) return statements[0]!;
@@ -100,17 +109,7 @@ class Parser {
   private collectUntilBrace(): AstNode[] {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length && !this.match("group", "}")) {
-      const prevPos = this.pos;
-      const stmt = this.parseStatement();
-      if (prevPos === this.pos) {
-        const t = this.peek();
-        throw new InterpreterError(
-          "parse",
-          `Unexpected token '${t?.value ?? "EOF"}'`,
-          t?.pos ?? { line: 1, column: 1 },
-        );
-      }
-      statements.push(stmt);
+      statements.push(this.parseNext(() => this.parseStatement()));
     }
     this.expect("group", "}");
     return statements;
