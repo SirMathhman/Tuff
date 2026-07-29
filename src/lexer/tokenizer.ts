@@ -1,4 +1,4 @@
-import { TYPE_SUFFIXES } from "./grammar";
+import { TYPE_SUFFIXES } from "../core/grammar";
 
 export type TokenPos = { line: number; column: number };
 

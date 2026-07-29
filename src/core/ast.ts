@@ -1,5 +1,5 @@
 import type { BinaryOp } from "./grammar";
-import type { TokenPos } from "./tokenizer";
+import type { TokenPos } from "../lexer/tokenizer";
 import type { Type } from "./types";
 
 /**

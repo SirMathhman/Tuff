@@ -2,8 +2,8 @@
  * Runtime value types for the Tuff interpreter.
  * A discriminated union that replaces the raw `number` encoding.
  */
-import type { Type } from "./types";
-import { InterpreterError } from "./error";
+import type { Type } from "../core/types";
+import { InterpreterError } from "../core/error";
 
 export type Value =
   | { kind: "number"; value: number; type?: Type }

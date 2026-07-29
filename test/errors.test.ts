@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { interpret } from "../src";
-import { InterpreterError } from "../src/error";
+import { InterpreterError } from "../src/core/error";
 
 describe("type compatibility errors", () => {
   test('interpret("(100U8 + 100I8) is I16") => 1', () => {

@@ -1,8 +1,8 @@
-import type { AstNode, LValue } from "./ast";
-import type { Type } from "./types";
+import type { AstNode, LValue } from "../core/ast";
+import type { Type } from "../core/types";
 import type { EvalResult, Value } from "./value";
-import { InterpreterError } from "./error";
-import { bool, isDynamic, isVoid, numeric, typesEqual } from "./types";
+import { InterpreterError } from "../core/error";
+import { bool, isDynamic, isVoid, numeric, typesEqual } from "../core/types";
 import {
   evalBreak,
   evalContinue,
@@ -182,7 +182,11 @@ export function evaluate(
               type: node.type,
             });
           }
-          return evalOk({ kind: "boolean", value: toNumber(left) === toNumber(right), type: node.type });
+          return evalOk({
+            kind: "boolean",
+            value: toNumber(left) === toNumber(right),
+            type: node.type,
+          });
         case "!=":
           if (left.kind === "enum" && right.kind === "enum") {
             return evalOk({
@@ -191,27 +195,63 @@ export function evaluate(
               type: node.type,
             });
           }
-          return evalOk({ kind: "boolean", value: toNumber(left) !== toNumber(right), type: node.type });
+          return evalOk({
+            kind: "boolean",
+            value: toNumber(left) !== toNumber(right),
+            type: node.type,
+          });
         case "+":
-          return evalOk({ kind: "number", value: toNumber(left) + toNumber(right), type: node.type });
+          return evalOk({
+            kind: "number",
+            value: toNumber(left) + toNumber(right),
+            type: node.type,
+          });
         case "-":
-          return evalOk({ kind: "number", value: toNumber(left) - toNumber(right), type: node.type });
+          return evalOk({
+            kind: "number",
+            value: toNumber(left) - toNumber(right),
+            type: node.type,
+          });
         case "*":
-          return evalOk({ kind: "number", value: toNumber(left) * toNumber(right), type: node.type });
+          return evalOk({
+            kind: "number",
+            value: toNumber(left) * toNumber(right),
+            type: node.type,
+          });
         case "/":
-          return evalOk({ kind: "number", value: toNumber(left) / toNumber(right), type: node.type });
+          return evalOk({
+            kind: "number",
+            value: toNumber(left) / toNumber(right),
+            type: node.type,
+          });
         case "||":
           return evalOk(toNumber(left) !== 0 ? left : right);
         case "&&":
           return evalOk(toNumber(left) !== 0 ? right : left);
         case "<":
-          return evalOk({ kind: "boolean", value: toNumber(left) < toNumber(right), type: node.type });
+          return evalOk({
+            kind: "boolean",
+            value: toNumber(left) < toNumber(right),
+            type: node.type,
+          });
         case ">":
-          return evalOk({ kind: "boolean", value: toNumber(left) > toNumber(right), type: node.type });
+          return evalOk({
+            kind: "boolean",
+            value: toNumber(left) > toNumber(right),
+            type: node.type,
+          });
         case "<=":
-          return evalOk({ kind: "boolean", value: toNumber(left) <= toNumber(right), type: node.type });
+          return evalOk({
+            kind: "boolean",
+            value: toNumber(left) <= toNumber(right),
+            type: node.type,
+          });
         case ">=":
-          return evalOk({ kind: "boolean", value: toNumber(left) >= toNumber(right), type: node.type });
+          return evalOk({
+            kind: "boolean",
+            value: toNumber(left) >= toNumber(right),
+            type: node.type,
+          });
       }
       break;
     }

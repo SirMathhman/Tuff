@@ -1,11 +1,11 @@
-import type { AstNode, LValue } from "./ast";
-import type { Token, TokenPos } from "./tokenizer";
-import type { BinaryOp } from "./grammar";
-import type { Type } from "./types";
-import { OPENING, PRECEDENCE } from "./grammar";
-import { InterpreterError } from "./error";
-import { arrayType, dynamic, parseTypeName, pointer, tupleType } from "./types";
-import { isIdentifierToken, isNumberToken } from "./tokenizer";
+import type { AstNode, LValue } from "../core/ast";
+import type { Token, TokenPos } from "../lexer/tokenizer";
+import type { BinaryOp } from "../core/grammar";
+import type { Type } from "../core/types";
+import { OPENING, PRECEDENCE } from "../core/grammar";
+import { InterpreterError } from "../core/error";
+import { arrayType, dynamic, parseTypeName, pointer, tupleType } from "../core/types";
+import { isIdentifierToken, isNumberToken } from "../lexer/tokenizer";
 
 /**
  * Recursive-descent parser for the Tuff language.

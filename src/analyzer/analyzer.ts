@@ -1,7 +1,7 @@
-import type { AstNode, LValue } from "./ast";
-import type { Type } from "./types";
-import { getOperatorCategory, TYPE_SUFFIXES } from "./grammar";
-import { InterpreterError } from "./error";
+import type { AstNode, LValue } from "../core/ast";
+import type { Type } from "../core/types";
+import { getOperatorCategory, TYPE_SUFFIXES } from "../core/grammar";
+import { InterpreterError } from "../core/error";
 import {
   arrayType,
   bool,
@@ -17,7 +17,7 @@ import {
   typeName,
   voidType,
   widen,
-} from "./types";
+} from "../core/types";
 
 /**
  * Semantic analysis stage: resolves all type information onto AST nodes,

@@ -6,8 +6,8 @@ import {
   evalYield,
   unwrap,
   type Value,
-} from "../src/value";
-import { isTerminal, shouldPropagate } from "../src/controlflow";
+} from "../src/eval/value";
+import { isTerminal, shouldPropagate } from "../src/eval/controlflow";
 
 const numVal: Value = { kind: "number", value: 1 };
 

@@ -1,8 +1,8 @@
-import { tokenize } from "./tokenizer";
-import { parse } from "./parser";
-import { analyze } from "./analyzer";
-import { evaluate } from "./evaluator";
-import { toNumber, unwrap } from "./value";
+import { tokenize } from "./lexer/tokenizer";
+import { parse } from "./parser/parser";
+import { analyze } from "./analyzer/analyzer";
+import { evaluate } from "./eval/evaluator";
+import { toNumber, unwrap } from "./eval/value";
 
 export function interpret(source: string): number {
   const trimmed = source.trim();

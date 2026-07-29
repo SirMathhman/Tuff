@@ -6,16 +6,16 @@ A test-driven interpreter for the Tuff programming language, built with TypeScri
 
 ```bash
 bun install
-bun test        # Run all tests (with 90% line coverage threshold)
-bun run index.ts  # Run interpreter
+bun run test        # Run all tests (PowerShell wrapper with --only-failures, 90% coverage threshold)
+bun run index.ts    # Run interpreter
 ```
 
 ## Workflow
 
 All features follow this test-driven workflow:
 
-1. Add test case to `test/index.test.ts`
-2. Run `bun test` — confirm it fails
+1. Add test case to the appropriate `test/<feature>.test.ts` file
+2. Run `bun run test` — confirm it fails
 3. Implement the feature
 4. Add logging if needed, iterate until passing
 5. Remove debug logging
@@ -29,6 +29,10 @@ Two hook systems coexist:
 - **`.husky/pre-commit`**: Runs `bun run format` (Prettier only) on git commit.
 - **`.github/hooks/hooks.json`**: AI agent "Stop" hook runs the full pipeline: `test` → `lint` → `cpd`. This is the validation gate for agent sessions.
 
+## Documentation
+
+- **[docs/MISSING_FEATURES.md](docs/MISSING_FEATURES.md)** — Planned features not yet implemented. Check here before adding new language constructs.
+
 ## Architecture
 
 ### Core Pipeline
@@ -38,15 +42,23 @@ Two hook systems coexist:
 ### Source Files (`src/`)
 
 - `index.ts` — Entry point: `interpret(source)` → tokenize → parse → analyze → evaluate → coerce to number
-- `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens. `&` operator with `&&` disambiguation. All tokens carry `pos: TokenPos`.
-- `ast.ts` — `AstNode` discriminated union: number, boolean, binary, unary (`-`, `&`, `&mut`, `*`), identifier, let, assign, augassign, block, if, loop, break, while, typecheck, fn, call, array, index, struct, struct_instantiation, field_access, match
-- `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `grammar.ts`). Postfix `is` and `[index]` handled in `parseUnary`. `tryParseAssign` uses backtracking for `*expr` lookahead.
-- `analyzer.ts` — Single-pass `resolveType()`: bottom-up type resolution, context propagation, symbol table, compatibility validation. All type reasoning lives here (no runtime type checks in evaluator).
-- `evaluator.ts` — `evaluate(node, env)` returns `EvalResult`. Reads pre-computed `node.type` from AST — no type reasoning at runtime.
-- `value.ts` — `Value` discriminated union (number, boolean, pointer, array). `EvalResult` type, `evalOk()`, `evalBreak()`, `unwrap()`, `toNumber()`.
-- `types.ts` — `Type` discriminated union (`NumericType`, `BoolType`, `VoidType`, `DynamicType`, `PointerType`, `ArrayType`). `isAssignable()`, `widen()`, `parseTypeName()`, `typeName()`.
-- `grammar.ts` — `PRECEDENCE` table (5 levels), `BinaryOp` derived type, `OPENING` braces, `TYPE_SUFFIXES`, `OPERATORS` category map.
-- `error.ts` — `InterpreterError` class with `kind: "parse" | "type" | "runtime"` and optional `position`.
+- `core/` — Shared foundational types
+  - `grammar.ts` — `PRECEDENCE` table (5 levels), `BinaryOp` derived type, `OPENING` braces, `TYPE_SUFFIXES`, `OPERATORS` category map
+  - `error.ts` — `InterpreterError` class with `kind: "parse" | "type" | "runtime"` and optional `position`
+  - `types.ts` — `Type` discriminated union (`NumericType`, `BoolType`, `VoidType`, `DynamicType`, `PointerType`, `ArrayType`). `isAssignable()`, `widen()`, `parseTypeName()`, `typeName()`
+  - `ast.ts` — `AstNode` discriminated union: number, boolean, binary, unary (`-`, `&`, `&mut`, `*`), identifier, let, assign, augassign, block, if, loop, break, while, typecheck, fn, call, array, index, struct, struct_instantiation, field_access, match
+- `lexer/` — Tokenization
+  - `tokenizer.ts` — Lexer with keyword/operator/group/identifier/punctuator tokens. `&` operator with `&&` disambiguation. All tokens carry `pos: TokenPos`
+- `parser/` — Parsing
+  - `parser.ts` — `Parser` class with table-driven precedence chain (`parseBinary` iterates `PRECEDENCE` table from `core/grammar.ts`). Postfix `is` and `[index]` handled in `parseUnary`. `tryParseAssign` uses backtracking for `*expr` lookahead
+- `analyzer/` — Type analysis
+  - `analyzer.ts` — Single-pass `resolveType()`: bottom-up type resolution, context propagation, symbol table, compatibility validation. All type reasoning lives here (no runtime type checks in evaluator)
+- `eval/` — Runtime evaluation
+  - `evaluator.ts` — `evaluate(node, env)` returns `EvalResult`. Reads pre-computed `node.type` from AST — no type reasoning at runtime
+  - `value.ts` — `Value` discriminated union (number, boolean, pointer, array). `EvalResult` type, `evalOk()`, `evalBreak()`, `unwrap()`, `toNumber()`
+  - `controlflow.ts` — Terminal control-flow propagation: `TerminalContext` types (`block`/`loop`/`expression`), `TERMINAL_MAP`, `shouldPropagate()`, `isTerminal()`. Enables `break`, `yield`, and `return` to bubble through `EvalResult` without exceptions
+
+Each subdirectory has a barrel `index.ts` that re-exports its public API.
 
 ### Key Conventions
 
@@ -71,13 +83,15 @@ Run in order: prettier → tsc --noEmit → eslint → pmd cpd (50-token minimum
 - **`LValue` is recursive**: Index targets can chain (`arr[i][j]`, `*ptr[i]`). Assignment targets nest through `LValue`, not `AstNode`.
 - **`UnresolvedType`**: Intermediate type state in `types.ts` — placeholder for type names parsed but not yet validated.
 - **Flat `src/` structure**: All source files live flat in `src/` — no subdirectories despite growing feature set.
-- **Single test file**: All tests in `test/index.test.ts`. Tests organized in `describe` blocks with flat structure.
+- **Multiple test files**: Tests are split by feature across `test/*.test.ts` (16+ files). Each imports `{ interpret }` from `../src`.
+- **PowerShell test wrapper**: `bun run test` invokes `scripts/test.ps1` which runs `bun test --coverage --only-failures`. Do not call `bun test` directly.
 - **`tsconfig.json`**: `module: "Preserve"` with `moduleResolution: "bundler"` — Bun-native setup, import paths have no `.ts` extension.
 - **Coverage threshold**: 90% line coverage (`bunfig.toml`), not 100%.
+- **ASI gotcha**: Never format dynamically generated JS with a newline after `return` — Automatic Semicolon Insertion will treat it as `return;`.
 
 ## Testing
 
-All tests in `test/index.test.ts` using `bun:test` framework. Pattern:
+Tests are split by feature across `test/*.test.ts` using `bun:test`. Each file imports `{ interpret }` from `../src`. Pattern:
 
 ```typescript
 test('interpret("source") => expected', () => {
@@ -88,3 +102,24 @@ test('interpret("source") => Error', () => {
   expect(() => interpret("source")).toThrow();
 });
 ```
+
+**Test file mapping:**
+
+| File | Feature |
+|---|---|
+| `arithmetic.test.ts` | `+`, `-`, `*`, `/`, precedence, blocks |
+| `arrays.test.ts` | Array literals, indexing, bounds checking |
+| `assignment.test.ts` | Assignment, augmented assignment |
+| `comparison.test.ts` | `==`, `!=`, `<`, `>`, `<=`, `>=` |
+| `control-flow.test.ts` | `if/else`, `loop`, `break`, `while` |
+| `controlflow.test.ts` | Unit tests for `controlflow.ts` module |
+| `errors.test.ts` | Type compatibility errors, error positions |
+| `functions.test.ts` | `fn` definition, calls, `return` |
+| `literals.test.ts` | Number literals, booleans, type suffixes |
+| `logical.test.ts` | `&&`, `\|\|`, `!` |
+| `match.test.ts` | `match/case` expressions |
+| `pointers.test.ts` | `&`, `&mut`, `*`, pointer assignment |
+| `structs.test.ts` | `struct` definition, instantiation, field access |
+| `tuples.test.ts` | Tuple types, numeric field access |
+| `typecheck.test.ts` | `is` type checking operator |
+| `yield.test.ts` | `yield` in blocks, functions |

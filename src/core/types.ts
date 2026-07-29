@@ -3,7 +3,7 @@
  * Single source of truth for all types, compatibility rules, and parsing.
  */
 
-import type { TokenPos } from "./tokenizer";
+import type { TokenPos } from "../lexer/tokenizer";
 
 /** Numeric type with a prefix (U/I/F) and bit width. */
 export interface NumericType {
