@@ -5,6 +5,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 ## Core Language Features
 
 ### Control Flow
+
 - [ ] `for` loop syntax (`for (let i = 0; i < 10; i += 1) { ... }`)
 - [ ] `continue` statement (skip to next iteration)
 - [ ] `return` statement (early return from functions — currently only expression-based `=> body`)
@@ -12,6 +13,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [ ] `switch` statement (alternative to `match` with fall-through semantics)
 
 ### Type System
+
 - [ ] `enum` type (named constants with optional associated data)
 - [ ] `union` type (`A | B` — type can be one of several types)
 - [ ] `type alias` (`type MyInt = I32`)
@@ -25,6 +27,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [ ] Variance checking (covariant/contravariant type parameters)
 
 ### Data Structures
+
 - [ ] `HashMap` / `Dictionary` type (`{ key: value, ... }` with dynamic keys)
 - [ ] `Tuple` type (`(I32, Bool)`)
 - [ ] `String` literals and concatenation
@@ -33,6 +36,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [ ] Linked list / tree data structures
 
 ### Memory & Ownership
+
 - [ ] `move` semantics (transfer ownership of values)
 - [ ] `borrow` checker (prevent use-after-free, double-free)
 - [ ] `drop` / destructor calls
@@ -44,6 +48,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 ## Operators & Expressions
 
 ### Binary Operators
+
 - [ ] `%` (modulo)
 - [ ] `**` (exponentiation)
 - [ ] `<<` / `>>` (bitwise shift)
@@ -57,11 +62,13 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [ ] `..=` (range assignment)
 
 ### Unary Operators
+
 - [ ] `!` (logical NOT — currently only `!` in `!=`)
 - [ ] `++` / `--` (increment/decrement)
 - [ ] `~` (bitwise NOT)
 
 ### Assignment Operators
+
 - [ ] `*=` (multiply-assign)
 - [ ] `/=` (divide-assign)
 - [ ] `-=` (subtract-assign)
@@ -69,6 +76,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [ ] `<<=` / `>>=` (shift assign)
 
 ### Other Expressions
+
 - [ ] Ternary conditional (`cond ? a : b` — shorthand for `if`)
 - [ ] Spread operator (`...arr` in function calls or arrays)
 - [ ] Comma expression (`a, b, c` — evaluate all, return last)
@@ -78,6 +86,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 ## Functions & Modules
 
 ### Functions
+
 - [ ] Closures (capture environment variables)
 - [ ] Higher-order functions (functions as first-class values)
 - [ ] Currying (`fn add(x) => fn(y) => x + y`)
@@ -90,6 +99,7 @@ Features the Tuff interpreter does not yet have, organized by category.
 - [ ] `inline` hint (suggest inlining)
 
 ### Modules & Imports
+
 - [ ] `module` keyword (namespace declarations)
 - [ ] `import` / `export` (cross-file dependencies)
 - [ ] `use` (re-export / alias)

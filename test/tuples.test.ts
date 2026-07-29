@@ -4,9 +4,7 @@ import { interpret } from "../src";
 describe("tuples", () => {
   test('interpret("let tuple : (I32, I32) = (1, 2); tuple.0 + tuple.1") => 3', () => {
     expect(
-      interpret(
-        "let tuple : (I32, I32) = (1, 2); tuple.0 + tuple.1",
-      ),
+      interpret("let tuple : (I32, I32) = (1, 2); tuple.0 + tuple.1"),
     ).toBe(3);
   });
 

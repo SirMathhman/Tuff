@@ -200,10 +200,7 @@ export function isAssignable(source: Type, target: Type): boolean {
     if (!isTuple(source)) return false;
     if (source.elements.length !== target.elements.length) return false;
     for (let i = 0; i < source.elements.length; i++) {
-      if (
-        !isAssignable(source.elements[i]!, target.elements[i]!)
-      )
-        return false;
+      if (!isAssignable(source.elements[i]!, target.elements[i]!)) return false;
     }
     return true;
   }
@@ -271,8 +268,7 @@ export function typeName(t: Type): string {
   if (t.kind === "pointer") return `&${typeName(t.inner)}`;
   if (t.kind === "array") return `[${typeName(t.inner)}; ${t.length}]`;
   if (t.kind === "struct") return t.name;
-  if (t.kind === "tuple")
-    return `(${t.elements.map(typeName).join(", ")})`;
+  if (t.kind === "tuple") return `(${t.elements.map(typeName).join(", ")})`;
   if (t.kind === "unresolved") return t.name;
   return "dynamic";
 }

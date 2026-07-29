@@ -65,9 +65,6 @@ export function toNumber(v: Value): number {
     case "struct":
       throw new InterpreterError("runtime", "Cannot coerce struct to number");
     case "tuple":
-      throw new InterpreterError(
-        "runtime",
-        "Cannot coerce tuple to number",
-      );
+      throw new InterpreterError("runtime", "Cannot coerce tuple to number");
   }
 }

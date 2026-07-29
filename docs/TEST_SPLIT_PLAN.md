@@ -47,22 +47,22 @@ test/
 
 ## Test File Mapping
 
-| New File | Tests from `binary expressions` | Count |
-|---|---|---|
-| `literals.test.ts` | All from `number literals` + `empty/whitespace` | ~27 |
-| `arithmetic.test.ts` | `1 + 2`, `1 + 2 + 3`, `2 + 3 - 4`, `2 * 3 - 4`, `2 + 3 * 4`, `(2 + 3) * 4`, `(2 + 3) * (1 + 2)`, `{ 2 + 3 } * 4`, `{ let x = 2 + 3; x } * 4`, `let y = { let x = 2 + 3; x } * 4; y`, `{ let a = 1; a } * 2`, `1 / 2` | ~12 |
-| `comparison.test.ts` | `x < y`, `x > y`, `x == y`, `x != y`, `x <= y`, `x >= y` | ~6 |
-| `logical.test.ts` | `x \|\| y`, `x && y` | ~2 |
-| `control-flow.test.ts` | `if` expression, `if` statement, `else if`, `loop`, `break`, nested `loop`, `while` | ~12 |
-| `assignment.test.ts` | `let x = 0; let x = 1`, `let x = 0; x = 1` (error), `let mut x = 1; x += 2`, `let mut x = 0U8; x = 0U16` (error), `let mut x = 0U8; x += 0U16` (error), `let mut x = false; x += true` (error) | ~8 |
-| `typecheck.test.ts` | `5U8 is U8`, `100U8 is U8 is Bool`, `(100U8 is U8 && 100U8 is U8) is Bool`, `true is Bool`, `5U8 is U16`, `5 is I32`, `5 is U8`, `(100) is I32`, `(100 + 1U8) is U8`, `{ let x = 0; } is Void`, `(100U8 + 100I8) is I16`, `let x = 100; x is I32`, `loop { break 100U8; } is U8` | ~13 |
-| `functions.test.ts` | `fn get()`, `fn add()`, `fn get() : U8 => 0U16` (error), `let get = 0; fn get()` (error), `fn get(); fn get()` (error), `fn accept(param : U8) => {} accept(0U16)` (error), `fn foo(x : U8, x : U16)` (error), `fn add(a, b); add(1)` (error), `fn get(); get(1)` (error), `fn get() => 0U16; let x : U8 = get()` (error) | ~10 |
-| `pointers.test.ts` | `&x`, `&mut x`, `*ptr`, `*y = 1`, `*y += 2`, `let mut x = 0; let y = &x; *y = 3` (error), `&1` (error), `*5` (error), `let x = 1; &x[0]` (error) | ~9 |
-| `arrays.test.ts` | `[1, 2, 3]`, `array[0]`, `array[0] = 1`, `array[0] += 2`, `&array; ptr[0]`, `&ptr0; ptr1[0]`, `x[99]` (error), `5[0]` (error) | ~8 |
-| `structs.test.ts` | `struct Empty {}`, `struct Empty { x : I32 }`, `struct Empty { x, y }`, `struct Empty { x, x }` (error), `Point { x, y }; pt.x + pt.y`, `pt : Point = Point {...}`, `p.z` (error), `x.y` (error), `Foo { y : 1 }` (error), `Bar { x : 1 }` (error) | ~10 |
-| `match.test.ts` | `match (3) { case 3 => 7; case _ => 4 }`, `match (5) { case 3 => 7; case _ => 4 }`, `match (2) { case 1 => 10; case 2 => 20; case 3 => 30 }`, `match (5) { case 3 => 7; case 2 => 8 }` (error) | ~4 |
-| `tuples.test.ts` | `tuple.0 + tuple.1`, tuple not coercible, tuple index out of range, tuple access on non-tuple | ~4 |
-| `errors.test.ts` | All from `error positions` + `undefinedIdentifier`, `let x = { let y = 100; }` (error), `let x = 100;` (void), `undefinedFn()`, pointer/array/struct not coercible | ~15 |
+| New File               | Tests from `binary expressions`                                                                                                                                                                                                                                                                                           | Count |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `literals.test.ts`     | All from `number literals` + `empty/whitespace`                                                                                                                                                                                                                                                                           | ~27   |
+| `arithmetic.test.ts`   | `1 + 2`, `1 + 2 + 3`, `2 + 3 - 4`, `2 * 3 - 4`, `2 + 3 * 4`, `(2 + 3) * 4`, `(2 + 3) * (1 + 2)`, `{ 2 + 3 } * 4`, `{ let x = 2 + 3; x } * 4`, `let y = { let x = 2 + 3; x } * 4; y`, `{ let a = 1; a } * 2`, `1 / 2`                                                                                                      | ~12   |
+| `comparison.test.ts`   | `x < y`, `x > y`, `x == y`, `x != y`, `x <= y`, `x >= y`                                                                                                                                                                                                                                                                  | ~6    |
+| `logical.test.ts`      | `x \|\| y`, `x && y`                                                                                                                                                                                                                                                                                                      | ~2    |
+| `control-flow.test.ts` | `if` expression, `if` statement, `else if`, `loop`, `break`, nested `loop`, `while`                                                                                                                                                                                                                                       | ~12   |
+| `assignment.test.ts`   | `let x = 0; let x = 1`, `let x = 0; x = 1` (error), `let mut x = 1; x += 2`, `let mut x = 0U8; x = 0U16` (error), `let mut x = 0U8; x += 0U16` (error), `let mut x = false; x += true` (error)                                                                                                                            | ~8    |
+| `typecheck.test.ts`    | `5U8 is U8`, `100U8 is U8 is Bool`, `(100U8 is U8 && 100U8 is U8) is Bool`, `true is Bool`, `5U8 is U16`, `5 is I32`, `5 is U8`, `(100) is I32`, `(100 + 1U8) is U8`, `{ let x = 0; } is Void`, `(100U8 + 100I8) is I16`, `let x = 100; x is I32`, `loop { break 100U8; } is U8`                                          | ~13   |
+| `functions.test.ts`    | `fn get()`, `fn add()`, `fn get() : U8 => 0U16` (error), `let get = 0; fn get()` (error), `fn get(); fn get()` (error), `fn accept(param : U8) => {} accept(0U16)` (error), `fn foo(x : U8, x : U16)` (error), `fn add(a, b); add(1)` (error), `fn get(); get(1)` (error), `fn get() => 0U16; let x : U8 = get()` (error) | ~10   |
+| `pointers.test.ts`     | `&x`, `&mut x`, `*ptr`, `*y = 1`, `*y += 2`, `let mut x = 0; let y = &x; *y = 3` (error), `&1` (error), `*5` (error), `let x = 1; &x[0]` (error)                                                                                                                                                                          | ~9    |
+| `arrays.test.ts`       | `[1, 2, 3]`, `array[0]`, `array[0] = 1`, `array[0] += 2`, `&array; ptr[0]`, `&ptr0; ptr1[0]`, `x[99]` (error), `5[0]` (error)                                                                                                                                                                                             | ~8    |
+| `structs.test.ts`      | `struct Empty {}`, `struct Empty { x : I32 }`, `struct Empty { x, y }`, `struct Empty { x, x }` (error), `Point { x, y }; pt.x + pt.y`, `pt : Point = Point {...}`, `p.z` (error), `x.y` (error), `Foo { y : 1 }` (error), `Bar { x : 1 }` (error)                                                                        | ~10   |
+| `match.test.ts`        | `match (3) { case 3 => 7; case _ => 4 }`, `match (5) { case 3 => 7; case _ => 4 }`, `match (2) { case 1 => 10; case 2 => 20; case 3 => 30 }`, `match (5) { case 3 => 7; case 2 => 8 }` (error)                                                                                                                            | ~4    |
+| `tuples.test.ts`       | `tuple.0 + tuple.1`, tuple not coercible, tuple index out of range, tuple access on non-tuple                                                                                                                                                                                                                             | ~4    |
+| `errors.test.ts`       | All from `error positions` + `undefinedIdentifier`, `let x = { let y = 100; }` (error), `let x = 100;` (void), `undefinedFn()`, pointer/array/struct not coercible                                                                                                                                                        | ~15   |
 
 ## Implementation Order
 
@@ -83,12 +83,12 @@ test/
 
 ## Risks & Mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Tests fail after split | Run `bun test` after each file is created to catch copy errors |
-| Coverage drops | Some uncovered lines in test file may disappear; verify threshold |
-| Import paths break | All files import from `../src` — consistent relative path |
-| Test ordering changes | `bun:test` doesn't guarantee order; tests should be independent |
+| Risk                   | Mitigation                                                        |
+| ---------------------- | ----------------------------------------------------------------- |
+| Tests fail after split | Run `bun test` after each file is created to catch copy errors    |
+| Coverage drops         | Some uncovered lines in test file may disappear; verify threshold |
+| Import paths break     | All files import from `../src` — consistent relative path         |
+| Test ordering changes  | `bun:test` doesn't guarantee order; tests should be independent   |
 
 ## Post-Migration Benefits
 
