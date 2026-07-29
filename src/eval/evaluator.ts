@@ -221,6 +221,13 @@ export function evaluate(
               type: node.type,
             });
           }
+          if (left.kind === "struct" || right.kind === "struct") {
+            throw new InterpreterError(
+              "runtime",
+              "Cannot compare structs with ==. Use an explicit equals function.",
+              node.pos,
+            );
+          }
           return evalOk({
             kind: "boolean",
             value: toNumber(left) === toNumber(right),

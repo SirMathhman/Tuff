@@ -60,6 +60,14 @@ describe("structs", () => {
     ).toThrow();
   });
 
+  test('interpret("struct Point { x : I32 } let a = Point { x : 1 }; let b = Point { x : 2 }; a == b") => Error (no == for structs)', () => {
+    expect(() =>
+      interpret(
+        "struct Point { x : I32 } let a = Point { x : 1 }; let b = Point { x : 2 }; a == b",
+      ),
+    ).toThrow();
+  });
+
   test('interpret("struct Wrapper<T> { field : T } let wrapper : Wrapper<I32> = Wrapper<I32> { field : 100 }; wrapper.field") => 100', () => {
     expect(
       interpret(
