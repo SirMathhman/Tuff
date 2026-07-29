@@ -4,18 +4,14 @@ import type { EvalResult, Value } from "./value";
 import { InterpreterError } from "../core/error";
 import {
   bool,
-  isAssignable,
   isDynamic,
-  isNull,
-  isNumeric,
-  isPointer,
-  isUnion,
   isVoid,
   nullType,
   numeric,
   typesEqual,
   voidType,
 } from "../core/types";
+import { valueMatchesType } from "../core/matcher";
 import {
   evalBreak,
   evalContinue,
@@ -29,58 +25,6 @@ import {
 import { shouldPropagate } from "./controlflow";
 
 type FnDef = { params: { name: string; type?: Type }[]; body: AstNode };
-
-/**
- * Check if a runtime value matches a target type.
- * Used for the `is` operator to enable type narrowing in if statements.
- */
-function valueMatchesType(
-  value: Value,
-  target: Type,
-  env: Map<string, Value>,
-): boolean {
-  if (isUnion(target)) {
-    return target.variants.some((v) => valueMatchesType(value, v, env));
-  }
-  if (isNull(target)) {
-    return value.kind === "null";
-  }
-  if (isPointer(target)) {
-    if (value.kind === "pointer") {
-      // Check if the pointer inner type is assignable
-      const ptrTarget = env.get(value.target);
-      if (ptrTarget && ptrTarget.kind !== "void" && ptrTarget.type) {
-        return isAssignable(ptrTarget.type, target.inner);
-      }
-      return true;
-    }
-    return false;
-  }
-  if (value.kind === "number") {
-    if (isNumeric(target)) {
-      return value.type ? typesEqual(value.type, target) : true;
-    }
-    return false;
-  }
-  if (value.kind === "boolean") {
-    return target.kind === "bool";
-  }
-  if (value.kind === "array") {
-    return target.kind === "array";
-  }
-  if (value.kind === "struct") {
-    if (target.kind !== "struct") return false;
-    if (!value.type || value.type.kind !== "struct") return true;
-    return value.type.name === target.name;
-  }
-  if (value.kind === "tuple") {
-    return target.kind === "tuple";
-  }
-  if (value.kind === "enum") {
-    return target.kind === "enum" && value.enum === target.name;
-  }
-  return false;
-}
 
 /** Type guard for block nodes with a void type field. */
 function isBlockWithVoidType(
@@ -604,10 +548,15 @@ export function evaluate(
               : value.kind === "void"
                 ? voidType()
                 : value.type;
-      // Runtime type check: for narrowing, check if the value kind matches
-      // the target type (e.g., pointer vs null in a union).
-      const matches = valueMatchesType(value, node.type, env);
-      // Also check static type equality for backward compatibility
+      // Runtime type check: only use when value has a concrete (non-dynamic)
+      // runtime type. Dynamic values fall through to the static check to
+      // preserve correct behavior (e.g., "5 is U8" => 0, not 1).
+      const hasConcreteRuntimeType =
+        value.kind === "number" ? value.type && !isDynamic(value.type) : true;
+      const matches = hasConcreteRuntimeType
+        ? valueMatchesType(value, node.type, env)
+        : false;
+      // Static type equality for backward compatibility
       const staticMatches = typesEqual(resolvedType, node.type);
       return evalOk({
         kind: "boolean",
