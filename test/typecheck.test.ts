@@ -65,7 +65,9 @@ describe("typecheck expressions", () => {
   });
 
   test('interpret("type Maybe = I32 | Bool; let temp : Maybe = 100; temp") => 100', () => {
-    expect(interpret("type Maybe = I32 | Bool; let temp : Maybe = 100; temp")).toBe(100);
+    expect(
+      interpret("type Maybe = I32 | Bool; let temp : Maybe = 100; temp"),
+    ).toBe(100);
   });
 
   test('interpret("let temp : I32 | Bool = 100; temp") => 100', () => {

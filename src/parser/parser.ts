@@ -4,12 +4,7 @@ import type { BinaryOp } from "../core/grammar";
 import type { Type } from "../core/types";
 import { OPENING, PRECEDENCE } from "../core/grammar";
 import { InterpreterError } from "../core/error";
-import {
-  arrayType,
-  pointer,
-  tupleType,
-  unionType,
-} from "../core/types";
+import { arrayType, pointer, tupleType, unionType } from "../core/types";
 import { isIdentifierToken, isNumberToken } from "../lexer/tokenizer";
 
 /**
@@ -426,7 +421,12 @@ class Parser {
     if (this.match("operator", "|")) {
       this.consume();
       const variants: Type[] = [first!];
-      while (!this.match("punctuator", ";") && !this.match("punctuator", ":") && !this.match("operator", "=") && !this.match("group", ")")) {
+      while (
+        !this.match("punctuator", ";") &&
+        !this.match("punctuator", ":") &&
+        !this.match("operator", "=") &&
+        !this.match("group", ")")
+      ) {
         variants.push(this.parseType()!);
         if (this.match("operator", "|")) {
           this.consume();
@@ -491,7 +491,15 @@ class Parser {
     if (this.match("punctuator", ";")) {
       this.consume();
     }
-    return { kind: "fn", name, typeParams: typeParams.length > 0 ? typeParams : undefined, params, returnType, body, pos };
+    return {
+      kind: "fn",
+      name,
+      typeParams: typeParams.length > 0 ? typeParams : undefined,
+      params,
+      returnType,
+      body,
+      pos,
+    };
   }
 
   /** Parse `match (expr) { case pattern => body; ... }`. */
