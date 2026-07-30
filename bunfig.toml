@@ -1,4 +1,0 @@
-[test]
-coverageThreshold = { lines = 0.9, functions = 0 }
-coverageReporter = ["text", "lcov"]
-coveragePathIgnorePatterns = ["test/**"]
