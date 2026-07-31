@@ -13,7 +13,7 @@ export default defineConfig([
       "max-lines": [
         "warn",
         {
-          max: 500,
+          max: 200,
           skipComments: true,
           skipBlankLines: true,
         },

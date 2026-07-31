@@ -81,3 +81,47 @@ test('evaluate("let x = true; let y = false; x || y") => 1', () => {
 test('evaluate("let x = true; let y = false; x && y") => 0', () => {
   expect(evaluate("let x = true; let y = false; x && y")).toBe(0);
 });
+
+test('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
+  expect(evaluate("let x = 0; let y = 1; x < y")).toBe(1);
+});
+
+test('evaluate("let x = 0; let y = 1; x > y") => 0', () => {
+  expect(evaluate("let x = 0; let y = 1; x > y")).toBe(0);
+});
+
+test('evaluate("let x = 0; let y = 1; x <= y") => 1', () => {
+  expect(evaluate("let x = 0; let y = 1; x <= y")).toBe(1);
+});
+
+test('evaluate("let x = 0; let y = 1; x >= y") => 0', () => {
+  expect(evaluate("let x = 0; let y = 1; x >= y")).toBe(0);
+});
+
+test('evaluate("let x = if (true) 2 else 3; x") => 2', () => {
+  expect(evaluate("let x = if (true) 2 else 3; x")).toBe(2);
+});
+
+test('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+  expect(evaluate("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
+});
+
+test('evaluate("let x = { let y = 100; }; x") => Error', () => {
+  expect(() => evaluate("let x = { let y = 100; }; x")).toThrow();
+});
+
+test('evaluate("let x = { let mut y = 100; y = 0; }; x") => Error', () => {
+  expect(() => evaluate("let x = { let mut y = 100; y = 0; }; x")).toThrow();
+});
+
+test('evaluate("let mut y = 0; let x = { y = 100; y = 0; }; x") => Error', () => {
+  expect(() =>
+    evaluate("let mut y = 0; let x = { y = 100; y = 0; }; x"),
+  ).toThrow();
+});
+
+test('evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x") => 1', () => {
+  expect(
+    evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),
+  ).toBe(1);
+});

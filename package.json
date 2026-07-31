@@ -6,7 +6,7 @@
   "scripts": {
     "test": "bun test",
     "lint": "tsc --noEmit && eslint . --fix",
-    "cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "cpd": "pmd cpd --dir src/ index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
     "format": "prettier . --write"
   },
   "devDependencies": {
