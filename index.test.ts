@@ -44,3 +44,24 @@ test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
 test('evaluate("let x = 0; let x = 1; x") => 1', () => {
   expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
 });
+test('evaluate("let x = { let x = 1; 0 }; x") => 0', () => {
+  expect(evaluate("let x = { let x = 1; 0 }; x")).toBe(0);
+});
+test('evaluate("undefinedIdentifier") => Error', () => {
+  expect(() => evaluate("undefinedIdentifier")).toThrow();
+});
+test('evaluate("let x = y; x") => Error', () => {
+  expect(() => evaluate("let x = y; x")).toThrow();
+});
+
+test('evaluate("let x = 100;") => 0', () => {
+  expect(evaluate("let x = 100;")).toBe(0);
+});
+
+test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+});
+
+test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+});

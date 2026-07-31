@@ -8,7 +8,8 @@ type AstNode =
       left: AstNode;
       right: AstNode;
     }
-  | { type: "let"; name: string; init: AstNode }
+  | { type: "let"; name: string; mutable: boolean; init: AstNode }
+  | { type: "assign_expr"; name: string; value: AstNode }
   | { type: "block"; statements: AstNode[] };
 
 // --- Tokenizer (unchanged) ---
@@ -16,6 +17,7 @@ type Token =
   | { type: "number"; value: number }
   | { type: "identifier"; name: string }
   | { type: "let_keyword" }
+  | { type: "mut_keyword" }
   | { type: "assign" } // =
   | { type: "semicolon" } // ;
   | { type: "plus" }
@@ -40,7 +42,7 @@ function isIdentifierToken(
 }
 
 // Keywords that look like identifiers but are reserved
-const KEYWORDS = new Set(["let"]);
+const KEYWORDS = new Set(["let", "mut"]);
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -75,6 +77,8 @@ function tokenize(source: string): Token[] {
       if (KEYWORDS.has(name)) {
         if (name === "let") {
           tokens.push({ type: "let_keyword" as const });
+        } else if (name === "mut") {
+          tokens.push({ type: "mut_keyword" as const });
         }
       } else {
         tokens.push({ type: "identifier", name });
@@ -119,6 +123,28 @@ function tokenize(source: string): Token[] {
 // --- Parser: builds AST from tokens (Phase 2) ---
 type ParseResult = { ast: AstNode; pos: number };
 
+// parseAssignmentExpr: handles identifier assignment (lowest precedence) — declared before use by parseStatement
+function parseAssignmentExpr(tokens: Token[], pos: number): ParseResult {
+  const exprResult = parseExpression(tokens, pos);
+
+  // Check if this is an assignment: "identifier = expr"
+  if (
+    exprResult.ast.type === "identifier" &&
+    exprResult.pos < tokens.length &&
+    tokens[exprResult.pos]?.type === "assign"
+  ) {
+    const name = (exprResult.ast as { type: "identifier"; name: string }).name;
+    let i = exprResult.pos + 1; // skip '='
+    const valueResult = parseAssignmentExpr(tokens, i); // right-recursive for chained assignments
+    return {
+      ast: { type: "assign_expr", name, value: valueResult.ast },
+      pos: valueResult.pos,
+    };
+  }
+
+  return exprResult;
+}
+
 // parseFactor: handles numbers, identifiers, and grouped expressions (highest precedence)
 function parseFactor(tokens: Token[], pos: number): ParseResult {
   const token = tokens[pos]!;
@@ -146,14 +172,21 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
   return { ast: { type: "number", value: token.value }, pos: pos + 1 };
 }
 
-// parseStatement: parses a single statement (let declaration or expression) and advances position
+// parseStatement: parses a single statement (let declaration, assignment, or expression) and advances position
 type StatementParseResult = { ast: AstNode; pos: number };
 function parseStatement(tokens: Token[], index: number): StatementParseResult {
   const token = tokens[index]!;
 
-  // Parse "let x = expr;"
+  // Parse "let [mut] x = expr;"
   if (token.type === "let_keyword") {
     let i = index + 1; // skip 'let'
+
+    // Check for optional 'mut' keyword
+    const isMutable = tokens[i]?.type === "mut_keyword";
+    if (isMutable) {
+      i++; // skip 'mut'
+    }
+
     const nameToken = tokens[i];
     if (!nameToken || !isIdentifierToken(nameToken)) {
       throw new Error(`Expected identifier after 'let' at position ${i}`);
@@ -165,15 +198,15 @@ function parseStatement(tokens: Token[], index: number): StatementParseResult {
       throw new Error(`Expected '=' after variable name at position ${i}`);
     }
     i++; // skip '='
-    const initResult = parseExpression(tokens, i);
+    const initResult = parseAssignmentExpr(tokens, i);
     return {
-      ast: { type: "let", name, init: initResult.ast },
+      ast: { type: "let", name, mutable: isMutable, init: initResult.ast },
       pos: initResult.pos,
     };
   }
 
-  // Parse expression statement: "expr;"
-  const exprResult = parseExpression(tokens, index);
+  // Parse expression statement (may include assignment): "expr;"
+  const exprResult = parseAssignmentExpr(tokens, index);
   return { ast: exprResult.ast, pos: exprResult.pos };
 }
 
@@ -241,45 +274,84 @@ function parseExpression(tokens: Token[], pos: number): ParseResult {
   return result;
 }
 
-// --- Evaluator: walks AST to produce a number (Phase 3) ---
-type Scope = Map<string, number>;
+// --- Evaluator: walks AST with statement/expression distinction (Phase 5) ---
+type EvalResult =
+  | { type: "value"; value: number } // Expressions produce values
+  | { type: "void" }; // Statements produce no value
 
-function evalAst(node: AstNode, scope: Scope): number {
+type ScopeEntry = { value: number; mutable: boolean };
+type Scope = Map<string, ScopeEntry>;
+
+function lookupScopeEntry(name: string, scope: Scope): ScopeEntry {
+  const entry = scope.get(name);
+  if (entry === undefined) {
+    throw new Error(`Undefined variable '${name}'`);
+  }
+  return entry;
+}
+
+function evalAst(node: AstNode, scope: Scope): EvalResult {
   switch (node.type) {
     case "block": {
       let lastValue = 0;
       for (const stmt of node.statements) {
-        lastValue = evalAst(stmt, scope);
+        const result = evalAst(stmt, scope);
+        if (result.type === "value") {
+          lastValue = result.value;
+        }
       }
-      return lastValue;
+      return { type: "value", value: lastValue };
     }
     case "number":
-      return node.value;
+      return { type: "value", value: node.value };
     case "identifier": {
-      const value = scope.get(node.name);
-      if (value === undefined) {
-        throw new Error(`Undefined variable '${node.name}'`);
-      }
-      return value;
+      const entry = lookupScopeEntry(node.name, scope);
+      return { type: "value", value: entry.value };
     }
     case "binary_op": {
-      const left = evalAst(node.left, scope);
-      const right = evalAst(node.right, scope);
+      const leftResult = evalAst(node.left, scope);
+      const rightResult = evalAst(node.right, scope);
+
+      // Both operands must be values for binary operations
+      if (leftResult.type !== "value" || rightResult.type !== "value") {
+        throw new Error(
+          `Binary operation requires value expressions on both sides`,
+        );
+      }
+
+      const left = leftResult.value;
+      const right = rightResult.value;
       switch (node.op) {
         case "+":
-          return left + right;
+          return { type: "value", value: left + right };
         case "-":
-          return left - right;
+          return { type: "value", value: left - right };
         case "*":
-          return left * right;
+          return { type: "value", value: left * right };
         case "/":
-          return Math.trunc(left / right); // integer division
+          return { type: "value", value: Math.trunc(left / right) };
       }
     }
     case "let": {
-      const value = evalAst(node.init, scope);
-      scope.set(node.name, value);
-      return value;
+      const initResult = evalAst(node.init, scope);
+      if (initResult.type !== "value") {
+        throw new Error(`Let declaration requires a value expression`);
+      }
+      // Allow shadowing — redeclaration is permitted
+      scope.set(node.name, { value: initResult.value, mutable: node.mutable });
+      return { type: "void" }; // declarations don't produce values
+    }
+    case "assign_expr": {
+      const entry = lookupScopeEntry(node.name, scope);
+      if (!entry.mutable) {
+        throw new Error(`Cannot assign to immutable variable '${node.name}'`);
+      }
+      const valueResult = evalAst(node.value, scope);
+      if (valueResult.type !== "value") {
+        throw new Error(`Assignment requires a value expression`);
+      }
+      entry.value = valueResult.value;
+      return { type: "void" }; // assignments don't produce values
     }
   }
 }
@@ -309,5 +381,6 @@ export function evaluate(source: string): number {
 
   const parsed = parseProgram(tokens, 0); // returns block AST with all statements
   const scope: Scope = new Map();
-  return evalAst(parsed.ast, scope); // walks tree → number with variable scope
+  const result = evalAst(parsed.ast, scope);
+  return result.type === "value" ? result.value : 0;
 }

@@ -10,8 +10,12 @@
     "format": "prettier . --write"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
-    "prettier": "^3.9.6"
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0"
   },
   "peerDependencies": {
     "typescript": "^5"
