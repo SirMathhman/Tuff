@@ -305,11 +305,33 @@ export interface EvalVoid {
   type: "void";
 }
 
-export type EvalResult = EvalValue | EvalVoid | EvalSignal;
+export type EvalResult = EvalValue | EvalVoid | EvalSignal | EvalError;
 
 export interface EvalSignal {
   type: "signal";
   signal: "continue" | "break";
+}
+
+export interface EvalError {
+  type: "error";
+  message: string;
+}
+
+export type Result<T, X> = OkResult<T> | ErrResult<X>;
+
+export interface OkResult<T> {
+  ok: true;
+  value: T;
+}
+
+export interface ErrResult<X> {
+  ok: false;
+  error: X;
+}
+
+export interface ParseError {
+  message: string;
+  position: number;
 }
 
 export interface ScopeEntry {

@@ -19,19 +19,22 @@ The interpreted language supports integers, booleans (`true`/`false`), binary op
 
 ### Files
 
-| File               | Role                                                                    |
-| ------------------ | ----------------------------------------------------------------------- |
-| `src/types.ts`     | Shared types: AST nodes, tokens, evaluator types, `BINARY_OPS` registry |
-| `src/tokenize.ts`  | Character-by-character tokenizer                                        |
-| `src/parse.ts`     | Recursive descent parser                                                |
-| `src/evaluate.ts`  | AST evaluator with linked scope chain                                   |
-| `index.ts`         | Re-exports `evaluate`                                                   |
-| `index.test.ts`    | All tests (`bun:test`)                                                  |
-| `eslint.config.ts` | ESLint flat config — prohibits `TSTypeLiteral` (use named interfaces)   |
+| File               | Role                                                                       |
+| ------------------ | -------------------------------------------------------------------------- |
+| `src/types.ts`     | Shared types: AST nodes, tokens, evaluator types, `BINARY_OPS` registry    |
+| `src/tokenize.ts`  | Character-by-character tokenizer                                           |
+| `src/parse.ts`     | Recursive descent parser                                                   |
+| `src/analyze.ts`   | Semantic analysis: `producesValue`, `getProducesValue`, `lookupScopeEntry` |
+| `src/evaluate.ts`  | AST evaluator with linked scope chain                                      |
+| `index.ts`         | Re-exports `evaluate`                                                      |
+| `index.test.ts`    | All tests (`bun:test`)                                                     |
+| `eslint.config.ts` | ESLint flat config — prohibits `TSTypeLiteral` (use named interfaces)      |
 
 ### Pipeline
 
-`tokenize(source) → parseProgram(tokens) → evalAst(ast, scope)` exposed via `evaluate(source: string): number`.
+`tokenize(source) → parseProgram(tokens) → evalAst(ast, scope)` exposed via `evaluate(source: string): Result<number, string>`.
+
+All errors use the `Result<T, X>` monad (`OkResult<T>` / `ErrResult<X>`) from `src/types.ts` — **no `throw` anywhere**. At the public boundary, `evaluate()` re-throws internal errors for backward compat, but tests use `checkOk()`/`checkErr()` helpers that work with the Result type directly.
 
 ### Parser
 
@@ -66,5 +69,6 @@ Walks the AST over a **linked scope chain** (`ScopeFrame` with `locals: Map<stri
 3. **Integer division**: `/` uses `Math.trunc`, not floating-point — tests expect integer results.
 4. **Block scoping**: Variables declared with `let` inside a `{ }` block are scoped to that block — they're removed from scope when the block exits. Top-level declarations remain in the global scope.
 5. **Named interfaces required**: ESLint prohibits `TSTypeLiteral` (inline object types). Always use named `interface` declarations instead of anonymous type literals.
-6. **`produceValue` analysis**: The parser's `producesValue()` static analysis determines if an AST node yields a value. Block last-statements, `if/else` (both branches must produce values) — this is used to reject `let x = voidExpr`.
-7. **Test style**: Tests use `bun:test` (`import { test, expect } from "bun:test"`), with describe/it optional. Pattern: `test('evaluate("...") => expected', ...)`.
+6. **`Result` monad**: ESLint prohibits `ThrowStatement`. All errors use `Result<T, X>` (`Ok`/`Err`) or `EvalError` in the `EvalResult` union. Never use `throw`.
+7. **`producesValue` analysis**: The `producesValue()` static analysis in `analyze.ts` determines if an AST node yields a value. Block last-statements, `if/else` (both branches must produce values) — this is used to reject `let x = voidExpr`.
+8. **Test style**: Tests use `bun:test` (`import { test, expect } from "bun:test"`), with `checkOk()`/`checkErr()` helpers that work with the `Result` type. Pattern: `test('evaluate("...") => expected', () => { expect(checkOk("...")).toBe(expected); })`.

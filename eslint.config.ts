@@ -24,6 +24,10 @@ export default defineConfig([
           selector: "TSTypeLiteral",
           message: "Use a named interface instead.",
         },
+        {
+          selector: "ThrowStatement",
+          message: "Use a Result monad",
+        },
       ],
     },
   },

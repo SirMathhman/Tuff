@@ -1,6 +1,6 @@
-import { type Token, KEYWORDS } from "./types";
+import { type Token, KEYWORDS, type Result, type ParseError } from "./types";
 
-export function tokenize(source: string): Token[] {
+export function tokenize(source: string): Result<Token[], ParseError> {
   const tokens: Token[] = [];
   let i = 0;
   while (i < source.length) {
@@ -97,14 +97,26 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "and" });
         i += 2;
       } else {
-        throw new Error(`Unexpected character '&' at position ${i}`);
+        return {
+          ok: false,
+          error: {
+            message: `Unexpected character '&' at position ${i}`,
+            position: i,
+          },
+        };
       }
     } else if (ch === "|") {
       if (i + 1 < source.length && source[i + 1] === "|") {
         tokens.push({ type: "or" });
         i += 2;
       } else {
-        throw new Error(`Unexpected character '|' at position ${i}`);
+        return {
+          ok: false,
+          error: {
+            message: `Unexpected character '|' at position ${i}`,
+            position: i,
+          },
+        };
       }
     } else if (ch === ">") {
       if (i + 1 < source.length && source[i + 1] === "=") {
@@ -135,8 +147,14 @@ export function tokenize(source: string): Token[] {
       tokens.push({ type: "rbrace" });
       i++;
     } else {
-      throw new Error(`Unexpected character '${ch}' at position ${i}`);
+      return {
+        ok: false,
+        error: {
+          message: `Unexpected character '${ch}' at position ${i}`,
+          position: i,
+        },
+      };
     }
   }
-  return tokens;
+  return { ok: true, value: tokens };
 }

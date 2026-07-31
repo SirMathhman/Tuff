@@ -2,45 +2,39 @@ import type {
   AstNode,
   BinaryOp,
   Scope,
-  ScopeFrame,
-  ScopeEntry,
   EvalResult,
-  EvalValue,
   EvalSignal,
   MatchPattern,
+  Result,
 } from "./types";
 
 import { BINARY_OPS } from "./types";
+
+import { getProducesValue, lookupScopeEntry, findScopeFrame } from "./analyze";
 
 import { parseProgram } from "./parse";
 
 import { tokenize } from "./tokenize";
 
-function findScopeFrame(name: string, scope: Scope): ScopeFrame {
-  let frame: ScopeFrame | null = scope;
-  while (frame) {
-    if (frame.locals.has(name)) return frame;
-    frame = frame.parent;
-  }
-  throw new Error(`Undefined variable '${name}'`);
-}
-
-function lookupScopeEntry(name: string, scope: Scope): ScopeEntry {
-  return findScopeFrame(name, scope).locals.get(name)!;
-}
-
-function evalBinaryOp(node: BinaryOp, scope: Scope): EvalValue {
+function evalBinaryOp(node: BinaryOp, scope: Scope): EvalResult {
   const leftResult = evalAst(node.left, scope);
   const rightResult = evalAst(node.right, scope);
 
-  // Both operands must be values for binary operations
-  if (leftResult.type !== "value" || rightResult.type !== "value") {
-    throw new Error(
-      `Binary operation requires value expressions on both sides`,
-    );
-  }
+  const leftCheck = getProducesValue(
+    leftResult,
+    "Binary operation left operand",
+  );
+  if (!leftCheck.ok) return leftCheck.error;
+  const rightCheck = getProducesValue(
+    rightResult,
+    "Binary operation right operand",
+  );
+  if (!rightCheck.ok) return rightCheck.error;
 
-  const value = BINARY_OPS[node.op].eval(leftResult.value, rightResult.value);
+  const value = BINARY_OPS[node.op].eval(
+    leftCheck.value.value,
+    rightCheck.value.value,
+  );
   return { type: "value", value };
 }
 
@@ -55,28 +49,25 @@ function matchPattern(
     case "number":
       return pattern.value === value;
     case "identifier":
-      // Variable pattern: always matches, binds to scope
       _scope.locals.set(pattern.name, { value, mutable: false });
       return true;
   }
 }
 
 function evalBlockStatements(statements: AstNode[], scope: Scope): EvalResult {
-  // Create a new child scope frame for block scoping
   const childScope: Scope = { locals: new Map(), parent: scope };
   let lastValue = 0;
   let hasValue = false;
   for (const stmt of statements) {
     const result = evalAst(stmt, childScope);
-    if (result.type === "signal") {
-      return result; // propagate continue signal
+    if (result.type === "signal" || result.type === "error") {
+      return result;
     }
     if (result.type === "value") {
       lastValue = result.value;
       hasValue = true;
     }
   }
-  // Child scope is discarded on exit — no cleanup needed
   if (!hasValue) {
     return { type: "void" };
   }
@@ -92,42 +83,46 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
     case "bool":
       return { type: "value", value: node.value ? 1 : 0 };
     case "identifier": {
-      const entry = lookupScopeEntry(node.name, scope);
-      return { type: "value", value: entry.value };
+      const entryResult = lookupScopeEntry(node.name, scope);
+      if (!entryResult.ok) return entryResult.error;
+      return { type: "value", value: entryResult.value.value };
     }
     case "binary_op":
       return evalBinaryOp(node, scope);
     case "let": {
-      const initResult = evalAst(node.init, scope);
-      if (initResult.type !== "value") {
-        throw new Error(`Let init must evaluate to a value`);
-      }
-      // Allow shadowing — redeclaration is permitted
+      const initCheck = getProducesValue(evalAst(node.init, scope), "Let init");
+      if (!initCheck.ok) return initCheck.error;
       scope.locals.set(node.name, {
-        value: initResult.value,
+        value: initCheck.value.value,
         mutable: node.mutable,
       });
-      return { type: "void" }; // declarations don't produce values
+      return { type: "void" };
     }
     case "assign_expr": {
-      const frame = findScopeFrame(node.name, scope);
-      const entry = frame.locals.get(node.name)!;
+      const frameResult = findScopeFrame(node.name, scope);
+      if (!frameResult.ok) return frameResult.error;
+      const entry = frameResult.value.locals.get(node.name)!;
       if (!entry.mutable) {
-        throw new Error(`Cannot assign to immutable variable '${node.name}'`);
+        return {
+          type: "error",
+          message: `Cannot assign to immutable variable '${node.name}'`,
+        };
       }
-      const valueResult = evalAst(node.value, scope);
-      if (valueResult.type !== "value") {
-        throw new Error(`Assignment requires a value expression`);
-      }
-      entry.value = valueResult.value;
-      return { type: "void" }; // assignments don't produce values
+      const rhsCheck = getProducesValue(
+        evalAst(node.value, scope),
+        "Assignment right-hand side",
+      );
+      if (!rhsCheck.ok) return rhsCheck.error;
+      entry.value = rhsCheck.value.value;
+      return { type: "void" };
     }
     case "if_expr": {
-      const condResult = evalAst(node.condition, scope);
-      if (condResult.type !== "value") {
-        throw new Error(`Condition must produce a value`);
-      }
-      if (condResult.value !== 0) {
+      const condCheck = getProducesValue(
+        evalAst(node.condition, scope),
+        "Condition",
+      );
+      if (!condCheck.ok) return condCheck.error;
+      if (condCheck.value.value !== 0) {
         return evalAst(node.then, scope);
       }
       if (node.else_ !== null) {
@@ -136,16 +131,15 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
       return { type: "void" };
     }
     case "while_expr": {
-      let condResult: EvalResult;
-      // Keep evaluating condition and body while condition is truthy
-
       while (true) {
-        condResult = evalAst(node.condition, scope);
-        if (condResult.type !== "value") {
-          throw new Error(`While condition must produce a value`);
-        }
-        if (condResult.value === 0) break;
+        const condCheck = getProducesValue(
+          evalAst(node.condition, scope),
+          "While condition",
+        );
+        if (!condCheck.ok) return condCheck.error;
+        if (condCheck.value.value === 0) break;
         const bodyResult = evalAst(node.body, scope);
+        if (bodyResult.type === "error") return bodyResult;
         if (bodyResult.type === "signal" && bodyResult.signal === "continue") {
           continue;
         }
@@ -160,36 +154,41 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
     case "break":
       return { type: "signal", signal: "break" } as EvalSignal;
     case "match_expr": {
-      const scrutineeResult = evalAst(node.scrutinee, scope);
-      if (scrutineeResult.type !== "value") {
-        throw new Error(`Match scrutinee must produce a value`);
-      }
+      const scrutineeCheck = getProducesValue(
+        evalAst(node.scrutinee, scope),
+        "Match scrutinee",
+      );
+      if (!scrutineeCheck.ok) return scrutineeCheck.error;
       for (const arm of node.arms) {
         const armScope: Scope = { locals: new Map(), parent: scope };
         const matched = matchPattern(
           arm.pattern,
-          scrutineeResult.value,
+          scrutineeCheck.value.value,
           armScope,
         );
         if (matched) {
           return evalAst(arm.body, armScope);
         }
       }
-      throw new Error(`Non-exhaustive match patterns`);
+      return { type: "error", message: "Non-exhaustive match patterns" };
     }
   }
 }
 
 // --- Entry Point ---
-export function evaluate(source: string): number {
+export function evaluate(source: string): Result<number, string> {
   const trimmed = source.trim();
-  if (trimmed.length === 0) return 0;
+  if (trimmed.length === 0) return { ok: true, value: 0 };
 
-  const tokens = tokenize(trimmed);
-  if (tokens.length === 0) return 0;
+  const tokenResult = tokenize(trimmed);
+  if (!tokenResult.ok) return { ok: false, error: tokenResult.error.message };
+  if (tokenResult.value.length === 0) return { ok: true, value: 0 };
 
-  const parsed = parseProgram(tokens, 0); // returns block AST with all statements
+  const parseResult = parseProgram(tokenResult.value, 0);
+  if (!parseResult.ok) return { ok: false, error: parseResult.error.message };
+
   const scope: Scope = { locals: new Map(), parent: null };
-  const result = evalAst(parsed.ast, scope);
-  return result.type === "value" ? result.value : 0;
+  const result = evalAst(parseResult.value.ast, scope);
+  if (result.type === "error") return { ok: false, error: result.message };
+  return { ok: true, value: result.type === "value" ? result.value : 0 };
 }
