@@ -78,7 +78,7 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
     case "let": {
       const initResult = evalAst(node.init, scope);
       if (initResult.type !== "value") {
-        throw new Error(`Let declaration requires a value expression`);
+        throw new Error(`Let init must evaluate to a value`);
       }
       // Allow shadowing — redeclaration is permitted
       scope.locals.set(node.name, {
@@ -108,7 +108,10 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
       if (condResult.value !== 0) {
         return evalAst(node.then, scope);
       }
-      return evalAst(node.else_, scope);
+      if (node.else_ !== null) {
+        return evalAst(node.else_, scope);
+      }
+      return { type: "void" };
     }
   }
 }

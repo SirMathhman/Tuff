@@ -43,7 +43,7 @@ export interface IfExpr {
   type: "if_expr";
   condition: AstNode;
   then: AstNode;
-  else_: AstNode;
+  else_: AstNode | null;
 }
 
 export type AstNode =

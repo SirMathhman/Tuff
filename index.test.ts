@@ -120,6 +120,22 @@ test('evaluate("let mut y = 0; let x = { y = 100; y = 0; }; x") => Error', () =>
   ).toThrow();
 });
 
+test('evaluate("let mut x = 0; if (true) { x = 1; 0 } else { x = 2; 0 } x") => 1', () => {
+  expect(
+    evaluate("let mut x = 0; if (true) { x = 1; 0 } else { x = 2; 0 } x"),
+  ).toBe(1);
+});
+
+test('evaluate("let y = if (false) { let x = 100; x } else { let x = 100; }; y") => Error', () => {
+  expect(() =>
+    evaluate("let y = if (false) { let x = 100; x } else { let x = 100; }; y"),
+  ).toThrow();
+});
+
+test('evaluate("let mut x = 0; if (false) { x = 1; } x") => 0', () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 1; } x")).toBe(0);
+});
+
 test('evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x") => 1', () => {
   expect(
     evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),

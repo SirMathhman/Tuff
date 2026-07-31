@@ -23,6 +23,28 @@ export interface ProgramParseResult {
   pos: number;
 }
 
+// Static analysis: does the AST node produce a value when evaluated?
+function producesValue(node: AstNode): boolean {
+  switch (node.type) {
+    case "number":
+    case "bool":
+    case "identifier":
+    case "binary_op":
+      return true;
+    case "block":
+      return (
+        node.statements.length > 0 &&
+        producesValue(node.statements[node.statements.length - 1]!)
+      );
+    case "if_expr":
+      if (node.else_ === null) return false;
+      return producesValue(node.then) && producesValue(node.else_);
+    case "let":
+    case "assign_expr":
+      return false;
+  }
+}
+
 // Maps token type → operator string for binary operators
 const TOKEN_TYPE_TO_OP: Record<string, BinaryOp["op"]> = {
   or: "||",
@@ -130,25 +152,21 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
     const thenResult = parseAssignmentExpr(tokens, i);
     i = thenResult.pos;
 
-    // Expect 'else'
-    if (tokens[i]?.type !== "else_keyword") {
-      throw new Error(
-        `Expected 'else' after if-then expression at position ${i}`,
-      );
+    // Check for optional 'else' clause
+    let elseResult: ParseResult | null = null;
+    if (tokens[i]?.type === "else_keyword") {
+      i++; // skip 'else'
+      elseResult = parseAssignmentExpr(tokens, i);
     }
-    i++; // skip 'else'
-
-    // Parse else expression
-    const elseResult = parseAssignmentExpr(tokens, i);
 
     return {
       ast: {
         type: "if_expr",
         condition: condResult.ast,
         then: thenResult.ast,
-        else_: elseResult.ast,
+        else_: elseResult?.ast ?? null,
       },
-      pos: elseResult.pos,
+      pos: elseResult ? elseResult.pos : thenResult.pos,
     };
   }
 
@@ -199,6 +217,11 @@ export function parseStatement(
     }
     i++; // skip '='
     const initResult = parseAssignmentExpr(tokens, i);
+    if (!producesValue(initResult.ast)) {
+      throw new Error(
+        `Let declaration requires a value expression at position ${i}`,
+      );
+    }
     return {
       ast: { type: "let", name, mutable: isMutable, init: initResult.ast },
       pos: initResult.pos,
