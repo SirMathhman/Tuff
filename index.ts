@@ -139,4 +139,14 @@ function evalAst(node: AstNode): number {
   }
 }
 
-// --- Entry Point (Phase 4: wire up Tokenize → Parse → Evaluate) ---\nexport function evaluate(source: string): number {\n  const trimmed = source.trim();\n  if (trimmed.length === 0) return 0;\n\n  const tokens = tokenize(trimmed);\n  if (tokens.length === 0) return 0;\n\n  const parsed = parseExpression(tokens, 0); // returns AstNode + pos\n  return evalAst(parsed.ast);                // walks tree → number\n}
+// --- Entry Point (Phase 4: wire up Tokenize → Parse → Evaluate) ---
+export function evaluate(source: string): number {
+  const trimmed = source.trim();
+  if (trimmed.length === 0) return 0;
+
+  const tokens = tokenize(trimmed);
+  if (tokens.length === 0) return 0;
+
+  const parsed = parseExpression(tokens, 0); // returns AstNode + pos
+  return evalAst(parsed.ast);                // walks tree → number
+}
