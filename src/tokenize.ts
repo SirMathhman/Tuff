@@ -43,16 +43,38 @@ export function tokenize(source: string): Token[] {
           tokens.push({ type: "if_keyword" as const });
         } else if (name === "else") {
           tokens.push({ type: "else_keyword" as const });
+        } else if (name === "while") {
+          tokens.push({ type: "while_keyword" as const });
+        } else if (name === "continue") {
+          tokens.push({ type: "continue_keyword" as const });
+        } else if (name === "break") {
+          tokens.push({ type: "break_keyword" as const });
+        } else if (name === "match") {
+          tokens.push({ type: "match_keyword" as const });
+        } else if (name === "case") {
+          tokens.push({ type: "case_keyword" as const });
+        } else if (name === "_") {
+          tokens.push({ type: "underscore_keyword" as const });
         }
       } else {
         tokens.push({ type: "identifier", name });
       }
     } else if (ch === "+") {
-      tokens.push({ type: "plus" });
-      i++;
+      if (i + 1 < source.length && source[i + 1] === "=") {
+        tokens.push({ type: "plus_assign" });
+        i += 2;
+      } else {
+        tokens.push({ type: "plus" });
+        i++;
+      }
     } else if (ch === "-") {
-      tokens.push({ type: "minus" });
-      i++;
+      if (i + 1 < source.length && source[i + 1] === "=") {
+        tokens.push({ type: "minus_assign" });
+        i += 2;
+      } else {
+        tokens.push({ type: "minus" });
+        i++;
+      }
     } else if (ch === "*") {
       tokens.push({ type: "multiply" });
       i++;
@@ -60,8 +82,13 @@ export function tokenize(source: string): Token[] {
       tokens.push({ type: "divide" });
       i++;
     } else if (ch === "=") {
-      tokens.push({ type: "assign" });
-      i++;
+      if (i + 1 < source.length && source[i + 1] === ">") {
+        tokens.push({ type: "arrow" });
+        i += 2;
+      } else {
+        tokens.push({ type: "assign" });
+        i++;
+      }
     } else if (ch === ";") {
       tokens.push({ type: "semicolon" });
       i++;

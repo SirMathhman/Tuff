@@ -1,6 +1,18 @@
-import type { AstNode, Token, Identifier, BinaryOp } from "./types";
+import type {
+  AstNode,
+  Token,
+  Identifier,
+  BinaryOp,
+  MatchArm,
+  MatchPattern,
+} from "./types";
 
-import { isIdentifierToken, isNumberToken, BINARY_OPS } from "./types";
+import {
+  isIdentifierToken,
+  isNumberToken,
+  BINARY_OPS,
+  COMPOUND_ASSIGN_OPS,
+} from "./types";
 
 // --- Parser: builds AST from tokens ---
 export interface ParseResult {
@@ -39,8 +51,14 @@ function producesValue(node: AstNode): boolean {
     case "if_expr":
       if (node.else_ === null) return false;
       return producesValue(node.then) && producesValue(node.else_);
+    case "match_expr":
+      return true;
     case "let":
     case "assign_expr":
+    case "while_expr":
+      return false;
+    case "continue":
+    case "break":
       return false;
   }
 }
@@ -111,7 +129,42 @@ function parseAssignmentExpr(tokens: Token[], pos: number): ParseResult {
     };
   }
 
+  // Desugar compound assignments: "identifier += expr" → "identifier = identifier + expr"
+  if (exprResult.ast.type === "identifier" && exprResult.pos < tokens.length) {
+    const compoundOp = COMPOUND_ASSIGN_OPS[tokens[exprResult.pos]!.type];
+    if (compoundOp) {
+      const name = (exprResult.ast as Identifier).name;
+      const i = exprResult.pos + 1;
+      const valueResult = parseAssignmentExpr(tokens, i);
+      const idNode: Identifier = { type: "identifier", name };
+      const binaryOp: BinaryOp = {
+        type: "binary_op",
+        op: compoundOp,
+        left: idNode,
+        right: valueResult.ast,
+      };
+      return {
+        ast: { type: "assign_expr", name, value: binaryOp },
+        pos: valueResult.pos,
+      };
+    }
+  }
+
   return exprResult;
+}
+
+// parseParenCondition: parses condition wrapped in parentheses "(expr)", returns condition AST and position after ')'
+function parseParenCondition(tokens: Token[], pos: number): ParseResult {
+  if (tokens[pos]?.type !== "lparen") {
+    throw new Error(`Expected '(' at position ${pos}`);
+  }
+  const innerResult = parseBinaryOp(tokens, pos + 1, 1);
+  if (tokens[innerResult.pos]?.type !== "rparen") {
+    throw new Error(
+      `Expected ')' after condition at position ${innerResult.pos}`,
+    );
+  }
+  return { ast: innerResult.ast, pos: innerResult.pos + 1 };
 }
 
 // parseFactor: handles numbers, identifiers, and grouped expressions (highest precedence)
@@ -136,17 +189,8 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
     // Parse "if (condition) then_expr else else_expr"
     let i = pos + 1;
 
-    // Expect and parse condition inside parentheses: "(cond)"
-    if (tokens[i]?.type !== "lparen") {
-      throw new Error(`Expected '(' after 'if' at position ${i}`);
-    }
-    i++; // skip '('
-    const condResult = parseBinaryOp(tokens, i, 1);
+    const condResult = parseParenCondition(tokens, i);
     i = condResult.pos;
-    if (tokens[i]?.type !== "rparen") {
-      throw new Error(`Expected ')' after condition at position ${i}`);
-    }
-    i++; // skip ')'
 
     // Parse then expression
     const thenResult = parseAssignmentExpr(tokens, i);
@@ -169,7 +213,84 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
       pos: elseResult ? elseResult.pos : thenResult.pos,
     };
   }
+  // Handle match expression: match (scrutinee) { case pattern => expr; ... }
+  if (token.type === "match_keyword") {
+    let i = pos + 1; // skip 'match'
 
+    // Expect scrutinee in parentheses: "(expr)"
+    if (tokens[i]?.type !== "lparen") {
+      throw new Error(`Expected '(' after 'match' at position ${i}`);
+    }
+    i++; // skip '('
+    const scrutineeResult = parseBinaryOp(tokens, i, 1);
+    i = scrutineeResult.pos;
+    if (tokens[i]?.type !== "rparen") {
+      throw new Error(`Expected ')' after scrutinee at position ${i}`);
+    }
+    i++; // skip ')'
+
+    // Expect opening brace
+    if (tokens[i]?.type !== "lbrace") {
+      throw new Error(`Expected '{' after match condition at position ${i}`);
+    }
+    i++; // skip '{'
+
+    // Parse arms
+    const arms: MatchArm[] = [];
+    while (i < tokens.length && tokens[i]?.type !== "rbrace") {
+      if (tokens[i]?.type !== "case_keyword") {
+        throw new Error(`Expected 'case' at position ${i}`);
+      }
+      i++; // skip 'case'
+
+      // Parse pattern
+      let pattern: MatchPattern;
+      const patternToken = tokens[i]!;
+      if (patternToken.type === "underscore_keyword") {
+        pattern = { type: "wildcard" };
+        i++;
+      } else if (isNumberToken(patternToken)) {
+        pattern = { type: "number", value: patternToken.value };
+        i++;
+      } else if (isIdentifierToken(patternToken)) {
+        pattern = { type: "identifier", name: patternToken.name };
+        i++;
+      } else {
+        throw new Error(`Expected pattern at position ${i}`);
+      }
+
+      // Expect '=>'
+      if (tokens[i]?.type !== "arrow") {
+        throw new Error(`Expected '=>' after pattern at position ${i}`);
+      }
+      i++; // skip '=>'
+
+      // Parse body
+      const bodyResult = parseAssignmentExpr(tokens, i);
+      arms.push({ pattern, body: bodyResult.ast });
+      i = bodyResult.pos;
+
+      // Skip optional semicolon
+      if (tokens[i]?.type === "semicolon") {
+        i++;
+      }
+    }
+
+    // Skip closing brace
+    if (tokens[i]?.type !== "rbrace") {
+      throw new Error(`Expected '}' at position ${i}`);
+    }
+    i++; // skip '}'
+
+    return {
+      ast: {
+        type: "match_expr",
+        scrutinee: scrutineeResult.ast,
+        arms,
+      } as AstNode,
+      pos: i,
+    };
+  }
   // Handle grouped expression: recursively parse inside parens or braces
   if (token.type === "lparen") {
     const innerResult = parseBinaryOp(tokens, pos + 1, 1);
@@ -226,6 +347,32 @@ export function parseStatement(
       ast: { type: "let", name, mutable: isMutable, init: initResult.ast },
       pos: initResult.pos,
     };
+  }
+
+  // Parse "while (condition) body"
+  if (token.type === "while_keyword") {
+    const condResult = parseParenCondition(tokens, index + 1);
+
+    // Parse body (typically a block, but can be any expression)
+    const bodyResult = parseAssignmentExpr(tokens, condResult.pos);
+    return {
+      ast: {
+        type: "while_expr",
+        condition: condResult.ast,
+        body: bodyResult.ast,
+      } as AstNode,
+      pos: bodyResult.pos,
+    };
+  }
+
+  // Parse "continue;"
+  if (token.type === "continue_keyword") {
+    return { ast: { type: "continue" } as AstNode, pos: index + 1 };
+  }
+
+  // Parse "break;"
+  if (token.type === "break_keyword") {
+    return { ast: { type: "break" } as AstNode, pos: index + 1 };
   }
 
   // Parse expression statement (may include assignment): "expr;"

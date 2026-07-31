@@ -46,6 +46,47 @@ export interface IfExpr {
   else_: AstNode | null;
 }
 
+export interface WhileExpr {
+  type: "while_expr";
+  condition: AstNode;
+  body: AstNode;
+}
+
+export interface ContinueStmt {
+  type: "continue";
+}
+
+export interface BreakStmt {
+  type: "break";
+}
+
+export interface MatchArm {
+  pattern: MatchPattern;
+  body: AstNode;
+}
+
+export interface WildcardPattern {
+  type: "wildcard";
+}
+
+export interface NumberPattern {
+  type: "number";
+  value: number;
+}
+
+export interface IdentifierPattern {
+  type: "identifier";
+  name: string;
+}
+
+export type MatchPattern = WildcardPattern | NumberPattern | IdentifierPattern;
+
+export interface MatchExpr {
+  type: "match_expr";
+  scrutinee: AstNode;
+  arms: MatchArm[];
+}
+
 export type AstNode =
   | NumberLiteral
   | Identifier
@@ -54,7 +95,11 @@ export type AstNode =
   | AssignExpr
   | Block
   | BoolLiteral
-  | IfExpr;
+  | IfExpr
+  | WhileExpr
+  | ContinueStmt
+  | BreakStmt
+  | MatchExpr;
 
 // --- Token Types ---
 export interface NumberToken {
@@ -83,8 +128,44 @@ export interface ElseKeyword {
   type: "else_keyword";
 }
 
+export interface WhileKeyword {
+  type: "while_keyword";
+}
+
+export interface ContinueKeyword {
+  type: "continue_keyword";
+}
+
+export interface BreakKeyword {
+  type: "break_keyword";
+}
+
+export interface MatchKeyword {
+  type: "match_keyword";
+}
+
+export interface CaseKeyword {
+  type: "case_keyword";
+}
+
+export interface UnderscoreKeyword {
+  type: "underscore_keyword";
+}
+
+export interface ArrowToken {
+  type: "arrow";
+}
+
 export interface AssignToken {
   type: "assign";
+}
+
+export interface PlusAssignToken {
+  type: "plus_assign";
+}
+
+export interface MinusAssignToken {
+  type: "minus_assign";
 }
 
 export interface SemicolonToken {
@@ -164,7 +245,16 @@ export type Token =
   | FalseKeyword
   | IfKeyword
   | ElseKeyword
+  | WhileKeyword
+  | ContinueKeyword
+  | BreakKeyword
+  | MatchKeyword
+  | CaseKeyword
+  | UnderscoreKeyword
+  | ArrowToken
   | AssignToken
+  | PlusAssignToken
+  | MinusAssignToken
   | SemicolonToken
   | AndToken
   | OrToken
@@ -190,7 +280,20 @@ export function isIdentifierToken(token: Token): token is IdentifierToken {
 }
 
 // Keywords that look like identifiers but are reserved
-export const KEYWORDS = new Set(["let", "mut", "true", "false", "if", "else"]);
+export const KEYWORDS = new Set([
+  "let",
+  "mut",
+  "true",
+  "false",
+  "if",
+  "else",
+  "while",
+  "continue",
+  "break",
+  "match",
+  "case",
+  "_",
+]);
 
 // --- Evaluator Types ---
 export interface EvalValue {
@@ -202,7 +305,12 @@ export interface EvalVoid {
   type: "void";
 }
 
-export type EvalResult = EvalValue | EvalVoid;
+export type EvalResult = EvalValue | EvalVoid | EvalSignal;
+
+export interface EvalSignal {
+  type: "signal";
+  signal: "continue" | "break";
+}
 
 export interface ScopeEntry {
   value: number;
@@ -233,4 +341,10 @@ export const BINARY_OPS: Record<BinaryOp["op"], BinaryOpInfo> = {
   "-": { prec: 4, eval: (l, r) => l - r },
   "*": { prec: 5, eval: (l, r) => l * r },
   "/": { prec: 5, eval: (l, r) => Math.trunc(l / r) },
+};
+
+// Compound assignment token type → binary operator mapping
+export const COMPOUND_ASSIGN_OPS: Record<string, BinaryOp["op"]> = {
+  plus_assign: "+",
+  minus_assign: "-",
 };

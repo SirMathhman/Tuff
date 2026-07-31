@@ -141,3 +141,35 @@ test('evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x") => 1', (
     evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),
   ).toBe(1);
 });
+
+test('evaluate("let mut x = 0; x += 1; x") => 1', () => {
+  expect(evaluate("let mut x = 0; x += 1; x")).toBe(1);
+});
+
+test('evaluate("let mut x = 0; x -= 1; x") => -1', () => {
+  expect(evaluate("let mut x = 0; x -= 1; x")).toBe(-1);
+});
+
+test('evaluate("let mut x = 0; while (x < 4) { x += 1; } x") => 4', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
+});
+
+test('evaluate("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+});
+
+test('evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x") => 4', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(
+    4,
+  );
+});
+
+test('evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x") => 1', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(1);
+});
+
+test('evaluate("let x = match (100) { case 100 => 1; case _ => 2; }; x") => 1', () => {
+  expect(
+    evaluate("let x = match (100) { case 100 => 1; case _ => 2; }; x"),
+  ).toBe(1);
+});

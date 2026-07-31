@@ -6,6 +6,8 @@ import type {
   ScopeEntry,
   EvalResult,
   EvalValue,
+  EvalSignal,
+  MatchPattern,
 } from "./types";
 
 import { BINARY_OPS } from "./types";
@@ -42,6 +44,23 @@ function evalBinaryOp(node: BinaryOp, scope: Scope): EvalValue {
   return { type: "value", value };
 }
 
+function matchPattern(
+  pattern: MatchPattern,
+  value: number,
+  _scope: Scope,
+): boolean {
+  switch (pattern.type) {
+    case "wildcard":
+      return true;
+    case "number":
+      return pattern.value === value;
+    case "identifier":
+      // Variable pattern: always matches, binds to scope
+      _scope.locals.set(pattern.name, { value, mutable: false });
+      return true;
+  }
+}
+
 function evalBlockStatements(statements: AstNode[], scope: Scope): EvalResult {
   // Create a new child scope frame for block scoping
   const childScope: Scope = { locals: new Map(), parent: scope };
@@ -49,6 +68,9 @@ function evalBlockStatements(statements: AstNode[], scope: Scope): EvalResult {
   let hasValue = false;
   for (const stmt of statements) {
     const result = evalAst(stmt, childScope);
+    if (result.type === "signal") {
+      return result; // propagate continue signal
+    }
     if (result.type === "value") {
       lastValue = result.value;
       hasValue = true;
@@ -112,6 +134,48 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
         return evalAst(node.else_, scope);
       }
       return { type: "void" };
+    }
+    case "while_expr": {
+      let condResult: EvalResult;
+      // Keep evaluating condition and body while condition is truthy
+
+      while (true) {
+        condResult = evalAst(node.condition, scope);
+        if (condResult.type !== "value") {
+          throw new Error(`While condition must produce a value`);
+        }
+        if (condResult.value === 0) break;
+        const bodyResult = evalAst(node.body, scope);
+        if (bodyResult.type === "signal" && bodyResult.signal === "continue") {
+          continue;
+        }
+        if (bodyResult.type === "signal" && bodyResult.signal === "break") {
+          break;
+        }
+      }
+      return { type: "void" };
+    }
+    case "continue":
+      return { type: "signal", signal: "continue" } as EvalSignal;
+    case "break":
+      return { type: "signal", signal: "break" } as EvalSignal;
+    case "match_expr": {
+      const scrutineeResult = evalAst(node.scrutinee, scope);
+      if (scrutineeResult.type !== "value") {
+        throw new Error(`Match scrutinee must produce a value`);
+      }
+      for (const arm of node.arms) {
+        const armScope: Scope = { locals: new Map(), parent: scope };
+        const matched = matchPattern(
+          arm.pattern,
+          scrutineeResult.value,
+          armScope,
+        );
+        if (matched) {
+          return evalAst(arm.body, armScope);
+        }
+      }
+      throw new Error(`Non-exhaustive match patterns`);
     }
   }
 }
