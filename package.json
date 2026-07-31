@@ -4,11 +4,14 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test" : "bun test",
-    "lint" : "tsc --noEmit"
+    "test": "bun test",
+    "lint": "tsc --noEmit",
+    "cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "format": "prettier . --write"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "prettier": "^3.9.6"
   },
   "peerDependencies": {
     "typescript": "^5"
