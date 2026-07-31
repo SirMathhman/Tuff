@@ -1,43 +1,122 @@
 // --- AST Node Types (Phase 1) ---
+interface NumberLiteral {
+  type: "number";
+  value: number;
+}
+
+interface Identifier {
+  type: "identifier";
+  name: string;
+}
+
+interface BinaryOp {
+  type: "binary_op";
+  op: "+" | "-" | "*" | "/";
+  left: AstNode;
+  right: AstNode;
+}
+
+interface LetDeclaration {
+  type: "let";
+  name: string;
+  mutable: boolean;
+  init: AstNode;
+}
+
+interface AssignExpr {
+  type: "assign_expr";
+  name: string;
+  value: AstNode;
+}
+
+interface Block {
+  type: "block";
+  statements: AstNode[];
+}
+
 type AstNode =
-  | { type: "number"; value: number }
-  | { type: "identifier"; name: string }
-  | {
-      type: "binary_op";
-      op: "+" | "-" | "*" | "/";
-      left: AstNode;
-      right: AstNode;
-    }
-  | { type: "let"; name: string; mutable: boolean; init: AstNode }
-  | { type: "assign_expr"; name: string; value: AstNode }
-  | { type: "block"; statements: AstNode[] };
+  NumberLiteral | Identifier | BinaryOp | LetDeclaration | AssignExpr | Block;
 
 // --- Tokenizer (unchanged) ---
-type Token =
-  | { type: "number"; value: number }
-  | { type: "identifier"; name: string }
-  | { type: "let_keyword" }
-  | { type: "mut_keyword" }
-  | { type: "assign" } // =
-  | { type: "semicolon" } // ;
-  | { type: "plus" }
-  | { type: "minus" }
-  | { type: "multiply" }
-  | { type: "divide" }
-  | { type: "lparen" }
-  | { type: "rparen" }
-  | { type: "lbrace" }
-  | { type: "rbrace" };
+interface NumberToken {
+  type: "number";
+  value: number;
+}
 
-function isNumberToken(
-  token: Token,
-): token is Extract<Token, { type: "number" }> {
+interface IdentifierToken {
+  type: "identifier";
+  name: string;
+}
+
+interface LetKeyword {
+  type: "let_keyword";
+}
+
+interface MutKeyword {
+  type: "mut_keyword";
+}
+
+interface AssignToken {
+  type: "assign";
+}
+
+interface SemicolonToken {
+  type: "semicolon";
+}
+
+interface PlusToken {
+  type: "plus";
+}
+
+interface MinusToken {
+  type: "minus";
+}
+
+interface MultiplyToken {
+  type: "multiply";
+}
+
+interface DivideToken {
+  type: "divide";
+}
+
+interface LParenToken {
+  type: "lparen";
+}
+
+interface RParenToken {
+  type: "rparen";
+}
+
+interface LBraceToken {
+  type: "lbrace";
+}
+
+interface RBraceToken {
+  type: "rbrace";
+}
+
+type Token =
+  | NumberToken
+  | IdentifierToken
+  | LetKeyword
+  | MutKeyword
+  | AssignToken
+  | SemicolonToken
+  | PlusToken
+  | MinusToken
+  | MultiplyToken
+  | DivideToken
+  | LParenToken
+  | RParenToken
+  | LBraceToken
+  | RBraceToken;
+
+function isNumberToken(token: Token): token is NumberToken {
   return token.type === "number";
 }
 
-function isIdentifierToken(
-  token: Token,
-): token is Extract<Token, { type: "identifier" }> {
+function isIdentifierToken(token: Token): token is IdentifierToken {
   return token.type === "identifier";
 }
 
@@ -121,7 +200,10 @@ function tokenize(source: string): Token[] {
 }
 
 // --- Parser: builds AST from tokens (Phase 2) ---
-type ParseResult = { ast: AstNode; pos: number };
+interface ParseResult {
+  ast: AstNode;
+  pos: number;
+}
 
 // parseAssignmentExpr: handles identifier assignment (lowest precedence) — declared before use by parseStatement
 function parseAssignmentExpr(tokens: Token[], pos: number): ParseResult {
@@ -133,7 +215,7 @@ function parseAssignmentExpr(tokens: Token[], pos: number): ParseResult {
     exprResult.pos < tokens.length &&
     tokens[exprResult.pos]?.type === "assign"
   ) {
-    const name = (exprResult.ast as { type: "identifier"; name: string }).name;
+    const name = (exprResult.ast as Identifier).name;
     const i = exprResult.pos + 1; // skip '='
     const valueResult = parseAssignmentExpr(tokens, i); // right-recursive for chained assignments
     return {
@@ -173,7 +255,10 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
 }
 
 // parseStatement: parses a single statement (let declaration, assignment, or expression) and advances position
-type StatementParseResult = { ast: AstNode; pos: number };
+interface StatementParseResult {
+  ast: AstNode;
+  pos: number;
+}
 function parseStatement(tokens: Token[], index: number): StatementParseResult {
   const token = tokens[index]!;
 
@@ -219,7 +304,10 @@ function skipSemicolon(tokens: Token[], index: number): number {
 }
 
 // parseBlock: parses statements inside { ... } returning a block AST node
-type BlockParseResult = { ast: AstNode; pos: number };
+interface BlockParseResult {
+  ast: AstNode;
+  pos: number;
+}
 function parseBlock(tokens: Token[], pos: number): BlockParseResult {
   let index = pos;
   const statements: AstNode[] = [];
@@ -275,74 +363,114 @@ function parseExpression(tokens: Token[], pos: number): ParseResult {
 }
 
 // --- Evaluator: walks AST with statement/expression distinction (Phase 5) ---
-type EvalResult =
-  | { type: "value"; value: number } // Expressions produce values
-  | { type: "void" }; // Statements produce no value
+interface EvalValue {
+  type: "value";
+  value: number;
+}
 
-type ScopeEntry = { value: number; mutable: boolean };
-type Scope = Map<string, ScopeEntry>;
+interface EvalVoid {
+  type: "void";
+}
+
+type EvalResult = EvalValue | EvalVoid;
+
+interface ScopeEntry {
+  value: number;
+  mutable: boolean;
+}
+
+interface ScopeFrame {
+  locals: Map<string, ScopeEntry>;
+  parent: ScopeFrame | null;
+}
+
+type Scope = ScopeFrame;
+
+function findScopeFrame(name: string, scope: Scope): ScopeFrame {
+  let frame: ScopeFrame | null = scope;
+  while (frame) {
+    if (frame.locals.has(name)) return frame;
+    frame = frame.parent;
+  }
+  throw new Error(`Undefined variable '${name}'`);
+}
 
 function lookupScopeEntry(name: string, scope: Scope): ScopeEntry {
-  const entry = scope.get(name);
-  if (entry === undefined) {
-    throw new Error(`Undefined variable '${name}'`);
+  return findScopeFrame(name, scope).locals.get(name)!;
+}
+
+function evalBinaryOp(node: BinaryOp, scope: Scope): EvalValue {
+  const leftResult = evalAst(node.left, scope);
+  const rightResult = evalAst(node.right, scope);
+
+  // Both operands must be values for binary operations
+  if (leftResult.type !== "value" || rightResult.type !== "value") {
+    throw new Error(
+      `Binary operation requires value expressions on both sides`,
+    );
   }
-  return entry;
+
+  const left = leftResult.value;
+  const right = rightResult.value;
+  let value: number;
+  switch (node.op) {
+    case "+":
+      value = left + right;
+      break;
+    case "-":
+      value = left - right;
+      break;
+    case "*":
+      value = left * right;
+      break;
+    case "/":
+      value = Math.trunc(left / right);
+      break;
+  }
+  return { type: "value", value };
+}
+
+function evalBlockStatements(statements: AstNode[], scope: Scope): EvalResult {
+  // Create a new child scope frame for block scoping
+  const childScope: Scope = { locals: new Map(), parent: scope };
+  let lastValue = 0;
+  for (const stmt of statements) {
+    const result = evalAst(stmt, childScope);
+    if (result.type === "value") {
+      lastValue = result.value;
+    }
+  }
+  // Child scope is discarded on exit — no cleanup needed
+  return { type: "value", value: lastValue };
 }
 
 function evalAst(node: AstNode, scope: Scope): EvalResult {
   switch (node.type) {
-    case "block": {
-      let lastValue = 0;
-      for (const stmt of node.statements) {
-        const result = evalAst(stmt, scope);
-        if (result.type === "value") {
-          lastValue = result.value;
-        }
-      }
-      return { type: "value", value: lastValue };
-    }
+    case "block":
+      return evalBlockStatements(node.statements, scope);
     case "number":
       return { type: "value", value: node.value };
     case "identifier": {
       const entry = lookupScopeEntry(node.name, scope);
       return { type: "value", value: entry.value };
     }
-    case "binary_op": {
-      const leftResult = evalAst(node.left, scope);
-      const rightResult = evalAst(node.right, scope);
-
-      // Both operands must be values for binary operations
-      if (leftResult.type !== "value" || rightResult.type !== "value") {
-        throw new Error(
-          `Binary operation requires value expressions on both sides`,
-        );
-      }
-
-      const left = leftResult.value;
-      const right = rightResult.value;
-      switch (node.op) {
-        case "+":
-          return { type: "value", value: left + right };
-        case "-":
-          return { type: "value", value: left - right };
-        case "*":
-          return { type: "value", value: left * right };
-        case "/":
-          return { type: "value", value: Math.trunc(left / right) };
-      }
-    }
+    case "binary_op":
+      return evalBinaryOp(node, scope);
     case "let": {
       const initResult = evalAst(node.init, scope);
       if (initResult.type !== "value") {
         throw new Error(`Let declaration requires a value expression`);
       }
       // Allow shadowing — redeclaration is permitted
-      scope.set(node.name, { value: initResult.value, mutable: node.mutable });
+      scope.locals.set(node.name, {
+        value: initResult.value,
+        mutable: node.mutable,
+      });
       return { type: "void" }; // declarations don't produce values
     }
     case "assign_expr": {
-      const entry = lookupScopeEntry(node.name, scope);
+      const frame = findScopeFrame(node.name, scope);
+      const entry = frame.locals.get(node.name)!;
       if (!entry.mutable) {
         throw new Error(`Cannot assign to immutable variable '${node.name}'`);
       }
@@ -357,7 +485,10 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
 }
 
 // --- Program Parser: top-level statement sequence (let decls + expressions) ---
-type ProgramParseResult = { ast: AstNode; pos: number };
+interface ProgramParseResult {
+  ast: AstNode;
+  pos: number;
+}
 function parseProgram(tokens: Token[], pos: number): ProgramParseResult {
   let index = pos;
   const statements: AstNode[] = [];
@@ -380,7 +511,7 @@ export function evaluate(source: string): number {
   if (tokens.length === 0) return 0;
 
   const parsed = parseProgram(tokens, 0); // returns block AST with all statements
-  const scope: Scope = new Map();
+  const scope: Scope = { locals: new Map(), parent: null };
   const result = evalAst(parsed.ast, scope);
   return result.type === "value" ? result.value : 0;
 }
