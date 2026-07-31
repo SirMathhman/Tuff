@@ -134,7 +134,7 @@ function parseAssignmentExpr(tokens: Token[], pos: number): ParseResult {
     tokens[exprResult.pos]?.type === "assign"
   ) {
     const name = (exprResult.ast as { type: "identifier"; name: string }).name;
-    let i = exprResult.pos + 1; // skip '='
+    const i = exprResult.pos + 1; // skip '='
     const valueResult = parseAssignmentExpr(tokens, i); // right-recursive for chained assignments
     return {
       ast: { type: "assign_expr", name, value: valueResult.ast },
@@ -236,7 +236,7 @@ function parseBlock(tokens: Token[], pos: number): BlockParseResult {
 
 // parseTerm: handles * and / (higher precedence than +/-)
 function parseTerm(tokens: Token[], pos: number): ParseResult {
-  let left = parseFactor(tokens, pos);
+  const left = parseFactor(tokens, pos);
 
   while (
     left.pos < tokens.length &&
@@ -256,7 +256,7 @@ function parseTerm(tokens: Token[], pos: number): ParseResult {
 
 // parseExpression: handles + and - (lowest precedence)
 function parseExpression(tokens: Token[], pos: number): ParseResult {
-  let result = parseTerm(tokens, pos);
+  const result = parseTerm(tokens, pos);
 
   while (
     result.pos < tokens.length &&
