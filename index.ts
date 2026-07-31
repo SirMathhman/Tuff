@@ -11,7 +11,7 @@ interface Identifier {
 
 interface BinaryOp {
   type: "binary_op";
-  op: "+" | "-" | "*" | "/";
+  op: "+" | "-" | "*" | "/" | "||" | "&&";
   left: AstNode;
   right: AstNode;
 }
@@ -34,8 +34,19 @@ interface Block {
   statements: AstNode[];
 }
 
+interface BoolLiteral {
+  type: "bool";
+  value: boolean;
+}
+
 type AstNode =
-  NumberLiteral | Identifier | BinaryOp | LetDeclaration | AssignExpr | Block;
+  | NumberLiteral
+  | Identifier
+  | BinaryOp
+  | LetDeclaration
+  | AssignExpr
+  | Block
+  | BoolLiteral;
 
 // --- Tokenizer (unchanged) ---
 interface NumberToken {
@@ -96,13 +107,33 @@ interface RBraceToken {
   type: "rbrace";
 }
 
+interface TrueKeyword {
+  type: "true_keyword";
+}
+
+interface FalseKeyword {
+  type: "false_keyword";
+}
+
+interface AndToken {
+  type: "and";
+}
+
+interface OrToken {
+  type: "or";
+}
+
 type Token =
   | NumberToken
   | IdentifierToken
   | LetKeyword
   | MutKeyword
+  | TrueKeyword
+  | FalseKeyword
   | AssignToken
   | SemicolonToken
+  | AndToken
+  | OrToken
   | PlusToken
   | MinusToken
   | MultiplyToken
@@ -121,7 +152,7 @@ function isIdentifierToken(token: Token): token is IdentifierToken {
 }
 
 // Keywords that look like identifiers but are reserved
-const KEYWORDS = new Set(["let", "mut"]);
+const KEYWORDS = new Set(["let", "mut", "true", "false"]);
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -158,6 +189,10 @@ function tokenize(source: string): Token[] {
           tokens.push({ type: "let_keyword" as const });
         } else if (name === "mut") {
           tokens.push({ type: "mut_keyword" as const });
+        } else if (name === "true") {
+          tokens.push({ type: "true_keyword" as const });
+        } else if (name === "false") {
+          tokens.push({ type: "false_keyword" as const });
         }
       } else {
         tokens.push({ type: "identifier", name });
@@ -180,6 +215,20 @@ function tokenize(source: string): Token[] {
     } else if (ch === ";") {
       tokens.push({ type: "semicolon" });
       i++;
+    } else if (ch === "&") {
+      if (i + 1 < source.length && source[i + 1] === "&") {
+        tokens.push({ type: "and" });
+        i += 2;
+      } else {
+        throw new Error(`Unexpected character '&' at position ${i}`);
+      }
+    } else if (ch === "|") {
+      if (i + 1 < source.length && source[i + 1] === "|") {
+        tokens.push({ type: "or" });
+        i += 2;
+      } else {
+        throw new Error(`Unexpected character '|' at position ${i}`);
+      }
     } else if (ch === "(") {
       tokens.push({ type: "lparen" });
       i++;
@@ -207,7 +256,7 @@ interface ParseResult {
 
 // parseAssignmentExpr: handles identifier assignment (lowest precedence) — declared before use by parseStatement
 function parseAssignmentExpr(tokens: Token[], pos: number): ParseResult {
-  const exprResult = parseExpression(tokens, pos);
+  const exprResult = parseBinaryOp(tokens, pos, 1);
 
   // Check if this is an assignment: "identifier = expr"
   if (
@@ -236,9 +285,17 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
     return { ast: { type: "identifier", name: token.name }, pos: pos + 1 };
   }
 
+  // Handle boolean literals
+  if (token.type === "true_keyword") {
+    return { ast: { type: "bool", value: true }, pos: pos + 1 };
+  }
+  if (token.type === "false_keyword") {
+    return { ast: { type: "bool", value: false }, pos: pos + 1 };
+  }
+
   // Handle grouped expression: recursively parse inside parens or braces
   if (token.type === "lparen") {
-    const innerResult = parseExpression(tokens, pos + 1);
+    const innerResult = parseBinaryOp(tokens, pos + 1, 1);
     return { ast: innerResult.ast, pos: innerResult.pos + 1 };
   }
 
@@ -322,44 +379,65 @@ function parseBlock(tokens: Token[], pos: number): BlockParseResult {
   return { ast: { type: "block", statements }, pos: index + 1 };
 }
 
-// parseTerm: handles * and / (higher precedence than +/-)
-function parseTerm(tokens: Token[], pos: number): ParseResult {
+// Precedence table for binary operators (higher = tighter binding)
+function getBinaryOpPrecedence(token: Token): number {
+  switch (token.type) {
+    case "or":
+      return 1;
+    case "and":
+      return 2;
+    case "plus":
+    case "minus":
+      return 2;
+    case "multiply":
+    case "divide":
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+// Maps a token type to its operator string for AST node creation
+function tokenTypeToBinaryOp(token: Token): BinaryOp["op"] {
+  switch (token.type) {
+    case "plus":
+      return "+";
+    case "minus":
+      return "-";
+    case "multiply":
+      return "*";
+    case "divide":
+      return "/";
+    case "or":
+      return "||";
+    case "and":
+      return "&&";
+    default:
+      throw new Error(`Unexpected token type for binary op`);
+  }
+}
+
+// parseBinaryOp: generic precedence-climbing parser for all binary operators
+function parseBinaryOp(
+  tokens: Token[],
+  pos: number,
+  minPrec: number,
+): ParseResult {
   const left = parseFactor(tokens, pos);
 
-  while (
-    left.pos < tokens.length &&
-    (tokens[left.pos]?.type === "multiply" ||
-      tokens[left.pos]?.type === "divide")
-  ) {
+  while (left.pos < tokens.length) {
+    const prec = getBinaryOpPrecedence(tokens[left.pos]!);
+    if (prec < minPrec) break;
+
     const opToken = tokens[left.pos]!;
-    const op: "*" | "/" = opToken.type === "multiply" ? "*" : "/";
+    const op = tokenTypeToBinaryOp(opToken);
     left.pos++;
-    const right = parseFactor(tokens, left.pos);
+    const right = parseBinaryOp(tokens, left.pos, prec + 1);
     left.ast = { type: "binary_op", op, left: left.ast, right: right.ast };
     left.pos = right.pos;
   }
 
   return left;
-}
-
-// parseExpression: handles + and - (lowest precedence)
-function parseExpression(tokens: Token[], pos: number): ParseResult {
-  const result = parseTerm(tokens, pos);
-
-  while (
-    result.pos < tokens.length &&
-    (tokens[result.pos]?.type === "plus" ||
-      tokens[result.pos]?.type === "minus")
-  ) {
-    const opToken = tokens[result.pos]!;
-    const op: "+" | "-" = opToken.type === "plus" ? "+" : "-";
-    result.pos++;
-    const right = parseTerm(tokens, result.pos);
-    result.ast = { type: "binary_op", op, left: result.ast, right: right.ast };
-    result.pos = right.pos;
-  }
-
-  return result;
 }
 
 // --- Evaluator: walks AST with statement/expression distinction (Phase 5) ---
@@ -426,6 +504,12 @@ function evalBinaryOp(node: BinaryOp, scope: Scope): EvalValue {
     case "/":
       value = Math.trunc(left / right);
       break;
+    case "||":
+      value = left !== 0 || right !== 0 ? 1 : 0;
+      break;
+    case "&&":
+      value = left !== 0 && right !== 0 ? 1 : 0;
+      break;
   }
   return { type: "value", value };
 }
@@ -450,6 +534,8 @@ function evalAst(node: AstNode, scope: Scope): EvalResult {
       return evalBlockStatements(node.statements, scope);
     case "number":
       return { type: "value", value: node.value };
+    case "bool":
+      return { type: "value", value: node.value ? 1 : 0 };
     case "identifier": {
       const entry = lookupScopeEntry(node.name, scope);
       return { type: "value", value: entry.value };

@@ -69,3 +69,15 @@ test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
 test('evaluate("{ let x = 1; } x") => Error', () => {
   expect(() => evaluate("{ let x = 1; } x")).toThrow();
 });
+
+test('evaluate("let x = true; x") => 1', () => {
+  expect(evaluate("let x = true; x")).toBe(1);
+});
+
+test('evaluate("let x = true; let y = false; x || y") => 1', () => {
+  expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
+});
+
+test('evaluate("let x = true; let y = false; x && y") => 0', () => {
+  expect(evaluate("let x = true; let y = false; x && y")).toBe(0);
+});
