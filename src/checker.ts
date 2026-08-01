@@ -85,6 +85,13 @@ export function validateScope(
         return ok(undefined);
       }
 
+      case "while": {
+        // The condition is always a value; the body is a statement.
+        const conditionResult = checkNode(node.condition, ctx.asValue());
+        if (!conditionResult.ok) return conditionResult;
+        return checkNode(node.body, ctx);
+      }
+
       case "block": {
         // A block introduces a child scope that inherits from the parent
         const childCtx = ctx.inChildScope();

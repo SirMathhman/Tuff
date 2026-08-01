@@ -61,6 +61,13 @@ export function generateJS(node: ASTNode): Result<string, Error> {
       return ok("(() => { " + parts.join(" ") + " })()");
     }
 
+    case "while":
+      return andThen(generateJS(node.condition), (condition) => {
+        return map(generateJS(node.body), (body) => {
+          return "while (" + condition + ") { " + body + "; }";
+        });
+      });
+
     default:
       return err(new Error("Cannot generate JS for node kind: " + node.kind));
   }

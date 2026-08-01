@@ -125,6 +125,33 @@ export function createParser(tokens: Token[]): Parser {
     return ok({ kind: "block", statements });
   }
 
+  // Parse: while ( <condition> ) <body>
+  function parseWhile(): Result<ASTNode, Error> {
+    consume(); // consume 'while'
+
+    if (peek().type !== "lparen") {
+      return err(new Error("Expected '(' after while"));
+    }
+    consume(); // consume '('
+
+    const conditionResult = parseExpression();
+    if (!conditionResult.ok) return conditionResult;
+
+    if (peek().type !== "rparen") {
+      return err(new Error("Expected ')' after while condition"));
+    }
+    consume(); // consume ')'
+
+    const bodyResult = parseStatement();
+    if (!bodyResult.ok) return bodyResult;
+
+    return ok({
+      kind: "while",
+      condition: conditionResult.value,
+      body: bodyResult.value,
+    });
+  }
+
   // Parse binary expression with precedence climbing
   function parseExpression(minPrec: number = 0): Result<ASTNode, Error> {
     return andThen(parsePrimary(), (left) => {
@@ -195,6 +222,10 @@ export function createParser(tokens: Token[]): Parser {
   function parseStatement(): Result<ASTNode, Error> {
     if (peek().type === "let") {
       return parseLetDecl();
+    }
+
+    if (peek().type === "while") {
+      return parseWhile();
     }
 
     // Expression statement

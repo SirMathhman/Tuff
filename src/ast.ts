@@ -24,6 +24,9 @@ export interface IfToken {
 export interface ElseToken {
   type: "else";
 }
+export interface WhileToken {
+  type: "while";
+}
 export interface LParenToken {
   type: "lparen";
 }
@@ -96,6 +99,7 @@ export type Token =
   | MutToken
   | IfToken
   | ElseToken
+  | WhileToken
   | LParenToken
   | RParenToken
   | LBraceToken
@@ -166,6 +170,11 @@ export interface BlockNode {
   kind: "block";
   statements: ASTNode[];
 }
+export interface WhileNode {
+  kind: "while";
+  condition: ASTNode;
+  body: ASTNode;
+}
 
 export type ASTNode =
   | NumberNode
@@ -176,7 +185,8 @@ export type ASTNode =
   | AssignNode
   | LetDeclNode
   | IfNode
-  | BlockNode;
+  | BlockNode
+  | WhileNode;
 
 // A node is a pure expression if it produces a value without side effects.
 // Declarations (let_decl) and assignments (assign) are statements, not

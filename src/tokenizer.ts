@@ -75,6 +75,8 @@ export function tokenize(source: string): Result<Token[], Error> {
         tokens.push({ type: "if" });
       } else if (name === "else") {
         tokens.push({ type: "else" });
+      } else if (name === "while") {
+        tokens.push({ type: "while" });
       } else if (name === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {
