@@ -85,6 +85,13 @@ export function tokenize(source: string): Result<Token[], Error> {
       continue;
     }
 
+    // Compound assignment operators (not binary operators, so not in OPERATORS)
+    if (source.startsWith("+=", i)) {
+      tokens.push({ type: "plus_equals" });
+      i += 2;
+      continue;
+    }
+
     // Operator tokens (from the centralized OPERATORS table)
     let matched = false;
     for (const [symbol, type] of SYMBOL_TO_TYPE) {

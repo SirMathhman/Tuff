@@ -6,12 +6,23 @@ function evaluate(source: string, args: string[] = []) {
   // evaluate() is only called with valid sources; error cases use compileTuffToJS directly
   const generatedJS = compiled.ok ? compiled.value : "";
   const wrappedJS =
-    "let __exit__ = undefined; let process = { exit : (arg) => { __exit__ = arg; } }; " +
+    "let __exit__ = 0; let process = { exit : (arg) => { __exit__ = arg; } }; " +
     generatedJS +
     " return __exit__;";
 
   const newArgs = ["mock_program_name.exe", ...args];
   return new Function("args", wrappedJS)(newArgs) as number;
+}
+
+// Assert that compiling `source` fails with an error of the given kind.
+// The kind is the error's `name` (e.g. "ScopeError" for semantic errors,
+// "Error" for syntax/lexical errors).
+function expectCompileError(source: string, errorKind: string) {
+  const result = compileTuffToJS(source);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.name).toBe(errorKind);
+  }
 }
 
 describe("tuff", () => {
@@ -43,8 +54,8 @@ describe("tuff", () => {
     expect(evaluate("let x = args.length; let y = x; y", [])).toBe(1);
   });
 
-  it('compile("undefinedIdentifier") => Error', () => {
-    expect(compileTuffToJS("undefinedIdentifier").ok).toBe(false);
+  it('compile("undefinedIdentifier") => ScopeError', () => {
+    expectCompileError("undefinedIdentifier", "ScopeError");
   });
 
   it('evaluate("let x = 0; let x = 1; x") => 1', () => {
@@ -55,8 +66,8 @@ describe("tuff", () => {
     expect(evaluate("let mut x = 0; x = 1; x", [])).toBe(1);
   });
 
-  it('compile("let x = 0; x = 1; x") => Error', () => {
-    expect(compileTuffToJS("let x = 0; x = 1; x").ok).toBe(false);
+  it('compile("let x = 0; x = 1; x") => ScopeError', () => {
+    expectCompileError("let x = 0; x = 1; x", "ScopeError");
   });
 
   it('evaluate("let x = true; x") => 1', () => {
@@ -106,10 +117,36 @@ describe("tuff", () => {
   });
 
   it('compile("let x = if (false) 2; x") => Error', () => {
-    expect(compileTuffToJS("let x = if (false) 2; x").ok).toBe(false);
+    expectCompileError("let x = if (false) 2; x", "Error");
   });
 
   it('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
     expect(evaluate("let mut x = 0; { x = 1; } x", [])).toBe(1);
+  });
+
+  it('evaluate("let x = 100;") => 0', () => {
+    expect(evaluate("let x = 100;", [])).toBe(0);
+  });
+
+  it('compile("let x = { let y = 100; }; x") => ScopeError', () => {
+    expectCompileError("let x = { let y = 100; }; x", "ScopeError");
+  });
+
+  it('compile("let mut y = 0; let x = { y = 1; }; x") => Error', () => {
+    expectCompileError("let mut y = 0; let x = { y = 1; }; x", "Error");
+  });
+
+  it('evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x") => 1', () => {
+    expect(
+      evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x", []),
+    ).toBe(1);
+  });
+
+  it('evaluate("let mut x = 0; if (true) { x = 1; } x") => 1', () => {
+    expect(evaluate("let mut x = 0; if (true) { x = 1; } x", [])).toBe(1);
+  });
+
+  it('evaluate("let mut x = 1; x += 2; x") => 3', () => {
+    expect(evaluate("let mut x = 1; x += 2; x", [])).toBe(3);
   });
 });

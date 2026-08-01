@@ -33,6 +33,10 @@ export function generateJS(node: ASTNode): Result<string, Error> {
     case "if":
       return andThen(generateJS(node.condition), (condition) => {
         return andThen(generateJS(node.thenBranch), (thenBranch) => {
+          if (node.elseBranch === undefined) {
+            // No else: the `if` is used as a statement, so emit an if statement.
+            return ok("if (" + condition + ") { " + thenBranch + "; }");
+          }
           return map(generateJS(node.elseBranch), (elseBranch) => {
             return (
               "(" + condition + " ? " + thenBranch + " : " + elseBranch + ")"
@@ -58,6 +62,6 @@ export function generateJS(node: ASTNode): Result<string, Error> {
     }
 
     default:
-      return err(new Error("Unexpected node kind in codegen"));
+      return err(new Error("Cannot generate JS for node kind: " + node.kind));
   }
 }

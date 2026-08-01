@@ -51,29 +51,11 @@ export function compileTuffToJS(source: string): Result<string, Error> {
       const valueResult = generateJS(stmt.value);
       if (!valueResult.ok) return valueResult;
       if (isNew) {
-        if (i === stmts.length - 1) {
-          parts.push(
-            "let " +
-              stmt.name +
-              " = " +
-              valueResult.value +
-              "; process.exit(" +
-              exitCode(stmt.name) +
-              ");",
-          );
-        } else {
-          parts.push("let " + stmt.name + " = " + valueResult.value + ";");
-        }
+        // A let declaration is a declaration, not an expression — it never
+        // produces an exit code. Only an expression statement does.
+        parts.push("let " + stmt.name + " = " + valueResult.value + ";");
       } else {
-        if (i === stmts.length - 1) {
-          parts.push(
-            "process.exit(" +
-              exitCode(stmt.name + " = " + valueResult.value) +
-              ");",
-          );
-        } else {
-          parts.push(stmt.name + " = " + valueResult.value + ";");
-        }
+        parts.push(stmt.name + " = " + valueResult.value + ";");
       }
     } else {
       const exprResult = generateJS(stmt);

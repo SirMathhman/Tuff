@@ -69,7 +69,7 @@ export function createParser(tokens: Token[]): Parser {
     return err(new Error("Unexpected token: " + token.type));
   }
 
-  // Parse: if ( <condition> ) <then> else <else>
+  // Parse: if ( <condition> ) <then> [else <else>]
   function parseIf(): Result<ASTNode, Error> {
     consume(); // consume 'if'
 
@@ -89,19 +89,21 @@ export function createParser(tokens: Token[]): Parser {
     const thenResult = parseExpression();
     if (!thenResult.ok) return thenResult;
 
-    if (peek().type !== "else") {
-      return err(new Error("Expected 'else' in if expression"));
+    // The else branch is optional at parse time. Whether it's required is
+    // validated later (an `if` used as a value must have an else).
+    let elseBranch: ASTNode | undefined;
+    if (peek().type === "else") {
+      consume(); // consume 'else'
+      const elseResult = parseExpression();
+      if (!elseResult.ok) return elseResult;
+      elseBranch = elseResult.value;
     }
-    consume(); // consume 'else'
-
-    const elseResult = parseExpression();
-    if (!elseResult.ok) return elseResult;
 
     return ok({
       kind: "if",
       condition: conditionResult.value,
       thenBranch: thenResult.value,
-      elseBranch: elseResult.value,
+      elseBranch,
     });
   }
 
@@ -200,20 +202,33 @@ export function createParser(tokens: Token[]): Parser {
     if (!exprResult.ok) return exprResult;
     const expr = exprResult.value;
 
-    // Check for assignment: identifier = expr
-    if (peek().type === "equals") {
+    // Check for assignment: identifier = expr, or compound assignment
+    // identifier += expr (desugared to x = x + expr).
+    const assignOp = thisAssignOp(peek());
+    if (assignOp !== null) {
       if (expr.kind !== "identifier") {
         return err(
           new Error("Left-hand side of assignment must be an identifier"),
         );
       }
-      consume(); // consume '='
+      consume(); // consume the assignment operator
       return andThen(parseExpression(), (value) => {
         // Consume optional trailing semicolon
         if (peek().type === "semicolon") {
           consume();
         }
-        return ok({ kind: "assign", name: expr.name, value });
+        // For compound assignment, desugar x <op>= e into x = x <op> e.
+        // A plain "=" assignment has an empty op ("").
+        const rhs: ASTNode =
+          assignOp === ""
+            ? value
+            : {
+                kind: "binary_op",
+                left: { kind: "identifier", name: expr.name },
+                op: assignOp,
+                right: value,
+              };
+        return ok({ kind: "assign", name: expr.name, value: rhs });
       });
     }
 
@@ -222,6 +237,18 @@ export function createParser(tokens: Token[]): Parser {
       consume();
     }
     return ok(expr);
+  }
+
+  // Return the binary-op symbol for a compound assignment token (e.g. "+=" -> "+"),
+  // "" for a plain "=" assignment, or null if the token is not an assignment.
+  function thisAssignOp(token: Token): string | null {
+    if (token.type === "equals") {
+      return "";
+    }
+    if (token.type === "plus_equals") {
+      return "+";
+    }
+    return null;
   }
 
   return { peek, parseStatement };

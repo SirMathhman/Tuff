@@ -51,6 +51,9 @@ export interface SemicolonToken {
 export interface PlusToken {
   type: "plus";
 }
+export interface PlusEqualsToken {
+  type: "plus_equals";
+}
 export interface MinusToken {
   type: "minus";
 }
@@ -102,6 +105,7 @@ export type Token =
   | BangEqualsToken
   | SemicolonToken
   | PlusToken
+  | PlusEqualsToken
   | MinusToken
   | StarToken
   | SlashToken
@@ -154,7 +158,9 @@ export interface IfNode {
   kind: "if";
   condition: ASTNode;
   thenBranch: ASTNode;
-  elseBranch: ASTNode;
+  // elseBranch is optional: an `if` used as a statement may omit it, but an
+  // `if` used as a value must have one (a value must always be produced).
+  elseBranch?: ASTNode;
 }
 export interface BlockNode {
   kind: "block";
@@ -171,6 +177,13 @@ export type ASTNode =
   | LetDeclNode
   | IfNode
   | BlockNode;
+
+// A node is a pure expression if it produces a value without side effects.
+// Declarations (let_decl) and assignments (assign) are statements, not
+// pure expressions.
+export function isExpression(node: ASTNode): boolean {
+  return node.kind !== "let_decl" && node.kind !== "assign";
+}
 
 // ---- Operator Table ----
 
