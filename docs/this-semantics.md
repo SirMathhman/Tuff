@@ -16,7 +16,7 @@ There is exactly one frame that is never constructed by anything: **true
 global**. It has no fields, no instance, and is not reachable by name. Every
 piece of code a person actually writes — including top-level `let`/`fn`
 declarations — lives inside an **implicit module frame** (`Module`), which is
-itself a constructor-like frame one level *inside* true global. This is the
+itself a constructor-like frame one level _inside_ true global. This is the
 load-bearing fact that makes the rest of the system consistent: there is no
 user-reachable "depth 0."
 
@@ -51,8 +51,8 @@ Nested functions do **not** inherit the outer function's `this` by default.
 Each function, at whatever depth, has its own `this` referring to its own
 instance. This is the opposite of JS's default (where nested plain functions
 rebind `this` and arrow functions had to be added specifically to opt out of
-that) — in Tuff, *reaching inward* to your own frame is the default, and
-*reaching outward* is the thing that requires explicit syntax.
+that) — in Tuff, _reaching inward_ to your own frame is the default, and
+_reaching outward_ is the thing that requires explicit syntax.
 
 ---
 
@@ -107,7 +107,7 @@ this.this
 
 This is top-level code, D=1. `this` alone (k=0) names `Module`. `this.this`
 (k=1) requires D ≥ 2, which fails — there is no frame beyond `Module` to
-climb into. **Compile error**, and it is the *same* error class as any other
+climb into. **Compile error**, and it is the _same_ error class as any other
 over-climb, not a distinct "top level is special" case.
 
 ---
@@ -141,16 +141,16 @@ at all — it isn't required to. Whether a `this` instance is conceptually
 "alive" from function entry or only from the point of first mention has no
 observable effect and is left to codegen (§7).
 
-A nested constructor may still take a receiver referring to an *outer*
+A nested constructor may still take a receiver referring to an _outer_
 frame, written using the climb chain as a type: `&this.this`,
 `&mut this.this`, or with an explicit lifetime, e.g.
 `this.this : &t mut Outer`.
 
 **Method-ness and constructor-ness are independent axes, not mutually
 exclusive categories.** "Method" asks whether the parameter list includes a
-`this`-typed parameter — a receiver belonging to *some* frame, reached via
+`this`-typed parameter — a receiver belonging to _some_ frame, reached via
 any `this.this^k`, not necessarily the function's own frame. "Constructor"
-asks whether the body mentions the function's *own* `this` (§4, possibly
+asks whether the body mentions the function's _own_ `this` (§4, possibly
 wrapped). These are facts about two different frames — an incoming receiver
 parameter versus an outgoing self-construction — so a function can be
 neither, either, or both:
@@ -170,7 +170,7 @@ neither, either, or both:
 function — method, constructor, capturing or not — declared inside another
 function's body is reachable via `.name(...)` off an instance of the
 enclosing frame, purely because of lexical nesting position. There is no
-separate "is this a member" check; membership *is* lexical position.
+separate "is this a member" check; membership _is_ lexical position.
 
 ---
 
@@ -180,7 +180,7 @@ There is no public/private distinction in the language. Because of this,
 **every `let` declared directly at a constructor's top-level body scope
 becomes a field of the resulting instance** — unconditionally. This applies
 whether or not the field is ever written as `this.field` explicitly; a bare
-local declared at that scope simply *is* a field, reachable three ways that
+local declared at that scope simply _is_ a field, reachable three ways that
 all name the same thing: bare name from inside (with auto-climbing through
 `this.this^k` when referenced from a nested function), `this.field` from
 inside, and `instance.field` from outside after construction.
@@ -206,7 +206,7 @@ on a given path.
 **Consequence for capture:** what looks like a nested function "capturing"
 an enclosing local (as in `add` referencing `counter` in §9 below) is not a
 separate closure-capture mechanism distinct from `this.this` field access —
-`counter`, being declared at `Counter`'s top-level body scope, already *is*
+`counter`, being declared at `Counter`'s top-level body scope, already _is_
 a field of `Counter`'s instance. A bare reference to it from a nested
 function is exactly the same mechanism as an explicit `this.this.counter`,
 just with the climb inserted automatically by lexical name resolution
@@ -229,7 +229,7 @@ receives an implicit reference to (some part of) the enclosing frame as an
 extra parameter, threaded in automatically at each call site.
 
 This is the same underlying analysis as capture-checking in any closure
-implementation, and it now also *is* the mechanism that decides which
+implementation, and it now also _is_ the mechanism that decides which
 `this.this` fields need to exist at all (see §7) — one analysis pass serving
 both purposes, rather than two separate mechanisms for "is this a closure"
 and "does this class have this field."
@@ -249,7 +249,7 @@ body never itself references `this.this`.
 
 What the compiler is **not** required to do is materialize that chain as any
 particular runtime representation. The specification only constrains
-*provable reachability at compile time* — not struct layout, not whether a
+_provable reachability at compile time_ — not struct layout, not whether a
 field literally exists in memory, not calling convention. A field that
 nothing outside the compiler's own reachability bookkeeping ever reads is
 free to be elided entirely in codegen, forwarded straight through without
@@ -268,7 +268,7 @@ with no cost imposed on the one that doesn't use it.
 **Open item, deliberately left as a live design decision:** whether frame
 layout should ever be treated as a stable ABI (e.g. for separate compilation
 across modules) is not settled by the semantics above. The semantics only
-fix what function *signatures* (parameter and return types) must mean;
+fix what function _signatures_ (parameter and return types) must mean;
 internal frame representation is explicitly not part of that contract unless
 a future decision makes it so.
 
@@ -283,7 +283,7 @@ mutate enclosing state.
 
 There is **no special-cased borrow-checking behavior for `this.this`** — it
 follows the same linear/affine reference rules as any other `&mut` in the
-language. A mutable outer reference is *threaded*, not reacquired per call:
+language. A mutable outer reference is _threaded_, not reacquired per call:
 if a chain of calls each takes `&t mut Outer` and returns `&t mut Outer`
 under a shared lifetime `t`, it is the same reference being moved through
 each call in sequence, not a series of independent short-lived borrows. This
@@ -292,7 +292,7 @@ is what makes chained mutation (`Counter().add().add().add()`) sound: each
 it onward for the next call to receive.
 
 A consequence of ordinary linear borrow rules applying here with no
-exception: a function that returns a *value* derived from the reference
+exception: a function that returns a _value_ derived from the reference
 (rather than the reference itself) ends the borrow at that point, so
 interleaving a read-only call into a mutation chain works exactly when
 ordinary borrow-checking would allow it, and fails exactly when it wouldn't
@@ -320,7 +320,7 @@ fn add(&mut, amount: I32) => {
 rule. `Counter::add` is just namespace-qualified lookup of `add` without
 binding any particular instance to it — and per the C-compilation model
 (§7), a receiver was always just an implicit leading parameter, so naming
-the function *without* an instance necessarily surfaces that parameter
+the function _without_ an instance necessarily surfaces that parameter
 explicitly:
 
 ```
@@ -351,7 +351,7 @@ deep the function was originally nested. This is not a separate assumption
 — it follows from the transitivity requirement in §7: if a function needs to
 reach k frames out, that need forces every intermediate ancestor frame to
 carry a connection to the next one, so a closure only ever needs to hold a
-reference to its *immediate* enclosing frame and walk any further hops
+reference to its _immediate_ enclosing frame and walk any further hops
 through fields already reachable from that single reference, rather than
 capturing a separate reference per hop.
 
@@ -410,7 +410,7 @@ its lexical position — dot-call availability and hoisting status are
 orthogonal (§4, §6). No `Outer.this`-style disambiguation syntax (as in Java)
 is needed, because nesting position alone establishes the inner-class
 relationship; explicit outer-reference syntax (`this.this`) is only needed
-when the inner constructor *also* wants to reach back out, which this
+when the inner constructor _also_ wants to reach back out, which this
 example doesn't.
 
 ---
