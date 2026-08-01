@@ -5,6 +5,7 @@ import { ok, err } from "./result";
 import type { Scope } from "./scope";
 import type { CompileError } from "./compileError";
 import { compileError } from "./compileError";
+import { inferType, typeMismatch, rangeError } from "./types";
 
 function scopeError(message: string): CompileError {
   return compileError("scope", message);
@@ -45,17 +46,14 @@ export function validateScope(
     ctx: CheckContext,
   ): Result<void, CompileError> {
     switch (node.kind) {
-      case "number":
+      case "number": {
         // Validate that a typed literal fits its type's range.
-        if (node.suffix === "U8" && (node.value < 0 || node.value > 255)) {
-          return err(
-            compileError(
-              "syntax",
-              "Value " + node.value + " out of range for U8",
-            ),
-          );
+        const rangeErr = rangeError(node.value, node.suffix);
+        if (rangeErr !== undefined) {
+          return err(compileError("syntax", rangeErr));
         }
         return ok(undefined);
+      }
 
       case "boolean":
         // Always valid
@@ -147,8 +145,22 @@ export function validateScope(
         // Validate the value expression first (RHS)
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        // Then add the new variable to scope
-        ctx.scope.declare(node.name, node.isMut === true);
+        // If a type annotation is present, the value's type must be
+        // assignable to it (widening allowed, narrowing rejected).
+        if (node.typeAnnotation !== undefined) {
+          const valueType = inferType(node.value, ctx.scope);
+          if (valueType !== undefined) {
+            const mismatch = typeMismatch(node.typeAnnotation, valueType);
+            if (mismatch !== undefined) {
+              return err(compileError("syntax", mismatch));
+            }
+          }
+        }
+        // Then add the new variable to scope, recording its type (either the
+        // annotation, or the inferred type of the value).
+        const declaredType =
+          node.typeAnnotation ?? inferType(node.value, ctx.scope);
+        ctx.scope.declare(node.name, node.isMut === true, declaredType);
         return ok(undefined);
       }
     }

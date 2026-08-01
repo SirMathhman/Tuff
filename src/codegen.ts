@@ -72,7 +72,10 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
 
     default:
       return err(
-        compileError("syntax", "Cannot generate JS for node kind: " + node.kind),
+        compileError(
+          "syntax",
+          "Cannot generate JS for node kind: " + node.kind,
+        ),
       );
   }
 }

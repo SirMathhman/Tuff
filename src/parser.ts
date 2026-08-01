@@ -55,7 +55,10 @@ export function createParser(tokens: Token[]): Parser {
         const propToken = consume();
         if (propToken.type !== "identifier") {
           return err(
-            compileError("syntax", "Expected identifier after dot, got " + propToken.type),
+            compileError(
+              "syntax",
+              "Expected identifier after dot, got " + propToken.type,
+            ),
           );
         }
         node = {
@@ -196,8 +199,27 @@ export function createParser(tokens: Token[]): Parser {
     const nameToken = consume();
     if (nameToken.type !== "identifier") {
       return err(
-        compileError("syntax", "Expected identifier after let, got " + nameToken.type),
+        compileError(
+          "syntax",
+          "Expected identifier after let, got " + nameToken.type,
+        ),
       );
+    }
+
+    // Optional type annotation: : <type>
+    let typeAnnotation: string | undefined;
+    if (peek().type === "colon") {
+      consume(); // consume ':'
+      const typeToken = consume();
+      if (typeToken.type !== "identifier") {
+        return err(
+          compileError(
+            "syntax",
+            "Expected type name after ':', got " + typeToken.type,
+          ),
+        );
+      }
+      typeAnnotation = typeToken.name;
     }
 
     if (peek().type !== "equals") {
@@ -216,6 +238,7 @@ export function createParser(tokens: Token[]): Parser {
         name: nameToken.name,
         value,
         isMut,
+        typeAnnotation,
       });
     });
   }
@@ -241,7 +264,10 @@ export function createParser(tokens: Token[]): Parser {
     if (assignOp !== null) {
       if (expr.kind !== "identifier") {
         return err(
-          compileError("syntax", "Left-hand side of assignment must be an identifier"),
+          compileError(
+            "syntax",
+            "Left-hand side of assignment must be an identifier",
+          ),
         );
       }
       consume(); // consume the assignment operator

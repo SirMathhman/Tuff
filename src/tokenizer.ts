@@ -4,6 +4,7 @@ import type { Result } from "./result";
 import { ok, err } from "./result";
 import type { CompileError } from "./compileError";
 import { compileError } from "./compileError";
+import { SUFFIXES } from "./types";
 
 // Lookup from operator symbol -> token type, longest symbols first so that
 // multi-character operators (e.g. "||") are matched before single-character ones.
@@ -41,11 +42,15 @@ export function tokenize(source: string): Result<Token[], CompileError> {
           break;
         }
       }
-      // Optional type suffix (e.g. "U8" in "100U8")
+      // Optional type suffix (e.g. "U8" in "100U8", "U16" in "100U16").
+      // SUFFIXES is ordered longest-first so multi-char suffixes match first.
       let suffix: string | undefined;
-      if (source.startsWith("U8", i)) {
-        suffix = "U8";
-        i += 2;
+      for (const s of SUFFIXES) {
+        if (source.startsWith(s, i)) {
+          suffix = s;
+          i += s.length;
+          break;
+        }
       }
       tokens.push({ type: "number", value: Number(num), suffix });
       continue;
@@ -141,6 +146,11 @@ export function tokenize(source: string): Result<Token[], CompileError> {
       i++;
       continue;
     }
+    if (char === ":") {
+      tokens.push({ type: "colon" });
+      i++;
+      continue;
+    }
     if (char === "=") {
       tokens.push({ type: "equals" });
       i++;
@@ -153,9 +163,7 @@ export function tokenize(source: string): Result<Token[], CompileError> {
     }
 
     // Unknown character: fail loudly instead of silently skipping
-    return err(
-      compileError("syntax", "Unexpected character: '" + char + "'"),
-    );
+    return err(compileError("syntax", "Unexpected character: '" + char + "'"));
   }
 
   tokens.push({ type: "eof" });

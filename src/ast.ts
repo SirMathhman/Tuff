@@ -50,6 +50,9 @@ export interface EqualsEqualsToken {
 export interface BangEqualsToken {
   type: "bang_equals";
 }
+export interface ColonToken {
+  type: "colon";
+}
 export interface SemicolonToken {
   type: "semicolon";
 }
@@ -109,6 +112,7 @@ export type Token =
   | EqualsToken
   | EqualsEqualsToken
   | BangEqualsToken
+  | ColonToken
   | SemicolonToken
   | PlusToken
   | PlusEqualsToken
@@ -161,6 +165,8 @@ export interface LetDeclNode {
   name: string;
   value: ASTNode;
   isMut?: boolean;
+  // Optional type annotation, e.g. "U8" in "let x : U8 = 100U8;".
+  typeAnnotation?: string;
 }
 export interface IfNode {
   kind: "if";

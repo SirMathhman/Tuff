@@ -170,4 +170,28 @@ describe("tuff", () => {
   it('compile("-100U8") => syntax', () => {
     expectCompileError("-100U8", "syntax");
   });
+
+  it('evaluate("let x : U8 = 100U8; x") => 100', () => {
+    expect(evaluate("let x : U8 = 100U8; x", [])).toBe(100);
+  });
+
+  it('evaluate("let x : U16 = 100U8; x") => 100', () => {
+    expect(evaluate("let x : U16 = 100U8; x", [])).toBe(100);
+  });
+
+  it('compile("let x : U8 = 100U16; x") => syntax', () => {
+    expectCompileError("let x : U8 = 100U16; x", "syntax");
+  });
+
+  it('compile("let x = 100U16; let y : U8 = x;") => syntax', () => {
+    expectCompileError("let x = 100U16; let y : U8 = x;", "syntax");
+  });
+
+  it('evaluate("let x : U16 = 100U16; x") => 100', () => {
+    expect(evaluate("let x : U16 = 100U16; x", [])).toBe(100);
+  });
+
+  it('compile("65536U16") => syntax', () => {
+    expectCompileError("65536U16", "syntax");
+  });
 });

@@ -9,6 +9,9 @@ export interface CompileError {
   message: string;
 }
 
-export function compileError(kind: CompileErrorKind, message: string): CompileError {
+export function compileError(
+  kind: CompileErrorKind,
+  message: string,
+): CompileError {
   return { kind, message };
 }
