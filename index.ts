@@ -64,6 +64,12 @@ export function compileTuffToJS(source: string): Result<string, CompileError> {
       const fnResult = generateJS(stmt);
       if (!fnResult.ok) return fnResult;
       parts.push(fnResult.value);
+    } else if (stmt.kind === "struct_decl") {
+      // A struct declaration is a declaration, not an expression — it never
+      // produces an exit code.
+      const structResult = generateJS(stmt);
+      if (!structResult.ok) return structResult;
+      parts.push(structResult.value);
     } else {
       const exprResult = generateJS(stmt);
       if (!exprResult.ok) return exprResult;

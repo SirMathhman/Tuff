@@ -1,4 +1,4 @@
-import type { ASTNode } from "./ast";
+import type { ASTNode, StructInitField } from "./ast";
 import type { Result } from "./result";
 import { ok, err, map, andThen } from "./result";
 import type { CompileError } from "./compileError";
@@ -11,6 +11,19 @@ function generateArgs(nodes: ASTNode[]): Result<string, CompileError> {
     const result = generateJS(node);
     if (!result.ok) return result;
     parts.push(result.value);
+  }
+  return ok(parts.join(", "));
+}
+
+// Generate the comma-separated "name: value" pairs for a struct initializer.
+function generateStructFields(
+  fields: StructInitField[],
+): Result<string, CompileError> {
+  const parts: string[] = [];
+  for (const field of fields) {
+    const result = generateJS(field.value);
+    if (!result.ok) return result;
+    parts.push(field.name + ": " + result.value);
   }
   return ok(parts.join(", "));
 }
@@ -112,6 +125,15 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
         return map(generateJS(node.index), (index) => {
           return object + "[" + index + "]";
         });
+      });
+
+    case "struct_decl":
+      // A struct declaration is a no-op at runtime (types are compile-time).
+      return ok("");
+
+    case "struct_init":
+      return andThen(generateStructFields(node.fields), (fields) => {
+        return ok("({ " + fields + " })");
       });
 
     case "if":

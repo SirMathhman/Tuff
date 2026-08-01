@@ -63,11 +63,15 @@ export function formatType(t: Type): string {
   if (t.kind === "ref") {
     return (t.isMut ? "&mut " : "&") + formatType(t.inner);
   }
-  return "[" + formatType(t.elem) + "; " + t.length + "]";
+  if (t.kind === "array") {
+    return "[" + formatType(t.elem) + "; " + t.length + "]";
+  }
+  return t.name;
 }
 
 // Whether a Type is well-formed: named types must exist in the TYPES table,
-// and reference/array types must have well-formed inner types.
+// and reference/array types must have well-formed inner types. Struct types
+// are validated by the checker (which tracks declared structs).
 export function isKnownType(t: Type): boolean {
   if (t.kind === "named") {
     return TYPES.has(t.name);
@@ -75,7 +79,10 @@ export function isKnownType(t: Type): boolean {
   if (t.kind === "ref") {
     return isKnownType(t.inner);
   }
-  return isKnownType(t.elem);
+  if (t.kind === "array") {
+    return isKnownType(t.elem);
+  }
+  return true;
 }
 
 // Side-table mapping each AST node to its inferred type. The checker computes
@@ -133,6 +140,14 @@ export function conversionKind(from: Type, to: Type): ConversionKind {
     // An array is never assignable to a non-array (or vice versa).
     return "impossible";
   }
+  // Struct types: assignable only to the same struct type.
+  if (from.kind === "struct" || to.kind === "struct") {
+    return from.kind === "struct" &&
+      to.kind === "struct" &&
+      from.name === to.name
+      ? "none"
+      : "impossible";
+  }
   // Both are named types.
   const f = TYPES.get(from.name);
   const t = TYPES.get(to.name);
@@ -183,6 +198,9 @@ export function isAssignable(from: Type, to: Type): boolean {
 // (U8 != U16), but `100 is I32` is true (generic Int matches any int).
 export function typeMatches(from: Type, to: Type): boolean {
   if (from.kind === "named" && to.kind === "named" && from.name === to.name) {
+    return true;
+  }
+  if (from.kind === "struct" && to.kind === "struct" && from.name === to.name) {
     return true;
   }
   if (from.kind !== "named" || to.kind !== "named") {

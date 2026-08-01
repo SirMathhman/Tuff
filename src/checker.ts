@@ -1,4 +1,4 @@
-import type { ASTNode, FnSignature, Type } from "./ast";
+import type { ASTNode, SymbolInfo, Type } from "./ast";
 import { isExpression } from "./ast";
 import type { Result } from "./result";
 import { ok, err } from "./result";
@@ -20,14 +20,14 @@ function scopeError(message: string): CompileError {
 }
 
 // CheckContext encapsulates the state threaded through semantic checking:
-// the current scope, the function table, and whether the node's value is
+// the current scope, the symbol table, and whether the node's value is
 // being used (as opposed to being evaluated as a standalone statement). A
 // block used as a value must end in a pure expression; a block used as a
 // statement may not.
 interface CheckContext {
   scope: Scope;
-  // The single source of truth for declared functions: name -> signature.
-  functions: Map<string, FnSignature>;
+  // The single source of truth for declared functions and structs.
+  symbols: Map<string, SymbolInfo>;
   valueContext: boolean;
   // Return a context that evaluates the node as a value.
   asValue(): CheckContext;
@@ -37,18 +37,18 @@ interface CheckContext {
 
 function createContext(
   scope: Scope,
-  functions: Map<string, FnSignature>,
+  symbols: Map<string, SymbolInfo>,
   valueContext: boolean,
 ): CheckContext {
   return {
     scope,
-    functions,
+    symbols,
     valueContext,
     asValue() {
-      return createContext(scope, functions, true);
+      return createContext(scope, symbols, true);
     },
     inChildScope() {
-      return createContext(scope.child(), functions, valueContext);
+      return createContext(scope.child(), symbols, valueContext);
     },
   };
 }
@@ -57,8 +57,8 @@ export function validateScope(
   stmts: ASTNode[],
   initialScope: Scope,
 ): Result<void, CompileError> {
-  // The single source of truth for declared functions: name -> signature.
-  const functions = new Map<string, FnSignature>();
+  // The single source of truth for declared functions and structs.
+  const symbols = new Map<string, SymbolInfo>();
 
   function checkNode(
     node: ASTNode,
@@ -90,9 +90,33 @@ export function validateScope(
         );
         return ok(undefined);
 
-      case "member_access":
-        // Only validate the object (the base identifier), property access is always valid
-        return checkNode(node.object, ctx.asValue());
+      case "member_access": {
+        // Validate the object and that the property exists on a struct.
+        const objectResult = checkNode(node.object, ctx.asValue());
+        if (!objectResult.ok) return objectResult;
+        const objectType = inferType(node.object);
+        if (objectType !== undefined && objectType.kind === "struct") {
+          const sym = ctx.symbols.get(objectType.name);
+          const fields =
+            sym !== undefined && sym.kind === "struct" ? sym.fields : undefined;
+          const field = fields?.find((f) => f.name === node.property);
+          if (field === undefined) {
+            return err(
+              scopeError(
+                "Unknown field '" +
+                  node.property +
+                  "' on struct '" +
+                  objectType.name +
+                  "'",
+              ),
+            );
+          }
+          setNodeType(node, field.type);
+        } else {
+          setNodeType(node, { kind: "named", name: "Int" });
+        }
+        return ok(undefined);
+      }
 
       case "binary_op": {
         const leftResult = checkNode(node.left, ctx.asValue());
@@ -169,7 +193,7 @@ export function validateScope(
       case "fn_decl": {
         // A function name must not collide with an existing variable or
         // function in the current scope.
-        if (ctx.functions.has(node.name) || ctx.scope.isDeclared(node.name)) {
+        if (ctx.symbols.has(node.name) || ctx.scope.isDeclared(node.name)) {
           return err(
             scopeError(
               "Name collision: '" + node.name + "' is already declared",
@@ -197,9 +221,9 @@ export function validateScope(
           }
         }
         // Record the function's signature so calls can validate arguments.
-        ctx.functions.set(node.name, {
-          params: node.params,
-          returnType: node.returnType,
+        ctx.symbols.set(node.name, {
+          kind: "function",
+          signature: { params: node.params, returnType: node.returnType },
         });
         // Check the body in a child scope where the parameters are declared
         // (immutable, with their declared types).
@@ -222,10 +246,11 @@ export function validateScope(
 
       case "call": {
         // The called function must be declared.
-        const sig = ctx.functions.get(node.name);
-        if (sig === undefined) {
+        const sym = ctx.symbols.get(node.name);
+        if (sym === undefined || sym.kind !== "function") {
           return err(scopeError("Undeclared function: '" + node.name + "'"));
         }
+        const sig = sym.signature;
         // Check each argument expression.
         for (const arg of node.args) {
           const argResult = checkNode(arg, ctx.asValue());
@@ -258,6 +283,70 @@ export function validateScope(
         }
         // A call's type is the function's return type.
         setNodeType(node, sig.returnType);
+        return ok(undefined);
+      }
+
+      case "struct_decl": {
+        // A struct name must not collide with an existing function or variable.
+        if (ctx.symbols.has(node.name) || ctx.scope.isDeclared(node.name)) {
+          return err(
+            scopeError(
+              "Name collision: '" + node.name + "' is already declared",
+            ),
+          );
+        }
+        // Each field type must be a known type.
+        for (const field of node.fields) {
+          if (!isKnownType(field.type)) {
+            return err(
+              compileError(
+                "syntax",
+                "Unknown type: '" + formatType(field.type) + "'",
+              ),
+            );
+          }
+        }
+        // Record the struct's fields.
+        ctx.symbols.set(node.name, { kind: "struct", fields: node.fields });
+        return ok(undefined);
+      }
+
+      case "struct_init": {
+        // The struct must be declared.
+        const sym = ctx.symbols.get(node.name);
+        if (sym === undefined || sym.kind !== "struct") {
+          return err(scopeError("Undeclared struct: '" + node.name + "'"));
+        }
+        const fields = sym.fields;
+        // Check each field value expression.
+        for (const field of node.fields) {
+          const valueResult = checkNode(field.value, ctx.asValue());
+          if (!valueResult.ok) return valueResult;
+        }
+        // Validate that all declared fields are provided with matching types.
+        for (const declared of fields) {
+          const provided = node.fields.find((f) => f.name === declared.name);
+          if (provided === undefined) {
+            return err(
+              scopeError(
+                "Missing field '" +
+                  declared.name +
+                  "' in struct '" +
+                  node.name +
+                  "'",
+              ),
+            );
+          }
+          const valueType = inferType(provided.value);
+          if (valueType !== undefined) {
+            const mismatch = typeMismatch(declared.type, valueType);
+            if (mismatch !== undefined) {
+              return err(compileError("syntax", mismatch));
+            }
+          }
+        }
+        // A struct init's type is the struct type.
+        setNodeType(node, { kind: "struct", name: node.name });
         return ok(undefined);
       }
 
@@ -404,7 +493,7 @@ export function validateScope(
 
       case "let_decl": {
         // A variable name must not collide with an existing function name.
-        if (ctx.functions.has(node.name)) {
+        if (ctx.symbols.has(node.name)) {
           return err(
             scopeError(
               "Name collision: '" + node.name + "' is already declared",
@@ -418,17 +507,19 @@ export function validateScope(
         // value's type must be assignable to it (widening allowed, narrowing
         // rejected, different kinds rejected).
         if (node.typeAnnotation !== undefined) {
-          if (!isKnownType(node.typeAnnotation)) {
+          // A named type annotation may refer to a declared struct.
+          const annotation = resolveStructType(node.typeAnnotation, ctx);
+          if (!isKnownType(annotation)) {
             return err(
               compileError(
                 "syntax",
-                "Unknown type: '" + formatType(node.typeAnnotation) + "'",
+                "Unknown type: '" + formatType(annotation) + "'",
               ),
             );
           }
           const valueType = inferType(node.value);
           if (valueType !== undefined) {
-            const mismatch = typeMismatch(node.typeAnnotation, valueType);
+            const mismatch = typeMismatch(annotation, valueType);
             if (mismatch !== undefined) {
               return err(compileError("syntax", mismatch));
             }
@@ -436,19 +527,29 @@ export function validateScope(
         }
         // Then add the new variable to scope, recording its type (either the
         // annotation, or the inferred type of the value).
-        const declaredType: Type = node.typeAnnotation ??
-          inferType(node.value) ?? { kind: "named", name: "Int" };
+        const declaredType: Type =
+          node.typeAnnotation !== undefined
+            ? resolveStructType(node.typeAnnotation, ctx)
+            : (inferType(node.value) ?? { kind: "named", name: "Int" });
         ctx.scope.declare(node.name, node.isMut === true, declaredType);
         return ok(undefined);
       }
     }
   }
 
+  // If a named type refers to a declared struct, return it as a StructType.
+  function resolveStructType(t: Type, ctx: CheckContext): Type {
+    if (t.kind === "named") {
+      const sym = ctx.symbols.get(t.name);
+      if (sym !== undefined && sym.kind === "struct") {
+        return { kind: "struct", name: t.name };
+      }
+    }
+    return t;
+  }
+
   for (const stmt of stmts) {
-    const result = checkNode(
-      stmt,
-      createContext(initialScope, functions, false),
-    );
+    const result = checkNode(stmt, createContext(initialScope, symbols, false));
     if (!result.ok) return result;
   }
 

@@ -306,4 +306,13 @@ describe("tuff", () => {
       ),
     ).toBe(6);
   });
+
+  it('evaluate("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y") => 7', () => {
+    expect(
+      evaluate(
+        "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y",
+        [],
+      ),
+    ).toBe(7);
+  });
 });

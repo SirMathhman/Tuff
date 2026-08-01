@@ -94,6 +94,8 @@ export function tokenize(source: string): Result<Token[], CompileError> {
         tokens.push({ type: "is" });
       } else if (name === "fn") {
         tokens.push({ type: "fn" });
+      } else if (name === "struct") {
+        tokens.push({ type: "struct" });
       } else if (name === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {

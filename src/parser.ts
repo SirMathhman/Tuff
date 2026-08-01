@@ -1,4 +1,11 @@
-import type { Token, ASTNode, FnParam, Type } from "./ast";
+import type {
+  Token,
+  ASTNode,
+  FnParam,
+  Type,
+  StructField,
+  StructInitField,
+} from "./ast";
 import { OPERATORS } from "./ast";
 import type { Result } from "./result";
 import { ok, err, andThen } from "./result";
@@ -127,6 +134,32 @@ export function createParser(tokens: Token[]): Parser {
         }
         consume(); // consume ')'
         return ok({ kind: "call", name: token.name, args });
+      }
+
+      // Handle struct construction: Name { field : value, ... }
+      if (peek().type === "lbrace") {
+        consume(); // consume '{'
+        const fields: StructInitField[] = [];
+        if (peek().type !== "rbrace") {
+          while (true) {
+            const fieldName = parseFieldName();
+            const valueResult = parseExpression();
+            if (!valueResult.ok) return valueResult;
+            fields.push({ name: fieldName, value: valueResult.value });
+            if (peek().type === "comma") {
+              consume(); // consume ','
+              continue;
+            }
+            break;
+          }
+        }
+        if (peek().type !== "rbrace") {
+          return err(
+            compileError("syntax", "Expected '}' after struct fields"),
+          );
+        }
+        consume(); // consume '}'
+        return ok({ kind: "struct_init", name: token.name, fields });
       }
 
       // Handle member access (chained)
@@ -433,6 +466,47 @@ export function createParser(tokens: Token[]): Parser {
     });
   }
 
+  // Parse: struct <name> { <field> : <type>, ... }
+  function parseStructDecl(): Result<ASTNode, CompileError> {
+    consume(); // consume 'struct'
+
+    const nameToken = consume();
+    if (nameToken.type !== "identifier") {
+      return err(
+        compileError(
+          "syntax",
+          "Expected struct name after struct, got " + nameToken.type,
+        ),
+      );
+    }
+
+    if (peek().type !== "lbrace") {
+      return err(compileError("syntax", "Expected '{' after struct name"));
+    }
+    consume(); // consume '{'
+
+    const fields: StructField[] = [];
+    if (peek().type !== "rbrace") {
+      while (true) {
+        const fieldName = parseFieldName();
+        const fieldType = parseTypeName();
+        fields.push({ name: fieldName, type: fieldType });
+        if (peek().type === "comma") {
+          consume(); // consume ','
+          continue;
+        }
+        break;
+      }
+    }
+
+    if (peek().type !== "rbrace") {
+      return err(compileError("syntax", "Expected '}' after struct fields"));
+    }
+    consume(); // consume '}'
+
+    return ok({ kind: "struct_decl", name: nameToken.name, fields });
+  }
+
   // Parse a single statement
   function parseStatement(): Result<ASTNode, CompileError> {
     if (peek().type === "let") {
@@ -445,6 +519,10 @@ export function createParser(tokens: Token[]): Parser {
 
     if (peek().type === "fn") {
       return parseFnDecl();
+    }
+
+    if (peek().type === "struct") {
+      return parseStructDecl();
     }
 
     // Expression statement
@@ -513,6 +591,19 @@ export function createParser(tokens: Token[]): Parser {
       return "+";
     }
     return null;
+  }
+
+  // Parse a struct field name followed by ':' and return the name.
+  function parseFieldName(): string {
+    const fieldName = consume();
+    if (fieldName.type !== "identifier") {
+      return "";
+    }
+    if (peek().type !== "colon") {
+      return "";
+    }
+    consume(); // consume ':'
+    return fieldName.name;
   }
 
   // Parse a type name, which may be a reference type like "&I32", a mutable

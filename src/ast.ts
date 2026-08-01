@@ -35,6 +35,9 @@ export interface IsToken {
 export interface FnToken {
   type: "fn";
 }
+export interface StructToken {
+  type: "struct";
+}
 export interface FatArrowToken {
   type: "fat_arrow";
 }
@@ -128,6 +131,7 @@ export type Token =
   | WhileToken
   | IsToken
   | FnToken
+  | StructToken
   | FatArrowToken
   | LParenToken
   | RParenToken
@@ -175,7 +179,11 @@ export interface ArrayType {
   elem: Type;
   length: number;
 }
-export type Type = NamedType | RefType | ArrayType;
+export interface StructType {
+  kind: "struct";
+  name: string;
+}
+export type Type = NamedType | RefType | ArrayType | StructType;
 
 // ---- AST Node Types ----
 
@@ -278,6 +286,49 @@ export interface IndexNode {
   // The index expression, e.g. "0" in "array[0]".
   index: ASTNode;
 }
+export interface StructDeclNode {
+  kind: "struct_decl";
+  // The struct name, e.g. "Point" in "struct Point { ... }".
+  name: string;
+  // The fields, e.g. [{ name: "x", type: "I32" }].
+  fields: StructField[];
+}
+// A single struct field: a name and its declared type.
+export interface StructField {
+  name: string;
+  type: Type;
+}
+export interface StructInitNode {
+  kind: "struct_init";
+  // The struct type name, e.g. "Point" in "Point { x : 3, y : 4 }".
+  name: string;
+  // The field values, keyed by field name.
+  fields: StructInitField[];
+}
+// A single struct-initializer field: a name and its value expression.
+export interface StructInitField {
+  name: string;
+  value: ASTNode;
+}
+// A variable symbol: its type and mutability.
+export interface VariableSymbol {
+  kind: "variable";
+  type: Type;
+  isMut: boolean;
+}
+// A function symbol: its signature.
+export interface FunctionSymbol {
+  kind: "function";
+  signature: FnSignature;
+}
+// A struct symbol: its fields.
+export interface StructSymbol {
+  kind: "struct";
+  fields: StructField[];
+}
+// The unified symbol table entry for a named declaration (function or struct).
+// Variables are tracked separately in the lexically-scoped Scope.
+export type SymbolInfo = VariableSymbol | FunctionSymbol | StructSymbol;
 export interface LetDeclNode {
   kind: "let_decl";
   name: string;
@@ -319,6 +370,8 @@ export type ASTNode =
   | DerefAssignNode
   | ArrayNode
   | IndexNode
+  | StructDeclNode
+  | StructInitNode
   | LetDeclNode
   | IfNode
   | BlockNode
