@@ -283,4 +283,18 @@ describe("tuff", () => {
   it('compile("let get = 0; fn get() : I32 => 0;") => scope', () => {
     expectCompileError("let get = 0; fn get() : I32 => 0;", "scope");
   });
+
+  it('evaluate("fn empty() : Void => {}") => 0', () => {
+    expect(evaluate("fn empty() : Void => {}", [])).toBe(0);
+  });
+
+  it('evaluate("let x = 100; let y : &I32 = &x; *y") => 100', () => {
+    expect(evaluate("let x = 100; let y : &I32 = &x; *y", [])).toBe(100);
+  });
+
+  it('evaluate("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x") => 100', () => {
+    expect(
+      evaluate("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x", []),
+    ).toBe(100);
+  });
 });

@@ -89,6 +89,9 @@ export interface PipePipeToken {
 export interface AmpAmpToken {
   type: "amp_amp";
 }
+export interface AmpToken {
+  type: "amp";
+}
 export interface LessThanToken {
   type: "less_than";
 }
@@ -137,6 +140,7 @@ export type Token =
   | SlashToken
   | PipePipeToken
   | AmpAmpToken
+  | AmpToken
   | LessThanToken
   | LessThanEqualToken
   | GreaterThanToken
@@ -210,9 +214,27 @@ export interface CallNode {
   // The argument expressions, e.g. [3, 4] in "add(3, 4)".
   args: ASTNode[];
 }
+export interface RefNode {
+  kind: "ref";
+  // The expression being referenced, e.g. "x" in "&x".
+  value: ASTNode;
+  // Whether this is a mutable reference (e.g. "&mut x").
+  isMut?: boolean;
+}
+export interface DerefNode {
+  kind: "deref";
+  // The reference being dereferenced, e.g. "y" in "*y".
+  value: ASTNode;
+}
 export interface AssignNode {
   kind: "assign";
   name: string;
+  value: ASTNode;
+}
+export interface DerefAssignNode {
+  kind: "deref_assign";
+  // The reference being assigned through, e.g. "y" in "*y = 100".
+  target: ASTNode;
   value: ASTNode;
 }
 export interface LetDeclNode {
@@ -250,7 +272,10 @@ export type ASTNode =
   | IsNode
   | FnDeclNode
   | CallNode
+  | RefNode
+  | DerefNode
   | AssignNode
+  | DerefAssignNode
   | LetDeclNode
   | IfNode
   | BlockNode

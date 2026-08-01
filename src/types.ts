@@ -5,8 +5,8 @@
 
 import type { ASTNode } from "./ast";
 
-// Type kind: whether a type is an integer or a boolean.
-type TypeKind = "int" | "bool";
+// Type kind: whether a type is an integer, a boolean, or void (no value).
+type TypeKind = "int" | "bool" | "void";
 
 // Signedness of an integer type. "generic" is used for the default "Int"
 // type of untyped literals, which can widen to any integer type.
@@ -31,6 +31,9 @@ const TYPES = new Map<string, TypeInfo>([
   // but its "int" kind prevents it from being assigned to a boolean.
   ["Int", { kind: "int", signedness: "generic", bits: 0 }],
   ["Bool", { kind: "bool", signedness: "generic", bits: 0 }],
+  // "Void" represents the absence of a value (e.g. a function with no
+  // meaningful return). It is only assignable to itself.
+  ["Void", { kind: "void", signedness: "generic", bits: 0 }],
 ]);
 
 // Inclusive value range for a type, used to validate typed literals.
@@ -51,8 +54,16 @@ const TYPE_RANGES = new Map<string, TypeRange>([
 // suffixes (e.g. "U16") are matched before shorter ones (e.g. "U8").
 export const SUFFIXES: string[] = ["U64", "U16", "U8"];
 
-// Whether a string is a known type name.
+// Whether a string is a known type name. Reference types like "&I32" and
+// mutable reference types like "&mut I32" are recognized when their inner
+// type is known.
 export function isKnownType(name: string): boolean {
+  if (name.startsWith("&mut ")) {
+    return TYPES.has(name.slice(5));
+  }
+  if (name.startsWith("&")) {
+    return TYPES.has(name.slice(1));
+  }
   return TYPES.has(name);
 }
 
@@ -84,6 +95,25 @@ export function inferType(node: ASTNode): string | undefined {
 export type ConversionKind = "none" | "implicit" | "explicit" | "impossible";
 
 export function conversionKind(from: string, to: string): ConversionKind {
+  // Reference types: "&X" is assignable to "&Y" when X is assignable to Y
+  // (e.g. the generic "Int" widens to a concrete integer type). A mutable
+  // reference "&mut X" is only assignable to another "&mut Y" where X is
+  // assignable to Y.
+  if (from.startsWith("&") && to.startsWith("&")) {
+    const fromMut = from.startsWith("&mut ");
+    const toMut = to.startsWith("&mut ");
+    if (fromMut !== toMut) {
+      // Immutable and mutable references are not interchangeable.
+      return "impossible";
+    }
+    const fromInner = fromMut ? from.slice(5) : from.slice(1);
+    const toInner = toMut ? to.slice(5) : to.slice(1);
+    return conversionKind(fromInner, toInner);
+  }
+  if (from.startsWith("&") || to.startsWith("&")) {
+    // A reference is never assignable to a non-reference (or vice versa).
+    return "impossible";
+  }
   const f = TYPES.get(from);
   const t = TYPES.get(to);
   // Unknown types are treated as compatible (don't reject).
@@ -94,6 +124,10 @@ export function conversionKind(from: string, to: string): ConversionKind {
     return "impossible";
   }
   if (f.kind === "bool") {
+    return "none";
+  }
+  if (f.kind === "void") {
+    // Void is only assignable to void (same kind, already checked).
     return "none";
   }
   // int -> int:

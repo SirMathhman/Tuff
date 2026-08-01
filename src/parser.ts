@@ -56,6 +56,27 @@ export function createParser(tokens: Token[]): Parser {
       return ok({ kind: "boolean", value: token.value });
     }
 
+    // Reference creation: &<expr> or &mut <expr>
+    if (token.type === "amp") {
+      consume(); // consume '&'
+      let isMut = false;
+      if (peek().type === "mut") {
+        isMut = true;
+        consume(); // consume 'mut'
+      }
+      return andThen(parsePrimary(), (value) => {
+        return ok({ kind: "ref", value, isMut });
+      });
+    }
+
+    // Dereference: *<expr>
+    if (token.type === "star") {
+      consume(); // consume '*'
+      return andThen(parsePrimary(), (value) => {
+        return ok({ kind: "deref", value });
+      });
+    }
+
     if (token.type === "identifier") {
       consume();
       let node: ASTNode = { kind: "identifier", name: token.name };
@@ -269,16 +290,7 @@ export function createParser(tokens: Token[]): Parser {
     let typeAnnotation: string | undefined;
     if (peek().type === "colon") {
       consume(); // consume ':'
-      const typeToken = consume();
-      if (typeToken.type !== "identifier") {
-        return err(
-          compileError(
-            "syntax",
-            "Expected type name after ':', got " + typeToken.type,
-          ),
-        );
-      }
-      typeAnnotation = typeToken.name;
+      typeAnnotation = parseTypeName();
     }
 
     if (peek().type !== "equals") {
@@ -343,16 +355,8 @@ export function createParser(tokens: Token[]): Parser {
           );
         }
         consume(); // consume ':'
-        const paramType = consume();
-        if (paramType.type !== "identifier") {
-          return err(
-            compileError(
-              "syntax",
-              "Expected parameter type, got " + paramType.type,
-            ),
-          );
-        }
-        params.push({ name: paramName.name, type: paramType.name });
+        const paramType = parseTypeName();
+        params.push({ name: paramName.name, type: paramType });
         if (peek().type === "comma") {
           consume(); // consume ','
           continue;
@@ -371,15 +375,7 @@ export function createParser(tokens: Token[]): Parser {
     }
     consume(); // consume ':'
 
-    const typeToken = consume();
-    if (typeToken.type !== "identifier") {
-      return err(
-        compileError(
-          "syntax",
-          "Expected return type after ':', got " + typeToken.type,
-        ),
-      );
-    }
+    const returnType = parseTypeName();
 
     if (peek().type !== "fat_arrow") {
       return err(compileError("syntax", "Expected '=>' after return type"));
@@ -396,7 +392,7 @@ export function createParser(tokens: Token[]): Parser {
         kind: "fn_decl",
         name: nameToken.name,
         params,
-        returnType: typeToken.name,
+        returnType,
         body,
       });
     });
@@ -421,10 +417,21 @@ export function createParser(tokens: Token[]): Parser {
     if (!exprResult.ok) return exprResult;
     const expr = exprResult.value;
 
-    // Check for assignment: identifier = expr, or compound assignment
-    // identifier += expr (desugared to x = x + expr).
+    // Check for assignment: identifier = expr, compound assignment
+    // identifier += expr, or deref assignment *ref = expr.
     const assignOp = thisAssignOp(peek());
     if (assignOp !== null) {
+      // Deref assignment: *<ref> = expr
+      if (expr.kind === "deref") {
+        consume(); // consume the assignment operator
+        return andThen(parseExpression(), (value) => {
+          // Consume optional trailing semicolon
+          if (peek().type === "semicolon") {
+            consume();
+          }
+          return ok({ kind: "deref_assign", target: expr.value, value });
+        });
+      }
       if (expr.kind !== "identifier") {
         return err(
           compileError(
@@ -471,6 +478,29 @@ export function createParser(tokens: Token[]): Parser {
       return "+";
     }
     return null;
+  }
+
+  // Parse a type name, which may be a reference type like "&I32" or a mutable
+  // reference type like "&mut I32". Returns the type string.
+  function parseTypeName(): string {
+    if (peek().type === "amp") {
+      consume(); // consume '&'
+      let prefix = "&";
+      if (peek().type === "mut") {
+        consume(); // consume 'mut'
+        prefix = "&mut ";
+      }
+      const inner = consume();
+      if (inner.type !== "identifier") {
+        return prefix.trim();
+      }
+      return prefix + inner.name;
+    }
+    const typeToken = consume();
+    if (typeToken.type !== "identifier") {
+      return "";
+    }
+    return typeToken.name;
   }
 
   return { peek, parseStatement };

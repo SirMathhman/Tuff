@@ -69,6 +69,34 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
         return ok(node.name + "(" + args + ")");
       });
 
+    case "ref":
+      // A reference is represented uniformly as a getter/setter object so it
+      // can be passed around and dereferenced. Both immutable and mutable
+      // references expose a `get` closure; a mutable reference additionally
+      // exposes a `set` closure that writes back to the target. The closures
+      // capture the target expression, so they work for arbitrary expressions
+      // (re-evaluated on each access), not just plain variables.
+      return map(generateJS(node.value), (value) => {
+        if (node.isMut === true) {
+          return (
+            "({ get: () => " + value + ", set: (v) => { " + value + " = v; } })"
+          );
+        }
+        return "({ get: () => " + value + " })";
+      });
+
+    case "deref":
+      return map(generateJS(node.value), (value) => {
+        return value + ".get()";
+      });
+
+    case "deref_assign":
+      return andThen(generateJS(node.target), (target) => {
+        return map(generateJS(node.value), (value) => {
+          return target + ".set(" + value + ")";
+        });
+      });
+
     case "assign":
       return map(generateJS(node.value), (value) => {
         return node.name + " = " + value;

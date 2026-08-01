@@ -245,6 +245,58 @@ export function validateScope(
         return ok(undefined);
       }
 
+      case "ref": {
+        // Check the referenced expression.
+        const valueResult = checkNode(node.value, ctx.asValue());
+        if (!valueResult.ok) return valueResult;
+        // A reference's type is "&" + the referenced value's type. A mutable
+        // reference is "&mut " + the type.
+        const valueType = inferType(node.value);
+        const inner = valueType !== undefined ? valueType : "Int";
+        setNodeType(node, node.isMut === true ? "&mut " + inner : "&" + inner);
+        return ok(undefined);
+      }
+
+      case "deref": {
+        // Check the referenced expression.
+        const valueResult = checkNode(node.value, ctx.asValue());
+        if (!valueResult.ok) return valueResult;
+        // A dereference's type is the referenced type (strip the leading "&"
+        // or "&mut ").
+        const valueType = inferType(node.value);
+        if (valueType !== undefined && valueType.startsWith("&")) {
+          setNodeType(node, valueType.replace("&mut ", "").replace("&", ""));
+        } else {
+          setNodeType(node, "Int");
+        }
+        return ok(undefined);
+      }
+
+      case "deref_assign": {
+        // Check the target reference and the assigned value.
+        const targetResult = checkNode(node.target, ctx.asValue());
+        if (!targetResult.ok) return targetResult;
+        const valueResult = checkNode(node.value, ctx.asValue());
+        if (!valueResult.ok) return valueResult;
+        // The target must be a mutable reference.
+        const targetType = inferType(node.target);
+        if (targetType === undefined || !targetType.startsWith("&mut ")) {
+          return err(
+            scopeError("Cannot assign through an immutable reference"),
+          );
+        }
+        // The assigned value's type must match the referenced type.
+        const innerType = targetType.replace("&mut ", "");
+        const valueType = inferType(node.value);
+        if (valueType !== undefined) {
+          const mismatch = typeMismatch(innerType, valueType);
+          if (mismatch !== undefined) {
+            return err(compileError("syntax", mismatch));
+          }
+        }
+        return ok(undefined);
+      }
+
       case "block": {
         // A block introduces a child scope that inherits from the parent
         const childCtx = ctx.inChildScope();
@@ -267,12 +319,17 @@ export function validateScope(
           }
         }
         // A block's type is the type of its last statement (its yielded value).
+        // An empty block (or one whose last statement has no type) is Void.
         const last = node.statements[node.statements.length - 1];
         if (last !== undefined) {
           const lastType = inferType(last);
           if (lastType !== undefined) {
             setNodeType(node, lastType);
+          } else {
+            setNodeType(node, "Void");
           }
+        } else {
+          setNodeType(node, "Void");
         }
         return ok(undefined);
       }

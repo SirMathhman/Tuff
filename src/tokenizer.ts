@@ -132,6 +132,11 @@ export function tokenize(source: string): Result<Token[], CompileError> {
 
     // Single-character tokens
     const char = source[i]!;
+    if (char === "&") {
+      tokens.push({ type: "amp" });
+      i++;
+      continue;
+    }
     if (char === "(") {
       tokens.push({ type: "lparen" });
       i++;
