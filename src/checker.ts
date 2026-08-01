@@ -1,4 +1,4 @@
-import type { ASTNode, SymbolInfo, Type } from "./ast";
+import type { ASTNode, FnSignature, StructField, Type } from "./ast";
 import { isExpression } from "./ast";
 import type { Result } from "./result";
 import { ok, err } from "./result";
@@ -19,36 +19,111 @@ function scopeError(message: string): CompileError {
   return compileError("scope", message);
 }
 
+// Return an error if `valueType` is the special ThisType (the type of the
+// compile-time scope reference `this`), which cannot be used as a runtime
+// value. Returns undefined if the type is not `this`.
+function rejectThisType(
+  valueType: Type | undefined,
+  message: string,
+): CompileError | undefined {
+  if (valueType !== undefined && valueType.kind === "this") {
+    return scopeError(message);
+  }
+  return undefined;
+}
+
+// Return a scope error if `name` collides with an existing function, struct,
+// or variable. Returns undefined if the name is free.
+function checkNameCollision(
+  ctx: CheckContext,
+  name: string,
+): CompileError | undefined {
+  if (
+    ctx.functions.has(name) ||
+    ctx.structs.has(name) ||
+    ctx.scope.isDeclared(name)
+  ) {
+    return scopeError("Name collision: '" + name + "' is already declared");
+  }
+  return undefined;
+}
+
+// Resolve a field access `structName.property` against the struct table.
+// Returns the field's type, or a scope error if the struct or field is
+// unknown.
+function resolveStructField(
+  structs: Map<string, StructField[]>,
+  structName: string,
+  property: string,
+): Result<Type, CompileError> {
+  const fields = structs.get(structName);
+  const field = fields?.find((f) => f.name === property);
+  if (field === undefined) {
+    return err(
+      scopeError(
+        "Unknown field '" + property + "' on struct '" + structName + "'",
+      ),
+    );
+  }
+  return ok(field.type);
+}
+
 // CheckContext encapsulates the state threaded through semantic checking:
-// the current scope, the symbol table, and whether the node's value is
-// being used (as opposed to being evaluated as a standalone statement). A
-// block used as a value must end in a pure expression; a block used as a
-// statement may not.
+// the current scope, the function/struct tables, and whether the node's
+// value is being used (as opposed to being evaluated as a standalone
+// statement). A block used as a value must end in a pure expression; a block
+// used as a statement may not.
 interface CheckContext {
   scope: Scope;
-  // The single source of truth for declared functions and structs.
-  symbols: Map<string, SymbolInfo>;
+  // Functions and structs live in separate namespaces so a constructor
+  // function and its implicit struct can share a name.
+  functions: Map<string, FnSignature>;
+  structs: Map<string, StructField[]>;
   valueContext: boolean;
+  // The type of `this` in the current function body. Undefined outside a
+  // function (where `this` is a bare scope reference, not a value).
+  thisType: Type | undefined;
   // Return a context that evaluates the node as a value.
   asValue(): CheckContext;
   // Return a context with a child scope (for blocks).
   inChildScope(): CheckContext;
+  // Return a context where `this` has the given type (for function bodies).
+  withThis(thisType: Type | undefined): CheckContext;
 }
 
 function createContext(
   scope: Scope,
-  symbols: Map<string, SymbolInfo>,
+  functions: Map<string, FnSignature>,
+  structs: Map<string, StructField[]>,
   valueContext: boolean,
+  thisType: Type | undefined,
 ): CheckContext {
   return {
     scope,
-    symbols,
+    functions,
+    structs,
     valueContext,
+    thisType,
     asValue() {
-      return createContext(scope, symbols, true);
+      return createContext(scope, functions, structs, true, thisType);
     },
     inChildScope() {
-      return createContext(scope.child(), symbols, valueContext);
+      return createContext(
+        scope.child(),
+        functions,
+        structs,
+        valueContext,
+        thisType,
+      );
+    },
+    withThis(newThisType) {
+      return createContext(
+        scope,
+        functions,
+        structs,
+        valueContext,
+        newThisType,
+      );
     },
   };
 }
@@ -57,8 +132,9 @@ export function validateScope(
   stmts: ASTNode[],
   initialScope: Scope,
 ): Result<void, CompileError> {
-  // The single source of truth for declared functions and structs.
-  const symbols = new Map<string, SymbolInfo>();
+  // Functions and structs live in separate namespaces.
+  const functions = new Map<string, FnSignature>();
+  const structs = new Map<string, StructField[]>();
 
   function checkNode(
     node: ASTNode,
@@ -90,28 +166,59 @@ export function validateScope(
         );
         return ok(undefined);
 
+      case "this":
+        // If `this` is declared in the current scope (as a receiver
+        // parameter of a method), it resolves to that parameter's type.
+        // Otherwise, inside a constructor function it is the constructor
+        // object (an implicit struct); outside any function it is a bare
+        // scope reference with the special ThisType, which the type system
+        // treats as non-assignable to any real type.
+        setNodeType(
+          node,
+          ctx.scope.typeOf("this") ?? ctx.thisType ?? { kind: "this" },
+        );
+        return ok(undefined);
+
       case "member_access": {
+        // `this.x` refers to the variable `x` in the current scope when
+        // `this` is a bare scope reference (outside a function). Inside a
+        // function, `this` is a constructor object (an implicit struct), so
+        // `this.x` resolves the field `x` on that struct.
+        if (node.object.kind === "this") {
+          const thisType = ctx.thisType;
+          if (thisType !== undefined && thisType.kind === "struct") {
+            const fieldResult = resolveStructField(
+              ctx.structs,
+              thisType.name,
+              node.property,
+            );
+            if (!fieldResult.ok) return fieldResult;
+            setNodeType(node, fieldResult.value);
+            return ok(undefined);
+          }
+          if (!ctx.scope.isDeclared(node.property)) {
+            return err(
+              scopeError("Undeclared identifier: '" + node.property + "'"),
+            );
+          }
+          setNodeType(
+            node,
+            ctx.scope.typeOf(node.property) ?? { kind: "named", name: "Int" },
+          );
+          return ok(undefined);
+        }
         // Validate the object and that the property exists on a struct.
         const objectResult = checkNode(node.object, ctx.asValue());
         if (!objectResult.ok) return objectResult;
         const objectType = inferType(node.object);
         if (objectType !== undefined && objectType.kind === "struct") {
-          const sym = ctx.symbols.get(objectType.name);
-          const fields =
-            sym !== undefined && sym.kind === "struct" ? sym.fields : undefined;
-          const field = fields?.find((f) => f.name === node.property);
-          if (field === undefined) {
-            return err(
-              scopeError(
-                "Unknown field '" +
-                  node.property +
-                  "' on struct '" +
-                  objectType.name +
-                  "'",
-              ),
-            );
-          }
-          setNodeType(node, field.type);
+          const fieldResult = resolveStructField(
+            ctx.structs,
+            objectType.name,
+            node.property,
+          );
+          if (!fieldResult.ok) return fieldResult;
+          setNodeType(node, fieldResult.value);
         } else {
           setNodeType(node, { kind: "named", name: "Int" });
         }
@@ -191,17 +298,14 @@ export function validateScope(
       }
 
       case "fn_decl": {
-        // A function name must not collide with an existing variable or
-        // function in the current scope.
-        if (ctx.symbols.has(node.name) || ctx.scope.isDeclared(node.name)) {
-          return err(
-            scopeError(
-              "Name collision: '" + node.name + "' is already declared",
-            ),
-          );
-        }
-        // The return type must be a known type.
-        if (!isKnownType(node.returnType)) {
+        // A function name must not collide with an existing function, struct,
+        // or variable.
+        const collision = checkNameCollision(ctx, node.name);
+        if (collision !== undefined) return err(collision);
+        // The return type must be a known type, OR a named type that will
+        // become an implicit struct (a constructor function whose fields are
+        // its parameters).
+        if (!isKnownType(node.returnType) && node.returnType.kind !== "named") {
           return err(
             compileError(
               "syntax",
@@ -221,22 +325,62 @@ export function validateScope(
           }
         }
         // Record the function's signature so calls can validate arguments.
-        ctx.symbols.set(node.name, {
-          kind: "function",
-          signature: { params: node.params, returnType: node.returnType },
+        ctx.functions.set(node.name, {
+          params: node.params,
+          returnType: node.returnType,
         });
+        // If the return type is a named type that is NOT a known primitive
+        // type, it implicitly defines a struct whose fields are the function's
+        // parameters. This lets `this` (the constructor object) and
+        // `Wrapper(100).field` resolve the fields. The struct lives in its own
+        // namespace, so it coexists with the function of the same name.
+        const implicitStruct: Type | undefined =
+          node.returnType.kind === "named" && !isKnownType(node.returnType)
+            ? { kind: "struct", name: node.returnType.name }
+            : undefined;
+        if (implicitStruct !== undefined) {
+          // The struct's fields come from the parameters plus any `let`
+          // declarations in the body block (so `{ let field = 100; this }`
+          // makes `this.field` available).
+          const fields: StructField[] = node.params.map((p) => ({
+            name: p.name,
+            type: p.type,
+          }));
+          if (node.body.kind === "block") {
+            for (const stmt of node.body.statements) {
+              if (stmt.kind === "let_decl") {
+                fields.push({
+                  name: stmt.name,
+                  type: stmt.typeAnnotation ??
+                    inferType(stmt.value) ?? { kind: "named", name: "Int" },
+                });
+              }
+            }
+          }
+          ctx.structs.set(implicitStruct.name, fields);
+        }
         // Check the body in a child scope where the parameters are declared
-        // (immutable, with their declared types).
-        const fnCtx = ctx.inChildScope();
+        // (immutable, with their declared types). Inside the body, `this` is
+        // the constructor object of the implicit struct (if the return type
+        // is a named type).
+        const fnCtx = ctx.inChildScope().withThis(implicitStruct);
         for (const param of node.params) {
           fnCtx.scope.declare(param.name, false, param.type);
         }
         const bodyResult = checkNode(node.body, fnCtx.asValue());
         if (!bodyResult.ok) return bodyResult;
         // The body's type must be assignable to the declared return type.
+        // When the return type is an implicit struct, compare against the
+        // struct type (so `this`, which has the struct type, is accepted).
         const bodyType = inferType(node.body);
-        if (bodyType !== undefined) {
-          const mismatch = typeMismatch(node.returnType, bodyType);
+        const returnType: Type = implicitStruct ?? node.returnType;
+        // When the return type is the generic "Int" (the default when the
+        // annotation is omitted), infer it from the body rather than checking
+        // assignability (which would reject a concrete body type like I32).
+        const isDefaultReturn =
+          node.returnType.kind === "named" && node.returnType.name === "Int";
+        if (bodyType !== undefined && !isDefaultReturn) {
+          const mismatch = typeMismatch(returnType, bodyType);
           if (mismatch !== undefined) {
             return err(compileError("syntax", mismatch));
           }
@@ -246,11 +390,10 @@ export function validateScope(
 
       case "call": {
         // The called function must be declared.
-        const sym = ctx.symbols.get(node.name);
-        if (sym === undefined || sym.kind !== "function") {
+        const sig = ctx.functions.get(node.name);
+        if (sig === undefined) {
           return err(scopeError("Undeclared function: '" + node.name + "'"));
         }
-        const sig = sym.signature;
         // Check each argument expression.
         for (const arg of node.args) {
           const argResult = checkNode(arg, ctx.asValue());
@@ -281,20 +424,23 @@ export function validateScope(
             }
           }
         }
-        // A call's type is the function's return type.
-        setNodeType(node, sig.returnType);
+        // A call's type is the function's return type. If the function is a
+        // constructor (its return type is an implicit struct), resolve the
+        // return type to the struct type so field access works.
+        const returnType: Type =
+          sig.returnType.kind === "named" &&
+          ctx.structs.has(sig.returnType.name)
+            ? { kind: "struct", name: sig.returnType.name }
+            : sig.returnType;
+        setNodeType(node, returnType);
         return ok(undefined);
       }
 
       case "struct_decl": {
-        // A struct name must not collide with an existing function or variable.
-        if (ctx.symbols.has(node.name) || ctx.scope.isDeclared(node.name)) {
-          return err(
-            scopeError(
-              "Name collision: '" + node.name + "' is already declared",
-            ),
-          );
-        }
+        // A struct name must not collide with an existing function, struct,
+        // or variable.
+        const collision = checkNameCollision(ctx, node.name);
+        if (collision !== undefined) return err(collision);
         // Each field type must be a known type.
         for (const field of node.fields) {
           if (!isKnownType(field.type)) {
@@ -307,17 +453,16 @@ export function validateScope(
           }
         }
         // Record the struct's fields.
-        ctx.symbols.set(node.name, { kind: "struct", fields: node.fields });
+        ctx.structs.set(node.name, node.fields);
         return ok(undefined);
       }
 
       case "struct_init": {
         // The struct must be declared.
-        const sym = ctx.symbols.get(node.name);
-        if (sym === undefined || sym.kind !== "struct") {
+        const fields = ctx.structs.get(node.name);
+        if (fields === undefined) {
           return err(scopeError("Undeclared struct: '" + node.name + "'"));
         }
-        const fields = sym.fields;
         // Check each field value expression.
         for (const field of node.fields) {
           const valueResult = checkNode(field.value, ctx.asValue());
@@ -354,8 +499,15 @@ export function validateScope(
         // Check the referenced expression.
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        // A reference's type wraps the referenced value's type.
+        // `this` is a compile-time scope reference, not a runtime value, so
+        // it cannot be referenced. Its ThisType is not a valid inner type.
         const valueType = inferType(node.value);
+        const thisErr = rejectThisType(
+          valueType,
+          "Cannot take a reference to 'this'",
+        );
+        if (thisErr !== undefined) return err(thisErr);
+        // A reference's type wraps the referenced value's type.
         const inner: Type =
           valueType !== undefined ? valueType : { kind: "named", name: "Int" };
         setNodeType(node, { kind: "ref", inner, isMut: node.isMut === true });
@@ -440,6 +592,45 @@ export function validateScope(
         return ok(undefined);
       }
 
+      case "tuple": {
+        // Check each element expression.
+        for (const elem of node.elements) {
+          const elemResult = checkNode(elem, ctx.asValue());
+          if (!elemResult.ok) return elemResult;
+        }
+        // A tuple's type wraps the element types.
+        const elements: Type[] = node.elements.map(
+          (elem) => inferType(elem) ?? { kind: "named", name: "Int" },
+        );
+        setNodeType(node, { kind: "tuple", elements });
+        return ok(undefined);
+      }
+
+      case "tuple_index": {
+        // Check the tuple expression.
+        const objectResult = checkNode(node.object, ctx.asValue());
+        if (!objectResult.ok) return objectResult;
+        // The object must be a tuple type; the index's type is the element type.
+        const objectType = inferType(node.object);
+        if (objectType !== undefined && objectType.kind === "tuple") {
+          const elem = objectType.elements[node.index];
+          if (elem === undefined) {
+            return err(
+              scopeError(
+                "Tuple index " +
+                  node.index +
+                  " out of bounds for tuple of arity " +
+                  objectType.elements.length,
+              ),
+            );
+          }
+          setNodeType(node, elem);
+        } else {
+          setNodeType(node, { kind: "named", name: "Int" });
+        }
+        return ok(undefined);
+      }
+
       case "block": {
         // A block introduces a child scope that inherits from the parent
         const childCtx = ctx.inChildScope();
@@ -492,8 +683,8 @@ export function validateScope(
       }
 
       case "let_decl": {
-        // A variable name must not collide with an existing function name.
-        if (ctx.symbols.has(node.name)) {
+        // A variable name must not collide with an existing function or struct.
+        if (ctx.functions.has(node.name) || ctx.structs.has(node.name)) {
           return err(
             scopeError(
               "Name collision: '" + node.name + "' is already declared",
@@ -503,6 +694,15 @@ export function validateScope(
         // Validate the value expression first (RHS)
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
+        // `this` is a compile-time scope reference, not a runtime value, so
+        // it cannot be bound to a variable. Its ThisType is not a valid value
+        // type, regardless of whether an annotation is present.
+        const valueType = inferType(node.value);
+        const thisErr = rejectThisType(
+          valueType,
+          "Cannot bind 'this' to a variable",
+        );
+        if (thisErr !== undefined) return err(thisErr);
         // If a type annotation is present, it must name a known type, and the
         // value's type must be assignable to it (widening allowed, narrowing
         // rejected, different kinds rejected).
@@ -517,12 +717,12 @@ export function validateScope(
               ),
             );
           }
-          const valueType = inferType(node.value);
-          if (valueType !== undefined) {
-            const mismatch = typeMismatch(annotation, valueType);
-            if (mismatch !== undefined) {
-              return err(compileError("syntax", mismatch));
-            }
+          const mismatch =
+            valueType !== undefined
+              ? typeMismatch(annotation, valueType)
+              : undefined;
+          if (mismatch !== undefined) {
+            return err(compileError("syntax", mismatch));
           }
         }
         // Then add the new variable to scope, recording its type (either the
@@ -530,7 +730,7 @@ export function validateScope(
         const declaredType: Type =
           node.typeAnnotation !== undefined
             ? resolveStructType(node.typeAnnotation, ctx)
-            : (inferType(node.value) ?? { kind: "named", name: "Int" });
+            : (valueType ?? { kind: "named", name: "Int" });
         ctx.scope.declare(node.name, node.isMut === true, declaredType);
         return ok(undefined);
       }
@@ -540,8 +740,7 @@ export function validateScope(
   // If a named type refers to a declared struct, return it as a StructType.
   function resolveStructType(t: Type, ctx: CheckContext): Type {
     if (t.kind === "named") {
-      const sym = ctx.symbols.get(t.name);
-      if (sym !== undefined && sym.kind === "struct") {
+      if (ctx.structs.has(t.name)) {
         return { kind: "struct", name: t.name };
       }
     }
@@ -549,7 +748,10 @@ export function validateScope(
   }
 
   for (const stmt of stmts) {
-    const result = checkNode(stmt, createContext(initialScope, symbols, false));
+    const result = checkNode(
+      stmt,
+      createContext(initialScope, functions, structs, false, undefined),
+    );
     if (!result.ok) return result;
   }
 

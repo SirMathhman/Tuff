@@ -1,14 +1,16 @@
 import type { ASTNode, StructInitField } from "./ast";
 import type { Result } from "./result";
-import { ok, err, map, andThen } from "./result";
+import { ok, map, andThen } from "./result";
 import type { CompileError } from "./compileError";
-import { compileError } from "./compileError";
 
 // Generate the comma-separated JS for a list of argument expressions.
-function generateArgs(nodes: ASTNode[]): Result<string, CompileError> {
+function generateArgs(
+  nodes: ASTNode[],
+  thisName: string,
+): Result<string, CompileError> {
   const parts: string[] = [];
   for (const node of nodes) {
-    const result = generateJS(node);
+    const result = generateJS(node, false, thisName);
     if (!result.ok) return result;
     parts.push(result.value);
   }
@@ -18,17 +20,22 @@ function generateArgs(nodes: ASTNode[]): Result<string, CompileError> {
 // Generate the comma-separated "name: value" pairs for a struct initializer.
 function generateStructFields(
   fields: StructInitField[],
+  thisName: string,
 ): Result<string, CompileError> {
   const parts: string[] = [];
   for (const field of fields) {
-    const result = generateJS(field.value);
+    const result = generateJS(field.value, false, thisName);
     if (!result.ok) return result;
     parts.push(field.name + ": " + result.value);
   }
   return ok(parts.join(", "));
 }
 
-export function generateJS(node: ASTNode): Result<string, CompileError> {
+export function generateJS(
+  node: ASTNode,
+  isRedeclare: boolean = false,
+  thisName: string = "this",
+): Result<string, CompileError> {
   switch (node.kind) {
     case "number":
       return ok(String(node.value));
@@ -39,14 +46,33 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
     case "identifier":
       return ok(node.name);
 
+    case "let_decl":
+      // A `let` declaration emits `let name = value;` (or `name = value;`
+      // when redeclaring an existing top-level variable).
+      return map(generateJS(node.value, false, thisName), (value) => {
+        return (isRedeclare ? "" : "let ") + node.name + " = " + value + ";";
+      });
+
+    case "this":
+      // `this` is a compile-time scope reference; it only appears as the
+      // object of a member access (this.x), which is handled there. On its
+      // own it has no runtime representation. When `this` is a receiver
+      // parameter, it emits the renamed JS identifier.
+      return ok(thisName);
+
     case "member_access":
-      return map(generateJS(node.object), (object) => {
+      // `this.x` refers to the variable `x` in the current scope, so it
+      // emits the bare variable name rather than a property access.
+      if (node.object.kind === "this") {
+        return ok(node.property);
+      }
+      return map(generateJS(node.object, false, thisName), (object) => {
         return object + "[" + JSON.stringify(node.property) + "]";
       });
 
     case "binary_op":
-      return andThen(generateJS(node.left), (left) => {
-        return map(generateJS(node.right), (right) => {
+      return andThen(generateJS(node.left, false, thisName), (left) => {
+        return map(generateJS(node.right, false, thisName), (right) => {
           // Parenthesize nested binary operands so the emitted JS preserves
           // the AST's grouping. Without this, `(2 + 3) * 4` would compile to
           // `2 + 3 * 4` (evaluated as `2 + (3*4) = 14`).
@@ -63,9 +89,60 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
       // already computed the boolean result, so emit it directly.
       return ok(String(node.result));
 
-    case "fn_decl":
-      return map(generateJS(node.body), (body) => {
-        const paramNames = node.params.map((p) => p.name).join(", ");
+    case "fn_decl": {
+      // If a parameter is named `this` (a receiver binding), rename it to a
+      // valid JS identifier and rewrite `this` references in the body.
+      const hasThisParam = node.params.some((p) => p.name === "this");
+      const innerThisName = hasThisParam ? "__this__" : thisName;
+      const paramNames = node.params
+        .map((p) => (p.name === "this" ? innerThisName : p.name))
+        .join(", ");
+      // If the body is `this` (or `this.field`), the function is a
+      // constructor: `this` is an object whose fields are the parameters.
+      // Emit the object literal (and any field access) directly.
+      const isConstructor =
+        node.body.kind === "this" ||
+        (node.body.kind === "member_access" &&
+          node.body.object.kind === "this") ||
+        (node.body.kind === "block" &&
+          node.body.statements[node.body.statements.length - 1]?.kind ===
+            "this");
+      if (isConstructor) {
+        // Collect the field names: parameters plus any `let` declarations in
+        // the body block.
+        const fieldNames: string[] = node.params.map((p) => p.name);
+        if (node.body.kind === "block") {
+          for (const stmt of node.body.statements) {
+            if (stmt.kind === "let_decl") {
+              fieldNames.push(stmt.name);
+            }
+          }
+        }
+        const obj =
+          "{ " + fieldNames.map((n) => n + ": " + n).join(", ") + " }";
+        // Determine what the function returns: the object itself, a field of
+        // it, or (for a block) the block's statements followed by the object.
+        let returned: string;
+        if (node.body.kind === "member_access") {
+          returned =
+            "return " + obj + "[" + JSON.stringify(node.body.property) + "];";
+        } else if (node.body.kind === "block") {
+          const parts: string[] = [];
+          for (let i = 0; i < node.body.statements.length - 1; i++) {
+            const stmt = node.body.statements[i]!;
+            const stmtResult = generateJS(stmt, false, innerThisName);
+            if (!stmtResult.ok) return stmtResult;
+            parts.push(stmtResult.value + ";");
+          }
+          returned = parts.join(" ") + " return " + obj + ";";
+        } else {
+          returned = "return " + obj + ";";
+        }
+        return ok(
+          "function " + node.name + "(" + paramNames + ") { " + returned + " }",
+        );
+      }
+      return map(generateJS(node.body, false, innerThisName), (body) => {
         return (
           "function " +
           node.name +
@@ -76,9 +153,10 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
           "; }"
         );
       });
+    }
 
     case "call":
-      return andThen(generateArgs(node.args), (args) => {
+      return andThen(generateArgs(node.args, thisName), (args) => {
         return ok(node.name + "(" + args + ")");
       });
 
@@ -89,7 +167,7 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
       // exposes a `set` closure that writes back to the target. The closures
       // capture the target expression, so they work for arbitrary expressions
       // (re-evaluated on each access), not just plain variables.
-      return map(generateJS(node.value), (value) => {
+      return map(generateJS(node.value, false, thisName), (value) => {
         if (node.isMut === true) {
           return (
             "({ get: () => " + value + ", set: (v) => { " + value + " = v; } })"
@@ -99,30 +177,30 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
       });
 
     case "deref":
-      return map(generateJS(node.value), (value) => {
+      return map(generateJS(node.value, false, thisName), (value) => {
         return value + ".get()";
       });
 
     case "deref_assign":
-      return andThen(generateJS(node.target), (target) => {
-        return map(generateJS(node.value), (value) => {
+      return andThen(generateJS(node.target, false, thisName), (target) => {
+        return map(generateJS(node.value, false, thisName), (value) => {
           return target + ".set(" + value + ")";
         });
       });
 
     case "assign":
-      return map(generateJS(node.value), (value) => {
+      return map(generateJS(node.value, false, thisName), (value) => {
         return node.name + " = " + value;
       });
 
     case "array":
-      return andThen(generateArgs(node.elements), (elements) => {
+      return andThen(generateArgs(node.elements, thisName), (elements) => {
         return ok("[" + elements + "]");
       });
 
     case "index":
-      return andThen(generateJS(node.object), (object) => {
-        return map(generateJS(node.index), (index) => {
+      return andThen(generateJS(node.object, false, thisName), (object) => {
+        return map(generateJS(node.index, false, thisName), (index) => {
           return object + "[" + index + "]";
         });
       });
@@ -132,31 +210,56 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
       return ok("");
 
     case "struct_init":
-      return andThen(generateStructFields(node.fields), (fields) => {
+      return andThen(generateStructFields(node.fields, thisName), (fields) => {
         return ok("({ " + fields + " })");
       });
 
-    case "if":
-      return andThen(generateJS(node.condition), (condition) => {
-        return andThen(generateJS(node.thenBranch), (thenBranch) => {
-          if (node.elseBranch === undefined) {
-            // No else: the `if` is used as a statement, so emit an if statement.
-            return ok("if (" + condition + ") { " + thenBranch + "; }");
-          }
-          return map(generateJS(node.elseBranch), (elseBranch) => {
-            return (
-              "(" + condition + " ? " + thenBranch + " : " + elseBranch + ")"
-            );
-          });
-        });
+    case "tuple":
+      return andThen(generateArgs(node.elements, thisName), (elements) => {
+        return ok("[" + elements + "]");
       });
+
+    case "tuple_index":
+      return map(generateJS(node.object, false, thisName), (object) => {
+        return object + "[" + node.index + "]";
+      });
+
+    case "if":
+      return andThen(
+        generateJS(node.condition, false, thisName),
+        (condition) => {
+          return andThen(
+            generateJS(node.thenBranch, false, thisName),
+            (thenBranch) => {
+              if (node.elseBranch === undefined) {
+                // No else: the `if` is used as a statement, so emit an if statement.
+                return ok("if (" + condition + ") { " + thenBranch + "; }");
+              }
+              return map(
+                generateJS(node.elseBranch, false, thisName),
+                (elseBranch) => {
+                  return (
+                    "(" +
+                    condition +
+                    " ? " +
+                    thenBranch +
+                    " : " +
+                    elseBranch +
+                    ")"
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
 
     case "block": {
       // Evaluate all statements, yielding the last one's value via an IIFE
       const parts: string[] = [];
       for (let i = 0; i < node.statements.length; i++) {
         const stmt = node.statements[i]!;
-        const stmtResult = generateJS(stmt);
+        const stmtResult = generateJS(stmt, false, thisName);
         if (!stmtResult.ok) return stmtResult;
         if (i === node.statements.length - 1) {
           parts.push("return " + stmtResult.value + ";");
@@ -168,18 +271,13 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
     }
 
     case "while":
-      return andThen(generateJS(node.condition), (condition) => {
-        return map(generateJS(node.body), (body) => {
-          return "while (" + condition + ") { " + body + "; }";
-        });
-      });
-
-    default:
-      return err(
-        compileError(
-          "syntax",
-          "Cannot generate JS for node kind: " + node.kind,
-        ),
+      return andThen(
+        generateJS(node.condition, false, thisName),
+        (condition) => {
+          return map(generateJS(node.body, false, thisName), (body) => {
+            return "while (" + condition + ") { " + body + "; }";
+          });
+        },
       );
   }
 }

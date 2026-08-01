@@ -23,6 +23,7 @@ const KEYWORDS = new Map<string, Token["type"]>([
   ["is", "is"],
   ["fn", "fn"],
   ["struct", "struct"],
+  ["this", "this"],
 ]);
 
 // Single-character token lookup, so each punctuation token is a table entry
@@ -98,9 +99,20 @@ function scanNumber(s: Scanner): boolean {
   while (s.i < s.source.length) {
     const c = s.source.charCodeAt(s.i);
     if (c === undefined) break;
-    if ((c >= 48 && c <= 57) || c === 46) {
+    // Consume digits, and a `.` only when it is followed by a digit (a real
+    // decimal point). A `.` followed by a letter is a member access or method
+    // call (e.g. `100.addOnce()`), not a float.
+    if (c >= 48 && c <= 57) {
       num += s.source[s.i];
       s.i++;
+    } else if (c === 46) {
+      const next = s.source.charCodeAt(s.i + 1);
+      if (next !== undefined && next >= 48 && next <= 57) {
+        num += s.source[s.i];
+        s.i++;
+      } else {
+        break;
+      }
     } else {
       break;
     }

@@ -44,23 +44,52 @@ export function createParser(tokens: Token[]): Parser {
 
     if (token.type === "lparen") {
       consume(); // consume '('
-      const exprResult = parseExpression();
-      if (!exprResult.ok) return exprResult;
+      const firstResult = parseExpression();
+      if (!firstResult.ok) return firstResult;
+      // A tuple literal: "(<expr>, <expr>, ...)". If a comma follows the
+      // first expression, this is a tuple rather than a parenthesized expr.
+      if (peek().type === "comma") {
+        const elements: ASTNode[] = [firstResult.value];
+        while (peek().type === "comma") {
+          consume(); // consume ','
+          const elemResult = parseExpression();
+          if (!elemResult.ok) return elemResult;
+          elements.push(elemResult.value);
+        }
+        if (peek().type !== "rparen") {
+          return err(
+            compileError("syntax", "Expected ')' after tuple literal"),
+          );
+        }
+        consume(); // consume ')'
+        return ok({ kind: "tuple", elements });
+      }
       if (peek().type !== "rparen") {
         return err(compileError("syntax", "Expected ')' after expression"));
       }
       consume(); // consume ')'
-      return exprResult;
+      return firstResult;
     }
 
     if (token.type === "number") {
       consume();
-      return ok({ kind: "number", value: token.value, suffix: token.suffix });
+      return parsePostfix({
+        kind: "number",
+        value: token.value,
+        suffix: token.suffix,
+      });
     }
 
     if (token.type === "boolean") {
       consume();
-      return ok({ kind: "boolean", value: token.value });
+      return parsePostfix({ kind: "boolean", value: token.value });
+    }
+
+    // `this` is a scope reference (not a runtime value). It is only valid as
+    // the object of a member access (this.x) or an assignment target.
+    if (token.type === "this") {
+      consume();
+      return parsePostfix({ kind: "this" });
     }
 
     // Reference creation: &<expr> or &mut <expr>
@@ -109,31 +138,18 @@ export function createParser(tokens: Token[]): Parser {
 
     if (token.type === "identifier") {
       consume();
-      let node: ASTNode = { kind: "identifier", name: token.name };
+      const node: ASTNode = { kind: "identifier", name: token.name };
 
       // Handle function calls: name(arg, ...)
       if (peek().type === "lparen") {
         consume(); // consume '('
-        const args: ASTNode[] = [];
-        if (peek().type !== "rparen") {
-          while (true) {
-            const argResult = parseExpression();
-            if (!argResult.ok) return argResult;
-            args.push(argResult.value);
-            if (peek().type === "comma") {
-              consume(); // consume ','
-              continue;
-            }
-            break;
-          }
-        }
-        if (peek().type !== "rparen") {
-          return err(
-            compileError("syntax", "Expected ')' after function call"),
-          );
-        }
-        consume(); // consume ')'
-        return ok({ kind: "call", name: token.name, args });
+        const argsResult = parseArgList([]);
+        if (!argsResult.ok) return argsResult;
+        return parsePostfix({
+          kind: "call",
+          name: token.name,
+          args: argsResult.value,
+        });
       }
 
       // Handle struct construction: Name { field : value, ... }
@@ -162,41 +178,92 @@ export function createParser(tokens: Token[]): Parser {
         return ok({ kind: "struct_init", name: token.name, fields });
       }
 
-      // Handle member access (chained)
-      while (peek().type === "dot") {
-        consume(); // consume dot
-        const propToken = consume();
-        if (propToken.type !== "identifier") {
-          return err(
-            compileError(
-              "syntax",
-              "Expected identifier after dot, got " + propToken.type,
-            ),
-          );
-        }
-        node = {
-          kind: "member_access",
-          object: node,
-          property: propToken.name,
-        };
-      }
-
-      // Handle indexing: array[<expr>]
-      while (peek().type === "lbracket") {
-        consume(); // consume '['
-        const indexResult = parseExpression();
-        if (!indexResult.ok) return indexResult;
-        if (peek().type !== "rbracket") {
-          return err(compileError("syntax", "Expected ']' after index"));
-        }
-        consume(); // consume ']'
-        node = { kind: "index", object: node, index: indexResult.value };
-      }
-
-      return ok(node);
+      return parsePostfix(node);
     }
 
     return err(compileError("syntax", "Unexpected token: " + token.type));
+  }
+
+  // Parse a parenthesized argument list `(arg, ...)`, starting with any
+  // pre-seeded arguments (e.g. the receiver of a method call). The opening
+  // `(` has already been consumed; this consumes through the closing `)`.
+  function parseArgList(initial: ASTNode[]): Result<ASTNode[], CompileError> {
+    const args: ASTNode[] = [...initial];
+    if (peek().type !== "rparen") {
+      while (true) {
+        const argResult = parseExpression();
+        if (!argResult.ok) return argResult;
+        args.push(argResult.value);
+        if (peek().type === "comma") {
+          consume(); // consume ','
+          continue;
+        }
+        break;
+      }
+    }
+    if (peek().type !== "rparen") {
+      return err(compileError("syntax", "Expected ')' after argument list"));
+    }
+    consume(); // consume ')'
+    return ok(args);
+  }
+
+  // Parse the postfix operators on a base node: member access (a.b), tuple
+  // indexing (t.0), and array indexing (arr[i]). Shared by identifiers and
+  // `this` so both support the same postfix syntax.
+  function parsePostfix(base: ASTNode): Result<ASTNode, CompileError> {
+    let node: ASTNode = base;
+
+    // Handle member access (chained) and tuple indexing (tuple.0)
+    while (peek().type === "dot") {
+      consume(); // consume dot
+      const propToken = consume();
+      if (propToken.type === "number") {
+        // Tuple element access: tuple.0, tuple.1, ...
+        node = {
+          kind: "tuple_index",
+          object: node,
+          index: propToken.value,
+        };
+        continue;
+      }
+      if (propToken.type !== "identifier") {
+        return err(
+          compileError(
+            "syntax",
+            "Expected identifier after dot, got " + propToken.type,
+          ),
+        );
+      }
+      // Method call: obj.method(args). The receiver `obj` is passed as the
+      // first argument (bound to the `this` parameter).
+      if (peek().type === "lparen") {
+        consume(); // consume '('
+        const argsResult = parseArgList([node]);
+        if (!argsResult.ok) return argsResult;
+        node = { kind: "call", name: propToken.name, args: argsResult.value };
+        continue;
+      }
+      node = {
+        kind: "member_access",
+        object: node,
+        property: propToken.name,
+      };
+    }
+
+    // Handle indexing: array[<expr>]
+    while (peek().type === "lbracket") {
+      consume(); // consume '['
+      const indexResult = parseExpression();
+      if (!indexResult.ok) return indexResult;
+      if (peek().type !== "rbracket") {
+        return err(compileError("syntax", "Expected ']' after index"));
+      }
+      consume(); // consume ']'
+      node = { kind: "index", object: node, index: indexResult.value };
+    }
+
+    return ok(node);
   }
 
   // Parse: if ( <condition> ) <then> [else <else>]
@@ -405,12 +472,20 @@ export function createParser(tokens: Token[]): Parser {
     const params: FnParam[] = [];
     if (peek().type !== "rparen") {
       while (true) {
-        const paramName = consume();
-        if (paramName.type !== "identifier") {
+        const paramToken = consume();
+        // A `this` token is allowed as a parameter name (the receiver
+        // binding of a method).
+        const paramName =
+          paramToken.type === "this"
+            ? "this"
+            : paramToken.type === "identifier"
+              ? paramToken.name
+              : undefined;
+        if (paramName === undefined) {
           return err(
             compileError(
               "syntax",
-              "Expected parameter name, got " + paramName.type,
+              "Expected parameter name, got " + paramToken.type,
             ),
           );
         }
@@ -418,13 +493,13 @@ export function createParser(tokens: Token[]): Parser {
           return err(
             compileError(
               "syntax",
-              "Expected ':' after parameter name '" + paramName.name + "'",
+              "Expected ':' after parameter name '" + paramName + "'",
             ),
           );
         }
         consume(); // consume ':'
         const paramType = parseTypeName();
-        params.push({ name: paramName.name, type: paramType });
+        params.push({ name: paramName, type: paramType });
         if (peek().type === "comma") {
           consume(); // consume ','
           continue;
@@ -438,12 +513,13 @@ export function createParser(tokens: Token[]): Parser {
     }
     consume(); // consume ')'
 
-    if (peek().type !== "colon") {
-      return err(compileError("syntax", "Expected ':' after function params"));
+    // The return type annotation is optional; it defaults to the generic
+    // "Int" type when omitted.
+    let returnType: Type = { kind: "named", name: "Int" };
+    if (peek().type === "colon") {
+      consume(); // consume ':'
+      returnType = parseTypeName();
     }
-    consume(); // consume ':'
-
-    const returnType = parseTypeName();
 
     if (peek().type !== "fat_arrow") {
       return err(compileError("syntax", "Expected '=>' after return type"));
@@ -545,7 +621,15 @@ export function createParser(tokens: Token[]): Parser {
           return ok({ kind: "deref_assign", target: expr.value, value });
         });
       }
-      if (expr.kind !== "identifier") {
+      // Determine the target variable name. A plain identifier `x` assigns to
+      // `x`; `this.x` assigns to the variable `x` in the current scope.
+      let targetName: string | undefined;
+      if (expr.kind === "identifier") {
+        targetName = expr.name;
+      } else if (expr.kind === "member_access" && expr.object.kind === "this") {
+        targetName = expr.property;
+      }
+      if (targetName === undefined) {
         return err(
           compileError(
             "syntax",
@@ -566,11 +650,11 @@ export function createParser(tokens: Token[]): Parser {
             ? value
             : {
                 kind: "binary_op",
-                left: { kind: "identifier", name: expr.name },
+                left: { kind: "identifier", name: targetName! },
                 op: assignOp,
                 right: value,
               };
-        return ok({ kind: "assign", name: expr.name, value: rhs });
+        return ok({ kind: "assign", name: targetName!, value: rhs });
       });
     }
 
@@ -607,8 +691,8 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse a type name, which may be a reference type like "&I32", a mutable
-  // reference type like "&mut I32", or an array type like "[I32; 3]".
-  // Returns a structured Type.
+  // reference type like "&mut I32", an array type like "[I32; 3]", or a tuple
+  // type like "(I32, I32)". Returns a structured Type.
   function parseTypeName(): Type {
     if (peek().type === "amp") {
       consume(); // consume '&'
@@ -619,6 +703,25 @@ export function createParser(tokens: Token[]): Parser {
       }
       const inner = parseTypeName();
       return { kind: "ref", inner, isMut };
+    }
+    if (peek().type === "lparen") {
+      consume(); // consume '('
+      const elements: Type[] = [];
+      if (peek().type !== "rparen") {
+        while (true) {
+          elements.push(parseTypeName());
+          if (peek().type === "comma") {
+            consume(); // consume ','
+            continue;
+          }
+          break;
+        }
+      }
+      if (peek().type !== "rparen") {
+        return { kind: "named", name: "" };
+      }
+      consume(); // consume ')'
+      return { kind: "tuple", elements };
     }
     if (peek().type === "lbracket") {
       consume(); // consume '['

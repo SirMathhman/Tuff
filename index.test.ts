@@ -4,6 +4,11 @@ import type { CompileErrorKind } from "./src/compileError";
 
 function evaluate(source: string, args: string[] = []) {
   const compiled = compileTuffToJS("in let args : &[Str]; " + source);
+  if (!compiled.ok) {
+    expect(compiled.error).toBeUndefined();
+    return;
+  }
+
   // evaluate() is only called with valid sources; error cases use compileTuffToJS directly
   const generatedJS = compiled.ok ? compiled.value : "";
   const wrappedJS =
@@ -346,5 +351,166 @@ describe("tuff", () => {
 
   it('compile("/* unterminated") => syntax', () => {
     expectCompileError("/* unterminated", "syntax");
+  });
+
+  it('evaluate("// /* not a block */ args.length") => 0', () => {
+    expect(evaluate("// /* not a block */ args.length", [])).toBe(0);
+  });
+
+  it('evaluate("/* // not a line comment */ args.length") => 1', () => {
+    expect(evaluate("/* // not a line comment */ args.length", [])).toBe(1);
+  });
+
+  it('evaluate("/* a /* nested */ args.length") => 1', () => {
+    expect(evaluate("/* a /* nested */ args.length", [])).toBe(1);
+  });
+
+  it('evaluate("args.length /* trailing */ + 1") => 2', () => {
+    expect(evaluate("args.length /* trailing */ + 1", [])).toBe(2);
+  });
+
+  it('evaluate("/* leading */ args.length") => 1', () => {
+    expect(evaluate("/* leading */ args.length", [])).toBe(1);
+  });
+
+  it('evaluate("// only a comment") => 0', () => {
+    expect(evaluate("// only a comment", [])).toBe(0);
+  });
+
+  it('evaluate("/* only a block */") => 0', () => {
+    expect(evaluate("/* only a block */", [])).toBe(0);
+  });
+
+  it('evaluate("let tuple : (I32, I32) = (3, 4); tuple.0 + tuple.1") => 7', () => {
+    expect(
+      evaluate("let tuple : (I32, I32) = (3, 4); tuple.0 + tuple.1", []),
+    ).toBe(7);
+  });
+
+  it('evaluate("let tuple = (3, 4); tuple.0 + tuple.1") => 7', () => {
+    expect(evaluate("let tuple = (3, 4); tuple.0 + tuple.1", [])).toBe(7);
+  });
+
+  it('evaluate("let tuple : (I32, I32, I32) = (1, 2, 3); tuple.0 + tuple.1 + tuple.2") => 6', () => {
+    expect(
+      evaluate(
+        "let tuple : (I32, I32, I32) = (1, 2, 3); tuple.0 + tuple.1 + tuple.2",
+        [],
+      ),
+    ).toBe(6);
+  });
+
+  it('evaluate("let tuple : (I32, Bool) = (3, true); tuple.0") => 3', () => {
+    expect(evaluate("let tuple : (I32, Bool) = (3, true); tuple.0", [])).toBe(
+      3,
+    );
+  });
+
+  it('compile("let tuple : (I32, I32) = (3, 4); tuple.2") => scope', () => {
+    expectCompileError("let tuple : (I32, I32) = (3, 4); tuple.2", "scope");
+  });
+
+  it('compile("let tuple : (I32, I32) = (3, 4, 5);") => syntax', () => {
+    expectCompileError("let tuple : (I32, I32) = (3, 4, 5);", "syntax");
+  });
+
+  it('evaluate("let tuple : (I32, (I32, I32)) = (1, (2, 3)); let inner = tuple.1; inner.0 + inner.1") => 5', () => {
+    expect(
+      evaluate(
+        "let tuple : (I32, (I32, I32)) = (1, (2, 3)); let inner = tuple.1; inner.0 + inner.1",
+        [],
+      ),
+    ).toBe(5);
+  });
+
+  it('evaluate("let x = 100; this.x") => 100', () => {
+    expect(evaluate("let x = 100; this.x", [])).toBe(100);
+  });
+
+  it('evaluate("let x = 100; let y = 200; this.x + this.y") => 300', () => {
+    expect(evaluate("let x = 100; let y = 200; this.x + this.y", [])).toBe(300);
+  });
+
+  it('compile("this.x") => scope', () => {
+    expectCompileError("this.x", "scope");
+  });
+
+  it('evaluate("let mut x = 0; this.x = 100; x") => 100', () => {
+    expect(evaluate("let mut x = 0; this.x = 100; x", [])).toBe(100);
+  });
+
+  it('evaluate("let mut x = 0; this.x += 100; x") => 100', () => {
+    expect(evaluate("let mut x = 0; this.x += 100; x", [])).toBe(100);
+  });
+
+  it('compile("let x = 0; this.x = 100;") => scope', () => {
+    expectCompileError("let x = 0; this.x = 100;", "scope");
+  });
+
+  it('compile("this.x = 100;") => scope', () => {
+    expectCompileError("this.x = 100;", "scope");
+  });
+
+  it('compile("let temp = &this;") => scope', () => {
+    expectCompileError("let temp = &this;", "scope");
+  });
+
+  it('compile("let temp = this;") => scope', () => {
+    expectCompileError("let temp = this;", "scope");
+  });
+
+  it('evaluate("fn Wrapper(field : I32) : Wrapper => this; Wrapper(100).field") => 100', () => {
+    expect(
+      evaluate(
+        "fn Wrapper(field : I32) : Wrapper => this; Wrapper(100).field",
+        [],
+      ),
+    ).toBe(100);
+  });
+
+  it('evaluate("fn Pair(a : I32, b : I32) : Pair => this; let p = Pair(3, 4); p.a + p.b") => 7', () => {
+    expect(
+      evaluate(
+        "fn Pair(a : I32, b : I32) : Pair => this; let p = Pair(3, 4); p.a + p.b",
+        [],
+      ),
+    ).toBe(7);
+  });
+
+  it('compile("fn Wrapper(field : I32) : Wrapper => this; Wrapper(100).missing") => scope', () => {
+    expectCompileError(
+      "fn Wrapper(field : I32) : Wrapper => this; Wrapper(100).missing",
+      "scope",
+    );
+  });
+
+  it('evaluate("fn Wrapper() : Wrapper => { let field = 100; this } Wrapper().field") => 100', () => {
+    expect(
+      evaluate(
+        "fn Wrapper() : Wrapper => { let field = 100; this } Wrapper().field",
+        [],
+      ),
+    ).toBe(100);
+  });
+
+  it('evaluate("fn addOnce(this : I32) => this + 1; 100.addOnce()") => 101', () => {
+    expect(
+      evaluate("fn addOnce(this : I32) => this + 1; 100.addOnce()", []),
+    ).toBe(101);
+  });
+
+  it('evaluate("fn add(this : I32, n : I32) => this + n; 100.add(5)") => 105', () => {
+    expect(
+      evaluate("fn add(this : I32, n : I32) => this + n; 100.add(5)", []),
+    ).toBe(105);
+  });
+
+  it('evaluate("let x = 100; fn addOnce(this : I32) => this + 1; x.addOnce()") => 101', () => {
+    expect(
+      evaluate(
+        "let x = 100; fn addOnce(this : I32) => this + 1; x.addOnce()",
+        [],
+      ),
+    ).toBe(101);
   });
 });

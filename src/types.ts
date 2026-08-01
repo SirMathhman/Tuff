@@ -66,6 +66,12 @@ export function formatType(t: Type): string {
   if (t.kind === "array") {
     return "[" + formatType(t.elem) + "; " + t.length + "]";
   }
+  if (t.kind === "tuple") {
+    return "(" + t.elements.map(formatType).join(", ") + ")";
+  }
+  if (t.kind === "this") {
+    return "this";
+  }
   return t.name;
 }
 
@@ -81,6 +87,14 @@ export function isKnownType(t: Type): boolean {
   }
   if (t.kind === "array") {
     return isKnownType(t.elem);
+  }
+  if (t.kind === "tuple") {
+    return t.elements.every(isKnownType);
+  }
+  if (t.kind === "this") {
+    // `this` is a compile-time scope reference; it is not a user-writable
+    // type, so it is not "known" as a declared type.
+    return false;
   }
   return true;
 }
@@ -138,6 +152,35 @@ export function conversionKind(from: Type, to: Type): ConversionKind {
   }
   if (from.kind === "array" || to.kind === "array") {
     // An array is never assignable to a non-array (or vice versa).
+    return "impossible";
+  }
+  // Tuple types: assignable only when they have the same arity and each
+  // element is assignable.
+  if (from.kind === "tuple" && to.kind === "tuple") {
+    if (from.elements.length !== to.elements.length) {
+      return "impossible";
+    }
+    let result: ConversionKind = "none";
+    for (let i = 0; i < from.elements.length; i++) {
+      const elemConv = conversionKind(from.elements[i]!, to.elements[i]!);
+      if (elemConv === "impossible") {
+        return "impossible";
+      }
+      if (elemConv === "explicit") {
+        result = "explicit";
+      } else if (elemConv === "implicit" && result === "none") {
+        result = "implicit";
+      }
+    }
+    return result;
+  }
+  if (from.kind === "tuple" || to.kind === "tuple") {
+    // A tuple is never assignable to a non-tuple (or vice versa).
+    return "impossible";
+  }
+  // `this` is a compile-time scope reference, not a runtime value. It is
+  // never assignable to any type, and no type is assignable to it.
+  if (from.kind === "this" || to.kind === "this") {
     return "impossible";
   }
   // Struct types: assignable only to the same struct type.
@@ -201,6 +244,15 @@ export function typeMatches(from: Type, to: Type): boolean {
     return true;
   }
   if (from.kind === "struct" && to.kind === "struct" && from.name === to.name) {
+    return true;
+  }
+  if (from.kind === "tuple" && to.kind === "tuple") {
+    if (from.elements.length !== to.elements.length) {
+      return false;
+    }
+    return from.elements.every((elem, i) => typeMatches(elem, to.elements[i]!));
+  }
+  if (from.kind === "this" && to.kind === "this") {
     return true;
   }
   if (from.kind !== "named" || to.kind !== "named") {

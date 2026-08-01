@@ -83,11 +83,6 @@ This document catalogs language features that Tuff should probably support but c
 - **Gap**: No `Option`/`Result` types, no `null`/`undefined` handling.
 - **Why**: Error handling and optional values are fundamental. Currently there's no way to represent "no value" except `Void`.
 
-### Tuple types
-
-- **Gap**: No tuples `(I32, Bool)`.
-- **Why**: Lightweight anonymous grouping of values.
-
 ### Array bounds checking
 
 - **Gap**: Array indexing is a plain JS array access with no bounds check.

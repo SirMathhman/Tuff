@@ -38,6 +38,9 @@ export interface FnToken {
 export interface StructToken {
   type: "struct";
 }
+export interface ThisToken {
+  type: "this";
+}
 export interface FatArrowToken {
   type: "fat_arrow";
 }
@@ -132,6 +135,7 @@ export type Token =
   | IsToken
   | FnToken
   | StructToken
+  | ThisToken
   | FatArrowToken
   | LParenToken
   | RParenToken
@@ -183,7 +187,16 @@ export interface StructType {
   kind: "struct";
   name: string;
 }
-export type Type = NamedType | RefType | ArrayType | StructType;
+export interface TupleType {
+  kind: "tuple";
+  // The element types, e.g. [I32, I32] in "(I32, I32)".
+  elements: Type[];
+}
+export interface ThisType {
+  kind: "this";
+}
+export type Type =
+  NamedType | RefType | ArrayType | StructType | TupleType | ThisType;
 
 // ---- AST Node Types ----
 
@@ -200,6 +213,9 @@ export interface BooleanNode {
 export interface IdentifierNode {
   kind: "identifier";
   name: string;
+}
+export interface ThisNode {
+  kind: "this";
 }
 export interface MemberAccessNode {
   kind: "member_access";
@@ -310,25 +326,18 @@ export interface StructInitField {
   name: string;
   value: ASTNode;
 }
-// A variable symbol: its type and mutability.
-export interface VariableSymbol {
-  kind: "variable";
-  type: Type;
-  isMut: boolean;
+export interface TupleNode {
+  kind: "tuple";
+  // The element expressions, e.g. [3, 4] in "(3, 4)".
+  elements: ASTNode[];
 }
-// A function symbol: its signature.
-export interface FunctionSymbol {
-  kind: "function";
-  signature: FnSignature;
+export interface TupleIndexNode {
+  kind: "tuple_index";
+  // The tuple being indexed, e.g. "tuple" in "tuple.0".
+  object: ASTNode;
+  // The element index, e.g. 0 in "tuple.0".
+  index: number;
 }
-// A struct symbol: its fields.
-export interface StructSymbol {
-  kind: "struct";
-  fields: StructField[];
-}
-// The unified symbol table entry for a named declaration (function or struct).
-// Variables are tracked separately in the lexically-scoped Scope.
-export type SymbolInfo = VariableSymbol | FunctionSymbol | StructSymbol;
 export interface LetDeclNode {
   kind: "let_decl";
   name: string;
@@ -359,6 +368,7 @@ export type ASTNode =
   | NumberNode
   | BooleanNode
   | IdentifierNode
+  | ThisNode
   | MemberAccessNode
   | BinaryOpNode
   | IsNode
@@ -372,6 +382,8 @@ export type ASTNode =
   | IndexNode
   | StructDeclNode
   | StructInitNode
+  | TupleNode
+  | TupleIndexNode
   | LetDeclNode
   | IfNode
   | BlockNode

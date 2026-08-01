@@ -46,38 +46,27 @@ export function compileTuffToJS(source: string): Result<string, CompileError> {
   const exitCode = (expr: string) => "Number(" + expr + ")";
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i]!;
+    // A `let` declaration is a declaration, not an expression — it never
+    // produces an exit code. Only an expression statement does. Track
+    // redeclarations so a repeated `let x` emits `x = ...` rather than
+    // `let x = ...`.
+    const isRedeclare = stmt.kind === "let_decl" && declared.has(stmt.name);
     if (stmt.kind === "let_decl") {
-      const isNew = !declared.has(stmt.name);
       declared.add(stmt.name);
-      const valueResult = generateJS(stmt.value);
-      if (!valueResult.ok) return valueResult;
-      if (isNew) {
-        // A let declaration is a declaration, not an expression — it never
-        // produces an exit code. Only an expression statement does.
-        parts.push("let " + stmt.name + " = " + valueResult.value + ";");
-      } else {
-        parts.push(stmt.name + " = " + valueResult.value + ";");
-      }
-    } else if (stmt.kind === "fn_decl") {
-      // A function declaration is a declaration, not an expression — it never
-      // produces an exit code.
-      const fnResult = generateJS(stmt);
-      if (!fnResult.ok) return fnResult;
-      parts.push(fnResult.value);
-    } else if (stmt.kind === "struct_decl") {
-      // A struct declaration is a declaration, not an expression — it never
-      // produces an exit code.
-      const structResult = generateJS(stmt);
-      if (!structResult.ok) return structResult;
-      parts.push(structResult.value);
+    }
+    const stmtResult = generateJS(stmt, isRedeclare);
+    if (!stmtResult.ok) return stmtResult;
+    const isDeclaration =
+      stmt.kind === "let_decl" ||
+      stmt.kind === "fn_decl" ||
+      stmt.kind === "struct_decl";
+    if (isDeclaration) {
+      // Declarations never produce an exit code.
+      parts.push(stmtResult.value);
+    } else if (i === stmts.length - 1) {
+      parts.push("process.exit(" + exitCode(stmtResult.value) + ");");
     } else {
-      const exprResult = generateJS(stmt);
-      if (!exprResult.ok) return exprResult;
-      if (i === stmts.length - 1) {
-        parts.push("process.exit(" + exitCode(exprResult.value) + ");");
-      } else {
-        parts.push(exprResult.value + ";");
-      }
+      parts.push(stmtResult.value + ";");
     }
   }
 
