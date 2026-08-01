@@ -6,7 +6,8 @@
   "scripts": {
     "lint": "tsc --noEmit && eslint . --fix",
     "test": "bun test",
-    "format": "prettier . --write"
+    "format": "prettier . --write",
+    "cpd": "pmd cpd --dir src index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

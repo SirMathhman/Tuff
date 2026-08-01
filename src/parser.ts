@@ -21,9 +21,13 @@ export function createParser(tokens: Token[]): Parser {
     return token;
   }
 
-  // Parse a primary expression: number, boolean, identifier, or member access
+  // Parse a primary expression: number, boolean, identifier, member access, or if
   function parsePrimary(): Result<ASTNode, Error> {
     const token = peek();
+
+    if (token.type === "if") {
+      return parseIf();
+    }
 
     if (token.type === "number") {
       consume();
@@ -59,6 +63,42 @@ export function createParser(tokens: Token[]): Parser {
     }
 
     return err(new Error(`Unexpected token: ${token.type}`));
+  }
+
+  // Parse: if ( <condition> ) <then> else <else>
+  function parseIf(): Result<ASTNode, Error> {
+    consume(); // consume 'if'
+
+    if (peek().type !== "lparen") {
+      return err(new Error(`Expected '(' after if`));
+    }
+    consume(); // consume '('
+
+    const conditionResult = parseExpression();
+    if (!conditionResult.ok) return conditionResult;
+
+    if (peek().type !== "rparen") {
+      return err(new Error(`Expected ')' after if condition`));
+    }
+    consume(); // consume ')'
+
+    const thenResult = parseExpression();
+    if (!thenResult.ok) return thenResult;
+
+    if (peek().type !== "else") {
+      return err(new Error(`Expected 'else' in if expression`));
+    }
+    consume(); // consume 'else'
+
+    const elseResult = parseExpression();
+    if (!elseResult.ok) return elseResult;
+
+    return ok({
+      kind: "if",
+      condition: conditionResult.value,
+      thenBranch: thenResult.value,
+      elseBranch: elseResult.value,
+    });
   }
 
   // Parse binary expression with precedence climbing

@@ -30,6 +30,15 @@ export function generateJS(node: ASTNode): Result<string, Error> {
         return `${node.name} = ${value}`;
       });
 
+    case "if":
+      return andThen(generateJS(node.condition), (condition) => {
+        return andThen(generateJS(node.thenBranch), (thenBranch) => {
+          return map(generateJS(node.elseBranch), (elseBranch) => {
+            return `(${condition} ? ${thenBranch} : ${elseBranch})`;
+          });
+        });
+      });
+
     default:
       return err(new Error(`Unexpected node kind in codegen`));
   }

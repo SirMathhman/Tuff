@@ -28,6 +28,11 @@ export default defineConfig([
           selector: "ThrowStatement",
           message: "This makes the control flow more clear.",
         },
+        {
+          selector: "TemplateLiteral",
+          message:
+            "Remove templates because it's one less thing to support when we self host.",
+        },
       ],
       "@typescript-eslint/no-restricted-types": [
         "error",

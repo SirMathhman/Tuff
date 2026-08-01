@@ -71,6 +71,10 @@ export function tokenize(source: string): Result<Token[], Error> {
         tokens.push({ type: "let" });
       } else if (name === "mut") {
         tokens.push({ type: "mut" });
+      } else if (name === "if") {
+        tokens.push({ type: "if" });
+      } else if (name === "else") {
+        tokens.push({ type: "else" });
       } else if (name === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {
@@ -95,6 +99,16 @@ export function tokenize(source: string): Result<Token[], Error> {
 
     // Single-character tokens
     const char = source[i]!;
+    if (char === "(") {
+      tokens.push({ type: "lparen" });
+      i++;
+      continue;
+    }
+    if (char === ")") {
+      tokens.push({ type: "rparen" });
+      i++;
+      continue;
+    }
     if (char === ".") {
       tokens.push({ type: "dot" });
       i++;

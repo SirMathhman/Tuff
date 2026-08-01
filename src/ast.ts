@@ -18,6 +18,18 @@ export interface LetToken {
 export interface MutToken {
   type: "mut";
 }
+export interface IfToken {
+  type: "if";
+}
+export interface ElseToken {
+  type: "else";
+}
+export interface LParenToken {
+  type: "lparen";
+}
+export interface RParenToken {
+  type: "rparen";
+}
 export interface EqualsToken {
   type: "equals";
 }
@@ -73,6 +85,10 @@ export type Token =
   | IdentifierToken
   | LetToken
   | MutToken
+  | IfToken
+  | ElseToken
+  | LParenToken
+  | RParenToken
   | EqualsToken
   | EqualsEqualsToken
   | BangEqualsToken
@@ -126,6 +142,12 @@ export interface LetDeclNode {
   value: ASTNode;
   isMut?: boolean;
 }
+export interface IfNode {
+  kind: "if";
+  condition: ASTNode;
+  thenBranch: ASTNode;
+  elseBranch: ASTNode;
+}
 
 export type ASTNode =
   | NumberNode
@@ -134,7 +156,8 @@ export type ASTNode =
   | MemberAccessNode
   | BinaryOpNode
   | AssignNode
-  | LetDeclNode;
+  | LetDeclNode
+  | IfNode;
 
 // ---- Operator Table ----
 

@@ -94,4 +94,18 @@ describe("tuff", () => {
   it('evaluate("let x = 0; let y = 1; x != y") => 1', () => {
     expect(evaluate("let x = 0; let y = 1; x != y", [])).toBe(1);
   });
+
+  it('evaluate("let x = if (true) 2 else 3; x") => 2', () => {
+    expect(evaluate("let x = if (true) 2 else 3; x", [])).toBe(2);
+  });
+
+  it('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+    expect(
+      evaluate("let x = if (false) 2 else if (false) 3 else 4; x", []),
+    ).toBe(4);
+  });
+
+  it('compile("let x = if (false) 2; x") => Error', () => {
+    expect(compileTuffToJS("let x = if (false) 2; x").ok).toBe(false);
+  });
 });

@@ -42,6 +42,14 @@ export function validateScope(
         return checkNode(node.right);
       }
 
+      case "if": {
+        const conditionResult = checkNode(node.condition);
+        if (!conditionResult.ok) return conditionResult;
+        const thenResult = checkNode(node.thenBranch);
+        if (!thenResult.ok) return thenResult;
+        return checkNode(node.elseBranch);
+      }
+
       case "assign": {
         if (!scope.has(node.name)) {
           return err(scopeError(`Undeclared identifier: '${node.name}'`));
