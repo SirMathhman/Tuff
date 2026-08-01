@@ -35,4 +35,8 @@ describe("tuff", () => {
   it('evaluate("args.length + 1") => 2', () => {
     expect(evaluate("args.length + 1", [])).toBe(2);
   });
+
+  it('evaluate("args.length + args.length") => 2', () => {
+    expect(evaluate("args.length + args.length", [])).toBe(2);
+  });
 });

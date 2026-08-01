@@ -24,12 +24,7 @@ function tokenize(source: string): Token[] {
 
   while (i < source.length) {
     // Skip whitespace
-    if (
-      source[i] === " " ||
-      source[i] === "\t" ||
-      source[i] === "\n" ||
-      source[i] === "\r"
-    ) {
+    if (source[i] === " " || source[i] === "\t" || source[i] === "\n" || source[i] === "\r") {
       i++;
       continue;
     }
@@ -58,31 +53,11 @@ function tokenize(source: string): Token[] {
 
     // Single-character tokens
     const char = source[i]!;
-    if (char === "+") {
-      tokens.push({ type: "plus" });
-      i++;
-      continue;
-    }
-    if (char === "-") {
-      tokens.push({ type: "minus" });
-      i++;
-      continue;
-    }
-    if (char === "*") {
-      tokens.push({ type: "star" });
-      i++;
-      continue;
-    }
-    if (char === "/") {
-      tokens.push({ type: "slash" });
-      i++;
-      continue;
-    }
-    if (char === ".") {
-      tokens.push({ type: "dot" });
-      i++;
-      continue;
-    }
+    if (char === "+") { tokens.push({ type: "plus" }); i++; continue; }
+    if (char === "-") { tokens.push({ type: "minus" }); i++; continue; }
+    if (char === "*") { tokens.push({ type: "star" }); i++; continue; }
+    if (char === "/") { tokens.push({ type: "slash" }); i++; continue; }
+    if (char === ".") { tokens.push({ type: "dot" }); i++; continue; }
 
     // Unknown character, skip
     i++;
@@ -146,9 +121,7 @@ class Parser {
         this.consume(); // consume dot
         const propToken = this.consume();
         if (propToken.type !== "identifier") {
-          throw new Error(
-            `Expected identifier after dot, got ${propToken.type}`,
-          );
+          throw new Error(`Expected identifier after dot, got ${propToken.type}`);
         }
         node = {
           kind: "member_access",
@@ -185,16 +158,11 @@ class Parser {
 
   private tokenToOp(token: Token): string | null {
     switch (token.type) {
-      case "plus":
-        return "+";
-      case "minus":
-        return "-";
-      case "star":
-        return "*";
-      case "slash":
-        return "/";
-      default:
-        return null;
+      case "plus": return "+";
+      case "minus": return "-";
+      case "star": return "*";
+      case "slash": return "/";
+      default: return null;
     }
   }
 }
