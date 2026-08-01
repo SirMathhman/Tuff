@@ -1,20 +1,85 @@
 // ---- Types ----
 
+interface NumberToken {
+  type: "number";
+  value: number;
+}
+interface IdentifierToken {
+  type: "identifier";
+  name: string;
+}
+interface LetToken {
+  type: "let";
+}
+interface EqualsToken {
+  type: "equals";
+}
+interface SemicolonToken {
+  type: "semicolon";
+}
+interface PlusToken {
+  type: "plus";
+}
+interface MinusToken {
+  type: "minus";
+}
+interface StarToken {
+  type: "star";
+}
+interface SlashToken {
+  type: "slash";
+}
+interface DotToken {
+  type: "dot";
+}
+interface EOFToken {
+  type: "eof";
+}
+
 type Token =
-  | { type: "number"; value: number }
-  | { type: "identifier"; name: string }
-  | { type: "plus" }
-  | { type: "minus" }
-  | { type: "star" }
-  | { type: "slash" }
-  | { type: "dot" }
-  | { type: "eof" };
+  | NumberToken
+  | IdentifierToken
+  | LetToken
+  | EqualsToken
+  | SemicolonToken
+  | PlusToken
+  | MinusToken
+  | StarToken
+  | SlashToken
+  | DotToken
+  | EOFToken;
+
+interface NumberNode {
+  kind: "number";
+  value: number;
+}
+interface IdentifierNode {
+  kind: "identifier";
+  name: string;
+}
+interface MemberAccessNode {
+  kind: "member_access";
+  object: ASTNode;
+  property: string;
+}
+interface BinaryOpNode {
+  kind: "binary_op";
+  left: ASTNode;
+  op: string;
+  right: ASTNode;
+}
+interface LetDeclNode {
+  kind: "let_decl";
+  name: string;
+  value: ASTNode;
+}
 
 type ASTNode =
-  | { kind: "number"; value: number }
-  | { kind: "identifier"; name: string }
-  | { kind: "member_access"; object: ASTNode; property: string }
-  | { kind: "binary_op"; left: ASTNode; op: string; right: ASTNode };
+  | NumberNode
+  | IdentifierNode
+  | MemberAccessNode
+  | BinaryOpNode
+  | LetDeclNode;
 
 // ---- Tokenizer ----
 
@@ -24,7 +89,12 @@ function tokenize(source: string): Token[] {
 
   while (i < source.length) {
     // Skip whitespace
-    if (source[i] === " " || source[i] === "\t" || source[i] === "\n" || source[i] === "\r") {
+    if (
+      source[i] === " " ||
+      source[i] === "\t" ||
+      source[i] === "\n" ||
+      source[i] === "\r"
+    ) {
       i++;
       continue;
     }
@@ -47,17 +117,51 @@ function tokenize(source: string): Token[] {
         name += source[i];
         i++;
       }
-      tokens.push({ type: "identifier", name });
+      if (name === "let") {
+        tokens.push({ type: "let" });
+      } else {
+        tokens.push({ type: "identifier", name });
+      }
       continue;
     }
 
     // Single-character tokens
     const char = source[i]!;
-    if (char === "+") { tokens.push({ type: "plus" }); i++; continue; }
-    if (char === "-") { tokens.push({ type: "minus" }); i++; continue; }
-    if (char === "*") { tokens.push({ type: "star" }); i++; continue; }
-    if (char === "/") { tokens.push({ type: "slash" }); i++; continue; }
-    if (char === ".") { tokens.push({ type: "dot" }); i++; continue; }
+    if (char === "+") {
+      tokens.push({ type: "plus" });
+      i++;
+      continue;
+    }
+    if (char === "-") {
+      tokens.push({ type: "minus" });
+      i++;
+      continue;
+    }
+    if (char === "*") {
+      tokens.push({ type: "star" });
+      i++;
+      continue;
+    }
+    if (char === "/") {
+      tokens.push({ type: "slash" });
+      i++;
+      continue;
+    }
+    if (char === ".") {
+      tokens.push({ type: "dot" });
+      i++;
+      continue;
+    }
+    if (char === "=") {
+      tokens.push({ type: "equals" });
+      i++;
+      continue;
+    }
+    if (char === ";") {
+      tokens.push({ type: "semicolon" });
+      i++;
+      continue;
+    }
 
     // Unknown character, skip
     i++;
@@ -95,14 +199,6 @@ class Parser {
     return token;
   }
 
-  expect(type: Token["type"]): Token {
-    const token = this.peek();
-    if (token.type !== type) {
-      throw new Error(`Expected ${type}, got ${token.type}`);
-    }
-    return this.consume();
-  }
-
   // Parse a primary expression: number, identifier, or member access
   parsePrimary(): ASTNode {
     const token = this.peek();
@@ -121,7 +217,9 @@ class Parser {
         this.consume(); // consume dot
         const propToken = this.consume();
         if (propToken.type !== "identifier") {
-          throw new Error(`Expected identifier after dot, got ${propToken.type}`);
+          throw new Error(
+            `Expected identifier after dot, got ${propToken.type}`,
+          );
         }
         node = {
           kind: "member_access",
@@ -156,13 +254,56 @@ class Parser {
     return left;
   }
 
+  // Parse a single statement
+  parseStatement(): ASTNode {
+    if (this.peek().type === "let") {
+      return this.parseLetDecl();
+    }
+
+    // Expression statement
+    const expr = this.parseExpression();
+    // Consume optional trailing semicolon
+    if (this.peek().type === "semicolon") {
+      this.consume();
+    }
+    return expr;
+  }
+
+  // Parse: let <identifier> = <expression> ;
+  parseLetDecl(): ASTNode {
+    this.consume(); // consume 'let'
+    const nameToken = this.consume();
+    if (nameToken.type !== "identifier") {
+      throw new Error(`Expected identifier after let, got ${nameToken.type}`);
+    }
+
+    if (this.peek().type !== "equals") {
+      throw new Error(`Expected '=' in let declaration`);
+    }
+    this.consume(); // consume '='
+
+    const value = this.parseExpression();
+
+    // Consume optional trailing semicolon
+    if (this.peek().type === "semicolon") {
+      this.consume();
+    }
+
+    return { kind: "let_decl", name: nameToken.name, value };
+  }
+
   private tokenToOp(token: Token): string | null {
     switch (token.type) {
-      case "plus": return "+";
-      case "minus": return "-";
-      case "star": return "*";
-      case "slash": return "/";
-      default: return null;
+      case "plus":
+        return "+";
+      case "minus":
+        return "-";
+      case "star":
+        return "*";
+      case "slash":
+        return "/";
+      default:
+        return null;
     }
   }
 }
@@ -182,16 +323,21 @@ function generateJS(node: ASTNode): string {
 
     case "binary_op":
       return `${generateJS(node.left)} ${node.op} ${generateJS(node.right)}`;
+
+    case "let_decl":
+      return `let ${node.name} = ${generateJS(node.value)}`;
   }
 }
 
 // ---- Compiler Entry Point ----
 
+const IMPLICIT_PREFIX = "in let args : &[Str]; ";
+
 export function compileTuffToJS(source: string): string {
-  // If the user source (after the implicit declaration) is empty, return 0 exit code
-  const lastSemicolon = source.lastIndexOf(";");
-  const userSource =
-    lastSemicolon >= 0 ? source.slice(lastSemicolon + 1) : source;
+  // Strip the implicit declaration prefix
+  const userSource = source.startsWith(IMPLICIT_PREFIX)
+    ? source.slice(IMPLICIT_PREFIX.length)
+    : source;
   const trimmed = userSource.trim();
   if (trimmed === "") {
     return "process.exit(0);";
@@ -199,7 +345,24 @@ export function compileTuffToJS(source: string): string {
 
   const tokens = tokenize(trimmed);
   const parser = new Parser(tokens);
-  const ast = parser.parseExpression();
-  const jsExpr = generateJS(ast);
-  return `__exit__ = ${jsExpr};`;
+
+  // Parse all statements separated by semicolons
+  const stmts: ASTNode[] = [];
+  while (parser.peek().type !== "eof") {
+    stmts.push(parser.parseStatement());
+  }
+
+  // Generate JS for all statements
+  const parts: string[] = [];
+  for (let i = 0; i < stmts.length; i++) {
+    const stmt = stmts[i]!;
+    if (i === stmts.length - 1) {
+      // Last statement's value becomes the exit code
+      parts.push(`__exit__ = ${generateJS(stmt)};`);
+    } else {
+      parts.push(`${generateJS(stmt)};`);
+    }
+  }
+
+  return parts.join(" ");
 }
