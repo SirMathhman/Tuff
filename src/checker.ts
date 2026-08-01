@@ -65,6 +65,95 @@ function resolveThisRole(
   return "scope";
 }
 
+// Return true if `node` references any state from an enclosing frame: a
+// `this.this^k` chain with k >= 1, or a bare identifier that is declared in
+// an enclosing scope (not in the function's own scope). This is the capture
+// analysis that decides whether a nested function is a closure (captures
+// outer state) or is hoisted (self-contained). `ownScope` is the function's
+// own scope; a bare identifier declared only in a parent scope is a capture.
+function capturesOuterState(node: ASTNode, ownScope: Scope): boolean {
+  switch (node.kind) {
+    case "identifier":
+      // A bare identifier declared in an enclosing scope (not the function's
+      // own scope) is a capture of enclosing state.
+      return (
+        !ownScope.declaredHere(node.name) && ownScope.isDeclared(node.name)
+      );
+    case "this":
+      return false;
+    case "member_access":
+      // `this.this^k` (k >= 1) climbs to an enclosing frame. The object of
+      // the outermost access is `this`; count the `.this` hops.
+      if (node.object.kind === "this") {
+        let climb = 0;
+        let base: ASTNode = node;
+        while (base.kind === "member_access" && base.property === "this") {
+          climb++;
+          base = base.object;
+        }
+        return climb >= 1;
+      }
+      return capturesOuterState(node.object, ownScope);
+    case "binary_op":
+      return (
+        capturesOuterState(node.left, ownScope) ||
+        capturesOuterState(node.right, ownScope)
+      );
+    case "is":
+      // An `is` check is resolved at compile time (the checker computes the
+      // boolean result), so `this.this is &Outer` does not require runtime
+      // access to the enclosing frame. It is not a capture.
+      return false;
+    case "call":
+      return node.args.some((a) => capturesOuterState(a, ownScope));
+    case "ref":
+      return capturesOuterState(node.value, ownScope);
+    case "deref":
+      return capturesOuterState(node.value, ownScope);
+    case "assign":
+      return (
+        capturesOuterState(node.target, ownScope) ||
+        capturesOuterState(node.value, ownScope)
+      );
+    case "deref_assign":
+      return (
+        capturesOuterState(node.target, ownScope) ||
+        capturesOuterState(node.value, ownScope)
+      );
+    case "array":
+      return node.elements.some((e) => capturesOuterState(e, ownScope));
+    case "index":
+      return (
+        capturesOuterState(node.object, ownScope) ||
+        capturesOuterState(node.index, ownScope)
+      );
+    case "struct_init":
+      return node.fields.some((f) => capturesOuterState(f.value, ownScope));
+    case "tuple":
+      return node.elements.some((e) => capturesOuterState(e, ownScope));
+    case "tuple_index":
+      return capturesOuterState(node.object, ownScope);
+    case "let_decl":
+      return capturesOuterState(node.value, ownScope);
+    case "if":
+      return (
+        capturesOuterState(node.condition, ownScope) ||
+        capturesOuterState(node.thenBranch, ownScope) ||
+        (node.elseBranch !== undefined &&
+          capturesOuterState(node.elseBranch, ownScope))
+      );
+    case "block":
+      return node.statements.some((s) => capturesOuterState(s, ownScope));
+    case "while":
+      return (
+        capturesOuterState(node.condition, ownScope) ||
+        capturesOuterState(node.body, ownScope)
+      );
+    default:
+      return false;
+  }
+}
+
 // Look up a field `structName.property` in the struct table. Returns the
 // field, or a scope error if the struct or field is unknown.
 function findStructField(
@@ -97,6 +186,25 @@ function resolveStructField(
   });
 }
 
+// Resolve a member access on a struct-typed object, handling the implicit
+// Module frame specially. Module's fields are the top-level scope variables,
+// so `this.this^k.x` on Module falls back to scope lookup (returning the
+// variable's type). Returns the field's type, or a scope error if the field
+// is unknown.
+function resolveStructMember(
+  ctx: CheckContext,
+  structName: string,
+  property: string,
+): Result<Type, CompileError> {
+  if (structName === "Module") {
+    if (!ctx.scope.isDeclared(property)) {
+      return err(scopeError("Undeclared identifier: '" + property + "'"));
+    }
+    return ok(ctx.scope.typeOf(property) ?? { kind: "named", name: "Int" });
+  }
+  return resolveStructField(ctx.structs, structName, property);
+}
+
 // CheckContext encapsulates the state threaded through semantic checking:
 // the current scope, the function/struct tables, and whether the node's
 // value is being used (as opposed to being evaluated as a standalone
@@ -112,10 +220,18 @@ interface CheckContext {
   // The type of `this` in the current function body. Undefined outside a
   // function (where `this` is a bare scope reference, not a value).
   thisType: Type | undefined;
-  // The type of the enclosing function's `this`, preserved when entering a
-  // nested function. Used to resolve `this.this` (a reference to the outer
-  // constructor's `this` from a nested constructor).
-  outerThisType: Type | undefined;
+  // The stack of enclosing frames' `this` types, innermost first. Used to
+  // resolve `this.this^k` (a climb of k frames outward). The current
+  // function's own `this` is `thisType`; `thisStack[0]` is the immediate
+  // enclosing frame, `thisStack[1]` the next, etc.
+  thisStack: Type[];
+  // The current nesting depth D (1 = top-level Module frame). A climb of k
+  // frames is valid iff k < D.
+  depth: number;
+  // The current function's own scope (where its parameters and top-level
+  // locals are declared). Undefined outside a function. Used to detect
+  // whether a bare identifier is a capture of an enclosing frame's field.
+  functionScope: Scope | undefined;
   // Return a context that evaluates the node as a value.
   asValue(): CheckContext;
   // Return a context with a child scope (for blocks).
@@ -130,7 +246,9 @@ function createContext(
   structs: Map<string, StructField[]>,
   valueContext: boolean,
   thisType: Type | undefined,
-  outerThisType: Type | undefined = undefined,
+  thisStack: Type[] = [],
+  depth: number = 1,
+  functionScope: Scope | undefined = undefined,
 ): CheckContext {
   return {
     scope,
@@ -138,7 +256,9 @@ function createContext(
     structs,
     valueContext,
     thisType,
-    outerThisType,
+    thisStack,
+    depth,
+    functionScope,
     asValue() {
       return createContext(
         scope,
@@ -146,7 +266,9 @@ function createContext(
         structs,
         true,
         thisType,
-        outerThisType,
+        thisStack,
+        depth,
+        functionScope,
       );
     },
     inChildScope() {
@@ -156,19 +278,25 @@ function createContext(
         structs,
         valueContext,
         thisType,
-        outerThisType,
+        thisStack,
+        depth,
+        functionScope,
       );
     },
     withThis(newThisType) {
       // When entering a new function body, the current `this` becomes the
-      // outer `this` for any nested functions.
+      // immediate enclosing frame for any nested functions, and the depth
+      // increases by one. The function's own scope is the current scope
+      // (where its parameters and top-level locals are declared).
       return createContext(
         scope,
         functions,
         structs,
         valueContext,
         newThisType,
-        thisType,
+        thisType !== undefined ? [thisType, ...thisStack] : thisStack,
+        depth + 1,
+        scope,
       );
     },
   };
@@ -217,6 +345,16 @@ export function validateScope(
         if (!ctx.scope.isDeclared(node.name)) {
           return err(scopeError("Undeclared identifier: '" + node.name + "'"));
         }
+        // A bare identifier declared in an enclosing scope (not the current
+        // function's own scope) is a capture of an enclosing frame's field
+        // (spec §5). Mark it so codegen emits `outer.field` rather than a
+        // plain variable reference.
+        if (
+          ctx.functionScope !== undefined &&
+          !ctx.functionScope.declaredHere(node.name)
+        ) {
+          node.capturedField = true;
+        }
         setNodeType(
           node,
           ctx.scope.typeOf(node.name) ?? { kind: "named", name: "Int" },
@@ -242,20 +380,39 @@ export function validateScope(
         // function, `this` is a constructor object (an implicit struct), so
         // `this.x` resolves the field `x` on that struct.
         if (node.object.kind === "this") {
-          // `this.this` is a reference to the enclosing function's `this`
-          // (the outer constructor object) from a nested constructor.
-          if (node.property === "this") {
-            const outerType = ctx.outerThisType;
-            if (outerType !== undefined) {
+          // `this.this^k` is a climb of k frames outward. Count how many
+          // consecutive `.this` accesses form the chain, then resolve the
+          // target frame from the stack.
+          let climb = 0;
+          let base: ASTNode = node;
+          while (base.kind === "member_access" && base.property === "this") {
+            climb++;
+            base = base.object;
+          }
+          if (climb > 0) {
+            // The chain is `this.this^k` (k = climb). It is valid iff k < D.
+            if (climb >= ctx.depth) {
+              return err(
+                scopeError(
+                  "'this.this' climbs past the outermost frame (no such field, because there was no frame there)",
+                ),
+              );
+            }
+            // The target frame is `thisStack[climb - 1]` (the climb-th
+            // enclosing frame). `this.this` (k=1) → thisStack[0].
+            const target = ctx.thisStack[climb - 1];
+            if (target !== undefined) {
               setNodeType(node, {
                 kind: "ref",
-                inner: outerType,
+                inner: target,
                 isMut: false,
               });
               return ok(undefined);
             }
             return err(
-              scopeError("'this.this' is only valid inside a nested function"),
+              scopeError(
+                "'this.this' climbs past the outermost frame (no such field, because there was no frame there)",
+              ),
             );
           }
           // `this` may be a receiver parameter (declared in scope with a
@@ -272,13 +429,15 @@ export function validateScope(
               ? thisType.inner
               : thisType;
           if (structType !== undefined && structType.kind === "struct") {
-            const fieldResult = resolveStructField(
-              ctx.structs,
+            // The implicit Module frame's fields are the top-level scope
+            // variables, so `this.x` on Module falls back to scope lookup.
+            const memberResult = resolveStructMember(
+              ctx,
               structType.name,
               node.property,
             );
-            if (!fieldResult.ok) return fieldResult;
-            setNodeType(node, fieldResult.value);
+            if (!memberResult.ok) return memberResult;
+            setNodeType(node, memberResult.value);
             return ok(undefined);
           }
           if (!ctx.scope.isDeclared(node.property)) {
@@ -296,14 +455,23 @@ export function validateScope(
         const objectResult = checkNode(node.object, ctx.asValue());
         if (!objectResult.ok) return objectResult;
         const objectType = inferType(node.object);
-        if (objectType !== undefined && objectType.kind === "struct") {
-          const fieldResult = resolveStructField(
-            ctx.structs,
-            objectType.name,
+        const structType =
+          objectType !== undefined && objectType.kind === "ref"
+            ? objectType.inner
+            : objectType;
+        if (structType !== undefined && structType.kind === "struct") {
+          // The implicit Module frame's fields are the top-level scope
+          // variables, so `this.this.x` on Module falls back to scope lookup.
+          if (structType.name === "Module") {
+            node.moduleField = true;
+          }
+          const memberResult = resolveStructMember(
+            ctx,
+            structType.name,
             node.property,
           );
-          if (!fieldResult.ok) return fieldResult;
-          setNodeType(node, fieldResult.value);
+          if (!memberResult.ok) return memberResult;
+          setNodeType(node, memberResult.value);
         } else {
           setNodeType(node, { kind: "named", name: "Int" });
         }
@@ -485,6 +653,24 @@ export function validateScope(
           implicitStructName !== undefined
             ? { kind: "struct", name: implicitStructName }
             : undefined;
+        // Determine whether this function captures any enclosing-frame state
+        // (a `this.this^k` climb or a bare reference to an enclosing local).
+        // A capturing function is a closure (emitted inline); a self-contained
+        // one is hoisted to the top level.
+        const fnOwnScope = ctx.inChildScope().withThis(implicitStruct).scope;
+        for (const param of node.params) {
+          fnOwnScope.declare(
+            param.name,
+            false,
+            resolveStructType(param.type, ctx),
+          );
+        }
+        const capturesOuter = capturesOuterState(node.body, fnOwnScope);
+        node.capturesOuter = capturesOuter;
+        const sig = ctx.functions.get(node.name);
+        if (sig !== undefined) {
+          sig.capturesOuter = capturesOuter;
+        }
         if (implicitStruct !== undefined) {
           // The struct's fields come from the parameters plus any `let`
           // declarations in the body block (so `{ let field = 100; this }`
@@ -519,6 +705,11 @@ export function validateScope(
             resolveStructType(param.type, ctx),
           );
         }
+        // Determine whether this function captures any enclosing-frame state
+        // (a `this.this^k` climb or a bare reference to an enclosing local).
+        // A capturing function is a closure (emitted inline); a self-contained
+        // one is hoisted to the top level. (Already computed above and stored
+        // on the node and signature.)
         // Check the body in a child scope where the parameters are declared
         // (immutable, with their declared types). The body is checked in
         // statement context so a block body may end in an assignment (e.g. a
@@ -569,7 +760,15 @@ export function validateScope(
         ) {
           const hasThisParam = sig.params.some((p) => p.name === "this");
           if (!hasThisParam) {
-            node.args = node.args.slice(1);
+            // A method call to a nested closure (a function that captures
+            // enclosing state and is attached to the receiver instance) is
+            // emitted as `receiver.name(...)`. The receiver is the first
+            // argument; keep it so codegen can emit the property access.
+            if (sig.capturesOuter === true) {
+              node.closureMethodCall = true;
+            } else {
+              node.args = node.args.slice(1);
+            }
           }
         }
         // Check each argument expression.
@@ -586,8 +785,14 @@ export function validateScope(
         const declaredReturn: Type =
           sig !== undefined ? sig.returnType : fnType!.returnType;
         // Validate the argument count and each argument's type against the
-        // function's declared parameters.
-        if (node.args.length !== paramTypes.length) {
+        // function's declared parameters. For a closure method call, the
+        // receiver (first argument) is the object the closure is attached to,
+        // not a real parameter, so it's excluded from the count.
+        const argCount =
+          node.closureMethodCall === true
+            ? node.args.length - 1
+            : node.args.length;
+        if (argCount !== paramTypes.length) {
           return err(
             scopeError(
               "Function '" +
@@ -595,12 +800,18 @@ export function validateScope(
                 "' expects " +
                 paramTypes.length +
                 " arguments, got " +
-                node.args.length,
+                argCount,
             ),
           );
         }
         for (let i = 0; i < node.args.length; i++) {
           const arg = node.args[i]!;
+          // For a closure method call, the receiver (first argument) is the
+          // object the closure is attached to, not a real parameter, so it's
+          // skipped in type validation.
+          if (node.closureMethodCall === true && i === 0) {
+            continue;
+          }
           const param = paramTypes[i]!;
           const argType = inferType(arg);
           if (argType !== undefined) {
@@ -897,6 +1108,12 @@ export function validateScope(
               ? thisType.inner
               : thisType;
           if (structType !== undefined && structType.kind === "struct") {
+            // The implicit Module frame's fields are the top-level scope
+            // variables, so `this.x = v` on Module is a scope-variable
+            // assignment.
+            if (structType.name === "Module") {
+              return checkModuleFieldAssign(ctx, target.property, node.value);
+            }
             return checkFieldAssignment(
               ctx,
               structType.name,
@@ -948,7 +1165,14 @@ export function validateScope(
             }
           }
           const objectType = inferType(target.object);
-          if (objectType === undefined || objectType.kind !== "struct") {
+          // The object may be a reference to a struct (e.g. `this.this` is
+          // `&Module`), so unwrap a ref type to resolve the underlying
+          // struct's fields.
+          const structType =
+            objectType !== undefined && objectType.kind === "ref"
+              ? objectType.inner
+              : objectType;
+          if (structType === undefined || structType.kind !== "struct") {
             return err(
               scopeError(
                 "Cannot assign to field of non-struct value: '" +
@@ -957,9 +1181,15 @@ export function validateScope(
               ),
             );
           }
+          // The implicit Module frame's fields are the top-level scope
+          // variables, so `this.this.x = v` on Module is a scope-variable
+          // assignment.
+          if (structType.name === "Module") {
+            return checkModuleFieldAssign(ctx, target.property, node.value);
+          }
           return checkFieldAssignment(
             ctx,
-            objectType.name,
+            structType.name,
             target.property,
             node.value,
           );
@@ -969,6 +1199,16 @@ export function validateScope(
         let name: string;
         if (target.kind === "identifier") {
           name = target.name;
+          // A bare identifier declared in an enclosing scope (not the current
+          // function's own scope) is a capture of an enclosing frame's field
+          // (spec §5). Mark it so codegen writes through the enclosing
+          // instance.
+          if (
+            ctx.functionScope !== undefined &&
+            !ctx.functionScope.declaredHere(target.name)
+          ) {
+            target.capturedField = true;
+          }
         } else if (target.kind === "member_access") {
           name = target.property;
         } else {
@@ -1077,6 +1317,25 @@ export function validateScope(
     return ok(undefined);
   }
 
+  // Validate an assignment to a Module (top-level scope) field, which is a
+  // scope-variable assignment. Returns ok if the variable is declared and
+  // mutable; otherwise a scope error.
+  function checkModuleFieldAssign(
+    ctx: CheckContext,
+    property: string,
+    value: ASTNode,
+  ): Result<void, CompileError> {
+    if (!ctx.scope.isDeclared(property)) {
+      return err(scopeError("Undeclared identifier: '" + property + "'"));
+    }
+    if (!ctx.scope.isMutable(property)) {
+      return err(
+        scopeError("Cannot assign to immutable variable: '" + property + "'"),
+      );
+    }
+    return checkNode(value, ctx.asValue());
+  }
+
   // If a named type refers to a declared struct, return it as a StructType.
   // Recurses into composite types (ref, array, tuple) so a struct nested
   // inside them (e.g. `&Wrapper`, `[Wrapper; 2]`) also resolves.
@@ -1118,7 +1377,18 @@ export function validateScope(
   for (const stmt of stmts) {
     const result = checkNode(
       stmt,
-      createContext(initialScope, functions, structs, false, undefined),
+      // The top level is the implicit Module frame (depth 1). Its `this` is
+      // the Module instance, so a nested function's `this.this` resolves to
+      // it.
+      createContext(
+        initialScope,
+        functions,
+        structs,
+        false,
+        { kind: "struct", name: "Module" },
+        [],
+        1,
+      ),
     );
     if (!result.ok) return result;
   }

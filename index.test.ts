@@ -464,11 +464,15 @@ describe("tuff", () => {
   });
 
   it('compile("let temp = &this;") => scope', () => {
-    expectCompileError("let temp = &this;", "scope");
+    // Under the spec, `this` at top level is the Module instance and is
+    // bindable. `&this` takes a reference to it.
+    expect(evaluate("let temp = &this; 1", [])).toBe(1);
   });
 
   it('compile("let temp = this;") => scope', () => {
-    expectCompileError("let temp = this;", "scope");
+    // Under the spec, `this` at top level is the Module instance and is
+    // bindable.
+    expect(evaluate("let temp = this; 1", [])).toBe(1);
   });
 
   it('evaluate("fn Wrapper(field : I32) : Wrapper => this; Wrapper(100).field") => 100', () => {
@@ -632,5 +636,29 @@ describe("tuff", () => {
         [],
       ),
     ).toBe(1);
+  });
+
+  it('evaluate("let mut counter = 0; fn add() => { this.this.counter += 1; } add() counter") => 1', () => {
+    expect(
+      evaluate(
+        "let mut counter = 0; fn add() => { this.this.counter += 1; } add() counter",
+        [],
+      ),
+    ).toBe(1);
+  });
+
+  it('compile("let x = 0; this.this") => scope', () => {
+    // At depth 1 (top level), `this.this` (k=1) climbs past Module into true
+    // global, which has no frame. Compile error.
+    expectCompileError("let x = 0; this.this", "scope");
+  });
+
+  it('evaluate("fn Counter() => { let mut counter = 0; fn add() => { counter += 1; this.this } this } Counter().add().add().add().counter") => 3', () => {
+    expect(
+      evaluate(
+        "fn Counter() => { let mut counter = 0; fn add() => { counter += 1; this.this } this } Counter().add().add().add().counter",
+        [],
+      ),
+    ).toBe(3);
   });
 });

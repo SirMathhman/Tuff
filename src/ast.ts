@@ -226,6 +226,11 @@ export interface BooleanNode {
 export interface IdentifierNode {
   kind: "identifier";
   name: string;
+  // Set by the checker when this bare identifier is a capture of an enclosing
+  // constructor's field (per spec §5, a bare reference to an enclosing local
+  // is the same as `this.this^k.field`). Codegen emits `outer.field` (a field
+  // access on the enclosing instance) rather than a plain variable reference.
+  capturedField?: boolean;
 }
 export interface ThisNode {
   kind: "this";
@@ -243,6 +248,11 @@ export interface MemberAccessNode {
   kind: "member_access";
   object: ASTNode;
   property: string;
+  // Set by the checker when this access is `this.this^k.field` where the
+  // climb target is the implicit Module frame. Module's fields are the
+  // top-level scope variables, so codegen emits the bare property name
+  // (a plain variable reference) rather than a field access on an object.
+  moduleField?: boolean;
 }
 export interface BinaryOpNode {
   kind: "binary_op";
@@ -275,6 +285,11 @@ export interface FnDeclNode {
   // `this is X`/a block ending in `this`). Set once by the checker; codegen
   // reads it instead of re-deriving it from the body shape.
   isConstructor?: boolean;
+  // Whether this nested function references any state from an enclosing
+  // frame (via `this.this^k` for k >= 1, or a bare reference to an enclosing
+  // local). When true, codegen emits it inline as a closure rather than
+  // hoisting it to the top level. Set once by the checker.
+  capturesOuter?: boolean;
 }
 // A single function parameter: a name and its declared type.
 export interface FnParam {
@@ -303,6 +318,11 @@ export interface FnSignature {
   // call case doesn't need to re-resolve the placeholder. Undefined for
   // functions without a `this` parameter.
   receiverType?: Type;
+  // Whether this function captures any enclosing-frame state (a `this.this^k`
+  // climb or a bare reference to an enclosing local). A capturing function is
+  // a closure (emitted inline and attached to the enclosing instance); a
+  // self-contained one is hoisted. Set once in fn_decl.
+  capturesOuter?: boolean;
 }
 export interface CallNode {
   kind: "call";
@@ -320,6 +340,11 @@ export interface CallNode {
   // checker drops the receiver if the callee has no `this` parameter (i.e.
   // it's a plain function, not a method).
   methodCall?: boolean;
+  // Whether this method call targets a nested closure (a function that
+  // captures enclosing state and is attached to the receiver instance). When
+  // true, codegen emits `receiver.name(...)` (a property access on the
+  // receiver) rather than a plain global call. Set by the checker.
+  closureMethodCall?: boolean;
 }
 export interface RefNode {
   kind: "ref";

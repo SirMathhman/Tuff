@@ -10,6 +10,10 @@ export interface Scope {
   isMutable(name: string): boolean;
   // Return the declared type of a variable, or undefined if it has none.
   typeOf(name: string): Type | undefined;
+  // Return true if `name` is declared in this exact scope (not a parent).
+  // Used to detect whether a reference to `name` is a capture of an enclosing
+  // scope's local.
+  declaredHere(name: string): boolean;
   child(): Scope;
 }
 
@@ -43,6 +47,9 @@ export function createScope(parent?: Scope): Scope {
         return types.get(name);
       }
       return parent !== undefined ? parent.typeOf(name) : undefined;
+    },
+    declaredHere(name) {
+      return declared.has(name);
     },
     child() {
       return createScope(this);

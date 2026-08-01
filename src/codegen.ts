@@ -8,10 +8,11 @@ function generateArgs(
   nodes: ASTNode[],
   thisName: string,
   hoisted: string[],
+  outerThisName: string | undefined,
 ): Result<string, CompileError> {
   const parts: string[] = [];
   for (const node of nodes) {
-    const result = generateJS(node, false, thisName, hoisted);
+    const result = generateJS(node, false, thisName, hoisted, outerThisName);
     if (!result.ok) return result;
     parts.push(result.value);
   }
@@ -23,10 +24,17 @@ function generateStructFields(
   fields: StructInitField[],
   thisName: string,
   hoisted: string[],
+  outerThisName: string | undefined,
 ): Result<string, CompileError> {
   const parts: string[] = [];
   for (const field of fields) {
-    const result = generateJS(field.value, false, thisName, hoisted);
+    const result = generateJS(
+      field.value,
+      false,
+      thisName,
+      hoisted,
+      outerThisName,
+    );
     if (!result.ok) return result;
     parts.push(field.name + ": " + result.value);
   }
@@ -38,6 +46,7 @@ export function generateJS(
   isRedeclare: boolean = false,
   thisName: string = "this",
   hoisted: string[] = [],
+  outerThisName: string | undefined = undefined,
 ): Result<string, CompileError> {
   switch (node.kind) {
     case "number":
@@ -47,6 +56,12 @@ export function generateJS(
       return ok(String(node.value));
 
     case "identifier":
+      // A bare identifier that the checker marked as a capture of an
+      // enclosing constructor's field emits `outer.field` (a field access on
+      // the enclosing instance) rather than a plain variable reference.
+      if (node.capturedField === true && outerThisName !== undefined) {
+        return ok(outerThisName + "[" + JSON.stringify(node.name) + "]");
+      }
       return ok(node.name);
 
     case "let_decl":
@@ -80,10 +95,23 @@ export function generateJS(
           }
           return ok(thisName + "[" + JSON.stringify(node.property) + "]");
         }
+        // `this.this^k` climbs k frames outward. When the climb target is the
+        // immediate enclosing frame (k=1), it emits the enclosing instance
+        // name (`outerThisName`). Deeper climbs are not yet supported at
+        // runtime.
+        if (node.property === "this" && outerThisName !== undefined) {
+          return ok(outerThisName);
+        }
+        return ok(node.property);
+      }
+      // A `this.this^k.field` access that resolves to a Module (top-level
+      // scope) field emits the bare property name — a plain variable
+      // reference — since Module's fields are the top-level variables.
+      if (node.moduleField === true) {
         return ok(node.property);
       }
       return map(
-        generateJS(node.object, false, thisName, hoisted),
+        generateJS(node.object, false, thisName, hoisted, outerThisName),
         (object) => {
           return object + "[" + JSON.stringify(node.property) + "]";
         },
@@ -91,10 +119,10 @@ export function generateJS(
 
     case "binary_op":
       return andThen(
-        generateJS(node.left, false, thisName, hoisted),
+        generateJS(node.left, false, thisName, hoisted, outerThisName),
         (left) => {
           return map(
-            generateJS(node.right, false, thisName, hoisted),
+            generateJS(node.right, false, thisName, hoisted, outerThisName),
             (right) => {
               // Parenthesize nested binary operands so the emitted JS preserves
               // the AST's grouping. Without this, `(2 + 3) * 4` would compile to
@@ -132,7 +160,7 @@ export function generateJS(
         // it like a normal expression body.
         if (node.body.kind === "is") {
           return map(
-            generateJS(node.body, false, innerThisName, hoisted),
+            generateJS(node.body, false, innerThisName, hoisted, outerThisName),
             (body) => {
               return (
                 "function " +
@@ -156,6 +184,10 @@ export function generateJS(
             }
           }
         }
+        // The instance object is built as `__self__` so nested closures can
+        // close over it (for `this.this` and captured-field access). The
+        // object's fields are the parameters plus the top-level `let`s.
+        const selfName = "__self__";
         const obj =
           "{ " + fieldNames.map((n) => n + ": " + n).join(", ") + " }";
         // Determine what the function returns: the object itself, a field of
@@ -165,32 +197,86 @@ export function generateJS(
           returned =
             "return " + obj + "[" + JSON.stringify(node.body.property) + "];";
         } else if (node.body.kind === "block") {
-          const parts: string[] = [];
           const last = node.body.statements[node.body.statements.length - 1];
           // A constructor block ending in `this is X` returns the `is` result
           // (a type check on the constructor object), not the object.
           const returnsIsResult = last !== undefined && last.kind === "is";
+          // Emit the field declarations and other statements first (in order),
+          // so the instance object `__self__` can be built from the declared
+          // fields. Nested closures are emitted after `__self__` exists so
+          // they can close over it.
+          const preStatements: string[] = [];
+          const closureStatements: string[] = [];
           for (let i = 0; i < node.body.statements.length - 1; i++) {
             const stmt = node.body.statements[i]!;
-            // Nested function declarations are hoisted to the top level (they
-            // are global in Tuff), so emit them into the hoisted buffer and
-            // skip them inline.
+            // A nested function that captures enclosing state is a closure:
+            // emit it inline (it closes over the enclosing locals and the
+            // instance `__self__`), then attach it to the instance so it's
+            // reachable as `.name()`. A self-contained nested function is
+            // hoisted to the top level.
             if (stmt.kind === "fn_decl") {
-              const fnResult = generateJS(stmt, false, innerThisName, hoisted);
+              const fnResult = generateJS(
+                stmt,
+                false,
+                innerThisName,
+                hoisted,
+                selfName,
+              );
               if (!fnResult.ok) return fnResult;
-              hoisted.push(fnResult.value);
+              if (stmt.capturesOuter === true) {
+                closureStatements.push(fnResult.value + ";");
+                closureStatements.push(
+                  selfName +
+                    "[" +
+                    JSON.stringify(stmt.name) +
+                    "] = " +
+                    stmt.name +
+                    ";",
+                );
+              } else {
+                hoisted.push(fnResult.value);
+              }
               continue;
             }
-            const stmtResult = generateJS(stmt, false, innerThisName, hoisted);
+            const stmtResult = generateJS(
+              stmt,
+              false,
+              innerThisName,
+              hoisted,
+              selfName,
+            );
             if (!stmtResult.ok) return stmtResult;
-            parts.push(stmtResult.value + ";");
+            preStatements.push(stmtResult.value + ";");
           }
+          const selfDecl = "const " + selfName + " = " + obj + ";";
           if (returnsIsResult) {
-            const lastResult = generateJS(last!, false, innerThisName, hoisted);
+            const lastResult = generateJS(
+              last!,
+              false,
+              innerThisName,
+              hoisted,
+              selfName,
+            );
             if (!lastResult.ok) return lastResult;
-            returned = parts.join(" ") + " return " + lastResult.value + ";";
+            returned =
+              preStatements.join(" ") +
+              " " +
+              selfDecl +
+              " " +
+              closureStatements.join(" ") +
+              " return " +
+              lastResult.value +
+              ";";
           } else {
-            returned = parts.join(" ") + " return " + obj + ";";
+            returned =
+              preStatements.join(" ") +
+              " " +
+              selfDecl +
+              " " +
+              closureStatements.join(" ") +
+              " return " +
+              selfName +
+              ";";
           }
         } else {
           returned = "return " + obj + ";";
@@ -200,7 +286,7 @@ export function generateJS(
         );
       }
       return map(
-        generateJS(node.body, false, innerThisName, hoisted),
+        generateJS(node.body, false, innerThisName, hoisted, outerThisName),
         (body) => {
           return (
             "function " +
@@ -216,16 +302,37 @@ export function generateJS(
     }
 
     case "call":
-      // When the receiver is auto-referenced (a method whose `this` param is
-      // a reference type like `&Wrapper`), wrap the first argument in a
+      // A method call to a nested closure (`receiver.name(...)`) emits a
+      // property access on the receiver, since the closure is attached to the
+      // receiver instance. The receiver is the first argument. When the
+      // receiver is auto-referenced (a method whose `this` param is a
+      // reference type like `&Wrapper`), wrap the first argument in a
       // reference object so it matches the expected `&Wrapper` type.
-      if (node.autoRefReceiver === true && node.args.length > 0) {
+      if (
+        (node.closureMethodCall === true || node.autoRefReceiver === true) &&
+        node.args.length > 0
+      ) {
         return andThen(
-          generateJS(node.args[0]!, false, thisName, hoisted),
+          generateJS(node.args[0]!, false, thisName, hoisted, outerThisName),
           (receiver) => {
             return map(
-              generateArgs(node.args.slice(1), thisName, hoisted),
+              generateArgs(
+                node.args.slice(1),
+                thisName,
+                hoisted,
+                outerThisName,
+              ),
               (rest) => {
+                if (node.closureMethodCall === true) {
+                  return (
+                    receiver +
+                    "[" +
+                    JSON.stringify(node.name) +
+                    "](" +
+                    rest +
+                    ")"
+                  );
+                }
                 const ref = "({ get: () => " + receiver + " })";
                 return node.name + "(" + ref + (rest ? ", " + rest : "") + ")";
               },
@@ -233,9 +340,12 @@ export function generateJS(
           },
         );
       }
-      return andThen(generateArgs(node.args, thisName, hoisted), (args) => {
-        return ok(node.name + "(" + args + ")");
-      });
+      return andThen(
+        generateArgs(node.args, thisName, hoisted, outerThisName),
+        (args) => {
+          return ok(node.name + "(" + args + ")");
+        },
+      );
 
     case "ref":
       // A reference is represented uniformly as a getter/setter object so it
@@ -244,26 +354,36 @@ export function generateJS(
       // exposes a `set` closure that writes back to the target. The closures
       // capture the target expression, so they work for arbitrary expressions
       // (re-evaluated on each access), not just plain variables.
-      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
-        if (node.isMut === true) {
-          return (
-            "({ get: () => " + value + ", set: (v) => { " + value + " = v; } })"
-          );
-        }
-        return "({ get: () => " + value + " })";
-      });
+      return map(
+        generateJS(node.value, false, thisName, hoisted, outerThisName),
+        (value) => {
+          if (node.isMut === true) {
+            return (
+              "({ get: () => " +
+              value +
+              ", set: (v) => { " +
+              value +
+              " = v; } })"
+            );
+          }
+          return "({ get: () => " + value + " })";
+        },
+      );
 
     case "deref":
-      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
-        return value + ".get()";
-      });
+      return map(
+        generateJS(node.value, false, thisName, hoisted, outerThisName),
+        (value) => {
+          return value + ".get()";
+        },
+      );
 
     case "deref_assign":
       return andThen(
-        generateJS(node.target, false, thisName, hoisted),
+        generateJS(node.target, false, thisName, hoisted, outerThisName),
         (target) => {
           return map(
-            generateJS(node.value, false, thisName, hoisted),
+            generateJS(node.value, false, thisName, hoisted, outerThisName),
             (value) => {
               return target + ".set(" + value + ")";
             },
@@ -285,7 +405,7 @@ export function generateJS(
           // through the reference (`thisName.get()["x"] = value`).
           if (target.object.thisIsRef === true) {
             return map(
-              generateJS(node.value, false, thisName, hoisted),
+              generateJS(node.value, false, thisName, hoisted, outerThisName),
               (value) => {
                 return (
                   thisName +
@@ -298,18 +418,25 @@ export function generateJS(
             );
           }
           return map(
-            generateJS(node.value, false, thisName, hoisted),
+            generateJS(node.value, false, thisName, hoisted, outerThisName),
             (value) => {
               return target.property + " = " + value;
             },
           );
         }
         return andThen(
-          generateJS(target.object, false, thisName, hoisted),
+          generateJS(target.object, false, thisName, hoisted, outerThisName),
           (object) => {
             return map(
-              generateJS(node.value, false, thisName, hoisted),
+              generateJS(node.value, false, thisName, hoisted, outerThisName),
               (value) => {
+                // A `this.this^k.field` assignment that resolves to a Module
+                // (top-level scope) field emits a plain variable assignment
+                // (`field = value`), since Module's fields are the top-level
+                // variables.
+                if (target.moduleField === true) {
+                  return target.property + " = " + value;
+                }
                 return (
                   object +
                   "[" +
@@ -322,17 +449,28 @@ export function generateJS(
           },
         );
       }
-      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
-        if (target.kind !== "identifier") {
-          return "";
-        }
-        return target.name + " = " + value;
-      });
+      return map(
+        generateJS(node.value, false, thisName, hoisted, outerThisName),
+        (value) => {
+          if (target.kind !== "identifier") {
+            return "";
+          }
+          // A captured-field assignment (`counter = v` where `counter` is an
+          // enclosing constructor's field) emits `outer["counter"] = v` so it
+          // writes through the enclosing instance.
+          if (target.capturedField === true && outerThisName !== undefined) {
+            return (
+              outerThisName + "[" + JSON.stringify(target.name) + "] = " + value
+            );
+          }
+          return target.name + " = " + value;
+        },
+      );
     }
 
     case "array":
       return andThen(
-        generateArgs(node.elements, thisName, hoisted),
+        generateArgs(node.elements, thisName, hoisted, outerThisName),
         (elements) => {
           return ok("[" + elements + "]");
         },
@@ -340,10 +478,10 @@ export function generateJS(
 
     case "index":
       return andThen(
-        generateJS(node.object, false, thisName, hoisted),
+        generateJS(node.object, false, thisName, hoisted, outerThisName),
         (object) => {
           return map(
-            generateJS(node.index, false, thisName, hoisted),
+            generateJS(node.index, false, thisName, hoisted, outerThisName),
             (index) => {
               return object + "[" + index + "]";
             },
@@ -357,7 +495,7 @@ export function generateJS(
 
     case "struct_init":
       return andThen(
-        generateStructFields(node.fields, thisName, hoisted),
+        generateStructFields(node.fields, thisName, hoisted, outerThisName),
         (fields) => {
           return ok("({ " + fields + " })");
         },
@@ -365,7 +503,7 @@ export function generateJS(
 
     case "tuple":
       return andThen(
-        generateArgs(node.elements, thisName, hoisted),
+        generateArgs(node.elements, thisName, hoisted, outerThisName),
         (elements) => {
           return ok("[" + elements + "]");
         },
@@ -373,7 +511,7 @@ export function generateJS(
 
     case "tuple_index":
       return map(
-        generateJS(node.object, false, thisName, hoisted),
+        generateJS(node.object, false, thisName, hoisted, outerThisName),
         (object) => {
           return object + "[" + node.index + "]";
         },
@@ -381,17 +519,29 @@ export function generateJS(
 
     case "if":
       return andThen(
-        generateJS(node.condition, false, thisName, hoisted),
+        generateJS(node.condition, false, thisName, hoisted, outerThisName),
         (condition) => {
           return andThen(
-            generateJS(node.thenBranch, false, thisName, hoisted),
+            generateJS(
+              node.thenBranch,
+              false,
+              thisName,
+              hoisted,
+              outerThisName,
+            ),
             (thenBranch) => {
               if (node.elseBranch === undefined) {
                 // No else: the `if` is used as a statement, so emit an if statement.
                 return ok("if (" + condition + ") { " + thenBranch + "; }");
               }
               return map(
-                generateJS(node.elseBranch, false, thisName, hoisted),
+                generateJS(
+                  node.elseBranch,
+                  false,
+                  thisName,
+                  hoisted,
+                  outerThisName,
+                ),
                 (elseBranch) => {
                   return (
                     "(" +
@@ -418,12 +568,24 @@ export function generateJS(
         // global in Tuff), so emit them into the hoisted buffer and skip them
         // inline.
         if (stmt.kind === "fn_decl") {
-          const fnResult = generateJS(stmt, false, thisName, hoisted);
+          const fnResult = generateJS(
+            stmt,
+            false,
+            thisName,
+            hoisted,
+            outerThisName,
+          );
           if (!fnResult.ok) return fnResult;
           hoisted.push(fnResult.value);
           continue;
         }
-        const stmtResult = generateJS(stmt, false, thisName, hoisted);
+        const stmtResult = generateJS(
+          stmt,
+          false,
+          thisName,
+          hoisted,
+          outerThisName,
+        );
         if (!stmtResult.ok) return stmtResult;
         if (i === node.statements.length - 1) {
           parts.push("return " + stmtResult.value + ";");
@@ -436,10 +598,10 @@ export function generateJS(
 
     case "while":
       return andThen(
-        generateJS(node.condition, false, thisName, hoisted),
+        generateJS(node.condition, false, thisName, hoisted, outerThisName),
         (condition) => {
           return map(
-            generateJS(node.body, false, thisName, hoisted),
+            generateJS(node.body, false, thisName, hoisted, outerThisName),
             (body) => {
               return "while (" + condition + ") { " + body + "; }";
             },
