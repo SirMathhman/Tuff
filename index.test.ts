@@ -1,5 +1,6 @@
 import { compileTuffToJS } from ".";
 import { describe, it, expect } from "bun:test";
+import type { CompileErrorKind } from "./src/compileError";
 
 function evaluate(source: string, args: string[] = []) {
   const compiled = compileTuffToJS("in let args : &[Str]; " + source);
@@ -15,13 +16,13 @@ function evaluate(source: string, args: string[] = []) {
 }
 
 // Assert that compiling `source` fails with an error of the given kind.
-// The kind is the error's `name` (e.g. "ScopeError" for semantic errors,
-// "Error" for syntax/lexical errors).
-function expectCompileError(source: string, errorKind: string) {
+// The kind is the error's `kind` field: "scope" for semantic errors,
+// "syntax" for syntax/lexical errors.
+function expectCompileError(source: string, errorKind: CompileErrorKind) {
   const result = compileTuffToJS(source);
   expect(result.ok).toBe(false);
   if (!result.ok) {
-    expect(result.error.name).toBe(errorKind);
+    expect(result.error.kind).toBe(errorKind);
   }
 }
 
@@ -54,8 +55,8 @@ describe("tuff", () => {
     expect(evaluate("let x = args.length; let y = x; y", [])).toBe(1);
   });
 
-  it('compile("undefinedIdentifier") => ScopeError', () => {
-    expectCompileError("undefinedIdentifier", "ScopeError");
+  it('compile("undefinedIdentifier") => scope', () => {
+    expectCompileError("undefinedIdentifier", "scope");
   });
 
   it('evaluate("let x = 0; let x = 1; x") => 1', () => {
@@ -66,8 +67,8 @@ describe("tuff", () => {
     expect(evaluate("let mut x = 0; x = 1; x", [])).toBe(1);
   });
 
-  it('compile("let x = 0; x = 1; x") => ScopeError', () => {
-    expectCompileError("let x = 0; x = 1; x", "ScopeError");
+  it('compile("let x = 0; x = 1; x") => scope', () => {
+    expectCompileError("let x = 0; x = 1; x", "scope");
   });
 
   it('evaluate("let x = true; x") => 1', () => {
@@ -116,8 +117,8 @@ describe("tuff", () => {
     ).toBe(4);
   });
 
-  it('compile("let x = if (false) 2; x") => Error', () => {
-    expectCompileError("let x = if (false) 2; x", "Error");
+  it('compile("let x = if (false) 2; x") => syntax', () => {
+    expectCompileError("let x = if (false) 2; x", "syntax");
   });
 
   it('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
@@ -128,12 +129,12 @@ describe("tuff", () => {
     expect(evaluate("let x = 100;", [])).toBe(0);
   });
 
-  it('compile("let x = { let y = 100; }; x") => ScopeError', () => {
-    expectCompileError("let x = { let y = 100; }; x", "ScopeError");
+  it('compile("let x = { let y = 100; }; x") => scope', () => {
+    expectCompileError("let x = { let y = 100; }; x", "scope");
   });
 
-  it('compile("let mut y = 0; let x = { y = 1; }; x") => Error', () => {
-    expectCompileError("let mut y = 0; let x = { y = 1; }; x", "Error");
+  it('compile("let mut y = 0; let x = { y = 1; }; x") => syntax', () => {
+    expectCompileError("let mut y = 0; let x = { y = 1; }; x", "syntax");
   });
 
   it('evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x") => 1', () => {
@@ -156,5 +157,17 @@ describe("tuff", () => {
 
   it('evaluate("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
     expect(evaluate("let mut x = 0; while (x < 4) x += 1; x", [])).toBe(4);
+  });
+
+  it('evaluate("100U8") => 100', () => {
+    expect(evaluate("100U8", [])).toBe(100);
+  });
+
+  it('compile("256U8") => syntax', () => {
+    expectCompileError("256U8", "syntax");
+  });
+
+  it('compile("-100U8") => syntax', () => {
+    expectCompileError("-100U8", "syntax");
   });
 });

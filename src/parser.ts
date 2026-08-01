@@ -2,10 +2,12 @@ import type { Token, ASTNode } from "./ast";
 import { OPERATORS } from "./ast";
 import type { Result } from "./result";
 import { ok, err, andThen } from "./result";
+import type { CompileError } from "./compileError";
+import { compileError } from "./compileError";
 
 export interface Parser {
   peek(): Token;
-  parseStatement(): Result<ASTNode, Error>;
+  parseStatement(): Result<ASTNode, CompileError>;
 }
 
 export function createParser(tokens: Token[]): Parser {
@@ -22,7 +24,7 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse a primary expression: number, boolean, identifier, member access, if, or block
-  function parsePrimary(): Result<ASTNode, Error> {
+  function parsePrimary(): Result<ASTNode, CompileError> {
     const token = peek();
 
     if (token.type === "if") {
@@ -35,7 +37,7 @@ export function createParser(tokens: Token[]): Parser {
 
     if (token.type === "number") {
       consume();
-      return ok({ kind: "number", value: token.value });
+      return ok({ kind: "number", value: token.value, suffix: token.suffix });
     }
 
     if (token.type === "boolean") {
@@ -53,7 +55,7 @@ export function createParser(tokens: Token[]): Parser {
         const propToken = consume();
         if (propToken.type !== "identifier") {
           return err(
-            new Error("Expected identifier after dot, got " + propToken.type),
+            compileError("syntax", "Expected identifier after dot, got " + propToken.type),
           );
         }
         node = {
@@ -66,15 +68,15 @@ export function createParser(tokens: Token[]): Parser {
       return ok(node);
     }
 
-    return err(new Error("Unexpected token: " + token.type));
+    return err(compileError("syntax", "Unexpected token: " + token.type));
   }
 
   // Parse: if ( <condition> ) <then> [else <else>]
-  function parseIf(): Result<ASTNode, Error> {
+  function parseIf(): Result<ASTNode, CompileError> {
     consume(); // consume 'if'
 
     if (peek().type !== "lparen") {
-      return err(new Error("Expected '(' after if"));
+      return err(compileError("syntax", "Expected '(' after if"));
     }
     consume(); // consume '('
 
@@ -82,7 +84,7 @@ export function createParser(tokens: Token[]): Parser {
     if (!conditionResult.ok) return conditionResult;
 
     if (peek().type !== "rparen") {
-      return err(new Error("Expected ')' after if condition"));
+      return err(compileError("syntax", "Expected ')' after if condition"));
     }
     consume(); // consume ')'
 
@@ -108,13 +110,13 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse: { <statement>; <statement>; ... }
-  function parseBlock(): Result<ASTNode, Error> {
+  function parseBlock(): Result<ASTNode, CompileError> {
     consume(); // consume '{'
 
     const statements: ASTNode[] = [];
     while (peek().type !== "rbrace") {
       if (peek().type === "eof") {
-        return err(new Error("Expected '}' to close block"));
+        return err(compileError("syntax", "Expected '}' to close block"));
       }
       const stmtResult = parseStatement();
       if (!stmtResult.ok) return stmtResult;
@@ -126,11 +128,11 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse: while ( <condition> ) <body>
-  function parseWhile(): Result<ASTNode, Error> {
+  function parseWhile(): Result<ASTNode, CompileError> {
     consume(); // consume 'while'
 
     if (peek().type !== "lparen") {
-      return err(new Error("Expected '(' after while"));
+      return err(compileError("syntax", "Expected '(' after while"));
     }
     consume(); // consume '('
 
@@ -138,7 +140,7 @@ export function createParser(tokens: Token[]): Parser {
     if (!conditionResult.ok) return conditionResult;
 
     if (peek().type !== "rparen") {
-      return err(new Error("Expected ')' after while condition"));
+      return err(compileError("syntax", "Expected ')' after while condition"));
     }
     consume(); // consume ')'
 
@@ -153,7 +155,7 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse binary expression with precedence climbing
-  function parseExpression(minPrec: number = 0): Result<ASTNode, Error> {
+  function parseExpression(minPrec: number = 0): Result<ASTNode, CompileError> {
     return andThen(parsePrimary(), (left) => {
       let node: ASTNode = left;
 
@@ -181,7 +183,7 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse: let [mut] <identifier> = <expression> ;
-  function parseLetDecl(): Result<ASTNode, Error> {
+  function parseLetDecl(): Result<ASTNode, CompileError> {
     consume(); // consume 'let'
 
     // Check for optional 'mut' keyword
@@ -194,12 +196,12 @@ export function createParser(tokens: Token[]): Parser {
     const nameToken = consume();
     if (nameToken.type !== "identifier") {
       return err(
-        new Error("Expected identifier after let, got " + nameToken.type),
+        compileError("syntax", "Expected identifier after let, got " + nameToken.type),
       );
     }
 
     if (peek().type !== "equals") {
-      return err(new Error("Expected '=' in let declaration"));
+      return err(compileError("syntax", "Expected '=' in let declaration"));
     }
     consume(); // consume '='
 
@@ -219,7 +221,7 @@ export function createParser(tokens: Token[]): Parser {
   }
 
   // Parse a single statement
-  function parseStatement(): Result<ASTNode, Error> {
+  function parseStatement(): Result<ASTNode, CompileError> {
     if (peek().type === "let") {
       return parseLetDecl();
     }
@@ -239,7 +241,7 @@ export function createParser(tokens: Token[]): Parser {
     if (assignOp !== null) {
       if (expr.kind !== "identifier") {
         return err(
-          new Error("Left-hand side of assignment must be an identifier"),
+          compileError("syntax", "Left-hand side of assignment must be an identifier"),
         );
       }
       consume(); // consume the assignment operator

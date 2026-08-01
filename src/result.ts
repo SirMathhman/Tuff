@@ -1,6 +1,8 @@
 // Result monad: represent success or failure without exceptions.
 // Returns `{ ok: true, value }` or `{ ok: false, error }` — never throws.
 
+import type { CompileError } from "./compileError";
+
 export interface OkResult<T> {
   ok: true;
   value: T;
@@ -11,7 +13,7 @@ export interface ErrResult<X> {
   error: X;
 }
 
-export type Result<T, X = Error> = OkResult<T> | ErrResult<X>;
+export type Result<T, X = CompileError> = OkResult<T> | ErrResult<X>;
 
 export function ok<T>(value: T): OkResult<T> {
   return { ok: true, value };

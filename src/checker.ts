@@ -3,11 +3,11 @@ import { isExpression } from "./ast";
 import type { Result } from "./result";
 import { ok, err } from "./result";
 import type { Scope } from "./scope";
+import type { CompileError } from "./compileError";
+import { compileError } from "./compileError";
 
-function scopeError(message: string): Error {
-  const err = new Error(message);
-  err.name = "ScopeError";
-  return err;
+function scopeError(message: string): CompileError {
+  return compileError("scope", message);
 }
 
 // CheckContext encapsulates the state threaded through semantic checking:
@@ -39,11 +39,22 @@ function createContext(scope: Scope, valueContext: boolean): CheckContext {
 export function validateScope(
   stmts: ASTNode[],
   initialScope: Scope,
-): Result<void, Error> {
-  function checkNode(node: ASTNode, ctx: CheckContext): Result<void, Error> {
+): Result<void, CompileError> {
+  function checkNode(
+    node: ASTNode,
+    ctx: CheckContext,
+  ): Result<void, CompileError> {
     switch (node.kind) {
       case "number":
-        // Always valid
+        // Validate that a typed literal fits its type's range.
+        if (node.suffix === "U8" && (node.value < 0 || node.value > 255)) {
+          return err(
+            compileError(
+              "syntax",
+              "Value " + node.value + " out of range for U8",
+            ),
+          );
+        }
         return ok(undefined);
 
       case "boolean":
@@ -77,7 +88,9 @@ export function validateScope(
         // An `if` used as a value must have an else branch, since a value
         // must always be produced.
         if (ctx.valueContext && node.elseBranch === undefined) {
-          return err(new Error("If expression must have an else branch"));
+          return err(
+            compileError("syntax", "If expression must have an else branch"),
+          );
         }
         if (node.elseBranch !== undefined) {
           return checkNode(node.elseBranch, ctx);
@@ -106,7 +119,9 @@ export function validateScope(
           const last = node.statements[node.statements.length - 1];
           if (last !== undefined && !isExpression(last)) {
             if (last.kind === "assign") {
-              return err(new Error("Block must end with an expression"));
+              return err(
+                compileError("syntax", "Block must end with an expression"),
+              );
             }
             return err(scopeError("Block must end with an expression"));
           }

@@ -6,10 +6,11 @@ import { createScope } from "./src/scope";
 import type { ASTNode } from "./src/ast";
 import type { Result } from "./src/result";
 import { ok } from "./src/result";
+import type { CompileError } from "./src/compileError";
 
 const IMPLICIT_PREFIX = "in let args : &[Str]; ";
 
-export function compileTuffToJS(source: string): Result<string, Error> {
+export function compileTuffToJS(source: string): Result<string, CompileError> {
   // Strip the implicit declaration prefix
   const userSource = source.startsWith(IMPLICIT_PREFIX)
     ? source.slice(IMPLICIT_PREFIX.length)

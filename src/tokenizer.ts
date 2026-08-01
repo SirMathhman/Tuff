@@ -2,6 +2,8 @@ import type { Token } from "./ast";
 import { OPERATORS } from "./ast";
 import type { Result } from "./result";
 import { ok, err } from "./result";
+import type { CompileError } from "./compileError";
+import { compileError } from "./compileError";
 
 // Lookup from operator symbol -> token type, longest symbols first so that
 // multi-character operators (e.g. "||") are matched before single-character ones.
@@ -9,7 +11,7 @@ const SYMBOL_TO_TYPE = [...OPERATORS.entries()]
   .sort((a, b) => b[1].symbol.length - a[1].symbol.length)
   .map(([type, info]) => [info.symbol, type] as const);
 
-export function tokenize(source: string): Result<Token[], Error> {
+export function tokenize(source: string): Result<Token[], CompileError> {
   const tokens: Token[] = [];
   let i = 0;
 
@@ -39,7 +41,13 @@ export function tokenize(source: string): Result<Token[], Error> {
           break;
         }
       }
-      tokens.push({ type: "number", value: Number(num) });
+      // Optional type suffix (e.g. "U8" in "100U8")
+      let suffix: string | undefined;
+      if (source.startsWith("U8", i)) {
+        suffix = "U8";
+        i += 2;
+      }
+      tokens.push({ type: "number", value: Number(num), suffix });
       continue;
     }
 
@@ -145,7 +153,9 @@ export function tokenize(source: string): Result<Token[], Error> {
     }
 
     // Unknown character: fail loudly instead of silently skipping
-    return err(new Error("Unexpected character: '" + char + "'"));
+    return err(
+      compileError("syntax", "Unexpected character: '" + char + "'"),
+    );
   }
 
   tokens.push({ type: "eof" });

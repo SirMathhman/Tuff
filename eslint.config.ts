@@ -41,6 +41,10 @@ export default defineConfig([
             Record: {
               message: "Use Map instead of Record for consistency.",
             },
+            Error: {
+              message:
+                "Do not use the default JS error (we don't throw or catch anyways). Use something more specific and clear.",
+            },
           },
         },
       ],

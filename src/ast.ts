@@ -3,6 +3,8 @@
 export interface NumberToken {
   type: "number";
   value: number;
+  // Optional type suffix, e.g. "U8" in "100U8".
+  suffix?: string;
 }
 export interface BooleanToken {
   type: "boolean";
@@ -127,6 +129,8 @@ export type Token =
 export interface NumberNode {
   kind: "number";
   value: number;
+  // Optional type suffix, e.g. "U8" in "100U8".
+  suffix?: string;
 }
 export interface BooleanNode {
   kind: "boolean";

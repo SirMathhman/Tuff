@@ -1,8 +1,10 @@
 import type { ASTNode } from "./ast";
 import type { Result } from "./result";
 import { ok, err, map, andThen } from "./result";
+import type { CompileError } from "./compileError";
+import { compileError } from "./compileError";
 
-export function generateJS(node: ASTNode): Result<string, Error> {
+export function generateJS(node: ASTNode): Result<string, CompileError> {
   switch (node.kind) {
     case "number":
       return ok(String(node.value));
@@ -69,6 +71,8 @@ export function generateJS(node: ASTNode): Result<string, Error> {
       });
 
     default:
-      return err(new Error("Cannot generate JS for node kind: " + node.kind));
+      return err(
+        compileError("syntax", "Cannot generate JS for node kind: " + node.kind),
+      );
   }
 }
