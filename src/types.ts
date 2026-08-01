@@ -3,7 +3,7 @@
 // inference, and assignability. The checker, tokenizer, and future codegen
 // all reference this module instead of maintaining ad-hoc type logic.
 
-import type { ASTNode } from "./ast";
+import type { ASTNode, Type } from "./ast";
 
 // Type kind: whether a type is an integer, a boolean, or void (no value).
 type TypeKind = "int" | "bool" | "void";
@@ -54,17 +54,28 @@ const TYPE_RANGES = new Map<string, TypeRange>([
 // suffixes (e.g. "U16") are matched before shorter ones (e.g. "U8").
 export const SUFFIXES: string[] = ["U64", "U16", "U8"];
 
-// Whether a string is a known type name. Reference types like "&I32" and
-// mutable reference types like "&mut I32" are recognized when their inner
-// type is known.
-export function isKnownType(name: string): boolean {
-  if (name.startsWith("&mut ")) {
-    return TYPES.has(name.slice(5));
+// Render a Type as a display string (e.g. "I32", "&I32", "&mut I32",
+// "[I32; 3]") for error messages.
+export function formatType(t: Type): string {
+  if (t.kind === "named") {
+    return t.name;
   }
-  if (name.startsWith("&")) {
-    return TYPES.has(name.slice(1));
+  if (t.kind === "ref") {
+    return (t.isMut ? "&mut " : "&") + formatType(t.inner);
   }
-  return TYPES.has(name);
+  return "[" + formatType(t.elem) + "; " + t.length + "]";
+}
+
+// Whether a Type is well-formed: named types must exist in the TYPES table,
+// and reference/array types must have well-formed inner types.
+export function isKnownType(t: Type): boolean {
+  if (t.kind === "named") {
+    return TYPES.has(t.name);
+  }
+  if (t.kind === "ref") {
+    return isKnownType(t.inner);
+  }
+  return isKnownType(t.elem);
 }
 
 // Side-table mapping each AST node to its inferred type. The checker computes
@@ -72,17 +83,17 @@ export function isKnownType(name: string): boolean {
 // lookup is O(1) instead of re-walking the AST. A WeakMap keeps the AST as a
 // pure data structure (no `type` field on every node) and avoids leaking
 // memory once nodes are garbage-collected.
-const NODE_TYPES = new WeakMap<ASTNode, string>();
+const NODE_TYPES = new WeakMap<ASTNode, Type>();
 
 // Record the inferred type of a node. Called by the checker as it walks.
-export function setNodeType(node: ASTNode, type: string): void {
+export function setNodeType(node: ASTNode, type: Type): void {
   NODE_TYPES.set(node, type);
 }
 
 // Infer the type of a node, if it has one. Returns undefined for nodes whose
 // type is unknown (e.g. statements, or nodes the checker hasn't visited).
 // This is a lookup into the side-table populated by the checker.
-export function inferType(node: ASTNode): string | undefined {
+export function inferType(node: ASTNode): Type | undefined {
   return NODE_TYPES.get(node);
 }
 
@@ -94,28 +105,37 @@ export function inferType(node: ASTNode): string | undefined {
 //   - "impossible": the conversion cannot be done (e.g. int to bool).
 export type ConversionKind = "none" | "implicit" | "explicit" | "impossible";
 
-export function conversionKind(from: string, to: string): ConversionKind {
+export function conversionKind(from: Type, to: Type): ConversionKind {
   // Reference types: "&X" is assignable to "&Y" when X is assignable to Y
   // (e.g. the generic "Int" widens to a concrete integer type). A mutable
   // reference "&mut X" is only assignable to another "&mut Y" where X is
   // assignable to Y.
-  if (from.startsWith("&") && to.startsWith("&")) {
-    const fromMut = from.startsWith("&mut ");
-    const toMut = to.startsWith("&mut ");
-    if (fromMut !== toMut) {
+  if (from.kind === "ref" && to.kind === "ref") {
+    if (from.isMut !== to.isMut) {
       // Immutable and mutable references are not interchangeable.
       return "impossible";
     }
-    const fromInner = fromMut ? from.slice(5) : from.slice(1);
-    const toInner = toMut ? to.slice(5) : to.slice(1);
-    return conversionKind(fromInner, toInner);
+    return conversionKind(from.inner, to.inner);
   }
-  if (from.startsWith("&") || to.startsWith("&")) {
+  if (from.kind === "ref" || to.kind === "ref") {
     // A reference is never assignable to a non-reference (or vice versa).
     return "impossible";
   }
-  const f = TYPES.get(from);
-  const t = TYPES.get(to);
+  // Array types: "[X; N]" is assignable to "[Y; M]" when X is assignable to Y
+  // and the lengths match.
+  if (from.kind === "array" && to.kind === "array") {
+    if (from.length !== to.length) {
+      return "impossible";
+    }
+    return conversionKind(from.elem, to.elem);
+  }
+  if (from.kind === "array" || to.kind === "array") {
+    // An array is never assignable to a non-array (or vice versa).
+    return "impossible";
+  }
+  // Both are named types.
+  const f = TYPES.get(from.name);
+  const t = TYPES.get(to.name);
   // Unknown types are treated as compatible (don't reject).
   if (f === undefined || t === undefined) {
     return "none";
@@ -149,7 +169,7 @@ export function conversionKind(from: string, to: string): ConversionKind {
 // type `to`. Widening is allowed; narrowing and signed/unsigned changes at
 // equal width are not. Different kinds (int vs bool) are never assignable.
 // Unknown types are treated as assignable (don't reject).
-export function isAssignable(from: string, to: string): boolean {
+export function isAssignable(from: Type, to: Type): boolean {
   return (
     conversionKind(from, to) !== "explicit" &&
     conversionKind(from, to) !== "impossible"
@@ -161,12 +181,15 @@ export function isAssignable(from: string, to: string): boolean {
 // must be the same, except the generic "Int" type (the default of untyped
 // integer literals) matches any integer type. So `100U8 is U16` is false
 // (U8 != U16), but `100 is I32` is true (generic Int matches any int).
-export function typeMatches(from: string, to: string): boolean {
-  if (from === to) {
+export function typeMatches(from: Type, to: Type): boolean {
+  if (from.kind === "named" && to.kind === "named" && from.name === to.name) {
     return true;
   }
-  const f = TYPES.get(from);
-  const t = TYPES.get(to);
+  if (from.kind !== "named" || to.kind !== "named") {
+    return false;
+  }
+  const f = TYPES.get(from.name);
+  const t = TYPES.get(to.name);
   // Unknown types don't match.
   if (f === undefined || t === undefined) {
     return false;
@@ -178,15 +201,15 @@ export function typeMatches(from: string, to: string): boolean {
 // Return an error message if a value of type `valueType` cannot be assigned
 // to a variable declared with type `declaredType`, or undefined if allowed.
 export function typeMismatch(
-  declaredType: string,
-  valueType: string,
+  declaredType: Type,
+  valueType: Type,
 ): string | undefined {
   if (!isAssignable(valueType, declaredType)) {
     return (
       "Cannot assign value of type '" +
-      valueType +
+      formatType(valueType) +
       "' to variable of type '" +
-      declaredType +
+      formatType(declaredType) +
       "'"
     );
   }

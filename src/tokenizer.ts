@@ -157,6 +157,16 @@ export function tokenize(source: string): Result<Token[], CompileError> {
       i++;
       continue;
     }
+    if (char === "[") {
+      tokens.push({ type: "lbracket" });
+      i++;
+      continue;
+    }
+    if (char === "]") {
+      tokens.push({ type: "rbracket" });
+      i++;
+      continue;
+    }
     if (char === ".") {
       tokens.push({ type: "dot" });
       i++;

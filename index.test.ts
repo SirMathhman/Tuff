@@ -297,4 +297,13 @@ describe("tuff", () => {
       evaluate("let mut x = 0; let y : &mut I32 = &mut x; *y = 100; x", []),
     ).toBe(100);
   });
+
+  it('evaluate("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
+    expect(
+      evaluate(
+        "let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
+        [],
+      ),
+    ).toBe(6);
+  });
 });

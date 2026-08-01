@@ -102,6 +102,18 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
         return node.name + " = " + value;
       });
 
+    case "array":
+      return andThen(generateArgs(node.elements), (elements) => {
+        return ok("[" + elements + "]");
+      });
+
+    case "index":
+      return andThen(generateJS(node.object), (object) => {
+        return map(generateJS(node.index), (index) => {
+          return object + "[" + index + "]";
+        });
+      });
+
     case "if":
       return andThen(generateJS(node.condition), (condition) => {
         return andThen(generateJS(node.thenBranch), (thenBranch) => {

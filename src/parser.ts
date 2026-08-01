@@ -1,4 +1,4 @@
-import type { Token, ASTNode, FnParam } from "./ast";
+import type { Token, ASTNode, FnParam, Type } from "./ast";
 import { OPERATORS } from "./ast";
 import type { Result } from "./result";
 import { ok, err, andThen } from "./result";
@@ -77,6 +77,29 @@ export function createParser(tokens: Token[]): Parser {
       });
     }
 
+    // Array literal: [<expr>, <expr>, ...]
+    if (token.type === "lbracket") {
+      consume(); // consume '['
+      const elements: ASTNode[] = [];
+      if (peek().type !== "rbracket") {
+        while (true) {
+          const elemResult = parseExpression();
+          if (!elemResult.ok) return elemResult;
+          elements.push(elemResult.value);
+          if (peek().type === "comma") {
+            consume(); // consume ','
+            continue;
+          }
+          break;
+        }
+      }
+      if (peek().type !== "rbracket") {
+        return err(compileError("syntax", "Expected ']' after array literal"));
+      }
+      consume(); // consume ']'
+      return ok({ kind: "array", elements });
+    }
+
     if (token.type === "identifier") {
       consume();
       let node: ASTNode = { kind: "identifier", name: token.name };
@@ -123,6 +146,18 @@ export function createParser(tokens: Token[]): Parser {
           object: node,
           property: propToken.name,
         };
+      }
+
+      // Handle indexing: array[<expr>]
+      while (peek().type === "lbracket") {
+        consume(); // consume '['
+        const indexResult = parseExpression();
+        if (!indexResult.ok) return indexResult;
+        if (peek().type !== "rbracket") {
+          return err(compileError("syntax", "Expected ']' after index"));
+        }
+        consume(); // consume ']'
+        node = { kind: "index", object: node, index: indexResult.value };
       }
 
       return ok(node);
@@ -287,7 +322,7 @@ export function createParser(tokens: Token[]): Parser {
     }
 
     // Optional type annotation: : <type>
-    let typeAnnotation: string | undefined;
+    let typeAnnotation: Type | undefined;
     if (peek().type === "colon") {
       consume(); // consume ':'
       typeAnnotation = parseTypeName();
@@ -480,27 +515,42 @@ export function createParser(tokens: Token[]): Parser {
     return null;
   }
 
-  // Parse a type name, which may be a reference type like "&I32" or a mutable
-  // reference type like "&mut I32". Returns the type string.
-  function parseTypeName(): string {
+  // Parse a type name, which may be a reference type like "&I32", a mutable
+  // reference type like "&mut I32", or an array type like "[I32; 3]".
+  // Returns a structured Type.
+  function parseTypeName(): Type {
     if (peek().type === "amp") {
       consume(); // consume '&'
-      let prefix = "&";
+      let isMut = false;
       if (peek().type === "mut") {
+        isMut = true;
         consume(); // consume 'mut'
-        prefix = "&mut ";
       }
-      const inner = consume();
-      if (inner.type !== "identifier") {
-        return prefix.trim();
+      const inner = parseTypeName();
+      return { kind: "ref", inner, isMut };
+    }
+    if (peek().type === "lbracket") {
+      consume(); // consume '['
+      const inner = parseTypeName();
+      if (peek().type !== "semicolon") {
+        return { kind: "named", name: "" };
       }
-      return prefix + inner.name;
+      consume(); // consume ';'
+      const sizeToken = consume();
+      if (sizeToken.type !== "number") {
+        return { kind: "named", name: "" };
+      }
+      if (peek().type !== "rbracket") {
+        return { kind: "named", name: "" };
+      }
+      consume(); // consume ']'
+      return { kind: "array", elem: inner, length: sizeToken.value };
     }
     const typeToken = consume();
     if (typeToken.type !== "identifier") {
-      return "";
+      return { kind: "named", name: "" };
     }
-    return typeToken.name;
+    return { kind: "named", name: typeToken.name };
   }
 
   return { peek, parseStatement };

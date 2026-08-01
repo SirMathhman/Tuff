@@ -50,6 +50,12 @@ export interface LBraceToken {
 export interface RBraceToken {
   type: "rbrace";
 }
+export interface LBracketToken {
+  type: "lbracket";
+}
+export interface RBracketToken {
+  type: "rbracket";
+}
 export interface EqualsToken {
   type: "equals";
 }
@@ -127,6 +133,8 @@ export type Token =
   | RParenToken
   | LBraceToken
   | RBraceToken
+  | LBracketToken
+  | RBracketToken
   | EqualsToken
   | EqualsEqualsToken
   | BangEqualsToken
@@ -147,6 +155,27 @@ export type Token =
   | GreaterThanEqualToken
   | DotToken
   | EOFToken;
+
+// ---- Type System ----
+
+// A structured type value. Named types (I32, U8, Bool, Void, Int) resolve to
+// metadata in the TYPES table; reference and array types wrap a Type directly
+// so composite types nest naturally (e.g. &[I32; 3]).
+export interface NamedType {
+  kind: "named";
+  name: string;
+}
+export interface RefType {
+  kind: "ref";
+  inner: Type;
+  isMut: boolean;
+}
+export interface ArrayType {
+  kind: "array";
+  elem: Type;
+  length: number;
+}
+export type Type = NamedType | RefType | ArrayType;
 
 // ---- AST Node Types ----
 
@@ -192,20 +221,20 @@ export interface FnDeclNode {
   // "fn add(first : I32, second : I32) : I32 => ...".
   params: FnParam[];
   // The return type annotation, e.g. "I32" in "fn get() : I32 => 100".
-  returnType: string;
+  returnType: Type;
   // The function body expression.
   body: ASTNode;
 }
 // A single function parameter: a name and its declared type.
 export interface FnParam {
   name: string;
-  type: string;
+  type: Type;
 }
 // The full signature of a declared function: its parameters and return type.
 // Used by the checker to validate calls and resolve a call's type.
 export interface FnSignature {
   params: FnParam[];
-  returnType: string;
+  returnType: Type;
 }
 export interface CallNode {
   kind: "call";
@@ -237,13 +266,25 @@ export interface DerefAssignNode {
   target: ASTNode;
   value: ASTNode;
 }
+export interface ArrayNode {
+  kind: "array";
+  // The element expressions, e.g. [1, 2, 3].
+  elements: ASTNode[];
+}
+export interface IndexNode {
+  kind: "index";
+  // The array being indexed, e.g. "array" in "array[0]".
+  object: ASTNode;
+  // The index expression, e.g. "0" in "array[0]".
+  index: ASTNode;
+}
 export interface LetDeclNode {
   kind: "let_decl";
   name: string;
   value: ASTNode;
   isMut?: boolean;
   // Optional type annotation, e.g. "U8" in "let x : U8 = 100U8;".
-  typeAnnotation?: string;
+  typeAnnotation?: Type;
 }
 export interface IfNode {
   kind: "if";
@@ -276,6 +317,8 @@ export type ASTNode =
   | DerefNode
   | AssignNode
   | DerefAssignNode
+  | ArrayNode
+  | IndexNode
   | LetDeclNode
   | IfNode
   | BlockNode

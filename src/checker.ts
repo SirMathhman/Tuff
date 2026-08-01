@@ -1,4 +1,4 @@
-import type { ASTNode, FnSignature } from "./ast";
+import type { ASTNode, FnSignature, Type } from "./ast";
 import { isExpression } from "./ast";
 import type { Result } from "./result";
 import { ok, err } from "./result";
@@ -12,6 +12,7 @@ import {
   isKnownType,
   typeMatches,
   setNodeType,
+  formatType,
 } from "./types";
 
 function scopeError(message: string): CompileError {
@@ -70,20 +71,23 @@ export function validateScope(
         if (rangeErr !== undefined) {
           return err(compileError("syntax", rangeErr));
         }
-        setNodeType(node, node.suffix ?? "Int");
+        setNodeType(node, { kind: "named", name: node.suffix ?? "Int" });
         return ok(undefined);
       }
 
       case "boolean":
         // Always valid
-        setNodeType(node, "Bool");
+        setNodeType(node, { kind: "named", name: "Bool" });
         return ok(undefined);
 
       case "identifier":
         if (!ctx.scope.isDeclared(node.name)) {
           return err(scopeError("Undeclared identifier: '" + node.name + "'"));
         }
-        setNodeType(node, ctx.scope.typeOf(node.name) ?? "Int");
+        setNodeType(
+          node,
+          ctx.scope.typeOf(node.name) ?? { kind: "named", name: "Int" },
+        );
         return ok(undefined);
 
       case "member_access":
@@ -98,7 +102,8 @@ export function validateScope(
         // A binary op's type is the type of its operands (they must agree).
         setNodeType(
           node,
-          inferType(node.left) ?? inferType(node.right) ?? "Int",
+          inferType(node.left) ??
+            inferType(node.right) ?? { kind: "named", name: "Int" },
         );
         return ok(undefined);
       }
@@ -107,7 +112,8 @@ export function validateScope(
         // Validate the value expression, and that the type name is known.
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        if (!isKnownType(node.typeName)) {
+        const typeName: Type = { kind: "named", name: node.typeName };
+        if (!isKnownType(typeName)) {
           return err(
             compileError("syntax", "Unknown type: '" + node.typeName + "'"),
           );
@@ -116,8 +122,8 @@ export function validateScope(
         // matches the checked type (type identity, not assignability).
         const valueType = inferType(node.value);
         node.result =
-          valueType !== undefined && typeMatches(valueType, node.typeName);
-        setNodeType(node, "Bool");
+          valueType !== undefined && typeMatches(valueType, typeName);
+        setNodeType(node, { kind: "named", name: "Bool" });
         return ok(undefined);
       }
 
@@ -141,10 +147,14 @@ export function validateScope(
           if (!elseResult.ok) return elseResult;
           setNodeType(
             node,
-            inferType(node.thenBranch) ?? inferType(node.elseBranch) ?? "Int",
+            inferType(node.thenBranch) ??
+              inferType(node.elseBranch) ?? { kind: "named", name: "Int" },
           );
         } else {
-          setNodeType(node, inferType(node.thenBranch) ?? "Int");
+          setNodeType(
+            node,
+            inferType(node.thenBranch) ?? { kind: "named", name: "Int" },
+          );
         }
         return ok(undefined);
       }
@@ -169,14 +179,20 @@ export function validateScope(
         // The return type must be a known type.
         if (!isKnownType(node.returnType)) {
           return err(
-            compileError("syntax", "Unknown type: '" + node.returnType + "'"),
+            compileError(
+              "syntax",
+              "Unknown type: '" + formatType(node.returnType) + "'",
+            ),
           );
         }
         // Each parameter type must be a known type.
         for (const param of node.params) {
           if (!isKnownType(param.type)) {
             return err(
-              compileError("syntax", "Unknown type: '" + param.type + "'"),
+              compileError(
+                "syntax",
+                "Unknown type: '" + formatType(param.type) + "'",
+              ),
             );
           }
         }
@@ -249,11 +265,11 @@ export function validateScope(
         // Check the referenced expression.
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        // A reference's type is "&" + the referenced value's type. A mutable
-        // reference is "&mut " + the type.
+        // A reference's type wraps the referenced value's type.
         const valueType = inferType(node.value);
-        const inner = valueType !== undefined ? valueType : "Int";
-        setNodeType(node, node.isMut === true ? "&mut " + inner : "&" + inner);
+        const inner: Type =
+          valueType !== undefined ? valueType : { kind: "named", name: "Int" };
+        setNodeType(node, { kind: "ref", inner, isMut: node.isMut === true });
         return ok(undefined);
       }
 
@@ -261,13 +277,12 @@ export function validateScope(
         // Check the referenced expression.
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        // A dereference's type is the referenced type (strip the leading "&"
-        // or "&mut ").
+        // A dereference's type is the referenced type (unwrap the ref).
         const valueType = inferType(node.value);
-        if (valueType !== undefined && valueType.startsWith("&")) {
-          setNodeType(node, valueType.replace("&mut ", "").replace("&", ""));
+        if (valueType !== undefined && valueType.kind === "ref") {
+          setNodeType(node, valueType.inner);
         } else {
-          setNodeType(node, "Int");
+          setNodeType(node, { kind: "named", name: "Int" });
         }
         return ok(undefined);
       }
@@ -280,19 +295,58 @@ export function validateScope(
         if (!valueResult.ok) return valueResult;
         // The target must be a mutable reference.
         const targetType = inferType(node.target);
-        if (targetType === undefined || !targetType.startsWith("&mut ")) {
+        if (
+          targetType === undefined ||
+          targetType.kind !== "ref" ||
+          !targetType.isMut
+        ) {
           return err(
             scopeError("Cannot assign through an immutable reference"),
           );
         }
         // The assigned value's type must match the referenced type.
-        const innerType = targetType.replace("&mut ", "");
+        const innerType = targetType.inner;
         const valueType = inferType(node.value);
         if (valueType !== undefined) {
           const mismatch = typeMismatch(innerType, valueType);
           if (mismatch !== undefined) {
             return err(compileError("syntax", mismatch));
           }
+        }
+        return ok(undefined);
+      }
+
+      case "array": {
+        // Check each element expression.
+        for (const elem of node.elements) {
+          const elemResult = checkNode(elem, ctx.asValue());
+          if (!elemResult.ok) return elemResult;
+        }
+        // An array's type wraps the element type and records the length.
+        const first = node.elements[0];
+        const firstType = first !== undefined ? inferType(first) : undefined;
+        const elemType: Type =
+          firstType !== undefined ? firstType : { kind: "named", name: "Int" };
+        setNodeType(node, {
+          kind: "array",
+          elem: elemType,
+          length: node.elements.length,
+        });
+        return ok(undefined);
+      }
+
+      case "index": {
+        // Check the array and the index expression.
+        const objectResult = checkNode(node.object, ctx.asValue());
+        if (!objectResult.ok) return objectResult;
+        const indexResult = checkNode(node.index, ctx.asValue());
+        if (!indexResult.ok) return indexResult;
+        // The object must be an array type; the index's type is the element type.
+        const objectType = inferType(node.object);
+        if (objectType !== undefined && objectType.kind === "array") {
+          setNodeType(node, objectType.elem);
+        } else {
+          setNodeType(node, { kind: "named", name: "Int" });
         }
         return ok(undefined);
       }
@@ -326,10 +380,10 @@ export function validateScope(
           if (lastType !== undefined) {
             setNodeType(node, lastType);
           } else {
-            setNodeType(node, "Void");
+            setNodeType(node, { kind: "named", name: "Void" });
           }
         } else {
-          setNodeType(node, "Void");
+          setNodeType(node, { kind: "named", name: "Void" });
         }
         return ok(undefined);
       }
@@ -368,7 +422,7 @@ export function validateScope(
             return err(
               compileError(
                 "syntax",
-                "Unknown type: '" + node.typeAnnotation + "'",
+                "Unknown type: '" + formatType(node.typeAnnotation) + "'",
               ),
             );
           }
@@ -382,8 +436,8 @@ export function validateScope(
         }
         // Then add the new variable to scope, recording its type (either the
         // annotation, or the inferred type of the value).
-        const declaredType =
-          node.typeAnnotation ?? inferType(node.value) ?? "Int";
+        const declaredType: Type = node.typeAnnotation ??
+          inferType(node.value) ?? { kind: "named", name: "Int" };
         ctx.scope.declare(node.name, node.isMut === true, declaredType);
         return ok(undefined);
       }
