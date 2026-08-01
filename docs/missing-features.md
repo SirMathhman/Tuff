@@ -242,11 +242,6 @@ This document catalogs language features that Tuff should probably support but c
 
 ## 8. Language Infrastructure
 
-### Comments
-
-- **Gap**: No comment syntax (`//`, `/* */`).
-- **Why**: Code without comments is unmaintainable. This is a surprising omission.
-
 ### Error messages / diagnostics
 
 - **Gap**: Errors are `{ kind, message }` strings with no source position (line/column).
@@ -278,7 +273,6 @@ This document catalogs language features that Tuff should probably support but c
 
 **High priority (fundamental, blocks real programs):**
 
-- Comments
 - `for` loops, `break`/`continue`
 - `return` statement + multi-statement function bodies
 - String type + string literals + concatenation

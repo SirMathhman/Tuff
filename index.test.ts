@@ -315,4 +315,36 @@ describe("tuff", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("// comment\\nargs.length") => 1', () => {
+    expect(evaluate("// comment\nargs.length", [])).toBe(1);
+  });
+
+  it('evaluate("args.length // trailing comment") => 1', () => {
+    expect(evaluate("args.length // trailing comment", [])).toBe(1);
+  });
+
+  it('evaluate("/* block */ args.length") => 1', () => {
+    expect(evaluate("/* block */ args.length", [])).toBe(1);
+  });
+
+  it('evaluate("/* multi\\nline */ args.length") => 1', () => {
+    expect(evaluate("/* multi\nline */ args.length", [])).toBe(1);
+  });
+
+  it('evaluate("args.length /* trailing */") => 1', () => {
+    expect(evaluate("args.length /* trailing */", [])).toBe(1);
+  });
+
+  it('evaluate("let x = 1; // comment\\nx") => 1', () => {
+    expect(evaluate("let x = 1; // comment\nx", [])).toBe(1);
+  });
+
+  it('evaluate("/* comment */ let x = 1; /* another */ x") => 1', () => {
+    expect(evaluate("/* comment */ let x = 1; /* another */ x", [])).toBe(1);
+  });
+
+  it('compile("/* unterminated") => syntax', () => {
+    expectCompileError("/* unterminated", "syntax");
+  });
 });
