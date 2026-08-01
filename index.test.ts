@@ -1,11 +1,11 @@
 import { compileTuffToJS } from ".";
 
-function evaluate(source: string, args: string[]) {
+function evaluate(source: string, args: string[] = []) {
   const generatedJS = compileTuffToJS("in let args : &[Str]; " + source);
   const wrappedJS =
     "let __exit__ = undefined; let process = { exit : (arg) => { __exit__ = arg; } };" +
     generatedJS +
-    " __exit__";
+    " return __exit__;";
 
   try {
     return new Function("args", wrappedJS)(args) as number;
@@ -16,3 +16,9 @@ function evaluate(source: string, args: string[]) {
     );
   }
 }
+
+describe("tuff", () => {
+  it('evaluate("") => 0', () => {
+    expect(evaluate("", [])).toBe(0)
+  })
+})
