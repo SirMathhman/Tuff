@@ -21,6 +21,16 @@ export default defineConfig([
           message: "Regexes don't make sense in a compiler.",
         },
       ],
+      "@typescript-eslint/no-restricted-types": [
+        "error",
+        {
+          types: {
+            Record: {
+              message: "Use Map instead of Record for consistency.",
+            },
+          },
+        },
+      ],
     },
   },
   tseslint.configs.recommended,
