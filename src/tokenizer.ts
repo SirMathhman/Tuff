@@ -1,4 +1,11 @@
 import type { Token } from "./ast";
+import { OPERATORS } from "./ast";
+
+// Lookup from operator symbol -> token type, longest symbols first so that
+// multi-character operators (e.g. "||") are matched before single-character ones.
+const SYMBOL_TO_TYPE = [...OPERATORS.entries()]
+  .sort((a, b) => b[1].symbol.length - a[1].symbol.length)
+  .map(([type, info]) => [info.symbol, type] as const);
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -72,28 +79,20 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
+    // Operator tokens (from the centralized OPERATORS table)
+    let matched = false;
+    for (const [symbol, type] of SYMBOL_TO_TYPE) {
+      if (source.startsWith(symbol, i)) {
+        tokens.push({ type } as Token);
+        i += symbol.length;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+
     // Single-character tokens
     const char = source[i]!;
-    if (char === "+") {
-      tokens.push({ type: "plus" });
-      i++;
-      continue;
-    }
-    if (char === "-") {
-      tokens.push({ type: "minus" });
-      i++;
-      continue;
-    }
-    if (char === "*") {
-      tokens.push({ type: "star" });
-      i++;
-      continue;
-    }
-    if (char === "/") {
-      tokens.push({ type: "slash" });
-      i++;
-      continue;
-    }
     if (char === ".") {
       tokens.push({ type: "dot" });
       i++;

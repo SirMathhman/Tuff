@@ -1,10 +1,9 @@
 import type { ASTNode } from "./ast";
 
-export class ScopeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ScopeError";
-  }
+function scopeError(message: string): Error {
+  const err = new Error(message);
+  err.name = "ScopeError";
+  return err;
 }
 
 export function validateScope(
@@ -27,7 +26,7 @@ export function validateScope(
 
       case "identifier":
         if (!scope.has(node.name)) {
-          throw new ScopeError(`Undeclared identifier: '${node.name}'`);
+          throw scopeError(`Undeclared identifier: '${node.name}'`);
         }
         break;
 
@@ -43,10 +42,10 @@ export function validateScope(
 
       case "assign":
         if (!scope.has(node.name)) {
-          throw new ScopeError(`Undeclared identifier: '${node.name}'`);
+          throw scopeError(`Undeclared identifier: '${node.name}'`);
         }
         if (!mutable.has(node.name)) {
-          throw new ScopeError(
+          throw scopeError(
             `Cannot assign to immutable variable: '${node.name}'`,
           );
         }

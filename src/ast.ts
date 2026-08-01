@@ -36,6 +36,15 @@ export interface StarToken {
 export interface SlashToken {
   type: "slash";
 }
+export interface PipePipeToken {
+  type: "pipe_pipe";
+}
+export interface AmpAmpToken {
+  type: "amp_amp";
+}
+export interface LessThanToken {
+  type: "less_than";
+}
 export interface DotToken {
   type: "dot";
 }
@@ -55,6 +64,9 @@ export type Token =
   | MinusToken
   | StarToken
   | SlashToken
+  | PipePipeToken
+  | AmpAmpToken
+  | LessThanToken
   | DotToken
   | EOFToken;
 
@@ -104,11 +116,22 @@ export type ASTNode =
   | AssignNode
   | LetDeclNode;
 
-// ---- Precedence Table ----
+// ---- Operator Table ----
 
-export const PRECEDENCE = new Map<string, number>([
-  ["+", 10],
-  ["-", 10],
-  ["*", 20],
-  ["/", 20],
+export interface OperatorInfo {
+  symbol: string;
+  precedence: number;
+  associativity?: "left" | "right";
+}
+
+// Single source of truth for binary operators.
+// Keyed by token type so the parser and tokenizer share one definition.
+export const OPERATORS = new Map<Token["type"], OperatorInfo>([
+  ["pipe_pipe", { symbol: "||", precedence: 5 }],
+  ["amp_amp", { symbol: "&&", precedence: 6 }],
+  ["less_than", { symbol: "<", precedence: 8 }],
+  ["plus", { symbol: "+", precedence: 10 }],
+  ["minus", { symbol: "-", precedence: 10 }],
+  ["star", { symbol: "*", precedence: 20 }],
+  ["slash", { symbol: "/", precedence: 20 }],
 ]);

@@ -20,6 +20,10 @@ export default defineConfig([
           selector: "Literal[regex]",
           message: "Regexes don't make sense in a compiler.",
         },
+        {
+          selector: "ClassDeclaration",
+          message: "Do not use classes for simplicity.",
+        },
       ],
       "@typescript-eslint/no-restricted-types": [
         "error",

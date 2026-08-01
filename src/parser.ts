@@ -1,47 +1,46 @@
 import type { Token, ASTNode } from "./ast";
-import { PRECEDENCE } from "./ast";
+import { OPERATORS } from "./ast";
 
-export class Parser {
-  tokens: Token[];
-  pos: number;
+export interface Parser {
+  peek(): Token;
+  parseStatement(): ASTNode;
+}
 
-  constructor(tokens: Token[]) {
-    this.tokens = tokens;
-    this.pos = 0;
+export function createParser(tokens: Token[]): Parser {
+  let pos = 0;
+
+  function peek(): Token {
+    return tokens[pos]!;
   }
 
-  peek(): Token {
-    return this.tokens[this.pos]!;
-  }
-
-  consume(): Token {
-    const token = this.tokens[this.pos]!;
-    this.pos++;
+  function consume(): Token {
+    const token = tokens[pos]!;
+    pos++;
     return token;
   }
 
-  // Parse a primary expression: number, identifier, or member access
-  parsePrimary(): ASTNode {
-    const token = this.peek();
+  // Parse a primary expression: number, boolean, identifier, or member access
+  function parsePrimary(): ASTNode {
+    const token = peek();
 
     if (token.type === "number") {
-      this.consume();
+      consume();
       return { kind: "number", value: token.value };
     }
 
     if (token.type === "boolean") {
-      this.consume();
+      consume();
       return { kind: "boolean", value: token.value };
     }
 
     if (token.type === "identifier") {
-      this.consume();
+      consume();
       let node: ASTNode = { kind: "identifier", name: token.name };
 
       // Handle member access (chained)
-      while (this.peek().type === "dot") {
-        this.consume(); // consume dot
-        const propToken = this.consume();
+      while (peek().type === "dot") {
+        consume(); // consume dot
+        const propToken = consume();
         if (propToken.type !== "identifier") {
           throw new Error(
             `Expected identifier after dot, got ${propToken.type}`,
@@ -61,98 +60,85 @@ export class Parser {
   }
 
   // Parse binary expression with precedence climbing
-  parseExpression(minPrec: number = 0): ASTNode {
-    let left = this.parsePrimary();
+  function parseExpression(minPrec: number = 0): ASTNode {
+    let left = parsePrimary();
 
     while (true) {
-      const token = this.peek();
-      const op = this.tokenToOp(token);
-      if (op === null) break;
+      const token = peek();
+      const info = OPERATORS.get(token.type);
+      if (info === undefined) break;
 
-      const prec = PRECEDENCE.get(op) ?? 0;
+      const prec = info.precedence;
       if (prec < minPrec) break;
 
-      this.consume(); // consume operator
-      const right = this.parseExpression(prec + 1);
-      left = { kind: "binary_op", left, op, right };
+      consume(); // consume operator
+      const right = parseExpression(prec + 1);
+      left = { kind: "binary_op", left, op: info.symbol, right };
     }
 
     return left;
   }
 
-  // Parse a single statement
-  parseStatement(): ASTNode {
-    if (this.peek().type === "let") {
-      return this.parseLetDecl();
-    }
-
-    // Expression statement
-    const expr = this.parseExpression();
-
-    // Check for assignment: identifier = expr
-    if (this.peek().type === "equals") {
-      if (expr.kind !== "identifier") {
-        throw new Error("Left-hand side of assignment must be an identifier");
-      }
-      this.consume(); // consume '='
-      const value = this.parseExpression();
-      // Consume optional trailing semicolon
-      if (this.peek().type === "semicolon") {
-        this.consume();
-      }
-      return { kind: "assign", name: expr.name, value };
-    }
-
-    // Consume optional trailing semicolon
-    if (this.peek().type === "semicolon") {
-      this.consume();
-    }
-    return expr;
-  }
-
   // Parse: let [mut] <identifier> = <expression> ;
-  parseLetDecl(): ASTNode {
-    this.consume(); // consume 'let'
+  function parseLetDecl(): ASTNode {
+    consume(); // consume 'let'
 
     // Check for optional 'mut' keyword
     let isMut = false;
-    if (this.peek().type === "mut") {
+    if (peek().type === "mut") {
       isMut = true;
-      this.consume(); // consume 'mut'
+      consume(); // consume 'mut'
     }
 
-    const nameToken = this.consume();
+    const nameToken = consume();
     if (nameToken.type !== "identifier") {
       throw new Error(`Expected identifier after let, got ${nameToken.type}`);
     }
 
-    if (this.peek().type !== "equals") {
+    if (peek().type !== "equals") {
       throw new Error(`Expected '=' in let declaration`);
     }
-    this.consume(); // consume '='
+    consume(); // consume '='
 
-    const value = this.parseExpression();
+    const value = parseExpression();
 
     // Consume optional trailing semicolon
-    if (this.peek().type === "semicolon") {
-      this.consume();
+    if (peek().type === "semicolon") {
+      consume();
     }
 
     return { kind: "let_decl", name: nameToken.name, value, isMut };
   }
 
-  private tokenToOp(token: Token): string | null {
-    switch (token.type) {
-      case "plus":
-        return "+";
-      case "minus":
-        return "-";
-      case "star":
-        return "*";
-      case "slash":
-        return "/";
-      default:
-        return null;
+  // Parse a single statement
+  function parseStatement(): ASTNode {
+    if (peek().type === "let") {
+      return parseLetDecl();
     }
+
+    // Expression statement
+    const expr = parseExpression();
+
+    // Check for assignment: identifier = expr
+    if (peek().type === "equals") {
+      if (expr.kind !== "identifier") {
+        throw new Error("Left-hand side of assignment must be an identifier");
+      }
+      consume(); // consume '='
+      const value = parseExpression();
+      // Consume optional trailing semicolon
+      if (peek().type === "semicolon") {
+        consume();
+      }
+      return { kind: "assign", name: expr.name, value };
+    }
+
+    // Consume optional trailing semicolon
+    if (peek().type === "semicolon") {
+      consume();
+    }
+    return expr;
   }
+
+  return { peek, parseStatement };
 }

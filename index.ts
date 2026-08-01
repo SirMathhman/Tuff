@@ -1,5 +1,5 @@
 import { tokenize } from "./src/tokenizer";
-import { Parser } from "./src/parser";
+import { createParser } from "./src/parser";
 import { validateScope } from "./src/checker";
 import { generateJS } from "./src/codegen";
 import type { ASTNode } from "./src/ast";
@@ -17,7 +17,7 @@ export function compileTuffToJS(source: string): string {
   }
 
   const tokens = tokenize(trimmed);
-  const parser = new Parser(tokens);
+  const parser = createParser(tokens);
 
   // Parse all statements separated by semicolons
   const stmts: ASTNode[] = [];
