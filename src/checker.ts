@@ -140,7 +140,14 @@ function createContext(
     thisType,
     outerThisType,
     asValue() {
-      return createContext(scope, functions, structs, true, thisType, outerThisType);
+      return createContext(
+        scope,
+        functions,
+        structs,
+        true,
+        thisType,
+        outerThisType,
+      );
     },
     inChildScope() {
       return createContext(
@@ -235,6 +242,22 @@ export function validateScope(
         // function, `this` is a constructor object (an implicit struct), so
         // `this.x` resolves the field `x` on that struct.
         if (node.object.kind === "this") {
+          // `this.this` is a reference to the enclosing function's `this`
+          // (the outer constructor object) from a nested constructor.
+          if (node.property === "this") {
+            const outerType = ctx.outerThisType;
+            if (outerType !== undefined) {
+              setNodeType(node, {
+                kind: "ref",
+                inner: outerType,
+                isMut: false,
+              });
+              return ok(undefined);
+            }
+            return err(
+              scopeError("'this.this' is only valid inside a nested function"),
+            );
+          }
           // `this` may be a receiver parameter (declared in scope with a
           // struct type) or the implicit constructor object (via thisType).
           // Record its role so codegen can emit `this.x` correctly.

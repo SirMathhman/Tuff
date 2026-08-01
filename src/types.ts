@@ -290,6 +290,12 @@ export function typeMatches(from: Type, to: Type): boolean {
   if (from.kind === "struct" && to.kind === "struct" && from.name === to.name) {
     return true;
   }
+  if (from.kind === "ref" && to.kind === "ref") {
+    return from.isMut === to.isMut && typeMatches(from.inner, to.inner);
+  }
+  if (from.kind === "array" && to.kind === "array") {
+    return from.length === to.length && typeMatches(from.elem, to.elem);
+  }
   if (from.kind === "tuple" && to.kind === "tuple") {
     if (from.elements.length !== to.elements.length) {
       return false;

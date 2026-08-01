@@ -260,7 +260,7 @@ export function createParser(tokens: Token[]): Parser {
       node = {
         kind: "member_access",
         object: node,
-        property: propToken.name,
+        property: propName,
       };
     }
 
@@ -377,9 +377,7 @@ export function createParser(tokens: Token[]): Parser {
           consume(); // consume 'is'
           const typeName = parseTypeName();
           if (typeName.kind === "named" && typeName.name === "") {
-            return err(
-              compileError("syntax", "Expected type name after 'is'"),
-            );
+            return err(compileError("syntax", "Expected type name after 'is'"));
           }
           node = {
             kind: "is",
