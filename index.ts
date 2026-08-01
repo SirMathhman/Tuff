@@ -2,6 +2,7 @@ import { tokenize } from "./src/tokenizer";
 import { createParser } from "./src/parser";
 import { validateScope } from "./src/checker";
 import { generateJS } from "./src/codegen";
+import { createScope } from "./src/scope";
 import type { ASTNode } from "./src/ast";
 import type { Result } from "./src/result";
 import { ok } from "./src/result";
@@ -31,15 +32,17 @@ export function compileTuffToJS(source: string): Result<string, Error> {
     stmts.push(stmtResult.value);
   }
 
-  // Validate scoping: args is implicitly declared
-  const scopeResult = validateScope(stmts, new Set(["args"]));
+  // Validate scoping: args is implicitly declared (and immutable)
+  const rootScope = createScope();
+  rootScope.declare("args", false);
+  const scopeResult = validateScope(stmts, rootScope);
   if (!scopeResult.ok) return scopeResult;
 
   // Generate JS for all statements
   const parts: string[] = [];
   const declared = new Set<string>();
   // Coerce the final expression to a number (exit code model)
-  const exitCode = (expr: string) => `Number(${expr})`;
+  const exitCode = (expr: string) => "Number(" + expr + ")";
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i]!;
     if (stmt.kind === "let_decl") {
@@ -50,27 +53,35 @@ export function compileTuffToJS(source: string): Result<string, Error> {
       if (isNew) {
         if (i === stmts.length - 1) {
           parts.push(
-            `let ${stmt.name} = ${valueResult.value}; process.exit(${exitCode(stmt.name)});`,
+            "let " +
+              stmt.name +
+              " = " +
+              valueResult.value +
+              "; process.exit(" +
+              exitCode(stmt.name) +
+              ");",
           );
         } else {
-          parts.push(`let ${stmt.name} = ${valueResult.value};`);
+          parts.push("let " + stmt.name + " = " + valueResult.value + ";");
         }
       } else {
         if (i === stmts.length - 1) {
           parts.push(
-            `process.exit(${exitCode(`${stmt.name} = ${valueResult.value}`)});`,
+            "process.exit(" +
+              exitCode(stmt.name + " = " + valueResult.value) +
+              ");",
           );
         } else {
-          parts.push(`${stmt.name} = ${valueResult.value};`);
+          parts.push(stmt.name + " = " + valueResult.value + ";");
         }
       }
     } else {
       const exprResult = generateJS(stmt);
       if (!exprResult.ok) return exprResult;
       if (i === stmts.length - 1) {
-        parts.push(`process.exit(${exitCode(exprResult.value)});`);
+        parts.push("process.exit(" + exitCode(exprResult.value) + ");");
       } else {
-        parts.push(`${exprResult.value};`);
+        parts.push(exprResult.value + ";");
       }
     }
   }

@@ -15,31 +15,49 @@ export function generateJS(node: ASTNode): Result<string, Error> {
 
     case "member_access":
       return map(generateJS(node.object), (object) => {
-        return `${object}[${JSON.stringify(node.property)}]`;
+        return object + "[" + JSON.stringify(node.property) + "]";
       });
 
     case "binary_op":
       return andThen(generateJS(node.left), (left) => {
         return map(generateJS(node.right), (right) => {
-          return `${left} ${node.op} ${right}`;
+          return left + " " + node.op + " " + right;
         });
       });
 
     case "assign":
       return map(generateJS(node.value), (value) => {
-        return `${node.name} = ${value}`;
+        return node.name + " = " + value;
       });
 
     case "if":
       return andThen(generateJS(node.condition), (condition) => {
         return andThen(generateJS(node.thenBranch), (thenBranch) => {
           return map(generateJS(node.elseBranch), (elseBranch) => {
-            return `(${condition} ? ${thenBranch} : ${elseBranch})`;
+            return (
+              "(" + condition + " ? " + thenBranch + " : " + elseBranch + ")"
+            );
           });
         });
       });
 
+    case "block": {
+      // Evaluate all statements, yielding the last one's value via an IIFE
+      const parts: string[] = [];
+      for (let i = 0; i < node.statements.length; i++) {
+        const stmt = node.statements[i]!;
+        const stmtResult = generateJS(stmt);
+        if (!stmtResult.ok) return stmtResult;
+        if (i === node.statements.length - 1) {
+          parts.push("return " + stmtResult.value + ";");
+        } else {
+          parts.push(stmtResult.value + ";");
+        }
+      }
+      return ok("(() => { " + parts.join(" ") + " })()");
+    }
+
     default:
-      return err(new Error(`Unexpected node kind in codegen`));
+      return err(new Error("Unexpected node kind in codegen"));
   }
 }

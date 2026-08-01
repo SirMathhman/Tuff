@@ -21,12 +21,16 @@ export function createParser(tokens: Token[]): Parser {
     return token;
   }
 
-  // Parse a primary expression: number, boolean, identifier, member access, or if
+  // Parse a primary expression: number, boolean, identifier, member access, if, or block
   function parsePrimary(): Result<ASTNode, Error> {
     const token = peek();
 
     if (token.type === "if") {
       return parseIf();
+    }
+
+    if (token.type === "lbrace") {
+      return parseBlock();
     }
 
     if (token.type === "number") {
@@ -49,7 +53,7 @@ export function createParser(tokens: Token[]): Parser {
         const propToken = consume();
         if (propToken.type !== "identifier") {
           return err(
-            new Error(`Expected identifier after dot, got ${propToken.type}`),
+            new Error("Expected identifier after dot, got " + propToken.type),
           );
         }
         node = {
@@ -62,7 +66,7 @@ export function createParser(tokens: Token[]): Parser {
       return ok(node);
     }
 
-    return err(new Error(`Unexpected token: ${token.type}`));
+    return err(new Error("Unexpected token: " + token.type));
   }
 
   // Parse: if ( <condition> ) <then> else <else>
@@ -70,7 +74,7 @@ export function createParser(tokens: Token[]): Parser {
     consume(); // consume 'if'
 
     if (peek().type !== "lparen") {
-      return err(new Error(`Expected '(' after if`));
+      return err(new Error("Expected '(' after if"));
     }
     consume(); // consume '('
 
@@ -78,7 +82,7 @@ export function createParser(tokens: Token[]): Parser {
     if (!conditionResult.ok) return conditionResult;
 
     if (peek().type !== "rparen") {
-      return err(new Error(`Expected ')' after if condition`));
+      return err(new Error("Expected ')' after if condition"));
     }
     consume(); // consume ')'
 
@@ -86,7 +90,7 @@ export function createParser(tokens: Token[]): Parser {
     if (!thenResult.ok) return thenResult;
 
     if (peek().type !== "else") {
-      return err(new Error(`Expected 'else' in if expression`));
+      return err(new Error("Expected 'else' in if expression"));
     }
     consume(); // consume 'else'
 
@@ -99,6 +103,24 @@ export function createParser(tokens: Token[]): Parser {
       thenBranch: thenResult.value,
       elseBranch: elseResult.value,
     });
+  }
+
+  // Parse: { <statement>; <statement>; ... }
+  function parseBlock(): Result<ASTNode, Error> {
+    consume(); // consume '{'
+
+    const statements: ASTNode[] = [];
+    while (peek().type !== "rbrace") {
+      if (peek().type === "eof") {
+        return err(new Error("Expected '}' to close block"));
+      }
+      const stmtResult = parseStatement();
+      if (!stmtResult.ok) return stmtResult;
+      statements.push(stmtResult.value);
+    }
+    consume(); // consume '}'
+
+    return ok({ kind: "block", statements });
   }
 
   // Parse binary expression with precedence climbing
@@ -143,12 +165,12 @@ export function createParser(tokens: Token[]): Parser {
     const nameToken = consume();
     if (nameToken.type !== "identifier") {
       return err(
-        new Error(`Expected identifier after let, got ${nameToken.type}`),
+        new Error("Expected identifier after let, got " + nameToken.type),
       );
     }
 
     if (peek().type !== "equals") {
-      return err(new Error(`Expected '=' in let declaration`));
+      return err(new Error("Expected '=' in let declaration"));
     }
     consume(); // consume '='
 

@@ -108,4 +108,8 @@ describe("tuff", () => {
   it('compile("let x = if (false) 2; x") => Error', () => {
     expect(compileTuffToJS("let x = if (false) 2; x").ok).toBe(false);
   });
+
+  it('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
+    expect(evaluate("let mut x = 0; { x = 1; } x", [])).toBe(1);
+  });
 });

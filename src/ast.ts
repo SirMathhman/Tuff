@@ -30,6 +30,12 @@ export interface LParenToken {
 export interface RParenToken {
   type: "rparen";
 }
+export interface LBraceToken {
+  type: "lbrace";
+}
+export interface RBraceToken {
+  type: "rbrace";
+}
 export interface EqualsToken {
   type: "equals";
 }
@@ -89,6 +95,8 @@ export type Token =
   | ElseToken
   | LParenToken
   | RParenToken
+  | LBraceToken
+  | RBraceToken
   | EqualsToken
   | EqualsEqualsToken
   | BangEqualsToken
@@ -148,6 +156,10 @@ export interface IfNode {
   thenBranch: ASTNode;
   elseBranch: ASTNode;
 }
+export interface BlockNode {
+  kind: "block";
+  statements: ASTNode[];
+}
 
 export type ASTNode =
   | NumberNode
@@ -157,7 +169,8 @@ export type ASTNode =
   | BinaryOpNode
   | AssignNode
   | LetDeclNode
-  | IfNode;
+  | IfNode
+  | BlockNode;
 
 // ---- Operator Table ----
 

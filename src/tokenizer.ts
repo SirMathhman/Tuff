@@ -109,6 +109,16 @@ export function tokenize(source: string): Result<Token[], Error> {
       i++;
       continue;
     }
+    if (char === "{") {
+      tokens.push({ type: "lbrace" });
+      i++;
+      continue;
+    }
+    if (char === "}") {
+      tokens.push({ type: "rbrace" });
+      i++;
+      continue;
+    }
     if (char === ".") {
       tokens.push({ type: "dot" });
       i++;
@@ -126,7 +136,7 @@ export function tokenize(source: string): Result<Token[], Error> {
     }
 
     // Unknown character: fail loudly instead of silently skipping
-    return err(new Error(`Unexpected character: '${char}'`));
+    return err(new Error("Unexpected character: '" + char + "'"));
   }
 
   tokens.push({ type: "eof" });
