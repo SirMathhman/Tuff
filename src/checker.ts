@@ -21,6 +21,10 @@ export function validateScope(
         // Always valid
         break;
 
+      case "boolean":
+        // Always valid
+        break;
+
       case "identifier":
         if (!scope.has(node.name)) {
           throw new ScopeError(`Undeclared identifier: '${node.name}'`);

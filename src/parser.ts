@@ -29,6 +29,11 @@ export class Parser {
       return { kind: "number", value: token.value };
     }
 
+    if (token.type === "boolean") {
+      this.consume();
+      return { kind: "boolean", value: token.value };
+    }
+
     if (token.type === "identifier") {
       this.consume();
       let node: ASTNode = { kind: "identifier", name: token.name };
@@ -64,7 +69,7 @@ export class Parser {
       const op = this.tokenToOp(token);
       if (op === null) break;
 
-      const prec = PRECEDENCE[op] ?? 0;
+      const prec = PRECEDENCE.get(op) ?? 0;
       if (prec < minPrec) break;
 
       this.consume(); // consume operator

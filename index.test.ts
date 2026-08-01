@@ -62,4 +62,12 @@ describe("tuff", () => {
   it('evaluate("let mut x = 0; x = 1; x") => 1', () => {
     expect(evaluate("let mut x = 0; x = 1; x", [])).toBe(1);
   });
+
+  it('compile("let x = 0; x = 1; x") => Error', () => {
+    expect(() => compileTuffToJS("let x = 0; x = 1; x")).toThrow();
+  });
+
+  it('evaluate("let x = true; x") => 1', () => {
+    expect(evaluate("let x = true; x", [])).toBe(1);
+  });
 });

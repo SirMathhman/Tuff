@@ -5,6 +5,9 @@ export function generateJS(node: ASTNode): string {
     case "number":
       return String(node.value);
 
+    case "boolean":
+      return String(node.value);
+
     case "identifier":
       return node.name;
 

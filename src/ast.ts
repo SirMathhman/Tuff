@@ -4,6 +4,10 @@ export interface NumberToken {
   type: "number";
   value: number;
 }
+export interface BooleanToken {
+  type: "boolean";
+  value: boolean;
+}
 export interface IdentifierToken {
   type: "identifier";
   name: string;
@@ -41,6 +45,7 @@ export interface EOFToken {
 
 export type Token =
   | NumberToken
+  | BooleanToken
   | IdentifierToken
   | LetToken
   | MutToken
@@ -58,6 +63,10 @@ export type Token =
 export interface NumberNode {
   kind: "number";
   value: number;
+}
+export interface BooleanNode {
+  kind: "boolean";
+  value: boolean;
 }
 export interface IdentifierNode {
   kind: "identifier";
@@ -88,6 +97,7 @@ export interface LetDeclNode {
 
 export type ASTNode =
   | NumberNode
+  | BooleanNode
   | IdentifierNode
   | MemberAccessNode
   | BinaryOpNode
@@ -96,9 +106,9 @@ export type ASTNode =
 
 // ---- Precedence Table ----
 
-export const PRECEDENCE: Record<string, number> = {
-  "+": 10,
-  "-": 10,
-  "*": 20,
-  "/": 20,
-};
+export const PRECEDENCE = new Map<string, number>([
+  ["+", 10],
+  ["-", 10],
+  ["*", 20],
+  ["/", 20],
+]);

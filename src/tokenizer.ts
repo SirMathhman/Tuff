@@ -62,6 +62,10 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "let" });
       } else if (name === "mut") {
         tokens.push({ type: "mut" });
+      } else if (name === "true") {
+        tokens.push({ type: "boolean", value: true });
+      } else if (name === "false") {
+        tokens.push({ type: "boolean", value: false });
       } else {
         tokens.push({ type: "identifier", name });
       }

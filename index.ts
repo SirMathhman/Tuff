@@ -31,6 +31,8 @@ export function compileTuffToJS(source: string): string {
   // Generate JS for all statements
   const parts: string[] = [];
   const declared = new Set<string>();
+  // Coerce the final expression to a number (exit code model)
+  const exitCode = (expr: string) => `Number(${expr})`;
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i]!;
     if (stmt.kind === "let_decl") {
@@ -39,21 +41,23 @@ export function compileTuffToJS(source: string): string {
       if (isNew) {
         if (i === stmts.length - 1) {
           parts.push(
-            `let ${stmt.name} = ${generateJS(stmt.value)}; process.exit(${stmt.name});`,
+            `let ${stmt.name} = ${generateJS(stmt.value)}; process.exit(${exitCode(stmt.name)});`,
           );
         } else {
           parts.push(`let ${stmt.name} = ${generateJS(stmt.value)};`);
         }
       } else {
         if (i === stmts.length - 1) {
-          parts.push(`process.exit(${stmt.name} = ${generateJS(stmt.value)});`);
+          parts.push(
+            `process.exit(${exitCode(`${stmt.name} = ${generateJS(stmt.value)}`)});`,
+          );
         } else {
           parts.push(`${stmt.name} = ${generateJS(stmt.value)};`);
         }
       }
     } else {
       if (i === stmts.length - 1) {
-        parts.push(`process.exit(${generateJS(stmt)});`);
+        parts.push(`process.exit(${exitCode(generateJS(stmt))});`);
       } else {
         parts.push(`${generateJS(stmt)};`);
       }
