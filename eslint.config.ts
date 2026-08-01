@@ -16,6 +16,10 @@ export default defineConfig([
           selector: "TSTypeLiteral",
           message: "Use named interfaces instead.",
         },
+        {
+          selector: "Literal[regex]",
+          message: "Regexes don't make sense in a compiler.",
+        },
       ],
     },
   },
