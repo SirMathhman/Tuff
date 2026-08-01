@@ -75,11 +75,7 @@ interface LetDeclNode {
 }
 
 type ASTNode =
-  | NumberNode
-  | IdentifierNode
-  | MemberAccessNode
-  | BinaryOpNode
-  | LetDeclNode;
+  NumberNode | IdentifierNode | MemberAccessNode | BinaryOpNode | LetDeclNode;
 
 // ---- Tokenizer ----
 
@@ -324,8 +320,56 @@ function generateJS(node: ASTNode): string {
     case "binary_op":
       return `${generateJS(node.left)} ${node.op} ${generateJS(node.right)}`;
 
-    case "let_decl":
-      return `let ${node.name} = ${generateJS(node.value)}`;
+    default:
+      throw new Error(`Unexpected node kind in codegen`);
+  }
+}
+
+// ---- Semantic Analysis ----
+
+class ScopeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScopeError";
+  }
+}
+
+function validateScope(stmts: ASTNode[], initialScope: Set<string>): void {
+  const scope = new Set(initialScope);
+
+  function checkNode(node: ASTNode): void {
+    switch (node.kind) {
+      case "number":
+        // Always valid
+        break;
+
+      case "identifier":
+        if (!scope.has(node.name)) {
+          throw new ScopeError(`Undeclared identifier: '${node.name}'`);
+        }
+        break;
+
+      case "member_access":
+        // Only validate the object (the base identifier), property access is always valid
+        checkNode(node.object);
+        break;
+
+      case "binary_op":
+        checkNode(node.left);
+        checkNode(node.right);
+        break;
+
+      case "let_decl":
+        // Validate the value expression first (RHS)
+        checkNode(node.value);
+        // Then add the new variable to scope
+        scope.add(node.name);
+        break;
+    }
+  }
+
+  for (const stmt of stmts) {
+    checkNode(stmt);
   }
 }
 
@@ -352,15 +396,38 @@ export function compileTuffToJS(source: string): string {
     stmts.push(parser.parseStatement());
   }
 
+  // Validate scoping: args is implicitly declared
+  validateScope(stmts, new Set(["args"]));
+
   // Generate JS for all statements
   const parts: string[] = [];
+  const declared = new Set<string>();
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i]!;
-    if (i === stmts.length - 1) {
-      // Last statement's value becomes the exit code
-      parts.push(`__exit__ = ${generateJS(stmt)};`);
+    if (stmt.kind === "let_decl") {
+      const isNew = !declared.has(stmt.name);
+      declared.add(stmt.name);
+      if (isNew) {
+        if (i === stmts.length - 1) {
+          parts.push(
+            `let ${stmt.name} = ${generateJS(stmt.value)}; process.exit(${stmt.name});`,
+          );
+        } else {
+          parts.push(`let ${stmt.name} = ${generateJS(stmt.value)};`);
+        }
+      } else {
+        if (i === stmts.length - 1) {
+          parts.push(`process.exit(${stmt.name} = ${generateJS(stmt.value)});`);
+        } else {
+          parts.push(`${stmt.name} = ${generateJS(stmt.value)};`);
+        }
+      }
     } else {
-      parts.push(`${generateJS(stmt)};`);
+      if (i === stmts.length - 1) {
+        parts.push(`process.exit(${generateJS(stmt)});`);
+      } else {
+        parts.push(`${generateJS(stmt)};`);
+      }
     }
   }
 

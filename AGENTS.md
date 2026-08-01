@@ -33,6 +33,7 @@ The test helper adds a wrapper layer:
 ```
 
 Key architectural hints from the test file:
+
 - **Rust-like type syntax**: `&[Str]` suggests a slice/string type system
 - **Sandboxed execution**: Generated JS runs in a `new Function()` context with a mock `process.exit`
 - **Exit code model**: Compiled programs return a `number` exit code
@@ -40,17 +41,20 @@ Key architectural hints from the test file:
 ## Conventions
 
 ### Code Style
+
 - **camelCase** for functions and variables
 - **No semicolons** (Bun/TypeScript convention)
 - **ESM modules** with `verbatimModuleSyntax` — use `import type` for type-only imports
 - **Strict TypeScript**: `strict: true`, `noUncheckedIndexedAccess` (array access returns `T | undefined`), `noImplicitOverride`
 
 ### Error Handling
+
 - Use `Result<T, X>` pattern (`OkResult`/`ErrResult`) instead of exceptions
 - Return `{ ok: true, value }` or `{ ok: false, error }` — never `throw`
 - ESLint's `no-restricted-syntax` rule bans `ThrowStatement`
 
 ### Testing
+
 - Use `evaluate(source, args)` helper to compile and run Tuff code in tests
 - Test pattern: `evaluate("source code") => expectedExitCode`
 - The helper prepends `"in let args : &[Str]; "` automatically

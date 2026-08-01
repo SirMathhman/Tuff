@@ -4,13 +4,16 @@ import { describe, it, expect } from "bun:test";
 function evaluate(source: string, args: string[] = []) {
   const generatedJS = compileTuffToJS("in let args : &[Str]; " + source);
   const wrappedJS =
-    "let __exit__ = undefined; let process = { exit : (arg) => { __exit__ = arg; } };" +
+    "let process = { exit : (arg) => { exitCode = arg; } }; " +
     generatedJS +
-    " return __exit__;";
+    " return exitCode;";
 
   try {
     const newArgs = ["mock_program_name.exe", ...args];
-    return new Function("args", wrappedJS)(newArgs) as number;
+    return new Function("exitCode", "args", wrappedJS)(
+      undefined,
+      newArgs,
+    ) as number;
   } catch (e) {
     throw new Error(
       "Failed to execute runtime JS: '" + wrappedJS + "'",
@@ -46,5 +49,13 @@ describe("tuff", () => {
 
   it('evaluate("let x = args.length; let y = x; y") => 1', () => {
     expect(evaluate("let x = args.length; let y = x; y", [])).toBe(1);
+  });
+
+  it('compile("undefinedIdentifier") => Error', () => {
+    expect(() => compileTuffToJS("undefinedIdentifier")).toThrow();
+  });
+
+  it('evaluate("let x = 0; let x = 1; x") => 1', () => {
+    expect(evaluate("let x = 0; let x = 1; x", [])).toBe(1);
   });
 });
