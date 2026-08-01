@@ -21,6 +21,12 @@ export interface MutToken {
 export interface EqualsToken {
   type: "equals";
 }
+export interface EqualsEqualsToken {
+  type: "equals_equals";
+}
+export interface BangEqualsToken {
+  type: "bang_equals";
+}
 export interface SemicolonToken {
   type: "semicolon";
 }
@@ -45,6 +51,15 @@ export interface AmpAmpToken {
 export interface LessThanToken {
   type: "less_than";
 }
+export interface LessThanEqualToken {
+  type: "less_than_equal";
+}
+export interface GreaterThanToken {
+  type: "greater_than";
+}
+export interface GreaterThanEqualToken {
+  type: "greater_than_equal";
+}
 export interface DotToken {
   type: "dot";
 }
@@ -59,6 +74,8 @@ export type Token =
   | LetToken
   | MutToken
   | EqualsToken
+  | EqualsEqualsToken
+  | BangEqualsToken
   | SemicolonToken
   | PlusToken
   | MinusToken
@@ -67,6 +84,9 @@ export type Token =
   | PipePipeToken
   | AmpAmpToken
   | LessThanToken
+  | LessThanEqualToken
+  | GreaterThanToken
+  | GreaterThanEqualToken
   | DotToken
   | EOFToken;
 
@@ -130,6 +150,11 @@ export const OPERATORS = new Map<Token["type"], OperatorInfo>([
   ["pipe_pipe", { symbol: "||", precedence: 5 }],
   ["amp_amp", { symbol: "&&", precedence: 6 }],
   ["less_than", { symbol: "<", precedence: 8 }],
+  ["less_than_equal", { symbol: "<=", precedence: 8 }],
+  ["greater_than", { symbol: ">", precedence: 8 }],
+  ["greater_than_equal", { symbol: ">=", precedence: 8 }],
+  ["equals_equals", { symbol: "==", precedence: 8 }],
+  ["bang_equals", { symbol: "!=", precedence: 8 }],
   ["plus", { symbol: "+", precedence: 10 }],
   ["minus", { symbol: "-", precedence: 10 }],
   ["star", { symbol: "*", precedence: 20 }],

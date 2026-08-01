@@ -3,30 +3,37 @@ import { createParser } from "./src/parser";
 import { validateScope } from "./src/checker";
 import { generateJS } from "./src/codegen";
 import type { ASTNode } from "./src/ast";
+import type { Result } from "./src/result";
+import { ok } from "./src/result";
 
 const IMPLICIT_PREFIX = "in let args : &[Str]; ";
 
-export function compileTuffToJS(source: string): string {
+export function compileTuffToJS(source: string): Result<string, Error> {
   // Strip the implicit declaration prefix
   const userSource = source.startsWith(IMPLICIT_PREFIX)
     ? source.slice(IMPLICIT_PREFIX.length)
     : source;
   const trimmed = userSource.trim();
   if (trimmed === "") {
-    return "process.exit(0);";
+    return ok("process.exit(0);");
   }
 
-  const tokens = tokenize(trimmed);
+  const tokenResult = tokenize(trimmed);
+  if (!tokenResult.ok) return tokenResult;
+  const tokens = tokenResult.value;
   const parser = createParser(tokens);
 
   // Parse all statements separated by semicolons
   const stmts: ASTNode[] = [];
   while (parser.peek().type !== "eof") {
-    stmts.push(parser.parseStatement());
+    const stmtResult = parser.parseStatement();
+    if (!stmtResult.ok) return stmtResult;
+    stmts.push(stmtResult.value);
   }
 
   // Validate scoping: args is implicitly declared
-  validateScope(stmts, new Set(["args"]));
+  const scopeResult = validateScope(stmts, new Set(["args"]));
+  if (!scopeResult.ok) return scopeResult;
 
   // Generate JS for all statements
   const parts: string[] = [];
@@ -38,31 +45,35 @@ export function compileTuffToJS(source: string): string {
     if (stmt.kind === "let_decl") {
       const isNew = !declared.has(stmt.name);
       declared.add(stmt.name);
+      const valueResult = generateJS(stmt.value);
+      if (!valueResult.ok) return valueResult;
       if (isNew) {
         if (i === stmts.length - 1) {
           parts.push(
-            `let ${stmt.name} = ${generateJS(stmt.value)}; process.exit(${exitCode(stmt.name)});`,
+            `let ${stmt.name} = ${valueResult.value}; process.exit(${exitCode(stmt.name)});`,
           );
         } else {
-          parts.push(`let ${stmt.name} = ${generateJS(stmt.value)};`);
+          parts.push(`let ${stmt.name} = ${valueResult.value};`);
         }
       } else {
         if (i === stmts.length - 1) {
           parts.push(
-            `process.exit(${exitCode(`${stmt.name} = ${generateJS(stmt.value)}`)});`,
+            `process.exit(${exitCode(`${stmt.name} = ${valueResult.value}`)});`,
           );
         } else {
-          parts.push(`${stmt.name} = ${generateJS(stmt.value)};`);
+          parts.push(`${stmt.name} = ${valueResult.value};`);
         }
       }
     } else {
+      const exprResult = generateJS(stmt);
+      if (!exprResult.ok) return exprResult;
       if (i === stmts.length - 1) {
-        parts.push(`process.exit(${exitCode(generateJS(stmt))});`);
+        parts.push(`process.exit(${exitCode(exprResult.value)});`);
       } else {
-        parts.push(`${generateJS(stmt)};`);
+        parts.push(`${exprResult.value};`);
       }
     }
   }
 
-  return parts.join(" ");
+  return ok(parts.join(" "));
 }

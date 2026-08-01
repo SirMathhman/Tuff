@@ -1,5 +1,7 @@
 import type { Token } from "./ast";
 import { OPERATORS } from "./ast";
+import type { Result } from "./result";
+import { ok, err } from "./result";
 
 // Lookup from operator symbol -> token type, longest symbols first so that
 // multi-character operators (e.g. "||") are matched before single-character ones.
@@ -7,7 +9,7 @@ const SYMBOL_TO_TYPE = [...OPERATORS.entries()]
   .sort((a, b) => b[1].symbol.length - a[1].symbol.length)
   .map(([type, info]) => [info.symbol, type] as const);
 
-export function tokenize(source: string): Token[] {
+export function tokenize(source: string): Result<Token[], Error> {
   const tokens: Token[] = [];
   let i = 0;
 
@@ -109,10 +111,10 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Unknown character, skip
-    i++;
+    // Unknown character: fail loudly instead of silently skipping
+    return err(new Error(`Unexpected character: '${char}'`));
   }
 
   tokens.push({ type: "eof" });
-  return tokens;
+  return ok(tokens);
 }

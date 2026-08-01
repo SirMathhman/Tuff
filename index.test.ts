@@ -2,24 +2,16 @@ import { compileTuffToJS } from ".";
 import { describe, it, expect } from "bun:test";
 
 function evaluate(source: string, args: string[] = []) {
-  const generatedJS = compileTuffToJS("in let args : &[Str]; " + source);
+  const compiled = compileTuffToJS("in let args : &[Str]; " + source);
+  // evaluate() is only called with valid sources; error cases use compileTuffToJS directly
+  const generatedJS = compiled.ok ? compiled.value : "";
   const wrappedJS =
-    "let process = { exit : (arg) => { exitCode = arg; } }; " +
+    "let __exit__ = undefined; let process = { exit : (arg) => { __exit__ = arg; } }; " +
     generatedJS +
-    " return exitCode;";
+    " return __exit__;";
 
-  try {
-    const newArgs = ["mock_program_name.exe", ...args];
-    return new Function("exitCode", "args", wrappedJS)(
-      undefined,
-      newArgs,
-    ) as number;
-  } catch (e) {
-    throw new Error(
-      "Failed to execute runtime JS: '" + wrappedJS + "'",
-      e instanceof Error ? e : new Error(JSON.stringify(e)),
-    );
-  }
+  const newArgs = ["mock_program_name.exe", ...args];
+  return new Function("args", wrappedJS)(newArgs) as number;
 }
 
 describe("tuff", () => {
@@ -52,7 +44,7 @@ describe("tuff", () => {
   });
 
   it('compile("undefinedIdentifier") => Error', () => {
-    expect(() => compileTuffToJS("undefinedIdentifier")).toThrow();
+    expect(compileTuffToJS("undefinedIdentifier").ok).toBe(false);
   });
 
   it('evaluate("let x = 0; let x = 1; x") => 1', () => {
@@ -64,7 +56,7 @@ describe("tuff", () => {
   });
 
   it('compile("let x = 0; x = 1; x") => Error', () => {
-    expect(() => compileTuffToJS("let x = 0; x = 1; x")).toThrow();
+    expect(compileTuffToJS("let x = 0; x = 1; x").ok).toBe(false);
   });
 
   it('evaluate("let x = true; x") => 1', () => {
@@ -81,5 +73,25 @@ describe("tuff", () => {
 
   it('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
     expect(evaluate("let x = 0; let y = 1; x < y", [])).toBe(1);
+  });
+
+  it('evaluate("let x = 0; let y = 1; x <= y") => 1', () => {
+    expect(evaluate("let x = 0; let y = 1; x <= y", [])).toBe(1);
+  });
+
+  it('evaluate("let x = 0; let y = 1; x == y") => 0', () => {
+    expect(evaluate("let x = 0; let y = 1; x == y", [])).toBe(0);
+  });
+
+  it('evaluate("let x = 0; let y = 1; x > y") => 0', () => {
+    expect(evaluate("let x = 0; let y = 1; x > y", [])).toBe(0);
+  });
+
+  it('evaluate("let x = 0; let y = 1; x >= y") => 0', () => {
+    expect(evaluate("let x = 0; let y = 1; x >= y", [])).toBe(0);
+  });
+
+  it('evaluate("let x = 0; let y = 1; x != y") => 1', () => {
+    expect(evaluate("let x = 0; let y = 1; x != y", [])).toBe(1);
   });
 });

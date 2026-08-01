@@ -24,6 +24,10 @@ export default defineConfig([
           selector: "ClassDeclaration",
           message: "Do not use classes for simplicity.",
         },
+        {
+          selector: "ThrowStatement",
+          message: "This makes the control flow more clear.",
+        },
       ],
       "@typescript-eslint/no-restricted-types": [
         "error",
