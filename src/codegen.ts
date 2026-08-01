@@ -4,6 +4,17 @@ import { ok, err, map, andThen } from "./result";
 import type { CompileError } from "./compileError";
 import { compileError } from "./compileError";
 
+// Generate the comma-separated JS for a list of argument expressions.
+function generateArgs(nodes: ASTNode[]): Result<string, CompileError> {
+  const parts: string[] = [];
+  for (const node of nodes) {
+    const result = generateJS(node);
+    if (!result.ok) return result;
+    parts.push(result.value);
+  }
+  return ok(parts.join(", "));
+}
+
 export function generateJS(node: ASTNode): Result<string, CompileError> {
   switch (node.kind) {
     case "number":
@@ -38,6 +49,25 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
       // The `is` operator is a compile-time type check; the checker has
       // already computed the boolean result, so emit it directly.
       return ok(String(node.result));
+
+    case "fn_decl":
+      return map(generateJS(node.body), (body) => {
+        const paramNames = node.params.map((p) => p.name).join(", ");
+        return (
+          "function " +
+          node.name +
+          "(" +
+          paramNames +
+          ") { return " +
+          body +
+          "; }"
+        );
+      });
+
+    case "call":
+      return andThen(generateArgs(node.args), (args) => {
+        return ok(node.name + "(" + args + ")");
+      });
 
     case "assign":
       return map(generateJS(node.value), (value) => {

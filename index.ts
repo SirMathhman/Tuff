@@ -58,6 +58,12 @@ export function compileTuffToJS(source: string): Result<string, CompileError> {
       } else {
         parts.push(stmt.name + " = " + valueResult.value + ";");
       }
+    } else if (stmt.kind === "fn_decl") {
+      // A function declaration is a declaration, not an expression — it never
+      // produces an exit code.
+      const fnResult = generateJS(stmt);
+      if (!fnResult.ok) return fnResult;
+      parts.push(fnResult.value);
     } else {
       const exprResult = generateJS(stmt);
       if (!exprResult.ok) return exprResult;

@@ -1,4 +1,4 @@
-import type { ASTNode } from "./ast";
+import type { ASTNode, FnSignature } from "./ast";
 import { isExpression } from "./ast";
 import type { Result } from "./result";
 import { ok, err } from "./result";
@@ -19,11 +19,14 @@ function scopeError(message: string): CompileError {
 }
 
 // CheckContext encapsulates the state threaded through semantic checking:
-// the current scope and whether the node's value is being used (as opposed
-// to being evaluated as a standalone statement). A block used as a value
-// must end in a pure expression; a block used as a statement may not.
+// the current scope, the function table, and whether the node's value is
+// being used (as opposed to being evaluated as a standalone statement). A
+// block used as a value must end in a pure expression; a block used as a
+// statement may not.
 interface CheckContext {
   scope: Scope;
+  // The single source of truth for declared functions: name -> signature.
+  functions: Map<string, FnSignature>;
   valueContext: boolean;
   // Return a context that evaluates the node as a value.
   asValue(): CheckContext;
@@ -31,15 +34,20 @@ interface CheckContext {
   inChildScope(): CheckContext;
 }
 
-function createContext(scope: Scope, valueContext: boolean): CheckContext {
+function createContext(
+  scope: Scope,
+  functions: Map<string, FnSignature>,
+  valueContext: boolean,
+): CheckContext {
   return {
     scope,
+    functions,
     valueContext,
     asValue() {
-      return createContext(scope, true);
+      return createContext(scope, functions, true);
     },
     inChildScope() {
-      return createContext(scope.child(), valueContext);
+      return createContext(scope.child(), functions, valueContext);
     },
   };
 }
@@ -48,6 +56,9 @@ export function validateScope(
   stmts: ASTNode[],
   initialScope: Scope,
 ): Result<void, CompileError> {
+  // The single source of truth for declared functions: name -> signature.
+  const functions = new Map<string, FnSignature>();
+
   function checkNode(
     node: ASTNode,
     ctx: CheckContext,
@@ -145,6 +156,95 @@ export function validateScope(
         return checkNode(node.body, ctx);
       }
 
+      case "fn_decl": {
+        // A function name must not collide with an existing variable or
+        // function in the current scope.
+        if (ctx.functions.has(node.name) || ctx.scope.isDeclared(node.name)) {
+          return err(
+            scopeError(
+              "Name collision: '" + node.name + "' is already declared",
+            ),
+          );
+        }
+        // The return type must be a known type.
+        if (!isKnownType(node.returnType)) {
+          return err(
+            compileError("syntax", "Unknown type: '" + node.returnType + "'"),
+          );
+        }
+        // Each parameter type must be a known type.
+        for (const param of node.params) {
+          if (!isKnownType(param.type)) {
+            return err(
+              compileError("syntax", "Unknown type: '" + param.type + "'"),
+            );
+          }
+        }
+        // Record the function's signature so calls can validate arguments.
+        ctx.functions.set(node.name, {
+          params: node.params,
+          returnType: node.returnType,
+        });
+        // Check the body in a child scope where the parameters are declared
+        // (immutable, with their declared types).
+        const fnCtx = ctx.inChildScope();
+        for (const param of node.params) {
+          fnCtx.scope.declare(param.name, false, param.type);
+        }
+        const bodyResult = checkNode(node.body, fnCtx.asValue());
+        if (!bodyResult.ok) return bodyResult;
+        // The body's type must be assignable to the declared return type.
+        const bodyType = inferType(node.body);
+        if (bodyType !== undefined) {
+          const mismatch = typeMismatch(node.returnType, bodyType);
+          if (mismatch !== undefined) {
+            return err(compileError("syntax", mismatch));
+          }
+        }
+        return ok(undefined);
+      }
+
+      case "call": {
+        // The called function must be declared.
+        const sig = ctx.functions.get(node.name);
+        if (sig === undefined) {
+          return err(scopeError("Undeclared function: '" + node.name + "'"));
+        }
+        // Check each argument expression.
+        for (const arg of node.args) {
+          const argResult = checkNode(arg, ctx.asValue());
+          if (!argResult.ok) return argResult;
+        }
+        // Validate the argument count and each argument's type against the
+        // function's declared parameters.
+        if (node.args.length !== sig.params.length) {
+          return err(
+            scopeError(
+              "Function '" +
+                node.name +
+                "' expects " +
+                sig.params.length +
+                " arguments, got " +
+                node.args.length,
+            ),
+          );
+        }
+        for (let i = 0; i < node.args.length; i++) {
+          const arg = node.args[i]!;
+          const param = sig.params[i]!;
+          const argType = inferType(arg);
+          if (argType !== undefined) {
+            const mismatch = typeMismatch(param.type, argType);
+            if (mismatch !== undefined) {
+              return err(compileError("syntax", mismatch));
+            }
+          }
+        }
+        // A call's type is the function's return type.
+        setNodeType(node, sig.returnType);
+        return ok(undefined);
+      }
+
       case "block": {
         // A block introduces a child scope that inherits from the parent
         const childCtx = ctx.inChildScope();
@@ -192,6 +292,14 @@ export function validateScope(
       }
 
       case "let_decl": {
+        // A variable name must not collide with an existing function name.
+        if (ctx.functions.has(node.name)) {
+          return err(
+            scopeError(
+              "Name collision: '" + node.name + "' is already declared",
+            ),
+          );
+        }
         // Validate the value expression first (RHS)
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
@@ -226,7 +334,10 @@ export function validateScope(
   }
 
   for (const stmt of stmts) {
-    const result = checkNode(stmt, createContext(initialScope, false));
+    const result = checkNode(
+      stmt,
+      createContext(initialScope, functions, false),
+    );
     if (!result.ok) return result;
   }
 

@@ -32,6 +32,12 @@ export interface WhileToken {
 export interface IsToken {
   type: "is";
 }
+export interface FnToken {
+  type: "fn";
+}
+export interface FatArrowToken {
+  type: "fat_arrow";
+}
 export interface LParenToken {
   type: "lparen";
 }
@@ -55,6 +61,9 @@ export interface BangEqualsToken {
 }
 export interface ColonToken {
   type: "colon";
+}
+export interface CommaToken {
+  type: "comma";
 }
 export interface SemicolonToken {
   type: "semicolon";
@@ -109,6 +118,8 @@ export type Token =
   | ElseToken
   | WhileToken
   | IsToken
+  | FnToken
+  | FatArrowToken
   | LParenToken
   | RParenToken
   | LBraceToken
@@ -117,6 +128,7 @@ export type Token =
   | EqualsEqualsToken
   | BangEqualsToken
   | ColonToken
+  | CommaToken
   | SemicolonToken
   | PlusToken
   | PlusEqualsToken
@@ -169,6 +181,35 @@ export interface IsNode {
   // inferred type matches `typeName`.
   result: boolean;
 }
+export interface FnDeclNode {
+  kind: "fn_decl";
+  name: string;
+  // The parameter list, e.g. [{ name: "first", type: "I32" }] in
+  // "fn add(first : I32, second : I32) : I32 => ...".
+  params: FnParam[];
+  // The return type annotation, e.g. "I32" in "fn get() : I32 => 100".
+  returnType: string;
+  // The function body expression.
+  body: ASTNode;
+}
+// A single function parameter: a name and its declared type.
+export interface FnParam {
+  name: string;
+  type: string;
+}
+// The full signature of a declared function: its parameters and return type.
+// Used by the checker to validate calls and resolve a call's type.
+export interface FnSignature {
+  params: FnParam[];
+  returnType: string;
+}
+export interface CallNode {
+  kind: "call";
+  // The name of the function being called.
+  name: string;
+  // The argument expressions, e.g. [3, 4] in "add(3, 4)".
+  args: ASTNode[];
+}
 export interface AssignNode {
   kind: "assign";
   name: string;
@@ -207,6 +248,8 @@ export type ASTNode =
   | MemberAccessNode
   | BinaryOpNode
   | IsNode
+  | FnDeclNode
+  | CallNode
   | AssignNode
   | LetDeclNode
   | IfNode

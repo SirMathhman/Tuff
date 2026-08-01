@@ -92,6 +92,8 @@ export function tokenize(source: string): Result<Token[], CompileError> {
         tokens.push({ type: "while" });
       } else if (name === "is") {
         tokens.push({ type: "is" });
+      } else if (name === "fn") {
+        tokens.push({ type: "fn" });
       } else if (name === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {
@@ -105,6 +107,13 @@ export function tokenize(source: string): Result<Token[], CompileError> {
     // Compound assignment operators (not binary operators, so not in OPERATORS)
     if (source.startsWith("+=", i)) {
       tokens.push({ type: "plus_equals" });
+      i += 2;
+      continue;
+    }
+
+    // Fat arrow (function body separator)
+    if (source.startsWith("=>", i)) {
+      tokens.push({ type: "fat_arrow" });
       i += 2;
       continue;
     }
@@ -150,6 +159,11 @@ export function tokenize(source: string): Result<Token[], CompileError> {
     }
     if (char === ":") {
       tokens.push({ type: "colon" });
+      i++;
+      continue;
+    }
+    if (char === ",") {
+      tokens.push({ type: "comma" });
       i++;
       continue;
     }

@@ -1,4 +1,4 @@
-import type { Token, ASTNode } from "./ast";
+import type { Token, ASTNode, FnParam } from "./ast";
 import { OPERATORS } from "./ast";
 import type { Result } from "./result";
 import { ok, err, andThen } from "./result";
@@ -59,6 +59,31 @@ export function createParser(tokens: Token[]): Parser {
     if (token.type === "identifier") {
       consume();
       let node: ASTNode = { kind: "identifier", name: token.name };
+
+      // Handle function calls: name(arg, ...)
+      if (peek().type === "lparen") {
+        consume(); // consume '('
+        const args: ASTNode[] = [];
+        if (peek().type !== "rparen") {
+          while (true) {
+            const argResult = parseExpression();
+            if (!argResult.ok) return argResult;
+            args.push(argResult.value);
+            if (peek().type === "comma") {
+              consume(); // consume ','
+              continue;
+            }
+            break;
+          }
+        }
+        if (peek().type !== "rparen") {
+          return err(
+            compileError("syntax", "Expected ')' after function call"),
+          );
+        }
+        consume(); // consume ')'
+        return ok({ kind: "call", name: token.name, args });
+      }
 
       // Handle member access (chained)
       while (peek().type === "dot") {
@@ -277,6 +302,106 @@ export function createParser(tokens: Token[]): Parser {
     });
   }
 
+  // Parse: fn <name>(<param> : <type>, ...) : <returnType> => <expression> ;
+  function parseFnDecl(): Result<ASTNode, CompileError> {
+    consume(); // consume 'fn'
+
+    const nameToken = consume();
+    if (nameToken.type !== "identifier") {
+      return err(
+        compileError(
+          "syntax",
+          "Expected function name after fn, got " + nameToken.type,
+        ),
+      );
+    }
+
+    if (peek().type !== "lparen") {
+      return err(compileError("syntax", "Expected '(' after function name"));
+    }
+    consume(); // consume '('
+
+    // Parse the parameter list: <name> : <type>, ...
+    const params: FnParam[] = [];
+    if (peek().type !== "rparen") {
+      while (true) {
+        const paramName = consume();
+        if (paramName.type !== "identifier") {
+          return err(
+            compileError(
+              "syntax",
+              "Expected parameter name, got " + paramName.type,
+            ),
+          );
+        }
+        if (peek().type !== "colon") {
+          return err(
+            compileError(
+              "syntax",
+              "Expected ':' after parameter name '" + paramName.name + "'",
+            ),
+          );
+        }
+        consume(); // consume ':'
+        const paramType = consume();
+        if (paramType.type !== "identifier") {
+          return err(
+            compileError(
+              "syntax",
+              "Expected parameter type, got " + paramType.type,
+            ),
+          );
+        }
+        params.push({ name: paramName.name, type: paramType.name });
+        if (peek().type === "comma") {
+          consume(); // consume ','
+          continue;
+        }
+        break;
+      }
+    }
+
+    if (peek().type !== "rparen") {
+      return err(compileError("syntax", "Expected ')' after function params"));
+    }
+    consume(); // consume ')'
+
+    if (peek().type !== "colon") {
+      return err(compileError("syntax", "Expected ':' after function params"));
+    }
+    consume(); // consume ':'
+
+    const typeToken = consume();
+    if (typeToken.type !== "identifier") {
+      return err(
+        compileError(
+          "syntax",
+          "Expected return type after ':', got " + typeToken.type,
+        ),
+      );
+    }
+
+    if (peek().type !== "fat_arrow") {
+      return err(compileError("syntax", "Expected '=>' after return type"));
+    }
+    consume(); // consume '=>'
+
+    return andThen(parseExpression(), (body) => {
+      // Consume optional trailing semicolon
+      if (peek().type === "semicolon") {
+        consume();
+      }
+
+      return ok({
+        kind: "fn_decl",
+        name: nameToken.name,
+        params,
+        returnType: typeToken.name,
+        body,
+      });
+    });
+  }
+
   // Parse a single statement
   function parseStatement(): Result<ASTNode, CompileError> {
     if (peek().type === "let") {
@@ -285,6 +410,10 @@ export function createParser(tokens: Token[]): Parser {
 
     if (peek().type === "while") {
       return parseWhile();
+    }
+
+    if (peek().type === "fn") {
+      return parseFnDecl();
     }
 
     // Expression statement

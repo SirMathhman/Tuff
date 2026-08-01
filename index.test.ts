@@ -270,4 +270,17 @@ describe("tuff", () => {
   it('evaluate("fn get() : I32 => 100; get()") => 100', () => {
     expect(evaluate("fn get() : I32 => 100; get()", [])).toBe(100);
   });
+
+  it('evaluate("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)") => 7', () => {
+    expect(
+      evaluate(
+        "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
+        [],
+      ),
+    ).toBe(7);
+  });
+
+  it('compile("let get = 0; fn get() : I32 => 0;") => scope', () => {
+    expectCompileError("let get = 0; fn get() : I32 => 0;", "scope");
+  });
 });
