@@ -29,6 +29,9 @@ export interface ElseToken {
 export interface WhileToken {
   type: "while";
 }
+export interface IsToken {
+  type: "is";
+}
 export interface LParenToken {
   type: "lparen";
 }
@@ -105,6 +108,7 @@ export type Token =
   | IfToken
   | ElseToken
   | WhileToken
+  | IsToken
   | LParenToken
   | RParenToken
   | LBraceToken
@@ -155,6 +159,16 @@ export interface BinaryOpNode {
   op: string;
   right: ASTNode;
 }
+export interface IsNode {
+  kind: "is";
+  // The value whose type is being checked.
+  value: ASTNode;
+  // The type name being checked against, e.g. "Bool" in "true is Bool".
+  typeName: string;
+  // The compile-time result, computed by the checker: whether the value's
+  // inferred type matches `typeName`.
+  result: boolean;
+}
 export interface AssignNode {
   kind: "assign";
   name: string;
@@ -192,6 +206,7 @@ export type ASTNode =
   | IdentifierNode
   | MemberAccessNode
   | BinaryOpNode
+  | IsNode
   | AssignNode
   | LetDeclNode
   | IfNode

@@ -5,7 +5,13 @@ import { ok, err } from "./result";
 import type { Scope } from "./scope";
 import type { CompileError } from "./compileError";
 import { compileError } from "./compileError";
-import { inferType, typeMismatch, rangeError } from "./types";
+import {
+  inferType,
+  typeMismatch,
+  rangeError,
+  isKnownType,
+  typeMatches,
+} from "./types";
 
 function scopeError(message: string): CompileError {
   return compileError("scope", message);
@@ -73,6 +79,23 @@ export function validateScope(
         const leftResult = checkNode(node.left, ctx.asValue());
         if (!leftResult.ok) return leftResult;
         return checkNode(node.right, ctx.asValue());
+      }
+
+      case "is": {
+        // Validate the value expression, and that the type name is known.
+        const valueResult = checkNode(node.value, ctx.asValue());
+        if (!valueResult.ok) return valueResult;
+        if (!isKnownType(node.typeName)) {
+          return err(
+            compileError("syntax", "Unknown type: '" + node.typeName + "'"),
+          );
+        }
+        // Compute the compile-time result: whether the value's inferred type
+        // matches the checked type (type identity, not assignability).
+        const valueType = inferType(node.value, ctx.scope);
+        node.result =
+          valueType !== undefined && typeMatches(valueType, node.typeName);
+        return ok(undefined);
       }
 
       case "if": {
@@ -145,9 +168,18 @@ export function validateScope(
         // Validate the value expression first (RHS)
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        // If a type annotation is present, the value's type must be
-        // assignable to it (widening allowed, narrowing rejected).
+        // If a type annotation is present, it must name a known type, and the
+        // value's type must be assignable to it (widening allowed, narrowing
+        // rejected, different kinds rejected).
         if (node.typeAnnotation !== undefined) {
+          if (!isKnownType(node.typeAnnotation)) {
+            return err(
+              compileError(
+                "syntax",
+                "Unknown type: '" + node.typeAnnotation + "'",
+              ),
+            );
+          }
           const valueType = inferType(node.value, ctx.scope);
           if (valueType !== undefined) {
             const mismatch = typeMismatch(node.typeAnnotation, valueType);

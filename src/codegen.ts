@@ -23,9 +23,21 @@ export function generateJS(node: ASTNode): Result<string, CompileError> {
     case "binary_op":
       return andThen(generateJS(node.left), (left) => {
         return map(generateJS(node.right), (right) => {
-          return left + " " + node.op + " " + right;
+          // Parenthesize nested binary operands so the emitted JS preserves
+          // the AST's grouping. Without this, `(2 + 3) * 4` would compile to
+          // `2 + 3 * 4` (evaluated as `2 + (3*4) = 14`).
+          const leftStr =
+            node.left.kind === "binary_op" ? "(" + left + ")" : left;
+          const rightStr =
+            node.right.kind === "binary_op" ? "(" + right + ")" : right;
+          return leftStr + " " + node.op + " " + rightStr;
         });
       });
+
+    case "is":
+      // The `is` operator is a compile-time type check; the checker has
+      // already computed the boolean result, so emit it directly.
+      return ok(String(node.result));
 
     case "assign":
       return map(generateJS(node.value), (value) => {

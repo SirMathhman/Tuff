@@ -35,6 +35,17 @@ export function createParser(tokens: Token[]): Parser {
       return parseBlock();
     }
 
+    if (token.type === "lparen") {
+      consume(); // consume '('
+      const exprResult = parseExpression();
+      if (!exprResult.ok) return exprResult;
+      if (peek().type !== "rparen") {
+        return err(compileError("syntax", "Expected ')' after expression"));
+      }
+      consume(); // consume ')'
+      return exprResult;
+    }
+
     if (token.type === "number") {
       consume();
       return ok({ kind: "number", value: token.value, suffix: token.suffix });
@@ -164,6 +175,29 @@ export function createParser(tokens: Token[]): Parser {
 
       while (true) {
         const token = peek();
+
+        // The `is` operator is special: its right side is a type name (an
+        // identifier), not a full expression. It produces an IsNode.
+        if (token.type === "is") {
+          consume(); // consume 'is'
+          const typeToken = consume();
+          if (typeToken.type !== "identifier") {
+            return err(
+              compileError(
+                "syntax",
+                "Expected type name after 'is', got " + typeToken.type,
+              ),
+            );
+          }
+          node = {
+            kind: "is",
+            value: node,
+            typeName: typeToken.name,
+            result: false,
+          };
+          continue;
+        }
+
         const info = OPERATORS.get(token.type);
         if (info === undefined) break;
 

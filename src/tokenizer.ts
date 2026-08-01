@@ -90,6 +90,8 @@ export function tokenize(source: string): Result<Token[], CompileError> {
         tokens.push({ type: "else" });
       } else if (name === "while") {
         tokens.push({ type: "while" });
+      } else if (name === "is") {
+        tokens.push({ type: "is" });
       } else if (name === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {

@@ -194,4 +194,72 @@ describe("tuff", () => {
   it('compile("65536U16") => syntax', () => {
     expectCompileError("65536U16", "syntax");
   });
+
+  it('evaluate("let x : Bool = true; x") => 1', () => {
+    expect(evaluate("let x : Bool = true; x", [])).toBe(1);
+  });
+
+  it('compile("let x : Foo = true; x") => syntax', () => {
+    expectCompileError("let x : Foo = true; x", "syntax");
+  });
+
+  it('compile("let x : Bool = 1;") => syntax', () => {
+    expectCompileError("let x : Bool = 1;", "syntax");
+  });
+
+  it('evaluate("let x : U8 = 1; x") => 1', () => {
+    expect(evaluate("let x : U8 = 1; x", [])).toBe(1);
+  });
+
+  it('evaluate("true is Bool") => 1', () => {
+    expect(evaluate("true is Bool", [])).toBe(1);
+  });
+
+  it('evaluate("1 is Bool") => 0', () => {
+    expect(evaluate("1 is Bool", [])).toBe(0);
+  });
+
+  it('evaluate("100U8 is U8") => 1', () => {
+    expect(evaluate("100U8 is U8", [])).toBe(1);
+  });
+
+  it('compile("true is Foo") => syntax', () => {
+    expectCompileError("true is Foo", "syntax");
+  });
+
+  it('evaluate("100 is I32") => 1', () => {
+    expect(evaluate("100 is I32", [])).toBe(1);
+  });
+
+  it('evaluate("let x : I32 = 100; x") => 100', () => {
+    expect(evaluate("let x : I32 = 100; x", [])).toBe(100);
+  });
+
+  it('evaluate("100U8 is U16") => 0', () => {
+    expect(evaluate("100U8 is U16", [])).toBe(0);
+  });
+
+  it('evaluate("let x : I32 = 100U8; x") => 100', () => {
+    expect(evaluate("let x : I32 = 100U8; x", [])).toBe(100);
+  });
+
+  it('evaluate("100U16 is I32") => 0', () => {
+    expect(evaluate("100U16 is I32", [])).toBe(0);
+  });
+
+  it('evaluate("(100U8) is U8") => 1', () => {
+    expect(evaluate("(100U8) is U8", [])).toBe(1);
+  });
+
+  it('evaluate("(1 is Bool)") => 0', () => {
+    expect(evaluate("(1 is Bool)", [])).toBe(0);
+  });
+
+  it('evaluate("(2 + 3) * 4") => 20', () => {
+    expect(evaluate("(2 + 3) * 4", [])).toBe(20);
+  });
+
+  it('evaluate("let x = 100; x is I32") => 1', () => {
+    expect(evaluate("let x = 100; x is I32", [])).toBe(1);
+  });
 });
