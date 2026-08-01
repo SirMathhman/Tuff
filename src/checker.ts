@@ -11,6 +11,7 @@ import {
   rangeError,
   isKnownType,
   typeMatches,
+  setNodeType,
 } from "./types";
 
 function scopeError(message: string): CompileError {
@@ -58,17 +59,20 @@ export function validateScope(
         if (rangeErr !== undefined) {
           return err(compileError("syntax", rangeErr));
         }
+        setNodeType(node, node.suffix ?? "Int");
         return ok(undefined);
       }
 
       case "boolean":
         // Always valid
+        setNodeType(node, "Bool");
         return ok(undefined);
 
       case "identifier":
         if (!ctx.scope.isDeclared(node.name)) {
           return err(scopeError("Undeclared identifier: '" + node.name + "'"));
         }
+        setNodeType(node, ctx.scope.typeOf(node.name) ?? "Int");
         return ok(undefined);
 
       case "member_access":
@@ -78,7 +82,14 @@ export function validateScope(
       case "binary_op": {
         const leftResult = checkNode(node.left, ctx.asValue());
         if (!leftResult.ok) return leftResult;
-        return checkNode(node.right, ctx.asValue());
+        const rightResult = checkNode(node.right, ctx.asValue());
+        if (!rightResult.ok) return rightResult;
+        // A binary op's type is the type of its operands (they must agree).
+        setNodeType(
+          node,
+          inferType(node.left) ?? inferType(node.right) ?? "Int",
+        );
+        return ok(undefined);
       }
 
       case "is": {
@@ -92,9 +103,10 @@ export function validateScope(
         }
         // Compute the compile-time result: whether the value's inferred type
         // matches the checked type (type identity, not assignability).
-        const valueType = inferType(node.value, ctx.scope);
+        const valueType = inferType(node.value);
         node.result =
           valueType !== undefined && typeMatches(valueType, node.typeName);
+        setNodeType(node, "Bool");
         return ok(undefined);
       }
 
@@ -114,7 +126,14 @@ export function validateScope(
           );
         }
         if (node.elseBranch !== undefined) {
-          return checkNode(node.elseBranch, ctx);
+          const elseResult = checkNode(node.elseBranch, ctx);
+          if (!elseResult.ok) return elseResult;
+          setNodeType(
+            node,
+            inferType(node.thenBranch) ?? inferType(node.elseBranch) ?? "Int",
+          );
+        } else {
+          setNodeType(node, inferType(node.thenBranch) ?? "Int");
         }
         return ok(undefined);
       }
@@ -145,6 +164,14 @@ export function validateScope(
               );
             }
             return err(scopeError("Block must end with an expression"));
+          }
+        }
+        // A block's type is the type of its last statement (its yielded value).
+        const last = node.statements[node.statements.length - 1];
+        if (last !== undefined) {
+          const lastType = inferType(last);
+          if (lastType !== undefined) {
+            setNodeType(node, lastType);
           }
         }
         return ok(undefined);
@@ -180,7 +207,7 @@ export function validateScope(
               ),
             );
           }
-          const valueType = inferType(node.value, ctx.scope);
+          const valueType = inferType(node.value);
           if (valueType !== undefined) {
             const mismatch = typeMismatch(node.typeAnnotation, valueType);
             if (mismatch !== undefined) {
@@ -191,7 +218,7 @@ export function validateScope(
         // Then add the new variable to scope, recording its type (either the
         // annotation, or the inferred type of the value).
         const declaredType =
-          node.typeAnnotation ?? inferType(node.value, ctx.scope);
+          node.typeAnnotation ?? inferType(node.value) ?? "Int";
         ctx.scope.declare(node.name, node.isMut === true, declaredType);
         return ok(undefined);
       }

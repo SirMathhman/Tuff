@@ -4,7 +4,6 @@
 // all reference this module instead of maintaining ad-hoc type logic.
 
 import type { ASTNode } from "./ast";
-import type { Scope } from "./scope";
 
 // Type kind: whether a type is an integer or a boolean.
 type TypeKind = "int" | "bool";
@@ -25,6 +24,7 @@ interface TypeInfo {
 const TYPES = new Map<string, TypeInfo>([
   ["U8", { kind: "int", signedness: "unsigned", bits: 8 }],
   ["U16", { kind: "int", signedness: "unsigned", bits: 16 }],
+  ["U64", { kind: "int", signedness: "unsigned", bits: 64 }],
   ["I32", { kind: "int", signedness: "signed", bits: 32 }],
   // "Int" is the default type of an untyped integer literal. Its "generic"
   // signedness and 0 bits make it assignable to any integer type (widening),
@@ -43,33 +43,36 @@ interface TypeRange {
 const TYPE_RANGES = new Map<string, TypeRange>([
   ["U8", { min: 0, max: 255 }],
   ["U16", { min: 0, max: 65535 }],
+  ["U64", { min: 0, max: 9007199254740991 }],
   ["I32", { min: -2147483648, max: 2147483647 }],
 ]);
 
 // Recognized literal type suffixes, longest-first so that multi-character
 // suffixes (e.g. "U16") are matched before shorter ones (e.g. "U8").
-export const SUFFIXES: string[] = ["U16", "U8"];
+export const SUFFIXES: string[] = ["U64", "U16", "U8"];
 
 // Whether a string is a known type name.
 export function isKnownType(name: string): boolean {
   return TYPES.has(name);
 }
 
+// Side-table mapping each AST node to its inferred type. The checker computes
+// each node's type once during its single pass and stores it here, so type
+// lookup is O(1) instead of re-walking the AST. A WeakMap keeps the AST as a
+// pure data structure (no `type` field on every node) and avoids leaking
+// memory once nodes are garbage-collected.
+const NODE_TYPES = new WeakMap<ASTNode, string>();
+
+// Record the inferred type of a node. Called by the checker as it walks.
+export function setNodeType(node: ASTNode, type: string): void {
+  NODE_TYPES.set(node, type);
+}
+
 // Infer the type of a node, if it has one. Returns undefined for nodes whose
-// type is unknown (e.g. expressions). Identifiers resolve their type from the
-// scope. Untyped number literals default to "Int"; typed literals use their
-// suffix; boolean literals are "Bool".
-export function inferType(node: ASTNode, scope: Scope): string | undefined {
-  if (node.kind === "number") {
-    return node.suffix ?? "Int";
-  }
-  if (node.kind === "boolean") {
-    return "Bool";
-  }
-  if (node.kind === "identifier") {
-    return scope.typeOf(node.name);
-  }
-  return undefined;
+// type is unknown (e.g. statements, or nodes the checker hasn't visited).
+// This is a lookup into the side-table populated by the checker.
+export function inferType(node: ASTNode): string | undefined {
+  return NODE_TYPES.get(node);
 }
 
 // The kind of conversion needed to go from type `from` to type `to`:

@@ -262,4 +262,12 @@ describe("tuff", () => {
   it('evaluate("let x = 100; x is I32") => 1', () => {
     expect(evaluate("let x = 100; x is I32", [])).toBe(1);
   });
+
+  it('evaluate("{ let x = 100U64; x } is U64") => 1', () => {
+    expect(evaluate("{ let x = 100U64; x } is U64", [])).toBe(1);
+  });
+
+  it('evaluate("fn get() : I32 => 100; get()") => 100', () => {
+    expect(evaluate("fn get() : I32 => 100; get()", [])).toBe(100);
+  });
 });
