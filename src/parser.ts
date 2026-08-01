@@ -86,10 +86,11 @@ export function createParser(tokens: Token[]): Parser {
     }
 
     // `this` is a scope reference (not a runtime value). It is only valid as
-    // the object of a member access (this.x) or an assignment target.
+    // the object of a member access (this.x) or an assignment target. The
+    // checker resolves its role (receiver/constructor/scope) later.
     if (token.type === "this") {
       consume();
-      return parsePostfix({ kind: "this" });
+      return parsePostfix({ kind: "this", thisRole: "scope" });
     }
 
     // Reference creation: &<expr> or &mut <expr>
@@ -702,6 +703,12 @@ export function createParser(tokens: Token[]): Parser {
         consume(); // consume 'mut'
       }
       const inner = parseTypeName();
+      // A function type is written "&(params) => return"; the leading "&" is
+      // a syntactic marker for function types, not a real reference, so
+      // unwrap it (a function value is not a reference to a function).
+      if (inner.kind === "function") {
+        return inner;
+      }
       return { kind: "ref", inner, isMut };
     }
     if (peek().type === "lparen") {
@@ -721,6 +728,14 @@ export function createParser(tokens: Token[]): Parser {
         return { kind: "named", name: "" };
       }
       consume(); // consume ')'
+      // A function type: "(<params>) => <returnType>". If a fat arrow
+      // follows the closing paren, this is a function type rather than a
+      // tuple type.
+      if (peek().type === "fat_arrow") {
+        consume(); // consume '=>'
+        const returnType = parseTypeName();
+        return { kind: "function", params: elements, returnType };
+      }
       return { kind: "tuple", elements };
     }
     if (peek().type === "lbracket") {

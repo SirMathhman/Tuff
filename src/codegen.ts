@@ -1,4 +1,4 @@
-import type { ASTNode, StructInitField } from "./ast";
+import type { ASTNode, StructInitField, ThisNode } from "./ast";
 import type { Result } from "./result";
 import { ok, map, andThen } from "./result";
 import type { CompileError } from "./compileError";
@@ -61,9 +61,15 @@ export function generateJS(
       return ok(thisName);
 
     case "member_access":
-      // `this.x` refers to the variable `x` in the current scope, so it
-      // emits the bare variable name rather than a property access.
+      // `this.x` behavior depends on the role of `this`, resolved by the
+      // checker: a bare scope reference (`this.x` = variable `x`) emits the
+      // bare property name; a receiver parameter (`this.x` = field on the
+      // receiver) emits a field access on the renamed receiver. The
+      // constructor role is handled by the fn_decl constructor path.
       if (node.object.kind === "this") {
+        if (node.object.thisRole === "receiver") {
+          return ok(thisName + "[" + JSON.stringify(node.property) + "]");
+        }
         return ok(node.property);
       }
       return map(generateJS(node.object, false, thisName), (object) => {
@@ -97,16 +103,25 @@ export function generateJS(
       const paramNames = node.params
         .map((p) => (p.name === "this" ? innerThisName : p.name))
         .join(", ");
-      // If the body is `this` (or `this.field`), the function is a
-      // constructor: `this` is an object whose fields are the parameters.
-      // Emit the object literal (and any field access) directly.
-      const isConstructor =
-        node.body.kind === "this" ||
-        (node.body.kind === "member_access" &&
-          node.body.object.kind === "this") ||
-        (node.body.kind === "block" &&
-          node.body.statements[node.body.statements.length - 1]?.kind ===
-            "this");
+      // A function is a constructor when its body's `this` resolves to the
+      // "constructor" role (the implicit constructor object). The checker
+      // resolves this role; codegen just reads it instead of re-deriving it
+      // from the body shape and the presence of a `this` parameter.
+      let terminalThis: ThisNode | undefined;
+      if (node.body.kind === "this") {
+        terminalThis = node.body;
+      } else if (
+        node.body.kind === "member_access" &&
+        node.body.object.kind === "this"
+      ) {
+        terminalThis = node.body.object;
+      } else if (node.body.kind === "block") {
+        const last = node.body.statements[node.body.statements.length - 1];
+        if (last !== undefined && last.kind === "this") {
+          terminalThis = last;
+        }
+      }
+      const isConstructor = terminalThis?.thisRole === "constructor";
       if (isConstructor) {
         // Collect the field names: parameters plus any `let` declarations in
         // the body block.

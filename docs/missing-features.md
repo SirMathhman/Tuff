@@ -122,10 +122,12 @@ This document catalogs language features that Tuff should probably support but c
 - **Gap**: Function names must be unique (name-collision check).
 - **Why**: Overloading by parameter type is a common convenience.
 
-### Closures / anonymous functions / first-class functions
+### Closures / anonymous functions / lambdas
 
-- **Gap**: Functions are named declarations only. No lambdas, no passing functions as values, no higher-order functions.
-- **Why**: Functional programming patterns (map/filter/reduce) are impossible.
+- **Gap**: Functions are named declarations only. No lambdas or anonymous function expressions.
+- **Why**: Functional programming patterns (map/filter/reduce) are impossible without inline function expressions.
+
+> **Note**: First-class functions are now supported — a named function can be bound to a variable via a function type (`let func : &() => I32 = get; func()`), and a function-valued variable can be called. What's still missing is the ability to _define_ a function inline as an expression (a lambda).
 
 ### Methods / associated functions
 
@@ -288,7 +290,7 @@ This document catalogs language features that Tuff should probably support but c
 **Lower priority (advanced):**
 
 - Generics
-- Closures / first-class functions
+- Closures / anonymous functions
 - Borrow checking / lifetimes
 - Modules / imports
 - Traits

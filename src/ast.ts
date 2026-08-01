@@ -195,8 +195,21 @@ export interface TupleType {
 export interface ThisType {
   kind: "this";
 }
+export interface FunctionType {
+  kind: "function";
+  // The parameter types, e.g. [] in "&() => I32".
+  params: Type[];
+  // The return type, e.g. I32 in "&() => I32".
+  returnType: Type;
+}
 export type Type =
-  NamedType | RefType | ArrayType | StructType | TupleType | ThisType;
+  | NamedType
+  | RefType
+  | ArrayType
+  | StructType
+  | TupleType
+  | ThisType
+  | FunctionType;
 
 // ---- AST Node Types ----
 
@@ -216,6 +229,11 @@ export interface IdentifierNode {
 }
 export interface ThisNode {
   kind: "this";
+  // The role of `this`, resolved by the checker: "receiver" (a method's
+  // `this` parameter), "constructor" (the implicit constructor object), or
+  // "scope" (a bare scope reference outside any function). Codegen uses this
+  // to decide how to emit `this` and `this.x`.
+  thisRole: "receiver" | "constructor" | "scope";
 }
 export interface MemberAccessNode {
   kind: "member_access";

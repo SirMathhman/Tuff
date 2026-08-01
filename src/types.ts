@@ -69,6 +69,14 @@ export function formatType(t: Type): string {
   if (t.kind === "tuple") {
     return "(" + t.elements.map(formatType).join(", ") + ")";
   }
+  if (t.kind === "function") {
+    return (
+      "(" +
+      t.params.map(formatType).join(", ") +
+      ") => " +
+      formatType(t.returnType)
+    );
+  }
   if (t.kind === "this") {
     return "this";
   }
@@ -90,6 +98,9 @@ export function isKnownType(t: Type): boolean {
   }
   if (t.kind === "tuple") {
     return t.elements.every(isKnownType);
+  }
+  if (t.kind === "function") {
+    return t.params.every(isKnownType) && isKnownType(t.returnType);
   }
   if (t.kind === "this") {
     // `this` is a compile-time scope reference; it is not a user-writable
@@ -178,6 +189,39 @@ export function conversionKind(from: Type, to: Type): ConversionKind {
     // A tuple is never assignable to a non-tuple (or vice versa).
     return "impossible";
   }
+  // Function types: assignable only when they have the same arity, each
+  // parameter type is assignable, and the return types are assignable.
+  if (from.kind === "function" && to.kind === "function") {
+    if (from.params.length !== to.params.length) {
+      return "impossible";
+    }
+    let result: ConversionKind = "none";
+    for (let i = 0; i < from.params.length; i++) {
+      const paramConv = conversionKind(from.params[i]!, to.params[i]!);
+      if (paramConv === "impossible") {
+        return "impossible";
+      }
+      if (paramConv === "explicit") {
+        result = "explicit";
+      } else if (paramConv === "implicit" && result === "none") {
+        result = "implicit";
+      }
+    }
+    const returnConv = conversionKind(from.returnType, to.returnType);
+    if (returnConv === "impossible") {
+      return "impossible";
+    }
+    if (returnConv === "explicit") {
+      result = "explicit";
+    } else if (returnConv === "implicit" && result === "none") {
+      result = "implicit";
+    }
+    return result;
+  }
+  if (from.kind === "function" || to.kind === "function") {
+    // A function is never assignable to a non-function (or vice versa).
+    return "impossible";
+  }
   // `this` is a compile-time scope reference, not a runtime value. It is
   // never assignable to any type, and no type is assignable to it.
   if (from.kind === "this" || to.kind === "this") {
@@ -251,6 +295,15 @@ export function typeMatches(from: Type, to: Type): boolean {
       return false;
     }
     return from.elements.every((elem, i) => typeMatches(elem, to.elements[i]!));
+  }
+  if (from.kind === "function" && to.kind === "function") {
+    if (from.params.length !== to.params.length) {
+      return false;
+    }
+    return (
+      from.params.every((p, i) => typeMatches(p, to.params[i]!)) &&
+      typeMatches(from.returnType, to.returnType)
+    );
   }
   if (from.kind === "this" && to.kind === "this") {
     return true;

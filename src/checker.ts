@@ -48,6 +48,23 @@ function checkNameCollision(
   return undefined;
 }
 
+// Resolve the role of `this` in the current context: "receiver" when `this`
+// is a method's receiver parameter (declared in scope), "constructor" when
+// `this` is the implicit constructor object (via thisType), or "scope" for a
+// bare scope reference outside any function. This is the single source of
+// truth for `this`'s meaning; codegen reads the resolved role from the node.
+function resolveThisRole(
+  ctx: CheckContext,
+): "receiver" | "constructor" | "scope" {
+  if (ctx.scope.typeOf("this") !== undefined) {
+    return "receiver";
+  }
+  if (ctx.thisType !== undefined) {
+    return "constructor";
+  }
+  return "scope";
+}
+
 // Resolve a field access `structName.property` against the struct table.
 // Returns the field's type, or a scope error if the struct or field is
 // unknown.
@@ -157,6 +174,17 @@ export function validateScope(
         return ok(undefined);
 
       case "identifier":
+        // A function name used as a value (a first-class function) resolves
+        // to a function type built from its signature.
+        if (ctx.functions.has(node.name)) {
+          const sig = ctx.functions.get(node.name)!;
+          setNodeType(node, {
+            kind: "function",
+            params: sig.params.map((p) => p.type),
+            returnType: sig.returnType,
+          });
+          return ok(undefined);
+        }
         if (!ctx.scope.isDeclared(node.name)) {
           return err(scopeError("Undeclared identifier: '" + node.name + "'"));
         }
@@ -166,18 +194,17 @@ export function validateScope(
         );
         return ok(undefined);
 
-      case "this":
-        // If `this` is declared in the current scope (as a receiver
-        // parameter of a method), it resolves to that parameter's type.
-        // Otherwise, inside a constructor function it is the constructor
-        // object (an implicit struct); outside any function it is a bare
-        // scope reference with the special ThisType, which the type system
-        // treats as non-assignable to any real type.
-        setNodeType(
-          node,
-          ctx.scope.typeOf("this") ?? ctx.thisType ?? { kind: "this" },
-        );
+      case "this": {
+        // `this` may be a receiver parameter (declared in scope), the
+        // implicit constructor object (via thisType), or a bare scope
+        // reference. Resolve its role once here so codegen can derive its
+        // behavior from it instead of re-deriving it from string/flag
+        // heuristics.
+        const scopeType = ctx.scope.typeOf("this");
+        node.thisRole = resolveThisRole(ctx);
+        setNodeType(node, scopeType ?? ctx.thisType ?? { kind: "this" });
         return ok(undefined);
+      }
 
       case "member_access": {
         // `this.x` refers to the variable `x` in the current scope when
@@ -185,7 +212,11 @@ export function validateScope(
         // function, `this` is a constructor object (an implicit struct), so
         // `this.x` resolves the field `x` on that struct.
         if (node.object.kind === "this") {
-          const thisType = ctx.thisType;
+          // `this` may be a receiver parameter (declared in scope with a
+          // struct type) or the implicit constructor object (via thisType).
+          // Record its role so codegen can emit `this.x` correctly.
+          node.object.thisRole = resolveThisRole(ctx);
+          const thisType = ctx.scope.typeOf("this") ?? ctx.thisType;
           if (thisType !== undefined && thisType.kind === "struct") {
             const fieldResult = resolveStructField(
               ctx.structs,
@@ -313,9 +344,10 @@ export function validateScope(
             ),
           );
         }
-        // Each parameter type must be a known type.
+        // Each parameter type must be a known type (or a declared struct).
         for (const param of node.params) {
-          if (!isKnownType(param.type)) {
+          const resolved = resolveStructType(param.type, ctx);
+          if (!isKnownType(resolved)) {
             return err(
               compileError(
                 "syntax",
@@ -365,7 +397,11 @@ export function validateScope(
         // is a named type).
         const fnCtx = ctx.inChildScope().withThis(implicitStruct);
         for (const param of node.params) {
-          fnCtx.scope.declare(param.name, false, param.type);
+          fnCtx.scope.declare(
+            param.name,
+            false,
+            resolveStructType(param.type, ctx),
+          );
         }
         const bodyResult = checkNode(node.body, fnCtx.asValue());
         if (!bodyResult.ok) return bodyResult;
@@ -389,9 +425,15 @@ export function validateScope(
       }
 
       case "call": {
-        // The called function must be declared.
+        // The called function must be declared, OR the callee must be a
+        // variable whose type is a function type (a first-class function).
         const sig = ctx.functions.get(node.name);
-        if (sig === undefined) {
+        const calleeType = ctx.scope.typeOf(node.name);
+        const fnType =
+          calleeType !== undefined && calleeType.kind === "function"
+            ? calleeType
+            : undefined;
+        if (sig === undefined && fnType === undefined) {
           return err(scopeError("Undeclared function: '" + node.name + "'"));
         }
         // Check each argument expression.
@@ -399,15 +441,23 @@ export function validateScope(
           const argResult = checkNode(arg, ctx.asValue());
           if (!argResult.ok) return argResult;
         }
+        // Resolve the parameter types and return type from either the
+        // declared signature or the callee's function type.
+        const paramTypes: Type[] =
+          sig !== undefined
+            ? sig.params.map((p) => resolveStructType(p.type, ctx))
+            : fnType!.params;
+        const declaredReturn: Type =
+          sig !== undefined ? sig.returnType : fnType!.returnType;
         // Validate the argument count and each argument's type against the
         // function's declared parameters.
-        if (node.args.length !== sig.params.length) {
+        if (node.args.length !== paramTypes.length) {
           return err(
             scopeError(
               "Function '" +
                 node.name +
                 "' expects " +
-                sig.params.length +
+                paramTypes.length +
                 " arguments, got " +
                 node.args.length,
             ),
@@ -415,10 +465,10 @@ export function validateScope(
         }
         for (let i = 0; i < node.args.length; i++) {
           const arg = node.args[i]!;
-          const param = sig.params[i]!;
+          const param = paramTypes[i]!;
           const argType = inferType(arg);
           if (argType !== undefined) {
-            const mismatch = typeMismatch(param.type, argType);
+            const mismatch = typeMismatch(param, argType);
             if (mismatch !== undefined) {
               return err(compileError("syntax", mismatch));
             }
@@ -428,10 +478,10 @@ export function validateScope(
         // constructor (its return type is an implicit struct), resolve the
         // return type to the struct type so field access works.
         const returnType: Type =
-          sig.returnType.kind === "named" &&
-          ctx.structs.has(sig.returnType.name)
-            ? { kind: "struct", name: sig.returnType.name }
-            : sig.returnType;
+          declaredReturn.kind === "named" &&
+          ctx.structs.has(declaredReturn.name)
+            ? { kind: "struct", name: declaredReturn.name }
+            : declaredReturn;
         setNodeType(node, returnType);
         return ok(undefined);
       }

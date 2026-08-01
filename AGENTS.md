@@ -4,6 +4,11 @@
 
 Tuff is a programming language that compiles to JavaScript. The compiler pipeline is fully implemented in `index.ts` (`compileTuffToJS`) and `src/`. The test helper (`evaluate` in `index.test.ts`) prepends a type declaration, wraps compiled output with a `process.exit` shim, and runs it via `new Function("args", ...)`.
 
+## Documentation
+
+- [`docs/missing-features.md`](docs/missing-features.md) — roadmap/wishlist of language features Tuff should support but doesn't yet (e.g. `for` loops, `break`/`continue`, `match`). Consult before adding a feature to avoid duplicating planned work.
+- [`docs/plan-*.md`](docs/) — design plans for refactors (symbol table, function table, codegen unification, reference representation, etc.). Many describe the _current_ architecture and the _target_ design; read the relevant plan before touching the checker/codegen to understand intended direction.
+
 ## Build and Test
 
 ```bash
@@ -88,8 +93,8 @@ And via `@typescript-eslint/no-restricted-types`:
 
 ### Type system (`src/types.ts`)
 
-- Known types: `U8`, `U16`, `I32`, `Int` (generic default), `Bool`
-- Literal suffixes: only `U8` and `U16` (no `I32` suffix — `100I32` is invalid)
+- Known types: `U8`, `U16`, `U64`, `I32`, `Int` (generic default), `Bool`, `Void`
+- Literal suffixes: `U64`, `U16`, `U8` (longest-first in `SUFFIXES`). There is **no** `I32` suffix — `100I32` is invalid; use `100 is I32` or `let x : I32 = 100`
 - Adding a new type = edit `src/types.ts` only
 - `is` is a compile-time type check (`value is TypeName`); codegen emits the precomputed boolean, not a runtime check
 

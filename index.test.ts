@@ -293,6 +293,18 @@ describe("tuff", () => {
     expect(evaluate("fn empty() : Void => {}", [])).toBe(0);
   });
 
+  it('evaluate("fn get() => 100; let func : &() => I32 = get; func()") => 100', () => {
+    expect(
+      evaluate("fn get() => 100; let func : &() => I32 = get; func()", []),
+    ).toBe(100);
+  });
+
+  it('evaluate("fn outer() => { fn inner() => 100; inner() } outer()") => 100', () => {
+    expect(
+      evaluate("fn outer() => { fn inner() => 100; inner() } outer()", []),
+    ).toBe(100);
+  });
+
   it('evaluate("let x = 100; let y : &I32 = &x; *y") => 100', () => {
     expect(evaluate("let x = 100; let y : &I32 = &x; *y", [])).toBe(100);
   });
@@ -512,5 +524,14 @@ describe("tuff", () => {
         [],
       ),
     ).toBe(101);
+  });
+
+  it('evaluate("struct Point { x : I32, y : I32 } fn getX(this : Point) => this.x; let pt : Point = Point { x : 3, y : 4 }; pt.getX()") => 3', () => {
+    expect(
+      evaluate(
+        "struct Point { x : I32, y : I32 } fn getX(this : Point) => this.x; let pt : Point = Point { x : 3, y : 4 }; pt.getX()",
+        [],
+      ),
+    ).toBe(3);
   });
 });
