@@ -1,7 +1,7 @@
 import type { ASTNode, FnSignature, StructField, Type } from "./ast";
 import { isExpression } from "./ast";
 import type { Result } from "./result";
-import { ok, err } from "./result";
+import { ok, err, map } from "./result";
 import type { Scope } from "./scope";
 import type { CompileError } from "./compileError";
 import { compileError } from "./compileError";
@@ -65,14 +65,13 @@ function resolveThisRole(
   return "scope";
 }
 
-// Resolve a field access `structName.property` against the struct table.
-// Returns the field's type, or a scope error if the struct or field is
-// unknown.
-function resolveStructField(
+// Look up a field `structName.property` in the struct table. Returns the
+// field, or a scope error if the struct or field is unknown.
+function findStructField(
   structs: Map<string, StructField[]>,
   structName: string,
   property: string,
-): Result<Type, CompileError> {
+): Result<StructField, CompileError> {
   const fields = structs.get(structName);
   const field = fields?.find((f) => f.name === property);
   if (field === undefined) {
@@ -82,7 +81,20 @@ function resolveStructField(
       ),
     );
   }
-  return ok(field.type);
+  return ok(field);
+}
+
+// Resolve a field access `structName.property` against the struct table.
+// Returns the field's type, or a scope error if the struct or field is
+// unknown.
+function resolveStructField(
+  structs: Map<string, StructField[]>,
+  structName: string,
+  property: string,
+): Result<Type, CompileError> {
+  return map(findStructField(structs, structName, property), (field) => {
+    return field.type;
+  });
 }
 
 // CheckContext encapsulates the state threaded through semantic checking:
@@ -100,6 +112,10 @@ interface CheckContext {
   // The type of `this` in the current function body. Undefined outside a
   // function (where `this` is a bare scope reference, not a value).
   thisType: Type | undefined;
+  // The type of the enclosing function's `this`, preserved when entering a
+  // nested function. Used to resolve `this.this` (a reference to the outer
+  // constructor's `this` from a nested constructor).
+  outerThisType: Type | undefined;
   // Return a context that evaluates the node as a value.
   asValue(): CheckContext;
   // Return a context with a child scope (for blocks).
@@ -114,6 +130,7 @@ function createContext(
   structs: Map<string, StructField[]>,
   valueContext: boolean,
   thisType: Type | undefined,
+  outerThisType: Type | undefined = undefined,
 ): CheckContext {
   return {
     scope,
@@ -121,8 +138,9 @@ function createContext(
     structs,
     valueContext,
     thisType,
+    outerThisType,
     asValue() {
-      return createContext(scope, functions, structs, true, thisType);
+      return createContext(scope, functions, structs, true, thisType, outerThisType);
     },
     inChildScope() {
       return createContext(
@@ -131,15 +149,19 @@ function createContext(
         structs,
         valueContext,
         thisType,
+        outerThisType,
       );
     },
     withThis(newThisType) {
+      // When entering a new function body, the current `this` becomes the
+      // outer `this` for any nested functions.
       return createContext(
         scope,
         functions,
         structs,
         valueContext,
         newThisType,
+        thisType,
       );
     },
   };
@@ -202,6 +224,7 @@ export function validateScope(
         // heuristics.
         const scopeType = ctx.scope.typeOf("this");
         node.thisRole = resolveThisRole(ctx);
+        node.thisIsRef = scopeType !== undefined && scopeType.kind === "ref";
         setNodeType(node, scopeType ?? ctx.thisType ?? { kind: "this" });
         return ok(undefined);
       }
@@ -217,10 +240,18 @@ export function validateScope(
           // Record its role so codegen can emit `this.x` correctly.
           node.object.thisRole = resolveThisRole(ctx);
           const thisType = ctx.scope.typeOf("this") ?? ctx.thisType;
-          if (thisType !== undefined && thisType.kind === "struct") {
+          node.object.thisIsRef =
+            thisType !== undefined && thisType.kind === "ref";
+          // A receiver may be a reference to a struct (`&Wrapper`), so unwrap
+          // a ref type to resolve the underlying struct's fields.
+          const structType =
+            thisType !== undefined && thisType.kind === "ref"
+              ? thisType.inner
+              : thisType;
+          if (structType !== undefined && structType.kind === "struct") {
             const fieldResult = resolveStructField(
               ctx.structs,
-              thisType.name,
+              structType.name,
               node.property,
             );
             if (!fieldResult.ok) return fieldResult;
@@ -274,10 +305,15 @@ export function validateScope(
         // Validate the value expression, and that the type name is known.
         const valueResult = checkNode(node.value, ctx.asValue());
         if (!valueResult.ok) return valueResult;
-        const typeName: Type = { kind: "named", name: node.typeName };
+        // The checked type may be a declared struct (e.g. `this is Counter`),
+        // so resolve a named type to a struct type when it refers to one.
+        const typeName: Type = resolveStructType(node.typeName, ctx);
         if (!isKnownType(typeName)) {
           return err(
-            compileError("syntax", "Unknown type: '" + node.typeName + "'"),
+            compileError(
+              "syntax",
+              "Unknown type: '" + formatType(node.typeName) + "'",
+            ),
           );
         }
         // Compute the compile-time result: whether the value's inferred type
@@ -356,19 +392,75 @@ export function validateScope(
             );
           }
         }
-        // Record the function's signature so calls can validate arguments.
-        ctx.functions.set(node.name, {
-          params: node.params,
-          returnType: node.returnType,
-        });
-        // If the return type is a named type that is NOT a known primitive
-        // type, it implicitly defines a struct whose fields are the function's
-        // parameters. This lets `this` (the constructor object) and
-        // `Wrapper(100).field` resolve the fields. The struct lives in its own
-        // namespace, so it coexists with the function of the same name.
-        const implicitStruct: Type | undefined =
+        // A function is a constructor when its body is `this` (or `this.field`,
+        // or a block ending in `this`) AND it has no `this` parameter (a
+        // function with a `this` param is a method, not a constructor). It
+        // implicitly defines a struct whose fields are the function's
+        // parameters. The struct's name comes from an explicit return
+        // annotation (`: Wrapper`) or, when the annotation is omitted (the
+        // default `Int` return type), from the function's own name. This lets
+        // `this` (the constructor object), `Wrapper(100).field`, and a method
+        // receiver like `fn get(this : Wrapper)` resolve the fields. The
+        // struct lives in its own namespace, so it coexists with the function
+        // of the same name.
+        const hasThisParam = node.params.some((p) => p.name === "this");
+        const lastStmt =
+          node.body.kind === "block"
+            ? node.body.statements[node.body.statements.length - 1]
+            : undefined;
+        const isConstructorBody =
+          !hasThisParam &&
+          (node.body.kind === "this" ||
+            (node.body.kind === "member_access" &&
+              node.body.object.kind === "this") ||
+            (node.body.kind === "is" && node.body.value.kind === "this") ||
+            (node.body.kind === "block" &&
+              (lastStmt?.kind === "this" ||
+                (lastStmt?.kind === "is" && lastStmt.value.kind === "this"))));
+        const explicitStructName =
           node.returnType.kind === "named" && !isKnownType(node.returnType)
-            ? { kind: "struct", name: node.returnType.name }
+            ? node.returnType.name
+            : undefined;
+        const implicitStructName =
+          explicitStructName ??
+          (isConstructorBody &&
+          node.returnType.kind === "named" &&
+          node.returnType.name === "Int"
+            ? node.name
+            : undefined);
+        // Record whether this function is a constructor. This is the single
+        // source of truth for constructor-ness; codegen reads it instead of
+        // re-deriving it from the body shape.
+        node.isConstructor = implicitStructName !== undefined;
+        // Record the function's signature so calls can validate arguments.
+        // The implicit struct name is stored on the signature so the call
+        // case can resolve a constructor call's return type directly. The
+        // receiver's reference-ness (whether the `this` param is a reference
+        // type) and its fully-resolved type are also recorded here as the
+        // single source of truth. Param types are resolved at definition time
+        // so a `&mut this` receiver shorthand resolves to the enclosing
+        // struct.
+        const thisParam = node.params.find((p) => p.name === "this");
+        const thisIsRef =
+          thisParam !== undefined && thisParam.type.kind === "ref";
+        const resolvedParams = node.params.map((p) => ({
+          name: p.name,
+          type: resolveStructType(p.type, ctx),
+        }));
+        const receiverType =
+          thisParam !== undefined
+            ? resolveStructType(thisParam.type, ctx)
+            : undefined;
+        ctx.functions.set(node.name, {
+          params: resolvedParams,
+          returnType: node.returnType,
+          implicitStructName,
+          thisIsRef,
+          receiverType,
+        });
+        const implicitStruct: Type | undefined =
+          implicitStructName !== undefined
+            ? { kind: "struct", name: implicitStructName }
             : undefined;
         if (implicitStruct !== undefined) {
           // The struct's fields come from the parameters plus any `let`
@@ -385,6 +477,7 @@ export function validateScope(
                   name: stmt.name,
                   type: stmt.typeAnnotation ??
                     inferType(stmt.value) ?? { kind: "named", name: "Int" },
+                  isMut: stmt.isMut === true,
                 });
               }
             }
@@ -403,7 +496,11 @@ export function validateScope(
             resolveStructType(param.type, ctx),
           );
         }
-        const bodyResult = checkNode(node.body, fnCtx.asValue());
+        // Check the body in a child scope where the parameters are declared
+        // (immutable, with their declared types). The body is checked in
+        // statement context so a block body may end in an assignment (e.g. a
+        // mutating method like `fn add(this : &mut Counter) => { this.value += 1; }`).
+        const bodyResult = checkNode(node.body, fnCtx);
         if (!bodyResult.ok) return bodyResult;
         // The body's type must be assignable to the declared return type.
         // When the return type is an implicit struct, compare against the
@@ -435,6 +532,22 @@ export function validateScope(
             : undefined;
         if (sig === undefined && fnType === undefined) {
           return err(scopeError("Undeclared function: '" + node.name + "'"));
+        }
+        // A method call (`obj.method(args)`) prepends the receiver as the
+        // first argument. If the callee has no `this` parameter (it's a plain
+        // function, not a method), drop the receiver so the argument count
+        // matches. This lets `Outer().Inner()` call a nested constructor
+        // `Inner` that has no `this` param. Only applies to declared
+        // functions (a first-class function value has no named params).
+        if (
+          node.methodCall === true &&
+          node.args.length > 0 &&
+          sig !== undefined
+        ) {
+          const hasThisParam = sig.params.some((p) => p.name === "this");
+          if (!hasThisParam) {
+            node.args = node.args.slice(1);
+          }
         }
         // Check each argument expression.
         for (const arg of node.args) {
@@ -468,6 +581,25 @@ export function validateScope(
           const param = paramTypes[i]!;
           const argType = inferType(arg);
           if (argType !== undefined) {
+            // A method receiver may be auto-referenced: when the first
+            // argument is a struct value and the `this` parameter is a
+            // reference to that struct (`&Wrapper`), the receiver is wrapped
+            // in a reference automatically. This lets `wrapper.get()` call
+            // `fn get(this : &Wrapper)`. The receiver's fully-resolved type
+            // comes from the signature (recorded in fn_decl), so no
+            // re-resolution is needed here.
+            const receiverType = sig?.receiverType;
+            const isAutoRefReceiver =
+              i === 0 &&
+              receiverType !== undefined &&
+              receiverType.kind === "ref" &&
+              argType.kind === "struct" &&
+              receiverType.inner.kind === "struct" &&
+              receiverType.inner.name === argType.name;
+            if (isAutoRefReceiver) {
+              node.autoRefReceiver = true;
+              continue;
+            }
             const mismatch = typeMismatch(param, argType);
             if (mismatch !== undefined) {
               return err(compileError("syntax", mismatch));
@@ -475,12 +607,15 @@ export function validateScope(
           }
         }
         // A call's type is the function's return type. If the function is a
-        // constructor (its return type is an implicit struct), resolve the
-        // return type to the struct type so field access works.
+        // constructor, resolve the return type to the struct type so field
+        // access works. The constructor's implicit struct name was recorded on
+        // the signature in fn_decl, so read it directly rather than re-deriving
+        // it from the return type and struct table.
+        const constructorStructName =
+          sig !== undefined ? sig.implicitStructName : undefined;
         const returnType: Type =
-          declaredReturn.kind === "named" &&
-          ctx.structs.has(declaredReturn.name)
-            ? { kind: "struct", name: declaredReturn.name }
+          constructorStructName !== undefined
+            ? { kind: "struct", name: constructorStructName }
             : declaredReturn;
         setNodeType(node, returnType);
         return ok(undefined);
@@ -719,14 +854,111 @@ export function validateScope(
       }
 
       case "assign": {
-        if (!ctx.scope.isDeclared(node.name)) {
-          return err(scopeError("Undeclared identifier: '" + node.name + "'"));
+        // The assignment target is a uniform ASTNode. Dispatch on its kind:
+        // an `identifier` is a plain variable assignment (`x = 100`); a
+        // `member_access` on `this` is either a scope-variable assignment
+        // (`this.x = 100` for a bare scope reference) or a struct-field
+        // mutation through a receiver (`this.value = 100` when `this` is a
+        // struct or `&mut` struct receiver); a `member_access` on another
+        // object is a struct-field assignment (`value.field = 100`).
+        const target = node.target;
+        if (target.kind === "member_access" && target.object.kind === "this") {
+          // `this.x` may be a struct-field mutation when `this` is a struct
+          // receiver (or a reference to one). Resolve `this`'s type; if it
+          // unwraps to a struct, treat this as a field mutation.
+          const thisType = ctx.scope.typeOf("this") ?? ctx.thisType;
+          target.object.thisIsRef =
+            thisType !== undefined && thisType.kind === "ref";
+          const structType =
+            thisType !== undefined && thisType.kind === "ref"
+              ? thisType.inner
+              : thisType;
+          if (structType !== undefined && structType.kind === "struct") {
+            return checkFieldAssignment(
+              ctx,
+              structType.name,
+              target.property,
+              node.value,
+            );
+          }
+          // Otherwise `this.x` is a bare scope reference to variable `x`.
+          if (!ctx.scope.isDeclared(target.property)) {
+            return err(
+              scopeError("Undeclared identifier: '" + target.property + "'"),
+            );
+          }
+          if (!ctx.scope.isMutable(target.property)) {
+            return err(
+              scopeError(
+                "Cannot assign to immutable variable: '" +
+                  target.property +
+                  "'",
+              ),
+            );
+          }
+          return checkNode(node.value, ctx.asValue());
         }
-        if (!ctx.scope.isMutable(node.name)) {
+        if (target.kind === "member_access" && target.object.kind !== "this") {
+          // Struct-field assignment: validate the object, resolve the field,
+          // and enforce that the field is mutable and the value type matches.
+          const targetResult = checkNode(target.object, ctx.asValue());
+          if (!targetResult.ok) return targetResult;
+          // Assigning to a field of a variable requires the variable itself
+          // to be mutable (`let mut value = ...`), even if the field is
+          // mutable. A plain identifier object must be declared and mutable.
+          if (target.object.kind === "identifier") {
+            if (!ctx.scope.isDeclared(target.object.name)) {
+              return err(
+                scopeError(
+                  "Undeclared identifier: '" + target.object.name + "'",
+                ),
+              );
+            }
+            if (!ctx.scope.isMutable(target.object.name)) {
+              return err(
+                scopeError(
+                  "Cannot assign to field of immutable variable: '" +
+                    target.object.name +
+                    "'",
+                ),
+              );
+            }
+          }
+          const objectType = inferType(target.object);
+          if (objectType === undefined || objectType.kind !== "struct") {
+            return err(
+              scopeError(
+                "Cannot assign to field of non-struct value: '" +
+                  target.property +
+                  "'",
+              ),
+            );
+          }
+          return checkFieldAssignment(
+            ctx,
+            objectType.name,
+            target.property,
+            node.value,
+          );
+        }
+        // Plain variable assignment (`x = 100`) or `this.x = 100`. Both
+        // resolve to a variable name in the current scope.
+        let name: string;
+        if (target.kind === "identifier") {
+          name = target.name;
+        } else if (target.kind === "member_access") {
+          name = target.property;
+        } else {
           return err(
-            scopeError(
-              "Cannot assign to immutable variable: '" + node.name + "'",
-            ),
+            scopeError("Left-hand side of assignment must be an identifier"),
+          );
+        }
+        if (!ctx.scope.isDeclared(name)) {
+          return err(scopeError("Undeclared identifier: '" + name + "'"));
+        }
+        if (!ctx.scope.isMutable(name)) {
+          return err(
+            scopeError("Cannot assign to immutable variable: '" + name + "'"),
           );
         }
         return checkNode(node.value, ctx.asValue());
@@ -787,12 +1019,75 @@ export function validateScope(
     }
   }
 
+  // Validate a struct-field assignment `structName.property = value`: the
+  // field must exist, be mutable, and the value's type must match the field's
+  // type. Returns ok(undefined) on success, or a scope/syntax error otherwise.
+  function checkFieldAssignment(
+    ctx: CheckContext,
+    structName: string,
+    property: string,
+    value: ASTNode,
+  ): Result<void, CompileError> {
+    const fieldResult = findStructField(ctx.structs, structName, property);
+    if (!fieldResult.ok) return fieldResult;
+    const field = fieldResult.value;
+    if (field.isMut !== true) {
+      return err(
+        scopeError(
+          "Cannot assign to immutable field '" +
+            property +
+            "' on struct '" +
+            structName +
+            "'",
+        ),
+      );
+    }
+    const valueResult = checkNode(value, ctx.asValue());
+    if (!valueResult.ok) return valueResult;
+    const valueType = inferType(value);
+    if (valueType !== undefined) {
+      const mismatch = typeMismatch(field.type, valueType);
+      if (mismatch !== undefined) {
+        return err(compileError("syntax", mismatch));
+      }
+    }
+    return ok(undefined);
+  }
+
   // If a named type refers to a declared struct, return it as a StructType.
+  // Recurses into composite types (ref, array, tuple) so a struct nested
+  // inside them (e.g. `&Wrapper`, `[Wrapper; 2]`) also resolves.
   function resolveStructType(t: Type, ctx: CheckContext): Type {
     if (t.kind === "named") {
       if (ctx.structs.has(t.name)) {
         return { kind: "struct", name: t.name };
       }
+      return t;
+    }
+    if (t.kind === "this") {
+      // A `this` inner type (from the `&mut this` receiver shorthand)
+      // resolves to the enclosing struct (ctx.thisType).
+      return ctx.thisType ?? t;
+    }
+    if (t.kind === "ref") {
+      return {
+        kind: "ref",
+        inner: resolveStructType(t.inner, ctx),
+        isMut: t.isMut,
+      };
+    }
+    if (t.kind === "array") {
+      return {
+        kind: "array",
+        elem: resolveStructType(t.elem, ctx),
+        length: t.length,
+      };
+    }
+    if (t.kind === "tuple") {
+      return {
+        kind: "tuple",
+        elements: t.elements.map((e) => resolveStructType(e, ctx)),
+      };
     }
     return t;
   }

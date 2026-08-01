@@ -1,4 +1,4 @@
-import type { ASTNode, StructInitField, ThisNode } from "./ast";
+import type { ASTNode, StructInitField } from "./ast";
 import type { Result } from "./result";
 import { ok, map, andThen } from "./result";
 import type { CompileError } from "./compileError";
@@ -7,10 +7,11 @@ import type { CompileError } from "./compileError";
 function generateArgs(
   nodes: ASTNode[],
   thisName: string,
+  hoisted: string[],
 ): Result<string, CompileError> {
   const parts: string[] = [];
   for (const node of nodes) {
-    const result = generateJS(node, false, thisName);
+    const result = generateJS(node, false, thisName, hoisted);
     if (!result.ok) return result;
     parts.push(result.value);
   }
@@ -21,10 +22,11 @@ function generateArgs(
 function generateStructFields(
   fields: StructInitField[],
   thisName: string,
+  hoisted: string[],
 ): Result<string, CompileError> {
   const parts: string[] = [];
   for (const field of fields) {
-    const result = generateJS(field.value, false, thisName);
+    const result = generateJS(field.value, false, thisName, hoisted);
     if (!result.ok) return result;
     parts.push(field.name + ": " + result.value);
   }
@@ -35,6 +37,7 @@ export function generateJS(
   node: ASTNode,
   isRedeclare: boolean = false,
   thisName: string = "this",
+  hoisted: string[] = [],
 ): Result<string, CompileError> {
   switch (node.kind) {
     case "number":
@@ -49,7 +52,7 @@ export function generateJS(
     case "let_decl":
       // A `let` declaration emits `let name = value;` (or `name = value;`
       // when redeclaring an existing top-level variable).
-      return map(generateJS(node.value, false, thisName), (value) => {
+      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
         return (isRedeclare ? "" : "let ") + node.name + " = " + value + ";";
       });
 
@@ -64,31 +67,47 @@ export function generateJS(
       // `this.x` behavior depends on the role of `this`, resolved by the
       // checker: a bare scope reference (`this.x` = variable `x`) emits the
       // bare property name; a receiver parameter (`this.x` = field on the
-      // receiver) emits a field access on the renamed receiver. The
-      // constructor role is handled by the fn_decl constructor path.
+      // receiver) emits a field access on the renamed receiver. When the
+      // receiver is a reference (`&Wrapper`), the field access dereferences
+      // it first (`this.get()["x"]`). The constructor role is handled by the
+      // fn_decl constructor path.
       if (node.object.kind === "this") {
         if (node.object.thisRole === "receiver") {
+          if (node.object.thisIsRef === true) {
+            return ok(
+              thisName + ".get()[" + JSON.stringify(node.property) + "]",
+            );
+          }
           return ok(thisName + "[" + JSON.stringify(node.property) + "]");
         }
         return ok(node.property);
       }
-      return map(generateJS(node.object, false, thisName), (object) => {
-        return object + "[" + JSON.stringify(node.property) + "]";
-      });
+      return map(
+        generateJS(node.object, false, thisName, hoisted),
+        (object) => {
+          return object + "[" + JSON.stringify(node.property) + "]";
+        },
+      );
 
     case "binary_op":
-      return andThen(generateJS(node.left, false, thisName), (left) => {
-        return map(generateJS(node.right, false, thisName), (right) => {
-          // Parenthesize nested binary operands so the emitted JS preserves
-          // the AST's grouping. Without this, `(2 + 3) * 4` would compile to
-          // `2 + 3 * 4` (evaluated as `2 + (3*4) = 14`).
-          const leftStr =
-            node.left.kind === "binary_op" ? "(" + left + ")" : left;
-          const rightStr =
-            node.right.kind === "binary_op" ? "(" + right + ")" : right;
-          return leftStr + " " + node.op + " " + rightStr;
-        });
-      });
+      return andThen(
+        generateJS(node.left, false, thisName, hoisted),
+        (left) => {
+          return map(
+            generateJS(node.right, false, thisName, hoisted),
+            (right) => {
+              // Parenthesize nested binary operands so the emitted JS preserves
+              // the AST's grouping. Without this, `(2 + 3) * 4` would compile to
+              // `2 + 3 * 4` (evaluated as `2 + (3*4) = 14`).
+              const leftStr =
+                node.left.kind === "binary_op" ? "(" + left + ")" : left;
+              const rightStr =
+                node.right.kind === "binary_op" ? "(" + right + ")" : right;
+              return leftStr + " " + node.op + " " + rightStr;
+            },
+          );
+        },
+      );
 
     case "is":
       // The `is` operator is a compile-time type check; the checker has
@@ -103,26 +122,30 @@ export function generateJS(
       const paramNames = node.params
         .map((p) => (p.name === "this" ? innerThisName : p.name))
         .join(", ");
-      // A function is a constructor when its body's `this` resolves to the
-      // "constructor" role (the implicit constructor object). The checker
-      // resolves this role; codegen just reads it instead of re-deriving it
-      // from the body shape and the presence of a `this` parameter.
-      let terminalThis: ThisNode | undefined;
-      if (node.body.kind === "this") {
-        terminalThis = node.body;
-      } else if (
-        node.body.kind === "member_access" &&
-        node.body.object.kind === "this"
-      ) {
-        terminalThis = node.body.object;
-      } else if (node.body.kind === "block") {
-        const last = node.body.statements[node.body.statements.length - 1];
-        if (last !== undefined && last.kind === "this") {
-          terminalThis = last;
-        }
-      }
-      const isConstructor = terminalThis?.thisRole === "constructor";
+      // A function is a constructor when the checker recorded it as one. The
+      // checker resolves constructor-ness from the body shape once; codegen
+      // just reads the recorded fact instead of re-deriving it.
+      const isConstructor = node.isConstructor === true;
       if (isConstructor) {
+        // A constructor whose body is `this is X` (a type check on the
+        // constructor object) returns the `is` result, not the object. Emit
+        // it like a normal expression body.
+        if (node.body.kind === "is") {
+          return map(
+            generateJS(node.body, false, innerThisName, hoisted),
+            (body) => {
+              return (
+                "function " +
+                node.name +
+                "(" +
+                paramNames +
+                ") { return " +
+                body +
+                "; }"
+              );
+            },
+          );
+        }
         // Collect the field names: parameters plus any `let` declarations in
         // the body block.
         const fieldNames: string[] = node.params.map((p) => p.name);
@@ -143,13 +166,32 @@ export function generateJS(
             "return " + obj + "[" + JSON.stringify(node.body.property) + "];";
         } else if (node.body.kind === "block") {
           const parts: string[] = [];
+          const last = node.body.statements[node.body.statements.length - 1];
+          // A constructor block ending in `this is X` returns the `is` result
+          // (a type check on the constructor object), not the object.
+          const returnsIsResult = last !== undefined && last.kind === "is";
           for (let i = 0; i < node.body.statements.length - 1; i++) {
             const stmt = node.body.statements[i]!;
-            const stmtResult = generateJS(stmt, false, innerThisName);
+            // Nested function declarations are hoisted to the top level (they
+            // are global in Tuff), so emit them into the hoisted buffer and
+            // skip them inline.
+            if (stmt.kind === "fn_decl") {
+              const fnResult = generateJS(stmt, false, innerThisName, hoisted);
+              if (!fnResult.ok) return fnResult;
+              hoisted.push(fnResult.value);
+              continue;
+            }
+            const stmtResult = generateJS(stmt, false, innerThisName, hoisted);
             if (!stmtResult.ok) return stmtResult;
             parts.push(stmtResult.value + ";");
           }
-          returned = parts.join(" ") + " return " + obj + ";";
+          if (returnsIsResult) {
+            const lastResult = generateJS(last!, false, innerThisName, hoisted);
+            if (!lastResult.ok) return lastResult;
+            returned = parts.join(" ") + " return " + lastResult.value + ";";
+          } else {
+            returned = parts.join(" ") + " return " + obj + ";";
+          }
         } else {
           returned = "return " + obj + ";";
         }
@@ -157,21 +199,41 @@ export function generateJS(
           "function " + node.name + "(" + paramNames + ") { " + returned + " }",
         );
       }
-      return map(generateJS(node.body, false, innerThisName), (body) => {
-        return (
-          "function " +
-          node.name +
-          "(" +
-          paramNames +
-          ") { return " +
-          body +
-          "; }"
-        );
-      });
+      return map(
+        generateJS(node.body, false, innerThisName, hoisted),
+        (body) => {
+          return (
+            "function " +
+            node.name +
+            "(" +
+            paramNames +
+            ") { return " +
+            body +
+            "; }"
+          );
+        },
+      );
     }
 
     case "call":
-      return andThen(generateArgs(node.args, thisName), (args) => {
+      // When the receiver is auto-referenced (a method whose `this` param is
+      // a reference type like `&Wrapper`), wrap the first argument in a
+      // reference object so it matches the expected `&Wrapper` type.
+      if (node.autoRefReceiver === true && node.args.length > 0) {
+        return andThen(
+          generateJS(node.args[0]!, false, thisName, hoisted),
+          (receiver) => {
+            return map(
+              generateArgs(node.args.slice(1), thisName, hoisted),
+              (rest) => {
+                const ref = "({ get: () => " + receiver + " })";
+                return node.name + "(" + ref + (rest ? ", " + rest : "") + ")";
+              },
+            );
+          },
+        );
+      }
+      return andThen(generateArgs(node.args, thisName, hoisted), (args) => {
         return ok(node.name + "(" + args + ")");
       });
 
@@ -182,7 +244,7 @@ export function generateJS(
       // exposes a `set` closure that writes back to the target. The closures
       // capture the target expression, so they work for arbitrary expressions
       // (re-evaluated on each access), not just plain variables.
-      return map(generateJS(node.value, false, thisName), (value) => {
+      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
         if (node.isMut === true) {
           return (
             "({ get: () => " + value + ", set: (v) => { " + value + " = v; } })"
@@ -192,66 +254,144 @@ export function generateJS(
       });
 
     case "deref":
-      return map(generateJS(node.value, false, thisName), (value) => {
+      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
         return value + ".get()";
       });
 
     case "deref_assign":
-      return andThen(generateJS(node.target, false, thisName), (target) => {
-        return map(generateJS(node.value, false, thisName), (value) => {
-          return target + ".set(" + value + ")";
-        });
-      });
+      return andThen(
+        generateJS(node.target, false, thisName, hoisted),
+        (target) => {
+          return map(
+            generateJS(node.value, false, thisName, hoisted),
+            (value) => {
+              return target + ".set(" + value + ")";
+            },
+          );
+        },
+      );
 
-    case "assign":
-      return map(generateJS(node.value, false, thisName), (value) => {
-        return node.name + " = " + value;
+    case "assign": {
+      // The assignment target is a uniform ASTNode. A `member_access` target
+      // emits a property write (`value["field"] = value`), except for a bare
+      // scope reference `this.x` which emits the bare variable name
+      // (`x = value`). An `identifier` target emits a plain variable
+      // assignment (`x = value`).
+      const target = node.target;
+      if (target.kind === "member_access") {
+        if (target.object.kind === "this") {
+          // `this.x` is a bare scope reference (emits `x = value`) unless
+          // `this` is a reference receiver, in which case it's a write
+          // through the reference (`thisName.get()["x"] = value`).
+          if (target.object.thisIsRef === true) {
+            return map(
+              generateJS(node.value, false, thisName, hoisted),
+              (value) => {
+                return (
+                  thisName +
+                  ".get()[" +
+                  JSON.stringify(target.property) +
+                  "] = " +
+                  value
+                );
+              },
+            );
+          }
+          return map(
+            generateJS(node.value, false, thisName, hoisted),
+            (value) => {
+              return target.property + " = " + value;
+            },
+          );
+        }
+        return andThen(
+          generateJS(target.object, false, thisName, hoisted),
+          (object) => {
+            return map(
+              generateJS(node.value, false, thisName, hoisted),
+              (value) => {
+                return (
+                  object +
+                  "[" +
+                  JSON.stringify(target.property) +
+                  "] = " +
+                  value
+                );
+              },
+            );
+          },
+        );
+      }
+      return map(generateJS(node.value, false, thisName, hoisted), (value) => {
+        if (target.kind !== "identifier") {
+          return "";
+        }
+        return target.name + " = " + value;
       });
+    }
 
     case "array":
-      return andThen(generateArgs(node.elements, thisName), (elements) => {
-        return ok("[" + elements + "]");
-      });
+      return andThen(
+        generateArgs(node.elements, thisName, hoisted),
+        (elements) => {
+          return ok("[" + elements + "]");
+        },
+      );
 
     case "index":
-      return andThen(generateJS(node.object, false, thisName), (object) => {
-        return map(generateJS(node.index, false, thisName), (index) => {
-          return object + "[" + index + "]";
-        });
-      });
+      return andThen(
+        generateJS(node.object, false, thisName, hoisted),
+        (object) => {
+          return map(
+            generateJS(node.index, false, thisName, hoisted),
+            (index) => {
+              return object + "[" + index + "]";
+            },
+          );
+        },
+      );
 
     case "struct_decl":
       // A struct declaration is a no-op at runtime (types are compile-time).
       return ok("");
 
     case "struct_init":
-      return andThen(generateStructFields(node.fields, thisName), (fields) => {
-        return ok("({ " + fields + " })");
-      });
+      return andThen(
+        generateStructFields(node.fields, thisName, hoisted),
+        (fields) => {
+          return ok("({ " + fields + " })");
+        },
+      );
 
     case "tuple":
-      return andThen(generateArgs(node.elements, thisName), (elements) => {
-        return ok("[" + elements + "]");
-      });
+      return andThen(
+        generateArgs(node.elements, thisName, hoisted),
+        (elements) => {
+          return ok("[" + elements + "]");
+        },
+      );
 
     case "tuple_index":
-      return map(generateJS(node.object, false, thisName), (object) => {
-        return object + "[" + node.index + "]";
-      });
+      return map(
+        generateJS(node.object, false, thisName, hoisted),
+        (object) => {
+          return object + "[" + node.index + "]";
+        },
+      );
 
     case "if":
       return andThen(
-        generateJS(node.condition, false, thisName),
+        generateJS(node.condition, false, thisName, hoisted),
         (condition) => {
           return andThen(
-            generateJS(node.thenBranch, false, thisName),
+            generateJS(node.thenBranch, false, thisName, hoisted),
             (thenBranch) => {
               if (node.elseBranch === undefined) {
                 // No else: the `if` is used as a statement, so emit an if statement.
                 return ok("if (" + condition + ") { " + thenBranch + "; }");
               }
               return map(
-                generateJS(node.elseBranch, false, thisName),
+                generateJS(node.elseBranch, false, thisName, hoisted),
                 (elseBranch) => {
                   return (
                     "(" +
@@ -274,7 +414,16 @@ export function generateJS(
       const parts: string[] = [];
       for (let i = 0; i < node.statements.length; i++) {
         const stmt = node.statements[i]!;
-        const stmtResult = generateJS(stmt, false, thisName);
+        // Nested function declarations are hoisted to the top level (they are
+        // global in Tuff), so emit them into the hoisted buffer and skip them
+        // inline.
+        if (stmt.kind === "fn_decl") {
+          const fnResult = generateJS(stmt, false, thisName, hoisted);
+          if (!fnResult.ok) return fnResult;
+          hoisted.push(fnResult.value);
+          continue;
+        }
+        const stmtResult = generateJS(stmt, false, thisName, hoisted);
         if (!stmtResult.ok) return stmtResult;
         if (i === node.statements.length - 1) {
           parts.push("return " + stmtResult.value + ";");
@@ -287,11 +436,14 @@ export function generateJS(
 
     case "while":
       return andThen(
-        generateJS(node.condition, false, thisName),
+        generateJS(node.condition, false, thisName, hoisted),
         (condition) => {
-          return map(generateJS(node.body, false, thisName), (body) => {
-            return "while (" + condition + ") { " + body + "; }";
-          });
+          return map(
+            generateJS(node.body, false, thisName, hoisted),
+            (body) => {
+              return "while (" + condition + ") { " + body + "; }";
+            },
+          );
         },
       );
   }

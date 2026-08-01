@@ -234,6 +234,10 @@ export interface ThisNode {
   // "scope" (a bare scope reference outside any function). Codegen uses this
   // to decide how to emit `this` and `this.x`.
   thisRole: "receiver" | "constructor" | "scope";
+  // Whether a receiver `this` parameter is a reference type (`&Wrapper`).
+  // When true, codegen dereferences `this` before a field access
+  // (`this.get()["x"]`). Set by the checker.
+  thisIsRef?: boolean;
 }
 export interface MemberAccessNode {
   kind: "member_access";
@@ -250,8 +254,9 @@ export interface IsNode {
   kind: "is";
   // The value whose type is being checked.
   value: ASTNode;
-  // The type name being checked against, e.g. "Bool" in "true is Bool".
-  typeName: string;
+  // The type being checked against, e.g. Bool in "true is Bool", or a
+  // reference type like &Outer in "this.this is &Outer".
+  typeName: Type;
   // The compile-time result, computed by the checker: whether the value's
   // inferred type matches `typeName`.
   result: boolean;
@@ -266,6 +271,10 @@ export interface FnDeclNode {
   returnType: Type;
   // The function body expression.
   body: ASTNode;
+  // Whether this function is a constructor (its body is `this`/`this.field`/
+  // `this is X`/a block ending in `this`). Set once by the checker; codegen
+  // reads it instead of re-deriving it from the body shape.
+  isConstructor?: boolean;
 }
 // A single function parameter: a name and its declared type.
 export interface FnParam {
@@ -277,6 +286,23 @@ export interface FnParam {
 export interface FnSignature {
   params: FnParam[];
   returnType: Type;
+  // The name of the implicit struct a constructor function defines, or
+  // undefined for ordinary functions. Set once in the checker's fn_decl case
+  // so the call case can resolve a constructor call's return type without
+  // re-deriving it.
+  implicitStructName?: string;
+  // Whether the `this` parameter (the receiver of a method) is a reference
+  // type (`&T` or `&mut T`). This is the single source of truth for the
+  // receiver's reference-ness, computed once in fn_decl from the `this` param
+  // type. The call case uses it to auto-reference the receiver, and the
+  // checker derives `ThisNode.thisIsRef` from it.
+  thisIsRef?: boolean;
+  // The fully-resolved type of the `this` parameter (the receiver of a
+  // method), computed once in fn_decl. For a `&mut this` receiver shorthand
+  // this is resolved to `&mut <enclosing struct>` at definition time, so the
+  // call case doesn't need to re-resolve the placeholder. Undefined for
+  // functions without a `this` parameter.
+  receiverType?: Type;
 }
 export interface CallNode {
   kind: "call";
@@ -284,6 +310,16 @@ export interface CallNode {
   name: string;
   // The argument expressions, e.g. [3, 4] in "add(3, 4)".
   args: ASTNode[];
+  // Whether the first argument (the receiver of a method call) should be
+  // auto-referenced when passed to a `this` parameter of reference type
+  // (e.g. `fn get(this : &Wrapper)`). Set by the checker; codegen wraps the
+  // receiver in a reference when true.
+  autoRefReceiver?: boolean;
+  // Whether this call came from method-call syntax (`obj.method(args)`), in
+  // which case the first argument is the receiver. Set by the parser. The
+  // checker drops the receiver if the callee has no `this` parameter (i.e.
+  // it's a plain function, not a method).
+  methodCall?: boolean;
 }
 export interface RefNode {
   kind: "ref";
@@ -299,7 +335,11 @@ export interface DerefNode {
 }
 export interface AssignNode {
   kind: "assign";
-  name: string;
+  // The assignment target expression. This is an `identifier` node for a
+  // plain variable assignment (`x = 100`), a `member_access` node for a
+  // struct-field assignment (`value.field = 100`) or a `this.x = 100`
+  // assignment. The checker and codegen dispatch on the target's node kind.
+  target: ASTNode;
   value: ASTNode;
 }
 export interface DerefAssignNode {
@@ -331,6 +371,9 @@ export interface StructDeclNode {
 export interface StructField {
   name: string;
   type: Type;
+  // Whether the field is mutable (declared with `mut`, e.g. `mut field : I32`).
+  // Only mutable fields can be assigned to.
+  isMut?: boolean;
 }
 export interface StructInitNode {
   kind: "struct_init";

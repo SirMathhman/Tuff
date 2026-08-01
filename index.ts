@@ -44,6 +44,11 @@ export function compileTuffToJS(source: string): Result<string, CompileError> {
   const declared = new Set<string>();
   // Coerce the final expression to a number (exit code model)
   const exitCode = (expr: string) => "Number(" + expr + ")";
+
+  // Nested function declarations are hoisted into this buffer by codegen
+  // (functions are global in Tuff), and emitted at the top level.
+  const hoisted: string[] = [];
+
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i]!;
     // A `let` declaration is a declaration, not an expression — it never
@@ -54,7 +59,7 @@ export function compileTuffToJS(source: string): Result<string, CompileError> {
     if (stmt.kind === "let_decl") {
       declared.add(stmt.name);
     }
-    const stmtResult = generateJS(stmt, isRedeclare);
+    const stmtResult = generateJS(stmt, isRedeclare, "this", hoisted);
     if (!stmtResult.ok) return stmtResult;
     const isDeclaration =
       stmt.kind === "let_decl" ||
@@ -70,5 +75,7 @@ export function compileTuffToJS(source: string): Result<string, CompileError> {
     }
   }
 
-  return ok(parts.join(" "));
+  // Emit hoisted nested functions at the top level, before the main
+  // statements, so they're callable from anywhere.
+  return ok(hoisted.join(" ") + " " + parts.join(" "));
 }

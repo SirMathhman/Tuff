@@ -534,4 +534,103 @@ describe("tuff", () => {
       ),
     ).toBe(3);
   });
+
+  it('evaluate("fn Wrapper(field : I32) => this; fn get(this : Wrapper) => this.field; let wrapper = Wrapper(100); wrapper.get()") => 100', () => {
+    expect(
+      evaluate(
+        "fn Wrapper(field : I32) => this; fn get(this : Wrapper) => this.field; let wrapper = Wrapper(100); wrapper.get()",
+        [],
+      ),
+    ).toBe(100);
+  });
+
+  it('evaluate("fn Wrapper(field : I32) => this; fn get(this : &Wrapper) => this.field; let wrapper = Wrapper(100); wrapper.get()") => 100', () => {
+    expect(
+      evaluate(
+        "fn Wrapper(field : I32) => this; fn get(this : &Wrapper) => this.field; let wrapper = Wrapper(100); wrapper.get()",
+        [],
+      ),
+    ).toBe(100);
+  });
+
+  it('evaluate("struct Wrapper { mut field : I32 } let mut value = Wrapper { field : 0 }; value.field = 100; value.field") => 100', () => {
+    expect(
+      evaluate(
+        "struct Wrapper { mut field : I32 } let mut value = Wrapper { field : 0 }; value.field = 100; value.field",
+        [],
+      ),
+    ).toBe(100);
+  });
+
+  it('compile("struct Wrapper { field : I32 } let mut value = Wrapper { field : 0 }; value.field = 100; value.field") => scope', () => {
+    expectCompileError(
+      "struct Wrapper { field : I32 } let mut value = Wrapper { field : 0 }; value.field = 100; value.field",
+      "scope",
+    );
+  });
+
+  it('compile("struct Wrapper { mut field : I32 } let value = Wrapper { field : 0 }; value.field = 100; value.field") => scope', () => {
+    expectCompileError(
+      "struct Wrapper { mut field : I32 } let value = Wrapper { field : 0 }; value.field = 100; value.field",
+      "scope",
+    );
+  });
+
+  it('evaluate("fn Counter() => { let mut value = 0; this } fn add(this : &mut Counter) => { this.value += 1; } let c = Counter(); c.add(); c.value") => 1', () => {
+    expect(
+      evaluate(
+        "fn Counter() => { let mut value = 0; this } fn add(this : &mut Counter) => { this.value += 1; } let c = Counter(); c.add(); c.value",
+        [],
+      ),
+    ).toBe(1);
+  });
+
+  it('evaluate("fn Counter() => { let mut value = 0; fn add(this : &mut Counter) => { this.value += 1; } this } let c = Counter(); c.add(); c.value") => 1', () => {
+    expect(
+      evaluate(
+        "fn Counter() => { let mut value = 0; fn add(this : &mut Counter) => { this.value += 1; } this } let c = Counter(); c.add(); c.value",
+        [],
+      ),
+    ).toBe(1);
+  });
+
+  it('evaluate("fn Counter() => { let mut value = 0; fn add(&mut this) => { this.value += 1; } this } let c = Counter(); c.add(); c.value") => 1', () => {
+    expect(
+      evaluate(
+        "fn Counter() => { let mut value = 0; fn add(&mut this) => { this.value += 1; } this } let c = Counter(); c.add(); c.value",
+        [],
+      ),
+    ).toBe(1);
+  });
+
+  it('evaluate("fn Counter() => this is Counter; Counter()") => 1', () => {
+    expect(evaluate("fn Counter() => this is Counter; Counter()", [])).toBe(1);
+  });
+
+  it('evaluate("fn Outer() => { fn Inner() => { let field = 100; this } this } Outer().Inner().field") => 100', () => {
+    expect(
+      evaluate(
+        "fn Outer() => { fn Inner() => { let field = 100; this } this } Outer().Inner().field",
+        [],
+      ),
+    ).toBe(100);
+  });
+
+  it('evaluate("fn Outer() => { fn Inner() => { this is Inner } this } Outer().Inner()") => 1', () => {
+    expect(
+      evaluate(
+        "fn Outer() => { fn Inner() => { this is Inner } this } Outer().Inner()",
+        [],
+      ),
+    ).toBe(1);
+  });
+
+  it('evaluate("fn Outer() => { fn Inner() => { this.this is &Outer } this } Outer().Inner()") => 1', () => {
+    expect(
+      evaluate(
+        "fn Outer() => { fn Inner() => { this.this is &Outer } this } Outer().Inner()",
+        [],
+      ),
+    ).toBe(1);
+  });
 });

@@ -228,7 +228,14 @@ export function createParser(tokens: Token[]): Parser {
         };
         continue;
       }
-      if (propToken.type !== "identifier") {
+      // A `this` token is allowed as a property name (e.g. `this.this`).
+      const propName =
+        propToken.type === "this"
+          ? "this"
+          : propToken.type === "identifier"
+            ? propToken.name
+            : undefined;
+      if (propName === undefined) {
         return err(
           compileError(
             "syntax",
@@ -242,7 +249,12 @@ export function createParser(tokens: Token[]): Parser {
         consume(); // consume '('
         const argsResult = parseArgList([node]);
         if (!argsResult.ok) return argsResult;
-        node = { kind: "call", name: propToken.name, args: argsResult.value };
+        node = {
+          kind: "call",
+          name: propName,
+          args: argsResult.value,
+          methodCall: true,
+        };
         continue;
       }
       node = {
@@ -358,23 +370,21 @@ export function createParser(tokens: Token[]): Parser {
       while (true) {
         const token = peek();
 
-        // The `is` operator is special: its right side is a type name (an
-        // identifier), not a full expression. It produces an IsNode.
+        // The `is` operator is special: its right side is a type name (e.g.
+        // `I32`, `&Outer`, `[I32; 3]`), not a full expression. It produces an
+        // IsNode.
         if (token.type === "is") {
           consume(); // consume 'is'
-          const typeToken = consume();
-          if (typeToken.type !== "identifier") {
+          const typeName = parseTypeName();
+          if (typeName.kind === "named" && typeName.name === "") {
             return err(
-              compileError(
-                "syntax",
-                "Expected type name after 'is', got " + typeToken.type,
-              ),
+              compileError("syntax", "Expected type name after 'is'"),
             );
           }
           node = {
             kind: "is",
             value: node,
-            typeName: typeToken.name,
+            typeName,
             result: false,
           };
           continue;
@@ -469,10 +479,40 @@ export function createParser(tokens: Token[]): Parser {
     }
     consume(); // consume '('
 
-    // Parse the parameter list: <name> : <type>, ...
+    // Parse the parameter list: <name> : <type>, ... or a receiver shorthand
+    // `&this` / `&mut this` (a reference to the enclosing struct).
     const params: FnParam[] = [];
     if (peek().type !== "rparen") {
       while (true) {
+        // Receiver shorthand: `&this` or `&mut this`. This is a `this`
+        // parameter whose type is a reference to the enclosing struct; the
+        // checker resolves the inner `this` type to the enclosing struct.
+        if (peek().type === "amp") {
+          consume(); // consume '&'
+          let isMut = false;
+          if (peek().type === "mut") {
+            isMut = true;
+            consume(); // consume 'mut'
+          }
+          const thisToken = consume();
+          if (thisToken.type !== "this") {
+            return err(
+              compileError(
+                "syntax",
+                "Expected 'this' after '&', got " + thisToken.type,
+              ),
+            );
+          }
+          params.push({
+            name: "this",
+            type: { kind: "ref", inner: { kind: "this" }, isMut },
+          });
+          if (peek().type === "comma") {
+            consume(); // consume ','
+            continue;
+          }
+          break;
+        }
         const paramToken = consume();
         // A `this` token is allowed as a parameter name (the receiver
         // binding of a method).
@@ -565,9 +605,15 @@ export function createParser(tokens: Token[]): Parser {
     const fields: StructField[] = [];
     if (peek().type !== "rbrace") {
       while (true) {
+        // A struct field may be declared mutable: `mut field : I32`.
+        let isMut = false;
+        if (peek().type === "mut") {
+          isMut = true;
+          consume(); // consume 'mut'
+        }
         const fieldName = parseFieldName();
         const fieldType = parseTypeName();
-        fields.push({ name: fieldName, type: fieldType });
+        fields.push({ name: fieldName, type: fieldType, isMut });
         if (peek().type === "comma") {
           consume(); // consume ','
           continue;
@@ -622,15 +668,18 @@ export function createParser(tokens: Token[]): Parser {
           return ok({ kind: "deref_assign", target: expr.value, value });
         });
       }
-      // Determine the target variable name. A plain identifier `x` assigns to
-      // `x`; `this.x` assigns to the variable `x` in the current scope.
-      let targetName: string | undefined;
+      // Determine the assignment target. A plain identifier `x` assigns to
+      // `x`; `this.x` assigns to the variable `x` in the current scope; and
+      // `value.field` assigns to the field `field` of the object `value`.
+      // All three are represented uniformly as a target ASTNode: an
+      // `identifier` for `x`, and a `member_access` for `this.x` / `value.field`.
+      let target: ASTNode | undefined;
       if (expr.kind === "identifier") {
-        targetName = expr.name;
-      } else if (expr.kind === "member_access" && expr.object.kind === "this") {
-        targetName = expr.property;
+        target = expr;
+      } else if (expr.kind === "member_access") {
+        target = expr;
       }
-      if (targetName === undefined) {
+      if (target === undefined) {
         return err(
           compileError(
             "syntax",
@@ -651,11 +700,11 @@ export function createParser(tokens: Token[]): Parser {
             ? value
             : {
                 kind: "binary_op",
-                left: { kind: "identifier", name: targetName! },
+                left: target!,
                 op: assignOp,
                 right: value,
               };
-        return ok({ kind: "assign", name: targetName!, value: rhs });
+        return ok({ kind: "assign", target: target!, value: rhs });
       });
     }
 
