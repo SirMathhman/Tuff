@@ -19,6 +19,8 @@ function compileStmt(stmt: Stmt): string {
   switch (stmt.kind) {
     case "VariableDecl":
       return `let ${stmt.name} = ${compileExpr(stmt.value)};`;
+    case "Assign":
+      return `${stmt.target.name} = ${compileExpr(stmt.value)};`;
     case "ExprStmt":
       return `${compileExpr(stmt.expr)};`;
   }

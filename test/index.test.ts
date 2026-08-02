@@ -66,3 +66,7 @@ test("compile narrowing U16 literal to U8 variable throws an error", () => {
 test("compile assigning inferred U16 variable to U8 variable throws an error", () => {
   expect(() => compileTuffToJS("let x = 100U16; let y : U8 = x;")).toThrow();
 });
+
+test("evaluate mutable variable reassignment returns the new value", () => {
+  expect(evalute("let mut x = 0; x = 1; x")).toBe(1);
+});

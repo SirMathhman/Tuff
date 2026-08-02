@@ -8,7 +8,7 @@ export interface Token {
   suffix?: string;
 }
 
-const KEYWORDS = new Set(["in", "let"]);
+const KEYWORDS = new Set(["in", "let", "mut"]);
 
 const PUNCTUATION = new Set([":", ";", ".", "&", "[", "]", "=", "-"]);
 

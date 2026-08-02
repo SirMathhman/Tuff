@@ -10,7 +10,15 @@ import { type Type, typeToString } from "./types.ts";
 
 export class ResolveError extends Error {}
 
-type SymbolTable = Map<string, Type>;
+// A declared binding: its type plus whether it may be reassigned.
+interface Binding {
+  type: Type;
+  mutable: boolean;
+}
+
+type SymbolTable = Map<string, Binding>;
+
+
 
 // Returns true if a value of type `actual` can be assigned to a slot of type
 // `expected`. Widening (U8 -> U16) is allowed; narrowing (U16 -> U8) is not.
@@ -59,13 +67,13 @@ function checkLiteralRange(
 function typecheckExpr(expr: Expr, symbols: SymbolTable): Type {
   switch (expr.kind) {
     case "Identifier": {
-      const type = symbols.get(expr.name);
-      if (type === undefined) {
+      const binding = symbols.get(expr.name);
+      if (binding === undefined) {
         throw new ResolveError(
           `Unknown identifier '${expr.name}'${describeLocation()}`,
         );
       }
-      return type;
+      return binding.type;
     }
     case "NumberLiteral": {
       if (expr.suffix !== undefined) {
@@ -140,7 +148,30 @@ function typecheckStmt(stmt: Stmt, symbols: SymbolTable): void {
           `Cannot assign value of type ${typeToString(valueType)} to variable '${stmt.name}' of type ${typeToString(stmt.type)}`,
         );
       }
-      symbols.set(stmt.name, stmt.type ?? valueType);
+      symbols.set(stmt.name, {
+        type: stmt.type ?? valueType,
+        mutable: stmt.mutable,
+      });
+      break;
+    }
+    case "Assign": {
+      const binding = symbols.get(stmt.target.name);
+      if (binding === undefined) {
+        throw new ResolveError(
+          `Unknown identifier '${stmt.target.name}'${describeLocation()}`,
+        );
+      }
+      if (!binding.mutable) {
+        throw new ResolveError(
+          `Cannot assign to immutable variable '${stmt.target.name}'`,
+        );
+      }
+      const valueType = typecheckExpr(stmt.value, symbols);
+      if (!typesCompatible(binding.type, valueType)) {
+        throw new ResolveError(
+          `Cannot assign value of type ${typeToString(valueType)} to variable '${stmt.target.name}' of type ${typeToString(binding.type)}`,
+        );
+      }
       break;
     }
     case "ExprStmt":
@@ -152,7 +183,10 @@ function typecheckStmt(stmt: Stmt, symbols: SymbolTable): void {
 export function resolve(program: Program): Program {
   // Seed the symbol table with the declared `in` parameters.
   const symbols: SymbolTable = new Map(
-    program.params.map((param) => [param.name, param.type]),
+    program.params.map((param) => [
+      param.name,
+      { type: param.type, mutable: false },
+    ]),
   );
 
   for (const stmt of program.body) {

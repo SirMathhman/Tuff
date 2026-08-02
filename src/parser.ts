@@ -14,13 +14,21 @@ export interface Program {
   body: Stmt[];
 }
 
-export type Stmt = VariableDecl | ExprStmt;
+export type Stmt = VariableDecl | Assign | ExprStmt;
 
 export interface VariableDecl {
   kind: "VariableDecl";
   name: string;
+  /** Whether the variable can be reassigned (`let mut`). */
+  mutable: boolean;
   /** Optional explicit type annotation, e.g. `let x : U8 = ...`. */
   type?: Type;
+  value: Expr;
+}
+
+export interface Assign {
+  kind: "Assign";
+  target: IdentifierExpr;
   value: Expr;
 }
 
@@ -205,6 +213,12 @@ export function parse(tokens: Token[]): Program {
     const token = peek();
     if (token?.type === "keyword" && token.value === "let") {
       advance(); // 'let'
+      // Optional `mut` marker: `let mut x = ...`.
+      let mutable = false;
+      if (peek()?.type === "keyword" && peek()?.value === "mut") {
+        advance(); // 'mut'
+        mutable = true;
+      }
       const name = advance();
       if (name.type !== "identifier") {
         throw new ParseError("Expected an identifier after 'let'");
@@ -218,9 +232,19 @@ export function parse(tokens: Token[]): Program {
       expectPunct("=");
       const value = parseExpression();
       consumeSemicolon();
-      return { kind: "VariableDecl", name: name.value, type, value };
+      return { kind: "VariableDecl", name: name.value, mutable, type, value };
     }
     const expr = parseExpression();
+    // Assignment statement: `x = 1`.
+    if (peek()?.type === "punct" && peek()?.value === "=") {
+      advance(); // '='
+      if (expr.kind !== "Identifier") {
+        throw new ParseError("Assignment target must be an identifier");
+      }
+      const value = parseExpression();
+      consumeSemicolon();
+      return { kind: "Assign", target: expr, value };
+    }
     consumeSemicolon();
     return { kind: "ExprStmt", expr };
   }
