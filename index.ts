@@ -1,1 +1,3 @@
-console.log("Hello via Bun!");
+export function compileTuffToJS(source: string): string {
+  return "";
+}
