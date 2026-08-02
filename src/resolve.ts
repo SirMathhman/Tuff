@@ -18,8 +18,6 @@ interface Binding {
 
 type SymbolTable = Map<string, Binding>;
 
-
-
 // Returns true if a value of type `actual` can be assigned to a slot of type
 // `expected`. Widening (U8 -> U16) is allowed; narrowing (U16 -> U8) is not.
 function typesCompatible(expected: Type, actual: Type): boolean {
@@ -28,6 +26,9 @@ function typesCompatible(expected: Type, actual: Type): boolean {
   }
   // Widening: a smaller unsigned integer can be assigned to a larger one.
   if (expected.kind === "U16" && actual.kind === "U8") {
+    return true;
+  }
+  if (expected.kind === "U32" && (actual.kind === "U8" || actual.kind === "U16")) {
     return true;
   }
   return false;
@@ -59,6 +60,13 @@ function checkLiteralRange(
         );
       }
       return;
+    case "U32":
+      if (!Number.isInteger(value) || value < 0 || value > 4294967295) {
+        throw new ResolveError(
+          `Value ${value} is out of range for U32 (expected 0..4294967295)`,
+        );
+      }
+      return;
     default:
       throw new ResolveError(`Unknown integer suffix '${suffix}'`);
   }
@@ -85,6 +93,9 @@ function typecheckExpr(expr: Expr, symbols: SymbolTable): Type {
       }
       if (expr.suffix === "U16") {
         return { kind: "U16" };
+      }
+      if (expr.suffix === "U32") {
+        return { kind: "U32" };
       }
       return { kind: "Number" };
     }

@@ -4,6 +4,7 @@ export type Type =
   | { kind: "Number" }
   | { kind: "U8" }
   | { kind: "U16" }
+  | { kind: "U32" }
   | { kind: "Str" }
   | { kind: "Ref"; inner: Type }
   | { kind: "Array"; inner: Type };
@@ -11,6 +12,7 @@ export type Type =
 export const NumberType: Type = { kind: "Number" };
 export const U8Type: Type = { kind: "U8" };
 export const U16Type: Type = { kind: "U16" };
+export const U32Type: Type = { kind: "U32" };
 export const StrType: Type = { kind: "Str" };
 
 export function ref(inner: Type): Type {
@@ -29,6 +31,8 @@ export function typeToString(type: Type): string {
       return "U8";
     case "U16":
       return "U16";
+    case "U32":
+      return "U32";
     case "Str":
       return "Str";
     case "Ref":
