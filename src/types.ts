@@ -25,6 +25,26 @@ export function array(inner: Type): Type {
   return { kind: "Array", inner };
 }
 
+// --- Named type registry ---
+//
+// Maps the source spelling of a primitive type (e.g. `U8`, `Str`, `Num`) to
+// the `Type` it denotes. The parser looks up identifiers here instead of
+// hardcoding each name, so adding a new primitive type is a single entry.
+
+export const NAMED_TYPES: Record<string, Type> = {
+  Str: { kind: "Str" },
+  Num: { kind: "Number" },
+  U8: { kind: "U8" },
+  U16: { kind: "U16" },
+  U32: { kind: "U32" },
+  U64: { kind: "U64" },
+};
+
+/** Returns the type denoted by a primitive type name, or undefined. */
+export function typeFromName(name: string): Type | undefined {
+  return NAMED_TYPES[name];
+}
+
 // --- Integer type table ---
 //
 // A single source of truth for the unsigned integer types. Each entry carries

@@ -3,6 +3,7 @@ import {
   checkIntegerRange,
   integerTypeFromSuffix,
   isAssignable,
+  typeFromName,
   type Type,
 } from "../src/types";
 
@@ -12,6 +13,20 @@ const U32: Type = { kind: "U32" };
 const U64: Type = { kind: "U64" };
 const Num: Type = { kind: "Number" };
 const Str: Type = { kind: "Str" };
+
+test("typeFromName resolves primitive type names", () => {
+  expect(typeFromName("U8")).toEqual(U8);
+  expect(typeFromName("U16")).toEqual(U16);
+  expect(typeFromName("U32")).toEqual(U32);
+  expect(typeFromName("U64")).toEqual(U64);
+  expect(typeFromName("Num")).toEqual(Num);
+  expect(typeFromName("Str")).toEqual(Str);
+});
+
+test("typeFromName returns undefined for unknown names", () => {
+  expect(typeFromName("Bool")).toBeUndefined();
+  expect(typeFromName("")).toBeUndefined();
+});
 
 test("integerTypeFromSuffix returns info for known suffixes", () => {
   expect(integerTypeFromSuffix("U8")?.bits).toBe(8);

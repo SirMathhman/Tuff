@@ -1,5 +1,5 @@
 import type { Token } from "./lexer.ts";
-import { array, ref, type Type } from "./types.ts";
+import { array, ref, type Type, typeFromName } from "./types.ts";
 
 // --- AST node types ---
 
@@ -119,26 +119,13 @@ export function parse(tokens: Token[]): Program {
           return array(inner);
         }
         break;
-      case "identifier":
-        if (token.value === "Str") {
-          return { kind: "Str" };
-        }
-        if (token.value === "Num") {
-          return { kind: "Number" };
-        }
-        if (token.value === "U8") {
-          return { kind: "U8" };
-        }
-        if (token.value === "U16") {
-          return { kind: "U16" };
-        }
-        if (token.value === "U32") {
-          return { kind: "U32" };
-        }
-        if (token.value === "U64") {
-          return { kind: "U64" };
+      case "identifier": {
+        const named = typeFromName(token.value);
+        if (named !== undefined) {
+          return named;
         }
         throw new ParseError(`Unknown type '${token.value}'`);
+      }
       default:
         break;
     }
