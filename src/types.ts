@@ -5,6 +5,7 @@ export type Type =
   | { kind: "U8" }
   | { kind: "U16" }
   | { kind: "U32" }
+  | { kind: "U64" }
   | { kind: "Str" }
   | { kind: "Ref"; inner: Type }
   | { kind: "Array"; inner: Type };
@@ -13,6 +14,7 @@ export const NumberType: Type = { kind: "Number" };
 export const U8Type: Type = { kind: "U8" };
 export const U16Type: Type = { kind: "U16" };
 export const U32Type: Type = { kind: "U32" };
+export const U64Type: Type = { kind: "U64" };
 export const StrType: Type = { kind: "Str" };
 
 export function ref(inner: Type): Type {
@@ -31,7 +33,7 @@ export function array(inner: Type): Type {
 // a new integer type is a one-line change here.
 
 export interface IntegerTypeInfo {
-  kind: "U8" | "U16" | "U32";
+  kind: "U8" | "U16" | "U32" | "U64";
   bits: number;
   max: number;
 }
@@ -40,6 +42,7 @@ export const INTEGER_TYPES: Record<string, IntegerTypeInfo> = {
   U8: { kind: "U8", bits: 8, max: 255 },
   U16: { kind: "U16", bits: 16, max: 65535 },
   U32: { kind: "U32", bits: 32, max: 4294967295 },
+  U64: { kind: "U64", bits: 64, max: 18446744073709551615 },
 };
 
 /** Returns the integer type info for a suffix like `U8`, or undefined. */
@@ -51,7 +54,12 @@ export function integerTypeFromSuffix(
 
 /** Returns true if `type` is one of the unsigned integer types. */
 export function isIntegerType(type: Type): boolean {
-  return type.kind === "U8" || type.kind === "U16" || type.kind === "U32";
+  return (
+    type.kind === "U8" ||
+    type.kind === "U16" ||
+    type.kind === "U32" ||
+    type.kind === "U64"
+  );
 }
 
 /**
@@ -99,6 +107,8 @@ export function typeToString(type: Type): string {
       return "U16";
     case "U32":
       return "U32";
+    case "U64":
+      return "U64";
     case "Str":
       return "Str";
     case "Ref":

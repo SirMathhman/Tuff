@@ -135,6 +135,9 @@ export function parse(tokens: Token[]): Program {
         if (token.value === "U32") {
           return { kind: "U32" };
         }
+        if (token.value === "U64") {
+          return { kind: "U64" };
+        }
         throw new ParseError(`Unknown type '${token.value}'`);
       default:
         break;

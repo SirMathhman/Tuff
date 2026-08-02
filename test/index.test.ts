@@ -78,3 +78,7 @@ test("compile narrowing U16 assignment to inferred U8 variable throws an error",
 test("compile narrowing U32 variable to U8 variable throws an error", () => {
   expect(() => compileTuffToJS("let x = 100U32; let y : U8 = x;")).toThrow();
 });
+
+test("compile narrowing U64 variable to U8 variable throws an error", () => {
+  expect(() => compileTuffToJS("let x = 100U64; let y : U8 = x;")).toThrow();
+});
