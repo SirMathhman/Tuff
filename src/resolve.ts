@@ -1,5 +1,11 @@
 import type { Expr, Program, Stmt } from "./parser.ts";
-import { type Type, typeToString } from "./types.ts";
+import {
+  checkIntegerRange,
+  integerTypeFromSuffix,
+  isAssignable,
+  type Type,
+  typeToString,
+} from "./types.ts";
 
 // --- Semantic analysis ---
 //
@@ -18,22 +24,6 @@ interface Binding {
 
 type SymbolTable = Map<string, Binding>;
 
-// Returns true if a value of type `actual` can be assigned to a slot of type
-// `expected`. Widening (U8 -> U16) is allowed; narrowing (U16 -> U8) is not.
-function typesCompatible(expected: Type, actual: Type): boolean {
-  if (expected.kind === actual.kind) {
-    return true;
-  }
-  // Widening: a smaller unsigned integer can be assigned to a larger one.
-  if (expected.kind === "U16" && actual.kind === "U8") {
-    return true;
-  }
-  if (expected.kind === "U32" && (actual.kind === "U8" || actual.kind === "U16")) {
-    return true;
-  }
-  return false;
-}
-
 function describeLocation(): string {
   // Placeholder for richer source-location tracking in a future stage.
   return "";
@@ -43,32 +33,8 @@ function describeLocation(): string {
 function checkLiteralRange(
   expr: Extract<Expr, { kind: "NumberLiteral" }>,
 ): void {
-  const { value, suffix } = expr;
-
-  switch (suffix) {
-    case "U8":
-      if (!Number.isInteger(value) || value < 0 || value > 255) {
-        throw new ResolveError(
-          `Value ${value} is out of range for U8 (expected 0..255)`,
-        );
-      }
-      return;
-    case "U16":
-      if (!Number.isInteger(value) || value < 0 || value > 65535) {
-        throw new ResolveError(
-          `Value ${value} is out of range for U16 (expected 0..65535)`,
-        );
-      }
-      return;
-    case "U32":
-      if (!Number.isInteger(value) || value < 0 || value > 4294967295) {
-        throw new ResolveError(
-          `Value ${value} is out of range for U32 (expected 0..4294967295)`,
-        );
-      }
-      return;
-    default:
-      throw new ResolveError(`Unknown integer suffix '${suffix}'`);
+  if (expr.suffix !== undefined) {
+    checkIntegerRange(expr.suffix, expr.value);
   }
 }
 
@@ -88,14 +54,12 @@ function typecheckExpr(expr: Expr, symbols: SymbolTable): Type {
         checkLiteralRange(expr);
       }
       // A suffixed literal has that integer type; otherwise it's a plain Number.
-      if (expr.suffix === "U8") {
-        return { kind: "U8" };
-      }
-      if (expr.suffix === "U16") {
-        return { kind: "U16" };
-      }
-      if (expr.suffix === "U32") {
-        return { kind: "U32" };
+      const info =
+        expr.suffix !== undefined
+          ? integerTypeFromSuffix(expr.suffix)
+          : undefined;
+      if (info !== undefined) {
+        return { kind: info.kind };
       }
       return { kind: "Number" };
     }
@@ -154,7 +118,7 @@ function typecheckStmt(stmt: Stmt, symbols: SymbolTable): void {
   switch (stmt.kind) {
     case "VariableDecl": {
       const valueType = typecheckExpr(stmt.value, symbols);
-      if (stmt.type !== undefined && !typesCompatible(stmt.type, valueType)) {
+      if (stmt.type !== undefined && !isAssignable(stmt.type, valueType)) {
         throw new ResolveError(
           `Cannot assign value of type ${typeToString(valueType)} to variable '${stmt.name}' of type ${typeToString(stmt.type)}`,
         );
@@ -178,7 +142,7 @@ function typecheckStmt(stmt: Stmt, symbols: SymbolTable): void {
         );
       }
       const valueType = typecheckExpr(stmt.value, symbols);
-      if (!typesCompatible(binding.type, valueType)) {
+      if (!isAssignable(binding.type, valueType)) {
         throw new ResolveError(
           `Cannot assign value of type ${typeToString(valueType)} to variable '${stmt.target.name}' of type ${typeToString(binding.type)}`,
         );
