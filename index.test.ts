@@ -41,3 +41,7 @@ test("evaluate brace-grouped expression", () => {
   expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
 });
 
+test("evaluate block with variable declaration", () => {
+  expect(evaluate("{ let x = 2 + 3; x } * 4")).toBe(20);
+});
+

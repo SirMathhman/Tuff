@@ -1,9 +1,7 @@
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[+\-*/(){}]/g) ?? [];
-  if (tokens.length === 0) {
-    return 0;
-  }
+  const tokens = source.match(/\d+|[a-zA-Z_]\w*|[+\-*/(){};=]/g) ?? [];
   let index = 0;
+  const scope = new Map<string, number>();
 
   function parseExpression(): number {
     let value = parseTerm();
@@ -26,13 +24,49 @@ export function evaluate(source: string): number {
   }
 
   function parseFactor(): number {
-    if (tokens[index] === "(" || tokens[index] === "{") {
+    const token = tokens[index];
+    if (token === undefined) {
+      return 0;
+    }
+    if (token === "(") {
       index++;
       const value = parseExpression();
-      index++; // consume ")" or "}"
+      index++; // consume ")"
       return value;
     }
-    return Number(tokens[index++]);
+    if (token === "{") {
+      index++;
+      const value = parseBlock();
+      index++; // consume "}"
+      return value;
+    }
+    if (/^\d+$/.test(token)) {
+      index++;
+      return Number(token);
+    }
+    index++; // variable reference
+    return scope.get(token) ?? 0;
+  }
+
+  function parseBlock(): number {
+    let value = 0;
+    while (index < tokens.length && tokens[index] !== "}") {
+      if (tokens[index] === "let") {
+        index++; // consume "let"
+        const name = tokens[index++];
+        index++; // consume "="
+        if (name !== undefined) {
+          scope.set(name, parseExpression());
+        }
+        index++; // consume ";"
+      } else {
+        value = parseExpression();
+        if (tokens[index] === ";") {
+          index++;
+        }
+      }
+    }
+    return value;
   }
 
   return parseExpression();
