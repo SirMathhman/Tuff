@@ -25,3 +25,7 @@ test("interpret multiplication takes precedence over addition", () => {
   expect(interpret("1 + 2 * 3")).toBe(7);
 });
 
+test("interpret parentheses override precedence", () => {
+  expect(interpret("(1 + 2) * 3")).toBe(9);
+});
+
