@@ -19,6 +19,35 @@ export type Token =
   | { type: "semicolon" }
   | { type: "eof" };
 
+type OperatorTokenType =
+  | "plus"
+  | "minus"
+  | "star"
+  | "or"
+  | "and"
+  | "lparen"
+  | "rparen"
+  | "lbrace"
+  | "rbrace"
+  | "equals"
+  | "equals_equals"
+  | "semicolon";
+
+const OPERATORS: Array<[string, OperatorTokenType]> = [
+  ["||", "or"],
+  ["&&", "and"],
+  ["==", "equals_equals"],
+  ["+", "plus"],
+  ["-", "minus"],
+  ["*", "star"],
+  ["(", "lparen"],
+  [")", "rparen"],
+  ["{", "lbrace"],
+  ["}", "rbrace"],
+  ["=", "equals"],
+  [";", "semicolon"],
+];
+
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -27,42 +56,6 @@ export function tokenize(source: string): Token[] {
     const ch = source[i];
 
     if (ch === " ") {
-      i++;
-    } else if (ch === "+") {
-      tokens.push({ type: "plus" });
-      i++;
-    } else if (ch === "-") {
-      tokens.push({ type: "minus" });
-      i++;
-    } else if (ch === "*") {
-      tokens.push({ type: "star" });
-      i++;
-    } else if (ch === "|" && source[i + 1] === "|") {
-      tokens.push({ type: "or" });
-      i += 2;
-    } else if (ch === "&" && source[i + 1] === "&") {
-      tokens.push({ type: "and" });
-      i += 2;
-    } else if (ch === "(") {
-      tokens.push({ type: "lparen" });
-      i++;
-    } else if (ch === ")") {
-      tokens.push({ type: "rparen" });
-      i++;
-    } else if (ch === "{") {
-      tokens.push({ type: "lbrace" });
-      i++;
-    } else if (ch === "}") {
-      tokens.push({ type: "rbrace" });
-      i++;
-    } else if (ch === "=" && source[i + 1] === "=") {
-      tokens.push({ type: "equals_equals" });
-      i += 2;
-    } else if (ch === "=") {
-      tokens.push({ type: "equals" });
-      i++;
-    } else if (ch === ";") {
-      tokens.push({ type: "semicolon" });
       i++;
     } else if (/\d/.test(ch!)) {
       let value = "";
@@ -89,7 +82,13 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "identifier", name });
       }
     } else {
-      throw new Error(`Unexpected character: ${ch}`);
+      const operator = OPERATORS.find(([text]) => source.startsWith(text, i));
+      if (operator) {
+        tokens.push({ type: operator[1] });
+        i += operator[0].length;
+      } else {
+        throw new Error(`Unexpected character: ${ch}`);
+      }
     }
   }
 
