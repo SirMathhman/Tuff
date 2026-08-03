@@ -19,6 +19,20 @@ export interface OperatorInfo {
   evaluate: (left: Value, right: Value) => Value;
 }
 
+export const TOKEN_TO_OPERATOR: Record<string, BinaryOp> = {
+  plus: "+",
+  minus: "-",
+  star: "*",
+  or: "||",
+  and: "&&",
+  equals_equals: "==",
+  not_equals: "!=",
+  less_than: "<",
+  less_than_or_equal: "<=",
+  greater_than: ">",
+  greater_than_or_equal: ">=",
+};
+
 export const OPERATORS: Record<BinaryOp, OperatorInfo> = {
   "||": { precedence: 1, evaluate: (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "||").value || requireType(right, "boolean", "||").value }) },
   "&&": { precedence: 2, evaluate: (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "&&").value && requireType(right, "boolean", "&&").value }) },

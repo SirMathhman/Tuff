@@ -1,22 +1,7 @@
 import type { Token } from "./tokens";
 import type { Expr, Stmt } from "./ast";
-import type { BinaryOp } from "./operators";
-import { OPERATORS } from "./operators";
+import { OPERATORS, TOKEN_TO_OPERATOR } from "./operators";
 import { ParseError } from "./errors";
-
-const BINARY_OPERATOR: Record<string, BinaryOp> = {
-  plus: "+",
-  minus: "-",
-  star: "*",
-  or: "||",
-  and: "&&",
-  equals_equals: "==",
-  not_equals: "!=",
-  less_than: "<",
-  less_than_or_equal: "<=",
-  greater_than: ">",
-  greater_than_or_equal: ">=",
-};
 
 export function parse(tokens: Token[]): Stmt {
   let index = 0;
@@ -38,7 +23,7 @@ export function parse(tokens: Token[]): Stmt {
 
     while (true) {
       const type = peek().type;
-      const op = BINARY_OPERATOR[type];
+      const op = TOKEN_TO_OPERATOR[type];
       if (op === undefined) {
         break;
       }
