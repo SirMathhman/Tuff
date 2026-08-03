@@ -304,3 +304,7 @@ test("interpret supports combined logical expressions", () => {
 test("interpret supports array literals with typed annotation and indexing", () => {
   expect(interpret("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
 });
+
+test("interpret throws on array index out of bounds", () => {
+  expect(() => interpret("let array : [I32; 2] = [1, 2]; array[5]")).toThrow();
+});
