@@ -6,13 +6,8 @@ export class Parser {
   constructor(private readonly tokens: Token[]) {}
 
   parse(): AST {
-    const ast = this.parseAdditive();
-
-    if (this.index < this.tokens.length) {
-      throw new Error(`Unexpected trailing token: ${JSON.stringify(this.tokens[this.index])}`);
-    }
-
-    return ast;
+    const statements = this.parseStatements(false);
+    return { type: "block", statements };
   }
 
   private peek(): Token | undefined {
@@ -88,16 +83,27 @@ export class Parser {
   }
 
   private parseBlock(): AST {
+    const statements = this.parseStatements(true);
+    return { type: "block", statements };
+  }
+
+  private parseStatements(inBlock: boolean): AST[] {
     const statements: AST[] = [];
 
     while (true) {
       const token = this.peek();
       if (!token) {
-        throw new Error("Unexpected end of input in block");
+        if (inBlock) {
+          throw new Error("Unexpected end of input in block");
+        }
+        break;
       }
       if (token.type === "paren" && token.value === "}") {
-        this.consume();
-        break;
+        if (inBlock) {
+          this.consume();
+          break;
+        }
+        throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
       }
 
       if (token.type === "identifier" && token.value === "let") {
@@ -122,7 +128,7 @@ export class Parser {
       }
     }
 
-    return { type: "block", statements };
+    return statements;
   }
 }
 

@@ -76,3 +76,7 @@ test("interpret supports multiple let bindings", () => {
 test("interpret supports nested blocks with shadowing", () => {
   expect(interpret("{ let x = 1; { let x = 2; x } + x }")).toBe(3);
 });
+
+test("interpret supports top-level let bindings", () => {
+  expect(interpret("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+});
