@@ -88,3 +88,7 @@ test("evaluate logical or requires boolean operands", () => {
 test("evaluate arithmetic requires numeric operands", () => {
   expect(() => evaluate("true + false")).toThrow();
 });
+
+test("evaluate less than", () => {
+  expect(evaluate("1 < 2")).toBe(1);
+});

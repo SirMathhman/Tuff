@@ -1,7 +1,7 @@
 import type { Value } from "./value";
 import { TypeError } from "./errors";
 
-export type BinaryOp = "+" | "-" | "*" | "||" | "&&" | "==";
+export type BinaryOp = "+" | "-" | "*" | "||" | "&&" | "==" | "<";
 
 function requireType<T extends Value["type"]>(
   value: Value,
@@ -21,4 +21,5 @@ export const BINARY_EVALUATORS: Record<BinaryOp, (left: Value, right: Value) => 
   "||": (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "||").value || requireType(right, "boolean", "||").value }),
   "&&": (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "&&").value && requireType(right, "boolean", "&&").value }),
   "==": (left, right) => ({ type: "boolean", value: left.type === right.type && left.value === right.value }),
+  "<": (left, right) => ({ type: "boolean", value: requireType(left, "number", "<").value < requireType(right, "number", "<").value }),
 };

@@ -7,6 +7,7 @@ const BINARY_PRECEDENCE: Record<string, number> = {
   or: 1,
   and: 2,
   equals_equals: 3,
+  less_than: 3,
   plus: 4,
   minus: 4,
   star: 5,
@@ -19,6 +20,7 @@ const BINARY_OPERATOR: Record<string, BinaryOp> = {
   or: "||",
   and: "&&",
   equals_equals: "==",
+  less_than: "<",
 };
 
 export function parse(tokens: Token[]): Stmt {
