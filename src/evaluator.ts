@@ -1,12 +1,31 @@
 import type { AST } from "./types";
 
-export function evaluate(ast: AST): number {
+export function evaluate(ast: AST, env: Record<string, number> = {}): number {
   switch (ast.type) {
     case "number":
       return ast.value;
+    case "identifier": {
+      const value = env[ast.name];
+      if (value === undefined) {
+        throw new Error(`Undefined variable: ${ast.name}`);
+      }
+      return value;
+    }
+    case "let": {
+      const value = evaluate(ast.value, env);
+      env[ast.name] = value;
+      return value;
+    }
+    case "block": {
+      let result = 0;
+      for (const statement of ast.statements) {
+        result = evaluate(statement, env);
+      }
+      return result;
+    }
     case "binary": {
-      const left = evaluate(ast.left);
-      const right = evaluate(ast.right);
+      const left = evaluate(ast.left, env);
+      const right = evaluate(ast.right, env);
       switch (ast.operator) {
         case "+":
           return left + right;
@@ -19,6 +38,6 @@ export function evaluate(ast: AST): number {
       }
     }
     case "unary":
-      return -evaluate(ast.operand);
+      return -evaluate(ast.operand, env);
   }
 }

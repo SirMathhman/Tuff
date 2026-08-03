@@ -60,3 +60,7 @@ test("interpret handles curly brace grouping", () => {
 test("interpret rejects mismatched grouping delimiters", () => {
   expect(() => interpret("(1 + 2 }")).toThrow();
 });
+
+test("interpret supports let bindings in a block", () => {
+  expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
+});

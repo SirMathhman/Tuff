@@ -22,7 +22,23 @@ export function lex(source: string): Token[] {
       continue;
     }
 
-    if (char === "+" || char === "-" || char === "*" || char === "/") {
+    if (isLetter(char)) {
+      let value = "";
+      while (i < source.length && isLetter(source[i]!)) {
+        value += source[i];
+        i++;
+      }
+      tokens.push({ type: "identifier", value });
+      continue;
+    }
+
+    if (char === ";") {
+      tokens.push({ type: "semicolon", value: char });
+      i++;
+      continue;
+    }
+
+    if (char === "+" || char === "-" || char === "*" || char === "/" || char === "=") {
       tokens.push({ type: "operator", value: char });
       i++;
       continue;
@@ -38,4 +54,8 @@ export function lex(source: string): Token[] {
   }
 
   return tokens;
+}
+
+function isLetter(char: string): boolean {
+  return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z");
 }
