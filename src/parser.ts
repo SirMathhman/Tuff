@@ -95,7 +95,7 @@ export class Parser {
         if (typeToken.type !== "identifier" || !TYPE_NAMES.includes(typeToken.value as TypeName)) {
           throw new Error(`Expected type name after is, got: ${JSON.stringify(typeToken)}`);
         }
-        left = { type: "binary", operator: "is", left, right: { type: "identifier", name: typeToken.value } };
+        left = { type: "binary", operator: "is", left, right: { type: "typeRef", name: typeToken.value as TypeName } };
       } else {
         break;
       }

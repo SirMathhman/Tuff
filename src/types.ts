@@ -44,6 +44,7 @@ export type AST =
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||" | "is"; left: AST; right: AST }
   | { type: "unary"; operator: "-" | "!"; operand: AST }
   | { type: "identifier"; name: string }
+  | { type: "typeRef"; name: TypeName }
   | { type: "let"; name: string; mutable: boolean; typeName?: TypeName; value: AST }
   | { type: "assign"; name: string; operator: "=" | "+=" | "-=" | "*=" | "/="; value: AST }
   | { type: "if"; condition: AST; then: AST; else: AST | null }

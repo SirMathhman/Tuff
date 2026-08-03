@@ -82,7 +82,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     case "binary": {
       const leftValue = evaluate(ast.left, env);
       if (ast.operator === "is") {
-        if (ast.right.type !== "identifier") {
+        if (ast.right.type !== "typeRef") {
           throw new Error(`Expected type name after is, got: ${JSON.stringify(ast.right)}`);
         }
         return typeOf(leftValue) === ast.right.name;
@@ -116,5 +116,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       }
       return unaryOps[ast.operator](operand);
     }
+    case "typeRef":
+      throw new Error(`Type reference cannot be evaluated standalone: ${ast.name}`);
   }
 }
