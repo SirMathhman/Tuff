@@ -312,3 +312,11 @@ test("interpret throws on array index out of bounds", () => {
 test("interpret rejects array literal length mismatching declared size", () => {
   expect(() => interpret("let array : [I32; 2] = [1, 2, 3]")).toThrow();
 });
+
+test("interpret supports typed array element arithmetic", () => {
+  expect(interpret("let array : [U8; 2] = [1U8, 2U8]; array[0] + array[1]")).toBe(3);
+});
+
+test("interpret throws on typed array element overflow", () => {
+  expect(() => interpret("let array : [U8; 2] = [255U8, 1U8]; array[0] + array[1]")).toThrow();
+});
