@@ -183,6 +183,8 @@ export function evaluate(source: string): number {
             index++;
           }
         }
+      } else if (tokens[index] === "if") {
+        parseIfStatement();
       } else {
         value = parseOr();
         if (tokens[index] === ";") {
@@ -191,6 +193,100 @@ export function evaluate(source: string): number {
       }
     }
     return value;
+  }
+
+  function parseIfStatement(): void {
+    index++; // consume "if"
+    index++; // consume "("
+    const condition = parseOr();
+    index++; // consume ")"
+    if (truthy(condition)) {
+      parseBranchStatement();
+      if (tokens[index] !== "else") {
+        throw new Error("If expression requires an else branch");
+      }
+      index++; // consume "else"
+      skipBranchStatement();
+    } else {
+      skipBranchStatement();
+      if (tokens[index] !== "else") {
+        throw new Error("If expression requires an else branch");
+      }
+      index++; // consume "else"
+      parseBranchStatement();
+    }
+  }
+
+  function parseBranchStatement(): void {
+    if (tokens[index] === "{") {
+      index++; // consume "{"
+      scopes.push(new Map());
+      parseStatements("}");
+      scopes.pop();
+      index++; // consume "}"
+    } else {
+      parseOr();
+      if (tokens[index] === ";") {
+        index++;
+      }
+    }
+  }
+
+  function skipBranchStatement(): void {
+    if (tokens[index] === "{") {
+      index++; // consume "{"
+      scopes.push(new Map());
+      skipStatements("}");
+      scopes.pop();
+      index++; // consume "}"
+    } else {
+      parseOr();
+      if (tokens[index] === ";") {
+        index++;
+      }
+    }
+  }
+
+  function skipStatements(endToken: string | undefined): void {
+    while (index < tokens.length && tokens[index] !== endToken) {
+      if (tokens[index] === "let") {
+        index++; // consume "let"
+        if (tokens[index] === "mut") {
+          index++;
+        }
+        index++; // name
+        index++; // "="
+        parseOr();
+        index++; // ";"
+      } else if (tokens[index + 1] === "=") {
+        index++; // name
+        index++; // "="
+        parseOr();
+        index++; // ";"
+      } else if (tokens[index] === "{") {
+        index++; // consume "{"
+        scopes.push(new Map());
+        skipStatements("}");
+        scopes.pop();
+        index++; // consume "}"
+      } else if (tokens[index] === "if") {
+        index++; // consume "if"
+        index++; // consume "("
+        parseOr();
+        index++; // consume ")"
+        skipBranchStatement();
+        if (tokens[index] !== "else") {
+          throw new Error("If expression requires an else branch");
+        }
+        index++; // consume "else"
+        skipBranchStatement();
+      } else {
+        parseOr();
+        if (tokens[index] === ";") {
+          index++;
+        }
+      }
+    }
   }
 
   function declareVariable(mutable: boolean): void {

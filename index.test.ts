@@ -145,3 +145,7 @@ test("evaluate if with empty block branch throws", () => {
   expect(() => evaluate("let x = if (false) {} else { 2 }; x")).toThrow();
 });
 
+test("evaluate if with block statements mutating outer variable", () => {
+  expect(evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x")).toBe(1);
+});
+
