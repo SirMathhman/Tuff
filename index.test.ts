@@ -157,3 +157,7 @@ test("evaluate if statement without else", () => {
   expect(evaluate("let mut x = 0; if (false) { x = 1; } x")).toBe(0);
 });
 
+test("evaluate if statement with expression branch", () => {
+  expect(evaluate("let mut x = 0; if (true) x = 1; x")).toBe(1);
+});
+

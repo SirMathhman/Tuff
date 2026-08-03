@@ -249,6 +249,8 @@ export function evaluate(source: string): number {
       parseStatements("}");
       scopes.pop();
       index++; // consume "}"
+    } else if (tokens[index + 1] === "=") {
+      assignVariable();
     } else {
       parseOr();
       if (tokens[index] === ";") {
