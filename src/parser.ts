@@ -59,6 +59,14 @@ export function parse(tokens: Token[]): AST {
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }
+    if (token.type === "paren" && token.value === "(") {
+      const inner = parseAdditive();
+      const closing = consume();
+      if (closing.type !== "paren" || closing.value !== ")") {
+        throw new Error(`Expected closing paren, got: ${JSON.stringify(closing)}`);
+      }
+      return inner;
+    }
     throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
   }
 

@@ -40,3 +40,7 @@ test("interpret respects operator precedence", () => {
 test("interpret handles whitespace around operators", () => {
   expect(interpret("1 + 2")).toBe(3);
 });
+
+test("interpret handles parentheses", () => {
+  expect(interpret("(1+2)*3")).toBe(9);
+});
