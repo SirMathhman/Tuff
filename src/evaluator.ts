@@ -1,31 +1,24 @@
 import type { AST } from "./types";
+import { Environment } from "./environment";
 
-export function evaluate(ast: AST, env: Record<string, number> = {}): number {
+export function evaluate(ast: AST, env: Environment = new Environment()): number {
   switch (ast.type) {
     case "number":
       return ast.value;
-    case "identifier": {
-      const value = env[ast.name];
-      if (value === undefined) {
-        throw new Error(`Undefined variable: ${ast.name}`);
-      }
-      return value;
-    }
+    case "identifier":
+      return env.lookup(ast.name);
     case "let": {
       const value = evaluate(ast.value, env);
-      env[ast.name] = value;
+      env.define(ast.name, value, ast.mutable);
       return value;
     }
     case "assign": {
       const value = evaluate(ast.value, env);
-      if (env[ast.name] === undefined) {
-        throw new Error(`Undefined variable: ${ast.name}`);
-      }
-      env[ast.name] = value;
+      env.assign(ast.name, value);
       return value;
     }
     case "block": {
-      const childEnv = Object.create(env) as Record<string, number>;
+      const childEnv = env.child();
       let result = 0;
       for (const statement of ast.statements) {
         result = evaluate(statement, childEnv);

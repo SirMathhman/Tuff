@@ -84,3 +84,7 @@ test("interpret supports top-level let bindings", () => {
 test("interpret supports mutable bindings and assignment", () => {
   expect(interpret("let mut x = 0; x = 1; x")).toBe(1);
 });
+
+test("interpret rejects assignment to immutable binding", () => {
+  expect(() => interpret("let x = 1; x = 2")).toThrow();
+});
