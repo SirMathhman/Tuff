@@ -133,3 +133,7 @@ test("evaluate if expression", () => {
   expect(evaluate("let x = if (true) 2 else 3; x")).toBe(2);
 });
 
+test("evaluate chained if expression", () => {
+  expect(evaluate("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
+});
+
