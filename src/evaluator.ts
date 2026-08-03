@@ -2,7 +2,7 @@ import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
 import { makeU8, makeU16, isU8, isU16, isFunction, requireNumber, typeOf, isTruthy } from "./value";
 import { callFunction } from "./functions";
-import { binaryOps, assignOps } from "./operators";
+import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
 export function evaluate(ast: AST, env: Environment = new Environment()): Value {
   switch (ast.type) {
@@ -88,11 +88,8 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     case "binary": {
       const leftValue = evaluate(ast.left, env);
       const rightValue = evaluate(ast.right, env);
-      if (ast.operator === "&&") {
-        return isTruthy(leftValue) && isTruthy(rightValue);
-      }
-      if (ast.operator === "||") {
-        return isTruthy(leftValue) || isTruthy(rightValue);
+      if (ast.operator === "&&" || ast.operator === "||") {
+        return logicalOps[ast.operator](isTruthy(leftValue), isTruthy(rightValue));
       }
       const left = requireNumber(leftValue, ast.operator);
       const right = requireNumber(rightValue, ast.operator);
@@ -106,11 +103,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return result;
     }
     case "unary": {
-      if (ast.operator === "!") {
-        return !isTruthy(evaluate(ast.operand, env));
-      }
-      const operand = requireNumber(evaluate(ast.operand, env), "-");
-      return -operand;
+      return unaryOps[ast.operator](evaluate(ast.operand, env));
     }
   }
 }
