@@ -28,3 +28,7 @@ test("evaluate multiplication and subtraction", () => {
 test("evaluate addition and multiplication with precedence", () => {
   expect(evaluate("2 + 3 * 4")).toBe(14);
 });
+
+test("evaluate parentheses override precedence", () => {
+  expect(evaluate("(2 + 3) * 4")).toBe(20);
+});

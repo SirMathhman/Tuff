@@ -43,6 +43,16 @@ export function parse(tokens: Token[]): Expr {
       return { kind: "number", value: token.value };
     }
 
+    if (token.type === "lparen") {
+      const expr = parseExpression();
+
+      if (advance().type !== "rparen") {
+        throw new Error("Expected closing parenthesis");
+      }
+
+      return expr;
+    }
+
     throw new Error(`Unexpected token: ${token.type}`);
   }
 
