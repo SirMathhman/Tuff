@@ -18,10 +18,12 @@ export function lex(source: string): Token[] {
         value += source[i];
         i++;
       }
+      let u8 = false;
       if (source[i] === "U" && source[i + 1] === "8") {
+        u8 = true;
         i += 2;
       }
-      tokens.push({ type: "number", value: Number(value) });
+      tokens.push({ type: "number", value: Number(value), u8 });
       continue;
     }
 

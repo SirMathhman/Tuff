@@ -99,7 +99,7 @@ export class Parser {
   private parsePrimary(): AST {
     const token = this.consume();
     if (token.type === "number") {
-      return { type: "number", value: token.value };
+      return { type: "number", value: token.value, u8: token.u8 };
     }
     if (token.type === "boolean") {
       return { type: "boolean", value: token.value };

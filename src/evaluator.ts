@@ -1,8 +1,36 @@
-import type { AST, Value } from "./types";
+import type { AST, Value, U8Value } from "./types";
 import { Environment } from "./environment";
 
 type BinaryOperator = "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!=";
 type AssignOperator = "=" | "+=" | "-=" | "*=" | "/=";
+
+const U8_MAX = 255;
+
+function makeU8(value: number): U8Value {
+  if (value < 0 || value > U8_MAX) {
+    throw new Error(`U8 overflow: ${value}`);
+  }
+  return { kind: "u8", value };
+}
+
+function isU8(value: Value): value is U8Value {
+  return typeof value === "object" && value !== null && value.kind === "u8";
+}
+
+function isNumber(value: Value): value is number | U8Value {
+  return typeof value === "number" || isU8(value);
+}
+
+function toNumber(value: number | U8Value): number {
+  return isU8(value) ? value.value : value;
+}
+
+function requireNumber(value: Value, operator: string): number {
+  if (!isNumber(value)) {
+    throw new Error(`Binary operator requires numbers: ${operator}`);
+  }
+  return toNumber(value);
+}
 
 const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
   "+": (l, r) => l + r,
@@ -31,7 +59,7 @@ function isTruthy(value: Value): boolean {
 export function evaluate(ast: AST, env: Environment = new Environment()): Value {
   switch (ast.type) {
     case "number":
-      return ast.value;
+      return ast.u8 ? makeU8(ast.value) : ast.value;
     case "boolean":
       return ast.value;
     case "identifier":
@@ -81,18 +109,21 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return result;
     }
     case "binary": {
-      const left = evaluate(ast.left, env);
-      const right = evaluate(ast.right, env);
-      if (typeof left !== "number" || typeof right !== "number") {
-        throw new Error(`Binary operator requires numbers: ${ast.operator}`);
+      const leftValue = evaluate(ast.left, env);
+      const rightValue = evaluate(ast.right, env);
+      const left = requireNumber(leftValue, ast.operator);
+      const right = requireNumber(rightValue, ast.operator);
+      const result = binaryOps[ast.operator](left, right);
+      if (isU8(leftValue) || isU8(rightValue)) {
+        if (typeof result !== "number") {
+          throw new Error(`U8 arithmetic must produce a number: ${ast.operator}`);
+        }
+        return makeU8(result);
       }
-      return binaryOps[ast.operator](left, right);
+      return result;
     }
     case "unary": {
-      const operand = evaluate(ast.operand, env);
-      if (typeof operand !== "number") {
-        throw new Error("Unary minus requires a number");
-      }
+      const operand = requireNumber(evaluate(ast.operand, env), "-");
       return -operand;
     }
   }

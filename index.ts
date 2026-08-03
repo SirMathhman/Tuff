@@ -13,5 +13,14 @@ export function interpret(source: string): number {
 }
 
 function toExitCode(value: Value): number {
-  return value === true ? 1 : value === false ? 0 : value;
+  if (value === true) {
+    return 1;
+  }
+  if (value === false) {
+    return 0;
+  }
+  if (typeof value === "object") {
+    return value.value;
+  }
+  return value;
 }

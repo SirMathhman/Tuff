@@ -1,7 +1,12 @@
-export type Value = number | boolean;
+export type Value = number | boolean | U8Value;
+
+export interface U8Value {
+  readonly kind: "u8";
+  readonly value: number;
+}
 
 export type Token =
-  | { type: "number"; value: number }
+  | { type: "number"; value: number; u8?: boolean }
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "identifier"; value: string }
@@ -9,7 +14,7 @@ export type Token =
   | { type: "semicolon"; value: ";" };
 
 export type AST =
-  | { type: "number"; value: number }
+  | { type: "number"; value: number; u8?: boolean }
   | { type: "boolean"; value: boolean }
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!="; left: AST; right: AST }
   | { type: "unary"; operator: "-"; operand: AST }
