@@ -1,34 +1,41 @@
-import type { Token } from "./lexer";
+import type { Token, AST } from "./types";
 
-export type AST =
-  | { type: "number"; value: number }
-  | { type: "binary"; operator: "+" | "-" | "*" | "/"; left: AST; right: AST }
-  | { type: "unary"; operator: "-"; operand: AST };
+export class Parser {
+  private index = 0;
 
-export function parse(tokens: Token[]): AST {
-  let index = 0;
+  constructor(private readonly tokens: Token[]) {}
 
-  function peek(): Token | undefined {
-    return tokens[index];
+  parse(): AST {
+    const ast = this.parseAdditive();
+
+    if (this.index < this.tokens.length) {
+      throw new Error(`Unexpected trailing token: ${JSON.stringify(this.tokens[this.index])}`);
+    }
+
+    return ast;
   }
 
-  function consume(): Token {
-    const token = tokens[index];
+  private peek(): Token | undefined {
+    return this.tokens[this.index];
+  }
+
+  private consume(): Token {
+    const token = this.tokens[this.index];
     if (!token) {
       throw new Error("Unexpected end of input");
     }
-    index++;
+    this.index++;
     return token;
   }
 
-  function parseAdditive(): AST {
-    let left = parseMultiplicative();
+  private parseAdditive(): AST {
+    let left = this.parseMultiplicative();
 
     while (true) {
-      const token = peek();
+      const token = this.peek();
       if (token && token.type === "operator" && (token.value === "+" || token.value === "-")) {
-        consume();
-        const right = parseMultiplicative();
+        this.consume();
+        const right = this.parseMultiplicative();
         left = { type: "binary", operator: token.value, left, right };
       } else {
         break;
@@ -38,14 +45,14 @@ export function parse(tokens: Token[]): AST {
     return left;
   }
 
-  function parseMultiplicative(): AST {
-    let left = parsePrimary();
+  private parseMultiplicative(): AST {
+    let left = this.parsePrimary();
 
     while (true) {
-      const token = peek();
+      const token = this.peek();
       if (token && token.type === "operator" && (token.value === "*" || token.value === "/")) {
-        consume();
-        const right = parsePrimary();
+        this.consume();
+        const right = this.parsePrimary();
         left = { type: "binary", operator: token.value, left, right };
       } else {
         break;
@@ -55,17 +62,17 @@ export function parse(tokens: Token[]): AST {
     return left;
   }
 
-  function parsePrimary(): AST {
-    const token = consume();
+  private parsePrimary(): AST {
+    const token = this.consume();
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }
     if (token.type === "operator" && token.value === "-") {
-      return { type: "unary", operator: "-", operand: parsePrimary() };
+      return { type: "unary", operator: "-", operand: this.parsePrimary() };
     }
     if (token.type === "paren" && (token.value === "(" || token.value === "{")) {
-      const inner = parseAdditive();
-      const closing = consume();
+      const inner = this.parseAdditive();
+      const closing = this.consume();
       const expected = token.value === "(" ? ")" : "}";
       if (closing.type !== "paren" || closing.value !== expected) {
         throw new Error(`Expected closing paren, got: ${JSON.stringify(closing)}`);
@@ -74,12 +81,8 @@ export function parse(tokens: Token[]): AST {
     }
     throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
   }
+}
 
-  const ast = parseAdditive();
-
-  if (index < tokens.length) {
-    throw new Error(`Unexpected trailing token: ${JSON.stringify(tokens[index])}`);
-  }
-
-  return ast;
+export function parse(tokens: Token[]): AST {
+  return new Parser(tokens).parse();
 }

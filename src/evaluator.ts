@@ -1,4 +1,4 @@
-import type { AST } from "./parser";
+import type { AST } from "./types";
 
 export function evaluate(ast: AST): number {
   switch (ast.type) {

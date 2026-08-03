@@ -1,7 +1,4 @@
-export type Token =
-  | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" }
-  | { type: "paren"; value: "(" | ")" | "{" | "}" };
+import type { Token } from "./types";
 
 export function lex(source: string): Token[] {
   const tokens: Token[] = [];
