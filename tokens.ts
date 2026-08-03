@@ -16,7 +16,11 @@ export type Token =
   | { type: "identifier"; name: string }
   | { type: "equals" }
   | { type: "equals_equals" }
+  | { type: "not_equals" }
   | { type: "less_than" }
+  | { type: "less_than_or_equal" }
+  | { type: "greater_than" }
+  | { type: "greater_than_or_equal" }
   | { type: "semicolon" }
   | { type: "eof" };
 
@@ -32,7 +36,11 @@ type OperatorTokenType =
   | "rbrace"
   | "equals"
   | "equals_equals"
+  | "not_equals"
   | "less_than"
+  | "less_than_or_equal"
+  | "greater_than"
+  | "greater_than_or_equal"
   | "semicolon";
 
 import { LexError } from "./errors";
@@ -41,7 +49,11 @@ const OPERATORS: Array<[string, OperatorTokenType]> = [
   ["||", "or"],
   ["&&", "and"],
   ["==", "equals_equals"],
+  ["!=", "not_equals"],
+  ["<=", "less_than_or_equal"],
+  [">=", "greater_than_or_equal"],
   ["<", "less_than"],
+  [">", "greater_than"],
   ["+", "plus"],
   ["-", "minus"],
   ["*", "star"],

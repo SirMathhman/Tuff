@@ -92,3 +92,19 @@ test("evaluate arithmetic requires numeric operands", () => {
 test("evaluate less than", () => {
   expect(evaluate("1 < 2")).toBe(1);
 });
+
+test("evaluate greater than", () => {
+  expect(evaluate("2 > 1")).toBe(1);
+});
+
+test("evaluate less than or equal", () => {
+  expect(evaluate("2 <= 2")).toBe(1);
+});
+
+test("evaluate greater than or equal", () => {
+  expect(evaluate("2 >= 3")).toBe(0);
+});
+
+test("evaluate not equal", () => {
+  expect(evaluate("1 != 2")).toBe(1);
+});

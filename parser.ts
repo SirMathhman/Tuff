@@ -11,7 +11,11 @@ const BINARY_OPERATOR: Record<string, BinaryOp> = {
   or: "||",
   and: "&&",
   equals_equals: "==",
+  not_equals: "!=",
   less_than: "<",
+  less_than_or_equal: "<=",
+  greater_than: ">",
+  greater_than_or_equal: ">=",
 };
 
 export function parse(tokens: Token[]): Stmt {
