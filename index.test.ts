@@ -106,11 +106,11 @@ test("interpret rejects compound assignment to immutable binding", () => {
 });
 
 test("interpret supports comparison operators", () => {
-  expect(interpret("1 < 2")).toBe(true);
+  expect(interpret("1 < 2")).toBe(1);
 });
 
 test("interpret supports boolean literals", () => {
-  expect(interpret("let x = true; x")).toBe(true);
+  expect(interpret("let x = true; x")).toBe(1);
 });
 
 test("interpret supports if expressions", () => {
@@ -119,4 +119,8 @@ test("interpret supports if expressions", () => {
 
 test("interpret throws when if without else has false condition", () => {
   expect(() => interpret("if (1 > 2) { 10 }")).toThrow();
+});
+
+test("interpret always returns a number exit code", () => {
+  expect(interpret("let x = 1 < 2; x")).toBe(1);
 });
