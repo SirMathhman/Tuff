@@ -196,3 +196,7 @@ test("interpret supports logical AND operator", () => {
 test("interpret supports logical OR operator", () => {
   expect(interpret("1 > 2 || 3 < 4")).toBe(1);
 });
+
+test("interpret supports logical NOT operator", () => {
+  expect(interpret("!true")).toBe(0);
+});

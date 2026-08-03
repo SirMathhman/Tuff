@@ -94,7 +94,9 @@ export function lex(source: string): Token[] {
         i += 2;
         continue;
       }
-      throw new Error(`Unexpected character: ${char}`);
+      tokens.push({ type: "operator", value: "!" });
+      i++;
+      continue;
     }
 
     if (char === "=") {

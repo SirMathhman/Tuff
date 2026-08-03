@@ -106,6 +106,9 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return result;
     }
     case "unary": {
+      if (ast.operator === "!") {
+        return !isTruthy(evaluate(ast.operand, env));
+      }
       const operand = requireNumber(evaluate(ast.operand, env), "-");
       return -operand;
     }

@@ -154,6 +154,9 @@ export class Parser {
     if (token.type === "operator" && token.value === "-") {
       return { type: "unary", operator: "-", operand: this.parsePrimary() };
     }
+    if (token.type === "operator" && token.value === "!") {
+      return { type: "unary", operator: "!", operand: this.parsePrimary() };
+    }
     if (token.type === "paren" && token.value === "{") {
       return this.parseBlock();
     }
