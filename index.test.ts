@@ -72,3 +72,7 @@ test("evaluate logical or", () => {
 test("evaluate logical and", () => {
   expect(evaluate("true && false")).toBe(0);
 });
+
+test("evaluate equality", () => {
+  expect(evaluate("1 == 2")).toBe(0);
+});

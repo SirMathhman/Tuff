@@ -15,6 +15,7 @@ export type Token =
   | { type: "false" }
   | { type: "identifier"; name: string }
   | { type: "equals" }
+  | { type: "equals_equals" }
   | { type: "semicolon" }
   | { type: "eof" };
 
@@ -54,6 +55,9 @@ export function tokenize(source: string): Token[] {
     } else if (ch === "}") {
       tokens.push({ type: "rbrace" });
       i++;
+    } else if (ch === "=" && source[i + 1] === "=") {
+      tokens.push({ type: "equals_equals" });
+      i += 2;
     } else if (ch === "=") {
       tokens.push({ type: "equals" });
       i++;

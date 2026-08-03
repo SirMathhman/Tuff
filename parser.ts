@@ -1,20 +1,23 @@
 import type { Token } from "./tokens";
 import type { Expr, Stmt } from "./ast";
+import type { BinaryOp } from "./operators";
 
 const BINARY_PRECEDENCE: Record<string, number> = {
   or: 1,
   and: 2,
-  plus: 3,
-  minus: 3,
-  star: 4,
+  equals_equals: 3,
+  plus: 4,
+  minus: 4,
+  star: 5,
 };
 
-const BINARY_OPERATOR: Record<string, "+" | "-" | "*" | "||" | "&&"> = {
+const BINARY_OPERATOR: Record<string, BinaryOp> = {
   plus: "+",
   minus: "-",
   star: "*",
   or: "||",
   and: "&&",
+  equals_equals: "==",
 };
 
 export function parse(tokens: Token[]): Stmt {
