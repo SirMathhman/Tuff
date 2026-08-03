@@ -5,7 +5,7 @@ export type Expr =
   | { kind: "boolean"; value: boolean }
   | { kind: "variable"; name: string }
   | { kind: "binary"; op: BinaryOp; left: Expr; right: Expr }
-  | { kind: "if"; condition: Expr; then: Expr; otherwise: Expr }
+  | { kind: "if"; condition: Expr; then: Expr; otherwise: Expr | null }
   | { kind: "block"; statements: Stmt[] };
 
 export type Stmt =

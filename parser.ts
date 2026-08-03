@@ -70,10 +70,7 @@ export function parse(tokens: Token[]): Stmt {
       throw new ParseError("Expected ) after if condition");
     }
     const then = parseExpression();
-    if (advance().type !== "else") {
-      throw new ParseError("Expected else in if expression");
-    }
-    const otherwise = parseExpression();
+    const otherwise = peek().type === "else" ? (advance(), parseExpression()) : null;
     return { kind: "if", condition, then, otherwise };
   }
 

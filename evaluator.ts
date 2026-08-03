@@ -38,7 +38,9 @@ function evalExpr(expr: Expr, env: Env): Value {
     case "if": {
       return evalCondition(expr.condition, env)
         ? evalExpr(expr.then, env)
-        : evalExpr(expr.otherwise, env);
+        : expr.otherwise
+          ? evalExpr(expr.otherwise, env)
+          : { type: "number", value: 0 };
     }
   }
 }

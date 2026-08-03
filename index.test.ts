@@ -124,3 +124,7 @@ test("evaluate if with block branches mutates outer variable", () => {
 test("evaluate chained else if with block branches", () => {
   expect(evaluate("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else { x = 3; } x")).toBe(3);
 });
+
+test("evaluate if without else leaves variable unchanged", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 1; } x")).toBe(0);
+});
