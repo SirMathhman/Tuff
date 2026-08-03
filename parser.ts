@@ -1,17 +1,8 @@
 import type { Token } from "./tokens";
 import type { Expr, Stmt } from "./ast";
 import type { BinaryOp } from "./operators";
+import { OPERATORS } from "./operators";
 import { ParseError } from "./errors";
-
-const BINARY_PRECEDENCE: Record<string, number> = {
-  or: 1,
-  and: 2,
-  equals_equals: 3,
-  less_than: 3,
-  plus: 4,
-  minus: 4,
-  star: 5,
-};
 
 const BINARY_OPERATOR: Record<string, BinaryOp> = {
   plus: "+",
@@ -43,13 +34,17 @@ export function parse(tokens: Token[]): Stmt {
 
     while (true) {
       const type = peek().type;
-      const precedence = BINARY_PRECEDENCE[type];
-      if (precedence === undefined || precedence < minPrecedence) {
+      const op = BINARY_OPERATOR[type];
+      if (op === undefined) {
+        break;
+      }
+      const precedence = OPERATORS[op].precedence;
+      if (precedence < minPrecedence) {
         break;
       }
       advance();
       const right = parseBinary(precedence + 1);
-      left = { kind: "binary", op: BINARY_OPERATOR[type]!, left, right };
+      left = { kind: "binary", op, left, right };
     }
 
     return left;

@@ -14,12 +14,17 @@ function requireType<T extends Value["type"]>(
   return value as Extract<Value, { type: T }>;
 }
 
-export const BINARY_EVALUATORS: Record<BinaryOp, (left: Value, right: Value) => Value> = {
-  "+": (left, right) => ({ type: "number", value: requireType(left, "number", "+").value + requireType(right, "number", "+").value }),
-  "-": (left, right) => ({ type: "number", value: requireType(left, "number", "-").value - requireType(right, "number", "-").value }),
-  "*": (left, right) => ({ type: "number", value: requireType(left, "number", "*").value * requireType(right, "number", "*").value }),
-  "||": (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "||").value || requireType(right, "boolean", "||").value }),
-  "&&": (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "&&").value && requireType(right, "boolean", "&&").value }),
-  "==": (left, right) => ({ type: "boolean", value: left.type === right.type && left.value === right.value }),
-  "<": (left, right) => ({ type: "boolean", value: requireType(left, "number", "<").value < requireType(right, "number", "<").value }),
+export interface OperatorInfo {
+  precedence: number;
+  evaluate: (left: Value, right: Value) => Value;
+}
+
+export const OPERATORS: Record<BinaryOp, OperatorInfo> = {
+  "||": { precedence: 1, evaluate: (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "||").value || requireType(right, "boolean", "||").value }) },
+  "&&": { precedence: 2, evaluate: (left, right) => ({ type: "boolean", value: requireType(left, "boolean", "&&").value && requireType(right, "boolean", "&&").value }) },
+  "==": { precedence: 3, evaluate: (left, right) => ({ type: "boolean", value: left.type === right.type && left.value === right.value }) },
+  "<": { precedence: 3, evaluate: (left, right) => ({ type: "boolean", value: requireType(left, "number", "<").value < requireType(right, "number", "<").value }) },
+  "+": { precedence: 4, evaluate: (left, right) => ({ type: "number", value: requireType(left, "number", "+").value + requireType(right, "number", "+").value }) },
+  "-": { precedence: 4, evaluate: (left, right) => ({ type: "number", value: requireType(left, "number", "-").value - requireType(right, "number", "-").value }) },
+  "*": { precedence: 5, evaluate: (left, right) => ({ type: "number", value: requireType(left, "number", "*").value * requireType(right, "number", "*").value }) },
 };

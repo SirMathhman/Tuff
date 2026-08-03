@@ -1,5 +1,5 @@
 import type { Expr, Stmt } from "./ast";
-import { BINARY_EVALUATORS } from "./operators";
+import { OPERATORS } from "./operators";
 import { Env } from "./env";
 import type { Value } from "./value";
 import { toNumber } from "./value";
@@ -24,7 +24,7 @@ function evalExpr(expr: Expr, env: Env): Value {
     case "binary": {
       const left = evalExpr(expr.left, env);
       const right = evalExpr(expr.right, env);
-      return BINARY_EVALUATORS[expr.op](left, right);
+      return OPERATORS[expr.op].evaluate(left, right);
     }
   }
 }
