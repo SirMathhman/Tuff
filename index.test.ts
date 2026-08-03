@@ -48,3 +48,7 @@ test("evaluate invalid character throws error", () => {
 test("evaluate top-level let with block initializer and reference", () => {
   expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
+
+test("evaluate variable scoped inside block is not visible outside", () => {
+  expect(() => evaluate("let x = { let y = 0; }; y")).toThrow();
+});

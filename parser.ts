@@ -99,5 +99,11 @@ export function parse(tokens: Token[]): Expr {
     return parseExpression();
   }
 
-  return parseStatement();
+  const statements: Expr[] = [];
+
+  while (peek().type !== "eof") {
+    statements.push(parseStatement());
+  }
+
+  return { kind: "block", statements };
 }
