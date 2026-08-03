@@ -141,3 +141,7 @@ test("evaluate if without else throws", () => {
   expect(() => evaluate("let x = if (false) 2; x")).toThrow();
 });
 
+test("evaluate if with empty block branch throws", () => {
+  expect(() => evaluate("let x = if (false) {} else { 2 }; x")).toThrow();
+});
+
