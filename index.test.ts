@@ -100,3 +100,7 @@ test("interpret supports shadowing with assignment to inner binding", () => {
 test("interpret supports compound assignment", () => {
   expect(interpret("let mut x = 2; x += 3; x")).toBe(5);
 });
+
+test("interpret rejects compound assignment to immutable binding", () => {
+  expect(() => interpret("let x = 2; x += 3")).toThrow();
+});
