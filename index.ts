@@ -13,6 +13,10 @@ function truthy(value: Value): boolean {
 }
 
 export function evaluate(source: string): number {
+  const invalid = source.match(/[^\s\d\w+\-*/(){};=<>!&|]/);
+  if (invalid) {
+    throw new Error(`Invalid character: ${invalid[0]}`);
+  }
   const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
   let index = 0;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];

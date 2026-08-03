@@ -125,3 +125,7 @@ test("evaluate not equal expression", () => {
   expect(evaluate("1 != 2")).toBe(1);
 });
 
+test("evaluate invalid character throws", () => {
+  expect(() => evaluate("#")).toThrow();
+});
+
