@@ -46,8 +46,9 @@ export interface StructTypeValue {
 }
 
 export interface ReferenceCell {
-  value: Value;
-  mutable: boolean;
+  readonly mutable: boolean;
+  get(): Value;
+  set(value: Value): void;
 }
 
 export interface ReferenceValue {

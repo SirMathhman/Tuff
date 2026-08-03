@@ -384,3 +384,7 @@ test("interpret rejects assignment through an immutable reference", () => {
 test("interpret supports compound assignment through a mutable reference", () => {
   expect(interpret("let mut x = 1; let y : &mut I32 = &mut x; *y += 5; x")).toBe(6);
 });
+
+test("interpret supports references to array elements", () => {
+  expect(interpret("let mut a : [I32; 2] = [1, 2]; let r : &mut I32 = &mut a[0]; *r = 9; a[0] + a[1]")).toBe(11);
+});

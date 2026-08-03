@@ -54,7 +54,7 @@ export function typeOf(value: Value): TypeName | undefined {
     return { kind: "struct", name: value.name, fields };
   }
   if (isRef(value)) {
-    return { kind: "ref", mutable: value.mutable, target: typeOf(value.cell.value) ?? "I32" };
+    return { kind: "ref", mutable: value.mutable, target: typeOf(value.cell.get()) ?? "I32" };
   }
   return undefined;
 }

@@ -1,4 +1,4 @@
-import type { AST, Value, FunctionValue, ArrayValue, StructValue, TypeName, StructTypeValue } from "./types";
+import type { AST, Value, FunctionValue, ArrayValue, StructValue, TypeName, StructTypeValue, ReferenceCell } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
 import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual, isStruct, isRef } from "./typecheck";
@@ -188,12 +188,9 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return unaryOps[ast.operator](operand);
     }
     case "ref": {
-      if (ast.target.type !== "identifier") {
-        throw new Error(`Reference target must be an identifier: ${JSON.stringify(ast.target)}`);
-      }
-      const cell = env.reference(ast.target.name);
+      const cell = resolveRefCell(ast.target, env);
       if (ast.mutable && !cell.mutable) {
-        throw new Error(`Cannot take mutable reference to immutable variable: ${ast.target.name}`);
+        throw new Error(`Cannot take mutable reference to immutable target: ${JSON.stringify(ast.target)}`);
       }
       return { kind: "ref", mutable: ast.mutable, cell };
     }
@@ -202,7 +199,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       if (!isRef(target)) {
         throw new Error(`Dereference requires a reference: ${JSON.stringify(ast.target)}`);
       }
-      return target.cell.value;
+      return target.cell.get();
     }
     case "derefAssign": {
       const ref = evaluate(ast.target, env);
@@ -214,11 +211,11 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       }
       const value = evaluate(ast.value, env);
       if (ast.operator === "=") {
-        ref.cell.value = value;
+        ref.cell.set(value);
         return value;
       }
-      const result = compoundAssign(ast.operator, ref.cell.value, value, "deref");
-      ref.cell.value = result;
+      const result = compoundAssign(ast.operator, ref.cell.get(), value, "deref");
+      ref.cell.set(result);
       return result;
     }
     case "typeRef":
@@ -237,6 +234,23 @@ function resolveIndex(ast: Extract<AST, { type: "index" | "indexAssign" }>, env:
     throw new Error(`Index out of bounds: ${index}`);
   }
   return { target, index, element };
+}
+
+function resolveRefCell(target: AST, env: Environment): ReferenceCell {
+  if (target.type === "identifier") {
+    return env.reference(target.name);
+  }
+  if (target.type === "index") {
+    const { target: arr, index } = resolveIndex(target, env);
+    return {
+      mutable: true,
+      get: () => arr.elements[index]!,
+      set: (value) => {
+        arr.elements[index] = value;
+      },
+    };
+  }
+  throw new Error(`Invalid reference target: ${JSON.stringify(target)}`);
 }
 
 function compoundAssign(operator: "+=" | "-=" | "*=" | "/=", current: Value, value: Value, name: string): number {

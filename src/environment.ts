@@ -37,7 +37,14 @@ export class Environment {
   }
 
   reference(name: string): ReferenceCell {
-    return this.resolveBinding(name);
+    const binding = this.resolveBinding(name);
+    return {
+      mutable: binding.mutable,
+      get: () => binding.value,
+      set: (value) => {
+        this.resolveMutableBinding(name).value = value;
+      },
+    };
   }
 
   child(): Environment {
