@@ -29,3 +29,7 @@ test("evaluate multiplication and subtraction expression", () => {
   expect(evaluate("2 * 3 - 4")).toBe(2);
 });
 
+test("evaluate addition and multiplication expression", () => {
+  expect(evaluate("2 + 3 * 4")).toBe(14);
+});
+
