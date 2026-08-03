@@ -376,3 +376,7 @@ test("interpret supports dereferencing a mutable reference for assignment", () =
 test("interpret rejects taking a mutable reference to an immutable variable", () => {
   expect(() => interpret("let x = 1; let y : &mut I32 = &mut x")).toThrow();
 });
+
+test("interpret rejects assignment through an immutable reference", () => {
+  expect(() => interpret("let mut x = 1; let y : &I32 = &x; *y = 5")).toThrow();
+});
