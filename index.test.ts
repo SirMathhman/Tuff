@@ -172,3 +172,7 @@ test("interpret supports function definitions and calls", () => {
 test("interpret supports closures capturing outer variables", () => {
   expect(interpret("let mut x = 10; fn add(n : I32) : I32 => x + n; add(5)")).toBe(15);
 });
+
+test("interpret supports recursive functions", () => {
+  expect(interpret("fn fact(n : I32) : I32 => if (n <= 1) { 1 } else { n * fact(n - 1) }; fact(5)")).toBe(120);
+});
