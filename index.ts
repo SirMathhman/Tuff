@@ -1,42 +1,33 @@
-export function evaluate(source: string) : number {
+import { tokenize } from "./tokens";
+import { parse } from "./parser";
+import type { Expr } from "./ast";
+
+function evalAst(expr: Expr): number {
+  switch (expr.kind) {
+    case "number":
+      return expr.value;
+    case "binary": {
+      const left = evalAst(expr.left);
+      const right = evalAst(expr.right);
+
+      switch (expr.op) {
+        case "+":
+          return left + right;
+        case "-":
+          return left - right;
+        case "*":
+          return left * right;
+      }
+    }
+  }
+}
+
+export function evaluate(source: string): number {
   if (source === "") {
     return 0;
   }
 
-  const parts = source.split(" ");
-  let index = 0;
-
-  function parseTerm(): number {
-    let value = Number(parts[index]);
-    index++;
-
-    while (index < parts.length && (parts[index] === "*")) {
-      const operator = parts[index];
-      index++;
-      const operand = Number(parts[index]);
-      index++;
-
-      if (operator === "*") {
-        value *= operand;
-      }
-    }
-
-    return value;
-  }
-
-  let result = parseTerm();
-
-  while (index < parts.length) {
-    const operator = parts[index];
-    index++;
-    const operand = parseTerm();
-
-    if (operator === "+") {
-      result += operand;
-    } else if (operator === "-") {
-      result -= operand;
-    }
-  }
-
-  return result;
+  const tokens = tokenize(source);
+  const ast = parse(tokens);
+  return evalAst(ast);
 }
