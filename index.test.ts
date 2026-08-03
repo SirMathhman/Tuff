@@ -45,6 +45,10 @@ test("evaluate assigning wider type to typed variable throws", () => {
   expect(() => evaluate("let mut x = 0U8; x = 0U16;")).toThrow();
 });
 
+test("evaluate function definition and call", () => {
+  expect(evaluate("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toBe(7);
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

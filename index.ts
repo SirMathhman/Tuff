@@ -1,4 +1,6 @@
-type Value = { kind: "number"; value: number; type?: string } | { kind: "boolean"; value: boolean };
+type Value =
+  | { kind: "number"; value: number; type?: string }
+  | { kind: "boolean"; value: boolean };
 
 function numberValue(value: number, type?: string): Value {
   return { kind: "number", value, type };
@@ -18,20 +20,28 @@ function typeSize(type: string): number {
 }
 
 export function evaluate(source: string): number {
-  const invalid = source.match(/[^\s\d\w+\-*/(){};=<>!&|:]/);
+  const invalid = source.match(/[^\s\d\w+\-*/(){};=<>!&|:,]/);
   if (invalid) {
     throw new Error(`Invalid character: ${invalid[0]}`);
   }
-  const tokens = source.match(/\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=:]/g) ?? [];
+  const tokens =
+    source.match(
+      /\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|=>|\|\||&&|<|>|[+\-*/(){};=:,]/g,
+    ) ?? [];
   let index = 0;
   let breakRequested = false;
-  const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
+  const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [
+    new Map(),
+  ];
+  const functions = new Map<string, { params: string[]; body: number }>();
 
   function currentScope(): Map<string, { value: Value; mutable: boolean }> {
     return scopes[scopes.length - 1]!;
   }
 
-  function lookup(name: string): { value: Value; mutable: boolean } | undefined {
+  function lookup(
+    name: string,
+  ): { value: Value; mutable: boolean } | undefined {
     for (let i = scopes.length - 1; i >= 0; i--) {
       const entry = scopes[i]!.get(name);
       if (entry !== undefined) {
@@ -43,7 +53,10 @@ export function evaluate(source: string): number {
 
   function parseOr(initial?: Value): Value {
     let value = parseEquality(initial);
-    while (index < tokens.length && (tokens[index] === "||" || tokens[index] === "&&")) {
+    while (
+      index < tokens.length &&
+      (tokens[index] === "||" || tokens[index] === "&&")
+    ) {
       const operator = tokens[index++];
       const right = parseEquality();
       value =
@@ -56,7 +69,10 @@ export function evaluate(source: string): number {
 
   function parseEquality(initial?: Value): Value {
     let value = parseComparison(initial);
-    while (index < tokens.length && (tokens[index] === "==" || tokens[index] === "!=")) {
+    while (
+      index < tokens.length &&
+      (tokens[index] === "==" || tokens[index] === "!=")
+    ) {
       const operator = tokens[index++];
       const right = parseComparison();
       const equal = value.kind === right.kind && value.value === right.value;
@@ -67,13 +83,25 @@ export function evaluate(source: string): number {
 
   function parseComparison(initial?: Value): Value {
     let value = parseExpression(initial);
-    while (index < tokens.length && (tokens[index] === "<" || tokens[index] === ">" || tokens[index] === "<=" || tokens[index] === ">=")) {
+    while (
+      index < tokens.length &&
+      (tokens[index] === "<" ||
+        tokens[index] === ">" ||
+        tokens[index] === "<=" ||
+        tokens[index] === ">=")
+    ) {
       const operator = tokens[index++];
       const right = parseExpression();
       const left = value.value as number;
       const rhs = right.value as number;
       value = booleanValue(
-        operator === "<" ? left < rhs : operator === ">" ? left > rhs : operator === "<=" ? left <= rhs : left >= rhs
+        operator === "<"
+          ? left < rhs
+          : operator === ">"
+            ? left > rhs
+            : operator === "<="
+              ? left <= rhs
+              : left >= rhs,
       );
     }
     return value;
@@ -81,7 +109,10 @@ export function evaluate(source: string): number {
 
   function parseExpression(initial?: Value): Value {
     let value = parseTerm(initial);
-    while (index < tokens.length && (tokens[index] === "+" || tokens[index] === "-")) {
+    while (
+      index < tokens.length &&
+      (tokens[index] === "+" || tokens[index] === "-")
+    ) {
       const operator = tokens[index++];
       const right = parseTerm();
       const left = value.value as number;
@@ -93,7 +124,10 @@ export function evaluate(source: string): number {
 
   function parseTerm(initial?: Value): Value {
     let value = initial ?? parseFactor();
-    while (index < tokens.length && (tokens[index] === "*" || tokens[index] === "/")) {
+    while (
+      index < tokens.length &&
+      (tokens[index] === "*" || tokens[index] === "/")
+    ) {
       const operator = tokens[index++];
       const right = parseFactor();
       const left = value.value as number;
@@ -170,6 +204,9 @@ export function evaluate(source: string): number {
       const elseValue = parseOr();
       return truthy(condition) ? thenValue : elseValue;
     }
+    if (tokens[index + 1] === "(") {
+      return parseFunctionCall();
+    }
     index++; // variable reference
     const entry = lookup(token);
     if (entry === undefined) {
@@ -183,7 +220,13 @@ export function evaluate(source: string): number {
   }
 
   function isAssignmentOperator(token: string | undefined): boolean {
-    return token === "=" || token === "+=" || token === "-=" || token === "*=" || token === "/=";
+    return (
+      token === "=" ||
+      token === "+=" ||
+      token === "-=" ||
+      token === "*=" ||
+      token === "/="
+    );
   }
 
   function parseStatements(endToken: string | undefined): Value | undefined {
@@ -214,6 +257,8 @@ export function evaluate(source: string): number {
         parseIfStatement();
       } else if (tokens[index] === "while") {
         parseWhileStatement();
+      } else if (tokens[index] === "fn") {
+        parseFunctionDefinition();
       } else if (tokens[index] === "continue") {
         index++; // consume "continue"
         index++; // consume ";"
@@ -250,6 +295,67 @@ export function evaluate(source: string): number {
       }
       index = conditionStart;
     }
+  }
+
+  function parseFunctionDefinition(): void {
+    index++; // consume "fn"
+    const name = tokens[index++];
+    index++; // consume "("
+    const params: string[] = [];
+    while (tokens[index] !== ")") {
+      const param = tokens[index++];
+      if (param !== undefined) {
+        params.push(param);
+      }
+      index++; // consume ":"
+      index++; // consume type
+      if (tokens[index] === ",") {
+        index++;
+      }
+    }
+    index++; // consume ")"
+    index++; // consume ":"
+    index++; // consume return type
+    index++; // consume "=>"
+    const body = index;
+    // Skip to the end of the body (the terminating ";")
+    while (index < tokens.length && tokens[index] !== ";") {
+      index++;
+    }
+    index++; // consume ";"
+    if (name !== undefined) {
+      functions.set(name, { params, body });
+    }
+  }
+
+  function parseFunctionCall(): Value {
+    const name = tokens[index++];
+    index++; // consume "("
+    const fn = functions.get(name ?? "");
+    if (fn === undefined) {
+      throw new Error(`Undefined function: ${name}`);
+    }
+    const args: Value[] = [];
+    while (tokens[index] !== ")") {
+      args.push(parseOr());
+      if (tokens[index] === ",") {
+        index++;
+      }
+    }
+    index++; // consume ")"
+    scopes.push(new Map());
+    fn.params.forEach((param, i) => {
+      const arg = args[i];
+      if (arg !== undefined) {
+        currentScope().set(param, { value: arg, mutable: false });
+      }
+    });
+    const savedIndex = index;
+    index = fn.body;
+    const result = parseOr();
+    index = savedIndex;
+    scopes.pop();
+    return result;
   }
 
   function parseIfStatement(): void {
@@ -392,8 +498,14 @@ export function evaluate(source: string): number {
     if (name !== undefined) {
       const value = parseOr();
       const valueType = value.kind === "number" ? value.type : undefined;
-      if (declaredType !== undefined && valueType !== undefined && typeSize(valueType) > typeSize(declaredType)) {
-        throw new Error(`Type mismatch: cannot assign ${valueType} to ${declaredType}`);
+      if (
+        declaredType !== undefined &&
+        valueType !== undefined &&
+        typeSize(valueType) > typeSize(declaredType)
+      ) {
+        throw new Error(
+          `Type mismatch: cannot assign ${valueType} to ${declaredType}`,
+        );
       }
       currentScope().set(name, { value, mutable });
     }
@@ -413,17 +525,30 @@ export function evaluate(source: string): number {
       }
       const rhs = parseOr();
       if (operator === "=") {
-        const existingType = entry.value.kind === "number" ? entry.value.type : undefined;
+        const existingType =
+          entry.value.kind === "number" ? entry.value.type : undefined;
         const newType = rhs.kind === "number" ? rhs.type : undefined;
-        if (existingType !== undefined && newType !== undefined && typeSize(newType) > typeSize(existingType)) {
-          throw new Error(`Type mismatch: cannot assign ${newType} to ${existingType}`);
+        if (
+          existingType !== undefined &&
+          newType !== undefined &&
+          typeSize(newType) > typeSize(existingType)
+        ) {
+          throw new Error(
+            `Type mismatch: cannot assign ${newType} to ${existingType}`,
+          );
         }
         entry.value = rhs;
       } else {
         const left = entry.value.value as number;
         const right = rhs.value as number;
         entry.value = numberValue(
-          operator === "+=" ? left + right : operator === "-=" ? left - right : operator === "*=" ? left * right : left / right
+          operator === "+="
+            ? left + right
+            : operator === "-="
+              ? left - right
+              : operator === "*="
+                ? left * right
+                : left / right,
         );
       }
     }
