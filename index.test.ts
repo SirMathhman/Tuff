@@ -160,3 +160,7 @@ test("interpret throws on U8 underflow", () => {
 test("interpret rejects type mismatch in let annotation", () => {
   expect(() => interpret("let x : U8 = 0U16;")).toThrow();
 });
+
+test("interpret accepts matching type annotation", () => {
+  expect(interpret("let x : U8 = 5U8; x")).toBe(5);
+});
