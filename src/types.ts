@@ -28,7 +28,7 @@ export type TypeName = "U8" | "U16" | "I32" | "Bool";
 
 export type Token =
   | { type: "number"; value: number; u8?: boolean; u16?: boolean }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "=>" }
+  | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||" | "=>" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "identifier"; value: string }
   | { type: "boolean"; value: boolean }
@@ -39,7 +39,7 @@ export type Token =
 export type AST =
   | { type: "number"; value: number; u8?: boolean; u16?: boolean }
   | { type: "boolean"; value: boolean }
-  | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&"; left: AST; right: AST }
+  | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||"; left: AST; right: AST }
   | { type: "unary"; operator: "-"; operand: AST }
   | { type: "identifier"; name: string }
   | { type: "let"; name: string; mutable: boolean; typeName?: TypeName; value: AST }

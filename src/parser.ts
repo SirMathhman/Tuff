@@ -24,11 +24,28 @@ export class Parser {
   }
 
   private parseAdditive(): AST {
-    let left = this.parseLogicalAnd();
+    let left = this.parseLogicalOr();
 
     while (true) {
       const token = this.peek();
       if (token && token.type === "operator" && (token.value === "+" || token.value === "-")) {
+        this.consume();
+        const right = this.parseLogicalOr();
+        left = { type: "binary", operator: token.value, left, right };
+      } else {
+        break;
+      }
+    }
+
+    return left;
+  }
+
+  private parseLogicalOr(): AST {
+    let left = this.parseLogicalAnd();
+
+    while (true) {
+      const token = this.peek();
+      if (token && token.type === "operator" && token.value === "||") {
         this.consume();
         const right = this.parseLogicalAnd();
         left = { type: "binary", operator: token.value, left, right };
