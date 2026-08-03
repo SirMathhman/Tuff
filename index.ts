@@ -49,8 +49,12 @@ export function evaluate(source: string): number {
   }
 
   function parseBlock(): number {
+    return parseStatements("}");
+  }
+
+  function parseStatements(endToken: string | undefined): number {
     let value = 0;
-    while (index < tokens.length && tokens[index] !== "}") {
+    while (index < tokens.length && tokens[index] !== endToken) {
       if (tokens[index] === "let") {
         index++; // consume "let"
         const name = tokens[index++];
@@ -69,5 +73,5 @@ export function evaluate(source: string): number {
     return value;
   }
 
-  return parseExpression();
+  return parseStatements(undefined);
 }
