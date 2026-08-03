@@ -1,6 +1,6 @@
 import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
-import { makeInteger, integerTypeOf, isFunction, requireNumber, typeOf, isTruthy, makeBool } from "./value";
+import { makeInteger, integerTypeOf, isFunction, requireNumber, typeOf, isTruthy, makeBool, isArray, typesEqual } from "./value";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -14,8 +14,8 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return env.lookup(ast.name);
     case "let": {
       const value = evaluate(ast.value, env);
-      if (ast.typeName && typeOf(value) !== ast.typeName) {
-        throw new Error(`Type mismatch: expected ${ast.typeName}, got ${typeOf(value) ?? "number"}`);
+      if (ast.typeName && !typesEqual(typeOf(value) ?? "I32", ast.typeName)) {
+        throw new Error(`Type mismatch: expected ${JSON.stringify(ast.typeName)}, got ${JSON.stringify(typeOf(value) ?? "number")}`);
       }
       env.define(ast.name, value, ast.mutable);
       return value;
@@ -70,6 +70,23 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       }
       const args = ast.args.map((arg) => evaluate(arg, env));
       return callFunction(callee, args, evaluate);
+    }
+    case "array": {
+      const elements = ast.elements.map((el) => evaluate(el, env));
+      const elementType = elements.length > 0 ? (typeOf(elements[0]!) ?? "I32") : "I32";
+      return { kind: "array", elementType, elements };
+    }
+    case "index": {
+      const target = evaluate(ast.target, env);
+      if (!isArray(target)) {
+        throw new Error(`Indexing requires an array: ${JSON.stringify(ast.target)}`);
+      }
+      const index = requireNumber(evaluate(ast.index, env), "index");
+      const element = target.elements[index];
+      if (element === undefined) {
+        throw new Error(`Index out of bounds: ${index}`);
+      }
+      return element;
     }
     case "block": {
       const childEnv = env.child();

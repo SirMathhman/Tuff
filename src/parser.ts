@@ -141,43 +141,67 @@ export class Parser {
 
   private parsePrimary(): AST {
     const token = this.consume();
+    let node: AST;
     if (token.type === "number") {
-      return { type: "number", value: token.value, typeName: token.typeName as IntegerTypeName | undefined };
-    }
-    if (token.type === "boolean") {
-      return { type: "boolean", value: token.value };
-    }
-    if (token.type === "identifier" && token.value === "if") {
-      return this.parseIf();
-    }
-    if (token.type === "identifier" && token.value === "while") {
-      return this.parseWhile();
-    }
-    if (token.type === "identifier") {
+      node = { type: "number", value: token.value, typeName: token.typeName as IntegerTypeName | undefined };
+    } else if (token.type === "boolean") {
+      node = { type: "boolean", value: token.value };
+    } else if (token.type === "identifier" && token.value === "if") {
+      node = this.parseIf();
+    } else if (token.type === "identifier" && token.value === "while") {
+      node = this.parseWhile();
+    } else if (token.type === "identifier") {
       const name = token.value;
       if (this.peek() && this.peek()!.type === "paren" && this.peek()!.value === "(") {
-        return this.parseCall(name);
+        node = this.parseCall(name);
+      } else {
+        node = { type: "identifier", name };
       }
-      return { type: "identifier", name };
-    }
-    if (token.type === "operator" && token.value === "-") {
-      return { type: "unary", operator: "-", operand: this.parsePrimary() };
-    }
-    if (token.type === "operator" && token.value === "!") {
-      return { type: "unary", operator: "!", operand: this.parsePrimary() };
-    }
-    if (token.type === "paren" && token.value === "{") {
-      return this.parseBlock();
-    }
-    if (token.type === "paren" && token.value === "(") {
+    } else if (token.type === "operator" && token.value === "-") {
+      node = { type: "unary", operator: "-", operand: this.parsePrimary() };
+    } else if (token.type === "operator" && token.value === "!") {
+      node = { type: "unary", operator: "!", operand: this.parsePrimary() };
+    } else if (token.type === "paren" && token.value === "{") {
+      node = this.parseBlock();
+    } else if (token.type === "paren" && token.value === "(") {
       const inner = this.parseAdditive();
       const closing = this.consume();
       if (closing.type !== "paren" || closing.value !== ")") {
         throw new Error(`Expected closing paren, got: ${JSON.stringify(closing)}`);
       }
-      return inner;
+      node = inner;
+    } else if (token.type === "bracket" && token.value === "[") {
+      node = this.parseArrayLiteral();
+    } else {
+      throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
     }
-    throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
+    return this.parsePostfix(node);
+  }
+
+  private parsePostfix(node: AST): AST {
+    while (true) {
+      const next = this.peek();
+      if (next && next.type === "bracket" && next.value === "[") {
+        this.consume();
+        const index = this.parseAdditive();
+        const closing = this.consume();
+        if (closing.type !== "bracket" || closing.value !== "]") {
+          throw new Error(`Expected ], got: ${JSON.stringify(closing)}`);
+        }
+        node = { type: "index", target: node, index };
+      } else {
+        break;
+      }
+    }
+    return node;
+  }
+
+  private parseArrayLiteral(): AST {
+    const elements: AST[] = [];
+    this.parseCommaSeparated("]", "array elements", () => {
+      elements.push(this.parseAdditive());
+    });
+    return { type: "array", elements };
   }
 
   private parseBlock(): AST {
@@ -340,7 +364,8 @@ export class Parser {
   }
 
   private parseCommaSeparated(closing: string, what: string, parseItem: () => void): void {
-    if (this.peek() && this.peek()!.type === "paren" && this.peek()!.value === closing) {
+    const closingType = closing === ")" ? "paren" : "bracket";
+    if (this.peek() && this.peek()!.type === closingType && this.peek()!.value === closing) {
       this.consume();
       return;
     }
@@ -352,7 +377,7 @@ export class Parser {
         continue;
       }
       const close = this.consume();
-      if (close.type !== "paren" || close.value !== closing) {
+      if (close.type !== closingType || close.value !== closing) {
         throw new Error(`Expected ${closing} after ${what}, got: ${JSON.stringify(close)}`);
       }
       break;
@@ -365,11 +390,35 @@ export class Parser {
       return undefined;
     }
     this.consume();
-    const typeToken = this.consume();
-    if (typeToken.type !== "identifier" || !TYPE_NAMES.includes(typeToken.value as TypeName)) {
-      throw new Error(`${errorMessage}, got: ${JSON.stringify(typeToken)}`);
+    const open = this.consume();
+    if (open.type === "bracket" && open.value === "[") {
+      const elementType = this.parseTypeName(errorMessage);
+      const semi = this.consume();
+      if (semi.type !== "semicolon") {
+        throw new Error(`Expected ; in array type, got: ${JSON.stringify(semi)}`);
+      }
+      const sizeToken = this.consume();
+      if (sizeToken.type !== "number") {
+        throw new Error(`Expected array size, got: ${JSON.stringify(sizeToken)}`);
+      }
+      const close = this.consume();
+      if (close.type !== "bracket" || close.value !== "]") {
+        throw new Error(`Expected ] in array type, got: ${JSON.stringify(close)}`);
+      }
+      return { kind: "array", elementType, size: sizeToken.value };
     }
-    return typeToken.value as TypeName;
+    if (open.type !== "identifier" || !TYPE_NAMES.includes(open.value as TypeName)) {
+      throw new Error(`${errorMessage}, got: ${JSON.stringify(open)}`);
+    }
+    return open.value as TypeName;
+  }
+
+  private parseTypeName(errorMessage: string): TypeName {
+    const token = this.consume();
+    if (token.type !== "identifier" || !TYPE_NAMES.includes(token.value as TypeName)) {
+      throw new Error(`${errorMessage}, got: ${JSON.stringify(token)}`);
+    }
+    return token.value as TypeName;
   }
 }
 

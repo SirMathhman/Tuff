@@ -157,6 +157,12 @@ export function lex(source: string): Token[] {
       continue;
     }
 
+    if (char === "[" || char === "]") {
+      tokens.push({ type: "bracket", value: char });
+      i++;
+      continue;
+    }
+
     throw new Error(`Unexpected character: ${char}`);
   }
 

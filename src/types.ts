@@ -1,4 +1,4 @@
-export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue;
+export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue | ArrayValue;
 
 export type IntegerTypeName = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64";
 
@@ -21,12 +21,24 @@ export interface FunctionValue {
   readonly closure: unknown;
 }
 
+export interface ArrayValue {
+  readonly kind: "array";
+  readonly elementType: TypeName;
+  readonly elements: Value[];
+}
+
 export interface Param {
   name: string;
   typeName?: TypeName;
 }
 
-export type TypeName = IntegerTypeName | "Bool";
+export type TypeName = IntegerTypeName | "Bool" | ArrayTypeName;
+
+export interface ArrayTypeName {
+  readonly kind: "array";
+  readonly elementType: TypeName;
+  readonly size: number;
+}
 
 export interface NumberLiteral {
   value: number;
@@ -37,6 +49,7 @@ export type Token =
   | ({ type: "number" } & NumberLiteral)
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" | "is" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
+  | { type: "bracket"; value: "[" | "]" }
   | { type: "identifier"; value: string }
   | { type: "boolean"; value: boolean }
   | { type: "colon"; value: ":" }
@@ -56,4 +69,6 @@ export type AST =
   | { type: "while"; condition: AST; body: AST }
   | { type: "fn"; name: string; params: Param[]; returnType?: TypeName; body: AST }
   | { type: "call"; callee: AST; args: AST[] }
+  | { type: "array"; elements: AST[] }
+  | { type: "index"; target: AST; index: AST }
   | { type: "block"; statements: AST[] };

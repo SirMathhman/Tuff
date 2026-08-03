@@ -300,3 +300,7 @@ test("interpret supports logical NOT operator", () => {
 test("interpret supports combined logical expressions", () => {
   expect(interpret("(1 < 2 && 3 < 4) || !false")).toBe(1);
 });
+
+test("interpret supports array literals with typed annotation and indexing", () => {
+  expect(interpret("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+});
