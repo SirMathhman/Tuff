@@ -19,8 +19,11 @@ function toExitCode(value: Value): number {
   if (value === false) {
     return 0;
   }
-  if (typeof value === "object") {
+  if (typeof value === "object" && "value" in value) {
     return value.value;
   }
-  return value;
+  if (typeof value === "number") {
+    return value;
+  }
+  return 0;
 }

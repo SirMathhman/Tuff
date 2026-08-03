@@ -1,4 +1,4 @@
-import type { Token, AST, TypeName } from "./types";
+import type { Token, AST, TypeName, Param } from "./types";
 
 export class Parser {
   private index = 0;
@@ -111,7 +111,11 @@ export class Parser {
       return this.parseWhile();
     }
     if (token.type === "identifier") {
-      return { type: "identifier", name: token.value };
+      const name = token.value;
+      if (this.peek() && this.peek()!.type === "paren" && this.peek()!.value === "(") {
+        return this.parseCall(name);
+      }
+      return { type: "identifier", name };
     }
     if (token.type === "operator" && token.value === "-") {
       return { type: "unary", operator: "-", operand: this.parsePrimary() };
@@ -215,6 +219,9 @@ export class Parser {
     if (token && token.type === "identifier" && token.value === "let") {
       return this.parseLet();
     }
+    if (token && token.type === "identifier" && token.value === "fn") {
+      return this.parseFn();
+    }
     return this.parseAdditive();
   }
 
@@ -231,16 +238,7 @@ export class Parser {
       throw new Error(`Expected identifier after let, got: ${JSON.stringify(nameToken)}`);
     }
     this.consume();
-    let typeName: TypeName | undefined;
-    const colon = this.peek();
-    if (colon && colon.type === "colon") {
-      this.consume();
-      const typeToken = this.consume();
-      if (typeToken.type !== "identifier" || (typeToken.value !== "U8" && typeToken.value !== "U16")) {
-        throw new Error(`Expected type annotation, got: ${JSON.stringify(typeToken)}`);
-      }
-      typeName = typeToken.value;
-    }
+    const typeName = this.parseTypeAnnotation("Expected type annotation");
     const eq = this.consume();
     if (eq.type !== "operator" || eq.value !== "=") {
       throw new Error(`Expected = after let ${nameToken.value}, got: ${JSON.stringify(eq)}`);
@@ -249,7 +247,85 @@ export class Parser {
     const node: AST = { name: nameToken.value, mutable, typeName, value } as AST;
     node.type = "let";
     return node;
-  }}
+  }
+
+  private parseFn(): AST {
+    this.consume();
+    const nameToken = this.consume();
+    if (nameToken.type !== "identifier") {
+      throw new Error(`Expected function name, got: ${JSON.stringify(nameToken)}`);
+    }
+    const params = this.parseParams();
+    const returnType = this.parseTypeAnnotation("Expected return type");
+    const arrow = this.consume();
+    if (arrow.type !== "operator" || arrow.value !== "=>") {
+      throw new Error(`Expected => after function signature, got: ${JSON.stringify(arrow)}`);
+    }
+    const body = this.parseAdditive();
+    const node: AST = { name: nameToken.value, params, returnType, body } as AST;
+    node.type = "fn";
+    return node;
+  }
+
+  private parseParams(): Param[] {
+    const open = this.consume();
+    if (open.type !== "paren" || open.value !== "(") {
+      throw new Error(`Expected ( for parameters, got: ${JSON.stringify(open)}`);
+    }
+    const params: Param[] = [];
+    this.parseCommaSeparated(")", "parameters", () => {
+      const nameToken = this.consume();
+      if (nameToken.type !== "identifier") {
+        throw new Error(`Expected parameter name, got: ${JSON.stringify(nameToken)}`);
+      }
+      const typeName = this.parseTypeAnnotation("Expected parameter type");
+      params.push({ name: nameToken.value, typeName });
+    });
+    return params;
+  }
+
+  private parseCall(name: string): AST {
+    this.consume();
+    const args: AST[] = [];
+    this.parseCommaSeparated(")", "arguments", () => {
+      args.push(this.parseAdditive());
+    });
+    return { type: "call", callee: { type: "identifier", name }, args };
+  }
+
+  private parseCommaSeparated(closing: string, what: string, parseItem: () => void): void {
+    if (this.peek() && this.peek()!.type === "paren" && this.peek()!.value === closing) {
+      this.consume();
+      return;
+    }
+    while (true) {
+      parseItem();
+      const next = this.peek();
+      if (next && next.type === "comma") {
+        this.consume();
+        continue;
+      }
+      const close = this.consume();
+      if (close.type !== "paren" || close.value !== closing) {
+        throw new Error(`Expected ${closing} after ${what}, got: ${JSON.stringify(close)}`);
+      }
+      break;
+    }
+  }
+
+  private parseTypeAnnotation(errorMessage: string): TypeName | undefined {
+    const colon = this.peek();
+    if (!colon || colon.type !== "colon") {
+      return undefined;
+    }
+    this.consume();
+    const typeToken = this.consume();
+    if (typeToken.type !== "identifier" || (typeToken.value !== "U8" && typeToken.value !== "U16" && typeToken.value !== "I32")) {
+      throw new Error(`${errorMessage}, got: ${JSON.stringify(typeToken)}`);
+    }
+    return typeToken.value;
+  }
+}
 
 export function parse(tokens: Token[]): AST {
   return new Parser(tokens).parse();

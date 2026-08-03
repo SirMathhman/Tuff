@@ -164,3 +164,7 @@ test("interpret rejects type mismatch in let annotation", () => {
 test("interpret accepts matching type annotation", () => {
   expect(interpret("let x : U8 = 5U8; x")).toBe(5);
 });
+
+test("interpret supports function definitions and calls", () => {
+  expect(interpret("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toBe(7);
+});

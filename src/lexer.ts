@@ -45,6 +45,9 @@ export function lex(source: string): Token[] {
           value += "16";
           i += 2;
         }
+      } else if (value === "I" && source[i] === "3" && source[i + 1] === "2") {
+        value += "32";
+        i += 2;
       }
       if (value === "true" || value === "false") {
         tokens.push({ type: "boolean", value: value === "true" });
@@ -56,6 +59,12 @@ export function lex(source: string): Token[] {
 
     if (char === ";") {
       tokens.push({ type: "semicolon", value: char });
+      i++;
+      continue;
+    }
+
+    if (char === ",") {
+      tokens.push({ type: "comma", value: char });
       i++;
       continue;
     }
@@ -92,6 +101,11 @@ export function lex(source: string): Token[] {
       const next = source[i + 1];
       if (next === "=") {
         tokens.push({ type: "operator", value: "==" });
+        i += 2;
+        continue;
+      }
+      if (next === ">") {
+        tokens.push({ type: "operator", value: "=>" });
         i += 2;
         continue;
       }

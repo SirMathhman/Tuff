@@ -1,4 +1,4 @@
-import type { AST, Value, U8Value, U16Value, TypeName } from "./types";
+import type { AST, Value, U8Value, U16Value, TypeName, FunctionValue } from "./types";
 import { Environment } from "./environment";
 
 type BinaryOperator = "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!=";
@@ -54,7 +54,14 @@ function typeOf(value: Value): TypeName | undefined {
   if (isU16(value)) {
     return "U16";
   }
+  if (typeof value === "number") {
+    return "I32";
+  }
   return undefined;
+}
+
+function isFunction(value: Value): value is FunctionValue {
+  return typeof value === "object" && value !== null && value.kind === "function";
 }
 
 const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
@@ -131,6 +138,37 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       let result: Value = 0;
       while (isTruthy(evaluate(ast.condition, env))) {
         result = evaluate(ast.body, env);
+      }
+      return result;
+    }
+    case "fn": {
+      const fn: FunctionValue = {
+        kind: "function",
+        name: ast.name,
+        params: ast.params,
+        returnType: ast.returnType,
+        body: ast.body,
+        closure: env,
+      };
+      env.define(ast.name, fn, false);
+      return fn;
+    }
+    case "call": {
+      const callee = evaluate(ast.callee, env);
+      if (!isFunction(callee)) {
+        throw new Error(`Not a function: ${JSON.stringify(ast.callee)}`);
+      }
+      const args = ast.args.map((arg) => evaluate(arg, env));
+      if (args.length !== callee.params.length) {
+        throw new Error(`Function ${callee.name} expects ${callee.params.length} args, got ${args.length}`);
+      }
+      const callEnv = (callee.closure as Environment).child();
+      callee.params.forEach((param, i) => {
+        callEnv.define(param.name, args[i]!, false);
+      });
+      const result = evaluate(callee.body, callEnv);
+      if (callee.returnType && typeOf(result) !== callee.returnType) {
+        throw new Error(`Return type mismatch: expected ${callee.returnType}, got ${typeOf(result) ?? "number"}`);
       }
       return result;
     }
