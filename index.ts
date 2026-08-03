@@ -363,8 +363,43 @@ export function evaluate(source: string): number {
       index++; // consume ";"
     }
     if (name !== undefined && returnType !== undefined) {
-      functions.set(name, { params, body, returnType });
+      const fn = { params, body, returnType };
+      functions.set(name, fn);
+      // Validate that the body's value is assignable to the declared return type.
+      const placeholderArgs = params.map((param) =>
+        param.type === "Bool"
+          ? booleanValue(false)
+          : numberValue(0, param.type),
+      );
+      const bodyValue = invokeFunction(fn, placeholderArgs);
+      const bodyType = bodyValue.kind === "number" ? bodyValue.type : "Bool";
+      assertAssignable(bodyType, returnType);
     }
+  }
+
+  function invokeFunction(
+    fn: {
+      params: Array<{ name: string; type: string }>;
+      body: number;
+      returnType: string;
+    },
+    args: Value[],
+  ): Value {
+    scopes.push(new Map());
+    fn.params.forEach((param, i) => {
+      const arg = args[i];
+      if (arg !== undefined) {
+        const argType = arg.kind === "number" ? arg.type : "Bool";
+        assertAssignable(argType, param.type);
+        currentScope().set(param.name, { value: arg, mutable: false });
+      }
+    });
+    const savedIndex = index;
+    index = fn.body;
+    const result = parseOr();
+    index = savedIndex;
+    scopes.pop();
+    return result;
   }
 
   function parseFunctionCall(): Value {
@@ -382,20 +417,7 @@ export function evaluate(source: string): number {
       }
     }
     index++; // consume ")"
-    scopes.push(new Map());
-    fn.params.forEach((param, i) => {
-      const arg = args[i];
-      if (arg !== undefined) {
-        const argType = arg.kind === "number" ? arg.type : "Bool";
-        assertAssignable(argType, param.type);
-        currentScope().set(param.name, { value: arg, mutable: false });
-      }
-    });
-    const savedIndex = index;
-    index = fn.body;
-    const result = parseOr();
-    index = savedIndex;
-    scopes.pop();
+    const result = invokeFunction(fn, args);
     if (fn.returnType === "Bool") {
       return booleanValue(truthy(result));
     }
