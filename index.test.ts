@@ -44,3 +44,7 @@ test("interpret handles whitespace around operators", () => {
 test("interpret handles parentheses", () => {
   expect(interpret("(1+2)*3")).toBe(9);
 });
+
+test("interpret handles nested parentheses", () => {
+  expect(interpret("((1+2)*3)")).toBe(9);
+});
