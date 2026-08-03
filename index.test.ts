@@ -80,3 +80,7 @@ test("evaluate equality", () => {
 test("evaluate equality is type-aware", () => {
   expect(evaluate("1 == true")).toBe(0);
 });
+
+test("evaluate logical or requires boolean operands", () => {
+  expect(() => evaluate("1 || 2")).toThrow();
+});
