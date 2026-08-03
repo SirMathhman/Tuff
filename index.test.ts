@@ -109,3 +109,19 @@ test("evaluate less than expression", () => {
   expect(evaluate("let x = 0; let y = 1; x < y")).toBe(1);
 });
 
+test("evaluate greater than expression", () => {
+  expect(evaluate("2 > 1")).toBe(1);
+});
+
+test("evaluate less than or equal expression", () => {
+  expect(evaluate("1 <= 1")).toBe(1);
+});
+
+test("evaluate greater than or equal expression", () => {
+  expect(evaluate("2 >= 3")).toBe(0);
+});
+
+test("evaluate not equal expression", () => {
+  expect(evaluate("1 != 2")).toBe(1);
+});
+

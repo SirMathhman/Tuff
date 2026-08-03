@@ -13,7 +13,7 @@ function truthy(value: Value): boolean {
 }
 
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|\|\||&&|<|[+\-*/(){};=]/g) ?? [];
+  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
   let index = 0;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
 
@@ -46,20 +46,25 @@ export function evaluate(source: string): number {
 
   function parseEquality(initial?: Value): Value {
     let value = parseComparison(initial);
-    while (index < tokens.length && tokens[index] === "==") {
-      index++;
+    while (index < tokens.length && (tokens[index] === "==" || tokens[index] === "!=")) {
+      const operator = tokens[index++];
       const right = parseComparison();
-      value = booleanValue(value.kind === right.kind && value.value === right.value);
+      const equal = value.kind === right.kind && value.value === right.value;
+      value = booleanValue(operator === "==" ? equal : !equal);
     }
     return value;
   }
 
   function parseComparison(initial?: Value): Value {
     let value = parseExpression(initial);
-    while (index < tokens.length && tokens[index] === "<") {
-      index++;
+    while (index < tokens.length && (tokens[index] === "<" || tokens[index] === ">" || tokens[index] === "<=" || tokens[index] === ">=")) {
+      const operator = tokens[index++];
       const right = parseExpression();
-      value = booleanValue((value.value as number) < (right.value as number));
+      const left = value.value as number;
+      const rhs = right.value as number;
+      value = booleanValue(
+        operator === "<" ? left < rhs : operator === ">" ? left > rhs : operator === "<=" ? left <= rhs : left >= rhs
+      );
     }
     return value;
   }
