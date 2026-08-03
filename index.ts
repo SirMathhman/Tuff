@@ -6,6 +6,8 @@ export function interpret(source: string): number {
     const operand = Number(tokens[i + 1]);
     if (operator === "+") {
       result += operand;
+    } else if (operator === "-") {
+      result -= operand;
     }
   }
   return result;

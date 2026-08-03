@@ -13,3 +13,7 @@ test("interpret addition expression", () => {
   expect(interpret("1 + 2")).toBe(3);
 });
 
+test("interpret subtraction expression", () => {
+  expect(interpret("1 - 2")).toBe(-1);
+});
+
