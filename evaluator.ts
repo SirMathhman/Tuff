@@ -13,6 +13,10 @@ function evalCondition(expr: Expr, env: Env): boolean {
   return value.value;
 }
 
+function evalOptional(expr: Expr | null, env: Env, fallback: Value): Value {
+  return expr ? evalExpr(expr, env) : fallback;
+}
+
 function evalExpr(expr: Expr, env: Env): Value {
   switch (expr.kind) {
     case "number":
@@ -38,9 +42,7 @@ function evalExpr(expr: Expr, env: Env): Value {
     case "if": {
       return evalCondition(expr.condition, env)
         ? evalExpr(expr.then, env)
-        : expr.otherwise
-          ? evalExpr(expr.otherwise, env)
-          : { type: "number", value: 0 };
+        : evalOptional(expr.otherwise, env, { type: "number", value: 0 });
     }
   }
 }
