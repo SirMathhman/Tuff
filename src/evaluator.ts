@@ -59,6 +59,18 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
           return left * right;
         case "/":
           return Math.trunc(left / right);
+        case "<":
+          return left < right ? 1 : 0;
+        case ">":
+          return left > right ? 1 : 0;
+        case "<=":
+          return left <= right ? 1 : 0;
+        case ">=":
+          return left >= right ? 1 : 0;
+        case "==":
+          return left === right ? 1 : 0;
+        case "!=":
+          return left !== right ? 1 : 0;
       }
     }
     case "unary":

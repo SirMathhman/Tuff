@@ -38,9 +38,43 @@ export function lex(source: string): Token[] {
       continue;
     }
 
-    if (char === "+" || char === "-" || char === "*" || char === "/" || char === "=") {
+    if (char === "<" || char === ">") {
       const next = source[i + 1];
-      if (next === "=" && char !== "=") {
+      if (next === "=") {
+        tokens.push({ type: "operator", value: (char + next) as "<=" | ">=" });
+        i += 2;
+        continue;
+      }
+      tokens.push({ type: "operator", value: char });
+      i++;
+      continue;
+    }
+
+    if (char === "!") {
+      const next = source[i + 1];
+      if (next === "=") {
+        tokens.push({ type: "operator", value: "!=" });
+        i += 2;
+        continue;
+      }
+      throw new Error(`Unexpected character: ${char}`);
+    }
+
+    if (char === "=") {
+      const next = source[i + 1];
+      if (next === "=") {
+        tokens.push({ type: "operator", value: "==" });
+        i += 2;
+        continue;
+      }
+      tokens.push({ type: "operator", value: char });
+      i++;
+      continue;
+    }
+
+    if (char === "+" || char === "-" || char === "*" || char === "/") {
+      const next = source[i + 1];
+      if (next === "=") {
         tokens.push({ type: "operator", value: (char + next) as "+=" | "-=" | "*=" | "/=" });
         i += 2;
         continue;

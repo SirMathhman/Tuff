@@ -24,11 +24,32 @@ export class Parser {
   }
 
   private parseAdditive(): AST {
-    let left = this.parseAssignment();
+    let left = this.parseComparison();
 
     while (true) {
       const token = this.peek();
       if (token && token.type === "operator" && (token.value === "+" || token.value === "-")) {
+        this.consume();
+        const right = this.parseComparison();
+        left = { type: "binary", operator: token.value, left, right };
+      } else {
+        break;
+      }
+    }
+
+    return left;
+  }
+
+  private parseComparison(): AST {
+    let left = this.parseAssignment();
+
+    while (true) {
+      const token = this.peek();
+      if (
+        token &&
+        token.type === "operator" &&
+        (token.value === "<" || token.value === ">" || token.value === "<=" || token.value === ">=" || token.value === "==" || token.value === "!=")
+      ) {
         this.consume();
         const right = this.parseAssignment();
         left = { type: "binary", operator: token.value, left, right };

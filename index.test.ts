@@ -104,3 +104,7 @@ test("interpret supports compound assignment", () => {
 test("interpret rejects compound assignment to immutable binding", () => {
   expect(() => interpret("let x = 2; x += 3")).toThrow();
 });
+
+test("interpret supports comparison operators", () => {
+  expect(interpret("1 < 2")).toBe(1);
+});
