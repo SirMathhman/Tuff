@@ -115,6 +115,17 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     }
     case "fieldAssign": {
       const { target, value: current } = resolveField(ast, env);
+      const structType = env.lookup(target.name);
+      if (!isStructType(structType)) {
+        throw new Error(`Unknown struct type: ${target.name}`);
+      }
+      const fieldSpec = structType.fields[ast.name];
+      if (!fieldSpec) {
+        throw new Error(`Unknown field: ${ast.name}`);
+      }
+      if (!fieldSpec.mutable) {
+        throw new Error(`Cannot assign to immutable field: ${ast.name}`);
+      }
       const value = evaluate(ast.value, env);
       if (ast.operator === "=") {
         target.fields[ast.name] = value;

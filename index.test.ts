@@ -356,3 +356,7 @@ test("interpret supports struct definition, construction, and field access", () 
 test("interpret supports struct field assignment", () => {
   expect(interpret("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; p.x = 10; p.x + p.y")).toBe(14);
 });
+
+test("interpret rejects assignment to immutable struct field", () => {
+  expect(() => interpret("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; p.x = 10")).toThrow();
+});
