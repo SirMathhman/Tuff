@@ -1,4 +1,4 @@
-import type { Token, AST } from "./types";
+import type { Token, AST, TypeName } from "./types";
 
 export class Parser {
   private index = 0;
@@ -99,7 +99,7 @@ export class Parser {
   private parsePrimary(): AST {
     const token = this.consume();
     if (token.type === "number") {
-      return { type: "number", value: token.value, u8: token.u8 };
+      return { type: "number", value: token.value, u8: token.u8, u16: token.u16 };
     }
     if (token.type === "boolean") {
       return { type: "boolean", value: token.value };
@@ -231,14 +231,25 @@ export class Parser {
       throw new Error(`Expected identifier after let, got: ${JSON.stringify(nameToken)}`);
     }
     this.consume();
+    let typeName: TypeName | undefined;
+    const colon = this.peek();
+    if (colon && colon.type === "colon") {
+      this.consume();
+      const typeToken = this.consume();
+      if (typeToken.type !== "identifier" || (typeToken.value !== "U8" && typeToken.value !== "U16")) {
+        throw new Error(`Expected type annotation, got: ${JSON.stringify(typeToken)}`);
+      }
+      typeName = typeToken.value;
+    }
     const eq = this.consume();
     if (eq.type !== "operator" || eq.value !== "=") {
       throw new Error(`Expected = after let ${nameToken.value}, got: ${JSON.stringify(eq)}`);
     }
     const value = this.parseAdditive();
-    return { type: "let", name: nameToken.value, mutable, value };
-  }
-}
+    const node: AST = { name: nameToken.value, mutable, typeName, value } as AST;
+    node.type = "let";
+    return node;
+  }}
 
 export function parse(tokens: Token[]): AST {
   return new Parser(tokens).parse();

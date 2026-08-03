@@ -1,10 +1,11 @@
-import type { AST, Value, U8Value } from "./types";
+import type { AST, Value, U8Value, U16Value, TypeName } from "./types";
 import { Environment } from "./environment";
 
 type BinaryOperator = "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!=";
 type AssignOperator = "=" | "+=" | "-=" | "*=" | "/=";
 
 const U8_MAX = 255;
+const U16_MAX = 65535;
 
 function makeU8(value: number): U8Value {
   if (value < 0 || value > U8_MAX) {
@@ -13,16 +14,30 @@ function makeU8(value: number): U8Value {
   return { kind: "u8", value };
 }
 
+function makeU16(value: number): U16Value {
+  if (value < 0 || value > U16_MAX) {
+    throw new Error(`U16 overflow: ${value}`);
+  }
+  return { kind: "u16", value };
+}
+
 function isU8(value: Value): value is U8Value {
   return typeof value === "object" && value !== null && value.kind === "u8";
 }
 
-function isNumber(value: Value): value is number | U8Value {
-  return typeof value === "number" || isU8(value);
+function isU16(value: Value): value is U16Value {
+  return typeof value === "object" && value !== null && value.kind === "u16";
 }
 
-function toNumber(value: number | U8Value): number {
-  return isU8(value) ? value.value : value;
+function isNumber(value: Value): value is number | U8Value | U16Value {
+  return typeof value === "number" || isU8(value) || isU16(value);
+}
+
+function toNumber(value: number | U8Value | U16Value): number {
+  if (isU8(value) || isU16(value)) {
+    return value.value;
+  }
+  return value;
 }
 
 function requireNumber(value: Value, operator: string): number {
@@ -30,6 +45,16 @@ function requireNumber(value: Value, operator: string): number {
     throw new Error(`Binary operator requires numbers: ${operator}`);
   }
   return toNumber(value);
+}
+
+function typeOf(value: Value): TypeName | undefined {
+  if (isU8(value)) {
+    return "U8";
+  }
+  if (isU16(value)) {
+    return "U16";
+  }
+  return undefined;
 }
 
 const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
@@ -59,13 +84,22 @@ function isTruthy(value: Value): boolean {
 export function evaluate(ast: AST, env: Environment = new Environment()): Value {
   switch (ast.type) {
     case "number":
-      return ast.u8 ? makeU8(ast.value) : ast.value;
+      if (ast.u8) {
+        return makeU8(ast.value);
+      }
+      if (ast.u16) {
+        return makeU16(ast.value);
+      }
+      return ast.value;
     case "boolean":
       return ast.value;
     case "identifier":
       return env.lookup(ast.name);
     case "let": {
       const value = evaluate(ast.value, env);
+      if (ast.typeName && typeOf(value) !== ast.typeName) {
+        throw new Error(`Type mismatch: expected ${ast.typeName}, got ${typeOf(value) ?? "number"}`);
+      }
       env.define(ast.name, value, ast.mutable);
       return value;
     }

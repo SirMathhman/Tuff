@@ -19,11 +19,15 @@ export function lex(source: string): Token[] {
         i++;
       }
       let u8 = false;
+      let u16 = false;
       if (source[i] === "U" && source[i + 1] === "8") {
         u8 = true;
         i += 2;
+      } else if (source[i] === "U" && source[i + 1] === "1" && source[i + 2] === "6") {
+        u16 = true;
+        i += 3;
       }
-      tokens.push({ type: "number", value: Number(value), u8 });
+      tokens.push({ type: "number", value: Number(value), u8, u16 });
       continue;
     }
 
@@ -32,6 +36,15 @@ export function lex(source: string): Token[] {
       while (i < source.length && isLetter(source[i]!)) {
         value += source[i];
         i++;
+      }
+      if (value === "U" && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6"))) {
+        if (source[i] === "8") {
+          value += "8";
+          i++;
+        } else {
+          value += "16";
+          i += 2;
+        }
       }
       if (value === "true" || value === "false") {
         tokens.push({ type: "boolean", value: value === "true" });
@@ -43,6 +56,12 @@ export function lex(source: string): Token[] {
 
     if (char === ";") {
       tokens.push({ type: "semicolon", value: char });
+      i++;
+      continue;
+    }
+
+    if (char === ":") {
+      tokens.push({ type: "colon", value: char });
       i++;
       continue;
     }
