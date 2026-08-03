@@ -12,3 +12,7 @@ test("evaluate single digit returns that digit", () => {
 test("evaluate addition of two numbers", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
+
+test("evaluate addition of three numbers", () => {
+  expect(evaluate("1 + 2 + 3")).toBe(6);
+});
