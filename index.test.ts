@@ -29,6 +29,14 @@ test("evaluate unary minus on variable", () => {
   expect(evaluate("let x = 100; -x")).toBe(-100);
 });
 
+test("evaluate incompatible type declaration throws", () => {
+  expect(() => evaluate("let x : U8 = 100U16;")).toThrow();
+});
+
+test("evaluate compatible type declaration", () => {
+  expect(evaluate("let x : U16 = 100U8;")).toBe(0);
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

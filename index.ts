@@ -1,7 +1,7 @@
-type Value = { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+type Value = { kind: "number"; value: number; type?: string } | { kind: "boolean"; value: boolean };
 
-function numberValue(value: number): Value {
-  return { kind: "number", value };
+function numberValue(value: number, type?: string): Value {
+  return { kind: "number", value, type };
 }
 
 function booleanValue(value: boolean): Value {
@@ -12,12 +12,17 @@ function truthy(value: Value): boolean {
   return value.kind === "boolean" ? value.value : value.value !== 0;
 }
 
+function typeSize(type: string): number {
+  const match = type.match(/U(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
 export function evaluate(source: string): number {
-  const invalid = source.match(/[^\s\d\w+\-*/(){};=<>!&|]/);
+  const invalid = source.match(/[^\s\d\w+\-*/(){};=<>!&|:]/);
   if (invalid) {
     throw new Error(`Invalid character: ${invalid[0]}`);
   }
-  const tokens = source.match(/\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
+  const tokens = source.match(/\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=:]/g) ?? [];
   let index = 0;
   let breakRequested = false;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
@@ -138,7 +143,7 @@ export function evaluate(source: string): number {
       if (suffix === "U8" && value > 255) {
         throw new Error("U8 literal out of range");
       }
-      return numberValue(value);
+      return numberValue(value, suffix);
     }
     if (/^\d+$/.test(token)) {
       index++;
@@ -378,9 +383,19 @@ export function evaluate(source: string): number {
 
   function declareVariable(mutable: boolean): void {
     const name = tokens[index++];
+    let declaredType: string | undefined;
+    if (tokens[index] === ":") {
+      index++; // consume ":"
+      declaredType = tokens[index++];
+    }
     index++; // consume "="
     if (name !== undefined) {
-      currentScope().set(name, { value: parseOr(), mutable });
+      const value = parseOr();
+      const valueType = value.kind === "number" ? value.type : undefined;
+      if (declaredType !== undefined && valueType !== undefined && typeSize(valueType) > typeSize(declaredType)) {
+        throw new Error(`Type mismatch: cannot assign ${valueType} to ${declaredType}`);
+      }
+      currentScope().set(name, { value, mutable });
     }
     index++; // consume ";"
   }
