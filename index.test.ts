@@ -25,3 +25,7 @@ test("evaluate addition and subtraction expression", () => {
   expect(evaluate("2 + 3 - 4")).toBe(1);
 });
 
+test("evaluate multiplication and subtraction expression", () => {
+  expect(evaluate("2 * 3 - 4")).toBe(2);
+});
+
