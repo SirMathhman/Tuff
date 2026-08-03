@@ -136,23 +136,14 @@ export class Parser {
   }
 
   private parseIf(): AST {
-    const open = this.consume();
-    if (open.type !== "paren" || open.value !== "(") {
-      throw new Error(`Expected ( after if, got: ${JSON.stringify(open)}`);
-    }
-    const condition = this.parseAdditive();
-    const close = this.consume();
-    if (close.type !== "paren" || close.value !== ")") {
-      throw new Error(`Expected ) after if condition, got: ${JSON.stringify(close)}`);
-    }
-    const then = this.parseBracedBlock();
+    const { condition, body } = this.parseConditionBlock("if");
     let elseBranch: AST | null = null;
     const next = this.peek();
     if (next && next.type === "identifier" && next.value === "else") {
       this.consume();
       elseBranch = this.parseBracedBlock();
     }
-    return { type: "if", condition, then, else: elseBranch };
+    return { type: "if", condition, then: body, else: elseBranch };
   }
 
   private parseBracedBlock(): AST {
@@ -165,17 +156,22 @@ export class Parser {
   }
 
   private parseWhile(): AST {
+    const { condition, body } = this.parseConditionBlock("while");
+    return { type: "while", condition, body };
+  }
+
+  private parseConditionBlock(keyword: string): { condition: AST; body: AST } {
     const open = this.consume();
     if (open.type !== "paren" || open.value !== "(") {
-      throw new Error(`Expected ( after while, got: ${JSON.stringify(open)}`);
+      throw new Error(`Expected ( after ${keyword}, got: ${JSON.stringify(open)}`);
     }
     const condition = this.parseAdditive();
     const close = this.consume();
     if (close.type !== "paren" || close.value !== ")") {
-      throw new Error(`Expected ) after while condition, got: ${JSON.stringify(close)}`);
+      throw new Error(`Expected ) after ${keyword} condition, got: ${JSON.stringify(close)}`);
     }
     const body = this.parseBracedBlock();
-    return { type: "while", condition, body };
+    return { condition, body };
   }
 
   private parseStatements(inBlock: boolean): AST[] {
