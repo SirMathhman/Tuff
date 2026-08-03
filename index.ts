@@ -3,5 +3,5 @@ export function evaluate(source: string) : number {
     return 0;
   }
 
-  return 0;
+  return Number(source);
 }
