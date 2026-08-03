@@ -1,6 +1,20 @@
 import type { Token } from "./tokens";
 import type { Expr, Stmt } from "./ast";
 
+const BINARY_PRECEDENCE: Record<string, number> = {
+  or: 1,
+  plus: 2,
+  minus: 2,
+  star: 3,
+};
+
+const BINARY_OPERATOR: Record<string, "+" | "-" | "*" | "||"> = {
+  plus: "+",
+  minus: "-",
+  star: "*",
+  or: "||",
+};
+
 export function parse(tokens: Token[]): Stmt {
   let index = 0;
 
@@ -13,36 +27,21 @@ export function parse(tokens: Token[]): Stmt {
   }
 
   function parseExpression(): Expr {
-    let left = parseOr();
-
-    while (peek().type === "plus" || peek().type === "minus") {
-      const op = advance().type === "plus" ? "+" : "-";
-      const right = parseOr();
-      left = { kind: "binary", op, left, right };
-    }
-
-    return left;
+    return parseBinary(0);
   }
 
-  function parseOr(): Expr {
-    let left = parseTerm();
-
-    while (peek().type === "or") {
-      advance();
-      const right = parseTerm();
-      left = { kind: "binary", op: "||", left, right };
-    }
-
-    return left;
-  }
-
-  function parseTerm(): Expr {
+  function parseBinary(minPrecedence: number): Expr {
     let left = parseFactor();
 
-    while (peek().type === "star") {
+    while (true) {
+      const type = peek().type;
+      const precedence = BINARY_PRECEDENCE[type];
+      if (precedence === undefined || precedence < minPrecedence) {
+        break;
+      }
       advance();
-      const right = parseFactor();
-      left = { kind: "binary", op: "*", left, right };
+      const right = parseBinary(precedence + 1);
+      left = { kind: "binary", op: BINARY_OPERATOR[type]!, left, right };
     }
 
     return left;
