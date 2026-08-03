@@ -57,6 +57,9 @@ export function typeOf(value: Value): TypeName | undefined {
   if (typeof value === "number") {
     return "I32";
   }
+  if (typeof value === "boolean") {
+    return "Bool";
+  }
   return undefined;
 }
 

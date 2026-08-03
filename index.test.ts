@@ -180,3 +180,7 @@ test("interpret supports recursive functions", () => {
 test("interpret rejects wrong number of arguments", () => {
   expect(() => interpret("fn add(a : I32, b : I32) : I32 => a + b; add(1)")).toThrow();
 });
+
+test("interpret supports function returning a boolean", () => {
+  expect(interpret("fn isEven(n : I32) : Bool => n % 2 == 0; isEven(4)")).toBe(1);
+});

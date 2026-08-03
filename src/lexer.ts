@@ -114,7 +114,7 @@ export function lex(source: string): Token[] {
       continue;
     }
 
-    if (char === "+" || char === "-" || char === "*" || char === "/") {
+    if (char === "+" || char === "-" || char === "*" || char === "/" || char === "%") {
       const next = source[i + 1];
       if (next === "=") {
         tokens.push({ type: "operator", value: (char + next) as "+=" | "-=" | "*=" | "/=" });

@@ -3,7 +3,7 @@ import { Environment } from "./environment";
 import { makeU8, makeU16, isU8, isU16, isFunction, requireNumber, typeOf, isTruthy } from "./value";
 import { callFunction } from "./functions";
 
-type BinaryOperator = "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!=";
+type BinaryOperator = "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=";
 type AssignOperator = "=" | "+=" | "-=" | "*=" | "/=";
 
 const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
@@ -11,6 +11,7 @@ const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> 
   "-": (l, r) => l - r,
   "*": (l, r) => l * r,
   "/": (l, r) => Math.trunc(l / r),
+  "%": (l, r) => l % r,
   "<": (l, r) => l < r,
   ">": (l, r) => l > r,
   "<=": (l, r) => l <= r,

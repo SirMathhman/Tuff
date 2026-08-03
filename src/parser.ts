@@ -84,7 +84,7 @@ export class Parser {
 
     while (true) {
       const token = this.peek();
-      if (token && token.type === "operator" && (token.value === "*" || token.value === "/")) {
+      if (token && token.type === "operator" && (token.value === "*" || token.value === "/" || token.value === "%")) {
         this.consume();
         const right = this.parsePrimary();
         left = { type: "binary", operator: token.value, left, right };
@@ -320,7 +320,7 @@ export class Parser {
     }
     this.consume();
     const typeToken = this.consume();
-    if (typeToken.type !== "identifier" || (typeToken.value !== "U8" && typeToken.value !== "U16" && typeToken.value !== "I32")) {
+    if (typeToken.type !== "identifier" || (typeToken.value !== "U8" && typeToken.value !== "U16" && typeToken.value !== "I32" && typeToken.value !== "Bool")) {
       throw new Error(`${errorMessage}, got: ${JSON.stringify(typeToken)}`);
     }
     return typeToken.value;
