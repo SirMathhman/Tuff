@@ -4,6 +4,7 @@ export type Token =
   | { type: "minus" }
   | { type: "star" }
   | { type: "or" }
+  | { type: "and" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -37,6 +38,9 @@ export function tokenize(source: string): Token[] {
       i++;
     } else if (ch === "|" && source[i + 1] === "|") {
       tokens.push({ type: "or" });
+      i += 2;
+    } else if (ch === "&" && source[i + 1] === "&") {
+      tokens.push({ type: "and" });
       i += 2;
     } else if (ch === "(") {
       tokens.push({ type: "lparen" });

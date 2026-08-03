@@ -2,7 +2,7 @@ export type Expr =
   | { kind: "number"; value: number }
   | { kind: "boolean"; value: boolean }
   | { kind: "variable"; name: string }
-  | { kind: "binary"; op: "+" | "-" | "*" | "||"; left: Expr; right: Expr }
+  | { kind: "binary"; op: "+" | "-" | "*" | "||" | "&&"; left: Expr; right: Expr }
   | { kind: "block"; statements: Stmt[] };
 
 export type Stmt =

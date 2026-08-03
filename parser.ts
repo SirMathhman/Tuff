@@ -3,16 +3,18 @@ import type { Expr, Stmt } from "./ast";
 
 const BINARY_PRECEDENCE: Record<string, number> = {
   or: 1,
-  plus: 2,
-  minus: 2,
-  star: 3,
+  and: 2,
+  plus: 3,
+  minus: 3,
+  star: 4,
 };
 
-const BINARY_OPERATOR: Record<string, "+" | "-" | "*" | "||"> = {
+const BINARY_OPERATOR: Record<string, "+" | "-" | "*" | "||" | "&&"> = {
   plus: "+",
   minus: "-",
   star: "*",
   or: "||",
+  and: "&&",
 };
 
 export function parse(tokens: Token[]): Stmt {
