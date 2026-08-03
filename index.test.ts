@@ -140,3 +140,7 @@ test("interpret supports while loop that never runs", () => {
 test("interpret supports nested while loops", () => {
   expect(interpret("let mut i = 0; let mut j = 0; while (i < 2) { while (j < 2) { j += 1; } i += 1; } j")).toBe(2);
 });
+
+test("interpret supports U8 integer suffix", () => {
+  expect(interpret("100U8")).toBe(100);
+});
