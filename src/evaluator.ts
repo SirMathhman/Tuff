@@ -1,68 +1,10 @@
-import type { AST, Value, U8Value, U16Value, TypeName, FunctionValue } from "./types";
+import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
+import { makeU8, makeU16, isU8, isU16, isFunction, requireNumber, typeOf, isTruthy } from "./value";
+import { callFunction } from "./functions";
 
 type BinaryOperator = "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!=";
 type AssignOperator = "=" | "+=" | "-=" | "*=" | "/=";
-
-const U8_MAX = 255;
-const U16_MAX = 65535;
-
-function makeU8(value: number): U8Value {
-  if (value < 0 || value > U8_MAX) {
-    throw new Error(`U8 overflow: ${value}`);
-  }
-  return { kind: "u8", value };
-}
-
-function makeU16(value: number): U16Value {
-  if (value < 0 || value > U16_MAX) {
-    throw new Error(`U16 overflow: ${value}`);
-  }
-  return { kind: "u16", value };
-}
-
-function isU8(value: Value): value is U8Value {
-  return typeof value === "object" && value !== null && value.kind === "u8";
-}
-
-function isU16(value: Value): value is U16Value {
-  return typeof value === "object" && value !== null && value.kind === "u16";
-}
-
-function isNumber(value: Value): value is number | U8Value | U16Value {
-  return typeof value === "number" || isU8(value) || isU16(value);
-}
-
-function toNumber(value: number | U8Value | U16Value): number {
-  if (isU8(value) || isU16(value)) {
-    return value.value;
-  }
-  return value;
-}
-
-function requireNumber(value: Value, operator: string): number {
-  if (!isNumber(value)) {
-    throw new Error(`Binary operator requires numbers: ${operator}`);
-  }
-  return toNumber(value);
-}
-
-function typeOf(value: Value): TypeName | undefined {
-  if (isU8(value)) {
-    return "U8";
-  }
-  if (isU16(value)) {
-    return "U16";
-  }
-  if (typeof value === "number") {
-    return "I32";
-  }
-  return undefined;
-}
-
-function isFunction(value: Value): value is FunctionValue {
-  return typeof value === "object" && value !== null && value.kind === "function";
-}
 
 const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
   "+": (l, r) => l + r,
@@ -83,10 +25,6 @@ const assignOps: Record<Exclude<AssignOperator, "=">, (left: number, right: numb
   "*=": (l, r) => l * r,
   "/=": (l, r) => Math.trunc(l / r),
 };
-
-function isTruthy(value: Value): boolean {
-  return value !== false && value !== 0;
-}
 
 export function evaluate(ast: AST, env: Environment = new Environment()): Value {
   switch (ast.type) {
@@ -159,18 +97,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
         throw new Error(`Not a function: ${JSON.stringify(ast.callee)}`);
       }
       const args = ast.args.map((arg) => evaluate(arg, env));
-      if (args.length !== callee.params.length) {
-        throw new Error(`Function ${callee.name} expects ${callee.params.length} args, got ${args.length}`);
-      }
-      const callEnv = (callee.closure as Environment).child();
-      callee.params.forEach((param, i) => {
-        callEnv.define(param.name, args[i]!, false);
-      });
-      const result = evaluate(callee.body, callEnv);
-      if (callee.returnType && typeOf(result) !== callee.returnType) {
-        throw new Error(`Return type mismatch: expected ${callee.returnType}, got ${typeOf(result) ?? "number"}`);
-      }
-      return result;
+      return callFunction(callee, args, evaluate);
     }
     case "block": {
       const childEnv = env.child();
