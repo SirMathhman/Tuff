@@ -250,6 +250,17 @@ function resolveRefCell(target: AST, env: Environment): ReferenceCell {
       },
     };
   }
+  if (target.type === "field") {
+    const { target: struct } = resolveField(target, env);
+    const name = target.name;
+    return {
+      mutable: true,
+      get: () => struct.fields[name]!,
+      set: (value) => {
+        struct.fields[name] = value;
+      },
+    };
+  }
   throw new Error(`Invalid reference target: ${JSON.stringify(target)}`);
 }
 

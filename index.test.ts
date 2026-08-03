@@ -388,3 +388,7 @@ test("interpret supports compound assignment through a mutable reference", () =>
 test("interpret supports references to array elements", () => {
   expect(interpret("let mut a : [I32; 2] = [1, 2]; let r : &mut I32 = &mut a[0]; *r = 9; a[0] + a[1]")).toBe(11);
 });
+
+test("interpret supports references to struct fields", () => {
+  expect(interpret("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; let r : &mut I32 = &mut p.x; *r = 9; p.x + p.y")).toBe(13);
+});
