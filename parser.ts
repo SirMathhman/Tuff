@@ -5,11 +5,11 @@ export function parse(tokens: Token[]): Expr {
   let index = 0;
 
   function peek(): Token {
-    return tokens[index];
+    return tokens[index]!;
   }
 
   function advance(): Token {
-    return tokens[index++];
+    return tokens[index++]!;
   }
 
   function parseExpression(): Expr {
