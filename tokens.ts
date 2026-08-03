@@ -9,34 +9,35 @@ export type Token =
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
+  let i = 0;
 
-  for (const part of source.split(" ")) {
-    if (part === "") {
-      continue;
-    }
+  while (i < source.length) {
+    const ch = source[i];
 
-    if (part === "+") {
+    if (ch === " ") {
+      i++;
+    } else if (ch === "+") {
       tokens.push({ type: "plus" });
-    } else if (part === "-") {
+      i++;
+    } else if (ch === "-") {
       tokens.push({ type: "minus" });
-    } else if (part === "*") {
+      i++;
+    } else if (ch === "*") {
       tokens.push({ type: "star" });
-    } else if (part === "(") {
+      i++;
+    } else if (ch === "(") {
       tokens.push({ type: "lparen" });
-    } else if (part === ")") {
+      i++;
+    } else if (ch === ")") {
       tokens.push({ type: "rparen" });
-    } else if (part.startsWith("(") && part.endsWith(")")) {
-      tokens.push({ type: "lparen" });
-      tokens.push({ type: "number", value: Number(part.slice(1, -1)) });
-      tokens.push({ type: "rparen" });
-    } else if (part.startsWith("(")) {
-      tokens.push({ type: "lparen" });
-      tokens.push({ type: "number", value: Number(part.slice(1)) });
-    } else if (part.endsWith(")")) {
-      tokens.push({ type: "number", value: Number(part.slice(0, -1)) });
-      tokens.push({ type: "rparen" });
+      i++;
     } else {
-      tokens.push({ type: "number", value: Number(part) });
+      let value = "";
+      while (i < source.length && /\d/.test(source[i]!)) {
+        value += source[i];
+        i++;
+      }
+      tokens.push({ type: "number", value: Number(value) });
     }
   }
 
