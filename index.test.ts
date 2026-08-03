@@ -332,3 +332,7 @@ test("interpret rejects is operator on array against mismatched type", () => {
 test("interpret supports array element assignment", () => {
   expect(interpret("let mut a : [I32; 2] = [1, 2]; a[0] = 5; a[0] + a[1]")).toBe(7);
 });
+
+test("interpret supports compound array element assignment", () => {
+  expect(interpret("let mut a : [I32; 2] = [1, 2]; a[0] += 5; a[0] + a[1]")).toBe(8);
+});
