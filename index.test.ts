@@ -84,3 +84,7 @@ test("evaluate equality is type-aware", () => {
 test("evaluate logical or requires boolean operands", () => {
   expect(() => evaluate("1 || 2")).toThrow();
 });
+
+test("evaluate arithmetic requires numeric operands", () => {
+  expect(() => evaluate("true + false")).toThrow();
+});
