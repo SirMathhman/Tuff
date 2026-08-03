@@ -168,3 +168,7 @@ test("interpret accepts matching type annotation", () => {
 test("interpret supports function definitions and calls", () => {
   expect(interpret("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toBe(7);
 });
+
+test("interpret supports closures capturing outer variables", () => {
+  expect(interpret("let mut x = 10; fn add(n : I32) : I32 => x + n; add(5)")).toBe(15);
+});
