@@ -152,3 +152,7 @@ test("interpret supports U8 suffix in arithmetic", () => {
 test("interpret throws on U8 overflow", () => {
   expect(() => interpret("255U8 + 1U8")).toThrow();
 });
+
+test("interpret throws on U8 underflow", () => {
+  expect(() => interpret("0U8 - 1U8")).toThrow();
+});
