@@ -8,6 +8,7 @@ export type Token =
   | { type: "lbrace" }
   | { type: "rbrace" }
   | { type: "let" }
+  | { type: "mut" }
   | { type: "identifier"; name: string }
   | { type: "equals" }
   | { type: "semicolon" }
@@ -64,6 +65,8 @@ export function tokenize(source: string): Token[] {
       }
       if (name === "let") {
         tokens.push({ type: "let" });
+      } else if (name === "mut") {
+        tokens.push({ type: "mut" });
       } else {
         tokens.push({ type: "identifier", name });
       }

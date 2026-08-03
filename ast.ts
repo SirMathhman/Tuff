@@ -5,6 +5,7 @@ export type Expr =
   | { kind: "block"; statements: Stmt[] };
 
 export type Stmt =
-  | { kind: "let"; name: string; value: Expr }
+  | { kind: "let"; name: string; mutable: boolean; value: Expr }
+  | { kind: "assign"; name: string; value: Expr }
   | { kind: "expr"; expr: Expr }
   | { kind: "block"; statements: Stmt[] };

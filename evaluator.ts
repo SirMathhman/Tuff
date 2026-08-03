@@ -36,7 +36,12 @@ function evalStmt(stmt: Stmt, env: Env): number {
   switch (stmt.kind) {
     case "let": {
       const value = evalExpr(stmt.value, env);
-      env.define(stmt.name, value);
+      env.define(stmt.name, value, stmt.mutable);
+      return value;
+    }
+    case "assign": {
+      const value = evalExpr(stmt.value, env);
+      env.assign(stmt.name, value);
       return value;
     }
     case "expr": {

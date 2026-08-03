@@ -77,6 +77,10 @@ export function parse(tokens: Token[]): Stmt {
   function parseStatement(): Stmt {
     if (peek().type === "let") {
       advance();
+      const mutable = peek().type === "mut";
+      if (mutable) {
+        advance();
+      }
       const nameToken = advance();
 
       if (nameToken.type !== "identifier") {
@@ -93,7 +97,23 @@ export function parse(tokens: Token[]): Stmt {
         throw new Error("Expected ; after let declaration");
       }
 
-      return { kind: "let", name: nameToken.name, value };
+      return { kind: "let", name: nameToken.name, mutable, value };
+    }
+
+    if (peek().type === "identifier" && tokens[index + 1]?.type === "equals") {
+      const nameToken = advance();
+      advance();
+      const value = parseExpression();
+
+      if (advance().type !== "semicolon") {
+        throw new Error("Expected ; after assignment");
+      }
+
+      if (nameToken.type !== "identifier") {
+        throw new Error("Expected identifier before =");
+      }
+
+      return { kind: "assign", name: nameToken.name, value };
     }
 
     return { kind: "expr", expr: parseExpression() };

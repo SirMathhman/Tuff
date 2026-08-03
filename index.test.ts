@@ -52,3 +52,7 @@ test("evaluate top-level let with block initializer and reference", () => {
 test("evaluate variable scoped inside block is not visible outside", () => {
   expect(() => evaluate("let x = { let y = 0; }; y")).toThrow();
 });
+
+test("evaluate mutable variable with assignment", () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+});
