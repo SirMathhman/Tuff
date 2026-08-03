@@ -54,7 +54,7 @@ export function typeOf(value: Value): TypeName | undefined {
     return { kind: "struct", name: value.name, fields };
   }
   if (isRef(value)) {
-    return { kind: "ref", target: typeOf(value.target) ?? "I32" };
+    return { kind: "ref", mutable: value.mutable, target: typeOf(value.cell.value) ?? "I32" };
   }
   return undefined;
 }
@@ -79,7 +79,7 @@ export function typesEqual(a: TypeName, b: TypeName): boolean {
       return aKeys.every((key) => key in b.fields && typesEqual(a.fields[key]!.typeName, b.fields[key]!.typeName));
     }
     if (a.kind === "ref" && b.kind === "ref") {
-      return typesEqual(a.target, b.target);
+      return a.mutable === b.mutable && typesEqual(a.target, b.target);
     }
   }
   return false;

@@ -45,9 +45,15 @@ export interface StructTypeValue {
   readonly fields: Record<string, { typeName: TypeName; mutable: boolean }>;
 }
 
+export interface ReferenceCell {
+  value: Value;
+  mutable: boolean;
+}
+
 export interface ReferenceValue {
   readonly kind: "ref";
-  readonly target: Value;
+  readonly mutable: boolean;
+  readonly cell: ReferenceCell;
 }
 
 export interface Param {
@@ -71,6 +77,7 @@ export interface StructTypeName {
 
 export interface ReferenceTypeName {
   readonly kind: "ref";
+  readonly mutable: boolean;
   readonly target: TypeName;
 }
 
@@ -96,8 +103,9 @@ export type AST =
   | { type: "boolean"; value: boolean }
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||" | "is"; left: AST; right: AST }
   | { type: "unary"; operator: "-" | "!"; operand: AST }
-  | { type: "ref"; target: AST }
+  | { type: "ref"; mutable: boolean; target: AST }
   | { type: "deref"; target: AST }
+  | { type: "derefAssign"; target: AST; operator: "=" | "+=" | "-=" | "*=" | "/="; value: AST }
   | { type: "identifier"; name: string }
   | { type: "typeRef"; name: TypeName }
   | { type: "let"; name: string; mutable: boolean; typeName?: TypeName; value: AST }

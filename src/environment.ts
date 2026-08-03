@@ -1,4 +1,4 @@
-import type { Value } from "./types";
+import type { Value, ReferenceCell } from "./types";
 import { isArray } from "./typecheck";
 
 interface Binding {
@@ -16,20 +16,16 @@ export class Environment {
   }
 
   lookup(name: string): Value {
-    const env = this.resolve(name);
-    if (!env) {
-      throw new Error(`Undefined variable: ${name}`);
-    }
-    return env.bindings.get(name)!.value;
+    return this.resolveBinding(name).value;
   }
 
   assign(name: string, value: Value): void {
-    const binding = this.resolveBinding(name);
+    const binding = this.resolveMutableBinding(name);
     binding.value = value;
   }
 
   assignElement(name: string, index: number, value: Value): void {
-    const binding = this.resolveBinding(name);
+    const binding = this.resolveMutableBinding(name);
     const arr = binding.value;
     if (!isArray(arr)) {
       throw new Error(`Indexing requires an array: ${name}`);
@@ -40,8 +36,20 @@ export class Environment {
     arr.elements[index] = value;
   }
 
+  reference(name: string): ReferenceCell {
+    return this.resolveBinding(name);
+  }
+
   child(): Environment {
     return new Environment(this);
+  }
+
+  private resolveMutableBinding(name: string): Binding {
+    const binding = this.resolveBinding(name);
+    if (!binding.mutable) {
+      throw new Error(`Cannot assign to immutable variable: ${name}`);
+    }
+    return binding;
   }
 
   private resolveBinding(name: string): Binding {
@@ -49,11 +57,7 @@ export class Environment {
     if (!env) {
       throw new Error(`Undefined variable: ${name}`);
     }
-    const binding = env.bindings.get(name)!;
-    if (!binding.mutable) {
-      throw new Error(`Cannot assign to immutable variable: ${name}`);
-    }
-    return binding;
+    return env.bindings.get(name)!;
   }
 
   private resolve(name: string): Environment | undefined {

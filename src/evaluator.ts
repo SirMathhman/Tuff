@@ -188,15 +188,38 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return unaryOps[ast.operator](operand);
     }
     case "ref": {
-      const target = evaluate(ast.target, env);
-      return { kind: "ref", target };
+      if (ast.target.type !== "identifier") {
+        throw new Error(`Reference target must be an identifier: ${JSON.stringify(ast.target)}`);
+      }
+      const cell = env.reference(ast.target.name);
+      if (ast.mutable && !cell.mutable) {
+        throw new Error(`Cannot take mutable reference to immutable variable: ${ast.target.name}`);
+      }
+      return { kind: "ref", mutable: ast.mutable, cell };
     }
     case "deref": {
       const target = evaluate(ast.target, env);
       if (!isRef(target)) {
         throw new Error(`Dereference requires a reference: ${JSON.stringify(ast.target)}`);
       }
-      return target.target;
+      return target.cell.value;
+    }
+    case "derefAssign": {
+      const ref = evaluate(ast.target, env);
+      if (!isRef(ref)) {
+        throw new Error(`Dereference assignment requires a reference: ${JSON.stringify(ast.target)}`);
+      }
+      if (!ref.mutable) {
+        throw new Error(`Cannot assign through immutable reference`);
+      }
+      const value = evaluate(ast.value, env);
+      if (ast.operator === "=") {
+        ref.cell.value = value;
+        return value;
+      }
+      const result = compoundAssign(ast.operator, ref.cell.value, value, "deref");
+      ref.cell.value = result;
+      return result;
     }
     case "typeRef":
       throw new Error(`Type reference cannot be evaluated standalone: ${ast.name}`);

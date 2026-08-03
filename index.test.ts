@@ -368,3 +368,7 @@ test("interpret supports struct field assignment in nested scope", () => {
 test("interpret supports references and dereferencing", () => {
   expect(interpret("let x = 1; let y : &I32 = &x; *y")).toBe(1);
 });
+
+test("interpret supports dereferencing a mutable reference for assignment", () => {
+  expect(interpret("let mut x = 1; let y : &mut I32 = &mut x; *y = 5; x")).toBe(5);
+});

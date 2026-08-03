@@ -120,6 +120,9 @@ export class Parser {
       if (left.type === "field") {
         return { type: "fieldAssign", target: left.target, name: left.name, operator: token.value, value };
       }
+      if (left.type === "deref") {
+        return { type: "derefAssign", target: left.target, operator: token.value, value };
+      }
       throw new Error(`Invalid assignment target: ${JSON.stringify(left)}`);
     }
     return left;
@@ -167,7 +170,7 @@ export class Parser {
     } else if (token.type === "operator" && token.value === "!") {
       node = { type: "unary", operator: "!", operand: this.parsePrimary() };
     } else if (token.type === "operator" && token.value === "&") {
-      node = { type: "ref", target: this.parsePrimary() };
+      node = { type: "ref", mutable: this.parseMutPrefix(), target: this.parsePrimary() };
     } else if (token.type === "operator" && token.value === "*") {
       node = { type: "deref", target: this.parsePrimary() };
     } else if (token.type === "paren" && token.value === "{") {
@@ -364,6 +367,14 @@ export class Parser {
     }
   }
 
+  private parseMutPrefix(): boolean {
+    if (this.peek() && this.peek()!.type === "identifier" && this.peek()!.value === "mut") {
+      this.consume();
+      return true;
+    }
+    return false;
+  }
+
   private parseLet(): AST {
     this.consume();
     let mutable = false;
@@ -465,7 +476,7 @@ export class Parser {
   private parseType(errorMessage: string): TypeName {
     const open = this.consume();
     if (open.type === "operator" && open.value === "&") {
-      return { kind: "ref", target: this.parseType(errorMessage) };
+      return { kind: "ref", mutable: this.parseMutPrefix(), target: this.parseType(errorMessage) };
     }
     if (open.type === "bracket" && open.value === "[") {
       const elementType = this.parseTypeName(errorMessage);
