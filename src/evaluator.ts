@@ -1,6 +1,7 @@
 import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
-import { makeInteger, integerTypeOf, isFunction, requireNumber, typeOf, isTruthy, makeBool, isArray, typesEqual } from "./value";
+import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
+import { integerTypeOf, isFunction, typeOf, isArray, typesEqual } from "./typecheck";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 

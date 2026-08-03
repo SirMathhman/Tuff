@@ -1,7 +1,7 @@
 import { lex } from "./src/lexer";
 import { parse } from "./src/parser";
 import { evaluate } from "./src/evaluator";
-import { isBool } from "./src/value";
+import { isBool } from "./src/typecheck";
 import type { Value } from "./src/types";
 
 export function interpret(source: string): number {

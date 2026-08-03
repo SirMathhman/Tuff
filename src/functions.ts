@@ -1,6 +1,6 @@
 import type { Value, FunctionValue, AST } from "./types";
 import { Environment } from "./environment";
-import { typeOf } from "./value";
+import { typeOf } from "./typecheck";
 
 export function callFunction(
   fn: FunctionValue,

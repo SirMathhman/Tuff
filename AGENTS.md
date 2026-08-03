@@ -22,7 +22,8 @@ The pipeline is **lex → parse → evaluate**:
 | `src/parser.ts` | Recursive-descent parser producing an `AST`; precedence via layered methods (`parseAdditive` → `parseLogicalOr` → … → `parsePrimary`) |
 | `src/evaluator.ts` | Tree-walking evaluator; dispatches on `ast.type` |
 | `src/environment.ts` | Lexical scoping via parent-chain `Environment`; `define`/`lookup`/`assign`/`child` |
-| `src/value.ts` | Value constructors (`makeInteger`, `makeBool`) and type helpers (`typeOf`, `isTruthy`, `requireNumber`) |
+| `src/value.ts` | Value constructors (`makeInteger`, `makeBool`) and numeric coercion (`isNumber`, `toNumber`, `requireNumber`, `isTruthy`) |
+| `src/typecheck.ts` | Type system: `typeOf`, `typesEqual`, `integerTypeOf`, and type guards (`isInteger`, `isBool`, `isArray`, `isFunction`) |
 | `src/operators.ts` | Operator tables (`binaryOps`, `logicalOps`, `unaryOps`, `assignOps`) |
 | `src/functions.ts` | Function call logic (arg count + return type checks, closure env) |
 | `src/types.ts` | Shared types: `Token`, `AST`, `Value`, `IntegerTypeName`, `TypeName` |
@@ -31,7 +32,7 @@ The pipeline is **lex → parse → evaluate**:
 
 - **Test-driven workflow:** This repo is developed test-first. Each commit typically adds a test in `index.test.ts`, then implements the minimal code to pass it. When adding a feature, add the test first.
 - **`interpret` returns an exit code, not the value.** Booleans map to `1`/`0`; numbers pass through. Tests assert against these exit codes (e.g. `expect(interpret("1 < 2")).toBe(1)`).
-- **Values are tagged objects, not raw primitives.** Booleans are first-class `BoolValue` (`{ kind: "bool", value }`), and integers are `IntegerValue` (`{ kind: "U8" | …, value }`). Use helpers from `src/value.ts` (`isBool`, `isInteger`, `typeOf`, `isTruthy`) rather than `typeof` checks.
+- **Values are tagged objects, not raw primitives.** Booleans are first-class `BoolValue` (`{ kind: "bool", value }`), and integers are `IntegerValue` (`{ kind: "U8" | …, value }`). Use type helpers from `src/typecheck.ts` (`isBool`, `isInteger`, `typeOf`, `typesEqual`) and value helpers from `src/value.ts` (`isTruthy`, `requireNumber`) rather than `typeof` checks.
 - **Integer types have overflow/underflow checks.** `makeInteger` throws on out-of-range values. Typed arithmetic preserves the operand's type and re-checks bounds.
 - **Errors are thrown** (plain `Error` with descriptive messages) — the interpreter has no error-return type. Tests assert with `.toThrow()`.
 - **Type annotations are optional** (`let x : U8 = …`, `fn f() : I32 => …`) and are validated at runtime.
