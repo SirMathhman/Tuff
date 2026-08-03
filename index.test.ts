@@ -324,3 +324,7 @@ test("interpret throws on typed array element overflow", () => {
 test("interpret supports is operator on array values", () => {
   expect(interpret("let a : [I32; 2] = [1, 2]; a is [I32; 2]")).toBe(1);
 });
+
+test("interpret rejects is operator on array against mismatched type", () => {
+  expect(interpret("let a : [I32; 2] = [1, 2]; a is [U8; 2]")).toBe(0);
+});
