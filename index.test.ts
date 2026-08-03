@@ -44,3 +44,7 @@ test("evaluate block with let declaration and variable reference", () => {
 test("evaluate invalid character throws error", () => {
   expect(() => evaluate("#")).toThrow();
 });
+
+test("evaluate top-level let with block initializer and reference", () => {
+  expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+});
