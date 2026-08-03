@@ -25,6 +25,10 @@ test("evaluate negative u8 literal throws", () => {
   expect(() => evaluate("-100U8")).toThrow();
 });
 
+test("evaluate unary minus on variable", () => {
+  expect(evaluate("let x = 100; -x")).toBe(-100);
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
