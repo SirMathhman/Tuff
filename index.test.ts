@@ -144,3 +144,7 @@ test("interpret supports nested while loops", () => {
 test("interpret supports U8 integer suffix", () => {
   expect(interpret("100U8")).toBe(100);
 });
+
+test("interpret supports U8 suffix in arithmetic", () => {
+  expect(interpret("100U8 + 20U8")).toBe(120);
+});
