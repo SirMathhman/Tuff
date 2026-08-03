@@ -93,3 +93,7 @@ test("evaluate logical or expression", () => {
   expect(evaluate("true || false")).toBe(1);
 });
 
+test("evaluate equality expression", () => {
+  expect(evaluate("1 == 2")).toBe(0);
+});
+

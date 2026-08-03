@@ -1,5 +1,5 @@
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[a-zA-Z_]\w*|[+\-*/(){};=]|\|\||&&/g) ?? [];
+  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|\|\||&&|[+\-*/(){};=]/g) ?? [];
   let index = 0;
   const scopes: Array<Map<string, { value: number; mutable: boolean }>> = [new Map()];
 
@@ -18,11 +18,21 @@ export function evaluate(source: string): number {
   }
 
   function parseOr(initial?: number): number {
-    let value = parseExpression(initial);
+    let value = parseEquality(initial);
     while (index < tokens.length && (tokens[index] === "||" || tokens[index] === "&&")) {
       const operator = tokens[index++];
-      const right = parseExpression();
+      const right = parseEquality();
       value = operator === "||" ? (value || right ? 1 : 0) : value && right ? 1 : 0;
+    }
+    return value;
+  }
+
+  function parseEquality(initial?: number): number {
+    let value = parseExpression(initial);
+    while (index < tokens.length && tokens[index] === "==") {
+      index++;
+      const right = parseExpression();
+      value = value === right ? 1 : 0;
     }
     return value;
   }
