@@ -1,5 +1,5 @@
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[+\-*/()]/g) ?? [];
+  const tokens = source.match(/\d+|[+\-*/(){}]/g) ?? [];
   if (tokens.length === 0) {
     return 0;
   }
@@ -26,10 +26,10 @@ export function evaluate(source: string): number {
   }
 
   function parseFactor(): number {
-    if (tokens[index] === "(") {
+    if (tokens[index] === "(" || tokens[index] === "{") {
       index++;
       const value = parseExpression();
-      index++; // consume ")"
+      index++; // consume ")" or "}"
       return value;
     }
     return Number(tokens[index++]);

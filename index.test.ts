@@ -37,3 +37,7 @@ test("evaluate parenthesized expression", () => {
   expect(evaluate("(2 + 3) * 4")).toBe(20);
 });
 
+test("evaluate brace-grouped expression", () => {
+  expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
+});
+
