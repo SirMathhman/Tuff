@@ -1,4 +1,4 @@
-import type { Value, IntegerValue, IntegerTypeName, BoolValue, FunctionValue, TypeName, ArrayValue, StructValue, ReferenceValue } from "./types";
+import type { Value, IntegerValue, IntegerTypeName, BoolValue, FunctionValue, TypeName, ArrayValue, StructValue, StructTypeValue, ReferenceValue } from "./types";
 
 export function integerTypeOf(value: Value): IntegerTypeName | undefined {
   if (typeof value === "object" && value !== null && "kind" in value && value.kind !== "function" && value.kind !== "bool" && value.kind !== "array" && value.kind !== "struct" && value.kind !== "ref" && value.kind !== "structType") {
@@ -21,6 +21,10 @@ export function isArray(value: Value): value is ArrayValue {
 
 export function isStruct(value: Value): value is StructValue {
   return typeof value === "object" && value !== null && value.kind === "struct";
+}
+
+export function isStructType(value: Value): value is StructTypeValue {
+  return typeof value === "object" && value !== null && value.kind === "structType";
 }
 
 export function isRef(value: Value): value is ReferenceValue {

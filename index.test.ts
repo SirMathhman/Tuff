@@ -392,3 +392,11 @@ test("interpret supports references to array elements", () => {
 test("interpret supports references to struct fields", () => {
   expect(interpret("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; let r : &mut I32 = &mut p.x; *r = 9; p.x + p.y")).toBe(13);
 });
+
+test("interpret rejects taking a mutable reference to an element of an immutable array", () => {
+  expect(() => interpret("let a : [I32; 2] = [1, 2]; let r : &mut I32 = &mut a[0]")).toThrow();
+});
+
+test("interpret rejects taking a mutable reference to an immutable struct field", () => {
+  expect(() => interpret("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; let r : &mut I32 = &mut p.x")).toThrow();
+});

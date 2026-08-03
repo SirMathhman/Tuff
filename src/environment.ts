@@ -1,5 +1,5 @@
-import type { Value, ReferenceCell } from "./types";
-import { isArray } from "./typecheck";
+import type { Value, ReferenceCell, ArrayValue } from "./types";
+import { isArray, isStruct, isStructType } from "./typecheck";
 
 interface Binding {
   value: Value;
@@ -25,14 +25,8 @@ export class Environment {
   }
 
   assignElement(name: string, index: number, value: Value): void {
-    const binding = this.resolveMutableBinding(name);
-    const arr = binding.value;
-    if (!isArray(arr)) {
-      throw new Error(`Indexing requires an array: ${name}`);
-    }
-    if (arr.elements[index] === undefined) {
-      throw new Error(`Index out of bounds: ${index}`);
-    }
+    this.resolveMutableBinding(name);
+    const arr = this.resolveArrayElement(name, index);
     arr.elements[index] = value;
   }
 
@@ -47,6 +41,44 @@ export class Environment {
     };
   }
 
+  referenceElement(name: string, index: number): ReferenceCell {
+    const arr = this.resolveArrayElement(name, index);
+    return {
+      mutable: this.resolveBinding(name).mutable,
+      get: () => arr.elements[index]!,
+      set: (value) => {
+        this.resolveMutableBinding(name);
+        arr.elements[index] = value;
+      },
+    };
+  }
+
+  referenceField(name: string, field: string): ReferenceCell {
+    const binding = this.resolveBinding(name);
+    const struct = binding.value;
+    if (!isStruct(struct)) {
+      throw new Error(`Field access requires a struct: ${name}`);
+    }
+    const structType = this.lookup(struct.name);
+    if (!isStructType(structType)) {
+      throw new Error(`Unknown struct type: ${struct.name}`);
+    }
+    const fieldSpec = structType.fields[field];
+    if (!fieldSpec) {
+      throw new Error(`Unknown field: ${field}`);
+    }
+    return {
+      mutable: fieldSpec.mutable,
+      get: () => struct.fields[field]!,
+      set: (value) => {
+        if (!fieldSpec.mutable) {
+          throw new Error(`Cannot assign to immutable field: ${field}`);
+        }
+        struct.fields[field] = value;
+      },
+    };
+  }
+
   child(): Environment {
     return new Environment(this);
   }
@@ -57,6 +89,18 @@ export class Environment {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
     }
     return binding;
+  }
+
+  private resolveArrayElement(name: string, index: number): ArrayValue {
+    const binding = this.resolveBinding(name);
+    const arr = binding.value;
+    if (!isArray(arr)) {
+      throw new Error(`Indexing requires an array: ${name}`);
+    }
+    if (arr.elements[index] === undefined) {
+      throw new Error(`Index out of bounds: ${index}`);
+    }
+    return arr;
   }
 
   private resolveBinding(name: string): Binding {

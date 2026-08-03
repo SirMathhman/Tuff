@@ -1,7 +1,7 @@
 import type { AST, Value, FunctionValue, ArrayValue, StructValue, TypeName, StructTypeValue, ReferenceCell } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
-import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual, isStruct, isRef } from "./typecheck";
+import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual, isStruct, isStructType, isRef } from "./typecheck";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -241,27 +241,22 @@ function resolveRefCell(target: AST, env: Environment): ReferenceCell {
     return env.reference(target.name);
   }
   if (target.type === "index") {
-    const { target: arr, index } = resolveIndex(target, env);
-    return {
-      mutable: true,
-      get: () => arr.elements[index]!,
-      set: (value) => {
-        arr.elements[index] = value;
-      },
-    };
+    const name = requireIdentifierTarget(target);
+    const index = requireNumber(evaluate(target.index, env), "index");
+    return env.referenceElement(name, index);
   }
   if (target.type === "field") {
-    const { target: struct } = resolveField(target, env);
-    const name = target.name;
-    return {
-      mutable: true,
-      get: () => struct.fields[name]!,
-      set: (value) => {
-        struct.fields[name] = value;
-      },
-    };
+    const name = requireIdentifierTarget(target);
+    return env.referenceField(name, target.name);
   }
   throw new Error(`Invalid reference target: ${JSON.stringify(target)}`);
+}
+
+function requireIdentifierTarget(target: Extract<AST, { type: "index" | "field" }>): string {
+  if (target.target.type !== "identifier") {
+    throw new Error(`Invalid reference target: ${JSON.stringify(target)}`);
+  }
+  return target.target.name;
 }
 
 function compoundAssign(operator: "+=" | "-=" | "*=" | "/=", current: Value, value: Value, name: string): number {
@@ -291,8 +286,4 @@ function resolveType(typeName: TypeName, env: Environment): TypeName {
     }
   }
   return typeName;
-}
-
-function isStructType(value: Value): value is StructTypeValue {
-  return typeof value === "object" && value !== null && value.kind === "structType";
 }
