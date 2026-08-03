@@ -85,3 +85,7 @@ test("evaluate block-scoped variable not visible outside throws", () => {
   expect(() => evaluate("{ let x = 0; } x")).toThrow();
 });
 
+test("evaluate boolean true literal", () => {
+  expect(evaluate("let x = true; x")).toBe(1);
+});
+

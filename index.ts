@@ -63,6 +63,14 @@ export function evaluate(source: string): number {
       index++;
       return Number(token);
     }
+    if (token === "true") {
+      index++;
+      return 1;
+    }
+    if (token === "false") {
+      index++;
+      return 0;
+    }
     index++; // variable reference
     const entry = lookup(token);
     if (entry === undefined) {
