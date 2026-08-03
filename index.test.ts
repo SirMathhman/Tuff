@@ -37,6 +37,10 @@ test("evaluate compatible type declaration", () => {
   expect(evaluate("let x : U16 = 100U8;")).toBe(0);
 });
 
+test("evaluate assigning typed variable to narrower type throws", () => {
+  expect(() => evaluate("let x = 100U16; let y : U8 = x;")).toThrow();
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
