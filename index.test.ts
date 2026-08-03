@@ -37,3 +37,7 @@ test("interpret curly braces group like parentheses", () => {
   expect(interpret("{ 2 + 3 } * 4")).toBe(20);
 });
 
+test("interpret let declaration inside block", () => {
+  expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
+});
+
