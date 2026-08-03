@@ -20,3 +20,7 @@ test("evaluate addition of three numbers", () => {
 test("evaluate addition and subtraction", () => {
   expect(evaluate("2 + 3 - 4")).toBe(1);
 });
+
+test("evaluate multiplication and subtraction", () => {
+  expect(evaluate("2 * 3 - 4")).toBe(2);
+});

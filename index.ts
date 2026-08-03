@@ -4,11 +4,32 @@ export function evaluate(source: string) : number {
   }
 
   const parts = source.split(" ");
-  let result = Number(parts[0]);
+  let index = 0;
 
-  for (let i = 1; i < parts.length; i += 2) {
-    const operator = parts[i];
-    const operand = Number(parts[i + 1]);
+  function parseTerm(): number {
+    let value = Number(parts[index]);
+    index++;
+
+    while (index < parts.length && (parts[index] === "*")) {
+      const operator = parts[index];
+      index++;
+      const operand = Number(parts[index]);
+      index++;
+
+      if (operator === "*") {
+        value *= operand;
+      }
+    }
+
+    return value;
+  }
+
+  let result = parseTerm();
+
+  while (index < parts.length) {
+    const operator = parts[index];
+    index++;
+    const operand = parseTerm();
 
     if (operator === "+") {
       result += operand;
