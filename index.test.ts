@@ -56,3 +56,7 @@ test("evaluate variable scoped inside block is not visible outside", () => {
 test("evaluate mutable variable with assignment", () => {
   expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
 });
+
+test("evaluate assignment inside nested block mutates outer variable", () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+});
