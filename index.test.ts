@@ -29,3 +29,7 @@ test("interpret parentheses override precedence", () => {
   expect(interpret("(1 + 2) * 3")).toBe(9);
 });
 
+test("interpret division expression", () => {
+  expect(interpret("10 / 2")).toBe(5);
+});
+
