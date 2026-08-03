@@ -112,3 +112,7 @@ test("interpret supports comparison operators", () => {
 test("interpret supports boolean literals", () => {
   expect(interpret("let x = true; x")).toBe(1);
 });
+
+test("interpret supports if expressions", () => {
+  expect(interpret("if (1 < 2) { 10 } else { 20 }")).toBe(10);
+});

@@ -104,6 +104,9 @@ export class Parser {
     if (token.type === "boolean") {
       return { type: "boolean", value: token.value };
     }
+    if (token.type === "identifier" && token.value === "if") {
+      return this.parseIf();
+    }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
     }
@@ -129,6 +132,35 @@ export class Parser {
     return { type: "block", statements };
   }
 
+  private parseIf(): AST {
+    const open = this.consume();
+    if (open.type !== "paren" || open.value !== "(") {
+      throw new Error(`Expected ( after if, got: ${JSON.stringify(open)}`);
+    }
+    const condition = this.parseAdditive();
+    const close = this.consume();
+    if (close.type !== "paren" || close.value !== ")") {
+      throw new Error(`Expected ) after if condition, got: ${JSON.stringify(close)}`);
+    }
+    const then = this.parseBracedBlock();
+    let elseBranch: AST | null = null;
+    const next = this.peek();
+    if (next && next.type === "identifier" && next.value === "else") {
+      this.consume();
+      elseBranch = this.parseBracedBlock();
+    }
+    return { type: "if", condition, then, else: elseBranch };
+  }
+
+  private parseBracedBlock(): AST {
+    const open = this.consume();
+    if (open.type !== "paren" || open.value !== "{") {
+      throw new Error(`Expected {, got: ${JSON.stringify(open)}`);
+    }
+    const statements = this.parseStatements(true);
+    return { type: "block", statements };
+  }
+
   private parseStatements(inBlock: boolean): AST[] {
     const statements: AST[] = [];
 
@@ -143,6 +175,12 @@ export class Parser {
       if (token.type === "paren" && token.value === "}") {
         if (inBlock) {
           this.consume();
+          break;
+        }
+        throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
+      }
+      if (token.type === "identifier" && token.value === "else") {
+        if (inBlock) {
           break;
         }
         throw new Error(`Unexpected token: ${JSON.stringify(token)}`);

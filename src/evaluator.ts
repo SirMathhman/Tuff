@@ -41,6 +41,13 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
       env.assign(ast.name, result);
       return result;
     }
+    case "if": {
+      const condition = evaluate(ast.condition, env);
+      if (condition !== 0) {
+        return evaluate(ast.then, env);
+      }
+      return ast.else ? evaluate(ast.else, env) : 0;
+    }
     case "block": {
       const childEnv = env.child();
       let result = 0;

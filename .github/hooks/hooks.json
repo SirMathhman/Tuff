@@ -1,10 +1,10 @@
 {
-	"hooks": {
-		"Stop": [
-			{
-				"type": "command",
-				"command": ""
-			}
-		]
-	}
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "cmd /c \"bun run cpd 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      }
+    ]
+  }
 }
