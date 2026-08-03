@@ -13,12 +13,24 @@ export function parse(tokens: Token[]): Stmt {
   }
 
   function parseExpression(): Expr {
-    let left = parseTerm();
+    let left = parseOr();
 
     while (peek().type === "plus" || peek().type === "minus") {
       const op = advance().type === "plus" ? "+" : "-";
-      const right = parseTerm();
+      const right = parseOr();
       left = { kind: "binary", op, left, right };
+    }
+
+    return left;
+  }
+
+  function parseOr(): Expr {
+    let left = parseTerm();
+
+    while (peek().type === "or") {
+      advance();
+      const right = parseTerm();
+      left = { kind: "binary", op: "||", left, right };
     }
 
     return left;

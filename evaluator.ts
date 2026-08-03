@@ -29,6 +29,8 @@ function evalExpr(expr: Expr, env: Env): number {
           return left - right;
         case "*":
           return left * right;
+        case "||":
+          return left || right ? 1 : 0;
       }
     }
   }
