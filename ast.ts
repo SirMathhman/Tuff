@@ -1,6 +1,10 @@
 export type Expr =
   | { kind: "number"; value: number }
-  | { kind: "binary"; op: "+" | "-" | "*"; left: Expr; right: Expr }
   | { kind: "variable"; name: string }
+  | { kind: "binary"; op: "+" | "-" | "*"; left: Expr; right: Expr }
+  | { kind: "block"; statements: Stmt[] };
+
+export type Stmt =
   | { kind: "let"; name: string; value: Expr }
-  | { kind: "block"; statements: Expr[] };
+  | { kind: "expr"; expr: Expr }
+  | { kind: "block"; statements: Stmt[] };

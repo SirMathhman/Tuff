@@ -1,29 +1,24 @@
-import type { Expr } from "./ast";
+import type { Expr, Stmt } from "./ast";
 import { Env } from "./env";
 
-export function evalAst(expr: Expr, env: Env): number {
+function evalExpr(expr: Expr, env: Env): number {
   switch (expr.kind) {
     case "number":
       return expr.value;
     case "variable": {
       return env.get(expr.name);
     }
-    case "let": {
-      const value = evalAst(expr.value, env);
-      env.define(expr.name, value);
-      return value;
-    }
     case "block": {
       const blockEnv = env.child();
       let result = 0;
       for (const statement of expr.statements) {
-        result = evalAst(statement, blockEnv);
+        result = evalStmt(statement, blockEnv);
       }
       return result;
     }
     case "binary": {
-      const left = evalAst(expr.left, env);
-      const right = evalAst(expr.right, env);
+      const left = evalExpr(expr.left, env);
+      const right = evalExpr(expr.right, env);
 
       switch (expr.op) {
         case "+":
@@ -35,4 +30,29 @@ export function evalAst(expr: Expr, env: Env): number {
       }
     }
   }
+}
+
+function evalStmt(stmt: Stmt, env: Env): number {
+  switch (stmt.kind) {
+    case "let": {
+      const value = evalExpr(stmt.value, env);
+      env.define(stmt.name, value);
+      return value;
+    }
+    case "expr": {
+      return evalExpr(stmt.expr, env);
+    }
+    case "block": {
+      const blockEnv = env.child();
+      let result = 0;
+      for (const statement of stmt.statements) {
+        result = evalStmt(statement, blockEnv);
+      }
+      return result;
+    }
+  }
+}
+
+export function evalAst(stmt: Stmt, env: Env): number {
+  return evalStmt(stmt, env);
 }

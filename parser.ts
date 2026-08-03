@@ -1,7 +1,7 @@
 import type { Token } from "./tokens";
-import type { Expr } from "./ast";
+import type { Expr, Stmt } from "./ast";
 
-export function parse(tokens: Token[]): Expr {
+export function parse(tokens: Token[]): Stmt {
   let index = 0;
 
   function peek(): Token {
@@ -58,7 +58,7 @@ export function parse(tokens: Token[]): Expr {
     }
 
     if (token.type === "lbrace") {
-      const statements: Expr[] = [];
+      const statements: Stmt[] = [];
 
       while (peek().type !== "rbrace" && peek().type !== "eof") {
         statements.push(parseStatement());
@@ -74,7 +74,7 @@ export function parse(tokens: Token[]): Expr {
     throw new Error(`Unexpected token: ${token.type}`);
   }
 
-  function parseStatement(): Expr {
+  function parseStatement(): Stmt {
     if (peek().type === "let") {
       advance();
       const nameToken = advance();
@@ -96,10 +96,10 @@ export function parse(tokens: Token[]): Expr {
       return { kind: "let", name: nameToken.name, value };
     }
 
-    return parseExpression();
+    return { kind: "expr", expr: parseExpression() };
   }
 
-  const statements: Expr[] = [];
+  const statements: Stmt[] = [];
 
   while (peek().type !== "eof") {
     statements.push(parseStatement());
