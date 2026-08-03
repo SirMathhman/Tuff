@@ -213,6 +213,14 @@ test("interpret supports is operator on boolean", () => {
   expect(interpret("true is Bool")).toBe(1);
 });
 
+test("interpret supports is operator on typed variable", () => {
+  expect(interpret("let x = 100U8; x is U8")).toBe(1);
+});
+
+test("interpret rejects is operator on mismatched typed variable", () => {
+  expect(interpret("let x = 100U8; x is U16")).toBe(0);
+});
+
 test("interpret supports U8 suffix in arithmetic", () => {
   expect(interpret("100U8 + 20U8")).toBe(120);
 });
