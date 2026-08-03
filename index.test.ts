@@ -197,6 +197,22 @@ test("interpret throws on I64 overflow", () => {
   expect(() => interpret("100000000000000000000I64")).toThrow();
 });
 
+test("interpret supports is operator matching type", () => {
+  expect(interpret("100U8 is U8")).toBe(1);
+});
+
+test("interpret supports is operator rejecting type", () => {
+  expect(interpret("100U8 is U16")).toBe(0);
+});
+
+test("interpret supports is operator on plain number", () => {
+  expect(interpret("100 is I32")).toBe(1);
+});
+
+test("interpret supports is operator on boolean", () => {
+  expect(interpret("true is Bool")).toBe(1);
+});
+
 test("interpret supports U8 suffix in arithmetic", () => {
   expect(interpret("100U8 + 20U8")).toBe(120);
 });

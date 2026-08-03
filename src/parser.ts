@@ -89,6 +89,13 @@ export class Parser {
         this.consume();
         const right = this.parseAssignment();
         left = { type: "binary", operator: token.value, left, right };
+      } else if (token && token.type === "operator" && token.value === "is") {
+        this.consume();
+        const typeToken = this.consume();
+        if (typeToken.type !== "identifier" || !TYPE_NAMES.includes(typeToken.value as TypeName)) {
+          throw new Error(`Expected type name after is, got: ${JSON.stringify(typeToken)}`);
+        }
+        left = { type: "binary", operator: "is", left, right: { type: "identifier", name: typeToken.value } };
       } else {
         break;
       }

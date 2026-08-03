@@ -52,6 +52,8 @@ export function lex(source: string): Token[] {
       }
       if (value === "true" || value === "false") {
         tokens.push({ type: "boolean", value: value === "true" });
+      } else if (value === "is") {
+        tokens.push({ type: "operator", value: "is" });
       } else {
         tokens.push({ type: "identifier", value });
       }

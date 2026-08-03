@@ -81,6 +81,12 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     }
     case "binary": {
       const leftValue = evaluate(ast.left, env);
+      if (ast.operator === "is") {
+        if (ast.right.type !== "identifier") {
+          throw new Error(`Expected type name after is, got: ${JSON.stringify(ast.right)}`);
+        }
+        return typeOf(leftValue) === ast.right.name;
+      }
       const rightValue = evaluate(ast.right, env);
       if (ast.operator === "&&" || ast.operator === "||") {
         return logicalOps[ast.operator](isTruthy(leftValue), isTruthy(rightValue));

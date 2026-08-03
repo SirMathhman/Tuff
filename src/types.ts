@@ -30,7 +30,7 @@ export interface NumberLiteral {
 
 export type Token =
   | ({ type: "number" } & NumberLiteral)
-  | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" }
+  | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" | "is" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "identifier"; value: string }
   | { type: "boolean"; value: boolean }
@@ -41,7 +41,7 @@ export type Token =
 export type AST =
   | ({ type: "number" } & NumberLiteral)
   | { type: "boolean"; value: boolean }
-  | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||"; left: AST; right: AST }
+  | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||" | "is"; left: AST; right: AST }
   | { type: "unary"; operator: "-" | "!"; operand: AST }
   | { type: "identifier"; name: string }
   | { type: "let"; name: string; mutable: boolean; typeName?: TypeName; value: AST }
