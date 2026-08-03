@@ -40,3 +40,7 @@ test("evaluate curly braces override precedence", () => {
 test("evaluate block with let declaration and variable reference", () => {
   expect(evaluate("{ let x = 2 + 3; x } * 4")).toBe(20);
 });
+
+test("evaluate invalid character throws error", () => {
+  expect(() => evaluate("#")).toThrow();
+});
