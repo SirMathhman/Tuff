@@ -308,3 +308,7 @@ test("interpret supports array literals with typed annotation and indexing", () 
 test("interpret throws on array index out of bounds", () => {
   expect(() => interpret("let array : [I32; 2] = [1, 2]; array[5]")).toThrow();
 });
+
+test("interpret rejects array literal length mismatching declared size", () => {
+  expect(() => interpret("let array : [I32; 2] = [1, 2, 3]")).toThrow();
+});
