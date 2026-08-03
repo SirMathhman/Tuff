@@ -360,3 +360,7 @@ test("interpret supports struct field assignment", () => {
 test("interpret rejects assignment to immutable struct field", () => {
   expect(() => interpret("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; p.x = 10")).toThrow();
 });
+
+test("interpret supports struct field assignment in nested scope", () => {
+  expect(interpret("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; { p.x = 10; } p.x + p.y")).toBe(14);
+});
