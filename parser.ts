@@ -11,6 +11,14 @@ export type Node =
 export function parse(tokens: Token[]): Node {
   let pos = 0;
 
+  function parseProgram(): Node {
+    const statements: Node[] = [];
+    while (pos < tokens.length) {
+      statements.push(parseStatement());
+    }
+    return { type: "block", statements };
+  }
+
   function parseBlock(): Node {
     const statements: Node[] = [];
     if (tokens[pos]?.type === "lbrace") {
@@ -83,5 +91,5 @@ export function parse(tokens: Token[]): Node {
     throw new ParseError("Unexpected token", pos - 1);
   }
 
-  return parseAdditive();
+  return parseProgram();
 }

@@ -49,3 +49,7 @@ test("interpret incomplete expression throws", () => {
   expect(() => interpret("1 +")).toThrow();
 });
 
+test("interpret top-level let declaration", () => {
+  expect(interpret("let x = 5; x")).toBe(5);
+});
+
