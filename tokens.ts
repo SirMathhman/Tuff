@@ -17,6 +17,7 @@ export type Token =
   | { type: "false" }
   | { type: "identifier"; name: string }
   | { type: "equals" }
+  | { type: "plus_equals" }
   | { type: "equals_equals" }
   | { type: "not_equals" }
   | { type: "less_than" }
@@ -37,6 +38,7 @@ type OperatorTokenType =
   | "lbrace"
   | "rbrace"
   | "equals"
+  | "plus_equals"
   | "equals_equals"
   | "not_equals"
   | "less_than"
@@ -56,6 +58,7 @@ const OPERATORS: Array<[string, OperatorTokenType]> = [
   [">=", "greater_than_or_equal"],
   ["<", "less_than"],
   [">", "greater_than"],
+  ["+=", "plus_equals"],
   ["+", "plus"],
   ["-", "minus"],
   ["*", "star"],

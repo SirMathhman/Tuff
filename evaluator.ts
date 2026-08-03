@@ -59,6 +59,13 @@ function evalStmt(stmt: Stmt, env: Env): Value {
       env.assign(stmt.name, value);
       return value;
     }
+    case "compound_assign": {
+      const current = env.get(stmt.name);
+      const right = evalExpr(stmt.value, env);
+      const result = OPERATORS[stmt.op].evaluate(current, right);
+      env.assign(stmt.name, result);
+      return result;
+    }
     case "expr": {
       return evalExpr(stmt.expr, env);
     }

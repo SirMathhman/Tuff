@@ -128,3 +128,7 @@ test("evaluate chained else if with block branches", () => {
 test("evaluate if without else leaves variable unchanged", () => {
   expect(evaluate("let mut x = 0; if (false) { x = 1; } x")).toBe(0);
 });
+
+test("evaluate compound assignment plus equals", () => {
+  expect(evaluate("let mut x = 0; x += 1; x")).toBe(1);
+});

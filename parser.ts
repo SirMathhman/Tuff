@@ -161,6 +161,22 @@ export function parse(tokens: Token[]): Stmt {
       return { kind: "assign", name: nameToken.name, value };
     }
 
+    if (peek().type === "identifier" && tokens[index + 1]?.type === "plus_equals") {
+      const nameToken = advance();
+      advance();
+      const value = parseExpression();
+
+      if (advance().type !== "semicolon") {
+        throw new ParseError("Expected ; after compound assignment");
+      }
+
+      if (nameToken.type !== "identifier") {
+        throw new ParseError("Expected identifier before +=");
+      }
+
+      return { kind: "compound_assign", name: nameToken.name, op: "+", value };
+    }
+
     return { kind: "expr", expr: parseExpression() };
   }
 
