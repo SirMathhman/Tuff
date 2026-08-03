@@ -1,19 +1,21 @@
 import type { Expr, Stmt } from "./ast";
 import { BINARY_EVALUATORS } from "./operators";
 import { Env } from "./env";
+import type { Value } from "./value";
+import { toNumber } from "./value";
 
-function evalExpr(expr: Expr, env: Env): number {
+function evalExpr(expr: Expr, env: Env): Value {
   switch (expr.kind) {
     case "number":
-      return expr.value;
+      return { type: "number", value: expr.value };
     case "boolean":
-      return expr.value ? 1 : 0;
+      return { type: "boolean", value: expr.value };
     case "variable": {
       return env.get(expr.name);
     }
     case "block": {
       const blockEnv = env.child();
-      let result = 0;
+      let result: Value = { type: "number", value: 0 };
       for (const statement of expr.statements) {
         result = evalStmt(statement, blockEnv);
       }
@@ -27,7 +29,7 @@ function evalExpr(expr: Expr, env: Env): number {
   }
 }
 
-function evalStmt(stmt: Stmt, env: Env): number {
+function evalStmt(stmt: Stmt, env: Env): Value {
   switch (stmt.kind) {
     case "let": {
       const value = evalExpr(stmt.value, env);
@@ -44,7 +46,7 @@ function evalStmt(stmt: Stmt, env: Env): number {
     }
     case "block": {
       const blockEnv = env.child();
-      let result = 0;
+      let result: Value = { type: "number", value: 0 };
       for (const statement of stmt.statements) {
         result = evalStmt(statement, blockEnv);
       }
@@ -54,5 +56,5 @@ function evalStmt(stmt: Stmt, env: Env): number {
 }
 
 export function evalAst(stmt: Stmt, env: Env): number {
-  return evalStmt(stmt, env);
+  return toNumber(evalStmt(stmt, env));
 }

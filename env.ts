@@ -1,5 +1,7 @@
+import type { Value } from "./value";
+
 export interface Binding {
-  value: number;
+  value: Value;
   mutable: boolean;
 }
 
@@ -10,15 +12,15 @@ export class Env {
     this.vars = vars ?? new Map();
   }
 
-  define(name: string, value: number, mutable: boolean): void {
+  define(name: string, value: Value, mutable: boolean): void {
     this.vars.set(name, { value, mutable });
   }
 
-  get(name: string): number {
+  get(name: string): Value {
     return this.lookup(name).value;
   }
 
-  assign(name: string, value: number): void {
+  assign(name: string, value: Value): void {
     const binding = this.lookup(name);
     if (!binding.mutable) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);

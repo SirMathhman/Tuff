@@ -76,3 +76,7 @@ test("evaluate logical and", () => {
 test("evaluate equality", () => {
   expect(evaluate("1 == 2")).toBe(0);
 });
+
+test("evaluate equality is type-aware", () => {
+  expect(evaluate("1 == true")).toBe(0);
+});
