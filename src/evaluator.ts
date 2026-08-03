@@ -65,6 +65,13 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       }
       return evaluate(ast.else, env);
     }
+    case "while": {
+      let result: Value = 0;
+      while (isTruthy(evaluate(ast.condition, env))) {
+        result = evaluate(ast.body, env);
+      }
+      return result;
+    }
     case "block": {
       const childEnv = env.child();
       let result: Value = 0;

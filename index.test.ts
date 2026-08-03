@@ -128,3 +128,7 @@ test("interpret always returns a number exit code", () => {
 test("interpret returns 0 for false exit code", () => {
   expect(interpret("let x = 2 < 1; x")).toBe(0);
 });
+
+test("interpret supports while loops", () => {
+  expect(interpret("let mut i = 0; while (i < 3) { i += 1; } i")).toBe(3);
+});

@@ -17,4 +17,5 @@ export type AST =
   | { type: "let"; name: string; mutable: boolean; value: AST }
   | { type: "assign"; name: string; operator: "=" | "+=" | "-=" | "*=" | "/="; value: AST }
   | { type: "if"; condition: AST; then: AST; else: AST | null }
+  | { type: "while"; condition: AST; body: AST }
   | { type: "block"; statements: AST[] };

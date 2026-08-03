@@ -107,6 +107,9 @@ export class Parser {
     if (token.type === "identifier" && token.value === "if") {
       return this.parseIf();
     }
+    if (token.type === "identifier" && token.value === "while") {
+      return this.parseWhile();
+    }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
     }
@@ -159,6 +162,20 @@ export class Parser {
     }
     const statements = this.parseStatements(true);
     return { type: "block", statements };
+  }
+
+  private parseWhile(): AST {
+    const open = this.consume();
+    if (open.type !== "paren" || open.value !== "(") {
+      throw new Error(`Expected ( after while, got: ${JSON.stringify(open)}`);
+    }
+    const condition = this.parseAdditive();
+    const close = this.consume();
+    if (close.type !== "paren" || close.value !== ")") {
+      throw new Error(`Expected ) after while condition, got: ${JSON.stringify(close)}`);
+    }
+    const body = this.parseBracedBlock();
+    return { type: "while", condition, body };
   }
 
   private parseStatements(inBlock: boolean): AST[] {
