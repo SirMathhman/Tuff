@@ -19,6 +19,7 @@ export function evaluate(source: string): number {
   }
   const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
   let index = 0;
+  let breakRequested = false;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
 
   function currentScope(): Map<string, { value: Value; mutable: boolean }> {
@@ -194,6 +195,11 @@ export function evaluate(source: string): number {
       } else if (tokens[index] === "continue") {
         index++; // consume "continue"
         index++; // consume ";"
+      } else if (tokens[index] === "break") {
+        index++; // consume "break"
+        index++; // consume ";"
+        breakRequested = true;
+        break;
       } else {
         value = parseOr();
         if (tokens[index] === ";") {
@@ -216,6 +222,10 @@ export function evaluate(source: string): number {
         break;
       }
       parseBranchStatement();
+      if (breakRequested) {
+        breakRequested = false;
+        break;
+      }
       index = conditionStart;
     }
   }
