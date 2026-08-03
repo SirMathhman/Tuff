@@ -45,3 +45,7 @@ test("interpret unknown character throws", () => {
   expect(() => interpret("#")).toThrow();
 });
 
+test("interpret incomplete expression throws", () => {
+  expect(() => interpret("1 +")).toThrow();
+});
+
