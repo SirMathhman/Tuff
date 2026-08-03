@@ -9,6 +9,8 @@ export type Token =
   | { type: "rbrace" }
   | { type: "let" }
   | { type: "mut" }
+  | { type: "true" }
+  | { type: "false" }
   | { type: "identifier"; name: string }
   | { type: "equals" }
   | { type: "semicolon" }
@@ -67,6 +69,10 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "let" });
       } else if (name === "mut") {
         tokens.push({ type: "mut" });
+      } else if (name === "true") {
+        tokens.push({ type: "true" });
+      } else if (name === "false") {
+        tokens.push({ type: "false" });
       } else {
         tokens.push({ type: "identifier", name });
       }

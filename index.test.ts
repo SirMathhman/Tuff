@@ -60,3 +60,7 @@ test("evaluate mutable variable with assignment", () => {
 test("evaluate assignment inside nested block mutates outer variable", () => {
   expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
 });
+
+test("evaluate boolean true literal", () => {
+  expect(evaluate("let x = true; x")).toBe(1);
+});

@@ -43,6 +43,14 @@ export function parse(tokens: Token[]): Stmt {
       return { kind: "number", value: token.value };
     }
 
+    if (token.type === "true") {
+      return { kind: "number", value: 1 };
+    }
+
+    if (token.type === "false") {
+      return { kind: "number", value: 0 };
+    }
+
     if (token.type === "identifier") {
       return { kind: "variable", name: token.name };
     }
