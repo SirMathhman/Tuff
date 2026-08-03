@@ -1,3 +1,6 @@
 export function interpret(source: string) {
-  return 0;
+  if (source === "") {
+    return 0;
+  }
+  return Number(source);
 }
