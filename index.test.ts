@@ -68,3 +68,7 @@ test("interpret supports let bindings in a block", () => {
 test("interpret throws on undefined variable", () => {
   expect(() => interpret("{ x }")).toThrow();
 });
+
+test("interpret supports multiple let bindings", () => {
+  expect(interpret("{ let x = 2; let y = 3; x + y }")).toBe(5);
+});
