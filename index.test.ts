@@ -57,3 +57,7 @@ test("interpret multiple top-level let declarations", () => {
   expect(interpret("let x = 2; let y = 3; x + y")).toBe(5);
 });
 
+test("interpret inner block shadows outer variable", () => {
+  expect(interpret("let x = 2; { let x = 3; x } + x")).toBe(5);
+});
+

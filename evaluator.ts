@@ -7,7 +7,10 @@ const operators: Record<string, (a: number, b: number) => number> = {
   "/": (a, b) => a / b,
 };
 
-export function evaluate(node: Node, env: Record<string, number> = {}): number {
+export function evaluate(
+  node: Node,
+  env: Record<string, number> = {}
+): number {
   switch (node.type) {
     case "number":
       return node.value;
@@ -22,9 +25,10 @@ export function evaluate(node: Node, env: Record<string, number> = {}): number {
       env[node.name] = evaluate(node.value, env);
       return env[node.name]!;
     case "block": {
+      const childEnv = Object.create(env) as Record<string, number>;
       let result = 0;
       for (const statement of node.statements) {
-        result = evaluate(statement, env);
+        result = evaluate(statement, childEnv);
       }
       return result;
     }
