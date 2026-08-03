@@ -1,6 +1,6 @@
 import type { Value, FunctionValue, AST } from "./types";
 import { Environment } from "./environment";
-import { typeOf } from "./typecheck";
+import { assertTypeMatches } from "./typecheck";
 
 export function callFunction(
   fn: FunctionValue,
@@ -15,8 +15,8 @@ export function callFunction(
     callEnv.define(param.name, args[i]!, false);
   });
   const result = evaluate(fn.body, callEnv);
-  if (fn.returnType && typeOf(result) !== fn.returnType) {
-    throw new Error(`Return type mismatch: expected ${fn.returnType}, got ${typeOf(result) ?? "number"}`);
+  if (fn.returnType) {
+    assertTypeMatches(result, fn.returnType, "Return type mismatch");
   }
   return result;
 }

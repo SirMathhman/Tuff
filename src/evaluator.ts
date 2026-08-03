@@ -1,7 +1,7 @@
 import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
-import { integerTypeOf, isFunction, typeOf, isArray, typesEqual } from "./typecheck";
+import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches } from "./typecheck";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -15,8 +15,8 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return env.lookup(ast.name);
     case "let": {
       const value = evaluate(ast.value, env);
-      if (ast.typeName && !typesEqual(typeOf(value) ?? "I32", ast.typeName)) {
-        throw new Error(`Type mismatch: expected ${JSON.stringify(ast.typeName)}, got ${JSON.stringify(typeOf(value) ?? "number")}`);
+      if (ast.typeName) {
+        assertTypeMatches(value, ast.typeName, "Type mismatch");
       }
       env.define(ast.name, value, ast.mutable);
       return value;

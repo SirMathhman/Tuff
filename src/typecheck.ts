@@ -50,3 +50,10 @@ export function typesEqual(a: TypeName, b: TypeName): boolean {
   }
   return false;
 }
+
+export function assertTypeMatches(value: Value, expected: TypeName, context: string): void {
+  const actual = typeOf(value) ?? "I32";
+  if (!typesEqual(actual, expected)) {
+    throw new Error(`${context}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+}
