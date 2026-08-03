@@ -58,6 +58,22 @@ export function parse(tokens: Token[]): Stmt {
       return { kind: "variable", name: token.name };
     }
 
+    if (token.type === "if") {
+      if (advance().type !== "lparen") {
+        throw new ParseError("Expected ( after if");
+      }
+      const condition = parseExpression();
+      if (advance().type !== "rparen") {
+        throw new ParseError("Expected ) after if condition");
+      }
+      const then = parseExpression();
+      if (advance().type !== "else") {
+        throw new ParseError("Expected else in if expression");
+      }
+      const otherwise = parseExpression();
+      return { kind: "if", condition, then, otherwise };
+    }
+
     if (token.type === "lparen") {
       const expr = parseExpression();
 

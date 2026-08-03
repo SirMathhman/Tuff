@@ -108,3 +108,7 @@ test("evaluate greater than or equal", () => {
 test("evaluate not equal", () => {
   expect(evaluate("1 != 2")).toBe(1);
 });
+
+test("evaluate if expression with else", () => {
+  expect(evaluate("let x = if (true) 2 else 3; x")).toBe(2);
+});

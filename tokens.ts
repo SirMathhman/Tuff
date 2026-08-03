@@ -11,6 +11,8 @@ export type Token =
   | { type: "rbrace" }
   | { type: "let" }
   | { type: "mut" }
+  | { type: "if" }
+  | { type: "else" }
   | { type: "true" }
   | { type: "false" }
   | { type: "identifier"; name: string }
@@ -91,6 +93,10 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "let" });
       } else if (name === "mut") {
         tokens.push({ type: "mut" });
+      } else if (name === "if") {
+        tokens.push({ type: "if" });
+      } else if (name === "else") {
+        tokens.push({ type: "else" });
       } else if (name === "true") {
         tokens.push({ type: "true" });
       } else if (name === "false") {

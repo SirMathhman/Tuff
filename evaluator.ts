@@ -3,6 +3,7 @@ import { OPERATORS } from "./operators";
 import { Env } from "./env";
 import type { Value } from "./value";
 import { toNumber } from "./value";
+import { TypeError } from "./errors";
 
 function evalExpr(expr: Expr, env: Env): Value {
   switch (expr.kind) {
@@ -25,6 +26,13 @@ function evalExpr(expr: Expr, env: Env): Value {
       const left = evalExpr(expr.left, env);
       const right = evalExpr(expr.right, env);
       return OPERATORS[expr.op].evaluate(left, right);
+    }
+    case "if": {
+      const condition = evalExpr(expr.condition, env);
+      if (condition.type !== "boolean") {
+        throw new TypeError("If condition must be a boolean");
+      }
+      return condition.value ? evalExpr(expr.then, env) : evalExpr(expr.otherwise, env);
     }
   }
 }
