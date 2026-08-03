@@ -12,6 +12,8 @@ export function evaluate(source: string) : number {
 
     if (operator === "+") {
       result += operand;
+    } else if (operator === "-") {
+      result -= operand;
     }
   }
 

@@ -16,3 +16,7 @@ test("evaluate addition of two numbers", () => {
 test("evaluate addition of three numbers", () => {
   expect(evaluate("1 + 2 + 3")).toBe(6);
 });
+
+test("evaluate addition and subtraction", () => {
+  expect(evaluate("2 + 3 - 4")).toBe(1);
+});
