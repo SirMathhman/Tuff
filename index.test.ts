@@ -225,6 +225,14 @@ test("interpret supports is operator on arithmetic result of typed variable", ()
   expect(interpret("let x = 100U8; (x + 20U8) is U8")).toBe(1);
 });
 
+test("interpret returns false when is checks function against integer type", () => {
+  expect(interpret("fn f() : I32 => 1; f is I32")).toBe(0);
+});
+
+test("interpret returns false when is checks function against boolean type", () => {
+  expect(interpret("fn f() : I32 => 1; f is Bool")).toBe(0);
+});
+
 test("interpret supports U8 suffix in arithmetic", () => {
   expect(interpret("100U8 + 20U8")).toBe(120);
 });
