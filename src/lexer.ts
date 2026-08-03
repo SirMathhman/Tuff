@@ -57,22 +57,10 @@ export function lex(source: string): Token[] {
         value += source[i];
         i++;
       }
-      if (value === "U" && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6") || (source[i] === "3" && source[i + 1] === "2") || (source[i] === "6" && source[i + 1] === "4"))) {
-        if (source[i] === "8") {
-          value += "8";
-          i++;
-        } else {
-          value += source[i] + source[i + 1];
-          i += 2;
-        }
-      } else if (value === "I" && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6") || (source[i] === "3" && source[i + 1] === "2") || (source[i] === "6" && source[i + 1] === "4"))) {
-        if (source[i] === "8") {
-          value += "8";
-          i++;
-        } else {
-          value += source[i] + source[i + 1];
-          i += 2;
-        }
+      const suffix = readTypeSuffix(source, i, value);
+      if (suffix) {
+        value = suffix.value;
+        i = suffix.i;
       }
       if (value === "true" || value === "false") {
         tokens.push({ type: "boolean", value: value === "true" });
@@ -187,4 +175,14 @@ export function lex(source: string): Token[] {
 
 function isLetter(char: string): boolean {
   return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z");
+}
+
+function readTypeSuffix(source: string, i: number, prefix: string): { value: string; i: number } | undefined {
+  if ((prefix === "U" || prefix === "I") && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6") || (source[i] === "3" && source[i + 1] === "2") || (source[i] === "6" && source[i + 1] === "4"))) {
+    if (source[i] === "8") {
+      return { value: prefix + "8", i: i + 1 };
+    }
+    return { value: prefix + source[i] + source[i + 1], i: i + 2 };
+  }
+  return undefined;
 }

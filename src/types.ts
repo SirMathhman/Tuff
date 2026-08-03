@@ -51,8 +51,19 @@ export interface Param {
 
 export type TypeName = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64" | "Bool";
 
+export interface NumberLiteral {
+  value: number;
+  u8?: boolean;
+  u16?: boolean;
+  u32?: boolean;
+  u64?: boolean;
+  i8?: boolean;
+  i16?: boolean;
+  i64?: boolean;
+}
+
 export type Token =
-  | { type: "number"; value: number; u8?: boolean; u16?: boolean; u32?: boolean; u64?: boolean; i8?: boolean; i16?: boolean; i64?: boolean }
+  | ({ type: "number" } & NumberLiteral)
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "identifier"; value: string }
@@ -62,7 +73,7 @@ export type Token =
   | { type: "semicolon"; value: ";" };
 
 export type AST =
-  | { type: "number"; value: number; u8?: boolean; u16?: boolean; u32?: boolean; u64?: boolean; i8?: boolean; i16?: boolean; i64?: boolean }
+  | ({ type: "number" } & NumberLiteral)
   | { type: "boolean"; value: boolean }
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||"; left: AST; right: AST }
   | { type: "unary"; operator: "-" | "!"; operand: AST }
