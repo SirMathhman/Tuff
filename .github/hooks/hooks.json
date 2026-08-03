@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "cmd /c \"bun run test\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      },
+      {
+        "type": "command",
+        "command": "cmd /c \"bun run test\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      }
+    ]
+  }
+}

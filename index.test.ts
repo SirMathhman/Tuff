@@ -149,3 +149,7 @@ test("evaluate if with block statements mutating outer variable", () => {
   expect(evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x")).toBe(1);
 });
 
+test("evaluate chained if statement", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else { x = 3; } x")).toBe(3);
+});
+

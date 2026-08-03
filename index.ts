@@ -202,19 +202,44 @@ export function evaluate(source: string): number {
     index++; // consume ")"
     if (truthy(condition)) {
       parseBranchStatement();
-      if (tokens[index] !== "else") {
-        throw new Error("If expression requires an else branch");
-      }
-      index++; // consume "else"
-      skipBranchStatement();
+      skipElseChain();
     } else {
       skipBranchStatement();
-      if (tokens[index] !== "else") {
-        throw new Error("If expression requires an else branch");
-      }
-      index++; // consume "else"
+      parseElseChain();
+    }
+  }
+
+  function parseElseChain(): void {
+    if (tokens[index] !== "else") {
+      throw new Error("If expression requires an else branch");
+    }
+    index++; // consume "else"
+    if (tokens[index] === "if") {
+      parseIfStatement();
+    } else {
       parseBranchStatement();
     }
+  }
+
+  function skipElseChain(): void {
+    if (tokens[index] !== "else") {
+      throw new Error("If expression requires an else branch");
+    }
+    index++; // consume "else"
+    if (tokens[index] === "if") {
+      skipIfStatement();
+    } else {
+      skipBranchStatement();
+    }
+  }
+
+  function skipIfStatement(): void {
+    index++; // consume "if"
+    index++; // consume "("
+    parseOr();
+    index++; // consume ")"
+    skipBranchStatement();
+    skipElseChain();
   }
 
   function parseBranchStatement(): void {
