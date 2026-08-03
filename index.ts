@@ -1,6 +1,11 @@
 type Value =
   | { kind: "number"; value: number; type?: string }
-  | { kind: "boolean"; value: boolean };
+  | { kind: "boolean"; value: boolean }
+  | {
+      kind: "reference";
+      target: { value: Value; mutable: boolean };
+      type?: string;
+    };
 
 function numberValue(value: number, type?: string): Value {
   return { kind: "number", value, type };
@@ -11,7 +16,30 @@ function booleanValue(value: boolean): Value {
 }
 
 function truthy(value: Value): boolean {
+  if (value.kind === "reference") {
+    return truthy(value.target.value);
+  }
   return value.kind === "boolean" ? value.value : value.value !== 0;
+}
+
+function toNumber(value: Value): number {
+  if (value.kind === "reference") {
+    return toNumber(value.target.value);
+  }
+  if (value.kind === "boolean") {
+    return value.value ? 1 : 0;
+  }
+  return value.value;
+}
+
+function valueType(value: Value): string | undefined {
+  if (value.kind === "number") {
+    return value.type;
+  }
+  if (value.kind === "reference") {
+    return value.type;
+  }
+  return "Bool";
 }
 
 function typeSize(type: string): number {
@@ -50,7 +78,7 @@ export function evaluate(source: string): number {
   }
   const tokens =
     source.match(
-      /\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|=>|\|\||&&|<|>|[+\-*/(){};=:,]/g,
+      /\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|=>|\|\||&&|<|>|[+\-*/&(){};=:,]/g,
     ) ?? [];
   let index = 0;
   let breakRequested = false;
@@ -99,7 +127,8 @@ export function evaluate(source: string): number {
     ) {
       const operator = tokens[index++];
       const right = parseComparison();
-      const equal = value.kind === right.kind && value.value === right.value;
+      const equal =
+        value.kind === right.kind && toNumber(value) === toNumber(right);
       value = booleanValue(operator === "==" ? equal : !equal);
     }
     return value;
@@ -116,8 +145,8 @@ export function evaluate(source: string): number {
     ) {
       const operator = tokens[index++];
       const right = parseExpression();
-      const left = value.value as number;
-      const rhs = right.value as number;
+      const left = toNumber(value);
+      const rhs = toNumber(right);
       value = booleanValue(
         operator === "<"
           ? left < rhs
@@ -139,8 +168,8 @@ export function evaluate(source: string): number {
     ) {
       const operator = tokens[index++];
       const right = parseTerm();
-      const left = value.value as number;
-      const rhs = right.value as number;
+      const left = toNumber(value);
+      const rhs = toNumber(right);
       value = numberValue(operator === "+" ? left + rhs : left - rhs);
     }
     return value;
@@ -154,8 +183,8 @@ export function evaluate(source: string): number {
     ) {
       const operator = tokens[index++];
       const right = parseFactor();
-      const left = value.value as number;
-      const rhs = right.value as number;
+      const left = toNumber(value);
+      const rhs = toNumber(right);
       if (operator === "/" && rhs === 0) {
         throw new Error("Division by zero");
       }
@@ -192,7 +221,32 @@ export function evaluate(source: string): number {
       if (value.kind === "number" && /U8$/.test(tokens[index - 1] ?? "")) {
         throw new Error("U8 literal cannot be negative");
       }
-      return numberValue(-(value.value as number));
+      return numberValue(-toNumber(value));
+    }
+    if (token === "&") {
+      index++;
+      const name = tokens[index++];
+      if (name === undefined) {
+        throw new Error("Expected identifier after &");
+      }
+      const entry = lookup(name);
+      if (entry === undefined) {
+        throw new Error(`Undefined identifier: ${name}`);
+      }
+      const targetType = valueType(entry.value);
+      return {
+        kind: "reference",
+        target: entry,
+        type: targetType === undefined ? undefined : `&${targetType}`,
+      };
+    }
+    if (token === "*") {
+      index++;
+      const ref = parseFactor();
+      if (ref.kind !== "reference") {
+        throw new Error("Cannot dereference non-reference");
+      }
+      return ref.target.value;
     }
     if (/^\d+[A-Za-z]\w*$/.test(token)) {
       index++;
@@ -372,8 +426,7 @@ export function evaluate(source: string): number {
           : numberValue(0, param.type),
       );
       const bodyValue = invokeFunction(fn, placeholderArgs);
-      const bodyType = bodyValue.kind === "number" ? bodyValue.type : "Bool";
-      assertAssignable(bodyType, returnType);
+      assertAssignable(valueType(bodyValue), returnType);
     }
   }
 
@@ -389,8 +442,7 @@ export function evaluate(source: string): number {
     fn.params.forEach((param, i) => {
       const arg = args[i];
       if (arg !== undefined) {
-        const argType = arg.kind === "number" ? arg.type : "Bool";
-        assertAssignable(argType, param.type);
+        assertAssignable(valueType(arg), param.type);
         currentScope().set(param.name, { value: arg, mutable: false });
       }
     });
@@ -421,7 +473,7 @@ export function evaluate(source: string): number {
     if (fn.returnType === "Bool") {
       return booleanValue(truthy(result));
     }
-    return numberValue(result.value as number, fn.returnType);
+    return numberValue(toNumber(result), fn.returnType);
   }
 
   function parseIfStatement(): void {
@@ -558,13 +610,17 @@ export function evaluate(source: string): number {
     let declaredType: string | undefined;
     if (tokens[index] === ":") {
       index++; // consume ":"
-      declaredType = tokens[index++];
+      if (tokens[index] === "&") {
+        index++; // consume "&"
+        declaredType = `&${tokens[index++]}`;
+      } else {
+        declaredType = tokens[index++];
+      }
     }
     index++; // consume "="
     if (name !== undefined) {
       const value = parseOr();
-      const valueType = value.kind === "number" ? value.type : "Bool";
-      assertAssignable(valueType, declaredType);
+      assertAssignable(valueType(value), declaredType);
       currentScope().set(name, { value, mutable });
     }
     index++; // consume ";"
@@ -583,14 +639,11 @@ export function evaluate(source: string): number {
       }
       const rhs = parseOr();
       if (operator === "=") {
-        const existingType =
-          entry.value.kind === "number" ? entry.value.type : undefined;
-        const newType = rhs.kind === "number" ? rhs.type : undefined;
-        assertAssignable(newType, existingType);
+        assertAssignable(valueType(rhs), valueType(entry.value));
         entry.value = rhs;
       } else {
-        const left = entry.value.value as number;
-        const right = rhs.value as number;
+        const left = toNumber(entry.value);
+        const right = toNumber(rhs);
         entry.value = numberValue(
           operator === "+="
             ? left + right
@@ -609,5 +662,5 @@ export function evaluate(source: string): number {
   if (result === undefined) {
     return 0;
   }
-  return result.kind === "boolean" ? (result.value ? 1 : 0) : result.value;
+  return toNumber(result);
 }

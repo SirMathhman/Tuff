@@ -229,3 +229,7 @@ test("evaluate while loop with break", () => {
   expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(1);
 });
 
+test("evaluate reference and dereference", () => {
+  expect(evaluate("let x = 1; let y : &I32 = &x; *y")).toBe(1);
+});
+
