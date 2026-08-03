@@ -1,7 +1,21 @@
 export function evaluate(source: string): number {
   const tokens = source.match(/\d+|[a-zA-Z_]\w*|[+\-*/(){};=]/g) ?? [];
   let index = 0;
-  const scope = new Map<string, { value: number; mutable: boolean }>();
+  const scopes: Array<Map<string, { value: number; mutable: boolean }>> = [new Map()];
+
+  function currentScope(): Map<string, { value: number; mutable: boolean }> {
+    return scopes[scopes.length - 1]!;
+  }
+
+  function lookup(name: string): { value: number; mutable: boolean } | undefined {
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      const entry = scopes[i]!.get(name);
+      if (entry !== undefined) {
+        return entry;
+      }
+    }
+    return undefined;
+  }
 
   function parseExpression(initial?: number): number {
     let value = parseTerm(initial);
@@ -36,7 +50,9 @@ export function evaluate(source: string): number {
     }
     if (token === "{") {
       index++;
+      scopes.push(new Map());
       const value = parseBlock();
+      scopes.pop();
       index++; // consume "}"
       if (value === undefined) {
         throw new Error("Block must end with an expression");
@@ -48,7 +64,7 @@ export function evaluate(source: string): number {
       return Number(token);
     }
     index++; // variable reference
-    const entry = scope.get(token);
+    const entry = lookup(token);
     if (entry === undefined) {
       throw new Error(`Undefined identifier: ${token}`);
     }
@@ -73,7 +89,9 @@ export function evaluate(source: string): number {
         assignVariable();
       } else if (tokens[index] === "{") {
         index++; // consume "{"
+        scopes.push(new Map());
         const blockValue = parseStatements("}");
+        scopes.pop();
         index++; // consume "}"
         if (blockValue !== undefined) {
           value = parseExpression(blockValue);
@@ -95,7 +113,7 @@ export function evaluate(source: string): number {
     const name = tokens[index++];
     index++; // consume "="
     if (name !== undefined) {
-      scope.set(name, { value: parseExpression(), mutable });
+      currentScope().set(name, { value: parseExpression(), mutable });
     }
     index++; // consume ";"
   }
@@ -104,7 +122,7 @@ export function evaluate(source: string): number {
     const name = tokens[index++];
     index++; // consume "="
     if (name !== undefined) {
-      const entry = scope.get(name);
+      const entry = lookup(name);
       if (entry === undefined) {
         throw new Error(`Undefined identifier: ${name}`);
       }

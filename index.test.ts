@@ -81,3 +81,7 @@ test("evaluate block mutating outer variable", () => {
   expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
 });
 
+test("evaluate block-scoped variable not visible outside throws", () => {
+  expect(() => evaluate("{ let x = 0; } x")).toThrow();
+});
+
