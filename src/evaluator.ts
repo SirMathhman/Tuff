@@ -2,30 +2,7 @@ import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
 import { makeU8, makeU16, isU8, isU16, isFunction, requireNumber, typeOf, isTruthy } from "./value";
 import { callFunction } from "./functions";
-
-type BinaryOperator = "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=";
-type AssignOperator = "=" | "+=" | "-=" | "*=" | "/=";
-
-const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
-  "+": (l, r) => l + r,
-  "-": (l, r) => l - r,
-  "*": (l, r) => l * r,
-  "/": (l, r) => Math.trunc(l / r),
-  "%": (l, r) => l % r,
-  "<": (l, r) => l < r,
-  ">": (l, r) => l > r,
-  "<=": (l, r) => l <= r,
-  ">=": (l, r) => l >= r,
-  "==": (l, r) => l === r,
-  "!=": (l, r) => l !== r,
-};
-
-const assignOps: Record<Exclude<AssignOperator, "=">, (left: number, right: number) => number> = {
-  "+=": (l, r) => l + r,
-  "-=": (l, r) => l - r,
-  "*=": (l, r) => l * r,
-  "/=": (l, r) => Math.trunc(l / r),
-};
+import { binaryOps, assignOps } from "./operators";
 
 export function evaluate(ast: AST, env: Environment = new Environment()): Value {
   switch (ast.type) {
