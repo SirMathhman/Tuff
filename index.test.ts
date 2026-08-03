@@ -320,3 +320,7 @@ test("interpret supports typed array element arithmetic", () => {
 test("interpret throws on typed array element overflow", () => {
   expect(() => interpret("let array : [U8; 2] = [255U8, 1U8]; array[0] + array[1]")).toThrow();
 });
+
+test("interpret supports is operator on array values", () => {
+  expect(interpret("let a : [I32; 2] = [1, 2]; a is [I32; 2]")).toBe(1);
+});

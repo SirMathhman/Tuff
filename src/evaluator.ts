@@ -1,7 +1,7 @@
 import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
-import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches } from "./typecheck";
+import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual } from "./typecheck";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -103,7 +103,8 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
         if (ast.right.type !== "typeRef") {
           throw new Error(`Expected type name after is, got: ${JSON.stringify(ast.right)}`);
         }
-        return makeBool(typeOf(leftValue) === ast.right.name);
+        const actual = typeOf(leftValue);
+        return makeBool(actual !== undefined && typesEqual(actual, ast.right.name));
       }
       const rightValue = evaluate(ast.right, env);
       if (ast.operator === "&&" || ast.operator === "||") {

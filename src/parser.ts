@@ -91,11 +91,8 @@ export class Parser {
         left = { type: "binary", operator: token.value, left, right };
       } else if (token && token.type === "operator" && token.value === "is") {
         this.consume();
-        const typeToken = this.consume();
-        if (typeToken.type !== "identifier" || !TYPE_NAMES.includes(typeToken.value as TypeName)) {
-          throw new Error(`Expected type name after is, got: ${JSON.stringify(typeToken)}`);
-        }
-        left = { type: "binary", operator: "is", left, right: { type: "typeRef", name: typeToken.value as TypeName } };
+        const typeName = this.parseType("Expected type name after is");
+        left = { type: "binary", operator: "is", left, right: { type: "typeRef", name: typeName } };
       } else {
         break;
       }
@@ -390,6 +387,10 @@ export class Parser {
       return undefined;
     }
     this.consume();
+    return this.parseType(errorMessage);
+  }
+
+  private parseType(errorMessage: string): TypeName {
     const open = this.consume();
     if (open.type === "bracket" && open.value === "[") {
       const elementType = this.parseTypeName(errorMessage);
