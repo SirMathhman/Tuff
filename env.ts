@@ -1,7 +1,12 @@
-export class Env {
-  private vars: Map<string, { value: number; mutable: boolean }>;
+export interface Binding {
+  value: number;
+  mutable: boolean;
+}
 
-  constructor(private parent: Env | null = null, vars?: Map<string, { value: number; mutable: boolean }>) {
+export class Env {
+  private vars: Map<string, Binding>;
+
+  constructor(private parent: Env | null = null, vars?: Map<string, Binding>) {
     this.vars = vars ?? new Map();
   }
 
@@ -10,28 +15,24 @@ export class Env {
   }
 
   get(name: string): number {
-    const binding = this.vars.get(name);
-    if (binding !== undefined) {
-      return binding.value;
-    }
-    if (this.parent) {
-      return this.parent.get(name);
-    }
-    throw new Error(`Undefined variable: ${name}`);
+    return this.lookup(name).value;
   }
 
   assign(name: string, value: number): void {
+    const binding = this.lookup(name);
+    if (!binding.mutable) {
+      throw new Error(`Cannot assign to immutable variable: ${name}`);
+    }
+    binding.value = value;
+  }
+
+  private lookup(name: string): Binding {
     const binding = this.vars.get(name);
     if (binding !== undefined) {
-      if (!binding.mutable) {
-        throw new Error(`Cannot assign to immutable variable: ${name}`);
-      }
-      binding.value = value;
-      return;
+      return binding;
     }
     if (this.parent) {
-      this.parent.assign(name, value);
-      return;
+      return this.parent.lookup(name);
     }
     throw new Error(`Undefined variable: ${name}`);
   }
