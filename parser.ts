@@ -39,66 +39,87 @@ export function parse(tokens: Token[]): Stmt {
     return left;
   }
 
-  function parseFactor(): Expr {
+  function parseNumber(): Expr {
     const token = advance();
+    if (token.type !== "number") {
+      throw new ParseError("Expected number");
+    }
+    return { kind: "number", value: token.value };
+  }
 
-    if (token.type === "number") {
-      return { kind: "number", value: token.value };
+  function parseBoolean(): Expr {
+    const token = advance();
+    return { kind: "boolean", value: token.type === "true" };
+  }
+
+  function parseVariable(): Expr {
+    const token = advance();
+    if (token.type !== "identifier") {
+      throw new ParseError("Expected identifier");
+    }
+    return { kind: "variable", name: token.name };
+  }
+
+  function parseIf(): Expr {
+    advance();
+    if (advance().type !== "lparen") {
+      throw new ParseError("Expected ( after if");
+    }
+    const condition = parseExpression();
+    if (advance().type !== "rparen") {
+      throw new ParseError("Expected ) after if condition");
+    }
+    const then = parseExpression();
+    if (advance().type !== "else") {
+      throw new ParseError("Expected else in if expression");
+    }
+    const otherwise = parseExpression();
+    return { kind: "if", condition, then, otherwise };
+  }
+
+  function parseGrouped(): Expr {
+    advance();
+    const expr = parseExpression();
+
+    if (advance().type !== "rparen") {
+      throw new ParseError("Expected closing parenthesis");
     }
 
-    if (token.type === "true") {
-      return { kind: "boolean", value: true };
+    return expr;
+  }
+
+  function parseBlock(): Expr {
+    advance();
+    const statements: Stmt[] = [];
+
+    while (peek().type !== "rbrace" && peek().type !== "eof") {
+      statements.push(parseStatement());
     }
 
-    if (token.type === "false") {
-      return { kind: "boolean", value: false };
+    if (advance().type !== "rbrace") {
+      throw new ParseError("Expected closing brace");
     }
 
-    if (token.type === "identifier") {
-      return { kind: "variable", name: token.name };
+    return { kind: "block", statements };
+  }
+
+  const PREFIX_PARSERS: Record<string, () => Expr> = {
+    number: parseNumber,
+    true: parseBoolean,
+    false: parseBoolean,
+    identifier: parseVariable,
+    if: parseIf,
+    lparen: parseGrouped,
+    lbrace: parseBlock,
+  };
+
+  function parseFactor(): Expr {
+    const type = peek().type;
+    const parser = PREFIX_PARSERS[type];
+    if (parser) {
+      return parser();
     }
-
-    if (token.type === "if") {
-      if (advance().type !== "lparen") {
-        throw new ParseError("Expected ( after if");
-      }
-      const condition = parseExpression();
-      if (advance().type !== "rparen") {
-        throw new ParseError("Expected ) after if condition");
-      }
-      const then = parseExpression();
-      if (advance().type !== "else") {
-        throw new ParseError("Expected else in if expression");
-      }
-      const otherwise = parseExpression();
-      return { kind: "if", condition, then, otherwise };
-    }
-
-    if (token.type === "lparen") {
-      const expr = parseExpression();
-
-      if (advance().type !== "rparen") {
-        throw new ParseError("Expected closing parenthesis");
-      }
-
-      return expr;
-    }
-
-    if (token.type === "lbrace") {
-      const statements: Stmt[] = [];
-
-      while (peek().type !== "rbrace" && peek().type !== "eof") {
-        statements.push(parseStatement());
-      }
-
-      if (advance().type !== "rbrace") {
-        throw new ParseError("Expected closing brace");
-      }
-
-      return { kind: "block", statements };
-    }
-
-    throw new ParseError(`Unexpected token: ${token.type}`);
+    throw new ParseError(`Unexpected token: ${type}`);
   }
 
   function parseStatement(): Stmt {
