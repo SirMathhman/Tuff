@@ -41,3 +41,7 @@ test("interpret let declaration inside block", () => {
   expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
 });
 
+test("interpret unknown character throws", () => {
+  expect(() => interpret("#")).toThrow();
+});
+

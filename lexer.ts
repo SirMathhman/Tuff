@@ -17,7 +17,13 @@ export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   const regex = /\d+|[a-zA-Z_]\w*|[+\-*/(){};=]/g;
   let match: RegExpExecArray | null;
+  let lastIndex = 0;
   while ((match = regex.exec(source)) !== null) {
+    const gap = source.slice(lastIndex, match.index);
+    if (/\S/.test(gap)) {
+      throw new Error(`Unexpected character: ${gap.match(/\S/)![0]}`);
+    }
+    lastIndex = regex.lastIndex;
     const text = match[0];
     if (/\d+/.test(text)) {
       tokens.push({ type: "number", value: Number(text) });
@@ -61,6 +67,10 @@ export function tokenize(source: string): Token[] {
           break;
       }
     }
+  }
+  const trailing = source.slice(lastIndex);
+  if (/\S/.test(trailing)) {
+    throw new Error(`Unexpected character: ${trailing.match(/\S/)![0]}`);
   }
   return tokens;
 }
