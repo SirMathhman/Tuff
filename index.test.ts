@@ -29,6 +29,10 @@ test("interpret division of two numbers", () => {
   expect(interpret("8/2")).toBe(4);
 });
 
+test("interpret division truncates to integer", () => {
+  expect(interpret("5/3")).toBe(1);
+});
+
 test("interpret respects operator precedence", () => {
   expect(interpret("1+2*3")).toBe(7);
 });

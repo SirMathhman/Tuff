@@ -15,7 +15,7 @@ export function evaluate(ast: AST): number {
         case "*":
           return left * right;
         case "/":
-          return left / right;
+          return Math.trunc(left / right);
       }
     }
   }
