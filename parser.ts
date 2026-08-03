@@ -53,6 +53,16 @@ export function parse(tokens: Token[]): Expr {
       return expr;
     }
 
+    if (token.type === "lbrace") {
+      const expr = parseExpression();
+
+      if (advance().type !== "rbrace") {
+        throw new Error("Expected closing brace");
+      }
+
+      return expr;
+    }
+
     throw new Error(`Unexpected token: ${token.type}`);
   }
 

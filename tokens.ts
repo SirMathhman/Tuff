@@ -5,6 +5,8 @@ export type Token =
   | { type: "star" }
   | { type: "lparen" }
   | { type: "rparen" }
+  | { type: "lbrace" }
+  | { type: "rbrace" }
   | { type: "eof" };
 
 export function tokenize(source: string): Token[] {
@@ -30,6 +32,12 @@ export function tokenize(source: string): Token[] {
       i++;
     } else if (ch === ")") {
       tokens.push({ type: "rparen" });
+      i++;
+    } else if (ch === "{") {
+      tokens.push({ type: "lbrace" });
+      i++;
+    } else if (ch === "}") {
+      tokens.push({ type: "rbrace" });
       i++;
     } else {
       let value = "";
