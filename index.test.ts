@@ -184,3 +184,7 @@ test("interpret rejects wrong number of arguments", () => {
 test("interpret supports function returning a boolean", () => {
   expect(interpret("fn isEven(n : I32) : Bool => n % 2 == 0; isEven(4)")).toBe(1);
 });
+
+test("interpret supports modulo operator", () => {
+  expect(interpret("7 % 3")).toBe(1);
+});
