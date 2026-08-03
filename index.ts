@@ -159,6 +159,10 @@ export function evaluate(source: string): number {
     return parseStatements("}");
   }
 
+  function isAssignmentOperator(token: string | undefined): boolean {
+    return token === "=" || token === "+=" || token === "-=" || token === "*=" || token === "/=";
+  }
+
   function parseStatements(endToken: string | undefined): Value | undefined {
     let value: Value | undefined;
     while (index < tokens.length && tokens[index] !== endToken) {
@@ -169,7 +173,7 @@ export function evaluate(source: string): number {
           index++; // consume "mut"
         }
         declareVariable(mutable);
-      } else if (tokens[index + 1] === "=" || tokens[index + 1] === "+=" || tokens[index + 1] === "-=" || tokens[index + 1] === "*=" || tokens[index + 1] === "/=") {
+      } else if (isAssignmentOperator(tokens[index + 1])) {
         assignVariable();
       } else if (tokens[index] === "{") {
         index++; // consume "{"
@@ -249,7 +253,7 @@ export function evaluate(source: string): number {
       parseStatements("}");
       scopes.pop();
       index++; // consume "}"
-    } else if (tokens[index + 1] === "=" || tokens[index + 1] === "+=" || tokens[index + 1] === "-=" || tokens[index + 1] === "*=" || tokens[index + 1] === "/=") {
+    } else if (isAssignmentOperator(tokens[index + 1])) {
       assignVariable();
     } else {
       parseOr();
@@ -285,7 +289,7 @@ export function evaluate(source: string): number {
         index++; // "="
         parseOr();
         index++; // ";"
-      } else if (tokens[index + 1] === "=" || tokens[index + 1] === "+=" || tokens[index + 1] === "-=" || tokens[index + 1] === "*=" || tokens[index + 1] === "/=") {
+      } else if (isAssignmentOperator(tokens[index + 1])) {
         index++; // name
         index++; // operator
         parseOr();
