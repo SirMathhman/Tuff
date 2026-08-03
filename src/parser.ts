@@ -109,12 +109,15 @@ export class Parser {
       token.type === "operator" &&
       (token.value === "=" || token.value === "+=" || token.value === "-=" || token.value === "*=" || token.value === "/=")
     ) {
-      if (left.type !== "identifier") {
-        throw new Error(`Invalid assignment target: ${JSON.stringify(left)}`);
-      }
       this.consume();
       const value = this.parseAssignment();
-      return { type: "assign", name: left.name, operator: token.value, value };
+      if (left.type === "identifier") {
+        return { type: "assign", name: left.name, operator: token.value, value };
+      }
+      if (left.type === "index") {
+        return { type: "indexAssign", target: left.target, index: left.index, operator: token.value, value };
+      }
+      throw new Error(`Invalid assignment target: ${JSON.stringify(left)}`);
     }
     return left;
   }

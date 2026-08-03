@@ -328,3 +328,7 @@ test("interpret supports is operator on array values", () => {
 test("interpret rejects is operator on array against mismatched type", () => {
   expect(interpret("let a : [I32; 2] = [1, 2]; a is [U8; 2]")).toBe(0);
 });
+
+test("interpret supports array element assignment", () => {
+  expect(interpret("let mut a : [I32; 2] = [1, 2]; a[0] = 5; a[0] + a[1]")).toBe(7);
+});

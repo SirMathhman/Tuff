@@ -65,6 +65,7 @@ export type AST =
   | { type: "typeRef"; name: TypeName }
   | { type: "let"; name: string; mutable: boolean; typeName?: TypeName; value: AST }
   | { type: "assign"; name: string; operator: "=" | "+=" | "-=" | "*=" | "/="; value: AST }
+  | { type: "indexAssign"; target: AST; index: AST; operator: "=" | "+=" | "-=" | "*=" | "/="; value: AST }
   | { type: "if"; condition: AST; then: AST; else: AST | null }
   | { type: "while"; condition: AST; body: AST }
   | { type: "fn"; name: string; params: Param[]; returnType?: TypeName; body: AST }

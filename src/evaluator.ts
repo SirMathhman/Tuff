@@ -1,4 +1,4 @@
-import type { AST, Value, FunctionValue } from "./types";
+import type { AST, Value, FunctionValue, ArrayValue } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
 import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual } from "./typecheck";
@@ -28,11 +28,19 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
         return value;
       }
       const current = env.lookup(ast.name);
-      if (typeof current !== "number" || typeof value !== "number") {
-        throw new Error(`Compound assignment requires numbers: ${ast.name}`);
-      }
-      const result = assignOps[ast.operator](current, value);
+      const result = compoundAssign(ast.operator, current, value, ast.name);
       env.assign(ast.name, result);
+      return result;
+    }
+    case "indexAssign": {
+      const { target, index, element } = resolveIndex(ast, env);
+      const value = evaluate(ast.value, env);
+      if (ast.operator === "=") {
+        target.elements[index] = value;
+        return value;
+      }
+      const result = compoundAssign(ast.operator, element, value, String(index));
+      target.elements[index] = result;
       return result;
     }
     case "if": {
@@ -78,15 +86,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return { kind: "array", elementType, elements };
     }
     case "index": {
-      const target = evaluate(ast.target, env);
-      if (!isArray(target)) {
-        throw new Error(`Indexing requires an array: ${JSON.stringify(ast.target)}`);
-      }
-      const index = requireNumber(evaluate(ast.index, env), "index");
-      const element = target.elements[index];
-      if (element === undefined) {
-        throw new Error(`Index out of bounds: ${index}`);
-      }
+      const { element } = resolveIndex(ast, env);
       return element;
     }
     case "block": {
@@ -144,4 +144,24 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     case "typeRef":
       throw new Error(`Type reference cannot be evaluated standalone: ${ast.name}`);
   }
+}
+
+function resolveIndex(ast: Extract<AST, { type: "index" | "indexAssign" }>, env: Environment): { target: ArrayValue; index: number; element: Value } {
+  const target = evaluate(ast.target, env);
+  if (!isArray(target)) {
+    throw new Error(`Indexing requires an array: ${JSON.stringify(ast.target)}`);
+  }
+  const index = requireNumber(evaluate(ast.index, env), "index");
+  const element = target.elements[index];
+  if (element === undefined) {
+    throw new Error(`Index out of bounds: ${index}`);
+  }
+  return { target, index, element };
+}
+
+function compoundAssign(operator: "+=" | "-=" | "*=" | "/=", current: Value, value: Value, name: string): number {
+  if (typeof current !== "number" || typeof value !== "number") {
+    throw new Error(`Compound assignment requires numbers: ${name}`);
+  }
+  return assignOps[operator](current, value);
 }
