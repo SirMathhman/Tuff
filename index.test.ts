@@ -176,3 +176,7 @@ test("interpret supports closures capturing outer variables", () => {
 test("interpret supports recursive functions", () => {
   expect(interpret("fn fact(n : I32) : I32 => if (n <= 1) { 1 } else { n * fact(n - 1) }; fact(5)")).toBe(120);
 });
+
+test("interpret rejects wrong number of arguments", () => {
+  expect(() => interpret("fn add(a : I32, b : I32) : I32 => a + b; add(1)")).toThrow();
+});
