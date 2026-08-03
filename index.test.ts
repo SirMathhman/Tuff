@@ -64,3 +64,7 @@ test("interpret rejects mismatched grouping delimiters", () => {
 test("interpret supports let bindings in a block", () => {
   expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
 });
+
+test("interpret throws on undefined variable", () => {
+  expect(() => interpret("{ x }")).toThrow();
+});
