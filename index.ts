@@ -140,6 +140,9 @@ export function evaluate(source: string): number {
       const condition = parseOr();
       index++; // consume ")"
       const thenValue = parseOr();
+      if (tokens[index] !== "else") {
+        throw new Error("If expression requires an else branch");
+      }
       index++; // consume "else"
       const elseValue = parseOr();
       return truthy(condition) ? thenValue : elseValue;

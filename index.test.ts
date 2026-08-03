@@ -137,3 +137,7 @@ test("evaluate chained if expression", () => {
   expect(evaluate("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
 });
 
+test("evaluate if without else throws", () => {
+  expect(() => evaluate("let x = if (false) 2; x")).toThrow();
+});
+
