@@ -57,3 +57,7 @@ test("evaluate declaration-only statement returns 0", () => {
   expect(evaluate("let x = 100;")).toBe(0);
 });
 
+test("evaluate redeclared variable uses latest value", () => {
+  expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
+});
+
