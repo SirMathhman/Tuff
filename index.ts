@@ -191,6 +191,9 @@ export function evaluate(source: string): number {
         parseIfStatement();
       } else if (tokens[index] === "while") {
         parseWhileStatement();
+      } else if (tokens[index] === "continue") {
+        index++; // consume "continue"
+        index++; // consume ";"
       } else {
         value = parseOr();
         if (tokens[index] === ";") {
@@ -334,6 +337,9 @@ export function evaluate(source: string): number {
         }
         index++; // consume "else"
         skipBranchStatement();
+      } else if (tokens[index] === "continue") {
+        index++; // consume "continue"
+        index++; // consume ";"
       } else {
         parseOr();
         if (tokens[index] === ";") {
