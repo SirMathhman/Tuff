@@ -380,3 +380,7 @@ test("interpret rejects taking a mutable reference to an immutable variable", ()
 test("interpret rejects assignment through an immutable reference", () => {
   expect(() => interpret("let mut x = 1; let y : &I32 = &x; *y = 5")).toThrow();
 });
+
+test("interpret supports compound assignment through a mutable reference", () => {
+  expect(interpret("let mut x = 1; let y : &mut I32 = &mut x; *y += 5; x")).toBe(6);
+});
