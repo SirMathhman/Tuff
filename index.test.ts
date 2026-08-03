@@ -88,3 +88,7 @@ test("interpret supports mutable bindings and assignment", () => {
 test("interpret rejects assignment to immutable binding", () => {
   expect(() => interpret("let x = 1; x = 2")).toThrow();
 });
+
+test("interpret supports assignment to mutable binding in nested scope", () => {
+  expect(interpret("let mut x = 0; { x = 5; } x")).toBe(5);
+});
