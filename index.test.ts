@@ -20,3 +20,15 @@ test("interpret addition of two numbers", () => {
 test("interpret subtraction of two numbers", () => {
   expect(interpret("5-2")).toBe(3);
 });
+
+test("interpret multiplication of two numbers", () => {
+  expect(interpret("3*4")).toBe(12);
+});
+
+test("interpret division of two numbers", () => {
+  expect(interpret("8/2")).toBe(4);
+});
+
+test("interpret respects operator precedence", () => {
+  expect(interpret("1+2*3")).toBe(7);
+});

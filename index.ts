@@ -1,14 +1,12 @@
+import { lex } from "./src/lexer";
+import { parse } from "./src/parser";
+import { evaluate } from "./src/evaluator";
+
 export function interpret(source: string) {
   if (source === "") {
     return 0;
   }
-  if (source.includes("+")) {
-    const [left, right] = source.split("+");
-    return Number(left) + Number(right);
-  }
-  if (source.includes("-")) {
-    const [left, right] = source.split("-");
-    return Number(left) - Number(right);
-  }
-  return Number(source);
+  const tokens = lex(source);
+  const ast = parse(tokens);
+  return evaluate(ast);
 }
