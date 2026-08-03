@@ -9,3 +9,7 @@ test("interpret single digit returns that digit", () => {
   expect(interpret("1")).toBe(1);
 });
 
+test("interpret addition expression", () => {
+  expect(interpret("1 + 2")).toBe(3);
+});
+
