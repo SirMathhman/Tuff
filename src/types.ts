@@ -33,10 +33,16 @@ export interface StructValue {
   readonly fields: Record<string, Value>;
 }
 
+export interface StructValue {
+  readonly kind: "struct";
+  readonly name: string;
+  readonly fields: Record<string, Value>;
+}
+
 export interface StructTypeValue {
   readonly kind: "structType";
   readonly name: string;
-  readonly fields: Record<string, TypeName>;
+  readonly fields: Record<string, { typeName: TypeName; mutable: boolean }>;
 }
 
 export interface Param {
@@ -55,7 +61,7 @@ export interface ArrayTypeName {
 export interface StructTypeName {
   readonly kind: "struct";
   readonly name: string;
-  readonly fields: Record<string, TypeName>;
+  readonly fields: Record<string, { typeName: TypeName; mutable: boolean }>;
 }
 
 export interface NumberLiteral {
@@ -91,7 +97,8 @@ export type AST =
   | { type: "call"; callee: AST; args: AST[] }
   | { type: "array"; elements: AST[] }
   | { type: "index"; target: AST; index: AST }
-  | { type: "struct"; name: string; fields: { name: string; typeName: TypeName }[] }
+  | { type: "struct"; name: string; fields: { name: string; typeName: TypeName; mutable: boolean }[] }
   | { type: "structLiteral"; name: string; fields: { name: string; value: AST }[] }
   | { type: "field"; target: AST; name: string }
+  | { type: "fieldAssign"; target: AST; name: string; operator: "=" | "+=" | "-=" | "*=" | "/="; value: AST }
   | { type: "block"; statements: AST[] };

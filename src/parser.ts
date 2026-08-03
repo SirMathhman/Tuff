@@ -117,6 +117,9 @@ export class Parser {
       if (left.type === "index") {
         return { type: "indexAssign", target: left.target, index: left.index, operator: token.value, value };
       }
+      if (left.type === "field") {
+        return { type: "fieldAssign", target: left.target, name: left.name, operator: token.value, value };
+      }
       throw new Error(`Invalid assignment target: ${JSON.stringify(left)}`);
     }
     return left;
@@ -310,13 +313,13 @@ export class Parser {
     if (nameToken.type !== "identifier") {
       throw new Error(`Expected struct name, got: ${JSON.stringify(nameToken)}`);
     }
-    const fields: { name: string; typeName: TypeName }[] = [];
-    this.parseStructFields("struct fields", (fieldToken) => {
+    const fields: { name: string; typeName: TypeName; mutable: boolean }[] = [];
+    this.parseStructFields("struct fields", (fieldToken, mutable) => {
       const typeName = this.parseTypeAnnotation("Expected field type");
       if (!typeName) {
         throw new Error(`Expected field type for ${fieldToken.value}`);
       }
-      fields.push({ name: fieldToken.value, typeName });
+      fields.push({ name: fieldToken.value, typeName, mutable });
     });
     return { type: "struct", name: nameToken.value, fields };
   }
@@ -334,14 +337,19 @@ export class Parser {
     return { type: "structLiteral", name, fields };
   }
 
-  private parseStructFields(what: string, parseField: (fieldToken: Extract<Token, { type: "identifier" }>) => void): void {
+  private parseStructFields(what: string, parseField: (fieldToken: Extract<Token, { type: "identifier" }>, mutable: boolean) => void): void {
     this.consumeOpenBrace();
     this.parseCommaSeparated("}", what, () => {
+      let mutable = false;
+      if (this.peek() && this.peek()!.type === "identifier" && this.peek()!.value === "mut") {
+        this.consume();
+        mutable = true;
+      }
       const fieldToken = this.consume();
       if (fieldToken.type !== "identifier") {
         throw new Error(`Expected field name, got: ${JSON.stringify(fieldToken)}`);
       }
-      parseField(fieldToken);
+      parseField(fieldToken, mutable);
     });
   }
 

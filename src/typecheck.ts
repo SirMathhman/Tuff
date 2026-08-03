@@ -43,9 +43,9 @@ export function typeOf(value: Value): TypeName | undefined {
     return { kind: "array", elementType, size: value.elements.length };
   }
   if (isStruct(value)) {
-    const fields: Record<string, TypeName> = {};
+    const fields: Record<string, { typeName: TypeName; mutable: boolean }> = {};
     for (const [name, fieldValue] of Object.entries(value.fields)) {
-      fields[name] = typeOf(fieldValue) ?? "I32";
+      fields[name] = { typeName: typeOf(fieldValue) ?? "I32", mutable: false };
     }
     return { kind: "struct", name: value.name, fields };
   }
@@ -69,7 +69,7 @@ export function typesEqual(a: TypeName, b: TypeName): boolean {
       if (aKeys.length !== bKeys.length) {
         return false;
       }
-      return aKeys.every((key) => key in b.fields && typesEqual(a.fields[key]!, b.fields[key]!));
+      return aKeys.every((key) => key in b.fields && typesEqual(a.fields[key]!.typeName, b.fields[key]!.typeName));
     }
   }
   return false;

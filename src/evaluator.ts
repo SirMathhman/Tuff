@@ -94,9 +94,9 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return element;
     }
     case "struct": {
-      const fields: Record<string, TypeName> = {};
+      const fields: Record<string, { typeName: TypeName; mutable: boolean }> = {};
       for (const field of ast.fields) {
-        fields[field.name] = field.typeName;
+        fields[field.name] = { typeName: field.typeName, mutable: field.mutable };
       }
       const structType: StructTypeValue = { kind: "structType", name: ast.name, fields };
       env.define(ast.name, structType, false);
@@ -110,15 +110,19 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return { kind: "struct", name: ast.name, fields } as StructValue;
     }
     case "field": {
-      const target = evaluate(ast.target, env);
-      if (!isStruct(target)) {
-        throw new Error(`Field access requires a struct: ${JSON.stringify(ast.target)}`);
-      }
-      const value = target.fields[ast.name];
-      if (value === undefined) {
-        throw new Error(`Unknown field: ${ast.name}`);
-      }
+      const { target, value } = resolveField(ast, env);
       return value;
+    }
+    case "fieldAssign": {
+      const { target, value: current } = resolveField(ast, env);
+      const value = evaluate(ast.value, env);
+      if (ast.operator === "=") {
+        target.fields[ast.name] = value;
+        return value;
+      }
+      const result = compoundAssign(ast.operator, current, value, ast.name);
+      target.fields[ast.name] = result;
+      return result;
     }
     case "block": {
       const childEnv = env.child();
@@ -195,6 +199,18 @@ function compoundAssign(operator: "+=" | "-=" | "*=" | "/=", current: Value, val
     throw new Error(`Compound assignment requires numbers: ${name}`);
   }
   return assignOps[operator](current, value);
+}
+
+function resolveField(ast: Extract<AST, { type: "field" | "fieldAssign" }>, env: Environment): { target: StructValue; value: Value } {
+  const target = evaluate(ast.target, env);
+  if (!isStruct(target)) {
+    throw new Error(`Field access requires a struct: ${JSON.stringify(ast.target)}`);
+  }
+  const value = target.fields[ast.name];
+  if (value === undefined) {
+    throw new Error(`Unknown field: ${ast.name}`);
+  }
+  return { target, value };
 }
 
 function resolveType(typeName: TypeName, env: Environment): TypeName {
