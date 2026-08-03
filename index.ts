@@ -189,6 +189,8 @@ export function evaluate(source: string): number {
         }
       } else if (tokens[index] === "if") {
         parseIfStatement();
+      } else if (tokens[index] === "while") {
+        parseWhileStatement();
       } else {
         value = parseOr();
         if (tokens[index] === ";") {
@@ -197,6 +199,22 @@ export function evaluate(source: string): number {
       }
     }
     return value;
+  }
+
+  function parseWhileStatement(): void {
+    index++; // consume "while"
+    index++; // consume "("
+    const conditionStart = index;
+    while (true) {
+      const condition = parseOr();
+      index++; // consume ")"
+      if (!truthy(condition)) {
+        skipBranchStatement();
+        break;
+      }
+      parseBranchStatement();
+      index = conditionStart;
+    }
   }
 
   function parseIfStatement(): void {
@@ -270,6 +288,11 @@ export function evaluate(source: string): number {
       skipStatements("}");
       scopes.pop();
       index++; // consume "}"
+    } else if (isAssignmentOperator(tokens[index + 1])) {
+      index++; // name
+      index++; // operator
+      parseOr();
+      index++; // ";"
     } else {
       parseOr();
       if (tokens[index] === ";") {
