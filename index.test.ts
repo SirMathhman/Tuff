@@ -49,6 +49,10 @@ test("evaluate function definition and call", () => {
   expect(evaluate("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toBe(7);
 });
 
+test("evaluate function returning bool assigned to number throws", () => {
+  expect(() => evaluate("fn get() : Bool => true; let x : U32 = get();")).toThrow();
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

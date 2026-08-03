@@ -33,7 +33,7 @@ export function evaluate(source: string): number {
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [
     new Map(),
   ];
-  const functions = new Map<string, { params: string[]; body: number }>();
+  const functions = new Map<string, { params: string[]; body: number; returnType: string }>();
 
   function currentScope(): Map<string, { value: Value; mutable: boolean }> {
     return scopes[scopes.length - 1]!;
@@ -315,7 +315,7 @@ export function evaluate(source: string): number {
     }
     index++; // consume ")"
     index++; // consume ":"
-    index++; // consume return type
+    const returnType = tokens[index++];
     index++; // consume "=>"
     const body = index;
     // Skip to the end of the body (the terminating ";")
@@ -323,8 +323,8 @@ export function evaluate(source: string): number {
       index++;
     }
     index++; // consume ";"
-    if (name !== undefined) {
-      functions.set(name, { params, body });
+    if (name !== undefined && returnType !== undefined) {
+      functions.set(name, { params, body, returnType });
     }
   }
 
@@ -355,7 +355,10 @@ export function evaluate(source: string): number {
     const result = parseOr();
     index = savedIndex;
     scopes.pop();
-    return result;
+    if (fn.returnType === "Bool") {
+      return booleanValue(truthy(result));
+    }
+    return numberValue(result.value as number, fn.returnType);
   }
 
   function parseIfStatement(): void {
@@ -497,15 +500,17 @@ export function evaluate(source: string): number {
     index++; // consume "="
     if (name !== undefined) {
       const value = parseOr();
-      const valueType = value.kind === "number" ? value.type : undefined;
-      if (
-        declaredType !== undefined &&
-        valueType !== undefined &&
-        typeSize(valueType) > typeSize(declaredType)
-      ) {
-        throw new Error(
-          `Type mismatch: cannot assign ${valueType} to ${declaredType}`,
-        );
+      const valueType = value.kind === "number" ? value.type : "Bool";
+      if (declaredType !== undefined && valueType !== undefined) {
+        if (valueType === "Bool" && declaredType !== "Bool") {
+          throw new Error(`Type mismatch: cannot assign Bool to ${declaredType}`);
+        }
+        if (valueType !== "Bool" && declaredType === "Bool") {
+          throw new Error(`Type mismatch: cannot assign ${valueType} to Bool`);
+        }
+        if (valueType !== "Bool" && declaredType !== "Bool" && typeSize(valueType) > typeSize(declaredType)) {
+          throw new Error(`Type mismatch: cannot assign ${valueType} to ${declaredType}`);
+        }
       }
       currentScope().set(name, { value, mutable });
     }
