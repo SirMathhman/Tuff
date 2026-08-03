@@ -246,8 +246,11 @@ function resolveRefCell(target: AST, env: Environment): ReferenceCell {
     return env.referenceElement(name, index);
   }
   if (target.type === "field") {
-    const name = requireIdentifierTarget(target);
-    return env.referenceField(name, target.name);
+    const struct = evaluate(target.target, env);
+    if (!isStruct(struct)) {
+      throw new Error(`Field access requires a struct: ${JSON.stringify(target.target)}`);
+    }
+    return env.referenceFieldValue(struct, target.name);
   }
   throw new Error(`Invalid reference target: ${JSON.stringify(target)}`);
 }
@@ -279,11 +282,21 @@ function resolveField(ast: Extract<AST, { type: "field" | "fieldAssign" }>, env:
 }
 
 function resolveType(typeName: TypeName, env: Environment): TypeName {
-  if (typeof typeName === "object" && typeName.kind === "struct" && Object.keys(typeName.fields).length === 0) {
+  if (typeof typeName === "object" && typeName.kind === "struct") {
     const resolved = env.lookup(typeName.name);
     if (isStructType(resolved)) {
-      return { kind: "struct", name: resolved.name, fields: resolved.fields };
+      const fields: Record<string, { typeName: TypeName; mutable: boolean }> = {};
+      for (const [name, spec] of Object.entries(resolved.fields)) {
+        fields[name] = { typeName: resolveType(spec.typeName, env), mutable: spec.mutable };
+      }
+      return { kind: "struct", name: resolved.name, fields };
     }
+  }
+  if (typeof typeName === "object" && typeName.kind === "array") {
+    return { kind: "array", elementType: resolveType(typeName.elementType, env), size: typeName.size };
+  }
+  if (typeof typeName === "object" && typeName.kind === "ref") {
+    return { kind: "ref", mutable: typeName.mutable, target: resolveType(typeName.target, env) };
   }
   return typeName;
 }

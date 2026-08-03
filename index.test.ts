@@ -400,3 +400,7 @@ test("interpret rejects taking a mutable reference to an element of an immutable
 test("interpret rejects taking a mutable reference to an immutable struct field", () => {
   expect(() => interpret("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 3, y : 4 }; let r : &mut I32 = &mut p.x")).toThrow();
 });
+
+test("interpret supports references to nested struct fields", () => {
+  expect(interpret("struct Inner { mut v : I32 } struct Outer { mut inner : Inner } let mut o : Outer = Outer { inner : Inner { v : 1 } }; let r : &mut I32 = &mut o.inner.v; *r = 9; o.inner.v")).toBe(9);
+});

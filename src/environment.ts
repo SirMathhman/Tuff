@@ -1,4 +1,4 @@
-import type { Value, ReferenceCell, ArrayValue } from "./types";
+import type { Value, ReferenceCell, ArrayValue, StructValue } from "./types";
 import { isArray, isStruct, isStructType } from "./typecheck";
 
 interface Binding {
@@ -59,6 +59,10 @@ export class Environment {
     if (!isStruct(struct)) {
       throw new Error(`Field access requires a struct: ${name}`);
     }
+    return this.referenceFieldValue(struct, field);
+  }
+
+  referenceFieldValue(struct: StructValue, field: string): ReferenceCell {
     const structType = this.lookup(struct.name);
     if (!isStructType(structType)) {
       throw new Error(`Unknown struct type: ${struct.name}`);
