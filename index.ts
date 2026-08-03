@@ -1,14 +1,39 @@
 export function interpret(source: string): number {
-  const tokens = source.split(" ");
-  let result = Number(tokens[0]);
-  for (let i = 1; i < tokens.length; i += 2) {
-    const operator = tokens[i];
-    const operand = Number(tokens[i + 1]);
-    if (operator === "+") {
-      result += operand;
-    } else if (operator === "-") {
-      result -= operand;
-    }
+  const tokens = source.match(/\d+|[+\-*/()]/g) ?? [];
+  if (tokens.length === 0) {
+    return 0;
   }
-  return result;
+  let pos = 0;
+
+  function parseAdditive(): number {
+    let value = parseMultiplicative();
+    while (tokens[pos] === "+" || tokens[pos] === "-") {
+      const op = tokens[pos++];
+      const right = parseMultiplicative();
+      value = op === "+" ? value + right : value - right;
+    }
+    return value;
+  }
+
+  function parseMultiplicative(): number {
+    let value = parsePrimary();
+    while (tokens[pos] === "*" || tokens[pos] === "/") {
+      const op = tokens[pos++];
+      const right = parsePrimary();
+      value = op === "*" ? value * right : value / right;
+    }
+    return value;
+  }
+
+  function parsePrimary(): number {
+    if (tokens[pos] === "(") {
+      pos++;
+      const value = parseAdditive();
+      pos++; // consume ")"
+      return value;
+    }
+    return Number(tokens[pos++]);
+  }
+
+  return parseAdditive();
 }

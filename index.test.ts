@@ -21,3 +21,7 @@ test("interpret chained addition expression", () => {
   expect(interpret("1 + 2 + 3")).toBe(6);
 });
 
+test("interpret multiplication takes precedence over addition", () => {
+  expect(interpret("1 + 2 * 3")).toBe(7);
+});
+
