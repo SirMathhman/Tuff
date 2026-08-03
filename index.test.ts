@@ -69,3 +69,7 @@ test("evaluate mutable variable assignment", () => {
   expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
 });
 
+test("evaluate assigning to immutable variable throws", () => {
+  expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
+});
+

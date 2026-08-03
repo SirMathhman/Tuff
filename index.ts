@@ -1,7 +1,7 @@
 export function evaluate(source: string): number {
   const tokens = source.match(/\d+|[a-zA-Z_]\w*|[+\-*/(){};=]/g) ?? [];
   let index = 0;
-  const scope = new Map<string, number>();
+  const scope = new Map<string, { value: number; mutable: boolean }>();
 
   function parseExpression(): number {
     let value = parseTerm();
@@ -45,11 +45,11 @@ export function evaluate(source: string): number {
       return Number(token);
     }
     index++; // variable reference
-    const value = scope.get(token);
-    if (value === undefined) {
+    const entry = scope.get(token);
+    if (entry === undefined) {
       throw new Error(`Undefined identifier: ${token}`);
     }
-    return value;
+    return entry.value;
   }
 
   function parseBlock(): number {
@@ -65,10 +65,11 @@ export function evaluate(source: string): number {
     while (index < tokens.length && tokens[index] !== endToken) {
       if (tokens[index] === "let") {
         index++; // consume "let"
-        if (tokens[index] === "mut") {
+        const mutable = tokens[index] === "mut";
+        if (mutable) {
           index++; // consume "mut"
         }
-        assignVariable();
+        declareVariable(mutable);
       } else if (tokens[index + 1] === "=") {
         assignVariable();
       } else {
@@ -81,11 +82,27 @@ export function evaluate(source: string): number {
     return value;
   }
 
+  function declareVariable(mutable: boolean): void {
+    const name = tokens[index++];
+    index++; // consume "="
+    if (name !== undefined) {
+      scope.set(name, { value: parseExpression(), mutable });
+    }
+    index++; // consume ";"
+  }
+
   function assignVariable(): void {
     const name = tokens[index++];
     index++; // consume "="
     if (name !== undefined) {
-      scope.set(name, parseExpression());
+      const entry = scope.get(name);
+      if (entry === undefined) {
+        throw new Error(`Undefined identifier: ${name}`);
+      }
+      if (!entry.mutable) {
+        throw new Error(`Cannot assign to immutable variable: ${name}`);
+      }
+      entry.value = parseExpression();
     }
     index++; // consume ";"
   }
