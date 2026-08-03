@@ -12,5 +12,6 @@ export type Stmt =
   | { kind: "let"; name: string; mutable: boolean; value: Expr }
   | { kind: "assign"; name: string; value: Expr }
   | { kind: "compound_assign"; name: string; op: BinaryOp; value: Expr }
+  | { kind: "while"; condition: Expr; body: Stmt }
   | { kind: "expr"; expr: Expr }
   | { kind: "block"; statements: Stmt[] };

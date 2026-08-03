@@ -66,6 +66,13 @@ function evalStmt(stmt: Stmt, env: Env): Value {
       env.assign(stmt.name, result);
       return result;
     }
+    case "while": {
+      let result: Value = { type: "number", value: 0 };
+      while (evalCondition(stmt.condition, env)) {
+        result = evalStmt(stmt.body, env);
+      }
+      return result;
+    }
     case "expr": {
       return evalExpr(stmt.expr, env);
     }

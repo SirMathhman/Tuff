@@ -120,6 +120,19 @@ export function parse(tokens: Token[]): Stmt {
   }
 
   function parseStatement(): Stmt {
+    if (peek().type === "while") {
+      advance();
+      if (advance().type !== "lparen") {
+        throw new ParseError("Expected ( after while");
+      }
+      const condition = parseExpression();
+      if (advance().type !== "rparen") {
+        throw new ParseError("Expected ) after while condition");
+      }
+      const body = parseStatement();
+      return { kind: "while", condition, body };
+    }
+
     if (peek().type === "let") {
       advance();
       const mutable = peek().type === "mut";

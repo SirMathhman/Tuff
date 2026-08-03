@@ -13,6 +13,7 @@ export type Token =
   | { type: "mut" }
   | { type: "if" }
   | { type: "else" }
+  | { type: "while" }
   | { type: "true" }
   | { type: "false" }
   | { type: "identifier"; name: string }
@@ -100,6 +101,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "if" });
       } else if (name === "else") {
         tokens.push({ type: "else" });
+      } else if (name === "while") {
+        tokens.push({ type: "while" });
       } else if (name === "true") {
         tokens.push({ type: "true" });
       } else if (name === "false") {

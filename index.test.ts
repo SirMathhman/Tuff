@@ -132,3 +132,7 @@ test("evaluate if without else leaves variable unchanged", () => {
 test("evaluate compound assignment plus equals", () => {
   expect(evaluate("let mut x = 0; x += 1; x")).toBe(1);
 });
+
+test("evaluate while loop", () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
+});
