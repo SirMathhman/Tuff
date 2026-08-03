@@ -1,4 +1,15 @@
-import type { Token } from "./types";
+import type { Token, IntegerTypeName } from "./types";
+
+const SUFFIXES: Record<string, IntegerTypeName> = {
+  U8: "U8",
+  U16: "U16",
+  U32: "U32",
+  U64: "U64",
+  I8: "I8",
+  I16: "I16",
+  I32: "I32",
+  I64: "I64",
+};
 
 export function lex(source: string): Token[] {
   const tokens: Token[] = [];
@@ -18,36 +29,11 @@ export function lex(source: string): Token[] {
         value += source[i];
         i++;
       }
-      let u8 = false;
-      let u16 = false;
-      let u32 = false;
-      let u64 = false;
-      let i8 = false;
-      let i16 = false;
-      let i64 = false;
-      if (source[i] === "U" && source[i + 1] === "8") {
-        u8 = true;
-        i += 2;
-      } else if (source[i] === "U" && source[i + 1] === "1" && source[i + 2] === "6") {
-        u16 = true;
-        i += 3;
-      } else if (source[i] === "U" && source[i + 1] === "3" && source[i + 2] === "2") {
-        u32 = true;
-        i += 3;
-      } else if (source[i] === "U" && source[i + 1] === "6" && source[i + 2] === "4") {
-        u64 = true;
-        i += 3;
-      } else if (source[i] === "I" && source[i + 1] === "8") {
-        i8 = true;
-        i += 2;
-      } else if (source[i] === "I" && source[i + 1] === "1" && source[i + 2] === "6") {
-        i16 = true;
-        i += 3;
-      } else if (source[i] === "I" && source[i + 1] === "6" && source[i + 2] === "4") {
-        i64 = true;
-        i += 3;
+      const suffix = readIntegerSuffix(source, i);
+      if (suffix) {
+        i = suffix.i;
       }
-      tokens.push({ type: "number", value: Number(value), u8, u16, u32, u64, i8, i16, i64 });
+      tokens.push({ type: "number", value: Number(value), typeName: suffix?.typeName });
       continue;
     }
 
@@ -57,10 +43,12 @@ export function lex(source: string): Token[] {
         value += source[i];
         i++;
       }
-      const suffix = readTypeSuffix(source, i, value);
-      if (suffix) {
-        value = suffix.value;
-        i = suffix.i;
+      if (value === "U" || value === "I") {
+        const suffix = readIntegerSuffix(source, i - 1);
+        if (suffix) {
+          value = suffix.typeName;
+          i = suffix.i;
+        }
       }
       if (value === "true" || value === "false") {
         tokens.push({ type: "boolean", value: value === "true" });
@@ -177,12 +165,28 @@ function isLetter(char: string): boolean {
   return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z");
 }
 
-function readTypeSuffix(source: string, i: number, prefix: string): { value: string; i: number } | undefined {
-  if ((prefix === "U" || prefix === "I") && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6") || (source[i] === "3" && source[i + 1] === "2") || (source[i] === "6" && source[i + 1] === "4"))) {
-    if (source[i] === "8") {
-      return { value: prefix + "8", i: i + 1 };
-    }
-    return { value: prefix + source[i] + source[i + 1], i: i + 2 };
+function readIntegerSuffix(source: string, i: number): { typeName: IntegerTypeName; i: number } | undefined {
+  const prefix = source[i]!;
+  if (prefix !== "U" && prefix !== "I") {
+    return undefined;
   }
-  return undefined;
+  const second = source[i + 1];
+  if (second === undefined) {
+    return undefined;
+  }
+  let digits: string;
+  if (second === "8") {
+    digits = "8";
+  } else {
+    const third = source[i + 2];
+    if (third === undefined) {
+      return undefined;
+    }
+    digits = second + third;
+  }
+  const typeName = SUFFIXES[prefix + digits];
+  if (!typeName) {
+    return undefined;
+  }
+  return { typeName, i: i + 1 + digits.length };
 }

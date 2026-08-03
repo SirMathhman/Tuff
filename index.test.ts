@@ -165,6 +165,14 @@ test("interpret supports I64 integer suffix", () => {
   expect(interpret("100I64")).toBe(100);
 });
 
+test("interpret supports I32 integer suffix", () => {
+  expect(interpret("100I32")).toBe(100);
+});
+
+test("interpret throws on I32 overflow", () => {
+  expect(() => interpret("2147483648I32")).toThrow();
+});
+
 test("interpret throws on U32 overflow", () => {
   expect(() => interpret("4294967295U32 + 1U32")).toThrow();
 });

@@ -1,4 +1,6 @@
-import type { Token, AST, TypeName, Param } from "./types";
+import type { Token, AST, TypeName, Param, IntegerTypeName } from "./types";
+
+const TYPE_NAMES: TypeName[] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64", "Bool"];
 
 export class Parser {
   private index = 0;
@@ -133,7 +135,7 @@ export class Parser {
   private parsePrimary(): AST {
     const token = this.consume();
     if (token.type === "number") {
-      return { type: "number", value: token.value, u8: token.u8, u16: token.u16, u32: token.u32, u64: token.u64, i8: token.i8, i16: token.i16, i64: token.i64 };
+      return { type: "number", value: token.value, typeName: token.typeName as IntegerTypeName | undefined };
     }
     if (token.type === "boolean") {
       return { type: "boolean", value: token.value };
@@ -357,10 +359,10 @@ export class Parser {
     }
     this.consume();
     const typeToken = this.consume();
-    if (typeToken.type !== "identifier" || (typeToken.value !== "U8" && typeToken.value !== "U16" && typeToken.value !== "U32" && typeToken.value !== "U64" && typeToken.value !== "I8" && typeToken.value !== "I16" && typeToken.value !== "I32" && typeToken.value !== "I64" && typeToken.value !== "Bool")) {
+    if (typeToken.type !== "identifier" || !TYPE_NAMES.includes(typeToken.value as TypeName)) {
       throw new Error(`${errorMessage}, got: ${JSON.stringify(typeToken)}`);
     }
-    return typeToken.value;
+    return typeToken.value as TypeName;
   }
 }
 
