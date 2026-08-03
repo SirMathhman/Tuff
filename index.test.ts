@@ -80,3 +80,7 @@ test("interpret supports nested blocks with shadowing", () => {
 test("interpret supports top-level let bindings", () => {
   expect(interpret("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
+
+test("interpret supports mutable bindings and assignment", () => {
+  expect(interpret("let mut x = 0; x = 1; x")).toBe(1);
+});

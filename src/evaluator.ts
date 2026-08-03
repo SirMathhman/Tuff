@@ -16,6 +16,14 @@ export function evaluate(ast: AST, env: Record<string, number> = {}): number {
       env[ast.name] = value;
       return value;
     }
+    case "assign": {
+      const value = evaluate(ast.value, env);
+      if (env[ast.name] === undefined) {
+        throw new Error(`Undefined variable: ${ast.name}`);
+      }
+      env[ast.name] = value;
+      return value;
+    }
     case "block": {
       const childEnv = Object.create(env) as Record<string, number>;
       let result = 0;

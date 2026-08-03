@@ -24,19 +24,33 @@ export class Parser {
   }
 
   private parseAdditive(): AST {
-    let left = this.parseMultiplicative();
+    let left = this.parseAssignment();
 
     while (true) {
       const token = this.peek();
       if (token && token.type === "operator" && (token.value === "+" || token.value === "-")) {
         this.consume();
-        const right = this.parseMultiplicative();
+        const right = this.parseAssignment();
         left = { type: "binary", operator: token.value, left, right };
       } else {
         break;
       }
     }
 
+    return left;
+  }
+
+  private parseAssignment(): AST {
+    const left = this.parseMultiplicative();
+    const token = this.peek();
+    if (token && token.type === "operator" && token.value === "=") {
+      if (left.type !== "identifier") {
+        throw new Error(`Invalid assignment target: ${JSON.stringify(left)}`);
+      }
+      this.consume();
+      const value = this.parseAssignment();
+      return { type: "assign", name: left.name, value };
+    }
     return left;
   }
 
@@ -108,16 +122,23 @@ export class Parser {
 
       if (token.type === "identifier" && token.value === "let") {
         this.consume();
-        const nameToken = this.consume();
-        if (nameToken.type !== "identifier") {
+        let mutable = false;
+        let nameToken = this.peek();
+        if (nameToken && nameToken.type === "identifier" && nameToken.value === "mut") {
+          this.consume();
+          mutable = true;
+          nameToken = this.peek();
+        }
+        if (!nameToken || nameToken.type !== "identifier") {
           throw new Error(`Expected identifier after let, got: ${JSON.stringify(nameToken)}`);
         }
+        this.consume();
         const eq = this.consume();
         if (eq.type !== "operator" || eq.value !== "=") {
           throw new Error(`Expected = after let ${nameToken.value}, got: ${JSON.stringify(eq)}`);
         }
         const value = this.parseAdditive();
-        statements.push({ type: "let", name: nameToken.value, value });
+        statements.push({ type: "let", name: nameToken.value, mutable, value });
       } else {
         statements.push(this.parseAdditive());
       }

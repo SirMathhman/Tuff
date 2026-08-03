@@ -10,5 +10,6 @@ export type AST =
   | { type: "binary"; operator: "+" | "-" | "*" | "/"; left: AST; right: AST }
   | { type: "unary"; operator: "-"; operand: AST }
   | { type: "identifier"; name: string }
-  | { type: "let"; name: string; value: AST }
+  | { type: "let"; name: string; mutable: boolean; value: AST }
+  | { type: "assign"; name: string; value: AST }
   | { type: "block"; statements: AST[] };
