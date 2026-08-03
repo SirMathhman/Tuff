@@ -105,3 +105,7 @@ test("evaluate division by zero throws", () => {
   expect(() => evaluate("1 / 0")).toThrow();
 });
 
+test("evaluate less than expression", () => {
+  expect(evaluate("let x = 0; let y = 1; x < y")).toBe(1);
+});
+

@@ -13,7 +13,7 @@ function truthy(value: Value): boolean {
 }
 
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|\|\||&&|[+\-*/(){};=]/g) ?? [];
+  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|\|\||&&|<|[+\-*/(){};=]/g) ?? [];
   let index = 0;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
 
@@ -45,11 +45,21 @@ export function evaluate(source: string): number {
   }
 
   function parseEquality(initial?: Value): Value {
-    let value = parseExpression(initial);
+    let value = parseComparison(initial);
     while (index < tokens.length && tokens[index] === "==") {
       index++;
-      const right = parseExpression();
+      const right = parseComparison();
       value = booleanValue(value.kind === right.kind && value.value === right.value);
+    }
+    return value;
+  }
+
+  function parseComparison(initial?: Value): Value {
+    let value = parseExpression(initial);
+    while (index < tokens.length && tokens[index] === "<") {
+      index++;
+      const right = parseExpression();
+      value = booleanValue((value.value as number) < (right.value as number));
     }
     return value;
   }
