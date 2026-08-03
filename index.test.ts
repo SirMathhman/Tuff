@@ -53,3 +53,7 @@ test("interpret top-level let declaration", () => {
   expect(interpret("let x = 5; x")).toBe(5);
 });
 
+test("interpret multiple top-level let declarations", () => {
+  expect(interpret("let x = 2; let y = 3; x + y")).toBe(5);
+});
+
