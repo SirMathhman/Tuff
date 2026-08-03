@@ -33,14 +33,18 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       return result;
     }
     case "indexAssign": {
-      const { target, index, element } = resolveIndex(ast, env);
+      if (ast.target.type !== "identifier") {
+        throw new Error(`Invalid assignment target: ${JSON.stringify(ast.target)}`);
+      }
+      const name = ast.target.name;
+      const { index, element } = resolveIndex(ast, env);
       const value = evaluate(ast.value, env);
       if (ast.operator === "=") {
-        target.elements[index] = value;
+        env.assignElement(name, index, value);
         return value;
       }
       const result = compoundAssign(ast.operator, element, value, String(index));
-      target.elements[index] = result;
+      env.assignElement(name, index, result);
       return result;
     }
     case "if": {

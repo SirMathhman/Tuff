@@ -336,3 +336,11 @@ test("interpret supports array element assignment", () => {
 test("interpret supports compound array element assignment", () => {
   expect(interpret("let mut a : [I32; 2] = [1, 2]; a[0] += 5; a[0] + a[1]")).toBe(8);
 });
+
+test("interpret rejects assignment to immutable array element", () => {
+  expect(() => interpret("let a : [I32; 2] = [1, 2]; a[0] = 5")).toThrow();
+});
+
+test("interpret rejects compound assignment to immutable array element", () => {
+  expect(() => interpret("let a : [I32; 2] = [1, 2]; a[0] += 5")).toThrow();
+});

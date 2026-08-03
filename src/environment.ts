@@ -1,4 +1,5 @@
 import type { Value } from "./types";
+import { isArray } from "./typecheck";
 
 interface Binding {
   value: Value;
@@ -23,6 +24,27 @@ export class Environment {
   }
 
   assign(name: string, value: Value): void {
+    const binding = this.resolveBinding(name);
+    binding.value = value;
+  }
+
+  assignElement(name: string, index: number, value: Value): void {
+    const binding = this.resolveBinding(name);
+    const arr = binding.value;
+    if (!isArray(arr)) {
+      throw new Error(`Indexing requires an array: ${name}`);
+    }
+    if (arr.elements[index] === undefined) {
+      throw new Error(`Index out of bounds: ${index}`);
+    }
+    arr.elements[index] = value;
+  }
+
+  child(): Environment {
+    return new Environment(this);
+  }
+
+  private resolveBinding(name: string): Binding {
     const env = this.resolve(name);
     if (!env) {
       throw new Error(`Undefined variable: ${name}`);
@@ -31,11 +53,7 @@ export class Environment {
     if (!binding.mutable) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
     }
-    binding.value = value;
-  }
-
-  child(): Environment {
-    return new Environment(this);
+    return binding;
   }
 
   private resolve(name: string): Environment | undefined {
