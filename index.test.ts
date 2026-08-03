@@ -24,3 +24,7 @@ test("evaluate addition and subtraction", () => {
 test("evaluate multiplication and subtraction", () => {
   expect(evaluate("2 * 3 - 4")).toBe(2);
 });
+
+test("evaluate addition and multiplication with precedence", () => {
+  expect(evaluate("2 + 3 * 4")).toBe(14);
+});
