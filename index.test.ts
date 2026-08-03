@@ -65,3 +65,7 @@ test("evaluate block with only declaration throws", () => {
   expect(() => evaluate("let x = { let y = 0; };")).toThrow();
 });
 
+test("evaluate mutable variable assignment", () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+});
+

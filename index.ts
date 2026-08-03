@@ -65,12 +65,12 @@ export function evaluate(source: string): number {
     while (index < tokens.length && tokens[index] !== endToken) {
       if (tokens[index] === "let") {
         index++; // consume "let"
-        const name = tokens[index++];
-        index++; // consume "="
-        if (name !== undefined) {
-          scope.set(name, parseExpression());
+        if (tokens[index] === "mut") {
+          index++; // consume "mut"
         }
-        index++; // consume ";"
+        assignVariable();
+      } else if (tokens[index + 1] === "=") {
+        assignVariable();
       } else {
         value = parseExpression();
         if (tokens[index] === ";") {
@@ -79,6 +79,15 @@ export function evaluate(source: string): number {
       }
     }
     return value;
+  }
+
+  function assignVariable(): void {
+    const name = tokens[index++];
+    index++; // consume "="
+    if (name !== undefined) {
+      scope.set(name, parseExpression());
+    }
+    index++; // consume ";"
   }
 
   return parseStatements(undefined) ?? 0;
