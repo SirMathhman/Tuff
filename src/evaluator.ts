@@ -17,9 +17,10 @@ export function evaluate(ast: AST, env: Record<string, number> = {}): number {
       return value;
     }
     case "block": {
+      const childEnv = Object.create(env) as Record<string, number>;
       let result = 0;
       for (const statement of ast.statements) {
-        result = evaluate(statement, env);
+        result = evaluate(statement, childEnv);
       }
       return result;
     }
