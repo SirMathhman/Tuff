@@ -13,6 +13,10 @@ test("evaluate single digit returns the digit", () => {
   expect(evaluate("1")).toBe(1);
 });
 
+test("evaluate typed integer literal", () => {
+  expect(evaluate("100U8")).toBe(100);
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

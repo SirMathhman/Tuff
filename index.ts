@@ -17,7 +17,7 @@ export function evaluate(source: string): number {
   if (invalid) {
     throw new Error(`Invalid character: ${invalid[0]}`);
   }
-  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
+  const tokens = source.match(/\d+[A-Za-z]\w*|\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
   let index = 0;
   let breakRequested = false;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
@@ -122,6 +122,10 @@ export function evaluate(source: string): number {
         throw new Error("Block must end with an expression");
       }
       return value;
+    }
+    if (/^\d+[A-Za-z]\w*$/.test(token)) {
+      index++;
+      return numberValue(Number(token.match(/^\d+/)?.[0]));
     }
     if (/^\d+$/.test(token)) {
       index++;
