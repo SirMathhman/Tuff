@@ -33,3 +33,7 @@ test("evaluate addition and multiplication expression", () => {
   expect(evaluate("2 + 3 * 4")).toBe(14);
 });
 
+test("evaluate parenthesized expression", () => {
+  expect(evaluate("(2 + 3) * 4")).toBe(20);
+});
+

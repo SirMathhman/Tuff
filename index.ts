@@ -1,5 +1,5 @@
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[+\-*/]/g) ?? [];
+  const tokens = source.match(/\d+|[+\-*/()]/g) ?? [];
   if (tokens.length === 0) {
     return 0;
   }
@@ -16,13 +16,23 @@ export function evaluate(source: string): number {
   }
 
   function parseTerm(): number {
-    let value = Number(tokens[index++]);
+    let value = parseFactor();
     while (index < tokens.length && (tokens[index] === "*" || tokens[index] === "/")) {
       const operator = tokens[index++];
-      const right = Number(tokens[index++]);
+      const right = parseFactor();
       value = operator === "*" ? value * right : value / right;
     }
     return value;
+  }
+
+  function parseFactor(): number {
+    if (tokens[index] === "(") {
+      index++;
+      const value = parseExpression();
+      index++; // consume ")"
+      return value;
+    }
+    return Number(tokens[index++]);
   }
 
   return parseExpression();
