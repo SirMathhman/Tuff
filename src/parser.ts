@@ -43,13 +43,17 @@ export class Parser {
   private parseAssignment(): AST {
     const left = this.parseMultiplicative();
     const token = this.peek();
-    if (token && token.type === "operator" && token.value === "=") {
+    if (
+      token &&
+      token.type === "operator" &&
+      (token.value === "=" || token.value === "+=" || token.value === "-=" || token.value === "*=" || token.value === "/=")
+    ) {
       if (left.type !== "identifier") {
         throw new Error(`Invalid assignment target: ${JSON.stringify(left)}`);
       }
       this.consume();
       const value = this.parseAssignment();
-      return { type: "assign", name: left.name, value };
+      return { type: "assign", name: left.name, operator: token.value, value };
     }
     return left;
   }

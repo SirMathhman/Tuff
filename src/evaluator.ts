@@ -14,8 +14,30 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
     }
     case "assign": {
       const value = evaluate(ast.value, env);
-      env.assign(ast.name, value);
-      return value;
+      if (ast.operator === "=") {
+        env.assign(ast.name, value);
+        return value;
+      }
+      const current = env.lookup(ast.name);
+      let result: number;
+      switch (ast.operator) {
+        case "+=":
+          result = current + value;
+          break;
+        case "-=":
+          result = current - value;
+          break;
+        case "*=":
+          result = current * value;
+          break;
+        case "/=":
+          result = Math.trunc(current / value);
+          break;
+        default:
+          throw new Error(`Unknown assignment operator: ${ast.operator}`);
+      }
+      env.assign(ast.name, result);
+      return result;
     }
     case "block": {
       const childEnv = env.child();

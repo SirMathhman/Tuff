@@ -39,6 +39,12 @@ export function lex(source: string): Token[] {
     }
 
     if (char === "+" || char === "-" || char === "*" || char === "/" || char === "=") {
+      const next = source[i + 1];
+      if (next === "=" && char !== "=") {
+        tokens.push({ type: "operator", value: (char + next) as "+=" | "-=" | "*=" | "/=" });
+        i += 2;
+        continue;
+      }
       tokens.push({ type: "operator", value: char });
       i++;
       continue;

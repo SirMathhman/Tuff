@@ -96,3 +96,7 @@ test("interpret supports assignment to mutable binding in nested scope", () => {
 test("interpret supports shadowing with assignment to inner binding", () => {
   expect(interpret("let mut x = 1; { let mut x = 2; x = 3; } x")).toBe(1);
 });
+
+test("interpret supports compound assignment", () => {
+  expect(interpret("let mut x = 2; x += 3; x")).toBe(5);
+});
