@@ -1,12 +1,15 @@
+interface Binding {
+  value: number;
+  mutable: boolean;
+}
+
 export class Environment {
-  private values = new Map<string, number>();
-  private mutable = new Map<string, boolean>();
+  private bindings = new Map<string, Binding>();
 
   constructor(private readonly parent?: Environment) {}
 
   define(name: string, value: number, mutable: boolean): void {
-    this.values.set(name, value);
-    this.mutable.set(name, mutable);
+    this.bindings.set(name, { value, mutable });
   }
 
   lookup(name: string): number {
@@ -14,7 +17,7 @@ export class Environment {
     if (!env) {
       throw new Error(`Undefined variable: ${name}`);
     }
-    return env.values.get(name)!;
+    return env.bindings.get(name)!.value;
   }
 
   assign(name: string, value: number): void {
@@ -22,10 +25,11 @@ export class Environment {
     if (!env) {
       throw new Error(`Undefined variable: ${name}`);
     }
-    if (!env.mutable.get(name)) {
+    const binding = env.bindings.get(name)!;
+    if (!binding.mutable) {
       throw new Error(`Cannot assign to immutable variable: ${name}`);
     }
-    env.values.set(name, value);
+    binding.value = value;
   }
 
   child(): Environment {
@@ -33,7 +37,7 @@ export class Environment {
   }
 
   private resolve(name: string): Environment | undefined {
-    if (this.values.has(name)) {
+    if (this.bindings.has(name)) {
       return this;
     }
     return this.parent?.resolve(name);

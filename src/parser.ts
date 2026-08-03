@@ -120,28 +120,7 @@ export class Parser {
         throw new Error(`Unexpected token: ${JSON.stringify(token)}`);
       }
 
-      if (token.type === "identifier" && token.value === "let") {
-        this.consume();
-        let mutable = false;
-        let nameToken = this.peek();
-        if (nameToken && nameToken.type === "identifier" && nameToken.value === "mut") {
-          this.consume();
-          mutable = true;
-          nameToken = this.peek();
-        }
-        if (!nameToken || nameToken.type !== "identifier") {
-          throw new Error(`Expected identifier after let, got: ${JSON.stringify(nameToken)}`);
-        }
-        this.consume();
-        const eq = this.consume();
-        if (eq.type !== "operator" || eq.value !== "=") {
-          throw new Error(`Expected = after let ${nameToken.value}, got: ${JSON.stringify(eq)}`);
-        }
-        const value = this.parseAdditive();
-        statements.push({ type: "let", name: nameToken.value, mutable, value });
-      } else {
-        statements.push(this.parseAdditive());
-      }
+      statements.push(this.parseStatement());
 
       const next = this.peek();
       if (next && next.type === "semicolon") {
@@ -150,6 +129,35 @@ export class Parser {
     }
 
     return statements;
+  }
+
+  private parseStatement(): AST {
+    const token = this.peek();
+    if (token && token.type === "identifier" && token.value === "let") {
+      return this.parseLet();
+    }
+    return this.parseAdditive();
+  }
+
+  private parseLet(): AST {
+    this.consume();
+    let mutable = false;
+    let nameToken = this.peek();
+    if (nameToken && nameToken.type === "identifier" && nameToken.value === "mut") {
+      this.consume();
+      mutable = true;
+      nameToken = this.peek();
+    }
+    if (!nameToken || nameToken.type !== "identifier") {
+      throw new Error(`Expected identifier after let, got: ${JSON.stringify(nameToken)}`);
+    }
+    this.consume();
+    const eq = this.consume();
+    if (eq.type !== "operator" || eq.value !== "=") {
+      throw new Error(`Expected = after let ${nameToken.value}, got: ${JSON.stringify(eq)}`);
+    }
+    const value = this.parseAdditive();
+    return { type: "let", name: nameToken.value, mutable, value };
   }
 }
 
