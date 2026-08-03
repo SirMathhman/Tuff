@@ -5,6 +5,14 @@ import type { Value } from "./value";
 import { toNumber } from "./value";
 import { TypeError } from "./errors";
 
+function evalCondition(expr: Expr, env: Env): boolean {
+  const value = evalExpr(expr, env);
+  if (value.type !== "boolean") {
+    throw new TypeError("Condition must be a boolean");
+  }
+  return value.value;
+}
+
 function evalExpr(expr: Expr, env: Env): Value {
   switch (expr.kind) {
     case "number":
@@ -28,11 +36,9 @@ function evalExpr(expr: Expr, env: Env): Value {
       return OPERATORS[expr.op].evaluate(left, right);
     }
     case "if": {
-      const condition = evalExpr(expr.condition, env);
-      if (condition.type !== "boolean") {
-        throw new TypeError("If condition must be a boolean");
-      }
-      return condition.value ? evalExpr(expr.then, env) : evalExpr(expr.otherwise, env);
+      return evalCondition(expr.condition, env)
+        ? evalExpr(expr.then, env)
+        : evalExpr(expr.otherwise, env);
     }
   }
 }
