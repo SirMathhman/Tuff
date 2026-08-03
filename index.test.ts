@@ -16,3 +16,7 @@ test("interpret multi-digit number returns that number", () => {
 test("interpret addition of two numbers", () => {
   expect(interpret("1+2")).toBe(3);
 });
+
+test("interpret subtraction of two numbers", () => {
+  expect(interpret("5-2")).toBe(3);
+});

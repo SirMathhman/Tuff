@@ -6,5 +6,9 @@ export function interpret(source: string) {
     const [left, right] = source.split("+");
     return Number(left) + Number(right);
   }
+  if (source.includes("-")) {
+    const [left, right] = source.split("-");
+    return Number(left) - Number(right);
+  }
   return Number(source);
 }
