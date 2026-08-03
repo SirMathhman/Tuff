@@ -92,3 +92,7 @@ test("interpret rejects assignment to immutable binding", () => {
 test("interpret supports assignment to mutable binding in nested scope", () => {
   expect(interpret("let mut x = 0; { x = 5; } x")).toBe(5);
 });
+
+test("interpret supports shadowing with assignment to inner binding", () => {
+  expect(interpret("let mut x = 1; { let mut x = 2; x = 3; } x")).toBe(1);
+});
