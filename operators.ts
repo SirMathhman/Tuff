@@ -1,11 +1,12 @@
 import type { Value } from "./value";
 import { toNumber } from "./value";
+import { TypeError } from "./errors";
 
 export type BinaryOp = "+" | "-" | "*" | "||" | "&&" | "==";
 
 function requireBoolean(value: Value, op: BinaryOp): boolean {
   if (value.type !== "boolean") {
-    throw new Error(`Operator ${op} requires boolean operands`);
+    throw new TypeError(`Operator ${op} requires boolean operands`);
   }
   return value.value;
 }

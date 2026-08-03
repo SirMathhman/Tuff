@@ -1,6 +1,7 @@
 import type { Token } from "./tokens";
 import type { Expr, Stmt } from "./ast";
 import type { BinaryOp } from "./operators";
+import { ParseError } from "./errors";
 
 const BINARY_PRECEDENCE: Record<string, number> = {
   or: 1,
@@ -75,7 +76,7 @@ export function parse(tokens: Token[]): Stmt {
       const expr = parseExpression();
 
       if (advance().type !== "rparen") {
-        throw new Error("Expected closing parenthesis");
+        throw new ParseError("Expected closing parenthesis");
       }
 
       return expr;
@@ -89,13 +90,13 @@ export function parse(tokens: Token[]): Stmt {
       }
 
       if (advance().type !== "rbrace") {
-        throw new Error("Expected closing brace");
+        throw new ParseError("Expected closing brace");
       }
 
       return { kind: "block", statements };
     }
 
-    throw new Error(`Unexpected token: ${token.type}`);
+    throw new ParseError(`Unexpected token: ${token.type}`);
   }
 
   function parseStatement(): Stmt {
@@ -108,17 +109,17 @@ export function parse(tokens: Token[]): Stmt {
       const nameToken = advance();
 
       if (nameToken.type !== "identifier") {
-        throw new Error("Expected identifier after let");
+        throw new ParseError("Expected identifier after let");
       }
 
       if (advance().type !== "equals") {
-        throw new Error("Expected = in let declaration");
+        throw new ParseError("Expected = in let declaration");
       }
 
       const value = parseExpression();
 
       if (advance().type !== "semicolon") {
-        throw new Error("Expected ; after let declaration");
+        throw new ParseError("Expected ; after let declaration");
       }
 
       return { kind: "let", name: nameToken.name, mutable, value };
@@ -130,11 +131,11 @@ export function parse(tokens: Token[]): Stmt {
       const value = parseExpression();
 
       if (advance().type !== "semicolon") {
-        throw new Error("Expected ; after assignment");
+        throw new ParseError("Expected ; after assignment");
       }
 
       if (nameToken.type !== "identifier") {
-        throw new Error("Expected identifier before =");
+        throw new ParseError("Expected identifier before =");
       }
 
       return { kind: "assign", name: nameToken.name, value };

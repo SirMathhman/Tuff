@@ -1,4 +1,5 @@
 import type { Value } from "./value";
+import { RuntimeError } from "./errors";
 
 export interface Binding {
   value: Value;
@@ -23,7 +24,7 @@ export class Env {
   assign(name: string, value: Value): void {
     const binding = this.lookup(name);
     if (!binding.mutable) {
-      throw new Error(`Cannot assign to immutable variable: ${name}`);
+      throw new RuntimeError(`Cannot assign to immutable variable: ${name}`);
     }
     binding.value = value;
   }
@@ -36,7 +37,7 @@ export class Env {
     if (this.parent) {
       return this.parent.lookup(name);
     }
-    throw new Error(`Undefined variable: ${name}`);
+    throw new RuntimeError(`Undefined variable: ${name}`);
   }
 
   child(): Env {

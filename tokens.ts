@@ -33,6 +33,8 @@ type OperatorTokenType =
   | "equals_equals"
   | "semicolon";
 
+import { LexError } from "./errors";
+
 const OPERATORS: Array<[string, OperatorTokenType]> = [
   ["||", "or"],
   ["&&", "and"],
@@ -87,7 +89,7 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: operator[1] });
         i += operator[0].length;
       } else {
-        throw new Error(`Unexpected character: ${ch}`);
+        throw new LexError(`Unexpected character: ${ch}`);
       }
     }
   }
