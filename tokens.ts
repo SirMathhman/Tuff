@@ -7,6 +7,10 @@ export type Token =
   | { type: "rparen" }
   | { type: "lbrace" }
   | { type: "rbrace" }
+  | { type: "let" }
+  | { type: "identifier"; name: string }
+  | { type: "equals" }
+  | { type: "semicolon" }
   | { type: "eof" };
 
 export function tokenize(source: string): Token[] {
@@ -39,13 +43,32 @@ export function tokenize(source: string): Token[] {
     } else if (ch === "}") {
       tokens.push({ type: "rbrace" });
       i++;
-    } else {
+    } else if (ch === "=") {
+      tokens.push({ type: "equals" });
+      i++;
+    } else if (ch === ";") {
+      tokens.push({ type: "semicolon" });
+      i++;
+    } else if (/\d/.test(ch!)) {
       let value = "";
       while (i < source.length && /\d/.test(source[i]!)) {
         value += source[i];
         i++;
       }
       tokens.push({ type: "number", value: Number(value) });
+    } else if (/[a-zA-Z]/.test(ch!)) {
+      let name = "";
+      while (i < source.length && /[a-zA-Z]/.test(source[i]!)) {
+        name += source[i];
+        i++;
+      }
+      if (name === "let") {
+        tokens.push({ type: "let" });
+      } else {
+        tokens.push({ type: "identifier", name });
+      }
+    } else {
+      throw new Error(`Unexpected character: ${ch}`);
     }
   }
 

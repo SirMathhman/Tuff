@@ -36,3 +36,7 @@ test("evaluate parentheses override precedence", () => {
 test("evaluate curly braces override precedence", () => {
   expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
 });
+
+test("evaluate block with let declaration and variable reference", () => {
+  expect(evaluate("{ let x = 2 + 3; x } * 4")).toBe(20);
+});

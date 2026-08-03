@@ -43,6 +43,10 @@ export function parse(tokens: Token[]): Expr {
       return { kind: "number", value: token.value };
     }
 
+    if (token.type === "identifier") {
+      return { kind: "variable", name: token.name };
+    }
+
     if (token.type === "lparen") {
       const expr = parseExpression();
 
@@ -54,17 +58,46 @@ export function parse(tokens: Token[]): Expr {
     }
 
     if (token.type === "lbrace") {
-      const expr = parseExpression();
+      const statements: Expr[] = [];
+
+      while (peek().type !== "rbrace" && peek().type !== "eof") {
+        statements.push(parseStatement());
+      }
 
       if (advance().type !== "rbrace") {
         throw new Error("Expected closing brace");
       }
 
-      return expr;
+      return { kind: "block", statements };
     }
 
     throw new Error(`Unexpected token: ${token.type}`);
   }
 
-  return parseExpression();
+  function parseStatement(): Expr {
+    if (peek().type === "let") {
+      advance();
+      const nameToken = advance();
+
+      if (nameToken.type !== "identifier") {
+        throw new Error("Expected identifier after let");
+      }
+
+      if (advance().type !== "equals") {
+        throw new Error("Expected = in let declaration");
+      }
+
+      const value = parseExpression();
+
+      if (advance().type !== "semicolon") {
+        throw new Error("Expected ; after let declaration");
+      }
+
+      return { kind: "let", name: nameToken.name, value };
+    }
+
+    return parseExpression();
+  }
+
+  return parseStatement();
 }

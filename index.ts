@@ -2,13 +2,34 @@ import { tokenize } from "./tokens";
 import { parse } from "./parser";
 import type { Expr } from "./ast";
 
-function evalAst(expr: Expr): number {
+type Env = Map<string, number>;
+
+function evalAst(expr: Expr, env: Env): number {
   switch (expr.kind) {
     case "number":
       return expr.value;
+    case "variable": {
+      const value = env.get(expr.name);
+      if (value === undefined) {
+        throw new Error(`Undefined variable: ${expr.name}`);
+      }
+      return value;
+    }
+    case "let": {
+      const value = evalAst(expr.value, env);
+      env.set(expr.name, value);
+      return value;
+    }
+    case "block": {
+      let result = 0;
+      for (const statement of expr.statements) {
+        result = evalAst(statement, env);
+      }
+      return result;
+    }
     case "binary": {
-      const left = evalAst(expr.left);
-      const right = evalAst(expr.right);
+      const left = evalAst(expr.left, env);
+      const right = evalAst(expr.right, env);
 
       switch (expr.op) {
         case "+":
@@ -29,5 +50,5 @@ export function evaluate(source: string): number {
 
   const tokens = tokenize(source);
   const ast = parse(tokens);
-  return evalAst(ast);
+  return evalAst(ast, new Map());
 }
