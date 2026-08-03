@@ -77,3 +77,7 @@ test("evaluate assigning to undefined variable throws", () => {
   expect(() => evaluate("undefinedIdentifier = 100;")).toThrow();
 });
 
+test("evaluate block mutating outer variable", () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+});
+

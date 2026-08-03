@@ -3,8 +3,8 @@ export function evaluate(source: string): number {
   let index = 0;
   const scope = new Map<string, { value: number; mutable: boolean }>();
 
-  function parseExpression(): number {
-    let value = parseTerm();
+  function parseExpression(initial?: number): number {
+    let value = parseTerm(initial);
     while (index < tokens.length && (tokens[index] === "+" || tokens[index] === "-")) {
       const operator = tokens[index++];
       const right = parseTerm();
@@ -13,8 +13,8 @@ export function evaluate(source: string): number {
     return value;
   }
 
-  function parseTerm(): number {
-    let value = parseFactor();
+  function parseTerm(initial?: number): number {
+    let value = initial ?? parseFactor();
     while (index < tokens.length && (tokens[index] === "*" || tokens[index] === "/")) {
       const operator = tokens[index++];
       const right = parseFactor();
@@ -38,6 +38,9 @@ export function evaluate(source: string): number {
       index++;
       const value = parseBlock();
       index++; // consume "}"
+      if (value === undefined) {
+        throw new Error("Block must end with an expression");
+      }
       return value;
     }
     if (/^\d+$/.test(token)) {
@@ -52,12 +55,8 @@ export function evaluate(source: string): number {
     return entry.value;
   }
 
-  function parseBlock(): number {
-    const value = parseStatements("}");
-    if (value === undefined) {
-      throw new Error("Block must end with an expression");
-    }
-    return value;
+  function parseBlock(): number | undefined {
+    return parseStatements("}");
   }
 
   function parseStatements(endToken: string | undefined): number | undefined {
@@ -72,6 +71,16 @@ export function evaluate(source: string): number {
         declareVariable(mutable);
       } else if (tokens[index + 1] === "=") {
         assignVariable();
+      } else if (tokens[index] === "{") {
+        index++; // consume "{"
+        const blockValue = parseStatements("}");
+        index++; // consume "}"
+        if (blockValue !== undefined) {
+          value = parseExpression(blockValue);
+          if (tokens[index] === ";") {
+            index++;
+          }
+        }
       } else {
         value = parseExpression();
         if (tokens[index] === ";") {
