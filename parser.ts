@@ -44,11 +44,11 @@ export function parse(tokens: Token[]): Stmt {
     }
 
     if (token.type === "true") {
-      return { kind: "number", value: 1 };
+      return { kind: "boolean", value: true };
     }
 
     if (token.type === "false") {
-      return { kind: "number", value: 0 };
+      return { kind: "boolean", value: false };
     }
 
     if (token.type === "identifier") {

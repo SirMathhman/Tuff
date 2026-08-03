@@ -5,6 +5,8 @@ function evalExpr(expr: Expr, env: Env): number {
   switch (expr.kind) {
     case "number":
       return expr.value;
+    case "boolean":
+      return expr.value ? 1 : 0;
     case "variable": {
       return env.get(expr.name);
     }
