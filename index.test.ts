@@ -49,3 +49,7 @@ test("evaluate top-level variable declaration", () => {
   expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
 
+test("evaluate undefined identifier throws", () => {
+  expect(() => evaluate("undefinedIdentifier")).toThrow();
+});
+

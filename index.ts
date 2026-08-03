@@ -45,7 +45,11 @@ export function evaluate(source: string): number {
       return Number(token);
     }
     index++; // variable reference
-    return scope.get(token) ?? 0;
+    const value = scope.get(token);
+    if (value === undefined) {
+      throw new Error(`Undefined identifier: ${token}`);
+    }
+    return value;
   }
 
   function parseBlock(): number {
