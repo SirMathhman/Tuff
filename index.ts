@@ -1,5 +1,5 @@
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[a-zA-Z_]\w*|[+\-*/(){};=]/g) ?? [];
+  const tokens = source.match(/\d+|[a-zA-Z_]\w*|[+\-*/(){};=]|\|\||&&/g) ?? [];
   let index = 0;
   const scopes: Array<Map<string, { value: number; mutable: boolean }>> = [new Map()];
 
@@ -15,6 +15,16 @@ export function evaluate(source: string): number {
       }
     }
     return undefined;
+  }
+
+  function parseOr(initial?: number): number {
+    let value = parseExpression(initial);
+    while (index < tokens.length && (tokens[index] === "||" || tokens[index] === "&&")) {
+      const operator = tokens[index++];
+      const right = parseExpression();
+      value = operator === "||" ? (value || right ? 1 : 0) : value && right ? 1 : 0;
+    }
+    return value;
   }
 
   function parseExpression(initial?: number): number {
@@ -102,13 +112,13 @@ export function evaluate(source: string): number {
         scopes.pop();
         index++; // consume "}"
         if (blockValue !== undefined) {
-          value = parseExpression(blockValue);
+          value = parseOr(blockValue);
           if (tokens[index] === ";") {
             index++;
           }
         }
       } else {
-        value = parseExpression();
+        value = parseOr();
         if (tokens[index] === ";") {
           index++;
         }
@@ -121,7 +131,7 @@ export function evaluate(source: string): number {
     const name = tokens[index++];
     index++; // consume "="
     if (name !== undefined) {
-      currentScope().set(name, { value: parseExpression(), mutable });
+      currentScope().set(name, { value: parseOr(), mutable });
     }
     index++; // consume ";"
   }
@@ -137,7 +147,7 @@ export function evaluate(source: string): number {
       if (!entry.mutable) {
         throw new Error(`Cannot assign to immutable variable: ${name}`);
       }
-      entry.value = parseExpression();
+      entry.value = parseOr();
     }
     index++; // consume ";"
   }
