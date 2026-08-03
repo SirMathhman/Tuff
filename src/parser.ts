@@ -63,10 +63,11 @@ export function parse(tokens: Token[]): AST {
     if (token.type === "operator" && token.value === "-") {
       return { type: "unary", operator: "-", operand: parsePrimary() };
     }
-    if (token.type === "paren" && token.value === "(") {
+    if (token.type === "paren" && (token.value === "(" || token.value === "{")) {
       const inner = parseAdditive();
       const closing = consume();
-      if (closing.type !== "paren" || closing.value !== ")") {
+      const expected = token.value === "(" ? ")" : "}";
+      if (closing.type !== "paren" || closing.value !== expected) {
         throw new Error(`Expected closing paren, got: ${JSON.stringify(closing)}`);
       }
       return inner;

@@ -1,7 +1,7 @@
 export type Token =
   | { type: "number"; value: number }
   | { type: "operator"; value: "+" | "-" | "*" | "/" }
-  | { type: "paren"; value: "(" | ")" };
+  | { type: "paren"; value: "(" | ")" | "{" | "}" };
 
 export function lex(source: string): Token[] {
   const tokens: Token[] = [];
@@ -31,7 +31,7 @@ export function lex(source: string): Token[] {
       continue;
     }
 
-    if (char === "(" || char === ")") {
+    if (char === "(" || char === ")" || char === "{" || char === "}") {
       tokens.push({ type: "paren", value: char });
       i++;
       continue;

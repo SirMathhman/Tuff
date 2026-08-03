@@ -52,3 +52,7 @@ test("interpret handles nested parentheses", () => {
 test("interpret handles unary minus", () => {
   expect(interpret("-5")).toBe(-5);
 });
+
+test("interpret handles curly brace grouping", () => {
+  expect(interpret("{ 2 + 3 } * 4")).toBe(20);
+});
