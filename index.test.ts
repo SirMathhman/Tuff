@@ -36,3 +36,7 @@ test("interpret division truncates to integer", () => {
 test("interpret respects operator precedence", () => {
   expect(interpret("1+2*3")).toBe(7);
 });
+
+test("interpret handles whitespace around operators", () => {
+  expect(interpret("1 + 2")).toBe(3);
+});
