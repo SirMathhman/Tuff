@@ -8,3 +8,7 @@ test("interpret empty string returns 0", () => {
 test("interpret single digit returns that digit", () => {
   expect(interpret("5")).toBe(5);
 });
+
+test("interpret multi-digit number returns that number", () => {
+  expect(interpret("42")).toBe(42);
+});
