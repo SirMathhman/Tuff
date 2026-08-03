@@ -125,7 +125,12 @@ export function evaluate(source: string): number {
     }
     if (/^\d+[A-Za-z]\w*$/.test(token)) {
       index++;
-      return numberValue(Number(token.match(/^\d+/)?.[0]));
+      const value = Number(token.match(/^\d+/)?.[0]);
+      const suffix = token.match(/[A-Za-z]\w*$/)?.[0];
+      if (suffix === "U8" && value > 255) {
+        throw new Error("U8 literal out of range");
+      }
+      return numberValue(value);
     }
     if (/^\d+$/.test(token)) {
       index++;

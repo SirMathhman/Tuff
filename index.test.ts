@@ -17,6 +17,10 @@ test("evaluate typed integer literal", () => {
   expect(evaluate("100U8")).toBe(100);
 });
 
+test("evaluate overflowing u8 literal throws", () => {
+  expect(() => evaluate("256U8")).toThrow();
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
