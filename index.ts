@@ -3,5 +3,5 @@ export function evaluate(source: string): number {
   if (trimmed === "") {
     return 0;
   }
-  return 0;
+  return Number(trimmed);
 }

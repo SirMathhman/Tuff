@@ -9,3 +9,7 @@ test("evaluate whitespace string returns 0", () => {
   expect(evaluate(" ")).toBe(0);
 });
 
+test("evaluate single digit returns the digit", () => {
+  expect(evaluate("1")).toBe(1);
+});
+
