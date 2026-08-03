@@ -73,6 +73,9 @@ export function evaluate(source: string): number {
       const right = parseFactor();
       const left = value.value as number;
       const rhs = right.value as number;
+      if (operator === "/" && rhs === 0) {
+        throw new Error("Division by zero");
+      }
       value = numberValue(operator === "*" ? left * rhs : left / rhs);
     }
     return value;

@@ -101,3 +101,7 @@ test("evaluate equality with boolean is strict", () => {
   expect(evaluate("1 == true")).toBe(0);
 });
 
+test("evaluate division by zero throws", () => {
+  expect(() => evaluate("1 / 0")).toThrow();
+});
+
