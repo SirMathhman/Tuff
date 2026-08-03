@@ -211,7 +211,7 @@ export function evaluate(source: string): number {
 
   function parseElseChain(): void {
     if (tokens[index] !== "else") {
-      throw new Error("If expression requires an else branch");
+      return;
     }
     index++; // consume "else"
     if (tokens[index] === "if") {
@@ -223,7 +223,7 @@ export function evaluate(source: string): number {
 
   function skipElseChain(): void {
     if (tokens[index] !== "else") {
-      throw new Error("If expression requires an else branch");
+      return;
     }
     index++; // consume "else"
     if (tokens[index] === "if") {
