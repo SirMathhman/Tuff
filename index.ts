@@ -123,6 +123,14 @@ export function evaluate(source: string): number {
       }
       return value;
     }
+    if (token === "-") {
+      index++;
+      const value = parseFactor();
+      if (value.kind === "number" && /U8$/.test(tokens[index - 1] ?? "")) {
+        throw new Error("U8 literal cannot be negative");
+      }
+      return numberValue(-(value.value as number));
+    }
     if (/^\d+[A-Za-z]\w*$/.test(token)) {
       index++;
       const value = Number(token.match(/^\d+/)?.[0]);
