@@ -163,6 +163,12 @@ export function lex(source: string): Token[] {
       continue;
     }
 
+    if (char === ".") {
+      tokens.push({ type: "dot", value: char });
+      i++;
+      continue;
+    }
+
     throw new Error(`Unexpected character: ${char}`);
   }
 

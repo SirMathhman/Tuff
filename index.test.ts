@@ -348,3 +348,7 @@ test("interpret rejects compound assignment to immutable array element", () => {
 test("interpret supports array element assignment in nested scope", () => {
   expect(interpret("let mut a : [I32; 2] = [1, 2]; { a[0] = 5; } a[0] + a[1]")).toBe(7);
 });
+
+test("interpret supports struct definition, construction, and field access", () => {
+  expect(interpret("struct Point { x : I32, y : I32 } let p : Point = Point { x : 3, y : 4 }; p.x + p.y")).toBe(7);
+});

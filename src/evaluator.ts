@@ -1,7 +1,7 @@
-import type { AST, Value, FunctionValue, ArrayValue } from "./types";
+import type { AST, Value, FunctionValue, ArrayValue, StructValue, TypeName, StructTypeValue } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
-import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual } from "./typecheck";
+import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual, isStruct } from "./typecheck";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -16,7 +16,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     case "let": {
       const value = evaluate(ast.value, env);
       if (ast.typeName) {
-        assertTypeMatches(value, ast.typeName, "Type mismatch");
+        assertTypeMatches(value, resolveType(ast.typeName, env), "Type mismatch");
       }
       env.define(ast.name, value, ast.mutable);
       return value;
@@ -93,6 +93,33 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       const { element } = resolveIndex(ast, env);
       return element;
     }
+    case "struct": {
+      const fields: Record<string, TypeName> = {};
+      for (const field of ast.fields) {
+        fields[field.name] = field.typeName;
+      }
+      const structType: StructTypeValue = { kind: "structType", name: ast.name, fields };
+      env.define(ast.name, structType, false);
+      return structType;
+    }
+    case "structLiteral": {
+      const fields: Record<string, Value> = {};
+      for (const field of ast.fields) {
+        fields[field.name] = evaluate(field.value, env);
+      }
+      return { kind: "struct", name: ast.name, fields } as StructValue;
+    }
+    case "field": {
+      const target = evaluate(ast.target, env);
+      if (!isStruct(target)) {
+        throw new Error(`Field access requires a struct: ${JSON.stringify(ast.target)}`);
+      }
+      const value = target.fields[ast.name];
+      if (value === undefined) {
+        throw new Error(`Unknown field: ${ast.name}`);
+      }
+      return value;
+    }
     case "block": {
       const childEnv = env.child();
       let result: Value = 0;
@@ -168,4 +195,18 @@ function compoundAssign(operator: "+=" | "-=" | "*=" | "/=", current: Value, val
     throw new Error(`Compound assignment requires numbers: ${name}`);
   }
   return assignOps[operator](current, value);
+}
+
+function resolveType(typeName: TypeName, env: Environment): TypeName {
+  if (typeof typeName === "object" && typeName.kind === "struct" && Object.keys(typeName.fields).length === 0) {
+    const resolved = env.lookup(typeName.name);
+    if (isStructType(resolved)) {
+      return { kind: "struct", name: resolved.name, fields: resolved.fields };
+    }
+  }
+  return typeName;
+}
+
+function isStructType(value: Value): value is StructTypeValue {
+  return typeof value === "object" && value !== null && value.kind === "structType";
 }

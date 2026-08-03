@@ -1,4 +1,4 @@
-export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue | ArrayValue;
+export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue | ArrayValue | StructValue | StructTypeValue;
 
 export type IntegerTypeName = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64";
 
@@ -27,17 +27,35 @@ export interface ArrayValue {
   readonly elements: Value[];
 }
 
+export interface StructValue {
+  readonly kind: "struct";
+  readonly name: string;
+  readonly fields: Record<string, Value>;
+}
+
+export interface StructTypeValue {
+  readonly kind: "structType";
+  readonly name: string;
+  readonly fields: Record<string, TypeName>;
+}
+
 export interface Param {
   name: string;
   typeName?: TypeName;
 }
 
-export type TypeName = IntegerTypeName | "Bool" | ArrayTypeName;
+export type TypeName = IntegerTypeName | "Bool" | ArrayTypeName | StructTypeName;
 
 export interface ArrayTypeName {
   readonly kind: "array";
   readonly elementType: TypeName;
   readonly size: number;
+}
+
+export interface StructTypeName {
+  readonly kind: "struct";
+  readonly name: string;
+  readonly fields: Record<string, TypeName>;
 }
 
 export interface NumberLiteral {
@@ -50,6 +68,7 @@ export type Token =
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" | "is" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "bracket"; value: "[" | "]" }
+  | { type: "dot"; value: "." }
   | { type: "identifier"; value: string }
   | { type: "boolean"; value: boolean }
   | { type: "colon"; value: ":" }
@@ -72,4 +91,7 @@ export type AST =
   | { type: "call"; callee: AST; args: AST[] }
   | { type: "array"; elements: AST[] }
   | { type: "index"; target: AST; index: AST }
+  | { type: "struct"; name: string; fields: { name: string; typeName: TypeName }[] }
+  | { type: "structLiteral"; name: string; fields: { name: string; value: AST }[] }
+  | { type: "field"; target: AST; name: string }
   | { type: "block"; statements: AST[] };

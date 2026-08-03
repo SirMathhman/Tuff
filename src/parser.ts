@@ -154,6 +154,8 @@ export class Parser {
       const name = token.value;
       if (this.peek() && this.peek()!.type === "paren" && this.peek()!.value === "(") {
         node = this.parseCall(name);
+      } else if (this.peek() && this.peek()!.type === "paren" && this.peek()!.value === "{") {
+        node = this.parseStructLiteral(name);
       } else {
         node = { type: "identifier", name };
       }
@@ -189,6 +191,13 @@ export class Parser {
           throw new Error(`Expected ], got: ${JSON.stringify(closing)}`);
         }
         node = { type: "index", target: node, index };
+      } else if (next && next.type === "dot") {
+        this.consume();
+        const fieldToken = this.consume();
+        if (fieldToken.type !== "identifier") {
+          throw new Error(`Expected field name after ., got: ${JSON.stringify(fieldToken)}`);
+        }
+        node = { type: "field", target: node, name: fieldToken.value };
       } else {
         break;
       }
@@ -221,10 +230,7 @@ export class Parser {
   }
 
   private parseBracedBlock(): AST {
-    const open = this.consume();
-    if (open.type !== "paren" || open.value !== "{") {
-      throw new Error(`Expected {, got: ${JSON.stringify(open)}`);
-    }
+    this.consumeOpenBrace();
     const statements = this.parseStatements(true);
     return { type: "block", statements };
   }
@@ -292,7 +298,58 @@ export class Parser {
     if (token && token.type === "identifier" && token.value === "fn") {
       return this.parseFn();
     }
+    if (token && token.type === "identifier" && token.value === "struct") {
+      return this.parseStruct();
+    }
     return this.parseAdditive();
+  }
+
+  private parseStruct(): AST {
+    this.consume();
+    const nameToken = this.consume();
+    if (nameToken.type !== "identifier") {
+      throw new Error(`Expected struct name, got: ${JSON.stringify(nameToken)}`);
+    }
+    const fields: { name: string; typeName: TypeName }[] = [];
+    this.parseStructFields("struct fields", (fieldToken) => {
+      const typeName = this.parseTypeAnnotation("Expected field type");
+      if (!typeName) {
+        throw new Error(`Expected field type for ${fieldToken.value}`);
+      }
+      fields.push({ name: fieldToken.value, typeName });
+    });
+    return { type: "struct", name: nameToken.value, fields };
+  }
+
+  private parseStructLiteral(name: string): AST {
+    const fields: { name: string; value: AST }[] = [];
+    this.parseStructFields("struct literal fields", (fieldToken) => {
+      const colon = this.consume();
+      if (colon.type !== "colon") {
+        throw new Error(`Expected : after field name, got: ${JSON.stringify(colon)}`);
+      }
+      const value = this.parseAdditive();
+      fields.push({ name: fieldToken.value, value });
+    });
+    return { type: "structLiteral", name, fields };
+  }
+
+  private parseStructFields(what: string, parseField: (fieldToken: Extract<Token, { type: "identifier" }>) => void): void {
+    this.consumeOpenBrace();
+    this.parseCommaSeparated("}", what, () => {
+      const fieldToken = this.consume();
+      if (fieldToken.type !== "identifier") {
+        throw new Error(`Expected field name, got: ${JSON.stringify(fieldToken)}`);
+      }
+      parseField(fieldToken);
+    });
+  }
+
+  private consumeOpenBrace(): void {
+    const open = this.consume();
+    if (open.type !== "paren" || open.value !== "{") {
+      throw new Error(`Expected {, got: ${JSON.stringify(open)}`);
+    }
   }
 
   private parseLet(): AST {
@@ -364,7 +421,7 @@ export class Parser {
   }
 
   private parseCommaSeparated(closing: string, what: string, parseItem: () => void): void {
-    const closingType = closing === ")" ? "paren" : "bracket";
+    const closingType = closing === "]" ? "bracket" : "paren";
     if (this.peek() && this.peek()!.type === closingType && this.peek()!.value === closing) {
       this.consume();
       return;
@@ -411,10 +468,13 @@ export class Parser {
       }
       return { kind: "array", elementType, size: sizeToken.value };
     }
-    if (open.type !== "identifier" || !TYPE_NAMES.includes(open.value as TypeName)) {
+    if (open.type !== "identifier") {
       throw new Error(`${errorMessage}, got: ${JSON.stringify(open)}`);
     }
-    return open.value as TypeName;
+    if (TYPE_NAMES.includes(open.value as TypeName)) {
+      return open.value as TypeName;
+    }
+    return { kind: "struct", name: open.value, fields: {} };
   }
 
   private parseTypeName(errorMessage: string): TypeName {
