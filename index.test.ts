@@ -116,3 +116,7 @@ test("evaluate if expression with else", () => {
 test("evaluate chained else if", () => {
   expect(evaluate("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
 });
+
+test("evaluate if with block branches mutates outer variable", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x")).toBe(2);
+});
