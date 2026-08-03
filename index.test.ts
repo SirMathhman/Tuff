@@ -124,3 +124,7 @@ test("interpret throws when if without else has false condition", () => {
 test("interpret always returns a number exit code", () => {
   expect(interpret("let x = 1 < 2; x")).toBe(1);
 });
+
+test("interpret returns 0 for false exit code", () => {
+  expect(interpret("let x = 2 < 1; x")).toBe(0);
+});
