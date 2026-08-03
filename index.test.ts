@@ -129,3 +129,7 @@ test("evaluate invalid character throws", () => {
   expect(() => evaluate("#")).toThrow();
 });
 
+test("evaluate if expression", () => {
+  expect(evaluate("let x = if (true) 2 else 3; x")).toBe(2);
+});
+

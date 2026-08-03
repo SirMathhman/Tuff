@@ -134,6 +134,16 @@ export function evaluate(source: string): number {
       index++;
       return booleanValue(false);
     }
+    if (token === "if") {
+      index++; // consume "if"
+      index++; // consume "("
+      const condition = parseOr();
+      index++; // consume ")"
+      const thenValue = parseOr();
+      index++; // consume "else"
+      const elseValue = parseOr();
+      return truthy(condition) ? thenValue : elseValue;
+    }
     index++; // variable reference
     const entry = lookup(token);
     if (entry === undefined) {
