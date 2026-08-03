@@ -1,3 +1,5 @@
+import { LexError } from "./errors";
+
 export type Token =
   | { type: "number"; value: number }
   | { type: "identifier"; name: string }
@@ -21,7 +23,11 @@ export function tokenize(source: string): Token[] {
   while ((match = regex.exec(source)) !== null) {
     const gap = source.slice(lastIndex, match.index);
     if (/\S/.test(gap)) {
-      throw new Error(`Unexpected character: ${gap.match(/\S/)![0]}`);
+      const bad = gap.match(/\S/)![0];
+      throw new LexError(
+        `Unexpected character: ${bad}`,
+        lastIndex + gap.indexOf(bad)
+      );
     }
     lastIndex = regex.lastIndex;
     const text = match[0];
@@ -70,7 +76,11 @@ export function tokenize(source: string): Token[] {
   }
   const trailing = source.slice(lastIndex);
   if (/\S/.test(trailing)) {
-    throw new Error(`Unexpected character: ${trailing.match(/\S/)![0]}`);
+    const bad = trailing.match(/\S/)![0];
+    throw new LexError(
+      `Unexpected character: ${bad}`,
+      lastIndex + trailing.indexOf(bad)
+    );
   }
   return tokens;
 }

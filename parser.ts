@@ -1,4 +1,5 @@
 import type { Token } from "./lexer";
+import { ParseError } from "./errors";
 
 export type Node =
   | { type: "number"; value: number }
@@ -79,7 +80,7 @@ export function parse(tokens: Token[]): Node {
       pos--; // let parseBlock consume the lbrace
       return parseBlock();
     }
-    throw new Error("Unexpected token");
+    throw new ParseError("Unexpected token", pos - 1);
   }
 
   return parseAdditive();
