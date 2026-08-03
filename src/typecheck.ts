@@ -1,7 +1,7 @@
-import type { Value, IntegerValue, IntegerTypeName, BoolValue, FunctionValue, TypeName, ArrayValue, StructValue } from "./types";
+import type { Value, IntegerValue, IntegerTypeName, BoolValue, FunctionValue, TypeName, ArrayValue, StructValue, ReferenceValue } from "./types";
 
 export function integerTypeOf(value: Value): IntegerTypeName | undefined {
-  if (typeof value === "object" && value !== null && "kind" in value && value.kind !== "function" && value.kind !== "bool" && value.kind !== "array" && value.kind !== "struct") {
+  if (typeof value === "object" && value !== null && "kind" in value && value.kind !== "function" && value.kind !== "bool" && value.kind !== "array" && value.kind !== "struct" && value.kind !== "ref" && value.kind !== "structType") {
     return value.kind as IntegerTypeName;
   }
   return undefined;
@@ -21,6 +21,10 @@ export function isArray(value: Value): value is ArrayValue {
 
 export function isStruct(value: Value): value is StructValue {
   return typeof value === "object" && value !== null && value.kind === "struct";
+}
+
+export function isRef(value: Value): value is ReferenceValue {
+  return typeof value === "object" && value !== null && value.kind === "ref";
 }
 
 export function isBool(value: Value): value is BoolValue {
@@ -49,6 +53,9 @@ export function typeOf(value: Value): TypeName | undefined {
     }
     return { kind: "struct", name: value.name, fields };
   }
+  if (isRef(value)) {
+    return { kind: "ref", target: typeOf(value.target) ?? "I32" };
+  }
   return undefined;
 }
 
@@ -70,6 +77,9 @@ export function typesEqual(a: TypeName, b: TypeName): boolean {
         return false;
       }
       return aKeys.every((key) => key in b.fields && typesEqual(a.fields[key]!.typeName, b.fields[key]!.typeName));
+    }
+    if (a.kind === "ref" && b.kind === "ref") {
+      return typesEqual(a.target, b.target);
     }
   }
   return false;

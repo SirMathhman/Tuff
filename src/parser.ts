@@ -166,6 +166,10 @@ export class Parser {
       node = { type: "unary", operator: "-", operand: this.parsePrimary() };
     } else if (token.type === "operator" && token.value === "!") {
       node = { type: "unary", operator: "!", operand: this.parsePrimary() };
+    } else if (token.type === "operator" && token.value === "&") {
+      node = { type: "ref", target: this.parsePrimary() };
+    } else if (token.type === "operator" && token.value === "*") {
+      node = { type: "deref", target: this.parsePrimary() };
     } else if (token.type === "paren" && token.value === "{") {
       node = this.parseBlock();
     } else if (token.type === "paren" && token.value === "(") {
@@ -460,6 +464,9 @@ export class Parser {
 
   private parseType(errorMessage: string): TypeName {
     const open = this.consume();
+    if (open.type === "operator" && open.value === "&") {
+      return { kind: "ref", target: this.parseType(errorMessage) };
+    }
     if (open.type === "bracket" && open.value === "[") {
       const elementType = this.parseTypeName(errorMessage);
       const semi = this.consume();

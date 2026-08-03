@@ -43,3 +43,8 @@ The pipeline is **lex → parse → evaluate**:
 - Don't add new source files without wiring them into the pipeline in `index.ts` and adding a test.
 - Keep operator logic in `src/operators.ts` tables rather than inline in the evaluator — this is what CPD checks for.
 - When adding a new AST node type, update `AST` in `src/types.ts`, the parser, and the evaluator's `switch` together.
+- **Struct type definitions are stored as `StructTypeValue` (kind `"structType"`), NOT `StructTypeName`** — `StructTypeName` is a type, not a `Value`, so it can't live in the environment. `typeOf` returns `undefined` for functions; guard with `actual !== undefined && typesEqual(...)` before comparing (a `?? "I32"` fallback makes `f is I32` wrongly return `true`).
+- **Struct field types carry a `mutable` flag**: `Record<string, { typeName: TypeName; mutable: boolean }>`. `fieldAssign` must look up the struct type and check the field's flag before mutating, or immutable fields are silently writable.
+- **`parseStructLiteral` must NOT consume the `{` itself** — `parseStructFields` does. Likewise `parseStructFields` must consume a leading `mut` prefix *before* the field name token.
+- **`assignOps` `Record` type excludes `"="`** — compound-assign helpers must type their operator param as `"+=" | "-=" | "*=" | "/="` (not include `"="`) or `tsc` errors.
+- **CPD rejects duplicated logic** (array lookup, compound assignment, struct field lookup, brace consumption). When adding a feature that mirrors an existing one, extract a shared helper (e.g. `resolveIndex`, `resolveField`, `consumeOpenBrace`) rather than copying code.

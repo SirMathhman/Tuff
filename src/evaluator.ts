@@ -1,7 +1,7 @@
 import type { AST, Value, FunctionValue, ArrayValue, StructValue, TypeName, StructTypeValue } from "./types";
 import { Environment } from "./environment";
 import { makeInteger, requireNumber, isTruthy, makeBool } from "./value";
-import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual, isStruct } from "./typecheck";
+import { integerTypeOf, isFunction, typeOf, isArray, assertTypeMatches, typesEqual, isStruct, isRef } from "./typecheck";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -186,6 +186,17 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
         return makeBool(!isTruthy(operand));
       }
       return unaryOps[ast.operator](operand);
+    }
+    case "ref": {
+      const target = evaluate(ast.target, env);
+      return { kind: "ref", target };
+    }
+    case "deref": {
+      const target = evaluate(ast.target, env);
+      if (!isRef(target)) {
+        throw new Error(`Dereference requires a reference: ${JSON.stringify(ast.target)}`);
+      }
+      return target.target;
     }
     case "typeRef":
       throw new Error(`Type reference cannot be evaluated standalone: ${ast.name}`);

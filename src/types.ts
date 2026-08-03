@@ -1,4 +1,4 @@
-export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue | ArrayValue | StructValue | StructTypeValue;
+export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue | ArrayValue | StructValue | StructTypeValue | ReferenceValue;
 
 export type IntegerTypeName = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64";
 
@@ -45,12 +45,17 @@ export interface StructTypeValue {
   readonly fields: Record<string, { typeName: TypeName; mutable: boolean }>;
 }
 
+export interface ReferenceValue {
+  readonly kind: "ref";
+  readonly target: Value;
+}
+
 export interface Param {
   name: string;
   typeName?: TypeName;
 }
 
-export type TypeName = IntegerTypeName | "Bool" | ArrayTypeName | StructTypeName;
+export type TypeName = IntegerTypeName | "Bool" | ArrayTypeName | StructTypeName | ReferenceTypeName;
 
 export interface ArrayTypeName {
   readonly kind: "array";
@@ -64,6 +69,11 @@ export interface StructTypeName {
   readonly fields: Record<string, { typeName: TypeName; mutable: boolean }>;
 }
 
+export interface ReferenceTypeName {
+  readonly kind: "ref";
+  readonly target: TypeName;
+}
+
 export interface NumberLiteral {
   value: number;
   typeName?: IntegerTypeName;
@@ -71,7 +81,7 @@ export interface NumberLiteral {
 
 export type Token =
   | ({ type: "number" } & NumberLiteral)
-  | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" | "is" }
+  | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&" | "&&" | "||" | "=>" | "is" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "bracket"; value: "[" | "]" }
   | { type: "dot"; value: "." }
@@ -86,6 +96,8 @@ export type AST =
   | { type: "boolean"; value: boolean }
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||" | "is"; left: AST; right: AST }
   | { type: "unary"; operator: "-" | "!"; operand: AST }
+  | { type: "ref"; target: AST }
+  | { type: "deref"; target: AST }
   | { type: "identifier"; name: string }
   | { type: "typeRef"; name: TypeName }
   | { type: "let"; name: string; mutable: boolean; typeName?: TypeName; value: AST }
