@@ -2,7 +2,8 @@ import type { Token } from "./lexer";
 
 export type AST =
   | { type: "number"; value: number }
-  | { type: "binary"; operator: "+" | "-" | "*" | "/"; left: AST; right: AST };
+  | { type: "binary"; operator: "+" | "-" | "*" | "/"; left: AST; right: AST }
+  | { type: "unary"; operator: "-"; operand: AST };
 
 export function parse(tokens: Token[]): AST {
   let index = 0;
@@ -58,6 +59,9 @@ export function parse(tokens: Token[]): AST {
     const token = consume();
     if (token.type === "number") {
       return { type: "number", value: token.value };
+    }
+    if (token.type === "operator" && token.value === "-") {
+      return { type: "unary", operator: "-", operand: parsePrimary() };
     }
     if (token.type === "paren" && token.value === "(") {
       const inner = parseAdditive();

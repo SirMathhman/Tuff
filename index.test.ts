@@ -48,3 +48,7 @@ test("interpret handles parentheses", () => {
 test("interpret handles nested parentheses", () => {
   expect(interpret("((1+2)*3)")).toBe(9);
 });
+
+test("interpret handles unary minus", () => {
+  expect(interpret("-5")).toBe(-5);
+});

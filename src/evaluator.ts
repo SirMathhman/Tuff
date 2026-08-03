@@ -18,5 +18,7 @@ export function evaluate(ast: AST): number {
           return Math.trunc(left / right);
       }
     }
+    case "unary":
+      return -evaluate(ast.operand);
   }
 }
