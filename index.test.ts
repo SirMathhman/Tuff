@@ -53,3 +53,7 @@ test("evaluate undefined identifier throws", () => {
   expect(() => evaluate("undefinedIdentifier")).toThrow();
 });
 
+test("evaluate declaration-only statement returns 0", () => {
+  expect(evaluate("let x = 100;")).toBe(0);
+});
+
