@@ -5,6 +5,10 @@ import type { Value } from "./value";
 import { toNumber } from "./value";
 import { TypeError } from "./errors";
 
+const CONTINUE: unique symbol = Symbol("continue");
+
+type EvalResult = Value | typeof CONTINUE;
+
 function evalCondition(expr: Expr, env: Env): boolean {
   const value = evalExpr(expr, env);
   if (value.type !== "boolean") {
@@ -30,7 +34,7 @@ function evalExpr(expr: Expr, env: Env): Value {
       const blockEnv = env.child();
       let result: Value = { type: "number", value: 0 };
       for (const statement of expr.statements) {
-        result = evalStmt(statement, blockEnv);
+        result = evalStmt(statement, blockEnv) as Value;
       }
       return result;
     }
@@ -47,7 +51,7 @@ function evalExpr(expr: Expr, env: Env): Value {
   }
 }
 
-function evalStmt(stmt: Stmt, env: Env): Value {
+function evalStmt(stmt: Stmt, env: Env): EvalResult {
   switch (stmt.kind) {
     case "let": {
       const value = evalExpr(stmt.value, env);
@@ -69,9 +73,16 @@ function evalStmt(stmt: Stmt, env: Env): Value {
     case "while": {
       let result: Value = { type: "number", value: 0 };
       while (evalCondition(stmt.condition, env)) {
-        result = evalStmt(stmt.body, env);
+        const r = evalStmt(stmt.body, env);
+        if (r === CONTINUE) {
+          continue;
+        }
+        result = r;
       }
       return result;
+    }
+    case "continue": {
+      return CONTINUE;
     }
     case "expr": {
       return evalExpr(stmt.expr, env);
@@ -80,7 +91,11 @@ function evalStmt(stmt: Stmt, env: Env): Value {
       const blockEnv = env.child();
       let result: Value = { type: "number", value: 0 };
       for (const statement of stmt.statements) {
-        result = evalStmt(statement, blockEnv);
+        const r = evalStmt(statement, blockEnv);
+        if (r === CONTINUE) {
+          return CONTINUE;
+        }
+        result = r;
       }
       return result;
     }
@@ -88,5 +103,5 @@ function evalStmt(stmt: Stmt, env: Env): Value {
 }
 
 export function evalAst(stmt: Stmt, env: Env): number {
-  return toNumber(evalStmt(stmt, env));
+  return toNumber(evalStmt(stmt, env) as Value);
 }

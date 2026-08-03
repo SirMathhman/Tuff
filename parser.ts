@@ -120,6 +120,14 @@ export function parse(tokens: Token[]): Stmt {
   }
 
   function parseStatement(): Stmt {
+    if (peek().type === "continue") {
+      advance();
+      if (advance().type !== "semicolon") {
+        throw new ParseError("Expected ; after continue");
+      }
+      return { kind: "continue" };
+    }
+
     if (peek().type === "while") {
       advance();
       if (advance().type !== "lparen") {

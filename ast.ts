@@ -13,5 +13,6 @@ export type Stmt =
   | { kind: "assign"; name: string; value: Expr }
   | { kind: "compound_assign"; name: string; op: BinaryOp; value: Expr }
   | { kind: "while"; condition: Expr; body: Stmt }
+  | { kind: "continue" }
   | { kind: "expr"; expr: Expr }
   | { kind: "block"; statements: Stmt[] };

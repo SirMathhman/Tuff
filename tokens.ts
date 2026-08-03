@@ -14,6 +14,7 @@ export type Token =
   | { type: "if" }
   | { type: "else" }
   | { type: "while" }
+  | { type: "continue" }
   | { type: "true" }
   | { type: "false" }
   | { type: "identifier"; name: string }
@@ -103,6 +104,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "else" });
       } else if (name === "while") {
         tokens.push({ type: "while" });
+      } else if (name === "continue") {
+        tokens.push({ type: "continue" });
       } else if (name === "true") {
         tokens.push({ type: "true" });
       } else if (name === "false") {

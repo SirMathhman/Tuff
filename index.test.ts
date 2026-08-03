@@ -136,3 +136,7 @@ test("evaluate compound assignment plus equals", () => {
 test("evaluate while loop", () => {
   expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
 });
+
+test("evaluate while loop with continue", () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(4);
+});
