@@ -41,6 +41,10 @@ test("evaluate assigning typed variable to narrower type throws", () => {
   expect(() => evaluate("let x = 100U16; let y : U8 = x;")).toThrow();
 });
 
+test("evaluate assigning wider type to typed variable throws", () => {
+  expect(() => evaluate("let mut x = 0U8; x = 0U16;")).toThrow();
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

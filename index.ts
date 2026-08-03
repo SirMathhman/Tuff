@@ -413,6 +413,11 @@ export function evaluate(source: string): number {
       }
       const rhs = parseOr();
       if (operator === "=") {
+        const existingType = entry.value.kind === "number" ? entry.value.type : undefined;
+        const newType = rhs.kind === "number" ? rhs.type : undefined;
+        if (existingType !== undefined && newType !== undefined && typeSize(newType) > typeSize(existingType)) {
+          throw new Error(`Type mismatch: cannot assign ${newType} to ${existingType}`);
+        }
         entry.value = rhs;
       } else {
         const left = entry.value.value as number;
