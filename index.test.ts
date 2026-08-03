@@ -233,6 +233,14 @@ test("interpret returns false when is checks function against boolean type", () 
   expect(interpret("fn f() : I32 => 1; f is Bool")).toBe(0);
 });
 
+test("interpret supports is operator on boolean variable", () => {
+  expect(interpret("let x = true; x is Bool")).toBe(1);
+});
+
+test("interpret rejects is operator on boolean variable against integer type", () => {
+  expect(interpret("let x = true; x is U8")).toBe(0);
+});
+
 test("interpret supports U8 suffix in arithmetic", () => {
   expect(interpret("100U8 + 20U8")).toBe(120);
 });
