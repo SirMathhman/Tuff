@@ -17,3 +17,7 @@ test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
 
+test("evaluate multiple addition expression", () => {
+  expect(evaluate("1 + 2 + 3")).toBe(6);
+});
+
