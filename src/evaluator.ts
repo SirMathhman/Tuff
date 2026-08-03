@@ -1,6 +1,6 @@
 import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
-import { makeU8, makeU16, isU8, isU16, isFunction, requireNumber, typeOf, isTruthy } from "./value";
+import { makeU8, makeU16, makeU32, makeU64, makeI8, makeI16, makeI64, isU8, isU16, isU32, isU64, isI8, isI16, isI64, isFunction, requireNumber, typeOf, isTruthy } from "./value";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -12,6 +12,21 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       }
       if (ast.u16) {
         return makeU16(ast.value);
+      }
+      if (ast.u32) {
+        return makeU32(ast.value);
+      }
+      if (ast.u64) {
+        return makeU64(ast.value);
+      }
+      if (ast.i8) {
+        return makeI8(ast.value);
+      }
+      if (ast.i16) {
+        return makeI16(ast.value);
+      }
+      if (ast.i64) {
+        return makeI64(ast.value);
       }
       return ast.value;
     case "boolean":
@@ -94,16 +109,52 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
       const left = requireNumber(leftValue, ast.operator);
       const right = requireNumber(rightValue, ast.operator);
       const result = binaryOps[ast.operator](left, right);
-      if (isU8(leftValue) || isU8(rightValue)) {
+      const maker = typedMaker(leftValue) ?? typedMaker(rightValue);
+      if (maker) {
         if (typeof result !== "number") {
-          throw new Error(`U8 arithmetic must produce a number: ${ast.operator}`);
+          throw new Error(`Typed arithmetic must produce a number: ${ast.operator}`);
         }
-        return makeU8(result);
+        return maker(result);
       }
       return result;
     }
     case "unary": {
-      return unaryOps[ast.operator](evaluate(ast.operand, env));
+      const operand = evaluate(ast.operand, env);
+      if (ast.operator === "-") {
+        const maker = typedMaker(operand);
+        if (maker) {
+          if (typeof operand !== "object" || !("value" in operand)) {
+            throw new Error("Unary minus requires a number");
+          }
+          return maker(-operand.value);
+        }
+      }
+      return unaryOps[ast.operator](operand);
     }
   }
+}
+
+function typedMaker(value: Value): ((n: number) => Value) | undefined {
+  if (isU8(value)) {
+    return makeU8;
+  }
+  if (isU16(value)) {
+    return makeU16;
+  }
+  if (isU32(value)) {
+    return makeU32;
+  }
+  if (isU64(value)) {
+    return makeU64;
+  }
+  if (isI8(value)) {
+    return makeI8;
+  }
+  if (isI16(value)) {
+    return makeI16;
+  }
+  if (isI64(value)) {
+    return makeI64;
+  }
+  return undefined;
 }

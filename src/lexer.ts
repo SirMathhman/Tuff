@@ -20,14 +20,34 @@ export function lex(source: string): Token[] {
       }
       let u8 = false;
       let u16 = false;
+      let u32 = false;
+      let u64 = false;
+      let i8 = false;
+      let i16 = false;
+      let i64 = false;
       if (source[i] === "U" && source[i + 1] === "8") {
         u8 = true;
         i += 2;
       } else if (source[i] === "U" && source[i + 1] === "1" && source[i + 2] === "6") {
         u16 = true;
         i += 3;
+      } else if (source[i] === "U" && source[i + 1] === "3" && source[i + 2] === "2") {
+        u32 = true;
+        i += 3;
+      } else if (source[i] === "U" && source[i + 1] === "6" && source[i + 2] === "4") {
+        u64 = true;
+        i += 3;
+      } else if (source[i] === "I" && source[i + 1] === "8") {
+        i8 = true;
+        i += 2;
+      } else if (source[i] === "I" && source[i + 1] === "1" && source[i + 2] === "6") {
+        i16 = true;
+        i += 3;
+      } else if (source[i] === "I" && source[i + 1] === "6" && source[i + 2] === "4") {
+        i64 = true;
+        i += 3;
       }
-      tokens.push({ type: "number", value: Number(value), u8, u16 });
+      tokens.push({ type: "number", value: Number(value), u8, u16, u32, u64, i8, i16, i64 });
       continue;
     }
 
@@ -37,17 +57,22 @@ export function lex(source: string): Token[] {
         value += source[i];
         i++;
       }
-      if (value === "U" && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6"))) {
+      if (value === "U" && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6") || (source[i] === "3" && source[i + 1] === "2") || (source[i] === "6" && source[i + 1] === "4"))) {
         if (source[i] === "8") {
           value += "8";
           i++;
         } else {
-          value += "16";
+          value += source[i] + source[i + 1];
           i += 2;
         }
-      } else if (value === "I" && source[i] === "3" && source[i + 1] === "2") {
-        value += "32";
-        i += 2;
+      } else if (value === "I" && (source[i] === "8" || (source[i] === "1" && source[i + 1] === "6") || (source[i] === "3" && source[i + 1] === "2") || (source[i] === "6" && source[i + 1] === "4"))) {
+        if (source[i] === "8") {
+          value += "8";
+          i++;
+        } else {
+          value += source[i] + source[i + 1];
+          i += 2;
+        }
       }
       if (value === "true" || value === "false") {
         tokens.push({ type: "boolean", value: value === "true" });

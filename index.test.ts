@@ -145,6 +145,50 @@ test("interpret supports U8 integer suffix", () => {
   expect(interpret("100U8")).toBe(100);
 });
 
+test("interpret supports U32 integer suffix", () => {
+  expect(interpret("100U32")).toBe(100);
+});
+
+test("interpret supports U64 integer suffix", () => {
+  expect(interpret("100U64")).toBe(100);
+});
+
+test("interpret supports I8 integer suffix", () => {
+  expect(interpret("100I8")).toBe(100);
+});
+
+test("interpret supports I16 integer suffix", () => {
+  expect(interpret("100I16")).toBe(100);
+});
+
+test("interpret supports I64 integer suffix", () => {
+  expect(interpret("100I64")).toBe(100);
+});
+
+test("interpret throws on U32 overflow", () => {
+  expect(() => interpret("4294967295U32 + 1U32")).toThrow();
+});
+
+test("interpret throws on U64 overflow", () => {
+  expect(() => interpret("100000000000000000000U64")).toThrow();
+});
+
+test("interpret throws on I8 overflow", () => {
+  expect(() => interpret("127I8 + 1I8")).toThrow();
+});
+
+test("interpret throws on I8 underflow", () => {
+  expect(() => interpret("-128I8 - 1I8")).toThrow();
+});
+
+test("interpret throws on I16 overflow", () => {
+  expect(() => interpret("32767I16 + 1I16")).toThrow();
+});
+
+test("interpret throws on I64 overflow", () => {
+  expect(() => interpret("100000000000000000000I64")).toThrow();
+});
+
 test("interpret supports U8 suffix in arithmetic", () => {
   expect(interpret("100U8 + 20U8")).toBe(120);
 });

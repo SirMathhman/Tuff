@@ -1,4 +1,4 @@
-export type Value = number | boolean | U8Value | U16Value | FunctionValue;
+export type Value = number | boolean | U8Value | U16Value | U32Value | U64Value | I8Value | I16Value | I64Value | FunctionValue;
 
 export interface U8Value {
   readonly kind: "u8";
@@ -7,6 +7,31 @@ export interface U8Value {
 
 export interface U16Value {
   readonly kind: "u16";
+  readonly value: number;
+}
+
+export interface U32Value {
+  readonly kind: "u32";
+  readonly value: number;
+}
+
+export interface U64Value {
+  readonly kind: "u64";
+  readonly value: number;
+}
+
+export interface I8Value {
+  readonly kind: "i8";
+  readonly value: number;
+}
+
+export interface I16Value {
+  readonly kind: "i16";
+  readonly value: number;
+}
+
+export interface I64Value {
+  readonly kind: "i64";
   readonly value: number;
 }
 
@@ -24,10 +49,10 @@ export interface Param {
   typeName?: TypeName;
 }
 
-export type TypeName = "U8" | "U16" | "I32" | "Bool";
+export type TypeName = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64" | "Bool";
 
 export type Token =
-  | { type: "number"; value: number; u8?: boolean; u16?: boolean }
+  | { type: "number"; value: number; u8?: boolean; u16?: boolean; u32?: boolean; u64?: boolean; i8?: boolean; i16?: boolean; i64?: boolean }
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "%" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "!" | "&&" | "||" | "=>" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "identifier"; value: string }
@@ -37,7 +62,7 @@ export type Token =
   | { type: "semicolon"; value: ";" };
 
 export type AST =
-  | { type: "number"; value: number; u8?: boolean; u16?: boolean }
+  | { type: "number"; value: number; u8?: boolean; u16?: boolean; u32?: boolean; u64?: boolean; i8?: boolean; i16?: boolean; i64?: boolean }
   | { type: "boolean"; value: boolean }
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&&" | "||"; left: AST; right: AST }
   | { type: "unary"; operator: "-" | "!"; operand: AST }
