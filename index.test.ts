@@ -61,3 +61,7 @@ test("evaluate redeclared variable uses latest value", () => {
   expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
 });
 
+test("evaluate block with only declaration throws", () => {
+  expect(() => evaluate("let x = { let y = 0; };")).toThrow();
+});
+

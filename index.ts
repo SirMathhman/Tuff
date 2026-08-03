@@ -53,11 +53,15 @@ export function evaluate(source: string): number {
   }
 
   function parseBlock(): number {
-    return parseStatements("}");
+    const value = parseStatements("}");
+    if (value === undefined) {
+      throw new Error("Block must end with an expression");
+    }
+    return value;
   }
 
-  function parseStatements(endToken: string | undefined): number {
-    let value = 0;
+  function parseStatements(endToken: string | undefined): number | undefined {
+    let value: number | undefined;
     while (index < tokens.length && tokens[index] !== endToken) {
       if (tokens[index] === "let") {
         index++; // consume "let"
@@ -77,5 +81,5 @@ export function evaluate(source: string): number {
     return value;
   }
 
-  return parseStatements(undefined);
+  return parseStatements(undefined) ?? 0;
 }
