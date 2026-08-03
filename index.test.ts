@@ -116,3 +116,7 @@ test("interpret supports boolean literals", () => {
 test("interpret supports if expressions", () => {
   expect(interpret("if (1 < 2) { 10 } else { 20 }")).toBe(10);
 });
+
+test("interpret throws when if without else has false condition", () => {
+  expect(() => interpret("if (1 > 2) { 10 }")).toThrow();
+});

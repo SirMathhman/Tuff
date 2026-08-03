@@ -46,7 +46,10 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
       if (condition !== 0) {
         return evaluate(ast.then, env);
       }
-      return ast.else ? evaluate(ast.else, env) : 0;
+      if (!ast.else) {
+        throw new Error("If expression without else evaluated to false");
+      }
+      return evaluate(ast.else, env);
     }
     case "block": {
       const childEnv = env.child();
