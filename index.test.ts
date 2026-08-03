@@ -33,3 +33,7 @@ test("interpret division expression", () => {
   expect(interpret("10 / 2")).toBe(5);
 });
 
+test("interpret curly braces group like parentheses", () => {
+  expect(interpret("{ 2 + 3 } * 4")).toBe(20);
+});
+

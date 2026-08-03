@@ -32,9 +32,9 @@ export function parse(tokens: Token[]): Node {
     if (token?.type === "number") {
       return { type: "number", value: token.value };
     }
-    if (token?.type === "lparen") {
+    if (token?.type === "lparen" || token?.type === "lbrace") {
       const node = parseAdditive();
-      pos++; // consume rparen
+      pos++; // consume rparen/rbrace
       return node;
     }
     throw new Error("Unexpected token");
