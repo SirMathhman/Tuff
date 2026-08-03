@@ -114,6 +114,16 @@ export function lex(source: string): Token[] {
       continue;
     }
 
+    if (char === "&") {
+      const next = source[i + 1];
+      if (next === "&") {
+        tokens.push({ type: "operator", value: "&&" });
+        i += 2;
+        continue;
+      }
+      throw new Error(`Unexpected character: ${char}`);
+    }
+
     if (char === "+" || char === "-" || char === "*" || char === "/" || char === "%") {
       const next = source[i + 1];
       if (next === "=") {

@@ -188,3 +188,7 @@ test("interpret supports function returning a boolean", () => {
 test("interpret supports modulo operator", () => {
   expect(interpret("7 % 3")).toBe(1);
 });
+
+test("interpret supports logical AND operator", () => {
+  expect(interpret("1 < 2 && 3 < 4")).toBe(1);
+});

@@ -88,6 +88,9 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     case "binary": {
       const leftValue = evaluate(ast.left, env);
       const rightValue = evaluate(ast.right, env);
+      if (ast.operator === "&&") {
+        return isTruthy(leftValue) && isTruthy(rightValue);
+      }
       const left = requireNumber(leftValue, ast.operator);
       const right = requireNumber(rightValue, ast.operator);
       const result = binaryOps[ast.operator](left, right);
