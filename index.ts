@@ -17,7 +17,7 @@ export function evaluate(source: string): number {
   if (invalid) {
     throw new Error(`Invalid character: ${invalid[0]}`);
   }
-  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
+  const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|!=|<=|>=|\+=|-=|\*=|\/=|\|\||&&|<|>|[+\-*/(){};=]/g) ?? [];
   let index = 0;
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
 
@@ -169,7 +169,7 @@ export function evaluate(source: string): number {
           index++; // consume "mut"
         }
         declareVariable(mutable);
-      } else if (tokens[index + 1] === "=") {
+      } else if (tokens[index + 1] === "=" || tokens[index + 1] === "+=" || tokens[index + 1] === "-=" || tokens[index + 1] === "*=" || tokens[index + 1] === "/=") {
         assignVariable();
       } else if (tokens[index] === "{") {
         index++; // consume "{"
@@ -249,7 +249,7 @@ export function evaluate(source: string): number {
       parseStatements("}");
       scopes.pop();
       index++; // consume "}"
-    } else if (tokens[index + 1] === "=") {
+    } else if (tokens[index + 1] === "=" || tokens[index + 1] === "+=" || tokens[index + 1] === "-=" || tokens[index + 1] === "*=" || tokens[index + 1] === "/=") {
       assignVariable();
     } else {
       parseOr();
@@ -285,9 +285,9 @@ export function evaluate(source: string): number {
         index++; // "="
         parseOr();
         index++; // ";"
-      } else if (tokens[index + 1] === "=") {
+      } else if (tokens[index + 1] === "=" || tokens[index + 1] === "+=" || tokens[index + 1] === "-=" || tokens[index + 1] === "*=" || tokens[index + 1] === "/=") {
         index++; // name
-        index++; // "="
+        index++; // operator
         parseOr();
         index++; // ";"
       } else if (tokens[index] === "{") {
@@ -327,7 +327,7 @@ export function evaluate(source: string): number {
 
   function assignVariable(): void {
     const name = tokens[index++];
-    index++; // consume "="
+    const operator = tokens[index++]; // "=", "+=", "-=", "*=", "/="
     if (name !== undefined) {
       const entry = lookup(name);
       if (entry === undefined) {
@@ -336,7 +336,16 @@ export function evaluate(source: string): number {
       if (!entry.mutable) {
         throw new Error(`Cannot assign to immutable variable: ${name}`);
       }
-      entry.value = parseOr();
+      const rhs = parseOr();
+      if (operator === "=") {
+        entry.value = rhs;
+      } else {
+        const left = entry.value.value as number;
+        const right = rhs.value as number;
+        entry.value = numberValue(
+          operator === "+=" ? left + right : operator === "-=" ? left - right : operator === "*=" ? left * right : left / right
+        );
+      }
     }
     index++; // consume ";"
   }

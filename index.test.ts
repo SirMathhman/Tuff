@@ -161,3 +161,7 @@ test("evaluate if statement with expression branch", () => {
   expect(evaluate("let mut x = 0; if (true) x = 1; x")).toBe(1);
 });
 
+test("evaluate compound assignment", () => {
+  expect(evaluate("let mut x = 1; x += 2; x")).toBe(3);
+});
+
