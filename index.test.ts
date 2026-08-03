@@ -73,3 +73,7 @@ test("evaluate assigning to immutable variable throws", () => {
   expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
 });
 
+test("evaluate assigning to undefined variable throws", () => {
+  expect(() => evaluate("undefinedIdentifier = 100;")).toThrow();
+});
+
