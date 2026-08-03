@@ -53,6 +53,10 @@ test("evaluate function returning bool assigned to number throws", () => {
   expect(() => evaluate("fn get() : Bool => true; let x : U32 = get();")).toThrow();
 });
 
+test("evaluate passing wider type to function parameter throws", () => {
+  expect(() => evaluate("fn pass(value : U8) => {} pass(0U16)")).toThrow();
+});
+
 test("evaluate addition expression", () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

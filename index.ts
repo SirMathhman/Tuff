@@ -19,6 +19,30 @@ function typeSize(type: string): number {
   return match ? Number(match[1]) : 0;
 }
 
+function assertAssignable(
+  sourceType: string | undefined,
+  targetType: string | undefined,
+): void {
+  if (sourceType === undefined || targetType === undefined) {
+    return;
+  }
+  if (sourceType === "Bool" && targetType !== "Bool") {
+    throw new Error(`Type mismatch: cannot assign Bool to ${targetType}`);
+  }
+  if (sourceType !== "Bool" && targetType === "Bool") {
+    throw new Error(`Type mismatch: cannot assign ${sourceType} to Bool`);
+  }
+  if (
+    sourceType !== "Bool" &&
+    targetType !== "Bool" &&
+    typeSize(sourceType) > typeSize(targetType)
+  ) {
+    throw new Error(
+      `Type mismatch: cannot assign ${sourceType} to ${targetType}`,
+    );
+  }
+}
+
 export function evaluate(source: string): number {
   const invalid = source.match(/[^\s\d\w+\-*/(){};=<>!&|:,]/);
   if (invalid) {
@@ -33,7 +57,7 @@ export function evaluate(source: string): number {
   const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [
     new Map(),
   ];
-  const functions = new Map<string, { params: string[]; body: number; returnType: string }>();
+  const functions = new Map<string, { params: Array<{ name: string; type: string }>; body: number; returnType: string }>();
 
   function currentScope(): Map<string, { value: Value; mutable: boolean }> {
     return scopes[scopes.length - 1]!;
@@ -301,28 +325,43 @@ export function evaluate(source: string): number {
     index++; // consume "fn"
     const name = tokens[index++];
     index++; // consume "("
-    const params: string[] = [];
+    const params: Array<{ name: string; type: string }> = [];
     while (tokens[index] !== ")") {
       const param = tokens[index++];
-      if (param !== undefined) {
-        params.push(param);
-      }
       index++; // consume ":"
-      index++; // consume type
+      const type = tokens[index++];
+      if (param !== undefined && type !== undefined) {
+        params.push({ name: param, type });
+      }
       if (tokens[index] === ",") {
         index++;
       }
     }
     index++; // consume ")"
-    index++; // consume ":"
-    const returnType = tokens[index++];
+    let returnType: string | undefined;
+    if (tokens[index] === ":") {
+      index++; // consume ":"
+      returnType = tokens[index++];
+    }
     index++; // consume "=>"
     const body = index;
-    // Skip to the end of the body (the terminating ";")
-    while (index < tokens.length && tokens[index] !== ";") {
-      index++;
+    // Skip to the end of the body: a balanced block or the terminating ";"
+    if (tokens[index] === "{") {
+      let depth = 0;
+      do {
+        if (tokens[index] === "{") {
+          depth++;
+        } else if (tokens[index] === "}") {
+          depth--;
+        }
+        index++;
+      } while (depth > 0 && index < tokens.length);
+    } else {
+      while (index < tokens.length && tokens[index] !== ";") {
+        index++;
+      }
+      index++; // consume ";"
     }
-    index++; // consume ";"
     if (name !== undefined && returnType !== undefined) {
       functions.set(name, { params, body, returnType });
     }
@@ -347,7 +386,9 @@ export function evaluate(source: string): number {
     fn.params.forEach((param, i) => {
       const arg = args[i];
       if (arg !== undefined) {
-        currentScope().set(param, { value: arg, mutable: false });
+        const argType = arg.kind === "number" ? arg.type : "Bool";
+        assertAssignable(argType, param.type);
+        currentScope().set(param.name, { value: arg, mutable: false });
       }
     });
     const savedIndex = index;
@@ -501,17 +542,7 @@ export function evaluate(source: string): number {
     if (name !== undefined) {
       const value = parseOr();
       const valueType = value.kind === "number" ? value.type : "Bool";
-      if (declaredType !== undefined && valueType !== undefined) {
-        if (valueType === "Bool" && declaredType !== "Bool") {
-          throw new Error(`Type mismatch: cannot assign Bool to ${declaredType}`);
-        }
-        if (valueType !== "Bool" && declaredType === "Bool") {
-          throw new Error(`Type mismatch: cannot assign ${valueType} to Bool`);
-        }
-        if (valueType !== "Bool" && declaredType !== "Bool" && typeSize(valueType) > typeSize(declaredType)) {
-          throw new Error(`Type mismatch: cannot assign ${valueType} to ${declaredType}`);
-        }
-      }
+      assertAssignable(valueType, declaredType);
       currentScope().set(name, { value, mutable });
     }
     index++; // consume ";"
@@ -533,15 +564,7 @@ export function evaluate(source: string): number {
         const existingType =
           entry.value.kind === "number" ? entry.value.type : undefined;
         const newType = rhs.kind === "number" ? rhs.type : undefined;
-        if (
-          existingType !== undefined &&
-          newType !== undefined &&
-          typeSize(newType) > typeSize(existingType)
-        ) {
-          throw new Error(
-            `Type mismatch: cannot assign ${newType} to ${existingType}`,
-          );
-        }
+        assertAssignable(newType, existingType);
         entry.value = rhs;
       } else {
         const left = entry.value.value as number;
