@@ -56,3 +56,7 @@ test("interpret handles unary minus", () => {
 test("interpret handles curly brace grouping", () => {
   expect(interpret("{ 2 + 3 } * 4")).toBe(20);
 });
+
+test("interpret rejects mismatched grouping delimiters", () => {
+  expect(() => interpret("(1 + 2 }")).toThrow();
+});
