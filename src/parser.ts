@@ -101,6 +101,9 @@ export class Parser {
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }
+    if (token.type === "boolean") {
+      return { type: "boolean", value: token.value };
+    }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
     }

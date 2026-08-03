@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

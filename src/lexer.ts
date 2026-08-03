@@ -28,7 +28,11 @@ export function lex(source: string): Token[] {
         value += source[i];
         i++;
       }
-      tokens.push({ type: "identifier", value });
+      if (value === "true" || value === "false") {
+        tokens.push({ type: "boolean", value: value === "true" });
+      } else {
+        tokens.push({ type: "identifier", value });
+      }
       continue;
     }
 

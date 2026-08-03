@@ -3,10 +3,12 @@ export type Token =
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" }
   | { type: "paren"; value: "(" | ")" | "{" | "}" }
   | { type: "identifier"; value: string }
+  | { type: "boolean"; value: boolean }
   | { type: "semicolon"; value: ";" };
 
 export type AST =
   | { type: "number"; value: number }
+  | { type: "boolean"; value: boolean }
   | { type: "binary"; operator: "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!="; left: AST; right: AST }
   | { type: "unary"; operator: "-"; operand: AST }
   | { type: "identifier"; name: string }

@@ -5,6 +5,8 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
   switch (ast.type) {
     case "number":
       return ast.value;
+    case "boolean":
+      return ast.value ? 1 : 0;
     case "identifier":
       return env.lookup(ast.name);
     case "let": {
