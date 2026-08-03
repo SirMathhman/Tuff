@@ -17,3 +17,7 @@ test("interpret subtraction expression", () => {
   expect(interpret("1 - 2")).toBe(-1);
 });
 
+test("interpret chained addition expression", () => {
+  expect(interpret("1 + 2 + 3")).toBe(6);
+});
+
