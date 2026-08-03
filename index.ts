@@ -3,5 +3,8 @@ export function evaluate(source: string): number {
   if (trimmed === "") {
     return 0;
   }
-  return Number(trimmed);
+  return trimmed
+    .split("+")
+    .map((part) => Number(part.trim()))
+    .reduce((sum, value) => sum + value, 0);
 }

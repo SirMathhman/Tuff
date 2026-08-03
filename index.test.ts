@@ -13,3 +13,7 @@ test("evaluate single digit returns the digit", () => {
   expect(evaluate("1")).toBe(1);
 });
 
+test("evaluate addition expression", () => {
+  expect(evaluate("1 + 2")).toBe(3);
+});
+
