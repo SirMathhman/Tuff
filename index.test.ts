@@ -97,3 +97,7 @@ test("evaluate equality expression", () => {
   expect(evaluate("1 == 2")).toBe(0);
 });
 
+test("evaluate equality with boolean is strict", () => {
+  expect(evaluate("1 == true")).toBe(0);
+});
+

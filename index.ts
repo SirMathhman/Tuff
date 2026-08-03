@@ -1,13 +1,27 @@
+type Value = { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+
+function numberValue(value: number): Value {
+  return { kind: "number", value };
+}
+
+function booleanValue(value: boolean): Value {
+  return { kind: "boolean", value };
+}
+
+function truthy(value: Value): boolean {
+  return value.kind === "boolean" ? value.value : value.value !== 0;
+}
+
 export function evaluate(source: string): number {
   const tokens = source.match(/\d+|[a-zA-Z_]\w*|==|\|\||&&|[+\-*/(){};=]/g) ?? [];
   let index = 0;
-  const scopes: Array<Map<string, { value: number; mutable: boolean }>> = [new Map()];
+  const scopes: Array<Map<string, { value: Value; mutable: boolean }>> = [new Map()];
 
-  function currentScope(): Map<string, { value: number; mutable: boolean }> {
+  function currentScope(): Map<string, { value: Value; mutable: boolean }> {
     return scopes[scopes.length - 1]!;
   }
 
-  function lookup(name: string): { value: number; mutable: boolean } | undefined {
+  function lookup(name: string): { value: Value; mutable: boolean } | undefined {
     for (let i = scopes.length - 1; i >= 0; i--) {
       const entry = scopes[i]!.get(name);
       if (entry !== undefined) {
@@ -17,50 +31,57 @@ export function evaluate(source: string): number {
     return undefined;
   }
 
-  function parseOr(initial?: number): number {
+  function parseOr(initial?: Value): Value {
     let value = parseEquality(initial);
     while (index < tokens.length && (tokens[index] === "||" || tokens[index] === "&&")) {
       const operator = tokens[index++];
       const right = parseEquality();
-      value = operator === "||" ? (value || right ? 1 : 0) : value && right ? 1 : 0;
+      value =
+        operator === "||"
+          ? booleanValue(truthy(value) || truthy(right))
+          : booleanValue(truthy(value) && truthy(right));
     }
     return value;
   }
 
-  function parseEquality(initial?: number): number {
+  function parseEquality(initial?: Value): Value {
     let value = parseExpression(initial);
     while (index < tokens.length && tokens[index] === "==") {
       index++;
       const right = parseExpression();
-      value = value === right ? 1 : 0;
+      value = booleanValue(value.kind === right.kind && value.value === right.value);
     }
     return value;
   }
 
-  function parseExpression(initial?: number): number {
+  function parseExpression(initial?: Value): Value {
     let value = parseTerm(initial);
     while (index < tokens.length && (tokens[index] === "+" || tokens[index] === "-")) {
       const operator = tokens[index++];
       const right = parseTerm();
-      value = operator === "+" ? value + right : value - right;
+      const left = value.value as number;
+      const rhs = right.value as number;
+      value = numberValue(operator === "+" ? left + rhs : left - rhs);
     }
     return value;
   }
 
-  function parseTerm(initial?: number): number {
+  function parseTerm(initial?: Value): Value {
     let value = initial ?? parseFactor();
     while (index < tokens.length && (tokens[index] === "*" || tokens[index] === "/")) {
       const operator = tokens[index++];
       const right = parseFactor();
-      value = operator === "*" ? value * right : value / right;
+      const left = value.value as number;
+      const rhs = right.value as number;
+      value = numberValue(operator === "*" ? left * rhs : left / rhs);
     }
     return value;
   }
 
-  function parseFactor(): number {
+  function parseFactor(): Value {
     const token = tokens[index];
     if (token === undefined) {
-      return 0;
+      return numberValue(0);
     }
     if (token === "(") {
       index++;
@@ -81,15 +102,15 @@ export function evaluate(source: string): number {
     }
     if (/^\d+$/.test(token)) {
       index++;
-      return Number(token);
+      return numberValue(Number(token));
     }
     if (token === "true") {
       index++;
-      return 1;
+      return booleanValue(true);
     }
     if (token === "false") {
       index++;
-      return 0;
+      return booleanValue(false);
     }
     index++; // variable reference
     const entry = lookup(token);
@@ -99,12 +120,12 @@ export function evaluate(source: string): number {
     return entry.value;
   }
 
-  function parseBlock(): number | undefined {
+  function parseBlock(): Value | undefined {
     return parseStatements("}");
   }
 
-  function parseStatements(endToken: string | undefined): number | undefined {
-    let value: number | undefined;
+  function parseStatements(endToken: string | undefined): Value | undefined {
+    let value: Value | undefined;
     while (index < tokens.length && tokens[index] !== endToken) {
       if (tokens[index] === "let") {
         index++; // consume "let"
@@ -162,5 +183,9 @@ export function evaluate(source: string): number {
     index++; // consume ";"
   }
 
-  return parseStatements(undefined) ?? 0;
+  const result = parseStatements(undefined);
+  if (result === undefined) {
+    return 0;
+  }
+  return result.kind === "boolean" ? (result.value ? 1 : 0) : result.value;
 }
