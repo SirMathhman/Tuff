@@ -106,11 +106,11 @@ test("interpret rejects compound assignment to immutable binding", () => {
 });
 
 test("interpret supports comparison operators", () => {
-  expect(interpret("1 < 2")).toBe(1);
+  expect(interpret("1 < 2")).toBe(true);
 });
 
 test("interpret supports boolean literals", () => {
-  expect(interpret("let x = true; x")).toBe(1);
+  expect(interpret("let x = true; x")).toBe(true);
 });
 
 test("interpret supports if expressions", () => {

@@ -1,3 +1,5 @@
+export type Value = number | boolean;
+
 export type Token =
   | { type: "number"; value: number }
   | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" | "+=" | "-=" | "*=" | "/=" | "<" | ">" | "<=" | ">=" | "==" | "!=" }

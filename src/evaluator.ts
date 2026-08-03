@@ -1,12 +1,39 @@
-import type { AST } from "./types";
+import type { AST, Value } from "./types";
 import { Environment } from "./environment";
 
-export function evaluate(ast: AST, env: Environment = new Environment()): number {
+type BinaryOperator = "+" | "-" | "*" | "/" | "<" | ">" | "<=" | ">=" | "==" | "!=";
+type AssignOperator = "=" | "+=" | "-=" | "*=" | "/=";
+
+const binaryOps: Record<BinaryOperator, (left: number, right: number) => Value> = {
+  "+": (l, r) => l + r,
+  "-": (l, r) => l - r,
+  "*": (l, r) => l * r,
+  "/": (l, r) => Math.trunc(l / r),
+  "<": (l, r) => l < r,
+  ">": (l, r) => l > r,
+  "<=": (l, r) => l <= r,
+  ">=": (l, r) => l >= r,
+  "==": (l, r) => l === r,
+  "!=": (l, r) => l !== r,
+};
+
+const assignOps: Record<Exclude<AssignOperator, "=">, (left: number, right: number) => number> = {
+  "+=": (l, r) => l + r,
+  "-=": (l, r) => l - r,
+  "*=": (l, r) => l * r,
+  "/=": (l, r) => Math.trunc(l / r),
+};
+
+function isTruthy(value: Value): boolean {
+  return value !== false && value !== 0;
+}
+
+export function evaluate(ast: AST, env: Environment = new Environment()): Value {
   switch (ast.type) {
     case "number":
       return ast.value;
     case "boolean":
-      return ast.value ? 1 : 0;
+      return ast.value;
     case "identifier":
       return env.lookup(ast.name);
     case "let": {
@@ -21,29 +48,16 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
         return value;
       }
       const current = env.lookup(ast.name);
-      let result: number;
-      switch (ast.operator) {
-        case "+=":
-          result = current + value;
-          break;
-        case "-=":
-          result = current - value;
-          break;
-        case "*=":
-          result = current * value;
-          break;
-        case "/=":
-          result = Math.trunc(current / value);
-          break;
-        default:
-          throw new Error(`Unknown assignment operator: ${ast.operator}`);
+      if (typeof current !== "number" || typeof value !== "number") {
+        throw new Error(`Compound assignment requires numbers: ${ast.name}`);
       }
+      const result = assignOps[ast.operator](current, value);
       env.assign(ast.name, result);
       return result;
     }
     case "if": {
       const condition = evaluate(ast.condition, env);
-      if (condition !== 0) {
+      if (isTruthy(condition)) {
         return evaluate(ast.then, env);
       }
       if (!ast.else) {
@@ -53,7 +67,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
     }
     case "block": {
       const childEnv = env.child();
-      let result = 0;
+      let result: Value = 0;
       for (const statement of ast.statements) {
         result = evaluate(statement, childEnv);
       }
@@ -62,30 +76,17 @@ export function evaluate(ast: AST, env: Environment = new Environment()): number
     case "binary": {
       const left = evaluate(ast.left, env);
       const right = evaluate(ast.right, env);
-      switch (ast.operator) {
-        case "+":
-          return left + right;
-        case "-":
-          return left - right;
-        case "*":
-          return left * right;
-        case "/":
-          return Math.trunc(left / right);
-        case "<":
-          return left < right ? 1 : 0;
-        case ">":
-          return left > right ? 1 : 0;
-        case "<=":
-          return left <= right ? 1 : 0;
-        case ">=":
-          return left >= right ? 1 : 0;
-        case "==":
-          return left === right ? 1 : 0;
-        case "!=":
-          return left !== right ? 1 : 0;
+      if (typeof left !== "number" || typeof right !== "number") {
+        throw new Error(`Binary operator requires numbers: ${ast.operator}`);
       }
+      return binaryOps[ast.operator](left, right);
     }
-    case "unary":
-      return -evaluate(ast.operand, env);
+    case "unary": {
+      const operand = evaluate(ast.operand, env);
+      if (typeof operand !== "number") {
+        throw new Error("Unary minus requires a number");
+      }
+      return -operand;
+    }
   }
 }

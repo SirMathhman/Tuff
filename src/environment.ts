@@ -1,5 +1,7 @@
+import type { Value } from "./types";
+
 interface Binding {
-  value: number;
+  value: Value;
   mutable: boolean;
 }
 
@@ -8,11 +10,11 @@ export class Environment {
 
   constructor(private readonly parent?: Environment) {}
 
-  define(name: string, value: number, mutable: boolean): void {
+  define(name: string, value: Value, mutable: boolean): void {
     this.bindings.set(name, { value, mutable });
   }
 
-  lookup(name: string): number {
+  lookup(name: string): Value {
     const env = this.resolve(name);
     if (!env) {
       throw new Error(`Undefined variable: ${name}`);
@@ -20,7 +22,7 @@ export class Environment {
     return env.bindings.get(name)!.value;
   }
 
-  assign(name: string, value: number): void {
+  assign(name: string, value: Value): void {
     const env = this.resolve(name);
     if (!env) {
       throw new Error(`Undefined variable: ${name}`);
