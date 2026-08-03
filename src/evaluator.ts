@@ -1,6 +1,6 @@
 import type { AST, Value, FunctionValue } from "./types";
 import { Environment } from "./environment";
-import { makeInteger, integerTypeOf, isFunction, requireNumber, typeOf, isTruthy } from "./value";
+import { makeInteger, integerTypeOf, isFunction, requireNumber, typeOf, isTruthy, makeBool } from "./value";
 import { callFunction } from "./functions";
 import { binaryOps, assignOps, logicalOps, unaryOps } from "./operators";
 
@@ -9,7 +9,7 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
     case "number":
       return ast.typeName ? makeInteger(ast.typeName, ast.value) : ast.value;
     case "boolean":
-      return ast.value;
+      return makeBool(ast.value);
     case "identifier":
       return env.lookup(ast.name);
     case "let": {
@@ -85,15 +85,18 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
         if (ast.right.type !== "typeRef") {
           throw new Error(`Expected type name after is, got: ${JSON.stringify(ast.right)}`);
         }
-        return typeOf(leftValue) === ast.right.name;
+        return makeBool(typeOf(leftValue) === ast.right.name);
       }
       const rightValue = evaluate(ast.right, env);
       if (ast.operator === "&&" || ast.operator === "||") {
-        return logicalOps[ast.operator](isTruthy(leftValue), isTruthy(rightValue));
+        return makeBool(logicalOps[ast.operator](isTruthy(leftValue), isTruthy(rightValue)));
       }
       const left = requireNumber(leftValue, ast.operator);
       const right = requireNumber(rightValue, ast.operator);
       const result = binaryOps[ast.operator](left, right);
+      if (typeof result === "boolean") {
+        return makeBool(result);
+      }
       const typeName = integerTypeOf(leftValue) ?? integerTypeOf(rightValue);
       if (typeName) {
         if (typeof result !== "number") {
@@ -113,6 +116,9 @@ export function evaluate(ast: AST, env: Environment = new Environment()): Value 
           }
           return makeInteger(typeName, -operand.value);
         }
+      }
+      if (ast.operator === "!") {
+        return makeBool(!isTruthy(operand));
       }
       return unaryOps[ast.operator](operand);
     }

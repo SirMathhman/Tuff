@@ -1,6 +1,7 @@
 import { lex } from "./src/lexer";
 import { parse } from "./src/parser";
 import { evaluate } from "./src/evaluator";
+import { isBool } from "./src/value";
 import type { Value } from "./src/types";
 
 export function interpret(source: string): number {
@@ -13,6 +14,9 @@ export function interpret(source: string): number {
 }
 
 function toExitCode(value: Value): number {
+  if (isBool(value)) {
+    return value.value ? 1 : 0;
+  }
   if (value === true) {
     return 1;
   }

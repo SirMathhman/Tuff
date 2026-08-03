@@ -1,4 +1,4 @@
-import type { Value, IntegerValue, IntegerTypeName, FunctionValue, TypeName } from "./types";
+import type { Value, IntegerValue, IntegerTypeName, BoolValue, FunctionValue, TypeName } from "./types";
 
 interface IntegerSpec {
   kind: IntegerTypeName;
@@ -26,7 +26,7 @@ export function makeInteger(typeName: IntegerTypeName, value: number): IntegerVa
 }
 
 export function integerTypeOf(value: Value): IntegerTypeName | undefined {
-  if (typeof value === "object" && value !== null && "kind" in value && value.kind !== "function") {
+  if (typeof value === "object" && value !== null && "kind" in value && value.kind !== "function" && value.kind !== "bool") {
     return value.kind as IntegerTypeName;
   }
   return undefined;
@@ -38,6 +38,14 @@ export function isInteger(value: Value): value is IntegerValue {
 
 export function isFunction(value: Value): value is FunctionValue {
   return typeof value === "object" && value !== null && value.kind === "function";
+}
+
+export function makeBool(value: boolean): BoolValue {
+  return { kind: "bool", value };
+}
+
+export function isBool(value: Value): value is BoolValue {
+  return typeof value === "object" && value !== null && value.kind === "bool";
 }
 
 export function isNumber(value: Value): value is number | IntegerValue {
@@ -66,12 +74,15 @@ export function typeOf(value: Value): TypeName | undefined {
   if (typeof value === "number") {
     return "I32";
   }
-  if (typeof value === "boolean") {
+  if (isBool(value) || typeof value === "boolean") {
     return "Bool";
   }
   return undefined;
 }
 
 export function isTruthy(value: Value): boolean {
+  if (isBool(value)) {
+    return value.value;
+  }
   return value !== false && value !== 0;
 }

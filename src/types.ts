@@ -1,10 +1,15 @@
-export type Value = number | boolean | IntegerValue | FunctionValue;
+export type Value = number | boolean | IntegerValue | BoolValue | FunctionValue;
 
 export type IntegerTypeName = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64";
 
 export interface IntegerValue {
   readonly kind: IntegerTypeName;
   readonly value: number;
+}
+
+export interface BoolValue {
+  readonly kind: "bool";
+  readonly value: boolean;
 }
 
 export interface FunctionValue {
