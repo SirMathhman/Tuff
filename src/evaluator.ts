@@ -1,12 +1,14 @@
 import type { Expr, Stmt, Program } from "./parser";
 
 type FunctionValue = { params: string[]; body: Expr };
+type ObjectValue = Map<string, Value>;
 type Value =
   | { kind: "number"; value: number }
   | { kind: "boolean"; value: boolean }
   | { kind: "null" }
   | { kind: "reference"; binding: Binding }
-  | { kind: "function"; value: FunctionValue };
+  | { kind: "function"; value: FunctionValue }
+  | { kind: "object"; value: ObjectValue };
 type Flow =
   | { kind: "value"; value: Value }
   | { kind: "break" }
@@ -91,11 +93,32 @@ function evalExpr(expr: Expr, env: Env): Flow {
         throw new Error("Cannot call non-function");
       }
       const argValues = expr.args.map((arg) => flowValue(evalExpr(arg, env)));
+      if (argValues.length !== callee.value.params.length) {
+        throw new Error(`Function expects ${callee.value.params.length} arguments but received ${argValues.length}`);
+      }
       const childEnv = new Map(env);
       callee.value.params.forEach((param, i) => {
         childEnv.set(param, { value: argValues[i] ?? { kind: "null" }, mutable: false });
       });
       return evalExpr(callee.value.body, childEnv);
+    }
+    case "member": {
+      const object = flowValue(evalExpr(expr.object, env));
+      if (object.kind !== "object") {
+        throw new Error("Cannot access member of non-object");
+      }
+      const prop = object.value.get(expr.property);
+      if (!prop) {
+        throw new Error(`Object has no property: ${expr.property}`);
+      }
+      return { kind: "value", value: prop };
+    }
+    case "object": {
+      const props = new Map<string, Value>();
+      for (const [key, valExpr] of expr.properties) {
+        props.set(key, flowValue(evalExpr(valExpr, env)));
+      }
+      return { kind: "value", value: { kind: "object", value: props } };
     }
     case "block":
       return evalBlock(expr.statements, new Map(env));

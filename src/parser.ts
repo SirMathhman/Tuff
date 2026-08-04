@@ -11,6 +11,8 @@ export type Expr =
   | { type: "while"; condition: Expr; body: Stmt }
   | { type: "match"; value: Expr; arms: MatchArm[] }
   | { type: "call"; callee: Expr; args: Expr[] }
+  | { type: "member"; object: Expr; property: string }
+  | { type: "object"; properties: [string, Expr][] }
   | { type: "block"; statements: Stmt[] };
 
 export type MatchArm = { pattern: Expr | null; value: Expr };
@@ -180,7 +182,34 @@ export function parse(tokens: Token[]): Program {
   function parseExpression(minPrecedence = 0): Expr {
     let left = parseUnary();
     while (index < tokens.length) {
-      const op = binaryOperators.get(current().type);
+      const token = current();
+      if (token.type === "dot") {
+        index++; // consume "."
+        const prop = tokens[index++]!;
+        if (prop.type !== "identifier") {
+          throw new Error("Expected property name");
+        }
+        left = { type: "member", object: left, property: prop.name };
+        continue;
+      }
+      if (token.type === "lparen") {
+        index++; // consume "("
+        const args: Expr[] = [];
+        if (current().type !== "rparen") {
+          while (true) {
+            args.push(parseExpression());
+            if (current().type === "comma") {
+              index++;
+            } else {
+              break;
+            }
+          }
+        }
+        index++; // consume ")"
+        left = { type: "call", callee: left, args };
+        continue;
+      }
+      const op = binaryOperators.get(token.type);
       if (!op || op.precedence < minPrecedence) {
         break;
       }
@@ -275,24 +304,7 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseIdentifier(token: Token): Expr {
-    const name = (token as { type: "identifier"; name: string }).name;
-    if (index < tokens.length && current().type === "lparen") {
-      index++; // consume "("
-      const args: Expr[] = [];
-      if (current().type !== "rparen") {
-        while (true) {
-          args.push(parseExpression());
-          if (current().type === "comma") {
-            index++;
-          } else {
-            break;
-          }
-        }
-      }
-      index++; // consume ")"
-      return { type: "call", callee: { type: "identifier", name }, args };
-    }
-    return { type: "identifier", name };
+    return { type: "identifier", name: (token as { type: "identifier"; name: string }).name };
   }
 
   function parseGroup(): Expr {
@@ -302,7 +314,34 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseBlockExpr(): Expr {
+    const next = tokens[index];
+    if (next?.type === "identifier") {
+      const after = tokens[index + 1];
+      if (after?.type === "colon") {
+        return parseObject();
+      }
+    }
     return parseBlock();
+  }
+
+  function parseObject(): Expr {
+    const properties: [string, Expr][] = [];
+    while (current().type !== "rbrace") {
+      const key = tokens[index++]!;
+      if (key.type !== "identifier") {
+        throw new Error("Expected property name");
+      }
+      index++; // consume ":"
+      const value = parseExpression();
+      properties.push([key.name, value]);
+      if (current().type === "comma") {
+        index++;
+      } else {
+        break;
+      }
+    }
+    index++; // consume "}"
+    return { type: "object", properties };
   }
 
   function parseParenthesized(): Expr {

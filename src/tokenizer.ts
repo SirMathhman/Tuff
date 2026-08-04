@@ -36,6 +36,8 @@ export type Token =
   | { type: "arrow" }
   | { type: "fn" }
   | { type: "comma" }
+  | { type: "dot" }
+  | { type: "colon" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -139,6 +141,12 @@ export function tokenize(source: string): Token[] {
         break;
       case ",":
         tokens.push({ type: "comma" });
+        break;
+      case ".":
+        tokens.push({ type: "dot" });
+        break;
+      case ":":
+        tokens.push({ type: "colon" });
         break;
       case "|":
         if (source.charAt(i + 1) === "|") {

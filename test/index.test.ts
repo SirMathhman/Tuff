@@ -213,3 +213,11 @@ test("evaluate function definition and call", () => {
   expect(evaluate("fn add(a, b) => a + b; add(3, 4)")).toBe(7);
 });
 
+test("evaluate function call with wrong arity throws", () => {
+  expect(() => evaluate("fn add(a, b) => a + b; add(3)")).toThrow();
+});
+
+test("evaluate object literal and member access", () => {
+  expect(evaluate("let pt = { x: 3, y: 4 }; pt.x + pt.y")).toBe(7);
+});
+
