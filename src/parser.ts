@@ -7,7 +7,7 @@ export type Expr =
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "unary"; operator: string; operand: Expr }
   | { type: "if"; condition: Expr; then: Expr; otherwise: Expr }
-  | { type: "while"; condition: Expr; body: Expr }
+  | { type: "while"; condition: Expr; body: Stmt }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -155,7 +155,7 @@ export function parse(tokens: Token[]): Program {
     }
     if (token.type === "while") {
       const condition = parseParenthesized();
-      const body = parseExpression();
+      const body = parseStatement();
       return { type: "while", condition, body };
     }
     if (token.type === "number") {

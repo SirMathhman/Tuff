@@ -36,7 +36,7 @@ function evalExpr(expr: Expr, env: Env): Value {
     case "while": {
       let result: Value = { kind: "number", value: 0 };
       while (toNumber(evalExpr(expr.condition, env)) !== 0) {
-        result = evalExpr(expr.body, env);
+        result = evalStmt(expr.body, env);
       }
       return result;
     }

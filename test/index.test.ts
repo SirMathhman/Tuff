@@ -157,3 +157,7 @@ test("evaluate while loop", () => {
   expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
 });
 
+test("evaluate while loop with statement body", () => {
+  expect(evaluate("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+});
+
