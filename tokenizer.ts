@@ -7,6 +7,7 @@ export type Token =
   | { type: "star" }
   | { type: "slash" }
   | { type: "equals" }
+  | { type: "equalsEquals" }
   | { type: "semicolon" }
   | { type: "or" }
   | { type: "lparen" }
@@ -57,7 +58,12 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "slash" });
         break;
       case "=":
-        tokens.push({ type: "equals" });
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "equalsEquals" });
+          i++;
+        } else {
+          tokens.push({ type: "equals" });
+        }
         break;
       case ";":
         tokens.push({ type: "semicolon" });

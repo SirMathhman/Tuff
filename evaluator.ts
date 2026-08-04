@@ -72,6 +72,8 @@ function apply(operator: string, left: number, right: number): number {
       return left / right;
     case "||":
       return left || right;
+    case "==":
+      return left === right ? 1 : 0;
     default:
       throw new Error(`Unknown operator: ${operator}`);
   }

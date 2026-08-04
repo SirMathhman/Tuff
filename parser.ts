@@ -16,10 +16,11 @@ export type Program = { statements: Stmt[] };
 
 const binaryOperators = new Map<Token["type"], { symbol: string; precedence: number }>([
   ["or", { symbol: "||", precedence: 1 }],
-  ["plus", { symbol: "+", precedence: 2 }],
-  ["minus", { symbol: "-", precedence: 2 }],
-  ["star", { symbol: "*", precedence: 3 }],
-  ["slash", { symbol: "/", precedence: 3 }],
+  ["equalsEquals", { symbol: "==", precedence: 2 }],
+  ["plus", { symbol: "+", precedence: 3 }],
+  ["minus", { symbol: "-", precedence: 3 }],
+  ["star", { symbol: "*", precedence: 4 }],
+  ["slash", { symbol: "/", precedence: 4 }],
 ]);
 
 export function parse(tokens: Token[]): Program {
