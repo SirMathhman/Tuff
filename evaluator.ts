@@ -27,6 +27,8 @@ function evalExpr(expr: Expr, env: Env): Value {
       return env.get(expr.name)?.value ?? { kind: "number", value: 0 };
     case "binary":
       return apply(expr.operator, evalExpr(expr.left, env), evalExpr(expr.right, env));
+    case "not":
+      return { kind: "boolean", value: toNumber(evalExpr(expr.operand, env)) === 0 };
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }
@@ -77,6 +79,8 @@ function apply(operator: string, left: Value, right: Value): Value {
       return { kind: "number", value: toNumber(left) / toNumber(right) };
     case "||":
       return { kind: "boolean", value: toNumber(left) !== 0 || toNumber(right) !== 0 };
+    case "&&":
+      return { kind: "boolean", value: toNumber(left) !== 0 && toNumber(right) !== 0 };
     case "==":
       return { kind: "boolean", value: left.kind === right.kind && left.value === right.value };
     default:

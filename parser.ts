@@ -5,6 +5,7 @@ export type Expr =
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
+  | { type: "not"; operand: Expr }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -16,11 +17,12 @@ export type Program = { statements: Stmt[] };
 
 const binaryOperators = new Map<Token["type"], { symbol: string; precedence: number }>([
   ["or", { symbol: "||", precedence: 1 }],
-  ["equalsEquals", { symbol: "==", precedence: 2 }],
-  ["plus", { symbol: "+", precedence: 3 }],
-  ["minus", { symbol: "-", precedence: 3 }],
-  ["star", { symbol: "*", precedence: 4 }],
-  ["slash", { symbol: "/", precedence: 4 }],
+  ["and", { symbol: "&&", precedence: 2 }],
+  ["equalsEquals", { symbol: "==", precedence: 3 }],
+  ["plus", { symbol: "+", precedence: 4 }],
+  ["minus", { symbol: "-", precedence: 4 }],
+  ["star", { symbol: "*", precedence: 5 }],
+  ["slash", { symbol: "/", precedence: 5 }],
 ]);
 
 export function parse(tokens: Token[]): Program {
@@ -94,6 +96,9 @@ export function parse(tokens: Token[]): Program {
 
   function parsePrimary(): Expr {
     const token = tokens[index++]!;
+    if (token.type === "not") {
+      return { type: "not", operand: parsePrimary() };
+    }
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }

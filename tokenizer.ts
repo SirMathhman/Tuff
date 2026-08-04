@@ -10,6 +10,8 @@ export type Token =
   | { type: "equalsEquals" }
   | { type: "semicolon" }
   | { type: "or" }
+  | { type: "and" }
+  | { type: "not" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -75,6 +77,17 @@ export function tokenize(source: string): Token[] {
         } else {
           throw new Error(`Unexpected character: ${char}`);
         }
+        break;
+      case "&":
+        if (source.charAt(i + 1) === "&") {
+          tokens.push({ type: "and" });
+          i++;
+        } else {
+          throw new Error(`Unexpected character: ${char}`);
+        }
+        break;
+      case "!":
+        tokens.push({ type: "not" });
         break;
       case "(":
         tokens.push({ type: "lparen" });
