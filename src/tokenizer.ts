@@ -1,6 +1,7 @@
 export type Token =
   | { type: "number"; value: number }
   | { type: "boolean"; value: boolean }
+  | { type: "null" }
   | { type: "identifier"; name: string }
   | { type: "plus" }
   | { type: "minus" }
@@ -78,6 +79,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "case" });
       } else if (name === "_") {
         tokens.push({ type: "underscore" });
+      } else if (name === "null") {
+        tokens.push({ type: "null" });
       } else {
         tokens.push({ type: "identifier", name });
       }

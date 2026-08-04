@@ -37,6 +37,8 @@ function evalExpr(expr: Expr, env: Env): Flow {
       return { kind: "value", value: { kind: "number", value: expr.value } };
     case "boolean":
       return { kind: "value", value: { kind: "boolean", value: expr.value } };
+    case "null":
+      return { kind: "value", value: { kind: "number", value: 0 } };
     case "identifier":
       return { kind: "value", value: env.get(expr.name)?.value ?? { kind: "number", value: 0 } };
     case "binary":

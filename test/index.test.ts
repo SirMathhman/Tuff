@@ -189,3 +189,7 @@ test("evaluate mutable reference assignment", () => {
   expect(evaluate("let mut x = 0; let y = &mut x; *y = 1; x")).toBe(1);
 });
 
+test("evaluate null literal", () => {
+  expect(evaluate("let x = null; x")).toBe(0);
+});
+

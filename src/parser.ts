@@ -3,6 +3,7 @@ import type { Token } from "./tokenizer";
 export type Expr =
   | { type: "number"; value: number }
   | { type: "boolean"; value: boolean }
+  | { type: "null" }
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "unary"; operator: string; operand: Expr }
@@ -234,6 +235,10 @@ export function parse(tokens: Token[]): Program {
     return { type: "boolean", value: (token as { type: "boolean"; value: boolean }).value };
   }
 
+  function parseNull(): Expr {
+    return { type: "null" };
+  }
+
   function parseIdentifier(token: Token): Expr {
     return { type: "identifier", name: (token as { type: "identifier"; name: string }).name };
   }
@@ -261,6 +266,7 @@ export function parse(tokens: Token[]): Program {
     ["match", parseMatch],
     ["number", parseNumber],
     ["boolean", parseBoolean],
+    ["null", parseNull],
     ["identifier", parseIdentifier],
     ["lparen", parseGroup],
     ["lbrace", parseBlockExpr],
