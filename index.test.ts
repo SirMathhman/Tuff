@@ -121,3 +121,7 @@ test("evaluate if with block branches", () => {
   expect(evaluate("let mut x = 0; if (false) { x = 2; } else { x = 3; } x")).toBe(3);
 });
 
+test("evaluate if without else", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 2; } x")).toBe(0);
+});
+

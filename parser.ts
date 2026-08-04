@@ -122,11 +122,11 @@ export function parse(tokens: Token[]): Program {
       const condition = parseExpression();
       index++; // consume ")"
       const then = parseExpression();
-      if (current().type !== "else") {
-        throw new Error("Expected else");
+      let otherwise: Expr = { type: "number", value: 0 };
+      if (current().type === "else") {
+        index++; // consume "else"
+        otherwise = parseExpression();
       }
-      index++; // consume "else"
-      const otherwise = parseExpression();
       return { type: "if", condition, then, otherwise };
     }
     if (token.type === "number") {
