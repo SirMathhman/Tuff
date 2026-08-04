@@ -48,6 +48,8 @@ function evalExpr(expr: Expr, env: Env): Flow {
       return { kind: "value", value: { kind: "boolean", value: expr.value } };
     case "null":
       return { kind: "value", value: { kind: "null" } };
+    case "char":
+      return { kind: "value", value: { kind: "number", value: expr.value.charCodeAt(0) } };
     case "identifier":
       return { kind: "value", value: lookupBinding(env, expr.name).value };
     case "binary":

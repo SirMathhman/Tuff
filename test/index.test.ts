@@ -225,3 +225,7 @@ test("evaluate array literal and indexing", () => {
   expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
 });
 
+test("evaluate character literal", () => {
+  expect(evaluate("'A'")).toBe(65);
+});
+

@@ -1,10 +1,6 @@
-import type { Token } from "./tokenizer";
+import type { Token, LiteralToken } from "./tokenizer";
 
-export type Expr =
-  | { type: "number"; value: number }
-  | { type: "boolean"; value: boolean }
-  | { type: "null" }
-  | { type: "identifier"; name: string }
+export type Expr = LiteralToken
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "unary"; operator: string; operand: Expr }
   | { type: "if"; condition: Expr; then: Stmt; otherwise: Stmt }
@@ -320,6 +316,10 @@ export function parse(tokens: Token[]): Program {
     return { type: "null" };
   }
 
+  function parseChar(token: Token): Expr {
+    return { type: "char", value: (token as { type: "char"; value: string }).value };
+  }
+
   function parseIdentifier(token: Token): Expr {
     return { type: "identifier", name: (token as { type: "identifier"; name: string }).name };
   }
@@ -391,6 +391,7 @@ export function parse(tokens: Token[]): Program {
     ["number", parseNumber],
     ["boolean", parseBoolean],
     ["null", parseNull],
+    ["char", parseChar],
     ["identifier", parseIdentifier],
     ["lparen", parseGroup],
     ["lbrace", parseBlockExpr],
