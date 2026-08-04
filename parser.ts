@@ -37,6 +37,11 @@ const prefixOperators = new Map<Token["type"], string>([
   ["minus", "-"],
 ]);
 
+const compoundAssignOperators = new Map<Token["type"], string>([
+  ["plusEquals", "+"],
+  ["minusEquals", "-"],
+]);
+
 export function parse(tokens: Token[]): Program {
   let index = 0;
 
@@ -86,8 +91,9 @@ export function parse(tokens: Token[]): Program {
       }
       return { type: "assign", name: expr.name, value };
     }
-    if (tokens[index]?.type === "plusEquals") {
-      index++; // consume "+="
+    const compoundOperator = compoundAssignOperators.get(tokens[index]?.type ?? "semicolon");
+    if (compoundOperator) {
+      index++; // consume compound assignment operator
       const value = parseExpression();
       if (tokens[index]?.type === "semicolon") {
         index++;
@@ -95,7 +101,7 @@ export function parse(tokens: Token[]): Program {
       if (expr.type !== "identifier") {
         throw new Error("Assignment target must be an identifier");
       }
-      return { type: "compoundAssign", name: expr.name, operator: "+", value };
+      return { type: "compoundAssign", name: expr.name, operator: compoundOperator, value };
     }
     if (tokens[index]?.type === "semicolon") {
       index++;

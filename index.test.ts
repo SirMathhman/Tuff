@@ -133,3 +133,7 @@ test("evaluate compound assignment", () => {
   expect(evaluate("let mut x = 1; x += 2; x")).toBe(3);
 });
 
+test("evaluate compound subtraction assignment", () => {
+  expect(evaluate("let mut x = 1; x -= 2; x")).toBe(-1);
+});
+
