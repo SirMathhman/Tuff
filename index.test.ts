@@ -81,3 +81,7 @@ test("evaluate logical not", () => {
   expect(evaluate("!true")).toBe(0);
 });
 
+test("evaluate unary minus", () => {
+  expect(evaluate("let x = 1; -x")).toBe(-1);
+});
+

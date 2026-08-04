@@ -5,7 +5,7 @@ export type Expr =
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
-  | { type: "not"; operand: Expr }
+  | { type: "unary"; operator: string; operand: Expr }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -23,6 +23,11 @@ const binaryOperators = new Map<Token["type"], { symbol: string; precedence: num
   ["minus", { symbol: "-", precedence: 4 }],
   ["star", { symbol: "*", precedence: 5 }],
   ["slash", { symbol: "/", precedence: 5 }],
+]);
+
+const prefixOperators = new Map<Token["type"], string>([
+  ["not", "!"],
+  ["minus", "-"],
 ]);
 
 export function parse(tokens: Token[]): Program {
@@ -81,7 +86,7 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseExpression(minPrecedence = 0): Expr {
-    let left = parsePrimary();
+    let left = parseUnary();
     while (index < tokens.length) {
       const op = binaryOperators.get(current().type);
       if (!op || op.precedence < minPrecedence) {
@@ -94,11 +99,18 @@ export function parse(tokens: Token[]): Program {
     return left;
   }
 
+  function parseUnary(): Expr {
+    const token = current();
+    const operator = prefixOperators.get(token.type);
+    if (operator) {
+      index++;
+      return { type: "unary", operator, operand: parseUnary() };
+    }
+    return parsePrimary();
+  }
+
   function parsePrimary(): Expr {
     const token = tokens[index++]!;
-    if (token.type === "not") {
-      return { type: "not", operand: parsePrimary() };
-    }
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }

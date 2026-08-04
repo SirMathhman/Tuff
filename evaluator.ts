@@ -27,8 +27,8 @@ function evalExpr(expr: Expr, env: Env): Value {
       return env.get(expr.name)?.value ?? { kind: "number", value: 0 };
     case "binary":
       return apply(expr.operator, evalExpr(expr.left, env), evalExpr(expr.right, env));
-    case "not":
-      return { kind: "boolean", value: toNumber(evalExpr(expr.operand, env)) === 0 };
+    case "unary":
+      return applyUnary(expr.operator, evalExpr(expr.operand, env));
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }
@@ -64,6 +64,17 @@ function evalStmt(stmt: Stmt, env: Env): Value {
     }
     case "expr":
       return evalExpr(stmt.expr, env);
+  }
+}
+
+function applyUnary(operator: string, operand: Value): Value {
+  switch (operator) {
+    case "!":
+      return { kind: "boolean", value: toNumber(operand) === 0 };
+    case "-":
+      return { kind: "number", value: -toNumber(operand) };
+    default:
+      throw new Error(`Unknown operator: ${operator}`);
   }
 }
 
