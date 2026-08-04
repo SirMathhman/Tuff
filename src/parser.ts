@@ -30,21 +30,6 @@ export type Stmt =
 
 export type Program = { statements: Stmt[] };
 
-const binaryOperators = new Map<Token["type"], { symbol: string; precedence: number }>([
-  ["or", { symbol: "||", precedence: 1 }],
-  ["and", { symbol: "&&", precedence: 2 }],
-  ["equalsEquals", { symbol: "==", precedence: 3 }],
-  ["notEquals", { symbol: "!=", precedence: 3 }],
-  ["lessThan", { symbol: "<", precedence: 3 }],
-  ["lessThanOrEqual", { symbol: "<=", precedence: 3 }],
-  ["greaterThan", { symbol: ">", precedence: 3 }],
-  ["greaterThanOrEqual", { symbol: ">=", precedence: 3 }],
-  ["plus", { symbol: "+", precedence: 4 }],
-  ["minus", { symbol: "-", precedence: 4 }],
-  ["star", { symbol: "*", precedence: 5 }],
-  ["slash", { symbol: "/", precedence: 5 }],
-]);
-
 const prefixOperators = new Map<Token["type"], string>([
   ["not", "!"],
   ["minus", "-"],
@@ -184,50 +169,73 @@ export function parse(tokens: Token[]): Program {
   function parseExpression(minPrecedence = 0): Expr {
     let left = parseUnary();
     while (index < tokens.length) {
-      const token = current();
-      if (token.type === "dot") {
-        index++; // consume "."
-        const prop = tokens[index++]!;
-        if (prop.type !== "identifier") {
-          throw new Error("Expected property name");
-        }
-        left = { type: "member", object: left, property: prop.name };
-        continue;
-      }
-      if (token.type === "lparen") {
-        index++; // consume "("
-        const args: Expr[] = [];
-        if (current().type !== "rparen") {
-          while (true) {
-            args.push(parseExpression());
-            if (current().type === "comma") {
-              index++;
-            } else {
-              break;
-            }
-          }
-        }
-        index++; // consume ")"
-        left = { type: "call", callee: left, args };
-        continue;
-      }
-      if (token.type === "lbracket") {
-        index++; // consume "["
-        const indexExpr = parseExpression();
-        index++; // consume "]"
-        left = { type: "index", object: left, index: indexExpr };
-        continue;
-      }
-      const op = binaryOperators.get(token.type);
-      if (!op || op.precedence < minPrecedence) {
+      const infix = infixParselets.get(current().type);
+      if (!infix || infix.precedence < minPrecedence) {
         break;
       }
-      index++;
-      const right = parseExpression(op.precedence + 1);
-      left = { type: "binary", operator: op.symbol, left, right };
+      left = infix.parse(left);
     }
     return left;
   }
+
+  function parseBinary(symbol: string, precedence: number) {
+    return (left: Expr): Expr => {
+      index++; // consume operator
+      const right = parseExpression(precedence + 1);
+      return { type: "binary", operator: symbol, left, right };
+    };
+  }
+
+  function parseMember(left: Expr): Expr {
+    index++; // consume "."
+    const prop = tokens[index++]!;
+    if (prop.type !== "identifier") {
+      throw new Error("Expected property name");
+    }
+    return { type: "member", object: left, property: prop.name };
+  }
+
+  function parseCall(left: Expr): Expr {
+    index++; // consume "("
+    const args: Expr[] = [];
+    if (current().type !== "rparen") {
+      while (true) {
+        args.push(parseExpression());
+        if (current().type === "comma") {
+          index++;
+        } else {
+          break;
+        }
+      }
+    }
+    index++; // consume ")"
+    return { type: "call", callee: left, args };
+  }
+
+  function parseIndex(left: Expr): Expr {
+    index++; // consume "["
+    const indexExpr = parseExpression();
+    index++; // consume "]"
+    return { type: "index", object: left, index: indexExpr };
+  }
+
+  const infixParselets = new Map<Token["type"], { precedence: number; parse: (left: Expr) => Expr }>([
+    ["dot", { precedence: 10, parse: parseMember }],
+    ["lparen", { precedence: 10, parse: parseCall }],
+    ["lbracket", { precedence: 10, parse: parseIndex }],
+    ["or", { precedence: 1, parse: parseBinary("||", 1) }],
+    ["and", { precedence: 2, parse: parseBinary("&&", 2) }],
+    ["equalsEquals", { precedence: 3, parse: parseBinary("==", 3) }],
+    ["notEquals", { precedence: 3, parse: parseBinary("!=", 3) }],
+    ["lessThan", { precedence: 3, parse: parseBinary("<", 3) }],
+    ["lessThanOrEqual", { precedence: 3, parse: parseBinary("<=", 3) }],
+    ["greaterThan", { precedence: 3, parse: parseBinary(">", 3) }],
+    ["greaterThanOrEqual", { precedence: 3, parse: parseBinary(">=", 3) }],
+    ["plus", { precedence: 4, parse: parseBinary("+", 4) }],
+    ["minus", { precedence: 4, parse: parseBinary("-", 4) }],
+    ["star", { precedence: 5, parse: parseBinary("*", 5) }],
+    ["slash", { precedence: 5, parse: parseBinary("/", 5) }],
+  ]);
 
   function parseUnary(): Expr {
     const token = current();
