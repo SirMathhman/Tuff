@@ -6,6 +6,7 @@ type Value =
   | { kind: "number"; value: number }
   | { kind: "boolean"; value: boolean }
   | { kind: "null" }
+  | { kind: "char"; value: string }
   | { kind: "reference"; binding: Binding }
   | { kind: "function"; value: FunctionValue }
   | { kind: "object"; value: ObjectValue }
@@ -33,6 +34,9 @@ function toNumber(value: Value): number {
   if (value.kind === "number") {
     return value.value;
   }
+  if (value.kind === "char") {
+    return value.value.charCodeAt(0);
+  }
   return value.kind === "boolean" && value.value ? 1 : 0;
 }
 
@@ -49,7 +53,7 @@ function evalExpr(expr: Expr, env: Env): Flow {
     case "null":
       return { kind: "value", value: { kind: "null" } };
     case "char":
-      return { kind: "value", value: { kind: "number", value: expr.value.charCodeAt(0) } };
+      return { kind: "value", value: { kind: "char", value: expr.value } };
     case "identifier":
       return { kind: "value", value: lookupBinding(env, expr.name).value };
     case "binary":
@@ -160,8 +164,8 @@ function sameValue(a: Value, b: Value): boolean {
   if (a.kind === "null") {
     return true;
   }
-  const av = a as { kind: "number" | "boolean"; value: number | boolean };
-  const bv = b as { kind: "number" | "boolean"; value: number | boolean };
+  const av = a as { kind: "number" | "boolean" | "char"; value: number | boolean | string };
+  const bv = b as { kind: "number" | "boolean" | "char"; value: number | boolean | string };
   return av.value === bv.value;
 }
 

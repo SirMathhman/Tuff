@@ -229,3 +229,7 @@ test("evaluate character literal", () => {
   expect(evaluate("'A'")).toBe(65);
 });
 
+test("evaluate character not equal to its char code", () => {
+  expect(evaluate("'A' == 65")).toBe(0);
+});
+
