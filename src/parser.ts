@@ -6,7 +6,7 @@ export type Expr =
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "unary"; operator: string; operand: Expr }
-  | { type: "if"; condition: Expr; then: Expr; otherwise: Expr }
+  | { type: "if"; condition: Expr; then: Stmt; otherwise: Stmt }
   | { type: "while"; condition: Expr; body: Stmt }
   | { type: "block"; statements: Stmt[] };
 
@@ -145,11 +145,11 @@ export function parse(tokens: Token[]): Program {
     const token = tokens[index++]!;
     if (token.type === "if") {
       const condition = parseParenthesized();
-      const then = parseExpression();
-      let otherwise: Expr = { type: "number", value: 0 };
+      const then = parseStatement();
+      let otherwise: Stmt = { type: "expr", expr: { type: "number", value: 0 } };
       if (current().type === "else") {
         index++; // consume "else"
-        otherwise = parseExpression();
+        otherwise = parseStatement();
       }
       return { type: "if", condition, then, otherwise };
     }

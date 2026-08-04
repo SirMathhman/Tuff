@@ -31,8 +31,8 @@ function evalExpr(expr: Expr, env: Env): Value {
       return applyUnary(expr.operator, evalExpr(expr.operand, env));
     case "if":
       return toNumber(evalExpr(expr.condition, env)) !== 0
-        ? evalExpr(expr.then, env)
-        : evalExpr(expr.otherwise, env);
+        ? evalStmt(expr.then, env)
+        : evalStmt(expr.otherwise, env);
     case "while": {
       let result: Value = { kind: "number", value: 0 };
       while (toNumber(evalExpr(expr.condition, env)) !== 0) {
