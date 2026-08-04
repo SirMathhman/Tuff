@@ -15,10 +15,15 @@ export type Expr = LiteralToken
 
 export type MatchArm = { pattern: Expr | null; value: Expr };
 
+export type LValue =
+  | { type: "identifier"; name: string }
+  | { type: "deref"; operand: Expr }
+  | { type: "index"; object: Expr; index: Expr };
+
 export type Stmt =
   | { type: "function"; name: string; params: string[]; body: Expr }
   | { type: "let"; name: string; mut: boolean; value: Expr }
-  | { type: "assign"; target: Expr; value: Expr }
+  | { type: "assign"; target: LValue; value: Expr }
   | { type: "compoundAssign"; name: string; operator: string; value: Expr }
   | { type: "break" }
   | { type: "continue" }
@@ -130,10 +135,7 @@ export function parse(tokens: Token[]): Program {
     if (tokens[index]?.type === "equals") {
       index++; // consume "="
       const value = parseAssignmentValue();
-      if (expr.type !== "identifier" && !(expr.type === "unary" && expr.operator === "*") && expr.type !== "index") {
-        throw new Error("Assignment target must be an identifier, dereference, or index");
-      }
-      return { type: "assign", target: expr, value };
+      return { type: "assign", target: toLValue(expr), value };
     }
     const compoundOperator = compoundAssignOperators.get(tokens[index]?.type ?? "semicolon");
     if (compoundOperator) {
@@ -160,6 +162,19 @@ export function parse(tokens: Token[]): Program {
       throw new Error("Assignment target must be an identifier");
     }
     return expr.name;
+  }
+
+  function toLValue(expr: Expr): LValue {
+    if (expr.type === "identifier") {
+      return { type: "identifier", name: expr.name };
+    }
+    if (expr.type === "unary" && expr.operator === "*") {
+      return { type: "deref", operand: expr.operand };
+    }
+    if (expr.type === "index") {
+      return { type: "index", object: expr.object, index: expr.index };
+    }
+    throw new Error("Assignment target must be an identifier, dereference, or index");
   }
 
   function parseExpression(minPrecedence = 0): Expr {

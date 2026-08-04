@@ -1,4 +1,4 @@
-import type { Expr, Stmt, Program } from "./parser";
+import type { Expr, Stmt, Program, LValue } from "./parser";
 
 type FunctionValue = { params: string[]; body: Expr };
 type ObjectValue = Map<string, Value>;
@@ -230,14 +230,14 @@ function getMutableBinding(env: Env, name: string): Binding {
   return binding;
 }
 
-function resolveTarget(target: Expr, env: Env): (value: Value) => void {
+function resolveTarget(target: LValue, env: Env): (value: Value) => void {
   if (target.type === "identifier") {
     const binding = getMutableBinding(env, target.name);
     return (value) => {
       binding.value = value;
     };
   }
-  if (target.type === "unary" && target.operator === "*") {
+  if (target.type === "deref") {
     const value = flowValue(evalExpr(target.operand, env));
     if (value.kind !== "reference") {
       throw new Error("Cannot assign through non-reference");
