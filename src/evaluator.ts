@@ -3,6 +3,7 @@ import type { Expr, Stmt, Program } from "./parser";
 type Value =
   | { kind: "number"; value: number }
   | { kind: "boolean"; value: boolean }
+  | { kind: "null" }
   | { kind: "reference"; binding: Binding };
 type Flow =
   | { kind: "value"; value: Value }
@@ -24,7 +25,10 @@ function toNumber(value: Value): number {
   if (value.kind === "reference") {
     return toNumber(value.binding.value);
   }
-  return value.kind === "number" ? value.value : value.value ? 1 : 0;
+  if (value.kind === "number") {
+    return value.value;
+  }
+  return value.kind === "boolean" && value.value ? 1 : 0;
 }
 
 function flowValue(flow: Flow): Value {
@@ -38,7 +42,7 @@ function evalExpr(expr: Expr, env: Env): Flow {
     case "boolean":
       return { kind: "value", value: { kind: "boolean", value: expr.value } };
     case "null":
-      return { kind: "value", value: { kind: "number", value: 0 } };
+      return { kind: "value", value: { kind: "null" } };
     case "identifier":
       return { kind: "value", value: lookupBinding(env, expr.name).value };
     case "binary":
@@ -97,7 +101,12 @@ function sameValue(a: Value, b: Value): boolean {
   if (a.kind !== b.kind || a.kind === "reference" || b.kind === "reference") {
     return false;
   }
-  return a.value === b.value;
+  if (a.kind === "null") {
+    return true;
+  }
+  const av = a as { kind: "number" | "boolean"; value: number | boolean };
+  const bv = b as { kind: "number" | "boolean"; value: number | boolean };
+  return av.value === bv.value;
 }
 
 function evalBlock(statements: Stmt[], env: Env): Flow {
