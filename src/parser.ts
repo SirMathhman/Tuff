@@ -14,6 +14,7 @@ export type Stmt =
   | { type: "let"; name: string; mut: boolean; value: Expr }
   | { type: "assign"; name: string; value: Expr }
   | { type: "compoundAssign"; name: string; operator: string; value: Expr }
+  | { type: "break" }
   | { type: "expr"; expr: Expr };
 
 export type Program = { statements: Stmt[] };
@@ -65,6 +66,13 @@ export function parse(tokens: Token[]): Program {
 
   function parseStatement(): Stmt {
     const token = current();
+    if (token.type === "break") {
+      index++; // consume "break"
+      if (tokens[index]?.type === "semicolon") {
+        index++;
+      }
+      return { type: "break" };
+    }
     if (token.type === "identifier" && token.name === "let") {
       index++; // consume "let"
       let mut = false;
