@@ -125,3 +125,7 @@ test("evaluate if without else", () => {
   expect(evaluate("let mut x = 0; if (false) { x = 2; } x")).toBe(0);
 });
 
+test("evaluate if without else keeps original value", () => {
+  expect(evaluate("let mut x = 1; if (false) { x = 2; } x")).toBe(1);
+});
+
