@@ -1,10 +1,12 @@
 import type { Expr, Stmt, Program } from "./parser";
 
+type FunctionValue = { params: string[]; body: Expr };
 type Value =
   | { kind: "number"; value: number }
   | { kind: "boolean"; value: boolean }
   | { kind: "null" }
-  | { kind: "reference"; binding: Binding };
+  | { kind: "reference"; binding: Binding }
+  | { kind: "function"; value: FunctionValue };
 type Flow =
   | { kind: "value"; value: Value }
   | { kind: "break" }
@@ -83,6 +85,18 @@ function evalExpr(expr: Expr, env: Env): Flow {
       }
       return { kind: "value", value: { kind: "number", value: 0 } };
     }
+    case "call": {
+      const callee = flowValue(evalExpr(expr.callee, env));
+      if (callee.kind !== "function") {
+        throw new Error("Cannot call non-function");
+      }
+      const argValues = expr.args.map((arg) => flowValue(evalExpr(arg, env)));
+      const childEnv = new Map(env);
+      callee.value.params.forEach((param, i) => {
+        childEnv.set(param, { value: argValues[i] ?? { kind: "null" }, mutable: false });
+      });
+      return evalExpr(callee.value.body, childEnv);
+    }
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }
@@ -126,6 +140,9 @@ function evalBlock(statements: Stmt[], env: Env): Flow {
 
 function evalStmt(stmt: Stmt, env: Env): Flow {
   switch (stmt.type) {
+    case "function":
+      env.set(stmt.name, { value: { kind: "function", value: { params: stmt.params, body: stmt.body } }, mutable: false });
+      return { kind: "value", value: { kind: "number", value: 0 } };
     case "let":
       env.set(stmt.name, { value: flowValue(evalExpr(stmt.value, env)), mutable: stmt.mut });
       return { kind: "value", value: { kind: "number", value: 0 } };

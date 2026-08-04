@@ -209,3 +209,7 @@ test("evaluate match null pattern with non-null value", () => {
   expect(evaluate("match (100) { case null => 2; case _ => 3; }")).toBe(3);
 });
 
+test("evaluate function definition and call", () => {
+  expect(evaluate("fn add(a, b) => a + b; add(3, 4)")).toBe(7);
+});
+

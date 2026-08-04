@@ -34,6 +34,8 @@ export type Token =
   | { type: "case" }
   | { type: "underscore" }
   | { type: "arrow" }
+  | { type: "fn" }
+  | { type: "comma" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -81,6 +83,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "underscore" });
       } else if (name === "null") {
         tokens.push({ type: "null" });
+      } else if (name === "fn") {
+        tokens.push({ type: "fn" });
       } else {
         tokens.push({ type: "identifier", name });
       }
@@ -132,6 +136,9 @@ export function tokenize(source: string): Token[] {
         break;
       case ";":
         tokens.push({ type: "semicolon" });
+        break;
+      case ",":
+        tokens.push({ type: "comma" });
         break;
       case "|":
         if (source.charAt(i + 1) === "|") {

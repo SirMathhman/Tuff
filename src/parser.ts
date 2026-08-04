@@ -10,11 +10,13 @@ export type Expr =
   | { type: "if"; condition: Expr; then: Stmt; otherwise: Stmt }
   | { type: "while"; condition: Expr; body: Stmt }
   | { type: "match"; value: Expr; arms: MatchArm[] }
+  | { type: "call"; callee: Expr; args: Expr[] }
   | { type: "block"; statements: Stmt[] };
 
 export type MatchArm = { pattern: Expr | null; value: Expr };
 
 export type Stmt =
+  | { type: "function"; name: string; params: string[]; body: Expr }
   | { type: "let"; name: string; mut: boolean; value: Expr }
   | { type: "assign"; target: Expr; value: Expr }
   | { type: "compoundAssign"; name: string; operator: string; value: Expr }
@@ -86,6 +88,39 @@ export function parse(tokens: Token[]): Program {
         index++;
       }
       return { type: "continue" };
+    }
+    if (token.type === "fn") {
+      index++; // consume "fn"
+      const name = tokens[index++]!;
+      if (name.type !== "identifier") {
+        throw new Error("Expected function name");
+      }
+      index++; // consume "("
+      const params: string[] = [];
+      if (current().type !== "rparen") {
+        while (true) {
+          const param = tokens[index++]!;
+          if (param.type !== "identifier") {
+            throw new Error("Expected parameter name");
+          }
+          params.push(param.name);
+          if (current().type === "comma") {
+            index++;
+          } else {
+            break;
+          }
+        }
+      }
+      index++; // consume ")"
+      if (current().type !== "arrow") {
+        throw new Error("Expected =>");
+      }
+      index++; // consume "=>"
+      const body = parseExpression();
+      if (tokens[index]?.type === "semicolon") {
+        index++;
+      }
+      return { type: "function", name: name.name, params, body };
     }
     if (token.type === "identifier" && token.name === "let") {
       index++; // consume "let"
@@ -240,7 +275,24 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseIdentifier(token: Token): Expr {
-    return { type: "identifier", name: (token as { type: "identifier"; name: string }).name };
+    const name = (token as { type: "identifier"; name: string }).name;
+    if (index < tokens.length && current().type === "lparen") {
+      index++; // consume "("
+      const args: Expr[] = [];
+      if (current().type !== "rparen") {
+        while (true) {
+          args.push(parseExpression());
+          if (current().type === "comma") {
+            index++;
+          } else {
+            break;
+          }
+        }
+      }
+      index++; // consume ")"
+      return { type: "call", callee: { type: "identifier", name }, args };
+    }
+    return { type: "identifier", name };
   }
 
   function parseGroup(): Expr {
