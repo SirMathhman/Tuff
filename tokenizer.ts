@@ -17,6 +17,8 @@ export type Token =
   | { type: "or" }
   | { type: "and" }
   | { type: "not" }
+  | { type: "if" }
+  | { type: "else" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -46,6 +48,10 @@ export function tokenize(source: string): Token[] {
       }
       if (name === "true" || name === "false") {
         tokens.push({ type: "boolean", value: name === "true" });
+      } else if (name === "if") {
+        tokens.push({ type: "if" });
+      } else if (name === "else") {
+        tokens.push({ type: "else" });
       } else {
         tokens.push({ type: "identifier", name });
       }

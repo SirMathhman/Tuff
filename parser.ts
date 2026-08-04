@@ -6,6 +6,7 @@ export type Expr =
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "unary"; operator: string; operand: Expr }
+  | { type: "if"; condition: Expr; then: Expr; otherwise: Expr }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -116,6 +117,18 @@ export function parse(tokens: Token[]): Program {
 
   function parsePrimary(): Expr {
     const token = tokens[index++]!;
+    if (token.type === "if") {
+      index++; // consume "("
+      const condition = parseExpression();
+      index++; // consume ")"
+      const then = parseExpression();
+      if (current().type !== "else") {
+        throw new Error("Expected else");
+      }
+      index++; // consume "else"
+      const otherwise = parseExpression();
+      return { type: "if", condition, then, otherwise };
+    }
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }

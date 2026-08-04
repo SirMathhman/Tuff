@@ -29,6 +29,10 @@ function evalExpr(expr: Expr, env: Env): Value {
       return apply(expr.operator, evalExpr(expr.left, env), evalExpr(expr.right, env));
     case "unary":
       return applyUnary(expr.operator, evalExpr(expr.operand, env));
+    case "if":
+      return toNumber(evalExpr(expr.condition, env)) !== 0
+        ? evalExpr(expr.then, env)
+        : evalExpr(expr.otherwise, env);
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }

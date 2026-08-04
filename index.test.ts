@@ -105,3 +105,7 @@ test("evaluate not equal", () => {
   expect(evaluate("1 != 2")).toBe(1);
 });
 
+test("evaluate if expression", () => {
+  expect(evaluate("let x = if (false) 2 else 3; x")).toBe(3);
+});
+
