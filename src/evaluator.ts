@@ -193,11 +193,8 @@ function evalStmt(stmt: Stmt, env: Env): Flow {
       env.set(stmt.name, { value: flowValue(evalExpr(stmt.value, env)), mutable: stmt.mut });
       return { kind: "value", value: { kind: "number", value: 0 } };
     case "assign": {
-      const binding = resolveTarget(stmt.target, env);
-      if (!binding.mutable) {
-        throw new Error("Cannot assign to immutable target");
-      }
-      binding.value = flowValue(evalExpr(stmt.value, env));
+      const setter = resolveTarget(stmt.target, env);
+      setter(flowValue(evalExpr(stmt.value, env)));
       return { kind: "value", value: { kind: "number", value: 0 } };
     }
     case "compoundAssign": {
@@ -233,16 +230,35 @@ function getMutableBinding(env: Env, name: string): Binding {
   return binding;
 }
 
-function resolveTarget(target: Expr, env: Env): Binding {
+function resolveTarget(target: Expr, env: Env): (value: Value) => void {
   if (target.type === "identifier") {
-    return getMutableBinding(env, target.name);
+    const binding = getMutableBinding(env, target.name);
+    return (value) => {
+      binding.value = value;
+    };
   }
   if (target.type === "unary" && target.operator === "*") {
     const value = flowValue(evalExpr(target.operand, env));
     if (value.kind !== "reference") {
       throw new Error("Cannot assign through non-reference");
     }
-    return value.binding;
+    const binding = value.binding;
+    return (newValue) => {
+      binding.value = newValue;
+    };
+  }
+  if (target.type === "index") {
+    const object = flowValue(evalExpr(target.object, env));
+    if (object.kind !== "array") {
+      throw new Error("Cannot index non-array");
+    }
+    const index = toNumber(flowValue(evalExpr(target.index, env)));
+    return (newValue) => {
+      if (index < 0 || index >= object.value.length) {
+        throw new Error(`Index out of bounds: ${index}`);
+      }
+      object.value[index] = newValue;
+    };
   }
   throw new Error("Invalid assignment target");
 }

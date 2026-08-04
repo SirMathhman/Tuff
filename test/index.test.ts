@@ -233,3 +233,7 @@ test("evaluate character not equal to its char code", () => {
   expect(evaluate("'A' == 65")).toBe(0);
 });
 
+test("evaluate array element assignment", () => {
+  expect(evaluate("let mut array = [0]; array[0] = 100; array[0]")).toBe(100);
+});
+

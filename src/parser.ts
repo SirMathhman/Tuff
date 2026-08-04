@@ -130,8 +130,8 @@ export function parse(tokens: Token[]): Program {
     if (tokens[index]?.type === "equals") {
       index++; // consume "="
       const value = parseAssignmentValue();
-      if (expr.type !== "identifier" && !(expr.type === "unary" && expr.operator === "*")) {
-        throw new Error("Assignment target must be an identifier or dereference");
+      if (expr.type !== "identifier" && !(expr.type === "unary" && expr.operator === "*") && expr.type !== "index") {
+        throw new Error("Assignment target must be an identifier, dereference, or index");
       }
       return { type: "assign", target: expr, value };
     }
