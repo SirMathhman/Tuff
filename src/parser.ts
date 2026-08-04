@@ -144,9 +144,7 @@ export function parse(tokens: Token[]): Program {
   function parsePrimary(): Expr {
     const token = tokens[index++]!;
     if (token.type === "if") {
-      index++; // consume "("
-      const condition = parseExpression();
-      index++; // consume ")"
+      const condition = parseParenthesized();
       const then = parseExpression();
       let otherwise: Expr = { type: "number", value: 0 };
       if (current().type === "else") {
@@ -156,9 +154,7 @@ export function parse(tokens: Token[]): Program {
       return { type: "if", condition, then, otherwise };
     }
     if (token.type === "while") {
-      index++; // consume "("
-      const condition = parseExpression();
-      index++; // consume ")"
+      const condition = parseParenthesized();
       const body = parseExpression();
       return { type: "while", condition, body };
     }
@@ -180,6 +176,13 @@ export function parse(tokens: Token[]): Program {
       return parseBlock();
     }
     throw new Error("Unexpected token");
+  }
+
+  function parseParenthesized(): Expr {
+    index++; // consume "("
+    const expr = parseExpression();
+    index++; // consume ")"
+    return expr;
   }
 
   function parseProgram(): Program {
