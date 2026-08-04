@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { evaluate } from ".";
+import { evaluate } from "../src";
 
 test("evaluate empty string returns 0", () => {
   expect(evaluate("")).toBe(0);
