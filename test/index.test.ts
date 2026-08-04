@@ -169,3 +169,7 @@ test("evaluate break in while loop", () => {
   expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(1);
 });
 
+test("evaluate continue in while loop", () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(4);
+});
+

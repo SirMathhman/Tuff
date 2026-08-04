@@ -1,46 +1,55 @@
 import type { Expr, Stmt, Program } from "./parser";
 
 type Value = { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
-type Flow = { value: Value; break: boolean };
+type Flow =
+  | { kind: "value"; value: Value }
+  | { kind: "break" }
+  | { kind: "continue" };
 type Binding = { value: Value; mutable: boolean };
 type Env = Map<string, Binding>;
 
 export function evaluateProgram(program: Program): number {
   const env: Env = new Map();
-  let result: Flow = { value: { kind: "number", value: 0 }, break: false };
+  let result: Flow = { kind: "value", value: { kind: "number", value: 0 } };
   for (const stmt of program.statements) {
     result = evalStmt(stmt, env);
   }
-  return toNumber(result.value);
+  return toNumber(result.kind === "value" ? result.value : { kind: "number", value: 0 });
 }
 
 function toNumber(value: Value): number {
   return value.kind === "number" ? value.value : value.value ? 1 : 0;
 }
 
+function flowValue(flow: Flow): Value {
+  return flow.kind === "value" ? flow.value : { kind: "number", value: 0 };
+}
+
 function evalExpr(expr: Expr, env: Env): Flow {
   switch (expr.type) {
     case "number":
-      return { value: { kind: "number", value: expr.value }, break: false };
+      return { kind: "value", value: { kind: "number", value: expr.value } };
     case "boolean":
-      return { value: { kind: "boolean", value: expr.value }, break: false };
+      return { kind: "value", value: { kind: "boolean", value: expr.value } };
     case "identifier":
-      return { value: env.get(expr.name)?.value ?? { kind: "number", value: 0 }, break: false };
+      return { kind: "value", value: env.get(expr.name)?.value ?? { kind: "number", value: 0 } };
     case "binary":
-      return { value: apply(expr.operator, evalExpr(expr.left, env).value, evalExpr(expr.right, env).value), break: false };
+      return { kind: "value", value: apply(expr.operator, flowValue(evalExpr(expr.left, env)), flowValue(evalExpr(expr.right, env))) };
     case "unary":
-      return { value: applyUnary(expr.operator, evalExpr(expr.operand, env).value), break: false };
+      return { kind: "value", value: applyUnary(expr.operator, flowValue(evalExpr(expr.operand, env))) };
     case "if":
-      return toNumber(evalExpr(expr.condition, env).value) !== 0
+      return toNumber(flowValue(evalExpr(expr.condition, env))) !== 0
         ? evalStmt(expr.then, env)
         : evalStmt(expr.otherwise, env);
     case "while": {
-      let result: Flow = { value: { kind: "number", value: 0 }, break: false };
-      while (toNumber(evalExpr(expr.condition, env).value) !== 0) {
+      let result: Flow = { kind: "value", value: { kind: "number", value: 0 } };
+      while (toNumber(flowValue(evalExpr(expr.condition, env))) !== 0) {
         result = evalStmt(expr.body, env);
-        if (result.break) {
-          result.break = false;
+        if (result.kind === "break") {
           break;
+        }
+        if (result.kind === "continue") {
+          continue;
         }
       }
       return result;
@@ -51,10 +60,10 @@ function evalExpr(expr: Expr, env: Env): Flow {
 }
 
 function evalBlock(statements: Stmt[], env: Env): Flow {
-  let result: Flow = { value: { kind: "number", value: 0 }, break: false };
+  let result: Flow = { kind: "value", value: { kind: "number", value: 0 } };
   for (const stmt of statements) {
     result = evalStmt(stmt, env);
-    if (result.break) {
+    if (result.kind === "break" || result.kind === "continue") {
       return result;
     }
   }
@@ -68,20 +77,22 @@ function evalBlock(statements: Stmt[], env: Env): Flow {
 function evalStmt(stmt: Stmt, env: Env): Flow {
   switch (stmt.type) {
     case "let":
-      env.set(stmt.name, { value: evalExpr(stmt.value, env).value, mutable: stmt.mut });
-      return { value: { kind: "number", value: 0 }, break: false };
+      env.set(stmt.name, { value: flowValue(evalExpr(stmt.value, env)), mutable: stmt.mut });
+      return { kind: "value", value: { kind: "number", value: 0 } };
     case "assign": {
       const binding = getMutableBinding(env, stmt.name);
-      binding.value = evalExpr(stmt.value, env).value;
-      return { value: { kind: "number", value: 0 }, break: false };
+      binding.value = flowValue(evalExpr(stmt.value, env));
+      return { kind: "value", value: { kind: "number", value: 0 } };
     }
     case "compoundAssign": {
       const binding = getMutableBinding(env, stmt.name);
-      binding.value = apply(stmt.operator, binding.value, evalExpr(stmt.value, env).value);
-      return { value: { kind: "number", value: 0 }, break: false };
+      binding.value = apply(stmt.operator, binding.value, flowValue(evalExpr(stmt.value, env)));
+      return { kind: "value", value: { kind: "number", value: 0 } };
     }
     case "break":
-      return { value: { kind: "number", value: 0 }, break: true };
+      return { kind: "break" };
+    case "continue":
+      return { kind: "continue" };
     case "expr":
       return evalExpr(stmt.expr, env);
   }
