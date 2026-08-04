@@ -57,3 +57,7 @@ test("evaluate reassigning immutable variable throws", () => {
   expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
 });
 
+test("evaluate boolean literal true", () => {
+  expect(evaluate("let x = true; x")).toBe(1);
+});
+

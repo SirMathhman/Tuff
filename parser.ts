@@ -2,6 +2,7 @@ import type { Token } from "./tokenizer";
 
 export type Expr =
   | { type: "number"; value: number }
+  | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "block"; statements: Stmt[] };
@@ -94,6 +95,9 @@ export function parse(tokens: Token[]): Program {
     const token = tokens[index++]!;
     if (token.type === "number") {
       return { type: "number", value: token.value };
+    }
+    if (token.type === "boolean") {
+      return { type: "boolean", value: token.value };
     }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.name };

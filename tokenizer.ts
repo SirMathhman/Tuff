@@ -1,5 +1,6 @@
 export type Token =
   | { type: "number"; value: number }
+  | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "plus" }
   | { type: "minus" }
@@ -34,7 +35,11 @@ export function tokenize(source: string): Token[] {
       while (i < source.length && /[a-zA-Z0-9_]/.test(source.charAt(i))) {
         name += source.charAt(i++);
       }
-      tokens.push({ type: "identifier", name });
+      if (name === "true" || name === "false") {
+        tokens.push({ type: "boolean", value: name === "true" });
+      } else {
+        tokens.push({ type: "identifier", name });
+      }
       continue;
     }
     switch (char) {

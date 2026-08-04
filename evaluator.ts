@@ -16,6 +16,8 @@ function evalExpr(expr: Expr, env: Env): number {
   switch (expr.type) {
     case "number":
       return expr.value;
+    case "boolean":
+      return expr.value ? 1 : 0;
     case "identifier":
       return env.get(expr.name)?.value ?? 0;
     case "binary":
