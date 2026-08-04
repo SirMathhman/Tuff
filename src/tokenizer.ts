@@ -41,7 +41,9 @@ export type Token =
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
-  | { type: "rbrace" };
+  | { type: "rbrace" }
+  | { type: "lbracket" }
+  | { type: "rbracket" };
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -209,6 +211,12 @@ export function tokenize(source: string): Token[] {
         break;
       case "}":
         tokens.push({ type: "rbrace" });
+        break;
+      case "[":
+        tokens.push({ type: "lbracket" });
+        break;
+      case "]":
+        tokens.push({ type: "rbracket" });
         break;
       default:
         throw new Error(`Unexpected character: ${char}`);

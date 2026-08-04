@@ -221,3 +221,7 @@ test("evaluate object literal and member access", () => {
   expect(evaluate("let pt = { x: 3, y: 4 }; pt.x + pt.y")).toBe(7);
 });
 
+test("evaluate array literal and indexing", () => {
+  expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+});
+

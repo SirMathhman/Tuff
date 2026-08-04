@@ -8,7 +8,8 @@ type Value =
   | { kind: "null" }
   | { kind: "reference"; binding: Binding }
   | { kind: "function"; value: FunctionValue }
-  | { kind: "object"; value: ObjectValue };
+  | { kind: "object"; value: ObjectValue }
+  | { kind: "array"; value: Value[] };
 type Flow =
   | { kind: "value"; value: Value }
   | { kind: "break" }
@@ -119,6 +120,22 @@ function evalExpr(expr: Expr, env: Env): Flow {
         props.set(key, flowValue(evalExpr(valExpr, env)));
       }
       return { kind: "value", value: { kind: "object", value: props } };
+    }
+    case "array": {
+      const elements = expr.elements.map((el) => flowValue(evalExpr(el, env)));
+      return { kind: "value", value: { kind: "array", value: elements } };
+    }
+    case "index": {
+      const object = flowValue(evalExpr(expr.object, env));
+      if (object.kind !== "array") {
+        throw new Error("Cannot index non-array");
+      }
+      const index = toNumber(flowValue(evalExpr(expr.index, env)));
+      const element = object.value[index];
+      if (element === undefined) {
+        throw new Error(`Index out of bounds: ${index}`);
+      }
+      return { kind: "value", value: element };
     }
     case "block":
       return evalBlock(expr.statements, new Map(env));

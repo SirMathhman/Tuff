@@ -12,6 +12,8 @@ export type Expr =
   | { type: "match"; value: Expr; arms: MatchArm[] }
   | { type: "call"; callee: Expr; args: Expr[] }
   | { type: "member"; object: Expr; property: string }
+  | { type: "index"; object: Expr; index: Expr }
+  | { type: "array"; elements: Expr[] }
   | { type: "object"; properties: [string, Expr][] }
   | { type: "block"; statements: Stmt[] };
 
@@ -209,6 +211,13 @@ export function parse(tokens: Token[]): Program {
         left = { type: "call", callee: left, args };
         continue;
       }
+      if (token.type === "lbracket") {
+        index++; // consume "["
+        const indexExpr = parseExpression();
+        index++; // consume "]"
+        left = { type: "index", object: left, index: indexExpr };
+        continue;
+      }
       const op = binaryOperators.get(token.type);
       if (!op || op.precedence < minPrecedence) {
         break;
@@ -344,6 +353,22 @@ export function parse(tokens: Token[]): Program {
     return { type: "object", properties };
   }
 
+  function parseArray(): Expr {
+    const elements: Expr[] = [];
+    if (current().type !== "rbracket") {
+      while (true) {
+        elements.push(parseExpression());
+        if (current().type === "comma") {
+          index++;
+        } else {
+          break;
+        }
+      }
+    }
+    index++; // consume "]"
+    return { type: "array", elements };
+  }
+
   function parseParenthesized(): Expr {
     index++; // consume "("
     const expr = parseExpression();
@@ -361,6 +386,7 @@ export function parse(tokens: Token[]): Program {
     ["identifier", parseIdentifier],
     ["lparen", parseGroup],
     ["lbrace", parseBlockExpr],
+    ["lbracket", parseArray],
   ]);
 
   function parseProgram(): Program {
