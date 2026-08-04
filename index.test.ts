@@ -37,3 +37,7 @@ test("evaluate block with variable declaration", () => {
   expect(evaluate("2 * { let x = 3 + 4; x }")).toBe(14);
 });
 
+test("evaluate top-level variable declaration", () => {
+  expect(evaluate("let y = 2 * { let x = 3 + 4; x }; y")).toBe(14);
+});
+
