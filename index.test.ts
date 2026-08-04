@@ -129,3 +129,7 @@ test("evaluate if without else keeps original value", () => {
   expect(evaluate("let mut x = 1; if (false) { x = 2; } x")).toBe(1);
 });
 
+test("evaluate compound assignment", () => {
+  expect(evaluate("let mut x = 1; x += 2; x")).toBe(3);
+});
+

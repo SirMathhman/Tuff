@@ -12,6 +12,7 @@ export type Expr =
 export type Stmt =
   | { type: "let"; name: string; mut: boolean; value: Expr }
   | { type: "assign"; name: string; value: Expr }
+  | { type: "compoundAssign"; name: string; operator: string; value: Expr }
   | { type: "expr"; expr: Expr };
 
 export type Program = { statements: Stmt[] };
@@ -84,6 +85,17 @@ export function parse(tokens: Token[]): Program {
         throw new Error("Assignment target must be an identifier");
       }
       return { type: "assign", name: expr.name, value };
+    }
+    if (tokens[index]?.type === "plusEquals") {
+      index++; // consume "+="
+      const value = parseExpression();
+      if (tokens[index]?.type === "semicolon") {
+        index++;
+      }
+      if (expr.type !== "identifier") {
+        throw new Error("Assignment target must be an identifier");
+      }
+      return { type: "compoundAssign", name: expr.name, operator: "+", value };
     }
     if (tokens[index]?.type === "semicolon") {
       index++;

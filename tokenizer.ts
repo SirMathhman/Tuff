@@ -7,6 +7,7 @@ export type Token =
   | { type: "star" }
   | { type: "slash" }
   | { type: "equals" }
+  | { type: "plusEquals" }
   | { type: "equalsEquals" }
   | { type: "notEquals" }
   | { type: "lessThan" }
@@ -59,7 +60,12 @@ export function tokenize(source: string): Token[] {
     }
     switch (char) {
       case "+":
-        tokens.push({ type: "plus" });
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "plusEquals" });
+          i++;
+        } else {
+          tokens.push({ type: "plus" });
+        }
         break;
       case "-":
         tokens.push({ type: "minus" });
