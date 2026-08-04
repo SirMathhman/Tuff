@@ -1,9 +1,12 @@
 export type Token =
   | { type: "number"; value: number }
+  | { type: "identifier"; name: string }
   | { type: "plus" }
   | { type: "minus" }
   | { type: "star" }
   | { type: "slash" }
+  | { type: "equals" }
+  | { type: "semicolon" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -26,6 +29,14 @@ export function tokenize(source: string): Token[] {
       tokens.push({ type: "number", value: Number(value) });
       continue;
     }
+    if (/[a-zA-Z_]/.test(char)) {
+      let name = "";
+      while (i < source.length && /[a-zA-Z0-9_]/.test(source[i])) {
+        name += source[i++];
+      }
+      tokens.push({ type: "identifier", name });
+      continue;
+    }
     switch (char) {
       case "+":
         tokens.push({ type: "plus" });
@@ -38,6 +49,12 @@ export function tokenize(source: string): Token[] {
         break;
       case "/":
         tokens.push({ type: "slash" });
+        break;
+      case "=":
+        tokens.push({ type: "equals" });
+        break;
+      case ";":
+        tokens.push({ type: "semicolon" });
         break;
       case "(":
         tokens.push({ type: "lparen" });
