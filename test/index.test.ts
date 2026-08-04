@@ -205,3 +205,7 @@ test("evaluate match against null pattern", () => {
   expect(evaluate("match (null) { case null => 2; case _ => 3; }")).toBe(2);
 });
 
+test("evaluate match null pattern with non-null value", () => {
+  expect(evaluate("match (100) { case null => 2; case _ => 3; }")).toBe(3);
+});
+
