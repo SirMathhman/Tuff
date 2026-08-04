@@ -40,6 +40,10 @@ const prefixOperators = new Map<Token["type"], string>([
 const compoundAssignOperators = new Map<Token["type"], string>([
   ["plusEquals", "+"],
   ["minusEquals", "-"],
+  ["starEquals", "*"],
+  ["slashEquals", "/"],
+  ["orEquals", "||"],
+  ["andEquals", "&&"],
 ]);
 
 export function parse(tokens: Token[]): Program {

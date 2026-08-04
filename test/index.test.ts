@@ -137,3 +137,19 @@ test("evaluate compound subtraction assignment", () => {
   expect(evaluate("let mut x = 1; x -= 2; x")).toBe(-1);
 });
 
+test("evaluate compound multiplication assignment", () => {
+  expect(evaluate("let mut x = 3; x *= 2; x")).toBe(6);
+});
+
+test("evaluate compound division assignment", () => {
+  expect(evaluate("let mut x = 6; x /= 2; x")).toBe(3);
+});
+
+test("evaluate compound or assignment", () => {
+  expect(evaluate("let mut x = false; x ||= true; x")).toBe(1);
+});
+
+test("evaluate compound and assignment", () => {
+  expect(evaluate("let mut x = true; x &&= false; x")).toBe(0);
+});
+

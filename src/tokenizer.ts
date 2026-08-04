@@ -9,6 +9,10 @@ export type Token =
   | { type: "equals" }
   | { type: "plusEquals" }
   | { type: "minusEquals" }
+  | { type: "starEquals" }
+  | { type: "slashEquals" }
+  | { type: "orEquals" }
+  | { type: "andEquals" }
   | { type: "equalsEquals" }
   | { type: "notEquals" }
   | { type: "lessThan" }
@@ -77,10 +81,20 @@ export function tokenize(source: string): Token[] {
         }
         break;
       case "*":
-        tokens.push({ type: "star" });
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "starEquals" });
+          i++;
+        } else {
+          tokens.push({ type: "star" });
+        }
         break;
       case "/":
-        tokens.push({ type: "slash" });
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "slashEquals" });
+          i++;
+        } else {
+          tokens.push({ type: "slash" });
+        }
         break;
       case "=":
         if (source.charAt(i + 1) === "=") {
@@ -95,16 +109,26 @@ export function tokenize(source: string): Token[] {
         break;
       case "|":
         if (source.charAt(i + 1) === "|") {
-          tokens.push({ type: "or" });
-          i++;
+          if (source.charAt(i + 2) === "=") {
+            tokens.push({ type: "orEquals" });
+            i += 2;
+          } else {
+            tokens.push({ type: "or" });
+            i++;
+          }
         } else {
           throw new Error(`Unexpected character: ${char}`);
         }
         break;
       case "&":
         if (source.charAt(i + 1) === "&") {
-          tokens.push({ type: "and" });
-          i++;
+          if (source.charAt(i + 2) === "=") {
+            tokens.push({ type: "andEquals" });
+            i += 2;
+          } else {
+            tokens.push({ type: "and" });
+            i++;
+          }
         } else {
           throw new Error(`Unexpected character: ${char}`);
         }
