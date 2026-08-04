@@ -162,64 +162,76 @@ export function parse(tokens: Token[]): Program {
 
   function parsePrimary(): Expr {
     const token = tokens[index++]!;
-    if (token.type === "if") {
-      const condition = parseParenthesized();
-      const then = parseStatement();
-      let otherwise: Stmt = { type: "expr", expr: { type: "number", value: 0 } };
-      if (current().type === "else") {
-        index++; // consume "else"
-        otherwise = parseStatement();
+    const parselet = prefixParselets.get(token.type);
+    if (!parselet) {
+      throw new Error("Unexpected token");
+    }
+    return parselet(token);
+  }
+
+  function parseIf(): Expr {
+    const condition = parseParenthesized();
+    const then = parseStatement();
+    let otherwise: Stmt = { type: "expr", expr: { type: "number", value: 0 } };
+    if (current().type === "else") {
+      index++; // consume "else"
+      otherwise = parseStatement();
+    }
+    return { type: "if", condition, then, otherwise };
+  }
+
+  function parseWhile(): Expr {
+    const condition = parseParenthesized();
+    const body = parseStatement();
+    return { type: "while", condition, body };
+  }
+
+  function parseMatch(): Expr {
+    const value = parseParenthesized();
+    index++; // consume "{"
+    const arms: MatchArm[] = [];
+    while (current().type !== "rbrace") {
+      index++; // consume "case"
+      let pattern: Expr | null = null;
+      if (current().type === "underscore") {
+        index++; // consume "_"
+      } else {
+        pattern = parseExpression();
       }
-      return { type: "if", condition, then, otherwise };
-    }
-    if (token.type === "while") {
-      const condition = parseParenthesized();
-      const body = parseStatement();
-      return { type: "while", condition, body };
-    }
-    if (token.type === "match") {
-      const value = parseParenthesized();
-      index++; // consume "{"
-      const arms: MatchArm[] = [];
-      while (current().type !== "rbrace") {
-        index++; // consume "case"
-        let pattern: Expr | null = null;
-        if (current().type === "underscore") {
-          index++; // consume "_"
-        } else {
-          pattern = parseExpression();
-        }
-        if (current().type !== "arrow") {
-          throw new Error("Expected =>");
-        }
-        index++; // consume "=>"
-        const armValue = parseExpression();
-        if (tokens[index]?.type === "semicolon") {
-          index++;
-        }
-        arms.push({ pattern, value: armValue });
+      if (current().type !== "arrow") {
+        throw new Error("Expected =>");
       }
-      index++; // consume "}"
-      return { type: "match", value, arms };
+      index++; // consume "=>"
+      const armValue = parseExpression();
+      if (tokens[index]?.type === "semicolon") {
+        index++;
+      }
+      arms.push({ pattern, value: armValue });
     }
-    if (token.type === "number") {
-      return { type: "number", value: token.value };
-    }
-    if (token.type === "boolean") {
-      return { type: "boolean", value: token.value };
-    }
-    if (token.type === "identifier") {
-      return { type: "identifier", name: token.name };
-    }
-    if (token.type === "lparen") {
-      const expr = parseExpression();
-      index++; // consume ")"
-      return expr;
-    }
-    if (token.type === "lbrace") {
-      return parseBlock();
-    }
-    throw new Error("Unexpected token");
+    index++; // consume "}"
+    return { type: "match", value, arms };
+  }
+
+  function parseNumber(token: Token): Expr {
+    return { type: "number", value: (token as { type: "number"; value: number }).value };
+  }
+
+  function parseBoolean(token: Token): Expr {
+    return { type: "boolean", value: (token as { type: "boolean"; value: boolean }).value };
+  }
+
+  function parseIdentifier(token: Token): Expr {
+    return { type: "identifier", name: (token as { type: "identifier"; name: string }).name };
+  }
+
+  function parseGroup(): Expr {
+    const expr = parseExpression();
+    index++; // consume ")"
+    return expr;
+  }
+
+  function parseBlockExpr(): Expr {
+    return parseBlock();
   }
 
   function parseParenthesized(): Expr {
@@ -228,6 +240,17 @@ export function parse(tokens: Token[]): Program {
     index++; // consume ")"
     return expr;
   }
+
+  const prefixParselets = new Map<Token["type"], (token: Token) => Expr>([
+    ["if", parseIf],
+    ["while", parseWhile],
+    ["match", parseMatch],
+    ["number", parseNumber],
+    ["boolean", parseBoolean],
+    ["identifier", parseIdentifier],
+    ["lparen", parseGroup],
+    ["lbrace", parseBlockExpr],
+  ]);
 
   function parseProgram(): Program {
     const statements: Stmt[] = [];
