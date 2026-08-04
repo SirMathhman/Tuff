@@ -16,9 +16,13 @@ export type Program = { statements: Stmt[] };
 export function parse(tokens: Token[]): Program {
   let index = 0;
 
+  function current(): Token {
+    return tokens[index]!;
+  }
+
   function parseBlock(): Expr {
     const statements: Stmt[] = [];
-    while (index < tokens.length && tokens[index].type !== "rbrace") {
+    while (index < tokens.length && current().type !== "rbrace") {
       statements.push(parseStatement());
     }
     index++; // consume "}"
@@ -26,7 +30,7 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseStatement(): Stmt {
-    const token = tokens[index];
+    const token = current();
     if (token.type === "identifier" && token.name === "let") {
       index++; // consume "let"
       let mut = false;
@@ -35,7 +39,7 @@ export function parse(tokens: Token[]): Program {
         mut = true;
         index++; // consume "mut"
       }
-      const name = tokens[index++];
+      const name = tokens[index++]!;
       if (name.type !== "identifier") {
         throw new Error("Expected identifier after let");
       }
@@ -66,8 +70,8 @@ export function parse(tokens: Token[]): Program {
 
   function parseExpression(): Expr {
     let left = parseTerm();
-    while (index < tokens.length && (tokens[index].type === "plus" || tokens[index].type === "minus")) {
-      const operator = tokens[index].type === "plus" ? "+" : "-";
+    while (index < tokens.length && (current().type === "plus" || current().type === "minus")) {
+      const operator = current().type === "plus" ? "+" : "-";
       index++;
       const right = parseTerm();
       left = { type: "binary", operator, left, right };
@@ -77,8 +81,8 @@ export function parse(tokens: Token[]): Program {
 
   function parseTerm(): Expr {
     let left = parsePrimary();
-    while (index < tokens.length && (tokens[index].type === "star" || tokens[index].type === "slash")) {
-      const operator = tokens[index].type === "star" ? "*" : "/";
+    while (index < tokens.length && (current().type === "star" || current().type === "slash")) {
+      const operator = current().type === "star" ? "*" : "/";
       index++;
       const right = parsePrimary();
       left = { type: "binary", operator, left, right };
@@ -87,7 +91,7 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parsePrimary(): Expr {
-    const token = tokens[index++];
+    const token = tokens[index++]!;
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }

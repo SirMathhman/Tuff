@@ -16,23 +16,23 @@ export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < source.length) {
-    const char = source[i];
+    const char = source.charAt(i);
     if (/\s/.test(char)) {
       i++;
       continue;
     }
     if (/\d/.test(char)) {
       let value = "";
-      while (i < source.length && /\d/.test(source[i])) {
-        value += source[i++];
+      while (i < source.length && /\d/.test(source.charAt(i))) {
+        value += source.charAt(i++);
       }
       tokens.push({ type: "number", value: Number(value) });
       continue;
     }
     if (/[a-zA-Z_]/.test(char)) {
       let name = "";
-      while (i < source.length && /[a-zA-Z0-9_]/.test(source[i])) {
-        name += source[i++];
+      while (i < source.length && /[a-zA-Z0-9_]/.test(source.charAt(i))) {
+        name += source.charAt(i++);
       }
       tokens.push({ type: "identifier", name });
       continue;
