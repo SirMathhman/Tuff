@@ -29,3 +29,7 @@ test("evaluate parentheses override precedence", () => {
   expect(evaluate("2 * (3 + 4)")).toBe(14);
 });
 
+test("evaluate curly braces override precedence", () => {
+  expect(evaluate("2 * { 3 + 4 }")).toBe(14);
+});
+

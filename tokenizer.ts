@@ -5,7 +5,9 @@ export type Token =
   | { type: "star" }
   | { type: "slash" }
   | { type: "lparen" }
-  | { type: "rparen" };
+  | { type: "rparen" }
+  | { type: "lbrace" }
+  | { type: "rbrace" };
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -42,6 +44,12 @@ export function tokenize(source: string): Token[] {
         break;
       case ")":
         tokens.push({ type: "rparen" });
+        break;
+      case "{":
+        tokens.push({ type: "lbrace" });
+        break;
+      case "}":
+        tokens.push({ type: "rbrace" });
         break;
       default:
         throw new Error(`Unexpected character: ${char}`);

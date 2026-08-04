@@ -34,9 +34,9 @@ export function parse(tokens: Token[]): Expr {
     if (token.type === "number") {
       return { type: "number", value: token.value };
     }
-    if (token.type === "lparen") {
+    if (token.type === "lparen" || token.type === "lbrace") {
       const expr = parseExpression();
-      index++; // consume ")"
+      index++; // consume ")" or "}"
       return expr;
     }
     throw new Error("Unexpected token");
