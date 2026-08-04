@@ -86,31 +86,34 @@ export function parse(tokens: Token[]): Program {
     const expr = parseExpression();
     if (tokens[index]?.type === "equals") {
       index++; // consume "="
-      const value = parseExpression();
-      if (tokens[index]?.type === "semicolon") {
-        index++;
-      }
-      if (expr.type !== "identifier") {
-        throw new Error("Assignment target must be an identifier");
-      }
-      return { type: "assign", name: expr.name, value };
+      const value = parseAssignmentValue();
+      return { type: "assign", name: requireIdentifier(expr), value };
     }
     const compoundOperator = compoundAssignOperators.get(tokens[index]?.type ?? "semicolon");
     if (compoundOperator) {
       index++; // consume compound assignment operator
-      const value = parseExpression();
-      if (tokens[index]?.type === "semicolon") {
-        index++;
-      }
-      if (expr.type !== "identifier") {
-        throw new Error("Assignment target must be an identifier");
-      }
-      return { type: "compoundAssign", name: expr.name, operator: compoundOperator, value };
+      const value = parseAssignmentValue();
+      return { type: "compoundAssign", name: requireIdentifier(expr), operator: compoundOperator, value };
     }
     if (tokens[index]?.type === "semicolon") {
       index++;
     }
     return { type: "expr", expr };
+  }
+
+  function parseAssignmentValue(): Expr {
+    const value = parseExpression();
+    if (tokens[index]?.type === "semicolon") {
+      index++;
+    }
+    return value;
+  }
+
+  function requireIdentifier(expr: Expr): string {
+    if (expr.type !== "identifier") {
+      throw new Error("Assignment target must be an identifier");
+    }
+    return expr.name;
   }
 
   function parseExpression(minPrecedence = 0): Expr {

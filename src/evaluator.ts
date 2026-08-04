@@ -56,30 +56,29 @@ function evalStmt(stmt: Stmt, env: Env): Value {
       env.set(stmt.name, { value: evalExpr(stmt.value, env), mutable: stmt.mut });
       return { kind: "number", value: 0 };
     case "assign": {
-      const binding = env.get(stmt.name);
-      if (!binding) {
-        throw new Error(`Cannot assign to undeclared variable: ${stmt.name}`);
-      }
-      if (!binding.mutable) {
-        throw new Error(`Cannot assign to immutable variable: ${stmt.name}`);
-      }
+      const binding = getMutableBinding(env, stmt.name);
       binding.value = evalExpr(stmt.value, env);
       return { kind: "number", value: 0 };
     }
     case "compoundAssign": {
-      const binding = env.get(stmt.name);
-      if (!binding) {
-        throw new Error(`Cannot assign to undeclared variable: ${stmt.name}`);
-      }
-      if (!binding.mutable) {
-        throw new Error(`Cannot assign to immutable variable: ${stmt.name}`);
-      }
+      const binding = getMutableBinding(env, stmt.name);
       binding.value = apply(stmt.operator, binding.value, evalExpr(stmt.value, env));
       return { kind: "number", value: 0 };
     }
     case "expr":
       return evalExpr(stmt.expr, env);
   }
+}
+
+function getMutableBinding(env: Env, name: string): Binding {
+  const binding = env.get(name);
+  if (!binding) {
+    throw new Error(`Cannot assign to undeclared variable: ${name}`);
+  }
+  if (!binding.mutable) {
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  }
+  return binding;
 }
 
 function applyUnary(operator: string, operand: Value): Value {
