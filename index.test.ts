@@ -69,3 +69,7 @@ test("evaluate equality", () => {
   expect(evaluate("let x = true; let y = false; x == y")).toBe(0);
 });
 
+test("evaluate boolean not equal to number", () => {
+  expect(evaluate("true == 1")).toBe(0);
+});
+
