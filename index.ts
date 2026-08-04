@@ -1,12 +1,18 @@
 import { tokenize } from "./tokenizer";
-import { parse, type Expr, type Stmt } from "./parser";
+import { parse, type Expr, type Stmt, type Program } from "./parser";
 
 export function evaluate(source: string): number {
   const tokens = tokenize(source);
   if (tokens.length === 0) {
     return 0;
   }
-  return evalExpr(parse(tokens), new Map());
+  const program: Program = parse(tokens);
+  const env = new Map<string, number>();
+  let result = 0;
+  for (const stmt of program.statements) {
+    result = evalStmt(stmt, env);
+  }
+  return result;
 }
 
 function evalExpr(expr: Expr, env: Map<string, number>): number {
@@ -26,6 +32,10 @@ function evalBlock(statements: Stmt[], env: Map<string, number>): number {
   let result = 0;
   for (const stmt of statements) {
     result = evalStmt(stmt, env);
+  }
+  const last = statements[statements.length - 1];
+  if (last && last.type === "let") {
+    throw new Error("Block must end with an expression");
   }
   return result;
 }

@@ -10,7 +10,9 @@ export type Stmt =
   | { type: "let"; name: string; value: Expr }
   | { type: "expr"; expr: Expr };
 
-export function parse(tokens: Token[]): Expr {
+export type Program = { statements: Stmt[] };
+
+export function parse(tokens: Token[]): Program {
   let index = 0;
 
   function parseBlock(): Expr {
@@ -85,5 +87,13 @@ export function parse(tokens: Token[]): Expr {
     throw new Error("Unexpected token");
   }
 
-  return parseBlock();
+  function parseProgram(): Program {
+    const statements: Stmt[] = [];
+    while (index < tokens.length) {
+      statements.push(parseStatement());
+    }
+    return { statements };
+  }
+
+  return parseProgram();
 }

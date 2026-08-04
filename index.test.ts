@@ -45,3 +45,7 @@ test("evaluate program ending in let declaration returns 0", () => {
   expect(evaluate("let x = 14;")).toBe(0);
 });
 
+test("evaluate block without expression value throws", () => {
+  expect(() => evaluate("let x = { let y = 100; };")).toThrow();
+});
+
