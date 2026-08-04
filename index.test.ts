@@ -21,3 +21,7 @@ test("evaluate chained addition", () => {
   expect(evaluate("1 + 2 + 3")).toBe(6);
 });
 
+test("evaluate multiplication before addition", () => {
+  expect(evaluate("2 * 3 + 4")).toBe(10);
+});
+

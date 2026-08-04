@@ -3,13 +3,27 @@ export function evaluate(source: string): number {
   if (tokens.length === 1 && tokens[0] === "") {
     return 0;
   }
-  let result = Number(tokens[0]);
-  for (let i = 1; i < tokens.length; i += 2) {
-    const operator = tokens[i];
-    const operand = Number(tokens[i + 1]);
-    if (operator === "+") {
-      result += operand;
+  let index = 0;
+
+  function parseExpression(): number {
+    let value = parseTerm();
+    while (index < tokens.length && (tokens[index] === "+" || tokens[index] === "-")) {
+      const operator = tokens[index++];
+      const right = parseTerm();
+      value = operator === "+" ? value + right : value - right;
     }
+    return value;
   }
-  return result;
+
+  function parseTerm(): number {
+    let value = Number(tokens[index++]);
+    while (index < tokens.length && (tokens[index] === "*" || tokens[index] === "/")) {
+      const operator = tokens[index++];
+      const right = Number(tokens[index++]);
+      value = operator === "*" ? value * right : value / right;
+    }
+    return value;
+  }
+
+  return parseExpression();
 }
