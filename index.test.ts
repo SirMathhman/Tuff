@@ -61,3 +61,7 @@ test("evaluate boolean literal true", () => {
   expect(evaluate("let x = true; x")).toBe(1);
 });
 
+test("evaluate logical or", () => {
+  expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
+});
+

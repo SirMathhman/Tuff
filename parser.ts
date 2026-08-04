@@ -5,6 +5,7 @@ export type Expr =
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
+  | { type: "or"; left: Expr; right: Expr }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -70,6 +71,16 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseExpression(): Expr {
+    let left = parseOr();
+    while (index < tokens.length && current().type === "or") {
+      index++;
+      const right = parseOr();
+      left = { type: "or", left, right };
+    }
+    return left;
+  }
+
+  function parseOr(): Expr {
     let left = parseTerm();
     while (index < tokens.length && (current().type === "plus" || current().type === "minus")) {
       const operator = current().type === "plus" ? "+" : "-";

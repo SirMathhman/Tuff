@@ -8,6 +8,7 @@ export type Token =
   | { type: "slash" }
   | { type: "equals" }
   | { type: "semicolon" }
+  | { type: "or" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -60,6 +61,14 @@ export function tokenize(source: string): Token[] {
         break;
       case ";":
         tokens.push({ type: "semicolon" });
+        break;
+      case "|":
+        if (source.charAt(i + 1) === "|") {
+          tokens.push({ type: "or" });
+          i++;
+        } else {
+          throw new Error(`Unexpected character: ${char}`);
+        }
         break;
       case "(":
         tokens.push({ type: "lparen" });
