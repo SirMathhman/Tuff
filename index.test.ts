@@ -41,3 +41,7 @@ test("evaluate top-level variable declaration", () => {
   expect(evaluate("let y = 2 * { let x = 3 + 4; x }; y")).toBe(14);
 });
 
+test("evaluate program ending in let declaration returns 0", () => {
+  expect(evaluate("let x = 14;")).toBe(0);
+});
+
