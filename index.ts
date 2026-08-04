@@ -1,39 +1,34 @@
+import { tokenize } from "./tokenizer";
+import { parse, type Expr } from "./parser";
+
 export function evaluate(source: string): number {
-  const tokens = source.match(/\d+|[+\-*/()]/g) ?? [];
+  const tokens = tokenize(source);
   if (tokens.length === 0) {
     return 0;
   }
-  let index = 0;
+  return evalExpr(parse(tokens));
+}
 
-  function parseExpression(): number {
-    let value = parseTerm();
-    while (index < tokens.length && (tokens[index] === "+" || tokens[index] === "-")) {
-      const operator = tokens[index++];
-      const right = parseTerm();
-      value = operator === "+" ? value + right : value - right;
-    }
-    return value;
+function evalExpr(expr: Expr): number {
+  switch (expr.type) {
+    case "number":
+      return expr.value;
+    case "binary":
+      return apply(expr.operator, evalExpr(expr.left), evalExpr(expr.right));
   }
+}
 
-  function parseTerm(): number {
-    let value = parsePrimary();
-    while (index < tokens.length && (tokens[index] === "*" || tokens[index] === "/")) {
-      const operator = tokens[index++];
-      const right = parsePrimary();
-      value = operator === "*" ? value * right : value / right;
-    }
-    return value;
+function apply(operator: string, left: number, right: number): number {
+  switch (operator) {
+    case "+":
+      return left + right;
+    case "-":
+      return left - right;
+    case "*":
+      return left * right;
+    case "/":
+      return left / right;
+    default:
+      throw new Error(`Unknown operator: ${operator}`);
   }
-
-  function parsePrimary(): number {
-    const token = tokens[index++];
-    if (token === "(") {
-      const value = parseExpression();
-      index++; // consume ")"
-      return value;
-    }
-    return Number(token);
-  }
-
-  return parseExpression();
 }
