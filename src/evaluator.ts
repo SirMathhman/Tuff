@@ -260,6 +260,15 @@ function resolveTarget(target: LValue, env: Env): (value: Value) => void {
       object.value[index] = newValue;
     };
   }
+  if (target.type === "member") {
+    const object = flowValue(evalExpr(target.object, env));
+    if (object.kind !== "object") {
+      throw new Error("Cannot access member of non-object");
+    }
+    return (newValue) => {
+      object.value.set(target.property, newValue);
+    };
+  }
   throw new Error("Invalid assignment target");
 }
 

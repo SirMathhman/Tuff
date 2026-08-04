@@ -237,3 +237,7 @@ test("evaluate array element assignment", () => {
   expect(evaluate("let mut array = [0]; array[0] = 100; array[0]")).toBe(100);
 });
 
+test("evaluate object property assignment", () => {
+  expect(evaluate("let mut container = { field: 0 }; container.field = 100; container.field")).toBe(100);
+});
+

@@ -18,7 +18,8 @@ export type MatchArm = { pattern: Expr | null; value: Expr };
 export type LValue =
   | { type: "identifier"; name: string }
   | { type: "deref"; operand: Expr }
-  | { type: "index"; object: Expr; index: Expr };
+  | { type: "index"; object: Expr; index: Expr }
+  | { type: "member"; object: Expr; property: string };
 
 export type Stmt =
   | { type: "function"; name: string; params: string[]; body: Expr }
@@ -174,7 +175,10 @@ export function parse(tokens: Token[]): Program {
     if (expr.type === "index") {
       return { type: "index", object: expr.object, index: expr.index };
     }
-    throw new Error("Assignment target must be an identifier, dereference, or index");
+    if (expr.type === "member") {
+      return { type: "member", object: expr.object, property: expr.property };
+    }
+    throw new Error("Assignment target must be an identifier, dereference, index, or member");
   }
 
   function parseExpression(minPrecedence = 0): Expr {
