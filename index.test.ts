@@ -117,3 +117,7 @@ test("evaluate assignment inside block mutates outer variable", () => {
   expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
 });
 
+test("evaluate if with block branches", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = 2; } else { x = 3; } x")).toBe(3);
+});
+
