@@ -40,7 +40,7 @@ function evalExpr(expr: Expr, env: Env): Flow {
     case "null":
       return { kind: "value", value: { kind: "number", value: 0 } };
     case "identifier":
-      return { kind: "value", value: env.get(expr.name)?.value ?? { kind: "number", value: 0 } };
+      return { kind: "value", value: lookupBinding(env, expr.name).value };
     case "binary":
       return { kind: "value", value: apply(expr.operator, flowValue(evalExpr(expr.left, env)), flowValue(evalExpr(expr.right, env))) };
     case "unary":
@@ -49,10 +49,7 @@ function evalExpr(expr: Expr, env: Env): Flow {
         if (operand.type !== "identifier") {
           throw new Error("Reference target must be an identifier");
         }
-        const binding = env.get(operand.name);
-        if (!binding) {
-          throw new Error(`Cannot reference undeclared variable: ${operand.name}`);
-        }
+        const binding = lookupBinding(env, operand.name);
         return { kind: "value", value: { kind: "reference", binding } };
       }
       return { kind: "value", value: applyUnary(expr.operator, flowValue(evalExpr(expr.operand, env))) };
@@ -143,6 +140,14 @@ function evalStmt(stmt: Stmt, env: Env): Flow {
     case "expr":
       return evalExpr(stmt.expr, env);
   }
+}
+
+function lookupBinding(env: Env, name: string): Binding {
+  const binding = env.get(name);
+  if (!binding) {
+    throw new Error(`Cannot reference undeclared variable: ${name}`);
+  }
+  return binding;
 }
 
 function getMutableBinding(env: Env, name: string): Binding {

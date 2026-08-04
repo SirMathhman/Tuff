@@ -193,3 +193,7 @@ test("evaluate null literal", () => {
   expect(evaluate("let x = null; x")).toBe(0);
 });
 
+test("evaluate undefined identifier throws", () => {
+  expect(() => evaluate("undefinedIdentifier")).toThrow();
+});
+
