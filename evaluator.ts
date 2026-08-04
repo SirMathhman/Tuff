@@ -22,8 +22,6 @@ function evalExpr(expr: Expr, env: Env): number {
       return env.get(expr.name)?.value ?? 0;
     case "binary":
       return apply(expr.operator, evalExpr(expr.left, env), evalExpr(expr.right, env));
-    case "or":
-      return evalExpr(expr.left, env) || evalExpr(expr.right, env);
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }
@@ -72,6 +70,8 @@ function apply(operator: string, left: number, right: number): number {
       return left * right;
     case "/":
       return left / right;
+    case "||":
+      return left || right;
     default:
       throw new Error(`Unknown operator: ${operator}`);
   }

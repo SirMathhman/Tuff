@@ -5,7 +5,6 @@ export type Expr =
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; operator: string; left: Expr; right: Expr }
-  | { type: "or"; left: Expr; right: Expr }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -14,6 +13,14 @@ export type Stmt =
   | { type: "expr"; expr: Expr };
 
 export type Program = { statements: Stmt[] };
+
+const binaryOperators = new Map<Token["type"], { symbol: string; precedence: number }>([
+  ["or", { symbol: "||", precedence: 1 }],
+  ["plus", { symbol: "+", precedence: 2 }],
+  ["minus", { symbol: "-", precedence: 2 }],
+  ["star", { symbol: "*", precedence: 3 }],
+  ["slash", { symbol: "/", precedence: 3 }],
+]);
 
 export function parse(tokens: Token[]): Program {
   let index = 0;
@@ -70,34 +77,16 @@ export function parse(tokens: Token[]): Program {
     return { type: "expr", expr };
   }
 
-  function parseExpression(): Expr {
-    let left = parseOr();
-    while (index < tokens.length && current().type === "or") {
-      index++;
-      const right = parseOr();
-      left = { type: "or", left, right };
-    }
-    return left;
-  }
-
-  function parseOr(): Expr {
-    let left = parseTerm();
-    while (index < tokens.length && (current().type === "plus" || current().type === "minus")) {
-      const operator = current().type === "plus" ? "+" : "-";
-      index++;
-      const right = parseTerm();
-      left = { type: "binary", operator, left, right };
-    }
-    return left;
-  }
-
-  function parseTerm(): Expr {
+  function parseExpression(minPrecedence = 0): Expr {
     let left = parsePrimary();
-    while (index < tokens.length && (current().type === "star" || current().type === "slash")) {
-      const operator = current().type === "star" ? "*" : "/";
+    while (index < tokens.length) {
+      const op = binaryOperators.get(current().type);
+      if (!op || op.precedence < minPrecedence) {
+        break;
+      }
       index++;
-      const right = parsePrimary();
-      left = { type: "binary", operator, left, right };
+      const right = parseExpression(op.precedence + 1);
+      left = { type: "binary", operator: op.symbol, left, right };
     }
     return left;
   }
