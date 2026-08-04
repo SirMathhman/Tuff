@@ -1,7 +1,10 @@
 import type { Expr, Stmt, Program } from "./parser";
 
+type Binding = { value: number; mutable: boolean };
+type Env = Map<string, Binding>;
+
 export function evaluateProgram(program: Program): number {
-  const env = new Map<string, number>();
+  const env: Env = new Map();
   let result = 0;
   for (const stmt of program.statements) {
     result = evalStmt(stmt, env);
@@ -9,12 +12,12 @@ export function evaluateProgram(program: Program): number {
   return result;
 }
 
-function evalExpr(expr: Expr, env: Map<string, number>): number {
+function evalExpr(expr: Expr, env: Env): number {
   switch (expr.type) {
     case "number":
       return expr.value;
     case "identifier":
-      return env.get(expr.name) ?? 0;
+      return env.get(expr.name)?.value ?? 0;
     case "binary":
       return apply(expr.operator, evalExpr(expr.left, env), evalExpr(expr.right, env));
     case "block":
@@ -22,7 +25,7 @@ function evalExpr(expr: Expr, env: Map<string, number>): number {
   }
 }
 
-function evalBlock(statements: Stmt[], env: Map<string, number>): number {
+function evalBlock(statements: Stmt[], env: Env): number {
   let result = 0;
   for (const stmt of statements) {
     result = evalStmt(stmt, env);
@@ -34,17 +37,22 @@ function evalBlock(statements: Stmt[], env: Map<string, number>): number {
   return result;
 }
 
-function evalStmt(stmt: Stmt, env: Map<string, number>): number {
+function evalStmt(stmt: Stmt, env: Env): number {
   switch (stmt.type) {
     case "let":
-      env.set(stmt.name, evalExpr(stmt.value, env));
+      env.set(stmt.name, { value: evalExpr(stmt.value, env), mutable: stmt.mut });
       return 0;
-    case "assign":
-      if (!env.has(stmt.name)) {
+    case "assign": {
+      const binding = env.get(stmt.name);
+      if (!binding) {
         throw new Error(`Cannot assign to undeclared variable: ${stmt.name}`);
       }
-      env.set(stmt.name, evalExpr(stmt.value, env));
+      if (!binding.mutable) {
+        throw new Error(`Cannot assign to immutable variable: ${stmt.name}`);
+      }
+      binding.value = evalExpr(stmt.value, env);
       return 0;
+    }
     case "expr":
       return evalExpr(stmt.expr, env);
   }

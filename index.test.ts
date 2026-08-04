@@ -53,3 +53,7 @@ test("evaluate mutable variable reassignment", () => {
   expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
 });
 
+test("evaluate reassigning immutable variable throws", () => {
+  expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
+});
+
