@@ -94,6 +94,16 @@ function apply(operator: string, left: Value, right: Value): Value {
       return { kind: "boolean", value: toNumber(left) !== 0 && toNumber(right) !== 0 };
     case "==":
       return { kind: "boolean", value: left.kind === right.kind && left.value === right.value };
+    case "!=":
+      return { kind: "boolean", value: left.kind !== right.kind || left.value !== right.value };
+    case "<":
+      return { kind: "boolean", value: toNumber(left) < toNumber(right) };
+    case "<=":
+      return { kind: "boolean", value: toNumber(left) <= toNumber(right) };
+    case ">":
+      return { kind: "boolean", value: toNumber(left) > toNumber(right) };
+    case ">=":
+      return { kind: "boolean", value: toNumber(left) >= toNumber(right) };
     default:
       throw new Error(`Unknown operator: ${operator}`);
   }

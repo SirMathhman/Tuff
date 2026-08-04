@@ -8,6 +8,11 @@ export type Token =
   | { type: "slash" }
   | { type: "equals" }
   | { type: "equalsEquals" }
+  | { type: "notEquals" }
+  | { type: "lessThan" }
+  | { type: "lessThanOrEqual" }
+  | { type: "greaterThan" }
+  | { type: "greaterThanOrEqual" }
   | { type: "semicolon" }
   | { type: "or" }
   | { type: "and" }
@@ -87,7 +92,28 @@ export function tokenize(source: string): Token[] {
         }
         break;
       case "!":
-        tokens.push({ type: "not" });
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "notEquals" });
+          i++;
+        } else {
+          tokens.push({ type: "not" });
+        }
+        break;
+      case "<":
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "lessThanOrEqual" });
+          i++;
+        } else {
+          tokens.push({ type: "lessThan" });
+        }
+        break;
+      case ">":
+        if (source.charAt(i + 1) === "=") {
+          tokens.push({ type: "greaterThanOrEqual" });
+          i++;
+        } else {
+          tokens.push({ type: "greaterThan" });
+        }
         break;
       case "(":
         tokens.push({ type: "lparen" });
