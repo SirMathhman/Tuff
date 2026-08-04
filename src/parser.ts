@@ -41,6 +41,8 @@ const binaryOperators = new Map<Token["type"], { symbol: string; precedence: num
 const prefixOperators = new Map<Token["type"], string>([
   ["not", "!"],
   ["minus", "-"],
+  ["ampersand", "&"],
+  ["star", "*"],
 ]);
 
 const compoundAssignOperators = new Map<Token["type"], string>([

@@ -1,6 +1,9 @@
 import type { Expr, Stmt, Program } from "./parser";
 
-type Value = { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+type Value =
+  | { kind: "number"; value: number }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "reference"; binding: Binding };
 type Flow =
   | { kind: "value"; value: Value }
   | { kind: "break" }
@@ -18,6 +21,9 @@ export function evaluateProgram(program: Program): number {
 }
 
 function toNumber(value: Value): number {
+  if (value.kind === "reference") {
+    return toNumber(value.binding.value);
+  }
   return value.kind === "number" ? value.value : value.value ? 1 : 0;
 }
 
@@ -36,6 +42,17 @@ function evalExpr(expr: Expr, env: Env): Flow {
     case "binary":
       return { kind: "value", value: apply(expr.operator, flowValue(evalExpr(expr.left, env)), flowValue(evalExpr(expr.right, env))) };
     case "unary":
+      if (expr.operator === "&") {
+        const operand = expr.operand;
+        if (operand.type !== "identifier") {
+          throw new Error("Reference target must be an identifier");
+        }
+        const binding = env.get(operand.name);
+        if (!binding) {
+          throw new Error(`Cannot reference undeclared variable: ${operand.name}`);
+        }
+        return { kind: "value", value: { kind: "reference", binding } };
+      }
       return { kind: "value", value: applyUnary(expr.operator, flowValue(evalExpr(expr.operand, env))) };
     case "if":
       return toNumber(flowValue(evalExpr(expr.condition, env))) !== 0
@@ -70,7 +87,18 @@ function evalExpr(expr: Expr, env: Env): Flow {
 
 function valuesEqual(pattern: Expr, value: Value, env: Env): boolean {
   const patternValue = flowValue(evalExpr(pattern, env));
-  return patternValue.kind === value.kind && patternValue.value === value.value;
+  return sameValue(deref(patternValue), deref(value));
+}
+
+function deref(value: Value): Value {
+  return value.kind === "reference" ? deref(value.binding.value) : value;
+}
+
+function sameValue(a: Value, b: Value): boolean {
+  if (a.kind !== b.kind || a.kind === "reference" || b.kind === "reference") {
+    return false;
+  }
+  return a.value === b.value;
 }
 
 function evalBlock(statements: Stmt[], env: Env): Flow {
@@ -129,6 +157,11 @@ function applyUnary(operator: string, operand: Value): Value {
       return { kind: "boolean", value: toNumber(operand) === 0 };
     case "-":
       return { kind: "number", value: -toNumber(operand) };
+    case "*":
+      if (operand.kind !== "reference") {
+        throw new Error("Cannot dereference non-reference");
+      }
+      return operand.binding.value;
     default:
       throw new Error(`Unknown operator: ${operator}`);
   }
@@ -149,9 +182,9 @@ function apply(operator: string, left: Value, right: Value): Value {
     case "&&":
       return { kind: "boolean", value: toNumber(left) !== 0 && toNumber(right) !== 0 };
     case "==":
-      return { kind: "boolean", value: left.kind === right.kind && left.value === right.value };
+      return { kind: "boolean", value: sameValue(deref(left), deref(right)) };
     case "!=":
-      return { kind: "boolean", value: left.kind !== right.kind || left.value !== right.value };
+      return { kind: "boolean", value: !sameValue(deref(left), deref(right)) };
     case "<":
       return { kind: "boolean", value: toNumber(left) < toNumber(right) };
     case "<=":

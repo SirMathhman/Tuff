@@ -23,6 +23,7 @@ export type Token =
   | { type: "or" }
   | { type: "and" }
   | { type: "not" }
+  | { type: "ampersand" }
   | { type: "if" }
   | { type: "else" }
   | { type: "while" }
@@ -152,7 +153,7 @@ export function tokenize(source: string): Token[] {
             i++;
           }
         } else {
-          throw new Error(`Unexpected character: ${char}`);
+          tokens.push({ type: "ampersand" });
         }
         break;
       case "!":

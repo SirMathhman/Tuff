@@ -181,3 +181,7 @@ test("evaluate match wildcard arm", () => {
   expect(evaluate("let x = match (3) { case 2 => 4; case _ => 5; }; x")).toBe(5);
 });
 
+test("evaluate reference and dereference", () => {
+  expect(evaluate("let x = 1; let y = &x; *y")).toBe(1);
+});
+
