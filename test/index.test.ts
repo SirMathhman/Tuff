@@ -173,3 +173,7 @@ test("evaluate continue in while loop", () => {
   expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(4);
 });
 
+test("evaluate match expression", () => {
+  expect(evaluate("let x = match (2) { case 2 => 4; case _ => 5; }; x")).toBe(4);
+});
+

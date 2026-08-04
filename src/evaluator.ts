@@ -54,9 +54,23 @@ function evalExpr(expr: Expr, env: Env): Flow {
       }
       return result;
     }
+    case "match": {
+      const value = flowValue(evalExpr(expr.value, env));
+      for (const arm of expr.arms) {
+        if (arm.pattern === null || valuesEqual(arm.pattern, value, env)) {
+          return evalExpr(arm.value, env);
+        }
+      }
+      return { kind: "value", value: { kind: "number", value: 0 } };
+    }
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }
+}
+
+function valuesEqual(pattern: Expr, value: Value, env: Env): boolean {
+  const patternValue = flowValue(evalExpr(pattern, env));
+  return patternValue.kind === value.kind && patternValue.value === value.value;
 }
 
 function evalBlock(statements: Stmt[], env: Env): Flow {

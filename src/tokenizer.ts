@@ -28,6 +28,10 @@ export type Token =
   | { type: "while" }
   | { type: "break" }
   | { type: "continue" }
+  | { type: "match" }
+  | { type: "case" }
+  | { type: "underscore" }
+  | { type: "arrow" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -67,6 +71,12 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "break" });
       } else if (name === "continue") {
         tokens.push({ type: "continue" });
+      } else if (name === "match") {
+        tokens.push({ type: "match" });
+      } else if (name === "case") {
+        tokens.push({ type: "case" });
+      } else if (name === "_") {
+        tokens.push({ type: "underscore" });
       } else {
         tokens.push({ type: "identifier", name });
       }
@@ -108,6 +118,9 @@ export function tokenize(source: string): Token[] {
       case "=":
         if (source.charAt(i + 1) === "=") {
           tokens.push({ type: "equalsEquals" });
+          i++;
+        } else if (source.charAt(i + 1) === ">") {
+          tokens.push({ type: "arrow" });
           i++;
         } else {
           tokens.push({ type: "equals" });

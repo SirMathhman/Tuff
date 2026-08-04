@@ -8,7 +8,10 @@ export type Expr =
   | { type: "unary"; operator: string; operand: Expr }
   | { type: "if"; condition: Expr; then: Stmt; otherwise: Stmt }
   | { type: "while"; condition: Expr; body: Stmt }
+  | { type: "match"; value: Expr; arms: MatchArm[] }
   | { type: "block"; statements: Stmt[] };
+
+export type MatchArm = { pattern: Expr | null; value: Expr };
 
 export type Stmt =
   | { type: "let"; name: string; mut: boolean; value: Expr }
@@ -173,6 +176,31 @@ export function parse(tokens: Token[]): Program {
       const condition = parseParenthesized();
       const body = parseStatement();
       return { type: "while", condition, body };
+    }
+    if (token.type === "match") {
+      const value = parseParenthesized();
+      index++; // consume "{"
+      const arms: MatchArm[] = [];
+      while (current().type !== "rbrace") {
+        index++; // consume "case"
+        let pattern: Expr | null = null;
+        if (current().type === "underscore") {
+          index++; // consume "_"
+        } else {
+          pattern = parseExpression();
+        }
+        if (current().type !== "arrow") {
+          throw new Error("Expected =>");
+        }
+        index++; // consume "=>"
+        const armValue = parseExpression();
+        if (tokens[index]?.type === "semicolon") {
+          index++;
+        }
+        arms.push({ pattern, value: armValue });
+      }
+      index++; // consume "}"
+      return { type: "match", value, arms };
     }
     if (token.type === "number") {
       return { type: "number", value: token.value };
