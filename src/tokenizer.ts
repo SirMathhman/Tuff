@@ -3,6 +3,7 @@ export type LiteralToken =
   | { type: "boolean"; value: boolean }
   | { type: "null" }
   | { type: "char"; value: string }
+  | { type: "string"; value: string }
   | { type: "identifier"; name: string };
 
 export type Token = LiteralToken
@@ -63,6 +64,19 @@ export function tokenize(source: string): Token[] {
         value += source.charAt(i++);
       }
       tokens.push({ type: "number", value: Number(value) });
+      continue;
+    }
+    if (char === '"') {
+      i++; // consume opening quote
+      let value = "";
+      while (i < source.length && source.charAt(i) !== '"') {
+        value += source.charAt(i++);
+      }
+      if (source.charAt(i) !== '"') {
+        throw new Error("Expected closing quote");
+      }
+      i++; // consume closing quote
+      tokens.push({ type: "string", value });
       continue;
     }
     if (char === "'") {

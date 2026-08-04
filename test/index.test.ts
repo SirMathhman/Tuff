@@ -241,3 +241,7 @@ test("evaluate object property assignment", () => {
   expect(evaluate("let mut container = { field: 0 }; container.field = 100; container.field")).toBe(100);
 });
 
+test("evaluate string literal length", () => {
+  expect(evaluate('"foo".length')).toBe(3);
+});
+

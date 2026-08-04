@@ -339,6 +339,10 @@ export function parse(tokens: Token[]): Program {
     return { type: "char", value: (token as { type: "char"; value: string }).value };
   }
 
+  function parseString(token: Token): Expr {
+    return { type: "string", value: (token as { type: "string"; value: string }).value };
+  }
+
   function parseIdentifier(token: Token): Expr {
     return { type: "identifier", name: (token as { type: "identifier"; name: string }).name };
   }
@@ -411,6 +415,7 @@ export function parse(tokens: Token[]): Program {
     ["boolean", parseBoolean],
     ["null", parseNull],
     ["char", parseChar],
+    ["string", parseString],
     ["identifier", parseIdentifier],
     ["lparen", parseGroup],
     ["lbrace", parseBlockExpr],

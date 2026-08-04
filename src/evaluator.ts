@@ -7,6 +7,7 @@ type Value =
   | { kind: "boolean"; value: boolean }
   | { kind: "null" }
   | { kind: "char"; value: string }
+  | { kind: "string"; value: string }
   | { kind: "reference"; binding: Binding }
   | { kind: "function"; value: FunctionValue }
   | { kind: "object"; value: ObjectValue }
@@ -54,6 +55,8 @@ function evalExpr(expr: Expr, env: Env): Flow {
       return { kind: "value", value: { kind: "null" } };
     case "char":
       return { kind: "value", value: { kind: "char", value: expr.value } };
+    case "string":
+      return { kind: "value", value: { kind: "string", value: expr.value } };
     case "identifier":
       return { kind: "value", value: lookupBinding(env, expr.name).value };
     case "binary":
@@ -111,6 +114,12 @@ function evalExpr(expr: Expr, env: Env): Flow {
     }
     case "member": {
       const object = flowValue(evalExpr(expr.object, env));
+      if (object.kind === "string") {
+        if (expr.property === "length") {
+          return { kind: "value", value: { kind: "number", value: object.value.length } };
+        }
+        throw new Error(`String has no property: ${expr.property}`);
+      }
       if (object.kind !== "object") {
         throw new Error("Cannot access member of non-object");
       }
