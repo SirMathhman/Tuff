@@ -7,6 +7,7 @@ export type Expr =
   | { type: "binary"; operator: string; left: Expr; right: Expr }
   | { type: "unary"; operator: string; operand: Expr }
   | { type: "if"; condition: Expr; then: Expr; otherwise: Expr }
+  | { type: "while"; condition: Expr; body: Expr }
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
@@ -153,6 +154,13 @@ export function parse(tokens: Token[]): Program {
         otherwise = parseExpression();
       }
       return { type: "if", condition, then, otherwise };
+    }
+    if (token.type === "while") {
+      index++; // consume "("
+      const condition = parseExpression();
+      index++; // consume ")"
+      const body = parseExpression();
+      return { type: "while", condition, body };
     }
     if (token.type === "number") {
       return { type: "number", value: token.value };

@@ -25,6 +25,7 @@ export type Token =
   | { type: "not" }
   | { type: "if" }
   | { type: "else" }
+  | { type: "while" }
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
@@ -58,6 +59,8 @@ export function tokenize(source: string): Token[] {
         tokens.push({ type: "if" });
       } else if (name === "else") {
         tokens.push({ type: "else" });
+      } else if (name === "while") {
+        tokens.push({ type: "while" });
       } else {
         tokens.push({ type: "identifier", name });
       }

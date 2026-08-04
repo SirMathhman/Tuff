@@ -33,6 +33,13 @@ function evalExpr(expr: Expr, env: Env): Value {
       return toNumber(evalExpr(expr.condition, env)) !== 0
         ? evalExpr(expr.then, env)
         : evalExpr(expr.otherwise, env);
+    case "while": {
+      let result: Value = { kind: "number", value: 0 };
+      while (toNumber(evalExpr(expr.condition, env)) !== 0) {
+        result = evalExpr(expr.body, env);
+      }
+      return result;
+    }
     case "block":
       return evalBlock(expr.statements, new Map(env));
   }
