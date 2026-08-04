@@ -7,7 +7,8 @@ export type Expr =
   | { type: "block"; statements: Stmt[] };
 
 export type Stmt =
-  | { type: "let"; name: string; value: Expr }
+  | { type: "let"; name: string; mut: boolean; value: Expr }
+  | { type: "assign"; name: string; value: Expr }
   | { type: "expr"; expr: Expr };
 
 export type Program = { statements: Stmt[] };
@@ -28,6 +29,12 @@ export function parse(tokens: Token[]): Program {
     const token = tokens[index];
     if (token.type === "identifier" && token.name === "let") {
       index++; // consume "let"
+      let mut = false;
+      const next = tokens[index];
+      if (next?.type === "identifier" && next.name === "mut") {
+        mut = true;
+        index++; // consume "mut"
+      }
       const name = tokens[index++];
       if (name.type !== "identifier") {
         throw new Error("Expected identifier after let");
@@ -37,9 +44,20 @@ export function parse(tokens: Token[]): Program {
       if (tokens[index]?.type === "semicolon") {
         index++;
       }
-      return { type: "let", name: name.name, value };
+      return { type: "let", name: name.name, mut, value };
     }
     const expr = parseExpression();
+    if (tokens[index]?.type === "equals") {
+      index++; // consume "="
+      const value = parseExpression();
+      if (tokens[index]?.type === "semicolon") {
+        index++;
+      }
+      if (expr.type !== "identifier") {
+        throw new Error("Assignment target must be an identifier");
+      }
+      return { type: "assign", name: expr.name, value };
+    }
     if (tokens[index]?.type === "semicolon") {
       index++;
     }

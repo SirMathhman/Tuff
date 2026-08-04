@@ -49,3 +49,7 @@ test("evaluate block without expression value throws", () => {
   expect(() => evaluate("let x = { let y = 100; };")).toThrow();
 });
 
+test("evaluate mutable variable reassignment", () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+});
+

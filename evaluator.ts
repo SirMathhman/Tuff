@@ -39,6 +39,12 @@ function evalStmt(stmt: Stmt, env: Map<string, number>): number {
     case "let":
       env.set(stmt.name, evalExpr(stmt.value, env));
       return 0;
+    case "assign":
+      if (!env.has(stmt.name)) {
+        throw new Error(`Cannot assign to undeclared variable: ${stmt.name}`);
+      }
+      env.set(stmt.name, evalExpr(stmt.value, env));
+      return 0;
     case "expr":
       return evalExpr(stmt.expr, env);
   }
