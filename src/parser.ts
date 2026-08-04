@@ -15,7 +15,7 @@ export type MatchArm = { pattern: Expr | null; value: Expr };
 
 export type Stmt =
   | { type: "let"; name: string; mut: boolean; value: Expr }
-  | { type: "assign"; name: string; value: Expr }
+  | { type: "assign"; target: Expr; value: Expr }
   | { type: "compoundAssign"; name: string; operator: string; value: Expr }
   | { type: "break" }
   | { type: "continue" }
@@ -109,7 +109,10 @@ export function parse(tokens: Token[]): Program {
     if (tokens[index]?.type === "equals") {
       index++; // consume "="
       const value = parseAssignmentValue();
-      return { type: "assign", name: requireIdentifier(expr), value };
+      if (expr.type !== "identifier" && !(expr.type === "unary" && expr.operator === "*")) {
+        throw new Error("Assignment target must be an identifier or dereference");
+      }
+      return { type: "assign", target: expr, value };
     }
     const compoundOperator = compoundAssignOperators.get(tokens[index]?.type ?? "semicolon");
     if (compoundOperator) {
@@ -154,6 +157,15 @@ export function parse(tokens: Token[]): Program {
 
   function parseUnary(): Expr {
     const token = current();
+    if (token.type === "ampersand") {
+      index++;
+      const next = tokens[index];
+      if (next?.type === "identifier" && next.name === "mut") {
+        index++; // consume "mut"
+        return { type: "unary", operator: "&mut", operand: parseUnary() };
+      }
+      return { type: "unary", operator: "&", operand: parseUnary() };
+    }
     const operator = prefixOperators.get(token.type);
     if (operator) {
       index++;

@@ -185,3 +185,7 @@ test("evaluate reference and dereference", () => {
   expect(evaluate("let x = 1; let y = &x; *y")).toBe(1);
 });
 
+test("evaluate mutable reference assignment", () => {
+  expect(evaluate("let mut x = 0; let y = &mut x; *y = 1; x")).toBe(1);
+});
+

@@ -42,7 +42,7 @@ function evalExpr(expr: Expr, env: Env): Flow {
     case "binary":
       return { kind: "value", value: apply(expr.operator, flowValue(evalExpr(expr.left, env)), flowValue(evalExpr(expr.right, env))) };
     case "unary":
-      if (expr.operator === "&") {
+      if (expr.operator === "&" || expr.operator === "&mut") {
         const operand = expr.operand;
         if (operand.type !== "identifier") {
           throw new Error("Reference target must be an identifier");
@@ -122,7 +122,10 @@ function evalStmt(stmt: Stmt, env: Env): Flow {
       env.set(stmt.name, { value: flowValue(evalExpr(stmt.value, env)), mutable: stmt.mut });
       return { kind: "value", value: { kind: "number", value: 0 } };
     case "assign": {
-      const binding = getMutableBinding(env, stmt.name);
+      const binding = resolveTarget(stmt.target, env);
+      if (!binding.mutable) {
+        throw new Error("Cannot assign to immutable target");
+      }
       binding.value = flowValue(evalExpr(stmt.value, env));
       return { kind: "value", value: { kind: "number", value: 0 } };
     }
@@ -149,6 +152,20 @@ function getMutableBinding(env: Env, name: string): Binding {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
   }
   return binding;
+}
+
+function resolveTarget(target: Expr, env: Env): Binding {
+  if (target.type === "identifier") {
+    return getMutableBinding(env, target.name);
+  }
+  if (target.type === "unary" && target.operator === "*") {
+    const value = flowValue(evalExpr(target.operand, env));
+    if (value.kind !== "reference") {
+      throw new Error("Cannot assign through non-reference");
+    }
+    return value.binding;
+  }
+  throw new Error("Invalid assignment target");
 }
 
 function applyUnary(operator: string, operand: Value): Value {
