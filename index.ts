@@ -1,7 +1,7 @@
 export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === "") return 0;
-  const tokens = trimmed.split(/([+\-*/()])/).filter((t) => t.trim() !== "");
+  const tokens = trimmed.split(/([+\-*/(){}])/).filter((t) => t.trim() !== "");
   let pos = 0;
   function parseExpression(): number {
     let result = parseTerm();
@@ -16,10 +16,10 @@ export function evaluate(source: string): number {
   }
   function parseTerm(): number {
     let result: number;
-    if (tokens[pos] === "(") {
+    if (tokens[pos] === "(" || tokens[pos] === "{") {
       pos++;
       result = parseExpression();
-      pos++; // skip ")"
+      pos++; // skip ")" or "}"
     } else {
       result = parseFloat(tokens[pos]!);
       pos++;
@@ -34,10 +34,10 @@ export function evaluate(source: string): number {
     return result;
   }
   function parseFactor(): number {
-    if (tokens[pos] === "(") {
+    if (tokens[pos] === "(" || tokens[pos] === "{") {
       pos++;
       const result = parseExpression();
-      pos++; // skip ")"
+      pos++; // skip ")" or "}"
       return result;
     }
     const result = parseFloat(tokens[pos]!);
