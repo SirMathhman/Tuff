@@ -2,23 +2,21 @@ export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === '') return 0;
 
-  // Tokenize into numbers, operators, grouping brackets, and identifiers
-  const matchResult = trimmed.match(/(\d+|[+\-\*\/(\){}]+|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)/g);
+  // Tokenize into numbers, operators, grouping brackets, punctuation, and identifiers
+  const matchResult = trimmed.match(/(\d+|[+\-\*\/(\){}=;]+|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)/g);
   if (!matchResult) return 0;
   const tokens: string[] = matchResult;
 
-  // Collect known identifiers (keywords + let-assigned variable names)
+  // Build symbol table from tokens: find "let <name> =" patterns sequentially
   const knownIdentifiers = new Set(["let"]);
-  for (const t of tokens) {
-    if (!/(\d+|[+\-\*\/(\){}])/.test(t)) {
-      const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (source.match(new RegExp(`\\blet\\s+${escaped}\\s*=`, 'g'))) {
-        knownIdentifiers.add(t);
-      }
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === 'let' && tokens[i + 2] === '=' && tokens[i + 1]) {
+      knownIdentifiers.add(tokens[i + 1]);
     }
   }
+  // Validate: throw on any identifier not in the symbol table
   for (const t of tokens) {
-    if (!/(\d+|[+\-\*\/(\){}])/.test(t)) {
+    if (!/(\d+|[+\-\*\/(\){}=;])/.test(t)) {
       if (!knownIdentifiers.has(t)) {
         throw new ReferenceError(`"${t}" is not defined`);
       }
