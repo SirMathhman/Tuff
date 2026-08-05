@@ -11,6 +11,11 @@ function eq(a: Value, b: Value): Value {
   if (a.tag === "number") return bool(a.num === (b as Value & { tag: "number" }).num);
   return bool(a.val === (b as Value & { tag: "bool" }).val);
 }
+function ne(a: Value, b: Value): Value { return bool(!truthy(eq(a, b))); }
+function lt(a: Value, b: Value): Value { return bool(toNum(a) < toNum(b)); }
+function lte(a: Value, b: Value): Value { return bool(toNum(a) <= toNum(b)); }
+function gt(a: Value, b: Value): Value { return bool(toNum(a) > toNum(b)); }
+function gte(a: Value, b: Value): Value { return bool(toNum(a) >= toNum(b)); }
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -29,9 +34,34 @@ function tokenize(source: string): Token[] {
       tokens.push({ type: ident === "let" || ident === "mut" ? "keyword" : "identifier", value: ident });
       continue;
     }
+    if (source[i] === "<" && source[i + 1] === "=") {
+      tokens.push({ type: "punct", value: "<=" });
+      i += 2;
+      continue;
+    }
+    if (source[i] === ">" && source[i + 1] === "=") {
+      tokens.push({ type: "punct", value: ">=" });
+      i += 2;
+      continue;
+    }
+    if (source[i] === "!" && source[i + 1] === "=") {
+      tokens.push({ type: "punct", value: "!=" });
+      i += 2;
+      continue;
+    }
     if (source[i] === "=" && source[i + 1] === "=") {
       tokens.push({ type: "punct", value: "==" });
       i += 2;
+      continue;
+    }
+    if (source[i] === "<") {
+      tokens.push({ type: "punct", value: "<" });
+      i++;
+      continue;
+    }
+    if (source[i] === ">") {
+      tokens.push({ type: "punct", value: ">" });
+      i++;
       continue;
     }
     if (source[i] === "|" && source[i + 1] === "|") {
@@ -105,10 +135,20 @@ export function evaluate(source: string): number {
   }
   function parseComparison(): Value {
     let result = parseTerm();
-    while (tokens[pos]?.value === "==") {
-      pos++;
-      const next = parseTerm();
-      result = eq(result, next);
+    while (true) {
+      const op = tokens[pos]?.value;
+      if (op === "==" || op === "!=" || op === "<" || op === "<=" || op === ">" || op === ">=") {
+        pos++;
+        const next = parseTerm();
+        if (op === "==") result = eq(result, next);
+        else if (op === "!=") result = ne(result, next);
+        else if (op === "<") result = lt(result, next);
+        else if (op === "<=") result = lte(result, next);
+        else if (op === ">") result = gt(result, next);
+        else result = gte(result, next);
+      } else {
+        break;
+      }
     }
     return result;
   }

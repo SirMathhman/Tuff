@@ -84,3 +84,43 @@ test('evaluate("let x = true; let y = false; x || y") => 1', () => {
 test('evaluate("let x = true; let y = false; x && y") => 0', () => {
   expect(evaluate("let x = true; let y = false; x && y")).toBe(0);
 });
+
+test('evaluate("1 < 2") => 1', () => {
+  expect(evaluate("1 < 2")).toBe(1);
+});
+
+test('evaluate("2 < 1") => 0', () => {
+  expect(evaluate("2 < 1")).toBe(0);
+});
+
+test('evaluate("1 <= 1") => 1', () => {
+  expect(evaluate("1 <= 1")).toBe(1);
+});
+
+test('evaluate("2 <= 1") => 0', () => {
+  expect(evaluate("2 <= 1")).toBe(0);
+});
+
+test('evaluate("2 > 1") => 1', () => {
+  expect(evaluate("2 > 1")).toBe(1);
+});
+
+test('evaluate("1 > 2") => 0', () => {
+  expect(evaluate("1 > 2")).toBe(0);
+});
+
+test('evaluate("1 >= 1") => 1', () => {
+  expect(evaluate("1 >= 1")).toBe(1);
+});
+
+test('evaluate("1 >= 2") => 0', () => {
+  expect(evaluate("1 >= 2")).toBe(0);
+});
+
+test('evaluate("1 != 2") => 1', () => {
+  expect(evaluate("1 != 2")).toBe(1);
+});
+
+test('evaluate("1 != 1") => 0', () => {
+  expect(evaluate("1 != 1")).toBe(0);
+});
