@@ -12,3 +12,7 @@ test('evaluate(" ") => 0', () => {
 test('evaluate("1") => 1', () => {
   expect(evaluate("1")).toBe(1);
 });
+
+test('evaluate("1 + 2") => 3', () => {
+  expect(evaluate("1 + 2")).toBe(3);
+});
