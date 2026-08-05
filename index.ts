@@ -80,6 +80,14 @@ export function evaluate(source: string): number {
     if (tok?.value === "{") {
       return parseBlock();
     }
+    if (tok?.value === "true") {
+      pos++;
+      return 1;
+    }
+    if (tok?.value === "false") {
+      pos++;
+      return 0;
+    }
     if (tok?.type === "identifier") {
       pos++;
       return lookup(tok.value);
