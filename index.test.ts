@@ -197,6 +197,10 @@ test('fn get() => { if (true) yield 1; 2 } + 3; get() => 4', () => {
   expect(evaluate('fn get() => { if (true) yield 1; 2 } + 3; get()')).toBe(4);
 });
 
+test('fn get() => { if (true) return 1; 2 } + 3; get() => 1', () => {
+  expect(evaluate('fn get() => { if (true) return 1; 2 } + 3; get()')).toBe(1);
+});
+
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });

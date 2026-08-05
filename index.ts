@@ -57,7 +57,8 @@ function negate(v: Value): Value { return num(-toNum(v)); }
 type ControlFlow =
   | { kind: "continue" }
   | { kind: "break" }
-  | { kind: "yield"; value: Value };
+  | { kind: "yield"; value: Value }
+  | { kind: "return"; value: Value };
 
 function isControlFlow(e: unknown): e is ControlFlow {
   return typeof e === "object" && e !== null && "kind" in e;
@@ -85,6 +86,7 @@ type Ast =
   | { kind: "continue" }
   | { kind: "break" }
   | { kind: "yield"; value: Ast }
+  | { kind: "return"; value: Ast }
   | { kind: "fn"; name: string; params: string[]; body: Ast }
   | { kind: "call"; name: string; args: Ast[] }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
@@ -167,7 +169,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" || ident === "match" || ident === "case" || ident === "null" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "return" || ident === "fn" || ident === "match" || ident === "case" || ident === "null" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -502,6 +504,13 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "break" };
     }
+    // Check for return statement
+    if (tokens[pos]?.value === "return") {
+      pos++;
+      const value = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "return", value };
+    }
     // Check for yield statement
     if (tokens[pos]?.value === "yield") {
       pos++;
@@ -756,6 +765,11 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         if (v === null) throw new Error("yield has no value");
         throw { kind: "yield", value: v };
       }
+      case "return": {
+        const v = visit(node.value);
+        if (v === null) throw new Error("return has no value");
+        throw { kind: "return", value: v };
+      }
       case "fn": {
         scopes[scopes.length - 1]!.vars[node.name] = {
           tag: "fn",
@@ -779,8 +793,12 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         fn.params.forEach((p, i) => {
           fnScopes[fnScopes.length - 1]!.vars[p] = argValues[i]!;
         });
-        const result = evalAst(fn.body, fnScopes, fnMutables);
-        return result;
+        try {
+          return evalAst(fn.body, fnScopes, fnMutables);
+        } catch (e) {
+          if (isControlFlow(e) && e.kind === "return") return e.value;
+          throw e;
+        }
       }
       case "wildcard": return num(0);
       case "null": return { tag: "null" };
