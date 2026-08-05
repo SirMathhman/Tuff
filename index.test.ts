@@ -49,6 +49,10 @@ test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
 
+test('evaluate("let x = { let y = 1; y }; y") => Error', () => {
+  expect(() => evaluate("let x = { let y = 1; y }; y")).toThrow();
+});
+
 test('evaluate("let x = 100;") => 0', () => {
   expect(evaluate("let x = 100;")).toBe(0);
 });
