@@ -20,3 +20,7 @@ test('evaluate("1 + 2") => 3', () => {
 test('evaluate("1 + 2 + 3") => 6', () => {
   expect(evaluate("1 + 2 + 3")).toBe(6);
 });
+
+test('evaluate("2 + 3 - 1") => 4', () => {
+  expect(evaluate("2 + 3 - 1")).toBe(4);
+});
