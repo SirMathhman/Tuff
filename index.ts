@@ -167,6 +167,18 @@ export function evaluate(source: string): number {
   }
   function parseFactor(): Value {
     const tok = tokens[pos];
+    if (tok?.value === "!") {
+      pos++;
+      return not(parseFactor());
+    }
+    if (tok?.value === "-") {
+      pos++;
+      return negate(parseFactor());
+    }
+    return parsePrimary();
+  }
+  function parsePrimary(): Value {
+    const tok = tokens[pos];
     if (tok?.value === "(") {
       pos++;
       const result = parseExpression();
@@ -175,14 +187,6 @@ export function evaluate(source: string): number {
     }
     if (tok?.value === "{") {
       return parseBlock();
-    }
-    if (tok?.value === "!") {
-      pos++;
-      return not(parseFactor());
-    }
-    if (tok?.value === "-") {
-      pos++;
-      return negate(parseFactor());
     }
     if (tok?.value === "true") {
       pos++;
