@@ -70,10 +70,9 @@ export function evaluate(source: string): number {
     pos++;
     return result;
   }
-  function parseBlock(): number {
-    pos++; // skip "{"
+  function parseStatements(stopToken: string): number {
     let result = 0;
-    while (tokens[pos]?.value !== "}" && tokens[pos]) {
+    while (tokens[pos]?.value !== stopToken && tokens[pos]) {
       if (tokens[pos]?.value === "let") {
         pos++; // skip "let"
         const name = tokens[pos]!.value;
@@ -86,26 +85,12 @@ export function evaluate(source: string): number {
         if (tokens[pos]?.value === ";") pos++;
       }
     }
-    pos++; // skip "}"
+    if (stopToken && tokens[pos]?.value === stopToken) pos++;
     return result;
   }
-  function parseStatement(): number {
-    if (tokens[pos]?.value === "let") {
-      pos++; // skip "let"
-      const name = tokens[pos]!.value;
-      pos++; // skip identifier
-      pos++; // skip "="
-      scope[name] = parseExpression();
-      if (tokens[pos]?.value === ";") pos++;
-      return scope[name];
-    }
-    const result = parseExpression();
-    if (tokens[pos]?.value === ";") pos++;
-    return result;
+  function parseBlock(): number {
+    pos++; // skip "{"
+    return parseStatements("}");
   }
-  let result = 0;
-  while (tokens[pos]) {
-    result = parseStatement();
-  }
-  return result;
+  return parseStatements("");
 }
