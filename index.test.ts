@@ -65,6 +65,10 @@ test('evaluate("let x = true; x") => 1', () => {
   expect(evaluate("let x = true; x")).toBe(1);
 });
 
+test('evaluate("let x = false; x") => 0', () => {
+  expect(evaluate("let x = false; x")).toBe(0);
+});
+
 test('evaluate("let x = 2; let y = 2; x == y") => 1', () => {
   expect(evaluate("let x = 2; let y = 2; x == y")).toBe(1);
 });
