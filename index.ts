@@ -104,7 +104,19 @@ function tokenize(source: string): Token[] {
     if (source[i] === "'") {
       i++; // skip opening quote
       let ch = "";
-      while (i < source.length && source[i] !== "'") { ch += source[i]!; i++; }
+      while (i < source.length && source[i] !== "'") {
+        if (source[i] === "\\") {
+          i++; // skip backslash
+          if (source[i] === "n") ch = "\n";
+          else if (source[i] === "t") ch = "\t";
+          else if (source[i] === "\\") ch = "\\";
+          else if (source[i] === "'") ch = "'";
+          else ch = source[i] || "";
+        } else {
+          ch += source[i]!;
+        }
+        i++;
+      }
       i++; // skip closing quote
       tokens.push({ type: "char", value: ch });
       continue;
