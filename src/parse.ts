@@ -94,10 +94,18 @@ export class Parser {
       return { type: "block", statements };
     }
 
-    // Variable reference
+    // Variable reference or assignment expression: `x` or `x = expr`
     if (token?.type === "identifier") {
+      const name = token.value;
       this.consume();
-      return { type: "varref", name: token.value };
+      // Look ahead: if next token is '=', this is an assignment expression
+      const next = this.peek();
+      if (next?.type === "operator" && next.value === "=") {
+        this.consume(); // discard '='
+        const valueExpr = this.parseFactor();
+        return { type: "assign", name, valueExpr };
+      }
+      return { type: "varref", name };
     }
 
     // Number literal
@@ -114,9 +122,12 @@ export class Parser {
     const next = this.peek();
     if (!next) throw new Error(`Unexpected end of input at position ${this.pos}`);
 
-    // Let declaration: `let x = expr`
+    // Let declaration: `let x = expr` or `let mut x = expr`
     if (next.type === "keyword" && next.value === "let") {
       this.consume(); // discard 'let'
+      const mutToken = this.peek();
+      const mutable = mutToken?.type === "keyword" && mutToken.value === "mut";
+      if (mutable) this.consume(); // discard 'mut'
       const nameToken = this.consume();
       if (!(nameToken.type === "identifier")) {
         throw new Error(`Expected identifier after 'let' at position ${this.pos}`);
@@ -126,7 +137,7 @@ export class Parser {
         throw new Error(`Expected '=' after variable name at position ${this.pos}`);
       }
       const valueExpr = this.parseExpr();
-      return { type: "letdecl", name: nameToken.value, valueExpr };
+      return { type: "letdecl", name: nameToken.value, valueExpr, mutable };
     }
 
     // Expression statement (e.g. `x` or `1 + 2`)

@@ -1,5 +1,5 @@
 // --- Tokenizer configuration (data-driven) ---
-const KEYWORDS = new Set(["let"]);
+const KEYWORDS = new Set(["let", "mut"]);
 const OPERATORS = "+-*\/=".split("");
 const DELIMITERS: Record<string, string> = { "(": ")", "{": "}" };
 
@@ -67,7 +67,7 @@ export function tokenize(source: string): Token[] {
         i++;
       }
       tokens.push(KEYWORDS.has(name)
-        ? { type: "keyword", value: name } as const
+        ? { type: "keyword", value: name }
         : { type: "identifier", value: name });
       continue;
     }

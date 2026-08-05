@@ -56,3 +56,7 @@ test('evaluate("let x = { let y = 1; y }; y") => Error', () => {
 test('evaluate("let x = 100;") => 0', () => {
   expect(evaluate("let x = 100;")).toBe(0);
 });
+
+test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+});

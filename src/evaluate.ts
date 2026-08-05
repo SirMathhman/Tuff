@@ -34,6 +34,15 @@ export function evaluateExpr(node: Expr, scope: Scope = new Scope()): number {
     }
   }
 
+  if (node.type === "assign") {
+    if (!scope.isMutable(node.name)) {
+      throw new Error(`Cannot reassign immutable variable '${node.name}'`);
+    }
+    const value = evaluateExpr(node.valueExpr, scope);
+    scope.set(node.name, value);
+    return value;
+  }
+
   // Exhaustive check — all Expr variants handled above
   const _exhaustive: never = node;
   throw new Error(`Unknown expression type: ${(_exhaustive as any).type}`);
@@ -44,6 +53,7 @@ function evaluateStmt(stmt: Stmt, scope: Scope): number {
   if (stmt.type === "letdecl") {
     const value = evaluateExpr(stmt.valueExpr, scope);
     scope.set(stmt.name, value);
+    if (stmt.mutable) scope.declareMutable(stmt.name);
     return 0;
   }
 
