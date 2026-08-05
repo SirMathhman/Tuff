@@ -1,5 +1,5 @@
 import type { Token } from "./tokenize";
-import type { Expr, LetDeclNode } from "./ast";
+import type { Expr, Stmt } from "./ast";
 
 /** Maps opening delimiters to their closing counterparts */
 const CLOSING_DELIMITER: Record<string, string> = {
@@ -73,27 +73,13 @@ export class Parser {
     // Block `{ stmts }`
     if (token?.type === "paren" && token.value === "{") {
       this.consume(); // discard '{'
-      const statements: (Expr | LetDeclNode)[] = [];
+      const statements: Stmt[] = [];
       while (true) {
         const next = this.peek();
         if (!next || (next.type === "paren" && next.value === "}")) break;
 
-        // Parse let declaration
-        if (next.type === "keyword" && next.value === "let") {
-          this.consume(); // discard 'let'
-          const nameToken = this.consume();
-          if (!(nameToken.type === "identifier")) {
-            throw new Error(`Expected identifier after 'let' at position ${this.pos}`);
-          }
-          const eqToken = this.consume();
-          if (!(eqToken.type === "operator" && eqToken.value === "=")) {
-            throw new Error(`Expected '=' after variable name at position ${this.pos}`);
-          }
-          const valueExpr = this.parseExpr();
-          statements.push({ type: "letdecl", name: nameToken.value, value: valueExpr });
-        } else {
-          statements.push(this.parseExpr());
-        }
+        // Parse a statement (let-decl or expr-stmt)
+        statements.push(this.parseStmt());
 
         // Consume semicolon if present (optional before '}')
         const semi = this.peek();
@@ -120,6 +106,31 @@ export class Parser {
     }
     this.consume();
     return { type: "number", value: token.value };
+  }
+
+  // --- Statement parsing (stmt -> let-decl | expr-stmt) ---
+
+  parseStmt(): Stmt {
+    const next = this.peek();
+    if (!next) throw new Error(`Unexpected end of input at position ${this.pos}`);
+
+    // Let declaration: `let x = expr`
+    if (next.type === "keyword" && next.value === "let") {
+      this.consume(); // discard 'let'
+      const nameToken = this.consume();
+      if (!(nameToken.type === "identifier")) {
+        throw new Error(`Expected identifier after 'let' at position ${this.pos}`);
+      }
+      const eqToken = this.consume();
+      if (!(eqToken.type === "operator" && eqToken.value === "=")) {
+        throw new Error(`Expected '=' after variable name at position ${this.pos}`);
+      }
+      const valueExpr = this.parseExpr();
+      return { type: "letdecl", name: nameToken.value, valueExpr };
+    }
+
+    // Expression statement (e.g. `x` or `1 + 2`)
+    return { type: "exprstmt", expr: this.parseExpr() };
   }
 }
 

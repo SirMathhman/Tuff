@@ -18,21 +18,29 @@ export interface VarRefNode {
   name: string;
 }
 
-/** Let declaration (`let x = expr;`) — part of a block's statements */
-export interface LetDeclNode {
+/** Expression union — any valid expression in the language */
+export type Expr = BinOpNode | NumberNode | VarRefNode | BlockNode;
+
+// --- Statements (side-effecting constructs that live inside blocks) ---
+
+/** Let declaration (`let x = expr;`) */
+export interface LetDeclStmt {
   type: "letdecl";
   name: string;
-  value: Expr;
+  valueExpr: Expr;
 }
+
+/** Expression used as a statement (e.g. `x` on its own line) */
+export interface ExprStmt {
+  type: "exprstmt";
+  expr: Expr;
+}
+
+/** Statement union — only appears inside blocks */
+export type Stmt = LetDeclStmt | ExprStmt;
 
 /** Block `{ stmts }` — evaluates to last statement's result */
 export interface BlockNode {
   type: "block";
-  statements: (Expr | LetDeclNode)[];
+  statements: Stmt[];
 }
-
-/** Statement union — can appear inside blocks */
-export type Stmt = Expr | LetDeclNode;
-
-/** Expression union — any valid expression in the language */
-export type Expr = BinOpNode | NumberNode | VarRefNode | BlockNode;

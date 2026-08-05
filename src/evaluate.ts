@@ -1,4 +1,4 @@
-import type { Expr } from "./ast";
+import type { Expr, Stmt } from "./ast";
 
 /**
  * Walk an expression AST and compute the numeric result.
@@ -15,11 +15,7 @@ export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map())
   if (node.type === "block") {
     let lastVal: number = 0;
     for (const stmt of node.statements) {
-      if (stmt.type === "letdecl") {
-        scope.set(stmt.name, evaluateExpr(stmt.value, scope));
-      } else {
-        lastVal = evaluateExpr(stmt as Expr, scope);
-      }
+      lastVal = evaluateStmt(stmt, scope);
     }
     return lastVal;
   }
@@ -39,4 +35,16 @@ export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map())
   // Exhaustive check — all Expr variants handled above
   const _exhaustive: never = node;
   throw new Error(`Unknown expression type: ${(_exhaustive as any).type}`);
+}
+
+/** Evaluate a statement and return its numeric result */
+function evaluateStmt(stmt: Stmt, scope: Map<string, number>): number {
+  if (stmt.type === "letdecl") {
+    const value = evaluateExpr(stmt.valueExpr, scope);
+    scope.set(stmt.name, value);
+    return value;
+  }
+
+  // exprstmt — just evaluate the expression and discard side effects
+  return evaluateExpr(stmt.expr, scope);
 }
