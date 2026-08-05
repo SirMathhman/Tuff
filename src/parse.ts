@@ -1,77 +1,90 @@
 import type { Token } from "./tokenize";
 import type { Expr } from "./ast";
 
-/**
- * Recursive-descent parser with operator precedence.
- *   expr  -> term (('+' | '-') term)*
- *   term  -> number (('*' | '/') number)*
- */
-export function parse(tokens: Token[]): Expr {
-  let pos = 0;
+/** Maps opening delimiters to their closing counterparts */
+const CLOSING_DELIMITER: Record<string, string> = {
+  "(": ")",
+  "{": "}",
+};
 
-  function peek(): Token | undefined {
-    return tokens[pos];
+export class Parser {
+  private tokens: Token[];
+  pos: number;
+
+  constructor(tokens: Token[]) {
+    this.tokens = tokens;
+    this.pos = 0;
   }
 
-  function consume(): Token {
-    const token = tokens[pos++];
-    if (token === undefined) throw new Error(`Unexpected end of input at position ${pos}`);
+  peek(): Token | undefined {
+    return this.tokens[this.pos];
+  }
+
+  consume(): Token {
+    const token = this.tokens[this.pos++];
+    if (token === undefined) throw new Error(`Unexpected end of input at position ${this.pos}`);
     return token;
   }
 
-  // expr handles + and - (lowest precedence)
-  function parseExpr(): Expr {
-    let result: Expr = parseTerm();
+  parseExpr(): Expr {
+    let result: Expr = this.parseTerm();
 
     while (true) {
-      const next = peek();
+      const next = this.peek();
       if (!(next?.type === "operator" && (next.value === "+" || next.value === "-"))) break;
-      consume(); // discard operator token
-      const right = parseTerm();
+      this.consume(); // discard operator token
+      const right = this.parseTerm();
       result = { type: "binop", op: next.value, left: result, right };
     }
 
     return result;
   }
 
-  // Remove old parseNumber reference — replaced by parseFactor
-
-  // term handles * and / (higher precedence)
-  function parseTerm(): Expr {
-    let result: Expr = parseFactor();
+  parseTerm(): Expr {
+    let result: Expr = this.parseFactor();
 
     while (true) {
-      const next = peek();
+      const next = this.peek();
       if (!(next?.type === "operator" && (next.value === "*" || next.value === "/"))) break;
-      consume(); // discard operator token
-      const right = parseFactor();
+      this.consume(); // discard operator token
+      const right = this.parseFactor();
       result = { type: "binop", op: next.value, left: result, right };
     }
 
     return result;
   }
 
-  // factor handles parenthesized/braced sub-expressions and numbers
-  function parseFactor(): Expr {
-    const token = peek();
-    if (token?.type === "paren" && (token.value === "(" || token.value === "{")) {
-      consume(); // discard opening delimiter
-      const expr = parseExpr();
-      const close = consume();
-      const expectedClose = token.value === "(" ? ")" : "}";
+  parseFactor(): Expr {
+    const token = this.peek();
+
+    if (token?.type === "paren" && CLOSING_DELIMITER[token.value]) {
+      const openValue = token.value;
+      this.consume(); // discard opening delimiter
+      const expr = this.parseExpr();
+      const close = this.consume();
+      const expectedClose = CLOSING_DELIMITER[openValue];
       if (!(close.type === "paren" && close.value === expectedClose)) {
-        throw new Error(`Expected '${expectedClose}' at position ${pos}`);
+        throw new Error(`Expected '${expectedClose}' at position ${this.pos}`);
       }
       return expr;
     }
+
     if (!token || token.type !== "number") {
-      throw new Error(`Expected number or '(' at position ${pos}, got: ${JSON.stringify(token)}`);
+      throw new Error(`Expected number or '(' at position ${this.pos}, got: ${JSON.stringify(token)}`);
     }
-    consume();
+    this.consume();
     return { type: "number", value: token.value };
   }
+}
 
-  // Entry point
+/**
+ * Recursive-descent parser with operator precedence.
+ *   expr  -> term (('+' | '-') term)*
+ *   term  -> factor (('*' | '/') factor)*
+ *   factor -> '(' expr ')' | '{' expr '}' | number
+ */
+export function parse(tokens: Token[]): Expr {
   if (tokens.length === 0) return { type: "number", value: 0 };
-  return parseExpr();
+  const parser = new Parser(tokens);
+  return parser.parseExpr();
 }
