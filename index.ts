@@ -32,7 +32,7 @@ type Ast =
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
-  | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
+  | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast | null }
   | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
   | { kind: "while"; cond: Ast; body: Ast }
   | { kind: "continue" }
@@ -273,8 +273,7 @@ function parse(tokens: Token[]): Ast {
       const cond = parseExpression();
       expectToken(")");
       const thenBranch = parseStatement()!;
-      expectToken("else");
-      const elseBranch = parseStatement()!;
+      const elseBranch = tokens[pos]?.value === "else" ? (pos++, parseStatement()) : null;
       return { kind: "if", cond, thenBranch, elseBranch };
     }
     const result = parseExpression();
@@ -373,7 +372,7 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
       case "if": {
         const cond = visit(node.cond)!;
         if (truthy(cond)) return visit(node.thenBranch);
-        return visit(node.elseBranch);
+        return node.elseBranch ? visit(node.elseBranch) : num(0);
       }
       case "while": {
         let iterations = 0;
