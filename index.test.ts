@@ -189,6 +189,10 @@ test('"test" == "test" => 1', () => {
   expect(evaluate('"test" == "test"')).toBe(1);
 });
 
+test('"apple" < "banana" => 1', () => {
+  expect(evaluate('"apple" < "banana"')).toBe(1);
+});
+
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });
