@@ -6,7 +6,10 @@ export function evaluate(source: string): number {
   const matchResult = trimmed.match(/(\d+|[+\-\*\/(\){}])/g);
   if (!matchResult) return 0;
   const tokens: string[] = matchResult;
-
+  // If source contains an assignment but no expression (only numbers), treat as statement-only → 0
+  if (source.includes('=') && !tokens.some(t => /[+\-\*\/()\{\}]/.test(t))) {
+    return 0;
+  }
   let pos = 0;
 
   function peek(): string | undefined {
