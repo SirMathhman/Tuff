@@ -7,7 +7,8 @@ type Value =
   | { tag: "ref"; scope: Scope; name: string; mutable: boolean }
   | { tag: "tuple"; values: Value[] }
   | { tag: "null" }
-  | { tag: "array"; values: Value[] };
+  | { tag: "array"; values: Value[] }
+  | { tag: "string"; value: string };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
@@ -18,6 +19,7 @@ function toNum(v: Value): number {
   if (v.tag === "tuple") return 0;
   if (v.tag === "null") return 0;
   if (v.tag === "array") return 0;
+  if (v.tag === "string") return v.value.charCodeAt(0);
   return 0;
 }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
@@ -72,7 +74,9 @@ type Ast =
   | { kind: "null" }
   | { kind: "array"; elements: Ast[] }
   | { kind: "array_index"; target: Ast; index: Ast }
-  | { kind: "char"; value: string };
+  | { kind: "char"; value: string }
+  | { kind: "string"; value: string }
+  | { kind: "string_index"; target: Ast; index: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -119,6 +123,26 @@ function tokenize(source: string): Token[] {
       }
       i++; // skip closing quote
       tokens.push({ type: "char", value: ch });
+      continue;
+    }
+    if (source[i] === '"') {
+      i++; // skip opening quote
+      let str = "";
+      while (i < source.length && source[i] !== '"') {
+        if (source[i] === "\\") {
+          i++; // skip backslash
+          if (source[i] === "n") str += "\n";
+          else if (source[i] === "t") str += "\t";
+          else if (source[i] === "\\") str += "\\";
+          else if (source[i] === '"') str += '"';
+          else str += source[i] || "";
+        } else {
+          str += source[i]!;
+        }
+        i++;
+      }
+      i++; // skip closing quote
+      tokens.push({ type: "string", value: str });
       continue;
     }
     if (/[a-zA-Z_]/.test(source[i]!)) {
@@ -352,6 +376,18 @@ function parse(tokens: Token[]): Ast {
     if (tok?.type === "char") {
       pos++;
       return { kind: "char", value: tok.value };
+    }
+    if (tok?.type === "string") {
+      const str = tok.value;
+      pos++;
+      // Check for string indexing: "string"[expr]
+      if (tokens[pos]?.value === "[") {
+        pos++; // skip "["
+        const index = parseExpression();
+        pos++; // skip "]"
+        return { kind: "string_index", target: { kind: "string", value: str }, index };
+      }
+      return { kind: "string", value: str };
     }
     if (tok?.type === "identifier") {      const name = tok.value;
       pos++;
@@ -762,6 +798,16 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         if (target.tag !== "array") throw new Error("cannot index non-array");
         const idx = toNum(visit(node.index)!);
         return target.values[idx]!;
+      }
+      case "string": return { tag: "string", value: node.value };
+      case "string_index": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("string target has no value");
+        if (target.tag !== "string") throw new Error("cannot index non-string");
+        const idx = toNum(visit(node.index)!);
+        const ch = target.value[idx];
+        if (ch === undefined) return num(0);
+        return num(ch.charCodeAt(0));
       }
     }
   }

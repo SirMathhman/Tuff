@@ -177,6 +177,10 @@ test('evaluate("let mut x = 0; if (true) x = 4; x") => 4', () => {
   expect(evaluate("let mut x = 0; if (true) x = 4; x")).toBe(4);
 });
 
+test('"apple"[0]" => 97', () => {
+  expect(evaluate('"apple"[0]')).toBe(97);
+});
+
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });
