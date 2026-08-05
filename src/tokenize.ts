@@ -1,7 +1,10 @@
 export type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" }
-  | { type: "paren"; value: "(" | ")" | "{" | "}" };
+  | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" }
+  | { type: "paren"; value: "(" | ")" | "{" | "}" }
+  | { type: "identifier"; value: string }
+  | { type: "keyword"; value: "let" }
+  | { type: "semicolon" };
 
 /**
  * Convert a source string into a stream of tokens.
@@ -31,8 +34,8 @@ export function tokenize(source: string): Token[] {
     }
 
     // Operator
-    if ("+-*/".includes(char)) {
-      const op = char as "+" | "-" | "*" | "/";
+    if ("+-*/=".includes(char)) {
+      const op = char as "+" | "-" | "*" | "/" | "=";
       tokens.push({ type: "operator", value: op });
       i++;
       continue;
@@ -50,6 +53,28 @@ export function tokenize(source: string): Token[] {
       const brace = char as "{" | "}";
       tokens.push({ type: "paren", value: brace });
       i++;
+      continue;
+    }
+
+    // Semicolon
+    if (char === ";") {
+      tokens.push({ type: "semicolon" });
+      i++;
+      continue;
+    }
+
+    // Identifier or keyword
+    if (/[a-zA-Z_]/.test(char)) {
+      let name = "";
+      while (i < source.length && /[a-zA-Z0-9_]/.test(source.charAt(i))) {
+        name += source.charAt(i);
+        i++;
+      }
+      if (name === "let") {
+        tokens.push({ type: "keyword", value: "let" });
+      } else {
+        tokens.push({ type: "identifier", value: name });
+      }
       continue;
     }
 

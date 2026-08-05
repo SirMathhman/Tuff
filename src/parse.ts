@@ -57,7 +57,8 @@ export class Parser {
   parseFactor(): Expr {
     const token = this.peek();
 
-    if (token?.type === "paren" && CLOSING_DELIMITER[token.value]) {
+    // Parenthesized expression `( expr )`
+    if (token?.type === "paren" && CLOSING_DELIMITER[token.value] && token.value !== "{") {
       const openValue = token.value;
       this.consume(); // discard opening delimiter
       const expr = this.parseExpr();
@@ -69,6 +70,51 @@ export class Parser {
       return expr;
     }
 
+    // Block `{ stmts }`
+    if (token?.type === "paren" && token.value === "{") {
+      this.consume(); // discard '{'
+      const statements: (Expr | LetDeclNode)[] = [];
+      while (true) {
+        const next = this.peek();
+        if (!next || (next.type === "paren" && next.value === "}")) break;
+
+        // Parse let declaration
+        if (next.type === "keyword" && next.value === "let") {
+          this.consume(); // discard 'let'
+          const nameToken = this.consume();
+          if (!(nameToken.type === "identifier")) {
+            throw new Error(`Expected identifier after 'let' at position ${this.pos}`);
+          }
+          const eqToken = this.consume();
+          if (!(eqToken.type === "operator" && eqToken.value === "=")) {
+            throw new Error(`Expected '=' after variable name at position ${this.pos}`);
+          }
+          const valueExpr = this.parseExpr();
+          statements.push({ type: "letdecl", name: nameToken.value, value: valueExpr });
+        } else {
+          statements.push(this.parseExpr());
+        }
+
+        // Consume semicolon if present (optional before '}')
+        const semi = this.peek();
+        if (semi?.type === "semicolon") {
+          this.consume();
+        }
+      }
+      const close = this.consume();
+      if (!(close.type === "paren" && close.value === "}")) {
+        throw new Error(`Expected '}' at position ${this.pos}`);
+      }
+      return { type: "block", statements };
+    }
+
+    // Variable reference
+    if (token?.type === "identifier") {
+      this.consume();
+      return { type: "varref", name: token.value };
+    }
+
+    // Number literal
     if (!token || token.type !== "number") {
       throw new Error(`Expected number or '(' at position ${this.pos}, got: ${JSON.stringify(token)}`);
     }
