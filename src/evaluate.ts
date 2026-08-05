@@ -1,5 +1,35 @@
 import type { Expr, Stmt } from "./ast";
-import { Scope } from "./ast";
+
+// --- Scope (lexical scoping) ---
+
+/** Lexical scope with parent chain for variable lookups */
+class Scope {
+  private bindings: Map<string, number>;
+  private mutableBindings: Set<string>;
+  private parent: Scope | null;
+
+  constructor(parent?: Scope) {
+    this.bindings = new Map();
+    this.mutableBindings = new Set();
+    this.parent = parent ?? null;
+  }
+
+  set(name: string, value: number): void {
+    this.bindings.set(name, value);
+  }
+
+  get(name: string): number | undefined {
+    return this.bindings.get(name) ?? this.parent?.get(name);
+  }
+
+  declareMutable(name: string): void {
+    this.mutableBindings.add(name);
+  }
+
+  isMutable(name: string): boolean {
+    return this.mutableBindings.has(name) || (this.parent?.isMutable(name) ?? false);
+  }
+}
 
 /**
  * Walk an expression AST and compute the numeric result.
