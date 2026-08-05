@@ -13,6 +13,10 @@ test('evaluate("1") => 1', () => {
   expect(evaluate("1")).toBe(1);
 });
 
+test('evaluate("100U8") => 100', () => {
+  expect(evaluate("100U8")).toBe(100);
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

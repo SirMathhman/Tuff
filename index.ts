@@ -118,6 +118,10 @@ function tokenize(source: string): Token[] {
         i++;
         while (i < source.length && /[0-9]/.test(source[i]!)) { numStr += source[i]!; i++; }
       }
+      // Handle numeric suffixes (e.g., U8, I32, F64)
+      if (i < source.length && /[a-zA-Z]/.test(source[i]!)) {
+        while (i < source.length && /[a-zA-Z0-9]/.test(source[i]!)) { i++; }
+      }
       tokens.push({ type: "number", value: numStr });
       continue;
     }
