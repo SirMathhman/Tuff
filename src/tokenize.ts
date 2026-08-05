@@ -1,6 +1,7 @@
 export type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" };
+  | { type: "operator"; value: "+" | "-" | "*" | "/" }
+  | { type: "paren"; value: "(" | ")" };
 
 /**
  * Convert a source string into a stream of tokens.
@@ -33,6 +34,14 @@ export function tokenize(source: string): Token[] {
     if ("+-*/".includes(char)) {
       const op = char as "+" | "-" | "*" | "/";
       tokens.push({ type: "operator", value: op });
+      i++;
+      continue;
+    }
+
+    // Parentheses
+    if (char === "(" || char === ")") {
+      const paren = char as "(" | ")";
+      tokens.push({ type: "paren", value: paren });
       i++;
       continue;
     }
