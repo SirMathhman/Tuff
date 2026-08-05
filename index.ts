@@ -2,22 +2,43 @@ export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === '') return 0;
 
-  // Tokenize into numbers, operators, and grouping brackets
-  const matchResult = trimmed.match(/(\d+|[+\-\*\/(\){}])/g);
+  // Tokenize into numbers, operators, grouping brackets, and identifiers
+  const matchResult = trimmed.match(/(\d+|[+\-\*\/(\){}]+|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)/g);
   if (!matchResult) return 0;
   const tokens: string[] = matchResult;
+
+  // Collect known identifiers (keywords + let-assigned variable names)
+  const knownIdentifiers = new Set(["let"]);
+  for (const t of tokens) {
+    if (!/(\d+|[+\-\*\/(\){}])/.test(t)) {
+      const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (source.match(new RegExp(`\\blet\\s+${escaped}\\s*=`, 'g'))) {
+        knownIdentifiers.add(t);
+      }
+    }
+  }
+  for (const t of tokens) {
+    if (!/(\d+|[+\-\*\/(\){}])/.test(t)) {
+      if (!knownIdentifiers.has(t)) {
+        throw new ReferenceError(`"${t}" is not defined`);
+      }
+    }
+  }
+  // Filter parseable tokens (numbers, operators, brackets) — skip keywords and identifiers
+  const parseTokens = tokens.filter(t => /(\d+|[+\-\*\/(\){}])/.test(t));
+
   // If source contains an assignment but no expression (only numbers), treat as statement-only → 0
-  if (source.includes('=') && !tokens.some(t => /[+\-\*\/()\{\}]/.test(t))) {
+  if (source.includes('=') && !parseTokens.some(t => /[+\-\*\/()\{\}]/.test(t))) {
     return 0;
   }
   let pos = 0;
 
   function peek(): string | undefined {
-    return tokens[pos];
+    return parseTokens[pos];
   }
 
   function consume(): string {
-    return tokens[pos++]!;
+    return parseTokens[pos++]!;
   }
 
   // parseExpression handles + and - (lowest precedence)
@@ -57,3 +78,4 @@ export function evaluate(source: string): number {
 
   return parseExpression();
 }
+

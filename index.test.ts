@@ -53,3 +53,11 @@ test('evaluate("let x = 100;") => 0', () => {
   expect(evaluate("let x = 100;")).toBe(0);
 });
 
+test('evaluate("undefinedIdentifier") => Error', () => {
+  expect(() => evaluate("undefinedIdentifier")).toThrow();
+});
+
+test('evaluate("let x = undefinedIdentifier;") => Error', () => {
+  expect(() => evaluate("let x = undefinedIdentifier;")).toThrow();
+});
+
