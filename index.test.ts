@@ -201,6 +201,10 @@ test('fn get() => { if (true) return 1; 2 } + 3; get() => 1', () => {
   expect(evaluate('fn get() => { if (true) return 1; 2 } + 3; get()')).toBe(1);
 });
 
+test('let pt = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
+  expect(evaluate('let pt = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
+});
+
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });

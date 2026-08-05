@@ -8,7 +8,8 @@ type Value =
   | { tag: "tuple"; values: Value[] }
   | { tag: "null" }
   | { tag: "array"; values: Value[] }
-  | { tag: "string"; value: string };
+  | { tag: "string"; value: string }
+  | { tag: "record"; fields: Record<string, Value> };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
@@ -21,6 +22,7 @@ function toNum(v: Value): number {
     case "null": return 0;
     case "array": return 0;
     case "string": return v.value.charCodeAt(0);
+    case "record": return 0;
     default: throw new Error(`cannot convert ${v.tag} to number`);
   }
 }
@@ -97,7 +99,9 @@ type Ast =
   | { kind: "char"; value: string }
   | { kind: "string"; value: string }
   | { kind: "string_index"; target: Ast; index: Ast }
-  | { kind: "string_length"; target: Ast };
+  | { kind: "string_length"; target: Ast }
+  | { kind: "record"; fields: { key: string; value: Ast }[] }
+  | { kind: "field_access"; target: Ast; field: string };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -170,6 +174,11 @@ function tokenize(source: string): Token[] {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
       tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "return" || ident === "fn" || ident === "match" || ident === "case" || ident === "null" ? "keyword" : "identifier", value: ident });
+      continue;
+    }
+    if (source[i] === ":") {
+      tokens.push({ type: "punct", value: ":" });
+      i++;
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -342,6 +351,22 @@ function parse(tokens: Token[]): Ast {
       return { kind: "paren", expr: result };
     }
     if (tok?.value === "{") {
+      // Check if this is a record literal: { key : value, ... }
+      // Look ahead to see if the next token is an identifier followed by ":"
+      if (tokens[pos + 1]?.type === "identifier" && tokens[pos + 2]?.value === ":") {
+        pos++; // skip "{"
+        const fields: { key: string; value: Ast }[] = [];
+        while (tokens[pos]?.value !== "}") {
+          const key = tokens[pos]!.value;
+          pos++; // skip key
+          pos++; // skip ":"
+          const value = parseExpression();
+          fields.push({ key, value });
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip "}"
+        return { kind: "record", fields };
+      }
       return parseBlock();
     }
     if (tok?.value === "[") {
@@ -432,12 +457,20 @@ function parse(tokens: Token[]): Ast {
         pos++; // skip ")"
         return { kind: "call", name, args };
       }
-      // Check for field access: identifier.index
+      // Check for field access: identifier.index or identifier.field
       if (tokens[pos]?.value === ".") {
         pos++; // skip "."
-        const index = parseInt(tokens[pos]!.value);
-        pos++;
-        return { kind: "index", target: { kind: "ident", name }, index };
+        const nextTok = tokens[pos];
+        if (nextTok?.type === "number") {
+          // Tuple index: identifier.0
+          pos++;
+          return { kind: "index", target: { kind: "ident", name }, index: parseInt(nextTok.value) };
+        } else {
+          // Record field access: identifier.field
+          const field = nextTok!.value;
+          pos++;
+          return { kind: "field_access", target: { kind: "ident", name }, field };
+        }
       }
       // Check for array indexing: identifier[expr]
       if (tokens[pos]?.value === "[") {
@@ -860,6 +893,23 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         if (target === null) throw new Error("string length target has no value");
         if (target.tag !== "string") throw new Error("cannot get length of non-string");
         return num(target.value.length);
+      }
+      case "record": {
+        const fields: Record<string, Value> = {};
+        for (const f of node.fields) {
+          const v = visit(f.value);
+          if (v === null) throw new Error("record field has no value");
+          fields[f.key] = v;
+        }
+        return { tag: "record", fields };
+      }
+      case "field_access": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("field access target has no value");
+        if (target.tag !== "record") throw new Error("cannot access field on non-record");
+        const val = target.fields[node.field];
+        if (val === undefined) throw new Error(`field ${node.field} not found`);
+        return val;
       }
     }
   }
