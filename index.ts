@@ -18,9 +18,14 @@ function gt(a: Value, b: Value): Value { return bool(toNum(a) > toNum(b)); }
 function gte(a: Value, b: Value): Value { return bool(toNum(a) >= toNum(b)); }
 function notOp(v: Value): Value { return bool(!truthy(v)); }
 function negate(v: Value): Value { return num(-toNum(v)); }
-const CONTINUE = Symbol("continue");
-const BREAK = Symbol("break");
-type YieldSignal = { yield: true; value: Value };
+type ControlFlow =
+  | { kind: "continue" }
+  | { kind: "break" }
+  | { kind: "yield"; value: Value };
+
+function isControlFlow(e: unknown): e is ControlFlow {
+  return typeof e === "object" && e !== null && "kind" in e;
+}
 
 // AST types
 type Ast =
@@ -376,10 +381,10 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
             if (stmt) value = visit(stmt);
           }
         } catch (e) {
-          if (typeof e === "object" && e !== null && "yield" in e) {
+          if (isControlFlow(e) && e.kind === "yield") {
             scopes.pop();
             mutables.pop();
-            return (e as YieldSignal).value;
+            return e.value;
           }
           throw e;
         }
@@ -406,19 +411,21 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
             if (!truthy(visit(node.cond)!)) break;
             visit(node.body);
           } catch (e) {
-            if (e === CONTINUE) continue;
-            if (e === BREAK) break;
+            if (isControlFlow(e)) {
+              if (e.kind === "continue") continue;
+              if (e.kind === "break") break;
+            }
             throw e;
           }
         }
         return null;
       }
-      case "continue": throw CONTINUE;
-      case "break": throw BREAK;
+      case "continue": throw { kind: "continue" };
+      case "break": throw { kind: "break" };
       case "yield": {
         const v = visit(node.value);
         if (v === null) throw new Error("yield has no value");
-        throw { yield: true, value: v };
+        throw { kind: "yield", value: v };
       }
     }
   }
