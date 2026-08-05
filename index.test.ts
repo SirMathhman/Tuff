@@ -61,3 +61,7 @@ test('evaluate("let x = undefinedIdentifier;") => Error', () => {
   expect(() => evaluate("let x = undefinedIdentifier;")).toThrow();
 });
 
+test('evaluate("let x") => Error', () => {
+  expect(() => evaluate("let x")).toThrow();
+});
+
