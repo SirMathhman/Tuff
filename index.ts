@@ -31,7 +31,7 @@ type Ast =
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
   | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
-  | { kind: "augassign"; name: string; op: "+"; value: Ast };
+  | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -331,7 +331,8 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         for (let i = scopes.length - 1; i >= 0; i--) {
           if (node.name in scopes[i]!.vars) {
             const existing = scopes[i]!.vars[node.name]!;
-            scopes[i]!.vars[node.name] = num(toNum(existing) + toNum(v));
+            const newVal = applyBinOp(node.op, existing, v);
+            scopes[i]!.vars[node.name] = newVal;
             break;
           }
         }
