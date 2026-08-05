@@ -17,6 +17,11 @@ function tokenize(source: string): Token[] {
       tokens.push({ type: ident === "let" || ident === "mut" ? "keyword" : "identifier", value: ident });
       continue;
     }
+    if (source[i] === "=" && source[i + 1] === "=") {
+      tokens.push({ type: "punct", value: "==" });
+      i += 2;
+      continue;
+    }
     tokens.push({ type: "punct", value: source[i]! });
     i++;
   }
@@ -48,13 +53,22 @@ export function evaluate(source: string): number {
     scopes[scopes.length - 1]![name] = value;
   }
   function parseExpression(): number {
-    let result = parseTerm();
+    let result = parseComparison();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
       const op = tokens[pos]!.value;
       pos++;
-      const next = parseTerm();
+      const next = parseComparison();
       if (op === "+") result += next;
       else result -= next;
+    }
+    return result;
+  }
+  function parseComparison(): number {
+    let result = parseTerm();
+    while (tokens[pos]?.value === "==") {
+      pos++;
+      const next = parseTerm();
+      result = result === next ? 1 : 0;
     }
     return result;
   }
