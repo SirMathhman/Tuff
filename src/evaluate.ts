@@ -13,9 +13,10 @@ export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map())
   }
 
   if (node.type === "block") {
+    const childScope = new Map(scope); // inherit parent bindings, isolate inner declarations
     let lastVal: number = 0;
     for (const stmt of node.statements) {
-      lastVal = evaluateStmt(stmt, scope);
+      lastVal = evaluateStmt(stmt, childScope);
     }
     return lastVal;
   }
