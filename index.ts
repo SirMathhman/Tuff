@@ -683,18 +683,26 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
       }
     }
   }
-  function visit(node: Ast): Value | null {
+const suffixRanges: Record<string, [number, number]> = {
+  U8: [0, 255],
+  I8: [-128, 127],
+  U16: [0, 65535],
+  I16: [-32768, 32767],
+  U32: [0, 4294967295],
+  I32: [-2147483648, 2147483647],
+};
+
+function checkSuffix(suffix: string, value: number): void {
+  const range = suffixRanges[suffix];
+  if (range && (value < range[0] || value > range[1])) {
+    throw new Error(`${suffix} overflow: ${value}`);
+  }
+}
+
+function visit(node: Ast): Value | null {
     switch (node.kind) {
       case "num": {
-        if (node.suffix) {
-          const v = node.value;
-          if (node.suffix === "U8" && (v < 0 || v > 255)) throw new Error(`U8 overflow: ${v}`);
-          if (node.suffix === "I8" && (v < -128 || v > 127)) throw new Error(`I8 overflow: ${v}`);
-          if (node.suffix === "U16" && (v < 0 || v > 65535)) throw new Error(`U16 overflow: ${v}`);
-          if (node.suffix === "I16" && (v < -32768 || v > 32767)) throw new Error(`I16 overflow: ${v}`);
-          if (node.suffix === "U32" && (v < 0 || v > 4294967295)) throw new Error(`U32 overflow: ${v}`);
-          if (node.suffix === "I32" && (v < -2147483648 || v > 2147483647)) throw new Error(`I32 overflow: ${v}`);
-        }
+        if (node.suffix) checkSuffix(node.suffix, node.value);
         return num(node.value);
       }
       case "bool": return bool(node.value);
