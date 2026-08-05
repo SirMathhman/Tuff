@@ -24,3 +24,7 @@ test('evaluate("1 + 2 + 3") => 6', () => {
 test('evaluate("2 + 3 - 1") => 4', () => {
   expect(evaluate("2 + 3 - 1")).toBe(4);
 });
+
+test('evaluate("2 * 3 + 4") => 10', () => {
+  expect(evaluate("2 * 3 + 4")).toBe(10);
+});
