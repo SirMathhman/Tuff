@@ -4,7 +4,7 @@ type Value =
   | { tag: "number"; num: number }
   | { tag: "bool"; val: boolean }
   | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] }
-  | { tag: "ref"; scope: Scope; name: string };
+  | { tag: "ref"; scope: Scope; name: string; mutable: boolean };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
@@ -42,10 +42,11 @@ type Ast =
   | { kind: "num"; value: number }
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; name: string }
-  | { kind: "unary"; op: "!" | "-" | "&" | "*"; operand: Ast }
+  | { kind: "unary"; op: "!" | "-" | "&" | "&mut" | "*"; operand: Ast }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
   | { kind: "let"; mutable: boolean; name: string; value: Ast }
   | { kind: "assign"; name: string; value: Ast }
+  | { kind: "refassign"; name: string; value: Ast }
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
   | { kind: "if_expr"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
@@ -203,6 +204,10 @@ function parse(tokens: Token[]): Ast {
     }
     if (tok?.value === "&") {
       pos++;
+      if (tokens[pos]?.value === "mut") {
+        pos++;
+        return { kind: "unary", op: "&mut", operand: parseFactor() };
+      }
       return { kind: "unary", op: "&", operand: parseFactor() };
     }
     if (tok?.value === "*") {
@@ -280,6 +285,16 @@ function parse(tokens: Token[]): Ast {
       const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "augassign", name, op: "+", value };
+    }
+    // Check for dereference assignment: *identifier = expression
+    if (tokens[pos]?.value === "*" && tokens[pos + 1]?.type === "identifier" && tokens[pos + 2]?.value === "=") {
+      const name = tokens[pos + 1]!.value;
+      pos++; // skip "*"
+      pos++; // skip identifier
+      pos++; // skip "="
+      const value = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "refassign", name, value };
     }
     // Check for assignment: identifier = expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
@@ -406,7 +421,15 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
           // Create a reference to the operand
           if (node.operand.kind === "ident") {
             const scope = scopes[scopes.length - 1]!;
-            return { tag: "ref", scope, name: node.operand.name };
+            return { tag: "ref", scope, name: node.operand.name, mutable: false };
+          }
+          throw new Error("can only take reference of identifier");
+        }
+        if (node.op === "&mut") {
+          // Create a mutable reference to the operand
+          if (node.operand.kind === "ident") {
+            const scope = scopes[scopes.length - 1]!;
+            return { tag: "ref", scope, name: node.operand.name, mutable: true };
           }
           throw new Error("can only take reference of identifier");
         }
@@ -433,6 +456,15 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         const v = visit(node.value);
         if (v === null) throw new Error("block has no value");
         setVar(node.name, v);
+        return null;
+      }
+      case "refassign": {
+        const ref = lookup(node.name);
+        if (ref.tag !== "ref") throw new Error("not a reference");
+        if (!ref.mutable) throw new Error("cannot assign through immutable reference");
+        const v = visit(node.value);
+        if (v === null) throw new Error("block has no value");
+        ref.scope.vars[ref.name] = v;
         return null;
       }
       case "augassign": {

@@ -196,3 +196,7 @@ test('evaluate("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x") => 1',
 test('evaluate("let x = 100; let y = &x; *y") => 100', () => {
   expect(evaluate("let x = 100; let y = &x; *y")).toBe(100);
 });
+
+test('evaluate("let mut x = 0; let y = &mut x; *y = 100;  x") => 100', () => {
+  expect(evaluate("let mut x = 0; let y = &mut x; *y = 100;  x")).toBe(100);
+});
