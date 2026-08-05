@@ -31,7 +31,8 @@ type Ast =
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
   | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
-  | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast };
+  | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
+  | { kind: "while"; cond: Ast; body: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -47,7 +48,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -240,6 +241,15 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "assign", name, value };
     }
+    // Check for while statement
+    if (tokens[pos]?.value === "while") {
+      pos++; // skip "while"
+      expectToken("(");
+      const cond = parseExpression();
+      expectToken(")");
+      const body = parseStatement()!;
+      return { kind: "while", cond, body };
+    }
     // Check for if statement — branches are parsed as statements (fall back to expressions)
     if (tokens[pos]?.value === "if") {
       pos++; // skip "if"
@@ -348,6 +358,12 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         const cond = visit(node.cond)!;
         if (truthy(cond)) return visit(node.thenBranch);
         return visit(node.elseBranch);
+      }
+      case "while": {
+        while (truthy(visit(node.cond)!)) {
+          visit(node.body);
+        }
+        return null;
       }
     }
   }
