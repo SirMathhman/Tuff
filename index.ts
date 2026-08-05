@@ -884,6 +884,14 @@ function evalAst(
         if (v === null) throw new Error("block has no value");
         if (node.typeAnnotation && suffixRanges[node.typeAnnotation]) {
           checkSuffix(node.typeAnnotation, toNum(v));
+          // Check type compatibility: if value has a suffix, ensure it fits in the annotation
+          if (node.value.kind === "num" && node.value.suffix && suffixRanges[node.value.suffix]) {
+            const valRange = suffixRanges[node.value.suffix]!;
+            const annRange = suffixRanges[node.typeAnnotation]!;
+            if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
+              throw new Error(`cannot assign ${node.value.suffix} to ${node.typeAnnotation}`);
+            }
+          }
         }
         scopes[scopes.length - 1]!.vars[node.name] = v;
         if (node.mutable) mutables[mutables.length - 1]![node.name] = true;

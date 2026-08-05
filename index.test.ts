@@ -33,6 +33,14 @@ test('evaluate("let x : U8 = 1U8; x") => 1', () => {
   expect(evaluate("let x : U8 = 1U8; x")).toBe(1);
 });
 
+test('evaluate("let x : U16 = 1U8; x") => 1', () => {
+  expect(evaluate("let x : U16 = 1U8; x")).toBe(1);
+});
+
+test('evaluate("let x : U8 = 1U16; x") => Error', () => {
+  expect(() => evaluate("let x : U8 = 1U16; x")).toThrow();
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
