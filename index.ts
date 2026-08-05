@@ -1,4 +1,4 @@
-type Token = { type: string; value: string };
+type Token = { type: string; value: string; suffix?: string };
 
 type Value =
   | { tag: "number"; num: number }
@@ -68,7 +68,7 @@ function isControlFlow(e: unknown): e is ControlFlow {
 
 // AST types
 type Ast =
-  | { kind: "num"; value: number }
+  | { kind: "num"; value: number; suffix?: string }
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; name: string }
   | { kind: "unary"; op: "!" | "-" | "&" | "&mut" | "*"; operand: Ast }
@@ -119,10 +119,13 @@ function tokenize(source: string): Token[] {
         while (i < source.length && /[0-9]/.test(source[i]!)) { numStr += source[i]!; i++; }
       }
       // Handle numeric suffixes (e.g., U8, I32, F64)
+      let suffix: string | undefined;
       if (i < source.length && /[a-zA-Z]/.test(source[i]!)) {
+        let suffixStart = i;
         while (i < source.length && /[a-zA-Z0-9]/.test(source[i]!)) { i++; }
+        suffix = source.slice(suffixStart, i);
       }
-      tokens.push({ type: "number", value: numStr });
+      tokens.push({ type: "number", value: numStr, suffix });
       continue;
     }
     if (source[i] === ".") {
@@ -485,7 +488,7 @@ function parse(tokens: Token[]): Ast {
     }
     const result = parseFloat(tok!.value);
     pos++;
-    return { kind: "num", value: result };
+    return { kind: "num", value: result, suffix: tok?.suffix };
   }
   function parseStatement(): Ast | null {
     if (tokens[pos]?.value === "let") {
@@ -682,7 +685,18 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
   }
   function visit(node: Ast): Value | null {
     switch (node.kind) {
-      case "num": return num(node.value);
+      case "num": {
+        if (node.suffix) {
+          const v = node.value;
+          if (node.suffix === "U8" && (v < 0 || v > 255)) throw new Error(`U8 overflow: ${v}`);
+          if (node.suffix === "I8" && (v < -128 || v > 127)) throw new Error(`I8 overflow: ${v}`);
+          if (node.suffix === "U16" && (v < 0 || v > 65535)) throw new Error(`U16 overflow: ${v}`);
+          if (node.suffix === "I16" && (v < -32768 || v > 32767)) throw new Error(`I16 overflow: ${v}`);
+          if (node.suffix === "U32" && (v < 0 || v > 4294967295)) throw new Error(`U32 overflow: ${v}`);
+          if (node.suffix === "I32" && (v < -2147483648 || v > 2147483647)) throw new Error(`I32 overflow: ${v}`);
+        }
+        return num(node.value);
+      }
       case "bool": return bool(node.value);
       case "ident": return lookup(node.name);
       case "unary": {
