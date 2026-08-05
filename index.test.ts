@@ -208,3 +208,7 @@ test('evaluate("let tuple = (3, 4); tuple.0 + tuple.1") => 7', () => {
 test('evaluate("fn get() => 100; let func = get; func()") => 100', () => {
   expect(evaluate("fn get() => 100; let func = get; func()")).toBe(100);
 });
+
+test('evaluate("let mut sum = 0; for (i in 0..4) sum += i; sum") => 6', () => {
+  expect(evaluate("let mut sum = 0; for (i in 0..4) sum += i; sum")).toBe(6);
+});

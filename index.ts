@@ -57,6 +57,7 @@ type Ast =
   | { kind: "if_stmt"; cond: Ast; thenBranch: Ast; elseBranch: Ast | null }
   | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
   | { kind: "while"; cond: Ast; body: Ast }
+  | { kind: "for"; varName: string; start: Ast; end: Ast; body: Ast }
   | { kind: "continue" }
   | { kind: "break" }
   | { kind: "yield"; value: Ast }
@@ -70,11 +71,22 @@ function tokenize(source: string): Token[] {
     if (/\s/.test(source[i]!)) { i++; continue; }
     if (/[0-9]/.test(source[i]!)) {
       let numStr = "";
-      while (i < source.length && /[0-9.]/.test(source[i]!)) { numStr += source[i]!; i++; }
+      while (i < source.length && /[0-9]/.test(source[i]!)) { numStr += source[i]!; i++; }
+      // Handle decimal point
+      if (i < source.length && source[i] === "." && i + 1 < source.length && /[0-9]/.test(source[i + 1]!)) {
+        numStr += source[i]!;
+        i++;
+        while (i < source.length && /[0-9]/.test(source[i]!)) { numStr += source[i]!; i++; }
+      }
       tokens.push({ type: "number", value: numStr });
       continue;
     }
     if (source[i] === ".") {
+      if (source[i + 1] === ".") {
+        tokens.push({ type: "punct", value: ".." });
+        i += 2;
+        continue;
+      }
       tokens.push({ type: "punct", value: "." });
       i++;
       continue;
@@ -82,7 +94,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -388,6 +400,20 @@ function parse(tokens: Token[]): Ast {
       const body = parseStatement()!;
       return { kind: "while", cond, body };
     }
+    // Check for for statement
+    if (tokens[pos]?.value === "for") {
+      pos++; // skip "for"
+      expectToken("(");
+      const varName = tokens[pos]!.value;
+      pos++; // skip variable name
+      expectToken("in");
+      const start = parseExpression();
+      expectToken("..");
+      const end = parseExpression();
+      expectToken(")");
+      const body = parseStatement()!;
+      return { kind: "for", varName, start, end, body };
+    }
     // Check for if statement — branches are parsed as statements (fall back to expressions)
     if (tokens[pos]?.value === "if") {
       pos++; // skip "if"
@@ -556,6 +582,34 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
             }
             throw e;
           }
+        }
+        return null;
+      }
+      case "for": {
+        const startVal = toNum(visit(node.start)!);
+        const endVal = toNum(visit(node.end)!);
+        scopes.push({ vars: {}, mutable: {} });
+        mutables.push({});
+        scopes[scopes.length - 1]!.vars[node.varName] = num(0);
+        mutables[mutables.length - 1]![node.varName] = true;
+        let iterations = 0;
+        try {
+          for (let i = startVal; i < endVal; i++) {
+            if (iterations++ > 10000) throw new Error("infinite loop detected");
+            scopes[scopes.length - 1]!.vars[node.varName] = num(i);
+            try {
+              visit(node.body);
+            } catch (e) {
+              if (isControlFlow(e)) {
+                if (e.kind === "continue") continue;
+                if (e.kind === "break") break;
+              }
+              throw e;
+            }
+          }
+        } finally {
+          scopes.pop();
+          mutables.pop();
         }
         return null;
       }
