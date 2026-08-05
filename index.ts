@@ -33,6 +33,11 @@ function tokenize(source: string): Token[] {
       i += 2;
       continue;
     }
+    if (source[i] === "|" && source[i + 1] === "|") {
+      tokens.push({ type: "punct", value: "||" });
+      i += 2;
+      continue;
+    }
     tokens.push({ type: "punct", value: source[i]! });
     i++;
   }
@@ -64,13 +69,22 @@ export function evaluate(source: string): number {
     scopes[scopes.length - 1]![name] = value;
   }
   function parseExpression(): Value {
-    let result = parseComparison();
+    let result = parseOr();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
       const op = tokens[pos]!.value;
       pos++;
-      const next = parseComparison();
+      const next = parseOr();
       if (op === "+") result = num(toNum(result) + toNum(next));
       else result = num(toNum(result) - toNum(next));
+    }
+    return result;
+  }
+  function parseOr(): Value {
+    let result = parseComparison();
+    while (tokens[pos]?.value === "||") {
+      pos++;
+      const next = parseComparison();
+      result = bool(toNum(result) !== 0 || toNum(next) !== 0);
     }
     return result;
   }

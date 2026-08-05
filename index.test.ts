@@ -76,3 +76,7 @@ test('evaluate("let x = 2; let y = 2; x == y") => 1', () => {
 test('evaluate("true == 1") => 0', () => {
   expect(evaluate("true == 1")).toBe(0);
 });
+
+test('evaluate("let x = true; let y = false; x || y") => 1', () => {
+  expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
+});
