@@ -2,6 +2,9 @@ export function evaluate(source: string): number {
   let s = source.trim();
   if (!s) return 0;
 
+  // Normalize curly braces to parentheses
+  s = s.replace(/{/g, "(").replace(/}/g, ")");
+
   // Resolve parentheses recursively (innermost first)
   while (s.includes("(")) {
     const match = s.match(/\(([^()]+)\)/);
