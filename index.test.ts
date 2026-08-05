@@ -204,3 +204,7 @@ test('evaluate("let mut x = 0; let y = &mut x; *y = 100;  x") => 100', () => {
 test('evaluate("let tuple = (3, 4); tuple.0 + tuple.1") => 7', () => {
   expect(evaluate("let tuple = (3, 4); tuple.0 + tuple.1")).toBe(7);
 });
+
+test('evaluate("fn get() => 100; let func = get; func()") => 100', () => {
+  expect(evaluate("fn get() => 100; let func = get; func()")).toBe(100);
+});
