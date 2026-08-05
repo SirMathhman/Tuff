@@ -3,7 +3,13 @@ type Token = { type: string; value: string; suffix?: string };
 type Value =
   | { tag: "number"; num: number }
   | { tag: "bool"; val: boolean }
-  | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] }
+  | {
+      tag: "fn";
+      params: string[];
+      body: Ast;
+      scopes: Scope[];
+      mutables: Scope["mutable"][];
+    }
   | { tag: "ref"; scope: Scope; name: string; mutable: boolean }
   | { tag: "tuple"; values: Value[] }
   | { tag: "null" }
@@ -11,37 +17,60 @@ type Value =
   | { tag: "string"; value: string }
   | { tag: "record"; fields: Record<string, Value> };
 
-function num(v: number): Value { return { tag: "number", num: v }; }
-function bool(v: boolean): Value { return { tag: "bool", val: v }; }
+function num(v: number): Value {
+  return { tag: "number", num: v };
+}
+function bool(v: boolean): Value {
+  return { tag: "bool", val: v };
+}
 function toNum(v: Value): number {
   switch (v.tag) {
-    case "number": return v.num;
-    case "bool": return v.val ? 1 : 0;
-    case "ref": return toNum(v.scope.vars[v.name]!);
-    case "tuple": return 0;
-    case "null": return 0;
-    case "array": return 0;
-    case "string": return v.value.charCodeAt(0);
-    case "record": return 0;
-    default: throw new Error(`cannot convert ${v.tag} to number`);
+    case "number":
+      return v.num;
+    case "bool":
+      return v.val ? 1 : 0;
+    case "ref":
+      return toNum(v.scope.vars[v.name]!);
+    case "tuple":
+      return 0;
+    case "null":
+      return 0;
+    case "array":
+      return 0;
+    case "string":
+      return v.value.charCodeAt(0);
+    case "record":
+      return 0;
+    default:
+      throw new Error(`cannot convert ${v.tag} to number`);
   }
 }
-function truthy(v: Value): boolean { return toNum(v) !== 0; }
+function truthy(v: Value): boolean {
+  return toNum(v) !== 0;
+}
 function eqValues(a: Value[], b: Value[]): boolean {
   return a.length === b.length && a.every((v, i) => truthy(eq(v, b[i]!)));
 }
 function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
   switch (a.tag) {
-    case "number": return bool(a.num === (b as any).num);
-    case "bool": return bool(a.val === (b as any).val);
-    case "string": return bool(a.value === (b as any).value);
-    case "array": return bool(eqValues(a.values, (b as any).values));
-    case "tuple": return bool(eqValues(a.values, (b as any).values));
-    default: return bool(false);
+    case "number":
+      return bool(a.num === (b as any).num);
+    case "bool":
+      return bool(a.val === (b as any).val);
+    case "string":
+      return bool(a.value === (b as any).value);
+    case "array":
+      return bool(eqValues(a.values, (b as any).values));
+    case "tuple":
+      return bool(eqValues(a.values, (b as any).values));
+    default:
+      return bool(false);
   }
 }
-function ne(a: Value, b: Value): Value { return bool(!truthy(eq(a, b))); }
+function ne(a: Value, b: Value): Value {
+  return bool(!truthy(eq(a, b)));
+}
 function cmp(a: Value, b: Value): number {
   if (a.tag === "string" && b.tag === "string") {
     if (a.value < b.value) return -1;
@@ -50,12 +79,24 @@ function cmp(a: Value, b: Value): number {
   }
   return toNum(a) - toNum(b);
 }
-function lt(a: Value, b: Value): Value { return bool(cmp(a, b) < 0); }
-function lte(a: Value, b: Value): Value { return bool(cmp(a, b) <= 0); }
-function gt(a: Value, b: Value): Value { return bool(cmp(a, b) > 0); }
-function gte(a: Value, b: Value): Value { return bool(cmp(a, b) >= 0); }
-function notOp(v: Value): Value { return bool(!truthy(v)); }
-function negate(v: Value): Value { return num(-toNum(v)); }
+function lt(a: Value, b: Value): Value {
+  return bool(cmp(a, b) < 0);
+}
+function lte(a: Value, b: Value): Value {
+  return bool(cmp(a, b) <= 0);
+}
+function gt(a: Value, b: Value): Value {
+  return bool(cmp(a, b) > 0);
+}
+function gte(a: Value, b: Value): Value {
+  return bool(cmp(a, b) >= 0);
+}
+function notOp(v: Value): Value {
+  return bool(!truthy(v));
+}
+function negate(v: Value): Value {
+  return num(-toNum(v));
+}
 type ControlFlow =
   | { kind: "continue" }
   | { kind: "break" }
@@ -75,7 +116,7 @@ type Ast =
   | { kind: "tuple"; elements: Ast[] }
   | { kind: "index"; target: Ast; index: number }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
-  | { kind: "let"; mutable: boolean; name: string; value: Ast }
+  | { kind: "let"; mutable: boolean; name: string; value: Ast; typeAnnotation?: string }
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "refassign"; name: string; value: Ast }
   | { kind: "array_assign"; target: Ast; index: Ast; value: Ast }
@@ -108,21 +149,37 @@ function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < source.length) {
-    if (/\s/.test(source[i]!)) { i++; continue; }
+    if (/\s/.test(source[i]!)) {
+      i++;
+      continue;
+    }
     if (/[0-9]/.test(source[i]!)) {
       let numStr = "";
-      while (i < source.length && /[0-9]/.test(source[i]!)) { numStr += source[i]!; i++; }
-      // Handle decimal point
-      if (i < source.length && source[i] === "." && i + 1 < source.length && /[0-9]/.test(source[i + 1]!)) {
+      while (i < source.length && /[0-9]/.test(source[i]!)) {
         numStr += source[i]!;
         i++;
-        while (i < source.length && /[0-9]/.test(source[i]!)) { numStr += source[i]!; i++; }
+      }
+      // Handle decimal point
+      if (
+        i < source.length &&
+        source[i] === "." &&
+        i + 1 < source.length &&
+        /[0-9]/.test(source[i + 1]!)
+      ) {
+        numStr += source[i]!;
+        i++;
+        while (i < source.length && /[0-9]/.test(source[i]!)) {
+          numStr += source[i]!;
+          i++;
+        }
       }
       // Handle numeric suffixes (e.g., U8, I32, F64)
       let suffix: string | undefined;
       if (i < source.length && /[a-zA-Z]/.test(source[i]!)) {
         let suffixStart = i;
-        while (i < source.length && /[a-zA-Z0-9]/.test(source[i]!)) { i++; }
+        while (i < source.length && /[a-zA-Z0-9]/.test(source[i]!)) {
+          i++;
+        }
         suffix = source.slice(suffixStart, i);
       }
       tokens.push({ type: "number", value: numStr, suffix });
@@ -180,8 +237,31 @@ function tokenize(source: string): Token[] {
     }
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
-      while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "return" || ident === "fn" || ident === "match" || ident === "case" || ident === "null" ? "keyword" : "identifier", value: ident });
+      while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) {
+        ident += source[i]!;
+        i++;
+      }
+      tokens.push({
+        type:
+          ident === "let" ||
+          ident === "mut" ||
+          ident === "if" ||
+          ident === "else" ||
+          ident === "while" ||
+          ident === "for" ||
+          ident === "in" ||
+          ident === "continue" ||
+          ident === "break" ||
+          ident === "yield" ||
+          ident === "return" ||
+          ident === "fn" ||
+          ident === "match" ||
+          ident === "case" ||
+          ident === "null"
+            ? "keyword"
+            : "identifier",
+        value: ident,
+      });
       continue;
     }
     if (source[i] === ":") {
@@ -250,7 +330,8 @@ function parse(tokens: Token[]): Ast {
   let pos = 0;
   function expectToken(value: string): void {
     const tok = tokens[pos];
-    if (!tok || tok.value !== value) throw new Error(`expected "${value}", got "${tok?.value ?? "EOF"}"`);
+    if (!tok || tok.value !== value)
+      throw new Error(`expected "${value}", got "${tok?.value ?? "EOF"}"`);
     pos++;
   }
   function parseExpression(): Ast {
@@ -285,7 +366,14 @@ function parse(tokens: Token[]): Ast {
     let result = parseTerm();
     while (true) {
       const op = tokens[pos]?.value;
-      if (op === "==" || op === "!=" || op === "<" || op === "<=" || op === ">" || op === ">=") {
+      if (
+        op === "==" ||
+        op === "!=" ||
+        op === "<" ||
+        op === "<=" ||
+        op === ">" ||
+        op === ">="
+      ) {
         pos++;
         const next = parseTerm();
         result = { kind: "binop", op, left: result, right: next };
@@ -347,7 +435,11 @@ function parse(tokens: Token[]): Ast {
         const nextTok = tokens[pos];
         if (nextTok?.type === "number") {
           pos++;
-          result = { kind: "index", target: result, index: parseInt(nextTok.value) };
+          result = {
+            kind: "index",
+            target: result,
+            index: parseInt(nextTok.value),
+          };
         } else if (nextTok?.value === "length") {
           pos++;
           if (result.kind === "string") {
@@ -407,7 +499,10 @@ function parse(tokens: Token[]): Ast {
     if (tok?.value === "{") {
       // Check if this is a record literal: { key : value, ... }
       // Look ahead to see if the next token is an identifier followed by ":"
-      if (tokens[pos + 1]?.type === "identifier" && tokens[pos + 2]?.value === ":") {
+      if (
+        tokens[pos + 1]?.type === "identifier" &&
+        tokens[pos + 2]?.value === ":"
+      ) {
         pos++; // skip "{"
         const fields: { key: string; value: Ast }[] = [];
         while (tokens[pos]?.value !== "}") {
@@ -452,7 +547,10 @@ function parse(tokens: Token[]): Ast {
       const cases: { pattern: Ast; body: Ast }[] = [];
       while (tokens[pos]?.value !== "}") {
         expectToken("case");
-        const pattern = tokens[pos]?.value === "_" ? (pos++, { kind: "wildcard" } as Ast) : parseExpression();
+        const pattern =
+          tokens[pos]?.value === "_"
+            ? (pos++, { kind: "wildcard" } as Ast)
+            : parseExpression();
         expectToken("=>");
         const body = parseExpression();
         cases.push({ pattern, body });
@@ -497,10 +595,17 @@ function parse(tokens: Token[]): Ast {
       if (mutable) pos++;
       const name = tokens[pos]!.value;
       pos++;
+      // Check for type annotation: let x : Type = value
+      let typeAnnotation: string | undefined;
+      if (tokens[pos]?.value === ":") {
+        pos++; // skip ":"
+        typeAnnotation = tokens[pos]!.value;
+        pos++; // skip type
+      }
       pos++; // skip "="
       const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return { kind: "let", mutable, name, value };
+      return { kind: "let", mutable, name, value, typeAnnotation };
     }
     // Check for augmented assignment: identifier += expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "+=") {
@@ -512,7 +617,11 @@ function parse(tokens: Token[]): Ast {
       return { kind: "augassign", name, op: "+", value };
     }
     // Check for dereference assignment: *identifier = expression
-    if (tokens[pos]?.value === "*" && tokens[pos + 1]?.type === "identifier" && tokens[pos + 2]?.value === "=") {
+    if (
+      tokens[pos]?.value === "*" &&
+      tokens[pos + 1]?.type === "identifier" &&
+      tokens[pos + 2]?.value === "="
+    ) {
       const name = tokens[pos + 1]!.value;
       pos++; // skip "*"
       pos++; // skip identifier
@@ -547,7 +656,12 @@ function parse(tokens: Token[]): Ast {
         if (tokens[pos]?.value === "=") pos++; // skip "="
         const value = parseExpression();
         if (tokens[pos]?.value === ";") pos++;
-        return { kind: "array_assign", target: { kind: "ident", name }, index, value };
+        return {
+          kind: "array_assign",
+          target: { kind: "ident", name },
+          index,
+          value,
+        };
       }
     }
     // Check for assignment: identifier = expression
@@ -633,7 +747,8 @@ function parse(tokens: Token[]): Ast {
       const cond = parseExpression();
       expectToken(")");
       const thenBranch = parseStatement()!;
-      const elseBranch = tokens[pos]?.value === "else" ? (pos++, parseStatement()) : null;
+      const elseBranch =
+        tokens[pos]?.value === "else" ? (pos++, parseStatement()) : null;
       return { kind: "if_stmt", cond, thenBranch, elseBranch };
     }
     const result = parseExpression();
@@ -654,14 +769,19 @@ function parse(tokens: Token[]): Ast {
     statements.push(parseStatement());
   }
   if (statements.length === 0) return { kind: "num", value: 0 };
-  if (statements.length === 1) return statements[0]! ?? { kind: "num", value: 0 };
+  if (statements.length === 1)
+    return statements[0]! ?? { kind: "num", value: 0 };
   return { kind: "block", statements };
 }
 
 // Evaluator — walks AST with scope
 type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
 
-function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value {
+function evalAst(
+  ast: Ast,
+  scopes: Scope[],
+  mutables: Scope["mutable"][],
+): Value {
   function lookup(name: string): Value {
     for (let i = scopes.length - 1; i >= 0; i--) {
       if (name in scopes[i]!.vars) return scopes[i]!.vars[name]!;
@@ -675,7 +795,8 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
     return false;
   }
   function setVar(name: string, value: Value): void {
-    if (!isMutable(name)) throw new Error(`cannot assign to immutable variable: ${name}`);
+    if (!isMutable(name))
+      throw new Error(`cannot assign to immutable variable: ${name}`);
     for (let i = scopes.length - 1; i >= 0; i--) {
       if (name in scopes[i]!.vars) {
         scopes[i]!.vars[name] = value;
@@ -683,30 +804,32 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
       }
     }
   }
-const suffixRanges: Record<string, [number, number]> = {
-  U8: [0, 255],
-  I8: [-128, 127],
-  U16: [0, 65535],
-  I16: [-32768, 32767],
-  U32: [0, 4294967295],
-  I32: [-2147483648, 2147483647],
-};
+  const suffixRanges: Record<string, [number, number]> = {
+    U8: [0, 255],
+    I8: [-128, 127],
+    U16: [0, 65535],
+    I16: [-32768, 32767],
+    U32: [0, 4294967295],
+    I32: [-2147483648, 2147483647],
+  };
 
-function checkSuffix(suffix: string, value: number): void {
-  const range = suffixRanges[suffix];
-  if (range && (value < range[0] || value > range[1])) {
-    throw new Error(`${suffix} overflow: ${value}`);
+  function checkSuffix(suffix: string, value: number): void {
+    const range = suffixRanges[suffix];
+    if (range && (value < range[0] || value > range[1])) {
+      throw new Error(`${suffix} overflow: ${value}`);
+    }
   }
-}
 
-function visit(node: Ast): Value | null {
+  function visit(node: Ast): Value | null {
     switch (node.kind) {
       case "num": {
         if (node.suffix) checkSuffix(node.suffix, node.value);
         return num(node.value);
       }
-      case "bool": return bool(node.value);
-      case "ident": return lookup(node.name);
+      case "bool":
+        return bool(node.value);
+      case "ident":
+        return lookup(node.name);
       case "unary": {
         const v = visit(node.operand)!;
         if (node.op === "!") return notOp(v);
@@ -722,7 +845,12 @@ function visit(node: Ast): Value | null {
           // Create a reference to the operand
           if (node.operand.kind === "ident") {
             const scope = scopes[scopes.length - 1]!;
-            return { tag: "ref", scope, name: node.operand.name, mutable: false };
+            return {
+              tag: "ref",
+              scope,
+              name: node.operand.name,
+              mutable: false,
+            };
           }
           throw new Error("can only take reference of identifier");
         }
@@ -730,7 +858,12 @@ function visit(node: Ast): Value | null {
           // Create a mutable reference to the operand
           if (node.operand.kind === "ident") {
             const scope = scopes[scopes.length - 1]!;
-            return { tag: "ref", scope, name: node.operand.name, mutable: true };
+            return {
+              tag: "ref",
+              scope,
+              name: node.operand.name,
+              mutable: true,
+            };
           }
           throw new Error("can only take reference of identifier");
         }
@@ -749,6 +882,9 @@ function visit(node: Ast): Value | null {
       case "let": {
         const v = visit(node.value);
         if (v === null) throw new Error("block has no value");
+        if (node.typeAnnotation && suffixRanges[node.typeAnnotation]) {
+          checkSuffix(node.typeAnnotation, toNum(v));
+        }
         scopes[scopes.length - 1]!.vars[node.name] = v;
         if (node.mutable) mutables[mutables.length - 1]![node.name] = true;
         return null;
@@ -761,8 +897,10 @@ function visit(node: Ast): Value | null {
       }
       case "array_assign": {
         const target = visit(node.target);
-        if (target === null) throw new Error("array assign target has no value");
-        if (target.tag !== "array") throw new Error("cannot assign to non-array");
+        if (target === null)
+          throw new Error("array assign target has no value");
+        if (target.tag !== "array")
+          throw new Error("cannot assign to non-array");
         const idx = toNum(visit(node.index)!);
         const v = visit(node.value);
         if (v === null) throw new Error("array assign value has no value");
@@ -772,7 +910,8 @@ function visit(node: Ast): Value | null {
       case "refassign": {
         const ref = lookup(node.name);
         if (ref.tag !== "ref") throw new Error("not a reference");
-        if (!ref.mutable) throw new Error("cannot assign through immutable reference");
+        if (!ref.mutable)
+          throw new Error("cannot assign through immutable reference");
         const v = visit(node.value);
         if (v === null) throw new Error("block has no value");
         ref.scope.vars[ref.name] = v;
@@ -805,7 +944,8 @@ function visit(node: Ast): Value | null {
         mutables.pop();
         return value;
       }
-      case "paren": return visit(node.expr);
+      case "paren":
+        return visit(node.expr);
       case "if_expr": {
         const cond = visit(node.cond)!;
         if (truthy(cond)) return visit(node.thenBranch);
@@ -861,8 +1001,10 @@ function visit(node: Ast): Value | null {
         }
         return null;
       }
-      case "continue": throw { kind: "continue" };
-      case "break": throw { kind: "break" };
+      case "continue":
+        throw { kind: "continue" };
+      case "break":
+        throw { kind: "break" };
       case "yield": {
         const v = visit(node.value);
         if (v === null) throw new Error("yield has no value");
@@ -890,7 +1032,7 @@ function visit(node: Ast): Value | null {
         const fn = fnVal;
         const fnScopes = [...fn.scopes, { vars: {}, mutable: {} }];
         const fnMutables = [...fn.mutables, {}];
-        const argValues = node.args.map(a => {
+        const argValues = node.args.map((a) => {
           const v = visit(a);
           if (v === null) throw new Error("argument has no value");
           return v;
@@ -905,9 +1047,12 @@ function visit(node: Ast): Value | null {
           throw e;
         }
       }
-      case "wildcard": return num(0);
-      case "null": return { tag: "null" };
-      case "char": return num(node.value.charCodeAt(0));
+      case "wildcard":
+        return num(0);
+      case "null":
+        return { tag: "null" };
+      case "char":
+        return num(node.value.charCodeAt(0));
       case "match": {
         const matchVal = visit(node.expr)!;
         for (const c of node.cases) {
@@ -922,7 +1067,7 @@ function visit(node: Ast): Value | null {
         return num(0);
       }
       case "tuple": {
-        const values = node.elements.map(e => {
+        const values = node.elements.map((e) => {
           const v = visit(e);
           if (v === null) throw new Error("tuple element has no value");
           return v;
@@ -936,7 +1081,7 @@ function visit(node: Ast): Value | null {
         return target.values[node.index]!;
       }
       case "array": {
-        const values = node.elements.map(e => {
+        const values = node.elements.map((e) => {
           const v = visit(e);
           if (v === null) throw new Error("array element has no value");
           return v;
@@ -950,7 +1095,8 @@ function visit(node: Ast): Value | null {
         const idx = toNum(visit(node.index)!);
         return target.values[idx]!;
       }
-      case "string": return { tag: "string", value: node.value };
+      case "string":
+        return { tag: "string", value: node.value };
       case "string_index": {
         const target = visit(node.target);
         if (target === null) throw new Error("string target has no value");
@@ -962,8 +1108,10 @@ function visit(node: Ast): Value | null {
       }
       case "string_length": {
         const target = visit(node.target);
-        if (target === null) throw new Error("string length target has no value");
-        if (target.tag !== "string") throw new Error("cannot get length of non-string");
+        if (target === null)
+          throw new Error("string length target has no value");
+        if (target.tag !== "string")
+          throw new Error("cannot get length of non-string");
         return num(target.value.length);
       }
       case "record": {
@@ -977,8 +1125,10 @@ function visit(node: Ast): Value | null {
       }
       case "field_access": {
         const target = visit(node.target);
-        if (target === null) throw new Error("field access target has no value");
-        if (target.tag !== "record") throw new Error("cannot access field on non-record");
+        if (target === null)
+          throw new Error("field access target has no value");
+        if (target.tag !== "record")
+          throw new Error("cannot access field on non-record");
         const val = target.fields[node.field];
         if (val === undefined) throw new Error(`field ${node.field} not found`);
         return val;
@@ -990,19 +1140,32 @@ function visit(node: Ast): Value | null {
 
 function applyBinOp(op: string, left: Value, right: Value): Value {
   switch (op) {
-    case "+": return num(toNum(left) + toNum(right));
-    case "-": return num(toNum(left) - toNum(right));
-    case "*": return num(toNum(left) * toNum(right));
-    case "/": return num(toNum(left) / toNum(right));
-    case "||": return bool(truthy(left) || truthy(right));
-    case "&&": return bool(truthy(left) && truthy(right));
-    case "==": return eq(left, right);
-    case "!=": return ne(left, right);
-    case "<": return lt(left, right);
-    case "<=": return lte(left, right);
-    case ">": return gt(left, right);
-    case ">=": return gte(left, right);
-    default: throw new Error(`unknown operator: ${op}`);
+    case "+":
+      return num(toNum(left) + toNum(right));
+    case "-":
+      return num(toNum(left) - toNum(right));
+    case "*":
+      return num(toNum(left) * toNum(right));
+    case "/":
+      return num(toNum(left) / toNum(right));
+    case "||":
+      return bool(truthy(left) || truthy(right));
+    case "&&":
+      return bool(truthy(left) && truthy(right));
+    case "==":
+      return eq(left, right);
+    case "!=":
+      return ne(left, right);
+    case "<":
+      return lt(left, right);
+    case "<=":
+      return lte(left, right);
+    case ">":
+      return gt(left, right);
+    case ">=":
+      return gte(left, right);
+    default:
+      throw new Error(`unknown operator: ${op}`);
   }
 }
 
