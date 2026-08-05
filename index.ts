@@ -29,6 +29,7 @@ function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
   if (a.tag === "number") return bool(a.num === (b as Value & { tag: "number" }).num);
   if (a.tag === "bool") return bool(a.val === (b as Value & { tag: "bool" }).val);
+  if (a.tag === "string") return bool(a.value === (b as Value & { tag: "string" }).value);
   return bool(false);
 }
 function ne(a: Value, b: Value): Value { return bool(!truthy(eq(a, b))); }
