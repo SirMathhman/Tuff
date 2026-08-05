@@ -97,6 +97,7 @@ export function evaluate(source: string): number {
     // Check for assignment: identifier = expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
       const name = tokens[pos]!.value;
+      if (!mutableVars.has(name)) throw new Error(`cannot assign to immutable variable: ${name}`);
       pos++; // skip identifier
       pos++; // skip "="
       assign(name, parseExpression());
