@@ -78,7 +78,8 @@ type Ast =
   | { kind: "array_index"; target: Ast; index: Ast }
   | { kind: "char"; value: string }
   | { kind: "string"; value: string }
-  | { kind: "string_index"; target: Ast; index: Ast };
+  | { kind: "string_index"; target: Ast; index: Ast }
+  | { kind: "string_length"; target: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -388,6 +389,15 @@ function parse(tokens: Token[]): Ast {
         const index = parseExpression();
         pos++; // skip "]"
         return { kind: "string_index", target: { kind: "string", value: str }, index };
+      }
+      // Check for string length: "string".length
+      if (tokens[pos]?.value === ".") {
+        pos++; // skip "."
+        if (tokens[pos]?.value === "length") {
+          pos++; // skip "length"
+          return { kind: "string_length", target: { kind: "string", value: str } };
+        }
+        throw new Error("expected \"length\" after \".\"");
       }
       return { kind: "string", value: str };
     }
@@ -810,6 +820,12 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         const ch = target.value[idx];
         if (ch === undefined) return num(0);
         return num(ch.charCodeAt(0));
+      }
+      case "string_length": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("string length target has no value");
+        if (target.tag !== "string") throw new Error("cannot get length of non-string");
+        return num(target.value.length);
       }
     }
   }
