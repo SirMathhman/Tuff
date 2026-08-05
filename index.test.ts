@@ -205,6 +205,10 @@ test('let pt = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
   expect(evaluate('let pt = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
 });
 
+test('let mut array = [0]; array[0] = 100; array[0] => 100', () => {
+  expect(evaluate('let mut array = [0]; array[0] = 100; array[0]')).toBe(100);
+});
+
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });

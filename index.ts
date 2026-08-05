@@ -78,6 +78,7 @@ type Ast =
   | { kind: "let"; mutable: boolean; name: string; value: Ast }
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "refassign"; name: string; value: Ast }
+  | { kind: "array_assign"; target: Ast; index: Ast; value: Ast }
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
   | { kind: "if_expr"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
@@ -516,6 +517,35 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "refassign", name, value };
     }
+    // Check for array indexed assignment: identifier[expr] = expression
+    if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "[") {
+      // Look ahead to see if there's an = after the ]
+      let depth = 0;
+      let j = pos + 2;
+      let foundEquals = false;
+      while (tokens[j]) {
+        if (tokens[j]!.value === "[") depth++;
+        else if (tokens[j]!.value === "]") {
+          if (depth === 0) {
+            if (tokens[j + 1]?.value === "=") foundEquals = true;
+            break;
+          }
+          depth--;
+        }
+        j++;
+      }
+      if (foundEquals) {
+        const name = tokens[pos]!.value;
+        pos++; // skip identifier
+        pos++; // skip "["
+        const index = parseExpression();
+        if (tokens[pos]?.value === "]") pos++; // skip "]"
+        if (tokens[pos]?.value === "=") pos++; // skip "="
+        const value = parseExpression();
+        if (tokens[pos]?.value === ";") pos++;
+        return { kind: "array_assign", target: { kind: "ident", name }, index, value };
+      }
+    }
     // Check for assignment: identifier = expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
       const name = tokens[pos]!.value;
@@ -697,6 +727,16 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         const v = visit(node.value);
         if (v === null) throw new Error("block has no value");
         setVar(node.name, v);
+        return null;
+      }
+      case "array_assign": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("array assign target has no value");
+        if (target.tag !== "array") throw new Error("cannot assign to non-array");
+        const idx = toNum(visit(node.index)!);
+        const v = visit(node.value);
+        if (v === null) throw new Error("array assign value has no value");
+        target.values[idx] = v;
         return null;
       }
       case "refassign": {
