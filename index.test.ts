@@ -220,3 +220,7 @@ test('evaluate("let x = match (1) { case 1 => 2; case _ => 3; }; x") => 2', () =
 test('evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x") => 3', () => {
   expect(evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x")).toBe(3);
 });
+
+test('evaluate("let x = null; x") => 0', () => {
+  expect(evaluate("let x = null; x")).toBe(0);
+});

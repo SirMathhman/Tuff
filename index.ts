@@ -5,7 +5,8 @@ type Value =
   | { tag: "bool"; val: boolean }
   | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] }
   | { tag: "ref"; scope: Scope; name: string; mutable: boolean }
-  | { tag: "tuple"; values: Value[] };
+  | { tag: "tuple"; values: Value[] }
+  | { tag: "null" };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
@@ -14,6 +15,7 @@ function toNum(v: Value): number {
   if (v.tag === "bool") return v.val ? 1 : 0;
   if (v.tag === "ref") return toNum(v.scope.vars[v.name]!);
   if (v.tag === "tuple") return 0;
+  if (v.tag === "null") return 0;
   return 0;
 }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
@@ -64,7 +66,8 @@ type Ast =
   | { kind: "fn"; name: string; params: string[]; body: Ast }
   | { kind: "call"; name: string; args: Ast[] }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
-  | { kind: "wildcard" };
+  | { kind: "wildcard" }
+  | { kind: "null" };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -96,7 +99,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" || ident === "match" || ident === "case" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" || ident === "match" || ident === "case" || ident === "null" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -306,6 +309,10 @@ function parse(tokens: Token[]): Ast {
     if (tok?.value === "false") {
       pos++;
       return { kind: "bool", value: false };
+    }
+    if (tok?.value === "null") {
+      pos++;
+      return { kind: "null" };
     }
     if (tok?.type === "identifier") {
       const name = tok.value;
@@ -667,6 +674,7 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return result;
       }
       case "wildcard": return num(0);
+      case "null": return { tag: "null" };
       case "match": {
         const matchVal = visit(node.expr)!;
         for (const c of node.cases) {
