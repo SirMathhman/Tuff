@@ -3,11 +3,17 @@ type Token = { type: string; value: string };
 type Value =
   | { tag: "number"; num: number }
   | { tag: "bool"; val: boolean }
-  | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] };
+  | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] }
+  | { tag: "ref"; scope: Scope; name: string };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
-function toNum(v: Value): number { return v.tag === "number" ? v.num : v.tag === "bool" ? (v.val ? 1 : 0) : 0; }
+function toNum(v: Value): number {
+  if (v.tag === "number") return v.num;
+  if (v.tag === "bool") return v.val ? 1 : 0;
+  if (v.tag === "ref") return toNum(v.scope.vars[v.name]!);
+  return 0;
+}
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
 function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
@@ -36,7 +42,7 @@ type Ast =
   | { kind: "num"; value: number }
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; name: string }
-  | { kind: "unary"; op: "!" | "-"; operand: Ast }
+  | { kind: "unary"; op: "!" | "-" | "&" | "*"; operand: Ast }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
   | { kind: "let"; mutable: boolean; name: string; value: Ast }
   | { kind: "assign"; name: string; value: Ast }
@@ -194,6 +200,14 @@ function parse(tokens: Token[]): Ast {
     if (tok?.value === "-") {
       pos++;
       return { kind: "unary", op: "-", operand: parseFactor() };
+    }
+    if (tok?.value === "&") {
+      pos++;
+      return { kind: "unary", op: "&", operand: parseFactor() };
+    }
+    if (tok?.value === "*") {
+      pos++;
+      return { kind: "unary", op: "*", operand: parseFactor() };
     }
     return parsePrimary();
   }
@@ -386,7 +400,22 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
       case "ident": return lookup(node.name);
       case "unary": {
         const v = visit(node.operand)!;
-        return node.op === "!" ? notOp(v) : negate(v);
+        if (node.op === "!") return notOp(v);
+        if (node.op === "-") return negate(v);
+        if (node.op === "&") {
+          // Create a reference to the operand
+          if (node.operand.kind === "ident") {
+            const scope = scopes[scopes.length - 1]!;
+            return { tag: "ref", scope, name: node.operand.name };
+          }
+          throw new Error("can only take reference of identifier");
+        }
+        if (node.op === "*") {
+          // Dereference
+          if (v.tag === "ref") return v.scope.vars[v.name]!;
+          throw new Error("cannot dereference non-reference");
+        }
+        return v;
       }
       case "binop": {
         const l = visit(node.left)!;
