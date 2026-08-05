@@ -31,7 +31,8 @@ export function evaluate(source: string): number {
   const scopes: Record<string, number>[] = [{}];
   function lookup(name: string): number {
     for (let i = scopes.length - 1; i >= 0; i--) {
-      if (name in scopes[i]) return scopes[i][name]!;
+      const s = scopes[i];
+      if (s && name in s) return s[name]!;
     }
     throw new Error(`undeclared variable: ${name}`);
   }
