@@ -2,6 +2,12 @@ export function evaluate(source: string): number {
   let s = source.trim();
   if (!s) return 0;
 
+  // Pure statement ending with ";" and no trailing expression returns 0
+  const lastSemicolon = s.lastIndexOf(";");
+  if (lastSemicolon !== -1 && !s.slice(lastSemicolon + 1).trim()) {
+    return 0;
+  }
+
   // Resolve curly brace blocks (allow statements like "let" and ";")
   while (s.includes("{")) {
     const blockMatch = s.match(/\{([^{}]+)\}/);

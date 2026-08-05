@@ -61,3 +61,7 @@ test(`evaluate("( let x = 1; x )") => Error`, () => {
   expect(() => evaluate("( let x = 1; x )")).toThrow();
 });
 
+test('evaluate("let x = 100;") => 0', () => {
+  expect(evaluate("let x = 100;")).toBe(0);
+});
+
