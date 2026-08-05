@@ -98,6 +98,11 @@ function tokenize(source: string): Token[] {
 // Parser — returns AST, does not evaluate
 function parse(tokens: Token[]): Ast {
   let pos = 0;
+  function expectToken(value: string): void {
+    const tok = tokens[pos];
+    if (!tok || tok.value !== value) throw new Error(`expected "${value}", got "${tok?.value ?? "EOF"}"`);
+    pos++;
+  }
   function parseExpression(): Ast {
     let result = parseOr();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
@@ -175,11 +180,11 @@ function parse(tokens: Token[]): Ast {
     }
     if (tok?.value === "if") {
       pos++; // skip "if"
-      pos++; // skip "("
+      expectToken("(");
       const cond = parseExpression();
-      pos++; // skip ")"
+      expectToken(")");
       const thenBranch = parseExpression();
-      pos++; // skip "else"
+      expectToken("else");
       const elseBranch = parseExpression();
       return { kind: "if", cond, thenBranch, elseBranch };
     }
