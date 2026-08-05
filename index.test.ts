@@ -188,3 +188,7 @@ test('evaluate("fn add(x, y) => x + y; add(3, 4)") => 7', () => {
 test('evaluate("fn add(x, y) => { x + y } add(3, 4)") => 7', () => {
   expect(evaluate("fn add(x, y) => { x + y } add(3, 4)")).toBe(7);
 });
+
+test('evaluate("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x") => 1', () => {
+  expect(evaluate("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x")).toBe(1);
+});
