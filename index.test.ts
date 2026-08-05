@@ -128,3 +128,7 @@ test('evaluate("1 != 1") => 0', () => {
 test('evaluate("let x = true; !x") => 0', () => {
   expect(evaluate("let x = true; !x")).toBe(0);
 });
+
+test('evaluate("let x = 100; -x") => -100', () => {
+  expect(evaluate("let x = 100; -x")).toBe(-100);
+});
