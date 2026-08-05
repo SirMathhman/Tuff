@@ -2,8 +2,8 @@ export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === '') return 0;
 
-  // Tokenize into numbers and operators
-  const matchResult = trimmed.match(/(\d+|[+\-\*\/])/g);
+  // Tokenize into numbers, operators, and parentheses
+  const matchResult = trimmed.match(/(\d+|[+\-\*\/()])/g);
   if (!matchResult) return 0;
   const tokens: string[] = matchResult;
 
@@ -31,14 +31,25 @@ export function evaluate(source: string): number {
 
   // parseTerm handles * and / (higher precedence)
   function parseTerm(): number {
-    let result = Number(consume()); // consume the number
+    let result = parseFactor();
     while (peek() === '*' || peek() === '/') {
       const op = consume();
-      const next = Number(consume());
+      const next = parseFactor();
       if (op === '*') result *= next;
       else result /= next;
     }
     return result;
+  }
+
+  // parseFactor handles parentheses and numbers (highest precedence)
+  function parseFactor(): number {
+    if (peek() === '(') {
+      consume(); // consume '('
+      const result = parseExpression();
+      consume(); // consume ')'
+      return result;
+    }
+    return Number(consume());
   }
 
   return parseExpression();
