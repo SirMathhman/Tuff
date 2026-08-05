@@ -1,15 +1,19 @@
 type Token = { type: string; value: string };
 
-type Value = { tag: "number"; num: number } | { tag: "bool"; val: boolean };
+type Value =
+  | { tag: "number"; num: number }
+  | { tag: "bool"; val: boolean }
+  | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
-function toNum(v: Value): number { return v.tag === "number" ? v.num : v.val ? 1 : 0; }
+function toNum(v: Value): number { return v.tag === "number" ? v.num : v.tag === "bool" ? (v.val ? 1 : 0) : 0; }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
 function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
   if (a.tag === "number") return bool(a.num === (b as Value & { tag: "number" }).num);
-  return bool(a.val === (b as Value & { tag: "bool" }).val);
+  if (a.tag === "bool") return bool(a.val === (b as Value & { tag: "bool" }).val);
+  return bool(false);
 }
 function ne(a: Value, b: Value): Value { return bool(!truthy(eq(a, b))); }
 function lt(a: Value, b: Value): Value { return bool(toNum(a) < toNum(b)); }
@@ -44,7 +48,9 @@ type Ast =
   | { kind: "while"; cond: Ast; body: Ast }
   | { kind: "continue" }
   | { kind: "break" }
-  | { kind: "yield"; value: Ast };
+  | { kind: "yield"; value: Ast }
+  | { kind: "fn"; name: string; params: string[]; body: Ast }
+  | { kind: "call"; name: string; args: Ast[] };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -60,7 +66,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "continue" || ident === "break" || ident === "yield" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -70,6 +76,11 @@ function tokenize(source: string): Token[] {
     }
     if (source[i] === ">" && source[i + 1] === "=") {
       tokens.push({ type: "punct", value: ">=" });
+      i += 2;
+      continue;
+    }
+    if (source[i] === "=" && source[i + 1] === ">") {
+      tokens.push({ type: "punct", value: "=>" });
       i += 2;
       continue;
     }
@@ -216,8 +227,20 @@ function parse(tokens: Token[]): Ast {
       return { kind: "bool", value: false };
     }
     if (tok?.type === "identifier") {
+      const name = tok.value;
       pos++;
-      return { kind: "ident", name: tok.value };
+      // Check for function call: identifier(args)
+      if (tokens[pos]?.value === "(") {
+        pos++; // skip "("
+        const args: Ast[] = [];
+        while (tokens[pos]?.value !== ")") {
+          args.push(parseExpression());
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip ")"
+        return { kind: "call", name, args };
+      }
+      return { kind: "ident", name };
     }
     const result = parseFloat(tok!.value);
     pos++;
@@ -271,6 +294,24 @@ function parse(tokens: Token[]): Ast {
       const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "yield", value };
+    }
+    // Check for fn statement
+    if (tokens[pos]?.value === "fn") {
+      pos++; // skip "fn"
+      const name = tokens[pos]!.value;
+      pos++; // skip name
+      pos++; // skip "("
+      const params: string[] = [];
+      while (tokens[pos]?.value !== ")") {
+        params.push(tokens[pos]!.value);
+        pos++;
+        if (tokens[pos]?.value === ",") pos++;
+      }
+      pos++; // skip ")"
+      pos++; // skip "=>"
+      const body = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "fn", name, params, body };
     }
     // Check for while statement
     if (tokens[pos]?.value === "while") {
@@ -426,6 +467,32 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         const v = visit(node.value);
         if (v === null) throw new Error("yield has no value");
         throw { kind: "yield", value: v };
+      }
+      case "fn": {
+        scopes[scopes.length - 1]!.vars[node.name] = {
+          tag: "fn",
+          params: node.params,
+          body: node.body,
+          scopes: [...scopes],
+          mutables: [...mutables],
+        };
+        return null;
+      }
+      case "call": {
+        const fn = lookup(node.name);
+        if (fn.tag !== "fn") throw new Error("not a function");
+        const fnScopes = [...fn.scopes, { vars: {}, mutable: {} }];
+        const fnMutables = [...fn.mutables, {}];
+        const argValues = node.args.map(a => {
+          const v = visit(a);
+          if (v === null) throw new Error("argument has no value");
+          return v;
+        });
+        fn.params.forEach((p, i) => {
+          fnScopes[fnScopes.length - 1]!.vars[p] = argValues[i]!;
+        });
+        const result = evalAst(fn.body, fnScopes, fnMutables);
+        return result;
       }
     }
   }

@@ -180,3 +180,7 @@ test('evaluate("let mut x = 0; if (true) x = 4; x") => 4', () => {
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });
+
+test('evaluate("fn add(x, y) => x + y; add(3, 4)") => 7', () => {
+  expect(evaluate("fn add(x, y) => x + y; add(3, 4)")).toBe(7);
+});
