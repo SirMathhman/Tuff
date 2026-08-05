@@ -1,6 +1,16 @@
 export function evaluate(source: string): number {
-  if (!source.trim()) return 0;
-  const tokens = source.match(/(\d+|[+\-*/])/g)!;
+  let s = source.trim();
+  if (!s) return 0;
+
+  // Resolve parentheses recursively (innermost first)
+  while (s.includes("(")) {
+    const match = s.match(/\(([^()]+)\)/);
+    if (!match) break;
+    s = s.replace(match[0]!, String(evaluate(match[1]!)));
+  }
+
+  // Tokenize flat expression: numbers and operators
+  const tokens = s.match(/(\d+|[+\-*/])/g)!;
 
   // First pass: resolve * and / (higher precedence)
   let terms: number[] = [parseInt(tokens[0], 10)];
