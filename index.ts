@@ -71,7 +71,8 @@ type Ast =
   | { kind: "wildcard" }
   | { kind: "null" }
   | { kind: "array"; elements: Ast[] }
-  | { kind: "array_index"; target: Ast; index: Ast };
+  | { kind: "array_index"; target: Ast; index: Ast }
+  | { kind: "char"; value: string };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -98,6 +99,14 @@ function tokenize(source: string): Token[] {
       }
       tokens.push({ type: "punct", value: "." });
       i++;
+      continue;
+    }
+    if (source[i] === "'") {
+      i++; // skip opening quote
+      let ch = "";
+      while (i < source.length && source[i] !== "'") { ch += source[i]!; i++; }
+      i++; // skip closing quote
+      tokens.push({ type: "char", value: ch });
       continue;
     }
     if (/[a-zA-Z_]/.test(source[i]!)) {
@@ -328,8 +337,11 @@ function parse(tokens: Token[]): Ast {
       pos++;
       return { kind: "null" };
     }
-    if (tok?.type === "identifier") {
-      const name = tok.value;
+    if (tok?.type === "char") {
+      pos++;
+      return { kind: "char", value: tok.value };
+    }
+    if (tok?.type === "identifier") {      const name = tok.value;
       pos++;
       // Check for function call: identifier(args)
       if (tokens[pos]?.value === "(") {
@@ -696,6 +708,7 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
       }
       case "wildcard": return num(0);
       case "null": return { tag: "null" };
+      case "char": return num(node.value.charCodeAt(0));
       case "match": {
         const matchVal = visit(node.expr)!;
         for (const c of node.cases) {

@@ -228,3 +228,7 @@ test('evaluate("let x = null; x") => 0', () => {
 test('evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
   expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
 });
+
+test("'a' => 97", () => {
+  expect(evaluate("'a'")).toBe(97);
+});
