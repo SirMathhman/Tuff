@@ -91,7 +91,7 @@ type Ast =
   | { kind: "yield"; value: Ast }
   | { kind: "return"; value: Ast }
   | { kind: "fn"; name: string; params: string[]; body: Ast }
-  | { kind: "call"; name: string; args: Ast[] }
+  | { kind: "call"; name: string; args: Ast[]; target?: Ast }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
   | { kind: "wildcard" }
   | { kind: "null" }
@@ -323,6 +323,52 @@ function parse(tokens: Token[]): Ast {
     return parsePrimary();
   }
   function parsePrimary(): Ast {
+    let result = parseAtom();
+    // Postfix loop — handle chained indexing, field access, calls, etc.
+    while (true) {
+      if (tokens[pos]?.value === "[") {
+        pos++; // skip "["
+        const index = parseExpression();
+        pos++; // skip "]"
+        if (result.kind === "string") {
+          result = { kind: "string_index", target: result, index };
+        } else {
+          result = { kind: "array_index", target: result, index };
+        }
+      } else if (tokens[pos]?.value === ".") {
+        pos++; // skip "."
+        const nextTok = tokens[pos];
+        if (nextTok?.type === "number") {
+          pos++;
+          result = { kind: "index", target: result, index: parseInt(nextTok.value) };
+        } else if (nextTok?.value === "length") {
+          pos++;
+          if (result.kind === "string") {
+            result = { kind: "string_length", target: result };
+          } else {
+            result = { kind: "field_access", target: result, field: "length" };
+          }
+        } else {
+          const field = nextTok!.value;
+          pos++;
+          result = { kind: "field_access", target: result, field };
+        }
+      } else if (tokens[pos]?.value === "(") {
+        pos++; // skip "("
+        const args: Ast[] = [];
+        while (tokens[pos]?.value !== ")") {
+          args.push(parseExpression());
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip ")"
+        result = { kind: "call", name: "", target: result, args };
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+  function parseAtom(): Ast {
     const tok = tokens[pos];
     if (tok?.value === "(") {
       pos++;
@@ -425,61 +471,12 @@ function parse(tokens: Token[]): Ast {
       return { kind: "char", value: tok.value };
     }
     if (tok?.type === "string") {
-      const str = tok.value;
       pos++;
-      // Check for string indexing: "string"[expr]
-      if (tokens[pos]?.value === "[") {
-        pos++; // skip "["
-        const index = parseExpression();
-        pos++; // skip "]"
-        return { kind: "string_index", target: { kind: "string", value: str }, index };
-      }
-      // Check for string length: "string".length
-      if (tokens[pos]?.value === ".") {
-        pos++; // skip "."
-        if (tokens[pos]?.value === "length") {
-          pos++; // skip "length"
-          return { kind: "string_length", target: { kind: "string", value: str } };
-        }
-        throw new Error("expected \"length\" after \".\"");
-      }
-      return { kind: "string", value: str };
+      return { kind: "string", value: tok.value };
     }
-    if (tok?.type === "identifier") {      const name = tok.value;
+    if (tok?.type === "identifier") {
+      const name = tok.value;
       pos++;
-      // Check for function call: identifier(args)
-      if (tokens[pos]?.value === "(") {
-        pos++; // skip "("
-        const args: Ast[] = [];
-        while (tokens[pos]?.value !== ")") {
-          args.push(parseExpression());
-          if (tokens[pos]?.value === ",") pos++;
-        }
-        pos++; // skip ")"
-        return { kind: "call", name, args };
-      }
-      // Check for field access: identifier.index or identifier.field
-      if (tokens[pos]?.value === ".") {
-        pos++; // skip "."
-        const nextTok = tokens[pos];
-        if (nextTok?.type === "number") {
-          // Tuple index: identifier.0
-          pos++;
-          return { kind: "index", target: { kind: "ident", name }, index: parseInt(nextTok.value) };
-        } else {
-          // Record field access: identifier.field
-          const field = nextTok!.value;
-          pos++;
-          return { kind: "field_access", target: { kind: "ident", name }, field };
-        }
-      }
-      // Check for array indexing: identifier[expr]
-      if (tokens[pos]?.value === "[") {
-        pos++; // skip "["
-        const index = parseExpression();
-        pos++; // skip "]"
-        return { kind: "array_index", target: { kind: "ident", name }, index };
-      }
       return { kind: "ident", name };
     }
     const result = parseFloat(tok!.value);
@@ -854,8 +851,10 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return null;
       }
       case "call": {
-        const fn = lookup(node.name);
-        if (fn.tag !== "fn") throw new Error("not a function");
+        const fnVal = node.target ? visit(node.target) : lookup(node.name);
+        if (fnVal === null) throw new Error("call target has no value");
+        if (fnVal.tag !== "fn") throw new Error("not a function");
+        const fn = fnVal;
         const fnScopes = [...fn.scopes, { vars: {}, mutable: {} }];
         const fnMutables = [...fn.mutables, {}];
         const argValues = node.args.map(a => {
