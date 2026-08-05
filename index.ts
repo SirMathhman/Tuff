@@ -278,15 +278,23 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return applyBinOp(node.op, l, r);
       }
       case "let": {
-        const v = visit(node.value)!;
+        const v = visit(node.value);
+        if (v === null) throw new Error("block has no value");
         scopes[scopes.length - 1]!.vars[node.name] = v;
         if (node.mutable) mutables[mutables.length - 1]![node.name] = true;
         return null;
       }
       case "assign": {
         if (!isMutable(node.name)) throw new Error(`cannot assign to immutable variable: ${node.name}`);
-        const v = visit(node.value)!;
-        scopes[scopes.length - 1]!.vars[node.name] = v;
+        const v = visit(node.value);
+        if (v === null) throw new Error("block has no value");
+        // Find the scope where the variable is declared
+        for (let i = scopes.length - 1; i >= 0; i--) {
+          if (node.name in scopes[i]!.vars) {
+            scopes[i]!.vars[node.name] = v;
+            break;
+          }
+        }
         return null;
       }
       case "block": {
@@ -298,7 +306,6 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         }
         scopes.pop();
         mutables.pop();
-        if (value === null) throw new Error("block has no value");
         return value;
       }
       case "paren": return visit(node.expr);

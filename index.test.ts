@@ -140,3 +140,11 @@ test('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
 test('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
   expect(evaluate("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
 });
+
+test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+});
+
+test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+});
