@@ -89,5 +89,23 @@ export function evaluate(source: string): number {
     pos++; // skip "}"
     return result;
   }
-  return parseExpression();
+  function parseStatement(): number {
+    if (tokens[pos]?.value === "let") {
+      pos++; // skip "let"
+      const name = tokens[pos]!.value;
+      pos++; // skip identifier
+      pos++; // skip "="
+      scope[name] = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return scope[name];
+    }
+    const result = parseExpression();
+    if (tokens[pos]?.value === ";") pos++;
+    return result;
+  }
+  let result = 0;
+  while (tokens[pos]) {
+    result = parseStatement();
+  }
+  return result;
 }
