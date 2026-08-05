@@ -1,4 +1,4 @@
 export function evaluate(source: string): number {
   if (!source.trim()) return 0;
-  return parseInt(source, 10);
+  return source.split("+").reduce((sum, part) => sum + parseInt(part.trim(), 10), 0);
 }
