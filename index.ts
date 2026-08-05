@@ -18,6 +18,7 @@ function gt(a: Value, b: Value): Value { return bool(toNum(a) > toNum(b)); }
 function gte(a: Value, b: Value): Value { return bool(toNum(a) >= toNum(b)); }
 function notOp(v: Value): Value { return bool(!truthy(v)); }
 function negate(v: Value): Value { return num(-toNum(v)); }
+const CONTINUE = Symbol("continue");
 
 // AST types
 type Ast =
@@ -32,7 +33,8 @@ type Ast =
   | { kind: "paren"; expr: Ast }
   | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
   | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
-  | { kind: "while"; cond: Ast; body: Ast };
+  | { kind: "while"; cond: Ast; body: Ast }
+  | { kind: "continue" };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -48,7 +50,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "continue" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -241,6 +243,12 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "assign", name, value };
     }
+    // Check for continue statement
+    if (tokens[pos]?.value === "continue") {
+      pos++;
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "continue" };
+    }
     // Check for while statement
     if (tokens[pos]?.value === "while") {
       pos++; // skip "while"
@@ -360,11 +368,20 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return visit(node.elseBranch);
       }
       case "while": {
-        while (truthy(visit(node.cond)!)) {
-          visit(node.body);
+        let iterations = 0;
+        while (true) {
+          if (iterations++ > 10000) throw new Error("infinite loop detected");
+          try {
+            if (!truthy(visit(node.cond)!)) break;
+            visit(node.body);
+          } catch (e) {
+            if (e === CONTINUE) continue;
+            throw e;
+          }
         }
         return null;
       }
+      case "continue": throw CONTINUE;
     }
   }
   return visit(ast) ?? num(0);
