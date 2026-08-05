@@ -41,3 +41,7 @@ test('evaluate("{ 2 + 3 } * 4") => 20', () => {
   expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
 });
 
+test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(evaluate("{ let x = 2 + 3; x } * 4")).toBe(20);
+});
+
