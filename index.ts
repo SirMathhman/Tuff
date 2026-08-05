@@ -30,7 +30,8 @@ type Ast =
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
-  | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast };
+  | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
+  | { kind: "augassign"; name: string; op: "+"; value: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -61,6 +62,11 @@ function tokenize(source: string): Token[] {
     }
     if (source[i] === "!" && source[i + 1] === "=") {
       tokens.push({ type: "punct", value: "!=" });
+      i += 2;
+      continue;
+    }
+    if (source[i] === "+" && source[i + 1] === "=") {
+      tokens.push({ type: "punct", value: "+=" });
       i += 2;
       continue;
     }
@@ -216,6 +222,15 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "let", mutable, name, value };
     }
+    // Check for augmented assignment: identifier += expression
+    if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "+=") {
+      const name = tokens[pos]!.value;
+      pos++; // skip identifier
+      pos++; // skip "+="
+      const value = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "augassign", name, op: "+", value };
+    }
     // Check for assignment: identifier = expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
       const name = tokens[pos]!.value;
@@ -303,6 +318,20 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         for (let i = scopes.length - 1; i >= 0; i--) {
           if (node.name in scopes[i]!.vars) {
             scopes[i]!.vars[node.name] = v;
+            break;
+          }
+        }
+        return null;
+      }
+      case "augassign": {
+        if (!isMutable(node.name)) throw new Error(`cannot assign to immutable variable: ${node.name}`);
+        const v = visit(node.value);
+        if (v === null) throw new Error("block has no value");
+        // Find the scope where the variable is declared
+        for (let i = scopes.length - 1; i >= 0; i--) {
+          if (node.name in scopes[i]!.vars) {
+            const existing = scopes[i]!.vars[node.name]!;
+            scopes[i]!.vars[node.name] = num(toNum(existing) + toNum(v));
             break;
           }
         }

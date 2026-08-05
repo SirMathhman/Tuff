@@ -152,3 +152,7 @@ test('evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x") => 2', 
 test('evaluate("let mut x = 0; if (false) x = 1; else x = 2; x") => 2', () => {
   expect(evaluate("let mut x = 0; if (false) x = 1; else x = 2; x")).toBe(2);
 });
+
+test('evaluate("let mut x = 1; x += 2; x") => 3', () => {
+  expect(evaluate("let mut x = 1; x += 2; x")).toBe(3);
+});
