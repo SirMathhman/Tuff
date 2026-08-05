@@ -4,7 +4,8 @@ type Value =
   | { tag: "number"; num: number }
   | { tag: "bool"; val: boolean }
   | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] }
-  | { tag: "ref"; scope: Scope; name: string; mutable: boolean };
+  | { tag: "ref"; scope: Scope; name: string; mutable: boolean }
+  | { tag: "tuple"; values: Value[] };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
@@ -12,6 +13,7 @@ function toNum(v: Value): number {
   if (v.tag === "number") return v.num;
   if (v.tag === "bool") return v.val ? 1 : 0;
   if (v.tag === "ref") return toNum(v.scope.vars[v.name]!);
+  if (v.tag === "tuple") return 0;
   return 0;
 }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
@@ -43,6 +45,8 @@ type Ast =
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; name: string }
   | { kind: "unary"; op: "!" | "-" | "&" | "&mut" | "*"; operand: Ast }
+  | { kind: "tuple"; elements: Ast[] }
+  | { kind: "index"; target: Ast; index: number }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
   | { kind: "let"; mutable: boolean; name: string; value: Ast }
   | { kind: "assign"; name: string; value: Ast }
@@ -64,10 +68,15 @@ function tokenize(source: string): Token[] {
   let i = 0;
   while (i < source.length) {
     if (/\s/.test(source[i]!)) { i++; continue; }
-    if (/[0-9.]/.test(source[i]!)) {
-      let num = "";
-      while (i < source.length && /[0-9.]/.test(source[i]!)) { num += source[i]!; i++; }
-      tokens.push({ type: "number", value: num });
+    if (/[0-9]/.test(source[i]!)) {
+      let numStr = "";
+      while (i < source.length && /[0-9.]/.test(source[i]!)) { numStr += source[i]!; i++; }
+      tokens.push({ type: "number", value: numStr });
+      continue;
+    }
+    if (source[i] === ".") {
+      tokens.push({ type: "punct", value: "." });
+      i++;
       continue;
     }
     if (/[a-zA-Z_]/.test(source[i]!)) {
@@ -220,6 +229,27 @@ function parse(tokens: Token[]): Ast {
     const tok = tokens[pos];
     if (tok?.value === "(") {
       pos++;
+      // Check if this is a tuple (contains commas) or a parenthesized expression
+      // Look ahead to see if there's a comma before the closing paren
+      let depth = 1;
+      let j = pos;
+      let hasComma = false;
+      while (depth > 0 && tokens[j]) {
+        if (tokens[j]!.value === "(") depth++;
+        else if (tokens[j]!.value === ")") depth--;
+        else if (tokens[j]!.value === "," && depth === 1) hasComma = true;
+        j++;
+      }
+      if (hasComma) {
+        // Parse as tuple
+        const elements: Ast[] = [];
+        while (tokens[pos]?.value !== ")") {
+          elements.push(parseExpression());
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip ")"
+        return { kind: "tuple", elements };
+      }
       const result = parseExpression();
       pos++; // skip ")"
       return { kind: "paren", expr: result };
@@ -258,6 +288,13 @@ function parse(tokens: Token[]): Ast {
         }
         pos++; // skip ")"
         return { kind: "call", name, args };
+      }
+      // Check for field access: identifier.index
+      if (tokens[pos]?.value === ".") {
+        pos++; // skip "."
+        const index = parseInt(tokens[pos]!.value);
+        pos++;
+        return { kind: "index", target: { kind: "ident", name }, index };
       }
       return { kind: "ident", name };
     }
@@ -554,6 +591,20 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         });
         const result = evalAst(fn.body, fnScopes, fnMutables);
         return result;
+      }
+      case "tuple": {
+        const values = node.elements.map(e => {
+          const v = visit(e);
+          if (v === null) throw new Error("tuple element has no value");
+          return v;
+        });
+        return { tag: "tuple", values };
+      }
+      case "index": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("index target has no value");
+        if (target.tag !== "tuple") throw new Error("cannot index non-tuple");
+        return target.values[node.index]!;
       }
     }
   }
