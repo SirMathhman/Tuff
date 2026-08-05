@@ -10,17 +10,19 @@ export function tokenize(source: string): Token[] {
   let i = 0;
 
   while (i < source.length) {
+    const char = source.charAt(i);
+
     // Skip whitespace
-    if (/\s/.test(source[i])) {
+    if (/\s/.test(char)) {
       i++;
       continue;
     }
 
     // Number (integer or decimal)
-    if (/[0-9.]/.test(source[i])) {
+    if (/[0-9.]/.test(char)) {
       let num = "";
-      while (i < source.length && /[0-9.]/.test(source[i])) {
-        num += source[i];
+      while (i < source.length && /[0-9.]/.test(source.charAt(i))) {
+        num += source.charAt(i);
         i++;
       }
       tokens.push({ type: "number", value: Number(num) });
@@ -28,14 +30,14 @@ export function tokenize(source: string): Token[] {
     }
 
     // Operator
-    if ("+-*/".includes(source[i])) {
-      const op = source[i] as "+" | "-" | "*" | "/";
+    if ("+-*/".includes(char)) {
+      const op = char as "+" | "-" | "*" | "/";
       tokens.push({ type: "operator", value: op });
       i++;
       continue;
     }
 
-    throw new Error(`Unexpected character: "${source[i]}" at position ${i}`);
+    throw new Error(`Unexpected character: "${char}" at position ${i}`);
   }
 
   return tokens;

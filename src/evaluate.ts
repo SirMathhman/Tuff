@@ -1,4 +1,4 @@
-import { Token } from "./tokenize";
+import type { Token } from "./tokenize";
 
 /**
  * Simple recursive-descent evaluator with operator precedence.
@@ -13,17 +13,21 @@ export function evaluateTokens(tokens: Token[]): number {
   }
 
   function consume(): Token {
-    return tokens[pos++];
+    const token = tokens[pos++];
+    if (token === undefined) throw new Error(`Unexpected end of input at position ${pos}`);
+    return token;
   }
 
   // expr handles + and - (lowest precedence)
   function parseExpr(): number {
     let result = parseTerm();
 
-    while (peek()?.type === "operator" && (peek().value === "+" || peek().value === "-")) {
-      const op = consume().value;
+    while (true) {
+      const next = peek();
+      if (!(next?.type === "operator" && (next.value === "+" || next.value === "-"))) break;
+      consume(); // discard operator token
       const right = parseTerm();
-      if (op === "+") result += right;
+      if (next.value === "+") result += right;
       else result -= right;
     }
 
@@ -34,10 +38,12 @@ export function evaluateTokens(tokens: Token[]): number {
   function parseTerm(): number {
     let result = parseNumber();
 
-    while (peek()?.type === "operator" && (peek().value === "*" || peek().value === "/")) {
-      const op = consume().value;
+    while (true) {
+      const next = peek();
+      if (!(next?.type === "operator" && (next.value === "*" || next.value === "/"))) break;
+      consume(); // discard operator token
       const right = parseNumber();
-      if (op === "*") result *= right;
+      if (next.value === "*") result *= right;
       else result /= right;
     }
 
