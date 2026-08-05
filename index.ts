@@ -62,7 +62,8 @@ type Ast =
   | { kind: "break" }
   | { kind: "yield"; value: Ast }
   | { kind: "fn"; name: string; params: string[]; body: Ast }
-  | { kind: "call"; name: string; args: Ast[] };
+  | { kind: "call"; name: string; args: Ast[] }
+  | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -94,7 +95,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "in" || ident === "continue" || ident === "break" || ident === "yield" || ident === "fn" || ident === "match" || ident === "case" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -278,6 +279,24 @@ function parse(tokens: Token[]): Ast {
       expectToken("else");
       const elseBranch = parseExpression();
       return { kind: "if_expr", cond, thenBranch, elseBranch };
+    }
+    if (tok?.value === "match") {
+      pos++; // skip "match"
+      expectToken("(");
+      const expr = parseExpression();
+      expectToken(")");
+      expectToken("{");
+      const cases: { pattern: Ast; body: Ast }[] = [];
+      while (tokens[pos]?.value !== "}") {
+        expectToken("case");
+        const pattern = parseExpression();
+        expectToken("=>");
+        const body = parseExpression();
+        cases.push({ pattern, body });
+        if (tokens[pos]?.value === ";") pos++;
+      }
+      pos++; // skip "}"
+      return { kind: "match", expr, cases };
     }
     if (tok?.value === "true") {
       pos++;
@@ -645,6 +664,16 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         });
         const result = evalAst(fn.body, fnScopes, fnMutables);
         return result;
+      }
+      case "match": {
+        const matchVal = visit(node.expr)!;
+        for (const c of node.cases) {
+          const patternVal = visit(c.pattern)!;
+          if (toNum(eq(matchVal, patternVal)) === 1) {
+            return visit(c.body);
+          }
+        }
+        return num(0);
       }
       case "tuple": {
         const values = node.elements.map(e => {
