@@ -136,12 +136,22 @@ export class Parser {
 
 /**
  * Recursive-descent parser with operator precedence.
- *   expr  -> term (('+' | '-') term)*
- *   term  -> factor (('*' | '/') factor)*
- *   factor -> '(' expr ')' | '{' expr '}' | number
+ *   program -> stmt*  (top-level statements wrapped in a block)
+ *   expr    -> term (('+' | '-') term)*
+ *   term    -> factor (('*' | '/') factor)*
+ *   factor  -> '(' expr ')' | '{' stmts '}' | varref | number
  */
 export function parse(tokens: Token[]): Expr {
   if (tokens.length === 0) return { type: "number", value: 0 };
   const parser = new Parser(tokens);
-  return parser.parseExpr();
+
+  // Parse top-level statements, wrapping them in a block expression.
+  // This allows `let y = expr; y` at the program level.
+  const statements: Stmt[] = [];
+  while (parser.peek() !== undefined) {
+    statements.push(parser.parseStmt());
+    // Consume optional semicolon between top-level statements
+    if (parser.peek()?.type === "semicolon") parser.consume();
+  }
+  return { type: "block", statements };
 }
