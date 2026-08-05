@@ -1,5 +1,16 @@
 type Token = { type: string; value: string };
 
+type Value = { tag: "number"; num: number } | { tag: "bool"; val: boolean };
+
+function num(v: number): Value { return { tag: "number", num: v }; }
+function bool(v: boolean): Value { return { tag: "bool", val: v }; }
+function toNum(v: Value): number { return v.tag === "number" ? v.num : v.val ? 1 : 0; }
+function eq(a: Value, b: Value): Value {
+  if (a.tag !== b.tag) return bool(false);
+  if (a.tag === "number") return bool(a.num === (b as Value & { tag: "number" }).num);
+  return bool(a.val === (b as Value & { tag: "bool" }).val);
+}
+
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -33,9 +44,9 @@ export function evaluate(source: string): number {
   if (trimmed === "") return 0;
   const tokens = tokenize(trimmed);
   let pos = 0;
-  const scopes: Record<string, number>[] = [{}];
+  const scopes: Record<string, Value>[] = [{}];
   const mutables: Record<string, boolean>[] = [{}];
-  function lookup(name: string): number {
+  function lookup(name: string): Value {
     for (let i = scopes.length - 1; i >= 0; i--) {
       const s = scopes[i];
       if (s && name in s) return s[name]!;
@@ -49,41 +60,41 @@ export function evaluate(source: string): number {
     }
     return false;
   }
-  function assign(name: string, value: number): void {
+  function assign(name: string, value: Value): void {
     scopes[scopes.length - 1]![name] = value;
   }
-  function parseExpression(): number {
+  function parseExpression(): Value {
     let result = parseComparison();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
       const op = tokens[pos]!.value;
       pos++;
       const next = parseComparison();
-      if (op === "+") result += next;
-      else result -= next;
+      if (op === "+") result = num(toNum(result) + toNum(next));
+      else result = num(toNum(result) - toNum(next));
     }
     return result;
   }
-  function parseComparison(): number {
+  function parseComparison(): Value {
     let result = parseTerm();
     while (tokens[pos]?.value === "==") {
       pos++;
       const next = parseTerm();
-      result = result === next ? 1 : 0;
+      result = eq(result, next);
     }
     return result;
   }
-  function parseTerm(): number {
+  function parseTerm(): Value {
     let result = parseFactor();
     while (tokens[pos]?.value === "*" || tokens[pos]?.value === "/") {
       const op = tokens[pos]!.value;
       pos++;
       const next = parseFactor();
-      if (op === "*") result *= next;
-      else result /= next;
+      if (op === "*") result = num(toNum(result) * toNum(next));
+      else result = num(toNum(result) / toNum(next));
     }
     return result;
   }
-  function parseFactor(): number {
+  function parseFactor(): Value {
     const tok = tokens[pos];
     if (tok?.value === "(") {
       pos++;
@@ -96,11 +107,11 @@ export function evaluate(source: string): number {
     }
     if (tok?.value === "true") {
       pos++;
-      return 1;
+      return bool(true);
     }
     if (tok?.value === "false") {
       pos++;
-      return 0;
+      return bool(false);
     }
     if (tok?.type === "identifier") {
       pos++;
@@ -108,9 +119,9 @@ export function evaluate(source: string): number {
     }
     const result = parseFloat(tok!.value);
     pos++;
-    return result;
+    return num(result);
   }
-  function parseStatement(): number | null {
+  function parseStatement(): Value | null {
     if (tokens[pos]?.value === "let") {
       pos++;
       const mutable = tokens[pos]?.value === "mut";
@@ -137,11 +148,11 @@ export function evaluate(source: string): number {
     if (tokens[pos]?.value === ";") pos++;
     return result;
   }
-  function parseBlock(): number {
+  function parseBlock(): Value {
     pos++; // skip "{"
     scopes.push({});
     mutables.push({});
-    let value: number | null = null;
+    let value: Value | null = null;
     while (tokens[pos]?.value !== "}" && tokens[pos]) {
       value = parseStatement();
     }
@@ -151,9 +162,9 @@ export function evaluate(source: string): number {
     if (value === null) throw new Error("block has no value");
     return value;
   }
-  let value: number | null = null;
+  let value: Value | null = null;
   while (tokens[pos]) {
     value = parseStatement();
   }
-  return value ?? 0;
+  return value ? toNum(value) : 0;
 }
