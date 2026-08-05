@@ -1,9 +1,14 @@
+// --- Tokenizer configuration (data-driven) ---
+const KEYWORDS = new Set(["let"]);
+const OPERATORS = "+-*\/=".split("");
+const DELIMITERS: Record<string, string> = { "(": ")", "{": "}" };
+
 export type Token =
   | { type: "number"; value: number }
-  | { type: "operator"; value: "+" | "-" | "*" | "/" | "=" }
-  | { type: "paren"; value: "(" | ")" | "{" | "}" }
+  | { type: "operator"; value: (typeof OPERATORS)[number] }
+  | { type: "paren"; value: string }
   | { type: "identifier"; value: string }
-  | { type: "keyword"; value: "let" }
+  | { type: "keyword"; value: string }
   | { type: "semicolon" };
 
 /**
@@ -34,24 +39,15 @@ export function tokenize(source: string): Token[] {
     }
 
     // Operator
-    if ("+-*/=".includes(char)) {
-      const op = char as "+" | "-" | "*" | "/" | "=";
-      tokens.push({ type: "operator", value: op });
+    if (OPERATORS.includes(char)) {
+      tokens.push({ type: "operator", value: char as "+" | "-" | "*" | "/" | "=" });
       i++;
       continue;
     }
 
-    // Parentheses and braces
-    if (char === "(" || char === ")") {
-      const paren = char as "(" | ")";
-      tokens.push({ type: "paren", value: paren });
-      i++;
-      continue;
-    }
-
-    if (char === "{" || char === "}") {
-      const brace = char as "{" | "}";
-      tokens.push({ type: "paren", value: brace });
+    // Delimiters (parentheses, braces)
+    if (char in DELIMITERS || Object.values(DELIMITERS).includes(char)) {
+      tokens.push({ type: "paren", value: char as "(" | ")" | "{" | "}" });
       i++;
       continue;
     }
@@ -70,11 +66,9 @@ export function tokenize(source: string): Token[] {
         name += source.charAt(i);
         i++;
       }
-      if (name === "let") {
-        tokens.push({ type: "keyword", value: "let" });
-      } else {
-        tokens.push({ type: "identifier", value: name });
-      }
+      tokens.push(KEYWORDS.has(name)
+        ? { type: "keyword", value: name } as const
+        : { type: "identifier", value: name });
       continue;
     }
 
