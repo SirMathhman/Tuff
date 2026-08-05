@@ -38,6 +38,11 @@ function tokenize(source: string): Token[] {
       i += 2;
       continue;
     }
+    if (source[i] === "&" && source[i + 1] === "&") {
+      tokens.push({ type: "punct", value: "&&" });
+      i += 2;
+      continue;
+    }
     tokens.push({ type: "punct", value: source[i]! });
     i++;
   }
@@ -80,11 +85,20 @@ export function evaluate(source: string): number {
     return result;
   }
   function parseOr(): Value {
-    let result = parseComparison();
+    let result = parseAnd();
     while (tokens[pos]?.value === "||") {
       pos++;
-      const next = parseComparison();
+      const next = parseAnd();
       result = bool(toNum(result) !== 0 || toNum(next) !== 0);
+    }
+    return result;
+  }
+  function parseAnd(): Value {
+    let result = parseComparison();
+    while (tokens[pos]?.value === "&&") {
+      pos++;
+      const next = parseComparison();
+      result = bool(toNum(result) !== 0 && toNum(next) !== 0);
     }
     return result;
   }
