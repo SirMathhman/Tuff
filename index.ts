@@ -32,7 +32,8 @@ type Ast =
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "block"; statements: (Ast | null)[] }
   | { kind: "paren"; expr: Ast }
-  | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast | null }
+  | { kind: "if_expr"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
+  | { kind: "if_stmt"; cond: Ast; thenBranch: Ast; elseBranch: Ast | null }
   | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
   | { kind: "while"; cond: Ast; body: Ast }
   | { kind: "continue" }
@@ -197,7 +198,7 @@ function parse(tokens: Token[]): Ast {
       const thenBranch = parseExpression();
       expectToken("else");
       const elseBranch = parseExpression();
-      return { kind: "if", cond, thenBranch, elseBranch };
+      return { kind: "if_expr", cond, thenBranch, elseBranch };
     }
     if (tok?.value === "true") {
       pos++;
@@ -274,7 +275,7 @@ function parse(tokens: Token[]): Ast {
       expectToken(")");
       const thenBranch = parseStatement()!;
       const elseBranch = tokens[pos]?.value === "else" ? (pos++, parseStatement()) : null;
-      return { kind: "if", cond, thenBranch, elseBranch };
+      return { kind: "if_stmt", cond, thenBranch, elseBranch };
     }
     const result = parseExpression();
     if (tokens[pos]?.value === ";") pos++;
@@ -369,7 +370,12 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return value;
       }
       case "paren": return visit(node.expr);
-      case "if": {
+      case "if_expr": {
+        const cond = visit(node.cond)!;
+        if (truthy(cond)) return visit(node.thenBranch);
+        return visit(node.elseBranch);
+      }
+      case "if_stmt": {
         const cond = visit(node.cond)!;
         if (truthy(cond)) return visit(node.thenBranch);
         return node.elseBranch ? visit(node.elseBranch) : num(0);
