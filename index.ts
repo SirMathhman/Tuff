@@ -40,27 +40,18 @@ function eq(a: Value, b: Value): Value {
   }
 }
 function ne(a: Value, b: Value): Value { return bool(!truthy(eq(a, b))); }
-function strCmp(a: string, b: string): number {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
+function cmp(a: Value, b: Value): number {
+  if (a.tag === "string" && b.tag === "string") {
+    if (a.value < b.value) return -1;
+    if (a.value > b.value) return 1;
+    return 0;
+  }
+  return toNum(a) - toNum(b);
 }
-function lt(a: Value, b: Value): Value {
-  if (a.tag === "string" && b.tag === "string") return bool(strCmp(a.value, b.value) < 0);
-  return bool(toNum(a) < toNum(b));
-}
-function lte(a: Value, b: Value): Value {
-  if (a.tag === "string" && b.tag === "string") return bool(strCmp(a.value, b.value) <= 0);
-  return bool(toNum(a) <= toNum(b));
-}
-function gt(a: Value, b: Value): Value {
-  if (a.tag === "string" && b.tag === "string") return bool(strCmp(a.value, b.value) > 0);
-  return bool(toNum(a) > toNum(b));
-}
-function gte(a: Value, b: Value): Value {
-  if (a.tag === "string" && b.tag === "string") return bool(strCmp(a.value, b.value) >= 0);
-  return bool(toNum(a) >= toNum(b));
-}
+function lt(a: Value, b: Value): Value { return bool(cmp(a, b) < 0); }
+function lte(a: Value, b: Value): Value { return bool(cmp(a, b) <= 0); }
+function gt(a: Value, b: Value): Value { return bool(cmp(a, b) > 0); }
+function gte(a: Value, b: Value): Value { return bool(cmp(a, b) >= 0); }
 function notOp(v: Value): Value { return bool(!truthy(v)); }
 function negate(v: Value): Value { return num(-toNum(v)); }
 type ControlFlow =
