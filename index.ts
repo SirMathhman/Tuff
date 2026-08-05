@@ -16,8 +16,20 @@ function lt(a: Value, b: Value): Value { return bool(toNum(a) < toNum(b)); }
 function lte(a: Value, b: Value): Value { return bool(toNum(a) <= toNum(b)); }
 function gt(a: Value, b: Value): Value { return bool(toNum(a) > toNum(b)); }
 function gte(a: Value, b: Value): Value { return bool(toNum(a) >= toNum(b)); }
-function not(v: Value): Value { return bool(!truthy(v)); }
+function notOp(v: Value): Value { return bool(!truthy(v)); }
 function negate(v: Value): Value { return num(-toNum(v)); }
+
+// AST types
+type Ast =
+  | { kind: "num"; value: number }
+  | { kind: "bool"; value: boolean }
+  | { kind: "ident"; name: string }
+  | { kind: "unary"; op: "!" | "-"; operand: Ast }
+  | { kind: "binop"; op: string; left: Ast; right: Ast }
+  | { kind: "let"; mutable: boolean; name: string; value: Ast }
+  | { kind: "assign"; name: string; value: Ast }
+  | { kind: "block"; statements: (Ast | null)[] }
+  | { kind: "paren"; expr: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -82,129 +94,101 @@ function tokenize(source: string): Token[] {
   return tokens;
 }
 
-export function evaluate(source: string): number {
-  const trimmed = source.trim();
-  if (trimmed === "") return 0;
-  const tokens = tokenize(trimmed);
+// Parser — returns AST, does not evaluate
+function parse(tokens: Token[]): Ast {
   let pos = 0;
-  const scopes: Record<string, Value>[] = [{}];
-  const mutables: Record<string, boolean>[] = [{}];
-  function lookup(name: string): Value {
-    for (let i = scopes.length - 1; i >= 0; i--) {
-      const s = scopes[i];
-      if (s && name in s) return s[name]!;
-    }
-    throw new Error(`undeclared variable: ${name}`);
-  }
-  function isMutable(name: string): boolean {
-    for (let i = mutables.length - 1; i >= 0; i--) {
-      const m = mutables[i];
-      if (m && name in m) return m[name]!;
-    }
-    return false;
-  }
-  function assign(name: string, value: Value): void {
-    scopes[scopes.length - 1]![name] = value;
-  }
-  function parseExpression(): Value {
+  function parseExpression(): Ast {
     let result = parseOr();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
       const op = tokens[pos]!.value;
       pos++;
       const next = parseOr();
-      if (op === "+") result = num(toNum(result) + toNum(next));
-      else result = num(toNum(result) - toNum(next));
+      result = { kind: "binop", op, left: result, right: next };
     }
     return result;
   }
-  function parseOr(): Value {
+  function parseOr(): Ast {
     let result = parseAnd();
     while (tokens[pos]?.value === "||") {
       pos++;
       const next = parseAnd();
-      result = bool(truthy(result) || truthy(next));
+      result = { kind: "binop", op: "||", left: result, right: next };
     }
     return result;
   }
-  function parseAnd(): Value {
+  function parseAnd(): Ast {
     let result = parseComparison();
     while (tokens[pos]?.value === "&&") {
       pos++;
       const next = parseComparison();
-      result = bool(truthy(result) && truthy(next));
+      result = { kind: "binop", op: "&&", left: result, right: next };
     }
     return result;
   }
-  function parseComparison(): Value {
+  function parseComparison(): Ast {
     let result = parseTerm();
     while (true) {
       const op = tokens[pos]?.value;
       if (op === "==" || op === "!=" || op === "<" || op === "<=" || op === ">" || op === ">=") {
         pos++;
         const next = parseTerm();
-        if (op === "==") result = eq(result, next);
-        else if (op === "!=") result = ne(result, next);
-        else if (op === "<") result = lt(result, next);
-        else if (op === "<=") result = lte(result, next);
-        else if (op === ">") result = gt(result, next);
-        else result = gte(result, next);
+        result = { kind: "binop", op, left: result, right: next };
       } else {
         break;
       }
     }
     return result;
   }
-  function parseTerm(): Value {
+  function parseTerm(): Ast {
     let result = parseFactor();
     while (tokens[pos]?.value === "*" || tokens[pos]?.value === "/") {
       const op = tokens[pos]!.value;
       pos++;
       const next = parseFactor();
-      if (op === "*") result = num(toNum(result) * toNum(next));
-      else result = num(toNum(result) / toNum(next));
+      result = { kind: "binop", op, left: result, right: next };
     }
     return result;
   }
-  function parseFactor(): Value {
+  function parseFactor(): Ast {
     const tok = tokens[pos];
     if (tok?.value === "!") {
       pos++;
-      return not(parseFactor());
+      return { kind: "unary", op: "!", operand: parseFactor() };
     }
     if (tok?.value === "-") {
       pos++;
-      return negate(parseFactor());
+      return { kind: "unary", op: "-", operand: parseFactor() };
     }
     return parsePrimary();
   }
-  function parsePrimary(): Value {
+  function parsePrimary(): Ast {
     const tok = tokens[pos];
     if (tok?.value === "(") {
       pos++;
       const result = parseExpression();
       pos++; // skip ")"
-      return result;
+      return { kind: "paren", expr: result };
     }
     if (tok?.value === "{") {
       return parseBlock();
     }
     if (tok?.value === "true") {
       pos++;
-      return bool(true);
+      return { kind: "bool", value: true };
     }
     if (tok?.value === "false") {
       pos++;
-      return bool(false);
+      return { kind: "bool", value: false };
     }
     if (tok?.type === "identifier") {
       pos++;
-      return lookup(tok.value);
+      return { kind: "ident", name: tok.value };
     }
     const result = parseFloat(tok!.value);
     pos++;
-    return num(result);
+    return { kind: "num", value: result };
   }
-  function parseStatement(): Value | null {
+  function parseStatement(): Ast | null {
     if (tokens[pos]?.value === "let") {
       pos++;
       const mutable = tokens[pos]?.value === "mut";
@@ -212,42 +196,124 @@ export function evaluate(source: string): number {
       const name = tokens[pos]!.value;
       pos++;
       pos++; // skip "="
-      assign(name, parseExpression());
-      if (mutable) mutables[mutables.length - 1]![name] = true;
+      const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return null;
+      return { kind: "let", mutable, name, value };
     }
     // Check for assignment: identifier = expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
       const name = tokens[pos]!.value;
-      if (!isMutable(name)) throw new Error(`cannot assign to immutable variable: ${name}`);
       pos++; // skip identifier
       pos++; // skip "="
-      assign(name, parseExpression());
+      const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return null;
+      return { kind: "assign", name, value };
     }
     const result = parseExpression();
     if (tokens[pos]?.value === ";") pos++;
     return result;
   }
-  function parseBlock(): Value {
+  function parseBlock(): Ast {
     pos++; // skip "{"
-    scopes.push({});
-    mutables.push({});
-    let value: Value | null = null;
+    const statements: (Ast | null)[] = [];
     while (tokens[pos]?.value !== "}" && tokens[pos]) {
-      value = parseStatement();
+      statements.push(parseStatement());
     }
     pos++; // skip "}"
-    scopes.pop();
-    mutables.pop();
-    if (value === null) throw new Error("block has no value");
-    return value;
+    return { kind: "block", statements };
   }
-  let value: Value | null = null;
+  const statements: (Ast | null)[] = [];
   while (tokens[pos]) {
-    value = parseStatement();
+    statements.push(parseStatement());
   }
-  return value ? toNum(value) : 0;
+  if (statements.length === 0) return { kind: "num", value: 0 };
+  if (statements.length === 1) return statements[0]! ?? { kind: "num", value: 0 };
+  return { kind: "block", statements };
+}
+
+// Evaluator — walks AST with scope
+type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
+
+function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value {
+  function lookup(name: string): Value {
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      if (name in scopes[i]!.vars) return scopes[i]!.vars[name]!;
+    }
+    throw new Error(`undeclared variable: ${name}`);
+  }
+  function isMutable(name: string): boolean {
+    for (let i = mutables.length - 1; i >= 0; i--) {
+      if (name in mutables[i]!) return mutables[i]![name]!;
+    }
+    return false;
+  }
+  function visit(node: Ast): Value | null {
+    switch (node.kind) {
+      case "num": return num(node.value);
+      case "bool": return bool(node.value);
+      case "ident": return lookup(node.name);
+      case "unary": {
+        const v = visit(node.operand)!;
+        return node.op === "!" ? notOp(v) : negate(v);
+      }
+      case "binop": {
+        const l = visit(node.left)!;
+        const r = visit(node.right)!;
+        return applyBinOp(node.op, l, r);
+      }
+      case "let": {
+        const v = visit(node.value)!;
+        scopes[scopes.length - 1]!.vars[node.name] = v;
+        if (node.mutable) mutables[mutables.length - 1]![node.name] = true;
+        return null;
+      }
+      case "assign": {
+        if (!isMutable(node.name)) throw new Error(`cannot assign to immutable variable: ${node.name}`);
+        const v = visit(node.value)!;
+        scopes[scopes.length - 1]!.vars[node.name] = v;
+        return null;
+      }
+      case "block": {
+        scopes.push({ vars: {}, mutable: {} });
+        mutables.push({});
+        let value: Value | null = null;
+        for (const stmt of node.statements) {
+          if (stmt) value = visit(stmt);
+        }
+        scopes.pop();
+        mutables.pop();
+        if (value === null) throw new Error("block has no value");
+        return value;
+      }
+      case "paren": return visit(node.expr);
+    }
+  }
+  return visit(ast) ?? num(0);
+}
+
+function applyBinOp(op: string, left: Value, right: Value): Value {
+  switch (op) {
+    case "+": return num(toNum(left) + toNum(right));
+    case "-": return num(toNum(left) - toNum(right));
+    case "*": return num(toNum(left) * toNum(right));
+    case "/": return num(toNum(left) / toNum(right));
+    case "||": return bool(truthy(left) || truthy(right));
+    case "&&": return bool(truthy(left) && truthy(right));
+    case "==": return eq(left, right);
+    case "!=": return ne(left, right);
+    case "<": return lt(left, right);
+    case "<=": return lte(left, right);
+    case ">": return gt(left, right);
+    case ">=": return gte(left, right);
+    default: throw new Error(`unknown operator: ${op}`);
+  }
+}
+
+export function evaluate(source: string): number {
+  const trimmed = source.trim();
+  if (trimmed === "") return 0;
+  const tokens = tokenize(trimmed);
+  const ast = parse(tokens);
+  const value = evalAst(ast, [{ vars: {}, mutable: {} }], [{}]);
+  return toNum(value);
 }
