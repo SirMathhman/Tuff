@@ -44,3 +44,24 @@ export interface BlockNode {
   type: "block";
   statements: Stmt[];
 }
+
+// --- Scope (lexical scoping) ---
+
+/** Lexical scope with parent chain for variable lookups */
+export class Scope {
+  private bindings: Map<string, number>;
+  private parent: Scope | null;
+
+  constructor(parent?: Scope) {
+    this.bindings = new Map();
+    this.parent = parent ?? null;
+  }
+
+  set(name: string, value: number): void {
+    this.bindings.set(name, value);
+  }
+
+  get(name: string): number | undefined {
+    return this.bindings.get(name) ?? this.parent?.get(name);
+  }
+}

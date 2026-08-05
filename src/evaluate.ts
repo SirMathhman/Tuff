@@ -1,9 +1,10 @@
 import type { Expr, Stmt } from "./ast";
+import { Scope } from "./ast";
 
 /**
  * Walk an expression AST and compute the numeric result.
  */
-export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map()): number {
+export function evaluateExpr(node: Expr, scope: Scope = new Scope()): number {
   if (node.type === "number") return node.value;
 
   if (node.type === "varref") {
@@ -13,7 +14,7 @@ export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map())
   }
 
   if (node.type === "block") {
-    const childScope = new Map(scope); // inherit parent bindings, isolate inner declarations
+    const childScope = new Scope(scope);
     let lastVal: number = 0;
     for (const stmt of node.statements) {
       lastVal = evaluateStmt(stmt, childScope);
@@ -39,7 +40,7 @@ export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map())
 }
 
 /** Evaluate a statement and return its numeric result */
-function evaluateStmt(stmt: Stmt, scope: Map<string, number>): number {
+function evaluateStmt(stmt: Stmt, scope: Scope): number {
   if (stmt.type === "letdecl") {
     const value = evaluateExpr(stmt.valueExpr, scope);
     scope.set(stmt.name, value);
