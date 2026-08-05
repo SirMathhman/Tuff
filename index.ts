@@ -1,7 +1,7 @@
 type Token = { type: string; value: string; suffix?: string };
 
 type Value =
-  | { tag: "number"; num: number }
+  | { tag: "number"; num: number; type?: string }
   | { tag: "bool"; val: boolean }
   | {
       tag: "fn";
@@ -17,8 +17,8 @@ type Value =
   | { tag: "string"; value: string }
   | { tag: "record"; fields: Record<string, Value> };
 
-function num(v: number): Value {
-  return { tag: "number", num: v };
+function num(v: number, type?: string): Value {
+  return { tag: "number", num: v, type };
 }
 function bool(v: boolean): Value {
   return { tag: "bool", val: v };
@@ -824,7 +824,7 @@ function evalAst(
     switch (node.kind) {
       case "num": {
         if (node.suffix) checkSuffix(node.suffix, node.value);
-        return num(node.value);
+        return num(node.value, node.suffix);
       }
       case "bool":
         return bool(node.value);
@@ -839,7 +839,7 @@ function evalAst(
           if (node.operand.kind === "num" && node.operand.suffix) {
             checkSuffix(node.operand.suffix, negated);
           }
-          return num(negated);
+          return num(negated, v.tag === "number" ? v.type : undefined);
         }
         if (node.op === "&") {
           // Create a reference to the operand
@@ -884,12 +884,12 @@ function evalAst(
         if (v === null) throw new Error("block has no value");
         if (node.typeAnnotation && suffixRanges[node.typeAnnotation]) {
           checkSuffix(node.typeAnnotation, toNum(v));
-          // Check type compatibility: if value has a suffix, ensure it fits in the annotation
-          if (node.value.kind === "num" && node.value.suffix && suffixRanges[node.value.suffix]) {
-            const valRange = suffixRanges[node.value.suffix]!;
+          // Check type compatibility using the value's tracked type
+          if (v.tag === "number" && v.type && suffixRanges[v.type]) {
+            const valRange = suffixRanges[v.type]!;
             const annRange = suffixRanges[node.typeAnnotation]!;
             if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
-              throw new Error(`cannot assign ${node.value.suffix} to ${node.typeAnnotation}`);
+              throw new Error(`cannot assign ${v.type} to ${node.typeAnnotation}`);
             }
           }
         }
