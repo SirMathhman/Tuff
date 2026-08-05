@@ -224,3 +224,7 @@ test('evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x") => 3', () =
 test('evaluate("let x = null; x") => 0', () => {
   expect(evaluate("let x = null; x")).toBe(0);
 });
+
+test('evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
+  expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+});

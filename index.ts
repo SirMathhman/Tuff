@@ -6,7 +6,8 @@ type Value =
   | { tag: "fn"; params: string[]; body: Ast; scopes: Scope[]; mutables: Scope["mutable"][] }
   | { tag: "ref"; scope: Scope; name: string; mutable: boolean }
   | { tag: "tuple"; values: Value[] }
-  | { tag: "null" };
+  | { tag: "null" }
+  | { tag: "array"; values: Value[] };
 
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
@@ -16,6 +17,7 @@ function toNum(v: Value): number {
   if (v.tag === "ref") return toNum(v.scope.vars[v.name]!);
   if (v.tag === "tuple") return 0;
   if (v.tag === "null") return 0;
+  if (v.tag === "array") return 0;
   return 0;
 }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
@@ -67,7 +69,9 @@ type Ast =
   | { kind: "call"; name: string; args: Ast[] }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
   | { kind: "wildcard" }
-  | { kind: "null" };
+  | { kind: "null" }
+  | { kind: "array"; elements: Ast[] }
+  | { kind: "array_index"; target: Ast; index: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -274,6 +278,16 @@ function parse(tokens: Token[]): Ast {
     if (tok?.value === "{") {
       return parseBlock();
     }
+    if (tok?.value === "[") {
+      pos++; // skip "["
+      const elements: Ast[] = [];
+      while (tokens[pos]?.value !== "]") {
+        elements.push(parseExpression());
+        if (tokens[pos]?.value === ",") pos++;
+      }
+      pos++; // skip "]"
+      return { kind: "array", elements };
+    }
     if (tok?.value === "if") {
       pos++; // skip "if"
       expectToken("(");
@@ -334,6 +348,13 @@ function parse(tokens: Token[]): Ast {
         const index = parseInt(tokens[pos]!.value);
         pos++;
         return { kind: "index", target: { kind: "ident", name }, index };
+      }
+      // Check for array indexing: identifier[expr]
+      if (tokens[pos]?.value === "[") {
+        pos++; // skip "["
+        const index = parseExpression();
+        pos++; // skip "]"
+        return { kind: "array_index", target: { kind: "ident", name }, index };
       }
       return { kind: "ident", name };
     }
@@ -701,6 +722,21 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         if (target === null) throw new Error("index target has no value");
         if (target.tag !== "tuple") throw new Error("cannot index non-tuple");
         return target.values[node.index]!;
+      }
+      case "array": {
+        const values = node.elements.map(e => {
+          const v = visit(e);
+          if (v === null) throw new Error("array element has no value");
+          return v;
+        });
+        return { tag: "array", values };
+      }
+      case "array_index": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("array target has no value");
+        if (target.tag !== "array") throw new Error("cannot index non-array");
+        const idx = toNum(visit(node.index)!);
+        return target.values[idx]!;
       }
     }
   }
