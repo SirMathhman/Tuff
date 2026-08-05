@@ -20,6 +20,7 @@ function notOp(v: Value): Value { return bool(!truthy(v)); }
 function negate(v: Value): Value { return num(-toNum(v)); }
 const CONTINUE = Symbol("continue");
 const BREAK = Symbol("break");
+type YieldSignal = { yield: true; value: Value };
 
 // AST types
 type Ast =
@@ -37,7 +38,8 @@ type Ast =
   | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
   | { kind: "while"; cond: Ast; body: Ast }
   | { kind: "continue" }
-  | { kind: "break" };
+  | { kind: "break" }
+  | { kind: "yield"; value: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -53,7 +55,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "continue" || ident === "break" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "continue" || ident === "break" || ident === "yield" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -258,6 +260,13 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "break" };
     }
+    // Check for yield statement
+    if (tokens[pos]?.value === "yield") {
+      pos++;
+      const value = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "yield", value };
+    }
     // Check for while statement
     if (tokens[pos]?.value === "while") {
       pos++; // skip "while"
@@ -362,8 +371,17 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         scopes.push({ vars: {}, mutable: {} });
         mutables.push({});
         let value: Value | null = null;
-        for (const stmt of node.statements) {
-          if (stmt) value = visit(stmt);
+        try {
+          for (const stmt of node.statements) {
+            if (stmt) value = visit(stmt);
+          }
+        } catch (e) {
+          if (typeof e === "object" && e !== null && "yield" in e) {
+            scopes.pop();
+            mutables.pop();
+            return (e as YieldSignal).value;
+          }
+          throw e;
         }
         scopes.pop();
         mutables.pop();
@@ -397,6 +415,11 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
       }
       case "continue": throw CONTINUE;
       case "break": throw BREAK;
+      case "yield": {
+        const v = visit(node.value);
+        if (v === null) throw new Error("yield has no value");
+        throw { yield: true, value: v };
+      }
     }
   }
   return visit(ast) ?? num(0);

@@ -176,3 +176,7 @@ test('evaluate("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
 test('evaluate("let mut x = 0; if (true) x = 4; x") => 4', () => {
   expect(evaluate("let mut x = 0; if (true) x = 4; x")).toBe(4);
 });
+
+test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
+  expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
+});
