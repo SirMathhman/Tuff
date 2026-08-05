@@ -21,6 +21,10 @@ test('evaluate("256U8") => Error', () => {
   expect(() => evaluate("256U8")).toThrow();
 });
 
+test('evaluate("-100U8") => Error', () => {
+  expect(() => evaluate("-100U8")).toThrow();
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toBe(3);
 });

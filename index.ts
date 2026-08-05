@@ -710,7 +710,14 @@ function visit(node: Ast): Value | null {
       case "unary": {
         const v = visit(node.operand)!;
         if (node.op === "!") return notOp(v);
-        if (node.op === "-") return negate(v);
+        if (node.op === "-") {
+          const result = negate(v);
+          // If operand is a suffixed literal, validate the negated value
+          if (node.operand.kind === "num" && node.operand.suffix) {
+            checkSuffix(node.operand.suffix, result.num);
+          }
+          return result;
+        }
         if (node.op === "&") {
           // Create a reference to the operand
           if (node.operand.kind === "ident") {
