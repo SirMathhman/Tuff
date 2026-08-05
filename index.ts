@@ -289,6 +289,15 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
     }
     return false;
   }
+  function setVar(name: string, value: Value): void {
+    if (!isMutable(name)) throw new Error(`cannot assign to immutable variable: ${name}`);
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      if (name in scopes[i]!.vars) {
+        scopes[i]!.vars[name] = value;
+        return;
+      }
+    }
+  }
   function visit(node: Ast): Value | null {
     switch (node.kind) {
       case "num": return num(node.value);
@@ -311,31 +320,16 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return null;
       }
       case "assign": {
-        if (!isMutable(node.name)) throw new Error(`cannot assign to immutable variable: ${node.name}`);
         const v = visit(node.value);
         if (v === null) throw new Error("block has no value");
-        // Find the scope where the variable is declared
-        for (let i = scopes.length - 1; i >= 0; i--) {
-          if (node.name in scopes[i]!.vars) {
-            scopes[i]!.vars[node.name] = v;
-            break;
-          }
-        }
+        setVar(node.name, v);
         return null;
       }
       case "augassign": {
-        if (!isMutable(node.name)) throw new Error(`cannot assign to immutable variable: ${node.name}`);
         const v = visit(node.value);
         if (v === null) throw new Error("block has no value");
-        // Find the scope where the variable is declared
-        for (let i = scopes.length - 1; i >= 0; i--) {
-          if (node.name in scopes[i]!.vars) {
-            const existing = scopes[i]!.vars[node.name]!;
-            const newVal = applyBinOp(node.op, existing, v);
-            scopes[i]!.vars[node.name] = newVal;
-            break;
-          }
-        }
+        const existing = lookup(node.name);
+        setVar(node.name, applyBinOp(node.op, existing, v));
         return null;
       }
       case "block": {
