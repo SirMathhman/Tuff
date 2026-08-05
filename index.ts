@@ -25,14 +25,17 @@ function toNum(v: Value): number {
   }
 }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
+function eqValues(a: Value[], b: Value[]): boolean {
+  return a.length === b.length && a.every((v, i) => truthy(eq(v, b[i]!)));
+}
 function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
   switch (a.tag) {
     case "number": return bool(a.num === (b as any).num);
     case "bool": return bool(a.val === (b as any).val);
     case "string": return bool(a.value === (b as any).value);
-    case "array": return bool(a.values.length === (b as any).values.length && a.values.every((v, i) => truthy(eq(v, (b as any).values[i]!))));
-    case "tuple": return bool(a.values.length === (b as any).values.length && a.values.every((v, i) => truthy(eq(v, (b as any).values[i]!))));
+    case "array": return bool(eqValues(a.values, (b as any).values));
+    case "tuple": return bool(eqValues(a.values, (b as any).values));
     default: return bool(false);
   }
 }
