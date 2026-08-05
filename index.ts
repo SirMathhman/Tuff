@@ -29,13 +29,20 @@ export function evaluate(source: string): number {
   const tokens = tokenize(trimmed);
   let pos = 0;
   const scopes: Record<string, number>[] = [{}];
-  const mutableVars = new Set<string>();
+  const mutables: Record<string, boolean>[] = [{}];
   function lookup(name: string): number {
     for (let i = scopes.length - 1; i >= 0; i--) {
       const s = scopes[i];
       if (s && name in s) return s[name]!;
     }
     throw new Error(`undeclared variable: ${name}`);
+  }
+  function isMutable(name: string): boolean {
+    for (let i = mutables.length - 1; i >= 0; i--) {
+      const m = mutables[i];
+      if (m && name in m) return m[name]!;
+    }
+    return false;
   }
   function assign(name: string, value: number): void {
     scopes[scopes.length - 1]![name] = value;
@@ -90,14 +97,14 @@ export function evaluate(source: string): number {
       pos++;
       pos++; // skip "="
       assign(name, parseExpression());
-      if (mutable) mutableVars.add(name);
+      if (mutable) mutables[mutables.length - 1]![name] = true;
       if (tokens[pos]?.value === ";") pos++;
       return null;
     }
     // Check for assignment: identifier = expression
     if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
       const name = tokens[pos]!.value;
-      if (!mutableVars.has(name)) throw new Error(`cannot assign to immutable variable: ${name}`);
+      if (!isMutable(name)) throw new Error(`cannot assign to immutable variable: ${name}`);
       pos++; // skip identifier
       pos++; // skip "="
       assign(name, parseExpression());
@@ -111,12 +118,14 @@ export function evaluate(source: string): number {
   function parseBlock(): number {
     pos++; // skip "{"
     scopes.push({});
+    mutables.push({});
     let value: number | null = null;
     while (tokens[pos]?.value !== "}" && tokens[pos]) {
       value = parseStatement();
     }
     pos++; // skip "}"
     scopes.pop();
+    mutables.pop();
     if (value === null) throw new Error("block has no value");
     return value;
   }
