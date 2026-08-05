@@ -27,10 +27,14 @@ function toNum(v: Value): number {
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
 function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
-  if (a.tag === "number") return bool(a.num === (b as Value & { tag: "number" }).num);
-  if (a.tag === "bool") return bool(a.val === (b as Value & { tag: "bool" }).val);
-  if (a.tag === "string") return bool(a.value === (b as Value & { tag: "string" }).value);
-  return bool(false);
+  switch (a.tag) {
+    case "number": return bool(a.num === (b as any).num);
+    case "bool": return bool(a.val === (b as any).val);
+    case "string": return bool(a.value === (b as any).value);
+    case "array": return bool(a.values.length === (b as any).values.length && a.values.every((v, i) => truthy(eq(v, (b as any).values[i]!))));
+    case "tuple": return bool(a.values.length === (b as any).values.length && a.values.every((v, i) => truthy(eq(v, (b as any).values[i]!))));
+    default: return bool(false);
+  }
 }
 function ne(a: Value, b: Value): Value { return bool(!truthy(eq(a, b))); }
 function lt(a: Value, b: Value): Value { return bool(toNum(a) < toNum(b)); }
