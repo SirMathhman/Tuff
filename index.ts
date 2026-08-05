@@ -225,6 +225,28 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "assign", name, value };
     }
+    // Check for if statement (branches are statements, e.g. assignments)
+    if (tokens[pos]?.value === "if") {
+      // Peek ahead: check if the branch after ) is an assignment
+      const savePos = pos;
+      pos++; // skip "if"
+      pos++; // skip "("
+      parseExpression();
+      pos++; // skip ")"
+      const branchTok = tokens[pos];
+      const isStatementBranch = branchTok?.type === "identifier" && tokens[pos + 1]?.value === "=";
+      pos = savePos;
+      if (isStatementBranch) {
+        pos++; // skip "if"
+        expectToken("(");
+        const cond = parseExpression();
+        expectToken(")");
+        const thenBranch = parseStatement()!;
+        expectToken("else");
+        const elseBranch = parseStatement()!;
+        return { kind: "if", cond, thenBranch, elseBranch };
+      }
+    }
     const result = parseExpression();
     if (tokens[pos]?.value === ";") pos++;
     return result;
