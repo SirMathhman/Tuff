@@ -2,8 +2,8 @@ export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === '') return 0;
 
-  // Tokenize into numbers, operators, and parentheses
-  const matchResult = trimmed.match(/(\d+|[+\-\*\/()])/g);
+  // Tokenize into numbers, operators, and grouping brackets
+  const matchResult = trimmed.match(/(\d+|[+\-\*\/(\){}])/g);
   if (!matchResult) return 0;
   const tokens: string[] = matchResult;
 
@@ -41,12 +41,12 @@ export function evaluate(source: string): number {
     return result;
   }
 
-  // parseFactor handles parentheses and numbers (highest precedence)
+  // parseFactor handles grouping brackets and numbers (highest precedence)
   function parseFactor(): number {
-    if (peek() === '(') {
-      consume(); // consume '('
+    if (peek() === '(' || peek() === '{') {
+      consume(); // consume opening bracket
       const result = parseExpression();
-      consume(); // consume ')'
+      consume(); // consume closing bracket
       return result;
     }
     return Number(consume());
