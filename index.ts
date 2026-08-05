@@ -28,7 +28,16 @@ export function evaluate(source: string): number {
   if (trimmed === "") return 0;
   const tokens = tokenize(trimmed);
   let pos = 0;
-  const scope: Record<string, number> = {};
+  const scopes: Record<string, number>[] = [{}];
+  function lookup(name: string): number {
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      if (name in scopes[i]) return scopes[i][name]!;
+    }
+    throw new Error(`undeclared variable: ${name}`);
+  }
+  function assign(name: string, value: number): void {
+    scopes[scopes.length - 1]![name] = value;
+  }
   function parseExpression(): number {
     let result = parseTerm();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
@@ -64,21 +73,21 @@ export function evaluate(source: string): number {
     }
     if (tok?.type === "identifier") {
       pos++;
-      return scope[tok.value] ?? 0;
+      return lookup(tok.value);
     }
     const result = parseFloat(tok!.value);
     pos++;
     return result;
   }
-  function parseStatements(stopToken: string): number {
-    let result = 0;
+  function parseStatements(stopToken: string): number | null {
+    let result: number | null = null;
     while (tokens[pos]?.value !== stopToken && tokens[pos]) {
       if (tokens[pos]?.value === "let") {
         pos++; // skip "let"
         const name = tokens[pos]!.value;
         pos++; // skip identifier
         pos++; // skip "="
-        scope[name] = parseExpression();
+        assign(name, parseExpression());
         if (tokens[pos]?.value === ";") pos++;
       } else {
         result = parseExpression();
@@ -90,7 +99,12 @@ export function evaluate(source: string): number {
   }
   function parseBlock(): number {
     pos++; // skip "{"
-    return parseStatements("}");
+    scopes.push({});
+    const result = parseStatements("}");
+    scopes.pop();
+    if (result === null) throw new Error("block has no value");
+    return result;
   }
-  return parseStatements("");
+  const r = parseStatements("");
+  return r ?? 0;
 }
