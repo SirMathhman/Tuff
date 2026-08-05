@@ -5,6 +5,7 @@ type Value = { tag: "number"; num: number } | { tag: "bool"; val: boolean };
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
 function toNum(v: Value): number { return v.tag === "number" ? v.num : v.val ? 1 : 0; }
+function truthy(v: Value): boolean { return toNum(v) !== 0; }
 function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
   if (a.tag === "number") return bool(a.num === (b as Value & { tag: "number" }).num);
@@ -89,7 +90,7 @@ export function evaluate(source: string): number {
     while (tokens[pos]?.value === "||") {
       pos++;
       const next = parseAnd();
-      result = bool(toNum(result) !== 0 || toNum(next) !== 0);
+      result = bool(truthy(result) || truthy(next));
     }
     return result;
   }
@@ -98,7 +99,7 @@ export function evaluate(source: string): number {
     while (tokens[pos]?.value === "&&") {
       pos++;
       const next = parseComparison();
-      result = bool(toNum(result) !== 0 && toNum(next) !== 0);
+      result = bool(truthy(result) && truthy(next));
     }
     return result;
   }
