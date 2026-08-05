@@ -51,15 +51,16 @@ export function parse(tokens: Token[]): Expr {
     return result;
   }
 
-  // factor handles parenthesized sub-expressions and numbers
+  // factor handles parenthesized/braced sub-expressions and numbers
   function parseFactor(): Expr {
     const token = peek();
-    if (token?.type === "paren" && token.value === "(") {
-      consume(); // discard '('
+    if (token?.type === "paren" && (token.value === "(" || token.value === "{")) {
+      consume(); // discard opening delimiter
       const expr = parseExpr();
       const close = consume();
-      if (!(close.type === "paren" && close.value === ")")) {
-        throw new Error(`Expected ')' at position ${pos}`);
+      const expectedClose = token.value === "(" ? ")" : "}";
+      if (!(close.type === "paren" && close.value === expectedClose)) {
+        throw new Error(`Expected '${expectedClose}' at position ${pos}`);
       }
       return expr;
     }
