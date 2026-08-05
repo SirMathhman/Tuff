@@ -29,7 +29,8 @@ type Ast =
   | { kind: "let"; mutable: boolean; name: string; value: Ast }
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "block"; statements: (Ast | null)[] }
-  | { kind: "paren"; expr: Ast };
+  | { kind: "paren"; expr: Ast }
+  | { kind: "if"; cond: Ast; thenBranch: Ast; elseBranch: Ast };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -45,7 +46,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" || ident === "mut" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" || ident === "if" || ident === "else" ? "keyword" : "identifier", value: ident });
       continue;
     }
     if (source[i] === "<" && source[i + 1] === "=") {
@@ -172,6 +173,16 @@ function parse(tokens: Token[]): Ast {
     if (tok?.value === "{") {
       return parseBlock();
     }
+    if (tok?.value === "if") {
+      pos++; // skip "if"
+      pos++; // skip "("
+      const cond = parseExpression();
+      pos++; // skip ")"
+      const thenBranch = parseExpression();
+      pos++; // skip "else"
+      const elseBranch = parseExpression();
+      return { kind: "if", cond, thenBranch, elseBranch };
+    }
     if (tok?.value === "true") {
       pos++;
       return { kind: "bool", value: true };
@@ -286,6 +297,11 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         return value;
       }
       case "paren": return visit(node.expr);
+      case "if": {
+        const cond = visit(node.cond)!;
+        if (truthy(cond)) return visit(node.thenBranch);
+        return visit(node.elseBranch);
+      }
     }
   }
   return visit(ast) ?? num(0);

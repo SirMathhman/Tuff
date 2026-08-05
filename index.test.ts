@@ -132,3 +132,7 @@ test('evaluate("let x = true; !x") => 0', () => {
 test('evaluate("let x = 100; -x") => -100', () => {
   expect(evaluate("let x = 100; -x")).toBe(-100);
 });
+
+test('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
+  expect(evaluate("let x = if (false) 2 else 3; x")).toBe(3);
+});
