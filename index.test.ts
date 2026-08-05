@@ -216,3 +216,7 @@ test('evaluate("let mut sum = 0; for (i in 0..4) sum += i; sum") => 6', () => {
 test('evaluate("let x = match (1) { case 1 => 2; case _ => 3; }; x") => 2', () => {
   expect(evaluate("let x = match (1) { case 1 => 2; case _ => 3; }; x")).toBe(2);
 });
+
+test('evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x") => 3', () => {
+  expect(evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x")).toBe(3);
+});

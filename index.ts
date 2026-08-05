@@ -63,7 +63,8 @@ type Ast =
   | { kind: "yield"; value: Ast }
   | { kind: "fn"; name: string; params: string[]; body: Ast }
   | { kind: "call"; name: string; args: Ast[] }
-  | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] };
+  | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
+  | { kind: "wildcard" };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -289,7 +290,7 @@ function parse(tokens: Token[]): Ast {
       const cases: { pattern: Ast; body: Ast }[] = [];
       while (tokens[pos]?.value !== "}") {
         expectToken("case");
-        const pattern = parseExpression();
+        const pattern = tokens[pos]?.value === "_" ? (pos++, { kind: "wildcard" } as Ast) : parseExpression();
         expectToken("=>");
         const body = parseExpression();
         cases.push({ pattern, body });
@@ -665,9 +666,13 @@ function evalAst(ast: Ast, scopes: Scope[], mutables: Scope["mutable"][]): Value
         const result = evalAst(fn.body, fnScopes, fnMutables);
         return result;
       }
+      case "wildcard": return num(0);
       case "match": {
         const matchVal = visit(node.expr)!;
         for (const c of node.cases) {
+          if (c.pattern.kind === "wildcard") {
+            return visit(c.body);
+          }
           const patternVal = visit(c.pattern)!;
           if (toNum(eq(matchVal, patternVal)) === 1) {
             return visit(c.body);
