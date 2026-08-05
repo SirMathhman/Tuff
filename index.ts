@@ -14,7 +14,7 @@ function tokenize(source: string): Token[] {
     if (/[a-zA-Z_]/.test(source[i]!)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z_0-9]/.test(source[i]!)) { ident += source[i]!; i++; }
-      tokens.push({ type: ident === "let" ? "keyword" : "identifier", value: ident });
+      tokens.push({ type: ident === "let" || ident === "mut" ? "keyword" : "identifier", value: ident });
       continue;
     }
     tokens.push({ type: "punct", value: source[i]! });
@@ -29,6 +29,7 @@ export function evaluate(source: string): number {
   const tokens = tokenize(trimmed);
   let pos = 0;
   const scopes: Record<string, number>[] = [{}];
+  const mutableVars = new Set<string>();
   function lookup(name: string): number {
     for (let i = scopes.length - 1; i >= 0; i--) {
       const s = scopes[i];
@@ -83,8 +84,20 @@ export function evaluate(source: string): number {
   function parseStatement(): number | null {
     if (tokens[pos]?.value === "let") {
       pos++;
+      const mutable = tokens[pos]?.value === "mut";
+      if (mutable) pos++;
       const name = tokens[pos]!.value;
       pos++;
+      pos++; // skip "="
+      assign(name, parseExpression());
+      if (mutable) mutableVars.add(name);
+      if (tokens[pos]?.value === ";") pos++;
+      return null;
+    }
+    // Check for assignment: identifier = expression
+    if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "=") {
+      const name = tokens[pos]!.value;
+      pos++; // skip identifier
       pos++; // skip "="
       assign(name, parseExpression());
       if (tokens[pos]?.value === ";") pos++;
