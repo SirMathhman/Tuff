@@ -1,9 +1,9 @@
-import type { Expr, LetDeclNode } from "./ast";
+import type { Expr } from "./ast";
 
 /**
  * Walk an expression AST and compute the numeric result.
  */
-export function evaluateExpr(node: Expr | LetDeclNode, scope: Map<string, number> = new Map()): number {
+export function evaluateExpr(node: Expr, scope: Map<string, number> = new Map()): number {
   if (node.type === "number") return node.value;
 
   if (node.type === "varref") {
@@ -24,13 +24,19 @@ export function evaluateExpr(node: Expr | LetDeclNode, scope: Map<string, number
     return lastVal;
   }
 
-  const left = evaluateExpr(node.left, scope);
-  const right = evaluateExpr(node.right, scope);
+  if (node.type === "binop") {
+    const left = evaluateExpr(node.left, scope);
+    const right = evaluateExpr(node.right, scope);
 
-  switch (node.op) {
-    case "+": return left + right;
-    case "-": return left - right;
-    case "*": return left * right;
-    case "/": return left / right;
+    switch (node.op) {
+      case "+": return left + right;
+      case "-": return left - right;
+      case "*": return left * right;
+      case "/": return left / right;
+    }
   }
+
+  // Exhaustive check — all Expr variants handled above
+  const _exhaustive: never = node;
+  throw new Error(`Unknown expression type: ${(_exhaustive as any).type}`);
 }

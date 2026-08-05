@@ -1,5 +1,5 @@
 import type { Token } from "./tokenize";
-import type { Expr } from "./ast";
+import type { Expr, LetDeclNode } from "./ast";
 
 /** Maps opening delimiters to their closing counterparts */
 const CLOSING_DELIMITER: Record<string, string> = {
