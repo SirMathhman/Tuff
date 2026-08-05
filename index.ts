@@ -3,7 +3,7 @@ export function evaluate(source: string): number {
   if (trimmed === '') return 0;
 
   // Tokenize into numbers and operators
-  const tokens = trimmed.match(/(\d+|\+)/g);
+  const tokens = trimmed.match(/(\d+|[+\-])/g);
   if (!tokens) return 0;
 
   let result = Number(tokens[0]);
@@ -11,6 +11,7 @@ export function evaluate(source: string): number {
     const op = tokens[i];
     const next = Number(tokens[i + 1]);
     if (op === '+') result += next;
+    else if (op === '-') result -= next;
   }
   return result;
 }
