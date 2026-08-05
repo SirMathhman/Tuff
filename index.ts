@@ -16,6 +16,7 @@ function lt(a: Value, b: Value): Value { return bool(toNum(a) < toNum(b)); }
 function lte(a: Value, b: Value): Value { return bool(toNum(a) <= toNum(b)); }
 function gt(a: Value, b: Value): Value { return bool(toNum(a) > toNum(b)); }
 function gte(a: Value, b: Value): Value { return bool(toNum(a) >= toNum(b)); }
+function not(v: Value): Value { return bool(!truthy(v)); }
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -173,6 +174,10 @@ export function evaluate(source: string): number {
     }
     if (tok?.value === "{") {
       return parseBlock();
+    }
+    if (tok?.value === "!") {
+      pos++;
+      return not(parseFactor());
     }
     if (tok?.value === "true") {
       pos++;
