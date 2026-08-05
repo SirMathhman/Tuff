@@ -80,32 +80,35 @@ export function evaluate(source: string): number {
     pos++;
     return result;
   }
-  function parseStatements(stopToken: string): number | null {
-    let result: number | null = null;
-    while (tokens[pos]?.value !== stopToken && tokens[pos]) {
-      if (tokens[pos]?.value === "let") {
-        pos++; // skip "let"
-        const name = tokens[pos]!.value;
-        pos++; // skip identifier
-        pos++; // skip "="
-        assign(name, parseExpression());
-        if (tokens[pos]?.value === ";") pos++;
-      } else {
-        result = parseExpression();
-        if (tokens[pos]?.value === ";") pos++;
-      }
+  function parseStatement(): number | null {
+    if (tokens[pos]?.value === "let") {
+      pos++;
+      const name = tokens[pos]!.value;
+      pos++;
+      pos++; // skip "="
+      assign(name, parseExpression());
+      if (tokens[pos]?.value === ";") pos++;
+      return null;
     }
-    if (stopToken && tokens[pos]?.value === stopToken) pos++;
+    const result = parseExpression();
+    if (tokens[pos]?.value === ";") pos++;
     return result;
   }
   function parseBlock(): number {
     pos++; // skip "{"
     scopes.push({});
-    const result = parseStatements("}");
+    let value: number | null = null;
+    while (tokens[pos]?.value !== "}" && tokens[pos]) {
+      value = parseStatement();
+    }
+    pos++; // skip "}"
     scopes.pop();
-    if (result === null) throw new Error("block has no value");
-    return result;
+    if (value === null) throw new Error("block has no value");
+    return value;
   }
-  const r = parseStatements("");
-  return r ?? 0;
+  let value: number | null = null;
+  while (tokens[pos]) {
+    value = parseStatement();
+  }
+  return value ?? 0;
 }
