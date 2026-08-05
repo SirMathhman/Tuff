@@ -2,14 +2,22 @@ export function evaluate(source: string): number {
   let s = source.trim();
   if (!s) return 0;
 
-  // Normalize curly braces to parentheses
-  s = s.replace(/{/g, "(").replace(/}/g, ")");
+  // Resolve curly brace blocks (allow statements like "let" and ";")
+  while (s.includes("{")) {
+    const blockMatch = s.match(/\{([^{}]+)\}/);
+    if (!blockMatch) break;
+    s = s.replace(blockMatch[0]!, String(evaluate(blockMatch[1]!)));
+  }
 
-  // Resolve parentheses recursively (innermost first)
+  // Resolve parentheses recursively — only pure expressions allowed (no "let" or ";")
   while (s.includes("(")) {
     const match = s.match(/\(([^()]+)\)/);
     if (!match) break;
-    s = s.replace(match[0]!, String(evaluate(match[1]!)));
+    const inner = match[1]!;
+    if (/;\b|^\s*let\b/.test(inner)) {
+      throw new Error("Statements not allowed in parentheses");
+    }
+    s = s.replace(match[0]!, String(evaluate(inner)));
   }
 
   // Tokenize flat expression: numbers and operators
