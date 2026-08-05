@@ -42,7 +42,7 @@ function evaluateStmt(stmt: Stmt, scope: Map<string, number>): number {
   if (stmt.type === "letdecl") {
     const value = evaluateExpr(stmt.valueExpr, scope);
     scope.set(stmt.name, value);
-    return value;
+    return 0;
   }
 
   // exprstmt — just evaluate the expression and discard side effects
