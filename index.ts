@@ -13,14 +13,16 @@ type Value =
 function num(v: number): Value { return { tag: "number", num: v }; }
 function bool(v: boolean): Value { return { tag: "bool", val: v }; }
 function toNum(v: Value): number {
-  if (v.tag === "number") return v.num;
-  if (v.tag === "bool") return v.val ? 1 : 0;
-  if (v.tag === "ref") return toNum(v.scope.vars[v.name]!);
-  if (v.tag === "tuple") return 0;
-  if (v.tag === "null") return 0;
-  if (v.tag === "array") return 0;
-  if (v.tag === "string") return v.value.charCodeAt(0);
-  return 0;
+  switch (v.tag) {
+    case "number": return v.num;
+    case "bool": return v.val ? 1 : 0;
+    case "ref": return toNum(v.scope.vars[v.name]!);
+    case "tuple": return 0;
+    case "null": return 0;
+    case "array": return 0;
+    case "string": return v.value.charCodeAt(0);
+    default: throw new Error(`cannot convert ${v.tag} to number`);
+  }
 }
 function truthy(v: Value): boolean { return toNum(v) !== 0; }
 function eq(a: Value, b: Value): Value {
