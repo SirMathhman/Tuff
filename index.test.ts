@@ -25,6 +25,10 @@ test('evaluate("-100U8") => Error', () => {
   expect(() => evaluate("-100U8")).toThrow();
 });
 
+test('evaluate("let x : U8 = 256;") => Error', () => {
+  expect(() => evaluate("let x : U8 = 256;")).toThrow();
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toBe(3);
 });
