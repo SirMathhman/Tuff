@@ -12,6 +12,7 @@ export function newTypeEnv(): TypeEnv {
     enums: new Map(),
     aliases: new Map(),
     inferred: new Map(),
+    mutables: new Map(),
   };
 }
 
@@ -61,6 +62,7 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       break;
     case "let":
       analyze(ast.value, typeEnv);
+      typeEnv.mutables.set(ast.name, ast.mutable);
       if (ast.typeAnnotation) {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
       } else {
@@ -70,10 +72,26 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       }
       break;
     case "inlet":
+      typeEnv.mutables.set(ast.name, false);
       if (ast.typeAnnotation) {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
       }
       break;
+    case "assign": {
+      analyze(ast.value, typeEnv);
+      // Assigning requires a mutable binding (scope-insensitive by name).
+      if (!typeEnv.mutables.get(ast.name)) {
+        throw new Error(`cannot assign to immutable variable: ${ast.name}`);
+      }
+      break;
+    }
+    case "augassign": {
+      analyze(ast.value, typeEnv);
+      if (!typeEnv.mutables.get(ast.name)) {
+        throw new Error(`cannot assign to immutable variable: ${ast.name}`);
+      }
+      break;
+    }
     case "unary": {
       // References can only be taken of identifiers (structural check).
       if (ast.op === "&" || ast.op === "&mut") {
@@ -126,9 +144,18 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       analyze(ast.value, typeEnv);
       break;
     case "fn":
+      // Function parameters are immutable bindings.
       for (const p of ast.params) {
+        typeEnv.mutables.set(p.name, false);
         typeEnv.inferred.set(p.name, resolveAstType(typeEnv.aliases, p.type));
       }
+      analyze(ast.body, typeEnv);
+      break;
+    case "for":
+      // Loop variable is mutable.
+      typeEnv.mutables.set(ast.varName, true);
+      analyze(ast.start, typeEnv);
+      analyze(ast.end, typeEnv);
       analyze(ast.body, typeEnv);
       break;
     case "typealias": {
