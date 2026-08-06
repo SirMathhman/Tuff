@@ -1,4 +1,4 @@
-import type { Ast, ControlFlow, Scope, Value } from "./types";
+import type { Ast, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { bool, eq, gte, gt, lt, lte, notOp, num, toNum, truthy } from "./values";
 
