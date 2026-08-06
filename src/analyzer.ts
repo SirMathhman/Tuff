@@ -221,6 +221,16 @@ function analyzeNode(
       }
       analyzeNode(ast.body, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       scopes.pop();
+      // Validate a literal body against the declared return type. `assign`
+      // mode enforces the widening/narrowing rules (U16 => 100U8 is fine,
+      // U8 => 100U16 is not). Generic type params accept anything.
+      if (ast.returnType) {
+        const retIsGeneric = ast.returnType.kind === "primitive" && typeEnv.typeParams.has(ast.returnType.name);
+        const lit = literalValue(ast.body);
+        if (lit !== undefined && !retIsGeneric) {
+          checkValueAgainstType(lit, ast.returnType, "assign", "return");
+        }
+      }
       break;
     case "for":
       // Loop variable is mutable in a nested scope.

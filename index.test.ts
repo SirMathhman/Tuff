@@ -313,6 +313,14 @@ test('evaluate("fn pass<T>(value : T) : T => value; pass(100)") => 100', () => {
   expectValid("fn pass<T>(value : T) : T => value; pass(100)", 100);
 });
 
+test('evaluate("fn get() : U8 => 100U16;") => Error', () => {
+  expectInvalid("fn get() : U8 => 100U16;");
+});
+
+test('evaluate("fn get() : U16 => 100U8;") => 0', () => {
+  expectValid("fn get() : U16 => 100U8;", 0);
+});
+
 test('evaluate("fn doNothing(param) => {}") => Error', () => {
   expectInvalid("fn doNothing(param) => {}");
 });
