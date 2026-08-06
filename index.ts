@@ -142,7 +142,8 @@ type Ast =
   | { kind: "length"; target: Ast }
   | { kind: "property_access"; target: Ast; property: string }
   | { kind: "record"; fields: { key: string; value: Ast }[] }
-  | { kind: "typecheck"; value: Ast; type: string };
+  | { kind: "typecheck"; value: Ast; type: string }
+  | { kind: "typealias"; name: string; baseType: string };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -257,7 +258,8 @@ function tokenize(source: string): Token[] {
           ident === "match" ||
           ident === "case" ||
           ident === "null" ||
-          ident === "is"
+          ident === "is" ||
+          ident === "type"
             ? "keyword"
             : "identifier",
         value: ident,
@@ -595,6 +597,17 @@ function parse(tokens: Token[]): Ast {
     return { kind: "num", value: result, suffix: tok?.suffix };
   }
   function parseStatement(): Ast | null {
+    // Check for type alias: type Alias = BaseType
+    if (tokens[pos]?.value === "type") {
+      pos++; // skip "type"
+      const name = tokens[pos]!.value;
+      pos++; // skip alias name
+      pos++; // skip "="
+      const baseType = tokens[pos]!.value;
+      pos++; // skip base type
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "typealias", name, baseType };
+    }
     if (tokens[pos]?.value === "let") {
       pos++;
       const mutable = tokens[pos]?.value === "mut";
@@ -827,6 +840,13 @@ function evalAst(
     }
   }
 
+  // Type alias resolution
+  const typeAliases: Record<string, string> = {};
+
+  function resolveType(typeName: string): string {
+    return typeAliases[typeName] ?? typeName;
+  }
+
   function visit(node: Ast): Value | null {
     switch (node.kind) {
       case "num": {
@@ -889,19 +909,18 @@ function evalAst(
       case "let": {
         let v = visit(node.value);
         if (v === null) throw new Error("block has no value");
-        if (node.typeAnnotation && suffixRanges[node.typeAnnotation]) {
-          checkSuffix(node.typeAnnotation, toNum(v));
-          // Check type compatibility using the value's tracked type
-          if (v.tag === "number" && v.type && suffixRanges[v.type]) {
-            const valRange = suffixRanges[v.type]!;
-            const annRange = suffixRanges[node.typeAnnotation]!;
-            if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
-              throw new Error(`cannot assign ${v.type} to ${node.typeAnnotation}`);
+        if (node.typeAnnotation) {
+          const resolvedAnn = resolveType(node.typeAnnotation);
+          if (suffixRanges[resolvedAnn]) {
+            checkSuffix(resolvedAnn, toNum(v));
+            // Check type compatibility using the value's tracked type
+            if (v.tag === "number" && v.type && suffixRanges[resolveType(v.type)]) {
+              const valRange = suffixRanges[resolveType(v.type)]!;
+              const annRange = suffixRanges[resolvedAnn]!;
+              if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
+                throw new Error(`cannot assign ${v.type} to ${node.typeAnnotation}`);
+              }
             }
-          }
-          // Propagate type annotation to the stored value
-          if (v.tag === "number") {
-            v = num(v.num, node.typeAnnotation);
           }
           // Propagate type annotation to the stored value
           if (v.tag === "number") {
@@ -1164,9 +1183,11 @@ function evalAst(
       case "typecheck": {
         const v = visit(node.value);
         if (v === null) throw new Error("typecheck value has no value");
-        const typeName = node.type.toLowerCase();
+        const resolvedType = resolveType(node.type);
+        const typeName = resolvedType.toLowerCase();
         if (v.tag === "number" && v.type) {
-          return bool(v.type === node.type);
+          const resolvedValueType = resolveType(v.type);
+          return bool(resolvedValueType === resolvedType);
         }
         const tagMap: Record<string, string> = {
           bool: "bool",
@@ -1180,7 +1201,11 @@ function evalAst(
         };
         const tagName = tagMap[typeName];
         if (tagName) return bool(v.tag === tagName);
-        return bool(v.tag === "number" && !v.type && typeName === "number");
+        return bool(v.tag === "number" && !v.type && resolvedType === "number");
+      }
+      case "typealias": {
+        typeAliases[node.name] = node.baseType;
+        return null;
       }
     }
   }

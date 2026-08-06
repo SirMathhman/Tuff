@@ -368,3 +368,7 @@ test('evaluate("null is null") => 1', () => {
 test('evaluate("let x = { a : 1 }; x is record") => 1', () => {
   expect(evaluate("let x = { a : 1 }; x is record")).toBe(1);
 });
+
+test('evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32") => 1', () => {
+  expect(evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32")).toBe(1);
+});
