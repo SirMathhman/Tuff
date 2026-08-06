@@ -521,10 +521,16 @@ export function parse(tokens: Token[]): Ast {
         if (tokens[pos]?.value === ",") pos++;
       }
       pos++; // skip ")"
+      // Optional return type annotation: fn name(...) : T => ...
+      let returnType: AstType | undefined;
+      if (tokens[pos]?.value === ":") {
+        pos++; // skip ":"
+        returnType = parseType();
+      }
       pos++; // skip "=>"
       const body = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return { kind: "fn", name, params, body, exported, typeParams };
+      return { kind: "fn", name, params, body, exported, typeParams, returnType };
     }
     // Check for fn statement
     if (tokens[pos]?.value === "fn") {
@@ -556,10 +562,16 @@ export function parse(tokens: Token[]): Ast {
         if (tokens[pos]?.value === ",") pos++;
       }
       pos++; // skip ")"
+      // Optional return type annotation: fn name(...) : T => ...
+      let returnType: AstType | undefined;
+      if (tokens[pos]?.value === ":") {
+        pos++; // skip ":"
+        returnType = parseType();
+      }
       pos++; // skip "=>"
       const body = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return { kind: "fn", name, params, body, typeParams };
+      return { kind: "fn", name, params, body, typeParams, returnType };
     }
     // Check for while statement
     if (tokens[pos]?.value === "while") {

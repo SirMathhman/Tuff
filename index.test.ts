@@ -309,6 +309,10 @@ test('evaluate("fn pass<T>(value : T) => value; pass(100)") => 100', () => {
   expectValid("fn pass<T>(value : T) => value; pass(100)", 100);
 });
 
+test('evaluate("fn pass<T>(value : T) : T => value; pass(100)") => 100', () => {
+  expectValid("fn pass<T>(value : T) : T => value; pass(100)", 100);
+});
+
 test('evaluate("fn doNothing(param) => {}") => Error', () => {
   expectInvalid("fn doNothing(param) => {}");
 });
