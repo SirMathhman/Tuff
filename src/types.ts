@@ -86,6 +86,15 @@ export type Ast =
 
 export type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
 
+// Per-program symbol table built by the semantic analysis pass (`analyze`).
+// Holds type declarations and inferred variable types without any runtime values.
+export type TypeEnv = {
+  structs: Map<string, { name: string; type: AstType }[]>;
+  enums: Map<string, string[]>;
+  aliases: Map<string, string>;
+  inferred: Map<string, AstType>;
+};
+
 // Evaluation context — all interpreter state threaded through an evalAst run.
 export type EvalContext = {
   scopes: Scope[];
@@ -93,4 +102,5 @@ export type EvalContext = {
   exports?: Record<string, Value>;
   moduleLoader?: (name: string, inputs?: Record<string, Value>) => Value | null;
   moduleInputs?: Record<string, Value>;
+  typeEnv?: TypeEnv;
 };

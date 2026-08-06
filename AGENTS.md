@@ -10,7 +10,7 @@
 
 ## Architecture
 
-Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
+Modular AST-based interpreter: `tokenize()` → `parse()` → `analyze()` → `evalAst()` → `Value` → `number`
 
 - `index.ts` — thin wrapper. Entry points: `evaluate(source, args?)`, `evaluateModules(entries, modules)`, `compile(source)` (hybrid: constant-folds programs that don't read `args`; emits real JS with `args` as a free variable for programs that do)
 - `src/index.ts` — barrel exports all `src/` modules
@@ -19,7 +19,8 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/tokenizer.ts` — `tokenize()` function
 - `src/parser.ts` — `parse()` function
 - `src/typeparser.ts` — `parseType()` function (recursive type annotation parser, shared by `let` annotations and `is` operator)
-- `src/evaluator.ts` — `evalAst(ast, ctx)` function with scope management; `ctx: EvalContext` carries scopes, mutables, exports, module hooks
+- `src/evaluator.ts` — `evalAst(ast, ctx)` function with scope management; `ctx: EvalContext` carries scopes, mutables, exports, module hooks, and the analyzed `typeEnv`
+- `src/analyzer.ts` — semantic analysis pass: `analyze(ast, typeEnv)` builds a per-program `TypeEnv` (structs/enums/aliases/inferred types) before evaluation; validates literals (`checkSuffix`) and alias cycles once, not per-eval
 - `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `defineStruct`/`getStructFields`, `defineEnum`/`getEnumVariants`, `defineTypeAlias`, `resolveType`, `resolveAstType`, `valueMatchesType` (for `is`), `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
 - `src/modules.ts` — `ModuleLoader` class: shared-scope module evaluation with `out` exports, lazy cross-module loading, and circular-dependency detection
 - `src/codegen.ts` — hybrid compiler: `referencesArgs(ast)` (true if the AST reads the `args` input) and `compileAst(ast)` (emits JS for args-dependent programs, with `args` as a free variable)
@@ -54,7 +55,7 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 - **Scope**: `scopes: Scope[]` array; `mutables: Scope["mutable"][]` array — traverse both for assignments
 - **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`, `-=`, `::`
 - **Safety**: 10,000 iteration limit on `while`/`for` loops
-- **Global type state**: struct/enum/type-alias definitions live at module level in `src/typesystem.ts` and persist across `evaluate()` calls in the same process — they can leak between tests
+- **Global type state**: struct/enum/type-alias definitions are tracked in a per-program `TypeEnv` (from `analyze()`) — the old module-level state in `src/typesystem.ts` still exists for compatibility but `evaluate()`/`compile()` use the analyzed `TypeEnv`
 - **Module structure**: each `src/` file is a single responsibility module. Import from `src/index.ts` barrel for cross-module access
 - **Test format**: `test('evaluate("<code>") => <result>', ...)` for success, `test('evaluate("<code>") => Error', ...)` for failures
 
