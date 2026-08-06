@@ -5,7 +5,7 @@ Features that would be useful to add to Tuff, grouped by category.
 ## String Support
 
 - [x] String literals (`"hello"`)
-- [ ] String concatenation (`"hi" + " there"`)
+- [ ] String concatenation (`"hi" + "there"`)
 - [x] String length (`.length`)
 - [x] String indexing (`"hello"[0]`)
 - [x] String comparison (`"a" < "b"`)
@@ -31,7 +31,7 @@ Features that would be useful to add to Tuff, grouped by category.
 ## Collections
 
 - [x] Array mutation (`array[0] = 5`)
-- [ ] Array length (`array.len` or `len(array)`)
+- [x] Array length (`.length`)
 - [ ] Array slicing (`array[1..3]`)
 - [ ] Array concatenation (`[1, 2] + [3, 4]`)
 - [ ] Array iteration (`for (x in array)`)
@@ -41,7 +41,7 @@ Features that would be useful to add to Tuff, grouped by category.
 ## Functions
 
 - [x] Closures (capture by reference)
-- [ ] Recursive functions
+- [x] Recursive functions
 - [ ] Variadic functions (`fn sum(...args)`)
 - [ ] Default parameter values (`fn greet(name, greeting = "hi")`)
 - [ ] Named arguments (`fn greet(name: "Alice")`)
@@ -91,7 +91,7 @@ Features that would be useful to add to Tuff, grouped by category.
 
 ## Type System
 
-- [ ] Type annotations (`let x: int = 5`)
+- [x] Type annotations (`let x : U8 = 5`)
 - [ ] Type inference display (`typeof(x)`)
 - [ ] Type casting (`x as int`)
 - [ ] Compile-time type checking mode
