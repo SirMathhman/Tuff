@@ -1,7 +1,4 @@
-import { tokenize } from "./src/tokenizer";
-import { parse } from "./src/parser";
-import { evalAst } from "./src/evaluator";
-import { toNum } from "./src/values";
+import { tokenize, parse, evalAst, toNum } from "./src";
 
 export function evaluate(source: string): number {
   const trimmed = source.trim();
