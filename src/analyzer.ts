@@ -52,12 +52,19 @@ function resolveAstType(aliases: Map<string, string>, t: AstType): AstType {
   return t;
 }
 
-export function analyze(ast: Ast, typeEnv: TypeEnv): void {
+export function analyze(
+  ast: Ast,
+  typeEnv: TypeEnv,
+  opts?: { moduleNames?: Set<string> },
+): void {
   // Static scope stack mirroring the evaluator's runtime scopes.
   // Each scope is the set of declared names; lookups walk backward.
   const scopes: Set<string>[] = [new Set()];
+  const moduleNames = opts?.moduleNames;
   const declared = (name: string): boolean =>
-    scopes.some((s) => s.has(name)) || name === "args";
+    scopes.some((s) => s.has(name)) ||
+    name === "args" ||
+    (moduleNames !== undefined && moduleNames.has(name));
   analyzeNode(ast, typeEnv, scopes, declared);
 }
 
