@@ -2,6 +2,17 @@
 import { expect } from "bun:test";
 import { compile, evaluate, evaluateModules } from "..";
 
+// Assert that evaluating `source` (with optional args) produces `expected`.
+// Evaluator route only — used for programs whose results depend on runtime inputs
+// (e.g. `args`), which `compile` cannot reproduce since it emits a constant.
+export function expectEval(
+  source: string,
+  expectedExitCode: number,
+  args: string[] = [],
+): void {
+  expect(evaluate(source, args)).toBe(expectedExitCode);
+}
+
 // Assert that evaluating `source` produces `expected`.
 export function expectValid(
   source: string,
@@ -14,8 +25,9 @@ export function expectValid(
   // The evaluator route
   expect(evaluate(withPrelude, wrappedArgs)).toBe(expectedExitCode);
 
-  // The compiler route
-  const generated = compile(withPrelude, wrappedArgs);
+  // The compiler route — emits a constant, so it evaluates with an empty
+  // args environment. Args-independent programs produce the same result here.
+  const generated = compile(withPrelude);
 
   // Wrap with a mock process.exit
   const wrapped =

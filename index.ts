@@ -31,7 +31,9 @@ export function evaluateModules(
   return result;
 }
 
-export function compile(source: string, args: string[] = []): string {
-  const evaluated = evaluate(source, args);
+export function compile(source: string): string {
+  // The emitted JS is a constant exit code — runtime args are irrelevant,
+  // so inputs are resolved against an empty environment.
+  const evaluated = evaluate(source, []);
   return "process.exit(" + evaluated + ");";
 }
