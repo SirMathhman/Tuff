@@ -2,11 +2,11 @@
 
 ## Quick Start
 
-- **Test**: `bun test`
+- **Test**: `bun test` (Bun native, primary). Fallback: `bun run test` (Node test runner via `test/bun-test-shim.ts`)
 - **Lint/typecheck**: `bun run lint` (runs `tsc --noEmit` then `eslint . --fix`)
-- **Duplication check**: `bun run cpd`
+- **Duplication check**: `bun run cpd` (PMD, min 50 tokens)
 - **Run**: `bun run index.ts`
-- **Quality gates** (`.github/hooks/hooks.json`): `bun run lint` → `bun run cpd` → `bun test` — all must pass on Stop hook
+- **Quality gates** (`.github/hooks/hooks.json`): `bun run lint` → `bun run cpd` → `bun run test` — all must pass on Stop hook
 
 ## Architecture
 
@@ -20,11 +20,13 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/parser.ts` — `parse()` function
 - `src/typeparser.ts` — `parseType()` function (recursive type annotation parser, shared by `let` annotations and `is` operator)
 - `src/evaluator.ts` — `evalAst()` function with scope management
-- `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `resolveType`, `resolveAstType`, `defineTypeAlias`, `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
+- `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `defineStruct`/`getStructFields`, `defineEnum`/`getEnumVariants`, `defineTypeAlias`, `resolveType`, `resolveAstType`, `valueMatchesType` (for `is`), `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
 - `src/modules.ts` — `ModuleLoader` class: shared-scope module evaluation with `out` exports, lazy cross-module loading, and circular-dependency detection
-- `index.test.ts` — test suite, one test per feature (~96 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
+- `index.test.ts` — test suite, one test per feature (109 tests). Each test: `test('evaluate("<code>") => <result>', () => { expectEval("<code>", <result>) })`
+- `test/helpers.ts` — shared assertions: `expectEval(source, expected)`, `expectEvalError(source)`, `expectModules(entries, modules, expected)`
+- `test/bun-test-shim.ts` — Node fallback shim for `bun:test`; supports only `toBe` and `toThrow` (don't add other assertions without extending it)
 - See [README.md](./README.md) for project overview
-- See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features
+- See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features. Features marked **[heap]** require manual memory management (Rust-style ownership/borrowing) — no GC
 
 ## Development Workflow
 
@@ -34,22 +36,22 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 2. Add test to `index.test.ts`
 3. Run `bun test` — confirm failure
 4. Implement minimum code to pass
-5. Run `bun test` — confirm all pass
+5. Run `bun test` — confirm all pass (use `bun run test` to verify the Node fallback too)
 6. `git add -A && git commit -m "<feature description>"`
 7. Suggest one architectural improvement
 
 ## Implemented Features
 
-Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&`, `&mut`, `*`), type annotations (`: U8`, `: I32`, etc.), functions (params require type annotations, e.g. `fn add(x : I32, y : I32)`), closures, `if`/`else`, `while`, `for` (range), `match`, `yield`, `return`, `continue`, `break`, array mutation, string indexing & length.
+Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&`, `&mut`, `*`), type annotations (`: U8`, `: I32`, etc.), functions (params require type annotations, e.g. `fn add(x : I32, y : I32)`), closures, recursion, `if`/`else`/`else if`, `while`, `for` (range), `match` (with `_` wildcard), `yield`, `return`, `continue`, `break`, array mutation, string indexing & length, `%`, `+=`/`-=`, structs, enums (`Color::Red`), union types (`Bool | I32`), type aliases (`type Id = U32`), `is` operator, modules (`evaluateModules`, `out` exports, `::` namespace paths).
 
 ## Key Conventions
 
-- **Value type**: discriminated union — `number`, `bool`, `fn`, `ref`, `tuple`, `null`, `array`, `string`, `record`
+- **Value type**: discriminated union — `number` (carries optional `type` suffix), `bool`, `fn`, `ref`, `tuple`, `null`, `array`, `string`, `record`, `struct`, `enum`
 - **AST types**: see `type Ast` union in `src/types.ts` — add new variants here when adding features
-- **AstType**: see `type AstType` in `src/types.ts` — `primitive` and `array` variants. Use for type annotations and `is` operator
+- **AstType**: see `type AstType` in `src/types.ts` — `primitive`, `array`, `struct`, `union` variants. Use for type annotations and `is` operator
 - **ControlFlow**: shared discriminated union for `continue`, `break`, `yield`, `return` — use this type, not symbols
 - **Scope**: `scopes: Scope[]` array; `mutables: Scope["mutable"][]` array — traverse both for assignments
-- **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`
+- **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`, `-=`, `::`
 - **Safety**: 10,000 iteration limit on `while`/`for` loops
 - **Module structure**: each `src/` file is a single responsibility module. Import from `src/index.ts` barrel for cross-module access
 - **Test format**: `test('evaluate("<code>") => <result>', ...)` for success, `test('evaluate("<code>") => Error', ...)` for failures
@@ -63,5 +65,8 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 - `tuple.0` tokenized as number — separate `.` from number tokenization
 - Always parse `if` as statement first, fall back to expression
 - Don't create new `Symbol()` for control flow — use `ControlFlow` type
-- Numeric suffixes (`U8`, `I32`, etc.) carry type info — validate ranges on assignment
+- Numeric suffixes (`U8`, `I32`, etc.) carry type info — validate ranges on assignment (`checkSuffix`); suffix propagates to `Value.type` for `is` and union matching
 - `evaluate()` returns `number` via `toNum()` — all expression results coerce to number
+- `is` parses in `parseComparison`; evaluated via `valueMatchesType`
+- Function params must be type-annotated — enforced via `checkValueAgainstType` on call
+- Don't add assertion methods beyond `toBe`/`toThrow` without extending `test/bun-test-shim.ts`

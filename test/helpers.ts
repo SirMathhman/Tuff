@@ -1,15 +1,51 @@
 // Shared test helpers for the Tuff test suite.
 import { expect } from "bun:test";
-import { evaluate, evaluateModules } from "..";
+import { compile, evaluate, evaluateModules } from "..";
 
 // Assert that evaluating `source` produces `expected`.
-export function expectEval(source: string, expected: number): void {
-  expect(evaluate(source)).toBe(expected);
+export function expectValid(
+  source: string,
+  expectedExitCode: number,
+  args: string[],
+): void {
+  const withPrelude = "in let args : &[&Str]; " + source;
+
+  // The evaluator route
+  expect(evaluate(withPrelude, args)).toBe(expectedExitCode);
+
+  // The compiler route
+  const generated = compile(source);
+
+  // Wrap with a mock process.exit
+  const wrapped =
+    "let __exit__ = 0; let process = { exit(code) => { __exit__ = code; } } " +
+    generated +
+    " return __exit__;";
+
+  try {
+    const actualExitCode = new Function("args", wrapped)(args);
+    if (actualExitCode !== expectedExitCode) {
+      throw new Error(
+        "Expected '" +
+          actualExitCode +
+          "' to be '" +
+          expectedExitCode +
+          "'. Generated: '" +
+          generated +
+          "'.",
+      );
+    }
+  } catch (e) {
+    throw new Error(
+      "Failed to execute generated code: '" + wrapped + "'",
+      e instanceof Error ? e : new Error(JSON.stringify(e)),
+    );
+  }
 }
 
 // Assert that evaluating `source` throws.
 export function expectEvalError(source: string): void {
-  expect(() => evaluate(source)).toThrow();
+  expect(() => evaluate(source, [])).toThrow();
 }
 
 // Assert that evaluating modules produces `expected`.
