@@ -268,6 +268,18 @@ function sub(template: string, value: string): string {
 // Compile an `is` type check. Folds when the value's type is statically known
 // (literal suffix or inferred binding); otherwise falls back to tag checks.
 function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeEnv): string {
+  // Union type: the value matches if it matches any member.
+  const resolvedType = resolveAstTypeName(typeEnv, node.type);
+  if (resolvedType.kind === "union") {
+    const memberChecks = resolvedType.types.map((m) =>
+      genTypecheck({ ...node, type: m }, typeEnv),
+    );
+    // OR of member checks, coercing to 0/1.
+    return memberChecks.reduce(
+      (acc, c) => "(Number(" + acc + " !== 0 || " + c + " !== 0))",
+      "0",
+    );
+  }
   const t = resolveType(typeEnv, node.type);
   const value = node.value;
   if (value.kind === "num" && value.suffix) {
