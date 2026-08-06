@@ -89,3 +89,36 @@ export function gte(a: Value, b: Value): Value {
 export function notOp(v: Value): Value {
   return bool(!truthy(v));
 }
+
+export function applyBinOp(op: string, left: Value, right: Value): Value {
+  switch (op) {
+    case "+":
+      return num(toNum(left) + toNum(right));
+    case "-":
+      return num(toNum(left) - toNum(right));
+    case "*":
+      return num(toNum(left) * toNum(right));
+    case "/":
+      return num(toNum(left) / toNum(right));
+    case "%":
+      return num(toNum(left) % toNum(right));
+    case "||":
+      return bool(truthy(left) || truthy(right));
+    case "&&":
+      return bool(truthy(left) && truthy(right));
+    case "==":
+      return eq(left, right);
+    case "!=":
+      return bool(!truthy(eq(left, right)));
+    case "<":
+      return lt(left, right);
+    case "<=":
+      return lte(left, right);
+    case ">":
+      return gt(left, right);
+    case ">=":
+      return gte(left, right);
+    default:
+      throw new Error(`unknown operator: ${op}`);
+  }
+}
