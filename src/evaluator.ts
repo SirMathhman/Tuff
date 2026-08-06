@@ -277,7 +277,29 @@ export function evalAst(
           return v;
         });
         fn.params.forEach((p, i) => {
-          fnScopes[fnScopes.length - 1]!.vars[p.name] = argValues[i]!;
+          const arg = argValues[i]!;
+          const resolvedType = resolveAstType(p.type);
+          if (resolvedType.kind === "array") {
+            const innerType = resolveAstType(resolvedType.elementType);
+            if (arg.tag !== "array") throw new Error(`expected array, got ${arg.tag}`);
+            if (arg.values.length !== resolvedType.length)
+              throw new Error(`array length mismatch: expected ${resolvedType.length}, got ${arg.values.length}`);
+            for (const elem of arg.values) {
+              if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
+                checkSuffix(innerType.name, elem.num);
+              }
+            }
+          } else if (resolvedType.kind === "primitive" && suffixRanges[resolvedType.name]) {
+            checkSuffix(resolvedType.name, toNum(arg));
+            if (arg.tag === "number" && arg.type && suffixRanges[resolveType(arg.type)]) {
+              const valRange = suffixRanges[resolveType(arg.type)]!;
+              const annRange = suffixRanges[resolvedType.name]!;
+              if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
+                throw new Error(`cannot pass ${arg.type} to parameter ${p.name} of type ${resolvedType.name}`);
+              }
+            }
+          }
+          fnScopes[fnScopes.length - 1]!.vars[p.name] = arg;
         });
         try {
           return evalAst(fn.body, fnScopes, fnMutables);

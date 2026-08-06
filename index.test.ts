@@ -273,6 +273,10 @@ test('evaluate("fn doNothing(param : I32) => {}") => 0', () => {
   expect(evaluate("fn doNothing(param : I32) => {}")).toBe(0);
 });
 
+test('evaluate("fn doNothing(param : U8) => {} doNothing(100U16)") => Error', () => {
+  expect(() => evaluate("fn doNothing(param : U8) => {} doNothing(100U16)")).toThrow();
+});
+
 test('evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)") => 7', () => {
   expect(evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)")).toBe(7);
 });
