@@ -142,6 +142,7 @@ type Ast =
   | { kind: "string"; value: string }
   | { kind: "string_index"; target: Ast; index: Ast }
   | { kind: "string_length"; target: Ast }
+  | { kind: "array_length"; target: Ast }
   | { kind: "record"; fields: { key: string; value: Ast }[] }
   | { kind: "field_access"; target: Ast; field: string };
 
@@ -445,7 +446,7 @@ function parse(tokens: Token[]): Ast {
           if (result.kind === "string") {
             result = { kind: "string_length", target: result };
           } else {
-            result = { kind: "field_access", target: result, field: "length" };
+            result = { kind: "array_length", target: result };
           }
         } else {
           const field = nextTok!.value;
@@ -1121,6 +1122,14 @@ function evalAst(
         if (target.tag !== "string")
           throw new Error("cannot get length of non-string");
         return num(target.value.length);
+      }
+      case "array_length": {
+        const target = visit(node.target);
+        if (target === null)
+          throw new Error("array length target has no value");
+        if (target.tag !== "array")
+          throw new Error("cannot get length of non-array");
+        return num(target.values.length);
       }
       case "record": {
         const fields: Record<string, Value> = {};

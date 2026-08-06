@@ -10,8 +10,10 @@
 
 Single-file AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — tokenizer, parser, evaluator, all exports
-- `index.test.ts` — test suite, one test per feature
+- `index.ts` — tokenizer, parser, evaluator, all exports (~1200 lines)
+- `index.test.ts` — test suite, one test per feature (~300 tests)
+- See [README.md](./README.md) for project overview
+- See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features
 
 ## Development Workflow
 
@@ -25,11 +27,15 @@ Single-file AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `eva
 6. `git add -A && git commit -m "<feature description>"`
 7. Suggest one architectural improvement
 
+## Implemented Features
+
+Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&`, `&mut`, `*`), type annotations (`: U8`, `: I32`, etc.), functions, closures, `if`/`else`, `while`, `for` (range), `match`, `yield`, `return`, `continue`, `break`, array mutation, string indexing & length.
+
 ## Key Conventions
 
-- **Value type**: discriminated union — `number`, `bool`, `fn`, `ref`, `tuple`, `null`, `array`
+- **Value type**: discriminated union — `number`, `bool`, `fn`, `ref`, `tuple`, `null`, `array`, `string`, `record`
 - **AST types**: see `type Ast` union in `index.ts` — add new variants here when adding features
-- **ControlFlow**: shared discriminated union for `continue`, `break`, `yield` — use this type, not symbols
+- **ControlFlow**: shared discriminated union for `continue`, `break`, `yield`, `return` — use this type, not symbols
 - **Scope**: `scopes: Scope[]` array; `mutables: Scope["mutable"][]` array — traverse both for assignments
 - **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`
 - **Safety**: 10,000 iteration limit on `while`/`for` loops
@@ -44,3 +50,4 @@ Single-file AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `eva
 - `tuple.0` tokenized as number — separate `.` from number tokenization
 - Always parse `if` as statement first, fall back to expression
 - Don't create new `Symbol()` for control flow — use `ControlFlow` type
+- Numeric suffixes (`U8`, `I32`, etc.) carry type info — validate ranges on assignment

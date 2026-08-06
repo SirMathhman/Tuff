@@ -4,17 +4,17 @@ Features that would be useful to add to Tuff, grouped by category.
 
 ## String Support
 
-- [ ] String literals (`"hello"`)
+- [x] String literals (`"hello"`)
 - [ ] String concatenation (`"hi" + " there"`)
-- [ ] String length (`len("hello")`)
-- [ ] String indexing (`"hello"[0]`)
-- [ ] String comparison (`"a" < "b"`)
+- [x] String length (`.length`)
+- [x] String indexing (`"hello"[0]`)
+- [x] String comparison (`"a" < "b"`)
 - [ ] String interpolation (`"x is {x}"`)
 
 ## Control Flow
 
-- [ ] `return` statement in functions (early return)
-- [ ] `else if` chaining for if statements
+- [x] `return` statement in functions (early return)
+- [x] `else if` chaining for if statements
 - [ ] `do { ... } while (cond)` — post-condition loop
 - [ ] Labeled loops with `break 'label` and `continue 'label`
 - [ ] `return` without value (returns `null`)
@@ -26,11 +26,11 @@ Features that would be useful to add to Tuff, grouped by category.
 - [ ] Union types (`type Result = Ok | Err`)
 - [ ] Dynamic types / `any`
 - [ ] Sets (`{1, 2, 3}`)
-- [ ] Maps / dictionaries (`{ "key": value }`)
+- [x] Records / maps (`{ x : 3, y : 4 }` with `.field` access)
 
 ## Collections
 
-- [ ] Array mutation (`array[0] = 5`)
+- [x] Array mutation (`array[0] = 5`)
 - [ ] Array length (`array.len` or `len(array)`)
 - [ ] Array slicing (`array[1..3]`)
 - [ ] Array concatenation (`[1, 2] + [3, 4]`)
@@ -40,18 +40,19 @@ Features that would be useful to add to Tuff, grouped by category.
 
 ## Functions
 
-- [ ] Closures capturing variables by value
+- [x] Closures (capture by reference)
 - [ ] Recursive functions
 - [ ] Variadic functions (`fn sum(...args)`)
 - [ ] Default parameter values (`fn greet(name, greeting = "hi")`)
 - [ ] Named arguments (`fn greet(name: "Alice")`)
 - [ ] Higher-order functions (`map`, `filter`, `reduce`)
 - [ ] Function composition (`f | g`)
-- [ ] Anonymous functions / lambdas (`fn(x, y) => x + y`)
+- [x] Anonymous functions / lambdas (`fn(x, y) => x + y`)
 - [ ] Method syntax (`obj.method()`)
 
 ## Pattern Matching
 
+- [x] Basic pattern matching with `case` and wildcard `_`
 - [ ] Pattern matching on tuples (`case (1, _) => ...`)
 - [ ] Pattern matching on arrays (`case [1, ..] => ...`)
 - [ ] Guard clauses (`case x if x > 0 => ...`)
@@ -63,6 +64,7 @@ Features that would be useful to add to Tuff, grouped by category.
 - [ ] Modulo (`%`)
 - [ ] Exponentiation (`**`)
 - [ ] Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
+- [x] Compound assignment (`+=`)
 - [ ] Compound assignment (`-=`, `*=`, `/=`)
 - [ ] Increment / decrement (`++x`, `x++`, `--x`, `x--`)
 - [ ] Ternary operator (`cond ? a : b`)

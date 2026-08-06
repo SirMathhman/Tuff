@@ -304,3 +304,7 @@ test("'a' => 97", () => {
 test("'\\n' => 10", () => {
   expect(evaluate("'\\n'")).toBe(10);
 });
+
+test('evaluate("let array = [1, 2, 3]; array.length") => 3', () => {
+  expect(evaluate("let array = [1, 2, 3]; array.length")).toBe(3);
+});
