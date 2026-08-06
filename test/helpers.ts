@@ -55,8 +55,9 @@ export function expectValid(
 }
 
 // Assert that evaluating `source` throws.
-export function expectEvalError(source: string): void {
+export function expectInvalid(source: string): void {
   expect(() => evaluate(source)).toThrow();
+  expect(() => compile(source)).toThrow();
 }
 
 // Assert that evaluating modules produces `expected`.

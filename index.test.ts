@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { expectValid, expectEvalError, expectModules } from "./test/helpers";
+import { expectValid, expectInvalid, expectModules } from "./test/helpers";
 
 test('evaluate("") => 0', () => {
   expectValid("", 0);
@@ -38,15 +38,15 @@ test('evaluate("100U8") => 100', () => {
 });
 
 test('evaluate("256U8") => Error', () => {
-  expectEvalError("256U8");
+  expectInvalid("256U8");
 });
 
 test('evaluate("-100U8") => Error', () => {
-  expectEvalError("-100U8");
+  expectInvalid("-100U8");
 });
 
 test('evaluate("let x : U8 = 256;") => Error', () => {
-  expectEvalError("let x : U8 = 256;");
+  expectInvalid("let x : U8 = 256;");
 });
 
 test('evaluate("let x : U8 = 1U8; x") => 1', () => {
@@ -58,7 +58,7 @@ test('evaluate("let x : U16 = 1U8; x") => 1', () => {
 });
 
 test('evaluate("let x : U8 = 1U16; x") => Error', () => {
-  expectEvalError("let x : U8 = 1U16; x");
+  expectInvalid("let x : U8 = 1U16; x");
 });
 
 test('evaluate("1 + 2") => 3', () => {
@@ -102,7 +102,7 @@ test('evaluate("let x = 0; let x = 1; x") => 1', () => {
 });
 
 test('evaluate("let x = { let y = 100; }; x") => Error', () => {
-  expectEvalError("let x = { let y = 100; }; x");
+  expectInvalid("let x = { let y = 100; }; x");
 });
 
 test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
@@ -306,7 +306,7 @@ test('evaluate("fn add(x : I32, y : I32) => x + y; add(3, 4)") => 7', () => {
 });
 
 test('evaluate("fn doNothing(param) => {}") => Error', () => {
-  expectEvalError("fn doNothing(param) => {}");
+  expectInvalid("fn doNothing(param) => {}");
 });
 
 test('evaluate("fn doNothing(param : I32) => {}") => 0', () => {
@@ -314,7 +314,7 @@ test('evaluate("fn doNothing(param : I32) => {}") => 0', () => {
 });
 
 test('evaluate("fn doNothing(param : U8) => {} doNothing(100U16)") => Error', () => {
-  expectEvalError("fn doNothing(param : U8) => {} doNothing(100U16)");
+  expectInvalid("fn doNothing(param : U8) => {} doNothing(100U16)");
 });
 
 test('evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)") => 7', () => {
@@ -458,7 +458,7 @@ test('evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is 
 });
 
 test('evaluate("type A = B; type B = A;") => Error', () => {
-  expectEvalError("type A = B; type B = A;");
+  expectInvalid("type A = B; type B = A;");
 });
 
 test('evaluate("args.length") => 1', () => {
