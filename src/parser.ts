@@ -286,8 +286,20 @@ export function parse(tokens: Token[]): Ast {
       let typeAnnotation: string | undefined;
       if (tokens[pos]?.value === ":") {
         pos++; // skip ":"
-        typeAnnotation = tokens[pos]!.value;
-        pos++; // skip type
+        // Check for array type annotation: [Type; Length]
+        if (tokens[pos]?.value === "[") {
+          pos++; // skip "["
+          const innerType = tokens[pos]!.value;
+          pos++; // skip inner type
+          pos++; // skip ";"
+          const length = tokens[pos]!.value;
+          pos++; // skip length
+          pos++; // skip "]"
+          typeAnnotation = `[${innerType}; ${length}]`;
+        } else {
+          typeAnnotation = tokens[pos]!.value;
+          pos++; // skip type
+        }
       }
       pos++; // skip "="
       const value = parseExpression();

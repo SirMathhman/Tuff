@@ -131,7 +131,23 @@ export function evalAst(
         if (v === null) throw new Error("block has no value");
         if (node.typeAnnotation) {
           const resolvedAnn = resolveType(node.typeAnnotation);
-          if (suffixRanges[resolvedAnn]) {
+          // Check for array type annotation: [Type; Length]
+          if (resolvedAnn.startsWith("[") && resolvedAnn.endsWith("]")) {
+            const match = resolvedAnn.match(/^\[(.+); (\d+)\]$/);
+            if (match) {
+              const innerType = resolveType(match[1]!);
+              const length = parseInt(match[2]!);
+              if (v.tag !== "array") throw new Error(`expected array, got ${v.tag}`);
+              if (v.values.length !== length) throw new Error(`array length mismatch: expected ${length}, got ${v.values.length}`);
+              // Validate each element's type
+              for (let i = 0; i < v.values.length; i++) {
+                const elem = v.values[i]!;
+                if (suffixRanges[innerType] && elem.tag === "number") {
+                  checkSuffix(innerType, elem.num);
+                }
+              }
+            }
+          } else if (suffixRanges[resolvedAnn]) {
             checkSuffix(resolvedAnn, toNum(v));
             // Check type compatibility using the value's tracked type
             if (v.tag === "number" && v.type && suffixRanges[resolveType(v.type)]) {
