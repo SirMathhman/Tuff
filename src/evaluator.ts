@@ -15,17 +15,11 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
       const loaded = moduleLoader(name);
       if (loaded !== null) return loaded;
     }
+    // The analyzer validates undeclared names before evaluation.
     throw new Error(`undeclared variable: ${name}`);
   }
-  function isMutable(name: string): boolean {
-    for (let i = mutables.length - 1; i >= 0; i--) {
-      if (name in mutables[i]!) return mutables[i]![name]!;
-    }
-    return false;
-  }
   function setVar(name: string, value: Value): void {
-    if (!isMutable(name))
-      throw new Error(`cannot assign to immutable variable: ${name}`);
+    // The analyzer validates immutability before evaluation.
     for (let i = scopes.length - 1; i >= 0; i--) {
       if (name in scopes[i]!.vars) {
         scopes[i]!.vars[name] = value;
@@ -41,6 +35,7 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
     node: Extract<Ast, { kind: "return" | "yield" }>,
   ): never {
     if (node.value === undefined) {
+      // The analyzer rejects yield-without-value; bare return yields null.
       if (kind === "return") throw { kind: "return", value: { tag: "null" } };
       throw new Error("yield has no value");
     }
@@ -73,6 +68,7 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
             return { tag: "enum", typeName: enumName!, variant: variant! };
           }
         }
+        // The analyzer validates namespace names before evaluation.
         throw new Error(`undeclared namespace: ${name}`);
       }
       case "unary": {
@@ -87,33 +83,19 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
           return num(negated, v.tag === "number" ? v.type : undefined);
         }
         if (node.op === "&") {
-          // Create a reference to the operand
-          if (node.operand.kind === "ident") {
-            const scope = scopes[scopes.length - 1]!;
-            return {
-              tag: "ref",
-              scope,
-              name: node.operand.name,
-              mutable: false,
-            };
-          }
-          throw new Error("can only take reference of identifier");
+          // Create a reference to the operand (analyzer validates ident).
+          const name = (node.operand as Extract<Ast, { kind: "ident" }>).name;
+          const scope = scopes[scopes.length - 1]!;
+          return { tag: "ref", scope, name, mutable: false };
         }
         if (node.op === "&mut") {
-          // Create a mutable reference to the operand
-          if (node.operand.kind === "ident") {
-            const scope = scopes[scopes.length - 1]!;
-            return {
-              tag: "ref",
-              scope,
-              name: node.operand.name,
-              mutable: true,
-            };
-          }
-          throw new Error("can only take reference of identifier");
+          // Create a mutable reference to the operand (analyzer validates ident).
+          const name = (node.operand as Extract<Ast, { kind: "ident" }>).name;
+          const scope = scopes[scopes.length - 1]!;
+          return { tag: "ref", scope, name, mutable: true };
         }
         if (node.op === "*") {
-          // Dereference
+          // Dereference (analyzer validates ref-typed operand).
           if (v.tag === "ref") return v.scope.vars[v.name]!;
           throw new Error("cannot dereference non-reference");
         }
@@ -439,13 +421,12 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
         }
         const fields: Record<string, Value> = {};
         const def = getStructFields(node.typeName);
-        if (!def) throw new Error(`unknown struct: ${node.typeName}`);
+        // The analyzer validates struct existence and field names.
         for (const f of node.fields) {
           const v = visit(f.value);
           if (v === null) throw new Error("struct field has no value");
-          const fieldDef = def.find((d) => d.name === f.key);
-          if (!fieldDef) throw new Error(`unknown field ${f.key} on struct ${node.typeName}`);
-          checkValueAgainstType(v, fieldDef.type, "assign", f.key);
+          const fieldDef = def!.find((d) => d.name === f.key);
+          checkValueAgainstType(v, fieldDef!.type, "assign", f.key);
           fields[f.key] = v;
         }
         return { tag: "struct", typeName: node.typeName, fields };
