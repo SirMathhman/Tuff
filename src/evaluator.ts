@@ -1,6 +1,7 @@
-import type { Ast, AstType, Scope, Value } from "./types";
+import type { Ast, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { bool, eq, gte, gt, lt, lte, notOp, num, toNum, truthy } from "./values";
+import { checkSuffix, defineTypeAlias, resolveAstType, resolveType, suffixRanges } from "./typesystem";
 
 // Evaluator — walks AST with scope
 export function evalAst(
@@ -29,57 +30,6 @@ export function evalAst(
         return;
       }
     }
-  }
-  const suffixRanges: Record<string, [number, number]> = {
-    U8: [0, 255],
-    I8: [-128, 127],
-    U16: [0, 65535],
-    I16: [-32768, 32767],
-    U32: [0, 4294967295],
-    I32: [-2147483648, 2147483647],
-  };
-
-  function checkSuffix(suffix: string, value: number): void {
-    const range = suffixRanges[suffix];
-    if (range && (value < range[0] || value > range[1])) {
-      throw new Error(`${suffix} overflow: ${value}`);
-    }
-  }
-
-  // Type alias resolution
-  const typeAliases: Record<string, string> = {};
-
-  function detectCycle(name: string): void {
-    const seen = new Set<string>();
-    let current = name;
-    while (typeAliases[current] !== undefined) {
-      current = typeAliases[current]!;
-      if (seen.has(current)) throw new Error(`circular type alias: ${current}`);
-      seen.add(current);
-    }
-  }
-
-  function resolveType(typeName: string): string {
-    let current = typeName;
-    while (typeAliases[current] !== undefined) {
-      current = typeAliases[current]!;
-    }
-    return current;
-  }
-
-  function resolveAstType(astType: AstType): AstType {
-    if (astType.kind === "primitive") {
-      const resolved = resolveType(astType.name);
-      return { kind: "primitive", name: resolved };
-    }
-    if (astType.kind === "array") {
-      return {
-        kind: "array",
-        elementType: resolveAstType(astType.elementType),
-        length: astType.length,
-      };
-    }
-    return astType;
   }
 
   function visit(node: Ast): Value | null {
@@ -478,8 +428,7 @@ export function evalAst(
         return bool(false);
       }
       case "typealias": {
-        typeAliases[node.name] = node.baseType;
-        detectCycle(node.name);
+        defineTypeAlias(node.name, node.baseType);
         return null;
       }
     }
