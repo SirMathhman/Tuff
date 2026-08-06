@@ -35,7 +35,7 @@ export function isControlFlow(e: unknown): e is ControlFlow {
 // AST type representation
 export type AstType =
   | { kind: "primitive"; name: string }
-  | { kind: "array"; elementType: AstType; length: number }
+  | { kind: "array"; elementType: AstType; length?: number }
   | { kind: "struct"; fields: { name: string; type: AstType }[] }
   | { kind: "union"; types: AstType[] }
   | { kind: "ref"; targetType: AstType };

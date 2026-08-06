@@ -250,7 +250,7 @@ function matchArray(
 ): { ok: boolean; error?: string } {
   if (value.tag !== "array")
     return fail(context, targetName, `expected array, got ${value.tag}`);
-  if (value.values.length !== resolved.length)
+  if (resolved.length !== undefined && value.values.length !== resolved.length)
     return fail(context, targetName, `array length mismatch: expected ${resolved.length}, got ${value.values.length}`);
   for (const elem of value.values) {
     const r = matchValue(elem, resolved.elementType, mode, context, targetName);

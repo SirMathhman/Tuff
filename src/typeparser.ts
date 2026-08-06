@@ -25,11 +25,16 @@ function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
   if (tokens[pos.pos]?.value === "[") {
     pos.pos++; // skip "["
     const elementType = parseType(tokens, pos);
-    pos.pos++; // skip ";"
-    const length = parseInt(tokens[pos.pos]!.value);
-    pos.pos++; // skip length
+    // Fixed-length array: [T; N]. Slice (no length): [T].
+    if (tokens[pos.pos]?.value === ";") {
+      pos.pos++; // skip ";"
+      const length = parseInt(tokens[pos.pos]!.value);
+      pos.pos++; // skip length
+      pos.pos++; // skip "]"
+      return { kind: "array", elementType, length };
+    }
     pos.pos++; // skip "]"
-    return { kind: "array", elementType, length };
+    return { kind: "array", elementType };
   }
   if (tokens[pos.pos]?.value === "{") {
     // Anonymous struct type: { x : I32, y : I32 }
