@@ -412,6 +412,32 @@ export function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "yield", value };
     }
+    // Check for out fn statement (exported function)
+    if (tokens[pos]?.value === "out" && tokens[pos + 1]?.value === "fn") {
+      pos++; // skip "out"
+      const exported = true;
+      pos++; // skip "fn"
+      const name = tokens[pos]!.value;
+      pos++; // skip name
+      pos++; // skip "("
+      const params: { name: string; type: AstType }[] = [];
+      while (tokens[pos]?.value !== ")") {
+        const paramName = tokens[pos]!.value;
+        pos++; // skip param name
+        if (tokens[pos]?.value !== ":") {
+          throw new Error(`parameter "${paramName}" requires a type annotation`);
+        }
+        pos++; // skip ":"
+        const paramType = parseType();
+        params.push({ name: paramName, type: paramType });
+        if (tokens[pos]?.value === ",") pos++;
+      }
+      pos++; // skip ")"
+      pos++; // skip "=>"
+      const body = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "fn", name, params, body, exported };
+    }
     // Check for fn statement
     if (tokens[pos]?.value === "fn") {
       pos++; // skip "fn"

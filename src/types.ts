@@ -59,7 +59,7 @@ export type Ast =
   | { kind: "break" }
   | { kind: "yield"; value: Ast }
   | { kind: "return"; value: Ast }
-  | { kind: "fn"; name: string; params: { name: string; type: AstType }[]; body: Ast }
+  | { kind: "fn"; name: string; params: { name: string; type: AstType }[]; body: Ast; exported?: boolean }
   | { kind: "call"; name: string; args: Ast[]; target?: Ast }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
   | { kind: "wildcard" }

@@ -240,13 +240,15 @@ export function evalAst(
         throw { kind: "return", value: v };
       }
       case "fn": {
-        scopes[scopes.length - 1]!.vars[node.name] = {
-          tag: "fn",
+        const fnValue = {
+          tag: "fn" as const,
           params: node.params,
           body: node.body,
           scopes: [...scopes],
           mutables: [...mutables],
         };
+        scopes[scopes.length - 1]!.vars[node.name] = fnValue;
+        if (node.exported && exports) exports[node.name] = fnValue;
         return null;
       }
       case "call": {
