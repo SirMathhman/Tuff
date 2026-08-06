@@ -362,8 +362,13 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
       case "array_index": {
         const target = visit(node.target);
         if (target === null) throw new Error("array target has no value");
-        if (target.tag !== "array") throw new Error("cannot index non-array");
         const idx = toNum(visit(node.index)!);
+        if (target.tag === "string") {
+          const ch = target.value[idx];
+          if (ch === undefined) return num(0);
+          return num(ch.charCodeAt(0));
+        }
+        if (target.tag !== "array") throw new Error("cannot index non-array");
         return target.values[idx]!;
       }
       case "string":

@@ -241,6 +241,10 @@ test('"apple"[0]" => 97', () => {
   expectValid('"apple"[0]', 97);
 });
 
+test('evaluate("let str : &Str = "apple"; str[0]") => 97', () => {
+  expectValid('let str : &Str = "apple"; str[0]', 97);
+});
+
 test('"apple".length" => 5', () => {
   expectValid('"apple".length', 5);
 });

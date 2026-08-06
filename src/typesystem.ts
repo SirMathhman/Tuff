@@ -157,9 +157,14 @@ function matchValue(
       return fail(context, targetName, "of union type");
     }
     case "ref": {
-      if (value.tag !== "ref")
-        return fail(context, targetName, `expected reference, got ${value.tag}`);
-      return matchValue(derefValue(value), resolved.targetType, mode, context, targetName);
+      if (value.tag === "ref") {
+        return matchValue(derefValue(value), resolved.targetType, mode, context, targetName);
+      }
+      // Assign mode auto-references: &T accepts a value of type T directly.
+      if (mode === "assign") {
+        return matchValue(value, resolved.targetType, mode, context, targetName);
+      }
+      return fail(context, targetName, `expected reference, got ${value.tag}`);
     }
   }
 }
