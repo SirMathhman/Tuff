@@ -12,7 +12,7 @@
 
 Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — thin wrapper (10 lines). Entry point: `export function evaluate(source: string): number`
+- `index.ts` — thin wrapper. Entry points: `evaluate(source)` and `evaluateModules(entries, modules)` (shared-scope module evaluation with `out` exports and lazy cross-module loading)
 - `src/index.ts` — barrel exports all `src/` modules
 - `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`
 - `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)

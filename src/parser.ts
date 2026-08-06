@@ -283,6 +283,25 @@ export function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "typealias", name, baseType };
     }
+    if (tokens[pos]?.value === "out" && tokens[pos + 1]?.value === "let") {
+      pos++; // skip "out"
+      const exported = true;
+      pos++; // skip "let"
+      const mutable = tokens[pos]?.value === "mut";
+      if (mutable) pos++;
+      const name = tokens[pos]!.value;
+      pos++;
+      // Check for type annotation: let x : Type = value
+      let typeAnnotation: AstType | undefined;
+      if (tokens[pos]?.value === ":") {
+        pos++; // skip ":"
+        typeAnnotation = parseType();
+      }
+      pos++; // skip "="
+      const value = parseExpression();
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "let", mutable, name, value, typeAnnotation, exported };
+    }
     if (tokens[pos]?.value === "let") {
       pos++;
       const mutable = tokens[pos]?.value === "mut";

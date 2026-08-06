@@ -8,10 +8,16 @@ export function evalAst(
   ast: Ast,
   scopes: Scope[],
   mutables: Scope["mutable"][],
+  exports?: Record<string, Value>,
+  moduleLoader?: (name: string) => Value | null,
 ): Value {
   function lookup(name: string): Value {
     for (let i = scopes.length - 1; i >= 0; i--) {
       if (name in scopes[i]!.vars) return scopes[i]!.vars[name]!;
+    }
+    if (moduleLoader) {
+      const loaded = moduleLoader(name);
+      if (loaded !== null) return loaded;
     }
     throw new Error(`undeclared variable: ${name}`);
   }
@@ -104,6 +110,7 @@ export function evalAst(
         }
         scopes[scopes.length - 1]!.vars[node.name] = v;
         if (node.mutable) mutables[mutables.length - 1]![node.name] = true;
+        if (node.exported && exports) exports[node.name] = v;
         return null;
       }
       case "assign": {
