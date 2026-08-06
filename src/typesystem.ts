@@ -98,6 +98,9 @@ export function resolveAstType(astType: AstType): AstType {
       types: astType.types.map((t) => resolveAstType(t)),
     };
   }
+  if (astType.kind === "ref") {
+    return { kind: "ref", targetType: resolveAstType(astType.targetType) };
+  }
   return astType;
 }
 
@@ -150,9 +153,17 @@ export function valueMatchesType(value: Value, astType: AstType): boolean {
     }
     case "union":
       return resolved.types.some((member) => valueMatchesType(value, member));
+    case "ref":
+      return value.tag === "ref" && valueMatchesType(derefValue(value), resolved.targetType);
     default:
       return false;
   }
+}
+
+// Dereference a value for type checking (non-ref values pass through).
+function derefValue(value: Value): Value {
+  if (value.tag === "ref") return value.scope.vars[value.name]!;
+  return value;
 }
 
 // Validate that a value fits a declared type. Throws on mismatch.
@@ -177,7 +188,21 @@ export function checkValueAgainstType(
     case "union":
       checkUnion(value, resolved, context, targetName);
       return;
+    case "ref":
+      checkRef(value, resolved, context, targetName);
+      return;
   }
+}
+
+function checkRef(
+  value: Value,
+  resolved: Extract<AstType, { kind: "ref" }>,
+  context: string,
+  targetName?: string,
+): void {
+  if (value.tag !== "ref")
+    throw new Error(`expected reference, got ${value.tag}`);
+  checkValueAgainstType(derefValue(value), resolved.targetType, context, targetName);
 }
 
 function checkUnion(

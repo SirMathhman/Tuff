@@ -17,6 +17,11 @@ export function parseType(tokens: Token[], pos: { pos: number }): AstType {
 }
 
 function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
+  if (tokens[pos.pos]?.value === "&") {
+    pos.pos++; // skip "&"
+    const targetType = parseSingleType(tokens, pos);
+    return { kind: "ref", targetType };
+  }
   if (tokens[pos.pos]?.value === "[") {
     pos.pos++; // skip "["
     const elementType = parseType(tokens, pos);
