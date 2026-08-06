@@ -17,6 +17,17 @@ export function parseType(tokens: Token[], pos: { pos: number }): AstType {
 }
 
 function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
+  if (tokens[pos.pos]?.value === "(") {
+    // Tuple type: (T1, T2, ...)
+    pos.pos++; // skip "("
+    const elements: AstType[] = [];
+    while (tokens[pos.pos]?.value !== ")") {
+      elements.push(parseType(tokens, pos));
+      if (tokens[pos.pos]?.value === ",") pos.pos++;
+    }
+    pos.pos++; // skip ")"
+    return { kind: "tuple", elements };
+  }
   if (tokens[pos.pos]?.value === "&") {
     pos.pos++; // skip "&"
     const targetType = parseSingleType(tokens, pos);

@@ -39,7 +39,8 @@ export type AstType =
   | { kind: "slice"; elementType: AstType }
   | { kind: "struct"; fields: { name: string; type: AstType }[] }
   | { kind: "union"; types: AstType[] }
-  | { kind: "ref"; targetType: AstType };
+  | { kind: "ref"; targetType: AstType }
+  | { kind: "tuple"; elements: AstType[] };
 
 // AST types
 export type Ast =

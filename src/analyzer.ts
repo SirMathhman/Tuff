@@ -47,6 +47,7 @@ function resolveAstType(aliases: Map<string, string>, t: AstType): AstType {
   if (t.kind === "union")
     return { kind: "union", types: t.types.map((m) => resolveAstType(aliases, m)) };
   if (t.kind === "ref") return { kind: "ref", targetType: resolveAstType(aliases, t.targetType) };
+  if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => resolveAstType(aliases, e)) };
   return t;
 }
 
@@ -93,12 +94,13 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
     case "index": {
       analyze(ast.target, typeEnv);
       analyze(ast.index, typeEnv);
-      // Indexing requires an array/slice/string/ref target when known.
+      // Indexing requires an array/slice/string/tuple/ref target when known.
       const t = staticType(ast.target, typeEnv);
       if (t) {
         const ok =
           t.kind === "array" ||
           t.kind === "slice" ||
+          t.kind === "tuple" ||
           t.kind === "ref" ||
           (t.kind === "primitive" && t.name === "string");
         if (!ok) throw new Error(`cannot index ${describeType(t)}`);
@@ -248,6 +250,8 @@ function describeType(t: AstType): string {
       return t.types.map(describeType).join(" | ");
     case "ref":
       return `&${describeType(t.targetType)}`;
+    case "tuple":
+      return `(${t.elements.map(describeType).join(", ")})`;
   }
 }
 

@@ -349,6 +349,10 @@ test('evaluate("let tuple = (3, 4); tuple.0 + tuple.1") => 7', () => {
   expectValid("let tuple = (3, 4); tuple.0 + tuple.1", 7);
 });
 
+test('evaluate("let tuple : (I32, I32) = (3, 4); tuple.0 + tuple.1") => 7', () => {
+  expectValid("let tuple : (I32, I32) = (3, 4); tuple.0 + tuple.1", 7);
+});
+
 test('evaluate("fn get() => 100; let func = get; func()") => 100', () => {
   expectValid("fn get() => 100; let func = get; func()", 100);
 });

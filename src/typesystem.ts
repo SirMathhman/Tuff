@@ -106,6 +106,9 @@ export function resolveAstType(astType: AstType): AstType {
   if (astType.kind === "ref") {
     return { kind: "ref", targetType: resolveAstType(astType.targetType) };
   }
+  if (astType.kind === "tuple") {
+    return { kind: "tuple", elements: astType.elements.map((e) => resolveAstType(e)) };
+  }
   return astType;
 }
 
@@ -174,7 +177,27 @@ function matchValue(
       }
       return fail(context, targetName, `expected reference, got ${value.tag}`);
     }
+    case "tuple":
+      return matchTuple(value, resolved, mode, context, targetName);
   }
+}
+
+function matchTuple(
+  value: Value,
+  resolved: Extract<AstType, { kind: "tuple" }>,
+  mode: MatchMode,
+  context?: string,
+  targetName?: string,
+): { ok: boolean; error?: string } {
+  if (value.tag !== "tuple")
+    return fail(context, targetName, `expected tuple, got ${value.tag}`);
+  if (value.values.length !== resolved.elements.length)
+    return fail(context, targetName, `tuple length mismatch: expected ${resolved.elements.length}, got ${value.values.length}`);
+  for (let i = 0; i < resolved.elements.length; i++) {
+    const r = matchValue(value.values[i]!, resolved.elements[i]!, mode, context, targetName);
+    if (!r.ok) return r;
+  }
+  return { ok: true };
 }
 
 function fail(
