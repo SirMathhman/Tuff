@@ -385,7 +385,7 @@ function parse(tokens: Token[]): Ast {
   }
   function parseTerm(): Ast {
     let result = parseFactor();
-    while (tokens[pos]?.value === "*" || tokens[pos]?.value === "/") {
+    while (tokens[pos]?.value === "*" || tokens[pos]?.value === "/" || tokens[pos]?.value === "%") {
       const op = tokens[pos]!.value;
       pos++;
       const next = parseFactor();
@@ -1157,6 +1157,8 @@ function applyBinOp(op: string, left: Value, right: Value): Value {
       return num(toNum(left) * toNum(right));
     case "/":
       return num(toNum(left) / toNum(right));
+    case "%":
+      return num(toNum(left) % toNum(right));
     case "||":
       return bool(truthy(left) || truthy(right));
     case "&&":
