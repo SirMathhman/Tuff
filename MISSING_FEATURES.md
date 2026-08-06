@@ -92,9 +92,17 @@ Features that would be useful to add to Tuff, grouped by category.
 ## Type System
 
 - [x] Type annotations (`let x : U8 = 5`)
+- [ ] Type inference (infer `let x = 5` as `U8` or `I32`)
 - [ ] Type inference display (`typeof(x)`)
 - [ ] Type casting (`x as int`)
+- [ ] Type aliases (`type Id = U32`)
+- [ ] Generics (`fn identity<T>(x: T) => x`)
+- [ ] Const generics / compile-time constants
+- [ ] Type narrowing in `if`/`match` branches
 - [ ] Compile-time type checking mode
+- [ ] Type error messages with source location
+- [ ] Variance checking (covariant/contravariant generics)
+- [ ] Type-level arithmetic (e.g., array size as type parameter)
 
 ## Error Handling
 
