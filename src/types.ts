@@ -98,7 +98,7 @@ export type TypeEnv = {
   mutables: Map<string, boolean>;
   exports: Map<string, AstType>;
   inputs: Map<string, AstType>;
-  fns: Map<string, { params: { name: string; type: AstType }[] }>;
+  fns: Map<string, { params: { name: string; type: AstType }[]; typeParams?: string[] }>;
   typeParams: Set<string>;
 };
 

@@ -73,6 +73,60 @@ export function resolveType(typeName: string): string {
   return current;
 }
 
+// Build a type-param -> type-arg substitution map (for generic structs and fns).
+// `aliases` is used to resolve type args canonically.
+export function typeSubstitution(
+  typeParams: string[] | undefined,
+  typeArgs: AstType[] | undefined,
+  aliases: Map<string, string>,
+): Map<string, AstType> {
+  const subst = new Map<string, AstType>();
+  if (typeParams && typeArgs) {
+    typeParams.forEach((tp, i) => {
+      const arg = typeArgs[i];
+      if (arg) subst.set(tp, resolveAliasedType(aliases, arg));
+    });
+  }
+  return subst;
+}
+
+// Replace type params with their substituted types throughout an AstType.
+export function substituteAstType(t: AstType, subst: Map<string, AstType>): AstType {
+  if (t.kind === "primitive") {
+    const replacement = subst.get(t.name);
+    return replacement ?? t;
+  }
+  if (t.kind === "array")
+    return { kind: "array", elementType: substituteAstType(t.elementType, subst), length: t.length };
+  if (t.kind === "slice") return { kind: "slice", elementType: substituteAstType(t.elementType, subst) };
+  if (t.kind === "struct")
+    return { kind: "struct", fields: t.fields.map((f) => ({ name: f.name, type: substituteAstType(f.type, subst) })) };
+  if (t.kind === "union")
+    return { kind: "union", types: t.types.map((m) => substituteAstType(m, subst)) };
+  if (t.kind === "ref") return { kind: "ref", targetType: substituteAstType(t.targetType, subst) };
+  if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => substituteAstType(e, subst)) };
+  return t;
+}
+
+// Resolve a type's alias references without needing a TypeEnv.
+function resolveAliasedType(aliases: Map<string, string>, t: AstType): AstType {
+  if (t.kind === "primitive") {
+    let name = t.name;
+    while (aliases.has(name)) name = aliases.get(name)!;
+    return { kind: "primitive", name };
+  }
+  if (t.kind === "array")
+    return { kind: "array", elementType: resolveAliasedType(aliases, t.elementType), length: t.length };
+  if (t.kind === "slice") return { kind: "slice", elementType: resolveAliasedType(aliases, t.elementType) };
+  if (t.kind === "struct")
+    return { kind: "struct", fields: t.fields.map((f) => ({ name: f.name, type: resolveAliasedType(aliases, f.type) })) };
+  if (t.kind === "union")
+    return { kind: "union", types: t.types.map((m) => resolveAliasedType(aliases, m)) };
+  if (t.kind === "ref") return { kind: "ref", targetType: resolveAliasedType(aliases, t.targetType) };
+  if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => resolveAliasedType(aliases, e)) };
+  return t;
+}
+
 export function resolveAstType(astType: AstType): AstType {
   if (astType.kind === "primitive") {
     const resolved = resolveType(astType.name);
