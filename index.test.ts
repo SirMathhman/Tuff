@@ -345,7 +345,7 @@ test('evaluate("1 is bool") => 0', () => {
   expect(evaluate("1 is bool")).toBe(0);
 });
 
-test('evaluate("\"hello\" is string") => 1', () => {
+test('evaluate("' + '"hello"' + ' is string") => 1', () => {
   expect(evaluate('"hello" is string')).toBe(1);
 });
 
