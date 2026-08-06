@@ -15,6 +15,7 @@ export function newTypeEnv(): TypeEnv {
     mutables: new Map(),
     exports: new Map(),
     inputs: new Map(),
+    fns: new Map(),
   };
 }
 
@@ -92,10 +93,19 @@ function analyzeNode(
     case "let":
       // RHS is analyzed before the name enters scope (order-sensitive).
       analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      // A block with a statement-only body has no value (e.g. { let y = 100; }).
+      if (ast.value.kind === "block" && !blockHasValue(ast.value)) {
+        throw new Error("block has no value");
+      }
       typeEnv.mutables.set(ast.name, ast.mutable);
       scopes[scopes.length - 1]!.add(ast.name);
       if (ast.typeAnnotation) {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
+        // Validate literal values against the annotation at analysis time.
+        const lit = literalValue(ast.value);
+        if (lit !== undefined) {
+          checkValueAgainstType(lit, ast.typeAnnotation, "assign", ast.name);
+        }
       } else {
         // No annotation — record the literal's type when statically known.
         const t = literalType(ast.value);
@@ -141,6 +151,10 @@ function analyzeNode(
         }
       }
       analyzeNode(ast.operand, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      // Negating a suffixed literal must stay in range (e.g. -100U8 errors).
+      if (ast.op === "-" && ast.operand.kind === "num" && ast.operand.suffix) {
+        checkSuffix(ast.operand.suffix, -ast.operand.value);
+      }
       // Dereference requires a ref-typed operand when statically known.
       if (ast.op === "*") {
         const t = staticType(ast.operand, typeEnv);
@@ -190,6 +204,7 @@ function analyzeNode(
       // the body also sees the enclosing scopes (closures capture them).
       scopes[scopes.length - 1]!.add(ast.name);
       typeEnv.mutables.set(ast.name, false);
+      typeEnv.fns.set(ast.name, { params: ast.params });
       if (ast.exported) {
         typeEnv.exports.set(ast.name, { kind: "primitive", name: "fn" });
       }
@@ -286,6 +301,24 @@ function analyzeNode(
       }
       break;
     }
+    case "call": {
+      for (const a of ast.args) analyzeNode(a, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      // Validate literal args against the target fn's param types.
+      const fnName = ast.target && ast.target.kind === "ident" ? ast.target.name : !ast.target ? ast.name : undefined;
+      if (fnName !== undefined && typeEnv.fns.has(fnName)) {
+        const fn = typeEnv.fns.get(fnName)!;
+        fn.params.forEach((p, i) => {
+          const arg = ast.args[i];
+          if (arg) {
+            const lit = literalValue(arg);
+            if (lit !== undefined) {
+              checkValueAgainstType(lit, p.type, "pass", p.name);
+            }
+          }
+        });
+      }
+      break;
+    }
     default:
       // Walk generic Ast children so nested expressions are analyzed.
       for (const v of Object.values(ast)) {
@@ -375,6 +408,33 @@ function describeType(t: AstType): string {
       return `&${describeType(t.targetType)}`;
     case "tuple":
       return `(${t.elements.map(describeType).join(", ")})`;
+  }
+}
+
+// True if a block's last statement produces a value (not null/flow control).
+function blockHasValue(node: Ast): boolean {
+  if (node.kind !== "block") return true;
+  const stmts = node.statements.filter((s) => s !== null);
+  if (stmts.length === 0) return false;
+  const last = stmts[stmts.length - 1]!;
+  switch (last.kind) {
+    case "let":
+    case "assign":
+    case "augassign":
+    case "refassign":
+    case "array_assign":
+    case "fn":
+    case "inlet":
+    case "typealias":
+    case "structdef":
+    case "enumdef":
+    case "while":
+    case "for":
+    case "break":
+    case "continue":
+      return false;
+    default:
+      return true;
   }
 }
 
