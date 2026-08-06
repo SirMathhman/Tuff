@@ -141,7 +141,8 @@ type Ast =
   | { kind: "string_index"; target: Ast; index: Ast }
   | { kind: "length"; target: Ast }
   | { kind: "property_access"; target: Ast; property: string }
-  | { kind: "record"; fields: { key: string; value: Ast }[] };
+  | { kind: "record"; fields: { key: string; value: Ast }[] }
+  | { kind: "typecheck"; value: Ast; type: string };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -255,7 +256,8 @@ function tokenize(source: string): Token[] {
           ident === "fn" ||
           ident === "match" ||
           ident === "case" ||
-          ident === "null"
+          ident === "null" ||
+          ident === "is"
             ? "keyword"
             : "identifier",
         value: ident,
@@ -380,6 +382,11 @@ function parse(tokens: Token[]): Ast {
         pos++;
         const next = parseTerm();
         result = { kind: "binop", op, left: result, right: next };
+      } else if (op === "is") {
+        pos++;
+        const typeName = tokens[pos]!.value;
+        pos++;
+        result = { kind: "typecheck", value: result, type: typeName };
       } else {
         break;
       }
@@ -880,7 +887,7 @@ function evalAst(
         return applyBinOp(node.op, l, r);
       }
       case "let": {
-        const v = visit(node.value);
+        let v = visit(node.value);
         if (v === null) throw new Error("block has no value");
         if (node.typeAnnotation && suffixRanges[node.typeAnnotation]) {
           checkSuffix(node.typeAnnotation, toNum(v));
@@ -891,6 +898,14 @@ function evalAst(
             if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
               throw new Error(`cannot assign ${v.type} to ${node.typeAnnotation}`);
             }
+          }
+          // Propagate type annotation to the stored value
+          if (v.tag === "number") {
+            v = num(v.num, node.typeAnnotation);
+          }
+          // Propagate type annotation to the stored value
+          if (v.tag === "number") {
+            v = num(v.num, node.typeAnnotation);
           }
         }
         scopes[scopes.length - 1]!.vars[node.name] = v;
@@ -1145,6 +1160,27 @@ function evalAst(
           fields[f.key] = v;
         }
         return { tag: "record", fields };
+      }
+      case "typecheck": {
+        const v = visit(node.value);
+        if (v === null) throw new Error("typecheck value has no value");
+        const typeName = node.type.toLowerCase();
+        if (v.tag === "number" && v.type) {
+          return bool(v.type === node.type);
+        }
+        const tagMap: Record<string, string> = {
+          bool: "bool",
+          string: "string",
+          tuple: "tuple",
+          array: "array",
+          record: "record",
+          null: "null",
+          fn: "fn",
+          ref: "ref",
+        };
+        const tagName = tagMap[typeName];
+        if (tagName) return bool(v.tag === tagName);
+        return bool(v.tag === "number" && !v.type && typeName === "number");
       }
     }
   }

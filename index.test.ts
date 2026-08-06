@@ -320,3 +320,47 @@ test('evaluate("10 % 3") => 1', () => {
 test('evaluate("let mut x = 0; x -= 1; x") => -1', () => {
   expect(evaluate("let mut x = 0; x -= 1; x")).toBe(-1);
 });
+
+test('evaluate("100U8 is U8") => 1', () => {
+  expect(evaluate("100U8 is U8")).toBe(1);
+});
+
+test('evaluate("100U8 is I32") => 0', () => {
+  expect(evaluate("100U8 is I32")).toBe(0);
+});
+
+test('evaluate("let x = 5; x is U8") => 0', () => {
+  expect(evaluate("let x = 5; x is U8")).toBe(0);
+});
+
+test('evaluate("let x : U8 = 5; x is U8") => 1', () => {
+  expect(evaluate("let x : U8 = 5; x is U8")).toBe(1);
+});
+
+test('evaluate("true is bool") => 1', () => {
+  expect(evaluate("true is bool")).toBe(1);
+});
+
+test('evaluate("1 is bool") => 0', () => {
+  expect(evaluate("1 is bool")).toBe(0);
+});
+
+test('evaluate("\"hello\" is string") => 1', () => {
+  expect(evaluate('"hello" is string')).toBe(1);
+});
+
+test('evaluate("(1, 2) is tuple") => 1', () => {
+  expect(evaluate("(1, 2) is tuple")).toBe(1);
+});
+
+test('evaluate("[1, 2] is array") => 1', () => {
+  expect(evaluate("[1, 2] is array")).toBe(1);
+});
+
+test('evaluate("null is null") => 1', () => {
+  expect(evaluate("null is null")).toBe(1);
+});
+
+test('evaluate("let x = { a : 1 }; x is record") => 1', () => {
+  expect(evaluate("let x = { a : 1 }; x is record")).toBe(1);
+});
