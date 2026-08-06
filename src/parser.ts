@@ -112,11 +112,7 @@ export function parse(tokens: Token[]): Ast {
         pos++; // skip "["
         const index = parseExpression();
         pos++; // skip "]"
-        if (result.kind === "string") {
-          result = { kind: "string_index", target: result, index };
-        } else {
-          result = { kind: "array_index", target: result, index };
-        }
+        result = { kind: "index", target: result, index };
       } else if (tokens[pos]?.value === "::") {
         // Namespace path: lib::foo — build a structural namespace node
         pos++; // skip "::"
@@ -139,7 +135,7 @@ export function parse(tokens: Token[]): Ast {
           result = {
             kind: "index",
             target: result,
-            index: parseInt(nextTok.value),
+            index: { kind: "num", value: parseInt(nextTok.value) },
           };
         } else if (nextTok?.value === "length") {
           pos++;

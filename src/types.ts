@@ -48,7 +48,7 @@ export type Ast =
   | { kind: "namespace"; segments: string[] }
   | { kind: "unary"; op: "!" | "-" | "&" | "&mut" | "*"; operand: Ast }
   | { kind: "tuple"; elements: Ast[] }
-  | { kind: "index"; target: Ast; index: number }
+  | { kind: "index"; target: Ast; index: Ast }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
   | { kind: "let"; mutable: boolean; name: string; value: Ast; typeAnnotation?: AstType; exported?: boolean }
   | { kind: "inlet"; name: string; typeAnnotation?: AstType }
@@ -72,10 +72,8 @@ export type Ast =
   | { kind: "wildcard" }
   | { kind: "null" }
   | { kind: "array"; elements: Ast[] }
-  | { kind: "array_index"; target: Ast; index: Ast }
   | { kind: "char"; value: string }
   | { kind: "string"; value: string }
-  | { kind: "string_index"; target: Ast; index: Ast }
   | { kind: "length"; target: Ast }
   | { kind: "property_access"; target: Ast; property: string }
   | { kind: "record"; fields: { key: string; value: Ast }[] }

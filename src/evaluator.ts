@@ -348,8 +348,20 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
       case "index": {
         const target = visit(node.target);
         if (target === null) throw new Error("index target has no value");
-        if (target.tag !== "tuple") throw new Error("cannot index non-tuple");
-        return target.values[node.index]!;
+        const idx = toNum(visit(node.index)!);
+        switch (target.tag) {
+          case "tuple":
+            return target.values[idx]!;
+          case "array":
+            return target.values[idx]!;
+          case "string": {
+            const ch = target.value[idx];
+            if (ch === undefined) return num(0);
+            return num(ch.charCodeAt(0));
+          }
+          default:
+            throw new Error(`cannot index ${target.tag}`);
+        }
       }
       case "array": {
         const values = node.elements.map((e) => {
@@ -359,29 +371,8 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
         });
         return { tag: "array", values };
       }
-      case "array_index": {
-        const target = visit(node.target);
-        if (target === null) throw new Error("array target has no value");
-        const idx = toNum(visit(node.index)!);
-        if (target.tag === "string") {
-          const ch = target.value[idx];
-          if (ch === undefined) return num(0);
-          return num(ch.charCodeAt(0));
-        }
-        if (target.tag !== "array") throw new Error("cannot index non-array");
-        return target.values[idx]!;
-      }
       case "string":
         return { tag: "string", value: node.value };
-      case "string_index": {
-        const target = visit(node.target);
-        if (target === null) throw new Error("string target has no value");
-        if (target.tag !== "string") throw new Error("cannot index non-string");
-        const idx = toNum(visit(node.index)!);
-        const ch = target.value[idx];
-        if (ch === undefined) return num(0);
-        return num(ch.charCodeAt(0));
-      }
       case "property_access": {
         const target = visit(node.target);
         if (target === null)
