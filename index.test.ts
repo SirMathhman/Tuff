@@ -1,438 +1,438 @@
-import { test, expect } from "bun:test";
-import { evaluate, evaluateModules } from ".";
+import { test } from "bun:test";
+import { expectEval, expectEvalError, expectModules } from "./test/helpers";
 
 test('evaluate("") => 0', () => {
-  expect(evaluate("")).toBe(0);
+  expectEval("", 0);
 });
 
 test('evaluateModules(["main"], {["main"] : "100"}) => 100', () => {
-  expect(evaluateModules(["main"], { main: "100" })).toBe(100);
+  expectModules(["main"], { main: "100" }, 100);
 });
 
 test('evaluateModules(["main"], {["main"] : "lib.x", ["lib"] : "out let x = 100;"}) => 100', () => {
-  expect(evaluateModules(["main"], { main: "lib.x", lib: "out let x = 100;" })).toBe(100);
+  expectModules(["main"], { main: "lib.x", lib: "out let x = 100;" }, 100);
 });
 
 test('evaluateModules(["main"], {["main"] : "lib.get()", ["lib"] : "out fn get() => 100;"}) => 100', () => {
-  expect(evaluateModules(["main"], { main: "lib.get()", lib: "out fn get() => 100;" })).toBe(100);
+  expectModules(["main"], { main: "lib.get()", lib: "out fn get() => 100;" }, 100);
 });
 
 test('evaluateModules(["main"], {["main"] : "lib::foo.get()", ["lib", "foo"] : "out fn get() => 100;"}) => 100', () => {
-  expect(evaluateModules(["main"], { main: "lib::foo.get()", "lib::foo": "out fn get() => 100;" })).toBe(100);
+  expectModules(["main"], { main: "lib::foo.get()", "lib::foo": "out fn get() => 100;" }, 100);
 });
 
 test('evaluate(" ") => 0', () => {
-  expect(evaluate(" ")).toBe(0);
+  expectEval(" ", 0);
 });
 
 test('evaluate("1") => 1', () => {
-  expect(evaluate("1")).toBe(1);
+  expectEval("1", 1);
 });
 
 test('evaluate("100U8") => 100', () => {
-  expect(evaluate("100U8")).toBe(100);
+  expectEval("100U8", 100);
 });
 
 test('evaluate("256U8") => Error', () => {
-  expect(() => evaluate("256U8")).toThrow();
+  expectEvalError("256U8");
 });
 
 test('evaluate("-100U8") => Error', () => {
-  expect(() => evaluate("-100U8")).toThrow();
+  expectEvalError("-100U8");
 });
 
 test('evaluate("let x : U8 = 256;") => Error', () => {
-  expect(() => evaluate("let x : U8 = 256;")).toThrow();
+  expectEvalError("let x : U8 = 256;");
 });
 
 test('evaluate("let x : U8 = 1U8; x") => 1', () => {
-  expect(evaluate("let x : U8 = 1U8; x")).toBe(1);
+  expectEval("let x : U8 = 1U8; x", 1);
 });
 
 test('evaluate("let x : U16 = 1U8; x") => 1', () => {
-  expect(evaluate("let x : U16 = 1U8; x")).toBe(1);
+  expectEval("let x : U16 = 1U8; x", 1);
 });
 
 test('evaluate("let x : U8 = 1U16; x") => Error', () => {
-  expect(() => evaluate("let x : U8 = 1U16; x")).toThrow();
+  expectEvalError("let x : U8 = 1U16; x");
 });
 
 test('evaluate("1 + 2") => 3', () => {
-  expect(evaluate("1 + 2")).toBe(3);
+  expectEval("1 + 2", 3);
 });
 
 test('evaluate("1 + 2 + 3") => 6', () => {
-  expect(evaluate("1 + 2 + 3")).toBe(6);
+  expectEval("1 + 2 + 3", 6);
 });
 
 test('evaluate("2 + 3 - 1") => 4', () => {
-  expect(evaluate("2 + 3 - 1")).toBe(4);
+  expectEval("2 + 3 - 1", 4);
 });
 
 test('evaluate("2 * 3 + 4") => 10', () => {
-  expect(evaluate("2 * 3 + 4")).toBe(10);
+  expectEval("2 * 3 + 4", 10);
 });
 
 test('evaluate("2 + 3 * 4") => 14', () => {
-  expect(evaluate("2 + 3 * 4")).toBe(14);
+  expectEval("2 + 3 * 4", 14);
 });
 
 test('evaluate("(2 + 3) * 4") => 20', () => {
-  expect(evaluate("(2 + 3) * 4")).toBe(20);
+  expectEval("(2 + 3) * 4", 20);
 });
 
 test('evaluate("{ 2 + 3 } * 4") => 20', () => {
-  expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
+  expectEval("{ 2 + 3 } * 4", 20);
 });
 
 test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
-  expect(evaluate("{ let x = 2 + 3; x } * 4")).toBe(20);
+  expectEval("{ let x = 2 + 3; x } * 4", 20);
 });
 
 test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
-  expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+  expectEval("let y = { let x = 2 + 3; x } * 4; y", 20);
 });
 
 test('evaluate("let x = 0; let x = 1; x") => 1', () => {
-  expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
+  expectEval("let x = 0; let x = 1; x", 1);
 });
 
 test('evaluate("let x = { let y = 100; }; x") => Error', () => {
-  expect(() => evaluate("let x = { let y = 100; }; x")).toThrow();
+  expectEvalError("let x = { let y = 100; }; x");
 });
 
 test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
-  expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
+  expectEval("let mut x = 0; x = 1; x", 1);
 });
 
 test('evaluate("let x = true; x") => 1', () => {
-  expect(evaluate("let x = true; x")).toBe(1);
+  expectEval("let x = true; x", 1);
 });
 
 test('evaluate("let x : Bool = true; x") => 1', () => {
-  expect(evaluate("let x : Bool = true; x")).toBe(1);
+  expectEval("let x : Bool = true; x", 1);
 });
 
 test('evaluate("let array : [I32; 3] = [1, 2, 3];") => 0', () => {
-  expect(evaluate("let array : [I32; 3] = [1, 2, 3];")).toBe(0);
+  expectEval("let array : [I32; 3] = [1, 2, 3];", 0);
 });
 
 test('evaluate("let array : [[I32; 2]; 2] = [[0, 1], [2, 3]];") => 0', () => {
-  expect(evaluate("let array : [[I32; 2]; 2] = [[0, 1], [2, 3]];")).toBe(0);
+  expectEval("let array : [[I32; 2]; 2] = [[0, 1], [2, 3]];", 0);
 });
 
 test('evaluate("let x = false; x") => 0', () => {
-  expect(evaluate("let x = false; x")).toBe(0);
+  expectEval("let x = false; x", 0);
 });
 
 test('evaluate("let x = 2; let y = 2; x == y") => 1', () => {
-  expect(evaluate("let x = 2; let y = 2; x == y")).toBe(1);
+  expectEval("let x = 2; let y = 2; x == y", 1);
 });
 
 test('evaluate("true == 1") => 0', () => {
-  expect(evaluate("true == 1")).toBe(0);
+  expectEval("true == 1", 0);
 });
 
 test('evaluate("let x = true; let y = false; x || y") => 1', () => {
-  expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
+  expectEval("let x = true; let y = false; x || y", 1);
 });
 
 test('evaluate("let x = true; let y = false; x && y") => 0', () => {
-  expect(evaluate("let x = true; let y = false; x && y")).toBe(0);
+  expectEval("let x = true; let y = false; x && y", 0);
 });
 
 test('evaluate("1 < 2") => 1', () => {
-  expect(evaluate("1 < 2")).toBe(1);
+  expectEval("1 < 2", 1);
 });
 
 test('evaluate("2 < 1") => 0', () => {
-  expect(evaluate("2 < 1")).toBe(0);
+  expectEval("2 < 1", 0);
 });
 
 test('evaluate("1 <= 1") => 1', () => {
-  expect(evaluate("1 <= 1")).toBe(1);
+  expectEval("1 <= 1", 1);
 });
 
 test('evaluate("2 <= 1") => 0', () => {
-  expect(evaluate("2 <= 1")).toBe(0);
+  expectEval("2 <= 1", 0);
 });
 
 test('evaluate("2 > 1") => 1', () => {
-  expect(evaluate("2 > 1")).toBe(1);
+  expectEval("2 > 1", 1);
 });
 
 test('evaluate("1 > 2") => 0', () => {
-  expect(evaluate("1 > 2")).toBe(0);
+  expectEval("1 > 2", 0);
 });
 
 test('evaluate("1 >= 1") => 1', () => {
-  expect(evaluate("1 >= 1")).toBe(1);
+  expectEval("1 >= 1", 1);
 });
 
 test('evaluate("1 >= 2") => 0', () => {
-  expect(evaluate("1 >= 2")).toBe(0);
+  expectEval("1 >= 2", 0);
 });
 
 test('evaluate("1 != 2") => 1', () => {
-  expect(evaluate("1 != 2")).toBe(1);
+  expectEval("1 != 2", 1);
 });
 
 test('evaluate("1 != 1") => 0', () => {
-  expect(evaluate("1 != 1")).toBe(0);
+  expectEval("1 != 1", 0);
 });
 
 test('evaluate("let x = true; !x") => 0', () => {
-  expect(evaluate("let x = true; !x")).toBe(0);
+  expectEval("let x = true; !x", 0);
 });
 
 test('evaluate("let x = 100; -x") => -100', () => {
-  expect(evaluate("let x = 100; -x")).toBe(-100);
+  expectEval("let x = 100; -x", -100);
 });
 
 test('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
-  expect(evaluate("let x = if (false) 2 else 3; x")).toBe(3);
+  expectEval("let x = if (false) 2 else 3; x", 3);
 });
 
 test('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
-  expect(evaluate("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
+  expectEval("let x = if (false) 2 else if (false) 3 else 4; x", 4);
 });
 
 test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
-  expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+  expectEval("let mut x = 0; { x = 1; } x", 1);
 });
 
 test('evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x") => 2', () => {
-  expect(evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x")).toBe(2);
+  expectEval("let mut x = 0; if (false) { x = 1; } else { x = 2; } x", 2);
 });
 
 test('evaluate("let mut x = 0; if (false) x = 1; else x = 2; x") => 2', () => {
-  expect(evaluate("let mut x = 0; if (false) x = 1; else x = 2; x")).toBe(2);
+  expectEval("let mut x = 0; if (false) x = 1; else x = 2; x", 2);
 });
 
 test('evaluate("let mut x = 1; x += 2; x") => 3', () => {
-  expect(evaluate("let mut x = 1; x += 2; x")).toBe(3);
+  expectEval("let mut x = 1; x += 2; x", 3);
 });
 
 test('evaluate("let mut x = 0; while (x < 4) { x += 1; } x") => 4', () => {
-  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
+  expectEval("let mut x = 0; while (x < 4) { x += 1; } x", 4);
 });
 
 test('evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x") => 4', () => {
-  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(4);
+  expectEval("let mut x = 0; while (x < 4) { x += 1; continue; } x", 4);
 });
 
 test('evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x") => 1', () => {
-  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(1);
+  expectEval("let mut x = 0; while (x < 4) { x += 1; break; } x", 1);
 });
 
 test('evaluate("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
-  expect(evaluate("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+  expectEval("let mut x = 0; while (x < 4) x += 1; x", 4);
 });
 
 test('evaluate("let mut x = 0; if (true) x = 4; x") => 4', () => {
-  expect(evaluate("let mut x = 0; if (true) x = 4; x")).toBe(4);
+  expectEval("let mut x = 0; if (true) x = 4; x", 4);
 });
 
 test('"apple"[0]" => 97', () => {
-  expect(evaluate('"apple"[0]')).toBe(97);
+  expectEval('"apple"[0]', 97);
 });
 
 test('"apple".length" => 5', () => {
-  expect(evaluate('"apple".length')).toBe(5);
+  expectEval('"apple".length', 5);
 });
 
 test('"test" == "test" => 1', () => {
-  expect(evaluate('"test" == "test"')).toBe(1);
+  expectEval('"test" == "test"', 1);
 });
 
 test('"apple" < "banana" => 1', () => {
-  expect(evaluate('"apple" < "banana"')).toBe(1);
+  expectEval('"apple" < "banana"', 1);
 });
 
 test('fn get() => { if (true) yield 1; 2 } + 3; get() => 4', () => {
-  expect(evaluate('fn get() => { if (true) yield 1; 2 } + 3; get()')).toBe(4);
+  expectEval('fn get() => { if (true) yield 1; 2 } + 3; get()', 4);
 });
 
 test('let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0] => 100', () => {
-  expect(evaluate("let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0]")).toBe(100);
+  expectEval("let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0]", 100);
 });
 
 test('let array0 = [[100]]; array0[0][0] => 100', () => {
-  expect(evaluate("let array0 = [[100]]; array0[0][0]")).toBe(100);
+  expectEval("let array0 = [[100]]; array0[0][0]", 100);
 });
 
 test('fn get() => { if (true) return 1; 2 } + 3; get() => 1', () => {
-  expect(evaluate('fn get() => { if (true) return 1; 2 } + 3; get()')).toBe(1);
+  expectEval('fn get() => { if (true) return 1; 2 } + 3; get()', 1);
 });
 
 test('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x => 0', () => {
-  expect(evaluate('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x')).toBe(0);
+  expectEval('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x', 0);
 });
 
 test('let pt = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
-  expect(evaluate('let pt = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
+  expectEval('let pt = { x : 3, y : 4 }; pt.x + pt.y', 7);
 });
 
 test('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
-  expect(evaluate('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
+  expectEval('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y', 7);
 });
 
 test('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0 => 1', () => {
-  expect(evaluate('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0')).toBe(1);
+  expectEval('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0', 1);
 });
 
 test('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
-  expect(evaluate('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
+  expectEval('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y', 7);
 });
 
 test('let mut array = [0]; array[0] = 100; array[0] => 100', () => {
-  expect(evaluate('let mut array = [0]; array[0] = 100; array[0]')).toBe(100);
+  expectEval('let mut array = [0]; array[0] = 100; array[0]', 100);
 });
 
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
-  expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
+  expectEval("let x = { if (true) yield 4; 0 }; x", 4);
 });
 
 test('evaluate("fn add(x : I32, y : I32) => x + y; add(3, 4)") => 7', () => {
-  expect(evaluate("fn add(x : I32, y : I32) => x + y; add(3, 4)")).toBe(7);
+  expectEval("fn add(x : I32, y : I32) => x + y; add(3, 4)", 7);
 });
 
 test('evaluate("fn doNothing(param) => {}") => Error', () => {
-  expect(() => evaluate("fn doNothing(param) => {}")).toThrow();
+  expectEvalError("fn doNothing(param) => {}");
 });
 
 test('evaluate("fn doNothing(param : I32) => {}") => 0', () => {
-  expect(evaluate("fn doNothing(param : I32) => {}")).toBe(0);
+  expectEval("fn doNothing(param : I32) => {}", 0);
 });
 
 test('evaluate("fn doNothing(param : U8) => {} doNothing(100U16)") => Error', () => {
-  expect(() => evaluate("fn doNothing(param : U8) => {} doNothing(100U16)")).toThrow();
+  expectEvalError("fn doNothing(param : U8) => {} doNothing(100U16)");
 });
 
 test('evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)") => 7', () => {
-  expect(evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)")).toBe(7);
+  expectEval("fn add(x : I32, y : I32) => { x + y } add(3, 4)", 7);
 });
 
 test('evaluate("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x") => 1', () => {
-  expect(evaluate("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x")).toBe(1);
+  expectEval("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x", 1);
 });
 
 test('evaluate("let x = 100; let y = &x; *y") => 100', () => {
-  expect(evaluate("let x = 100; let y = &x; *y")).toBe(100);
+  expectEval("let x = 100; let y = &x; *y", 100);
 });
 
 test('evaluate("let mut x = 0; let y = &mut x; *y = 100;  x") => 100', () => {
-  expect(evaluate("let mut x = 0; let y = &mut x; *y = 100;  x")).toBe(100);
+  expectEval("let mut x = 0; let y = &mut x; *y = 100;  x", 100);
 });
 
 test('evaluate("let tuple = (3, 4); tuple.0 + tuple.1") => 7', () => {
-  expect(evaluate("let tuple = (3, 4); tuple.0 + tuple.1")).toBe(7);
+  expectEval("let tuple = (3, 4); tuple.0 + tuple.1", 7);
 });
 
 test('evaluate("fn get() => 100; let func = get; func()") => 100', () => {
-  expect(evaluate("fn get() => 100; let func = get; func()")).toBe(100);
+  expectEval("fn get() => 100; let func = get; func()", 100);
 });
 
 test('evaluate("let mut sum = 0; for (i in 0..4) sum += i; sum") => 6', () => {
-  expect(evaluate("let mut sum = 0; for (i in 0..4) sum += i; sum")).toBe(6);
+  expectEval("let mut sum = 0; for (i in 0..4) sum += i; sum", 6);
 });
 
 test('evaluate("let x = match (1) { case 1 => 2; case _ => 3; }; x") => 2', () => {
-  expect(evaluate("let x = match (1) { case 1 => 2; case _ => 3; }; x")).toBe(2);
+  expectEval("let x = match (1) { case 1 => 2; case _ => 3; }; x", 2);
 });
 
 test('evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x") => 3', () => {
-  expect(evaluate("let x = match (4) { case 1 => 2; case _ => 3; }; x")).toBe(3);
+  expectEval("let x = match (4) { case 1 => 2; case _ => 3; }; x", 3);
 });
 
 test('evaluate("let x = null; x") => 0', () => {
-  expect(evaluate("let x = null; x")).toBe(0);
+  expectEval("let x = null; x", 0);
 });
 
 test('evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
-  expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+  expectEval("let array = [1, 2, 3]; array[0] + array[1] + array[2]", 6);
 });
 
 test("'a' => 97", () => {
-  expect(evaluate("'a'")).toBe(97);
+  expectEval("'a'", 97);
 });
 
 test("'\\n' => 10", () => {
-  expect(evaluate("'\\n'")).toBe(10);
+  expectEval("'\\n'", 10);
 });
 
 test('evaluate("let array = [1, 2, 3]; array.length") => 3', () => {
-  expect(evaluate("let array = [1, 2, 3]; array.length")).toBe(3);
+  expectEval("let array = [1, 2, 3]; array.length", 3);
 });
 
 test('evaluate("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)") => 120', () => {
-  expect(evaluate("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)")).toBe(120);
+  expectEval("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)", 120);
 });
 
 test('evaluate("10 % 3") => 1', () => {
-  expect(evaluate("10 % 3")).toBe(1);
+  expectEval("10 % 3", 1);
 });
 
 test('evaluate("let mut x = 0; x -= 1; x") => -1', () => {
-  expect(evaluate("let mut x = 0; x -= 1; x")).toBe(-1);
+  expectEval("let mut x = 0; x -= 1; x", -1);
 });
 
 test('evaluate("100U8 is U8") => 1', () => {
-  expect(evaluate("100U8 is U8")).toBe(1);
+  expectEval("100U8 is U8", 1);
 });
 
 test('evaluate("let x = 100U8; x is U8") => 1', () => {
-  expect(evaluate("let x = 100U8; x is U8")).toBe(1);
+  expectEval("let x = 100U8; x is U8", 1);
 });
 
 test('evaluate("100U8 is I32") => 0', () => {
-  expect(evaluate("100U8 is I32")).toBe(0);
+  expectEval("100U8 is I32", 0);
 });
 
 test('evaluate("let x = 5; x is U8") => 0', () => {
-  expect(evaluate("let x = 5; x is U8")).toBe(0);
+  expectEval("let x = 5; x is U8", 0);
 });
 
 test('evaluate("let x : U8 = 5; x is U8") => 1', () => {
-  expect(evaluate("let x : U8 = 5; x is U8")).toBe(1);
+  expectEval("let x : U8 = 5; x is U8", 1);
 });
 
 test('evaluate("let value : Bool | I32 = 100; value is I32") => 1', () => {
-  expect(evaluate("let value : Bool | I32 = 100; value is I32")).toBe(1);
+  expectEval("let value : Bool | I32 = 100; value is I32", 1);
 });
 
 test('evaluate("true is bool") => 1', () => {
-  expect(evaluate("true is bool")).toBe(1);
+  expectEval("true is bool", 1);
 });
 
 test('evaluate("1 is bool") => 0', () => {
-  expect(evaluate("1 is bool")).toBe(0);
+  expectEval("1 is bool", 0);
 });
 
 test('evaluate("' + '"hello"' + ' is string") => 1', () => {
-  expect(evaluate('"hello" is string')).toBe(1);
+  expectEval('"hello" is string', 1);
 });
 
 test('evaluate("(1, 2) is tuple") => 1', () => {
-  expect(evaluate("(1, 2) is tuple")).toBe(1);
+  expectEval("(1, 2) is tuple", 1);
 });
 
 test('evaluate("[1, 2] is array") => 1', () => {
-  expect(evaluate("[1, 2] is array")).toBe(1);
+  expectEval("[1, 2] is array", 1);
 });
 
 test('evaluate("null is null") => 1', () => {
-  expect(evaluate("null is null")).toBe(1);
+  expectEval("null is null", 1);
 });
 
 test('evaluate("let x = { a : 1 }; x is record") => 1', () => {
-  expect(evaluate("let x = { a : 1 }; x is record")).toBe(1);
+  expectEval("let x = { a : 1 }; x is record", 1);
 });
 
 test('evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32") => 1', () => {
-  expect(evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32")).toBe(1);
+  expectEval("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32", 1);
 });
 
 test('evaluate("type A = B; type B = A;") => Error', () => {
-  expect(() => evaluate("type A = B; type B = A;")).toThrow();
+  expectEvalError("type A = B; type B = A;");
 });
