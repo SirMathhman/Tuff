@@ -1,7 +1,7 @@
 import type { Ast, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { applyBinOp, bool, eq, notOp, num, toNum, truthy } from "./values";
-import { checkSuffix, defineTypeAlias, resolveAstType, resolveType, suffixRanges } from "./typesystem";
+import { checkSuffix, checkValueAgainstType, defineTypeAlias, resolveAstType, resolveType, suffixRanges } from "./typesystem";
 
 // Evaluator — walks AST with scope
 export function evalAst(
@@ -96,29 +96,7 @@ export function evalAst(
         if (v === null) throw new Error("block has no value");
         if (node.typeAnnotation) {
           const resolvedAnn = resolveAstType(node.typeAnnotation);
-          if (resolvedAnn.kind === "array") {
-            const innerType = resolveAstType(resolvedAnn.elementType);
-            const length = resolvedAnn.length;
-            if (v.tag !== "array") throw new Error(`expected array, got ${v.tag}`);
-            if (v.values.length !== length) throw new Error(`array length mismatch: expected ${length}, got ${v.values.length}`);
-            // Validate each element's type
-            for (let i = 0; i < v.values.length; i++) {
-              const elem = v.values[i]!;
-              if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
-                checkSuffix(innerType.name, elem.num);
-              }
-            }
-          } else if (resolvedAnn.kind === "primitive" && suffixRanges[resolvedAnn.name]) {
-            checkSuffix(resolvedAnn.name, toNum(v));
-            // Check type compatibility using the value's tracked type
-            if (v.tag === "number" && v.type && suffixRanges[resolveType(v.type)]) {
-              const valRange = suffixRanges[resolveType(v.type)]!;
-              const annRange = suffixRanges[resolvedAnn.name]!;
-              if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
-                throw new Error(`cannot assign ${v.type} to ${node.typeAnnotation}`);
-              }
-            }
-          }
+          checkValueAgainstType(v, node.typeAnnotation, "assign");
           // Propagate type annotation to the stored value
           if (v.tag === "number" && resolvedAnn.kind === "primitive") {
             v = num(v.num, resolvedAnn.name);
@@ -278,27 +256,7 @@ export function evalAst(
         });
         fn.params.forEach((p, i) => {
           const arg = argValues[i]!;
-          const resolvedType = resolveAstType(p.type);
-          if (resolvedType.kind === "array") {
-            const innerType = resolveAstType(resolvedType.elementType);
-            if (arg.tag !== "array") throw new Error(`expected array, got ${arg.tag}`);
-            if (arg.values.length !== resolvedType.length)
-              throw new Error(`array length mismatch: expected ${resolvedType.length}, got ${arg.values.length}`);
-            for (const elem of arg.values) {
-              if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
-                checkSuffix(innerType.name, elem.num);
-              }
-            }
-          } else if (resolvedType.kind === "primitive" && suffixRanges[resolvedType.name]) {
-            checkSuffix(resolvedType.name, toNum(arg));
-            if (arg.tag === "number" && arg.type && suffixRanges[resolveType(arg.type)]) {
-              const valRange = suffixRanges[resolveType(arg.type)]!;
-              const annRange = suffixRanges[resolvedType.name]!;
-              if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
-                throw new Error(`cannot pass ${arg.type} to parameter ${p.name} of type ${resolvedType.name}`);
-              }
-            }
-          }
+          checkValueAgainstType(arg, p.type, "pass", p.name);
           fnScopes[fnScopes.length - 1]!.vars[p.name] = arg;
         });
         try {

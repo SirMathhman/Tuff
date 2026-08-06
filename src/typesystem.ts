@@ -1,4 +1,5 @@
-import type { AstType } from "./types";
+import type { AstType, Value } from "./types";
+import { toNum } from "./values";
 
 // Suffix ranges for numeric types
 export const suffixRanges: Record<string, [number, number]> = {
@@ -56,4 +57,39 @@ export function resolveAstType(astType: AstType): AstType {
     };
   }
   return astType;
+}
+
+// Validate that a value fits a declared type. Throws on mismatch.
+// `context` describes the binding site for error messages (e.g. "assign" or "pass").
+export function checkValueAgainstType(
+  value: Value,
+  astType: AstType,
+  context: string,
+  targetName?: string,
+): void {
+  const resolved = resolveAstType(astType);
+  if (resolved.kind === "array") {
+    const innerType = resolveAstType(resolved.elementType);
+    if (value.tag !== "array") throw new Error(`expected array, got ${value.tag}`);
+    if (value.values.length !== resolved.length)
+      throw new Error(`array length mismatch: expected ${resolved.length}, got ${value.values.length}`);
+    for (const elem of value.values) {
+      if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
+        checkSuffix(innerType.name, elem.num);
+      }
+    }
+    return;
+  }
+  if (resolved.kind === "primitive" && suffixRanges[resolved.name]) {
+    checkSuffix(resolved.name, toNum(value));
+    // Check type compatibility using the value's tracked type
+    if (value.tag === "number" && value.type && suffixRanges[resolveType(value.type)]) {
+      const valRange = suffixRanges[resolveType(value.type)]!;
+      const annRange = suffixRanges[resolved.name]!;
+      if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
+        const target = targetName ? ` to ${targetName}` : "";
+        throw new Error(`cannot ${context} ${value.type}${target} of type ${resolved.name}`);
+      }
+    }
+  }
 }

@@ -20,7 +20,7 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/parser.ts` — `parse()` function
 - `src/typeparser.ts` — `parseType()` function (recursive type annotation parser, shared by `let` annotations and `is` operator)
 - `src/evaluator.ts` — `evalAst()` function with scope management
-- `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `resolveType`, `resolveAstType`, `defineTypeAlias`
+- `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `resolveType`, `resolveAstType`, `defineTypeAlias`, `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
 - `index.test.ts` — test suite, one test per feature (~96 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
 - See [README.md](./README.md) for project overview
 - See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features
