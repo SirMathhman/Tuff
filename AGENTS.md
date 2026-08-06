@@ -12,7 +12,7 @@
 
 Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — thin wrapper. Entry points: `evaluate(source)` and `evaluateModules(entries, modules)` (shared-scope module evaluation with `out` exports and lazy cross-module loading)
+- `index.ts` — thin wrapper. Entry points: `evaluate(source)` and `evaluateModules(entries, modules)`
 - `src/index.ts` — barrel exports all `src/` modules
 - `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`
 - `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)
@@ -21,6 +21,7 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/typeparser.ts` — `parseType()` function (recursive type annotation parser, shared by `let` annotations and `is` operator)
 - `src/evaluator.ts` — `evalAst()` function with scope management
 - `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `resolveType`, `resolveAstType`, `defineTypeAlias`, `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
+- `src/modules.ts` — `ModuleLoader` class: shared-scope module evaluation with `out` exports, lazy cross-module loading, and circular-dependency detection
 - `index.test.ts` — test suite, one test per feature (~96 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
 - See [README.md](./README.md) for project overview
 - See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features
