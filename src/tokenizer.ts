@@ -121,6 +121,11 @@ export function tokenize(source: string): Token[] {
       });
       continue;
     }
+    if (source[i] === ":" && source[i + 1] === ":") {
+      tokens.push({ type: "punct", value: "::" });
+      i += 2;
+      continue;
+    }
     if (source[i] === ":") {
       tokens.push({ type: "punct", value: ":" });
       i++;

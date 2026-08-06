@@ -117,6 +117,18 @@ export function parse(tokens: Token[]): Ast {
         } else {
           result = { kind: "array_index", target: result, index };
         }
+      } else if (tokens[pos]?.value === "::") {
+        // Namespace path: lib::foo — build a dotted path resolved as a module
+        pos++; // skip "::"
+        const nextTok = tokens[pos];
+        if (nextTok?.type !== "identifier") throw new Error("expected identifier after ::");
+        const segment = nextTok.value;
+        pos++;
+        if (result.kind === "ident") {
+          result = { kind: "ident", name: `${result.name}::${segment}` };
+        } else {
+          result = { kind: "property_access", target: result, property: segment };
+        }
       } else if (tokens[pos]?.value === ".") {
         pos++; // skip "."
         const nextTok = tokens[pos];
