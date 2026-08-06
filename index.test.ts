@@ -325,6 +325,10 @@ test('evaluate("100U8 is U8") => 1', () => {
   expect(evaluate("100U8 is U8")).toBe(1);
 });
 
+test('evaluate("let x = 100U8; x is U8") => 1', () => {
+  expect(evaluate("let x = 100U8; x is U8")).toBe(1);
+});
+
 test('evaluate("100U8 is I32") => 0', () => {
   expect(evaluate("100U8 is I32")).toBe(0);
 });
