@@ -2,17 +2,17 @@
 
 ## Quick Start
 
-- **Test**: `bun test` (Bun native, primary). Fallback: `bun run test` (Node test runner via `test/bun-test-shim.ts`)
-- **Lint/typecheck**: `bun run lint` (runs `tsc --noEmit` then `eslint . --fix`)
+- **Test**: `bun run test` (Node test runner via tsx + `test/bun-test-shim.ts` — canonical, what quality gates run). Fast alternative: `bun test` (Bun native). Run both before committing
+- **Lint/typecheck**: `bun run lint` (runs `tsc --noEmit` then `eslint . --fix` — note: auto-fixes files in place)
 - **Duplication check**: `bun run cpd` (PMD, min 50 tokens)
-- **Run**: `bun run index.ts`
 - **Quality gates** (`.github/hooks/hooks.json`): `bun run lint` → `bun run cpd` → `bun run test` — all must pass on Stop hook
+- **No CLI/main**: `index.ts` only exports library functions — there is nothing to run standalone
 
 ## Architecture
 
 Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — thin wrapper. Entry points: `evaluate(source)` and `evaluateModules(entries, modules)`
+- `index.ts` — thin wrapper. Entry points: `evaluate(source)`, `evaluateModules(entries, modules)`, `compile(source)` (generates `process.exit(n);` JS)
 - `src/index.ts` — barrel exports all `src/` modules
 - `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`
 - `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)
@@ -22,8 +22,8 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/evaluator.ts` — `evalAst()` function with scope management
 - `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `defineStruct`/`getStructFields`, `defineEnum`/`getEnumVariants`, `defineTypeAlias`, `resolveType`, `resolveAstType`, `valueMatchesType` (for `is`), `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
 - `src/modules.ts` — `ModuleLoader` class: shared-scope module evaluation with `out` exports, lazy cross-module loading, and circular-dependency detection
-- `index.test.ts` — test suite, one test per feature (109 tests). Each test: `test('evaluate("<code>") => <result>', () => { expectEval("<code>", <result>) })`
-- `test/helpers.ts` — shared assertions: `expectEval(source, expected)`, `expectEvalError(source)`, `expectModules(entries, modules, expected)`
+- `index.test.ts` — test suite, one test per feature (109 tests). Each test: `test('evaluate("<code>") => <result>', () => { expectValid("<code>", <result>) })`
+- `test/helpers.ts` — shared assertions: `expectValid(source, expected)` (asserts BOTH the `evaluate()` and `compile()` routes), `expectEvalError(source)`, `expectModules(entries, modules, expected)`
 - `test/bun-test-shim.ts` — Node fallback shim for `bun:test`; supports only `toBe` and `toThrow` (don't add other assertions without extending it)
 - See [README.md](./README.md) for project overview
 - See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features. Features marked **[heap]** require manual memory management (Rust-style ownership/borrowing) — no GC
@@ -36,7 +36,7 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 2. Add test to `index.test.ts`
 3. Run `bun test` — confirm failure
 4. Implement minimum code to pass
-5. Run `bun test` — confirm all pass (use `bun run test` to verify the Node fallback too)
+5. Run `bun test` **and** `bun run test` — confirm all pass in both runners (a change that breaks `compile()` fails tests even when `evaluate()` works, since `expectValid` exercises both)
 6. `git add -A && git commit -m "<feature description>"`
 7. Suggest one architectural improvement
 
@@ -53,6 +53,7 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 - **Scope**: `scopes: Scope[]` array; `mutables: Scope["mutable"][]` array — traverse both for assignments
 - **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`, `-=`, `::`
 - **Safety**: 10,000 iteration limit on `while`/`for` loops
+- **Global type state**: struct/enum/type-alias definitions live at module level in `src/typesystem.ts` and persist across `evaluate()` calls in the same process — they can leak between tests
 - **Module structure**: each `src/` file is a single responsibility module. Import from `src/index.ts` barrel for cross-module access
 - **Test format**: `test('evaluate("<code>") => <result>', ...)` for success, `test('evaluate("<code>") => Error', ...)` for failures
 
@@ -65,6 +66,9 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 - `tuple.0` tokenized as number — separate `.` from number tokenization
 - Always parse `if` as statement first, fall back to expression
 - Don't create new `Symbol()` for control flow — use `ControlFlow` type
+- `yield`/`return`/`break`/`continue` are thrown as plain objects (`{kind,...}`) — catch via `isControlFlow()`, never `new Error`
+- `true`/`false`/`out` are identifiers, not keywords — matched by value in `parseAtom`/`parseStatement`
+- `match` with no matching case returns `num(0)`; out-of-bounds string index returns `num(0)` (array index returns `undefined`)
 - Numeric suffixes (`U8`, `I32`, etc.) carry type info — validate ranges on assignment (`checkSuffix`); suffix propagates to `Value.type` for `is` and union matching
 - `evaluate()` returns `number` via `toNum()` — all expression results coerce to number
 - `is` parses in `parseComparison`; evaluated via `valueMatchesType`
