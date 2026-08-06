@@ -1,4 +1,5 @@
 import { tokenize, parse, evalAst, toNum } from "./src";
+import { compileAst, referencesArgs } from "./src/codegen";
 import { ModuleLoader } from "./src/modules";
 
 export function evaluate(source: string, args: string[] = []): number {
@@ -32,8 +33,18 @@ export function evaluateModules(
 }
 
 export function compile(source: string): string {
-  // The emitted JS is a constant exit code — runtime args are irrelevant,
-  // so inputs are resolved against an empty environment.
-  const evaluated = evaluate(source, []);
-  return "process.exit(" + evaluated + ");";
+  const trimmed = source.trim();
+  if (trimmed === "") return "process.exit(0);";
+  const ast = parse(tokenize(trimmed));
+  // Programs that don't read `args` constant-fold to an exit code.
+  // Programs that do reference `args` get real JS with `args` as a free variable.
+  if (!referencesArgs(ast)) {
+    const value = evalAst(ast, {
+      scopes: [{ vars: {}, mutable: {} }],
+      mutables: [{}],
+      moduleInputs: { args: { tag: "array", values: [] } },
+    });
+    return "process.exit(" + toNum(value) + ");";
+  }
+  return compileAst(ast);
 }

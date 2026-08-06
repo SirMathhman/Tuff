@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { expectValid, expectEval, expectEvalError, expectModules } from "./test/helpers";
+import { expectValid, expectEvalError, expectModules } from "./test/helpers";
 
 test('evaluate("") => 0', () => {
   expectValid("", 0);
@@ -458,7 +458,5 @@ test('evaluate("type A = B; type B = A;") => Error', () => {
 });
 
 test('evaluate("args.length") => 1', () => {
-  // Args-sensitive: verified through the evaluator route only, since `compile`
-  // emits a constant and cannot reproduce runtime args.
-  expectEval("in let args : &[&Str]; args.length", 1, ["mock_program_name"]);
+  expectValid("args.length", 1, []);
 });

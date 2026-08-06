@@ -12,7 +12,7 @@
 
 Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — thin wrapper. Entry points: `evaluate(source, args?)`, `evaluateModules(entries, modules)`, `compile(source)` (generates `process.exit(n);` JS — a constant, independent of runtime args)
+- `index.ts` — thin wrapper. Entry points: `evaluate(source, args?)`, `evaluateModules(entries, modules)`, `compile(source)` (hybrid: constant-folds programs that don't read `args`; emits real JS with `args` as a free variable for programs that do)
 - `src/index.ts` — barrel exports all `src/` modules
 - `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`, `EvalContext`
 - `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)
@@ -22,8 +22,9 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/evaluator.ts` — `evalAst(ast, ctx)` function with scope management; `ctx: EvalContext` carries scopes, mutables, exports, module hooks
 - `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `defineStruct`/`getStructFields`, `defineEnum`/`getEnumVariants`, `defineTypeAlias`, `resolveType`, `resolveAstType`, `valueMatchesType` (for `is`), `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
 - `src/modules.ts` — `ModuleLoader` class: shared-scope module evaluation with `out` exports, lazy cross-module loading, and circular-dependency detection
+- `src/codegen.ts` — hybrid compiler: `referencesArgs(ast)` (true if the AST reads the `args` input) and `compileAst(ast)` (emits JS for args-dependent programs, with `args` as a free variable)
 - `index.test.ts` — test suite, one test per feature (109 tests). Each test: `test('evaluate("<code>") => <result>', () => { expectValid("<code>", <result>) })`
-- `test/helpers.ts` — shared assertions: `expectValid(source, expected, args?)` (asserts BOTH the `evaluate()` and `compile()` routes; compile sees an empty args env), `expectEval(source, expected, args?)` (evaluator route only — for args-sensitive programs), `expectEvalError(source)`, `expectModules(entries, modules, expected)`
+- `test/helpers.ts` — shared assertions: `expectValid(source, expected, args?)` (asserts BOTH the `evaluate()` and `compile()` routes; both see the same runtime args), `expectEval(source, expected, args?)` (evaluator route only — for programs that must run with real runtime inputs), `expectEvalError(source)`, `expectModules(entries, modules, expected)`
 - `test/bun-test-shim.ts` — Node fallback shim for `bun:test`; supports only `toBe` and `toThrow` (don't add other assertions without extending it)
 - See [README.md](./README.md) for project overview
 - See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features. Features marked **[heap]** require manual memory management (Rust-style ownership/borrowing) — no GC

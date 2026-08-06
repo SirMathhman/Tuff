@@ -6,3 +6,4 @@ export * from "./evaluator";
 export * from "./typesystem";
 export * from "./typeparser";
 export * from "./modules";
+export * from "./codegen";
