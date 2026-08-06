@@ -182,6 +182,21 @@ function matchValue(
   }
 }
 
+// Match each value against its corresponding type, in order.
+function matchElements(
+  values: Value[],
+  types: AstType[],
+  mode: MatchMode,
+  context?: string,
+  targetName?: string,
+): { ok: boolean; error?: string } {
+  for (let i = 0; i < types.length; i++) {
+    const r = matchValue(values[i]!, types[i]!, mode, context, targetName);
+    if (!r.ok) return r;
+  }
+  return { ok: true };
+}
+
 function matchTuple(
   value: Value,
   resolved: Extract<AstType, { kind: "tuple" }>,
@@ -193,11 +208,7 @@ function matchTuple(
     return fail(context, targetName, `expected tuple, got ${value.tag}`);
   if (value.values.length !== resolved.elements.length)
     return fail(context, targetName, `tuple length mismatch: expected ${resolved.elements.length}, got ${value.values.length}`);
-  for (let i = 0; i < resolved.elements.length; i++) {
-    const r = matchValue(value.values[i]!, resolved.elements[i]!, mode, context, targetName);
-    if (!r.ok) return r;
-  }
-  return { ok: true };
+  return matchElements(value.values, resolved.elements, mode, context, targetName);
 }
 
 function fail(
@@ -283,11 +294,13 @@ function matchArray(
     return fail(context, targetName, `expected array, got ${value.tag}`);
   if (value.values.length !== resolved.length)
     return fail(context, targetName, `array length mismatch: expected ${resolved.length}, got ${value.values.length}`);
-  for (const elem of value.values) {
-    const r = matchValue(elem, resolved.elementType, mode, context, targetName);
-    if (!r.ok) return r;
-  }
-  return { ok: true };
+  return matchElements(
+    value.values,
+    Array.from({ length: resolved.length }, () => resolved.elementType),
+    mode,
+    context,
+    targetName,
+  );
 }
 
 function matchSlice(
@@ -299,11 +312,13 @@ function matchSlice(
 ): { ok: boolean; error?: string } {
   if (value.tag !== "array")
     return fail(context, targetName, `expected array, got ${value.tag}`);
-  for (const elem of value.values) {
-    const r = matchValue(elem, resolved.elementType, mode, context, targetName);
-    if (!r.ok) return r;
-  }
-  return { ok: true };
+  return matchElements(
+    value.values,
+    value.values.map(() => resolved.elementType),
+    mode,
+    context,
+    targetName,
+  );
 }
 
 function matchStruct(
