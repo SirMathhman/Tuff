@@ -1,5 +1,5 @@
-import type { Ast, AstType, TypeEnv } from "./types";
-import { checkSuffix } from "./typesystem";
+import type { Ast, AstType, TypeEnv, Value } from "./types";
+import { checkSuffix, checkValueAgainstType } from "./typesystem";
 
 // Semantic analysis — walks the AST once before evaluation, validating
 // declarations and recording type information. Does NOT execute anything.
@@ -73,6 +73,21 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
       }
       break;
+    case "unary": {
+      // References can only be taken of identifiers (structural check).
+      if (ast.op === "&" || ast.op === "&mut") {
+        if (ast.operand.kind !== "ident") {
+          throw new Error("can only take reference of identifier");
+        }
+      }
+      analyze(ast.operand, typeEnv);
+      break;
+    }
+    case "yield":
+      // `yield` always requires a value (structural check).
+      if (ast.value === undefined) throw new Error("yield has no value");
+      analyze(ast.value, typeEnv);
+      break;
     case "fn":
       for (const p of ast.params) {
         typeEnv.inferred.set(p.name, resolveAstType(typeEnv.aliases, p.type));
@@ -91,7 +106,24 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       typeEnv.enums.set(ast.name, ast.variants);
       break;
     case "structliteral": {
-      for (const f of ast.fields) analyze(f.value, typeEnv);
+      // Validate fields when the struct is known locally. Unknown names may
+      // be module instantiation (`lib { x : 100 }`) resolved at runtime, so
+      // only throw for field issues, not unknown structs.
+      const def = typeEnv.structs.get(ast.typeName);
+      if (def) {
+        for (const f of ast.fields) {
+          analyze(f.value, typeEnv);
+          const fieldDef = def.find((d) => d.name === f.key);
+          if (!fieldDef) throw new Error(`unknown field ${f.key} on struct ${ast.typeName}`);
+          // Check literal values against the field type at analysis time.
+          const lit = literalValue(f.value);
+          if (lit !== undefined) {
+            checkValueAgainstType(lit, fieldDef.type, "assign", f.key);
+          }
+        }
+      } else {
+        for (const f of ast.fields) analyze(f.value, typeEnv);
+      }
       break;
     }
     default:
@@ -122,6 +154,25 @@ function literalType(node: Ast): AstType | undefined {
       return { kind: "primitive", name: "string" };
     case "null":
       return { kind: "primitive", name: "null" };
+    default:
+      return undefined;
+  }
+}
+
+// Convert a static literal AST to its runtime Value, or undefined if the
+// expression isn't a literal (analysis-time type checks only apply to literals).
+function literalValue(node: Ast): Value | undefined {
+  switch (node.kind) {
+    case "num":
+      return { tag: "number", num: node.value, type: node.suffix };
+    case "bool":
+      return { tag: "bool", val: node.value };
+    case "char":
+      return { tag: "number", num: node.value.charCodeAt(0) };
+    case "string":
+      return { tag: "string", value: node.value };
+    case "null":
+      return { tag: "null" };
     default:
       return undefined;
   }
