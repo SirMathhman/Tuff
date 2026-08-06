@@ -61,11 +61,11 @@ Features that would be useful to add to Tuff, grouped by category.
 
 ## Operators
 
-- [ ] Modulo (`%`)
+- [x] Modulo (`%`)
 - [ ] Exponentiation (`**`)
 - [ ] Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`)
-- [x] Compound assignment (`+=`)
-- [ ] Compound assignment (`-=`, `*=`, `/=`)
+- [x] Compound assignment (`+=`, `-=`)
+- [ ] Compound assignment (`*=`, `/=`)
 - [ ] Increment / decrement (`++x`, `x++`, `--x`, `x--`)
 - [ ] Ternary operator (`cond ? a : b`)
 - [ ] Null coalescing (`a ?? b`)

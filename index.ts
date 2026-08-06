@@ -55,15 +55,15 @@ function eq(a: Value, b: Value): Value {
   if (a.tag !== b.tag) return bool(false);
   switch (a.tag) {
     case "number":
-      return bool(a.num === (b as any).num);
+      return bool(a.num === (b as Extract<Value, { tag: "number" }>).num);
     case "bool":
-      return bool(a.val === (b as any).val);
+      return bool(a.val === (b as Extract<Value, { tag: "bool" }>).val);
     case "string":
-      return bool(a.value === (b as any).value);
+      return bool(a.value === (b as Extract<Value, { tag: "string" }>).value);
     case "array":
-      return bool(eqValues(a.values, (b as any).values));
+      return bool(eqValues(a.values, (b as Extract<Value, { tag: "array" }>).values));
     case "tuple":
-      return bool(eqValues(a.values, (b as any).values));
+      return bool(eqValues(a.values, (b as Extract<Value, { tag: "tuple" }>).values));
     default:
       return bool(false);
   }
@@ -94,9 +94,7 @@ function gte(a: Value, b: Value): Value {
 function notOp(v: Value): Value {
   return bool(!truthy(v));
 }
-function negate(v: Value): Value {
-  return num(-toNum(v));
-}
+
 type ControlFlow =
   | { kind: "continue" }
   | { kind: "break" }
