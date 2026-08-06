@@ -45,6 +45,7 @@ Features that would be useful to add to Tuff, grouped by category.
 
 - [x] Closures (capture by reference)
 - [x] Recursive functions
+- [x] Generic functions (`fn pass<T>(value : T) => value`) — type params parse and erase; return-type annotations (`: T`) validated
 - [ ] Variadic functions (`fn sum(...args)`) [heap]
 - [ ] Default parameter values (`fn greet(name, greeting = "hi")`)
 - [ ] Named arguments (`fn greet(name: "Alice")`)
@@ -99,7 +100,8 @@ Features that would be useful to add to Tuff, grouped by category.
 - [ ] Type inference display (`typeof(x)`)
 - [ ] Type casting (`x as int`)
 - [x] Type aliases (`type Id = U32`)
-- [ ] Generics (`fn identity<T>(x: T) => x`)
+- [x] Generics — generic functions (`fn pass<T>(x : T)`) and generic structs (`struct Wrapper<T> { field : T }` with `Wrapper<Bool>` instantiation); type-arg substitution into field/param types
+- [x] `is` on union types (`x is U8 | U16`) and named structs (`x is A`)
 - [ ] Const generics / compile-time constants
 - [ ] Type narrowing in `if`/`match` branches
 - [ ] Compile-time type checking mode
