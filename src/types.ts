@@ -72,7 +72,7 @@ export type Ast =
   | { kind: "length"; target: Ast }
   | { kind: "property_access"; target: Ast; property: string }
   | { kind: "record"; fields: { key: string; value: Ast }[] }
-  | { kind: "typecheck"; value: Ast; type: string }
+  | { kind: "typecheck"; value: Ast; type: AstType }
   | { kind: "typealias"; name: string; baseType: string };
 
 export type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };

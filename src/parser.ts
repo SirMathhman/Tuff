@@ -54,9 +54,22 @@ export function parse(tokens: Token[]): Ast {
         result = { kind: "binop", op, left: result, right: next };
       } else if (op === "is") {
         pos++;
-        const typeName = tokens[pos]!.value;
-        pos++;
-        result = { kind: "typecheck", value: result, type: typeName };
+        // Check for array type: [Type; Length]
+        let astType: AstType;
+        if (tokens[pos]?.value === "[") {
+          pos++; // skip "["
+          const innerTypeName = tokens[pos]!.value;
+          pos++; // skip inner type
+          pos++; // skip ";"
+          const length = parseInt(tokens[pos]!.value);
+          pos++; // skip length
+          pos++; // skip "]"
+          astType = { kind: "array", elementType: { kind: "primitive", name: innerTypeName }, length };
+        } else {
+          astType = { kind: "primitive", name: tokens[pos]!.value };
+          pos++;
+        }
+        result = { kind: "typecheck", value: result, type: astType };
       } else {
         break;
       }

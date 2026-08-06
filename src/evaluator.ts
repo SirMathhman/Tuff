@@ -430,25 +430,52 @@ export function evalAst(
       case "typecheck": {
         const v = visit(node.value);
         if (v === null) throw new Error("typecheck value has no value");
-        const resolvedType = resolveType(node.type);
-        const typeName = resolvedType.toLowerCase();
-        if (v.tag === "number" && v.type) {
-          const resolvedValueType = resolveType(v.type);
-          return bool(resolvedValueType === resolvedType);
+        const resolvedType = resolveAstType(node.type);
+        if (resolvedType.kind === "primitive") {
+          const typeName = resolvedType.name.toLowerCase();
+          if (v.tag === "number" && v.type) {
+            const resolvedValueType = resolveType(v.type);
+            return bool(resolvedValueType === resolvedType.name);
+          }
+          const tagMap: Record<string, string> = {
+            bool: "bool",
+            string: "string",
+            tuple: "tuple",
+            array: "array",
+            record: "record",
+            null: "null",
+            fn: "fn",
+            ref: "ref",
+          };
+          const tagName = tagMap[typeName];
+          if (tagName) return bool(v.tag === tagName);
+          return bool(v.tag === "number" && !v.type && resolvedType.name === "number");
         }
-        const tagMap: Record<string, string> = {
-          bool: "bool",
-          string: "string",
-          tuple: "tuple",
-          array: "array",
-          record: "record",
-          null: "null",
-          fn: "fn",
-          ref: "ref",
-        };
-        const tagName = tagMap[typeName];
-        if (tagName) return bool(v.tag === tagName);
-        return bool(v.tag === "number" && !v.type && resolvedType === "number");
+        if (resolvedType.kind === "array") {
+          if (v.tag !== "array") return bool(false);
+          if (v.values.length !== resolvedType.length) return bool(false);
+          const innerType = resolveAstType(resolvedType.elementType);
+          for (let i = 0; i < v.values.length; i++) {
+            const elem = v.values[i]!;
+            if (innerType.kind === "primitive") {
+              if (innerType.name.toLowerCase() === "number") {
+                if (elem.tag !== "number") return bool(false);
+              } else if (suffixRanges[innerType.name]) {
+                if (elem.tag !== "number" || !elem.type) return bool(false);
+                if (resolveType(elem.type) !== innerType.name) return bool(false);
+              } else {
+                const tagMap: Record<string, string> = {
+                  bool: "bool", string: "string", tuple: "tuple",
+                  array: "array", record: "record", null: "null", fn: "fn", ref: "ref",
+                };
+                const tagName = tagMap[innerType.name.toLowerCase()];
+                if (tagName && elem.tag !== tagName) return bool(false);
+              }
+            }
+          }
+          return bool(true);
+        }
+        return bool(false);
       }
       case "typealias": {
         typeAliases[node.name] = node.baseType;
