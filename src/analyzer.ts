@@ -81,6 +81,41 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
         }
       }
       analyze(ast.operand, typeEnv);
+      // Dereference requires a ref-typed operand when statically known.
+      if (ast.op === "*") {
+        const t = staticType(ast.operand, typeEnv);
+        if (t && t.kind !== "ref") {
+          throw new Error("cannot dereference non-reference");
+        }
+      }
+      break;
+    }
+    case "index": {
+      analyze(ast.target, typeEnv);
+      analyze(ast.index, typeEnv);
+      // Indexing requires an array/slice/string/ref target when known.
+      const t = staticType(ast.target, typeEnv);
+      if (t) {
+        const ok =
+          t.kind === "array" ||
+          t.kind === "slice" ||
+          t.kind === "ref" ||
+          (t.kind === "primitive" && t.name === "string");
+        if (!ok) throw new Error(`cannot index ${describeType(t)}`);
+      }
+      break;
+    }
+    case "length": {
+      analyze(ast.target, typeEnv);
+      const t = staticType(ast.target, typeEnv);
+      if (t) {
+        const ok =
+          t.kind === "array" ||
+          t.kind === "slice" ||
+          t.kind === "ref" ||
+          (t.kind === "primitive" && t.name === "string");
+        if (!ok) throw new Error(`cannot get length of ${describeType(t)}`);
+      }
       break;
     }
     case "yield":
@@ -156,6 +191,63 @@ function literalType(node: Ast): AstType | undefined {
       return { kind: "primitive", name: "null" };
     default:
       return undefined;
+  }
+}
+
+// Compute an expression's type when statically known (literals, inferred
+// variables, and composites of those). Returns undefined when not determinable.
+function staticType(node: Ast, typeEnv: TypeEnv): AstType | undefined {
+  switch (node.kind) {
+    case "num":
+    case "bool":
+    case "char":
+    case "string":
+    case "null":
+      return literalType(node);
+    case "ident": {
+      const t = typeEnv.inferred.get(node.name);
+      if (t) return resolveAstType(typeEnv.aliases, t);
+      return undefined;
+    }
+    case "unary":
+      // Deref of a known ref yields the target type.
+      if (node.op === "*") {
+        const t = staticType(node.operand, typeEnv);
+        if (t && t.kind === "ref") return t.targetType;
+      }
+      return undefined;
+    case "array":
+      return { kind: "slice", elementType: staticType(node.elements[0]!, typeEnv) ?? { kind: "primitive", name: "number" } };
+    case "record":
+      return {
+        kind: "struct",
+        fields: node.fields.map((f) => ({
+          name: f.key,
+          type: staticType(f.value, typeEnv) ?? { kind: "primitive", name: "number" },
+        })),
+      };
+    case "paren":
+      return staticType(node.expr, typeEnv);
+    default:
+      return undefined;
+  }
+}
+
+// Human-readable name for an AstType (for error messages).
+function describeType(t: AstType): string {
+  switch (t.kind) {
+    case "primitive":
+      return t.name;
+    case "array":
+      return `[${describeType(t.elementType)}; ${t.length}]`;
+    case "slice":
+      return `[${describeType(t.elementType)}]`;
+    case "struct":
+      return "record";
+    case "union":
+      return t.types.map(describeType).join(" | ");
+    case "ref":
+      return `&${describeType(t.targetType)}`;
   }
 }
 
