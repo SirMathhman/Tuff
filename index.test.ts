@@ -265,6 +265,10 @@ test('fn get() => { if (true) return 1; 2 } + 3; get() => 1', () => {
   expect(evaluate('fn get() => { if (true) return 1; 2 } + 3; get()')).toBe(1);
 });
 
+test('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x => 0', () => {
+  expect(evaluate('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x')).toBe(0);
+});
+
 test('let pt = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
   expect(evaluate('let pt = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
 });

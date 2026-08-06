@@ -243,6 +243,8 @@ export function evalAst(
         throw { kind: "yield", value: v };
       }
       case "return": {
+        // Bare return (no value) returns null
+        if (node.value === undefined) throw { kind: "return", value: { tag: "null" } };
         const v = visit(node.value);
         if (v === null) throw new Error("return has no value");
         throw { kind: "return", value: v };
@@ -279,7 +281,8 @@ export function evalAst(
         try {
           return evalAst(fn.body, fnScopes, fnMutables);
         } catch (e) {
-          if (isControlFlow(e) && e.kind === "return") return e.value;
+          if (isControlFlow(e) && e.kind === "return")
+            return e.value ?? { tag: "null" };
           throw e;
         }
       }

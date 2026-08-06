@@ -448,6 +448,11 @@ export function parse(tokens: Token[]): Ast {
     // Check for return statement
     if (tokens[pos]?.value === "return") {
       pos++;
+      // Bare return (no value) returns null
+      if (tokens[pos]?.value === ";" || tokens[pos] === undefined) {
+        if (tokens[pos]?.value === ";") pos++;
+        return { kind: "return" };
+      }
       const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "return", value };

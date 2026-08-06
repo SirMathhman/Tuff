@@ -24,7 +24,7 @@ export type ControlFlow =
   | { kind: "continue" }
   | { kind: "break" }
   | { kind: "yield"; value: Value }
-  | { kind: "return"; value: Value };
+  | { kind: "return"; value?: Value };
 
 export function isControlFlow(e: unknown): e is ControlFlow {
   return typeof e === "object" && e !== null && "kind" in e;
@@ -61,7 +61,7 @@ export type Ast =
   | { kind: "continue" }
   | { kind: "break" }
   | { kind: "yield"; value: Ast }
-  | { kind: "return"; value: Ast }
+  | { kind: "return"; value?: Ast }
   | { kind: "fn"; name: string; params: { name: string; type: AstType }[]; body: Ast; exported?: boolean }
   | { kind: "call"; name: string; args: Ast[]; target?: Ast }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
