@@ -23,6 +23,6 @@ export function evaluateModules(
 }
 
 export function compile(source: string): string {
-  const evaluated = evaluate(source, []);
+  const evaluated = evaluate(source);
   return "process.exit(" + evaluated + ");";
 }
