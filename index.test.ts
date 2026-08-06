@@ -305,6 +305,10 @@ test('evaluate("fn add(x : I32, y : I32) => x + y; add(3, 4)") => 7', () => {
   expectValid("fn add(x : I32, y : I32) => x + y; add(3, 4)", 7);
 });
 
+test('evaluate("fn pass<T>(value : T) => value; pass(100)") => 100', () => {
+  expectValid("fn pass<T>(value : T) => value; pass(100)", 100);
+});
+
 test('evaluate("fn doNothing(param) => {}") => Error', () => {
   expectInvalid("fn doNothing(param) => {}");
 });

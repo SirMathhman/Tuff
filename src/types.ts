@@ -11,6 +11,7 @@ export type Value =
       body: Ast;
       scopes: Scope[];
       mutables: Scope["mutable"][];
+      typeParams?: string[];
     }
   | { tag: "ref"; scope: Scope; name: string; mutable: boolean }
   | { tag: "tuple"; values: Value[] }
@@ -68,7 +69,7 @@ export type Ast =
   | { kind: "break" }
   | { kind: "yield"; value: Ast }
   | { kind: "return"; value?: Ast }
-  | { kind: "fn"; name: string; params: { name: string; type: AstType }[]; body: Ast; exported?: boolean }
+  | { kind: "fn"; name: string; params: { name: string; type: AstType }[]; body: Ast; exported?: boolean; typeParams?: string[] }
   | { kind: "call"; name: string; args: Ast[]; target?: Ast }
   | { kind: "match"; expr: Ast; cases: { pattern: Ast; body: Ast }[] }
   | { kind: "wildcard" }
@@ -98,6 +99,7 @@ export type TypeEnv = {
   exports: Map<string, AstType>;
   inputs: Map<string, AstType>;
   fns: Map<string, { params: { name: string; type: AstType }[] }>;
+  typeParams: Set<string>;
 };
 
 // Evaluation context — all interpreter state threaded through an evalAst run.

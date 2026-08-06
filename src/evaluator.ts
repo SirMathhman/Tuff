@@ -270,6 +270,7 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
           body: node.body,
           scopes: [...scopes],
           mutables: [...mutables],
+          typeParams: node.typeParams,
         };
         scopes[scopes.length - 1]!.vars[node.name] = fnValue;
         if (node.exported && exports) exports[node.name] = fnValue;
@@ -289,7 +290,9 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
         });
         fn.params.forEach((p, i) => {
           const arg = argValues[i]!;
-          checkValueAgainstType(arg, p.type, "pass", p.name);
+          // Generic type params (T) accept any value — skip the check.
+          const isGeneric = p.type.kind === "primitive" && (fn.typeParams ?? []).includes(p.type.name);
+          if (!isGeneric) checkValueAgainstType(arg, p.type, "pass", p.name);
           fnScopes[fnScopes.length - 1]!.vars[p.name] = arg;
         });
         try {

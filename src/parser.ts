@@ -496,6 +496,17 @@ export function parse(tokens: Token[]): Ast {
       pos++; // skip "fn"
       const name = tokens[pos]!.value;
       pos++; // skip name
+      // Generic type parameters: fn name<T, U>(...)
+      const typeParams: string[] = [];
+      if (tokens[pos]?.value === "<") {
+        pos++; // skip "<"
+        while (tokens[pos]?.value !== ">") {
+          typeParams.push(tokens[pos]!.value);
+          pos++;
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip ">"
+      }
       pos++; // skip "("
       const params: { name: string; type: AstType }[] = [];
       while (tokens[pos]?.value !== ")") {
@@ -513,13 +524,24 @@ export function parse(tokens: Token[]): Ast {
       pos++; // skip "=>"
       const body = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return { kind: "fn", name, params, body, exported };
+      return { kind: "fn", name, params, body, exported, typeParams };
     }
     // Check for fn statement
     if (tokens[pos]?.value === "fn") {
       pos++; // skip "fn"
       const name = tokens[pos]!.value;
       pos++; // skip name
+      // Generic type parameters: fn name<T, U>(...)
+      const typeParams: string[] = [];
+      if (tokens[pos]?.value === "<") {
+        pos++; // skip "<"
+        while (tokens[pos]?.value !== ">") {
+          typeParams.push(tokens[pos]!.value);
+          pos++;
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip ">"
+      }
       pos++; // skip "("
       const params: { name: string; type: AstType }[] = [];
       while (tokens[pos]?.value !== ")") {
@@ -537,7 +559,7 @@ export function parse(tokens: Token[]): Ast {
       pos++; // skip "=>"
       const body = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return { kind: "fn", name, params, body };
+      return { kind: "fn", name, params, body, typeParams };
     }
     // Check for while statement
     if (tokens[pos]?.value === "while") {

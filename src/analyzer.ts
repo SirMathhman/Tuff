@@ -16,6 +16,7 @@ export function newTypeEnv(): TypeEnv {
     exports: new Map(),
     inputs: new Map(),
     fns: new Map(),
+    typeParams: new Set(),
   };
 }
 
@@ -208,6 +209,10 @@ function analyzeNode(
       if (ast.exported) {
         typeEnv.exports.set(ast.name, { kind: "primitive", name: "fn" });
       }
+      // Generic type params (fn pass<T>(...)) are valid type names.
+      for (const tp of ast.typeParams ?? []) {
+        typeEnv.typeParams.add(tp);
+      }
       scopes.push(new Set());
       for (const p of ast.params) {
         typeEnv.mutables.set(p.name, false);
@@ -311,7 +316,9 @@ function analyzeNode(
           const arg = ast.args[i];
           if (arg) {
             const lit = literalValue(arg);
-            if (lit !== undefined) {
+            // Generic type params (T) accept any value — skip the check.
+            const isGeneric = p.type.kind === "primitive" && typeEnv.typeParams.has(p.type.name);
+            if (lit !== undefined && !isGeneric) {
               checkValueAgainstType(lit, p.type, "pass", p.name);
             }
           }
