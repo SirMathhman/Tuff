@@ -6,19 +6,19 @@ import { compile, evaluate, evaluateModules } from "..";
 export function expectValid(
   source: string,
   expectedExitCode: number,
-  args: string[],
+  args: string[] = [],
 ): void {
-  const withPrelude = "in let args : &[&Str]; " + source;
+  const withPrelude = source;
 
   // The evaluator route
-  expect(evaluate(withPrelude, args)).toBe(expectedExitCode);
+  expect(evaluate(withPrelude)).toBe(expectedExitCode);
 
   // The compiler route
   const generated = compile(source);
 
   // Wrap with a mock process.exit
   const wrapped =
-    "let __exit__ = 0; let process = { exit(code) => { __exit__ = code; } } " +
+    "let __exit__ = 0; let process = { exit: (code) => { __exit__ = code; } }; " +
     generated +
     " return __exit__;";
 
@@ -38,14 +38,14 @@ export function expectValid(
   } catch (e) {
     throw new Error(
       "Failed to execute generated code: '" + wrapped + "'",
-      e instanceof Error ? e : new Error(JSON.stringify(e)),
+      new Error(JSON.stringify(e)),
     );
   }
 }
 
 // Assert that evaluating `source` throws.
 export function expectEvalError(source: string): void {
-  expect(() => evaluate(source, [])).toThrow();
+  expect(() => evaluate(source)).toThrow();
 }
 
 // Assert that evaluating modules produces `expected`.

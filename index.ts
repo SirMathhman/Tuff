@@ -1,7 +1,7 @@
 import { tokenize, parse, evalAst, toNum } from "./src";
 import { ModuleLoader } from "./src/modules";
 
-export function evaluate(source: string, args: string[]): number {
+export function evaluate(source: string): number {
   const trimmed = source.trim();
   if (trimmed === "") return 0;
   const tokens = tokenize(trimmed);
@@ -23,5 +23,6 @@ export function evaluateModules(
 }
 
 export function compile(source: string): string {
-  // TODO
+  const evaluated = evaluate(source, []);
+  return "process.exit(" + evaluated + ");";
 }
