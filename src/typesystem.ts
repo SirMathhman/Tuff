@@ -85,6 +85,12 @@ export function resolveAstType(astType: AstType): AstType {
       length: astType.length,
     };
   }
+  if (astType.kind === "slice") {
+    return {
+      kind: "slice",
+      elementType: resolveAstType(astType.elementType),
+    };
+  }
   if (astType.kind === "struct") {
     return {
       kind: "struct",
@@ -145,6 +151,8 @@ function matchValue(
       return matchPrimitive(value, resolved, mode, context, targetName);
     case "array":
       return matchArray(value, resolved, mode, context, targetName);
+    case "slice":
+      return matchSlice(value, resolved, mode, context, targetName);
     case "struct":
       return matchStruct(value, resolved, mode, context);
     case "union": {
@@ -250,8 +258,24 @@ function matchArray(
 ): { ok: boolean; error?: string } {
   if (value.tag !== "array")
     return fail(context, targetName, `expected array, got ${value.tag}`);
-  if (resolved.length !== undefined && value.values.length !== resolved.length)
+  if (value.values.length !== resolved.length)
     return fail(context, targetName, `array length mismatch: expected ${resolved.length}, got ${value.values.length}`);
+  for (const elem of value.values) {
+    const r = matchValue(elem, resolved.elementType, mode, context, targetName);
+    if (!r.ok) return r;
+  }
+  return { ok: true };
+}
+
+function matchSlice(
+  value: Value,
+  resolved: Extract<AstType, { kind: "slice" }>,
+  mode: MatchMode,
+  context?: string,
+  targetName?: string,
+): { ok: boolean; error?: string } {
+  if (value.tag !== "array")
+    return fail(context, targetName, `expected array, got ${value.tag}`);
   for (const elem of value.values) {
     const r = matchValue(elem, resolved.elementType, mode, context, targetName);
     if (!r.ok) return r;

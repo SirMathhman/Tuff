@@ -34,7 +34,7 @@ function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
       return { kind: "array", elementType, length };
     }
     pos.pos++; // skip "]"
-    return { kind: "array", elementType };
+    return { kind: "slice", elementType };
   }
   if (tokens[pos.pos]?.value === "{") {
     // Anonymous struct type: { x : I32, y : I32 }
