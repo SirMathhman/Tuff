@@ -1,4 +1,5 @@
 import type { Ast, AstType, TypeEnv } from "./types";
+import { suffixRanges } from "./typesystem";
 
 // Compiler — emits JS for a program, with `args` as a free variable.
 // The test harness executes the emitted JS with `args` bound to runtime args.
@@ -63,6 +64,36 @@ function genValue(node: Ast, typeEnv?: TypeEnv): string {
   }
 }
 
+// Emit a `let` binding's value, propagating the annotation type to a
+// plain-number literal (mirrors the evaluator's type propagation). For
+// `let x : Bool | I32 = 100`, the union picks I32 and marks the value.
+function genLetValue(node: Extract<Ast, { kind: "let" }>, typeEnv?: TypeEnv): string {
+  const expr = genExpr(node.value, typeEnv);
+  if (!node.typeAnnotation || node.value.kind !== "num" || node.value.suffix) {
+    return expr;
+  }
+  const ann = resolveAstTypeName(typeEnv, node.typeAnnotation);
+  // Suffixed primitive annotation → mark the literal.
+  if (ann.kind === "primitive" && ann.name !== "number") {
+    return "{ v: " + node.value.value + ", __t: " + JSON.stringify(ann.name) + " }";
+  }
+  // Union annotation → pick the suffixed primitive member that fits the value.
+  if (ann.kind === "union") {
+    const val = node.value.value;
+    const member = ann.types.find((m) => {
+      if (m.kind !== "primitive") return false;
+      const resolved = resolveAstTypeName(typeEnv, m);
+      if (resolved.kind !== "primitive") return false;
+      const range = suffixRanges[resolved.name];
+      return range !== undefined && val >= range[0] && val <= range[1];
+    });
+    if (member && member.kind === "primitive") {
+      return "{ v: " + node.value.value + ", __t: " + JSON.stringify(member.name) + " }";
+    }
+  }
+  return expr;
+}
+
 function genStatement(node: Ast, typeEnv?: TypeEnv): string {
   const isMut = (name: string): boolean => typeEnv?.mutables.get(name) === true;
   switch (node.kind) {
@@ -74,9 +105,11 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
     case "let":
       // `var` allows redeclaration (the evaluator overwrites silently);
       // mutable bindings become cells so `&mut` can write through them.
+      // Type annotations propagate to plain-number values (mirrors the
+      // evaluator's type propagation: `let x : Bool | I32 = 100` → x is I32).
       return isMut(node.name)
-        ? "var " + node.name + " = { v: " + genExpr(node.value, typeEnv) + " };"
-        : "var " + node.name + " = " + genExpr(node.value, typeEnv) + ";";
+        ? "var " + node.name + " = { v: " + genLetValue(node, typeEnv) + " };"
+        : "var " + node.name + " = " + genLetValue(node, typeEnv) + ";";
     case "assign":
       return (isMut(node.name) ? node.name + ".v" : node.name) + " = " + genExpr(node.value, typeEnv) + ";";
     case "augassign":
@@ -268,9 +301,27 @@ function sub(template: string, value: string): string {
 // Compile an `is` type check. Folds when the value's type is statically known
 // (literal suffix or inferred binding); otherwise falls back to tag checks.
 function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeEnv): string {
-  // Union type: the value matches if it matches any member.
   const resolvedType = resolveAstTypeName(typeEnv, node.type);
   if (resolvedType.kind === "union") {
+    // Fold when the value's inferred type is a subset of the checked union
+    // (e.g. x's inferred U8 | U16 against `is U8 | U16`).
+    if (node.value.kind === "ident") {
+      const inferred = typeEnv?.inferred.get(node.value.name);
+      if (inferred) {
+        const resolved = resolveAstTypeName(typeEnv, inferred);
+        if (resolved.kind === "union") {
+          const subset = resolved.types.every((m) =>
+            resolvedType.types.some((c) => typeEqualsCodegen(m, c)),
+          );
+          if (subset) return "1";
+          const overlap = resolved.types.some((m) =>
+            resolvedType.types.some((c) => typeEqualsCodegen(m, c)),
+          );
+          if (!overlap) return "0";
+        }
+      }
+    }
+    // Union type: the value matches if it matches any member.
     const memberChecks = resolvedType.types.map((m) =>
       genTypecheck({ ...node, type: m }, typeEnv),
     );
@@ -310,15 +361,21 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
     const inferred = typeEnv?.inferred.get(value.name);
     if (inferred) {
       const resolved = resolveAstTypeName(typeEnv, inferred);
-      // Union: value matches if any member matches the check type.
+      // Union value type: fold when it's a subset of the checked type
+      // (e.g. `x is U8 | U16` where x's inferred type is U8 | U16).
       if (resolved.kind === "union") {
-        const matches = resolved.types.some((m) => resolveType(typeEnv, m) === t);
-        if (matches) return "1";
-        return "0";
+        const resUnion = resolved;
+        const subset = resUnion.types.every((m) => typeEqualsCodegen(m, resolvedType));
+        if (subset) return "1";
+        // Disjoint: no overlap → the value can never match.
+        const overlap = resUnion.types.some((m) => typeEqualsCodegen(m, resolvedType));
+        if (!overlap) return "0";
+      } else {
+        // Single inferred type.
+        const r = describeResolved(resolved);
+        if (r === t) return "1";
+        if (r !== undefined && r !== "number") return "0";
       }
-      const r = describeResolved(resolved);
-      if (r === t) return "1";
-      if (r !== undefined && r !== "number") return "0";
     }
   }
   const v = genExpr(value, typeEnv);
@@ -354,6 +411,34 @@ function resolveAstTypeName(typeEnv: TypeEnv | undefined, t: AstType): AstType {
   if (t.kind === "ref") return { kind: "ref", targetType: resolveAstTypeName(typeEnv, t.targetType) };
   if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => resolveAstTypeName(typeEnv, e)) };
   return t;
+}
+
+// Structural equality for AstType (mirrors the analyzer's typeEquals).
+function typeEqualsCodegen(a: AstType, b: AstType): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "primitive":
+      return a.name === (b as Extract<AstType, { kind: "primitive" }>).name;
+    case "array":
+      return a.length === (b as Extract<AstType, { kind: "array" }>).length && typeEqualsCodegen(a.elementType, (b as Extract<AstType, { kind: "array" }>).elementType);
+    case "slice":
+      return typeEqualsCodegen(a.elementType, (b as Extract<AstType, { kind: "slice" }>).elementType);
+    case "tuple":
+      return (
+        a.elements.length === (b as Extract<AstType, { kind: "tuple" }>).elements.length &&
+        a.elements.every((e, i) => typeEqualsCodegen(e, (b as Extract<AstType, { kind: "tuple" }>).elements[i]!))
+      );
+    case "struct": {
+      const bf = (b as Extract<AstType, { kind: "struct" }>).fields;
+      return a.fields.length === bf.length && a.fields.every((f, i) => f.name === bf[i]!.name && typeEqualsCodegen(f.type, bf[i]!.type));
+    }
+    case "union": {
+      const bt = (b as Extract<AstType, { kind: "union" }>).types;
+      return a.types.length === bt.length && a.types.every((m, i) => typeEqualsCodegen(m, bt[i]!));
+    }
+    case "ref":
+      return typeEqualsCodegen(a.targetType, (b as Extract<AstType, { kind: "ref" }>).targetType);
+  }
 }
 
 function resolveType(typeEnv: TypeEnv | undefined, t: AstType): string {

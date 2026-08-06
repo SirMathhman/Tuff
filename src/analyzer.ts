@@ -414,18 +414,28 @@ function staticType(node: Ast, typeEnv: TypeEnv): AstType | undefined {
     case "paren":
       return staticType(node.expr, typeEnv);
     case "if_expr": {
-      // When both branches have the same static type, that's the result type.
+      // Same static type in both branches → that type; different types →
+      // a union of the branch types (U8 | U16 for `if (c) 1U8 else 1U16`).
       const thenT = staticType(node.thenBranch, typeEnv);
       const elseT = staticType(node.elseBranch, typeEnv);
-      if (thenT && elseT && typeEquals(thenT, elseT)) return thenT;
+      if (thenT && elseT) {
+        if (typeEquals(thenT, elseT)) return thenT;
+        return { kind: "union", types: [thenT, elseT] };
+      }
       return undefined;
     }
     case "match": {
-      // If every case body has the same static type, that's the result type.
+      // If every case body has the same static type, that's the result type;
+      // otherwise a union of all distinct body types.
       const bodies = node.cases.map((c) => staticType(c.body, typeEnv));
-      const first = bodies[0];
-      if (first && bodies.every((b) => b && typeEquals(b, first))) return first;
-      return undefined;
+      const known = bodies.filter((b) => b !== undefined) as AstType[];
+      if (known.length === 0) return undefined;
+      if (known.every((b) => typeEquals(b, known[0]!))) return known[0];
+      const distinct: AstType[] = [];
+      for (const b of known) {
+        if (!distinct.some((d) => typeEquals(d, b))) distinct.push(b);
+      }
+      return { kind: "union", types: distinct };
     }
     default:
       return undefined;
