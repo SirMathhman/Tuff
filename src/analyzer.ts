@@ -107,8 +107,8 @@ function analyzeNode(
           checkValueAgainstType(lit, ast.typeAnnotation, "assign", ast.name);
         }
       } else {
-        // No annotation — record the literal's type when statically known.
-        const t = literalType(ast.value);
+        // No annotation — record the value's type when statically known.
+        const t = literalType(ast.value) ?? staticType(ast.value, typeEnv);
         if (t) typeEnv.inferred.set(ast.name, t);
       }
       if (ast.exported) {
@@ -386,8 +386,56 @@ function staticType(node: Ast, typeEnv: TypeEnv): AstType | undefined {
       };
     case "paren":
       return staticType(node.expr, typeEnv);
+    case "if_expr": {
+      // When both branches have the same static type, that's the result type.
+      const thenT = staticType(node.thenBranch, typeEnv);
+      const elseT = staticType(node.elseBranch, typeEnv);
+      if (thenT && elseT && typeEquals(thenT, elseT)) return thenT;
+      return undefined;
+    }
+    case "match": {
+      // If every case body has the same static type, that's the result type.
+      const bodies = node.cases.map((c) => staticType(c.body, typeEnv));
+      const first = bodies[0];
+      if (first && bodies.every((b) => b && typeEquals(b, first))) return first;
+      return undefined;
+    }
     default:
       return undefined;
+  }
+}
+
+// Structural equality for AstType (after alias resolution).
+function typeEquals(a: AstType, b: AstType): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "primitive":
+      return a.name === (b as Extract<AstType, { kind: "primitive" }>).name;
+    case "array":
+      return a.length === (b as Extract<AstType, { kind: "array" }>).length && typeEquals(a.elementType, (b as Extract<AstType, { kind: "array" }>).elementType);
+    case "slice":
+      return typeEquals(a.elementType, (b as Extract<AstType, { kind: "slice" }>).elementType);
+    case "tuple":
+      return (
+        a.elements.length === (b as Extract<AstType, { kind: "tuple" }>).elements.length &&
+        a.elements.every((e, i) => typeEquals(e, (b as Extract<AstType, { kind: "tuple" }>).elements[i]!))
+      );
+    case "struct": {
+      const bf = (b as Extract<AstType, { kind: "struct" }>).fields;
+      return (
+        a.fields.length === bf.length &&
+        a.fields.every((f, i) => f.name === bf[i]!.name && typeEquals(f.type, bf[i]!.type))
+      );
+    }
+    case "union": {
+      const bt = (b as Extract<AstType, { kind: "union" }>).types;
+      return (
+        a.types.length === bt.length &&
+        a.types.every((m, i) => typeEquals(m, bt[i]!))
+      );
+    }
+    case "ref":
+      return typeEquals(a.targetType, (b as Extract<AstType, { kind: "ref" }>).targetType);
   }
 }
 
