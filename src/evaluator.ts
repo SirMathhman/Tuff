@@ -38,6 +38,21 @@ export function evalAst(
     }
   }
 
+  // Evaluate an optional value expression and throw a control-flow signal.
+  // `kind` is "return" or "yield". A missing value yields null for return.
+  function throwControlFlow(
+    kind: "return" | "yield",
+    node: Extract<Ast, { kind: "return" | "yield" }>,
+  ): never {
+    if (node.value === undefined) {
+      if (kind === "return") throw { kind: "return", value: { tag: "null" } };
+      throw new Error("yield has no value");
+    }
+    const v = visit(node.value);
+    if (v === null) throw new Error(`${kind} has no value`);
+    throw { kind, value: v };
+  }
+
   function visit(node: Ast): Value | null {
     switch (node.kind) {
       case "num": {
@@ -237,18 +252,12 @@ export function evalAst(
         throw { kind: "continue" };
       case "break":
         throw { kind: "break" };
-      case "yield": {
-        const v = visit(node.value);
-        if (v === null) throw new Error("yield has no value");
-        throw { kind: "yield", value: v };
-      }
-      case "return": {
-        // Bare return (no value) returns null
-        if (node.value === undefined) throw { kind: "return", value: { tag: "null" } };
-        const v = visit(node.value);
-        if (v === null) throw new Error("return has no value");
-        throw { kind: "return", value: v };
-      }
+      case "yield":
+        throwControlFlow("yield", node);
+        break;
+      case "return":
+        throwControlFlow("return", node);
+        break;
       case "fn": {
         const fnValue = {
           tag: "fn" as const,
