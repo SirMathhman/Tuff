@@ -308,3 +308,7 @@ test("'\\n' => 10", () => {
 test('evaluate("let array = [1, 2, 3]; array.length") => 3', () => {
   expect(evaluate("let array = [1, 2, 3]; array.length")).toBe(3);
 });
+
+test('evaluate("fn factorial(n) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)") => 120', () => {
+  expect(evaluate("fn factorial(n) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)")).toBe(120);
+});
