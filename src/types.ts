@@ -40,6 +40,7 @@ export type Ast =
   | { kind: "num"; value: number; suffix?: string }
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; name: string }
+  | { kind: "namespace"; segments: string[] }
   | { kind: "unary"; op: "!" | "-" | "&" | "&mut" | "*"; operand: Ast }
   | { kind: "tuple"; elements: Ast[] }
   | { kind: "index"; target: Ast; index: number }

@@ -118,14 +118,16 @@ export function parse(tokens: Token[]): Ast {
           result = { kind: "array_index", target: result, index };
         }
       } else if (tokens[pos]?.value === "::") {
-        // Namespace path: lib::foo — build a dotted path resolved as a module
+        // Namespace path: lib::foo — build a structural namespace node
         pos++; // skip "::"
         const nextTok = tokens[pos];
         if (nextTok?.type !== "identifier") throw new Error("expected identifier after ::");
         const segment = nextTok.value;
         pos++;
         if (result.kind === "ident") {
-          result = { kind: "ident", name: `${result.name}::${segment}` };
+          result = { kind: "namespace", segments: [result.name, segment] };
+        } else if (result.kind === "namespace") {
+          result = { kind: "namespace", segments: [...result.segments, segment] };
         } else {
           result = { kind: "property_access", target: result, property: segment };
         }

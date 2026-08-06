@@ -48,6 +48,14 @@ export function evalAst(
         return bool(node.value);
       case "ident":
         return lookup(node.name);
+      case "namespace": {
+        const name = node.segments.join("::");
+        if (moduleLoader) {
+          const loaded = moduleLoader(name);
+          if (loaded !== null) return loaded;
+        }
+        throw new Error(`undeclared namespace: ${name}`);
+      }
       case "unary": {
         const v = visit(node.operand)!;
         if (node.op === "!") return notOp(v);
