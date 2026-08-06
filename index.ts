@@ -844,7 +844,16 @@ function evalAst(
   const typeAliases: Record<string, string> = {};
 
   function resolveType(typeName: string): string {
-    return typeAliases[typeName] ?? typeName;
+    const seen = new Set<string>();
+    let current = typeName;
+    while (typeAliases[current] !== undefined) {
+      if (seen.has(current)) {
+        throw new Error(`circular type alias: ${current}`);
+      }
+      seen.add(current);
+      current = typeAliases[current]!;
+    }
+    return current;
   }
 
   function visit(node: Ast): Value | null {
@@ -1205,6 +1214,19 @@ function evalAst(
       }
       case "typealias": {
         typeAliases[node.name] = node.baseType;
+        // Detect cycles after assignment
+        let current = node.name;
+        const seen = new Set<string>();
+        while (typeAliases[current] !== undefined) {
+          current = typeAliases[current]!;
+          if (current === node.name) {
+            throw new Error(`circular type alias: ${node.name}`);
+          }
+          if (seen.has(current)) {
+            throw new Error(`circular type alias: ${current}`);
+          }
+          seen.add(current);
+        }
         return null;
       }
     }

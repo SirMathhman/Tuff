@@ -372,3 +372,7 @@ test('evaluate("let x = { a : 1 }; x is record") => 1', () => {
 test('evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32") => 1', () => {
   expect(evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32")).toBe(1);
 });
+
+test('evaluate("type A = B; type B = A;") => Error', () => {
+  expect(() => evaluate("type A = B; type B = A;")).toThrow();
+});
