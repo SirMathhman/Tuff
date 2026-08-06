@@ -8,13 +8,14 @@ export function expectValid(
   expectedExitCode: number,
   args: string[] = [],
 ): void {
-  const withPrelude = source;
+  const wrappedArgs = ["mock_program_name", ...args];
+  const withPrelude = "in let args : &[&Str]; " + source;
 
   // The evaluator route
-  expect(evaluate(withPrelude)).toBe(expectedExitCode);
+  expect(evaluate(withPrelude, wrappedArgs)).toBe(expectedExitCode);
 
   // The compiler route
-  const generated = compile(source);
+  const generated = compile(withPrelude, wrappedArgs);
 
   // Wrap with a mock process.exit
   const wrapped =

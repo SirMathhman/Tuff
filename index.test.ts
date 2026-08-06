@@ -456,3 +456,7 @@ test('evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is 
 test('evaluate("type A = B; type B = A;") => Error', () => {
   expectEvalError("type A = B; type B = A;");
 });
+
+test('evaluate("args.length") => 1', () => {
+  expectValid("args.length", 1, []);
+});

@@ -1,7 +1,7 @@
 import { tokenize, parse, evalAst, toNum } from "./src";
 import { ModuleLoader } from "./src/modules";
 
-export function evaluate(source: string): number {
+export function evaluate(source: string, args: string[] = []): number {
   const trimmed = source.trim();
   if (trimmed === "") return 0;
   const tokens = tokenize(trimmed);
@@ -9,6 +9,12 @@ export function evaluate(source: string): number {
   const value = evalAst(ast, {
     scopes: [{ vars: {}, mutable: {} }],
     mutables: [{}],
+    moduleInputs: {
+      args: {
+        tag: "array",
+        values: args.map((a) => ({ tag: "string", value: a })),
+      },
+    },
   });
   return toNum(value);
 }
@@ -25,7 +31,7 @@ export function evaluateModules(
   return result;
 }
 
-export function compile(source: string): string {
-  const evaluated = evaluate(source);
+export function compile(source: string, args: string[] = []): string {
+  const evaluated = evaluate(source, args);
   return "process.exit(" + evaluated + ");";
 }
