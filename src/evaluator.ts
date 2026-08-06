@@ -1,4 +1,4 @@
-import type { Ast, Scope, Value } from "./types";
+import type { Ast, AstType, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { bool, eq, gte, gt, lt, lte, notOp, num, toNum, truthy } from "./values";
 
@@ -67,6 +67,21 @@ export function evalAst(
     return current;
   }
 
+  function resolveAstType(astType: AstType): AstType {
+    if (astType.kind === "primitive") {
+      const resolved = resolveType(astType.name);
+      return { kind: "primitive", name: resolved };
+    }
+    if (astType.kind === "array") {
+      return {
+        kind: "array",
+        elementType: resolveAstType(astType.elementType),
+        length: astType.length,
+      };
+    }
+    return astType;
+  }
+
   function visit(node: Ast): Value | null {
     switch (node.kind) {
       case "num": {
@@ -130,37 +145,33 @@ export function evalAst(
         let v = visit(node.value);
         if (v === null) throw new Error("block has no value");
         if (node.typeAnnotation) {
-          const resolvedAnn = resolveType(node.typeAnnotation);
-          // Check for array type annotation: [Type; Length]
-          if (resolvedAnn.startsWith("[") && resolvedAnn.endsWith("]")) {
-            const match = resolvedAnn.match(/^\[(.+); (\d+)\]$/);
-            if (match) {
-              const innerType = resolveType(match[1]!);
-              const length = parseInt(match[2]!);
-              if (v.tag !== "array") throw new Error(`expected array, got ${v.tag}`);
-              if (v.values.length !== length) throw new Error(`array length mismatch: expected ${length}, got ${v.values.length}`);
-              // Validate each element's type
-              for (let i = 0; i < v.values.length; i++) {
-                const elem = v.values[i]!;
-                if (suffixRanges[innerType] && elem.tag === "number") {
-                  checkSuffix(innerType, elem.num);
-                }
+          const resolvedAnn = resolveAstType(node.typeAnnotation);
+          if (resolvedAnn.kind === "array") {
+            const innerType = resolveAstType(resolvedAnn.elementType);
+            const length = resolvedAnn.length;
+            if (v.tag !== "array") throw new Error(`expected array, got ${v.tag}`);
+            if (v.values.length !== length) throw new Error(`array length mismatch: expected ${length}, got ${v.values.length}`);
+            // Validate each element's type
+            for (let i = 0; i < v.values.length; i++) {
+              const elem = v.values[i]!;
+              if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
+                checkSuffix(innerType.name, elem.num);
               }
             }
-          } else if (suffixRanges[resolvedAnn]) {
-            checkSuffix(resolvedAnn, toNum(v));
+          } else if (resolvedAnn.kind === "primitive" && suffixRanges[resolvedAnn.name]) {
+            checkSuffix(resolvedAnn.name, toNum(v));
             // Check type compatibility using the value's tracked type
             if (v.tag === "number" && v.type && suffixRanges[resolveType(v.type)]) {
               const valRange = suffixRanges[resolveType(v.type)]!;
-              const annRange = suffixRanges[resolvedAnn]!;
+              const annRange = suffixRanges[resolvedAnn.name]!;
               if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
                 throw new Error(`cannot assign ${v.type} to ${node.typeAnnotation}`);
               }
             }
           }
           // Propagate type annotation to the stored value
-          if (v.tag === "number") {
-            v = num(v.num, node.typeAnnotation);
+          if (v.tag === "number" && resolvedAnn.kind === "primitive") {
+            v = num(v.num, resolvedAnn.name);
           }
         }
         scopes[scopes.length - 1]!.vars[node.name] = v;

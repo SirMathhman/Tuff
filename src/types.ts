@@ -30,6 +30,12 @@ export function isControlFlow(e: unknown): e is ControlFlow {
 }
 
 // AST types
+// AST type representation
+export type AstType =
+  | { kind: "primitive"; name: string }
+  | { kind: "array"; elementType: AstType; length: number };
+
+// AST types
 export type Ast =
   | { kind: "num"; value: number; suffix?: string }
   | { kind: "bool"; value: boolean }
@@ -38,7 +44,7 @@ export type Ast =
   | { kind: "tuple"; elements: Ast[] }
   | { kind: "index"; target: Ast; index: number }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
-  | { kind: "let"; mutable: boolean; name: string; value: Ast; typeAnnotation?: string }
+  | { kind: "let"; mutable: boolean; name: string; value: Ast; typeAnnotation?: AstType }
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "refassign"; name: string; value: Ast }
   | { kind: "array_assign"; target: Ast; index: Ast; value: Ast }

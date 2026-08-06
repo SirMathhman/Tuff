@@ -1,4 +1,4 @@
-import type { Ast, Token } from "./types";
+import type { Ast, AstType, Token } from "./types";
 
 // Parser — returns AST, does not evaluate
 export function parse(tokens: Token[]): Ast {
@@ -283,21 +283,21 @@ export function parse(tokens: Token[]): Ast {
       const name = tokens[pos]!.value;
       pos++;
       // Check for type annotation: let x : Type = value
-      let typeAnnotation: string | undefined;
+      let typeAnnotation: AstType | undefined;
       if (tokens[pos]?.value === ":") {
         pos++; // skip ":"
         // Check for array type annotation: [Type; Length]
         if (tokens[pos]?.value === "[") {
           pos++; // skip "["
-          const innerType = tokens[pos]!.value;
+          const innerTypeName = tokens[pos]!.value;
           pos++; // skip inner type
           pos++; // skip ";"
-          const length = tokens[pos]!.value;
+          const length = parseInt(tokens[pos]!.value);
           pos++; // skip length
           pos++; // skip "]"
-          typeAnnotation = `[${innerType}; ${length}]`;
+          typeAnnotation = { kind: "array", elementType: { kind: "primitive", name: innerTypeName }, length };
         } else {
-          typeAnnotation = tokens[pos]!.value;
+          typeAnnotation = { kind: "primitive", name: tokens[pos]!.value };
           pos++; // skip type
         }
       }
