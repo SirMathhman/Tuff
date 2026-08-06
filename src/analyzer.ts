@@ -53,16 +53,35 @@ function resolveAstType(aliases: Map<string, string>, t: AstType): AstType {
 }
 
 export function analyze(ast: Ast, typeEnv: TypeEnv): void {
+  // Static scope stack mirroring the evaluator's runtime scopes.
+  // Each scope is the set of declared names; lookups walk backward.
+  const scopes: Set<string>[] = [new Set()];
+  const declared = (name: string): boolean =>
+    scopes.some((s) => s.has(name)) || name === "args";
+  analyzeNode(ast, typeEnv, scopes, declared);
+}
+
+function analyzeNode(
+  ast: Ast,
+  typeEnv: TypeEnv,
+  scopes: Set<string>[],
+  declared: (name: string) => boolean,
+): void {
   switch (ast.kind) {
     case "num":
       if (ast.suffix) checkSuffix(ast.suffix, ast.value);
       break;
     case "block":
-      for (const stmt of ast.statements) if (stmt) analyze(stmt, typeEnv);
+      scopes.push(new Set());
+      for (const stmt of ast.statements)
+        if (stmt) analyzeNode(stmt, typeEnv, scopes, declared);
+      scopes.pop();
       break;
     case "let":
-      analyze(ast.value, typeEnv);
+      // RHS is analyzed before the name enters scope (order-sensitive).
+      analyzeNode(ast.value, typeEnv, scopes, declared);
       typeEnv.mutables.set(ast.name, ast.mutable);
+      scopes[scopes.length - 1]!.add(ast.name);
       if (ast.typeAnnotation) {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
       } else {
@@ -73,12 +92,13 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       break;
     case "inlet":
       typeEnv.mutables.set(ast.name, false);
+      scopes[scopes.length - 1]!.add(ast.name);
       if (ast.typeAnnotation) {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
       }
       break;
     case "assign": {
-      analyze(ast.value, typeEnv);
+      analyzeNode(ast.value, typeEnv, scopes, declared);
       // Assigning requires a mutable binding (scope-insensitive by name).
       if (!typeEnv.mutables.get(ast.name)) {
         throw new Error(`cannot assign to immutable variable: ${ast.name}`);
@@ -86,12 +106,17 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       break;
     }
     case "augassign": {
-      analyze(ast.value, typeEnv);
+      analyzeNode(ast.value, typeEnv, scopes, declared);
       if (!typeEnv.mutables.get(ast.name)) {
         throw new Error(`cannot assign to immutable variable: ${ast.name}`);
       }
       break;
     }
+    case "ident":
+      if (!declared(ast.name)) {
+        throw new Error(`undeclared variable: ${ast.name}`);
+      }
+      break;
     case "unary": {
       // References can only be taken of identifiers (structural check).
       if (ast.op === "&" || ast.op === "&mut") {
@@ -99,7 +124,7 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
           throw new Error("can only take reference of identifier");
         }
       }
-      analyze(ast.operand, typeEnv);
+      analyzeNode(ast.operand, typeEnv, scopes, declared);
       // Dereference requires a ref-typed operand when statically known.
       if (ast.op === "*") {
         const t = staticType(ast.operand, typeEnv);
@@ -110,8 +135,8 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       break;
     }
     case "index": {
-      analyze(ast.target, typeEnv);
-      analyze(ast.index, typeEnv);
+      analyzeNode(ast.target, typeEnv, scopes, declared);
+      analyzeNode(ast.index, typeEnv, scopes, declared);
       // Indexing requires an array/slice/string/tuple/ref target when known.
       const t = staticType(ast.target, typeEnv);
       if (t) {
@@ -126,7 +151,7 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       break;
     }
     case "length": {
-      analyze(ast.target, typeEnv);
+      analyzeNode(ast.target, typeEnv, scopes, declared);
       const t = staticType(ast.target, typeEnv);
       if (t) {
         const ok =
@@ -141,22 +166,32 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
     case "yield":
       // `yield` always requires a value (structural check).
       if (ast.value === undefined) throw new Error("yield has no value");
-      analyze(ast.value, typeEnv);
+      analyzeNode(ast.value, typeEnv, scopes, declared);
       break;
     case "fn":
-      // Function parameters are immutable bindings.
+      // The fn name binds in the enclosing scope (before the body runs),
+      // enabling recursion. Params are immutable bindings in a nested scope;
+      // the body also sees the enclosing scopes (closures capture them).
+      scopes[scopes.length - 1]!.add(ast.name);
+      typeEnv.mutables.set(ast.name, false);
+      scopes.push(new Set());
       for (const p of ast.params) {
         typeEnv.mutables.set(p.name, false);
         typeEnv.inferred.set(p.name, resolveAstType(typeEnv.aliases, p.type));
+        scopes[scopes.length - 1]!.add(p.name);
       }
-      analyze(ast.body, typeEnv);
+      analyzeNode(ast.body, typeEnv, scopes, declared);
+      scopes.pop();
       break;
     case "for":
-      // Loop variable is mutable.
+      // Loop variable is mutable in a nested scope.
+      scopes.push(new Set());
       typeEnv.mutables.set(ast.varName, true);
-      analyze(ast.start, typeEnv);
-      analyze(ast.end, typeEnv);
-      analyze(ast.body, typeEnv);
+      scopes[scopes.length - 1]!.add(ast.varName);
+      analyzeNode(ast.start, typeEnv, scopes, declared);
+      analyzeNode(ast.end, typeEnv, scopes, declared);
+      analyzeNode(ast.body, typeEnv, scopes, declared);
+      scopes.pop();
       break;
     case "typealias": {
       typeEnv.aliases.set(ast.name, ast.baseType);
@@ -176,7 +211,7 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       const def = typeEnv.structs.get(ast.typeName);
       if (def) {
         for (const f of ast.fields) {
-          analyze(f.value, typeEnv);
+          analyzeNode(f.value, typeEnv, scopes, declared);
           const fieldDef = def.find((d) => d.name === f.key);
           if (!fieldDef) throw new Error(`unknown field ${f.key} on struct ${ast.typeName}`);
           // Check literal values against the field type at analysis time.
@@ -186,7 +221,7 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
           }
         }
       } else {
-        for (const f of ast.fields) analyze(f.value, typeEnv);
+        for (const f of ast.fields) analyzeNode(f.value, typeEnv, scopes, declared);
       }
       break;
     }
@@ -195,10 +230,10 @@ export function analyze(ast: Ast, typeEnv: TypeEnv): void {
       for (const v of Object.values(ast)) {
         if (Array.isArray(v)) {
           for (const x of v) {
-            if (x && typeof x === "object" && "kind" in x) analyze(x as Ast, typeEnv);
+            if (x && typeof x === "object" && "kind" in x) analyzeNode(x as Ast, typeEnv, scopes, declared);
           }
         } else if (v && typeof v === "object" && "kind" in v) {
-          analyze(v as Ast, typeEnv);
+          analyzeNode(v as Ast, typeEnv, scopes, declared);
         }
       }
       break;
