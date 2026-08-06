@@ -101,6 +101,60 @@ export function resolveAstType(astType: AstType): AstType {
   return astType;
 }
 
+// Check whether a value matches a type (used by the `is` operator).
+export function valueMatchesType(value: Value, astType: AstType): boolean {
+  const resolved = resolveAstType(astType);
+  switch (resolved.kind) {
+    case "primitive": {
+      const typeName = resolved.name.toLowerCase();
+      if (value.tag === "number" && value.type) {
+        return resolveType(value.type) === resolved.name;
+      }
+      const tagMap: Record<string, string> = {
+        bool: "bool",
+        string: "string",
+        tuple: "tuple",
+        array: "array",
+        record: "record",
+        null: "null",
+        fn: "fn",
+        ref: "ref",
+        enum: "enum",
+      };
+      const tagName = tagMap[typeName];
+      if (tagName) return value.tag === tagName;
+      return value.tag === "number" && !value.type && resolved.name === "number";
+    }
+    case "array": {
+      if (value.tag !== "array") return false;
+      if (value.values.length !== resolved.length) return false;
+      const innerType = resolveAstType(resolved.elementType);
+      for (const elem of value.values) {
+        if (innerType.kind === "primitive") {
+          if (innerType.name.toLowerCase() === "number") {
+            if (elem.tag !== "number") return false;
+          } else if (suffixRanges[innerType.name]) {
+            if (elem.tag !== "number" || !elem.type) return false;
+            if (resolveType(elem.type) !== innerType.name) return false;
+          } else {
+            const tagMap: Record<string, string> = {
+              bool: "bool", string: "string", tuple: "tuple",
+              array: "array", record: "record", null: "null", fn: "fn", ref: "ref", enum: "enum",
+            };
+            const tagName = tagMap[innerType.name.toLowerCase()];
+            if (tagName && elem.tag !== tagName) return false;
+          }
+        }
+      }
+      return true;
+    }
+    case "union":
+      return resolved.types.some((member) => valueMatchesType(value, member));
+    default:
+      return false;
+  }
+}
+
 // Validate that a value fits a declared type. Throws on mismatch.
 // `context` describes the binding site for error messages (e.g. "assign" or "pass").
 export function checkValueAgainstType(
@@ -133,6 +187,7 @@ function checkUnion(
   targetName?: string,
 ): void {
   // A value is valid if it matches at least one member of the union.
+  // Uses the range-based annotation check (not strict `is` matching).
   let matched = false;
   for (const member of resolved.types) {
     try {

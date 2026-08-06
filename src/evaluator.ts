@@ -1,7 +1,7 @@
-import type { Ast, AstType, Scope, Value } from "./types";
+import type { Ast, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { applyBinOp, bool, eq, notOp, num, toNum, truthy } from "./values";
-import { checkSuffix, checkValueAgainstType, defineEnum, defineStruct, defineTypeAlias, getEnumVariants, getStructFields, resolveAstType, resolveType, suffixRanges } from "./typesystem";
+import { checkSuffix, checkValueAgainstType, defineEnum, defineStruct, defineTypeAlias, getEnumVariants, getStructFields, resolveAstType, suffixRanges, valueMatchesType } from "./typesystem";
 
 // Evaluator — walks AST with scope
 export function evalAst(
@@ -411,7 +411,7 @@ export function evalAst(
       case "typecheck": {
         const v = visit(node.value);
         if (v === null) throw new Error("typecheck value has no value");
-        return bool(matchesType(v, node.type));
+        return bool(valueMatchesType(v, node.type));
       }
       case "typealias": {
         defineTypeAlias(node.name, node.baseType);
@@ -442,58 +442,4 @@ export function evalAst(
     }
   }
   return visit(ast) ?? num(0);
-}
-
-// Check whether a value matches a type (used by the `is` operator).
-function matchesType(v: Value, type: AstType): boolean {
-  const resolved = resolveAstType(type);
-  switch (resolved.kind) {
-    case "primitive": {
-      const typeName = resolved.name.toLowerCase();
-      if (v.tag === "number" && v.type) {
-        return resolveType(v.type) === resolved.name;
-      }
-      const tagMap: Record<string, string> = {
-        bool: "bool",
-        string: "string",
-        tuple: "tuple",
-        array: "array",
-        record: "record",
-        null: "null",
-        fn: "fn",
-        ref: "ref",
-        enum: "enum",
-      };
-      const tagName = tagMap[typeName];
-      if (tagName) return v.tag === tagName;
-      return v.tag === "number" && !v.type && resolved.name === "number";
-    }
-    case "array": {
-      if (v.tag !== "array") return false;
-      if (v.values.length !== resolved.length) return false;
-      const innerType = resolveAstType(resolved.elementType);
-      for (const elem of v.values) {
-        if (innerType.kind === "primitive") {
-          if (innerType.name.toLowerCase() === "number") {
-            if (elem.tag !== "number") return false;
-          } else if (suffixRanges[innerType.name]) {
-            if (elem.tag !== "number" || !elem.type) return false;
-            if (resolveType(elem.type) !== innerType.name) return false;
-          } else {
-            const tagMap: Record<string, string> = {
-              bool: "bool", string: "string", tuple: "tuple",
-              array: "array", record: "record", null: "null", fn: "fn", ref: "ref", enum: "enum",
-            };
-            const tagName = tagMap[innerType.name.toLowerCase()];
-            if (tagName && elem.tag !== tagName) return false;
-          }
-        }
-      }
-      return true;
-    }
-    case "union":
-      return resolved.types.some((member) => matchesType(v, member));
-    default:
-      return false;
-  }
 }
