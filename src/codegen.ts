@@ -150,7 +150,7 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
     case "num":
       // Suffixed literals preserve their type at runtime so `is` checks work
       // (e.g. `if (c) 100U8 else 100U16; x is U8`). Unsuffixed stay plain.
-      return node.suffix ? `{ v: ${node.value}, t: ${JSON.stringify(node.suffix)} }` : String(node.value);
+      return node.suffix ? `{ v: ${node.value}, __t: ${JSON.stringify(node.suffix)} }` : String(node.value);
     case "bool":
       return node.value ? "true" : "false";
     case "char":
@@ -315,19 +315,15 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
     string: '((typeof ($0) === "string") ? 1 : 0)',
     array: "((Array.isArray($0)) ? 1 : 0)",
     tuple: "((Array.isArray($0)) ? 1 : 0)",
-    record: '((typeof ($0) === "object" && $0 !== null && !Array.isArray($0) && $0.t === undefined && $0.__t === undefined) ? 1 : 0)',
+    record: '((typeof ($0) === "object" && $0 !== null && !Array.isArray($0) && $0.__t === undefined) ? 1 : 0)',
     null: "(($0 === null) ? 1 : 0)",
     number: '((typeof ($0) === "number") ? 1 : 0)',
   };
   const tag = tagChecks[t];
   if (tag) return sub(tag, v);
-  // Named struct type: check the runtime `__t` marker.
-  if (typeEnv && typeEnv.structs.has(t)) {
-    return sub("((($0) && typeof ($0) === 'object' && ($0).__t === " + JSON.stringify(t) + ") ? 1 : 0)", v);
-  }
-  // Suffixed numeric type (U8, I32, ...): check the runtime `.t` marker.
-  // A value only matches if it was produced by a suffixed literal of that type.
-  return sub("((($0) && typeof ($0) === 'object' && ($0).t === " + JSON.stringify(t) + ") ? 1 : 0)", v);
+  // Typed value (named struct, suffixed number, enum): check the `__t` marker.
+  // A value only matches if it was produced by a literal of that exact type.
+  return sub("((($0) && typeof ($0) === 'object' && ($0).__t === " + JSON.stringify(t) + ") ? 1 : 0)", v);
 }
 
 // Resolve a type's alias references (mirrors analyzer's resolveAstType).
