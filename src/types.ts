@@ -85,3 +85,12 @@ export type Ast =
   | { kind: "enumdef"; name: string; variants: string[] };
 
 export type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
+
+// Evaluation context — all interpreter state threaded through an evalAst run.
+export type EvalContext = {
+  scopes: Scope[];
+  mutables: Scope["mutable"][];
+  exports?: Record<string, Value>;
+  moduleLoader?: (name: string, inputs?: Record<string, Value>) => Value | null;
+  moduleInputs?: Record<string, Value>;
+};

@@ -1,17 +1,12 @@
-import type { Ast, Scope, Value } from "./types";
+import type { Ast, EvalContext, Value } from "./types";
 import { isControlFlow } from "./types";
 import { applyBinOp, bool, eq, notOp, num, toNum, truthy } from "./values";
 import { checkSuffix, checkValueAgainstType, defineEnum, defineStruct, defineTypeAlias, getEnumVariants, getStructFields, resolveAstType, suffixRanges, valueMatchesType } from "./typesystem";
 
 // Evaluator — walks AST with scope
-export function evalAst(
-  ast: Ast,
-  scopes: Scope[],
-  mutables: Scope["mutable"][],
-  exports?: Record<string, Value>,
-  moduleLoader?: (name: string, inputs?: Record<string, Value>) => Value | null,
-  moduleInputs?: Record<string, Value>,
-): Value {
+// `ctx` carries all interpreter state: scopes, mutables, exports, and module hooks.
+export function evalAst(ast: Ast, ctx: EvalContext): Value {
+  const { scopes, mutables, exports, moduleLoader, moduleInputs } = ctx;
   function lookup(name: string): Value {
     for (let i = scopes.length - 1; i >= 0; i--) {
       if (name in scopes[i]!.vars) return scopes[i]!.vars[name]!;
@@ -316,7 +311,7 @@ export function evalAst(
           fnScopes[fnScopes.length - 1]!.vars[p.name] = arg;
         });
         try {
-          return evalAst(fn.body, fnScopes, fnMutables);
+          return evalAst(fn.body, { scopes: fnScopes, mutables: fnMutables });
         } catch (e) {
           if (isControlFlow(e) && e.kind === "return")
             return e.value ?? { tag: "null" };

@@ -26,10 +26,13 @@ export class ModuleLoader {
     const exports: Record<string, Value> = {};
     const tokens = tokenize(source);
     const ast = parse(tokens);
-    evalAst(ast, this.scopes, this.mutables, exports, (n, i) =>
-      this.load(n, i),
-      inputs,
-    );
+    evalAst(ast, {
+      scopes: this.scopes,
+      mutables: this.mutables,
+      exports,
+      moduleLoader: (n, i) => this.load(n, i),
+      moduleInputs: inputs,
+    });
     const record = { tag: "record" as const, fields: exports };
     if (!inputs) this.records[name] = record;
     return record;
@@ -42,9 +45,12 @@ export class ModuleLoader {
     const exports: Record<string, Value> = {};
     const tokens = tokenize(source);
     const ast = parse(tokens);
-    const value = evalAst(ast, this.scopes, this.mutables, exports, (n, i) =>
-      this.load(n, i),
-    );
+    const value = evalAst(ast, {
+      scopes: this.scopes,
+      mutables: this.mutables,
+      exports,
+      moduleLoader: (n, i) => this.load(n, i),
+    });
     return toNum(value);
   }
 }

@@ -14,12 +14,12 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 
 - `index.ts` — thin wrapper. Entry points: `evaluate(source)`, `evaluateModules(entries, modules)`, `compile(source)` (generates `process.exit(n);` JS)
 - `src/index.ts` — barrel exports all `src/` modules
-- `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`
+- `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`, `EvalContext`
 - `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)
 - `src/tokenizer.ts` — `tokenize()` function
 - `src/parser.ts` — `parse()` function
 - `src/typeparser.ts` — `parseType()` function (recursive type annotation parser, shared by `let` annotations and `is` operator)
-- `src/evaluator.ts` — `evalAst()` function with scope management
+- `src/evaluator.ts` — `evalAst(ast, ctx)` function with scope management; `ctx: EvalContext` carries scopes, mutables, exports, module hooks
 - `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `defineStruct`/`getStructFields`, `defineEnum`/`getEnumVariants`, `defineTypeAlias`, `resolveType`, `resolveAstType`, `valueMatchesType` (for `is`), `checkValueAgainstType` (shared value-vs-type validation used by `let` annotations and function call params)
 - `src/modules.ts` — `ModuleLoader` class: shared-scope module evaluation with `out` exports, lazy cross-module loading, and circular-dependency detection
 - `index.test.ts` — test suite, one test per feature (109 tests). Each test: `test('evaluate("<code>") => <result>', () => { expectValid("<code>", <result>) })`

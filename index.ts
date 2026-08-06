@@ -6,7 +6,10 @@ export function evaluate(source: string): number {
   if (trimmed === "") return 0;
   const tokens = tokenize(trimmed);
   const ast = parse(tokens);
-  const value = evalAst(ast, [{ vars: {}, mutable: {} }], [{}]);
+  const value = evalAst(ast, {
+    scopes: [{ vars: {}, mutable: {} }],
+    mutables: [{}],
+  });
   return toNum(value);
 }
 
