@@ -141,10 +141,8 @@ type Ast =
   | { kind: "char"; value: string }
   | { kind: "string"; value: string }
   | { kind: "string_index"; target: Ast; index: Ast }
-  | { kind: "string_length"; target: Ast }
-  | { kind: "array_length"; target: Ast }
-  | { kind: "record"; fields: { key: string; value: Ast }[] }
-  | { kind: "field_access"; target: Ast; field: string };
+  | { kind: "property_access"; target: Ast; property: string }
+  | { kind: "record"; fields: { key: string; value: Ast }[] };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -441,17 +439,10 @@ function parse(tokens: Token[]): Ast {
             target: result,
             index: parseInt(nextTok.value),
           };
-        } else if (nextTok?.value === "length") {
-          pos++;
-          if (result.kind === "string") {
-            result = { kind: "string_length", target: result };
-          } else {
-            result = { kind: "array_length", target: result };
-          }
         } else {
-          const field = nextTok!.value;
+          const property = nextTok!.value;
           pos++;
-          result = { kind: "field_access", target: result, field };
+          result = { kind: "property_access", target: result, property };
         }
       } else if (tokens[pos]?.value === "(") {
         pos++; // skip "("
@@ -1115,21 +1106,27 @@ function evalAst(
         if (ch === undefined) return num(0);
         return num(ch.charCodeAt(0));
       }
-      case "string_length": {
+      case "property_access": {
         const target = visit(node.target);
         if (target === null)
-          throw new Error("string length target has no value");
-        if (target.tag !== "string")
-          throw new Error("cannot get length of non-string");
-        return num(target.value.length);
-      }
-      case "array_length": {
-        const target = visit(node.target);
-        if (target === null)
-          throw new Error("array length target has no value");
-        if (target.tag !== "array")
-          throw new Error("cannot get length of non-array");
-        return num(target.values.length);
+          throw new Error("property access target has no value");
+        const prop = node.property;
+        if (prop === "length") {
+          switch (target.tag) {
+            case "string":
+              return num(target.value.length);
+            case "array":
+              return num(target.values.length);
+            default:
+              throw new Error(`cannot get length of ${target.tag}`);
+          }
+        }
+        if (target.tag === "record") {
+          const val = target.fields[prop];
+          if (val === undefined) throw new Error(`field ${prop} not found`);
+          return val;
+        }
+        throw new Error(`cannot access property ${prop} on ${target.tag}`);
       }
       case "record": {
         const fields: Record<string, Value> = {};
@@ -1139,16 +1136,6 @@ function evalAst(
           fields[f.key] = v;
         }
         return { tag: "record", fields };
-      }
-      case "field_access": {
-        const target = visit(node.target);
-        if (target === null)
-          throw new Error("field access target has no value");
-        if (target.tag !== "record")
-          throw new Error("cannot access field on non-record");
-        const val = target.fields[node.field];
-        if (val === undefined) throw new Error(`field ${node.field} not found`);
-        return val;
       }
     }
   }
