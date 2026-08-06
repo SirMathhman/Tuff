@@ -1,4 +1,5 @@
 import type { Ast, AstType, Token } from "./types";
+import { parseType as parseTypeModule } from "./typeparser";
 
 // Parser — returns AST, does not evaluate
 export function parse(tokens: Token[]): Ast {
@@ -9,20 +10,12 @@ export function parse(tokens: Token[]): Ast {
       throw new Error(`expected "${value}", got "${tok?.value ?? "EOF"}"`);
     pos++;
   }
-  // Recursively parse a type: primitive (e.g. I32) or array ([Type; Length])
+  // Delegate to the type parser module, keeping the shared position in sync
   function parseType(): AstType {
-    if (tokens[pos]?.value === "[") {
-      pos++; // skip "["
-      const elementType = parseType();
-      pos++; // skip ";"
-      const length = parseInt(tokens[pos]!.value);
-      pos++; // skip length
-      pos++; // skip "]"
-      return { kind: "array", elementType, length };
-    }
-    const name = tokens[pos]!.value;
-    pos++; // skip type name
-    return { kind: "primitive", name };
+    const state = { pos };
+    const result = parseTypeModule(tokens, state);
+    pos = state.pos;
+    return result;
   }
   function parseExpression(): Ast {
     let result = parseOr();

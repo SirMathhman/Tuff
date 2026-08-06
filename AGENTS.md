@@ -18,6 +18,7 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 - `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)
 - `src/tokenizer.ts` — `tokenize()` function
 - `src/parser.ts` — `parse()` function
+- `src/typeparser.ts` — `parseType()` function (recursive type annotation parser, shared by `let` annotations and `is` operator)
 - `src/evaluator.ts` — `evalAst()` function with scope management
 - `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `resolveType`, `resolveAstType`, `defineTypeAlias`
 - `index.test.ts` — test suite, one test per feature (~96 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
