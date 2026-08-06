@@ -3,16 +3,24 @@
 ## Quick Start
 
 - **Test**: `bun test`
-- **Typecheck**: `bun run typecheck`
+- **Lint/typecheck**: `bun run lint` (runs `tsc --noEmit` then `eslint . --fix`)
+- **Duplication check**: `bun run cpd`
 - **Run**: `bun run index.ts`
-- **Quality gates** (`.github/hooks/hooks.json`): typecheck → cpd (duplication check) → test — all must pass on Stop hook
+- **Quality gates** (`.github/hooks/hooks.json`): `bun run lint` → `bun run cpd` → `bun test` — all must pass on Stop hook
 
 ## Architecture
 
-Single-file AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
+Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — tokenizer, parser, evaluator, all exports (~1200 lines). Entry point: `export function evaluate(source: string): number`
-- `index.test.ts` — test suite, one test per feature (~300 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
+- `index.ts` — thin wrapper (10 lines). Entry point: `export function evaluate(source: string): number`
+- `src/index.ts` — barrel exports all `src/` modules
+- `src/types.ts` — core type definitions: `Token`, `Value`, `ControlFlow`, `AstType`, `Ast`, `Scope`
+- `src/values.ts` — value constructors (`num`, `bool`), conversions (`toNum`, `truthy`), comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `notOp`), binary operations (`applyBinOp`)
+- `src/tokenizer.ts` — `tokenize()` function
+- `src/parser.ts` — `parse()` function
+- `src/evaluator.ts` — `evalAst()` function with scope management
+- `src/typesystem.ts` — type system: `suffixRanges`, `checkSuffix`, `resolveType`, `resolveAstType`, `defineTypeAlias`
+- `index.test.ts` — test suite, one test per feature (~96 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
 - See [README.md](./README.md) for project overview
 - See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features
 
@@ -35,12 +43,13 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 ## Key Conventions
 
 - **Value type**: discriminated union — `number`, `bool`, `fn`, `ref`, `tuple`, `null`, `array`, `string`, `record`
-- **AST types**: see `type Ast` union in `index.ts` — add new variants here when adding features
+- **AST types**: see `type Ast` union in `src/types.ts` — add new variants here when adding features
+- **AstType**: see `type AstType` in `src/types.ts` — `primitive` and `array` variants. Use for type annotations and `is` operator
 - **ControlFlow**: shared discriminated union for `continue`, `break`, `yield`, `return` — use this type, not symbols
 - **Scope**: `scopes: Scope[]` array; `mutables: Scope["mutable"][]` array — traverse both for assignments
 - **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`
 - **Safety**: 10,000 iteration limit on `while`/`for` loops
-- **No extra files**: keep everything in `index.ts` unless explicitly asked to split
+- **Module structure**: each `src/` file is a single responsibility module. Import from `src/index.ts` barrel for cross-module access
 - **Test format**: `test('evaluate("<code>") => <result>', ...)` for success, `test('evaluate("<code>") => Error', ...)` for failures
 
 ## Pitfalls

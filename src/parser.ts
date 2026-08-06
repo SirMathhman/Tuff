@@ -9,6 +9,21 @@ export function parse(tokens: Token[]): Ast {
       throw new Error(`expected "${value}", got "${tok?.value ?? "EOF"}"`);
     pos++;
   }
+  // Recursively parse a type: primitive (e.g. I32) or array ([Type; Length])
+  function parseType(): AstType {
+    if (tokens[pos]?.value === "[") {
+      pos++; // skip "["
+      const elementType = parseType();
+      pos++; // skip ";"
+      const length = parseInt(tokens[pos]!.value);
+      pos++; // skip length
+      pos++; // skip "]"
+      return { kind: "array", elementType, length };
+    }
+    const name = tokens[pos]!.value;
+    pos++; // skip type name
+    return { kind: "primitive", name };
+  }
   function parseExpression(): Ast {
     let result = parseOr();
     while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
@@ -54,21 +69,7 @@ export function parse(tokens: Token[]): Ast {
         result = { kind: "binop", op, left: result, right: next };
       } else if (op === "is") {
         pos++;
-        // Check for array type: [Type; Length]
-        let astType: AstType;
-        if (tokens[pos]?.value === "[") {
-          pos++; // skip "["
-          const innerTypeName = tokens[pos]!.value;
-          pos++; // skip inner type
-          pos++; // skip ";"
-          const length = parseInt(tokens[pos]!.value);
-          pos++; // skip length
-          pos++; // skip "]"
-          astType = { kind: "array", elementType: { kind: "primitive", name: innerTypeName }, length };
-        } else {
-          astType = { kind: "primitive", name: tokens[pos]!.value };
-          pos++;
-        }
+        const astType = parseType();
         result = { kind: "typecheck", value: result, type: astType };
       } else {
         break;
@@ -299,20 +300,7 @@ export function parse(tokens: Token[]): Ast {
       let typeAnnotation: AstType | undefined;
       if (tokens[pos]?.value === ":") {
         pos++; // skip ":"
-        // Check for array type annotation: [Type; Length]
-        if (tokens[pos]?.value === "[") {
-          pos++; // skip "["
-          const innerTypeName = tokens[pos]!.value;
-          pos++; // skip inner type
-          pos++; // skip ";"
-          const length = parseInt(tokens[pos]!.value);
-          pos++; // skip length
-          pos++; // skip "]"
-          typeAnnotation = { kind: "array", elementType: { kind: "primitive", name: innerTypeName }, length };
-        } else {
-          typeAnnotation = { kind: "primitive", name: tokens[pos]!.value };
-          pos++; // skip type
-        }
+        typeAnnotation = parseType();
       }
       pos++; // skip "="
       const value = parseExpression();

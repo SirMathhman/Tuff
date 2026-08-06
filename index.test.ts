@@ -101,6 +101,10 @@ test('evaluate("let array : [I32; 3] = [1, 2, 3];") => 0', () => {
   expect(evaluate("let array : [I32; 3] = [1, 2, 3];")).toBe(0);
 });
 
+test('evaluate("let array : [[I32; 2]; 2] = [[0, 1], [2, 3]];") => 0', () => {
+  expect(evaluate("let array : [[I32; 2]; 2] = [[0, 1], [2, 3]];")).toBe(0);
+});
+
 test('evaluate("let x = false; x") => 0', () => {
   expect(evaluate("let x = false; x")).toBe(0);
 });
