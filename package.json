@@ -5,11 +5,16 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit && eslint . --fix",
     "cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "latest",
+    "eslint": "^10.8.0",
+    "globals": "^17.9.0",
+    "jiti": "^2.7.0",
+    "typescript-eslint": "^8.66.0"
   },
   "peerDependencies": {
     "typescript": "^5"

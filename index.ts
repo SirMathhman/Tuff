@@ -176,7 +176,7 @@ function tokenize(source: string): Token[] {
       // Handle numeric suffixes (e.g., U8, I32, F64)
       let suffix: string | undefined;
       if (i < source.length && /[a-zA-Z]/.test(source[i]!)) {
-        let suffixStart = i;
+        const suffixStart = i;
         while (i < source.length && /[a-zA-Z0-9]/.test(source[i]!)) {
           i++;
         }

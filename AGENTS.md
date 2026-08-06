@@ -5,13 +5,14 @@
 - **Test**: `bun test`
 - **Typecheck**: `bun run typecheck`
 - **Run**: `bun run index.ts`
+- **Quality gates** (`.github/hooks/hooks.json`): typecheck → cpd (duplication check) → test — all must pass on Stop hook
 
 ## Architecture
 
 Single-file AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst()` → `Value` → `number`
 
-- `index.ts` — tokenizer, parser, evaluator, all exports (~1200 lines)
-- `index.test.ts` — test suite, one test per feature (~300 tests)
+- `index.ts` — tokenizer, parser, evaluator, all exports (~1200 lines). Entry point: `export function evaluate(source: string): number`
+- `index.test.ts` — test suite, one test per feature (~300 tests). Each test: `test('evaluate("<code>") => <result>', () => { expect(evaluate("<code>")).toBe(<result>) })`
 - See [README.md](./README.md) for project overview
 - See [MISSING_FEATURES.md](./MISSING_FEATURES.md) for planned features
 
@@ -40,6 +41,7 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 - **Tokenizer**: multi-char lookahead required for `==`, `!=`, `<=`, `>=`, `=>`, `..`, `||`, `&&`, `+=`
 - **Safety**: 10,000 iteration limit on `while`/`for` loops
 - **No extra files**: keep everything in `index.ts` unless explicitly asked to split
+- **Test format**: `test('evaluate("<code>") => <result>', ...)` for success, `test('evaluate("<code>") => Error', ...)` for failures
 
 ## Pitfalls
 
@@ -51,3 +53,4 @@ Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&
 - Always parse `if` as statement first, fall back to expression
 - Don't create new `Symbol()` for control flow — use `ControlFlow` type
 - Numeric suffixes (`U8`, `I32`, etc.) carry type info — validate ranges on assignment
+- `evaluate()` returns `number` via `toNum()` — all expression results coerce to number
