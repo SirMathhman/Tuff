@@ -39,7 +39,7 @@ Modular AST-based interpreter: `tokenize()` → `parse()` → `Ast` → `evalAst
 
 ## Implemented Features
 
-Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&`, `&mut`, `*`), type annotations (`: U8`, `: I32`, etc.), functions, closures, `if`/`else`, `while`, `for` (range), `match`, `yield`, `return`, `continue`, `break`, array mutation, string indexing & length.
+Numbers, booleans, strings, chars, tuples, arrays, records, null, references (`&`, `&mut`, `*`), type annotations (`: U8`, `: I32`, etc.), functions (params require type annotations, e.g. `fn add(x : I32, y : I32)`), closures, `if`/`else`, `while`, `for` (range), `match`, `yield`, `return`, `continue`, `break`, array mutation, string indexing & length.
 
 ## Key Conventions
 

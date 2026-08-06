@@ -261,12 +261,20 @@ test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
   expect(evaluate("let x = { if (true) yield 4; 0 }; x")).toBe(4);
 });
 
-test('evaluate("fn add(x, y) => x + y; add(3, 4)") => 7', () => {
-  expect(evaluate("fn add(x, y) => x + y; add(3, 4)")).toBe(7);
+test('evaluate("fn add(x : I32, y : I32) => x + y; add(3, 4)") => 7', () => {
+  expect(evaluate("fn add(x : I32, y : I32) => x + y; add(3, 4)")).toBe(7);
 });
 
-test('evaluate("fn add(x, y) => { x + y } add(3, 4)") => 7', () => {
-  expect(evaluate("fn add(x, y) => { x + y } add(3, 4)")).toBe(7);
+test('evaluate("fn doNothing(param) => {}") => Error', () => {
+  expect(() => evaluate("fn doNothing(param) => {}")).toThrow();
+});
+
+test('evaluate("fn doNothing(param : I32) => {}") => 0', () => {
+  expect(evaluate("fn doNothing(param : I32) => {}")).toBe(0);
+});
+
+test('evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)") => 7', () => {
+  expect(evaluate("fn add(x : I32, y : I32) => { x + y } add(3, 4)")).toBe(7);
 });
 
 test('evaluate("let mut x = 0; fn addOnce() => { x += 1; } addOnce(); x") => 1', () => {
@@ -321,8 +329,8 @@ test('evaluate("let array = [1, 2, 3]; array.length") => 3', () => {
   expect(evaluate("let array = [1, 2, 3]; array.length")).toBe(3);
 });
 
-test('evaluate("fn factorial(n) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)") => 120', () => {
-  expect(evaluate("fn factorial(n) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)")).toBe(120);
+test('evaluate("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)") => 120', () => {
+  expect(evaluate("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)")).toBe(120);
 });
 
 test('evaluate("10 % 3") => 1', () => {

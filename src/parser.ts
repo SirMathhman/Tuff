@@ -399,10 +399,16 @@ export function parse(tokens: Token[]): Ast {
       const name = tokens[pos]!.value;
       pos++; // skip name
       pos++; // skip "("
-      const params: string[] = [];
+      const params: { name: string; type: AstType }[] = [];
       while (tokens[pos]?.value !== ")") {
-        params.push(tokens[pos]!.value);
-        pos++;
+        const paramName = tokens[pos]!.value;
+        pos++; // skip param name
+        if (tokens[pos]?.value !== ":") {
+          throw new Error(`parameter "${paramName}" requires a type annotation`);
+        }
+        pos++; // skip ":"
+        const paramType = parseType();
+        params.push({ name: paramName, type: paramType });
         if (tokens[pos]?.value === ",") pos++;
       }
       pos++; // skip ")"

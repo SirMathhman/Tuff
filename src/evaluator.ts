@@ -277,7 +277,7 @@ export function evalAst(
           return v;
         });
         fn.params.forEach((p, i) => {
-          fnScopes[fnScopes.length - 1]!.vars[p] = argValues[i]!;
+          fnScopes[fnScopes.length - 1]!.vars[p.name] = argValues[i]!;
         });
         try {
           return evalAst(fn.body, fnScopes, fnMutables);
