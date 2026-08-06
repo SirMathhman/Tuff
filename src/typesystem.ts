@@ -21,6 +21,21 @@ export function checkSuffix(suffix: string, value: number): void {
 // Type alias resolution
 const typeAliases: Record<string, string> = {};
 
+// Struct definitions: name -> field definitions
+const structDefs: Record<string, { name: string; type: AstType }[]> = {};
+
+export function defineStruct(name: string, fields: { name: string; type: AstType }[]): void {
+  structDefs[name] = fields;
+}
+
+export function getStructFields(name: string): { name: string; type: AstType }[] | undefined {
+  return structDefs[name];
+}
+
+export function isStructType(name: string): boolean {
+  return structDefs[name] !== undefined;
+}
+
 export function defineTypeAlias(name: string, baseType: string): void {
   typeAliases[name] = baseType;
   detectCycle(name);
@@ -56,6 +71,12 @@ export function resolveAstType(astType: AstType): AstType {
       length: astType.length,
     };
   }
+  if (astType.kind === "struct") {
+    return {
+      kind: "struct",
+      fields: astType.fields.map((f) => ({ name: f.name, type: resolveAstType(f.type) })),
+    };
+  }
   return astType;
 }
 
@@ -68,28 +89,64 @@ export function checkValueAgainstType(
   targetName?: string,
 ): void {
   const resolved = resolveAstType(astType);
-  if (resolved.kind === "array") {
-    const innerType = resolveAstType(resolved.elementType);
-    if (value.tag !== "array") throw new Error(`expected array, got ${value.tag}`);
-    if (value.values.length !== resolved.length)
-      throw new Error(`array length mismatch: expected ${resolved.length}, got ${value.values.length}`);
-    for (const elem of value.values) {
-      if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
-        checkSuffix(innerType.name, elem.num);
-      }
-    }
-    return;
+  switch (resolved.kind) {
+    case "struct":
+      checkStruct(value, resolved, context);
+      return;
+    case "array":
+      checkArray(value, resolved);
+      return;
+    case "primitive":
+      checkPrimitive(value, resolved, context, targetName);
+      return;
   }
-  if (resolved.kind === "primitive" && suffixRanges[resolved.name]) {
-    checkSuffix(resolved.name, toNum(value));
-    // Check type compatibility using the value's tracked type
-    if (value.tag === "number" && value.type && suffixRanges[resolveType(value.type)]) {
-      const valRange = suffixRanges[resolveType(value.type)]!;
-      const annRange = suffixRanges[resolved.name]!;
-      if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
-        const target = targetName ? ` to ${targetName}` : "";
-        throw new Error(`cannot ${context} ${value.type}${target} of type ${resolved.name}`);
-      }
+}
+
+function checkStruct(
+  value: Value,
+  resolved: Extract<AstType, { kind: "struct" }>,
+  context: string,
+): void {
+  if (value.tag !== "record")
+    throw new Error(`expected struct, got ${value.tag}`);
+  for (const field of resolved.fields) {
+    const fieldVal = value.fields[field.name];
+    if (fieldVal === undefined)
+      throw new Error(`missing field ${field.name}`);
+    checkValueAgainstType(fieldVal, field.type, context, field.name);
+  }
+}
+
+function checkArray(
+  value: Value,
+  resolved: Extract<AstType, { kind: "array" }>,
+): void {
+  const innerType = resolveAstType(resolved.elementType);
+  if (value.tag !== "array") throw new Error(`expected array, got ${value.tag}`);
+  if (value.values.length !== resolved.length)
+    throw new Error(`array length mismatch: expected ${resolved.length}, got ${value.values.length}`);
+  for (const elem of value.values) {
+    if (innerType.kind === "primitive" && suffixRanges[innerType.name] && elem.tag === "number") {
+      checkSuffix(innerType.name, elem.num);
+    }
+  }
+}
+
+function checkPrimitive(
+  value: Value,
+  resolved: Extract<AstType, { kind: "primitive" }>,
+  context: string,
+  targetName?: string,
+): void {
+  if (!suffixRanges[resolved.name]) return;
+  checkSuffix(resolved.name, toNum(value));
+  // Check type compatibility using the value's tracked type
+  if (value.tag === "number" && value.type && suffixRanges[resolveType(value.type)]) {
+    const valRange = suffixRanges[resolveType(value.type)]!;
+    const annRange = suffixRanges[resolved.name]!;
+    if (valRange[0] < annRange[0] || valRange[1] > annRange[1]) {
+      const target = targetName ? ` to ${targetName}` : "";
+      throw new Error(`cannot ${context} ${value.type}${target} of type ${resolved.name}`);
     }
   }
 }

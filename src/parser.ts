@@ -279,6 +279,21 @@ export function parse(tokens: Token[]): Ast {
     if (tok?.type === "identifier") {
       const name = tok.value;
       pos++;
+      // Struct literal: Point { x : 3, y : 4 }
+      if (tokens[pos]?.value === "{") {
+        pos++; // skip "{"
+        const fields: { key: string; value: Ast }[] = [];
+        while (tokens[pos]?.value !== "}") {
+          const key = tokens[pos]!.value;
+          pos++; // skip key
+          pos++; // skip ":"
+          const value = parseExpression();
+          fields.push({ key, value });
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip "}"
+        return { kind: "structliteral", typeName: name, fields };
+      }
       return { kind: "ident", name };
     }
     const result = parseFloat(tok!.value);
@@ -286,6 +301,24 @@ export function parse(tokens: Token[]): Ast {
     return { kind: "num", value: result, suffix: tok?.suffix };
   }
   function parseStatement(): Ast | null {
+    // Check for struct definition: struct Name { field : Type, ... }
+    if (tokens[pos]?.value === "struct") {
+      pos++; // skip "struct"
+      const name = tokens[pos]!.value;
+      pos++; // skip struct name
+      pos++; // skip "{"
+      const fields: { name: string; type: AstType }[] = [];
+      while (tokens[pos]?.value !== "}") {
+        const fieldName = tokens[pos]!.value;
+        pos++; // skip field name
+        pos++; // skip ":"
+        const fieldType = parseType();
+        fields.push({ name: fieldName, type: fieldType });
+        if (tokens[pos]?.value === ",") pos++;
+      }
+      pos++; // skip "}"
+      return { kind: "structdef", name, fields };
+    }
     // Check for type alias: type Alias = BaseType
     if (tokens[pos]?.value === "type") {
       pos++; // skip "type"

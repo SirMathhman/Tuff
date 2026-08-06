@@ -1,7 +1,7 @@
 import type { Ast, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { applyBinOp, bool, eq, notOp, num, toNum, truthy } from "./values";
-import { checkSuffix, checkValueAgainstType, defineTypeAlias, resolveAstType, resolveType, suffixRanges } from "./typesystem";
+import { checkSuffix, checkValueAgainstType, defineStruct, defineTypeAlias, getStructFields, resolveAstType, resolveType, suffixRanges } from "./typesystem";
 
 // Evaluator — walks AST with scope
 export function evalAst(
@@ -351,6 +351,11 @@ export function evalAst(
           if (val === undefined) throw new Error(`field ${node.property} not found`);
           return val;
         }
+        if (target.tag === "struct") {
+          const val = target.fields[node.property];
+          if (val === undefined) throw new Error(`field ${node.property} not found`);
+          return val;
+        }
         throw new Error(`cannot access property ${node.property} on ${target.tag}`);
       }
       case "length": {
@@ -427,6 +432,24 @@ export function evalAst(
       case "typealias": {
         defineTypeAlias(node.name, node.baseType);
         return null;
+      }
+      case "structdef": {
+        defineStruct(node.name, node.fields);
+        return null;
+      }
+      case "structliteral": {
+        const fields: Record<string, Value> = {};
+        const def = getStructFields(node.typeName);
+        if (!def) throw new Error(`unknown struct: ${node.typeName}`);
+        for (const f of node.fields) {
+          const v = visit(f.value);
+          if (v === null) throw new Error("struct field has no value");
+          const fieldDef = def.find((d) => d.name === f.key);
+          if (!fieldDef) throw new Error(`unknown field ${f.key} on struct ${node.typeName}`);
+          checkValueAgainstType(v, fieldDef.type, "assign", f.key);
+          fields[f.key] = v;
+        }
+        return { tag: "struct", typeName: node.typeName, fields };
       }
     }
   }

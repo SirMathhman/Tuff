@@ -21,7 +21,8 @@ Features that would be useful to add to Tuff, grouped by category.
 
 ## Data Types
 
-- [ ] Structs / named tuples (`struct Point { x, y }`)
+- [x] Structs / named tuples (`struct Point { x, y }`)
+- [x] Anonymous struct types (`let pt : { x : I32, y : I32 } = { x : 3, y : 4 }`)
 - [ ] Enums (`enum Color { Red, Green, Blue }`)
 - [ ] Union types (`type Result = Ok | Err`)
 - [ ] Dynamic types / `any`
@@ -95,7 +96,7 @@ Features that would be useful to add to Tuff, grouped by category.
 - [ ] Type inference (infer `let x = 5` as `U8` or `I32`)
 - [ ] Type inference display (`typeof(x)`)
 - [ ] Type casting (`x as int`)
-- [ ] Type aliases (`type Id = U32`)
+- [x] Type aliases (`type Id = U32`)
 - [ ] Generics (`fn identity<T>(x: T) => x`)
 - [ ] Const generics / compile-time constants
 - [ ] Type narrowing in `if`/`match` branches

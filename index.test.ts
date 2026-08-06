@@ -269,6 +269,14 @@ test('let pt = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
   expect(evaluate('let pt = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
 });
 
+test('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
+  expect(evaluate('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
+});
+
+test('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
+  expect(evaluate('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
+});
+
 test('let mut array = [0]; array[0] = 100; array[0] => 100', () => {
   expect(evaluate('let mut array = [0]; array[0] = 100; array[0]')).toBe(100);
 });

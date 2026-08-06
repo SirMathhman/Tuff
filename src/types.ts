@@ -17,7 +17,8 @@ export type Value =
   | { tag: "null" }
   | { tag: "array"; values: Value[] }
   | { tag: "string"; value: string }
-  | { tag: "record"; fields: Record<string, Value> };
+  | { tag: "record"; fields: Record<string, Value> }
+  | { tag: "struct"; typeName: string; fields: Record<string, Value> };
 
 export type ControlFlow =
   | { kind: "continue" }
@@ -33,7 +34,8 @@ export function isControlFlow(e: unknown): e is ControlFlow {
 // AST type representation
 export type AstType =
   | { kind: "primitive"; name: string }
-  | { kind: "array"; elementType: AstType; length: number };
+  | { kind: "array"; elementType: AstType; length: number }
+  | { kind: "struct"; fields: { name: string; type: AstType }[] };
 
 // AST types
 export type Ast =
@@ -74,6 +76,8 @@ export type Ast =
   | { kind: "property_access"; target: Ast; property: string }
   | { kind: "record"; fields: { key: string; value: Ast }[] }
   | { kind: "typecheck"; value: Ast; type: AstType }
-  | { kind: "typealias"; name: string; baseType: string };
+  | { kind: "typealias"; name: string; baseType: string }
+  | { kind: "structdef"; name: string; fields: { name: string; type: AstType }[] }
+  | { kind: "structliteral"; typeName: string; fields: { key: string; value: Ast }[] };
 
 export type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
