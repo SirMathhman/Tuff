@@ -25,7 +25,7 @@ Features that would be useful to add to Tuff, grouped by category.
 
 - [x] Structs / named tuples (`struct Point { x, y }`)
 - [x] Anonymous struct types (`let pt : { x : I32, y : I32 } = { x : 3, y : 4 }`)
-- [ ] Enums (`enum Color { Red, Green, Blue }`)
+- [x] Enums (`enum Color { Red, Green, Blue }`)
 - [ ] Union types (`type Result = Ok | Err`)
 - [ ] Dynamic types / `any` [heap]
 - [ ] Sets (`{1, 2, 3}`) [heap]

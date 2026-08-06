@@ -1,7 +1,7 @@
 import type { Ast, Scope, Value } from "./types";
 import { isControlFlow } from "./types";
 import { applyBinOp, bool, eq, notOp, num, toNum, truthy } from "./values";
-import { checkSuffix, checkValueAgainstType, defineStruct, defineTypeAlias, getStructFields, resolveAstType, resolveType, suffixRanges } from "./typesystem";
+import { checkSuffix, checkValueAgainstType, defineEnum, defineStruct, defineTypeAlias, getEnumVariants, getStructFields, resolveAstType, resolveType, suffixRanges } from "./typesystem";
 
 // Evaluator — walks AST with scope
 export function evalAst(
@@ -68,6 +68,14 @@ export function evalAst(
         if (moduleLoader) {
           const loaded = moduleLoader(name);
           if (loaded !== null) return loaded;
+        }
+        // Enum variant: Color::Red
+        if (node.segments.length === 2) {
+          const [enumName, variant] = node.segments;
+          const variants = getEnumVariants(enumName!);
+          if (variants && variants.includes(variant!)) {
+            return { tag: "enum", typeName: enumName!, variant: variant! };
+          }
         }
         throw new Error(`undeclared namespace: ${name}`);
       }
@@ -462,6 +470,10 @@ export function evalAst(
           fields[f.key] = v;
         }
         return { tag: "struct", typeName: node.typeName, fields };
+      }
+      case "enumdef": {
+        defineEnum(node.name, node.variants);
+        return null;
       }
     }
   }

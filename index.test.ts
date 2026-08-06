@@ -277,6 +277,10 @@ test('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 };
   expect(evaluate('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
 });
 
+test('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0 => 1', () => {
+  expect(evaluate('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0')).toBe(1);
+});
+
 test('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
   expect(evaluate('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y')).toBe(7);
 });

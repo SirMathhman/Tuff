@@ -115,7 +115,8 @@ export function tokenize(source: string): Token[] {
           ident === "null" ||
           ident === "is" ||
           ident === "type" ||
-          ident === "struct"
+          ident === "struct" ||
+          ident === "enum"
             ? "keyword"
             : "identifier",
         value: ident,

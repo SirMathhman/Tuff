@@ -36,6 +36,21 @@ export function isStructType(name: string): boolean {
   return structDefs[name] !== undefined;
 }
 
+// Enum definitions: name -> variant names
+const enumDefs: Record<string, string[]> = {};
+
+export function defineEnum(name: string, variants: string[]): void {
+  enumDefs[name] = variants;
+}
+
+export function getEnumVariants(name: string): string[] | undefined {
+  return enumDefs[name];
+}
+
+export function isEnumType(name: string): boolean {
+  return enumDefs[name] !== undefined;
+}
+
 export function defineTypeAlias(name: string, baseType: string): void {
   typeAliases[name] = baseType;
   detectCycle(name);

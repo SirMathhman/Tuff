@@ -52,6 +52,11 @@ export function eq(a: Value, b: Value): Value {
       return bool(eqValues(a.values, (b as Extract<Value, { tag: "array" }>).values));
     case "tuple":
       return bool(eqValues(a.values, (b as Extract<Value, { tag: "tuple" }>).values));
+    case "enum":
+      return bool(
+        a.typeName === (b as Extract<Value, { tag: "enum" }>).typeName &&
+        a.variant === (b as Extract<Value, { tag: "enum" }>).variant,
+      );
     default:
       return bool(false);
   }

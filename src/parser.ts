@@ -319,6 +319,21 @@ export function parse(tokens: Token[]): Ast {
       pos++; // skip "}"
       return { kind: "structdef", name, fields };
     }
+    // Check for enum definition: enum Name { Variant1, Variant2, ... }
+    if (tokens[pos]?.value === "enum") {
+      pos++; // skip "enum"
+      const name = tokens[pos]!.value;
+      pos++; // skip enum name
+      pos++; // skip "{"
+      const variants: string[] = [];
+      while (tokens[pos]?.value !== "}") {
+        variants.push(tokens[pos]!.value);
+        pos++; // skip variant name
+        if (tokens[pos]?.value === ",") pos++;
+      }
+      pos++; // skip "}"
+      return { kind: "enumdef", name, variants };
+    }
     // Check for type alias: type Alias = BaseType
     if (tokens[pos]?.value === "type") {
       pos++; // skip "type"

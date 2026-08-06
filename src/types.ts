@@ -18,7 +18,8 @@ export type Value =
   | { tag: "array"; values: Value[] }
   | { tag: "string"; value: string }
   | { tag: "record"; fields: Record<string, Value> }
-  | { tag: "struct"; typeName: string; fields: Record<string, Value> };
+  | { tag: "struct"; typeName: string; fields: Record<string, Value> }
+  | { tag: "enum"; typeName: string; variant: string };
 
 export type ControlFlow =
   | { kind: "continue" }
@@ -78,6 +79,7 @@ export type Ast =
   | { kind: "typecheck"; value: Ast; type: AstType }
   | { kind: "typealias"; name: string; baseType: string }
   | { kind: "structdef"; name: string; fields: { name: string; type: AstType }[] }
-  | { kind: "structliteral"; typeName: string; fields: { key: string; value: Ast }[] };
+  | { kind: "structliteral"; typeName: string; fields: { key: string; value: Ast }[] }
+  | { kind: "enumdef"; name: string; variants: string[] };
 
 export type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
