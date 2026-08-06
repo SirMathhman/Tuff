@@ -397,6 +397,10 @@ test('evaluate("let x : U8 = 5; x is U8") => 1', () => {
   expect(evaluate("let x : U8 = 5; x is U8")).toBe(1);
 });
 
+test('evaluate("let value : Bool | I32 = 100; value is I32") => 1', () => {
+  expect(evaluate("let value : Bool | I32 = 100; value is I32")).toBe(1);
+});
+
 test('evaluate("true is bool") => 1', () => {
   expect(evaluate("true is bool")).toBe(1);
 });

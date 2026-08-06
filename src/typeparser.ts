@@ -3,6 +3,20 @@ import type { AstType, Token } from "./types";
 // Type parser — parses type annotations into AstType, does not evaluate.
 // Advances the shared position so callers can continue parsing the expression.
 export function parseType(tokens: Token[], pos: { pos: number }): AstType {
+  const first = parseSingleType(tokens, pos);
+  // Union type: A | B | C
+  if (tokens[pos.pos]?.value === "|") {
+    const types: AstType[] = [first];
+    while (tokens[pos.pos]?.value === "|") {
+      pos.pos++; // skip "|"
+      types.push(parseSingleType(tokens, pos));
+    }
+    return { kind: "union", types };
+  }
+  return first;
+}
+
+function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
   if (tokens[pos.pos]?.value === "[") {
     pos.pos++; // skip "["
     const elementType = parseType(tokens, pos);

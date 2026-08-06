@@ -92,6 +92,12 @@ export function resolveAstType(astType: AstType): AstType {
       fields: astType.fields.map((f) => ({ name: f.name, type: resolveAstType(f.type) })),
     };
   }
+  if (astType.kind === "union") {
+    return {
+      kind: "union",
+      types: astType.types.map((t) => resolveAstType(t)),
+    };
+  }
   return astType;
 }
 
@@ -114,6 +120,32 @@ export function checkValueAgainstType(
     case "primitive":
       checkPrimitive(value, resolved, context, targetName);
       return;
+    case "union":
+      checkUnion(value, resolved, context, targetName);
+      return;
+  }
+}
+
+function checkUnion(
+  value: Value,
+  resolved: Extract<AstType, { kind: "union" }>,
+  context: string,
+  targetName?: string,
+): void {
+  // A value is valid if it matches at least one member of the union.
+  let matched = false;
+  for (const member of resolved.types) {
+    try {
+      checkValueAgainstType(value, member, context, targetName);
+      matched = true;
+      break;
+    } catch {
+      // try next member
+    }
+  }
+  if (!matched) {
+    const target = targetName ? ` to ${targetName}` : "";
+    throw new Error(`cannot ${context} value${target} of union type`);
   }
 }
 
