@@ -464,3 +464,7 @@ test('evaluate("type A = B; type B = A;") => Error', () => {
 test('evaluate("args.length") => 1', () => {
   expectValid("args.length", 1, []);
 });
+
+test('evaluate("let x = if (args.length == 2) 100U8 else 100U16; x is U8") => 1', () => {
+  expectValid("let x = if (args.length == 2) 100U8 else 100U16; x is U8", 1, ["foo"]);
+});

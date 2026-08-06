@@ -30,8 +30,9 @@ export function compileAst(ast: Ast, typeEnv?: TypeEnv): string {
 }
 
 // Coerce a JS expression to a number (mirrors the evaluator's toNum).
+// Unwraps suffixed-number objects ({ v, t }) to their numeric value.
 function toNumJs(expr: string): string {
-  return "Number(" + expr + ")";
+  return "Number((" + expr + " && typeof (" + expr + ") === 'object' && 'v' in (" + expr + ")) ? (" + expr + ").v : (" + expr + "))";
 }
 
 // Produce a JS expression for a node that may be a statement (block value).
@@ -147,7 +148,9 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
   const isMut = (name: string): boolean => typeEnv?.mutables.get(name) === true;
   switch (node.kind) {
     case "num":
-      return String(node.value);
+      // Suffixed literals preserve their type at runtime so `is` checks work
+      // (e.g. `if (c) 100U8 else 100U16; x is U8`). Unsuffixed stay plain.
+      return node.suffix ? `{ v: ${node.value}, t: ${JSON.stringify(node.suffix)} }` : String(node.value);
     case "bool":
       return node.value ? "true" : "false";
     case "char":
@@ -163,11 +166,17 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
     case "binop": {
       const l = genExpr(node.left, typeEnv);
       const r = genExpr(node.right, typeEnv);
+      const ln = toNumJs(l);
+      const rn = toNumJs(r);
+      // == / !=: compare raw values (===), unwrapping suffixed-number objects.
       if (node.op === "==") return "(Number((" + l + ") === (" + r + ")))";
       if (node.op === "!=") return "(Number((" + l + ") !== (" + r + ")))";
+      // < <= > >=: the evaluator compares strings lexicographically, else
+      // numerically — JS < does exactly that, unwrapped for suffixed numbers.
       if (node.op === "<" || node.op === "<=" || node.op === ">" || node.op === ">=")
         return "(Number((" + l + ") " + node.op + " (" + r + ")))";
-      return "((" + l + ") " + node.op + " (" + r + "))";
+      // + - * / %: numeric (unwrapped suffixed-number objects).
+      return "((" + ln + ") " + node.op + " (" + rn + "))";
     }
     case "unary": {
       const operand = genExpr(node.operand, typeEnv);
@@ -246,6 +255,12 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
   }
 }
 
+// Substitute a value expression into a `$0` template without regex replace
+// (plain split/join — immune to any `$` escaping quirks).
+function sub(template: string, value: string): string {
+  return template.split("$0").join(value);
+}
+
 // Compile an `is` type check. Folds when the value's type is statically known
 // (literal suffix or inferred binding); otherwise falls back to tag checks.
 function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeEnv): string {
@@ -290,18 +305,21 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
       if (r !== undefined && r !== "number") return "0";
     }
   }
+  const v = genExpr(value, typeEnv);
   const tagChecks: Record<string, string> = {
     bool: '((typeof ($0) === "boolean") ? 1 : 0)',
     string: '((typeof ($0) === "string") ? 1 : 0)',
     array: "((Array.isArray($0)) ? 1 : 0)",
     tuple: "((Array.isArray($0)) ? 1 : 0)",
-    record: '((typeof ($0) === "object" && $0 !== null && !Array.isArray($0)) ? 1 : 0)',
+    record: '((typeof ($0) === "object" && $0 !== null && !Array.isArray($0) && $0.t === undefined) ? 1 : 0)',
     null: "(($0 === null) ? 1 : 0)",
     number: '((typeof ($0) === "number") ? 1 : 0)',
   };
   const tag = tagChecks[t];
-  if (tag) return tag.replace(/\$0/g, genExpr(value, typeEnv));
-  return "0";
+  if (tag) return sub(tag, v);
+  // Suffixed numeric type (U8, I32, ...): check the runtime `.t` marker.
+  // A value only matches if it was produced by a suffixed literal of that type.
+  return sub("((($0) && typeof ($0) === 'object' && ($0).t === " + JSON.stringify(t) + ") ? 1 : 0)", v);
 }
 
 // Resolve a type's alias references (mirrors analyzer's resolveAstType).
