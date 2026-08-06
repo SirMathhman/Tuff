@@ -64,5 +64,16 @@ function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
   }
   const name = tokens[pos.pos]!.value;
   pos.pos++; // skip type name
+  // Generic type arguments: Wrapper<Bool>
+  if (tokens[pos.pos]?.value === "<") {
+    pos.pos++; // skip "<"
+    const typeArgs: AstType[] = [];
+    while (tokens[pos.pos]?.value !== ">") {
+      typeArgs.push(parseType(tokens, pos));
+      if (tokens[pos.pos]?.value === ",") pos.pos++;
+    }
+    pos.pos++; // skip ">"
+    return { kind: "primitive", name, typeArgs };
+  }
   return { kind: "primitive", name };
 }

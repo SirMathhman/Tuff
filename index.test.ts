@@ -492,3 +492,7 @@ test('evaluate("let x = if (args.length == 2) 1U8 else 1U16; x is U8 | U16") => 
 test('evaluate("struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A") => 1', () => {
   expectValid("struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A", 1, ["foo"]);
 });
+
+test('evaluate("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool") => 1', () => {
+  expectValid("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool", 1);
+});

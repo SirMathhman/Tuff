@@ -275,6 +275,34 @@ export function parse(tokens: Token[]): Ast {
     if (tok?.type === "identifier") {
       const name = tok.value;
       pos++;
+      // Generic type arguments: Wrapper<Bool> { ... } — only when a matching
+      // `>` is followed by `{` (a struct literal), so `x < 4` isn't confused.
+      let typeArgs: AstType[] | undefined;
+      if (tokens[pos]?.value === "<") {
+        let depth = 0;
+        let j = pos;
+        let closesWithBrace = false;
+        while (tokens[j]) {
+          if (tokens[j]!.value === "<") depth++;
+          else if (tokens[j]!.value === ">") {
+            depth--;
+            if (depth === 0) {
+              closesWithBrace = tokens[j + 1]?.value === "{";
+              break;
+            }
+          }
+          j++;
+        }
+        if (closesWithBrace) {
+          pos++; // skip "<"
+          typeArgs = [];
+          while (tokens[pos]?.value !== ">") {
+            typeArgs.push(parseType());
+            if (tokens[pos]?.value === ",") pos++;
+          }
+          pos++; // skip ">"
+        }
+      }
       // Struct literal: Point { x : 3, y : 4 }
       if (tokens[pos]?.value === "{") {
         pos++; // skip "{"
@@ -288,7 +316,7 @@ export function parse(tokens: Token[]): Ast {
           if (tokens[pos]?.value === ",") pos++;
         }
         pos++; // skip "}"
-        return { kind: "structliteral", typeName: name, fields };
+        return { kind: "structliteral", typeName: name, fields, typeArgs };
       }
       return { kind: "ident", name };
     }
@@ -302,6 +330,17 @@ export function parse(tokens: Token[]): Ast {
       pos++; // skip "struct"
       const name = tokens[pos]!.value;
       pos++; // skip struct name
+      // Generic type parameters: struct Name<T, U> { ... }
+      const typeParams: string[] = [];
+      if (tokens[pos]?.value === "<") {
+        pos++; // skip "<"
+        while (tokens[pos]?.value !== ">") {
+          typeParams.push(tokens[pos]!.value);
+          pos++;
+          if (tokens[pos]?.value === ",") pos++;
+        }
+        pos++; // skip ">"
+      }
       pos++; // skip "{"
       const fields: { name: string; type: AstType }[] = [];
       while (tokens[pos]?.value !== "}") {
@@ -313,7 +352,7 @@ export function parse(tokens: Token[]): Ast {
         if (tokens[pos]?.value === ",") pos++;
       }
       pos++; // skip "}"
-      return { kind: "structdef", name, fields };
+      return { kind: "structdef", name, fields, typeParams };
     }
     // Check for enum definition: enum Name { Variant1, Variant2, ... }
     if (tokens[pos]?.value === "enum") {

@@ -388,7 +388,9 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
     null: "(($0 === null) ? 1 : 0)",
     number: '((typeof ($0) === "number") ? 1 : 0)',
   };
-  const tag = tagChecks[t];
+  // Tag checks are keyed lowercase (bool, string, ...), matching the
+  // evaluator's valueMatchesType which lowercases the type name.
+  const tag = tagChecks[t.toLowerCase()];
   if (tag) return sub(tag, v);
   // Typed value (named struct, suffixed number, enum): check the `__t` marker.
   // A value only matches if it was produced by a literal of that exact type.

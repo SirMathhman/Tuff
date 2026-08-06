@@ -35,7 +35,7 @@ export function isControlFlow(e: unknown): e is ControlFlow {
 // AST types
 // AST type representation
 export type AstType =
-  | { kind: "primitive"; name: string }
+  | { kind: "primitive"; name: string; typeArgs?: AstType[] }
   | { kind: "array"; elementType: AstType; length: number }
   | { kind: "slice"; elementType: AstType }
   | { kind: "struct"; fields: { name: string; type: AstType }[] }
@@ -82,8 +82,8 @@ export type Ast =
   | { kind: "record"; fields: { key: string; value: Ast }[] }
   | { kind: "typecheck"; value: Ast; type: AstType }
   | { kind: "typealias"; name: string; baseType: string }
-  | { kind: "structdef"; name: string; fields: { name: string; type: AstType }[] }
-  | { kind: "structliteral"; typeName: string; fields: { key: string; value: Ast }[] }
+  | { kind: "structdef"; name: string; fields: { name: string; type: AstType }[]; typeParams?: string[] }
+  | { kind: "structliteral"; typeName: string; fields: { key: string; value: Ast }[]; typeArgs?: AstType[] }
   | { kind: "enumdef"; name: string; variants: string[] };
 
 export type Scope = { vars: Record<string, Value>; mutable: Record<string, boolean> };
@@ -91,7 +91,7 @@ export type Scope = { vars: Record<string, Value>; mutable: Record<string, boole
 // Per-program symbol table built by the semantic analysis pass (`analyze`).
 // Holds type declarations and inferred variable types without any runtime values.
 export type TypeEnv = {
-  structs: Map<string, { name: string; type: AstType }[]>;
+  structs: Map<string, { fields: { name: string; type: AstType }[]; typeParams?: string[] }>;
   enums: Map<string, string[]>;
   aliases: Map<string, string>;
   inferred: Map<string, AstType>;

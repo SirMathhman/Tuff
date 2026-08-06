@@ -56,6 +56,40 @@ function resolveAstType(aliases: Map<string, string>, t: AstType): AstType {
   return t;
 }
 
+// Build a type-param -> type-arg substitution map (for generic structs).
+function typeSubstitution(
+  typeParams: string[] | undefined,
+  typeArgs: AstType[] | undefined,
+  typeEnv: TypeEnv,
+): Map<string, AstType> {
+  const subst = new Map<string, AstType>();
+  if (typeParams && typeArgs) {
+    typeParams.forEach((tp, i) => {
+      const arg = typeArgs[i];
+      if (arg) subst.set(tp, resolveAstType(typeEnv.aliases, arg));
+    });
+  }
+  return subst;
+}
+
+// Replace type params with their substituted types throughout an AstType.
+function substituteAstType(t: AstType, subst: Map<string, AstType>): AstType {
+  if (t.kind === "primitive") {
+    const replacement = subst.get(t.name);
+    return replacement ?? t;
+  }
+  if (t.kind === "array")
+    return { kind: "array", elementType: substituteAstType(t.elementType, subst), length: t.length };
+  if (t.kind === "slice") return { kind: "slice", elementType: substituteAstType(t.elementType, subst) };
+  if (t.kind === "struct")
+    return { kind: "struct", fields: t.fields.map((f) => ({ name: f.name, type: substituteAstType(f.type, subst) })) };
+  if (t.kind === "union")
+    return { kind: "union", types: t.types.map((m) => substituteAstType(m, subst)) };
+  if (t.kind === "ref") return { kind: "ref", targetType: substituteAstType(t.targetType, subst) };
+  if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => substituteAstType(e, subst)) };
+  return t;
+}
+
 export function analyze(
   ast: Ast,
   typeEnv: TypeEnv,
@@ -255,7 +289,7 @@ function analyzeNode(
       break;
     }
     case "structdef":
-      typeEnv.structs.set(ast.name, ast.fields);
+      typeEnv.structs.set(ast.name, { fields: ast.fields, typeParams: ast.typeParams });
       break;
     case "enumdef":
       typeEnv.enums.set(ast.name, ast.variants);
@@ -292,8 +326,11 @@ function analyzeNode(
       // Validate fields when the struct is known locally. Unknown names that
       // aren't modules are unknown structs; module instantiation (`lib { x : 100 }`)
       // is resolved at runtime.
-      const def = typeEnv.structs.get(ast.typeName);
-      if (def) {
+      const structInfo = typeEnv.structs.get(ast.typeName);
+      if (structInfo) {
+        // Generic struct: substitute type args for params in field types.
+        const subst = typeSubstitution(structInfo.typeParams, ast.typeArgs, typeEnv);
+        const def = structInfo.fields.map((f) => ({ name: f.name, type: substituteAstType(f.type, subst) }));
         for (const f of ast.fields) {
           analyzeNode(f.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
           const fieldDef = def.find((d) => d.name === f.key);
@@ -410,7 +447,7 @@ function staticType(node: Ast, typeEnv: TypeEnv): AstType | undefined {
       };
     case "structliteral":
       // Named struct literal: A {} has the struct's name as its type.
-      return { kind: "primitive", name: node.typeName };
+      return { kind: "primitive", name: node.typeName, typeArgs: node.typeArgs };
     case "paren":
       return staticType(node.expr, typeEnv);
     case "if_expr": {
