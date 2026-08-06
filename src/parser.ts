@@ -345,6 +345,20 @@ export function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "typealias", name, baseType };
     }
+    if (tokens[pos]?.value === "in" && tokens[pos + 1]?.value === "let") {
+      pos++; // skip "in"
+      pos++; // skip "let"
+      const name = tokens[pos]!.value;
+      pos++;
+      // Check for type annotation: in let x : Type
+      let typeAnnotation: AstType | undefined;
+      if (tokens[pos]?.value === ":") {
+        pos++; // skip ":"
+        typeAnnotation = parseType();
+      }
+      if (tokens[pos]?.value === ";") pos++;
+      return { kind: "inlet", name, typeAnnotation };
+    }
     if (tokens[pos]?.value === "out" && tokens[pos + 1]?.value === "let") {
       pos++; // skip "out"
       const exported = true;

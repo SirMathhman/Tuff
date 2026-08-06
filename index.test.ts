@@ -21,6 +21,10 @@ test('evaluateModules(["main"], {["main"] : "lib::foo.get()", ["lib", "foo"] : "
   expectModules(["main"], { main: "lib::foo.get()", "lib::foo": "out fn get() => 100;" }, 100);
 });
 
+test('evaluateModules(["main"], {["main"] : "lib { x : 100 }.y", ["lib"] : "in let x : I32; out let y = x;"}) => 100', () => {
+  expectModules(["main"], { main: "lib { x : 100 }.y", lib: "in let x : I32; out let y = x;" }, 100);
+});
+
 test('evaluate(" ") => 0', () => {
   expectValid(" ", 0);
 });

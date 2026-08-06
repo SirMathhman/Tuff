@@ -9,7 +9,8 @@ export function evalAst(
   scopes: Scope[],
   mutables: Scope["mutable"][],
   exports?: Record<string, Value>,
-  moduleLoader?: (name: string) => Value | null,
+  moduleLoader?: (name: string, inputs?: Record<string, Value>) => Value | null,
+  moduleInputs?: Record<string, Value>,
 ): Value {
   function lookup(name: string): Value {
     for (let i = scopes.length - 1; i >= 0; i--) {
@@ -127,6 +128,16 @@ export function evalAst(
         const l = visit(node.left)!;
         const r = visit(node.right)!;
         return applyBinOp(node.op, l, r);
+      }
+      case "inlet": {
+        // Bind an input value provided at module instantiation.
+        const inputVal = moduleInputs?.[node.name];
+        if (inputVal === undefined)
+          throw new Error(`missing input: ${node.name}`);
+        if (node.typeAnnotation)
+          checkValueAgainstType(inputVal, node.typeAnnotation, "pass", node.name);
+        scopes[scopes.length - 1]!.vars[node.name] = inputVal;
+        return null;
       }
       case "let": {
         let v = visit(node.value);
@@ -422,6 +433,18 @@ export function evalAst(
         return null;
       }
       case "structliteral": {
+        // Module instantiation: lib { x : 100 } — load the module with inputs.
+        const structDef = getStructFields(node.typeName);
+        if (!structDef && moduleLoader) {
+          const inputs: Record<string, Value> = {};
+          for (const f of node.fields) {
+            const v = visit(f.value);
+            if (v === null) throw new Error("struct field has no value");
+            inputs[f.key] = v;
+          }
+          const loaded = moduleLoader(node.typeName, inputs);
+          if (loaded !== null) return loaded;
+        }
         const fields: Record<string, Value> = {};
         const def = getStructFields(node.typeName);
         if (!def) throw new Error(`unknown struct: ${node.typeName}`);

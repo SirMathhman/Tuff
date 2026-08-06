@@ -50,6 +50,7 @@ export type Ast =
   | { kind: "index"; target: Ast; index: number }
   | { kind: "binop"; op: string; left: Ast; right: Ast }
   | { kind: "let"; mutable: boolean; name: string; value: Ast; typeAnnotation?: AstType; exported?: boolean }
+  | { kind: "inlet"; name: string; typeAnnotation?: AstType }
   | { kind: "assign"; name: string; value: Ast }
   | { kind: "refassign"; name: string; value: Ast }
   | { kind: "array_assign"; target: Ast; index: Ast; value: Ast }
