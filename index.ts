@@ -141,6 +141,7 @@ type Ast =
   | { kind: "char"; value: string }
   | { kind: "string"; value: string }
   | { kind: "string_index"; target: Ast; index: Ast }
+  | { kind: "length"; target: Ast }
   | { kind: "property_access"; target: Ast; property: string }
   | { kind: "record"; fields: { key: string; value: Ast }[] };
 
@@ -439,6 +440,9 @@ function parse(tokens: Token[]): Ast {
             target: result,
             index: parseInt(nextTok.value),
           };
+        } else if (nextTok?.value === "length") {
+          pos++;
+          result = { kind: "length", target: result };
         } else {
           const property = nextTok!.value;
           pos++;
@@ -1110,23 +1114,24 @@ function evalAst(
         const target = visit(node.target);
         if (target === null)
           throw new Error("property access target has no value");
-        const prop = node.property;
-        if (prop === "length") {
-          switch (target.tag) {
-            case "string":
-              return num(target.value.length);
-            case "array":
-              return num(target.values.length);
-            default:
-              throw new Error(`cannot get length of ${target.tag}`);
-          }
-        }
         if (target.tag === "record") {
-          const val = target.fields[prop];
-          if (val === undefined) throw new Error(`field ${prop} not found`);
+          const val = target.fields[node.property];
+          if (val === undefined) throw new Error(`field ${node.property} not found`);
           return val;
         }
-        throw new Error(`cannot access property ${prop} on ${target.tag}`);
+        throw new Error(`cannot access property ${node.property} on ${target.tag}`);
+      }
+      case "length": {
+        const target = visit(node.target);
+        if (target === null) throw new Error("length target has no value");
+        switch (target.tag) {
+          case "string":
+            return num(target.value.length);
+          case "array":
+            return num(target.values.length);
+          default:
+            throw new Error(`cannot get length of ${target.tag}`);
+        }
       }
       case "record": {
         const fields: Record<string, Value> = {};
