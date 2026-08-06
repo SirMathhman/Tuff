@@ -346,8 +346,9 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
         return { tag: "tuple", values };
       }
       case "index": {
-        const target = visit(node.target);
+        let target = visit(node.target);
         if (target === null) throw new Error("index target has no value");
+        if (target.tag === "ref") target = target.scope.vars[target.name]!;
         const idx = toNum(visit(node.index)!);
         switch (target.tag) {
           case "tuple":

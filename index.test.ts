@@ -333,6 +333,10 @@ test('evaluate("let x = 100; let y : &I32 = &x; *y") => 100', () => {
   expectValid("let x = 100; let y : &I32 = &x; *y", 100);
 });
 
+test('evaluate("let array = [1, 2, 3]; let ptr : &[I32; 3] = &array; ptr[0] + ptr[1] + ptr[2]") => 6', () => {
+  expectValid("let array = [1, 2, 3]; let ptr : &[I32; 3] = &array; ptr[0] + ptr[1] + ptr[2]", 6);
+});
+
 test('evaluate("let mut x = 0; let y = &mut x; *y = 100;  x") => 100', () => {
   expectValid("let mut x = 0; let y = &mut x; *y = 100;  x", 100);
 });
