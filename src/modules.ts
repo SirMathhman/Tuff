@@ -21,6 +21,30 @@ export class ModuleLoader {
     return new Set(Object.keys(this.modules));
   }
 
+  // Analyze every module source once, building a name -> TypeEnv map so
+  // cross-module references (exports, inputs) can be validated statically.
+  // Pass 1: analyze each module in isolation (collects its exports/inputs).
+  // Pass 2: re-analyze with the full module map to validate cross-refs.
+  private analyzeAll(): Map<string, TypeEnv> {
+    const names = [...this.moduleNames()];
+    for (const name of names) {
+      this.analyzeSource(name);
+    }
+    // After all TypeEnvs exist, re-run analysis on modules that reference
+    // other modules so cross-module checks have the full map available.
+    for (const name of names) {
+      const source = this.modules[name];
+      if (source === undefined) continue;
+      const typeEnv = this.typeEnvs.get(name)!;
+      const ast = parse(tokenize(source));
+      analyze(ast, typeEnv, {
+        moduleNames: this.moduleNames(),
+        moduleEnvs: this.typeEnvs,
+      });
+    }
+    return this.typeEnvs;
+  }
+
   // Parse + analyze a module source once, caching its TypeEnv.
   private analyzeSource(name: string): TypeEnv {
     let typeEnv = this.typeEnvs.get(name);
@@ -29,7 +53,10 @@ export class ModuleLoader {
       if (source === undefined) throw new Error(`module not found: ${name}`);
       const ast = parse(tokenize(source));
       typeEnv = newTypeEnv();
-      analyze(ast, typeEnv, { moduleNames: this.moduleNames() });
+      analyze(ast, typeEnv, {
+        moduleNames: this.moduleNames(),
+        moduleEnvs: this.typeEnvs,
+      });
       this.typeEnvs.set(name, typeEnv);
     }
     return typeEnv;
@@ -65,8 +92,10 @@ export class ModuleLoader {
   evaluateEntry(name: string): number {
     const source = this.modules[name];
     if (source === undefined) throw new Error(`module not found: ${name}`);
+    // Analyze all modules so cross-module references are validated statically.
+    this.analyzeAll();
     const exports: Record<string, Value> = {};
-    const typeEnv = this.analyzeSource(name);
+    const typeEnv = this.typeEnvs.get(name)!;
     const tokens = tokenize(source);
     const ast = parse(tokens);
     const value = evalAst(ast, {

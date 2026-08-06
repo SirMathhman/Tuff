@@ -13,6 +13,8 @@ export function newTypeEnv(): TypeEnv {
     aliases: new Map(),
     inferred: new Map(),
     mutables: new Map(),
+    exports: new Map(),
+    inputs: new Map(),
   };
 }
 
@@ -55,17 +57,18 @@ function resolveAstType(aliases: Map<string, string>, t: AstType): AstType {
 export function analyze(
   ast: Ast,
   typeEnv: TypeEnv,
-  opts?: { moduleNames?: Set<string> },
+  opts?: { moduleNames?: Set<string>; moduleEnvs?: Map<string, TypeEnv> },
 ): void {
   // Static scope stack mirroring the evaluator's runtime scopes.
   // Each scope is the set of declared names; lookups walk backward.
   const scopes: Set<string>[] = [new Set()];
   const moduleNames = opts?.moduleNames;
+  const moduleEnvs = opts?.moduleEnvs;
   const declared = (name: string): boolean =>
     scopes.some((s) => s.has(name)) ||
     name === "args" ||
     (moduleNames !== undefined && moduleNames.has(name));
-  analyzeNode(ast, typeEnv, scopes, declared, moduleNames);
+  analyzeNode(ast, typeEnv, scopes, declared, moduleNames, moduleEnvs);
 }
 
 function analyzeNode(
@@ -74,6 +77,7 @@ function analyzeNode(
   scopes: Set<string>[],
   declared: (name: string) => boolean,
   moduleNames?: Set<string>,
+  moduleEnvs?: Map<string, TypeEnv>,
 ): void {
   switch (ast.kind) {
     case "num":
@@ -82,12 +86,12 @@ function analyzeNode(
     case "block":
       scopes.push(new Set());
       for (const stmt of ast.statements)
-        if (stmt) analyzeNode(stmt, typeEnv, scopes, declared, moduleNames);
+        if (stmt) analyzeNode(stmt, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       scopes.pop();
       break;
     case "let":
       // RHS is analyzed before the name enters scope (order-sensitive).
-      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       typeEnv.mutables.set(ast.name, ast.mutable);
       scopes[scopes.length - 1]!.add(ast.name);
       if (ast.typeAnnotation) {
@@ -97,16 +101,20 @@ function analyzeNode(
         const t = literalType(ast.value);
         if (t) typeEnv.inferred.set(ast.name, t);
       }
+      if (ast.exported) {
+        typeEnv.exports.set(ast.name, typeEnv.inferred.get(ast.name) ?? { kind: "primitive", name: "number" });
+      }
       break;
     case "inlet":
       typeEnv.mutables.set(ast.name, false);
       scopes[scopes.length - 1]!.add(ast.name);
       if (ast.typeAnnotation) {
         typeEnv.inferred.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
+        typeEnv.inputs.set(ast.name, resolveAstType(typeEnv.aliases, ast.typeAnnotation));
       }
       break;
     case "assign": {
-      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       // Assigning requires a mutable binding (scope-insensitive by name).
       if (!typeEnv.mutables.get(ast.name)) {
         throw new Error(`cannot assign to immutable variable: ${ast.name}`);
@@ -114,7 +122,7 @@ function analyzeNode(
       break;
     }
     case "augassign": {
-      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       if (!typeEnv.mutables.get(ast.name)) {
         throw new Error(`cannot assign to immutable variable: ${ast.name}`);
       }
@@ -132,7 +140,7 @@ function analyzeNode(
           throw new Error("can only take reference of identifier");
         }
       }
-      analyzeNode(ast.operand, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.operand, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       // Dereference requires a ref-typed operand when statically known.
       if (ast.op === "*") {
         const t = staticType(ast.operand, typeEnv);
@@ -143,8 +151,8 @@ function analyzeNode(
       break;
     }
     case "index": {
-      analyzeNode(ast.target, typeEnv, scopes, declared, moduleNames);
-      analyzeNode(ast.index, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.target, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      analyzeNode(ast.index, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       // Indexing requires an array/slice/string/tuple/ref target when known.
       const t = staticType(ast.target, typeEnv);
       if (t) {
@@ -159,7 +167,7 @@ function analyzeNode(
       break;
     }
     case "length": {
-      analyzeNode(ast.target, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.target, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       const t = staticType(ast.target, typeEnv);
       if (t) {
         const ok =
@@ -174,7 +182,7 @@ function analyzeNode(
     case "yield":
       // `yield` always requires a value (structural check).
       if (ast.value === undefined) throw new Error("yield has no value");
-      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       break;
     case "fn":
       // The fn name binds in the enclosing scope (before the body runs),
@@ -182,13 +190,16 @@ function analyzeNode(
       // the body also sees the enclosing scopes (closures capture them).
       scopes[scopes.length - 1]!.add(ast.name);
       typeEnv.mutables.set(ast.name, false);
+      if (ast.exported) {
+        typeEnv.exports.set(ast.name, { kind: "primitive", name: "fn" });
+      }
       scopes.push(new Set());
       for (const p of ast.params) {
         typeEnv.mutables.set(p.name, false);
         typeEnv.inferred.set(p.name, resolveAstType(typeEnv.aliases, p.type));
         scopes[scopes.length - 1]!.add(p.name);
       }
-      analyzeNode(ast.body, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.body, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       scopes.pop();
       break;
     case "for":
@@ -196,9 +207,9 @@ function analyzeNode(
       scopes.push(new Set());
       typeEnv.mutables.set(ast.varName, true);
       scopes[scopes.length - 1]!.add(ast.varName);
-      analyzeNode(ast.start, typeEnv, scopes, declared, moduleNames);
-      analyzeNode(ast.end, typeEnv, scopes, declared, moduleNames);
-      analyzeNode(ast.body, typeEnv, scopes, declared, moduleNames);
+      analyzeNode(ast.start, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      analyzeNode(ast.end, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      analyzeNode(ast.body, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       scopes.pop();
       break;
     case "typealias": {
@@ -224,6 +235,22 @@ function analyzeNode(
       }
       break;
     }
+    case "property_access": {
+      analyzeNode(ast.target, typeEnv, scopes, declared, moduleNames, moduleEnvs);
+      // Module field access: lib.x — validate x is exported by lib.
+      if (
+        ast.target.kind === "ident" &&
+        moduleNames !== undefined &&
+        moduleNames.has(ast.target.name) &&
+        moduleEnvs !== undefined
+      ) {
+        const moduleEnv = moduleEnvs.get(ast.target.name);
+        if (moduleEnv && !moduleEnv.exports.has(ast.property)) {
+          throw new Error(`field ${ast.property} not found`);
+        }
+      }
+      break;
+    }
     case "structliteral": {
       // Validate fields when the struct is known locally. Unknown names that
       // aren't modules are unknown structs; module instantiation (`lib { x : 100 }`)
@@ -231,7 +258,7 @@ function analyzeNode(
       const def = typeEnv.structs.get(ast.typeName);
       if (def) {
         for (const f of ast.fields) {
-          analyzeNode(f.value, typeEnv, scopes, declared, moduleNames);
+          analyzeNode(f.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
           const fieldDef = def.find((d) => d.name === f.key);
           if (!fieldDef) throw new Error(`unknown field ${f.key} on struct ${ast.typeName}`);
           // Check literal values against the field type at analysis time.
@@ -245,7 +272,17 @@ function analyzeNode(
         if (!isModule) {
           throw new Error(`unknown struct: ${ast.typeName}`);
         }
-        for (const f of ast.fields) analyzeNode(f.value, typeEnv, scopes, declared, moduleNames);
+        // Module instantiation: validate provided inputs against the module's
+        // declared `in let` variables.
+        const moduleEnv = moduleEnvs !== undefined ? moduleEnvs.get(ast.typeName) : undefined;
+        if (moduleEnv) {
+          for (const f of ast.fields) {
+            if (!moduleEnv.inputs.has(f.key)) {
+              throw new Error(`unknown input ${f.key} on module ${ast.typeName}`);
+            }
+          }
+        }
+        for (const f of ast.fields) analyzeNode(f.value, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       }
       break;
     }
@@ -254,10 +291,10 @@ function analyzeNode(
       for (const v of Object.values(ast)) {
         if (Array.isArray(v)) {
           for (const x of v) {
-            if (x && typeof x === "object" && "kind" in x) analyzeNode(x as Ast, typeEnv, scopes, declared, moduleNames);
+            if (x && typeof x === "object" && "kind" in x) analyzeNode(x as Ast, typeEnv, scopes, declared, moduleNames, moduleEnvs);
           }
         } else if (v && typeof v === "object" && "kind" in v) {
-          analyzeNode(v as Ast, typeEnv, scopes, declared, moduleNames);
+          analyzeNode(v as Ast, typeEnv, scopes, declared, moduleNames, moduleEnvs);
         }
       }
       break;

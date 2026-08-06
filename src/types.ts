@@ -95,6 +95,8 @@ export type TypeEnv = {
   aliases: Map<string, string>;
   inferred: Map<string, AstType>;
   mutables: Map<string, boolean>;
+  exports: Map<string, AstType>;
+  inputs: Map<string, AstType>;
 };
 
 // Evaluation context — all interpreter state threaded through an evalAst run.
