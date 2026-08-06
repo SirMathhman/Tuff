@@ -468,3 +468,7 @@ test('evaluate("args.length") => 1', () => {
 test('evaluate("let x = if (args.length == 2) 100U8 else 100U16; x is U8") => 1', () => {
   expectValid("let x = if (args.length == 2) 100U8 else 100U16; x is U8", 1, ["foo"]);
 });
+
+test('evaluate("struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A") => 1', () => {
+  expectValid("struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A", 1, ["foo"]);
+});

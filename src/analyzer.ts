@@ -384,6 +384,9 @@ function staticType(node: Ast, typeEnv: TypeEnv): AstType | undefined {
           type: staticType(f.value, typeEnv) ?? { kind: "primitive", name: "number" },
         })),
       };
+    case "structliteral":
+      // Named struct literal: A {} has the struct's name as its type.
+      return { kind: "primitive", name: node.typeName };
     case "paren":
       return staticType(node.expr, typeEnv);
     case "if_expr": {

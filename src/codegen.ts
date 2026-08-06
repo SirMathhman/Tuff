@@ -214,8 +214,12 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
       return "[" + node.elements.map((e) => genExpr(e, typeEnv)).join(", ") + "]";
     case "record":
       return "({" + node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv)).join(", ") + "})";
-    case "structliteral":
-      return "({" + node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv)).join(", ") + "})";
+    case "structliteral": {
+      // Named struct literals carry a `__t` marker so `is` checks work at
+      // runtime (e.g. `if (c) A {} else B {}; x is A`).
+      const fields = node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv));
+      return "({ __t: " + JSON.stringify(node.typeName) + ", " + fields.join(", ") + "})";
+    }
     case "call": {
       const target = node.target ? genExpr(node.target, typeEnv) : node.name;
       return "(" + target + ")(" + node.args.map((a) => genExpr(a, typeEnv)).join(", ") + ")";
@@ -311,12 +315,16 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
     string: '((typeof ($0) === "string") ? 1 : 0)',
     array: "((Array.isArray($0)) ? 1 : 0)",
     tuple: "((Array.isArray($0)) ? 1 : 0)",
-    record: '((typeof ($0) === "object" && $0 !== null && !Array.isArray($0) && $0.t === undefined) ? 1 : 0)',
+    record: '((typeof ($0) === "object" && $0 !== null && !Array.isArray($0) && $0.t === undefined && $0.__t === undefined) ? 1 : 0)',
     null: "(($0 === null) ? 1 : 0)",
     number: '((typeof ($0) === "number") ? 1 : 0)',
   };
   const tag = tagChecks[t];
   if (tag) return sub(tag, v);
+  // Named struct type: check the runtime `__t` marker.
+  if (typeEnv && typeEnv.structs.has(t)) {
+    return sub("((($0) && typeof ($0) === 'object' && ($0).__t === " + JSON.stringify(t) + ") ? 1 : 0)", v);
+  }
   // Suffixed numeric type (U8, I32, ...): check the runtime `.t` marker.
   // A value only matches if it was produced by a suffixed literal of that type.
   return sub("((($0) && typeof ($0) === 'object' && ($0).t === " + JSON.stringify(t) + ") ? 1 : 0)", v);

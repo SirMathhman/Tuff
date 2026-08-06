@@ -278,6 +278,10 @@ function matchPrimitive(
   if (value.tag === "number" && value.type) {
     return { ok: resolveType(value.type) === resolved.name };
   }
+  // Named struct type: the value must be a struct with a matching typeName.
+  if (isStructType(resolved.name)) {
+    return { ok: value.tag === "struct" && value.typeName === resolved.name };
+  }
   const tagName = tagMap[typeName];
   if (tagName) return { ok: value.tag === tagName };
   return { ok: value.tag === "number" && !value.type && resolved.name === "number" };
