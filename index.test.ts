@@ -1,8 +1,12 @@
 import { test, expect } from "bun:test";
-import { evaluate } from ".";
+import { evaluate, evaluateModules } from ".";
 
 test('evaluate("") => 0', () => {
   expect(evaluate("")).toBe(0);
+});
+
+test('evaluateModules(["main"], {["main"] : "100"}) => 100', () => {
+  expect(evaluateModules(["main"], { main: "100" })).toBe(100);
 });
 
 test('evaluate(" ") => 0', () => {
