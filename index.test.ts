@@ -316,3 +316,7 @@ test('evaluate("fn factorial(n) => if (n <= 1) 1 else n * factorial(n - 1); fact
 test('evaluate("10 % 3") => 1', () => {
   expect(evaluate("10 % 3")).toBe(1);
 });
+
+test('evaluate("let mut x = 0; x -= 1; x") => -1', () => {
+  expect(evaluate("let mut x = 0; x -= 1; x")).toBe(-1);
+});

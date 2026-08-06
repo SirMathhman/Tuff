@@ -124,7 +124,7 @@ type Ast =
   | { kind: "paren"; expr: Ast }
   | { kind: "if_expr"; cond: Ast; thenBranch: Ast; elseBranch: Ast }
   | { kind: "if_stmt"; cond: Ast; thenBranch: Ast; elseBranch: Ast | null }
-  | { kind: "augassign"; name: string; op: "+" | "-" | "*" | "/"; value: Ast }
+  | { kind: "augassign"; name: string; op: "+" | "-"; value: Ast }
   | { kind: "while"; cond: Ast; body: Ast }
   | { kind: "for"; varName: string; start: Ast; end: Ast; body: Ast }
   | { kind: "continue" }
@@ -291,6 +291,11 @@ function tokenize(source: string): Token[] {
     }
     if (source[i] === "+" && source[i + 1] === "=") {
       tokens.push({ type: "punct", value: "+=" });
+      i += 2;
+      continue;
+    }
+    if (source[i] === "-" && source[i + 1] === "=") {
+      tokens.push({ type: "punct", value: "-=" });
       i += 2;
       continue;
     }
@@ -603,14 +608,15 @@ function parse(tokens: Token[]): Ast {
       if (tokens[pos]?.value === ";") pos++;
       return { kind: "let", mutable, name, value, typeAnnotation };
     }
-    // Check for augmented assignment: identifier += expression
-    if (tokens[pos]?.type === "identifier" && tokens[pos + 1]?.value === "+=") {
+    // Check for augmented assignment: identifier += expression or identifier -= expression
+    if (tokens[pos]?.type === "identifier" && (tokens[pos + 1]?.value === "+=" || tokens[pos + 1]?.value === "-=")) {
       const name = tokens[pos]!.value;
+      const op = tokens[pos + 1]!.value === "+=" ? "+" : "-";
       pos++; // skip identifier
-      pos++; // skip "+="
+      pos++; // skip "+=" or "-="
       const value = parseExpression();
       if (tokens[pos]?.value === ";") pos++;
-      return { kind: "augassign", name, op: "+", value };
+      return { kind: "augassign", name, op, value };
     }
     // Check for dereference assignment: *identifier = expression
     if (
