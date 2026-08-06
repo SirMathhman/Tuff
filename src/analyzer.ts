@@ -221,14 +221,21 @@ function analyzeNode(
       }
       analyzeNode(ast.body, typeEnv, scopes, declared, moduleNames, moduleEnvs);
       scopes.pop();
-      // Validate a literal body against the declared return type. `assign`
-      // mode enforces the widening/narrowing rules (U16 => 100U8 is fine,
-      // U8 => 100U16 is not). Generic type params accept anything.
+      // Validate the body against the declared return type. `assign` mode
+      // enforces the widening/narrowing rules (U16 => 100U8 is fine, U8 =>
+      // 100U16 is not). Works for literal bodies and statically-typed
+      // expression bodies. Generic type params accept anything.
       if (ast.returnType) {
         const retIsGeneric = ast.returnType.kind === "primitive" && typeEnv.typeParams.has(ast.returnType.name);
         const lit = literalValue(ast.body);
         if (lit !== undefined && !retIsGeneric) {
           checkValueAgainstType(lit, ast.returnType, "assign", "return");
+        } else if (lit === undefined && !retIsGeneric) {
+          const bodyType = staticType(ast.body, typeEnv);
+          const bodyVal = bodyType && valueFromStaticType(bodyType);
+          if (bodyVal) {
+            checkValueAgainstType(bodyVal, ast.returnType, "assign", "return");
+          }
         }
       }
       break;
@@ -523,4 +530,23 @@ function literalValue(node: Ast): Value | undefined {
     default:
       return undefined;
   }
+}
+
+// Convert a static AstType to a representative Value for analysis-time
+// type checks (suffixed numerics carry their type so range checks apply).
+function valueFromStaticType(t: AstType): Value | undefined {
+  if (t.kind === "primitive") {
+    // Suffixed numerics (U8, I32, ...): a number carrying the type marker.
+    if (t.name !== "number" && t.name !== "bool" && t.name !== "string" && t.name !== "null" && t.name !== "fn") {
+      return { tag: "number", num: 0, type: t.name };
+    }
+    if (t.name === "bool") return { tag: "bool", val: false };
+    if (t.name === "string") return { tag: "string", value: "" };
+    if (t.name === "null") return { tag: "null" };
+    return { tag: "number", num: 0 };
+  }
+  if (t.kind === "array" || t.kind === "slice") return { tag: "array", values: [] };
+  if (t.kind === "tuple") return { tag: "tuple", values: [] };
+  if (t.kind === "struct") return { tag: "record", fields: {} };
+  return undefined;
 }
