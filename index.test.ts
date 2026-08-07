@@ -500,3 +500,8 @@ test('evaluate("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wr
 test('compileToExports("out let x = 100;").x => 100', () => {
   expect(compileToExports("out let x = 100;").x).toBe(100);
 });
+
+test('compileToExports("out fn get() => 100;").get() => 100', () => {
+  const get = compileToExports("out fn get() => 100;").get as () => number;
+  expect(get()).toBe(100);
+});
