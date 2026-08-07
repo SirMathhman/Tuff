@@ -1,5 +1,6 @@
 import type { Ast, AstType, TypeEnv } from "./types";
 import { suffixRanges } from "./typesystem";
+import { typeEquals as typeEqualsCodegen } from "./asttype";
 
 // Compiler — emits JS for a program, with `args` as a free variable.
 // The test harness executes the emitted JS with `args` bound to runtime args.
@@ -447,42 +448,6 @@ function resolveAstTypeName(typeEnv: TypeEnv | undefined, t: AstType): AstType {
   if (t.kind === "fn")
     return { kind: "fn", params: t.params.map((p) => resolveAstTypeName(typeEnv, p)), returnType: resolveAstTypeName(typeEnv, t.returnType) };
   return t;
-}
-
-// Structural equality for AstType (mirrors the analyzer's typeEquals).
-function typeEqualsCodegen(a: AstType, b: AstType): boolean {
-  if (a.kind !== b.kind) return false;
-  switch (a.kind) {
-    case "primitive":
-      return a.name === (b as Extract<AstType, { kind: "primitive" }>).name;
-    case "array":
-      return a.length === (b as Extract<AstType, { kind: "array" }>).length && typeEqualsCodegen(a.elementType, (b as Extract<AstType, { kind: "array" }>).elementType);
-    case "slice":
-      return typeEqualsCodegen(a.elementType, (b as Extract<AstType, { kind: "slice" }>).elementType);
-    case "tuple":
-      return (
-        a.elements.length === (b as Extract<AstType, { kind: "tuple" }>).elements.length &&
-        a.elements.every((e, i) => typeEqualsCodegen(e, (b as Extract<AstType, { kind: "tuple" }>).elements[i]!))
-      );
-    case "struct": {
-      const bf = (b as Extract<AstType, { kind: "struct" }>).fields;
-      return a.fields.length === bf.length && a.fields.every((f, i) => f.name === bf[i]!.name && typeEqualsCodegen(f.type, bf[i]!.type));
-    }
-    case "union": {
-      const bt = (b as Extract<AstType, { kind: "union" }>).types;
-      return a.types.length === bt.length && a.types.every((m, i) => typeEqualsCodegen(m, bt[i]!));
-    }
-    case "ref":
-      return typeEqualsCodegen(a.targetType, (b as Extract<AstType, { kind: "ref" }>).targetType);
-    case "fn": {
-      const bf = (b as Extract<AstType, { kind: "fn" }>);
-      return (
-        a.params.length === bf.params.length &&
-        a.params.every((p, i) => typeEqualsCodegen(p, bf.params[i]!)) &&
-        typeEqualsCodegen(a.returnType, bf.returnType)
-      );
-    }
-  }
 }
 
 function resolveType(typeEnv: TypeEnv | undefined, t: AstType): string {

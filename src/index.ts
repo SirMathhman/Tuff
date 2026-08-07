@@ -5,6 +5,7 @@ export * from "./parser";
 export * from "./evaluator";
 export * from "./typesystem";
 export * from "./typeparser";
+export * from "./asttype";
 export * from "./modules";
 export * from "./codegen";
 export * from "./analyzer";
