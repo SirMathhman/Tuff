@@ -25,23 +25,17 @@ export function compileAst(ast: Ast, typeEnv?: TypeEnv): string {
   if (ast.kind === "block") {
     const stmts = ast.statements.filter((s) => s !== null);
     if (stmts.length === 0) return "process.exit(0);";
-    // Collect non-`args` `in let` inputs. If present, defer the whole body
+    // If the program has non-`args` `in let` inputs, defer the whole body
     // into an `__init__` function that binds them from the runtime args
-    // object (mirrors the evaluator's moduleInputs). `args` stays a free
-    // variable, so it's excluded.
-    const inlets = stmts.filter(
-      (s): s is Extract<Ast, { kind: "inlet" }> =>
-        s.kind === "inlet" && s.name !== "args",
+    // object (mirrors the evaluator's moduleInputs). The `inlet` statement
+    // case emits the binding; `args` stays a free variable, so it's excluded.
+    const hasInlets = stmts.some(
+      (s) => s.kind === "inlet" && s.name !== "args",
     );
-    if (inlets.length > 0) {
-      const bindings = inlets
-        .map((i) => "var " + i.name + " = __args__." + i.name + ";")
-        .join("\n");
+    if (hasInlets) {
       const body = stmts.map((s) => genStatement(s!, typeEnv)).join("\n");
       return (
         "module.exports.__init__ = function(__args__) {\n" +
-        bindings +
-        "\n" +
         body +
         "\n};\n" +
         "process.exit(0);"
@@ -122,7 +116,9 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
   switch (node.kind) {
     case "inlet":
       // `args` is a free variable provided by the runtime — declaration only.
-      return "";
+      // Other `in let` inputs bind from the runtime args object (`__args__`),
+      // which is in scope when the body is wrapped in `__init__`.
+      return node.name === "args" ? "" : "var " + node.name + " = __args__." + node.name + ";";
     case "block":
       return "{ " + node.statements.filter((s) => s !== null).map((s) => genStatement(s!, typeEnv)).join(" ") + " }";
     case "let":
