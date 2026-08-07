@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { expectValid, expectInvalid, expectModules, compileToExports } from "./test/helpers";
+import {
+  expectValid,
+  expectInvalid,
+  expectModules,
+  compileToExports,
+} from "./test/helpers";
 
 test('evaluate("") => 0', () => {
   expectValid("", 0);
@@ -14,15 +19,27 @@ test('evaluateModules(["main"], {["main"] : "lib.x", ["lib"] : "out let x = 100;
 });
 
 test('evaluateModules(["main"], {["main"] : "lib.get()", ["lib"] : "out fn get() => 100;"}) => 100', () => {
-  expectModules(["main"], { main: "lib.get()", lib: "out fn get() => 100;" }, 100);
+  expectModules(
+    ["main"],
+    { main: "lib.get()", lib: "out fn get() => 100;" },
+    100,
+  );
 });
 
 test('evaluateModules(["main"], {["main"] : "lib::foo.get()", ["lib", "foo"] : "out fn get() => 100;"}) => 100', () => {
-  expectModules(["main"], { main: "lib::foo.get()", "lib::foo": "out fn get() => 100;" }, 100);
+  expectModules(
+    ["main"],
+    { main: "lib::foo.get()", "lib::foo": "out fn get() => 100;" },
+    100,
+  );
 });
 
 test('evaluateModules(["main"], {["main"] : "lib { x : 100 }.y", ["lib"] : "in let x : I32; out let y = x;"}) => 100', () => {
-  expectModules(["main"], { main: "lib { x : 100 }.y", lib: "in let x : I32; out let y = x;" }, 100);
+  expectModules(
+    ["main"],
+    { main: "lib { x : 100 }.y", lib: "in let x : I32; out let y = x;" },
+    100,
+  );
 });
 
 test('evaluate(" ") => 0', () => {
@@ -257,44 +274,59 @@ test('"apple" < "banana" => 1', () => {
   expectValid('"apple" < "banana"', 1);
 });
 
-test('fn get() => { if (true) yield 1; 2 } + 3; get() => 4', () => {
-  expectValid('fn get() => { if (true) yield 1; 2 } + 3; get()', 4);
+test("fn get() => { if (true) yield 1; 2 } + 3; get() => 4", () => {
+  expectValid("fn get() => { if (true) yield 1; 2 } + 3; get()", 4);
 });
 
-test('let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0] => 100', () => {
-  expectValid("let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0]", 100);
+test("let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0] => 100", () => {
+  expectValid(
+    "let array = [100]; let array0 = [array]; let temp = array0[0]; temp[0]",
+    100,
+  );
 });
 
-test('let array0 = [[100]]; array0[0][0] => 100', () => {
+test("let array0 = [[100]]; array0[0][0] => 100", () => {
   expectValid("let array0 = [[100]]; array0[0][0]", 100);
 });
 
-test('fn get() => { if (true) return 1; 2 } + 3; get() => 1', () => {
-  expectValid('fn get() => { if (true) return 1; 2 } + 3; get()', 1);
+test("fn get() => { if (true) return 1; 2 } + 3; get() => 1", () => {
+  expectValid("fn get() => { if (true) return 1; 2 } + 3; get()", 1);
 });
 
-test('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x => 0', () => {
-  expectValid('let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x', 0);
+test("let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x => 0", () => {
+  expectValid(
+    "let mut x = 0; fn doNothing() => { if (true) return; x += 1; } doNothing(); x",
+    0,
+  );
 });
 
-test('let pt = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
-  expectValid('let pt = { x : 3, y : 4 }; pt.x + pt.y', 7);
+test("let pt = { x : 3, y : 4 }; pt.x + pt.y => 7", () => {
+  expectValid("let pt = { x : 3, y : 4 }; pt.x + pt.y", 7);
 });
 
-test('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
-  expectValid('struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y', 7);
+test("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y => 7", () => {
+  expectValid(
+    "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y",
+    7,
+  );
 });
 
-test('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0 => 1', () => {
-  expectValid('enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0', 1);
+test("enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0 => 1", () => {
+  expectValid(
+    "enum Color { Red, Green, Blue } Color::Red == Color::Red && Color::Red != 0",
+    1,
+  );
 });
 
-test('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y => 7', () => {
-  expectValid('let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y', 7);
+test("let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y => 7", () => {
+  expectValid(
+    "let pt : { x : I32, y : I32 } = { x : 3, y : 4 }; pt.x + pt.y",
+    7,
+  );
 });
 
-test('let mut array = [0]; array[0] = 100; array[0] => 100', () => {
-  expectValid('let mut array = [0]; array[0] = 100; array[0]', 100);
+test("let mut array = [0]; array[0] = 100; array[0] => 100", () => {
+  expectValid("let mut array = [0]; array[0] = 100; array[0]", 100);
 });
 
 test('evaluate("let x = { if (true) yield 4; 0 }; x") => 4', () => {
@@ -350,11 +382,17 @@ test('evaluate("let x = 100; let y : &I32 = &x; *y") => 100', () => {
 });
 
 test('evaluate("let array = [1, 2, 3]; let ptr : &[I32; 3] = &array; ptr[0] + ptr[1] + ptr[2]") => 6', () => {
-  expectValid("let array = [1, 2, 3]; let ptr : &[I32; 3] = &array; ptr[0] + ptr[1] + ptr[2]", 6);
+  expectValid(
+    "let array = [1, 2, 3]; let ptr : &[I32; 3] = &array; ptr[0] + ptr[1] + ptr[2]",
+    6,
+  );
 });
 
 test('evaluate("let array = [1, 2, 3]; let ptr : &[I32] = &array; ptr[0] + ptr[1] + ptr[2]") => 6', () => {
-  expectValid("let array = [1, 2, 3]; let ptr : &[I32] = &array; ptr[0] + ptr[1] + ptr[2]", 6);
+  expectValid(
+    "let array = [1, 2, 3]; let ptr : &[I32] = &array; ptr[0] + ptr[1] + ptr[2]",
+    6,
+  );
 });
 
 test('evaluate("let mut x = 0; let y = &mut x; *y = 100;  x") => 100', () => {
@@ -406,7 +444,10 @@ test('evaluate("let array = [1, 2, 3]; array.length") => 3', () => {
 });
 
 test('evaluate("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)") => 120', () => {
-  expectValid("fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)", 120);
+  expectValid(
+    "fn factorial(n : I32) => if (n <= 1) 1 else n * factorial(n - 1); factorial(5)",
+    120,
+  );
 });
 
 test('evaluate("10 % 3") => 1', () => {
@@ -470,7 +511,10 @@ test('evaluate("let x = { a : 1 }; x is record") => 1', () => {
 });
 
 test('evaluate("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32") => 1', () => {
-  expectValid("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32", 1);
+  expectValid(
+    "type MyAlias = I32; let x : MyAlias = 100; x is MyAlias && x is I32",
+    1,
+  );
 });
 
 test('evaluate("type A = B; type B = A;") => Error', () => {
@@ -482,19 +526,30 @@ test('evaluate("args.length") => 1', () => {
 });
 
 test('evaluate("let x = if (args.length == 2) 100U8 else 100U16; x is U8") => 1', () => {
-  expectValid("let x = if (args.length == 2) 100U8 else 100U16; x is U8", 1, ["foo"]);
+  expectValid("let x = if (args.length == 2) 100U8 else 100U16; x is U8", 1, [
+    "foo",
+  ]);
 });
 
 test('evaluate("let x = if (args.length == 2) 1U8 else 1U16; x is U8 | U16") => 1', () => {
-  expectValid("let x = if (args.length == 2) 1U8 else 1U16; x is U8 | U16", 1, ["foo"]);
+  expectValid("let x = if (args.length == 2) 1U8 else 1U16; x is U8 | U16", 1, [
+    "foo",
+  ]);
 });
 
 test('evaluate("struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A") => 1', () => {
-  expectValid("struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A", 1, ["foo"]);
+  expectValid(
+    "struct A {} struct B {} let x = if (args.length == 2) A {} else B {}; x is A",
+    1,
+    ["foo"],
+  );
 });
 
 test('evaluate("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool") => 1', () => {
-  expectValid("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool", 1);
+  expectValid(
+    "struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool",
+    1,
+  );
 });
 
 test('compileToExports("out let x = 100;").x => 100', () => {
@@ -502,6 +557,8 @@ test('compileToExports("out let x = 100;").x => 100', () => {
 });
 
 test('compileToExports("out fn get() => 100;").get() => 100', () => {
-  const get = compileToExports("out fn get() => 100;").get as () => number;
+  const { get } = compileToExports<{ get: () => number }>(
+    "out fn get() => 100;",
+  );
   expect(get()).toBe(100);
 });

@@ -69,7 +69,9 @@ export function expectModules(
   expect(evaluateModules(entries, modules)).toBe(expected);
 }
 
-export function compileToExports(source: string): Record<string, unknown> {
+export function compileToExports<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(source: string): T {
   const compiled = compile(source);
   const actualModule = {
     exports: {},
@@ -79,5 +81,5 @@ export function compileToExports(source: string): Record<string, unknown> {
   const process = { exit: () => {} };
 
   new Function("module", "process", compiled)(actualModule, process);
-  return actualModule.exports;
+  return actualModule.exports as T;
 }
