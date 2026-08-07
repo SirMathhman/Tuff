@@ -7,6 +7,14 @@ import { typeEquals as typeEqualsCodegen } from "./asttype";
 // Mutable (`let mut`) bindings compile to `{ v }` cells so `&mut` references
 // can write through them; immutable bindings stay plain values.
 
+// Bundled context threaded through the generator functions. `modulePaths`
+// maps module identifiers to their require paths; references to them compile
+// to `require("<path>")` calls (the harness provides `require`).
+type CodegenCtx = {
+  typeEnv?: TypeEnv;
+  modulePaths?: Map<string, string>;
+};
+
 // True if the AST reads the `args` input (an identifier named "args").
 export function referencesArgs(node: Ast): boolean {
   if (node.kind === "ident") return node.name === "args";
@@ -21,13 +29,12 @@ export function referencesArgs(node: Ast): boolean {
 }
 
 // Compile a program into JS statements ending in `process.exit(<value>);`.
-// `modulePaths` maps module identifiers to their require paths; references
-// to them compile to `require("<path>")` calls (the harness provides `require`).
 export function compileAst(
   ast: Ast,
   typeEnv?: TypeEnv,
   modulePaths?: Map<string, string>,
 ): string {
+  const ctx: CodegenCtx = { typeEnv, modulePaths };
   if (ast.kind === "block") {
     const stmts = ast.statements.filter((s) => s !== null);
     if (stmts.length === 0) return "process.exit(0);";
@@ -39,7 +46,7 @@ export function compileAst(
       (s) => s.kind === "inlet" && s.name !== "args",
     );
     if (hasInlets) {
-      const body = stmts.map((s) => genStatement(s!, typeEnv, modulePaths)).join("\n");
+      const body = stmts.map((s) => genStatement(s!, ctx)).join("\n");
       return (
         "module.exports.__init__ = function(__args__) {\n" +
         body +
@@ -47,10 +54,10 @@ export function compileAst(
         "process.exit(0);"
       );
     }
-    const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv, modulePaths));
-    return body.join("\n") + "\nprocess.exit(" + toNumJs(genValue(stmts[stmts.length - 1]!, typeEnv, modulePaths)) + ");";
+    const body = stmts.slice(0, -1).map((s) => genStatement(s!, ctx));
+    return body.join("\n") + "\nprocess.exit(" + toNumJs(genValue(stmts[stmts.length - 1]!, ctx)) + ");";
   }
-  return "process.exit(" + toNumJs(genValue(ast, typeEnv, modulePaths)) + ");";
+  return "process.exit(" + toNumJs(genValue(ast, ctx)) + ");";
 }
 
 // Coerce a JS expression to a number (mirrors the evaluator's toNum).
@@ -60,7 +67,7 @@ function toNumJs(expr: string): string {
 }
 
 // Produce a JS expression for a node that may be a statement (block value).
-function genValue(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>): string {
+function genValue(node: Ast, ctx: CodegenCtx): string {
   switch (node.kind) {
     case "let":
     case "assign":
@@ -73,25 +80,26 @@ function genValue(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string
     case "structdef":
     case "enumdef":
       // Statements as the block value: execute, then yield 0 (toNum(null) = 0).
-      return "(function() { " + genStatement(node, typeEnv, modulePaths) + " return 0; })()";
+      return "(function() { " + genStatement(node, ctx) + " return 0; })()";
     case "return":
     case "yield":
       // Control flow as the block value: execute (throw/return), then yield 0.
-      return "(function() { " + genStatement(node, typeEnv, modulePaths) + " return 0; })()";
+      return "(function() { " + genStatement(node, ctx) + " return 0; })()";
     case "break":
     case "continue":
       // Loop control as the block value: a statement-only block with flow.
-      return "(function() { " + genStatement(node, typeEnv, modulePaths) + " return 0; })()";
+      return "(function() { " + genStatement(node, ctx) + " return 0; })()";
     default:
-      return genExpr(node, typeEnv, modulePaths);
+      return genExpr(node, ctx);
   }
 }
 
 // Emit a `let` binding's value, propagating the annotation type to a
 // plain-number literal (mirrors the evaluator's type propagation). For
 // `let x : Bool | I32 = 100`, the union picks I32 and marks the value.
-function genLetValue(node: Extract<Ast, { kind: "let" }>, typeEnv?: TypeEnv, modulePaths?: Map<string, string>): string {
-  const expr = genExpr(node.value, typeEnv, modulePaths);
+function genLetValue(node: Extract<Ast, { kind: "let" }>, ctx: CodegenCtx): string {
+  const { typeEnv } = ctx;
+  const expr = genExpr(node.value, ctx);
   if (!node.typeAnnotation || node.value.kind !== "num" || node.value.suffix) {
     return expr;
   }
@@ -117,7 +125,8 @@ function genLetValue(node: Extract<Ast, { kind: "let" }>, typeEnv?: TypeEnv, mod
   return expr;
 }
 
-function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>): string {
+function genStatement(node: Ast, ctx: CodegenCtx): string {
+  const { typeEnv } = ctx;
   const isMut = (name: string): boolean => typeEnv?.mutables.get(name) === true;
   switch (node.kind) {
     case "inlet":
@@ -126,7 +135,7 @@ function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, st
       // which is in scope when the body is wrapped in `__init__`.
       return node.name === "args" ? "" : "var " + node.name + " = __args__." + node.name + ";";
     case "block":
-      return "{ " + node.statements.filter((s) => s !== null).map((s) => genStatement(s!, typeEnv, modulePaths)).join(" ") + " }";
+      return "{ " + node.statements.filter((s) => s !== null).map((s) => genStatement(s!, ctx)).join(" ") + " }";
     case "let":
       // `var` allows redeclaration (the evaluator overwrites silently);
       // mutable bindings become cells so `&mut` can write through them.
@@ -135,23 +144,23 @@ function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, st
       // Exported (`out let`) bindings are also assigned to module.exports.
       {
         const decl = isMut(node.name)
-          ? "var " + node.name + " = { v: " + genLetValue(node, typeEnv, modulePaths) + " };"
-          : "var " + node.name + " = " + genLetValue(node, typeEnv, modulePaths) + ";";
+          ? "var " + node.name + " = { v: " + genLetValue(node, ctx) + " };"
+          : "var " + node.name + " = " + genLetValue(node, ctx) + ";";
         if (node.exported) {
           return decl + " module.exports." + node.name + " = " + (isMut(node.name) ? node.name + ".v" : node.name) + ";";
         }
         return decl;
       }
     case "assign":
-      return (isMut(node.name) ? node.name + ".v" : node.name) + " = " + genExpr(node.value, typeEnv, modulePaths) + ";";
+      return (isMut(node.name) ? node.name + ".v" : node.name) + " = " + genExpr(node.value, ctx) + ";";
     case "augassign":
-      return (isMut(node.name) ? node.name + ".v" : node.name) + " " + node.op + "= " + genExpr(node.value, typeEnv, modulePaths) + ";";
+      return (isMut(node.name) ? node.name + ".v" : node.name) + " " + node.op + "= " + genExpr(node.value, ctx) + ";";
     case "refassign": {
-      const target = genExpr({ kind: "ident", name: node.name }, typeEnv, modulePaths);
-      return "(" + target + ").v = " + genExpr(node.value, typeEnv, modulePaths) + ";";
+      const target = genExpr({ kind: "ident", name: node.name }, ctx);
+      return "(" + target + ").v = " + genExpr(node.value, ctx) + ";";
     }
     case "array_assign":
-      return "(" + genExpr(node.target, typeEnv, modulePaths) + ")[" + genExpr(node.index, typeEnv, modulePaths) + "] = " + genExpr(node.value, typeEnv, modulePaths) + ";";
+      return "(" + genExpr(node.target, ctx) + ")[" + genExpr(node.index, ctx) + "] = " + genExpr(node.value, ctx) + ";";
     case "fn": {
       const params = node.params.map((p) => p.name).join(", ");
       const decl =
@@ -160,7 +169,7 @@ function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, st
         "(" +
         params +
         ") { try { return " +
-        genExpr(node.body, typeEnv, modulePaths) +
+        genExpr(node.body, ctx) +
         "; } catch (e) { if (e && e.__return) return e.value; throw e; } }";
       if (node.exported) {
         return decl + " module.exports." + node.name + " = " + node.name + ";";
@@ -168,11 +177,11 @@ function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, st
       return decl;
     }
     case "if_stmt": {
-      const elseCode = node.elseBranch ? " else " + genStatement(node.elseBranch, typeEnv, modulePaths) : "";
-      return "if (" + genExpr(node.cond, typeEnv, modulePaths) + ") " + genStatement(node.thenBranch, typeEnv, modulePaths) + elseCode;
+      const elseCode = node.elseBranch ? " else " + genStatement(node.elseBranch, ctx) : "";
+      return "if (" + genExpr(node.cond, ctx) + ") " + genStatement(node.thenBranch, ctx) + elseCode;
     }
     case "while":
-      return "while (" + genExpr(node.cond, typeEnv, modulePaths) + ") " + genStatement(node.body, typeEnv, modulePaths);
+      return "while (" + genExpr(node.cond, ctx) + ") " + genStatement(node.body, ctx);
     case "for": {
       const isMutVar = typeEnv?.mutables.get(node.varName) === true;
       const v = isMutVar ? node.varName + ".v" : node.varName;
@@ -180,24 +189,24 @@ function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, st
         "for (let " +
         node.varName +
         (isMutVar ? " = { v: (" : " = (") +
-        genExpr(node.start, typeEnv, modulePaths) +
+        genExpr(node.start, ctx) +
         ") }; " +
         v +
         " < (" +
-        genExpr(node.end, typeEnv, modulePaths) +
+        genExpr(node.end, ctx) +
         "); " +
         v +
         "++) " +
-        genStatement(node.body, typeEnv, modulePaths)
+        genStatement(node.body, ctx)
       );
     }
     case "return":
       // Return unwinds to the fn boundary (bypasses surrounding expressions),
       // so it's emitted as a thrown sentinel caught by the fn wrapper.
-      return "throw { __return: true, value: " + (node.value ? genExpr(node.value, typeEnv, modulePaths) : "0") + " };";
+      return "throw { __return: true, value: " + (node.value ? genExpr(node.value, ctx) : "0") + " };";
     case "yield":
       // Yield is block-local: return from the enclosing IIFE/block.
-      return "return " + genExpr(node.value, typeEnv, modulePaths) + ";";
+      return "return " + genExpr(node.value, ctx) + ";";
     case "break":
       return "break;";
     case "continue":
@@ -208,11 +217,12 @@ function genStatement(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, st
       // Type declarations are erased at runtime.
       return "";
     default:
-      return genExpr(node, typeEnv, modulePaths) + ";";
+      return genExpr(node, ctx) + ";";
   }
 }
 
-function genExpr(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>): string {
+function genExpr(node: Ast, ctx: CodegenCtx): string {
+  const { typeEnv, modulePaths } = ctx;
   const isMut = (name: string): boolean => typeEnv?.mutables.get(name) === true;
   switch (node.kind) {
     case "num":
@@ -238,8 +248,8 @@ function genExpr(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>
     case "inlet":
       return node.name === "args" ? "args" : "0";
     case "binop": {
-      const l = genExpr(node.left, typeEnv, modulePaths);
-      const r = genExpr(node.right, typeEnv, modulePaths);
+      const l = genExpr(node.left, ctx);
+      const r = genExpr(node.right, ctx);
       const ln = toNumJs(l);
       const rn = toNumJs(r);
       // == / !=: compare raw values (===), unwrapping suffixed-number objects.
@@ -253,7 +263,7 @@ function genExpr(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>
       return "((" + ln + ") " + node.op + " (" + rn + "))";
     }
     case "unary": {
-      const operand = genExpr(node.operand, typeEnv, modulePaths);
+      const operand = genExpr(node.operand, ctx);
       if (node.op === "-" || node.op === "!") return "(" + node.op + "(" + operand + "))";
       // &mut x — alias the cell itself so `*y = v` writes through.
       if (node.op === "&mut") {
@@ -265,56 +275,56 @@ function genExpr(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>
       return "(" + operand + ")";
     }
     case "index": {
-      const target = genExpr(node.target, typeEnv, modulePaths);
-      const idx = genExpr(node.index, typeEnv, modulePaths);
+      const target = genExpr(node.target, ctx);
+      const idx = genExpr(node.index, ctx);
       // String indexing yields the char code; array/tuple yields the element.
       return '((typeof (' + target + ')[' + idx + '] === "string") ? (' + target + ')[' + idx + '].charCodeAt(0) : (' + target + ')[' + idx + '])';
     }
     case "length":
-      return "((" + genExpr(node.target, typeEnv, modulePaths) + ").length)";
+      return "((" + genExpr(node.target, ctx) + ").length)";
     case "property_access":
-      return "((" + genExpr(node.target, typeEnv, modulePaths) + ")." + node.property + ")";
+      return "((" + genExpr(node.target, ctx) + ")." + node.property + ")";
     case "namespace": {
       // Enum variant: Color::Red encodes as "Color::Red" (string compare).
       return JSON.stringify(node.segments.join("::"));
     }
     case "typecheck":
-      return genTypecheck(node, typeEnv);
+      return genTypecheck(node, ctx);
     case "paren":
-      return "(" + genExpr(node.expr, typeEnv, modulePaths) + ")";
+      return "(" + genExpr(node.expr, ctx) + ")";
     case "array":
-      return "[" + node.elements.map((e) => genExpr(e, typeEnv, modulePaths)).join(", ") + "]";
+      return "[" + node.elements.map((e) => genExpr(e, ctx)).join(", ") + "]";
     case "tuple":
-      return "[" + node.elements.map((e) => genExpr(e, typeEnv, modulePaths)).join(", ") + "]";
+      return "[" + node.elements.map((e) => genExpr(e, ctx)).join(", ") + "]";
     case "record":
-      return "({" + node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv, modulePaths)).join(", ") + "})";
+      return "({" + node.fields.map((f) => f.key + ": " + genExpr(f.value, ctx)).join(", ") + "})";
     case "structliteral": {
       // Named struct literals carry a `__t` marker so `is` checks work at
       // runtime (e.g. `if (c) A {} else B {}; x is A`).
-      const fields = node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv, modulePaths));
+      const fields = node.fields.map((f) => f.key + ": " + genExpr(f.value, ctx));
       return "({ __t: " + JSON.stringify(node.typeName) + ", " + fields.join(", ") + "})";
     }
     case "call": {
-      const target = node.target ? genExpr(node.target, typeEnv, modulePaths) : node.name;
-      return "(" + target + ")(" + node.args.map((a) => genExpr(a, typeEnv, modulePaths)).join(", ") + ")";
+      const target = node.target ? genExpr(node.target, ctx) : node.name;
+      return "(" + target + ")(" + node.args.map((a) => genExpr(a, ctx)).join(", ") + ")";
     }
     case "if_expr":
-      return "(" + genExpr(node.cond, typeEnv, modulePaths) + " ? " + genExpr(node.thenBranch, typeEnv, modulePaths) + " : " + genExpr(node.elseBranch, typeEnv, modulePaths) + ")";
+      return "(" + genExpr(node.cond, ctx) + " ? " + genExpr(node.thenBranch, ctx) + " : " + genExpr(node.elseBranch, ctx) + ")";
     case "match": {
-      const matchVal = genExpr(node.expr, typeEnv, modulePaths);
+      const matchVal = genExpr(node.expr, ctx);
       let js = "0";
       for (let i = node.cases.length - 1; i >= 0; i--) {
         const c = node.cases[i]!;
-        const cond = c.pattern.kind === "wildcard" ? "true" : "((" + genExpr(c.pattern, typeEnv, modulePaths) + ") === (" + matchVal + "))";
-        js = "(" + cond + " ? " + genExpr(c.body, typeEnv, modulePaths) + " : " + js + ")";
+        const cond = c.pattern.kind === "wildcard" ? "true" : "((" + genExpr(c.pattern, ctx) + ") === (" + matchVal + "))";
+        js = "(" + cond + " ? " + genExpr(c.body, ctx) + " : " + js + ")";
       }
       return js;
     }
     case "block": {
       const stmts = node.statements.filter((s) => s !== null);
       if (stmts.length === 0) return "0";
-      const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv, modulePaths));
-      return "(function() { " + body.join(" ") + " return " + genValue(stmts[stmts.length - 1]!, typeEnv, modulePaths) + "; })()";
+      const body = stmts.slice(0, -1).map((s) => genStatement(s!, ctx));
+      return "(function() { " + body.join(" ") + " return " + genValue(stmts[stmts.length - 1]!, ctx) + "; })()";
     }
     case "fn": {
       const params = node.params.map((p) => p.name).join(", ");
@@ -324,7 +334,7 @@ function genExpr(node: Ast, typeEnv?: TypeEnv, modulePaths?: Map<string, string>
         "(" +
         params +
         ") { try { return " +
-        genExpr(node.body, typeEnv, modulePaths) +
+        genExpr(node.body, ctx) +
         "; } catch (e) { if (e && e.__return) return e.value; throw e; } })"
       );
     }
@@ -341,7 +351,8 @@ function sub(template: string, value: string): string {
 
 // Compile an `is` type check. Folds when the value's type is statically known
 // (literal suffix or inferred binding); otherwise falls back to tag checks.
-function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeEnv): string {
+function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, ctx: CodegenCtx): string {
+  const { typeEnv } = ctx;
   const resolvedType = resolveAstTypeName(typeEnv, node.type);
   if (resolvedType.kind === "union") {
     // Fold when the value's inferred type is a subset of the checked union
@@ -364,7 +375,7 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
     }
     // Union type: the value matches if it matches any member.
     const memberChecks = resolvedType.types.map((m) =>
-      genTypecheck({ ...node, type: m }, typeEnv),
+      genTypecheck({ ...node, type: m }, ctx),
     );
     // OR of member checks, coercing to 0/1.
     return memberChecks.reduce(
@@ -419,7 +430,7 @@ function genTypecheck(node: Extract<Ast, { kind: "typecheck" }>, typeEnv?: TypeE
       }
     }
   }
-  const v = genExpr(value, typeEnv);
+  const v = genExpr(value, ctx);
   const tagChecks: Record<string, string> = {
     bool: '((typeof ($0) === "boolean") ? 1 : 0)',
     string: '((typeof ($0) === "string") ? 1 : 0)',
