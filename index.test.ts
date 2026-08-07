@@ -577,3 +577,11 @@ test('evaluate("fn add(first : I32, second : I32) : I32 => first + second; let f
     7,
   );
 });
+
+test('compileToExports("in let func : &() => I32; out let y = func();", { func : () => 100 }).y => 100', () => {
+  const { y } = compileToExports<{ y: number }>(
+    "in let func : &() => I32; out let y = func();",
+    { func: () => 100 },
+  );
+  expect(y).toBe(100);
+});
