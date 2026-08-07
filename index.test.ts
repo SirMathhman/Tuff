@@ -602,3 +602,11 @@ test('compileToExports({ source : "out let y = lib.x", others : { "./lib" : { x 
   });
   expect(y).toBe(100);
 });
+
+test('compileToExports({ source : "out let y = lib.x", others : { "../lib" : { x : 100 } } }).y => 100', () => {
+  const { y } = compileToExports<{ y: number }>({
+    source: "out let y = lib.x",
+    others: { "../lib": { x: 100 } },
+  });
+  expect(y).toBe(100);
+});

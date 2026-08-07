@@ -77,12 +77,14 @@ export function compileToExports<
   others?: Record<string, object>;
 }): T {
   const { source, args = {}, others = {} } = options;
-  // Module identifiers in the source compile to require("./<name>") calls.
-  // The module names are the keys of `others` (minus the entry point).
-  const moduleNames = new Set(
-    Object.keys(others).map((p) => p.replace(/^\.\//, "")),
-  );
-  const compiled = compile(source, moduleNames);
+  // Module identifiers in the source compile to require("<path>") calls.
+  // The module identifier is the basename of the path (e.g. "../lib" → "lib").
+  const modulePaths = new Map<string, string>();
+  for (const path of Object.keys(others)) {
+    const name = path.split("/").pop()!;
+    modulePaths.set(name, path);
+  }
+  const compiled = compile(source, modulePaths);
   const exports0: Record<string, unknown> = {
     __init__: undefined,
   };

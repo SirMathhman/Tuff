@@ -57,8 +57,10 @@ export function evaluateModules(
 
 export function compile(
   source: string,
-  moduleNames?: Set<string>,
+  modulePaths?: Map<string, string>,
 ): string {
+  // The analyzer only needs the set of module identifiers.
+  const moduleNames = modulePaths ? new Set(modulePaths.keys()) : undefined;
   const { ast, typeEnv } = analyzeProgram(source, moduleNames);
-  return compileAst(ast, typeEnv, moduleNames);
+  return compileAst(ast, typeEnv, modulePaths);
 }
