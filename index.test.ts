@@ -1,5 +1,5 @@
-import { test } from "bun:test";
-import { expectValid, expectInvalid, expectModules } from "./test/helpers";
+import { expect, test } from "bun:test";
+import { expectValid, expectInvalid, expectModules, compileToExports } from "./test/helpers";
 
 test('evaluate("") => 0', () => {
   expectValid("", 0);
@@ -495,4 +495,8 @@ test('evaluate("struct A {} struct B {} let x = if (args.length == 2) A {} else 
 
 test('evaluate("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool") => 1', () => {
   expectValid("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wrapper<Bool> { field : true }; wrapper.field is Bool", 1);
+});
+
+test('compileToExports("out let x = 100;").x => 100', () => {
+  expect(compileToExports("out let x = 100;").x).toBe(100);
 });

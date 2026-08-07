@@ -107,9 +107,16 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
       // mutable bindings become cells so `&mut` can write through them.
       // Type annotations propagate to plain-number values (mirrors the
       // evaluator's type propagation: `let x : Bool | I32 = 100` → x is I32).
-      return isMut(node.name)
-        ? "var " + node.name + " = { v: " + genLetValue(node, typeEnv) + " };"
-        : "var " + node.name + " = " + genLetValue(node, typeEnv) + ";";
+      // Exported (`out let`) bindings are also assigned to module.exports.
+      {
+        const decl = isMut(node.name)
+          ? "var " + node.name + " = { v: " + genLetValue(node, typeEnv) + " };"
+          : "var " + node.name + " = " + genLetValue(node, typeEnv) + ";";
+        if (node.exported) {
+          return decl + " module.exports." + node.name + " = " + (isMut(node.name) ? node.name + ".v" : node.name) + ";";
+        }
+        return decl;
+      }
     case "assign":
       return (isMut(node.name) ? node.name + ".v" : node.name) + " = " + genExpr(node.value, typeEnv) + ";";
     case "augassign":
@@ -122,15 +129,18 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
       return "(" + genExpr(node.target, typeEnv) + ")[" + genExpr(node.index, typeEnv) + "] = " + genExpr(node.value, typeEnv) + ";";
     case "fn": {
       const params = node.params.map((p) => p.name).join(", ");
-      return (
+      const decl =
         "function " +
         node.name +
         "(" +
         params +
         ") { try { return " +
         genExpr(node.body, typeEnv) +
-        "; } catch (e) { if (e && e.__return) return e.value; throw e; } }"
-      );
+        "; } catch (e) { if (e && e.__return) return e.value; throw e; } }";
+      if (node.exported) {
+        return decl + " module.exports." + node.name + " = " + node.name + ";";
+      }
+      return decl;
     }
     case "if_stmt": {
       const elseCode = node.elseBranch ? " else " + genStatement(node.elseBranch, typeEnv) : "";

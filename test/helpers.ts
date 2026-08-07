@@ -68,3 +68,16 @@ export function expectModules(
 ): void {
   expect(evaluateModules(entries, modules)).toBe(expected);
 }
+
+export function compileToExports(source: string): Record<string, unknown> {
+  const compiled = compile(source);
+  const actualModule = {
+    exports: {},
+  };
+
+  // Mock process.exit so the trailing coercion call doesn't throw.
+  const process = { exit: () => {} };
+
+  new Function("module", "process", compiled)(actualModule, process);
+  return actualModule.exports;
+}
