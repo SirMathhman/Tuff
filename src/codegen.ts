@@ -24,6 +24,28 @@ export function compileAst(ast: Ast, typeEnv?: TypeEnv): string {
   if (ast.kind === "block") {
     const stmts = ast.statements.filter((s) => s !== null);
     if (stmts.length === 0) return "process.exit(0);";
+    // Collect non-`args` `in let` inputs. If present, defer the whole body
+    // into an `__init__` function that binds them from the runtime args
+    // object (mirrors the evaluator's moduleInputs). `args` stays a free
+    // variable, so it's excluded.
+    const inlets = stmts.filter(
+      (s): s is Extract<Ast, { kind: "inlet" }> =>
+        s.kind === "inlet" && s.name !== "args",
+    );
+    if (inlets.length > 0) {
+      const bindings = inlets
+        .map((i) => "var " + i.name + " = __args__." + i.name + ";")
+        .join("\n");
+      const body = stmts.map((s) => genStatement(s!, typeEnv)).join("\n");
+      return (
+        "module.exports.__init__ = function(__args__) {\n" +
+        bindings +
+        "\n" +
+        body +
+        "\n};\n" +
+        "process.exit(0);"
+      );
+    }
     const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv));
     return body.join("\n") + "\nprocess.exit(" + toNumJs(genValue(stmts[stmts.length - 1]!, typeEnv)) + ");";
   }

@@ -71,15 +71,25 @@ export function expectModules(
 
 export function compileToExports<
   T extends Record<string, unknown> = Record<string, unknown>,
->(source: string): T {
+>(source: string, args: object = {}): T {
   const compiled = compile(source);
+  const exports0: Record<string, unknown> = {
+    __init__: undefined,
+  };
+
   const actualModule = {
-    exports: {},
+    exports: exports0,
   };
 
   // Mock process.exit so the trailing coercion call doesn't throw.
   const process = { exit: () => {} };
 
   new Function("module", "process", compiled)(actualModule, process);
+
+  const maybeInit = actualModule.exports.__init__;
+  if (maybeInit && typeof maybeInit === "function") {
+    (maybeInit as (args: object) => void)(args);
+  }
+
   return actualModule.exports as T;
 }

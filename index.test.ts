@@ -562,3 +562,11 @@ test('compileToExports("out fn get() => 100;").get() => 100', () => {
   );
   expect(get()).toBe(100);
 });
+
+test('compileToExports("in let x : I32; out let y = x;", { x : 100 }).y => 100', () => {
+  const { y } = compileToExports<{ y: number }>(
+    "in let x : I32; out let y = x;",
+    { x: 100 },
+  );
+  expect(y).toBe(100);
+});
