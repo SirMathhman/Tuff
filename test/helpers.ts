@@ -71,8 +71,18 @@ export function expectModules(
 
 export function compileToExports<
   T extends Record<string, unknown> = Record<string, unknown>,
->(source: string, args: object = {}): T {
-  const compiled = compile(source);
+>(options: {
+  source: string;
+  args?: object;
+  others?: Record<string, object>;
+}): T {
+  const { source, args = {}, others = {} } = options;
+  // Module identifiers in the source compile to require("./<name>") calls.
+  // The module names are the keys of `others` (minus the entry point).
+  const moduleNames = new Set(
+    Object.keys(others).map((p) => p.replace(/^\.\//, "")),
+  );
+  const compiled = compile(source, moduleNames);
   const exports0: Record<string, unknown> = {
     __init__: undefined,
   };
@@ -84,7 +94,15 @@ export function compileToExports<
   // Mock process.exit so the trailing coercion call doesn't throw.
   const process = { exit: () => {} };
 
-  new Function("module", "process", compiled)(actualModule, process);
+  function requireImpl(path: string) {
+    return others[path];
+  }
+
+  new Function("module", "process", "require", compiled)(
+    actualModule,
+    process,
+    requireImpl,
+  );
 
   const maybeInit = actualModule.exports.__init__;
   if (maybeInit && typeof maybeInit === "function") {

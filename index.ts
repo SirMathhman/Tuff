@@ -6,7 +6,10 @@ import type { Ast } from "./src/types";
 
 // Parse + analyze a program: runs semantic analysis once, returning the
 // AST and its TypeEnv for the evaluator or compiler to consume.
-function analyzeProgram(source: string): {
+function analyzeProgram(
+  source: string,
+  moduleNames?: Set<string>,
+): {
   ast: Ast;
   typeEnv: ReturnType<typeof newTypeEnv>;
 } {
@@ -15,7 +18,7 @@ function analyzeProgram(source: string): {
     return { ast: { kind: "num", value: 0 }, typeEnv: newTypeEnv() };
   const ast = parse(tokenize(trimmed));
   const typeEnv = newTypeEnv();
-  analyze(ast, typeEnv);
+  analyze(ast, typeEnv, { moduleNames });
   return { ast, typeEnv };
 }
 
@@ -52,7 +55,10 @@ export function evaluateModules(
   return result;
 }
 
-export function compile(source: string): string {
-  const { ast, typeEnv } = analyzeProgram(source);
-  return compileAst(ast, typeEnv);
+export function compile(
+  source: string,
+  moduleNames?: Set<string>,
+): string {
+  const { ast, typeEnv } = analyzeProgram(source, moduleNames);
+  return compileAst(ast, typeEnv, moduleNames);
 }

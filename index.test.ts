@@ -553,21 +553,21 @@ test('evaluate("struct Wrapper<T> { field : T } let wrapper : Wrapper<Bool> = Wr
 });
 
 test('compileToExports("out let x = 100;").x => 100', () => {
-  expect(compileToExports("out let x = 100;").x).toBe(100);
+  expect(compileToExports({ source: "out let x = 100;" }).x).toBe(100);
 });
 
 test('compileToExports("out fn get() => 100;").get() => 100', () => {
-  const { get } = compileToExports<{ get: () => number }>(
-    "out fn get() => 100;",
-  );
+  const { get } = compileToExports<{ get: () => number }>({
+    source: "out fn get() => 100;",
+  });
   expect(get()).toBe(100);
 });
 
 test('compileToExports("in let x : I32; out let y = x;", { x : 100 }).y => 100', () => {
-  const { y } = compileToExports<{ y: number }>(
-    "in let x : I32; out let y = x;",
-    { x: 100 },
-  );
+  const { y } = compileToExports<{ y: number }>({
+    source: "in let x : I32; out let y = x;",
+    args: { x: 100 },
+  });
   expect(y).toBe(100);
 });
 
@@ -579,17 +579,26 @@ test('evaluate("fn add(first : I32, second : I32) : I32 => first + second; let f
 });
 
 test('compileToExports("in let func : &() => I32; out let y = func();", { func : () => 100 }).y => 100', () => {
-  const { y } = compileToExports<{ y: number }>(
-    "in let func : &() => I32; out let y = func();",
-    { func: () => 100 },
-  );
+  const { y } = compileToExports<{ y: number }>({
+    source: "in let func : &() => I32; out let y = func();",
+    args: { func: () => 100 },
+  });
   expect(y).toBe(100);
 });
 
 test('compileToExports("struct Point { x : I32, y : I32 } in let pt : Point; out let result = pt.x + pt.y", { pt : { x : 3, y : 4 } }).result => 7', () => {
-  const { result } = compileToExports<{ result: number }>(
-    "struct Point { x : I32, y : I32 } in let pt : Point; out let result = pt.x + pt.y",
-    { pt: { x: 3, y: 4 } },
-  );
+  const { result } = compileToExports<{ result: number }>({
+    source:
+      "struct Point { x : I32, y : I32 } in let pt : Point; out let result = pt.x + pt.y",
+    args: { pt: { x: 3, y: 4 } },
+  });
   expect(result).toBe(7);
+});
+
+test('compileToExports({ source : "out let y = lib.x", others : { "./lib" : { x : 100 } } }).y => 100', () => {
+  const { y } = compileToExports<{ y: number }>({
+    source: "out let y = lib.x",
+    others: { "./lib": { x: 100 } },
+  });
+  expect(y).toBe(100);
 });

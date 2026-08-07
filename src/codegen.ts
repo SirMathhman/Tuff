@@ -21,7 +21,13 @@ export function referencesArgs(node: Ast): boolean {
 }
 
 // Compile a program into JS statements ending in `process.exit(<value>);`.
-export function compileAst(ast: Ast, typeEnv?: TypeEnv): string {
+// `moduleNames` is the set of known module identifiers; references to them
+// compile to `require("./<name>")` calls (the harness provides `require`).
+export function compileAst(
+  ast: Ast,
+  typeEnv?: TypeEnv,
+  moduleNames?: Set<string>,
+): string {
   if (ast.kind === "block") {
     const stmts = ast.statements.filter((s) => s !== null);
     if (stmts.length === 0) return "process.exit(0);";
@@ -33,7 +39,7 @@ export function compileAst(ast: Ast, typeEnv?: TypeEnv): string {
       (s) => s.kind === "inlet" && s.name !== "args",
     );
     if (hasInlets) {
-      const body = stmts.map((s) => genStatement(s!, typeEnv)).join("\n");
+      const body = stmts.map((s) => genStatement(s!, typeEnv, moduleNames)).join("\n");
       return (
         "module.exports.__init__ = function(__args__) {\n" +
         body +
@@ -41,10 +47,10 @@ export function compileAst(ast: Ast, typeEnv?: TypeEnv): string {
         "process.exit(0);"
       );
     }
-    const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv));
-    return body.join("\n") + "\nprocess.exit(" + toNumJs(genValue(stmts[stmts.length - 1]!, typeEnv)) + ");";
+    const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv, moduleNames));
+    return body.join("\n") + "\nprocess.exit(" + toNumJs(genValue(stmts[stmts.length - 1]!, typeEnv, moduleNames)) + ");";
   }
-  return "process.exit(" + toNumJs(genValue(ast, typeEnv)) + ");";
+  return "process.exit(" + toNumJs(genValue(ast, typeEnv, moduleNames)) + ");";
 }
 
 // Coerce a JS expression to a number (mirrors the evaluator's toNum).
@@ -54,7 +60,7 @@ function toNumJs(expr: string): string {
 }
 
 // Produce a JS expression for a node that may be a statement (block value).
-function genValue(node: Ast, typeEnv?: TypeEnv): string {
+function genValue(node: Ast, typeEnv?: TypeEnv, moduleNames?: Set<string>): string {
   switch (node.kind) {
     case "let":
     case "assign":
@@ -67,25 +73,25 @@ function genValue(node: Ast, typeEnv?: TypeEnv): string {
     case "structdef":
     case "enumdef":
       // Statements as the block value: execute, then yield 0 (toNum(null) = 0).
-      return "(function() { " + genStatement(node, typeEnv) + " return 0; })()";
+      return "(function() { " + genStatement(node, typeEnv, moduleNames) + " return 0; })()";
     case "return":
     case "yield":
       // Control flow as the block value: execute (throw/return), then yield 0.
-      return "(function() { " + genStatement(node, typeEnv) + " return 0; })()";
+      return "(function() { " + genStatement(node, typeEnv, moduleNames) + " return 0; })()";
     case "break":
     case "continue":
       // Loop control as the block value: a statement-only block with flow.
-      return "(function() { " + genStatement(node, typeEnv) + " return 0; })()";
+      return "(function() { " + genStatement(node, typeEnv, moduleNames) + " return 0; })()";
     default:
-      return genExpr(node, typeEnv);
+      return genExpr(node, typeEnv, moduleNames);
   }
 }
 
 // Emit a `let` binding's value, propagating the annotation type to a
 // plain-number literal (mirrors the evaluator's type propagation). For
 // `let x : Bool | I32 = 100`, the union picks I32 and marks the value.
-function genLetValue(node: Extract<Ast, { kind: "let" }>, typeEnv?: TypeEnv): string {
-  const expr = genExpr(node.value, typeEnv);
+function genLetValue(node: Extract<Ast, { kind: "let" }>, typeEnv?: TypeEnv, moduleNames?: Set<string>): string {
+  const expr = genExpr(node.value, typeEnv, moduleNames);
   if (!node.typeAnnotation || node.value.kind !== "num" || node.value.suffix) {
     return expr;
   }
@@ -111,7 +117,7 @@ function genLetValue(node: Extract<Ast, { kind: "let" }>, typeEnv?: TypeEnv): st
   return expr;
 }
 
-function genStatement(node: Ast, typeEnv?: TypeEnv): string {
+function genStatement(node: Ast, typeEnv?: TypeEnv, moduleNames?: Set<string>): string {
   const isMut = (name: string): boolean => typeEnv?.mutables.get(name) === true;
   switch (node.kind) {
     case "inlet":
@@ -120,7 +126,7 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
       // which is in scope when the body is wrapped in `__init__`.
       return node.name === "args" ? "" : "var " + node.name + " = __args__." + node.name + ";";
     case "block":
-      return "{ " + node.statements.filter((s) => s !== null).map((s) => genStatement(s!, typeEnv)).join(" ") + " }";
+      return "{ " + node.statements.filter((s) => s !== null).map((s) => genStatement(s!, typeEnv, moduleNames)).join(" ") + " }";
     case "let":
       // `var` allows redeclaration (the evaluator overwrites silently);
       // mutable bindings become cells so `&mut` can write through them.
@@ -129,23 +135,23 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
       // Exported (`out let`) bindings are also assigned to module.exports.
       {
         const decl = isMut(node.name)
-          ? "var " + node.name + " = { v: " + genLetValue(node, typeEnv) + " };"
-          : "var " + node.name + " = " + genLetValue(node, typeEnv) + ";";
+          ? "var " + node.name + " = { v: " + genLetValue(node, typeEnv, moduleNames) + " };"
+          : "var " + node.name + " = " + genLetValue(node, typeEnv, moduleNames) + ";";
         if (node.exported) {
           return decl + " module.exports." + node.name + " = " + (isMut(node.name) ? node.name + ".v" : node.name) + ";";
         }
         return decl;
       }
     case "assign":
-      return (isMut(node.name) ? node.name + ".v" : node.name) + " = " + genExpr(node.value, typeEnv) + ";";
+      return (isMut(node.name) ? node.name + ".v" : node.name) + " = " + genExpr(node.value, typeEnv, moduleNames) + ";";
     case "augassign":
-      return (isMut(node.name) ? node.name + ".v" : node.name) + " " + node.op + "= " + genExpr(node.value, typeEnv) + ";";
+      return (isMut(node.name) ? node.name + ".v" : node.name) + " " + node.op + "= " + genExpr(node.value, typeEnv, moduleNames) + ";";
     case "refassign": {
-      const target = genExpr({ kind: "ident", name: node.name }, typeEnv);
-      return "(" + target + ").v = " + genExpr(node.value, typeEnv) + ";";
+      const target = genExpr({ kind: "ident", name: node.name }, typeEnv, moduleNames);
+      return "(" + target + ").v = " + genExpr(node.value, typeEnv, moduleNames) + ";";
     }
     case "array_assign":
-      return "(" + genExpr(node.target, typeEnv) + ")[" + genExpr(node.index, typeEnv) + "] = " + genExpr(node.value, typeEnv) + ";";
+      return "(" + genExpr(node.target, typeEnv, moduleNames) + ")[" + genExpr(node.index, typeEnv, moduleNames) + "] = " + genExpr(node.value, typeEnv, moduleNames) + ";";
     case "fn": {
       const params = node.params.map((p) => p.name).join(", ");
       const decl =
@@ -154,7 +160,7 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
         "(" +
         params +
         ") { try { return " +
-        genExpr(node.body, typeEnv) +
+        genExpr(node.body, typeEnv, moduleNames) +
         "; } catch (e) { if (e && e.__return) return e.value; throw e; } }";
       if (node.exported) {
         return decl + " module.exports." + node.name + " = " + node.name + ";";
@@ -162,11 +168,11 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
       return decl;
     }
     case "if_stmt": {
-      const elseCode = node.elseBranch ? " else " + genStatement(node.elseBranch, typeEnv) : "";
-      return "if (" + genExpr(node.cond, typeEnv) + ") " + genStatement(node.thenBranch, typeEnv) + elseCode;
+      const elseCode = node.elseBranch ? " else " + genStatement(node.elseBranch, typeEnv, moduleNames) : "";
+      return "if (" + genExpr(node.cond, typeEnv, moduleNames) + ") " + genStatement(node.thenBranch, typeEnv, moduleNames) + elseCode;
     }
     case "while":
-      return "while (" + genExpr(node.cond, typeEnv) + ") " + genStatement(node.body, typeEnv);
+      return "while (" + genExpr(node.cond, typeEnv, moduleNames) + ") " + genStatement(node.body, typeEnv, moduleNames);
     case "for": {
       const isMutVar = typeEnv?.mutables.get(node.varName) === true;
       const v = isMutVar ? node.varName + ".v" : node.varName;
@@ -174,24 +180,24 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
         "for (let " +
         node.varName +
         (isMutVar ? " = { v: (" : " = (") +
-        genExpr(node.start, typeEnv) +
+        genExpr(node.start, typeEnv, moduleNames) +
         ") }; " +
         v +
         " < (" +
-        genExpr(node.end, typeEnv) +
+        genExpr(node.end, typeEnv, moduleNames) +
         "); " +
         v +
         "++) " +
-        genStatement(node.body, typeEnv)
+        genStatement(node.body, typeEnv, moduleNames)
       );
     }
     case "return":
       // Return unwinds to the fn boundary (bypasses surrounding expressions),
       // so it's emitted as a thrown sentinel caught by the fn wrapper.
-      return "throw { __return: true, value: " + (node.value ? genExpr(node.value, typeEnv) : "0") + " };";
+      return "throw { __return: true, value: " + (node.value ? genExpr(node.value, typeEnv, moduleNames) : "0") + " };";
     case "yield":
       // Yield is block-local: return from the enclosing IIFE/block.
-      return "return " + genExpr(node.value, typeEnv) + ";";
+      return "return " + genExpr(node.value, typeEnv, moduleNames) + ";";
     case "break":
       return "break;";
     case "continue":
@@ -202,11 +208,11 @@ function genStatement(node: Ast, typeEnv?: TypeEnv): string {
       // Type declarations are erased at runtime.
       return "";
     default:
-      return genExpr(node, typeEnv) + ";";
+      return genExpr(node, typeEnv, moduleNames) + ";";
   }
 }
 
-function genExpr(node: Ast, typeEnv?: TypeEnv): string {
+function genExpr(node: Ast, typeEnv?: TypeEnv, moduleNames?: Set<string>): string {
   const isMut = (name: string): boolean => typeEnv?.mutables.get(name) === true;
   switch (node.kind) {
     case "num":
@@ -222,12 +228,15 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
     case "null":
       return "0";
     case "ident":
+      // A module identifier compiles to a require call (the harness provides
+      // `require`); otherwise it's a plain variable reference.
+      if (moduleNames?.has(node.name)) return 'require("./' + node.name + '")';
       return isMut(node.name) ? node.name + ".v" : node.name;
     case "inlet":
       return node.name === "args" ? "args" : "0";
     case "binop": {
-      const l = genExpr(node.left, typeEnv);
-      const r = genExpr(node.right, typeEnv);
+      const l = genExpr(node.left, typeEnv, moduleNames);
+      const r = genExpr(node.right, typeEnv, moduleNames);
       const ln = toNumJs(l);
       const rn = toNumJs(r);
       // == / !=: compare raw values (===), unwrapping suffixed-number objects.
@@ -241,7 +250,7 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
       return "((" + ln + ") " + node.op + " (" + rn + "))";
     }
     case "unary": {
-      const operand = genExpr(node.operand, typeEnv);
+      const operand = genExpr(node.operand, typeEnv, moduleNames);
       if (node.op === "-" || node.op === "!") return "(" + node.op + "(" + operand + "))";
       // &mut x — alias the cell itself so `*y = v` writes through.
       if (node.op === "&mut") {
@@ -253,15 +262,15 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
       return "(" + operand + ")";
     }
     case "index": {
-      const target = genExpr(node.target, typeEnv);
-      const idx = genExpr(node.index, typeEnv);
+      const target = genExpr(node.target, typeEnv, moduleNames);
+      const idx = genExpr(node.index, typeEnv, moduleNames);
       // String indexing yields the char code; array/tuple yields the element.
       return '((typeof (' + target + ')[' + idx + '] === "string") ? (' + target + ')[' + idx + '].charCodeAt(0) : (' + target + ')[' + idx + '])';
     }
     case "length":
-      return "((" + genExpr(node.target, typeEnv) + ").length)";
+      return "((" + genExpr(node.target, typeEnv, moduleNames) + ").length)";
     case "property_access":
-      return "((" + genExpr(node.target, typeEnv) + ")." + node.property + ")";
+      return "((" + genExpr(node.target, typeEnv, moduleNames) + ")." + node.property + ")";
     case "namespace": {
       // Enum variant: Color::Red encodes as "Color::Red" (string compare).
       return JSON.stringify(node.segments.join("::"));
@@ -269,40 +278,40 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
     case "typecheck":
       return genTypecheck(node, typeEnv);
     case "paren":
-      return "(" + genExpr(node.expr, typeEnv) + ")";
+      return "(" + genExpr(node.expr, typeEnv, moduleNames) + ")";
     case "array":
-      return "[" + node.elements.map((e) => genExpr(e, typeEnv)).join(", ") + "]";
+      return "[" + node.elements.map((e) => genExpr(e, typeEnv, moduleNames)).join(", ") + "]";
     case "tuple":
-      return "[" + node.elements.map((e) => genExpr(e, typeEnv)).join(", ") + "]";
+      return "[" + node.elements.map((e) => genExpr(e, typeEnv, moduleNames)).join(", ") + "]";
     case "record":
-      return "({" + node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv)).join(", ") + "})";
+      return "({" + node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv, moduleNames)).join(", ") + "})";
     case "structliteral": {
       // Named struct literals carry a `__t` marker so `is` checks work at
       // runtime (e.g. `if (c) A {} else B {}; x is A`).
-      const fields = node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv));
+      const fields = node.fields.map((f) => f.key + ": " + genExpr(f.value, typeEnv, moduleNames));
       return "({ __t: " + JSON.stringify(node.typeName) + ", " + fields.join(", ") + "})";
     }
     case "call": {
-      const target = node.target ? genExpr(node.target, typeEnv) : node.name;
-      return "(" + target + ")(" + node.args.map((a) => genExpr(a, typeEnv)).join(", ") + ")";
+      const target = node.target ? genExpr(node.target, typeEnv, moduleNames) : node.name;
+      return "(" + target + ")(" + node.args.map((a) => genExpr(a, typeEnv, moduleNames)).join(", ") + ")";
     }
     case "if_expr":
-      return "(" + genExpr(node.cond, typeEnv) + " ? " + genExpr(node.thenBranch, typeEnv) + " : " + genExpr(node.elseBranch, typeEnv) + ")";
+      return "(" + genExpr(node.cond, typeEnv, moduleNames) + " ? " + genExpr(node.thenBranch, typeEnv, moduleNames) + " : " + genExpr(node.elseBranch, typeEnv, moduleNames) + ")";
     case "match": {
-      const matchVal = genExpr(node.expr, typeEnv);
+      const matchVal = genExpr(node.expr, typeEnv, moduleNames);
       let js = "0";
       for (let i = node.cases.length - 1; i >= 0; i--) {
         const c = node.cases[i]!;
-        const cond = c.pattern.kind === "wildcard" ? "true" : "((" + genExpr(c.pattern, typeEnv) + ") === (" + matchVal + "))";
-        js = "(" + cond + " ? " + genExpr(c.body, typeEnv) + " : " + js + ")";
+        const cond = c.pattern.kind === "wildcard" ? "true" : "((" + genExpr(c.pattern, typeEnv, moduleNames) + ") === (" + matchVal + "))";
+        js = "(" + cond + " ? " + genExpr(c.body, typeEnv, moduleNames) + " : " + js + ")";
       }
       return js;
     }
     case "block": {
       const stmts = node.statements.filter((s) => s !== null);
       if (stmts.length === 0) return "0";
-      const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv));
-      return "(function() { " + body.join(" ") + " return " + genValue(stmts[stmts.length - 1]!, typeEnv) + "; })()";
+      const body = stmts.slice(0, -1).map((s) => genStatement(s!, typeEnv, moduleNames));
+      return "(function() { " + body.join(" ") + " return " + genValue(stmts[stmts.length - 1]!, typeEnv, moduleNames) + "; })()";
     }
     case "fn": {
       const params = node.params.map((p) => p.name).join(", ");
@@ -312,7 +321,7 @@ function genExpr(node: Ast, typeEnv?: TypeEnv): string {
         "(" +
         params +
         ") { try { return " +
-        genExpr(node.body, typeEnv) +
+        genExpr(node.body, typeEnv, moduleNames) +
         "; } catch (e) { if (e && e.__return) return e.value; throw e; } })"
       );
     }
