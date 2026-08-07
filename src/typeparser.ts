@@ -18,7 +18,7 @@ export function parseType(tokens: Token[], pos: { pos: number }): AstType {
 
 function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
   if (tokens[pos.pos]?.value === "(") {
-    // Tuple type: (T1, T2, ...)
+    // Tuple type: (T1, T2, ...) or function type: (T1, T2) => R
     pos.pos++; // skip "("
     const elements: AstType[] = [];
     while (tokens[pos.pos]?.value !== ")") {
@@ -26,6 +26,12 @@ function parseSingleType(tokens: Token[], pos: { pos: number }): AstType {
       if (tokens[pos.pos]?.value === ",") pos.pos++;
     }
     pos.pos++; // skip ")"
+    // Function type: (T1, T2) => R
+    if (tokens[pos.pos]?.value === "=>") {
+      pos.pos++; // skip "=>"
+      const returnType = parseType(tokens, pos);
+      return { kind: "fn", params: elements, returnType };
+    }
     return { kind: "tuple", elements };
   }
   if (tokens[pos.pos]?.value === "&") {

@@ -444,6 +444,8 @@ function resolveAstTypeName(typeEnv: TypeEnv | undefined, t: AstType): AstType {
   if (t.kind === "union") return { kind: "union", types: t.types.map((m) => resolveAstTypeName(typeEnv, m)) };
   if (t.kind === "ref") return { kind: "ref", targetType: resolveAstTypeName(typeEnv, t.targetType) };
   if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => resolveAstTypeName(typeEnv, e)) };
+  if (t.kind === "fn")
+    return { kind: "fn", params: t.params.map((p) => resolveAstTypeName(typeEnv, p)), returnType: resolveAstTypeName(typeEnv, t.returnType) };
   return t;
 }
 
@@ -472,6 +474,14 @@ function typeEqualsCodegen(a: AstType, b: AstType): boolean {
     }
     case "ref":
       return typeEqualsCodegen(a.targetType, (b as Extract<AstType, { kind: "ref" }>).targetType);
+    case "fn": {
+      const bf = (b as Extract<AstType, { kind: "fn" }>);
+      return (
+        a.params.length === bf.params.length &&
+        a.params.every((p, i) => typeEqualsCodegen(p, bf.params[i]!)) &&
+        typeEqualsCodegen(a.returnType, bf.returnType)
+      );
+    }
   }
 }
 

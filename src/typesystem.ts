@@ -105,6 +105,8 @@ export function substituteAstType(t: AstType, subst: Map<string, AstType>): AstT
     return { kind: "union", types: t.types.map((m) => substituteAstType(m, subst)) };
   if (t.kind === "ref") return { kind: "ref", targetType: substituteAstType(t.targetType, subst) };
   if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => substituteAstType(e, subst)) };
+  if (t.kind === "fn")
+    return { kind: "fn", params: t.params.map((p) => substituteAstType(p, subst)), returnType: substituteAstType(t.returnType, subst) };
   return t;
 }
 
@@ -124,6 +126,8 @@ function resolveAliasedType(aliases: Map<string, string>, t: AstType): AstType {
     return { kind: "union", types: t.types.map((m) => resolveAliasedType(aliases, m)) };
   if (t.kind === "ref") return { kind: "ref", targetType: resolveAliasedType(aliases, t.targetType) };
   if (t.kind === "tuple") return { kind: "tuple", elements: t.elements.map((e) => resolveAliasedType(aliases, e)) };
+  if (t.kind === "fn")
+    return { kind: "fn", params: t.params.map((p) => resolveAliasedType(aliases, p)), returnType: resolveAliasedType(aliases, t.returnType) };
   return t;
 }
 
@@ -162,6 +166,13 @@ export function resolveAstType(astType: AstType): AstType {
   }
   if (astType.kind === "tuple") {
     return { kind: "tuple", elements: astType.elements.map((e) => resolveAstType(e)) };
+  }
+  if (astType.kind === "fn") {
+    return {
+      kind: "fn",
+      params: astType.params.map((p) => resolveAstType(p)),
+      returnType: resolveAstType(astType.returnType),
+    };
   }
   return astType;
 }
@@ -233,6 +244,8 @@ function matchValue(
     }
     case "tuple":
       return matchTuple(value, resolved, mode, context, targetName);
+    case "fn":
+      return matchFn(value, resolved, mode, context, targetName);
   }
 }
 
@@ -273,6 +286,21 @@ function fail(
   if (context === undefined) return { ok: false, error: message };
   const target = targetName ? ` to ${targetName}` : "";
   return { ok: false, error: `cannot ${context} value${target} ${message}` };
+}
+
+function matchFn(
+  value: Value,
+  resolved: Extract<AstType, { kind: "fn" }>,
+  mode: MatchMode,
+  context?: string,
+  targetName?: string,
+): { ok: boolean; error?: string } {
+  const v = derefValue(value);
+  if (v.tag !== "fn")
+    return fail(context, targetName, `expected fn, got ${v.tag}`);
+  if (v.params.length !== resolved.params.length)
+    return fail(context, targetName, `fn param count mismatch: expected ${resolved.params.length}, got ${v.params.length}`);
+  return { ok: true };
 }
 
 function matchPrimitive(

@@ -279,8 +279,9 @@ export function evalAst(ast: Ast, ctx: EvalContext): Value {
       case "call": {
         const fnVal = node.target ? visit(node.target) : lookup(node.name);
         if (fnVal === null) throw new Error("call target has no value");
-        if (fnVal.tag !== "fn") throw new Error("not a function");
-        const fn = fnVal;
+        // Dereference a reference to a function (e.g. `&add`).
+        const fn = fnVal.tag === "ref" ? fnVal.scope.vars[fnVal.name]! : fnVal;
+        if (fn.tag !== "fn") throw new Error("not a function");
         const fnScopes = [...fn.scopes, { vars: {}, mutable: {} }];
         const fnMutables = [...fn.mutables, {}];
         const argValues = node.args.map((a) => {

@@ -481,6 +481,14 @@ function typeEquals(a: AstType, b: AstType): boolean {
     }
     case "ref":
       return typeEquals(a.targetType, (b as Extract<AstType, { kind: "ref" }>).targetType);
+    case "fn": {
+      const bf = (b as Extract<AstType, { kind: "fn" }>);
+      return (
+        a.params.length === bf.params.length &&
+        a.params.every((p, i) => typeEquals(p, bf.params[i]!)) &&
+        typeEquals(a.returnType, bf.returnType)
+      );
+    }
   }
 }
 
@@ -501,6 +509,8 @@ function describeType(t: AstType): string {
       return `&${describeType(t.targetType)}`;
     case "tuple":
       return `(${t.elements.map(describeType).join(", ")})`;
+    case "fn":
+      return `(${t.params.map(describeType).join(", ")}) => ${describeType(t.returnType)}`;
   }
 }
 

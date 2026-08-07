@@ -570,3 +570,10 @@ test('compileToExports("in let x : I32; out let y = x;", { x : 100 }).y => 100',
   );
   expect(y).toBe(100);
 });
+
+test('evaluate("fn add(first : I32, second : I32) : I32 => first + second; let func : &(I32, I32) => I32 = &add; func(3, 4)") => 7', () => {
+  expectValid(
+    "fn add(first : I32, second : I32) : I32 => first + second; let func : &(I32, I32) => I32 = &add; func(3, 4)",
+    7,
+  );
+});
