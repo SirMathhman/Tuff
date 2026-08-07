@@ -585,3 +585,11 @@ test('compileToExports("in let func : &() => I32; out let y = func();", { func :
   );
   expect(y).toBe(100);
 });
+
+test('compileToExports("struct Point { x : I32, y : I32 } in let pt : Point; out let result = pt.x + pt.y", { pt : { x : 3, y : 4 } }).result => 7', () => {
+  const { result } = compileToExports<{ result: number }>(
+    "struct Point { x : I32, y : I32 } in let pt : Point; out let result = pt.x + pt.y",
+    { pt: { x: 3, y: 4 } },
+  );
+  expect(result).toBe(7);
+});
