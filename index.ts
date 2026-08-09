@@ -14,10 +14,11 @@ function parseAddition(src: string): string {
 
 function parseNumber(src: string): string {
   const trimmed = src.trim();
+  if (trimmed === "") return "0";
   if (/^-?\d+$/.test(trimmed)) {
     return trimmed;
   }
-  return "0";
+  throw new Error(`Unexpected token: ${trimmed}`);
 }
 
 export function compileTuffToJS(tuffSource: string): string {
