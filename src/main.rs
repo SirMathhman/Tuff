@@ -1,5 +1,8 @@
 fn main() {
-    println!("Hello, world!");
+    let tuff_source = fs::read_to_string("src/lib.tuff").expect("Failed to read lib.tuff");
+    let c_source = compile_tuff_to_c(&tuff_source);
+    fs::write("src/lib.c", &c_source).expect("Failed to write lib.c");
+    println!("Compiled src/lib.tuff -> src/lib.c");
 }
 
 use std::env;
