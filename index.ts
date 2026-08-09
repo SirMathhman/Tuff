@@ -82,25 +82,19 @@ function parseMultiplication(tokens: Token[]): string {
   return left;
 }
 
+function parseGrouped(tokens: Token[], closeType: string, expected: string): string {
+  const expr = parseExpression(tokens);
+  const closing = tokens.shift();
+  if (closing?.type !== closeType)
+    throw new Error(`Expected '${expected}', got ${closing?.type ?? "nothing"}`);
+  return `(${expr})`;
+}
+
 function parsePrimary(tokens: Token[]): string {
   const token = tokens.shift();
   if (token?.type === "Number") return token.value;
-  if (token?.type === "LParen") {
-    const expr = parseExpression(tokens);
-    const closing = tokens.shift();
-    if (closing?.type !== "RParen") {
-      throw new Error("Expected ')', got " + (closing?.type ?? "nothing"));
-    }
-    return `(${expr})`;
-  }
-  if (token?.type === "LBrace") {
-    const expr = parseExpression(tokens);
-    const closing = tokens.shift();
-    if (closing?.type !== "RBrace") {
-      throw new Error("Expected '}', got " + (closing?.type ?? "nothing"));
-    }
-    return `(${expr})`;
-  }
+  if (token?.type === "LParen") return parseGrouped(tokens, "RParen", ")");
+  if (token?.type === "LBrace") return parseGrouped(tokens, "RBrace", "}");
   if (token?.type === "Eof") return "0";
   throw new Error(`Expected number or '(', got ${token?.type ?? "nothing"}`);
 }
