@@ -37,3 +37,7 @@ test('compile("#") => Error', () => {
 test('executeTuff("2 + 3 - 4") => 1', () => {
   expect(executeTuff("2 + 3 - 4")).toBe(1);
 });
+
+test('executeTuff("2 * 3 - 4") => 2', () => {
+  expect(executeTuff("2 * 3 - 4")).toBe(2);
+});
