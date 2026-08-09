@@ -53,3 +53,7 @@ test('executeTuff("10 / 3") => 3', () => {
 test('executeTuff("(2 + 3) * 4") => 20', () => {
   expect(executeTuff("(2 + 3) * 4")).toBe(20);
 });
+
+test('executeTuff("{ 2 + 3 } * 4") => 20', () => {
+  expect(executeTuff("{ 2 + 3 } * 4")).toBe(20);
+});

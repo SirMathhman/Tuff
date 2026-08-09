@@ -6,6 +6,8 @@ type Token =
   | { type: "Slash" }
   | { type: "LParen" }
   | { type: "RParen" }
+  | { type: "LBrace" }
+  | { type: "RBrace" }
   | { type: "Eof" };
 
 function tokenize(src: string): Token[] {
@@ -35,6 +37,12 @@ function tokenize(src: string): Token[] {
       i++;
     } else if (src[i] === ")") {
       tokens.push({ type: "RParen" });
+      i++;
+    } else if (src[i] === "{") {
+      tokens.push({ type: "LBrace" });
+      i++;
+    } else if (src[i] === "}") {
+      tokens.push({ type: "RBrace" });
       i++;
     } else {
       throw new Error(`Unexpected token: ${src[i]!}`);
@@ -82,6 +90,14 @@ function parsePrimary(tokens: Token[]): string {
     const closing = tokens.shift();
     if (closing?.type !== "RParen") {
       throw new Error("Expected ')', got " + (closing?.type ?? "nothing"));
+    }
+    return `(${expr})`;
+  }
+  if (token?.type === "LBrace") {
+    const expr = parseExpression(tokens);
+    const closing = tokens.shift();
+    if (closing?.type !== "RBrace") {
+      throw new Error("Expected '}', got " + (closing?.type ?? "nothing"));
     }
     return `(${expr})`;
   }
