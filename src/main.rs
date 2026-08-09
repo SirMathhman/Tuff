@@ -76,11 +76,26 @@ impl Lexer {
                 tokens.push(Token::Number(num.parse().unwrap()));
             } else {
                 let token = match ch {
-                    ':' => { chars.next(); Token::Colon }
-                    '=' => { chars.next(); Token::Equals }
-                    '.' => { chars.next(); Token::Dot }
-                    ';' => { chars.next(); Token::Semicolon }
-                    _ => { chars.next(); continue } // skip unknown chars
+                    ':' => {
+                        chars.next();
+                        Token::Colon
+                    }
+                    '=' => {
+                        chars.next();
+                        Token::Equals
+                    }
+                    '.' => {
+                        chars.next();
+                        Token::Dot
+                    }
+                    ';' => {
+                        chars.next();
+                        Token::Semicolon
+                    }
+                    _ => {
+                        chars.next();
+                        continue;
+                    } // skip unknown chars
                 };
                 tokens.push(token);
             }
@@ -114,7 +129,10 @@ impl Lexer {
 
 #[derive(Debug)]
 enum Statement {
-    Let { name: String, value: Box<Expression> },
+    Let {
+        name: String,
+        value: Box<Expression>,
+    },
     Return(Expression),
 }
 
@@ -122,7 +140,10 @@ enum Statement {
 enum Expression {
     Number(i32),
     Ident(String),
-    PropertyAccess { object: Box<Expression>, property: String },
+    PropertyAccess {
+        object: Box<Expression>,
+        property: String,
+    },
 }
 
 // --- Parser ---
@@ -133,7 +154,9 @@ struct Parser {
 
 impl Parser {
     fn new(input: &str) -> Self {
-        Parser { lexer: Lexer::new(input) }
+        Parser {
+            lexer: Lexer::new(input),
+        }
     }
 
     fn parse(&mut self) -> Vec<Statement> {
@@ -176,7 +199,10 @@ impl Parser {
                 self.lexer.eat();
             }
 
-            Statement::Let { name, value: Box::new(value) }
+            Statement::Let {
+                name,
+                value: Box::new(value),
+            }
         } else {
             let expr = self.parse_expression();
             if *self.lexer.peek() == Token::Semicolon {
@@ -240,7 +266,8 @@ impl CodeGen {
                 Statement::Let { name, value } => {
                     let c_value = self.expr_to_c(value);
                     if c_value == "argv" {
-                        self.declarations.push(format!("    char** {} = argv;", name));
+                        self.declarations
+                            .push(format!("    char** {} = argv;", name));
                         self.arg_vars.push(name.clone());
                     }
                 }
@@ -317,7 +344,9 @@ fn execute_tuff(tuff_source: &str, args: Vec<String>) -> Result<i32, ExecuteErro
         .status()
         .map_err(|e| ExecuteError::Compile(e.to_string()))?;
     if !compile.success() {
-        return Err(ExecuteError::Compile("clang returned non-zero exit code".into()));
+        return Err(ExecuteError::Compile(
+            "clang returned non-zero exit code".into(),
+        ));
     }
 
     // 3) Execute the generated binary using args
