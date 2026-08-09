@@ -28,14 +28,50 @@ impl fmt::Display for ExecuteError {
 
 fn compile_tuff_to_c(tuff_source: &str) -> String {
     let expr = tuff_source.trim();
-    let value = if expr.is_empty() {
-        "0"
-    } else if expr == "args.length" {
+    if expr.is_empty() {
+        return "#include <stdio.h>\nint main(int argc, char* argv[]) { return 0; }\n".into();
+    }
+
+    // Parse statements
+    let mut declarations = String::new();
+    let mut return_expr = expr;
+
+    // Handle let declarations
+    if let Some(semi_idx) = expr.find(';') {
+        let before_semi = &expr[..semi_idx];
+        return_expr = &expr[semi_idx + 1..].trim();
+        if let Some(let_end) = before_semi.strip_prefix("let ") {
+            // Extract variable name and check if it's assigned from args
+            if let Some((var_name, _type_annotation)) = let_end.split_once(':') {
+                let var_name = var_name.trim();
+                let rest = _type_annotation.trim();
+                if let Some(assign_val) = rest.strip_suffix("= args") {
+                    let _ = assign_val; // Type annotation, ignore for now
+                    declarations.push_str(&format!("    char** {} = argv;\n", var_name));
+                }
+            }
+        }
+    }
+
+    // Handle .length on args or variables that reference args
+    let final_value = if return_expr == "args.length" {
         "argc"
+    } else if let Some(var_name) = return_expr.strip_suffix(".length") {
+        let var_name = var_name.trim();
+        // Check if this variable was declared as args
+        if declarations.contains(&format!("char** {} = argv", var_name)) {
+            "argc"
+        } else {
+            return_expr
+        }
     } else {
-        expr
+        return_expr
     };
-    format!("#include <stdio.h>\nint main(int argc, char* argv[]) {{ return {}; }}\n", value)
+
+    format!(
+        "#include <stdio.h>\nint main(int argc, char* argv[]) {{\n{}\n    return {};\n}}\n",
+        declarations, final_value
+    )
 }
 
 fn execute_tuff(tuff_source: &str, args: Vec<String>) -> Result<i32, ExecuteError> {
@@ -105,5 +141,10 @@ mod tests {
     #[test]
     fn test_execute_tuff_args_length_empty() {
         expect_valid("args.length", vec![], 1);
+    }
+
+    #[test]
+    fn test_execute_tuff_let_args_length() {
+        expect_valid("let args0 : &[&Str] = args; args0.length", vec![], 1);
     }
 }
