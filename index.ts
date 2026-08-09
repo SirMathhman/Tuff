@@ -4,6 +4,8 @@ type Token =
   | { type: "Minus" }
   | { type: "Star" }
   | { type: "Slash" }
+  | { type: "LParen" }
+  | { type: "RParen" }
   | { type: "Eof" };
 
 function tokenize(src: string): Token[] {
@@ -27,6 +29,12 @@ function tokenize(src: string): Token[] {
       i++;
     } else if (src[i] === "/") {
       tokens.push({ type: "Slash" });
+      i++;
+    } else if (src[i] === "(") {
+      tokens.push({ type: "LParen" });
+      i++;
+    } else if (src[i] === ")") {
+      tokens.push({ type: "RParen" });
       i++;
     } else {
       throw new Error(`Unexpected token: ${src[i]!}`);
@@ -52,11 +60,11 @@ function parseAddition(tokens: Token[]): string {
 }
 
 function parseMultiplication(tokens: Token[]): string {
-  let left = parseNumber(tokens);
+  let left = parsePrimary(tokens);
   while (tokens[0]?.type === "Star" || tokens[0]?.type === "Slash") {
     const op = tokens[0]!.type === "Star" ? "*" : "/";
     tokens.shift();
-    const right = parseNumber(tokens);
+    const right = parsePrimary(tokens);
     if (op === "/") {
       left = `(Math.trunc(${left} / ${right}))`;
     } else {
@@ -66,11 +74,19 @@ function parseMultiplication(tokens: Token[]): string {
   return left;
 }
 
-function parseNumber(tokens: Token[]): string {
+function parsePrimary(tokens: Token[]): string {
   const token = tokens.shift();
   if (token?.type === "Number") return token.value;
+  if (token?.type === "LParen") {
+    const expr = parseExpression(tokens);
+    const closing = tokens.shift();
+    if (closing?.type !== "RParen") {
+      throw new Error("Expected ')', got " + (closing?.type ?? "nothing"));
+    }
+    return `(${expr})`;
+  }
   if (token?.type === "Eof") return "0";
-  throw new Error(`Expected number, got ${token?.type ?? "nothing"}`);
+  throw new Error(`Expected number or '(', got ${token?.type ?? "nothing"}`);
 }
 
 export function compileTuffToJS(tuffSource: string): string {
