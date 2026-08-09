@@ -45,3 +45,7 @@ test('executeTuff("2 * 3 - 4") => 2', () => {
 test('executeTuff("2 + 3 * 4") => 14', () => {
   expect(executeTuff("2 + 3 * 4")).toBe(14);
 });
+
+test('executeTuff("10 / 3") => 3', () => {
+  expect(executeTuff("10 / 3")).toBe(3);
+});
