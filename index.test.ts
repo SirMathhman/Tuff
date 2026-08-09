@@ -3,7 +3,7 @@ import { compileTuffToJS } from ".";
 
 const PRELUDE = "in let args : &[&Str]; ";
 
-function executeTuff(tuffSource: string, args: string[]): number {
+function executeTuff(tuffSource: string, args: string[] = []): number {
   const jsSource = compileTuffToJS(PRELUDE + tuffSource);
   try {
     return new Function("args", jsSource)(args);
@@ -13,3 +13,7 @@ function executeTuff(tuffSource: string, args: string[]): number {
     );
   }
 }
+
+test('executeTuff("") => 0', () => {
+  expect(executeTuff("")).toBe(0);
+});
