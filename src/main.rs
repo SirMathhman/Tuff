@@ -400,4 +400,9 @@ mod tests {
     fn test_execute_tuff_let_args_length() {
         expect_valid("let args0 : &[&Str] = args; args0.length", vec![], 1);
     }
+
+    #[test]
+    fn test_execute_tuff_let_args_length_no_type() {
+        expect_valid("let args0 = args; args0.length", vec![], 1);
+    }
 }
