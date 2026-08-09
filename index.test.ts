@@ -33,3 +33,7 @@ test('executeTuff("1 + 2 + 3") => 6', () => {
 test('compile("#") => Error', () => {
   expect(() => compileTuffToJS("#")).toThrow();
 });
+
+test('executeTuff("2 + 3 - 4") => 1', () => {
+  expect(executeTuff("2 + 3 - 4")).toBe(1);
+});

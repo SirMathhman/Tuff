@@ -1,6 +1,7 @@
 type Token =
   | { type: "Number"; value: string }
   | { type: "Plus" }
+  | { type: "Minus" }
   | { type: "Eof" };
 
 function tokenize(src: string): Token[] {
@@ -16,6 +17,9 @@ function tokenize(src: string): Token[] {
     } else if (src[i] === "+") {
       tokens.push({ type: "Plus" });
       i++;
+    } else if (src[i] === "-") {
+      tokens.push({ type: "Minus" });
+      i++;
     } else {
       throw new Error(`Unexpected token: ${src[i]!}`);
     }
@@ -30,10 +34,11 @@ function parseExpression(tokens: Token[]): string {
 
 function parseAddition(tokens: Token[]): string {
   let left = parseNumber(tokens);
-  while (tokens[0]?.type === "Plus") {
+  while (tokens[0]?.type === "Plus" || tokens[0]?.type === "Minus") {
+    const op = tokens[0]!.type === "Plus" ? "+" : "-";
     tokens.shift();
     const right = parseNumber(tokens);
-    left = `(${left} + ${right})`;
+    left = `(${left} ${op} ${right})`;
   }
   return left;
 }
