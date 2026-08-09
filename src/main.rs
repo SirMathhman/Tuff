@@ -25,8 +25,14 @@ impl fmt::Display for ExecuteError {
 
 fn compile_tuff_to_c(tuff_source: &str) -> String {
     let expr = tuff_source.trim();
-    let value = if expr.is_empty() { "0" } else { expr };
-    format!("#include <stdio.h>\nint main() {{ return {}; }}\n", value)
+    let value = if expr.is_empty() {
+        "0"
+    } else if expr == "args.length" {
+        "argc"
+    } else {
+        expr
+    };
+    format!("#include <stdio.h>\nint main(int argc, char* argv[]) {{ return {}; }}\n", value)
 }
 
 fn execute_tuff(tuff_source: &str, args: Vec<String>) -> Result<i32, ExecuteError> {
@@ -91,5 +97,10 @@ mod tests {
     #[test]
     fn test_execute_tuff_returns_expression_value() {
         expect_valid("1", vec![], 1);
+    }
+
+    #[test]
+    fn test_execute_tuff_args_length_empty() {
+        expect_valid("args.length", vec![], 1);
     }
 }
