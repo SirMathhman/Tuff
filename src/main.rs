@@ -1,6 +1,6 @@
 fn main() {
     let tuff_source = fs::read_to_string("src/lib.tuff").expect("Failed to read lib.tuff");
-    let c_source = compile_tuff_to_c(&tuff_source);
+    let c_source = compile_tuff_to_c(&tuff_source).expect("Failed to compile");
     fs::write("src/lib.c", &c_source).expect("Failed to write lib.c");
     println!("Compiled src/lib.tuff -> src/lib.c");
 }
@@ -37,7 +37,7 @@ struct Lexer {
 }
 
 impl Lexer {
-    fn new(input: &str) -> Self {
+    fn new(input: &str) -> Result<Self, String> {
         let mut tokens = Vec::new();
         let mut chars = input.chars().peekable();
 
@@ -92,17 +92,21 @@ impl Lexer {
                         chars.next();
                         Token::Semicolon
                     }
-                    _ => {
+                    '&' | '[' | ']' => {
                         chars.next();
                         continue;
-                    } // skip unknown chars
+                    } // skip type syntax chars
+                    _ => {
+                        chars.next();
+                        return Err(format!("Unexpected character: '{}'", ch));
+                    }
                 };
                 tokens.push(token);
             }
         }
 
         tokens.push(Token::Eof);
-        Lexer { tokens, pos: 0 }
+        Ok(Lexer { tokens, pos: 0 })
     }
 
     fn peek(&self) -> &Token {
@@ -153,30 +157,30 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(input: &str) -> Self {
-        Parser {
-            lexer: Lexer::new(input),
-        }
+    fn new(input: &str) -> Result<Self, String> {
+        Ok(Parser {
+            lexer: Lexer::new(input)?,
+        })
     }
 
-    fn parse(&mut self) -> Vec<Statement> {
+    fn parse(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = Vec::new();
 
         while *self.lexer.peek() != Token::Eof {
-            let stmt = self.parse_statement();
+            let stmt = self.parse_statement()?;
             statements.push(stmt);
         }
 
-        statements
+        Ok(statements)
     }
 
-    fn parse_statement(&mut self) -> Statement {
+    fn parse_statement(&mut self) -> Result<Statement, String> {
         if *self.lexer.peek() == Token::Let {
             self.lexer.eat(); // eat 'let'
             let name = match self.lexer.eat() {
                 Token::Ident(name) => name,
                 Token::Args => "args".into(),
-                _ => panic!("Expected identifier after 'let'"),
+                other => return Err(format!("Expected identifier after 'let', got {:?}", other)),
             };
 
             // Skip type annotation: : Type
@@ -192,35 +196,35 @@ impl Parser {
                 self.lexer.eat(); // eat '='
             }
 
-            let value = self.parse_expression();
+            let value = self.parse_expression()?;
 
             // Eat semicolon if present
             if *self.lexer.peek() == Token::Semicolon {
                 self.lexer.eat();
             }
 
-            Statement::Let {
+            Ok(Statement::Let {
                 name,
                 value: Box::new(value),
-            }
+            })
         } else {
-            let expr = self.parse_expression();
+            let expr = self.parse_expression()?;
             if *self.lexer.peek() == Token::Semicolon {
                 self.lexer.eat();
             }
-            Statement::Return(expr)
+            Ok(Statement::Return(expr))
         }
     }
 
-    fn parse_expression(&mut self) -> Expression {
-        let mut expr = self.parse_primary();
+    fn parse_expression(&mut self) -> Result<Expression, String> {
+        let mut expr = self.parse_primary()?;
 
         while *self.lexer.peek() == Token::Dot {
             self.lexer.eat(); // eat '.'
             let property = match self.lexer.eat() {
                 Token::Ident(name) => name,
                 Token::Args => "args".into(),
-                _ => panic!("Expected property name after '.'"),
+                other => return Err(format!("Expected property name after '.', got {:?}", other)),
             };
             expr = Expression::PropertyAccess {
                 object: Box::new(expr),
@@ -228,16 +232,16 @@ impl Parser {
             };
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn parse_primary(&mut self) -> Expression {
+    fn parse_primary(&mut self) -> Result<Expression, String> {
         match self.lexer.eat() {
-            Token::Number(n) => Expression::Number(n),
-            Token::Ident(name) => Expression::Ident(name),
-            Token::Args => Expression::Ident("args".into()),
-            Token::Eof => panic!("Unexpected end of input"),
-            other => panic!("Unexpected token: {:?}", other),
+            Token::Number(n) => Ok(Expression::Number(n)),
+            Token::Ident(name) => Ok(Expression::Ident(name)),
+            Token::Args => Ok(Expression::Ident("args".into())),
+            Token::Eof => Err("Unexpected end of input".into()),
+            other => Err(format!("Unexpected token: {:?}", other)),
         }
     }
 }
@@ -258,6 +262,10 @@ impl CodeGen {
     }
 
     fn generate(&mut self, statements: &[Statement]) -> String {
+        if statements.is_empty() {
+            return "#include <stdio.h>\nint main(int argc, char* argv[]) { return 0; }\n".into();
+        }
+
         // Process all statements except the last (which is the return)
         let (body_stmts, last_stmt) = statements.split_at(statements.len() - 1);
 
@@ -313,20 +321,21 @@ impl CodeGen {
     }
 }
 
-fn compile_tuff_to_c(tuff_source: &str) -> String {
+fn compile_tuff_to_c(tuff_source: &str) -> Result<String, String> {
     let expr = tuff_source.trim();
     if expr.is_empty() {
-        return "#include <stdio.h>\nint main(int argc, char* argv[]) { return 0; }\n".into();
+        return Ok("#include <stdio.h>\nint main(int argc, char* argv[]) { return 0; }\n".into());
     }
 
-    let mut parser = Parser::new(expr);
-    let statements = parser.parse();
+    let mut parser = Parser::new(expr)?;
+    let statements = parser.parse()?;
     let mut codegen = CodeGen::new();
-    codegen.generate(&statements)
+    Ok(codegen.generate(&statements))
 }
 
 fn execute_tuff(tuff_source: &str, args: Vec<String>) -> Result<i32, ExecuteError> {
-    let c_source = compile_tuff_to_c(tuff_source);
+    let c_source = compile_tuff_to_c(tuff_source)
+        .map_err(|e| ExecuteError::Compile(e))?;
 
     // 1) Save the c_source to a temp .c file
     let temp_dir = env::temp_dir();
@@ -366,7 +375,7 @@ fn execute_tuff(tuff_source: &str, args: Vec<String>) -> Result<i32, ExecuteErro
 }
 
 fn expect_valid(tuff_source: &str, args: Vec<String>, expected_exit_code: i32) {
-    let c_source = compile_tuff_to_c(tuff_source);
+    let c_source = compile_tuff_to_c(tuff_source).expect("compile failed");
     let actual_exit_code = execute_tuff(tuff_source, args).expect("execute_tuff failed");
 
     if expected_exit_code != actual_exit_code {
@@ -404,5 +413,10 @@ mod tests {
     #[test]
     fn test_execute_tuff_let_args_length_no_type() {
         expect_valid("let args0 = args; args0.length", vec![], 1);
+    }
+
+    #[test]
+    fn test_compile_invalid_returns_err() {
+        assert!(compile_tuff_to_c("#").is_err());
     }
 }
