@@ -21,3 +21,7 @@ test('executeTuff("") => 0', () => {
 test('executeTuff("1") => 1', () => {
   expect(executeTuff("1")).toBe(1);
 });
+
+test('executeTuff("1 + 2") => 3', () => {
+  expect(executeTuff("1 + 2")).toBe(3);
+});
