@@ -155,6 +155,10 @@ test('executeTuff("let mut sum = 0; let range = 0..4; for (i in range) sum += i;
   expect(executeTuff("let mut sum = 0; let range = 0..4; for (i in range) sum += i; sum")).toBe(6);
 });
 
+test('executeTuff("let x = match (2) { case 2 => 3; case _ => 4; }; x") => 3', () => {
+  expect(executeTuff("let x = match (2) { case 2 => 3; case _ => 4; }; x")).toBe(3);
+});
+
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });

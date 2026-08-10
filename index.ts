@@ -3,10 +3,10 @@
 type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" | ".." }
-  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" }
+  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" | ".." | "=>" | ">>" }
+  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" | "match" | "case" }
   | { type: "identifier"; value: string }
-  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
+  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" }
   | { type: "eof" };
 
 function tokenize(source: string): Token[] {
@@ -26,6 +26,12 @@ function tokenize(source: string): Token[] {
     } else if (ch === "." && source[i + 1] === ".") {
       tokens.push({ type: "op", value: ".." });
       i += 2;
+    } else if (ch === ">" && source[i + 1] === ">") {
+      tokens.push({ type: "op", value: ">>" });
+      i += 2;
+    } else if (ch === ">") {
+      tokens.push({ type: "punct", value: ">" });
+      i++;
     } else if (ch === "+" && source[i + 1] === "=") {
       tokens.push({ type: "op", value: "+=" });
       i += 2;
@@ -44,8 +50,8 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "break" || ident === "continue") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" });
+      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "break" || ident === "continue" || ident === "match" || ident === "case") {
+        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" | "match" | "case" });
       } else if (ident === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (ident === "false") {
@@ -56,6 +62,9 @@ function tokenize(source: string): Token[] {
     } else if (ch === ";") {
       tokens.push({ type: "punct", value: ";" });
       i++;
+    } else if (ch === "=" && source[i + 1] === ">") {
+      tokens.push({ type: "op", value: "=>" });
+      i += 2;
     } else if (ch === "=") {
       tokens.push({ type: "punct", value: "=" });
       i++;
@@ -99,7 +108,8 @@ type Expr =
   | { type: "range"; start: Expr; end: Expr }
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr }
-  | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null };
+  | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null }
+  | { type: "match"; target: Expr; cases: { pattern: Expr; body: Expr }[] };
 
 type VarType = "number" | "boolean" | "range";
 
@@ -305,11 +315,12 @@ class Parser {
   // Expression: number or binary (left-associative, no precedence for now)
   parseExpr(): Expr {
     let left = this.parsePrimary();
-    while (this.peek().type === "op") {
-      const op = this.consume();
-      if (op.type !== "op") throw new Error("Expected operator");
+    while (true) {
+      const next = this.peek();
+      if (next.type !== "op" || next.value === "=>" || next.value === ">>") break;
+      this.consume();
       const right = this.parsePrimary();
-      left = { type: "binary", op: op.value, left, right };
+      left = { type: "binary", op: next.value, left, right };
     }
     return left;
   }
@@ -356,6 +367,52 @@ class Parser {
         return { type: "if", condition, thenNode, elseNode };
       }
       return { type: "if", condition, thenNode, elseNode: null };
+    }
+    if (token.type === "keyword" && token.value === "match") {
+      // Parse: match (target) { case pattern => body; ... }
+      const openTok = this.peek();
+      if (openTok.type !== "punct" || openTok.value !== "(") {
+        throw new Error("Expected '(' after 'match'");
+      }
+      this.consume(); // "("
+      const target = this.parseExpr();
+      const closeTok = this.peek();
+      if (closeTok.type !== "punct" || closeTok.value !== ")") {
+        throw new Error("Expected ')' after match target");
+      }
+      this.consume(); // ")"
+      const braceTok = this.peek();
+      if (braceTok.type !== "punct" || braceTok.value !== "{") {
+        throw new Error("Expected '{' after match target");
+      }
+      this.consume(); // "{"
+      const cases: { pattern: Expr; body: Expr }[] = [];
+      while (true) {
+        const tok = this.peek();
+        if (tok.type === "eof" || (tok.type === "punct" && tok.value === "}")) {
+          if (tok.type === "punct") this.consume(); // "}"
+          break;
+        }
+        if (tok.type === "keyword" && tok.value === "case") {
+          this.consume(); // "case"
+          const pattern = this.parseExpr();
+          const arrowTok = this.peek();
+          if (arrowTok.type !== "op" || arrowTok.value !== "=>") {
+            throw new Error("Expected '=>' after case pattern");
+          }
+          this.consume(); // "=>"
+          const body = this.parseExpr();
+          cases.push({ pattern, body });
+          // Optional semicolon
+          const semi = this.peek();
+          if (semi.type === "punct" && semi.value === ";") {
+            this.consume();
+          }
+        } else {
+          throw new Error(`Expected 'case' in match block`);
+        }
+      }
+      return { type: "match", target, cases };
     }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
@@ -479,6 +536,16 @@ function genExpr(expr: Expr): string {
     const thenJs = genNode(expr.thenNode, (e) => e).replace(/;$/, "");
     const elseJs = expr.elseNode ? genNode(expr.elseNode, (e) => e).replace(/;$/, "") : "0";
     return `(${genExpr(expr.condition)}) ? ${thenJs} : ${elseJs}`;
+  }
+  if (expr.type === "match") {
+    const targetJs = genExpr(expr.target);
+    const casesJs = expr.cases.map(c => {
+      if (c.pattern.type === "identifier" && c.pattern.name === "_") {
+        return `default:{return ${genExpr(c.body)};}`;
+      }
+      return `case ${genExpr(c.pattern)}:{return ${genExpr(c.body)};}`;
+    }).join("");
+    return `(function(t){switch(t){${casesJs}}})(${targetJs})`;
   }
   throw new Error("Unknown expression type");
 }
