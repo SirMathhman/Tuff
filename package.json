@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "lint": "tsc --noEmit && eslint lint . --fix",
+    "lint": "tsc --noEmit && eslint . --fix",
     "cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
