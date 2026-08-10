@@ -100,14 +100,17 @@ function parseMultiplication(tokens: Token[]): string {
   return left;
 }
 
-function parseBlock(tokens: Token[]): string {
+function parseStatementsInScope(
+  tokens: Token[],
+  stopType: string,
+): string {
   const parts: string[] = [];
   let hasDeclarations = false;
   let lastExpr: string | null = null;
-  while (tokens[0]?.type !== "RBrace" && tokens[0]?.type !== "Eof") {
+  while (tokens[0]?.type !== stopType && tokens[0]?.type !== "Eof") {
     if (tokens[0]?.type === "Identifier" && tokens[0]?.value === "let") {
       hasDeclarations = true;
-      tokens.shift(); // consume "let"
+      tokens.shift();
       const nameToken = tokens.shift();
       if (nameToken?.type !== "Identifier")
         throw new Error(
@@ -135,15 +138,21 @@ function parseBlock(tokens: Token[]): string {
       }
     }
   }
-  const block = parts.join("\n");
-  const retExpr = lastExpr ? `return ${lastExpr};` : "";
-  if (hasDeclarations) {
-    return `(function() { ${block}${retExpr} })()`;
-  }
+  if (parts.length === 0 && lastExpr === null) return "0";
   if (lastExpr) {
+    if (hasDeclarations) {
+      return `(function() { ${parts.join("\n")}return ${lastExpr}; })()`;
+    }
     return `(${lastExpr})`;
   }
-  return `(${block})`;
+  if (hasDeclarations) {
+    return `(function() { ${parts.join("\n")} })()`;
+  }
+  return `(${parts.join("\n")})`;
+}
+
+function parseBlock(tokens: Token[]): string {
+  return parseStatementsInScope(tokens, "RBrace");
 }
 
 function expectClosing(tokens: Token[], closeType: string, expected: string): void {
@@ -174,6 +183,10 @@ function parsePrimary(tokens: Token[]): string {
   throw new Error(`Expected number or '(', got ${token?.type ?? "nothing"}`);
 }
 
+function parseStatements(tokens: Token[]): string {
+  return parseStatementsInScope(tokens, "Eof");
+}
+
 const PRELUDE = "in let args : &[&Str]; ";
 
 export function compileTuffToJS(tuffSource: string): string {
@@ -181,6 +194,6 @@ export function compileTuffToJS(tuffSource: string): string {
     ? tuffSource.slice(PRELUDE.length)
     : tuffSource;
   const tokens = tokenize(source);
-  const expr = parseExpression(tokens);
-  return `return ${expr};`;
+  const result = parseStatements(tokens);
+  return `return ${result};`;
 }
