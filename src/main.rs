@@ -804,4 +804,9 @@ mod tests {
     fn test_char_from_string_index() {
         expect_valid("let str = \"apple\"; let c = str[0]; c", vec![], 97);
     }
+
+    #[test]
+    fn test_deref_returns_value() {
+        expect_valid("let x = 100; let y = &x; *y", vec![], 100);
+    }
 }
