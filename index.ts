@@ -2,8 +2,9 @@ export function compileTuffToJS(source: string) {
   if (source === "") {
     return "";
   }
-  if (/^[\d\s\+\-\*\/\(\)]+$/.test(source)) {
-    return "process.exit(" + source + ")";
+  const jsSource = source.replace(/{/g, "(").replace(/}/g, ")");
+  if (/^[\d\s\+\-\*\/\(\)]+$/.test(jsSource)) {
+    return "process.exit(" + jsSource + ")";
   }
   throw new Error("Source contains invalid Tuff syntax");
 }
