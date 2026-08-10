@@ -2,6 +2,7 @@
 
 type Token =
   | { type: "number"; value: string }
+  | { type: "boolean"; value: boolean }
   | { type: "op"; value: "+" | "-" | "*" | "/" }
   | { type: "keyword"; value: "in" | "let" | "mut" }
   | { type: "identifier"; value: string }
@@ -33,6 +34,10 @@ function tokenize(source: string): Token[] {
       }
       if (ident === "in" || ident === "let" || ident === "mut") {
         tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" });
+      } else if (ident === "true") {
+        tokens.push({ type: "boolean", value: true });
+      } else if (ident === "false") {
+        tokens.push({ type: "boolean", value: false });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }
@@ -72,6 +77,7 @@ type AstNode =
 
 type Expr =
   | { type: "number"; value: number }
+  | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "group"; nodes: AstNode[] }
@@ -194,6 +200,9 @@ class Parser {
     if (token.type === "number") {
       return { type: "number", value: parseInt(token.value, 10) };
     }
+    if (token.type === "boolean") {
+      return { type: "boolean", value: token.value };
+    }
     if (token.type === "punct" && token.value === "(") {
       const expr = this.parseExpr();
       const closingTok = this.peek();
@@ -267,6 +276,9 @@ function generateBlockJS(nodes: AstNode[]): string {
 function genExpr(expr: Expr): string {
   if (expr.type === "number") {
     return String(expr.value);
+  }
+  if (expr.type === "boolean") {
+    return expr.value ? "1" : "0";
   }
   if (expr.type === "identifier") {
     return expr.name;
@@ -342,6 +354,9 @@ function validateAssign(name: string, value: Expr, scope: string[], mutableVars:
 
 function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string>): void {
   if (expr.type === "number") {
+    return;
+  }
+  if (expr.type === "boolean") {
     return;
   }
   if (expr.type === "identifier") {

@@ -78,3 +78,7 @@ test('compileTuff("let x = 0; x = 1; x") => Error', () => {
 test('executeTuff("let mut x = 0; { x = 1; } x") => 1', () => {
   expect(executeTuff("let mut x = 0; { x = 1; } x")).toBe(1);
 });
+
+test('executeTuff("let x = true; x") => 1', () => {
+  expect(executeTuff("let x = true; x")).toBe(1);
+});
