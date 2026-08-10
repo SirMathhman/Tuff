@@ -15,10 +15,17 @@ impl std::fmt::Display for CompileError {
 
 fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
     let trimmed = tuff_source.trim();
-    let exit_code = if trimmed == "args.length" {
-        String::from("argc")
+    // Strip the prelude if present (handles trailing semicolon and spaces)
+    let expr = trimmed.strip_prefix("in let args : &[&Str]")
+        .map(|s| s.trim_start())
+        .map(|s| s.strip_prefix(';').unwrap_or(s))
+        .map(|s| s.trim())
+        .unwrap_or(trimmed);
+    // For empty expressions, default to 0
+    let exit_code = if expr.is_empty() {
+        String::from("0")
     } else {
-        trimmed.parse::<i32>().unwrap_or(0).to_string()
+        expr.replace("args.length", "argc")
     };
     Ok(format!(
         "int main(int argc, char* argv[]) {{ return {}; }}",
@@ -112,5 +119,10 @@ mod tests {
     #[test]
     fn test_args_length_with_arg() {
         expect_valid("args.length", vec!["foo".to_string()], 2);
+    }
+
+    #[test]
+    fn test_args_length_plus_one() {
+        expect_valid("args.length + 1", vec!["foo".to_string()], 3);
     }
 }
