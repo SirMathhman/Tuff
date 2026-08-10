@@ -58,3 +58,7 @@ test('compileTuff("( let x = 2 + 3; x ) * 4") => Error', () => {
 test('executeTuff("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   expect(executeTuff("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
+
+test('executeTuff("let x = 100;") => 0', () => {
+  expect(executeTuff("let x = 100;")).toBe(0);
+});
