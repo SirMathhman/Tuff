@@ -9,14 +9,16 @@
 - **Run**: `bun run index.ts`
 
 ## Architecture
-`index.ts` is a single-file compiler that transforms "Tuff" source into JavaScript. The pipeline is:
+`index.ts` is the entry point that chains four compiler stages from `src/`:
 
-1. **Tokenizer** (`tokenize`) — produces `Token[]` with types: `number`, `boolean`, `op`, `keyword`, `punct`, `eof`
-2. **Parser** (`Parser` class) — produces `AstNode[]`; node types: `decl`, `let`, `assign`, `expr`, `while`, `for`, `break`, `continue`. Expressions (`Expr`) include `number`, `boolean`, `identifier`, `binary`, `range`, `group`, `assign`, `if`
-3. **Scope validation** (`validateScopes`) — tracks declared vars, mutability, and types (`VarType` = `number` | `boolean` | `range` | `array`); throws on undefined vars, assignment to immutable vars, and type mismatches
-4. **Code generation** (`generateJS`) — emits JS; top-level expressions become `process.exit(Number(...))`
+1. **`src/tokenizer.ts`** — `tokenize()` produces `Token[]` with types: `number`, `boolean`, `op`, `keyword`, `punct`, `eof`
+2. **`src/parser.ts`** — `Parser` class produces `AstNode[]`; node types: `decl`, `let`, `assign`, `expr`, `while`, `for`, `break`, `continue`. Expressions (`Expr`) include `number`, `boolean`, `identifier`, `binary`, `range`, `group`, `assign`, `if`
+3. **`src/validator.ts`** — `validateScopes()` tracks declared vars, mutability, and types (`VarType` = `number` | `boolean` | `range` | `array`); throws on undefined vars, assignment to immutable vars, and type mismatches
+4. **`src/generator.ts`** — `generateJS()` emits JS; top-level expressions become `process.exit(Number(...))`
 
-Entry point: `compileTuffToJS(tuffSource: string): string`.
+Type definitions are in `src/types.ts`. No circular dependencies: types → tokenizer → parser → validator/generator.
+
+Entry point: `compileTuffToJS(tuffSource: string): string` in `index.ts`.
 
 ## Conventions
 - Tuff programs receive `process` (with `exit(code)`) and `args` (string array) as globals
