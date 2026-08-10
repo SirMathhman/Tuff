@@ -554,4 +554,9 @@ mod tests {
     fn test_let_args_index_nested() {
         expect_valid("let x = args; let arg = args[1]; arg[0]", vec!["apple".to_string()], 97);
     }
+
+    #[test]
+    fn test_let_args_index_chained() {
+        expect_valid("let x = args; let arg = args[1]; let c = arg[0]; c", vec!["apple".to_string()], 97);
+    }
 }
