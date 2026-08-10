@@ -134,6 +134,20 @@ export class Parser {
     let rangeExpr: Expr;
     if (parsedRange.type === "binary" && parsedRange.op === "..") {
       rangeExpr = { type: "range", start: parsedRange.left, end: parsedRange.right };
+    } else if (parsedRange.type === "group" && parsedRange.nodes.length === 1) {
+      const first = parsedRange.nodes[0]!;
+      if (first.type === "expr") {
+        const inner = first.expr;
+        if (inner.type === "binary" && inner.op === "..") {
+          rangeExpr = { type: "range", start: inner.left, end: inner.right };
+        } else if (inner.type === "identifier") {
+          rangeExpr = inner;
+        } else {
+          throw new Error("Expected range expression or range variable");
+        }
+      } else {
+        throw new Error("Expected range expression or range variable");
+      }
     } else if (parsedRange.type === "identifier") {
       rangeExpr = parsedRange;
     } else {

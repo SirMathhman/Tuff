@@ -175,6 +175,10 @@ test('executeTuff("let mut sum = 0; let range = 0..4; for (i in range) sum += i;
   expect(executeTuff("let mut sum = 0; let range = 0..4; for (i in range) sum += i; sum")).toBe(6);
 });
 
+test('executeTuff("let mut sum = 0; for (i in (0..4)) sum += i; sum") => 6', () => {
+  expect(executeTuff("let mut sum = 0; for (i in (0..4)) sum += i; sum")).toBe(6);
+});
+
 test('executeTuff("let x = match (2) { case 2 => 3; case _ => 4; }; x") => 3', () => {
   expect(executeTuff("let x = match (2) { case 2 => 3; case _ => 4; }; x")).toBe(3);
 });
