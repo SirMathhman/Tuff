@@ -5,5 +5,8 @@ export function compileTuffToJS(source: string) {
   if (/^\d+$/.test(source)) {
     return "process.exit(" + source + ")";
   }
+  if (/^[\d\s\+\-\*\/\(\)]+$/.test(source)) {
+    return "process.exit(" + source + ")";
+  }
   return "";
 }

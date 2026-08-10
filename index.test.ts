@@ -58,3 +58,7 @@ test("expectValid one", () => {
 test("expectValid two", () => {
   expectValid("2", 2);
 });
+
+test("expectValid addition", () => {
+  expectValid("1 + 2", 3);
+});
