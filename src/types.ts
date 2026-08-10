@@ -23,12 +23,12 @@ export type Token =
         | "case";
     }
   | { type: "identifier"; value: string }
-  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" | "[" | "]" | "," }
+  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" | "[" | "]" | "," | ":" }
   | { type: "eof" };
 
 export type AstNode =
   | { type: "decl"; name: string }
-  | { type: "let"; name: string; mutable: boolean; init: Expr }
+  | { type: "let"; name: string; mutable: boolean; init: Expr; typeAnnotation?: IntType }
   | { type: "assign"; target: Expr; value: Expr }
   | { type: "expr"; expr: Expr }
   | { type: "while"; condition: Expr; body: AstNode[] }

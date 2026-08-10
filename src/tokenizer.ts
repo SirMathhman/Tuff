@@ -118,6 +118,9 @@ export function tokenize(source: string): Token[] {
     } else if (ch === ",") {
       tokens.push({ type: "punct", value: "," });
       i++;
+    } else if (ch === ":") {
+      tokens.push({ type: "punct", value: ":" });
+      i++;
     } else {
       throw new Error(`Unexpected character: ${ch}`);
     }

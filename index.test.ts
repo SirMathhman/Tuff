@@ -99,6 +99,10 @@ test('executeTuff("let x = 0; let y = 1; x < y") => 1', () => {
   expect(executeTuff("let x = 0; let y = 1; x < y")).toBe(1);
 });
 
+test('executeTuff("let x : U8 = 100U8; x") => 100', () => {
+  expect(executeTuff("let x : U8 = 100U8; x")).toBe(100);
+});
+
 test('executeTuff("let x = 0; let y = 1; (x < y) == 1") => 0', () => {
   expect(executeTuff("let x = 0; let y = 1; (x < y) == 1")).toBe(0);
 });

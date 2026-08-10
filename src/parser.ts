@@ -1,4 +1,4 @@
-import type { Token, AstNode, Expr } from "./types";
+import type { Token, AstNode, Expr, IntType } from "./types";
 
 export class Parser {
   private pos = 0;
@@ -168,17 +168,29 @@ export class Parser {
     const mutable = mutTok.type === "keyword" && mutTok.value === "mut";
     if (mutable) this.consume();
     const name = this.consumeIdentifier();
+    let typeAnnotation: IntType | undefined = undefined;
+    const colonTok = this.peek();
+    if (colonTok.type === "punct" && colonTok.value === ":") {
+      this.consume();
+      const typeTok = this.peek();
+      if (typeTok.type === "identifier") {
+        this.consume();
+        typeAnnotation = typeTok.value as IntType;
+      } else {
+        throw new Error("Expected integer type after colon");
+      }
+    }
     const eqTok = this.peek();
     if (eqTok.type === "punct" && eqTok.value === "=") {
       this.consume();
       const init = this.parseExpr();
       const semiTok = this.peek();
       if (semiTok.type === "punct" && semiTok.value === ";") this.consume();
-      return { type: "let", name, mutable, init };
+      return { type: "let", name, mutable, init, typeAnnotation };
     }
     const semiTok = this.peek();
     if (semiTok.type === "punct" && semiTok.value === ";") this.consume();
-    return { type: "let", name, mutable, init: { type: "number", value: 0, intType: false } };
+    return { type: "let", name, mutable, init: { type: "number", value: 0, intType: false }, typeAnnotation };
   }
 
   parseAssignStmt(): AstNode {

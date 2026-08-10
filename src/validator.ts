@@ -38,6 +38,20 @@ function validateIntRanges(node: AstNode): void {
           : node.expr,
     );
   }
+  if (node.type === "let" && node.typeAnnotation) {
+    const initExpr = node.init;
+    if (initExpr.type === "number" && initExpr.intType) {
+      if (initExpr.intType !== node.typeAnnotation) {
+        throw new Error(
+          `Type mismatch: expected ${node.typeAnnotation}, got ${initExpr.intType}`,
+        );
+      }
+    } else {
+      throw new Error(
+        `Type annotation ${node.typeAnnotation} requires an integer literal`,
+      );
+    }
+  }
   if (node.type === "while") {
     validateIntExpr(node.condition);
     for (const n of node.body) validateIntRanges(n);
@@ -107,6 +121,8 @@ function validateNodeScope(
     const initType = inferExprType(node.init, scope, mutableVars, types);
     if (hasIntType(node.init)) {
       intVars.set(node.name, (node.init as { type: "number"; intType: IntType }).intType);
+    } else if (node.typeAnnotation) {
+      intVars.set(node.name, node.typeAnnotation);
     }
     scope.push(node.name);
     types.set(node.name, initType);
