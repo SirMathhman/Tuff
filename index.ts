@@ -4,7 +4,7 @@ type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
   | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" }
-  | { type: "keyword"; value: "in" | "let" | "mut" }
+  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
   | { type: "eof" };
@@ -38,8 +38,8 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let" || ident === "mut") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" });
+      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else") {
+        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" });
       } else if (ident === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (ident === "false") {
@@ -87,7 +87,8 @@ type Expr =
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "group"; nodes: AstNode[] }
-  | { type: "assign"; name: string; value: Expr };
+  | { type: "assign"; name: string; value: Expr }
+  | { type: "if"; condition: Expr; thenExpr: Expr; elseExpr: Expr };
 
 type VarType = "number" | "boolean";
 
@@ -224,6 +225,28 @@ class Parser {
       const nodes = this.parseBlock();
       return { type: "group", nodes };
     }
+    if (token.type === "keyword" && token.value === "if") {
+      // Parse: if (condition) thenExpr else elseExpr
+      const openTok = this.peek();
+      if (openTok.type !== "punct" || openTok.value !== "(") {
+        throw new Error("Expected '(' after 'if'");
+      }
+      this.consume(); // "("
+      const condition = this.parseExpr();
+      const closeTok = this.peek();
+      if (closeTok.type !== "punct" || closeTok.value !== ")") {
+        throw new Error("Expected ')' after condition");
+      }
+      this.consume(); // ")"
+      const thenExpr = this.parseExpr();
+      const elseTok = this.peek();
+      if (elseTok.type !== "keyword" || elseTok.value !== "else") {
+        throw new Error("Expected 'else'");
+      }
+      this.consume(); // "else"
+      const elseExpr = this.parseExpr();
+      return { type: "if", condition, thenExpr, elseExpr };
+    }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
     }
@@ -323,6 +346,9 @@ function genExpr(expr: Expr): string {
     if (parts.length === 0) return "(0)";
     return `(${parts.join(",")})`;
   }
+  if (expr.type === "if") {
+    return `(${genExpr(expr.condition)}) ? ${genExpr(expr.thenExpr)} : ${genExpr(expr.elseExpr)}`;
+  }
   throw new Error("Unknown expression type");
 }
 
@@ -413,6 +439,14 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
       return inferExprType(last.expr, scope_, mut_, types_);
     }
     return "number";
+  }
+  if (expr.type === "if") {
+    const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types);
+    const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types);
+    if (thenType !== elseType) {
+      throw new Error(`If branches must have the same type: ${thenType} vs ${elseType}`);
+    }
+    return thenType;
   }
   return "number";
 }
