@@ -110,7 +110,9 @@ function parseBlock(tokens: Token[]): string {
       tokens.shift(); // consume "let"
       const nameToken = tokens.shift();
       if (nameToken?.type !== "Identifier")
-        throw new Error(`Expected variable name, got ${nameToken?.type ?? "nothing"}`);
+        throw new Error(
+          `Expected variable name, got ${nameToken?.type ?? "nothing"}`,
+        );
       const name = nameToken.value;
       const assignToken = tokens.shift();
       if (assignToken?.type !== "Assign")
@@ -144,19 +146,22 @@ function parseBlock(tokens: Token[]): string {
   return `(${block})`;
 }
 
-function parseGrouped(tokens: Token[], closeType: string, expected: string): string {
-  if (closeType === "RBrace") {
-    const block = parseBlock(tokens);
-    const closing = tokens.shift();
-    if (closing?.type !== closeType)
-      throw new Error(`Expected '${expected}', got ${closing?.type ?? "nothing"}`);
-    return `(${block})`;
-  }
-  const expr = parseExpression(tokens);
+function expectClosing(tokens: Token[], closeType: string, expected: string): void {
   const closing = tokens.shift();
   if (closing?.type !== closeType)
     throw new Error(`Expected '${expected}', got ${closing?.type ?? "nothing"}`);
-  return `(${expr})`;
+}
+
+function parseGrouped(
+  tokens: Token[],
+  closeType: string,
+  expected: string,
+): string {
+  const result = closeType === "RBrace"
+    ? parseBlock(tokens)
+    : parseExpression(tokens);
+  expectClosing(tokens, closeType, expected);
+  return `(${result})`;
 }
 
 function parsePrimary(tokens: Token[]): string {
@@ -172,7 +177,9 @@ function parsePrimary(tokens: Token[]): string {
 const PRELUDE = "in let args : &[&Str]; ";
 
 export function compileTuffToJS(tuffSource: string): string {
-  const source = tuffSource.startsWith(PRELUDE) ? tuffSource.slice(PRELUDE.length) : tuffSource;
+  const source = tuffSource.startsWith(PRELUDE)
+    ? tuffSource.slice(PRELUDE.length)
+    : tuffSource;
   const tokens = tokenize(source);
   const expr = parseExpression(tokens);
   return `return ${expr};`;
