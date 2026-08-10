@@ -99,23 +99,26 @@ class Parser {
   parse(): AstNode[] {
     const nodes: AstNode[] = [];
     while (this.peek().type !== "eof") {
-      const tok = this.peek();
-      if (tok.type === "keyword" && tok.value === "in") {
-        nodes.push(this.parseDecl());
-      } else if (tok.type === "keyword" && tok.value === "let") {
-        nodes.push(this.parseLetDecl());
-      } else if (tok.type === "identifier") {
-        const next = this.tokens[this.pos + 1];
-        if (next && next.type === "punct" && next.value === "=") {
-          nodes.push(this.parseAssignStmt());
-        } else {
-          nodes.push(this.parseExprNode());
-        }
-      } else {
-        nodes.push(this.parseExprNode());
-      }
+      nodes.push(this.parseStmt(true));
     }
     return nodes;
+  }
+
+  parseStmt(allowIn: boolean): AstNode {
+    const tok = this.peek();
+    if (allowIn && tok.type === "keyword" && tok.value === "in") {
+      return this.parseDecl();
+    }
+    if (tok.type === "keyword" && tok.value === "let") {
+      return this.parseLetDecl();
+    }
+    if (tok.type === "identifier") {
+      const next = this.tokens[this.pos + 1];
+      if (next && next.type === "punct" && next.value === "=") {
+        return this.parseAssignStmt();
+      }
+    }
+    return this.parseExprNode();
   }
 
   parseLetDecl(): AstNode {
@@ -217,22 +220,10 @@ class Parser {
     const nodes: AstNode[] = [];
     while (this.peek().type !== "eof") {
       const tok = this.peek();
-      // Stop at closing brace
       if (tok.type === "punct" && tok.value === "}") {
         break;
       }
-      if (tok.type === "keyword" && tok.value === "let") {
-        nodes.push(this.parseLetDecl());
-      } else if (tok.type === "identifier") {
-        const next = this.tokens[this.pos + 1];
-        if (next && next.type === "punct" && next.value === "=") {
-          nodes.push(this.parseAssignStmt());
-        } else {
-          nodes.push(this.parseExprNode());
-        }
-      } else {
-        nodes.push(this.parseExprNode());
-      }
+      nodes.push(this.parseStmt(false));
     }
     // Consume closing "}"
     const closeTok = this.peek();
