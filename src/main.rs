@@ -530,9 +530,17 @@ fn codegen_expr(expr: &Expr, ctx: &CodegenContext) -> String {
             format!("*{}", codegen_expr(inner, ctx))
         }
         Expr::StrLit(s) => {
-            // Escape backslashes first, then quotes for C string literal
-            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-            format!("\"{}\"", escaped)
+            let bs = char::from(92);
+            let qt = char::from(34);
+            let mut escaped = String::new();
+            for c in s.chars() {
+                match c {
+                    c if c == bs => { escaped.push(bs); escaped.push(bs); }
+                    c if c == qt => { escaped.push(bs); escaped.push(qt); }
+                    _ => escaped.push(c),
+                }
+            }
+            format!("{}{}{}", qt, escaped, qt)
         }
     }
 }
