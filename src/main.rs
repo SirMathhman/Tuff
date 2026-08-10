@@ -14,8 +14,13 @@ impl std::fmt::Display for CompileError {
 }
 
 fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
-    let exit_code = tuff_source.trim().parse::<i32>().unwrap_or(0);
-    Ok(format!("int main() {{ return {}; }}", exit_code))
+    let trimmed = tuff_source.trim();
+    let exit_code = if trimmed == "args.length" {
+        String::from("argc")
+    } else {
+        trimmed.parse::<i32>().unwrap_or(0).to_string()
+    };
+    Ok(format!("int main(int argc, char* argv[]) {{ return {}; }}", exit_code))
 }
 
 #[cfg(test)]
@@ -91,5 +96,15 @@ mod tests {
     #[test]
     fn test_returns_one() {
         expect_valid("1", vec![], 1);
+    }
+
+    #[test]
+    fn test_args_length() {
+        expect_valid("args.length", vec![], 1);
+    }
+
+    #[test]
+    fn test_args_length_with_arg() {
+        expect_valid("args.length", vec!["foo".to_string()], 2);
     }
 }
