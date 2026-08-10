@@ -90,3 +90,7 @@ test("expectValid parentheses", () => {
 test("expectValid braces", () => {
   expectValid("{ 2 + 3 } * 4", 20);
 });
+
+test("expectInvalid mismatched braces", () => {
+  expectInvalid("{ 2 + 3 ) * 4");
+});
