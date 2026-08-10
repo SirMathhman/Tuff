@@ -162,6 +162,7 @@ type Expr =
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
+  | { type: "unary"; op: "-"; operand: Expr }
   | { type: "range"; start: Expr; end: Expr }
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; target: Expr; value: Expr }
@@ -416,7 +417,14 @@ class Parser {
   }
 
   parsePrimary(): Expr {
-    const token = this.consume();
+    const token = this.peek();
+    // Handle unary minus
+    if (token.type === "op" && token.value === "-") {
+      this.consume();
+      const operand = this.parsePrimary();
+      return { type: "unary", op: "-", operand };
+    }
+    this.consume();
     if (token.type === "number") {
       return { type: "number", value: parseInt(token.value, 10), u8: token.u8 };
     }
@@ -684,6 +692,9 @@ function genExpr(expr: Expr): string {
   if (expr.type === "index") {
     return `${genExpr(expr.target)}[${genExpr(expr.index)}]`;
   }
+  if (expr.type === "unary") {
+    return `(-${genExpr(expr.operand)})`;
+  }
   throw new Error("Unknown expression type");
 }
 
@@ -750,6 +761,9 @@ function validateU8Expr(expr: Expr): void {
   if (expr.type === "index") {
     validateU8Expr(expr.target);
     validateU8Expr(expr.index);
+  }
+  if (expr.type === "unary") {
+    validateU8Expr(expr.operand);
   }
 }
 
@@ -1007,6 +1021,9 @@ function inferExprType(
       );
     }
     return thenType;
+  }
+  if (expr.type === "unary") {
+    return "number";
   }
   if (expr.type === "array") {
     for (const elem of expr.elements) {
