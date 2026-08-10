@@ -364,6 +364,7 @@ struct CodegenContext {
     args_vars: std::collections::HashSet<String>,
     args_index_vars: std::collections::HashMap<String, String>,
     pointer_vars: std::collections::HashSet<String>,
+    string_vars: std::collections::HashSet<String>,
 }
 
 impl CodegenContext {
@@ -372,6 +373,7 @@ impl CodegenContext {
             args_vars: std::collections::HashSet::new(),
             args_index_vars: std::collections::HashMap::new(),
             pointer_vars: std::collections::HashSet::new(),
+            string_vars: std::collections::HashSet::new(),
         }
     }
 }
@@ -398,6 +400,9 @@ fn codegen(stmts: &[Stmt]) -> String {
                 if is_ref_expr(value) {
                     ctx.pointer_vars.insert(name.clone());
                 }
+                if is_str_lit(value) {
+                    ctx.string_vars.insert(name.clone());
+                }
                 if is_reassign {
                     buf.push_str(&format!(
                         " {} = {};",
@@ -405,7 +410,13 @@ fn codegen(stmts: &[Stmt]) -> String {
                         codegen_expr(value, &ctx)
                     ));
                 } else {
-                    let type_prefix = if ctx.pointer_vars.contains(name) { "int *" } else { "int" };
+                    let type_prefix = if ctx.string_vars.contains(name) {
+                        "char *"
+                    } else if ctx.pointer_vars.contains(name) {
+                        "int *"
+                    } else {
+                        "int"
+                    };
                     buf.push_str(&format!(
                         " {} {} = {};",
                         type_prefix,
@@ -442,6 +453,10 @@ fn is_args_expr(expr: &Expr) -> bool {
 
 fn is_ref_expr(expr: &Expr) -> bool {
     matches!(expr, Expr::Ref(_))
+}
+
+fn is_str_lit(expr: &Expr) -> bool {
+    matches!(expr, Expr::StrLit(_))
 }
 
 fn is_args_index(expr: &Expr) -> bool {
@@ -762,5 +777,10 @@ mod tests {
     #[test]
     fn test_string_escape_sequence() {
         expect_valid("\"a\\t\"[0]", vec![], 97);
+    }
+
+    #[test]
+    fn test_string_variable_index() {
+        expect_valid("let str = \"apple\"; str[0]", vec![], 97);
     }
 }
