@@ -20,7 +20,10 @@ fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
     } else {
         trimmed.parse::<i32>().unwrap_or(0).to_string()
     };
-    Ok(format!("int main(int argc, char* argv[]) {{ return {}; }}", exit_code))
+    Ok(format!(
+        "int main(int argc, char* argv[]) {{ return {}; }}",
+        exit_code
+    ))
 }
 
 #[cfg(test)]
@@ -37,7 +40,10 @@ mod tests {
     }
 
     fn expect_valid(tuff_source: &str, args: Vec<String>, expected_exit_code: i32) {
-        let generated_result = compile_tuff_to_c(tuff_source);
+        let mut tuff_source_with_prelude = String::from("in let args : &[&Str]; ");
+        tuff_source_with_prelude.push_str(tuff_source);
+
+        let generated_result = compile_tuff_to_c(tuff_source_with_prelude.as_str());
         if let Err(generation_error) = generated_result {
             panic!("Failed to compile: '{}'", generation_error)
         }
