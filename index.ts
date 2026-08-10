@@ -68,6 +68,7 @@ type AstNode =
   | { type: "decl"; name: string }
   | { type: "let"; name: string; mutable: boolean; init: Expr }
   | { type: "assign"; name: string; value: Expr }
+  | { type: "block"; nodes: AstNode[] }
   | { type: "expr"; expr: Expr };
 
 type Expr =
@@ -118,6 +119,7 @@ class Parser {
         return this.parseAssignStmt();
       }
     }
+    // Fall through to parseExprNode for expressions and `{` grouping
     return this.parseExprNode();
   }
 
@@ -221,14 +223,10 @@ class Parser {
     while (this.peek().type !== "eof") {
       const tok = this.peek();
       if (tok.type === "punct" && tok.value === "}") {
+        this.consume(); // consume "}"
         break;
       }
       nodes.push(this.parseStmt(false));
-    }
-    // Consume closing "}"
-    const closeTok = this.peek();
-    if (closeTok.type === "punct" && closeTok.value === "}") {
-      this.consume();
     }
     return nodes;
   }
@@ -254,6 +252,9 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
   }
   if (node.type === "assign") {
     return `${node.name}=${genExpr(node.value)};`;
+  }
+  if (node.type === "block") {
+    return generateBlockJS(node.nodes);
   }
   if (node.type === "expr") {
     return wrapExpr(genExpr(node.expr));
@@ -295,12 +296,10 @@ function genExpr(expr: Expr): string {
       }
       return `(function(){${lines}})()`;
     }
-    // Simple grouping: just parenthesize the expression
-    const last = expr.nodes[expr.nodes.length - 1]!;
-    if (last.type === "expr") {
-      return `(${genExpr(last.expr)})`;
-    }
-    return "(0)";
+    // Simple grouping: generate all nodes as comma expression
+    const parts = expr.nodes.map(n => genNode(n, (e) => e).replace(/;$/, ""));
+    if (parts.length === 0) return "(0)";
+    return `(${parts.join(",")})`;
   }
   throw new Error("Unknown expression type");
 }
@@ -313,17 +312,41 @@ function validateScopes(nodes: AstNode[]): void {
   for (const node of nodes) {
     if (node.type === "decl") {
       scope.push(node.name);
-    } else if (node.type === "let") {
-      validateExprScopes(node.init, scope, mutableVars);
-      scope.push(node.name);
-      if (node.mutable) {
-        mutableVars.add(node.name);
-      }
-    } else if (node.type === "assign") {
-      validateAssign(node.name, node.value, scope, mutableVars);
-    } else if (node.type === "expr") {
-      validateExprScopes(node.expr, scope, mutableVars);
+    } else {
+      validateNodeScope(node, scope, mutableVars);
     }
+  }
+}
+
+function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<string>): void {
+  if (node.type === "decl") return;
+  if (node.type === "let") {
+    validateExprScopes(node.init, scope, mutableVars);
+    scope.push(node.name);
+    if (node.mutable) {
+      mutableVars.add(node.name);
+    }
+    return;
+  }
+  if (node.type === "assign") {
+    validateAssign(node.name, node.value, scope, mutableVars);
+    return;
+  }
+  if (node.type === "block") {
+    validateBlockScopes(node.nodes, scope, mutableVars);
+    return;
+  }
+  if (node.type === "expr") {
+    validateExprScopes(node.expr, scope, mutableVars);
+    return;
+  }
+}
+
+function validateBlockScopes(nodes: AstNode[], scope: string[], mutableVars: Set<string>): void {
+  const blockScope = [...scope];
+  const blockMutableVars = new Set(mutableVars);
+  for (const node of nodes) {
+    validateNodeScope(node, blockScope, blockMutableVars);
   }
 }
 
@@ -361,17 +384,7 @@ function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string
     const blockScope = [...scope];
     const blockMutableVars = new Set(mutableVars);
     for (const node of expr.nodes) {
-      if (node.type === "let") {
-        validateExprScopes(node.init, blockScope, blockMutableVars);
-        blockScope.push(node.name);
-        if (node.mutable) {
-          blockMutableVars.add(node.name);
-        }
-      } else if (node.type === "assign") {
-        validateAssign(node.name, node.value, blockScope, blockMutableVars);
-      } else if (node.type === "expr") {
-        validateExprScopes(node.expr, blockScope, blockMutableVars);
-      }
+      validateNodeScope(node, blockScope, blockMutableVars);
     }
     return;
   }
