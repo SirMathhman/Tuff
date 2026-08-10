@@ -164,25 +164,21 @@ class Parser {
   parseAssignStmt(): AstNode {
     const name = this.consumeIdentifier();
     const opTok = this.peek();
+    let value: Expr;
     if (opTok.type === "op" && opTok.value === "+=") {
       this.consume(); // "+="
-      const value = this.parseExpr();
-      const semiTok = this.peek();
-      if (semiTok.type === "punct" && semiTok.value === ";") {
-        this.consume(); // ";"
-      }
-      return { type: "assign", name, value: { type: "binary", op: "+", left: { type: "identifier", name }, right: value } };
-    }
-    if (opTok.type === "punct" && opTok.value === "=") {
+      value = { type: "binary", op: "+", left: { type: "identifier", name }, right: this.parseExpr() };
+    } else if (opTok.type === "punct" && opTok.value === "=") {
       this.consume(); // "="
-      const value = this.parseExpr();
-      const semiTok = this.peek();
-      if (semiTok.type === "punct" && semiTok.value === ";") {
-        this.consume(); // ";"
-      }
-      return { type: "assign", name, value };
+      value = this.parseExpr();
+    } else {
+      throw new Error(`Expected '=' after identifier`);
     }
-    throw new Error(`Expected '=' after identifier`);
+    const semiTok = this.peek();
+    if (semiTok.type === "punct" && semiTok.value === ";") {
+      this.consume(); // ";"
+    }
+    return { type: "assign", name, value };
   }
 
   parseDecl(): AstNode {
