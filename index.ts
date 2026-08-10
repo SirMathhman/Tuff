@@ -87,7 +87,7 @@ type AstNode =
   | { type: "assign"; name: string; value: Expr }
   | { type: "expr"; expr: Expr }
   | { type: "while"; condition: Expr; body: AstNode[] }
-  | { type: "for"; varName: string; start: Expr; end: Expr; body: AstNode[] }
+  | { type: "for"; varName: string; rangeExpr: Expr; body: AstNode[] }
   | { type: "break" }
   | { type: "continue" };
 
@@ -96,11 +96,12 @@ type Expr =
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
+  | { type: "range"; start: Expr; end: Expr }
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr }
   | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null };
 
-type VarType = "number" | "boolean";
+type VarType = "number" | "boolean" | "range";
 
 // --- Parser ---
 
@@ -219,19 +220,22 @@ class Parser {
       throw new Error("Expected 'in' after loop variable");
     }
     this.consume(); // "in"
-    const range = this.parseExpr();
-    if (range.type !== "binary" || range.op !== "..") {
-      throw new Error("Expected range expression (start..end)");
+    const parsedRange = this.parseExpr();
+    let rangeExpr: Expr;
+    if (parsedRange.type === "binary" && parsedRange.op === "..") {
+      rangeExpr = { type: "range", start: parsedRange.left, end: parsedRange.right };
+    } else if (parsedRange.type === "identifier") {
+      rangeExpr = parsedRange;
+    } else {
+      throw new Error("Expected range expression or range variable");
     }
-    const start = range.left;
-    const end = range.right;
     const closeTok = this.peek();
     if (closeTok.type !== "punct" || closeTok.value !== ")") {
       throw new Error("Expected ')' after for range");
     }
     this.consume(); // ")"
     const body = this.parseLoopBody();
-    return { type: "for", varName, start, end, body };
+    return { type: "for", varName, rangeExpr, body };
   }
 
   parseLetDecl(): AstNode {
@@ -403,7 +407,9 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
   }
   if (node.type === "for") {
     const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
-    return `for (let ${node.varName}=${genExpr(node.start)}; ${node.varName}<${genExpr(node.end)}; ${node.varName}++) {${bodyJs}}`;
+    const startJs = genRangeStart(node.rangeExpr);
+    const endJs = genRangeEnd(node.rangeExpr);
+    return `for (let ${node.varName}=${startJs}; ${node.varName}<${endJs}; ${node.varName}++) {${bodyJs}}`;
   }
   if (node.type === "break") {
     return "break;";
@@ -447,6 +453,9 @@ function genExpr(expr: Expr): string {
   if (expr.type === "binary") {
     if (comparisonOps.has(expr.op)) {
       return genComparisonOp(genExpr(expr.left), expr.op, genExpr(expr.right));
+    }
+    if (expr.op === "..") {
+      return `{start:${genExpr(expr.left)},end:${genExpr(expr.right)}}`;
     }
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
   }
@@ -519,8 +528,7 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
     return;
   }
   if (node.type === "for") {
-    inferExprType(node.start, scope, mutableVars, types);
-    inferExprType(node.end, scope, mutableVars, types);
+    validateRangeExpr(node.rangeExpr, scope, mutableVars, types);
     const scope_ = [...scope, node.varName];
     const mut_ = new Set(mutableVars);
     mut_.add(node.varName);
@@ -537,6 +545,43 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
   if (node.type === "continue") {
     return;
   }
+}
+
+function validateRangeExpr(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
+  if (expr.type === "range") {
+    inferExprType(expr.start, scope, mutableVars, types);
+    inferExprType(expr.end, scope, mutableVars, types);
+  } else if (expr.type === "identifier") {
+    if (!scope.includes(expr.name)) {
+      throw new Error(`Undefined variable: ${expr.name}`);
+    }
+    const varType = types.get(expr.name);
+    if (varType !== "range") {
+      throw new Error(`Expected range type, got ${varType}`);
+    }
+  } else {
+    throw new Error("Expected range expression or range variable");
+  }
+}
+
+function genRangeStart(expr: Expr): string {
+  if (expr.type === "range") {
+    return genExpr(expr.start);
+  }
+  if (expr.type === "identifier") {
+    return `${expr.name}.start`;
+  }
+  throw new Error("Invalid range expression");
+}
+
+function genRangeEnd(expr: Expr): string {
+  if (expr.type === "range") {
+    return genExpr(expr.end);
+  }
+  if (expr.type === "identifier") {
+    return `${expr.name}.end`;
+  }
+  throw new Error("Invalid range expression");
 }
 
 function validateAssignType(varName: string, value: Expr, types: Map<string, VarType>, scope: string[], mutableVars: Set<string>): void {
@@ -613,6 +658,7 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     return types.get(expr.name) || "number";
   }
   if (expr.type === "binary") {
+    if (expr.op === "..") return "range";
     if (comparisonOps.has(expr.op)) return "boolean";
     return "number";
   }

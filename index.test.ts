@@ -151,6 +151,10 @@ test('executeTuff("let mut sum = 0; for (i in 0..4) sum += i; sum") => 6', () =>
   expect(executeTuff("let mut sum = 0; for (i in 0..4) sum += i; sum")).toBe(6);
 });
 
+test('executeTuff("let mut sum = 0; let range = 0..4; for (i in range) sum += i; sum") => 6', () => {
+  expect(executeTuff("let mut sum = 0; let range = 0..4; for (i in range) sum += i; sum")).toBe(6);
+});
+
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });
