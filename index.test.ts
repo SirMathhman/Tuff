@@ -66,3 +66,7 @@ test("expectValid addition", () => {
 test("expectValid addition chain", () => {
   expectValid("1 + 2 + 3", 6);
 });
+
+test("expectValid mixed arithmetic", () => {
+  expectValid("2 + 3 - 4", 1);
+});
