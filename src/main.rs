@@ -131,6 +131,7 @@ struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     scope: std::collections::HashSet<String>,
+    mutable_vars: std::collections::HashSet<String>,
 }
 
 impl Parser {
@@ -148,6 +149,7 @@ impl Parser {
             tokens,
             pos: 0,
             scope: std::collections::HashSet::new(),
+            mutable_vars: std::collections::HashSet::new(),
         }
     }
 
@@ -174,10 +176,13 @@ impl Parser {
             }
             // Check for assignment: identifier = expr
             if self.tokens.get(self.pos + 1) == Some(&Token::Eq) && self.scope.contains(s) {
+                let name = s.clone();
+                if !self.mutable_vars.contains(&name) {
+                    return Err(CompileError { message: format!("cannot assign to immutable variable '{}'", name) });
+                }
                 self.pos += 1; // consume identifier
                 self.pos += 1; // consume '='
                 let value = self.parse_expr()?;
-                let name = s.clone();
                 if self.current() == Token::Semicolon {
                     self.pos += 1;
                 }
@@ -211,6 +216,9 @@ impl Parser {
         let value = self.parse_expr()?;
         // Add variable to scope after parsing its value
         self.scope.insert(name.clone());
+        if is_mut {
+            self.mutable_vars.insert(name.clone());
+        }
         // consume ';'
         if self.current() == Token::Semicolon {
             self.pos += 1;
@@ -653,5 +661,10 @@ mod tests {
     #[test]
     fn test_let_mut_with_assignment() {
         expect_valid("let mut x = 0; x = 1; x", vec![], 1);
+    }
+
+    #[test]
+    fn test_non_mut_assignment_error() {
+        expect_invalid("let x = 0; x = 1; x");
     }
 }
