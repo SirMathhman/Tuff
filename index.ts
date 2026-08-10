@@ -4,7 +4,7 @@ type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
   | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" }
-  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" }
+  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" | "break" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
   | { type: "eof" };
@@ -41,8 +41,8 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" });
+      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "break") {
+        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" | "break" });
       } else if (ident === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (ident === "false") {
@@ -83,7 +83,8 @@ type AstNode =
   | { type: "let"; name: string; mutable: boolean; init: Expr }
   | { type: "assign"; name: string; value: Expr }
   | { type: "expr"; expr: Expr }
-  | { type: "while"; condition: Expr; body: AstNode[] };
+  | { type: "while"; condition: Expr; body: AstNode[] }
+  | { type: "break" };
 
 type Expr =
   | { type: "number"; value: number }
@@ -129,6 +130,14 @@ class Parser {
     }
     if (tok.type === "keyword" && tok.value === "while") {
       return this.parseWhile();
+    }
+    if (tok.type === "keyword" && tok.value === "break") {
+      this.consume(); // "break"
+      const semi = this.peek();
+      if (semi.type === "punct" && semi.value === ";") {
+        this.consume(); // ";"
+      }
+      return { type: "break" };
     }
     if (tok.type === "identifier") {
       const next = this.tokens[this.pos + 1];
@@ -343,6 +352,9 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
     const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
     return `while (${genExpr(node.condition)}) {${bodyJs}}`;
   }
+  if (node.type === "break") {
+    return "break;";
+  }
   throw new Error("Unknown node type");
 }
 
@@ -448,6 +460,9 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
     for (const n of node.body) {
       validateNodeScope(n, scope_, mut_, types_);
     }
+    return;
+  }
+  if (node.type === "break") {
     return;
   }
 }
