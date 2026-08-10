@@ -4,7 +4,7 @@ type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
   | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" }
-  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" }
+  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
   | { type: "eof" };
@@ -41,8 +41,8 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" });
+      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while") {
+        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" });
       } else if (ident === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (ident === "false") {
@@ -82,7 +82,8 @@ type AstNode =
   | { type: "decl"; name: string }
   | { type: "let"; name: string; mutable: boolean; init: Expr }
   | { type: "assign"; name: string; value: Expr }
-  | { type: "expr"; expr: Expr };
+  | { type: "expr"; expr: Expr }
+  | { type: "while"; condition: Expr; body: AstNode[] };
 
 type Expr =
   | { type: "number"; value: number }
@@ -126,6 +127,9 @@ class Parser {
     if (tok.type === "keyword" && tok.value === "let") {
       return this.parseLetDecl();
     }
+    if (tok.type === "keyword" && tok.value === "while") {
+      return this.parseWhile();
+    }
     if (tok.type === "identifier") {
       const next = this.tokens[this.pos + 1];
       if (next && (next.type === "punct" && next.value === "=" || next.type === "op" && next.value === "+=")) {
@@ -139,6 +143,37 @@ class Parser {
       this.consume(); // ";"
     }
     return node;
+  }
+
+  parseWhile(): AstNode {
+    this.consume(); // "while"
+    const openTok = this.peek();
+    if (openTok.type !== "punct" || openTok.value !== "(") {
+      throw new Error("Expected '(' after 'while'");
+    }
+    this.consume(); // "("
+    const condition = this.parseExpr();
+    const closeTok = this.peek();
+    if (closeTok.type !== "punct" || closeTok.value !== ")") {
+      throw new Error("Expected ')' after while condition");
+    }
+    this.consume(); // ")"
+    const body: AstNode[] = [];
+    const bodyTok = this.peek();
+    if (bodyTok.type === "punct" && bodyTok.value === "{") {
+      this.consume(); // "{"
+      while (this.peek().type !== "eof") {
+        const t = this.peek();
+        if (t.type === "punct" && t.value === "}") {
+          this.consume(); // "}"
+          break;
+        }
+        body.push(this.parseStmt(false));
+      }
+    } else {
+      body.push(this.parseStmt(false));
+    }
+    return { type: "while", condition, body };
   }
 
   parseLetDecl(): AstNode {
@@ -304,6 +339,10 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
   if (node.type === "expr") {
     return wrapExpr(genExpr(node.expr));
   }
+  if (node.type === "while") {
+    const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
+    return `while (${genExpr(node.condition)}) {${bodyJs}}`;
+  }
   throw new Error("Unknown node type");
 }
 
@@ -399,6 +438,16 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
   }
   if (node.type === "expr") {
     validateExprScope(node.expr, scope, mutableVars, types);
+    return;
+  }
+  if (node.type === "while") {
+    inferExprType(node.condition, scope, mutableVars, types);
+    const scope_ = [...scope];
+    const mut_ = new Set(mutableVars);
+    const types_ = new Map(types);
+    for (const n of node.body) {
+      validateNodeScope(n, scope_, mut_, types_);
+    }
     return;
   }
 }
