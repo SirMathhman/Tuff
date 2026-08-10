@@ -799,4 +799,9 @@ mod tests {
     fn test_string_variable_index() {
         expect_valid("let str = \"apple\"; str[0]", vec![], 97);
     }
+
+    #[test]
+    fn test_char_from_string_index() {
+        expect_valid("let str = \"apple\"; let c = str[0]; c", vec![], 97);
+    }
 }
