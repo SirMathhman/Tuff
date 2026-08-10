@@ -149,7 +149,7 @@ impl Parser {
         while self.current() != Token::Eof {
             if self.current() == Token::Hash {
                 self.pos += 1;
-                return Err(CompileError {});
+                return Err(CompileError { message: "invalid token '#'".to_string() });
             }
             stmts.push(self.parse_stmt()?);
         }
@@ -170,7 +170,7 @@ impl Parser {
         self.pos += 1;
         let name = match self.current() {
             Token::Ident(ref s) => s.clone(),
-            _ => return Err(CompileError {}),
+            _ => return Err(CompileError { message: "expected identifier after 'let'".to_string() }),
         };
         self.pos += 1;
         // consume '='
@@ -220,7 +220,7 @@ impl Parser {
                 } else {
                     // Check if the variable is in scope
                     if !self.scope.contains(s) {
-                        return Err(CompileError {});
+                        return Err(CompileError { message: format!("undefined identifier '{}'", s) });
                     }
                     // Check if this is followed by .length
                     let var_name = s.clone();
@@ -238,9 +238,9 @@ impl Parser {
             }
             Token::Hash => {
                 self.pos += 1;
-                return Err(CompileError {});
+                return Err(CompileError { message: "invalid token '#'".to_string() });
             }
-            _ => return Err(CompileError {}),
+            _ => return Err(CompileError { message: "unexpected token".to_string() }),
         };
         // Handle indexing: args[1]
         if self.current() == Token::LBracket {
@@ -260,7 +260,7 @@ impl Parser {
                 }
                 return Ok(indexed);
             }
-            return Err(CompileError {});
+            return Err(CompileError { message: "expected ']'".to_string() });
         }
         Ok(base)
     }
@@ -419,11 +419,13 @@ fn codegen_expr_with_args_vars(
 // --- Compiler Entry ---
 
 #[derive(Debug)]
-struct CompileError {}
+struct CompileError {
+    message: String,
+}
 
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "compile error")
+        write!(f, "compile error: {}", self.message)
     }
 }
 
