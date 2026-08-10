@@ -19,6 +19,7 @@ enum Token {
     Eq,
     Amp,
     Star,
+    Str(String),
     Invalid(char),
     Eof,
 }
@@ -80,6 +81,7 @@ impl Tokenizer {
                 Token::RBracket
             }
             c if c.is_ascii_digit() => self.parse_num(),
+            '"' => self.parse_string(),
             c if c == '_' || c.is_ascii_alphabetic() => self.parse_ident(),
             c => {
                 self.pos += 1;
@@ -108,6 +110,20 @@ impl Tokenizer {
         Token::Ident(s)
     }
 
+    fn parse_string(&mut self) -> Token {
+        // consume opening quote
+        self.pos += 1;
+        let mut s = String::new();
+        while self.pos < self.chars.len() && self.chars[self.pos] != '"' {
+            s.push(self.chars[self.pos]);
+            self.pos += 1;
+        }
+        if self.pos < self.chars.len() {
+            self.pos += 1; // consume closing quote
+        }
+        Token::Str(s)
+    }
+
     fn skip_whitespace(&mut self) {
         while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
             self.pos += 1;
@@ -128,6 +144,7 @@ enum Expr {
     Index(Box<Expr>, Box<Expr>),
     Ref(Box<Expr>),
     Deref(Box<Expr>),
+    StrLit(String),
 }
 
 #[derive(Debug)]
@@ -272,6 +289,10 @@ impl Parser {
             Token::Num(n) => {
                 self.pos += 1;
                 Expr::Num(n)
+            }
+            Token::Str(s) => {
+                self.pos += 1;
+                Expr::StrLit(s)
             }
             Token::Ident(ref s) => {
                 self.pos += 1;
@@ -508,6 +529,11 @@ fn codegen_expr(expr: &Expr, ctx: &CodegenContext) -> String {
         Expr::Deref(inner) => {
             format!("*{}", codegen_expr(inner, ctx))
         }
+        Expr::StrLit(s) => {
+            // Escape backslashes first, then quotes for C string literal
+            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+            format!("\"{}\"", escaped)
+        }
     }
 }
 
@@ -718,5 +744,10 @@ mod tests {
     #[test]
     fn test_reference_and_dereference() {
         expect_valid("let x = 0; let y = &x; *y", vec![], 0);
+    }
+
+    #[test]
+    fn test_string_literal_index() {
+        expect_valid("\"apple\"[0]", vec![], 97);
     }
 }
