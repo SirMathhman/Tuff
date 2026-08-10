@@ -12,9 +12,12 @@ A compiler that translates Tuff source code to JavaScript, running on **Bun**.
 
 ## Architecture
 
-- **`index.ts`** — Core compiler. Export `compileTuffToJS(tuffSource: string): string` translates Tuff to JS.
-  - Parser chain: `parseExpression` → `parseAddition` → `parseNumber`. Currently supports integer literals and `+` (addition) only.
-  - Extracts the expression after the last `;` in the source.
+Single-file compiler in **`index.ts`**. Export `compileTuffToJS(tuffSource: string): string` translates Tuff to JS.
+
+- **Tokenizer** (`tokenize`) — Produces `Token[]` (Number, Identifier, operators, punctuation, Eof).
+- **Parser chain** — `parseStatements` → `parseExpression` → `parseAddition` → `parseMultiplication` → `parsePrimary`.
+- **Features**: integer literals, arithmetic (`+`, `-`, `*`, `/` with `Math.trunc`), parenthesized and braced blocks `{ }`, `let` declarations with shadowing.
+- **`parseStatementsInScope`** — Handles `let` bindings and expressions, wraps declarations in IIFEs.
 - **`index.test.ts`** — Tests. Helper `executeTuff()` compiles then runs generated JS via `new Function()`.
 
 ## Conventions
