@@ -21,7 +21,7 @@ function expectValid(
     if (actualExitCode !== expectedExitCode) {
       throw new Error(
         "Expected exit code '" +
-          expectValid +
+          expectedExitCode +
           "' but was actually '" +
           actualExitCode +
           "'. Generated: '" +
