@@ -5,6 +5,7 @@
 Tuff is a systems programming language designed with one fundamental principle: **zero undefined behavior and zero panics**. Every operation has defined behavior, every error is recoverable, and the language is safe even for AI-generated code and bare metal environments.
 
 Tuff combines:
+
 - **Rust-inspired** ownership and borrowing for memory safety
 - **TypeScript/Kotlin-inspired** type inference and developer ergonomics
 - **Refinement types** for compile-time range proofs
@@ -12,12 +13,14 @@ Tuff combines:
 - **C-level interoperability** as a first-class requirement
 
 ### Primary Stakeholders
+
 - Systems programmers who want safety without escape hatches
 - Embedded/bare metal developers who need guaranteed behavior
 - AI-assisted coding workflows that demand predictable outputs
 - Teams porting C codebases to a safer alternative
 
 ### Success Criteria
+
 - No undefined behavior in any valid Tuff program
 - No panic mechanism — all errors are recoverable
 - Seamless C FFI — call any C library without wrappers
@@ -30,15 +33,15 @@ Tuff combines:
 
 ### 2.1 Core Concepts
 
-| Concept | Description |
-|---------|-------------|
-| Ownership | Each value has exactly one owner; references are borrowed |
-| Lifetimes | Compile-time guarantee that references outlive their referents |
-| Contracts | Named sets of method signatures, fields, and generic bounds |
-| Refinement Types | Compile-time range proofs on numeric types |
-| Null Type | First-class `Null` type, distinct from `0` and pointers |
-| Result Types | All errors return `Result<T, E>` or `Option<T>` — never panic |
-| Continuations | Async/await compiled to continuation-passing form |
+| Concept          | Description                                                    |
+| ---------------- | -------------------------------------------------------------- |
+| Ownership        | Each value has exactly one owner; references are borrowed      |
+| Lifetimes        | Compile-time guarantee that references outlive their referents |
+| Contracts        | Named sets of method signatures, fields, and generic bounds    |
+| Refinement Types | Compile-time range proofs on numeric types                     |
+| Null Type        | First-class `Null` type, distinct from `0` and pointers        |
+| Result Types     | All errors return `Result<T, E>` or `Option<T>` — never panic  |
+| Continuations    | Async/await compiled to continuation-passing form              |
 
 ### 2.2 Type System Hierarchy
 
@@ -80,12 +83,14 @@ Type
 ### 2.3 State Transitions
 
 **Ownership Lifecycle:**
+
 ```
 Created → Owned → (Borrowed & / &mut) → Dropped
                  → Moved → New Owner → ... → Dropped
 ```
 
 **Key Rules:**
+
 - A value can have exactly one owner at a time
 - Immutable borrows (`&T`) can coexist with each other
 - Mutable borrow (`&mut T`) requires exclusive access
@@ -96,296 +101,511 @@ Created → Owned → (Borrowed & / &mut) → Dropped
 
 ## 3. Functional Requirements
 
-### 3.1 Syntax
+### 3.1 Syntax Overview
 
-Tuff uses C/Rust-like syntax with curly braces and semicolons. Parentheses are **required** in control flow conditions.
+Tuff is an **expression-oriented** language with C/Rust-like curly-brace syntax. Semicolons are **required** to terminate statements. Whitespace is **not** significant — braces delimit blocks.
+
+#### Comments
 
 ```tuff
-// Basic structure
-module my_package
+// Single-line comment
+/* Multi-line
+   block comment */
+```
 
-import std::io
-import std::collections::Vec
+#### Variable Declarations
 
-// Function definition with type inference
-fn greet(name: String) -> String {
-    let message = "Hello, " + name  // type inferred
-    return message
-}
+```tuff
+let x = 42;              // Immutable binding
+let mut y = 10;          // Mutable binding
+let z : I32 = 42;        // Explicit type annotation
+```
 
-// Control flow (parentheses required)
-fn classify(n: Int) -> String {
-    if (n > 0) {
-        return "positive"
-    } else if (n == 0) {
-        return "zero"
-    } else {
-        return "negative"
-    }
-}
+#### Type Aliases
 
-// Pattern matching (exhaustive)
-fn describe(value: Result<String, Error>) -> String {
-    match (value) {
-        Ok(s) => "Got: " + s,
-        Err(e) => "Error: " + e.message,
-    }
-}
+```tuff
+type Percentage = Int<0, 100>;
+type NullablePtr<T> = &T | Null;
+```
 
-// Nullable pointer
-type NullablePtr<T> = &T | Null
+#### Numeric Literals
 
-fn find_first(items: Vec<String>, target: String) -> NullablePtr<String> {
-    for (item in items) {
-        if (item == target) {
-            return &item
-        }
-    }
-    return Null
+```tuff
+42;           // Decimal
+0xFF;         // Hexadecimal
+0b1010;       // Binary
+0o77;         // Octal
+42U32;        // Type suffix
+1_000_000U64; // Underscore separators with type
+```
+
+#### String Literals
+
+```tuff
+"Hello, World!";      // Double-quoted string
+'X';                   // Character literal
+```
+
+#### Operators
+
+```tuff
+// Arithmetic
+let sum = a + b;
+let diff = a - b;
+let prod = a * b;
+let quot = a / b;
+let rem = a % b;
+
+// Comparison
+let eq = a == b;
+let ne = a != b;
+let lt = a < b;
+let gt = a > b;
+let le = a <= b;
+let ge = a >= b;
+
+// Logical
+let both = a && b;
+let either = a || b;
+let not_a = !a;
+
+// Bitwise
+let and_bits = a & b;
+let or_bits = a | b;
+let xor_bits = a ^ b;
+let shifted = a << 2;
+let right_shifted = a >> 1;
+
+// Compound assignment
+x += 1;
+x -= 1;
+x *= 2;
+// etc.
+```
+
+**No operator overloading** — operators work only on built-in types.
+
+#### Ternary Expression
+
+```tuff
+let msg = if (count == 0) then "empty" else "has items";
+```
+
+#### Implicit Return
+
+The last expression in a block is implicitly returned:
+
+```tuff
+fn square(x : I32) : I32 => x * x;
+
+fn classify(n : I32) : String => {
+    if (n > 0) then "positive" else "negative"  // Implicit return
 }
 ```
 
-### 3.2 Ownership and Borrowing
+#### Semicolons
+
+Semicolons are **required** after statements:
+
+```tuff
+let x = 5;
+let y = 10;
+let sum = x + y;
+```
+
+---
+
+### 3.2 Functions
+
+Functions use `:` for type annotations and `=>` is **required** for all function definitions — both short and multi-line:
+
+```tuff
+// Multi-line function (=> required)
+fn add(first : I32, second : I32) : I32 => {
+    let result = first + second;
+    return result;
+}
+
+// Single-expression function
+fn multiply(a : I32, b : I32) : I32 => a * b;
+
+// No return type (returns Unit)
+fn print_hello() : Unit => {
+    println("Hello!");
+}
+
+// Generic function
+fn first<T>(items : Vec<T>) : Option<T> => {
+    if (items.len() > 0) then Some(items[0]) else None
+}
+```
+
+#### Method Calls
+
+```tuff
+obj.method();
+vec.push(42);
+string.len();
+```
+
+---
+
+### 3.3 Structs
+
+```tuff
+struct Point {
+    x: F64,
+    y: F64,
+}
+
+struct Rectangle {
+    top_left: Point,
+    bottom_right: Point,
+}
+
+// Construction
+let p = Point { x: 0.0, y: 0.0 };
+let r = Rectangle { top_left: p, bottom_right: Point { x: 1.0, y: 1.0 } };
+
+// Field access
+let x = p.x;  // Auto-deref works through references
+```
+
+---
+
+### 3.4 Unions (Algebraic Data Types)
+
+Tuff uses union types defined as type aliases of `|`-separated types. Unions can hold **any type** — structs, primitives, arrays, Null, etc.
+
+```tuff
+// Define variant structs
+struct IntValue { value: I32 }
+struct StrValue { text: String }
+struct Empty {}
+
+// Union type
+type MyUnion = IntValue | StrValue | Empty | Null;
+
+// Construction
+let something : MyUnion = IntValue { value: 42 };
+let another : MyUnion = StrValue { text: "hello" };
+let nothing : MyUnion = Empty {};
+let null_val : MyUnion = Null;
+
+// Pattern matching
+match (something) {
+    case v : IntValue => println("Int: " + v.value.toString());
+    case v : StrValue => println("Str: " + v.text);
+    case Empty => println("Empty");
+    case Null => println("Null");
+}
+
+// Destructuring in patterns
+match (value) {
+    case { value } : IntValue => println("Value: " + value.toString());
+    case { text } : StrValue => println("Text: " + text);
+    case _ => println("Other");
+}
+```
+
+---
+
+### 3.5 Control Flow
+
+All conditions require **parentheses**.
+
+```tuff
+// If/else (expression — returns a value)
+let msg = if (count > 0) {
+    "has items"
+} else {
+    "empty"
+};
+
+// Ternary (shorthand)
+let sign = if (n >= 0) then "positive" else "negative";
+
+// Match (exhaustive pattern matching)
+match (result) {
+    case v : Ok => {
+        println("Success: " + v.data);
+    };
+    case e : Err => {
+        println("Error: " + e.message);
+    };
+}
+
+// While loop
+while (condition) {
+    // ...
+};
+
+// For loop with range
+for (i in 0..10) {
+    println(i.toString());
+};
+
+// For-in (iterator)
+for (item in collection) {
+    process(item);
+};
+
+// Labeled loops
+outer: for (x in items) {
+    for (y in items) {
+        if (x == y) {
+            break outer;
+        }
+    }
+};
+
+// No goto — structured control flow only
+```
+
+### 3.6 Ownership and Borrowing
 
 ```tuff
 // Ownership transfer
-fn take_ownership(value: Vec<Int>) -> Int {
-    let len = value.len()  // borrow
-    return len             // value dropped at end
+fn take_ownership(value : Vec<I32>) : I32 {
+    let len = value.len();  // borrow
+    return len;             // value dropped at end
 }
 
 // Borrowing
-fn first_element(items: &Vec<Int>) -> &Int {
-    return &items[0]  // returns borrow of element
+fn first_element(items : &Vec<I32>) : &I32 {
+    return &items[0];  // returns borrow of element
 }
 
 // Mutable borrow
-fn append_item(items: &mut Vec<Int>, item: Int) {
-    items.push(item)  // mutates through borrow
+fn append_item(items : &mut Vec<I32>, item : I32) : Unit {
+    items.push(item);  // mutates through borrow
 }
+
+// Dereferencing
+let val = *ptr;           // Explicit deref
+let field = ptr.field;    // Auto-deref for field access
 ```
 
-### 3.3 Lifetimes
+### 3.7 Lifetimes
 
 Tuff supports both **explicit** and **inferred** lifetimes:
 
 ```tuff
 // Inferred lifetime (compiler determines)
-fn longest(a: &String, b: &String) -> &String {
+fn longest(a : &String, b : &String) : &String => {
     if (a.len() >= b.len()) {
-        return a
+        return a;
     } else {
-        return b
+        return b;
     }
 }
 
 // Explicit lifetime annotation
-fn longest_explicit<'a>(a: &'a String, b: &'a String) -> &'a String {
+fn longest_explicit<'a>(a : &'a String, b : &'a String) : &'a String => {
     if (a.len() >= b.len()) {
-        return a
+        return a;
     } else {
-        return b
+        return b;
     }
 }
 ```
 
-### 3.4 Contracts
+### 3.8 Contracts
 
 The `contract` keyword defines method signatures, fields, and generic bounds:
 
 ```tuff
 // Basic contract
 contract Serializable {
-    fn serialize() -> String
-    fn deserialize(data: String) -> Result<Self, Error>
+    fn serialize() : String;
+    fn deserialize(data : String) : Result<Self, Error>;
 }
 
 // Contract with fields
 contract Resource {
-    id: UInt<0, MAX>
-    fn open() -> Result<Self, Error>
-    fn close() -> Result<(), Error>
+    id: UInt<0, MAX>;
+    fn open() : Result<Self, Error>;
+    fn close() : Result<Unit, Error>;
 }
 
 // Contract with generic bounds
-contract Container<T: Clone> {
-    fn insert(item: T) -> Result<(), Error>
-    fn remove(index: UInt<0, MAX>) -> Result<T, Error>
-    fn len() -> UInt<0, MAX>
+contract Container<T : Clone> {
+    fn insert(item : T) : Result<Unit, Error>;
+    fn remove(index : UInt<0, MAX>) : Result<T, Error>;
+    fn len() : UInt<0, MAX>;
 }
 
 // Implementing a contract
-struct MyList<T: Clone> {
-    items: Vec<T>
+struct MyList<T : Clone> {
+    items: Vec<T>,
 }
 
-impl Container<Int> for MyList<Int> {
-    fn insert(item: Int) -> Result<(), Error> {
-        self.items.push(item)
-        return Ok(())
+impl Container<I32> for MyList<I32> {
+    fn insert(item : I32) : Result<Unit, Error> {
+        self.items.push(item);
+        return Ok(());
     }
-    // ...
 }
 ```
 
-### 3.5 Generics
+### 3.9 Generics
 
-Generics use monomorphization (code duplicated per type):
+Generics use angle brackets `<T>` and monomorphization (code duplicated per type):
 
 ```tuff
-fn max<T: Ord>(a: T, b: T) -> T {
+fn max<T : Ord>(a : T, b : T) : T => {
     if (a >= b) {
-        return a
+        return a;
     } else {
-        return b
+        return b;
     }
 }
 
 // Usage
-let n = max(3, 5)        // T = Int
-let s = max("a", "b")    // T = String
+let n = max(3, 5);        // T = I32
+let s = max("a", "b");    // T = String
 ```
 
-### 3.6 Refinement Types
+### 3.10 Refinement Types
 
 Compile-time range proofs eliminate integer overflow:
 
 ```tuff
 // Range-constrained types
-type Percentage = Int<0, 100>
-type Port = UInt<0, 65535>
-type Index = UInt<0, MAX>
+type Percentage = Int<0, 100>;
+type Port = UInt<0, 65535>;
+type Index = UInt<0, MAX>;
 
-fn set_percentage(val: Percentage) {
+fn set_percentage(val : Percentage) : Unit {
     // Compiler proves val is in [0, 100]
-    self.pct = val
+    self.pct = val;
 }
 
 // Arithmetic with refinement
-fn add_safe(a: Int<0, 100>, b: Int<0, 100>) -> Result<Int<0, 100>, Overflow> {
-    let sum = a + b  // Compiler inserts range check
+fn add_safe(a : Int<0, 100>, b : Int<0, 100>) : Result<Int<0, 100>, Overflow> {
+    let sum = a + b;  // Compiler inserts range check
     if (sum >= 0 && sum <= 100) {
-        return Ok(sum)
+        return Ok(sum);
     } else {
-        return Err(Overflow)
+        return Err(Overflow);
     }
 }
 ```
 
-### 3.7 Null Safety
+### 3.11 Null Safety
 
 `Null` is a first-class type, not equal to `0`:
 
 ```tuff
 // Nullable pointer as union
-type NullablePtr<T> = &T | Null
+type NullablePtr<T> = &T | Null;
 
-fn process(node: NullablePtr<TreeNode>) -> String {
+fn process(node : NullablePtr<TreeNode>) : String => {
     match (node) {
-        &n => n.value.toString(),
-        Null => "empty",
+        case n : &TreeNode => n.value.toString();
+        case Null => "empty";
     }
 }
 
 // Null is its own type
-val nothing: Null = Null
+let nothing : Null = Null;
 // nothing != 0  // compile error: types differ
 ```
 
-### 3.8 Error Handling
+### 3.12 Error Handling
 
-All errors are recoverable — there is no panic:
+All errors are recoverable — there is no panic. The `?` operator propagates errors:
 
 ```tuff
 // Result type for fallible operations
-fn divide(a: Float, b: Float) -> Result<Float, DivByZero> {
+fn divide(a : F64, b : F64) : Result<F64, DivByZero> => {
     if (b == 0.0) {
-        return Err(DivByZero)
+        return Err(DivByZero);
     }
-    return Ok(a / b)
+    return Ok(a / b);
 }
 
 // Caller must handle
-fn calculate() -> Result<Float, Error> {
-    let result = divide(10.0, 0.0)?  // propagate error
-    return Ok(result)
+fn calculate() : Result<F64, Error> => {
+    let result = divide(10.0, 0.0)?;  // Propagate error
+    return Ok(result);
 }
 
 // Option for missing values
-fn find_key(map: Map<String, Int>, key: String) -> Option<Int> {
+fn find_key(map : Map<String, I32>, key : String) : Option<I32> => {
     if (map.contains(key)) {
-        return Some(map[key])
+        return Some(map[key]);
     }
-    return None
+    return None;
 }
 ```
 
-### 3.9 Async/Await
+### 3.13 Async/Await
 
 Continuation-passing form enables async even on bare metal:
 
 ```tuff
 // Async function
-async fn fetch_url(url: String) -> Result<String, NetworkError> {
-    let response = await http_get(url)
-    return Ok(response.body)
+async fn fetch_url(url : String) : Result<String, NetworkError> {
+    let response = await http_get(url);
+    return Ok(response.body);
 }
 
 // Usage
-async fn main() -> Result<(), Error> {
-    let data = await fetch_url("https://example.com")
-    println(data)
-    return Ok(())
+async fn main() : Result<Unit, Error> {
+    let data = await fetch_url("https://example.com");
+    println(data);
+    return Ok(());
 }
 
 // Compiled to continuation-passing:
 // fetch_url(url, fn(result) { ... })
 ```
 
-### 3.10 Concurrency
+### 3.13 Concurrency
 
 Thread safety enforced by ownership:
 
 ```tuff
 // Send-safe data (owned transfer between threads)
-fn spawn_task(data: Vec<Int>) -> Thread {
+fn spawn_task(data : Vec<I32>) : Thread => {
     return Thread::spawn(move || {
         process(data)  // data moved into thread
-    })
+    });
 }
 
 // Shared state with synchronization
 struct Counter {
-    value: AtomicInt
+    value: AtomicI32,
 }
 
-fn increment(counter: &Counter) {
-    counter.value.fetch_add(1)  // atomic, no data race
+fn increment(counter : &Counter) : Unit => {
+    counter.value.fetch_add(1);  // atomic, no data race
 }
 ```
 
-### 3.11 C Interoperability
+### 3.14 C Interoperability
 
 Seamless C FFI is critical:
 
 ```tuff
 // Import C functions
 extern "C" {
-    fn malloc(size: UInt) -> *Void
-    fn free(ptr: *Void) -> ()
-    fn printf(format: *Char, ...) -> Int
+    fn malloc(size : UInt) : *Void;
+    fn free(ptr : *Void) : Unit;
+    fn printf(format : *Char, ...) : Int;
 }
 
 // Call C libraries directly
-fn allocate_buffer(size: UInt) -> *U8 {
-    let ptr = malloc(size) as *U8
-    return ptr
+fn allocate_buffer(size : UInt) : *U8 => {
+    let ptr = malloc(size) as *U8;
+    return ptr;
 }
 
 // Export to C
 #[export_c]
-fn my_function(x: Int, y: Int) -> Int {
-    return x + y
+fn my_function(x : I32, y : I32) : I32 => {
+    return x + y;
 }
 ```
 
@@ -433,38 +653,39 @@ outer: for (x in items) {
 // No goto — structured control flow only
 ```
 
-### 3.13 Closures
+### 3.15 Closures
 
 Rust-style capture modes:
 
 ```tuff
 // Borrow capture (default)
-let multiplier = |x: Int| -> Int { x * factor }  // borrows factor
+let multiplier = |x : I32| : I32 => x * factor;  // borrows factor
 
 // Move capture
-let owned_closure = move |x: Int| -> Int { x * owned_data }
+let owned_closure = move |x : I32| : I32 => x * owned_data;
 
 // Mutable capture
-let mut counter = 0
-let increment = || -> () { counter += 1 }  // mutates capture
+let mut counter = 0;
+let increment = || : Unit => counter += 1;  // mutates capture
 ```
 
-### 3.14 Module System
+### 3.16 Module System
 
-Namespace-based modules:
+File path determines module path (no explicit module declarations):
 
 ```tuff
-// File: my_package::math::utils.tuff
-module my_package::math::utils
+// File: my_package/math/utils.tuff
+// Module path: my_package::math::utils
 
-pub fn add(a: Int, b: Int) -> Int {
-    return a + b
+out fn add(a : I32, b : I32) : I32 => {
+    return a + b;
 }
 
-// Import
-import my_package::math::utils::add
-import my_package::math::*  // wildcard
+// In another file:
+in my_package::math::utils::add;
 ```
+
+The `in` keyword imports (like dependency injection), and `out` marks public exports.
 
 ---
 
@@ -472,18 +693,18 @@ import my_package::math::*  // wildcard
 
 ### 4.1 Undefined Behaviors Eliminated
 
-| Behavior | Tuff's Approach |
-|----------|----------------|
-| Integer overflow | Refinement types + Result return |
-| Division by zero | Returns `Result<T, DivByZero>` |
-| Use-after-free | Ownership system prevents at compile time |
-| Data races | Ownership + `Send`/`Sync` contracts |
+| Behavior                 | Tuff's Approach                           |
+| ------------------------ | ----------------------------------------- |
+| Integer overflow         | Refinement types + Result return          |
+| Division by zero         | Returns `Result<T, DivByZero>`            |
+| Use-after-free           | Ownership system prevents at compile time |
+| Data races               | Ownership + `Send`/`Sync` contracts       |
 | Null pointer dereference | `Null` type + exhaustive pattern matching |
-| Buffer overflow | Bounds-checked arrays and slices |
-| Unaligned access | Compiler enforces alignment |
-| Uninitialized memory | All variables must be initialized |
-| Signed integer overflow | Defined behavior via refinement |
-| Dangling references | Lifetime system prevents |
+| Buffer overflow          | Bounds-checked arrays and slices          |
+| Unaligned access         | Compiler enforces alignment               |
+| Uninitialized memory     | All variables must be initialized         |
+| Signed integer overflow  | Defined behavior via refinement           |
+| Dangling references      | Lifetime system prevents                  |
 
 ### 4.2 Error Recovery in Bare Metal
 
@@ -491,10 +712,10 @@ In bare metal environments, the caller must handle all errors:
 
 ```tuff
 // Entry point must return Result
-fn main() -> Result<(), FatalError> {
+fn main() : Result<Unit, FatalError> => {
     // All errors propagated up
     // No panic, no crash
-    return hardware_init()?
+    return hardware_init()?;
 }
 
 // The compiler enforces that all error paths are handled
@@ -505,10 +726,10 @@ fn main() -> Result<(), FatalError> {
 
 ```tuff
 // Always returns Result, never crashes
-let result: Result<Float, DivByZero> = 1.0 / 0.0
+let result : Result<F64, DivByZero> = 1.0 / 0.0;
 match (result) {
-    Ok(val) => println("Result: " + val.toString()),
-    Err(DivByZero) => println("Cannot divide by zero"),
+    case v : Ok => println("Result: " + v.toString());
+    case e : Err => println("Cannot divide by zero");
 }
 ```
 
@@ -516,11 +737,11 @@ match (result) {
 
 ```tuff
 // Bounds checked, returns Result
-fn get_item(arr: &Vec<Int>, index: Int) -> Result<Int, IndexOutOfBounds> {
+fn get_item(arr : &Vec<I32>, index : I32) : Result<I32, IndexOutOfBounds> => {
     if (index >= 0 && index < arr.len()) {
-        return Ok(arr[index])
+        return Ok(arr[index]);
     }
-    return Err(IndexOutOfBounds)
+    return Err(IndexOutOfBounds);
 }
 ```
 
@@ -529,28 +750,33 @@ fn get_item(arr: &Vec<Int>, index: Int) -> Result<Int, IndexOutOfBounds> {
 ## 5. Non-Functional Requirements
 
 ### 5.1 Performance
+
 - Zero-cost abstractions: generics monomorphize, inlining applied
 - No hidden allocations: stack allocation by default, heap explicit
 - Async has no runtime overhead on bare metal (continuation-passing)
 - Bounds checks may be elided when refinement types prove safety
 
 ### 5.2 Compilation
+
 - Initial target: C (compiled via GCC/Clang)
 - Future target: LLVM IR (direct native code generation)
 - Compile times: target < 1s for small modules, < 30s for large crates
 
 ### 5.3 Safety
+
 - 100% of valid Tuff programs have defined behavior
 - No `unsafe` keyword — no escape hatch
 - Safe for AI-generated code: no edge cases that panic
 - Safe for bare metal: no OS dependencies for core language
 
 ### 5.4 Interoperability
+
 - Call any C function directly via `extern "C"`
 - Export Tuff functions to C via `#[export_c]`
 - Compatible with C ABI for structs and enums
 
 ### 5.5 Developer Experience
+
 - Type inference reduces boilerplate
 - Exhaustive pattern matching catches missing cases
 - Refinement types catch range errors at compile time
@@ -561,15 +787,18 @@ fn get_item(arr: &Vec<Int>, index: Int) -> Result<Int, IndexOutOfBounds> {
 ## 6. Data Requirements
 
 ### 6.1 Input Formats
+
 - `.tuff` source files (UTF-8 encoded)
 - C header files for FFI (`extern "C"` blocks)
 
 ### 6.2 Output Formats
+
 - C source code (initial backend)
 - LLVM IR (future backend)
 - Native binaries (via C compiler or LLVM)
 
 ### 6.3 Standard Library Data Structures
+
 - `Vec<T>` — growable heap-allocated vector
 - `Map<K, V>` — hash map or tree map
 - `Set<T>` — hash set or tree set
@@ -581,11 +810,14 @@ fn get_item(arr: &Vec<Int>, index: Int) -> Result<Int, IndexOutOfBounds> {
 ## 7. External Dependencies
 
 ### 7.1 Compiler Dependencies
+
 - GCC or Clang (for C backend)
 - LLVM (future native backend)
 
 ### 7.2 Package Manager (Future)
+
 Plugin-based dependency resolution supporting:
+
 - GitHub Releases
 - GitLab Packages
 - Azure Artifacts
@@ -593,6 +825,7 @@ Plugin-based dependency resolution supporting:
 - Custom registries (plugin interface)
 
 ### 7.3 C Libraries
+
 - libc (for I/O, memory, etc.)
 - Any C library via FFI
 
@@ -601,18 +834,21 @@ Plugin-based dependency resolution supporting:
 ## 8. Constraints and Assumptions
 
 ### 8.1 Technical Constraints
+
 - Initial compiler generates C — limited by C's capabilities
 - No garbage collection — ownership-based memory management only
 - No runtime type information (RTTI) — compile-time type safety only
 - No macros in v1 — language simplicity prioritized
 
 ### 8.2 Design Assumptions
+
 - Developers familiar with Rust, C, or TypeScript
 - Target platforms support C compilation
 - Bare metal targets have minimal memory (KB range)
 - AI-generated code is a primary use case
 
 ### 8.3 Business Assumptions
+
 - Open-source distribution
 - Community-driven standard library growth
 - Gradual migration from C codebases is a key adoption path
@@ -655,76 +891,76 @@ The following areas are acknowledged as TBD and require future decisions:
 
 ## Appendix A: Language Comparison
 
-| Feature | Tuff | Rust | C | Kotlin | TypeScript |
-|---------|------|------|---|--------|------------|
-| Undefined Behavior | None | Some (unsafe) | Extensive | None | None |
-| Panics | No | Yes | N/A | No | No |
-| Memory Safety | Ownership | Ownership | Manual | GC | GC |
-| Null Safety | `Null` type | `Option<T>` | Raw pointers | `T?` | `T \| null` |
-| Integer Overflow | Result/Refinement | Wrapping/Panic | UB | Checked | Checked |
-| Async | Continuation-passing | Futures | Callbacks | Coroutines | Promises |
-| FFI | C (native) | C (unsafe) | N/A | Limited | None |
-| Type Inference | Yes | Limited | No | Yes | Yes |
-| Generics | Monomorphization | Monomorphization | Macros | Erased | Erased |
+| Feature            | Tuff                 | Rust             | C            | Kotlin     | TypeScript  |
+| ------------------ | -------------------- | ---------------- | ------------ | ---------- | ----------- |
+| Undefined Behavior | None                 | Some (unsafe)    | Extensive    | None       | None        |
+| Panics             | No                   | Yes              | N/A          | No         | No          |
+| Memory Safety      | Ownership            | Ownership        | Manual       | GC         | GC          |
+| Null Safety        | `Null` type          | `Option<T>`      | Raw pointers | `T?`       | `T \| null` |
+| Integer Overflow   | Result/Refinement    | Wrapping/Panic   | UB           | Checked    | Checked     |
+| Async              | Continuation-passing | Futures          | Callbacks    | Coroutines | Promises    |
+| FFI                | C (native)           | C (unsafe)       | N/A          | Limited    | None        |
+| Type Inference     | Yes                  | Limited          | No           | Yes        | Yes         |
+| Generics           | Monomorphization     | Monomorphization | Macros       | Erased     | Erased      |
 
 ## Appendix B: Sample Program
 
 ```tuff
-module main
+// File: main.tuff
 
-import std::io
-import std::collections::Vec
-import std::result::{Ok, Err, Result}
+in std::io;
+in std::collections::Vec;
+in std::result::{Ok, Err, Result};
 
 // Contract for sortable types
 contract Ord {
-    fn less_than(self: &Self, other: &Self) -> Bool
+    fn less_than(self : &Self, other : &Self) : Bool;
 }
 
-// Implement for Int
-impl Ord for Int {
-    fn less_than(self: &Int, other: &Int) -> Bool {
-        return *self < *other
+// Implement for I32
+impl Ord for I32 {
+    fn less_than(self : &I32, other : &I32) : Bool => {
+        return *self < *other;
     }
 }
 
 // Generic sort with contract bound
-fn bubble_sort<T: Ord>(items: &mut Vec<T>) -> Result<(), Error> {
-    let n = items.len()
+fn bubble_sort<T : Ord>(items : &mut Vec<T>) : Result<Unit, Error> => {
+    let n = items.len();
     for (i in 0..n) {
         for (j in 0..(n - 1)) {
             if (items[j].less_than(&items[j + 1]) == false) {
                 // Swap
-                let temp = items[j]
-                items[j] = items[j + 1]
-                items[j + 1] = temp
+                let temp = items[j];
+                items[j] = items[j + 1];
+                items[j + 1] = temp;
             }
         }
-    }
-    return Ok(())
+    };
+    return Ok(());
 }
 
 // Main entry point — must handle all errors
-fn main() -> Result<(), Error> {
-    let mut numbers = Vec::new()
-    numbers.push(5)
-    numbers.push(2)
-    numbers.push(8)
-    numbers.push(1)
+fn main() : Result<Unit, Error> => {
+    let mut numbers = Vec::new();
+    numbers.push(5);
+    numbers.push(2);
+    numbers.push(8);
+    numbers.push(1);
 
     // Sort — must handle Result
-    let sort_result = bubble_sort(&mut numbers)
+    let sort_result = bubble_sort(&mut numbers);
     match (sort_result) {
-        Ok(()) => {
+        case v : Ok => {
             for (n in numbers) {
-                io::println(n.toString())
-            }
-        },
-        Err(e) => {
-            io::println("Sort failed: " + e.message)
-        },
-    }
+                io::println(n.toString());
+            };
+        };
+        case e : Err => {
+            io::println("Sort failed: " + e.message);
+        };
+    };
 
-    return Ok(())
+    return Ok(());
 }
 ```
