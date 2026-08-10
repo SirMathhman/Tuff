@@ -267,6 +267,8 @@ fn codegen(stmts: &[Stmt]) -> String {
     let mut args_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
     // Track which variables hold args[index] (so .length generates strlen(argv[index]))
     let mut args_index_vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    // Track which variables have already been declared (for reassignment support)
+    let mut declared_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, value) => {
@@ -279,11 +281,21 @@ fn codegen(stmts: &[Stmt]) -> String {
                     // Skip generating int declaration for args[index] vars (argv[i] is char*, not int)
                     continue;
                 }
-                buf.push_str(&format!(
-                    " int {} = {};",
-                    name,
-                    codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
-                ));
+                let is_reassign = declared_vars.contains(name);
+                declared_vars.insert(name.clone());
+                if is_reassign {
+                    buf.push_str(&format!(
+                        " {} = {};",
+                        name,
+                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
+                    ));
+                } else {
+                    buf.push_str(&format!(
+                        " int {} = {};",
+                        name,
+                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
+                    ));
+                }
             }
             Stmt::Expr(expr) => {
                 buf.push_str(&format!(
@@ -558,5 +570,10 @@ mod tests {
     #[test]
     fn test_let_args_index_chained() {
         expect_valid("let x = args; let arg = args[1]; let c = arg[0]; c", vec!["apple".to_string()], 97);
+    }
+
+    #[test]
+    fn test_variable_reassignment() {
+        expect_valid("let x = 0; let x = 1; x", vec![], 1);
     }
 }
