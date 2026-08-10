@@ -268,11 +268,58 @@ function genExpr(expr: Expr): string {
   throw new Error("Unknown expression type");
 }
 
+// --- Scope Validation ---
+
+function validateScopes(nodes: AstNode[]): void {
+  const scope: string[] = [];
+  for (const node of nodes) {
+    if (node.type === "decl") {
+      scope.push(node.name);
+    } else if (node.type === "let") {
+      validateExprScopes(node.init, scope);
+      scope.push(node.name);
+    } else if (node.type === "expr") {
+      validateExprScopes(node.expr, scope);
+    }
+  }
+}
+
+function validateExprScopes(expr: Expr, scope: string[]): void {
+  if (expr.type === "number") {
+    return;
+  }
+  if (expr.type === "identifier") {
+    if (!scope.includes(expr.name)) {
+      throw new Error(`Undefined variable: ${expr.name}`);
+    }
+    return;
+  }
+  if (expr.type === "binary") {
+    validateExprScopes(expr.left, scope);
+    validateExprScopes(expr.right, scope);
+    return;
+  }
+  if (expr.type === "group") {
+    // Block creates a new scope that inherits from outer scope
+    const blockScope = [...scope];
+    for (const node of expr.nodes) {
+      if (node.type === "let") {
+        validateExprScopes(node.init, blockScope);
+        blockScope.push(node.name);
+      } else if (node.type === "expr") {
+        validateExprScopes(node.expr, blockScope);
+      }
+    }
+    return;
+  }
+}
+
 // --- Compiler ---
 
 export function compileTuffToJS(tuffSource: string): string {
   const tokens = tokenize(tuffSource);
   const parser = new Parser(tokens);
   const ast = parser.parse();
+  validateScopes(ast);
   return generateJS(ast);
 }
