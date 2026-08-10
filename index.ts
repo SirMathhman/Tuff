@@ -91,7 +91,7 @@ type Expr =
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr }
-  | { type: "if"; condition: Expr; thenExpr: Expr; elseExpr: Expr | null };
+  | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null };
 
 type VarType = "number" | "boolean";
 
@@ -133,7 +133,12 @@ class Parser {
       }
     }
     // Fall through to parseExprNode for expressions and `{` grouping
-    return this.parseExprNode();
+    const node = this.parseExprNode();
+    const semi = this.peek();
+    if (semi.type === "punct" && semi.value === ";") {
+      this.consume(); // ";"
+    }
+    return node;
   }
 
   parseLetDecl(): AstNode {
@@ -246,14 +251,14 @@ class Parser {
         throw new Error("Expected ')' after condition");
       }
       this.consume(); // ")"
-      const thenExpr = this.parseExpr();
+      const thenNode = this.parseStmt(false);
       const elseTok = this.peek();
       if (elseTok.type === "keyword" && elseTok.value === "else") {
         this.consume(); // "else"
-        const elseExpr = this.parseExpr();
-        return { type: "if", condition, thenExpr, elseExpr };
+        const elseNode = this.parseStmt(false);
+        return { type: "if", condition, thenNode, elseNode };
       }
-      return { type: "if", condition, thenExpr, elseExpr: null };
+      return { type: "if", condition, thenNode, elseNode: null };
     }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
@@ -355,7 +360,9 @@ function genExpr(expr: Expr): string {
     return `(${parts.join(",")})`;
   }
   if (expr.type === "if") {
-    return `(${genExpr(expr.condition)}) ? ${genExpr(expr.thenExpr)} : ${expr.elseExpr ? genExpr(expr.elseExpr) : "0"}`;
+    const thenJs = genNode(expr.thenNode, (e) => e).replace(/;$/, "");
+    const elseJs = expr.elseNode ? genNode(expr.elseNode, (e) => e).replace(/;$/, "") : "0";
+    return `(${genExpr(expr.condition)}) ? ${thenJs} : ${elseJs}`;
   }
   throw new Error("Unknown expression type");
 }
@@ -434,13 +441,26 @@ function validateExprScope(expr: Expr, scope: string[], mutableVars: Set<string>
     return;
   }
   if (expr.type === "if") {
-    validateExprScope(expr.thenExpr, scope, mutableVars, types);
-    if (expr.elseExpr) {
-      validateExprScope(expr.elseExpr, scope, mutableVars, types);
+    validateNodeScope(expr.thenNode, scope, mutableVars, types);
+    if (expr.elseNode) {
+      validateNodeScope(expr.elseNode, scope, mutableVars, types);
     }
     return;
   }
   inferExprType(expr, scope, mutableVars, types);
+}
+
+function inferNodeType(node: AstNode, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
+  if (node.type === "expr") {
+    return inferExprType(node.expr, scope, mutableVars, types);
+  }
+  if (node.type === "let") {
+    return types.get(node.name)!;
+  }
+  if (node.type === "assign") {
+    return types.get(node.name)!;
+  }
+  throw new Error("Node type cannot be inferred");
 }
 
 function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
@@ -473,11 +493,11 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     throw new Error("Block used as expression must end with an expression");
   }
   if (expr.type === "if") {
-    if (!expr.elseExpr) {
+    if (!expr.elseNode) {
       throw new Error("If used as expression must have an else branch");
     }
-    const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types);
-    const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types);
+    const thenType = inferNodeType(expr.thenNode, scope, mutableVars, types);
+    const elseType = inferNodeType(expr.elseNode, scope, mutableVars, types);
     if (thenType !== elseType) {
       throw new Error(`If branches must have the same type: ${thenType} vs ${elseType}`);
     }
