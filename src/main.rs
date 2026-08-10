@@ -377,6 +377,13 @@ fn codegen_expr_with_args_vars(
             if matches!(target.as_ref(), Expr::Args) {
                 return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars, args_index_vars));
             }
+            // If target is a var that holds args[index], generate argv[index][sub_index]
+            if let Expr::Var(name) = target.as_ref() {
+                if let Some(idx_str) = args_index_vars.get(name) {
+                    let sub_idx = codegen_expr_with_args_vars(index, args_vars, args_index_vars);
+                    return format!("argv[{}][{}]", idx_str, sub_idx);
+                }
+            }
             format!(
                 "{}[{}]",
                 codegen_expr_with_args_vars(target, args_vars, args_index_vars),
@@ -541,5 +548,10 @@ mod tests {
     #[test]
     fn test_args_index_length() {
         expect_valid("let x = args; args[1].length", vec!["foo".to_string()], 3);
+    }
+
+    #[test]
+    fn test_let_args_index_nested() {
+        expect_valid("let x = args; let arg = args[1]; arg[0]", vec!["apple".to_string()], 97);
     }
 }
