@@ -110,3 +110,7 @@ test('executeTuff("let x = if (true) 2 else 3; x") => 2', () => {
 test('executeTuff("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
   expect(executeTuff("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
 });
+
+test('executeTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } x") => 2', () => {
+  expect(executeTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } x")).toBe(2);
+});
