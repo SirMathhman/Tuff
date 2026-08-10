@@ -234,19 +234,14 @@ impl Parser {
     }
 
     fn parse_compound_assign(&mut self, name: &str, _op: Token, _kind: fn(String, Expr) -> Stmt) -> Result<Stmt, CompileError> {
-        if !self.mutable_vars.contains(name) {
-            return Err(CompileError { message: format!("cannot assign to immutable variable '{}'", name) });
-        }
-        self.pos += 1; // consume identifier
-        self.pos += 1; // consume operator
-        let value = self.parse_expr()?;
-        if self.current() == Token::Semicolon {
-            self.pos += 1;
-        }
-        Ok(Stmt::CompoundAdd(name.to_string(), value))
+        Ok(Stmt::CompoundAdd(name.to_string(), self.parse_assignment_body(name)?))
     }
 
     fn parse_assign(&mut self, name: &str, _op: Token, kind: fn(String, Expr) -> Stmt) -> Result<Stmt, CompileError> {
+        Ok(kind(name.to_string(), self.parse_assignment_body(name)?))
+    }
+
+    fn parse_assignment_body(&mut self, name: &str) -> Result<Expr, CompileError> {
         if !self.mutable_vars.contains(name) {
             return Err(CompileError { message: format!("cannot assign to immutable variable '{}'", name) });
         }
@@ -256,7 +251,7 @@ impl Parser {
         if self.current() == Token::Semicolon {
             self.pos += 1;
         }
-        Ok(kind(name.to_string(), value))
+        Ok(value)
     }
 
     fn parse_let(&mut self) -> Result<Stmt, CompileError> {
