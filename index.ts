@@ -3,8 +3,25 @@
 type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" | ".." | "=>" | ">>" }
-  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" | "match" | "case" }
+  | {
+      type: "op";
+      value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" | ".." | "=>" | ">>";
+    }
+  | {
+      type: "keyword";
+      value:
+        | "in"
+        | "let"
+        | "mut"
+        | "if"
+        | "else"
+        | "while"
+        | "for"
+        | "break"
+        | "continue"
+        | "match"
+        | "case";
+    }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" }
   | { type: "eof" };
@@ -50,8 +67,34 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "break" || ident === "continue" || ident === "match" || ident === "case") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" | "match" | "case" });
+      if (
+        ident === "in" ||
+        ident === "let" ||
+        ident === "mut" ||
+        ident === "if" ||
+        ident === "else" ||
+        ident === "while" ||
+        ident === "for" ||
+        ident === "break" ||
+        ident === "continue" ||
+        ident === "match" ||
+        ident === "case"
+      ) {
+        tokens.push({
+          type: "keyword",
+          value: ident as
+            | "in"
+            | "let"
+            | "mut"
+            | "if"
+            | "else"
+            | "while"
+            | "for"
+            | "break"
+            | "continue"
+            | "match"
+            | "case",
+        });
       } else if (ident === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (ident === "false") {
@@ -168,7 +211,11 @@ class Parser {
     }
     if (tok.type === "identifier") {
       const next = this.tokens[this.pos + 1];
-      if (next && (next.type === "punct" && next.value === "=" || next.type === "op" && next.value === "+=")) {
+      if (
+        next &&
+        ((next.type === "punct" && next.value === "=") ||
+          (next.type === "op" && next.value === "+="))
+      ) {
         return this.parseAssignStmt();
       }
     }
@@ -233,7 +280,11 @@ class Parser {
     const parsedRange = this.parseExpr();
     let rangeExpr: Expr;
     if (parsedRange.type === "binary" && parsedRange.op === "..") {
-      rangeExpr = { type: "range", start: parsedRange.left, end: parsedRange.right };
+      rangeExpr = {
+        type: "range",
+        start: parsedRange.left,
+        end: parsedRange.right,
+      };
     } else if (parsedRange.type === "identifier") {
       rangeExpr = parsedRange;
     } else {
@@ -279,7 +330,12 @@ class Parser {
     let value: Expr;
     if (opTok.type === "op" && opTok.value === "+=") {
       this.consume(); // "+="
-      value = { type: "binary", op: "+", left: { type: "identifier", name }, right: this.parseExpr() };
+      value = {
+        type: "binary",
+        op: "+",
+        left: { type: "identifier", name },
+        right: this.parseExpr(),
+      };
     } else if (opTok.type === "punct" && opTok.value === "=") {
       this.consume(); // "="
       value = this.parseExpr();
@@ -317,7 +373,8 @@ class Parser {
     let left = this.parsePrimary();
     while (true) {
       const next = this.peek();
-      if (next.type !== "op" || next.value === "=>" || next.value === ">>") break;
+      if (next.type !== "op" || next.value === "=>" || next.value === ">>")
+        break;
       this.consume();
       const right = this.parsePrimary();
       left = { type: "binary", op: next.value, left, right };
@@ -459,11 +516,11 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
     return wrapExpr(genExpr(node.expr));
   }
   if (node.type === "while") {
-    const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
+    const bodyJs = node.body.map((n) => genNode(n, (e) => `${e};`)).join("");
     return `while (${genExpr(node.condition)}) {${bodyJs}}`;
   }
   if (node.type === "for") {
-    const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
+    const bodyJs = node.body.map((n) => genNode(n, (e) => `${e};`)).join("");
     const startJs = genRangeStart(node.rangeExpr);
     const endJs = genRangeEnd(node.rangeExpr);
     return `for (let ${node.varName}=${startJs}; ${node.varName}<${endJs}; ${node.varName}++) {${bodyJs}}`;
@@ -478,7 +535,9 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
 }
 
 function generateJS(nodes: AstNode[]): string {
-  const lines = nodes.map((n) => genNode(n, (e) => `process.exit(Number(${e}));`));
+  const lines = nodes.map((n) =>
+    genNode(n, (e) => `process.exit(Number(${e}));`),
+  );
   return lines.filter((l) => l).join("\n");
 }
 
@@ -528,23 +587,27 @@ function genExpr(expr: Expr): string {
       throw new Error("Block with declarations must end with an expression");
     }
     // Simple grouping: generate all nodes as comma expression
-    const parts = expr.nodes.map(n => genNode(n, (e) => e).replace(/;$/, ""));
+    const parts = expr.nodes.map((n) => genNode(n, (e) => e).replace(/;$/, ""));
     if (parts.length === 0) return "(0)";
     return `(${parts.join(",")})`;
   }
   if (expr.type === "if") {
     const thenJs = genNode(expr.thenNode, (e) => e).replace(/;$/, "");
-    const elseJs = expr.elseNode ? genNode(expr.elseNode, (e) => e).replace(/;$/, "") : "0";
+    const elseJs = expr.elseNode
+      ? genNode(expr.elseNode, (e) => e).replace(/;$/, "")
+      : "0";
     return `(${genExpr(expr.condition)}) ? ${thenJs} : ${elseJs}`;
   }
   if (expr.type === "match") {
     const targetJs = genExpr(expr.target);
-    const casesJs = expr.cases.map(c => {
-      if (c.pattern.type === "identifier" && c.pattern.name === "_") {
-        return `default:{return ${genExpr(c.body)};}`;
-      }
-      return `case ${genExpr(c.pattern)}:{return ${genExpr(c.body)};}`;
-    }).join("");
+    const casesJs = expr.cases
+      .map((c) => {
+        if (c.pattern.type === "identifier" && c.pattern.name === "_") {
+          return `default:{return ${genExpr(c.body)};}`;
+        }
+        return `case ${genExpr(c.pattern)}:{return ${genExpr(c.body)};}`;
+      })
+      .join("");
     return `(function(t){switch(t){${casesJs}}})(${targetJs})`;
   }
   throw new Error("Unknown expression type");
@@ -565,7 +628,12 @@ function validateScopes(nodes: AstNode[]): void {
   }
 }
 
-function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
+function validateNodeScope(
+  node: AstNode,
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): void {
   if (node.type === "decl") return;
   if (node.type === "let") {
     const initType = inferExprType(node.init, scope, mutableVars, types);
@@ -620,7 +688,12 @@ function assertDefined(name: string, scope: string[]): void {
   }
 }
 
-function validateRangeExpr(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
+function validateRangeExpr(
+  expr: Expr,
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): void {
   if (expr.type === "range") {
     inferExprType(expr.start, scope, mutableVars, types);
     inferExprType(expr.end, scope, mutableVars, types);
@@ -655,7 +728,13 @@ function genRangeEnd(expr: Expr): string {
   throw new Error("Invalid range expression");
 }
 
-function validateAssignType(varName: string, value: Expr, types: Map<string, VarType>, scope: string[], mutableVars: Set<string>): void {
+function validateAssignType(
+  varName: string,
+  value: Expr,
+  types: Map<string, VarType>,
+  scope: string[],
+  mutableVars: Set<string>,
+): void {
   const varType = types.get(varName)!;
   const valType = inferExprType(value, scope, mutableVars, types);
   if (varType !== valType) {
@@ -663,7 +742,13 @@ function validateAssignType(varName: string, value: Expr, types: Map<string, Var
   }
 }
 
-function validateAssign(name: string, value: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
+function validateAssign(
+  name: string,
+  value: Expr,
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): void {
   if (!scope.includes(name)) {
     throw new Error(`Undefined variable: ${name}`);
   }
@@ -677,7 +762,12 @@ function isGroupExpr(expr: Expr): expr is { type: "group"; nodes: AstNode[] } {
   return expr.type === "group";
 }
 
-function validateGroupScope(expr: { type: "group"; nodes: AstNode[] }, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): [string[], Set<string>, Map<string, VarType>] {
+function validateGroupScope(
+  expr: { type: "group"; nodes: AstNode[] },
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): [string[], Set<string>, Map<string, VarType>] {
   const scope_ = [...scope];
   const mut_ = new Set(mutableVars);
   const types_ = new Map(types);
@@ -687,7 +777,12 @@ function validateGroupScope(expr: { type: "group"; nodes: AstNode[] }, scope: st
   return [scope_, mut_, types_];
 }
 
-function validateExprScope(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
+function validateExprScope(
+  expr: Expr,
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): void {
   if (isGroupExpr(expr)) {
     validateGroupScope(expr, scope, mutableVars, types);
     return;
@@ -702,7 +797,12 @@ function validateExprScope(expr: Expr, scope: string[], mutableVars: Set<string>
   inferExprType(expr, scope, mutableVars, types);
 }
 
-function inferNodeType(node: AstNode, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
+function inferNodeType(
+  node: AstNode,
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): VarType {
   if (node.type === "expr") {
     return inferExprType(node.expr, scope, mutableVars, types);
   }
@@ -715,7 +815,12 @@ function inferNodeType(node: AstNode, scope: string[], mutableVars: Set<string>,
   throw new Error("Node type cannot be inferred");
 }
 
-function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
+function inferExprType(
+  expr: Expr,
+  scope: string[],
+  mutableVars: Set<string>,
+  types: Map<string, VarType>,
+): VarType {
   if (expr.type === "number") {
     return "number";
   }
@@ -736,7 +841,12 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     return types.get(expr.name)!;
   }
   if (isGroupExpr(expr)) {
-    const [scope_, mut_, types_] = validateGroupScope(expr, scope, mutableVars, types);
+    const [scope_, mut_, types_] = validateGroupScope(
+      expr,
+      scope,
+      mutableVars,
+      types,
+    );
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {
       return inferExprType(last.expr, scope_, mut_, types_);
@@ -750,7 +860,9 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     const thenType = inferNodeType(expr.thenNode, scope, mutableVars, types);
     const elseType = inferNodeType(expr.elseNode, scope, mutableVars, types);
     if (thenType !== elseType) {
-      throw new Error(`If branches must have the same type: ${thenType} vs ${elseType}`);
+      throw new Error(
+        `If branches must have the same type: ${thenType} vs ${elseType}`,
+      );
     }
     return thenType;
   }
