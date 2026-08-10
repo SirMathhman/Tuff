@@ -1,5 +1,7 @@
 import type { Token, AstNode, Expr, IntType } from "./types";
 
+const INT_TYPES: IntType[] = ["U8", "I8", "U16", "I16", "U32", "I32"];
+
 export class Parser {
   private pos = 0;
 
@@ -244,7 +246,11 @@ export class Parser {
       const typeTok = this.peek();
       if (typeTok.type === "identifier") {
         this.consume();
-        left = { type: "is", value: left, typeAnnotation: typeTok.value as IntType };
+        const typeName = typeTok.value as IntType;
+        if (!INT_TYPES.includes(typeName)) {
+          throw new Error(`Invalid integer type: ${typeName}`);
+        }
+        left = { type: "is", value: left, typeAnnotation: typeName };
       } else {
         throw new Error("Expected type after 'is'");
       }
