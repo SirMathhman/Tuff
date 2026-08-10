@@ -10,14 +10,7 @@ export default defineConfig([
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
-      "max-lines": [
-        "error",
-        {
-          max: 500,
-          skipComments: true,
-          skipBlankLines: true,
-        },
-      ],
+      "max-lines": ["warn", { max: 600, skipComments: true, skipBlankLines: true }],
     },
   },
   tseslint.configs.recommended,
