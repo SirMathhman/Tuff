@@ -352,6 +352,14 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
   }
 }
 
+function validateAssignType(varName: string, value: Expr, types: Map<string, VarType>, scope: string[], mutableVars: Set<string>): void {
+  const varType = types.get(varName)!;
+  const valType = inferExprType(value, scope, mutableVars, types);
+  if (varType !== valType) {
+    throw new Error(`Type mismatch: cannot assign ${valType} to ${varType}`);
+  }
+}
+
 function validateAssign(name: string, value: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
   if (!scope.includes(name)) {
     throw new Error(`Undefined variable: ${name}`);
@@ -359,11 +367,7 @@ function validateAssign(name: string, value: Expr, scope: string[], mutableVars:
   if (!mutableVars.has(name)) {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
   }
-  const varType = types.get(name)!;
-  const valType = inferExprType(value, scope, mutableVars, types);
-  if (varType !== valType) {
-    throw new Error(`Type mismatch: cannot assign ${valType} to ${varType}`);
-  }
+  validateAssignType(name, value, types, scope, mutableVars);
 }
 
 function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
@@ -386,12 +390,8 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     return "number";
   }
   if (expr.type === "assign") {
-    const varType = types.get(expr.name)!;
-    const valType = inferExprType(expr.value, scope, mutableVars, types);
-    if (varType !== valType) {
-      throw new Error(`Type mismatch: cannot assign ${valType} to ${varType}`);
-    }
-    return varType;
+    validateAssignType(expr.name, expr.value, types, scope, mutableVars);
+    return types.get(expr.name)!;
   }
   if (expr.type === "group") {
     const scope_ = [...scope];
