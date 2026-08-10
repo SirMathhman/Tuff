@@ -111,6 +111,7 @@ function parseStatementsInScope(
   stopType: string,
 ): string {
   const parts: string[] = [];
+  const mutableVars = new Set<string>();
   let hasDeclarations = false;
   let lastExpr: string | null = null;
   while (tokens[0]?.type !== stopType && tokens[0]?.type !== "Eof") {
@@ -127,6 +128,7 @@ function parseStatementsInScope(
           `Expected variable name, got ${nameToken?.type ?? "nothing"}`,
         );
       const name = nameToken.value;
+      if (isMut) mutableVars.add(name);
       const assignToken = tokens.shift();
       if (assignToken?.type !== "Assign")
         throw new Error(`Expected '=', got ${assignToken?.type ?? "nothing"}`);
@@ -141,6 +143,8 @@ function parseStatementsInScope(
       // Assignment statement (e.g., x = 1;)
       const nameToken = tokens.shift() as { type: "Identifier"; value: string };
       const name = nameToken.value;
+      if (!mutableVars.has(name))
+        throw new Error(`Cannot assign to immutable variable '${name}'`);
       tokens.shift(); // consume '='
       const value = parseExpression(tokens);
       expectSemi(tokens);
