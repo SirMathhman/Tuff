@@ -547,14 +547,18 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
   }
 }
 
+function assertDefined(name: string, scope: string[]): void {
+  if (!scope.includes(name)) {
+    throw new Error(`Undefined variable: ${name}`);
+  }
+}
+
 function validateRangeExpr(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
   if (expr.type === "range") {
     inferExprType(expr.start, scope, mutableVars, types);
     inferExprType(expr.end, scope, mutableVars, types);
   } else if (expr.type === "identifier") {
-    if (!scope.includes(expr.name)) {
-      throw new Error(`Undefined variable: ${expr.name}`);
-    }
+    assertDefined(expr.name, scope);
     const varType = types.get(expr.name);
     if (varType !== "range") {
       throw new Error(`Expected range type, got ${varType}`);
@@ -652,9 +656,7 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     return "boolean";
   }
   if (expr.type === "identifier") {
-    if (!scope.includes(expr.name)) {
-      throw new Error(`Undefined variable: ${expr.name}`);
-    }
+    assertDefined(expr.name, scope);
     return types.get(expr.name) || "number";
   }
   if (expr.type === "binary") {
