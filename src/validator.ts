@@ -1,25 +1,36 @@
-import type { AstNode, Expr, VarType } from "./types";
+import type { AstNode, Expr, IntType, VarType } from "./types";
+
+const INT_RANGES: Record<IntType, [number, number]> = {
+  U8: [0, 255],
+  U16: [0, 65535],
+  U32: [0, 4294967295],
+  I8: [-128, 127],
+  I16: [-32768, 32767],
+  I32: [-2147483648, 2147483647],
+};
+
+const UNSIGNED_TYPES = new Set<IntType>(["U8", "U16", "U32"]);
 
 export function validateScopes(nodes: AstNode[]): void {
   for (const node of nodes) {
-    validateU8(node);
+    validateIntRanges(node);
   }
   const scope: string[] = [];
   const mutableVars = new Set<string>();
   const types = new Map<string, VarType>();
-  const u8Vars = new Set<string>();
+  const intVars = new Map<string, IntType>();
   for (const node of nodes) {
     if (node.type === "decl") {
       scope.push(node.name);
     } else {
-      validateNodeScope(node, scope, mutableVars, types, u8Vars);
+      validateNodeScope(node, scope, mutableVars, types, intVars);
     }
   }
 }
 
-function validateU8(node: AstNode): void {
+function validateIntRanges(node: AstNode): void {
   if (node.type === "let" || node.type === "assign" || node.type === "expr") {
-    validateU8Expr(
+    validateIntExpr(
       node.type === "let"
         ? node.init
         : node.type === "assign"
@@ -28,54 +39,59 @@ function validateU8(node: AstNode): void {
     );
   }
   if (node.type === "while") {
-    validateU8Expr(node.condition);
-    for (const n of node.body) validateU8(n);
+    validateIntExpr(node.condition);
+    for (const n of node.body) validateIntRanges(n);
   }
   if (node.type === "for") {
-    validateU8Range(node.rangeExpr);
-    for (const n of node.body) validateU8(n);
+    validateIntRange(node.rangeExpr);
+    for (const n of node.body) validateIntRanges(n);
   }
 }
 
-function validateU8Expr(expr: Expr): void {
-  if (expr.type === "number" && expr.u8 && expr.value > 255) {
-    throw new Error(`U8 literal out of range: ${expr.value}`);
+function validateIntExpr(expr: Expr): void {
+  if (expr.type === "number" && expr.intType) {
+    const [min, max] = INT_RANGES[expr.intType];
+    if (expr.value < min || expr.value > max) {
+      throw new Error(
+        `${expr.intType} literal out of range: ${expr.value} (must be ${min}..${max})`,
+      );
+    }
   }
   if (expr.type === "binary") {
-    validateU8Expr(expr.left);
-    validateU8Expr(expr.right);
+    validateIntExpr(expr.left);
+    validateIntExpr(expr.right);
   }
   if (expr.type === "group") {
-    for (const n of expr.nodes) validateU8(n);
+    for (const n of expr.nodes) validateIntRanges(n);
   }
   if (expr.type === "if") {
-    validateU8Expr(expr.condition);
-    validateU8(expr.thenNode);
-    if (expr.elseNode) validateU8(expr.elseNode);
+    validateIntExpr(expr.condition);
+    validateIntRanges(expr.thenNode);
+    if (expr.elseNode) validateIntRanges(expr.elseNode);
   }
   if (expr.type === "match") {
-    validateU8Expr(expr.target);
+    validateIntExpr(expr.target);
     for (const c of expr.cases) {
-      validateU8Expr(c.pattern);
-      validateU8Expr(c.body);
+      validateIntExpr(c.pattern);
+      validateIntExpr(c.body);
     }
   }
   if (expr.type === "array") {
-    for (const e of expr.elements) validateU8Expr(e);
+    for (const e of expr.elements) validateIntExpr(e);
   }
   if (expr.type === "index") {
-    validateU8Expr(expr.target);
-    validateU8Expr(expr.index);
+    validateIntExpr(expr.target);
+    validateIntExpr(expr.index);
   }
   if (expr.type === "unary") {
-    validateU8Expr(expr.operand);
+    validateIntExpr(expr.operand);
   }
 }
 
-function validateU8Range(expr: Expr): void {
+function validateIntRange(expr: Expr): void {
   if (expr.type === "range") {
-    validateU8Expr(expr.start);
-    validateU8Expr(expr.end);
+    validateIntExpr(expr.start);
+    validateIntExpr(expr.end);
   }
 }
 
@@ -84,13 +100,13 @@ function validateNodeScope(
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
-  u8Vars: Set<string>,
+  intVars: Map<string, IntType>,
 ): void {
   if (node.type === "decl") return;
   if (node.type === "let") {
     const initType = inferExprType(node.init, scope, mutableVars, types);
-    if (isU8Expr(node.init)) {
-      u8Vars.add(node.name);
+    if (hasIntType(node.init)) {
+      intVars.set(node.name, (node.init as { type: "number"; intType: IntType }).intType);
     }
     scope.push(node.name);
     types.set(node.name, initType);
@@ -104,7 +120,7 @@ function validateNodeScope(
     return;
   }
   if (node.type === "expr") {
-    validateExprScope(node.expr, scope, mutableVars, types, u8Vars);
+    validateExprScope(node.expr, scope, mutableVars, types, intVars);
     return;
   }
   if (node.type === "while") {
@@ -112,9 +128,9 @@ function validateNodeScope(
     const scope_ = [...scope];
     const mut_ = new Set(mutableVars);
     const types_ = new Map(types);
-    const u8_ = new Set(u8Vars);
+    const int_ = new Map(intVars);
     for (const n of node.body) {
-      validateNodeScope(n, scope_, mut_, types_, u8_);
+      validateNodeScope(n, scope_, mut_, types_, int_);
     }
     return;
   }
@@ -125,18 +141,20 @@ function validateNodeScope(
     mut_.add(node.varName);
     const types_ = new Map(types);
     types_.set(node.varName, "number");
-    const u8_ = new Set(u8Vars);
+    const int_ = new Map(intVars);
     for (const n of node.body) {
-      validateNodeScope(n, scope_, mut_, types_, u8_);
+      validateNodeScope(n, scope_, mut_, types_, int_);
     }
     return;
   }
   if (node.type === "break" || node.type === "continue") return;
 }
 
-function isU8Expr(expr: Expr): boolean {
-  return expr.type === "number" && expr.u8;
+function hasIntType(expr: Expr): boolean {
+  return expr.type === "number" && expr.intType !== false;
 }
+
+
 
 function assertDefined(name: string, scope: string[]): void {
   if (!scope.includes(name)) {
@@ -205,14 +223,14 @@ function validateGroupScope(
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
-  u8Vars: Set<string>,
+  intVars: Map<string, IntType>,
 ): [string[], Set<string>, Map<string, VarType>] {
   const scope_ = [...scope];
   const mut_ = new Set(mutableVars);
   const types_ = new Map(types);
-  const u8_ = new Set(u8Vars);
+  const int_ = new Map(intVars);
   for (const node of expr.nodes) {
-    validateNodeScope(node, scope_, mut_, types_, u8_);
+    validateNodeScope(node, scope_, mut_, types_, int_);
   }
   return [scope_, mut_, types_];
 }
@@ -222,25 +240,28 @@ function validateExprScope(
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
-  u8Vars: Set<string>,
+  intVars: Map<string, IntType>,
 ): void {
   if (isGroupExpr(expr)) {
-    validateGroupScope(expr, scope, mutableVars, types, u8Vars);
+    validateGroupScope(expr, scope, mutableVars, types, intVars);
     return;
   }
   if (expr.type === "if") {
-    validateNodeScope(expr.thenNode, scope, mutableVars, types, u8Vars);
+    validateNodeScope(expr.thenNode, scope, mutableVars, types, intVars);
     if (expr.elseNode) {
-      validateNodeScope(expr.elseNode, scope, mutableVars, types, u8Vars);
+      validateNodeScope(expr.elseNode, scope, mutableVars, types, intVars);
     }
     return;
   }
   if (expr.type === "unary" && expr.op === "-") {
-    if (expr.operand.type === "identifier" && u8Vars.has(expr.operand.name)) {
-      throw new Error(`Cannot negate U8 variable: ${expr.operand.name}`);
+    if (expr.operand.type === "identifier" && intVars.has(expr.operand.name)) {
+      const intType = intVars.get(expr.operand.name);
+      if (intType && UNSIGNED_TYPES.has(intType)) {
+        throw new Error(`Cannot negate unsigned variable: ${expr.operand.name}`);
+      }
     }
-    if (expr.operand.type === "number" && expr.operand.u8) {
-      throw new Error(`Cannot negate U8 literal: ${expr.operand.value}`);
+    if (expr.operand.type === "number" && expr.operand.intType && UNSIGNED_TYPES.has(expr.operand.intType)) {
+      throw new Error(`Cannot negate unsigned literal: ${expr.operand.value}`);
     }
   }
   inferExprType(expr, scope, mutableVars, types);
@@ -293,7 +314,7 @@ function inferExprType(
       scope,
       mutableVars,
       types,
-      new Set(),
+      new Map(),
     );
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {

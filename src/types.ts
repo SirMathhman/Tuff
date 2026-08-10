@@ -1,5 +1,7 @@
+export type IntType = "U8" | "U16" | "U32" | "I8" | "I16" | "I32";
+
 export type Token =
-  | { type: "number"; value: string; u8: boolean }
+  | { type: "number"; value: string; intType: false | IntType }
   | { type: "boolean"; value: boolean }
   | {
       type: "op";
@@ -35,7 +37,7 @@ export type AstNode =
   | { type: "continue" };
 
 export type Expr =
-  | { type: "number"; value: number; u8: boolean }
+  | { type: "number"; value: number; intType: false | IntType }
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }

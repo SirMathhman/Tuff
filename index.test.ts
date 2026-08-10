@@ -194,3 +194,47 @@ test('executeTuff("let mut array = [0]; array[0] = 1; array[0]") => 1', () => {
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });
+
+test('executeTuff("100U16") => 100', () => {
+  expect(executeTuff("100U16")).toBe(100);
+});
+
+test('compileTuff("65536U16") => Error', () => {
+  expect(() => compileTuffToJS("65536U16")).toThrow();
+});
+
+test('executeTuff("100U32") => 100', () => {
+  expect(executeTuff("100U32")).toBe(100);
+});
+
+test('compileTuff("4294967296U32") => Error', () => {
+  expect(() => compileTuffToJS("4294967296U32")).toThrow();
+});
+
+test('executeTuff("100I8") => 100', () => {
+  expect(executeTuff("100I8")).toBe(100);
+});
+
+test('compileTuff("128I8") => Error', () => {
+  expect(() => compileTuffToJS("128I8")).toThrow();
+});
+
+test('compileTuff("-128I8") => Error', () => {
+  expect(() => compileTuffToJS("-128I8")).toThrow();
+});
+
+test('executeTuff("100I16") => 100', () => {
+  expect(executeTuff("100I16")).toBe(100);
+});
+
+test('compileTuff("32768I16") => Error', () => {
+  expect(() => compileTuffToJS("32768I16")).toThrow();
+});
+
+test('executeTuff("100I32") => 100', () => {
+  expect(executeTuff("100I32")).toBe(100);
+});
+
+test('compileTuff("2147483648I32") => Error', () => {
+  expect(() => compileTuffToJS("2147483648I32")).toThrow();
+});

@@ -164,7 +164,7 @@ export class Parser {
     }
     const semiTok = this.peek();
     if (semiTok.type === "punct" && semiTok.value === ";") this.consume();
-    return { type: "let", name, mutable, init: { type: "number", value: 0, u8: false } };
+    return { type: "let", name, mutable, init: { type: "number", value: 0, intType: false } };
   }
 
   parseAssignStmt(): AstNode {
@@ -224,7 +224,7 @@ export class Parser {
     }
     this.consume();
     if (token.type === "number") {
-      return { type: "number", value: parseInt(token.value, 10), u8: token.u8 };
+      return { type: "number", value: parseInt(token.value, 10), intType: token.intType };
     }
     if (token.type === "boolean") {
       return { type: "boolean", value: token.value };

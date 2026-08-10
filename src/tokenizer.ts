@@ -1,4 +1,4 @@
-import type { Token } from "./types";
+import type { Token, IntType } from "./types";
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -13,11 +13,19 @@ export function tokenize(source: string): Token[] {
         num += source[i]!;
         i++;
       }
-      const u8 = source.slice(i, i + 2) === "U8";
-      if (u8) {
-        i += 2;
+      const suffix = source.slice(i, i + 4);
+      let intType: false | IntType = false;
+      if (suffix === "U16" || suffix === "U32" || suffix === "I16" || suffix === "I32") {
+        intType = suffix as IntType;
+        i += 4;
+      } else {
+        const short = source.slice(i, i + 2);
+        if (short === "U8" || short === "I8") {
+          intType = short as IntType;
+          i += 2;
+        }
       }
-      tokens.push({ type: "number", value: num, u8 });
+      tokens.push({ type: "number", value: num, intType });
     } else if (ch === "." && source[i + 1] === ".") {
       tokens.push({ type: "op", value: ".." });
       i += 2;
