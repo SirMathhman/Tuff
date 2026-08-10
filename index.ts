@@ -1,3 +1,3 @@
 export function compileTuffToJS(tuffSource: string): string {
-  throw new Error("TODO");
+  return tuffSource.replace(/in let \w+;?\s*/g, "");
 }
