@@ -238,7 +238,7 @@ function genExpr(expr: Expr): string {
   }
   if (expr.type === "group") {
     // If the block contains let declarations, wrap in IIFE
-    const hasLet = expr.nodes.some(n => n.type === "let");
+    const hasLet = expr.nodes.some((n) => n.type === "let");
     if (hasLet) {
       const lines = generateBlockJS(expr.nodes);
       const last = expr.nodes[expr.nodes.length - 1]!;
