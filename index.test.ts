@@ -54,3 +54,7 @@ test("expectInvalid hash", () => {
 test("expectValid one", () => {
   expectValid("1", 1);
 });
+
+test("expectValid two", () => {
+  expectValid("2", 2);
+});
