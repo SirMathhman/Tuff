@@ -68,7 +68,6 @@ type AstNode =
   | { type: "decl"; name: string }
   | { type: "let"; name: string; mutable: boolean; init: Expr }
   | { type: "assign"; name: string; value: Expr }
-  | { type: "block"; nodes: AstNode[] }
   | { type: "expr"; expr: Expr };
 
 type Expr =
@@ -77,10 +76,6 @@ type Expr =
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr };
-
-type BlockStmt =
-  | { type: "let"; name: string; init: Expr }
-  | { type: "expr"; expr: Expr };
 
 // --- Parser ---
 
@@ -253,9 +248,6 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
   if (node.type === "assign") {
     return `${node.name}=${genExpr(node.value)};`;
   }
-  if (node.type === "block") {
-    return generateBlockJS(node.nodes);
-  }
   if (node.type === "expr") {
     return wrapExpr(genExpr(node.expr));
   }
@@ -332,21 +324,9 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
     validateAssign(node.name, node.value, scope, mutableVars);
     return;
   }
-  if (node.type === "block") {
-    validateBlockScopes(node.nodes, scope, mutableVars);
-    return;
-  }
   if (node.type === "expr") {
     validateExprScopes(node.expr, scope, mutableVars);
     return;
-  }
-}
-
-function validateBlockScopes(nodes: AstNode[], scope: string[], mutableVars: Set<string>): void {
-  const blockScope = [...scope];
-  const blockMutableVars = new Set(mutableVars);
-  for (const node of nodes) {
-    validateNodeScope(node, blockScope, blockMutableVars);
   }
 }
 
@@ -381,10 +361,10 @@ function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string
   }
   if (expr.type === "group") {
     // Block creates a new scope that inherits from outer scope
-    const blockScope = [...scope];
-    const blockMutableVars = new Set(mutableVars);
+    const scope_ = [...scope];
+    const mut_ = new Set(mutableVars);
     for (const node of expr.nodes) {
-      validateNodeScope(node, blockScope, blockMutableVars);
+      validateNodeScope(node, scope_, mut_);
     }
     return;
   }
