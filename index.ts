@@ -5,7 +5,7 @@ type Token =
   | { type: "op"; value: "+" | "-" | "*" | "/" }
   | { type: "keyword"; value: "in" | "let" }
   | { type: "identifier"; value: string }
-  | { type: "punct"; value: ";" }
+  | { type: "punct"; value: ";" | "(" | ")" }
   | { type: "eof" };
 
 function tokenize(source: string): Token[] {
@@ -39,6 +39,12 @@ function tokenize(source: string): Token[] {
     } else if (ch === ";") {
       tokens.push({ type: "punct", value: ";" });
       i++;
+    } else if (ch === "(") {
+      tokens.push({ type: "punct", value: "(" });
+      i++;
+    } else if (ch === ")") {
+      tokens.push({ type: "punct", value: ")" });
+      i++;
     } else {
       throw new Error(`Unexpected character: ${ch}`);
     }
@@ -53,7 +59,8 @@ type AstNode = { type: "decl"; name: string } | { type: "expr"; expr: Expr };
 
 type Expr =
   | { type: "number"; value: number }
-  | { type: "binary"; op: string; left: Expr; right: Expr };
+  | { type: "binary"; op: string; left: Expr; right: Expr }
+  | { type: "group"; expr: Expr };
 
 // --- Parser ---
 
@@ -119,6 +126,15 @@ class Parser {
     if (token.type === "number") {
       return { type: "number", value: parseInt(token.value, 10) };
     }
+    if (token.type === "punct" && token.value === "(") {
+      const expr = this.parseExpr();
+      const closingTok = this.peek();
+      if (closingTok.type !== "punct" || closingTok.value !== ")") {
+        throw new Error("Expected ')'");
+      }
+      this.consume(); // ")"
+      return { type: "group", expr };
+    }
     throw new Error(`Unexpected token: ${token.type}`);
   }
 
@@ -152,6 +168,9 @@ function genExpr(expr: Expr): string {
   }
   if (expr.type === "binary") {
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
+  }
+  if (expr.type === "group") {
+    return `(${genExpr(expr.expr)})`;
   }
   throw new Error("Unknown expression type");
 }
