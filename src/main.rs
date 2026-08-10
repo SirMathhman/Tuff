@@ -16,20 +16,34 @@ impl std::fmt::Display for CompileError {
 fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
     let trimmed = tuff_source.trim();
     // Strip the prelude if present (handles trailing semicolon and spaces)
-    let expr = trimmed.strip_prefix("in let args : &[&Str]")
+    let expr = trimmed
+        .strip_prefix("in let args : &[&Str]")
         .map(|s| s.trim_start())
         .map(|s| s.strip_prefix(';').unwrap_or(s))
         .map(|s| s.trim())
         .unwrap_or(trimmed);
     // For empty expressions, default to 0
     let exit_code = if expr.is_empty() {
-        String::from("0")
+        String::from("return 0;")
+    } else if expr.contains('#') {
+        return Err(CompileError {});
+    } else if expr.starts_with("let ") {
+        // Parse "let x = <value>; <rest>"
+        let semicolon_pos = expr.find(';').expect("let statement must end with ;");
+        let let_stmt = &expr[..semicolon_pos];
+        let rest = expr[semicolon_pos + 1..].trim();
+        // Extract variable name and value from "let x = value"
+        let let_prefix = "let ";
+        let eq_pos = let_stmt.find(" = ").expect("let statement must have = ");
+        let var_name = let_stmt[let_prefix.len()..eq_pos].trim();
+        let var_value = let_stmt[eq_pos + 3..].trim().replace("args.length", "argc");
+        let rest_expr = rest.replace("args.length", "argc");
+        format!("int {} = {}; return {};", var_name, var_value, rest_expr)
     } else {
-        expr.replace("args.length", "argc")
+        format!("return {};", expr.replace("args.length", "argc"))
     };
     Ok(format!(
-        "int main(int argc, char* argv[]) {{ return {}; }}",
-        exit_code
+        "int main(int argc, char* argv[]) {{ {exit_code} }}"
     ))
 }
 
@@ -124,5 +138,25 @@ mod tests {
     #[test]
     fn test_args_length_plus_one() {
         expect_valid("args.length + 1", vec!["foo".to_string()], 3);
+    }
+
+    #[test]
+    fn test_args_length_doubled() {
+        expect_valid("args.length + args.length", vec!["foo".to_string()], 4);
+    }
+
+    #[test]
+    fn test_hash_invalid() {
+        expect_invalid("#");
+    }
+
+    #[test]
+    fn test_let_variable() {
+        expect_valid("let x = args.length; x", vec!["foo".to_string()], 2);
+    }
+
+    #[test]
+    fn test_let_variable_doubled() {
+        expect_valid("let x = args.length; x + x", vec!["foo".to_string()], 4);
     }
 }
