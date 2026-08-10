@@ -53,10 +53,51 @@ function compileSourceToJS(source: string): string {
   return result;
 }
 
+function hasTopLevelLet(source: string): boolean {
+  let braceDepth = 0;
+  for (let i = 0; i < source.length - 3; i++) {
+    if (source[i] === "{") braceDepth++;
+    else if (source[i] === "}") braceDepth--;
+    if (braceDepth === 0 && source[i] === "l" && source[i + 1] === "e" && source[i + 2] === "t" && (source[i + 3] === " " || source[i + 3] === "\t")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function splitTopLevelStatements(source: string): string[] {
+  const statements: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}") depth--;
+    if (depth === 0 && source[i] === ";") {
+      statements.push(current.trim());
+      current = "";
+    } else {
+      current += source[i];
+    }
+  }
+  const last = current.trim();
+  if (last !== "") statements.push(last);
+  return statements;
+}
+
+function compileTopLevelStatements(source: string): string {
+  const statements = splitTopLevelStatements(source).map(s => s.trim()).filter(s => s !== "");
+  const lastStatement = statements.pop()!;
+  const body = statements.map(s => s + ";").join("") + "return " + lastStatement + ";";
+  return "(function(){" + body + "})()";
+}
+
 export function compileTuffToJS(source: string) {
   if (source === "") {
     return "";
   }
   const jsSource = compileSourceToJS(source);
+  if (hasTopLevelLet(source)) {
+    return "process.exit(" + compileTopLevelStatements(jsSource) + ")";
+  }
   return "process.exit(" + jsSource + ")";
 }

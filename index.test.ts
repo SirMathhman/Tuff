@@ -98,3 +98,7 @@ test("expectInvalid mismatched braces", () => {
 test("expectValid block with let", () => {
   expectValid("{ let x = 2 + 3; x } * 4", 20);
 });
+
+test("expectValid top-level let", () => {
+  expectValid("let y = { let x = 2 + 3; x } * 4; y", 20);
+});
