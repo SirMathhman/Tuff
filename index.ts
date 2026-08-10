@@ -3,7 +3,7 @@
 type Token =
   | { type: "number"; value: string }
   | { type: "op"; value: "+" | "-" | "*" | "/" }
-  | { type: "keyword"; value: "in" | "let" }
+  | { type: "keyword"; value: "in" | "let" | "mut" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
   | { type: "eof" };
@@ -31,8 +31,8 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" });
+      if (ident === "in" || ident === "let" || ident === "mut") {
+        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" });
       } else {
         tokens.push({ type: "identifier", value: ident });
       }
@@ -66,14 +66,16 @@ function tokenize(source: string): Token[] {
 
 type AstNode =
   | { type: "decl"; name: string }
-  | { type: "let"; name: string; init: Expr }
+  | { type: "let"; name: string; mutable: boolean; init: Expr }
+  | { type: "assign"; name: string; value: Expr }
   | { type: "expr"; expr: Expr };
 
 type Expr =
   | { type: "number"; value: number }
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
-  | { type: "group"; nodes: AstNode[] };
+  | { type: "group"; nodes: AstNode[] }
+  | { type: "assign"; name: string; value: Expr };
 
 type BlockStmt =
   | { type: "let"; name: string; init: Expr }
@@ -102,6 +104,13 @@ class Parser {
         nodes.push(this.parseDecl());
       } else if (tok.type === "keyword" && tok.value === "let") {
         nodes.push(this.parseLetDecl());
+      } else if (tok.type === "identifier") {
+        const next = this.tokens[this.pos + 1];
+        if (next && next.type === "punct" && next.value === "=") {
+          nodes.push(this.parseAssignStmt());
+        } else {
+          nodes.push(this.parseExprNode());
+        }
       } else {
         nodes.push(this.parseExprNode());
       }
@@ -111,6 +120,11 @@ class Parser {
 
   parseLetDecl(): AstNode {
     this.consume(); // "let"
+    const mutTok = this.peek();
+    const mutable = mutTok.type === "keyword" && mutTok.value === "mut";
+    if (mutable) {
+      this.consume(); // "mut"
+    }
     const name = this.consumeIdentifier();
     const eqTok = this.peek();
     if (eqTok.type === "punct" && eqTok.value === "=") {
@@ -120,13 +134,28 @@ class Parser {
       if (semiTok.type === "punct" && semiTok.value === ";") {
         this.consume(); // ";"
       }
-      return { type: "let", name, init };
+      return { type: "let", name, mutable, init };
     }
     const semiTok = this.peek();
     if (semiTok.type === "punct" && semiTok.value === ";") {
       this.consume(); // ";"
     }
-    return { type: "let", name, init: { type: "number", value: 0 } };
+    return { type: "let", name, mutable, init: { type: "number", value: 0 } };
+  }
+
+  parseAssignStmt(): AstNode {
+    const name = this.consumeIdentifier();
+    const eqTok = this.peek();
+    if (eqTok.type === "punct" && eqTok.value === "=") {
+      this.consume(); // "="
+      const value = this.parseExpr();
+      const semiTok = this.peek();
+      if (semiTok.type === "punct" && semiTok.value === ";") {
+        this.consume(); // ";"
+      }
+      return { type: "assign", name, value };
+    }
+    throw new Error(`Expected '=' after identifier`);
   }
 
   parseDecl(): AstNode {
@@ -186,10 +215,21 @@ class Parser {
 
   parseBlock(): AstNode[] {
     const nodes: AstNode[] = [];
-    while (this.peek().type !== "eof" && this.peek().type !== "punct") {
+    while (this.peek().type !== "eof") {
       const tok = this.peek();
+      // Stop at closing brace
+      if (tok.type === "punct" && tok.value === "}") {
+        break;
+      }
       if (tok.type === "keyword" && tok.value === "let") {
         nodes.push(this.parseLetDecl());
+      } else if (tok.type === "identifier") {
+        const next = this.tokens[this.pos + 1];
+        if (next && next.type === "punct" && next.value === "=") {
+          nodes.push(this.parseAssignStmt());
+        } else {
+          nodes.push(this.parseExprNode());
+        }
       } else {
         nodes.push(this.parseExprNode());
       }
@@ -221,6 +261,9 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
   if (node.type === "let") {
     return `let ${node.name}=${genExpr(node.init)};`;
   }
+  if (node.type === "assign") {
+    return `${node.name}=${genExpr(node.value)};`;
+  }
   if (node.type === "expr") {
     return wrapExpr(genExpr(node.expr));
   }
@@ -243,6 +286,9 @@ function genExpr(expr: Expr): string {
   }
   if (expr.type === "identifier") {
     return expr.name;
+  }
+  if (expr.type === "assign") {
+    return `${expr.name}=${genExpr(expr.value)}`;
   }
   if (expr.type === "binary") {
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
@@ -272,12 +318,21 @@ function genExpr(expr: Expr): string {
 
 function validateScopes(nodes: AstNode[]): void {
   const scope: string[] = [];
+  const mutableVars = new Set<string>();
   for (const node of nodes) {
     if (node.type === "decl") {
       scope.push(node.name);
     } else if (node.type === "let") {
       validateExprScopes(node.init, scope);
       scope.push(node.name);
+      if (node.mutable) {
+        mutableVars.add(node.name);
+      }
+    } else if (node.type === "assign") {
+      if (!scope.includes(node.name)) {
+        throw new Error(`Undefined variable: ${node.name}`);
+      }
+      validateExprScopes(node.value, scope);
     } else if (node.type === "expr") {
       validateExprScopes(node.expr, scope);
     }
