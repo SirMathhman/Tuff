@@ -363,8 +363,7 @@ impl Parser {
 #[derive(Debug, Clone, PartialEq)]
 enum VarType {
     Int,
-    IntPtr,
-    IntPtrPtr,
+    IntPtr(u8),
     CharPtr,
     Args,
     ArgsIndex(String),
@@ -381,12 +380,14 @@ impl CodegenContext {
         }
     }
 
-    fn type_prefix(&self, name: &str) -> &'static str {
+    fn type_prefix(&self, name: &str) -> String {
         match self.var_types.get(name) {
-            Some(VarType::IntPtr) => "int *",
-            Some(VarType::IntPtrPtr) => "int **",
-            Some(VarType::CharPtr) => "char *",
-            _ => "int",
+            Some(VarType::IntPtr(level)) => {
+                let stars = ":".repeat(*level as usize);
+                format!("int{} ", stars.replace(":", "*"))
+            }
+            Some(VarType::CharPtr) => "char *".to_string(),
+            _ => "int".to_string(),
         }
     }
 
@@ -422,19 +423,16 @@ fn codegen(stmts: &[Stmt]) -> String {
                     // Determine pointer level based on what's being referenced
                     if let Expr::Ref(inner) = value {
                         if let Expr::Var(inner_name) = inner.as_ref() {
-                            match ctx.var_types.get(inner_name) {
-                                Some(VarType::IntPtr) => {
-                                    ctx.var_types.insert(name.clone(), VarType::IntPtrPtr);
-                                }
-                                _ => {
-                                    ctx.var_types.insert(name.clone(), VarType::IntPtr);
-                                }
-                            }
+                            let base_level = match ctx.var_types.get(inner_name) {
+                                Some(VarType::IntPtr(level)) => *level + 1,
+                                _ => 1,
+                            };
+                            ctx.var_types.insert(name.clone(), VarType::IntPtr(base_level));
                         } else {
-                            ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                            ctx.var_types.insert(name.clone(), VarType::IntPtr(1));
                         }
                     } else {
-                        ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                        ctx.var_types.insert(name.clone(), VarType::IntPtr(1));
                     }
                 } else if is_str_lit(value) {
                     ctx.var_types.insert(name.clone(), VarType::CharPtr);
@@ -452,7 +450,7 @@ fn codegen(stmts: &[Stmt]) -> String {
                 } else {
                     let type_prefix = ctx.type_prefix(name);
                     buf.push_str(&format!(
-                        " {} {} = {};",
+                        "{} {} = {};",
                         type_prefix,
                         name,
                         codegen_expr(value, &ctx)
@@ -831,5 +829,10 @@ mod tests {
     #[test]
     fn test_double_deref() {
         expect_valid("let x = 100; let y = &x; let z = &y; **z", vec![], 100);
+    }
+
+    #[test]
+    fn test_triple_deref() {
+        expect_valid("let x = 100; let y = &x; let z = &y; let a = &z; ***a", vec![], 100);
     }
 }
