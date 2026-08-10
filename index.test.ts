@@ -78,3 +78,7 @@ test("expectValid multiplication subtraction", () => {
 test("expectValid multiplication addition", () => {
   expectValid("2 * 3 + 4", 10);
 });
+
+test("expectValid operator precedence", () => {
+  expectValid("2 + 3 * 4", 14);
+});
