@@ -39,6 +39,10 @@ function tokenize(source: string): Token[] {
         num += source[i]!;
         i++;
       }
+      // Check for U8 suffix
+      if (source.slice(i, i + 2) === "U8") {
+        i += 2;
+      }
       tokens.push({ type: "number", value: num });
     } else if (ch === "." && source[i + 1] === ".") {
       tokens.push({ type: "op", value: ".." });

@@ -5,6 +5,7 @@
 - **Install**: `bun install`
 - **Test**: `bun test`
 - **Lint**: `bun run lint` (runs `tsc --noEmit && eslint . --fix`)
+- **CPD**: `bun run cpd` (PMD copy-paste detector on `index.ts` and `index.test.ts`)
 - **Run**: `bun run index.ts`
 
 ## Architecture
@@ -12,7 +13,7 @@
 
 1. **Tokenizer** (`tokenize`) — produces `Token[]` with types: `number`, `boolean`, `op`, `keyword`, `punct`, `eof`
 2. **Parser** (`Parser` class) — produces `AstNode[]`; node types: `decl`, `let`, `assign`, `expr`, `while`, `for`, `break`, `continue`. Expressions (`Expr`) include `number`, `boolean`, `identifier`, `binary`, `range`, `group`, `assign`, `if`
-3. **Scope validation** (`validateScopes`) — tracks declared vars, mutability, and types (`VarType` = `number` | `boolean` | `range`); throws on undefined vars, assignment to immutable vars, and type mismatches
+3. **Scope validation** (`validateScopes`) — tracks declared vars, mutability, and types (`VarType` = `number` | `boolean` | `range` | `array`); throws on undefined vars, assignment to immutable vars, and type mismatches
 4. **Code generation** (`generateJS`) — emits JS; top-level expressions become `process.exit(Number(...))`
 
 Entry point: `compileTuffToJS(tuffSource: string): string`.
