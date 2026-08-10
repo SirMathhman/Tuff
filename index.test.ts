@@ -94,3 +94,11 @@ test("expectValid braces", () => {
 test("expectInvalid mismatched braces", () => {
   expectInvalid("{ 2 + 3 ) * 4");
 });
+
+test("expectValid block with let", () => {
+  expectValid("{ let x = 2 + 3; x } * 4", 20);
+});
+
+test("expectValid block with let", () => {
+  expectValid("{ let x = 2 + 3; x } * 4", 20);
+});
