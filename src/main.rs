@@ -10,6 +10,7 @@ fn main() {
 enum Token {
     Ident(String),
     Num(i64),
+    Bool(bool),
     Plus,
     PlusEq,
     Dot,
@@ -124,7 +125,13 @@ impl Tokenizer {
             self.pos += 1;
         }
         let s: String = self.chars[start..self.pos].iter().collect();
-        Token::Ident(s)
+        if s == "true" {
+            Token::Bool(true)
+        } else if s == "false" {
+            Token::Bool(false)
+        } else {
+            Token::Ident(s)
+        }
     }
 
     fn parse_string(&mut self) -> Token {
@@ -162,6 +169,7 @@ enum Expr {
     Ref(Box<Expr>),
     Deref(Box<Expr>),
     StrLit(String),
+    BoolLit(bool),
 }
 
 #[derive(Debug)]
@@ -322,6 +330,10 @@ impl Parser {
             Token::Num(n) => {
                 self.pos += 1;
                 Expr::Num(n)
+            }
+            Token::Bool(b) => {
+                self.pos += 1;
+                Expr::BoolLit(b)
             }
             Token::Str(s) => {
                 self.pos += 1;
@@ -656,6 +668,9 @@ fn codegen_expr(expr: &Expr, ctx: &CodegenContext) -> String {
             }
             format!("{}{}{}", qt, escaped, qt)
         }
+        Expr::BoolLit(b) => {
+            if *b { "1".to_string() } else { "0".to_string() }
+        }
     }
 }
 
@@ -911,5 +926,10 @@ mod tests {
     #[test]
     fn test_compound_assignment_plus_eq() {
         expect_valid("let mut x = 0; x += 1; x", vec![], 1);
+    }
+
+    #[test]
+    fn test_boolean_true() {
+        expect_valid("let x = true; x", vec![], 1);
     }
 }
