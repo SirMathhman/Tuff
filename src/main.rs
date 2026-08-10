@@ -17,6 +17,8 @@ enum Token {
     Semicolon,
     Hash,
     Eq,
+    Amp,
+    Star,
     Invalid(char),
     Eof,
 }
@@ -48,6 +50,14 @@ impl Tokenizer {
             '=' => {
                 self.pos += 1;
                 Token::Eq
+            }
+            '&' => {
+                self.pos += 1;
+                Token::Amp
+            }
+            '*' => {
+                self.pos += 1;
+                Token::Star
             }
             ';' => {
                 self.pos += 1;
@@ -116,6 +126,8 @@ enum Expr {
     BinOp(Box<Expr>, Box<Expr>),
     PropertyAccess(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
+    Ref(Box<Expr>),
+    Deref(Box<Expr>),
 }
 
 #[derive(Debug)]
@@ -227,7 +239,7 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, CompileError> {
-        self.parse_addition()
+        self.parse_unary()
     }
 
     fn parse_addition(&mut self) -> Result<Expr, CompileError> {
@@ -239,6 +251,20 @@ impl Parser {
         } else {
             Ok(left)
         }
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, CompileError> {
+        if self.current() == Token::Amp {
+            self.pos += 1;
+            let inner = self.parse_unary()?;
+            return Ok(Expr::Ref(Box::new(inner)));
+        }
+        if self.current() == Token::Star {
+            self.pos += 1;
+            let inner = self.parse_unary()?;
+            return Ok(Expr::Deref(Box::new(inner)));
+        }
+        self.parse_addition()
     }
 
     fn parse_primary(&mut self) -> Result<Expr, CompileError> {
@@ -321,6 +347,8 @@ fn codegen(stmts: &[Stmt]) -> String {
     let mut args_index_vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     // Track which variables have already been declared (for reassignment support)
     let mut declared_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Track which variables are pointer types (from & reference)
+    let mut pointer_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, _is_mut, value) => {
@@ -335,31 +363,36 @@ fn codegen(stmts: &[Stmt]) -> String {
                 }
                 let is_reassign = declared_vars.contains(name);
                 declared_vars.insert(name.clone());
+                if is_ref_expr(value) {
+                    pointer_vars.insert(name.clone());
+                }
                 if is_reassign {
                     buf.push_str(&format!(
                         " {} = {};",
                         name,
-                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
+                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars, &pointer_vars)
                     ));
                 } else {
+                    let type_prefix = if pointer_vars.contains(name) { "int *" } else { "int" };
                     buf.push_str(&format!(
-                        " int {} = {};",
+                        " {} {} = {};",
+                        type_prefix,
                         name,
-                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
+                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars, &pointer_vars)
                     ));
                 }
             }
             Stmt::Expr(expr) => {
                 buf.push_str(&format!(
                     " return {};",
-                    codegen_expr_with_args_vars(expr, &args_vars, &args_index_vars)
+                    codegen_expr_with_args_vars(expr, &args_vars, &args_index_vars, &pointer_vars)
                 ));
             }
             Stmt::Assign(name, value) => {
                 buf.push_str(&format!(
                     " {} = {};",
                     name,
-                    codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
+                    codegen_expr_with_args_vars(value, &args_vars, &args_index_vars, &pointer_vars)
                 ));
             }
         }
@@ -373,6 +406,10 @@ fn is_args_expr(expr: &Expr) -> bool {
         Expr::Args | Expr::ArgsLength => true,
         _ => false,
     }
+}
+
+fn is_ref_expr(expr: &Expr) -> bool {
+    matches!(expr, Expr::Ref(_))
 }
 
 fn is_args_index(expr: &Expr) -> bool {
@@ -402,6 +439,7 @@ fn codegen_expr_with_args_vars(
     expr: &Expr,
     args_vars: &std::collections::HashSet<String>,
     args_index_vars: &std::collections::HashMap<String, String>,
+    _pointer_vars: &std::collections::HashSet<String>,
 ) -> String {
     match expr {
         Expr::Num(n) => n.to_string(),
@@ -411,8 +449,8 @@ fn codegen_expr_with_args_vars(
         Expr::BinOp(left, right) => {
             format!(
                 "{} + {}",
-                codegen_expr_with_args_vars(left, args_vars, args_index_vars),
-                codegen_expr_with_args_vars(right, args_vars, args_index_vars)
+                codegen_expr_with_args_vars(left, args_vars, args_index_vars, _pointer_vars),
+                codegen_expr_with_args_vars(right, args_vars, args_index_vars, _pointer_vars)
             )
         }
         Expr::PropertyAccess(target, prop) => {
@@ -430,15 +468,15 @@ fn codegen_expr_with_args_vars(
                 // If target is args[index], generate strlen(argv[index])
                 if is_args_index(target) {
                     if let Expr::Index(_, idx) = target.as_ref() {
-                        let idx_str = codegen_expr_with_args_vars(idx, args_vars, args_index_vars);
+                        let idx_str = codegen_expr_with_args_vars(idx, args_vars, args_index_vars, _pointer_vars);
                         return format!("strlen(argv[{}])", idx_str);
                     }
                 }
-                codegen_expr_with_args_vars(target, args_vars, args_index_vars)
+                codegen_expr_with_args_vars(target, args_vars, args_index_vars, _pointer_vars)
             } else {
                 format!(
                     "{}.{}",
-                    codegen_expr_with_args_vars(target, args_vars, args_index_vars),
+                    codegen_expr_with_args_vars(target, args_vars, args_index_vars, _pointer_vars),
                     prop
                 )
             }
@@ -446,20 +484,26 @@ fn codegen_expr_with_args_vars(
         Expr::Index(target, index) => {
             // args[n] -> argv[n]
             if matches!(target.as_ref(), Expr::Args) {
-                return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars, args_index_vars));
+                return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars, args_index_vars, _pointer_vars));
             }
             // If target is a var that holds args[index], generate argv[index][sub_index]
             if let Expr::Var(name) = target.as_ref() {
                 if let Some(idx_str) = args_index_vars.get(name) {
-                    let sub_idx = codegen_expr_with_args_vars(index, args_vars, args_index_vars);
+                    let sub_idx = codegen_expr_with_args_vars(index, args_vars, args_index_vars, _pointer_vars);
                     return format!("argv[{}][{}]", idx_str, sub_idx);
                 }
             }
             format!(
                 "{}[{}]",
-                codegen_expr_with_args_vars(target, args_vars, args_index_vars),
-                codegen_expr_with_args_vars(index, args_vars, args_index_vars)
+                codegen_expr_with_args_vars(target, args_vars, args_index_vars, _pointer_vars),
+                codegen_expr_with_args_vars(index, args_vars, args_index_vars, _pointer_vars)
             )
+        }
+        Expr::Ref(inner) => {
+            format!("&{}", codegen_expr_with_args_vars(inner, args_vars, args_index_vars, _pointer_vars))
+        }
+        Expr::Deref(inner) => {
+            format!("*{}", codegen_expr_with_args_vars(inner, args_vars, args_index_vars, _pointer_vars))
         }
     }
 }
@@ -666,5 +710,10 @@ mod tests {
     #[test]
     fn test_non_mut_assignment_error() {
         expect_invalid("let x = 0; x = 1; x");
+    }
+
+    #[test]
+    fn test_reference_and_dereference() {
+        expect_valid("let x = 0; let y = &x; *y", vec![], 0);
     }
 }
