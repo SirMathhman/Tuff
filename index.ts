@@ -281,6 +281,13 @@ function generateBlockJS(nodes: AstNode[]): string {
   return lines.join("");
 }
 
+function genComparisonOp(left: string, op: string, right: string): string {
+  const jsOp = op === "==" ? "===" : op;
+  return `(${left} ${jsOp} ${right}) ? 1 : 0`;
+}
+
+const comparisonOps = new Set(["==", "<"]);
+
 function genExpr(expr: Expr): string {
   if (expr.type === "number") {
     return String(expr.value);
@@ -295,11 +302,8 @@ function genExpr(expr: Expr): string {
     return `${expr.name}=${genExpr(expr.value)}`;
   }
   if (expr.type === "binary") {
-    if (expr.op === "==") {
-      return `(${genExpr(expr.left)} === ${genExpr(expr.right)}) ? 1 : 0`;
-    }
-    if (expr.op === "<") {
-      return `(${genExpr(expr.left)} < ${genExpr(expr.right)}) ? 1 : 0`;
+    if (comparisonOps.has(expr.op)) {
+      return genComparisonOp(genExpr(expr.left), expr.op, genExpr(expr.right));
     }
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
   }
