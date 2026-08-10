@@ -295,26 +295,37 @@ function validateExprScope(
     }
   }
   if (expr.type === "is") {
-    if (expr.value.type === "number" && expr.value.intType) {
-      if (!isSubtypeOf(expr.value.intType, expr.typeAnnotation)) {
-        throw new Error(
-          `Type mismatch: ${expr.value.intType} is not ${expr.typeAnnotation}`,
-        );
-      }
-    } else if (expr.value.type === "identifier" && intVars.has(expr.value.name)) {
-      const actualIntType = intVars.get(expr.value.name)!;
-      if (!isSubtypeOf(actualIntType, expr.typeAnnotation)) {
-        throw new Error(
-          `Type mismatch: ${actualIntType} is not ${expr.typeAnnotation}`,
-        );
-      }
-    } else {
+    const valueExpr = expr.value;
+    const actualIntType = extractIntType(valueExpr, intVars);
+    if (!actualIntType) {
       throw new Error(
-        `is operator requires a number value, got ${inferExprType(expr.value, scope, mutableVars, types)}`,
+        `is operator requires a number value, got ${inferExprType(valueExpr, scope, mutableVars, types)}`,
+      );
+    }
+    if (!isSubtypeOf(actualIntType, expr.typeAnnotation)) {
+      throw new Error(
+        `Type mismatch: ${actualIntType} is not ${expr.typeAnnotation}`,
       );
     }
   }
   inferExprType(expr, scope, mutableVars, types);
+}
+
+function extractIntType(
+  expr: Expr,
+  intVars: Map<string, IntType>,
+): IntType | false {
+  if (expr.type === "number" && expr.intType) return expr.intType;
+  if (expr.type === "group" && expr.nodes.length === 1) {
+    const first = expr.nodes[0]!;
+    if (first.type === "expr") {
+      return extractIntType(first.expr, intVars);
+    }
+  }
+  if (expr.type === "identifier" && intVars.has(expr.name)) {
+    return intVars.get(expr.name)!;
+  }
+  return false;
 }
 
 function inferNodeType(

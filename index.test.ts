@@ -123,6 +123,14 @@ test('executeTuff("let x : U8 = 100U8; x is U8") => 1', () => {
   expect(executeTuff("let x : U8 = 100U8; x is U8")).toBe(1);
 });
 
+test('executeTuff("(100U8) is U8") => 1', () => {
+  expect(executeTuff("(100U8) is U8")).toBe(1);
+});
+
+test('executeTuff("(100U8) is U16") => 1', () => {
+  expect(executeTuff("(100U8) is U16")).toBe(1);
+});
+
 test('compileTuff("100U8 is U99") => Error', () => {
   expect(() => compileTuffToJS("100U8 is U99")).toThrow();
 });
