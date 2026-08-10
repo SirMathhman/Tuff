@@ -339,7 +339,7 @@ function genExpr(expr: Expr): string {
       if (last.type === "expr") {
         return `(function(){${lines}return ${genExpr(last.expr)};})()`;
       }
-      return `(function(){${lines}})()`;
+      throw new Error("Block with declarations must end with an expression");
     }
     // Simple grouping: generate all nodes as comma expression
     const parts = expr.nodes.map(n => genNode(n, (e) => e).replace(/;$/, ""));
@@ -434,9 +434,13 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     for (const node of expr.nodes) {
       validateNodeScope(node, scope_, mut_, types_);
     }
+    const hasLet = expr.nodes.some((n) => n.type === "let");
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {
       return inferExprType(last.expr, scope_, mut_, types_);
+    }
+    if (hasLet) {
+      throw new Error("Block with declarations must end with an expression");
     }
     return "number";
   }
