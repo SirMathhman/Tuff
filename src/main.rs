@@ -123,6 +123,7 @@ enum Stmt {
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    scope: std::collections::HashSet<String>,
 }
 
 impl Parser {
@@ -136,7 +137,11 @@ impl Parser {
                 break;
             }
         }
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            scope: std::collections::HashSet::new(),
+        }
     }
 
     fn parse(&mut self) -> Result<Vec<Stmt>, CompileError> {
@@ -171,6 +176,8 @@ impl Parser {
         // consume '='
         self.pos += 1;
         let value = self.parse_expr()?;
+        // Add variable to scope after parsing its value
+        self.scope.insert(name.clone());
         // consume ';'
         if self.current() == Token::Semicolon {
             self.pos += 1;
@@ -211,6 +218,10 @@ impl Parser {
                         Expr::Args
                     }
                 } else {
+                    // Check if the variable is in scope
+                    if !self.scope.contains(s) {
+                        return Err(CompileError {});
+                    }
                     // Check if this is followed by .length
                     let var_name = s.clone();
                     if self.current() == Token::Dot {
@@ -575,5 +586,10 @@ mod tests {
     #[test]
     fn test_variable_reassignment() {
         expect_valid("let x = 0; let x = 1; x", vec![], 1);
+    }
+
+    #[test]
+    fn test_undefined_identifier() {
+        expect_invalid("undefinedIdentifier");
     }
 }
