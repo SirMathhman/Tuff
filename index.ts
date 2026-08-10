@@ -100,6 +100,12 @@ function parseMultiplication(tokens: Token[]): string {
   return left;
 }
 
+function expectSemi(tokens: Token[]): void {
+  const semiToken = tokens.shift();
+  if (semiToken?.type !== "Semi")
+    throw new Error(`Expected ';', got ${semiToken?.type ?? "nothing"}`);
+}
+
 function parseStatementsInScope(
   tokens: Token[],
   stopType: string,
@@ -111,6 +117,10 @@ function parseStatementsInScope(
     if (tokens[0]?.type === "Identifier" && tokens[0]?.value === "let") {
       hasDeclarations = true;
       tokens.shift();
+      // Check for 'mut' keyword
+      const nextToken = tokens[0];
+      const isMut = nextToken?.type === "Identifier" && nextToken.value === "mut";
+      if (isMut) tokens.shift();
       const nameToken = tokens.shift();
       if (nameToken?.type !== "Identifier")
         throw new Error(
@@ -121,10 +131,20 @@ function parseStatementsInScope(
       if (assignToken?.type !== "Assign")
         throw new Error(`Expected '=', got ${assignToken?.type ?? "nothing"}`);
       const value = parseExpression(tokens);
-      const semiToken = tokens.shift();
-      if (semiToken?.type !== "Semi")
-        throw new Error(`Expected ';', got ${semiToken?.type ?? "nothing"}`);
+      expectSemi(tokens);
       parts.push(`var ${name} = ${value};`);
+      lastExpr = null;
+    } else if (
+      tokens[0]?.type === "Identifier" &&
+      tokens[1]?.type === "Assign"
+    ) {
+      // Assignment statement (e.g., x = 1;)
+      const nameToken = tokens.shift() as { type: "Identifier"; value: string };
+      const name = nameToken.value;
+      tokens.shift(); // consume '='
+      const value = parseExpression(tokens);
+      expectSemi(tokens);
+      parts.push(`${name} = ${value};`);
       lastExpr = null;
     } else {
       const expr = parseExpression(tokens);
