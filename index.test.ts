@@ -70,3 +70,7 @@ test("expectValid addition chain", () => {
 test("expectValid mixed arithmetic", () => {
   expectValid("2 + 3 - 4", 1);
 });
+
+test("expectValid multiplication subtraction", () => {
+  expectValid("2 * 3 - 4", 2);
+});
