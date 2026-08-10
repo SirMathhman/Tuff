@@ -16,6 +16,7 @@ enum Token {
     RBracket,
     Semicolon,
     Hash,
+    Invalid(char),
     Eof,
 }
 
@@ -65,9 +66,9 @@ impl Tokenizer {
             }
             c if c.is_ascii_digit() => self.parse_num(),
             c if c == '_' || c.is_ascii_alphabetic() => self.parse_ident(),
-            _ => {
+            c => {
                 self.pos += 1;
-                Token::Hash // treat unknown chars as invalid
+                Token::Invalid(c)
             }
         }
     }
@@ -150,6 +151,10 @@ impl Parser {
             if self.current() == Token::Hash {
                 self.pos += 1;
                 return Err(CompileError { message: "invalid token '#'".to_string() });
+            }
+            if let Token::Invalid(c) = self.current() {
+                self.pos += 1;
+                return Err(CompileError { message: format!("invalid token '{}'", c) });
             }
             stmts.push(self.parse_stmt()?);
         }
@@ -593,5 +598,10 @@ mod tests {
     #[test]
     fn test_undefined_identifier() {
         expect_invalid("undefinedIdentifier");
+    }
+
+    #[test]
+    fn test_at_sign_invalid() {
+        expect_invalid("@");
     }
 }
