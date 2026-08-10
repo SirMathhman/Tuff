@@ -124,7 +124,7 @@ function parseStatementsInScope(
       const semiToken = tokens.shift();
       if (semiToken?.type !== "Semi")
         throw new Error(`Expected ';', got ${semiToken?.type ?? "nothing"}`);
-      parts.push(`let ${name} = ${value};`);
+      parts.push(`var ${name} = ${value};`);
       lastExpr = null;
     } else {
       const expr = parseExpression(tokens);

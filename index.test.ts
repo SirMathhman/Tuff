@@ -63,3 +63,7 @@ test('executeTuff("{ let x = 2 + 3; x } * 4") => 20', () => {
 test('executeTuff("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   expect(executeTuff("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
 });
+
+test('executeTuff("let x = 0; let x = 1; x") => 1', () => {
+  expect(executeTuff("let x = 0; let x = 1; x")).toBe(1);
+});
