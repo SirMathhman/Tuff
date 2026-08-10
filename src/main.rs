@@ -14,6 +14,8 @@ enum Token {
     Dot,
     LBracket,
     RBracket,
+    LParen,
+    RParen,
     Semicolon,
     Hash,
     Eq,
@@ -79,6 +81,14 @@ impl Tokenizer {
             ']' => {
                 self.pos += 1;
                 Token::RBracket
+            }
+            '(' => {
+                self.pos += 1;
+                Token::LParen
+            }
+            ')' => {
+                self.pos += 1;
+                Token::RParen
             }
             c if c.is_ascii_digit() => self.parse_num(),
             '"' => self.parse_string(),
@@ -294,6 +304,24 @@ impl Parser {
                 self.pos += 1;
                 Expr::StrLit(s)
             }
+            Token::LParen => {
+                self.pos += 1; // consume (
+                let inner = self.parse_expr()?;
+                if self.current() == Token::RParen {
+                    self.pos += 1; // consume )
+                }
+                // Handle indexing on parenthesized expression: (***a)[0]
+                if self.current() == Token::LBracket {
+                    self.pos += 1; // consume [
+                    let index = self.parse_expr()?;
+                    if self.current() == Token::RBracket {
+                        self.pos += 1; // consume ]
+                        return Ok(Expr::Index(Box::new(inner), Box::new(index)));
+                    }
+                    return Err(CompileError { message: "expected ']'".to_string() });
+                }
+                return Ok(inner);
+            }
             Token::Ident(ref s) => {
                 self.pos += 1;
                 if s == "args" {
@@ -364,7 +392,7 @@ impl Parser {
 enum VarType {
     Int,
     IntPtr(u8),
-    CharPtr,
+    CharPtr(u8),
     Args,
     ArgsIndex(String),
 }
@@ -386,7 +414,10 @@ impl CodegenContext {
                 let stars = ":".repeat(*level as usize);
                 format!("int{} ", stars.replace(":", "*"))
             }
-            Some(VarType::CharPtr) => "char *".to_string(),
+            Some(VarType::CharPtr(level)) => {
+                let stars = ":".repeat(*level as usize);
+                format!("char{} ", stars.replace(":", "*"))
+            }
             _ => "int".to_string(),
         }
     }
@@ -423,11 +454,17 @@ fn codegen(stmts: &[Stmt]) -> String {
                     // Determine pointer level based on what's being referenced
                     if let Expr::Ref(inner) = value {
                         if let Expr::Var(inner_name) = inner.as_ref() {
-                            let base_level = match ctx.var_types.get(inner_name) {
-                                Some(VarType::IntPtr(level)) => *level + 1,
-                                _ => 1,
-                            };
-                            ctx.var_types.insert(name.clone(), VarType::IntPtr(base_level));
+                            match ctx.var_types.get(inner_name) {
+                                Some(VarType::IntPtr(level)) => {
+                                    ctx.var_types.insert(name.clone(), VarType::IntPtr(*level + 1));
+                                }
+                                Some(VarType::CharPtr(level)) => {
+                                    ctx.var_types.insert(name.clone(), VarType::CharPtr(*level + 1));
+                                }
+                                _ => {
+                                    ctx.var_types.insert(name.clone(), VarType::IntPtr(1));
+                                }
+                            }
                         } else {
                             ctx.var_types.insert(name.clone(), VarType::IntPtr(1));
                         }
@@ -435,7 +472,7 @@ fn codegen(stmts: &[Stmt]) -> String {
                         ctx.var_types.insert(name.clone(), VarType::IntPtr(1));
                     }
                 } else if is_str_lit(value) {
-                    ctx.var_types.insert(name.clone(), VarType::CharPtr);
+                    ctx.var_types.insert(name.clone(), VarType::CharPtr(1));
                 } else {
                     ctx.var_types.insert(name.clone(), VarType::Int);
                 }
@@ -834,5 +871,10 @@ mod tests {
     #[test]
     fn test_triple_deref() {
         expect_valid("let x = 100; let y = &x; let z = &y; let a = &z; ***a", vec![], 100);
+    }
+
+    #[test]
+    fn test_triple_deref_string_index() {
+        expect_valid("let x = \"apple\"; let y = &x; let z = &y; let a = &z; (***a)[0]", vec![], 97);
     }
 }
