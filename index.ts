@@ -145,7 +145,7 @@ function tokenize(source: string): Token[] {
 type AstNode =
   | { type: "decl"; name: string }
   | { type: "let"; name: string; mutable: boolean; init: Expr }
-  | { type: "assign"; name: string; value: Expr }
+  | { type: "assign"; target: Expr; value: Expr }
   | { type: "expr"; expr: Expr }
   | { type: "while"; condition: Expr; body: AstNode[] }
   | { type: "for"; varName: string; rangeExpr: Expr; body: AstNode[] }
@@ -159,7 +159,7 @@ type Expr =
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "range"; start: Expr; end: Expr }
   | { type: "group"; nodes: AstNode[] }
-  | { type: "assign"; name: string; value: Expr }
+  | { type: "assign"; target: Expr; value: Expr }
   | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null }
   | { type: "match"; target: Expr; cases: { pattern: Expr; body: Expr }[] }
   | { type: "array"; elements: Expr[] }
@@ -228,6 +228,22 @@ class Parser {
           (next.type === "op" && next.value === "+="))
       ) {
         return this.parseAssignStmt();
+      }
+      // Check for array index assignment: array[0] = 1
+      if (next && next.type === "punct" && next.value === "[") {
+        // Look ahead to find if there's an = after the ]
+        let idx = this.pos + 2;
+        while (idx < this.tokens.length && this.tokens[idx]!.type !== "eof") {
+          const tok = this.tokens[idx]!;
+          if (tok.type === "punct" && tok.value === "]") {
+            const afterBracket = this.tokens[idx + 1];
+            if (afterBracket && ((afterBracket.type === "punct" && afterBracket.value === "=") || (afterBracket.type === "op" && afterBracket.value === "+="))) {
+              return this.parseAssignStmt();
+            }
+            break;
+          }
+          idx++;
+        }
       }
     }
     // Fall through to parseExprNode for expressions and `{` grouping
@@ -337,6 +353,7 @@ class Parser {
 
   parseAssignStmt(): AstNode {
     const name = this.consumeIdentifier();
+    const target = this.parseIndexChain({ type: "identifier", name });
     const opTok = this.peek();
     let value: Expr;
     if (opTok.type === "op" && opTok.value === "+=") {
@@ -344,7 +361,7 @@ class Parser {
       value = {
         type: "binary",
         op: "+",
-        left: { type: "identifier", name },
+        left: target,
         right: this.parseExpr(),
       };
     } else if (opTok.type === "punct" && opTok.value === "=") {
@@ -357,7 +374,7 @@ class Parser {
     if (semiTok.type === "punct" && semiTok.value === ";") {
       this.consume(); // ";"
     }
-    return { type: "assign", name, value };
+    return { type: "assign", target, value };
   }
 
   parseDecl(): AstNode {
@@ -500,21 +517,7 @@ class Parser {
       return { type: "array", elements };
     }
     if (token.type === "identifier") {
-      let result: Expr = { type: "identifier", name: token.value };
-      // Check for index: array[0]
-      while (true) {
-        const next = this.peek();
-        if (next.type !== "punct" || next.value !== "[") break;
-        this.consume(); // "["
-        const index = this.parseExpr();
-        const closeTok = this.peek();
-        if (closeTok.type !== "punct" || closeTok.value !== "]") {
-          throw new Error("Expected ']'");
-        }
-        this.consume(); // "]"
-        result = { type: "index", target: result, index };
-      }
-      return result;
+      return this.parseIndexChain({ type: "identifier", name: token.value });
     }
     throw new Error(`Unexpected token: ${token.type}`);
   }
@@ -540,6 +543,23 @@ class Parser {
     }
     throw new Error("Expected identifier");
   }
+
+  parseIndexChain(base: Expr): Expr {
+    let result = base;
+    while (true) {
+      const next = this.peek();
+      if (next.type !== "punct" || next.value !== "[") break;
+      this.consume(); // "["
+      const index = this.parseExpr();
+      const closeTok = this.peek();
+      if (closeTok.type !== "punct" || closeTok.value !== "]") {
+        throw new Error("Expected ']'");
+      }
+      this.consume(); // "]"
+      result = { type: "index", target: result, index };
+    }
+    return result;
+  }
 }
 
 // --- Code Generator ---
@@ -552,7 +572,7 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
     return `let ${node.name}=${genExpr(node.init)};`;
   }
   if (node.type === "assign") {
-    return `${node.name}=${genExpr(node.value)};`;
+    return `${genExpr(node.target)}=${genExpr(node.value)};`;
   }
   if (node.type === "expr") {
     return wrapExpr(genExpr(node.expr));
@@ -606,7 +626,7 @@ function genExpr(expr: Expr): string {
     return expr.name;
   }
   if (expr.type === "assign") {
-    return `${expr.name}=${genExpr(expr.value)}`;
+    return `${genExpr(expr.target)}=${genExpr(expr.value)}`;
   }
   if (expr.type === "binary") {
     if (comparisonOps.has(expr.op)) {
@@ -694,7 +714,7 @@ function validateNodeScope(
     return;
   }
   if (node.type === "assign") {
-    validateAssign(node.name, node.value, scope, mutableVars, types);
+    validateAssignExpr(node.target, node.value, scope, mutableVars, types);
     return;
   }
   if (node.type === "expr") {
@@ -777,7 +797,7 @@ function genRangeEnd(expr: Expr): string {
   throw new Error("Invalid range expression");
 }
 
-function validateAssignType(
+function checkTypeMismatch(
   varName: string,
   value: Expr,
   types: Map<string, VarType>,
@@ -791,20 +811,22 @@ function validateAssignType(
   }
 }
 
-function validateAssign(
-  name: string,
+function validateAssignExpr(
+  target: Expr,
   value: Expr,
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
 ): void {
-  if (!scope.includes(name)) {
-    throw new Error(`Undefined variable: ${name}`);
+  inferExprType(target, scope, mutableVars, types);
+  if (target.type === "identifier") {
+    if (!mutableVars.has(target.name)) {
+      throw new Error(`Cannot assign to immutable variable: ${target.name}`);
+    }
+    checkTypeMismatch(target.name, value, types, scope, mutableVars);
+  } else {
+    inferExprType(value, scope, mutableVars, types);
   }
-  if (!mutableVars.has(name)) {
-    throw new Error(`Cannot assign to immutable variable: ${name}`);
-  }
-  validateAssignType(name, value, types, scope, mutableVars);
 }
 
 function isGroupExpr(expr: Expr): expr is { type: "group"; nodes: AstNode[] } {
@@ -859,7 +881,10 @@ function inferNodeType(
     return types.get(node.name)!;
   }
   if (node.type === "assign") {
-    return types.get(node.name)!;
+    if (node.target.type === "identifier") {
+      return types.get(node.target.name)!;
+    }
+    return inferExprType(node.target, scope, mutableVars, types);
   }
   throw new Error("Node type cannot be inferred");
 }
@@ -886,8 +911,13 @@ function inferExprType(
     return "number";
   }
   if (expr.type === "assign") {
-    validateAssignType(expr.name, expr.value, types, scope, mutableVars);
-    return types.get(expr.name)!;
+    const target = expr.target;
+    if (target.type === "identifier") {
+      checkTypeMismatch(target.name, expr.value, types, scope, mutableVars);
+      return types.get(target.name)!;
+    }
+    inferExprType(target, scope, mutableVars, types);
+    return inferExprType(expr.value, scope, mutableVars, types);
   }
   if (isGroupExpr(expr)) {
     const [scope_, mut_, types_] = validateGroupScope(

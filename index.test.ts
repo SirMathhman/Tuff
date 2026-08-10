@@ -167,6 +167,10 @@ test('executeTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6'
   expect(executeTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
 });
 
+test('executeTuff("let mut array = [0]; array[0] = 1; array[0]") => 1', () => {
+  expect(executeTuff("let mut array = [0]; array[0] = 1; array[0]")).toBe(1);
+});
+
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });
