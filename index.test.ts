@@ -82,3 +82,7 @@ test("expectValid multiplication addition", () => {
 test("expectValid operator precedence", () => {
   expectValid("2 + 3 * 4", 14);
 });
+
+test("expectValid parentheses", () => {
+  expectValid("(2 + 3) * 4", 20);
+});
