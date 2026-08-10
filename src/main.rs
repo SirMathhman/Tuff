@@ -11,6 +11,7 @@ enum Token {
     Ident(String),
     Num(i64),
     Plus,
+    PlusEq,
     Dot,
     LBracket,
     RBracket,
@@ -48,7 +49,13 @@ impl Tokenizer {
         match self.chars[self.pos] {
             '+' => {
                 self.pos += 1;
-                Token::Plus
+                // Check for +=
+                if self.pos < self.chars.len() && self.chars[self.pos] == '=' {
+                    self.pos += 1;
+                    Token::PlusEq
+                } else {
+                    Token::Plus
+                }
             }
             '=' => {
                 self.pos += 1;
@@ -162,6 +169,7 @@ enum Stmt {
     Let(String, bool, Expr),
     Expr(Expr),
     Assign(String, Expr),
+    CompoundAdd(String, Expr),
 }
 
 // --- Parser ---
@@ -213,22 +221,42 @@ impl Parser {
             if s == "let" {
                 return self.parse_let();
             }
+            // Check for compound assignment: identifier += expr
+            if self.tokens.get(self.pos + 1) == Some(&Token::PlusEq) && self.scope.contains(s) {
+                return self.parse_compound_assign(s, Token::PlusEq, Stmt::CompoundAdd);
+            }
             // Check for assignment: identifier = expr
             if self.tokens.get(self.pos + 1) == Some(&Token::Eq) && self.scope.contains(s) {
-                let name = s.clone();
-                if !self.mutable_vars.contains(&name) {
-                    return Err(CompileError { message: format!("cannot assign to immutable variable '{}'", name) });
-                }
-                self.pos += 1; // consume identifier
-                self.pos += 1; // consume '='
-                let value = self.parse_expr()?;
-                if self.current() == Token::Semicolon {
-                    self.pos += 1;
-                }
-                return Ok(Stmt::Assign(name, value));
+                return self.parse_assign(s, Token::Eq, Stmt::Assign);
             }
         }
         Ok(Stmt::Expr(self.parse_expr()?))
+    }
+
+    fn parse_compound_assign(&mut self, name: &str, _op: Token, _kind: fn(String, Expr) -> Stmt) -> Result<Stmt, CompileError> {
+        if !self.mutable_vars.contains(name) {
+            return Err(CompileError { message: format!("cannot assign to immutable variable '{}'", name) });
+        }
+        self.pos += 1; // consume identifier
+        self.pos += 1; // consume operator
+        let value = self.parse_expr()?;
+        if self.current() == Token::Semicolon {
+            self.pos += 1;
+        }
+        Ok(Stmt::CompoundAdd(name.to_string(), value))
+    }
+
+    fn parse_assign(&mut self, name: &str, _op: Token, kind: fn(String, Expr) -> Stmt) -> Result<Stmt, CompileError> {
+        if !self.mutable_vars.contains(name) {
+            return Err(CompileError { message: format!("cannot assign to immutable variable '{}'", name) });
+        }
+        self.pos += 1; // consume identifier
+        self.pos += 1; // consume operator
+        let value = self.parse_expr()?;
+        if self.current() == Token::Semicolon {
+            self.pos += 1;
+        }
+        Ok(kind(name.to_string(), value))
     }
 
     fn parse_let(&mut self) -> Result<Stmt, CompileError> {
@@ -503,6 +531,13 @@ fn codegen(stmts: &[Stmt]) -> String {
             Stmt::Assign(name, value) => {
                 buf.push_str(&format!(
                     " {} = {};",
+                    name,
+                    codegen_expr(value, &ctx)
+                ));
+            }
+            Stmt::CompoundAdd(name, value) => {
+                buf.push_str(&format!(
+                    " {} += {};",
                     name,
                     codegen_expr(value, &ctx)
                 ));
@@ -876,5 +911,10 @@ mod tests {
     #[test]
     fn test_triple_deref_string_index() {
         expect_valid("let x = \"apple\"; let y = &x; let z = &y; let a = &z; (***a)[0]", vec![], 97);
+    }
+
+    #[test]
+    fn test_compound_assignment_plus_eq() {
+        expect_valid("let mut x = 0; x += 1; x", vec![], 1);
     }
 }
