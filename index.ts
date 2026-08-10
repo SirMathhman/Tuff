@@ -5,7 +5,7 @@ type Token =
   | { type: "op"; value: "+" | "-" | "*" | "/" }
   | { type: "keyword"; value: "in" | "let" }
   | { type: "identifier"; value: string }
-  | { type: "punct"; value: ";" | "(" | ")" }
+  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" }
   | { type: "eof" };
 
 function tokenize(source: string): Token[] {
@@ -44,6 +44,12 @@ function tokenize(source: string): Token[] {
       i++;
     } else if (ch === ")") {
       tokens.push({ type: "punct", value: ")" });
+      i++;
+    } else if (ch === "{") {
+      tokens.push({ type: "punct", value: "{" });
+      i++;
+    } else if (ch === "}") {
+      tokens.push({ type: "punct", value: "}" });
       i++;
     } else {
       throw new Error(`Unexpected character: ${ch}`);
@@ -126,13 +132,14 @@ class Parser {
     if (token.type === "number") {
       return { type: "number", value: parseInt(token.value, 10) };
     }
-    if (token.type === "punct" && token.value === "(") {
+    if (token.type === "punct" && (token.value === "(" || token.value === "{")) {
       const expr = this.parseExpr();
       const closingTok = this.peek();
-      if (closingTok.type !== "punct" || closingTok.value !== ")") {
-        throw new Error("Expected ')'");
+      const expectedClose = token.value === "(" ? ")" : "}";
+      if (closingTok.type !== "punct" || closingTok.value !== expectedClose) {
+        throw new Error(`Expected '${expectedClose}'`);
       }
-      this.consume(); // ")"
+      this.consume();
       return { type: "group", expr };
     }
     throw new Error(`Unexpected token: ${token.type}`);
