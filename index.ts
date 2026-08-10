@@ -3,8 +3,8 @@
 type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" }
-  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" | "break" | "continue" }
+  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" | ".." }
+  | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
   | { type: "eof" };
@@ -23,6 +23,9 @@ function tokenize(source: string): Token[] {
         i++;
       }
       tokens.push({ type: "number", value: num });
+    } else if (ch === "." && source[i + 1] === ".") {
+      tokens.push({ type: "op", value: ".." });
+      i += 2;
     } else if (ch === "+" && source[i + 1] === "=") {
       tokens.push({ type: "op", value: "+=" });
       i += 2;
@@ -41,8 +44,8 @@ function tokenize(source: string): Token[] {
         ident += source[i]!;
         i++;
       }
-      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "break" || ident === "continue") {
-        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" | "break" | "continue" });
+      if (ident === "in" || ident === "let" || ident === "mut" || ident === "if" || ident === "else" || ident === "while" || ident === "for" || ident === "break" || ident === "continue") {
+        tokens.push({ type: "keyword", value: ident as "in" | "let" | "mut" | "if" | "else" | "while" | "for" | "break" | "continue" });
       } else if (ident === "true") {
         tokens.push({ type: "boolean", value: true });
       } else if (ident === "false") {
@@ -84,6 +87,7 @@ type AstNode =
   | { type: "assign"; name: string; value: Expr }
   | { type: "expr"; expr: Expr }
   | { type: "while"; condition: Expr; body: AstNode[] }
+  | { type: "for"; varName: string; start: Expr; end: Expr; body: AstNode[] }
   | { type: "break" }
   | { type: "continue" };
 
@@ -132,6 +136,9 @@ class Parser {
     if (tok.type === "keyword" && tok.value === "while") {
       return this.parseWhile();
     }
+    if (tok.type === "keyword" && tok.value === "for") {
+      return this.parseFor();
+    }
     if (tok.type === "keyword" && tok.value === "break") {
       this.consume(); // "break"
       const semi = this.peek();
@@ -176,9 +183,14 @@ class Parser {
       throw new Error("Expected ')' after while condition");
     }
     this.consume(); // ")"
+    const body = this.parseLoopBody();
+    return { type: "while", condition, body };
+  }
+
+  parseLoopBody(): AstNode[] {
     const body: AstNode[] = [];
-    const bodyTok = this.peek();
-    if (bodyTok.type === "punct" && bodyTok.value === "{") {
+    const tok = this.peek();
+    if (tok.type === "punct" && tok.value === "{") {
       this.consume(); // "{"
       while (this.peek().type !== "eof") {
         const t = this.peek();
@@ -191,7 +203,35 @@ class Parser {
     } else {
       body.push(this.parseStmt(false));
     }
-    return { type: "while", condition, body };
+    return body;
+  }
+
+  parseFor(): AstNode {
+    this.consume(); // "for"
+    const openTok = this.peek();
+    if (openTok.type !== "punct" || openTok.value !== "(") {
+      throw new Error("Expected '(' after 'for'");
+    }
+    this.consume(); // "("
+    const varName = this.consumeIdentifier();
+    const inTok = this.peek();
+    if (inTok.type !== "keyword" || inTok.value !== "in") {
+      throw new Error("Expected 'in' after loop variable");
+    }
+    this.consume(); // "in"
+    const range = this.parseExpr();
+    if (range.type !== "binary" || range.op !== "..") {
+      throw new Error("Expected range expression (start..end)");
+    }
+    const start = range.left;
+    const end = range.right;
+    const closeTok = this.peek();
+    if (closeTok.type !== "punct" || closeTok.value !== ")") {
+      throw new Error("Expected ')' after for range");
+    }
+    this.consume(); // ")"
+    const body = this.parseLoopBody();
+    return { type: "for", varName, start, end, body };
   }
 
   parseLetDecl(): AstNode {
@@ -361,6 +401,10 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
     const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
     return `while (${genExpr(node.condition)}) {${bodyJs}}`;
   }
+  if (node.type === "for") {
+    const bodyJs = node.body.map(n => genNode(n, (e) => `${e};`)).join("");
+    return `for (let ${node.varName}=${genExpr(node.start)}; ${node.varName}<${genExpr(node.end)}; ${node.varName}++) {${bodyJs}}`;
+  }
   if (node.type === "break") {
     return "break;";
   }
@@ -469,6 +513,19 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
     const scope_ = [...scope];
     const mut_ = new Set(mutableVars);
     const types_ = new Map(types);
+    for (const n of node.body) {
+      validateNodeScope(n, scope_, mut_, types_);
+    }
+    return;
+  }
+  if (node.type === "for") {
+    inferExprType(node.start, scope, mutableVars, types);
+    inferExprType(node.end, scope, mutableVars, types);
+    const scope_ = [...scope, node.varName];
+    const mut_ = new Set(mutableVars);
+    mut_.add(node.varName);
+    const types_ = new Map(types);
+    types_.set(node.varName, "number");
     for (const n of node.body) {
       validateNodeScope(n, scope_, mut_, types_);
     }
