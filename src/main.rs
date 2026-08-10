@@ -265,22 +265,30 @@ fn codegen(stmts: &[Stmt]) -> String {
     let mut buf = String::from("#include <string.h>\nint main(int argc, char* argv[]) {");
     // Track which variables hold args (so .length on them resolves to the var itself)
     let mut args_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Track which variables hold args[index] (so .length generates strlen(argv[index]))
+    let mut args_index_vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, value) => {
                 if is_args_expr(value) {
                     args_vars.insert(name.clone());
                 }
+                if is_args_index(value) {
+                    let idx_str = get_index_str(value);
+                    args_index_vars.insert(name.clone(), idx_str);
+                    // Skip generating int declaration for args[index] vars (argv[i] is char*, not int)
+                    continue;
+                }
                 buf.push_str(&format!(
                     " int {} = {};",
                     name,
-                    codegen_expr_with_args_vars(value, &args_vars)
+                    codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
                 ));
             }
             Stmt::Expr(expr) => {
                 buf.push_str(&format!(
                     " return {};",
-                    codegen_expr_with_args_vars(expr, &args_vars)
+                    codegen_expr_with_args_vars(expr, &args_vars, &args_index_vars)
                 ));
             }
         }
@@ -303,9 +311,26 @@ fn is_args_index(expr: &Expr) -> bool {
     }
 }
 
+fn get_index_str(expr: &Expr) -> String {
+    if let Expr::Index(_, idx) = expr {
+        codegen_expr(idx)
+    } else {
+        "0".to_string()
+    }
+}
+
+fn codegen_expr(expr: &Expr) -> String {
+    match expr {
+        Expr::Num(n) => n.to_string(),
+        Expr::Var(name) => name.clone(),
+        _ => "0".to_string(),
+    }
+}
+
 fn codegen_expr_with_args_vars(
     expr: &Expr,
     args_vars: &std::collections::HashSet<String>,
+    args_index_vars: &std::collections::HashMap<String, String>,
 ) -> String {
     match expr {
         Expr::Num(n) => n.to_string(),
@@ -315,8 +340,8 @@ fn codegen_expr_with_args_vars(
         Expr::BinOp(left, right) => {
             format!(
                 "{} + {}",
-                codegen_expr_with_args_vars(left, args_vars),
-                codegen_expr_with_args_vars(right, args_vars)
+                codegen_expr_with_args_vars(left, args_vars, args_index_vars),
+                codegen_expr_with_args_vars(right, args_vars, args_index_vars)
             )
         }
         Expr::PropertyAccess(target, prop) => {
@@ -326,19 +351,23 @@ fn codegen_expr_with_args_vars(
                     if args_vars.contains(name) {
                         return name.clone();
                     }
+                    // If target is a var that holds args[index], generate strlen(argv[index])
+                    if let Some(idx_str) = args_index_vars.get(name) {
+                        return format!("strlen(argv[{}])", idx_str);
+                    }
                 }
                 // If target is args[index], generate strlen(argv[index])
                 if is_args_index(target) {
                     if let Expr::Index(_, idx) = target.as_ref() {
-                        let idx_str = codegen_expr_with_args_vars(idx, args_vars);
+                        let idx_str = codegen_expr_with_args_vars(idx, args_vars, args_index_vars);
                         return format!("strlen(argv[{}])", idx_str);
                     }
                 }
-                codegen_expr_with_args_vars(target, args_vars)
+                codegen_expr_with_args_vars(target, args_vars, args_index_vars)
             } else {
                 format!(
                     "{}.{}",
-                    codegen_expr_with_args_vars(target, args_vars),
+                    codegen_expr_with_args_vars(target, args_vars, args_index_vars),
                     prop
                 )
             }
@@ -346,12 +375,12 @@ fn codegen_expr_with_args_vars(
         Expr::Index(target, index) => {
             // args[n] -> argv[n]
             if matches!(target.as_ref(), Expr::Args) {
-                return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars));
+                return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars, args_index_vars));
             }
             format!(
                 "{}[{}]",
-                codegen_expr_with_args_vars(target, args_vars),
-                codegen_expr_with_args_vars(index, args_vars)
+                codegen_expr_with_args_vars(target, args_vars, args_index_vars),
+                codegen_expr_with_args_vars(index, args_vars, args_index_vars)
             )
         }
     }
@@ -497,6 +526,11 @@ mod tests {
     #[test]
     fn test_let_variable_doubled() {
         expect_valid("let x = args.length; x + x", vec!["foo".to_string()], 4);
+    }
+
+    #[test]
+    fn test_let_args_index_length() {
+        expect_valid("let x = args; let arg = args[1]; arg.length", vec!["foo".to_string()], 3);
     }
 
     #[test]
