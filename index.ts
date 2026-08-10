@@ -5,7 +5,7 @@ type Token =
   | { type: "op"; value: "+" | "-" | "*" | "/" }
   | { type: "keyword"; value: "in" | "let" }
   | { type: "identifier"; value: string }
-  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" }
+  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
   | { type: "eof" };
 
 function tokenize(source: string): Token[] {
@@ -39,6 +39,9 @@ function tokenize(source: string): Token[] {
     } else if (ch === ";") {
       tokens.push({ type: "punct", value: ";" });
       i++;
+    } else if (ch === "=") {
+      tokens.push({ type: "punct", value: "=" });
+      i++;
     } else if (ch === "(") {
       tokens.push({ type: "punct", value: "(" });
       i++;
@@ -61,12 +64,20 @@ function tokenize(source: string): Token[] {
 
 // --- AST ---
 
-type AstNode = { type: "decl"; name: string } | { type: "expr"; expr: Expr };
+type AstNode =
+  | { type: "decl"; name: string }
+  | { type: "let"; name: string; init: Expr }
+  | { type: "expr"; expr: Expr };
 
 type Expr =
   | { type: "number"; value: number }
+  | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
-  | { type: "group"; expr: Expr };
+  | { type: "group"; nodes: AstNode[] };
+
+type BlockStmt =
+  | { type: "let"; name: string; init: Expr }
+  | { type: "expr"; expr: Expr };
 
 // --- Parser ---
 
@@ -89,11 +100,33 @@ class Parser {
       const tok = this.peek();
       if (tok.type === "keyword" && tok.value === "in") {
         nodes.push(this.parseDecl());
+      } else if (tok.type === "keyword" && tok.value === "let") {
+        nodes.push(this.parseLetDecl());
       } else {
         nodes.push(this.parseExprNode());
       }
     }
     return nodes;
+  }
+
+  parseLetDecl(): AstNode {
+    this.consume(); // "let"
+    const name = this.consumeIdentifier();
+    const eqTok = this.peek();
+    if (eqTok.type === "punct" && eqTok.value === "=") {
+      this.consume(); // "="
+      const init = this.parseExpr();
+      const semiTok = this.peek();
+      if (semiTok.type === "punct" && semiTok.value === ";") {
+        this.consume(); // ";"
+      }
+      return { type: "let", name, init };
+    }
+    const semiTok = this.peek();
+    if (semiTok.type === "punct" && semiTok.value === ";") {
+      this.consume(); // ";"
+    }
+    return { type: "let", name, init: { type: "number", value: 0 } };
   }
 
   parseDecl(): AstNode {
@@ -132,17 +165,41 @@ class Parser {
     if (token.type === "number") {
       return { type: "number", value: parseInt(token.value, 10) };
     }
-    if (token.type === "punct" && (token.value === "(" || token.value === "{")) {
+    if (token.type === "punct" && token.value === "(") {
       const expr = this.parseExpr();
       const closingTok = this.peek();
-      const expectedClose = token.value === "(" ? ")" : "}";
-      if (closingTok.type !== "punct" || closingTok.value !== expectedClose) {
-        throw new Error(`Expected '${expectedClose}'`);
+      if (closingTok.type !== "punct" || closingTok.value !== ")") {
+        throw new Error("Expected ')'");
       }
       this.consume();
-      return { type: "group", expr };
+      return { type: "group", nodes: [{ type: "expr", expr }] };
+    }
+    if (token.type === "punct" && token.value === "{") {
+      const nodes = this.parseBlock();
+      return { type: "group", nodes };
+    }
+    if (token.type === "identifier") {
+      return { type: "identifier", name: token.value };
     }
     throw new Error(`Unexpected token: ${token.type}`);
+  }
+
+  parseBlock(): AstNode[] {
+    const nodes: AstNode[] = [];
+    while (this.peek().type !== "eof" && this.peek().type !== "punct") {
+      const tok = this.peek();
+      if (tok.type === "keyword" && tok.value === "let") {
+        nodes.push(this.parseLetDecl());
+      } else {
+        nodes.push(this.parseExprNode());
+      }
+    }
+    // Consume closing "}"
+    const closeTok = this.peek();
+    if (closeTok.type === "punct" && closeTok.value === "}") {
+      this.consume();
+    }
+    return nodes;
   }
 
   consumeIdentifier(): string {
@@ -173,13 +230,45 @@ function genExpr(expr: Expr): string {
   if (expr.type === "number") {
     return String(expr.value);
   }
+  if (expr.type === "identifier") {
+    return expr.name;
+  }
   if (expr.type === "binary") {
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
   }
   if (expr.type === "group") {
-    return `(${genExpr(expr.expr)})`;
+    // If the block contains let declarations, wrap in IIFE
+    const hasLet = expr.nodes.some(n => n.type === "let");
+    if (hasLet) {
+      const lines = generateBlockJS(expr.nodes);
+      const last = expr.nodes[expr.nodes.length - 1]!;
+      if (last.type === "expr") {
+        return `(function(){${lines}return ${genExpr(last.expr)};})()`;
+      }
+      return `(function(){${lines}})()`;
+    }
+    // Simple grouping: just parenthesize the expression
+    const last = expr.nodes[expr.nodes.length - 1]!;
+    if (last.type === "expr") {
+      return `(${genExpr(last.expr)})`;
+    }
+    return "(0)";
   }
   throw new Error("Unknown expression type");
+}
+
+function generateBlockJS(nodes: AstNode[]): string {
+  const lines: string[] = [];
+  for (const node of nodes) {
+    if (node.type === "decl") {
+      // Stripped (injected at runtime)
+    } else if (node.type === "let") {
+      lines.push(`let ${node.name}=${genExpr(node.init)};`);
+    } else if (node.type === "expr") {
+      lines.push(`${genExpr(node.expr)};`);
+    }
+  }
+  return lines.join("");
 }
 
 // --- Compiler ---
