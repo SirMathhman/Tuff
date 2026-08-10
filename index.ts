@@ -320,17 +320,21 @@ function validateScopes(nodes: AstNode[]): void {
         mutableVars.add(node.name);
       }
     } else if (node.type === "assign") {
-      if (!scope.includes(node.name)) {
-        throw new Error(`Undefined variable: ${node.name}`);
-      }
-      if (!mutableVars.has(node.name)) {
-        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
-      }
-      validateExprScopes(node.value, scope, mutableVars);
+      validateAssign(node.name, node.value, scope, mutableVars);
     } else if (node.type === "expr") {
       validateExprScopes(node.expr, scope, mutableVars);
     }
   }
+}
+
+function validateAssign(name: string, value: Expr, scope: string[], mutableVars: Set<string>): void {
+  if (!scope.includes(name)) {
+    throw new Error(`Undefined variable: ${name}`);
+  }
+  if (!mutableVars.has(name)) {
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  }
+  validateExprScopes(value, scope, mutableVars);
 }
 
 function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string>): void {
@@ -349,13 +353,7 @@ function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string
     return;
   }
   if (expr.type === "assign") {
-    if (!scope.includes(expr.name)) {
-      throw new Error(`Undefined variable: ${expr.name}`);
-    }
-    if (!mutableVars.has(expr.name)) {
-      throw new Error(`Cannot assign to immutable variable: ${expr.name}`);
-    }
-    validateExprScopes(expr.value, scope, mutableVars);
+    validateAssign(expr.name, expr.value, scope, mutableVars);
     return;
   }
   if (expr.type === "group") {
@@ -370,13 +368,7 @@ function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string
           blockMutableVars.add(node.name);
         }
       } else if (node.type === "assign") {
-        if (!blockScope.includes(node.name)) {
-          throw new Error(`Undefined variable: ${node.name}`);
-        }
-        if (!blockMutableVars.has(node.name)) {
-          throw new Error(`Cannot assign to immutable variable: ${node.name}`);
-        }
-        validateExprScopes(node.value, blockScope, blockMutableVars);
+        validateAssign(node.name, node.value, blockScope, blockMutableVars);
       } else if (node.type === "expr") {
         validateExprScopes(node.expr, blockScope, blockMutableVars);
       }
