@@ -86,3 +86,7 @@ test('executeTuff("let x = true; x") => 1', () => {
 test('executeTuff("let x = 1; let y = 2; x == y") => 0', () => {
   expect(executeTuff("let x = 1; let y = 2; x == y")).toBe(0);
 });
+
+test('executeTuff("true == 1") => 0', () => {
+  expect(executeTuff("true == 1")).toBe(0);
+});

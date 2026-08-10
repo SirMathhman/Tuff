@@ -267,7 +267,7 @@ function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
 }
 
 function generateJS(nodes: AstNode[]): string {
-  const lines = nodes.map((n) => genNode(n, (e) => `process.exit(${e});`));
+  const lines = nodes.map((n) => genNode(n, (e) => `process.exit(Number(${e}));`));
   return lines.filter((l) => l).join("\n");
 }
 
@@ -281,7 +281,7 @@ function genExpr(expr: Expr): string {
     return String(expr.value);
   }
   if (expr.type === "boolean") {
-    return expr.value ? "1" : "0";
+    return expr.value ? "true" : "false";
   }
   if (expr.type === "identifier") {
     return expr.name;
@@ -291,7 +291,7 @@ function genExpr(expr: Expr): string {
   }
   if (expr.type === "binary") {
     if (expr.op === "==") {
-      return `(${genExpr(expr.left)} == ${genExpr(expr.right)}) ? 1 : 0`;
+      return `(${genExpr(expr.left)} === ${genExpr(expr.right)}) ? 1 : 0`;
     }
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
   }
