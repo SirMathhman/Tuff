@@ -115,6 +115,10 @@ test('executeTuff("let x = 100; -x") => -100', () => {
   expect(executeTuff("let x = 100; -x")).toBe(-100);
 });
 
+test('compileTuff("let x = 100U8; -x") => Error', () => {
+  expect(() => compileTuffToJS("let x = 100U8; -x")).toThrow();
+});
+
 test('executeTuff("let x = if (true) 2 else 3; x") => 2', () => {
   expect(executeTuff("let x = if (true) 2 else 3; x")).toBe(2);
 });

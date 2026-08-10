@@ -707,11 +707,12 @@ function validateScopes(nodes: AstNode[]): void {
   const scope: string[] = [];
   const mutableVars = new Set<string>();
   const types = new Map<string, VarType>();
+  const u8Vars = new Set<string>();
   for (const node of nodes) {
     if (node.type === "decl") {
       scope.push(node.name);
     } else {
-      validateNodeScope(node, scope, mutableVars, types);
+      validateNodeScope(node, scope, mutableVars, types, u8Vars);
     }
   }
 }
@@ -779,10 +780,14 @@ function validateNodeScope(
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
+  u8Vars: Set<string>,
 ): void {
   if (node.type === "decl") return;
   if (node.type === "let") {
     const initType = inferExprType(node.init, scope, mutableVars, types);
+    if (isU8Expr(node.init)) {
+      u8Vars.add(node.name);
+    }
     scope.push(node.name);
     types.set(node.name, initType);
     if (node.mutable) {
@@ -795,7 +800,7 @@ function validateNodeScope(
     return;
   }
   if (node.type === "expr") {
-    validateExprScope(node.expr, scope, mutableVars, types);
+    validateExprScope(node.expr, scope, mutableVars, types, u8Vars);
     return;
   }
   if (node.type === "while") {
@@ -803,8 +808,9 @@ function validateNodeScope(
     const scope_ = [...scope];
     const mut_ = new Set(mutableVars);
     const types_ = new Map(types);
+    const u8_ = new Set(u8Vars);
     for (const n of node.body) {
-      validateNodeScope(n, scope_, mut_, types_);
+      validateNodeScope(n, scope_, mut_, types_, u8_);
     }
     return;
   }
@@ -815,8 +821,9 @@ function validateNodeScope(
     mut_.add(node.varName);
     const types_ = new Map(types);
     types_.set(node.varName, "number");
+    const u8_ = new Set(u8Vars);
     for (const n of node.body) {
-      validateNodeScope(n, scope_, mut_, types_);
+      validateNodeScope(n, scope_, mut_, types_, u8_);
     }
     return;
   }
@@ -826,6 +833,11 @@ function validateNodeScope(
   if (node.type === "continue") {
     return;
   }
+}
+
+function isU8Expr(expr: Expr): boolean {
+  if (expr.type === "number" && expr.u8) return true;
+  return false;
 }
 
 function assertDefined(name: string, scope: string[]): void {
@@ -915,12 +927,14 @@ function validateGroupScope(
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
+  u8Vars: Set<string>,
 ): [string[], Set<string>, Map<string, VarType>] {
   const scope_ = [...scope];
   const mut_ = new Set(mutableVars);
   const types_ = new Map(types);
+  const u8_ = new Set(u8Vars);
   for (const node of expr.nodes) {
-    validateNodeScope(node, scope_, mut_, types_);
+    validateNodeScope(node, scope_, mut_, types_, u8_);
   }
   return [scope_, mut_, types_];
 }
@@ -930,17 +944,23 @@ function validateExprScope(
   scope: string[],
   mutableVars: Set<string>,
   types: Map<string, VarType>,
+  u8Vars: Set<string>,
 ): void {
   if (isGroupExpr(expr)) {
-    validateGroupScope(expr, scope, mutableVars, types);
+    validateGroupScope(expr, scope, mutableVars, types, u8Vars);
     return;
   }
   if (expr.type === "if") {
-    validateNodeScope(expr.thenNode, scope, mutableVars, types);
+    validateNodeScope(expr.thenNode, scope, mutableVars, types, u8Vars);
     if (expr.elseNode) {
-      validateNodeScope(expr.elseNode, scope, mutableVars, types);
+      validateNodeScope(expr.elseNode, scope, mutableVars, types, u8Vars);
     }
     return;
+  }
+  if (expr.type === "unary" && expr.op === "-") {
+    if (expr.operand.type === "identifier" && u8Vars.has(expr.operand.name)) {
+      throw new Error(`Cannot negate U8 variable: ${expr.operand.name}`);
+    }
   }
   inferExprType(expr, scope, mutableVars, types);
 }
@@ -1002,6 +1022,7 @@ function inferExprType(
       scope,
       mutableVars,
       types,
+      new Set(),
     );
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {
