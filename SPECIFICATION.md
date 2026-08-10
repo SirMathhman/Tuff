@@ -52,9 +52,9 @@ Type
 │   ├── Char
 │   ├── String
 │   └── Numeric Types (with refinement)
-│       ├── Int<min, max>    (signed, range-constrained)
-│       ├── UInt<min, max>   (unsigned, range-constrained)
-│       └── Float             (IEEE 754, no overflow panic)
+│       ├── I32 >= min && I32 <= max   (signed, range-constrained)
+│       ├── U32 >= 0 && U32 < 256       (unsigned, range-constrained)
+│       └── F64                          (IEEE 754, no overflow panic)
 ├── Compound Types
 │   ├── Struct
 │   ├── Enum (with associated data — algebraic data types)
@@ -124,7 +124,7 @@ let z : I32 = 42;        // Explicit type annotation
 #### Type Aliases
 
 ```tuff
-type Percentage = Int<0, 100>;
+type Percentage = I32 >= 0 && I32 <= 100;
 type NullablePtr<T> = &T | Null;
 ```
 
@@ -167,14 +167,14 @@ let ge = a >= b;
 // Logical
 let both = a && b;
 let either = a || b;
-let not_a = !a;
+let notA = !a;
 
 // Bitwise
-let and_bits = a & b;
-let or_bits = a | b;
-let xor_bits = a ^ b;
+let andBits = a & b;
+let orBits = a | b;
+let xorBits = a ^ b;
 let shifted = a << 2;
-let right_shifted = a >> 1;
+let rightShifted = a >> 1;
 
 // Compound assignment
 x += 1;
@@ -229,8 +229,8 @@ fn add(first : I32, second : I32) : I32 => {
 // Single-expression function
 fn multiply(a : I32, b : I32) : I32 => a * b;
 
-// No return type (returns Unit)
-fn print_hello() : Unit => {
+// No return type (returns Void)
+fn printHello() : Void => {
     println("Hello!");
 }
 
@@ -259,13 +259,13 @@ struct Point {
 }
 
 struct Rectangle {
-    top_left: Point,
-    bottom_right: Point,
+    topLeft: Point,
+    bottomRight: Point,
 }
 
 // Construction
 let p = Point { x: 0.0, y: 0.0 };
-let r = Rectangle { top_left: p, bottom_right: Point { x: 1.0, y: 1.0 } };
+let r = Rectangle { topLeft: p, bottomRight: Point { x: 1.0, y: 1.0 } };
 
 // Field access
 let x = p.x;  // Auto-deref works through references
@@ -290,7 +290,7 @@ type MyUnion = IntValue | StrValue | Empty | Null;
 let something : MyUnion = IntValue { value: 42 };
 let another : MyUnion = StrValue { text: "hello" };
 let nothing : MyUnion = Empty {};
-let null_val : MyUnion = Null;
+let nullVal : MyUnion = Null;
 
 // Pattern matching
 match (something) {
@@ -366,18 +366,18 @@ outer: for (x in items) {
 
 ```tuff
 // Ownership transfer
-fn take_ownership(value : Vec<I32>) : I32 {
+fn takeOwnership(value : Vec<I32>) : I32 => {
     let len = value.len();  // borrow
     return len;             // value dropped at end
 }
 
 // Borrowing
-fn first_element(items : &Vec<I32>) : &I32 {
+fn firstElement(items : &Vec<I32>) : &I32 => {
     return &items[0];  // returns borrow of element
 }
 
 // Mutable borrow
-fn append_item(items : &mut Vec<I32>, item : I32) : Unit {
+fn appendItem(items : &mut Vec<I32>, item : I32) : Void => {
     items.push(item);  // mutates through borrow
 }
 
@@ -401,7 +401,7 @@ fn longest(a : &String, b : &String) : &String => {
 }
 
 // Explicit lifetime annotation
-fn longest_explicit<'a>(a : &'a String, b : &'a String) : &'a String => {
+fn longestExplicit<'a>(a : &'a String, b : &'a String) : &'a String => {
     if (a.len() >= b.len()) {
         return a;
     } else {
@@ -423,16 +423,16 @@ contract Serializable {
 
 // Contract with fields
 contract Resource {
-    id: UInt<0, MAX>;
+    id: U32 >= 0;
     fn open() : Result<Self, Error>;
-    fn close() : Result<Unit, Error>;
+    fn close() : Result<Void, Error>;
 }
 
 // Contract with generic bounds
 contract Container<T : Clone> {
-    fn insert(item : T) : Result<Unit, Error>;
-    fn remove(index : UInt<0, MAX>) : Result<T, Error>;
-    fn len() : UInt<0, MAX>;
+    fn insert(item : T) : Result<Void, Error>;
+    fn remove(index : U32 >= 0) : Result<T, Error>;
+    fn len() : U32 >= 0;
 }
 
 // Implementing a contract
@@ -441,7 +441,7 @@ struct MyList<T : Clone> {
 }
 
 impl Container<I32> for MyList<I32> {
-    fn insert(item : I32) : Result<Unit, Error> {
+    fn insert(item : I32) : Result<Void, Error> {
         self.items.push(item);
         return Ok(());
     }
@@ -468,21 +468,21 @@ let s = max("a", "b");    // T = String
 
 ### 3.10 Refinement Types
 
-Compile-time range proofs eliminate integer overflow:
+Compile-time range proofs eliminate integer overflow using predicate-based syntax:
 
 ```tuff
-// Range-constrained types
-type Percentage = Int<0, 100>;
-type Port = UInt<0, 65535>;
-type Index = UInt<0, MAX>;
+// Range-constrained types with explicit predicates
+type Percentage = I32 >= 0 && I32 <= 100;
+type Port = U16 >= 0 && U16 <= 65535;
+type Index = U32 >= 0;
 
-fn set_percentage(val : Percentage) : Unit {
-    // Compiler proves val is in [0, 100]
+fn setPercentage(val : Percentage) : Void => {
+    // Compiler proves val >= 0 && val <= 100
     self.pct = val;
 }
 
 // Arithmetic with refinement
-fn add_safe(a : Int<0, 100>, b : Int<0, 100>) : Result<Int<0, 100>, Overflow> {
+fn addSafe(a : I32 >= 0 && I32 <= 100, b : I32 >= 0 && I32 <= 100) : Result<I32 >= 0 && I32 <= 100, Overflow> => {
     let sum = a + b;  // Compiler inserts range check
     if (sum >= 0 && sum <= 100) {
         return Ok(sum);
@@ -490,6 +490,10 @@ fn add_safe(a : Int<0, 100>, b : Int<0, 100>) : Result<Int<0, 100>, Overflow> {
         return Err(Overflow);
     }
 }
+
+// More complex predicates
+type PositiveOdd = I32 > 0 && I32 % 2 != 0;
+type EmailLength = U32 >= 1 && U32 <= 254;
 ```
 
 ### 3.11 Null Safety
@@ -532,7 +536,7 @@ fn calculate() : Result<F64, Error> => {
 }
 
 // Option for missing values
-fn find_key(map : Map<String, I32>, key : String) : Option<I32> => {
+fn findKey(map : Map<String, I32>, key : String) : Option<I32> => {
     if (map.contains(key)) {
         return Some(map[key]);
     }
@@ -546,20 +550,20 @@ Continuation-passing form enables async even on bare metal:
 
 ```tuff
 // Async function
-async fn fetch_url(url : String) : Result<String, NetworkError> {
-    let response = await http_get(url);
+async fn fetchUrl(url : String) : Result<String, NetworkError> => {
+    let response = await httpGet(url);
     return Ok(response.body);
 }
 
 // Usage
-async fn main() : Result<Unit, Error> {
-    let data = await fetch_url("https://example.com");
+async fn main() : Result<Void, Error> => {
+    let data = await fetchUrl("https://example.com");
     println(data);
     return Ok(());
 }
 
 // Compiled to continuation-passing:
-// fetch_url(url, fn(result) { ... })
+// fetchUrl(url, fn(result) { ... })
 ```
 
 ### 3.13 Concurrency
@@ -568,9 +572,9 @@ Thread safety enforced by ownership:
 
 ```tuff
 // Send-safe data (owned transfer between threads)
-fn spawn_task(data : Vec<I32>) : Thread => {
+fn spawnTask(data : Vec<I32>) : Thread => {
     return Thread::spawn(move || {
-        process(data)  // data moved into thread
+        process(data);  // data moved into thread
     });
 }
 
@@ -579,7 +583,7 @@ struct Counter {
     value: AtomicI32,
 }
 
-fn increment(counter : &Counter) : Unit => {
+fn increment(counter : &Counter) : Void => {
     counter.value.fetch_add(1);  // atomic, no data race
 }
 ```
@@ -592,19 +596,19 @@ Seamless C FFI is critical:
 // Import C functions
 extern "C" {
     fn malloc(size : UInt) : *Void;
-    fn free(ptr : *Void) : Unit;
+    fn free(ptr : *Void) : Void;
     fn printf(format : *Char, ...) : Int;
 }
 
 // Call C libraries directly
-fn allocate_buffer(size : UInt) : *U8 => {
+fn allocateBuffer(size : UInt) : *U8 => {
     let ptr = malloc(size) as *U8;
     return ptr;
 }
 
 // Export to C
-#[export_c]
-fn my_function(x : I32, y : I32) : I32 => {
+#[exportC]
+fn myFunction(x : I32, y : I32) : I32 => {
     return x + y;
 }
 ```
@@ -662,11 +666,11 @@ Rust-style capture modes:
 let multiplier = |x : I32| : I32 => x * factor;  // borrows factor
 
 // Move capture
-let owned_closure = move |x : I32| : I32 => x * owned_data;
+let ownedClosure = move |x : I32| : I32 => x * ownedData;
 
 // Mutable capture
 let mut counter = 0;
-let increment = || : Unit => counter += 1;  // mutates capture
+let increment = || : Void => counter += 1;  // mutates capture
 ```
 
 ### 3.16 Module System
@@ -674,15 +678,15 @@ let increment = || : Unit => counter += 1;  // mutates capture
 File path determines module path (no explicit module declarations):
 
 ```tuff
-// File: my_package/math/utils.tuff
-// Module path: my_package::math::utils
+// File: myPackage/math/utils.tuff
+// Module path: myPackage::math::utils
 
 out fn add(a : I32, b : I32) : I32 => {
     return a + b;
 }
 
 // In another file:
-in my_package::math::utils::add;
+in myPackage::math::utils::add;
 ```
 
 The `in` keyword imports (like dependency injection), and `out` marks public exports.
@@ -712,10 +716,10 @@ In bare metal environments, the caller must handle all errors:
 
 ```tuff
 // Entry point must return Result
-fn main() : Result<Unit, FatalError> => {
+fn main() : Result<Void, FatalError> => {
     // All errors propagated up
     // No panic, no crash
-    return hardware_init()?;
+    return hardwareInit()?;
 }
 
 // The compiler enforces that all error paths are handled
@@ -737,7 +741,7 @@ match (result) {
 
 ```tuff
 // Bounds checked, returns Result
-fn get_item(arr : &Vec<I32>, index : I32) : Result<I32, IndexOutOfBounds> => {
+fn getItem(arr : &Vec<I32>, index : I32) : Result<I32, IndexOutOfBounds> => {
     if (index >= 0 && index < arr.len()) {
         return Ok(arr[index]);
     }
@@ -772,7 +776,7 @@ fn get_item(arr : &Vec<I32>, index : I32) : Result<I32, IndexOutOfBounds> => {
 ### 5.4 Interoperability
 
 - Call any C function directly via `extern "C"`
-- Export Tuff functions to C via `#[export_c]`
+- Export Tuff functions to C via `#[exportC]`
 - Compatible with C ABI for structs and enums
 
 ### 5.5 Developer Experience
@@ -914,22 +918,22 @@ in std::result::{Ok, Err, Result};
 
 // Contract for sortable types
 contract Ord {
-    fn less_than(self : &Self, other : &Self) : Bool;
+    fn lessThan(self : &Self, other : &Self) : Bool;
 }
 
 // Implement for I32
 impl Ord for I32 {
-    fn less_than(self : &I32, other : &I32) : Bool => {
+    fn lessThan(self : &I32, other : &I32) : Bool => {
         return *self < *other;
     }
 }
 
 // Generic sort with contract bound
-fn bubble_sort<T : Ord>(items : &mut Vec<T>) : Result<Unit, Error> => {
+fn bubbleSort<T : Ord>(items : &mut Vec<T>) : Result<Void, Error> => {
     let n = items.len();
     for (i in 0..n) {
         for (j in 0..(n - 1)) {
-            if (items[j].less_than(&items[j + 1]) == false) {
+            if (items[j].lessThan(&items[j + 1]) == false) {
                 // Swap
                 let temp = items[j];
                 items[j] = items[j + 1];
@@ -941,7 +945,7 @@ fn bubble_sort<T : Ord>(items : &mut Vec<T>) : Result<Unit, Error> => {
 }
 
 // Main entry point — must handle all errors
-fn main() : Result<Unit, Error> => {
+fn main() : Result<Void, Error> => {
     let mut numbers = Vec::new();
     numbers.push(5);
     numbers.push(2);
@@ -949,8 +953,8 @@ fn main() : Result<Unit, Error> => {
     numbers.push(1);
 
     // Sort — must handle Result
-    let sort_result = bubble_sort(&mut numbers);
-    match (sort_result) {
+    let sortResult = bubbleSort(&mut numbers);
+    match (sortResult) {
         case v : Ok => {
             for (n in numbers) {
                 io::println(n.toString());
