@@ -16,6 +16,7 @@ enum Token {
     RBracket,
     Semicolon,
     Hash,
+    Eq,
     Invalid(char),
     Eof,
 }
@@ -43,6 +44,10 @@ impl Tokenizer {
             '+' => {
                 self.pos += 1;
                 Token::Plus
+            }
+            '=' => {
+                self.pos += 1;
+                Token::Eq
             }
             ';' => {
                 self.pos += 1;
@@ -115,8 +120,9 @@ enum Expr {
 
 #[derive(Debug)]
 enum Stmt {
-    Let(String, Expr),
+    Let(String, bool, Expr),
     Expr(Expr),
+    Assign(String, Expr),
 }
 
 // --- Parser ---
@@ -166,6 +172,17 @@ impl Parser {
             if s == "let" {
                 return self.parse_let();
             }
+            // Check for assignment: identifier = expr
+            if self.tokens.get(self.pos + 1) == Some(&Token::Eq) && self.scope.contains(s) {
+                self.pos += 1; // consume identifier
+                self.pos += 1; // consume '='
+                let value = self.parse_expr()?;
+                let name = s.clone();
+                if self.current() == Token::Semicolon {
+                    self.pos += 1;
+                }
+                return Ok(Stmt::Assign(name, value));
+            }
         }
         Ok(Stmt::Expr(self.parse_expr()?))
     }
@@ -173,6 +190,17 @@ impl Parser {
     fn parse_let(&mut self) -> Result<Stmt, CompileError> {
         // consume "let"
         self.pos += 1;
+        // Check for "mut" keyword
+        let is_mut = if let Token::Ident(ref s) = self.current() {
+            if s == "mut" {
+                self.pos += 1;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
         let name = match self.current() {
             Token::Ident(ref s) => s.clone(),
             _ => return Err(CompileError { message: "expected identifier after 'let'".to_string() }),
@@ -187,7 +215,7 @@ impl Parser {
         if self.current() == Token::Semicolon {
             self.pos += 1;
         }
-        Ok(Stmt::Let(name, value))
+        Ok(Stmt::Let(name, is_mut, value))
     }
 
     fn parse_expr(&mut self) -> Result<Expr, CompileError> {
@@ -287,7 +315,7 @@ fn codegen(stmts: &[Stmt]) -> String {
     let mut declared_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
     for stmt in stmts {
         match stmt {
-            Stmt::Let(name, value) => {
+            Stmt::Let(name, _is_mut, value) => {
                 if is_args_expr(value) {
                     args_vars.insert(name.clone());
                 }
@@ -317,6 +345,13 @@ fn codegen(stmts: &[Stmt]) -> String {
                 buf.push_str(&format!(
                     " return {};",
                     codegen_expr_with_args_vars(expr, &args_vars, &args_index_vars)
+                ));
+            }
+            Stmt::Assign(name, value) => {
+                buf.push_str(&format!(
+                    " {} = {};",
+                    name,
+                    codegen_expr_with_args_vars(value, &args_vars, &args_index_vars)
                 ));
             }
         }
@@ -603,5 +638,20 @@ mod tests {
     #[test]
     fn test_at_sign_invalid() {
         expect_invalid("@");
+    }
+
+    #[test]
+    fn test_comma_invalid() {
+        expect_invalid(",");
+    }
+
+    #[test]
+    fn test_multiple_invalid_chars() {
+        expect_invalid("@#%@#$!@");
+    }
+
+    #[test]
+    fn test_let_mut_with_assignment() {
+        expect_valid("let mut x = 0; x = 1; x", vec![], 1);
     }
 }
