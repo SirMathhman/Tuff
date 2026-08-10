@@ -239,6 +239,9 @@ function validateExprScope(
     if (expr.operand.type === "identifier" && u8Vars.has(expr.operand.name)) {
       throw new Error(`Cannot negate U8 variable: ${expr.operand.name}`);
     }
+    if (expr.operand.type === "number" && expr.operand.u8) {
+      throw new Error(`Cannot negate U8 literal: ${expr.operand.value}`);
+    }
   }
   inferExprType(expr, scope, mutableVars, types);
 }
