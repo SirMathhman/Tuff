@@ -106,3 +106,7 @@ test('executeTuff("let x = 0; let y = 1; (x < y) == 1") => 0', () => {
 test('executeTuff("let x = if (true) 2 else 3; x") => 2', () => {
   expect(executeTuff("let x = if (true) 2 else 3; x")).toBe(2);
 });
+
+test('executeTuff("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+  expect(executeTuff("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
+});
