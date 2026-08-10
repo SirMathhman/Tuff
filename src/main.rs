@@ -758,4 +758,9 @@ mod tests {
     fn test_string_literal_index() {
         expect_valid("\"apple\"[0]", vec![], 97);
     }
+
+    #[test]
+    fn test_string_escape_sequence() {
+        expect_valid("\"a\\t\"[0]", vec![], 97);
+    }
 }
