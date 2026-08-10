@@ -214,18 +214,27 @@ class Parser {
 
 // --- Code Generator ---
 
-function generateJS(nodes: AstNode[]): string {
-  const lines: string[] = [];
-  for (const node of nodes) {
-    if (node.type === "decl") {
-      // Declarations are stripped (injected at runtime)
-    } else if (node.type === "let") {
-      lines.push(`let ${node.name}=${genExpr(node.init)};`);
-    } else if (node.type === "expr") {
-      lines.push(`process.exit(${genExpr(node.expr)});`);
-    }
+function genNode(node: AstNode, wrapExpr: (expr: string) => string): string {
+  if (node.type === "decl") {
+    return "";
   }
-  return lines.join("\n");
+  if (node.type === "let") {
+    return `let ${node.name}=${genExpr(node.init)};`;
+  }
+  if (node.type === "expr") {
+    return wrapExpr(genExpr(node.expr));
+  }
+  throw new Error("Unknown node type");
+}
+
+function generateJS(nodes: AstNode[]): string {
+  const lines = nodes.map((n) => genNode(n, (e) => `process.exit(${e});`));
+  return lines.filter((l) => l).join("\n");
+}
+
+function generateBlockJS(nodes: AstNode[]): string {
+  const lines = nodes.map((n) => genNode(n, (e) => `${e};`));
+  return lines.join("");
 }
 
 function genExpr(expr: Expr): string {
@@ -257,20 +266,6 @@ function genExpr(expr: Expr): string {
     return "(0)";
   }
   throw new Error("Unknown expression type");
-}
-
-function generateBlockJS(nodes: AstNode[]): string {
-  const lines: string[] = [];
-  for (const node of nodes) {
-    if (node.type === "decl") {
-      // Stripped (injected at runtime)
-    } else if (node.type === "let") {
-      lines.push(`let ${node.name}=${genExpr(node.init)};`);
-    } else if (node.type === "expr") {
-      lines.push(`${genExpr(node.expr)};`);
-    }
-  }
-  return lines.join("");
 }
 
 // --- Compiler ---
