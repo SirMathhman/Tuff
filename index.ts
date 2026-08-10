@@ -314,7 +314,7 @@ function validateScopes(nodes: AstNode[]): void {
     if (node.type === "decl") {
       scope.push(node.name);
     } else if (node.type === "let") {
-      validateExprScopes(node.init, scope);
+      validateExprScopes(node.init, scope, mutableVars);
       scope.push(node.name);
       if (node.mutable) {
         mutableVars.add(node.name);
@@ -323,14 +323,17 @@ function validateScopes(nodes: AstNode[]): void {
       if (!scope.includes(node.name)) {
         throw new Error(`Undefined variable: ${node.name}`);
       }
-      validateExprScopes(node.value, scope);
+      if (!mutableVars.has(node.name)) {
+        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
+      }
+      validateExprScopes(node.value, scope, mutableVars);
     } else if (node.type === "expr") {
-      validateExprScopes(node.expr, scope);
+      validateExprScopes(node.expr, scope, mutableVars);
     }
   }
 }
 
-function validateExprScopes(expr: Expr, scope: string[]): void {
+function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string>): void {
   if (expr.type === "number") {
     return;
   }
@@ -341,19 +344,41 @@ function validateExprScopes(expr: Expr, scope: string[]): void {
     return;
   }
   if (expr.type === "binary") {
-    validateExprScopes(expr.left, scope);
-    validateExprScopes(expr.right, scope);
+    validateExprScopes(expr.left, scope, mutableVars);
+    validateExprScopes(expr.right, scope, mutableVars);
+    return;
+  }
+  if (expr.type === "assign") {
+    if (!scope.includes(expr.name)) {
+      throw new Error(`Undefined variable: ${expr.name}`);
+    }
+    if (!mutableVars.has(expr.name)) {
+      throw new Error(`Cannot assign to immutable variable: ${expr.name}`);
+    }
+    validateExprScopes(expr.value, scope, mutableVars);
     return;
   }
   if (expr.type === "group") {
     // Block creates a new scope that inherits from outer scope
     const blockScope = [...scope];
+    const blockMutableVars = new Set(mutableVars);
     for (const node of expr.nodes) {
       if (node.type === "let") {
-        validateExprScopes(node.init, blockScope);
+        validateExprScopes(node.init, blockScope, blockMutableVars);
         blockScope.push(node.name);
+        if (node.mutable) {
+          blockMutableVars.add(node.name);
+        }
+      } else if (node.type === "assign") {
+        if (!blockScope.includes(node.name)) {
+          throw new Error(`Undefined variable: ${node.name}`);
+        }
+        if (!blockMutableVars.has(node.name)) {
+          throw new Error(`Cannot assign to immutable variable: ${node.name}`);
+        }
+        validateExprScopes(node.value, blockScope, blockMutableVars);
       } else if (node.type === "expr") {
-        validateExprScopes(node.expr, blockScope);
+        validateExprScopes(node.expr, blockScope, blockMutableVars);
       }
     }
     return;
