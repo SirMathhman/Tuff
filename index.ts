@@ -383,7 +383,7 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
     return;
   }
   if (node.type === "expr") {
-    inferExprType(node.expr, scope, mutableVars, types, false);
+    validateExprScope(node.expr, scope, mutableVars, types);
     return;
   }
 }
@@ -406,7 +406,25 @@ function validateAssign(name: string, value: Expr, scope: string[], mutableVars:
   validateAssignType(name, value, types, scope, mutableVars);
 }
 
-function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>, asValue = true): VarType {
+function validateExprScope(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
+  if (expr.type === "group") {
+    const scope_ = [...scope];
+    const mut_ = new Set(mutableVars);
+    const types_ = new Map(types);
+    for (const node of expr.nodes) {
+      validateNodeScope(node, scope_, mut_, types_);
+    }
+    return;
+  }
+  if (expr.type === "if") {
+    validateExprScope(expr.thenExpr, scope, mutableVars, types);
+    validateExprScope(expr.elseExpr, scope, mutableVars, types);
+    return;
+  }
+  inferExprType(expr, scope, mutableVars, types);
+}
+
+function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
   if (expr.type === "number") {
     return "number";
   }
@@ -436,16 +454,13 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     }
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {
-      return inferExprType(last.expr, scope_, mut_, types_, asValue);
+      return inferExprType(last.expr, scope_, mut_, types_);
     }
-    if (asValue && expr.nodes.length > 0) {
-      throw new Error("Block used as expression must end with an expression");
-    }
-    return "number";
+    throw new Error("Block used as expression must end with an expression");
   }
   if (expr.type === "if") {
-    const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types, false);
-    const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types, false);
+    const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types);
+    const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types);
     if (thenType !== elseType) {
       throw new Error(`If branches must have the same type: ${thenType} vs ${elseType}`);
     }
