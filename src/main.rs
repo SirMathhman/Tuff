@@ -339,60 +339,71 @@ impl Parser {
 
 // --- Code Generator ---
 
+struct CodegenContext {
+    args_vars: std::collections::HashSet<String>,
+    args_index_vars: std::collections::HashMap<String, String>,
+    pointer_vars: std::collections::HashSet<String>,
+}
+
+impl CodegenContext {
+    fn new() -> Self {
+        Self {
+            args_vars: std::collections::HashSet::new(),
+            args_index_vars: std::collections::HashMap::new(),
+            pointer_vars: std::collections::HashSet::new(),
+        }
+    }
+}
+
 fn codegen(stmts: &[Stmt]) -> String {
     let mut buf = String::from("#include <string.h>\nint main(int argc, char* argv[]) {");
-    // Track which variables hold args (so .length on them resolves to the var itself)
-    let mut args_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
-    // Track which variables hold args[index] (so .length generates strlen(argv[index]))
-    let mut args_index_vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut ctx = CodegenContext::new();
     // Track which variables have already been declared (for reassignment support)
     let mut declared_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
-    // Track which variables are pointer types (from & reference)
-    let mut pointer_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, _is_mut, value) => {
                 if is_args_expr(value) {
-                    args_vars.insert(name.clone());
+                    ctx.args_vars.insert(name.clone());
                 }
                 if is_args_index(value) {
                     let idx_str = get_index_str(value);
-                    args_index_vars.insert(name.clone(), idx_str);
+                    ctx.args_index_vars.insert(name.clone(), idx_str);
                     // Skip generating int declaration for args[index] vars (argv[i] is char*, not int)
                     continue;
                 }
                 let is_reassign = declared_vars.contains(name);
                 declared_vars.insert(name.clone());
                 if is_ref_expr(value) {
-                    pointer_vars.insert(name.clone());
+                    ctx.pointer_vars.insert(name.clone());
                 }
                 if is_reassign {
                     buf.push_str(&format!(
                         " {} = {};",
                         name,
-                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars, &pointer_vars)
+                        codegen_expr(value, &ctx)
                     ));
                 } else {
-                    let type_prefix = if pointer_vars.contains(name) { "int *" } else { "int" };
+                    let type_prefix = if ctx.pointer_vars.contains(name) { "int *" } else { "int" };
                     buf.push_str(&format!(
                         " {} {} = {};",
                         type_prefix,
                         name,
-                        codegen_expr_with_args_vars(value, &args_vars, &args_index_vars, &pointer_vars)
+                        codegen_expr(value, &ctx)
                     ));
                 }
             }
             Stmt::Expr(expr) => {
                 buf.push_str(&format!(
                     " return {};",
-                    codegen_expr_with_args_vars(expr, &args_vars, &args_index_vars, &pointer_vars)
+                    codegen_expr(expr, &ctx)
                 ));
             }
             Stmt::Assign(name, value) => {
                 buf.push_str(&format!(
                     " {} = {};",
                     name,
-                    codegen_expr_with_args_vars(value, &args_vars, &args_index_vars, &pointer_vars)
+                    codegen_expr(value, &ctx)
                 ));
             }
         }
@@ -420,27 +431,19 @@ fn is_args_index(expr: &Expr) -> bool {
 }
 
 fn get_index_str(expr: &Expr) -> String {
+    // Simple fallback for index extraction; not used with context
     if let Expr::Index(_, idx) = expr {
-        codegen_expr(idx)
+        match idx.as_ref() {
+            Expr::Num(n) => n.to_string(),
+            Expr::Var(name) => name.clone(),
+            _ => "0".to_string(),
+        }
     } else {
         "0".to_string()
     }
 }
 
-fn codegen_expr(expr: &Expr) -> String {
-    match expr {
-        Expr::Num(n) => n.to_string(),
-        Expr::Var(name) => name.clone(),
-        _ => "0".to_string(),
-    }
-}
-
-fn codegen_expr_with_args_vars(
-    expr: &Expr,
-    args_vars: &std::collections::HashSet<String>,
-    args_index_vars: &std::collections::HashMap<String, String>,
-    _pointer_vars: &std::collections::HashSet<String>,
-) -> String {
+fn codegen_expr(expr: &Expr, ctx: &CodegenContext) -> String {
     match expr {
         Expr::Num(n) => n.to_string(),
         Expr::Var(name) => name.clone(),
@@ -449,34 +452,34 @@ fn codegen_expr_with_args_vars(
         Expr::BinOp(left, right) => {
             format!(
                 "{} + {}",
-                codegen_expr_with_args_vars(left, args_vars, args_index_vars, _pointer_vars),
-                codegen_expr_with_args_vars(right, args_vars, args_index_vars, _pointer_vars)
+                codegen_expr(left, ctx),
+                codegen_expr(right, ctx)
             )
         }
         Expr::PropertyAccess(target, prop) => {
             if prop == "length" {
                 // If target is a var that holds args, just return the var (argc)
                 if let Expr::Var(name) = target.as_ref() {
-                    if args_vars.contains(name) {
+                    if ctx.args_vars.contains(name) {
                         return name.clone();
                     }
                     // If target is a var that holds args[index], generate strlen(argv[index])
-                    if let Some(idx_str) = args_index_vars.get(name) {
+                    if let Some(idx_str) = ctx.args_index_vars.get(name) {
                         return format!("strlen(argv[{}])", idx_str);
                     }
                 }
                 // If target is args[index], generate strlen(argv[index])
                 if is_args_index(target) {
                     if let Expr::Index(_, idx) = target.as_ref() {
-                        let idx_str = codegen_expr_with_args_vars(idx, args_vars, args_index_vars, _pointer_vars);
+                        let idx_str = codegen_expr(idx, ctx);
                         return format!("strlen(argv[{}])", idx_str);
                     }
                 }
-                codegen_expr_with_args_vars(target, args_vars, args_index_vars, _pointer_vars)
+                codegen_expr(target, ctx)
             } else {
                 format!(
                     "{}.{}",
-                    codegen_expr_with_args_vars(target, args_vars, args_index_vars, _pointer_vars),
+                    codegen_expr(target, ctx),
                     prop
                 )
             }
@@ -484,26 +487,26 @@ fn codegen_expr_with_args_vars(
         Expr::Index(target, index) => {
             // args[n] -> argv[n]
             if matches!(target.as_ref(), Expr::Args) {
-                return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars, args_index_vars, _pointer_vars));
+                return format!("argv[{}]", codegen_expr(index, ctx));
             }
             // If target is a var that holds args[index], generate argv[index][sub_index]
             if let Expr::Var(name) = target.as_ref() {
-                if let Some(idx_str) = args_index_vars.get(name) {
-                    let sub_idx = codegen_expr_with_args_vars(index, args_vars, args_index_vars, _pointer_vars);
+                if let Some(idx_str) = ctx.args_index_vars.get(name) {
+                    let sub_idx = codegen_expr(index, ctx);
                     return format!("argv[{}][{}]", idx_str, sub_idx);
                 }
             }
             format!(
                 "{}[{}]",
-                codegen_expr_with_args_vars(target, args_vars, args_index_vars, _pointer_vars),
-                codegen_expr_with_args_vars(index, args_vars, args_index_vars, _pointer_vars)
+                codegen_expr(target, ctx),
+                codegen_expr(index, ctx)
             )
         }
         Expr::Ref(inner) => {
-            format!("&{}", codegen_expr_with_args_vars(inner, args_vars, args_index_vars, _pointer_vars))
+            format!("&{}", codegen_expr(inner, ctx))
         }
         Expr::Deref(inner) => {
-            format!("*{}", codegen_expr_with_args_vars(inner, args_vars, args_index_vars, _pointer_vars))
+            format!("*{}", codegen_expr(inner, ctx))
         }
     }
 }
