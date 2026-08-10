@@ -64,7 +64,8 @@ export function tokenize(source: string): Token[] {
         ident === "break" ||
         ident === "continue" ||
         ident === "match" ||
-        ident === "case"
+        ident === "case" ||
+        ident === "is"
       ) {
         tokens.push({
           type: "keyword",

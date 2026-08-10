@@ -111,6 +111,9 @@ function validateIntExpr(expr: Expr): void {
   if (expr.type === "unary") {
     validateIntExpr(expr.operand);
   }
+  if (expr.type === "is") {
+    validateIntExpr(expr.value);
+  }
 }
 
 function validateIntRange(expr: Expr): void {
@@ -291,6 +294,26 @@ function validateExprScope(
       throw new Error(`Cannot negate unsigned literal: ${expr.operand.value}`);
     }
   }
+  if (expr.type === "is") {
+    if (expr.value.type === "number" && expr.value.intType) {
+      if (!isSubtypeOf(expr.value.intType, expr.typeAnnotation)) {
+        throw new Error(
+          `Type mismatch: ${expr.value.intType} is not ${expr.typeAnnotation}`,
+        );
+      }
+    } else if (expr.value.type === "identifier" && intVars.has(expr.value.name)) {
+      const actualIntType = intVars.get(expr.value.name)!;
+      if (!isSubtypeOf(actualIntType, expr.typeAnnotation)) {
+        throw new Error(
+          `Type mismatch: ${actualIntType} is not ${expr.typeAnnotation}`,
+        );
+      }
+    } else {
+      throw new Error(
+        `is operator requires a number value, got ${inferExprType(expr.value, scope, mutableVars, types)}`,
+      );
+    }
+  }
   inferExprType(expr, scope, mutableVars, types);
 }
 
@@ -378,6 +401,7 @@ function inferExprType(
     inferExprType(expr.index, scope, mutableVars, types);
     return "number";
   }
+  if (expr.type === "is") return "number";
   return "number";
 }
 

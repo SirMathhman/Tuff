@@ -20,7 +20,8 @@ export type Token =
         | "break"
         | "continue"
         | "match"
-        | "case";
+        | "case"
+        | "is";
     }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" | "[" | "]" | "," | ":" }
@@ -48,6 +49,7 @@ export type Expr =
   | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null }
   | { type: "match"; target: Expr; cases: { pattern: Expr; body: Expr }[] }
   | { type: "array"; elements: Expr[] }
-  | { type: "index"; target: Expr; index: Expr };
+  | { type: "index"; target: Expr; index: Expr }
+  | { type: "is"; value: Expr; typeAnnotation: IntType };
 
 export type VarType = "number" | "boolean" | "range" | "array";

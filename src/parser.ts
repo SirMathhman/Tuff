@@ -238,6 +238,17 @@ export class Parser {
       const right = this.parsePrimary();
       left = { type: "binary", op: next.value, left, right };
     }
+    const next = this.peek();
+    if (next.type === "keyword" && next.value === "is") {
+      this.consume();
+      const typeTok = this.peek();
+      if (typeTok.type === "identifier") {
+        this.consume();
+        left = { type: "is", value: left, typeAnnotation: typeTok.value as IntType };
+      } else {
+        throw new Error("Expected type after 'is'");
+      }
+    }
     return left;
   }
 

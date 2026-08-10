@@ -91,6 +91,9 @@ export function genExpr(expr: Expr): string {
   if (expr.type === "unary") {
     return `(-${genExpr(expr.operand)})`;
   }
+  if (expr.type === "is") {
+    return "true";
+  }
   throw new Error("Unknown expression type");
 }
 

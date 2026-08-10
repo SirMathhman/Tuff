@@ -107,6 +107,18 @@ test('compileTuff("let x : U8 = 100U16; x") => Error', () => {
   expect(() => compileTuffToJS("let x : U8 = 100U16; x")).toThrow();
 });
 
+test('executeTuff("100U8 is U8") => 1', () => {
+  expect(executeTuff("100U8 is U8")).toBe(1);
+});
+
+test('executeTuff("100U8 is U16") => 1', () => {
+  expect(executeTuff("100U8 is U16")).toBe(1);
+});
+
+test('compileTuff("100U16 is U8") => Error', () => {
+  expect(() => compileTuffToJS("100U16 is U8")).toThrow();
+});
+
 test('executeTuff("let x = 0; let y = 1; (x < y) == 1") => 0', () => {
   expect(executeTuff("let x = 0; let y = 1; (x < y) == 1")).toBe(0);
 });
