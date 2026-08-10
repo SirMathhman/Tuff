@@ -30,3 +30,7 @@ test('executeTuff("1 + 2") => 3', () => {
 test('executeTuff("1 + 2 + 3") => 6', () => {
   expect(executeTuff("1 + 2 + 3")).toBe(6);
 });
+
+test('executeTuff("2 + 3 - 4") => 1', () => {
+  expect(executeTuff("2 + 3 - 4")).toBe(1);
+});
