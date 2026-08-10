@@ -283,7 +283,7 @@ function generateBlockJS(nodes: AstNode[]): string {
 
 function genComparisonOp(left: string, op: string, right: string): string {
   const jsOp = op === "==" ? "===" : op;
-  return `(${left} ${jsOp} ${right}) ? 1 : 0`;
+  return `(${left} ${jsOp} ${right})`;
 }
 
 const comparisonOps = new Set(["==", "<"]);
@@ -394,9 +394,7 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     return types.get(expr.name) || "number";
   }
   if (expr.type === "binary") {
-    // == always returns number (0 or 1)
-    if (expr.op === "==") return "number";
-    // Arithmetic ops return number
+    if (comparisonOps.has(expr.op)) return "boolean";
     return "number";
   }
   if (expr.type === "assign") {
