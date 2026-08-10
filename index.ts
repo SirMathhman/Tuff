@@ -1,7 +1,7 @@
 // --- Tokenizer ---
 
 type Token =
-  | { type: "number"; value: string }
+  | { type: "number"; value: string; u8: boolean }
   | { type: "boolean"; value: boolean }
   | {
       type: "op";
@@ -40,14 +40,11 @@ function tokenize(source: string): Token[] {
         i++;
       }
       // Check for U8 suffix
-      if (source.slice(i, i + 2) === "U8") {
-        const value = parseInt(num, 10);
-        if (value > 255) {
-          throw new Error(`U8 literal out of range: ${num}`);
-        }
+      const u8 = source.slice(i, i + 2) === "U8";
+      if (u8) {
         i += 2;
       }
-      tokens.push({ type: "number", value: num });
+      tokens.push({ type: "number", value: num, u8 });
     } else if (ch === "." && source[i + 1] === ".") {
       tokens.push({ type: "op", value: ".." });
       i += 2;
@@ -161,7 +158,7 @@ type AstNode =
   | { type: "continue" };
 
 type Expr =
-  | { type: "number"; value: number }
+  | { type: "number"; value: number; u8: boolean }
   | { type: "boolean"; value: boolean }
   | { type: "identifier"; name: string }
   | { type: "binary"; op: string; left: Expr; right: Expr }
@@ -356,7 +353,7 @@ class Parser {
     if (semiTok.type === "punct" && semiTok.value === ";") {
       this.consume(); // ";"
     }
-    return { type: "let", name, mutable, init: { type: "number", value: 0 } };
+    return { type: "let", name, mutable, init: { type: "number", value: 0, u8: false } };
   }
 
   parseAssignStmt(): AstNode {
@@ -421,7 +418,7 @@ class Parser {
   parsePrimary(): Expr {
     const token = this.consume();
     if (token.type === "number") {
-      return { type: "number", value: parseInt(token.value, 10) };
+      return { type: "number", value: parseInt(token.value, 10), u8: token.u8 };
     }
     if (token.type === "boolean") {
       return { type: "boolean", value: token.value };
@@ -693,6 +690,9 @@ function genExpr(expr: Expr): string {
 // --- Scope Validation ---
 
 function validateScopes(nodes: AstNode[]): void {
+  for (const node of nodes) {
+    validateU8(node);
+  }
   const scope: string[] = [];
   const mutableVars = new Set<string>();
   const types = new Map<string, VarType>();
@@ -702,6 +702,61 @@ function validateScopes(nodes: AstNode[]): void {
     } else {
       validateNodeScope(node, scope, mutableVars, types);
     }
+  }
+}
+
+function validateU8(node: AstNode): void {
+  if (node.type === "let" || node.type === "assign" || node.type === "expr") {
+    validateU8Expr(
+      node.type === "let" ? node.init : node.type === "assign" ? node.value : node.expr,
+    );
+  }
+  if (node.type === "while") {
+    validateU8Expr(node.condition);
+    for (const n of node.body) validateU8(n);
+  }
+  if (node.type === "for") {
+    validateU8Range(node.rangeExpr);
+    for (const n of node.body) validateU8(n);
+  }
+}
+
+function validateU8Expr(expr: Expr): void {
+  if (expr.type === "number" && expr.u8 && expr.value > 255) {
+    throw new Error(`U8 literal out of range: ${expr.value}`);
+  }
+  if (expr.type === "binary") {
+    validateU8Expr(expr.left);
+    validateU8Expr(expr.right);
+  }
+  if (expr.type === "group") {
+    for (const n of expr.nodes) validateU8(n);
+  }
+  if (expr.type === "if") {
+    validateU8Expr(expr.condition);
+    validateU8(expr.thenNode);
+    if (expr.elseNode) validateU8(expr.elseNode);
+  }
+  if (expr.type === "match") {
+    validateU8Expr(expr.target);
+    for (const c of expr.cases) {
+      validateU8Expr(c.pattern);
+      validateU8Expr(c.body);
+    }
+  }
+  if (expr.type === "array") {
+    for (const e of expr.elements) validateU8Expr(e);
+  }
+  if (expr.type === "index") {
+    validateU8Expr(expr.target);
+    validateU8Expr(expr.index);
+  }
+}
+
+function validateU8Range(expr: Expr): void {
+  if (expr.type === "range") {
+    validateU8Expr(expr.start);
+    validateU8Expr(expr.end);
   }
 }
 
