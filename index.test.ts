@@ -159,6 +159,10 @@ test('executeTuff("let x = match (2) { case 2 => 3; case _ => 4; }; x") => 3', (
   expect(executeTuff("let x = match (2) { case 2 => 3; case _ => 4; }; x")).toBe(3);
 });
 
+test('executeTuff("let x = match (1) { case 2 => 3; case _ => 4; }; x") => 4', () => {
+  expect(executeTuff("let x = match (1) { case 2 => 3; case _ => 4; }; x")).toBe(4);
+});
+
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });
