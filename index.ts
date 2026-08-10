@@ -49,9 +49,7 @@ function tokenize(source: string): Token[] {
 
 // --- AST ---
 
-type AstNode =
-  | { type: "decl"; name: string }
-  | { type: "expr"; expr: Expr };
+type AstNode = { type: "decl"; name: string } | { type: "expr"; expr: Expr };
 
 type Expr =
   | { type: "number"; value: number }
