@@ -54,3 +54,7 @@ test('executeTuff("{ 2 + 3 } * 4") => 20', () => {
 test('compileTuff("( let x = 2 + 3; x ) * 4") => Error', () => {
   expect(() => compileTuffToJS("( let x = 2 + 3; x ) * 4")).toThrow();
 });
+
+test('executeTuff("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+  expect(executeTuff("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+});

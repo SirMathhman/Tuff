@@ -219,6 +219,8 @@ function generateJS(nodes: AstNode[]): string {
   for (const node of nodes) {
     if (node.type === "decl") {
       // Declarations are stripped (injected at runtime)
+    } else if (node.type === "let") {
+      lines.push(`let ${node.name}=${genExpr(node.init)};`);
     } else if (node.type === "expr") {
       lines.push(`process.exit(${genExpr(node.expr)});`);
     }
