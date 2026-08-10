@@ -364,6 +364,7 @@ impl Parser {
 enum VarType {
     Int,
     IntPtr,
+    IntPtrPtr,
     CharPtr,
     Args,
     ArgsIndex(String),
@@ -383,6 +384,7 @@ impl CodegenContext {
     fn type_prefix(&self, name: &str) -> &'static str {
         match self.var_types.get(name) {
             Some(VarType::IntPtr) => "int *",
+            Some(VarType::IntPtrPtr) => "int **",
             Some(VarType::CharPtr) => "char *",
             _ => "int",
         }
@@ -417,7 +419,23 @@ fn codegen(stmts: &[Stmt]) -> String {
                     // Skip generating int declaration for args[index] vars (argv[i] is char*, not int)
                     continue;
                 } else if is_ref_expr(value) {
-                    ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                    // Determine pointer level based on what's being referenced
+                    if let Expr::Ref(inner) = value {
+                        if let Expr::Var(inner_name) = inner.as_ref() {
+                            match ctx.var_types.get(inner_name) {
+                                Some(VarType::IntPtr) => {
+                                    ctx.var_types.insert(name.clone(), VarType::IntPtrPtr);
+                                }
+                                _ => {
+                                    ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                                }
+                            }
+                        } else {
+                            ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                        }
+                    } else {
+                        ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                    }
                 } else if is_str_lit(value) {
                     ctx.var_types.insert(name.clone(), VarType::CharPtr);
                 } else {
@@ -808,5 +826,10 @@ mod tests {
     #[test]
     fn test_deref_returns_value() {
         expect_valid("let x = 100; let y = &x; *y", vec![], 100);
+    }
+
+    #[test]
+    fn test_double_deref() {
+        expect_valid("let x = 100; let y = &x; let z = &y; **z", vec![], 100);
     }
 }
