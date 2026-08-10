@@ -3,7 +3,7 @@
 type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" }
+  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" | "+=" }
   | { type: "keyword"; value: "in" | "let" | "mut" | "if" | "else" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
@@ -23,6 +23,9 @@ function tokenize(source: string): Token[] {
         i++;
       }
       tokens.push({ type: "number", value: num });
+    } else if (ch === "+" && source[i + 1] === "=") {
+      tokens.push({ type: "op", value: "+=" });
+      i += 2;
     } else if (/[+\-*/]/.test(ch)) {
       tokens.push({ type: "op", value: ch as "+" | "-" | "*" | "/" });
       i++;
@@ -125,7 +128,7 @@ class Parser {
     }
     if (tok.type === "identifier") {
       const next = this.tokens[this.pos + 1];
-      if (next && next.type === "punct" && next.value === "=") {
+      if (next && (next.type === "punct" && next.value === "=" || next.type === "op" && next.value === "+=")) {
         return this.parseAssignStmt();
       }
     }
@@ -160,8 +163,17 @@ class Parser {
 
   parseAssignStmt(): AstNode {
     const name = this.consumeIdentifier();
-    const eqTok = this.peek();
-    if (eqTok.type === "punct" && eqTok.value === "=") {
+    const opTok = this.peek();
+    if (opTok.type === "op" && opTok.value === "+=") {
+      this.consume(); // "+="
+      const value = this.parseExpr();
+      const semiTok = this.peek();
+      if (semiTok.type === "punct" && semiTok.value === ";") {
+        this.consume(); // ";"
+      }
+      return { type: "assign", name, value: { type: "binary", op: "+", left: { type: "identifier", name }, right: value } };
+    }
+    if (opTok.type === "punct" && opTok.value === "=") {
       this.consume(); // "="
       const value = this.parseExpr();
       const semiTok = this.peek();
