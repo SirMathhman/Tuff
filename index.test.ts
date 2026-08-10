@@ -44,3 +44,7 @@ test("expectValid empty string", () => {
   expectValid("", 0);
 });
 
+test("expectInvalid hash", () => {
+  expectInvalid("#");
+});
+
