@@ -16,7 +16,10 @@ function expectValid(
       },
     };
 
-    new Function("process", "args", generatedJS)(process, args);
+    new Function("process", "args", generatedJS)(process, [
+      "mock_program_name",
+      ...args,
+    ]);
 
     if (actualExitCode !== expectedExitCode) {
       throw new Error(
@@ -48,3 +51,6 @@ test("expectInvalid hash", () => {
   expectInvalid("#");
 });
 
+test("expectValid one", () => {
+  expectValid("1", 1);
+});
