@@ -11,6 +11,9 @@ enum Token {
     Ident(String),
     Num(i64),
     Plus,
+    Dot,
+    LBracket,
+    RBracket,
     Semicolon,
     Hash,
     Eof,
@@ -48,6 +51,18 @@ impl Tokenizer {
                 self.pos += 1;
                 Token::Hash
             }
+            '.' => {
+                self.pos += 1;
+                Token::Dot
+            }
+            '[' => {
+                self.pos += 1;
+                Token::LBracket
+            }
+            ']' => {
+                self.pos += 1;
+                Token::RBracket
+            }
             c if c.is_ascii_digit() => self.parse_num(),
             c if c == '_' || c.is_ascii_alphabetic() => self.parse_ident(),
             _ => {
@@ -69,7 +84,7 @@ impl Tokenizer {
     fn parse_ident(&mut self) -> Token {
         let start = self.pos;
         while self.pos < self.chars.len()
-            && (self.chars[self.pos].is_ascii_alphanumeric() || self.chars[self.pos] == '.' || self.chars[self.pos] == '_')
+            && (self.chars[self.pos].is_ascii_alphanumeric() || self.chars[self.pos] == '_')
         {
             self.pos += 1;
         }
@@ -91,7 +106,10 @@ enum Expr {
     Num(i64),
     Var(String),
     ArgsLength,
+    Args,
     BinOp(Box<Expr>, Box<Expr>),
+    PropertyAccess(Box<Expr>, String),
+    Index(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug)]
@@ -176,25 +194,64 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<Expr, CompileError> {
-        match self.current() {
+        let base = match self.current() {
             Token::Num(n) => {
                 self.pos += 1;
-                Ok(Expr::Num(n))
+                Expr::Num(n)
             }
             Token::Ident(ref s) => {
                 self.pos += 1;
-                if s == "args.length" {
-                    Ok(Expr::ArgsLength)
+                if s == "args" {
+                    // Check if next token is Dot followed by "length"
+                    if self.current() == Token::Dot {
+                        self.pos += 1; // consume dot
+                        self.pos += 1; // consume "length"
+                        return Ok(Expr::ArgsLength);
+                    } else {
+                        Expr::Args
+                    }
                 } else {
-                    Ok(Expr::Var(s.clone()))
+                    // Check if this is followed by .length
+                    let var_name = s.clone();
+                    if self.current() == Token::Dot {
+                        self.pos += 1; // consume dot
+                        self.pos += 1; // consume "length"
+                        return Ok(Expr::PropertyAccess(
+                            Box::new(Expr::Var(var_name)),
+                            "length".to_string(),
+                        ));
+                    } else {
+                        Expr::Var(var_name)
+                    }
                 }
             }
             Token::Hash => {
                 self.pos += 1;
-                Err(CompileError {})
+                return Err(CompileError {});
             }
-            _ => Err(CompileError {}),
+            _ => return Err(CompileError {}),
+        };
+        // Handle indexing: args[1]
+        if self.current() == Token::LBracket {
+            self.pos += 1; // consume [
+            let index = self.parse_expr()?;
+            if self.current() == Token::RBracket {
+                self.pos += 1; // consume ]
+                let indexed = Expr::Index(Box::new(base), Box::new(index));
+                // Handle .length after index: args[1].length
+                if self.current() == Token::Dot {
+                    self.pos += 1; // consume dot
+                    self.pos += 1; // consume "length"
+                    return Ok(Expr::PropertyAccess(
+                        Box::new(indexed),
+                        "length".to_string(),
+                    ));
+                }
+                return Ok(indexed);
+            }
+            return Err(CompileError {});
         }
+        Ok(base)
     }
 
     fn current(&self) -> Token {
@@ -205,14 +262,26 @@ impl Parser {
 // --- Code Generator ---
 
 fn codegen(stmts: &[Stmt]) -> String {
-    let mut buf = String::from("int main(int argc, char* argv[]) {");
+    let mut buf = String::from("#include <string.h>\nint main(int argc, char* argv[]) {");
+    // Track which variables hold args (so .length on them resolves to the var itself)
+    let mut args_vars: std::collections::HashSet<String> = std::collections::HashSet::new();
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, value) => {
-                buf.push_str(&format!(" int {} = {};", name, codegen_expr(value)));
+                if is_args_expr(value) {
+                    args_vars.insert(name.clone());
+                }
+                buf.push_str(&format!(
+                    " int {} = {};",
+                    name,
+                    codegen_expr_with_args_vars(value, &args_vars)
+                ));
             }
             Stmt::Expr(expr) => {
-                buf.push_str(&format!(" return {};", codegen_expr(expr)));
+                buf.push_str(&format!(
+                    " return {};",
+                    codegen_expr_with_args_vars(expr, &args_vars)
+                ));
             }
         }
     }
@@ -220,13 +289,70 @@ fn codegen(stmts: &[Stmt]) -> String {
     buf
 }
 
-fn codegen_expr(expr: &Expr) -> String {
+fn is_args_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::Args | Expr::ArgsLength => true,
+        _ => false,
+    }
+}
+
+fn is_args_index(expr: &Expr) -> bool {
+    match expr {
+        Expr::Index(target, _) => matches!(target.as_ref(), Expr::Args),
+        _ => false,
+    }
+}
+
+fn codegen_expr_with_args_vars(
+    expr: &Expr,
+    args_vars: &std::collections::HashSet<String>,
+) -> String {
     match expr {
         Expr::Num(n) => n.to_string(),
         Expr::Var(name) => name.clone(),
         Expr::ArgsLength => "argc".to_string(),
+        Expr::Args => "argc".to_string(),
         Expr::BinOp(left, right) => {
-            format!("{} + {}", codegen_expr(left), codegen_expr(right))
+            format!(
+                "{} + {}",
+                codegen_expr_with_args_vars(left, args_vars),
+                codegen_expr_with_args_vars(right, args_vars)
+            )
+        }
+        Expr::PropertyAccess(target, prop) => {
+            if prop == "length" {
+                // If target is a var that holds args, just return the var (argc)
+                if let Expr::Var(name) = target.as_ref() {
+                    if args_vars.contains(name) {
+                        return name.clone();
+                    }
+                }
+                // If target is args[index], generate strlen(argv[index])
+                if is_args_index(target) {
+                    if let Expr::Index(_, idx) = target.as_ref() {
+                        let idx_str = codegen_expr_with_args_vars(idx, args_vars);
+                        return format!("strlen(argv[{}])", idx_str);
+                    }
+                }
+                codegen_expr_with_args_vars(target, args_vars)
+            } else {
+                format!(
+                    "{}.{}",
+                    codegen_expr_with_args_vars(target, args_vars),
+                    prop
+                )
+            }
+        }
+        Expr::Index(target, index) => {
+            // args[n] -> argv[n]
+            if matches!(target.as_ref(), Expr::Args) {
+                return format!("argv[{}]", codegen_expr_with_args_vars(index, args_vars));
+            }
+            format!(
+                "{}[{}]",
+                codegen_expr_with_args_vars(target, args_vars),
+                codegen_expr_with_args_vars(index, args_vars)
+            )
         }
     }
 }
@@ -371,5 +497,15 @@ mod tests {
     #[test]
     fn test_let_variable_doubled() {
         expect_valid("let x = args.length; x + x", vec!["foo".to_string()], 4);
+    }
+
+    #[test]
+    fn test_let_args_length_property() {
+        expect_valid("let x = args; x.length", vec![], 1);
+    }
+
+    #[test]
+    fn test_args_index_length() {
+        expect_valid("let x = args; args[1].length", vec!["foo".to_string()], 3);
     }
 }
