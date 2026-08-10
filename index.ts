@@ -86,6 +86,8 @@ type Expr =
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr };
 
+type VarType = "number" | "boolean";
+
 // --- Parser ---
 
 class Parser {
@@ -319,76 +321,92 @@ function genExpr(expr: Expr): string {
 function validateScopes(nodes: AstNode[]): void {
   const scope: string[] = [];
   const mutableVars = new Set<string>();
+  const types = new Map<string, VarType>();
   for (const node of nodes) {
     if (node.type === "decl") {
       scope.push(node.name);
     } else {
-      validateNodeScope(node, scope, mutableVars);
+      validateNodeScope(node, scope, mutableVars, types);
     }
   }
 }
 
-function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<string>): void {
+function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
   if (node.type === "decl") return;
   if (node.type === "let") {
-    validateExprScopes(node.init, scope, mutableVars);
+    const initType = inferExprType(node.init, scope, mutableVars, types);
     scope.push(node.name);
+    types.set(node.name, initType);
     if (node.mutable) {
       mutableVars.add(node.name);
     }
     return;
   }
   if (node.type === "assign") {
-    validateAssign(node.name, node.value, scope, mutableVars);
+    validateAssign(node.name, node.value, scope, mutableVars, types);
     return;
   }
   if (node.type === "expr") {
-    validateExprScopes(node.expr, scope, mutableVars);
+    inferExprType(node.expr, scope, mutableVars, types);
     return;
   }
 }
 
-function validateAssign(name: string, value: Expr, scope: string[], mutableVars: Set<string>): void {
+function validateAssign(name: string, value: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
   if (!scope.includes(name)) {
     throw new Error(`Undefined variable: ${name}`);
   }
   if (!mutableVars.has(name)) {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
   }
-  validateExprScopes(value, scope, mutableVars);
+  const varType = types.get(name)!;
+  const valType = inferExprType(value, scope, mutableVars, types);
+  if (varType !== valType) {
+    throw new Error(`Type mismatch: cannot assign ${valType} to ${varType}`);
+  }
 }
 
-function validateExprScopes(expr: Expr, scope: string[], mutableVars: Set<string>): void {
+function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
   if (expr.type === "number") {
-    return;
+    return "number";
   }
   if (expr.type === "boolean") {
-    return;
+    return "boolean";
   }
   if (expr.type === "identifier") {
     if (!scope.includes(expr.name)) {
       throw new Error(`Undefined variable: ${expr.name}`);
     }
-    return;
+    return types.get(expr.name) || "number";
   }
   if (expr.type === "binary") {
-    validateExprScopes(expr.left, scope, mutableVars);
-    validateExprScopes(expr.right, scope, mutableVars);
-    return;
+    // == always returns number (0 or 1)
+    if (expr.op === "==") return "number";
+    // Arithmetic ops return number
+    return "number";
   }
   if (expr.type === "assign") {
-    validateAssign(expr.name, expr.value, scope, mutableVars);
-    return;
+    const varType = types.get(expr.name)!;
+    const valType = inferExprType(expr.value, scope, mutableVars, types);
+    if (varType !== valType) {
+      throw new Error(`Type mismatch: cannot assign ${valType} to ${varType}`);
+    }
+    return varType;
   }
   if (expr.type === "group") {
-    // Block creates a new scope that inherits from outer scope
     const scope_ = [...scope];
     const mut_ = new Set(mutableVars);
+    const types_ = new Map(types);
     for (const node of expr.nodes) {
-      validateNodeScope(node, scope_, mut_);
+      validateNodeScope(node, scope_, mut_, types_);
     }
-    return;
+    const last = expr.nodes[expr.nodes.length - 1];
+    if (last && last.type === "expr") {
+      return inferExprType(last.expr, scope_, mut_, types_);
+    }
+    return "number";
   }
+  return "number";
 }
 
 // --- Compiler ---
