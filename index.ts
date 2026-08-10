@@ -91,7 +91,7 @@ type Expr =
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr }
-  | { type: "if"; condition: Expr; thenExpr: Expr; elseExpr: Expr };
+  | { type: "if"; condition: Expr; thenExpr: Expr; elseExpr: Expr | null };
 
 type VarType = "number" | "boolean";
 
@@ -248,12 +248,12 @@ class Parser {
       this.consume(); // ")"
       const thenExpr = this.parseExpr();
       const elseTok = this.peek();
-      if (elseTok.type !== "keyword" || elseTok.value !== "else") {
-        throw new Error("Expected 'else'");
+      if (elseTok.type === "keyword" && elseTok.value === "else") {
+        this.consume(); // "else"
+        const elseExpr = this.parseExpr();
+        return { type: "if", condition, thenExpr, elseExpr };
       }
-      this.consume(); // "else"
-      const elseExpr = this.parseExpr();
-      return { type: "if", condition, thenExpr, elseExpr };
+      return { type: "if", condition, thenExpr, elseExpr: null };
     }
     if (token.type === "identifier") {
       return { type: "identifier", name: token.value };
@@ -355,7 +355,7 @@ function genExpr(expr: Expr): string {
     return `(${parts.join(",")})`;
   }
   if (expr.type === "if") {
-    return `(${genExpr(expr.condition)}) ? ${genExpr(expr.thenExpr)} : ${genExpr(expr.elseExpr)}`;
+    return `(${genExpr(expr.condition)}) ? ${genExpr(expr.thenExpr)} : ${expr.elseExpr ? genExpr(expr.elseExpr) : "0"}`;
   }
   throw new Error("Unknown expression type");
 }
@@ -435,7 +435,9 @@ function validateExprScope(expr: Expr, scope: string[], mutableVars: Set<string>
   }
   if (expr.type === "if") {
     validateExprScope(expr.thenExpr, scope, mutableVars, types);
-    validateExprScope(expr.elseExpr, scope, mutableVars, types);
+    if (expr.elseExpr) {
+      validateExprScope(expr.elseExpr, scope, mutableVars, types);
+    }
     return;
   }
   inferExprType(expr, scope, mutableVars, types);
@@ -471,6 +473,9 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     throw new Error("Block used as expression must end with an expression");
   }
   if (expr.type === "if") {
+    if (!expr.elseExpr) {
+      throw new Error("If used as expression must have an else branch");
+    }
     const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types);
     const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types);
     if (thenType !== elseType) {
