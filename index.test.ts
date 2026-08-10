@@ -1,10 +1,8 @@
 import { test, expect } from "bun:test";
 import { compileTuffToJS } from ".";
 
-const PRELUDE = "in let args : &[&Str]; ";
-
 function executeTuff(tuffSource: string, args: string[] = []): number {
-  const jsSource = compileTuffToJS(PRELUDE + tuffSource);
+  const jsSource = compileTuffToJS(tuffSource);
   try {
     return new Function("args", jsSource)(args);
   } catch (e) {
@@ -56,4 +54,8 @@ test('executeTuff("(2 + 3) * 4") => 20', () => {
 
 test('executeTuff("{ 2 + 3 } * 4") => 20', () => {
   expect(executeTuff("{ 2 + 3 } * 4")).toBe(20);
+});
+
+test('executeTuff("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(executeTuff("{ let x = 2 + 3; x } * 4")).toBe(20);
 });
