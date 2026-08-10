@@ -360,20 +360,42 @@ impl Parser {
 
 // --- Code Generator ---
 
+#[derive(Debug, Clone, PartialEq)]
+enum VarType {
+    Int,
+    IntPtr,
+    CharPtr,
+    Args,
+    ArgsIndex(String),
+}
+
 struct CodegenContext {
-    args_vars: std::collections::HashSet<String>,
-    args_index_vars: std::collections::HashMap<String, String>,
-    pointer_vars: std::collections::HashSet<String>,
-    string_vars: std::collections::HashSet<String>,
+    var_types: std::collections::HashMap<String, VarType>,
 }
 
 impl CodegenContext {
     fn new() -> Self {
         Self {
-            args_vars: std::collections::HashSet::new(),
-            args_index_vars: std::collections::HashMap::new(),
-            pointer_vars: std::collections::HashSet::new(),
-            string_vars: std::collections::HashSet::new(),
+            var_types: std::collections::HashMap::new(),
+        }
+    }
+
+    fn type_prefix(&self, name: &str) -> &'static str {
+        match self.var_types.get(name) {
+            Some(VarType::IntPtr) => "int *",
+            Some(VarType::CharPtr) => "char *",
+            _ => "int",
+        }
+    }
+
+    fn is_args(&self, name: &str) -> bool {
+        matches!(self.var_types.get(name), Some(VarType::Args))
+    }
+
+    fn is_args_index(&self, name: &str) -> Option<&String> {
+        match self.var_types.get(name) {
+            Some(VarType::ArgsIndex(idx)) => Some(idx),
+            _ => None,
         }
     }
 }
@@ -386,23 +408,23 @@ fn codegen(stmts: &[Stmt]) -> String {
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, _is_mut, value) => {
+                // Determine variable type from expression
                 if is_args_expr(value) {
-                    ctx.args_vars.insert(name.clone());
-                }
-                if is_args_index(value) {
+                    ctx.var_types.insert(name.clone(), VarType::Args);
+                } else if is_args_index(value) {
                     let idx_str = get_index_str(value);
-                    ctx.args_index_vars.insert(name.clone(), idx_str);
+                    ctx.var_types.insert(name.clone(), VarType::ArgsIndex(idx_str));
                     // Skip generating int declaration for args[index] vars (argv[i] is char*, not int)
                     continue;
+                } else if is_ref_expr(value) {
+                    ctx.var_types.insert(name.clone(), VarType::IntPtr);
+                } else if is_str_lit(value) {
+                    ctx.var_types.insert(name.clone(), VarType::CharPtr);
+                } else {
+                    ctx.var_types.insert(name.clone(), VarType::Int);
                 }
                 let is_reassign = declared_vars.contains(name);
                 declared_vars.insert(name.clone());
-                if is_ref_expr(value) {
-                    ctx.pointer_vars.insert(name.clone());
-                }
-                if is_str_lit(value) {
-                    ctx.string_vars.insert(name.clone());
-                }
                 if is_reassign {
                     buf.push_str(&format!(
                         " {} = {};",
@@ -410,13 +432,7 @@ fn codegen(stmts: &[Stmt]) -> String {
                         codegen_expr(value, &ctx)
                     ));
                 } else {
-                    let type_prefix = if ctx.string_vars.contains(name) {
-                        "char *"
-                    } else if ctx.pointer_vars.contains(name) {
-                        "int *"
-                    } else {
-                        "int"
-                    };
+                    let type_prefix = ctx.type_prefix(name);
                     buf.push_str(&format!(
                         " {} {} = {};",
                         type_prefix,
@@ -496,11 +512,11 @@ fn codegen_expr(expr: &Expr, ctx: &CodegenContext) -> String {
             if prop == "length" {
                 // If target is a var that holds args, just return the var (argc)
                 if let Expr::Var(name) = target.as_ref() {
-                    if ctx.args_vars.contains(name) {
+                    if ctx.is_args(name) {
                         return name.clone();
                     }
                     // If target is a var that holds args[index], generate strlen(argv[index])
-                    if let Some(idx_str) = ctx.args_index_vars.get(name) {
+                    if let Some(idx_str) = ctx.is_args_index(name) {
                         return format!("strlen(argv[{}])", idx_str);
                     }
                 }
@@ -527,7 +543,7 @@ fn codegen_expr(expr: &Expr, ctx: &CodegenContext) -> String {
             }
             // If target is a var that holds args[index], generate argv[index][sub_index]
             if let Expr::Var(name) = target.as_ref() {
-                if let Some(idx_str) = ctx.args_index_vars.get(name) {
+                if let Some(idx_str) = ctx.is_args_index(name) {
                     let sub_idx = codegen_expr(index, ctx);
                     return format!("argv[{}][{}]", idx_str, sub_idx);
                 }
