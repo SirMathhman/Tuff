@@ -163,6 +163,10 @@ test('executeTuff("let x = match (1) { case 2 => 3; case _ => 4; }; x") => 4', (
   expect(executeTuff("let x = match (1) { case 2 => 3; case _ => 4; }; x")).toBe(4);
 });
 
+test('executeTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
+  expect(executeTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+});
+
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });

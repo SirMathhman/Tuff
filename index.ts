@@ -23,7 +23,7 @@ type Token =
         | "case";
     }
   | { type: "identifier"; value: string }
-  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" }
+  | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" | ">" | "[" | "]" | "," }
   | { type: "eof" };
 
 function tokenize(source: string): Token[] {
@@ -120,8 +120,17 @@ function tokenize(source: string): Token[] {
     } else if (ch === "{") {
       tokens.push({ type: "punct", value: "{" });
       i++;
+    } else if (ch === "[") {
+      tokens.push({ type: "punct", value: "[" });
+      i++;
+    } else if (ch === "]") {
+      tokens.push({ type: "punct", value: "]" });
+      i++;
     } else if (ch === "}") {
       tokens.push({ type: "punct", value: "}" });
+      i++;
+    } else if (ch === ",") {
+      tokens.push({ type: "punct", value: "," });
       i++;
     } else {
       throw new Error(`Unexpected character: ${ch}`);
@@ -152,9 +161,11 @@ type Expr =
   | { type: "group"; nodes: AstNode[] }
   | { type: "assign"; name: string; value: Expr }
   | { type: "if"; condition: Expr; thenNode: AstNode; elseNode: AstNode | null }
-  | { type: "match"; target: Expr; cases: { pattern: Expr; body: Expr }[] };
+  | { type: "match"; target: Expr; cases: { pattern: Expr; body: Expr }[] }
+  | { type: "array"; elements: Expr[] }
+  | { type: "index"; target: Expr; index: Expr };
 
-type VarType = "number" | "boolean" | "range";
+type VarType = "number" | "boolean" | "range" | "array";
 
 // --- Parser ---
 
@@ -471,8 +482,39 @@ class Parser {
       }
       return { type: "match", target, cases };
     }
+    if (token.type === "punct" && token.value === "[") {
+      // Array literal: [1, 2, 3]
+      const elements: Expr[] = [];
+      while (true) {
+        const tok = this.peek();
+        if (tok.type === "eof" || (tok.type === "punct" && tok.value === "]")) {
+          if (tok.type === "punct") this.consume(); // "]"
+          break;
+        }
+        elements.push(this.parseExpr());
+        const comma = this.peek();
+        if (comma.type === "punct" && comma.value === ",") {
+          this.consume();
+        }
+      }
+      return { type: "array", elements };
+    }
     if (token.type === "identifier") {
-      return { type: "identifier", name: token.value };
+      let result: Expr = { type: "identifier", name: token.value };
+      // Check for index: array[0]
+      while (true) {
+        const next = this.peek();
+        if (next.type !== "punct" || next.value !== "[") break;
+        this.consume(); // "["
+        const index = this.parseExpr();
+        const closeTok = this.peek();
+        if (closeTok.type !== "punct" || closeTok.value !== "]") {
+          throw new Error("Expected ']'");
+        }
+        this.consume(); // "]"
+        result = { type: "index", target: result, index };
+      }
+      return result;
     }
     throw new Error(`Unexpected token: ${token.type}`);
   }
@@ -609,6 +651,13 @@ function genExpr(expr: Expr): string {
       })
       .join("");
     return `(function(t){switch(t){${casesJs}}})(${targetJs})`;
+  }
+  if (expr.type === "array") {
+    const elementsJs = expr.elements.map(e => genExpr(e)).join(",");
+    return `[${elementsJs}]`;
+  }
+  if (expr.type === "index") {
+    return `${genExpr(expr.target)}[${genExpr(expr.index)}]`;
   }
   throw new Error("Unknown expression type");
 }
@@ -865,6 +914,18 @@ function inferExprType(
       );
     }
     return thenType;
+  }
+  if (expr.type === "array") {
+    for (const elem of expr.elements) {
+      inferExprType(elem, scope, mutableVars, types);
+    }
+    return "array";
+  }
+  if (expr.type === "index") {
+    assertDefined(expr.target.type === "identifier" ? expr.target.name : "", scope);
+    inferExprType(expr.target, scope, mutableVars, types);
+    inferExprType(expr.index, scope, mutableVars, types);
+    return "number";
   }
   return "number";
 }
