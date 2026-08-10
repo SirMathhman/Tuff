@@ -11,6 +11,17 @@ const INT_RANGES: Record<IntType, [number, number]> = {
 
 const UNSIGNED_TYPES = new Set<IntType>(["U8", "U16", "U32"]);
 
+function isSubtypeOf(actual: IntType, expected: IntType): boolean {
+  if (actual === expected) return true;
+  if (actual === "U8" && expected === "U16") return true;
+  if (actual === "U8" && expected === "U32") return true;
+  if (actual === "I8" && expected === "I16") return true;
+  if (actual === "I8" && expected === "I32") return true;
+  if (actual === "U16" && expected === "U32") return true;
+  if (actual === "I16" && expected === "I32") return true;
+  return false;
+}
+
 export function validateScopes(nodes: AstNode[]): void {
   for (const node of nodes) {
     validateIntRanges(node);
@@ -41,9 +52,9 @@ function validateIntRanges(node: AstNode): void {
   if (node.type === "let" && node.typeAnnotation) {
     const initExpr = node.init;
     if (initExpr.type === "number" && initExpr.intType) {
-      if (initExpr.intType !== node.typeAnnotation) {
+      if (!isSubtypeOf(initExpr.intType, node.typeAnnotation)) {
         throw new Error(
-          `Type mismatch: expected ${node.typeAnnotation}, got ${initExpr.intType}`,
+          `Type mismatch: cannot assign ${initExpr.intType} to ${node.typeAnnotation}`,
         );
       }
     } else {
