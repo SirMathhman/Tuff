@@ -94,3 +94,7 @@ test('executeTuff("true == 1") => 0', () => {
 test('compileTuff("let mut x = true; x = 1;") => Error', () => {
   expect(() => compileTuffToJS("let mut x = true; x = 1;")).toThrow();
 });
+
+test('executeTuff("let x = 0; let y = 1; x < y") => 1', () => {
+  expect(executeTuff("let x = 0; let y = 1; x < y")).toBe(1);
+});

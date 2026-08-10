@@ -3,7 +3,7 @@
 type Token =
   | { type: "number"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" }
+  | { type: "op"; value: "+" | "-" | "*" | "/" | "==" | "<" }
   | { type: "keyword"; value: "in" | "let" | "mut" }
   | { type: "identifier"; value: string }
   | { type: "punct"; value: ";" | "(" | ")" | "{" | "}" | "=" }
@@ -29,6 +29,9 @@ function tokenize(source: string): Token[] {
     } else if (ch === "=" && source[i + 1] === "=") {
       tokens.push({ type: "op", value: "==" });
       i += 2;
+    } else if (ch === "<") {
+      tokens.push({ type: "op", value: "<" });
+      i++;
     } else if (/[a-zA-Z_]/.test(ch)) {
       let ident = "";
       while (i < source.length && /[a-zA-Z0-9_]/.test(source[i]!)) {
@@ -294,6 +297,9 @@ function genExpr(expr: Expr): string {
   if (expr.type === "binary") {
     if (expr.op === "==") {
       return `(${genExpr(expr.left)} === ${genExpr(expr.right)}) ? 1 : 0`;
+    }
+    if (expr.op === "<") {
+      return `(${genExpr(expr.left)} < ${genExpr(expr.right)}) ? 1 : 0`;
     }
     return `${genExpr(expr.left)} ${expr.op} ${genExpr(expr.right)}`;
   }
