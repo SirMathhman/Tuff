@@ -118,3 +118,7 @@ test('executeTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } x") => 2
 test('compileTuff("let x = { let y = 100; } x") => Error', () => {
   expect(() => compileTuffToJS("let x = { let y = 100; } x")).toThrow();
 });
+
+test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
+  expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
+});

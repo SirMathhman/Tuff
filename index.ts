@@ -383,7 +383,7 @@ function validateNodeScope(node: AstNode, scope: string[], mutableVars: Set<stri
     return;
   }
   if (node.type === "expr") {
-    inferExprType(node.expr, scope, mutableVars, types);
+    inferExprType(node.expr, scope, mutableVars, types, false);
     return;
   }
 }
@@ -406,7 +406,7 @@ function validateAssign(name: string, value: Expr, scope: string[], mutableVars:
   validateAssignType(name, value, types, scope, mutableVars);
 }
 
-function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): VarType {
+function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>, asValue = true): VarType {
   if (expr.type === "number") {
     return "number";
   }
@@ -434,19 +434,18 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     for (const node of expr.nodes) {
       validateNodeScope(node, scope_, mut_, types_);
     }
-    const hasLet = expr.nodes.some((n) => n.type === "let");
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {
-      return inferExprType(last.expr, scope_, mut_, types_);
+      return inferExprType(last.expr, scope_, mut_, types_, asValue);
     }
-    if (hasLet) {
-      throw new Error("Block with declarations must end with an expression");
+    if (asValue && expr.nodes.length > 0) {
+      throw new Error("Block used as expression must end with an expression");
     }
     return "number";
   }
   if (expr.type === "if") {
-    const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types);
-    const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types);
+    const thenType = inferExprType(expr.thenExpr, scope, mutableVars, types, false);
+    const elseType = inferExprType(expr.elseExpr, scope, mutableVars, types, false);
     if (thenType !== elseType) {
       throw new Error(`If branches must have the same type: ${thenType} vs ${elseType}`);
     }
