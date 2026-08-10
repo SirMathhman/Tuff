@@ -107,6 +107,10 @@ test('executeTuff("100U8") => 100', () => {
   expect(executeTuff("100U8")).toBe(100);
 });
 
+test('compileTuff("256U8") => Error', () => {
+  expect(() => compileTuffToJS("256U8")).toThrow();
+});
+
 test('executeTuff("let x = if (true) 2 else 3; x") => 2', () => {
   expect(executeTuff("let x = if (true) 2 else 3; x")).toBe(2);
 });

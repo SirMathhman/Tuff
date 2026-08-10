@@ -41,6 +41,10 @@ function tokenize(source: string): Token[] {
       }
       // Check for U8 suffix
       if (source.slice(i, i + 2) === "U8") {
+        const value = parseInt(num, 10);
+        if (value > 255) {
+          throw new Error(`U8 literal out of range: ${num}`);
+        }
         i += 2;
       }
       tokens.push({ type: "number", value: num });
