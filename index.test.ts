@@ -143,6 +143,10 @@ test('executeTuff("let mut x = 0; while (x < 4) { x += 1; break; } x") => 1', ()
   expect(executeTuff("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(1);
 });
 
+test('executeTuff("let mut x = 0; while (x < 4) { x += 1; continue; } x") => 4', () => {
+  expect(executeTuff("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(4);
+});
+
 test('compileTuff("let mut x = 0; let y = { x = 100; };") => Error', () => {
   expect(() => compileTuffToJS("let mut x = 0; let y = { x = 100; };")).toThrow();
 });
