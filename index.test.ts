@@ -40,3 +40,7 @@ function expectInvalid(tuffSource: string) {
   expect(() => compileTuffToJS(tuffSource)).toThrow();
 }
 
+test("expectValid empty string", () => {
+  expectValid("", 0);
+});
+
