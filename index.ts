@@ -406,6 +406,10 @@ function validateAssign(name: string, value: Expr, scope: string[], mutableVars:
   validateAssignType(name, value, types, scope, mutableVars);
 }
 
+function isGroupExpr(expr: Expr): expr is { type: "group"; nodes: AstNode[] } {
+  return expr.type === "group";
+}
+
 function validateGroupScope(expr: { type: "group"; nodes: AstNode[] }, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): [string[], Set<string>, Map<string, VarType>] {
   const scope_ = [...scope];
   const mut_ = new Set(mutableVars);
@@ -417,8 +421,8 @@ function validateGroupScope(expr: { type: "group"; nodes: AstNode[] }, scope: st
 }
 
 function validateExprScope(expr: Expr, scope: string[], mutableVars: Set<string>, types: Map<string, VarType>): void {
-  if (expr.type === "group") {
-    validateGroupScope(expr as { type: "group"; nodes: AstNode[] }, scope, mutableVars, types);
+  if (isGroupExpr(expr)) {
+    validateGroupScope(expr, scope, mutableVars, types);
     return;
   }
   if (expr.type === "if") {
@@ -450,8 +454,8 @@ function inferExprType(expr: Expr, scope: string[], mutableVars: Set<string>, ty
     validateAssignType(expr.name, expr.value, types, scope, mutableVars);
     return types.get(expr.name)!;
   }
-  if (expr.type === "group") {
-    const [scope_, mut_, types_] = validateGroupScope(expr as { type: "group"; nodes: AstNode[] }, scope, mutableVars, types);
+  if (isGroupExpr(expr)) {
+    const [scope_, mut_, types_] = validateGroupScope(expr, scope, mutableVars, types);
     const last = expr.nodes[expr.nodes.length - 1];
     if (last && last.type === "expr") {
       return inferExprType(last.expr, scope_, mut_, types_);
