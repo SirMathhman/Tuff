@@ -22,10 +22,17 @@ export interface CompileError {
 export function compileTuffToJS(
   tuffSource: string,
 ): Result<string, CompileError> {
-  if (tuffSource.trim() === "") {
+  const trimmed = tuffSource.trim();
+  if (trimmed === "") {
     return {
       isOk: true,
       value: "",
+    };
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return {
+      isOk: true,
+      value: "process.exit(" + trimmed + ")",
     };
   }
   return {

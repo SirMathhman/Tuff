@@ -56,3 +56,7 @@ function expectInvalid(tuffSource: string, expectedType: CompileErrorType) {
 test("empty source compiles to valid JS", () => {
   expectValid("", 0);
 });
+
+test("bare number exits with that value", () => {
+  expectValid("1", 1);
+});
