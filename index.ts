@@ -114,6 +114,10 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
       values[values.length - 1] = last * val;
     } else if (op === "/") {
       values[values.length - 1] = last / val;
+    } else if (op === "&&") {
+      values[values.length - 1] = last && val;
+    } else if (op === "||") {
+      values[values.length - 1] = last || val;
     } else {
       ops.push(op);
       values.push(val);
@@ -132,7 +136,7 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
   return result;
 }
 
-const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/])/g;
+const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/]|&&|\|\|)/g;
 
 function resolve(token: string, scope: Map<string, number>, mutable: Set<string>): number {
   if (token.startsWith("(") || token.startsWith("{")) {
