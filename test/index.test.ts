@@ -119,9 +119,7 @@ describe("evaluate", () => {
   });
 
   it('evaluate("let mut x = 0; if (false) x = 2; else x = 3; x") => 3', () => {
-    expect(
-      evaluate("let mut x = 0; if (false) x = 2; else x = 3; x"),
-    ).toBe(3);
+    expect(evaluate("let mut x = 0; if (false) x = 2; else x = 3; x")).toBe(3);
   });
 
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {

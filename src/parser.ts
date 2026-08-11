@@ -60,6 +60,18 @@ export class Parser {
 
   private parseIfStatement(): AstNode {
     this.consume(); // "if"
+    const { condition, thenBranch, elseBranch } = this.parseIfCore(
+      () => this.parseBranch(),
+      false,
+    );
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "if", condition, thenBranch, elseBranch };
+  }
+
+  private parseIfCore(
+    parseBranch: () => AstNode,
+    requireElse = false,
+  ): { condition: AstNode; thenBranch: AstNode; elseBranch: AstNode } {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
       throw new Error("Expected ( after if");
     this.consume(); // "("
@@ -67,18 +79,18 @@ export class Parser {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
       throw new Error("Expected ) after condition");
     this.consume(); // ")"
-
-    // Parse then branch (handle assignment)
-    const thenBranch = this.parseBranch();
-
+    const thenBranch = parseBranch();
     if (this.peek()?.[0] === "kw" && this.peek()![1] === "else") {
       this.consume(); // "else"
-      const elseBranch = this.parseBranch();
-      if (this.peek()?.[0] === "semi") this.consume();
-      return { type: "if", condition, thenBranch, elseBranch };
+      const elseBranch = parseBranch();
+      return { condition, thenBranch, elseBranch };
     }
-    if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "if", condition, thenBranch, elseBranch: { type: "num", value: 0 } };
+    if (requireElse) throw new Error("Expected else");
+    return {
+      condition,
+      thenBranch,
+      elseBranch: { type: "num", value: 0 },
+    };
   }
 
   private parseBranch(): AstNode {
@@ -217,18 +229,9 @@ export class Parser {
     // if (cond) then else expr
     if (token[0] === "kw" && token[1] === "if") {
       this.consume(); // "if"
-      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
-        throw new Error("Expected ( after if");
-      this.consume(); // "("
-      const condition = this.parseAddSub();
-      if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
-        throw new Error("Expected ) after condition");
-      this.consume(); // ")"
-      const thenBranch = this.parseFactor();
-      if (this.peek()?.[0] !== "kw" || this.peek()![1] !== "else")
-        throw new Error("Expected else");
-      this.consume(); // "else"
-      const elseBranch = this.parseFactor();
+      const { condition, thenBranch, elseBranch } = this.parseIfCore(
+        () => this.parseFactor(),
+      );
       return { type: "if", condition, thenBranch, elseBranch };
     }
 
