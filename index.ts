@@ -275,34 +275,40 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
   return parseNumber(p, tokens, env);
 }
 
+function evaluateStringExpr(str: string): number | null {
+  const s = str.toLowerCase().trim();
+  if (s === "true") return 1;
+  if (s === "false") return 0;
+
+  // Split by || (lowest precedence)
+  const orParts = s.split("||");
+  if (orParts.length > 1) {
+    for (const part of orParts) {
+      const val = evaluateStringExpr(part);
+      if (val !== null && val !== 0) return 1;
+    }
+    return 0;
+  }
+
+  // Split by && (higher precedence)
+  const andParts = s.split("&&");
+  if (andParts.length > 1) {
+    for (const part of andParts) {
+      const val = evaluateStringExpr(part);
+      if (val === null) return null;
+      if (val === 0) return 0;
+    }
+    return 1;
+  }
+
+  // Fallback to number
+  const num = Number(s);
+  return isNaN(num) ? null : num;
+}
+
 function parseLiteral(token: Token): number | null {
   if (token[0] === "num") return token[1];
-  if (token[0] === "str") {
-    const str = token[1].toLowerCase();
-    if (str === "true") return 1;
-    if (str === "false") return 0;
-    // Handle "&&" logical AND (higher precedence)
-    const andParts = str.split("&&");
-    if (andParts.length > 1) {
-      for (const part of andParts) {
-        const val = parseLiteral(["str", part.trim()]);
-        if (val === null) return null;
-        if (val === 0) return 0;
-      }
-      return 1;
-    }
-    // Handle "||" logical OR
-    const orParts = str.split("||");
-    if (orParts.length > 1) {
-      for (const part of orParts) {
-        const val = parseLiteral(["str", part.trim()]);
-        if (val !== null && val !== 0) return 1;
-      }
-      return 0;
-    }
-    const num = Number(str);
-    return isNaN(num) ? null : num;
-  }
+  if (token[0] === "str") return evaluateStringExpr(token[1]);
   return null;
 }
 
