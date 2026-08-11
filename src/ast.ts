@@ -10,7 +10,8 @@ export type AstNode =
   | Deref
   | Assign
   | DerefAssign
-  | If;
+  | IfStatement
+  | IfExpression;
 
 export interface Num {
   type: "num";
@@ -75,8 +76,15 @@ export interface DerefAssign {
   value: AstNode;
 }
 
-export interface If {
-  type: "if";
+export interface IfStatement {
+  type: "if-statement";
+  condition: AstNode;
+  thenBranch: AstNode;
+  elseBranch: AstNode;
+}
+
+export interface IfExpression {
+  type: "if-expression";
   condition: AstNode;
   thenBranch: AstNode;
   elseBranch: AstNode;

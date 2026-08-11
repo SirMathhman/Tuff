@@ -65,7 +65,7 @@ export class Parser {
       false,
     );
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "if", condition, thenBranch, elseBranch };
+    return { type: "if-statement", condition, thenBranch, elseBranch };
   }
 
   private parseIfCore(
@@ -231,8 +231,9 @@ export class Parser {
       this.consume(); // "if"
       const { condition, thenBranch, elseBranch } = this.parseIfCore(
         () => this.parseFactor(),
+        true,
       );
-      return { type: "if", condition, thenBranch, elseBranch };
+      return { type: "if-expression", condition, thenBranch, elseBranch };
     }
 
     return this.parsePrimary();

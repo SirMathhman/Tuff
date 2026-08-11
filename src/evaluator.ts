@@ -55,7 +55,7 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "let": {
       if (
-        node.value.type === "if" &&
+        node.value.type === "if-expression" &&
         (node.value.thenBranch.type === "block" ||
           node.value.elseBranch.type === "block")
       ) {
@@ -121,7 +121,8 @@ export function evaluate(node: AstNode, env: Environment): number {
       return last;
     }
 
-    case "if": {
+    case "if-statement":
+    case "if-expression": {
       const condition = evaluate(node.condition, env);
       if (condition !== 0) {
         return evaluate(node.thenBranch, env);
