@@ -57,4 +57,8 @@ describe("evaluate", () => {
   it('evaluate("something invalid") => Error', () => {
     expect(() => evaluate("something invalid")).toThrow();
   });
+
+  it('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+    expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+  });
 });
