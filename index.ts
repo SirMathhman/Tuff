@@ -1,9 +1,34 @@
-export function evaluate(input: string): number {
+export function evaluate(input: string, scope: Map<string, number> = new Map()): number {
   const trimmed = input.trim();
   if (trimmed === "") return 0;
 
-  // Handle let declarations: return 0 (no value produced)
-  if (trimmed.startsWith("let ") && trimmed.endsWith(";")) return 0;
+  // Handle let declarations with proper scoping
+  if (trimmed.startsWith("let ")) {
+    const match = trimmed.match(/^let\s+(\w+)\s*=\s*(.+)$/);
+    if (match) {
+      const [, name, expr] = match;
+      const childScope = new Map(scope);
+      const val = evaluate(expr.trim(), childScope);
+      childScope.set(name!, val);
+      // After the assignment, check if there's more
+      const semiIndex = trimmed.indexOf(";");
+      if (semiIndex !== -1) {
+        const rest = trimmed.slice(semiIndex + 1).trim();
+        return evaluate(rest, childScope);
+      }
+      return 0;
+    }
+    // Bare "let x = ..." with semicolon
+    if (trimmed.endsWith(";")) return 0;
+  }
+
+  // Handle variable references
+  if (/^[a-zA-Z_]\w*$/.test(trimmed)) {
+    if (!scope.has(trimmed)) {
+      throw new Error(`Undefined variable: ${trimmed}`);
+    }
+    return scope.get(trimmed)!;
+  }
 
   // Handle grouped expressions: ( ) or { }
   if (trimmed.startsWith("(") || trimmed.startsWith("{")) {
@@ -13,12 +38,12 @@ export function evaluate(input: string): number {
     if (depth !== undefined) {
       const inner = trimmed.slice(1, depth);
       const rest = trimmed.slice(depth + 1).trim();
-      if (rest === "") return evaluate(inner);
-      const groupResult = evaluate(inner);
+      if (rest === "") return evaluate(inner, scope);
+      const groupResult = evaluate(inner, scope);
       const remainingTokens = rest.match(tokenRegex);
       if (remainingTokens && remainingTokens.length >= 2) {
         const op = remainingTokens[0]!;
-        const nextVal = resolve(remainingTokens[1]!);
+        const nextVal = resolve(remainingTokens[1]!, scope);
         return applyOp(groupResult, op, nextVal);
       }
       return groupResult;
@@ -29,7 +54,7 @@ export function evaluate(input: string): number {
   if (!tokens || tokens.length === 0) throw new Error(`Invalid expression: ${input}`);
 
   const first = tokens[0];
-  const firstVal = resolve(first);
+  const firstVal = resolve(first, scope);
 
   // Pass 1: handle * and /
   const values: number[] = [firstVal];
@@ -38,7 +63,7 @@ export function evaluate(input: string): number {
   while (i < tokens.length) {
     const op = tokens[i]!;
     const raw = tokens[i + 1]!;
-    const val = resolve(raw);
+    const val = resolve(raw, scope);
     const last = values[values.length - 1] ?? 0;
     if (op === "*") {
       values[values.length - 1] = last * val;
@@ -65,9 +90,15 @@ export function evaluate(input: string): number {
 // Regex that matches numbers, parenthesized/braced groups, and operators
 const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[+\-*/])/g;
 
-function resolve(token: string): number {
+function resolve(token: string, scope: Map<string, number>): number {
   if (token.startsWith("(") || token.startsWith("{")) {
-    return evaluate(token);
+    return evaluate(token, scope);
+  }
+  if (/^[a-zA-Z_]\w*$/.test(token)) {
+    if (!scope.has(token)) {
+      throw new Error(`Undefined variable: ${token}`);
+    }
+    return scope.get(token)!;
   }
   return parseFloat(token);
 }
