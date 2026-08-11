@@ -54,13 +54,18 @@ class Environment {
   }
 }
 
-type Ref = { name: string; env: Environment };
+type Ref = { name: string; env: Environment; mutable: boolean };
 
 function deref(ref: Ref): number {
   const val = ref.env.get(ref.name);
   if (val === undefined) throw new Error("Reference to undefined variable");
   if (typeof val === "object") return deref(val);
   return val;
+}
+
+function assignRef(ref: Ref, value: number): void {
+  if (!ref.mutable) throw new Error("Cannot assign through immutable reference");
+  ref.env.assign(ref.name, value);
 }
 
 type Token =
@@ -106,6 +111,9 @@ function parseProgram(p: { pos: number }, tokens: Token[], env: Environment): nu
   while (p.pos < tokens.length) {
     if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
       last = parseLet(p, tokens, env);
+    } else if (tokens[p.pos]![0] === "op" && tokens[p.pos]![1] === "*" && p.pos + 2 < tokens.length && tokens[p.pos + 2]![0] === "assign") {
+      // *y = value ;
+      last = parseDerefAssignment(p, tokens, env);
     } else if (tokens[p.pos]![0] === "id" && p.pos + 1 < tokens.length && tokens[p.pos + 1]![0] === "assign") {
       last = parseAssignment(p, tokens, env);
     } else {
@@ -138,6 +146,25 @@ function parseAssignment(p: { pos: number }, tokens: Token[], env: Environment):
   p.pos++; // consume "="
   const value = parseAddSub(p, tokens, env);
   env.assign(name, value);
+  if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
+  return value;
+}
+
+function parseDerefAssignment(p: { pos: number }, tokens: Token[], env: Environment): number {
+  // *y = value ;
+  p.pos++; // consume *
+  const idToken = tokens[p.pos];
+  if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier after *");
+  p.pos++; // consume id
+  p.pos++; // consume "="
+  const value = parseAddSub(p, tokens, env);
+  const ref = env.get(idToken[1]);
+  if (ref === undefined) throw new Error("Undefined variable: " + idToken[1]);
+  if (typeof ref === "object") {
+    assignRef(ref, value);
+  } else {
+    throw new Error("Cannot dereference non-reference");
+  }
   if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
   return value;
 }
@@ -180,14 +207,17 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
   const token = tokens[p.pos];
   if (!token) throw new Error("Unexpected end");
 
-  // &x — address-of
+  // &x or &mut x — address-of
   if (token[0] === "ref") {
     p.pos++;
+    const next = tokens[p.pos];
+    const isMut = next && next[0] === "id" && next[1] === "mut";
+    if (isMut) p.pos++; // consume "mut"
     const idToken = tokens[p.pos];
     if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier after &");
     const name = idToken[1];
     p.pos++;
-    return { name, env } as any;
+    return { name, env, mutable: isMut } as any;
   }
 
   // *y — dereference
