@@ -65,12 +65,20 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
     if (semiIndex !== -1) {
       const exprStr = trimmed.slice(name!.length + 1, semiIndex).trim();
       const val = evaluateTyped(exprStr, scope, mutable);
+      const existing = scope.get(name!);
+      if (existing && existing.type !== val.type) {
+        throw new Error(`Type mismatch: cannot assign ${val.type} to ${name} which is ${existing.type}`);
+      }
       scope.set(name!, val);
       const rest = trimmed.slice(semiIndex + 1).trim();
       if (rest === "") return val;
       return evaluateTyped(rest, scope, mutable);
     }
     const val = evaluateTyped(expr!.trim(), scope, mutable);
+    const existing = scope.get(name!);
+    if (existing && existing.type !== val.type) {
+      throw new Error(`Type mismatch: cannot assign ${val.type} to ${name} which is ${existing.type}`);
+    }
     scope.set(name!, val);
     return val;
   }
