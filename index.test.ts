@@ -5,4 +5,8 @@ describe("evaluate", () => {
   it('evaluate("") => 0', () => {
     expect(evaluate("")).toBe(0);
   });
+
+  it('evaluate("1") => 1', () => {
+    expect(evaluate("1")).toBe(1);
+  });
 });
