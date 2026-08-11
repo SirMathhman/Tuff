@@ -81,8 +81,4 @@ describe("evaluate", () => {
   it('evaluate("let x = 0; let x = 1; x") => 1', () => {
     expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
   });
-
-  it('evaluate("let x = 0; let x = 1; x") => 1', () => {
-    expect(evaluate("let x = 0; let x = 1; x")).toBe(1);
-  });
 });
