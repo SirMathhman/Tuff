@@ -23,7 +23,7 @@ export function evaluate(input: string): number {
   }
 
   const tokens = trimmed.match(tokenRegex);
-  if (!tokens) return 0;
+  if (!tokens || tokens.length === 0) throw new Error(`Invalid expression: ${input}`);
 
   const first = tokens[0];
   const firstVal = resolve(first);
