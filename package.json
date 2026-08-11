@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "test": "bun test test/",
+    "typecheck": "tsc --noEmit",
     "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
