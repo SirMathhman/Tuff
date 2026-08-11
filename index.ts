@@ -2,30 +2,31 @@ export function evaluate(input: string): number {
   const trimmed = input.trim();
   if (trimmed === "") return 0;
 
-  // Handle parenthesized expressions: find matching ) and evaluate inside
-  if (trimmed.startsWith("(")) {
-    const depth = findMatchingParen(trimmed);
+  // Handle grouped expressions: ( ) or { }
+  if (trimmed.startsWith("(") || trimmed.startsWith("{")) {
+    const open = trimmed[0] as "(" | "{";
+    const close = open === "(" ? ")" : "}";
+    const depth = findMatchingBracket(trimmed, open, close);
     if (depth !== undefined) {
       const inner = trimmed.slice(1, depth);
       const rest = trimmed.slice(depth + 1).trim();
       if (rest === "") return evaluate(inner);
-      // Continue with parenthesized result as first operand
-      const parenResult = evaluate(inner);
-      const remainingTokens = rest.match(/(\d+|\([^\)]*\)|[+\-*/])/g);
+      const groupResult = evaluate(inner);
+      const remainingTokens = rest.match(tokenRegex);
       if (remainingTokens && remainingTokens.length >= 2) {
         const op = remainingTokens[0]!;
-        const nextVal = evaluate(remainingTokens[1]!);
-        return applyOp(parenResult, op, nextVal);
+        const nextVal = resolve(remainingTokens[1]!);
+        return applyOp(groupResult, op, nextVal);
       }
-      return parenResult;
+      return groupResult;
     }
   }
 
-  const tokens = trimmed.match(/(\d+|\([^\)]*\)|[+\-*/])/g);
+  const tokens = trimmed.match(tokenRegex);
   if (!tokens) return 0;
 
   const first = tokens[0];
-  const firstVal = first?.startsWith("(") ? evaluate(first) : parseFloat(first);
+  const firstVal = resolve(first);
 
   // Pass 1: handle * and /
   const values: number[] = [firstVal];
@@ -34,7 +35,7 @@ export function evaluate(input: string): number {
   while (i < tokens.length) {
     const op = tokens[i]!;
     const raw = tokens[i + 1]!;
-    const val = raw.startsWith("(") ? evaluate(raw) : parseFloat(raw);
+    const val = resolve(raw);
     const last = values[values.length - 1] ?? 0;
     if (op === "*") {
       values[values.length - 1] = last * val;
@@ -56,6 +57,28 @@ export function evaluate(input: string): number {
   }
 
   return result;
+}
+
+// Regex that matches numbers, parenthesized/braced groups, and operators
+const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[+\-*/])/g;
+
+function resolve(token: string): number {
+  if (token.startsWith("(") || token.startsWith("{")) {
+    return evaluate(token);
+  }
+  return parseFloat(token);
+}
+
+function findMatchingBracket(input: string, open: string, close: string): number | undefined {
+  let depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === open) depth++;
+    else if (input[i] === close) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return undefined;
 }
 
 function findMatchingParen(input: string): number | undefined {

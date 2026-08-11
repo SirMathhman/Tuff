@@ -45,4 +45,8 @@ describe("evaluate", () => {
   it('evaluate("(2 + (1 + 1)) * 4") => 16', () => {
     expect(evaluate("(2 + (1 + 1)) * 4")).toBe(16);
   });
+
+  it('evaluate("{ 2 + 3 } * 4") => 20', () => {
+    expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
+  });
 });
