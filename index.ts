@@ -121,6 +121,10 @@ function parseFactor(tokens: Token[], pos: [number], ctx: Context): number {
   throw new Error(`Unexpected token: ${token}`);
 }
 
+function isSingleEquals(tokens: Token[], idx: number): boolean {
+  return tokens[idx]![0] === "OP" && tokens[idx]![1] === "=";
+}
+
 function parseStatement(tokens: Token[], pos: [number], ctx: Context): number {
   if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
     pos[0]++;
@@ -133,7 +137,7 @@ function parseStatement(tokens: Token[], pos: [number], ctx: Context): number {
     pos[0]++;
     return assignAndSkip(tokens, pos, ctx, name, isMut);
   }
-  if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0] + 1]![0] === "OP" && tokens[pos[0] + 1]![1] === "=") {
+  if (tokens[pos[0]]![0] === "IDENT" && isSingleEquals(tokens, pos[0] + 1)) {
     const name = tokens[pos[0]]![1] as string;
     if (!ctx.mutable.has(name)) {
       throw new Error(`Cannot assign to immutable variable '${name}'`);
