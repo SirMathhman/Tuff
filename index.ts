@@ -41,6 +41,12 @@ export function compileTuffToJS(
       value: "process.exit(" + trimmed + ")",
     };
   }
+  if (/^[\d\s\+\-\*\/\{\}]+$/.test(trimmed) && !/[\+\-\*\/]\s*$/.test(trimmed)) {
+    return {
+      isOk: true,
+      value: "process.exit(" + trimmed.replace(/\{/g, "(").replace(/\}/g, ")") + ")",
+    };
+  }
   return {
     isOk: false,
     value: {

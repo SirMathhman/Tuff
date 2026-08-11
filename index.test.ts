@@ -85,6 +85,10 @@ test("parenthesized expression respects grouping", () => {
   expectValid("(2 + 3) * 4", 20);
 });
 
+test("braced expression respects grouping", () => {
+  expectValid("{ 2 + 3 } * 4", 20);
+});
+
 test("trailing operator is invalid", () => {
   expectInvalid("1+", CompileErrorType.Invalid);
 });
