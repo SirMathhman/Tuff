@@ -238,22 +238,20 @@ function findMatchingParen(input: string, start: number): number {
   return -1;
 }
 
-function findElseKeyword(input: string): number {
-  let depth = 0;
-  for (let i = 0; i < input.length; i++) {
-    if (input[i] === "(" || input[i] === "{") depth++;
-    else if (input[i] === ")" || input[i] === "}") depth--;
-    else if (depth === 0 && input.slice(i, i + 5) === "else ") return i;
-  }
-  return -1;
-}
-
-function findSemicolon(input: string, start: number): number {
+function findAtDepth(input: string, start: number, predicate: (i: number, ch: string) => boolean): number {
   let depth = 0;
   for (let i = start; i < input.length; i++) {
     if (input[i] === "(" || input[i] === "{") depth++;
     else if (input[i] === ")" || input[i] === "}") depth--;
-    else if (input[i] === ";" && depth === 0) return i;
+    else if (depth === 0 && predicate(i, input[i]!)) return i;
   }
   return -1;
+}
+
+function findElseKeyword(input: string): number {
+  return findAtDepth(input, 0, (i, _ch) => input.slice(i, i + 5) === "else ");
+}
+
+function findSemicolon(input: string, start: number): number {
+  return findAtDepth(input, start, (_i, ch) => ch === ";");
 }
