@@ -1,20 +1,61 @@
 export function evaluate(source: string): number {
   if (source === "") return 0;
 
-  // Split on + and -, keeping the operator
-  const tokens = source.split(/([+-])/);
-  if (tokens.length === 1) {
-    const num = Number(tokens[0]!);
-    if (tokens[0]!.trim() === String(num)) return num;
+  const tokens = tokenize(source);
+  const parser = { pos: 0 };
+  const result = parseAddSub(parser, tokens);
+
+  if (parser.pos < tokens.length) {
     throw new Error("Invalid source: " + source);
   }
+  return result;
+}
 
-  let result = Number(tokens[0]!.trim());
-  for (let i = 1; i < tokens.length; i += 2) {
-    const op = tokens[i]!;
-    const val = Number(tokens[i + 1]!.trim());
-    if (op === "+") result += val;
-    else if (op === "-") result -= val;
+type Token = ["num", number] | ["op", "+" | "-" | "*" | "/"];
+
+function tokenize(source: string): Token[] {
+  const result: Token[] = [];
+  const re = /(\d+\.?\d*|[+\-*/])/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(source))) {
+    const [text] = match;
+    if (text === " " || text === "") continue;
+    if (text === "+" || text === "-" || text === "*" || text === "/") {
+      result.push(["op", text as "+" | "-" | "*" | "/"]);
+    } else {
+      result.push(["num", Number(text)]);
+    }
   }
   return result;
+}
+
+function parseAddSub(p: { pos: number }, tokens: Token[]): number {
+  let left = parseMulDiv(p, tokens);
+  while (p.pos < tokens.length && tokens[p.pos]![0] === "op" && (tokens[p.pos]![1] === "+" || tokens[p.pos]![1] === "-")) {
+    const op = tokens[p.pos]![1];
+    p.pos++;
+    const right = parseMulDiv(p, tokens);
+    left = op === "+" ? left + right : left - right;
+  }
+  return left;
+}
+
+function parseMulDiv(p: { pos: number }, tokens: Token[]): number {
+  let left = parseNumber(p, tokens);
+  while (p.pos < tokens.length && tokens[p.pos]![0] === "op" && (tokens[p.pos]![1] === "*" || tokens[p.pos]![1] === "/")) {
+    const op = tokens[p.pos]![1];
+    p.pos++;
+    const right = parseNumber(p, tokens);
+    left = op === "*" ? left * right : left / right;
+  }
+  return left;
+}
+
+function parseNumber(p: { pos: number }, tokens: Token[]): number {
+  const token = tokens[p.pos];
+  if (!token || token[0] !== "num") {
+    throw new Error("Expected number");
+  }
+  p.pos++;
+  return token[1];
 }
