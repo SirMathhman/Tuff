@@ -74,6 +74,14 @@ function parseFactor(tokens: Token[], pos: [number], ctx: Context): number {
     pos[0]++;
     return token[1];
   }
+  if (token && token[0] === "IDENT" && token[1] === "true") {
+    pos[0]++;
+    return 1;
+  }
+  if (token && token[0] === "IDENT" && token[1] === "false") {
+    pos[0]++;
+    return 0;
+  }
   if (token && token[0] === "IDENT") {
     pos[0]++;
     return ctx.scope.get(token[1])!;

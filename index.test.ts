@@ -48,4 +48,7 @@ describe("interpret", () => {
   it('interpret("let y = 100; y = 20;") => Error', () => {
     expect(() => interpret("let y = 100; y = 20;")).toThrow();
   });
+  it('interpret("let x = true; x") => 1', () => {
+    expect(interpret("let x = true; x")).toBe(1);
+  });
 });
