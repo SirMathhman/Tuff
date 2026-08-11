@@ -27,4 +27,7 @@ describe("interpret", () => {
   it('interpret("(2 + 3) * 4") => 20', () => {
     expect(interpret("(2 + 3) * 4")).toBe(20);
   });
+  it('interpret("{ 2 + 3 } * 4") => 20', () => {
+    expect(interpret("{ 2 + 3 } * 4")).toBe(20);
+  });
 });
