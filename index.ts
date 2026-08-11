@@ -4,21 +4,26 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
 
   // Handle let declarations with proper scoping
   if (trimmed.startsWith("let ")) {
-    const match = trimmed.match(/^let\s+(\w+)\s*=\s*(.+)$/);
+    const match = trimmed.match(/^let\s+(\w+)\s*=\s*(.*)$/);
     if (match) {
       const [, name, expr] = match;
       const childScope = new Map(scope);
-      const val = evaluate(expr.trim(), childScope);
-      childScope.set(name!, val);
-      // After the assignment, check if there's more
-      const semiIndex = trimmed.indexOf(";");
+      // Find the semicolon that separates the assignment from the rest
+      // Need to respect braces and parentheses
+      const eqIndex = trimmed.indexOf("=") + 1;
+      const semiIndex = findSemicolon(trimmed, eqIndex);
       if (semiIndex !== -1) {
+        const exprStr = trimmed.slice(eqIndex, semiIndex).trim();
+        const val = evaluate(exprStr, childScope);
+        childScope.set(name!, val);
         const rest = trimmed.slice(semiIndex + 1).trim();
         return evaluate(rest, childScope);
       }
+      // No semicolon: just evaluate the expression
+      const val = evaluate(expr?.trim() ?? "", childScope);
+      childScope.set(name!, val);
       return 0;
     }
-    // Bare "let x = ..." with semicolon
     if (trimmed.endsWith(";")) return 0;
   }
 
@@ -50,6 +55,11 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
     }
   }
 
+  // Handle block expressions: { let x = expr; expr }
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return evaluate(trimmed.slice(1, -1), scope);
+  }
+
   const tokens = trimmed.match(tokenRegex);
   if (!tokens || tokens.length === 0) throw new Error(`Invalid expression: ${input}`);
 
@@ -61,8 +71,9 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
   const ops: string[] = [];
   let i = 1;
   while (i < tokens.length) {
-    const op = tokens[i]!;
-    const raw = tokens[i + 1]!;
+    const op = tokens[i];
+    const raw = tokens[i + 1];
+    if (op === undefined || raw === undefined) break;
     const val = resolve(raw, scope);
     const last = values[values.length - 1] ?? 0;
     if (op === "*") {
@@ -87,8 +98,7 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
   return result;
 }
 
-// Regex that matches numbers, parenthesized/braced groups, and operators
-const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[+\-*/])/g;
+const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/])/g;
 
 function resolve(token: string, scope: Map<string, number>): number {
   if (token.startsWith("(") || token.startsWith("{")) {
@@ -115,22 +125,20 @@ function findMatchingBracket(input: string, open: string, close: string): number
   return undefined;
 }
 
-function findMatchingParen(input: string): number | undefined {
-  let depth = 0;
-  for (let i = 0; i < input.length; i++) {
-    if (input[i] === "(") depth++;
-    else if (input[i] === ")") {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return undefined;
-}
-
 function applyOp(a: number, op: string, b: number): number {
   if (op === "+") return a + b;
   if (op === "-") return a - b;
   if (op === "*") return a * b;
   if (op === "/") return a / b;
   return b;
+}
+
+function findSemicolon(input: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < input.length; i++) {
+    if (input[i] === "(" || input[i] === "{") depth++;
+    else if (input[i] === ")" || input[i] === "}") depth--;
+    else if (input[i] === ";" && depth === 0) return i;
+  }
+  return -1;
 }
