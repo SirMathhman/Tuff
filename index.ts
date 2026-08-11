@@ -9,68 +9,7 @@ function toNumber(tv: TypedValue): number {
 }
 
 export function evaluate(input: string, scope: Map<string, TypedValue> = new Map(), mutable: Set<string> = new Set()): number {
-  const trimmed = input.trim();
-  if (trimmed === "") return 0;
-
-  // Handle let declarations with proper scoping
-  const isMut = trimmed.startsWith("let mut ");
-  if (isMut || trimmed.startsWith("let ")) {
-    const prefix = isMut ? "let mut " : "let ";
-    const match = trimmed.match(new RegExp(`^${prefix}(\\w+)\\s*=\\s*(.*)$`));
-    if (match) {
-      const [, name, expr] = match;
-      const childScope = new Map(scope);
-      const childMutable = new Set(mutable);
-      if (isMut) childMutable.add(name!);
-      const eqIndex = trimmed.indexOf("=") + 1;
-      const semiIndex = findSemicolon(trimmed, eqIndex);
-      if (semiIndex !== -1) {
-        const exprStr = trimmed.slice(eqIndex, semiIndex).trim();
-        const val = evaluateTyped(exprStr, childScope, childMutable);
-        childScope.set(name!, val);
-        const rest = trimmed.slice(semiIndex + 1).trim();
-        return toNumber(evaluateTyped(rest, childScope, childMutable));
-      }
-      const val = evaluateTyped(expr?.trim() ?? "", childScope, childMutable);
-      childScope.set(name!, val);
-      return 0;
-    }
-    if (trimmed.endsWith(";")) return 0;
-  }
-
-  // Handle assignment expressions: x = expr (but not == or !=)
-  const assignMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*=(?!=)\s*(.+)$/);
-  if (assignMatch) {
-    const [, name, expr] = assignMatch;
-    if (!mutable.has(name!)) {
-      throw new Error(`Cannot assign to immutable variable: ${name}`);
-    }
-    const semiIndex = findSemicolon(trimmed, name!.length + 1);
-    if (semiIndex !== -1) {
-      const exprStr = trimmed.slice(name!.length + 1, semiIndex).trim();
-      const val = evaluateTyped(exprStr, scope, mutable);
-      scope.set(name!, val);
-      const rest = trimmed.slice(semiIndex + 1).trim();
-      if (rest === "") return toNumber(val);
-      return toNumber(evaluateTyped(rest, scope, mutable));
-    }
-    const val = evaluateTyped(expr!.trim(), scope, mutable);
-    scope.set(name!, val);
-    return toNumber(val);
-  }
-
-  // Handle variable references
-  if (/^[a-zA-Z_]\w*$/.test(trimmed)) {
-    if (trimmed === "true") return 1;
-    if (trimmed === "false") return 0;
-    if (!scope.has(trimmed)) {
-      throw new Error(`Undefined variable: ${trimmed}`);
-    }
-    return toNumber(scope.get(trimmed)!);
-  }
-
-  const result = evaluateTyped(trimmed, scope, mutable);
-  return toNumber(result);
+  return toNumber(evaluateTyped(input, scope, mutable));
 }
 
 function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: Set<string>): TypedValue {
