@@ -29,7 +29,7 @@ export function compileTuffToJS(
       value: "",
     };
   }
-  if (/^\d+(\s*\+\s*\d+)+$/.test(trimmed) || /^\d+$/.test(trimmed)) {
+  if (/^\d+(\s*[\+\-]\s*\d+)+$/.test(trimmed) || /^\d+$/.test(trimmed)) {
     return {
       isOk: true,
       value: "process.exit(" + trimmed + ")",
