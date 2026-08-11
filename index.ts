@@ -275,16 +275,25 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
   return parseNumber(p, tokens, env);
 }
 
+function parseLiteral(token: Token): number | null {
+  if (token[0] === "num") return token[1];
+  if (token[0] === "str") {
+    const str = token[1].toLowerCase();
+    if (str === "true") return 1;
+    if (str === "false") return 0;
+    const num = Number(str);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+}
+
 function parseNumber(p: { pos: number }, tokens: Token[], env: Environment): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Expected number");
-  if (token[0] === "num") {
+  const literal = parseLiteral(token);
+  if (literal !== null) {
     p.pos++;
-    return token[1];
-  }
-  if (token[0] === "str") {
-    p.pos++;
-    return token[1] === "true" ? 1 : 0;
+    return literal;
   }
   if (token[0] === "id") {
     p.pos++;
