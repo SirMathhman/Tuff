@@ -41,6 +41,7 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
       const val = evaluate(exprStr, scope, mutable);
       scope.set(name!, val);
       const rest = trimmed.slice(semiIndex + 1).trim();
+      if (rest === "") return val;
       return evaluate(rest, scope, mutable);
     }
     const val = evaluate(expr!.trim(), scope, mutable);
