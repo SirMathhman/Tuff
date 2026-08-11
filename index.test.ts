@@ -33,4 +33,7 @@ describe("interpret", () => {
   it('interpret("{ let x = 2 + 3; x } * 4") => 20', () => {
     expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
   });
+  it('interpret("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+    expect(interpret("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+  });
 });

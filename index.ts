@@ -108,6 +108,26 @@ export function interpret(input: string): number {
   if (input === "") return 0;
   const tokens = tokenize(input);
   const pos: [number] = [0];
-  const result = parseExpr(tokens, pos, new Map());
-  return result;
+  const scope = new Map<string, number>();
+  let lastValue = 0;
+  while (tokens[pos[0]]![0] !== "EOF") {
+    if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
+      pos[0]++;
+      const name = tokens[pos[0]]![1] as string;
+      pos[0]++;
+      pos[0]++;
+      const value = parseExpr(tokens, pos, scope);
+      scope.set(name, value);
+      lastValue = value;
+      if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
+        pos[0]++;
+      }
+    } else {
+      lastValue = parseExpr(tokens, pos, scope);
+      if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
+        pos[0]++;
+      }
+    }
+  }
+  return lastValue;
 }
