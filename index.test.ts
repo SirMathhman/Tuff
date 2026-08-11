@@ -18,4 +18,10 @@ describe("interpret", () => {
   it('interpret("2 + 3 - 4") => 1', () => {
     expect(interpret("2 + 3 - 4")).toBe(1);
   });
+  it('interpret("2 * 3 + 4") => 10', () => {
+    expect(interpret("2 * 3 + 4")).toBe(10);
+  });
+  it('interpret("2 + 3 * 4") => 14', () => {
+    expect(interpret("2 + 3 * 4")).toBe(14);
+  });
 });
