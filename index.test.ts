@@ -60,3 +60,7 @@ test("empty source compiles to valid JS", () => {
 test("bare number exits with that value", () => {
   expectValid("1", 1);
 });
+
+test("arithmetic expression exits with result", () => {
+  expectValid("1 + 2", 3);
+});
