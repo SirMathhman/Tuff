@@ -174,4 +174,9 @@ mod tests {
     fn test_evaluate_let_binding() {
         assert_eq!(evaluate("2 * { let x = 3 + 4; x }"), 14);
     }
+
+    #[test]
+    fn test_evaluate_nested_let() {
+        assert_eq!(evaluate("let y = 2 * { let x = 3 + 4; x }; y"), 14);
+    }
 }
