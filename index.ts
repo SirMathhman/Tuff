@@ -4,8 +4,10 @@ type Token =
   | ["IDENT", string]
   | ["EOF", null];
 
+type Value = ["num", number] | ["bool", boolean];
+
 interface Context {
-  scope: Map<string, number>;
+  scope: Map<string, Value>;
   mutable: Set<string>;
 }
 
@@ -45,7 +47,7 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
-function parseExpr(tokens: Token[], pos: [number], ctx: Context): number {
+function parseExpr(tokens: Token[], pos: [number], ctx: Context): Value {
   let left = parseComparison(tokens, pos, ctx);
   while (
     tokens[pos[0]]![0] === "OP" &&
@@ -53,12 +55,12 @@ function parseExpr(tokens: Token[], pos: [number], ctx: Context): number {
   ) {
     const op = tokens[pos[0]++]![1] as "+" | "-";
     const right = parseComparison(tokens, pos, ctx);
-    left = op === "+" ? left + right : left - right;
+    left = op === "+" ? ["num", (left[1] as number) + (right[1] as number)] : ["num", (left[1] as number) - (right[1] as number)];
   }
   return left;
 }
 
-function parseComparison(tokens: Token[], pos: [number], ctx: Context): number {
+function parseComparison(tokens: Token[], pos: [number], ctx: Context): Value {
   let left = parseTerm(tokens, pos, ctx);
   while (
     tokens[pos[0]]![0] === "OP" &&
@@ -66,12 +68,12 @@ function parseComparison(tokens: Token[], pos: [number], ctx: Context): number {
   ) {
     pos[0]++;
     const right = parseTerm(tokens, pos, ctx);
-    left = left === right ? 1 : 0;
+    left = left[0] === right[0] && left[1] === right[1] ? ["num", 1] : ["num", 0];
   }
   return left;
 }
 
-function parseTerm(tokens: Token[], pos: [number], ctx: Context): number {
+function parseTerm(tokens: Token[], pos: [number], ctx: Context): Value {
   let left = parseFactor(tokens, pos, ctx);
   while (
     tokens[pos[0]]![0] === "OP" &&
@@ -79,24 +81,24 @@ function parseTerm(tokens: Token[], pos: [number], ctx: Context): number {
   ) {
     const op = tokens[pos[0]++]![1] as "*" | "/";
     const right = parseFactor(tokens, pos, ctx);
-    left = op === "*" ? left * right : left / right;
+    left = op === "*" ? ["num", (left[1] as number) * (right[1] as number)] : ["num", (left[1] as number) / (right[1] as number)];
   }
   return left;
 }
 
-function parseFactor(tokens: Token[], pos: [number], ctx: Context): number {
+function parseFactor(tokens: Token[], pos: [number], ctx: Context): Value {
   const token = tokens[pos[0]];
   if (token && token[0] === "NUM") {
     pos[0]++;
-    return token[1];
+    return ["num", token[1]];
   }
   if (token && token[0] === "IDENT" && token[1] === "true") {
     pos[0]++;
-    return 1;
+    return ["bool", true];
   }
   if (token && token[0] === "IDENT" && token[1] === "false") {
     pos[0]++;
-    return 0;
+    return ["bool", false];
   }
   if (token && token[0] === "IDENT") {
     pos[0]++;
@@ -109,7 +111,7 @@ function parseFactor(tokens: Token[], pos: [number], ctx: Context): number {
       mutable: new Set(ctx.mutable),
     };
     const closer = token[1] === "(" ? ")" : "}";
-    let lastValue = 0;
+    let lastValue: Value = ["num", 0];
     while (tokens[pos[0]]![0] !== "EOF" && !(tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === closer)) {
       lastValue = parseStatement(tokens, pos, blockCtx);
     }
@@ -125,7 +127,7 @@ function isSingleEquals(tokens: Token[], idx: number): boolean {
   return tokens[idx]![0] === "OP" && tokens[idx]![1] === "=";
 }
 
-function parseStatement(tokens: Token[], pos: [number], ctx: Context): number {
+function parseStatement(tokens: Token[], pos: [number], ctx: Context): Value {
   if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
     pos[0]++;
     const isMut = tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "mut";
@@ -152,7 +154,7 @@ function parseStatement(tokens: Token[], pos: [number], ctx: Context): number {
   return value;
 }
 
-function assignAndSkip(tokens: Token[], pos: [number], ctx: Context, name: string, isMut: boolean): number {
+function assignAndSkip(tokens: Token[], pos: [number], ctx: Context, name: string, isMut: boolean): Value {
   const value = parseExpr(tokens, pos, ctx);
   ctx.scope.set(name, value);
   if (isMut) {
@@ -161,7 +163,7 @@ function assignAndSkip(tokens: Token[], pos: [number], ctx: Context, name: strin
   if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
     pos[0]++;
   }
-  return 0;
+  return ["num", 0];
 }
 
 export function interpret(input: string): number {
@@ -172,9 +174,9 @@ export function interpret(input: string): number {
     scope: new Map(),
     mutable: new Set(),
   };
-  let lastValue = 0;
+  let lastValue: Value = ["num", 0];
   while (tokens[pos[0]]![0] !== "EOF") {
     lastValue = parseStatement(tokens, pos, ctx);
   }
-  return lastValue;
+  return lastValue[0] === "bool" ? (lastValue[1] ? 1 : 0) : (lastValue[1] as number);
 }
