@@ -113,4 +113,8 @@ describe("evaluate", () => {
   it('evaluate("let x = true; x") => 1', () => {
     expect(evaluate("let x = true; x")).toBe(1);
   });
+
+  it('evaluate("let x = true; let y = false; x || y") => 1', () => {
+    expect(evaluate("let x = true; let y = false; x || y")).toBe(1);
+  });
 });
