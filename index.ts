@@ -1,30 +1,51 @@
-export function evaluate(input: string, scope: Map<string, number> = new Map()): number {
+export function evaluate(input: string, scope: Map<string, number> = new Map(), mutable: Set<string> = new Set()): number {
   const trimmed = input.trim();
   if (trimmed === "") return 0;
 
   // Handle let declarations with proper scoping
-  if (trimmed.startsWith("let ")) {
-    const match = trimmed.match(/^let\s+(\w+)\s*=\s*(.*)$/);
+  const isMut = trimmed.startsWith("let mut ");
+  if (isMut || trimmed.startsWith("let ")) {
+    const prefix = isMut ? "let mut " : "let ";
+    const match = trimmed.match(new RegExp(`^${prefix}(\\w+)\\s*=\\s*(.*)$`));
     if (match) {
       const [, name, expr] = match;
       const childScope = new Map(scope);
-      // Find the semicolon that separates the assignment from the rest
-      // Need to respect braces and parentheses
+      const childMutable = new Set(mutable);
+      if (isMut) childMutable.add(name!);
       const eqIndex = trimmed.indexOf("=") + 1;
       const semiIndex = findSemicolon(trimmed, eqIndex);
       if (semiIndex !== -1) {
         const exprStr = trimmed.slice(eqIndex, semiIndex).trim();
-        const val = evaluate(exprStr, childScope);
+        const val = evaluate(exprStr, childScope, childMutable);
         childScope.set(name!, val);
         const rest = trimmed.slice(semiIndex + 1).trim();
-        return evaluate(rest, childScope);
+        return evaluate(rest, childScope, childMutable);
       }
-      // No semicolon: just evaluate the expression
-      const val = evaluate(expr?.trim() ?? "", childScope);
+      const val = evaluate(expr?.trim() ?? "", childScope, childMutable);
       childScope.set(name!, val);
       return 0;
     }
     if (trimmed.endsWith(";")) return 0;
+  }
+
+  // Handle assignment expressions: x = expr
+  const assignMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+  if (assignMatch) {
+    const [, name, expr] = assignMatch;
+    if (!mutable.has(name!)) {
+      throw new Error(`Cannot assign to immutable variable: ${name}`);
+    }
+    const semiIndex = findSemicolon(trimmed, name!.length + 1);
+    if (semiIndex !== -1) {
+      const exprStr = trimmed.slice(name!.length + 1, semiIndex).trim();
+      const val = evaluate(exprStr, scope, mutable);
+      scope.set(name!, val);
+      const rest = trimmed.slice(semiIndex + 1).trim();
+      return evaluate(rest, scope, mutable);
+    }
+    const val = evaluate(expr!.trim(), scope, mutable);
+    scope.set(name!, val);
+    return val;
   }
 
   // Handle variable references
@@ -43,12 +64,12 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
     if (depth !== undefined) {
       const inner = trimmed.slice(1, depth);
       const rest = trimmed.slice(depth + 1).trim();
-      if (rest === "") return evaluate(inner, scope);
-      const groupResult = evaluate(inner, scope);
+      if (rest === "") return evaluate(inner, scope, mutable);
+      const groupResult = evaluate(inner, scope, mutable);
       const remainingTokens = rest.match(tokenRegex);
       if (remainingTokens && remainingTokens.length >= 2) {
         const op = remainingTokens[0]!;
-        const nextVal = resolve(remainingTokens[1]!, scope);
+        const nextVal = resolve(remainingTokens[1]!, scope, mutable);
         return applyOp(groupResult, op, nextVal);
       }
       return groupResult;
@@ -57,14 +78,14 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
 
   // Handle block expressions: { let x = expr; expr }
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    return evaluate(trimmed.slice(1, -1), scope);
+    return evaluate(trimmed.slice(1, -1), scope, mutable);
   }
 
   const tokens = trimmed.match(tokenRegex);
   if (!tokens || tokens.length === 0) throw new Error(`Invalid expression: ${input}`);
 
   const first = tokens[0];
-  const firstVal = resolve(first, scope);
+  const firstVal = resolve(first, scope, mutable);
 
   // Pass 1: handle * and /
   const values: number[] = [firstVal];
@@ -74,7 +95,7 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
     const op = tokens[i];
     const raw = tokens[i + 1];
     if (op === undefined || raw === undefined) break;
-    const val = resolve(raw, scope);
+    const val = resolve(raw, scope, mutable);
     const last = values[values.length - 1] ?? 0;
     if (op === "*") {
       values[values.length - 1] = last * val;
@@ -100,9 +121,9 @@ export function evaluate(input: string, scope: Map<string, number> = new Map()):
 
 const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/])/g;
 
-function resolve(token: string, scope: Map<string, number>): number {
+function resolve(token: string, scope: Map<string, number>, mutable: Set<string>): number {
   if (token.startsWith("(") || token.startsWith("{")) {
-    return evaluate(token, scope);
+    return evaluate(token, scope, mutable);
   }
   if (/^[a-zA-Z_]\w*$/.test(token)) {
     if (!scope.has(token)) {
