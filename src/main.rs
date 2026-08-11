@@ -12,6 +12,7 @@ enum Token {
     LParen,
     RParen,
     Let,
+    Mut,
     Identifier(String),
     Equals,
     Semicolon,
@@ -44,6 +45,24 @@ impl<'a> Parser<'a> {
 
     fn parse_let_statement(&mut self) -> i64 {
         self.eat(); // eat 'let'
+        if self.current_token() == Token::Mut {
+            self.eat(); // eat 'mut'
+        }
+        let name = match self.current_token().clone() {
+            Token::Identifier(n) => n,
+            _ => String::new(),
+        };
+        self.eat(); // eat identifier
+        self.eat(); // eat '='
+        let value = self.parse_expression();
+        self.scope.insert(name, value);
+        if self.current_token() == Token::Semicolon {
+            self.eat();
+        }
+        0i64
+    }
+
+    fn parse_assignment(&mut self) -> i64 {
         let name = match self.current_token().clone() {
             Token::Identifier(n) => n,
             _ => String::new(),
@@ -144,6 +163,8 @@ fn evaluate(input: &str) -> i64 {
                 }
                 if ident == "let" {
                     tokens.push(Token::Let);
+                } else if ident == "mut" {
+                    tokens.push(Token::Mut);
                 } else {
                     tokens.push(Token::Identifier(ident));
                 }
@@ -167,6 +188,8 @@ fn evaluate(input: &str) -> i64 {
         iterations += 1;
         if parser.current_token() == Token::Let {
             parser.parse_let_statement();
+        } else if matches!(parser.current_token(), Token::Identifier(_)) && parser.tokens.get(parser.pos + 1) == Some(&Token::Equals) {
+            parser.parse_assignment();
         } else {
             result = parser.parse_expression();
             if parser.current_token() == Token::Semicolon {
@@ -239,5 +262,10 @@ mod tests {
     #[test]
     fn test_evaluate_let_statement_only() {
         assert_eq!(evaluate("let x = 100;"), 0);
+    }
+
+    #[test]
+    fn test_evaluate_mut_let_and_reassign() {
+        assert_eq!(evaluate("let mut x = 0; x = 1; x"), 1);
     }
 }
