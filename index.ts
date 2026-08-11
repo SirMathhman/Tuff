@@ -22,6 +22,12 @@ export interface CompileError {
 export function compileTuffToJS(
   tuffSource: string,
 ): Result<string, CompileError> {
+  if (tuffSource.trim() === "") {
+    return {
+      isOk: true,
+      value: "",
+    };
+  }
   return {
     isOk: false,
     value: {

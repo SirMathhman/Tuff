@@ -52,3 +52,7 @@ function expectInvalid(tuffSource: string, expectedType: CompileErrorType) {
     );
   }
 }
+
+test("empty source compiles to valid JS", () => {
+  expectValid("", 0);
+});
