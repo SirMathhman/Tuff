@@ -169,4 +169,9 @@ mod tests {
     fn test_evaluate_curly_braces() {
         assert_eq!(evaluate("2 * { 3 + 4 }"), 14);
     }
+
+    #[test]
+    fn test_evaluate_let_binding() {
+        assert_eq!(evaluate("2 * { let x = 3 + 4; x }"), 14);
+    }
 }
