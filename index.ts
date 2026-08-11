@@ -142,6 +142,8 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
     } else if (op === "+" || op === "-") {
       ops.push(op);
       values.push(val);
+    } else if (!knownOperators.has(op)) {
+      throw new Error(`Unknown operator: ${op}`);
     } else {
       throw new Error(`Unknown operator: ${op}`);
     }
@@ -154,12 +156,13 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
     const next = values[j + 1]!;
     if (ops[j] === "+") result = toTypedValue(result.value + next.value);
     else if (ops[j] === "-") result = toTypedValue(result.value - next.value);
-    else throw new Error(`Unknown operator: ${ops[j]}`);
+    else if (!knownOperators.has(ops[j]!)) throw new Error(`Unknown operator: ${ops[j]}`);
   }
 
   return result;
 }
 
+const knownOperators = new Set(["+", "-", "*", "/", "&&", "||", "==", "!=", "<", ">"]);
 const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/<>]|&&|\|\||==|!=|#)/g;
 
 function resolveTyped(token: string, scope: Map<string, TypedValue>, mutable: Set<string>): TypedValue {
