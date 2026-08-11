@@ -3,7 +3,7 @@ export function evaluate(source: string): number {
 
   const tokens = tokenize(source);
   const parser = { pos: 0 };
-  const env: Record<string, number> = {};
+  const env: Scope = {};
   const result = parseProgram(parser, tokens, env);
 
   if (parser.pos < tokens.length) {
@@ -11,6 +11,8 @@ export function evaluate(source: string): number {
   }
   return result;
 }
+
+type Scope = Record<string, number> & { __parent?: Scope };
 
 type Token =
   | ["num", number]
@@ -47,7 +49,7 @@ function tokenize(source: string): Token[] {
   return result;
 }
 
-function parseProgram(p: { pos: number }, tokens: Token[], env: Record<string, number>): number {
+function parseProgram(p: { pos: number }, tokens: Token[], env: Scope): number {
   let last = 0;
   while (p.pos < tokens.length) {
     if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
@@ -61,7 +63,7 @@ function parseProgram(p: { pos: number }, tokens: Token[], env: Record<string, n
   return last;
 }
 
-function parseLet(p: { pos: number }, tokens: Token[], env: Record<string, number>): number {
+function parseLet(p: { pos: number }, tokens: Token[], env: Scope): number {
   // let <id> = <expr> ;
   p.pos++; // consume "let"
   const idToken = tokens[p.pos];
@@ -77,7 +79,7 @@ function parseLet(p: { pos: number }, tokens: Token[], env: Record<string, numbe
   return 0;
 }
 
-function parseAddSub(p: { pos: number }, tokens: Token[], env: Record<string, number>): number {
+function parseAddSub(p: { pos: number }, tokens: Token[], env: Scope): number {
   let left = parseMulDiv(p, tokens, env);
   while (
     p.pos < tokens.length &&
@@ -92,7 +94,7 @@ function parseAddSub(p: { pos: number }, tokens: Token[], env: Record<string, nu
   return left;
 }
 
-function parseMulDiv(p: { pos: number }, tokens: Token[], env: Record<string, number>): number {
+function parseMulDiv(p: { pos: number }, tokens: Token[], env: Scope): number {
   let left = parseFactor(p, tokens, env);
   while (
     p.pos < tokens.length &&
@@ -107,7 +109,7 @@ function parseMulDiv(p: { pos: number }, tokens: Token[], env: Record<string, nu
   return left;
 }
 
-function parseFactor(p: { pos: number }, tokens: Token[], env: Record<string, number>): number {
+function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Unexpected end");
   if (token[0] === "group" && token[1] === "(") {
@@ -121,14 +123,17 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Record<string, nu
   }
   if (token[0] === "group" && token[1] === "{") {
     p.pos++;
+    // Create a new block scope that inherits from parent
+    const blockEnv: Scope = Object.create({});
+    blockEnv.__parent = env;
     let last = 0;
     let found = false;
     while (p.pos < tokens.length && tokens[p.pos]![0] !== "group" && tokens[p.pos]![1] !== "}") {
       found = true;
       if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
-        last = parseLet(p, tokens, env);
+        last = parseLet(p, tokens, blockEnv);
       } else {
-        last = parseAddSub(p, tokens, env);
+        last = parseAddSub(p, tokens, blockEnv);
         if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
       }
     }
@@ -142,7 +147,16 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Record<string, nu
   return parseNumber(p, tokens, env);
 }
 
-function parseNumber(p: { pos: number }, tokens: Token[], env: Record<string, number>): number {
+function lookup(name: string, scope: Scope): number | undefined {
+  let current: Scope | undefined = scope;
+  while (current) {
+    if (Object.prototype.hasOwnProperty.call(current, name)) return current[name];
+    current = current.__parent;
+  }
+  return undefined;
+}
+
+function parseNumber(p: { pos: number }, tokens: Token[], env: Scope): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Expected number");
   if (token[0] === "num") {
@@ -151,8 +165,9 @@ function parseNumber(p: { pos: number }, tokens: Token[], env: Record<string, nu
   }
   if (token[0] === "id") {
     p.pos++;
-    if (!(token[1] in env)) throw new Error("Undefined variable: " + token[1]);
-    return env[token[1]]!;
+    const value = lookup(token[1], env);
+    if (value === undefined) throw new Error("Undefined variable: " + token[1]);
+    return value;
   }
   throw new Error("Expected number");
 }
