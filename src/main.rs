@@ -9,6 +9,8 @@ enum Token {
     Minus,
     Multiply,
     Divide,
+    LParen,
+    RParen,
     Eof,
 }
 
@@ -68,6 +70,13 @@ impl<'a> Parser<'a> {
         if let Token::Number(n) = token {
             self.eat();
             n
+        } else if token == Token::LParen {
+            self.eat();
+            let value = self.parse_expression();
+            if *self.current_token() == Token::RParen {
+                self.eat();
+            }
+            value
         } else {
             0
         }
@@ -80,14 +89,17 @@ fn evaluate(input: &str) -> i64 {
         return 0;
     }
     let tokens: Vec<Token> = input
-        .split_whitespace()
-        .map(|s| {
-            match s {
-                "+" => Token::Plus,
-                "-" => Token::Minus,
-                "*" => Token::Multiply,
-                "/" => Token::Divide,
-                _ => Token::Number(s.parse::<i64>().unwrap_or(0)),
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| {
+            match c {
+                '+' => Token::Plus,
+                '-' => Token::Minus,
+                '*' => Token::Multiply,
+                '/' => Token::Divide,
+                '(' => Token::LParen,
+                ')' => Token::RParen,
+                _ => Token::Number(c.to_digit(10).map(|d| d as i64).unwrap_or(0)),
             }
         })
         .collect();
@@ -131,5 +143,10 @@ mod tests {
     #[test]
     fn test_evaluate_multiplication_addition() {
         assert_eq!(evaluate("2 * 3 + 4"), 10);
+    }
+
+    #[test]
+    fn test_evaluate_parentheses() {
+        assert_eq!(evaluate("2 * (3 + 4)"), 14);
     }
 }
