@@ -2,6 +2,7 @@ fn main() {
     println!("Hello, world!");
 }
 
+#[allow(dead_code)]
 fn evaluate(_input: &str) -> i64 {
     0
 }
