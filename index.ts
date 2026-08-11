@@ -3,9 +3,8 @@ export function evaluate(source: string): number {
 
   const tokens = tokenize(source);
   const parser = { pos: 0 };
-  const env: Scope = {};
-  const mutable = new Set<string>();
-  const result = parseProgram(parser, tokens, env, mutable);
+  const env = new Environment();
+  const result = parseProgram(parser, tokens, env);
 
   if (parser.pos < tokens.length) {
     throw new Error("Invalid source: " + source);
@@ -13,7 +12,56 @@ export function evaluate(source: string): number {
   return result;
 }
 
-type Scope = Record<string, number | Ref> & { __parent?: Scope; __mutable?: Set<string> };
+class Environment {
+  private values: Record<string, number | Ref> = {};
+  private mutable: Set<string> = new Set();
+  private parent: Environment | undefined;
+
+  constructor(parent?: Environment) {
+    this.parent = parent;
+  }
+
+  declare(name: string, value: number | Ref, mutable = false): void {
+    this.values[name] = value;
+    if (mutable) this.mutable.add(name);
+  }
+
+  assign(name: string, value: number | Ref): void {
+    if (!this.mutable.has(name)) {
+      if (this.parent) {
+        this.parent.assign(name, value);
+        return;
+      }
+      throw new Error("Cannot assign to immutable variable: " + name);
+    }
+    this.values[name] = value;
+  }
+
+  get(name: string): number | Ref | undefined {
+    if (Object.prototype.hasOwnProperty.call(this.values, name)) {
+      return this.values[name];
+    }
+    if (this.parent) {
+      return this.parent.get(name);
+    }
+    return undefined;
+  }
+
+  isMutable(name: string): boolean {
+    if (this.mutable.has(name)) return true;
+    if (this.parent) return this.parent.isMutable(name);
+    return false;
+  }
+}
+
+type Ref = { name: string; env: Environment };
+
+function deref(ref: Ref): number {
+  const val = ref.env.get(ref.name);
+  if (val === undefined) throw new Error("Reference to undefined variable");
+  if (typeof val === "object") return deref(val);
+  return val;
+}
 
 type Token =
   | ["num", number]
@@ -53,41 +101,25 @@ function tokenize(source: string): Token[] {
   return result;
 }
 
-// Reference type: holds a variable name and the scope it belongs to
-type Ref = { name: string; scope: Scope };
-
-function deref(ref: Ref): number {
-  const val = lookup(ref.name, ref.scope);
-  if (val === undefined) throw new Error("Reference to undefined variable");
-  if (typeof val === "object") return deref(val);
-  return val;
-}
-
-function parseProgram(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<string>): number {
+function parseProgram(p: { pos: number }, tokens: Token[], env: Environment): number {
   let last = 0;
   while (p.pos < tokens.length) {
     if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
-      last = parseLet(p, tokens, env, mutable);
+      last = parseLet(p, tokens, env);
     } else if (tokens[p.pos]![0] === "id" && p.pos + 1 < tokens.length && tokens[p.pos + 1]![0] === "assign") {
-      // id = expr ;
-      last = parseAssignment(p, tokens, env, mutable);
+      last = parseAssignment(p, tokens, env);
     } else {
       last = parseAddSub(p, tokens, env);
-      // consume trailing semicolon if present
       if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
     }
   }
   return last;
 }
 
-function parseLet(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<string>): number {
-  // let [mut] <id> = <expr> ;
+function parseLet(p: { pos: number }, tokens: Token[], env: Environment): number {
   p.pos++; // consume "let"
-  // optional "mut" keyword
   const isMut = tokens[p.pos]![0] === "id" && tokens[p.pos]![1] === "mut";
-  if (isMut) {
-    p.pos++; // consume "mut"
-  }
+  if (isMut) p.pos++; // consume "mut"
   const idToken = tokens[p.pos];
   if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier");
   const name = idToken[1];
@@ -95,26 +127,22 @@ function parseLet(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<
   if (tokens[p.pos]![0] !== "assign") throw new Error("Expected =");
   p.pos++; // consume "="
   const value = parseAddSub(p, tokens, env);
-  env[name] = value;
-  if (isMut) mutable.add(name);
-  // consume trailing semicolon
+  env.declare(name, value, isMut);
   if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
   return 0;
 }
 
-function parseAssignment(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<string>): number {
-  const name = tokens[p.pos]![1];
+function parseAssignment(p: { pos: number }, tokens: Token[], env: Environment): number {
+  const name = String(tokens[p.pos]![1]);
   p.pos++; // consume id
   p.pos++; // consume "="
   const value = parseAddSub(p, tokens, env);
-  if (!mutable.has(String(name))) throw new Error("Cannot assign to immutable variable: " + name);
-  env[name] = value;
-  // consume trailing semicolon
+  env.assign(name, value);
   if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
   return value;
 }
 
-function parseAddSub(p: { pos: number }, tokens: Token[], env: Scope): number {
+function parseAddSub(p: { pos: number }, tokens: Token[], env: Environment): number {
   let left = parseMulDiv(p, tokens, env);
   while (
     p.pos < tokens.length &&
@@ -129,14 +157,13 @@ function parseAddSub(p: { pos: number }, tokens: Token[], env: Scope): number {
   return left;
 }
 
-function parseMulDiv(p: { pos: number }, tokens: Token[], env: Scope): number {
+function parseMulDiv(p: { pos: number }, tokens: Token[], env: Environment): number {
   let left = parseFactor(p, tokens, env);
   while (
     p.pos < tokens.length &&
     tokens[p.pos]![0] === "op" &&
     (tokens[p.pos]![1] === "*" || tokens[p.pos]![1] === "/")
   ) {
-    // If * is followed by an identifier, it's dereference — stop
     if (tokens[p.pos]![1] === "*") {
       const next = tokens[p.pos + 1];
       if (next && next[0] === "id") break;
@@ -149,7 +176,7 @@ function parseMulDiv(p: { pos: number }, tokens: Token[], env: Scope): number {
   return left;
 }
 
-function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
+function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Unexpected end");
 
@@ -160,7 +187,7 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
     if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier after &");
     const name = idToken[1];
     p.pos++;
-    return { name, scope: env } as any;
+    return { name, env } as any;
   }
 
   // *y — dereference
@@ -169,7 +196,7 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
     if (next && next[0] === "id") {
       p.pos++; // consume *
       p.pos++; // consume id
-      const value = lookup(next[1], env);
+      const value = env.get(next[1]);
       if (value === undefined) throw new Error("Undefined variable: " + next[1]);
       if (typeof value === "object") return deref(value);
       throw new Error("Cannot dereference non-reference");
@@ -187,17 +214,14 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
   }
   if (token[0] === "group" && token[1] === "{") {
     p.pos++;
-    // Create a new block scope that inherits from parent
-    const blockEnv: Scope = Object.create({});
-    blockEnv.__parent = env;
-    const blockMutable = new Set<string>();
+    const blockEnv = new Environment(env);
     let last = 0;
     let found = false;
     let hasValue = false;
     while (p.pos < tokens.length && tokens[p.pos]![0] !== "group" && tokens[p.pos]![1] !== "}") {
       found = true;
       if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
-        parseLet(p, tokens, blockEnv, blockMutable);
+        parseLet(p, tokens, blockEnv);
         hasValue = false;
       } else {
         last = parseAddSub(p, tokens, blockEnv);
@@ -216,16 +240,7 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
   return parseNumber(p, tokens, env);
 }
 
-function lookup(name: string, scope: Scope): number | Ref | undefined {
-  let current: Scope | undefined = scope;
-  while (current) {
-    if (Object.prototype.hasOwnProperty.call(current, name)) return current[name];
-    current = current.__parent;
-  }
-  return undefined;
-}
-
-function parseNumber(p: { pos: number }, tokens: Token[], env: Scope): number {
+function parseNumber(p: { pos: number }, tokens: Token[], env: Environment): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Expected number");
   if (token[0] === "num") {
@@ -234,7 +249,7 @@ function parseNumber(p: { pos: number }, tokens: Token[], env: Scope): number {
   }
   if (token[0] === "id") {
     p.pos++;
-    const value = lookup(token[1], env);
+    const value = env.get(token[1]);
     if (value === undefined) throw new Error("Undefined variable: " + token[1]);
     if (typeof value === "object") return deref(value);
     return value;
