@@ -65,9 +65,14 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
     if (depth !== undefined) {
       const inner = trimmed.slice(1, depth);
       const rest = trimmed.slice(depth + 1).trim();
-      // If block is a pure declaration and is used as a value (no rest after), throw
-      if (open === "{" && inner.trim().startsWith("let ") && inner.trim().endsWith(";") && rest === "") {
-        throw new Error(`Block has no value-producing expression: ${trimmed}`);
+      // If block is a pure declaration or assignment (no trailing expression), throw
+      if (open === "{" && rest === "") {
+        const innerTrimmed = inner.trim();
+        const isPureDeclaration = innerTrimmed.startsWith("let ") && innerTrimmed.endsWith(";");
+        const isPureAssignment = /^[a-zA-Z_]\w*\s*=/.test(innerTrimmed) && innerTrimmed.endsWith(";");
+        if (isPureDeclaration || isPureAssignment) {
+          throw new Error(`Block has no value-producing expression: ${trimmed}`);
+        }
       }
       if (rest === "") return evaluate(inner, scope, mutable);
       const groupResult = evaluate(inner, scope, mutable);
