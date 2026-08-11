@@ -241,8 +241,8 @@ function findMatchingParen(input: string, start: number): number {
 function findElseKeyword(input: string): number {
   let depth = 0;
   for (let i = 0; i < input.length; i++) {
-    if (input[i] === "(") depth++;
-    else if (input[i] === ")") depth--;
+    if (input[i] === "(" || input[i] === "{") depth++;
+    else if (input[i] === ")" || input[i] === "}") depth--;
     else if (depth === 0 && input.slice(i, i + 5) === "else ") return i;
   }
   return -1;
