@@ -28,8 +28,8 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
     if (trimmed.endsWith(";")) return 0;
   }
 
-  // Handle assignment expressions: x = expr
-  const assignMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+  // Handle assignment expressions: x = expr (but not == or !=)
+  const assignMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*=(?!=)\s*(.+)$/);
   if (assignMatch) {
     const [, name, expr] = assignMatch;
     if (!mutable.has(name!)) {
@@ -118,6 +118,10 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
       values[values.length - 1] = last && val;
     } else if (op === "||") {
       values[values.length - 1] = last || val;
+    } else if (op === "==") {
+      values[values.length - 1] = last === val ? 1 : 0;
+    } else if (op === "!=") {
+      values[values.length - 1] = last !== val ? 1 : 0;
     } else {
       ops.push(op);
       values.push(val);
@@ -136,7 +140,7 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
   return result;
 }
 
-const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/]|&&|\|\|)/g;
+const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/]|&&|\|\||==|!=)/g;
 
 function resolve(token: string, scope: Map<string, number>, mutable: Set<string>): number {
   if (token.startsWith("(") || token.startsWith("{")) {
