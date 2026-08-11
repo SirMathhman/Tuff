@@ -72,7 +72,10 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "derefassign": {
       const value = evaluate(node.value, env);
       // The target is a deref of an id
-      const target = node.target as { type: "deref"; operand: { type: "id"; name: string } };
+      const target = node.target as {
+        type: "deref";
+        operand: { type: "id"; name: string };
+      };
       const ref = env.get(target.operand.name);
       if (ref === undefined)
         throw new Error("Undefined variable: " + target.operand.name);

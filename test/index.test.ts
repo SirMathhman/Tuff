@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { evaluate } from "./index";
+import { evaluate } from "../src/index";
 
 describe("evaluate", () => {
   it('evaluate("") => 0', () => {

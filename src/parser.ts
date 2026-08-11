@@ -83,7 +83,10 @@ export class Parser {
     this.consume();
     this.consume(); // "="
     const value = this.parseAddSub();
-    const target: AstNode = { type: "deref", operand: { type: "id", name: idToken[1] } };
+    const target: AstNode = {
+      type: "deref",
+      operand: { type: "id", name: idToken[1] },
+    };
     if (this.peek()?.[0] === "semi") this.consume();
     return { type: "derefassign", target, value };
   }
