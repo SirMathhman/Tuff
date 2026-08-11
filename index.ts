@@ -98,28 +98,27 @@ function parseStatement(tokens: Token[], pos: [number], scope: Map<string, numbe
     const name = tokens[pos[0]]![1] as string;
     pos[0]++;
     pos[0]++;
-    const value = parseExpr(tokens, pos, scope);
-    scope.set(name, value);
-    if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
-      pos[0]++;
-    }
-    return 0;
+    return assignAndSkip(tokens, pos, scope, name);
   }
   if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0] + 1]![0] === "OP" && tokens[pos[0] + 1]![1] === "=") {
     const name = tokens[pos[0]]![1] as string;
     pos[0] += 2;
-    const value = parseExpr(tokens, pos, scope);
-    scope.set(name, value);
-    if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
-      pos[0]++;
-    }
-    return 0;
+    return assignAndSkip(tokens, pos, scope, name);
   }
   const value = parseExpr(tokens, pos, scope);
   if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
     pos[0]++;
   }
   return value;
+}
+
+function assignAndSkip(tokens: Token[], pos: [number], scope: Map<string, number>, name: string): number {
+  const value = parseExpr(tokens, pos, scope);
+  scope.set(name, value);
+  if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
+    pos[0]++;
+  }
+  return 0;
 }
 
 export function interpret(input: string): number {
