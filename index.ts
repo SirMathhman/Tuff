@@ -3,13 +3,18 @@ export function evaluate(input: string): number {
   const num = Number(input);
   if (!Number.isNaN(num)) return num;
 
-  const parts = input.split("+");
-  if (parts.length >= 2) {
-    let sum = 0;
-    for (const part of parts) {
-      if (part !== undefined) sum += evaluate(part);
+  const tokens = input.match(/([^+\-]+|[+\-])/g);
+  if (tokens && tokens.length >= 3) {
+    let result = evaluate(tokens[0]);
+    let i = 1;
+    while (i < tokens.length) {
+      const op = tokens[i];
+      const next = evaluate(tokens[i + 1]!);
+      if (op === "+") result += next;
+      else if (op === "-") result -= next;
+      i += 2;
     }
-    return sum;
+    return result;
   }
 
   throw new Error("Not implemented");
