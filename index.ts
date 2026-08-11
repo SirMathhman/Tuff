@@ -4,8 +4,12 @@ export function evaluate(input: string): number {
   if (!Number.isNaN(num)) return num;
 
   const parts = input.split("+");
-  if (parts.length === 2 && parts[0] !== undefined && parts[1] !== undefined) {
-    return evaluate(parts[0]) + evaluate(parts[1]);
+  if (parts.length >= 2) {
+    let sum = 0;
+    for (const part of parts) {
+      if (part !== undefined) sum += evaluate(part);
+    }
+    return sum;
   }
 
   throw new Error("Not implemented");
