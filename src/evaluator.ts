@@ -54,6 +54,15 @@ export function evaluate(node: AstNode, env: Environment): number {
       return -evaluate(node.operand, env);
 
     case "let": {
+      if (
+        node.value.type === "if" &&
+        (node.value.thenBranch.type === "block" ||
+          node.value.elseBranch.type === "block")
+      ) {
+        throw new Error(
+          "if/else with block branches cannot be used as expression",
+        );
+      }
       const value = evaluate(node.value, env);
       env.declare(node.name, value, node.mutable);
       return 0;
