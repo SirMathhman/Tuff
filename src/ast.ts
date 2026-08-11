@@ -9,7 +9,8 @@ export type AstNode =
   | Ref
   | Deref
   | Assign
-  | DerefAssign;
+  | DerefAssign
+  | If;
 
 export interface Num {
   type: "num";
@@ -72,4 +73,11 @@ export interface DerefAssign {
   type: "derefassign";
   target: AstNode;
   value: AstNode;
+}
+
+export interface If {
+  type: "if";
+  condition: AstNode;
+  thenBranch: AstNode;
+  elseBranch: AstNode;
 }

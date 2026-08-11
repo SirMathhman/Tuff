@@ -101,4 +101,8 @@ describe("evaluate", () => {
   it('evaluate("\"let x = 0; let y = 1; x == y\"") => 0', () => {
     expect(evaluate('"let x = 0; let y = 1; x == y"')).toBe(0);
   });
+
+  it('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
+    expect(evaluate("let x = if (false) 2 else 3; x")).toBe(3);
+  });
 });

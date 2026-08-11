@@ -164,6 +164,24 @@ export class Parser {
       return { type: "block", statements };
     }
 
+    // if (cond) then else expr
+    if (token[0] === "kw" && token[1] === "if") {
+      this.consume(); // "if"
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
+        throw new Error("Expected ( after if");
+      this.consume(); // "("
+      const condition = this.parseAddSub();
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+        throw new Error("Expected ) after condition");
+      this.consume(); // ")"
+      const thenBranch = this.parseFactor();
+      if (this.peek()?.[0] !== "kw" || this.peek()![1] !== "else")
+        throw new Error("Expected else");
+      this.consume(); // "else"
+      const elseBranch = this.parseFactor();
+      return { type: "if", condition, thenBranch, elseBranch };
+    }
+
     return this.parsePrimary();
   }
 

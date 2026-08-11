@@ -5,7 +5,7 @@ export type Token =
   | ["bool", boolean]
   | ["op", "+" | "-" | "*" | "/" | "&&" | "||" | "=="]
   | ["group", "(" | ")" | "{" | "}"]
-  | ["kw", "let" | "mut"]
+  | ["kw", "let" | "mut" | "if" | "else"]
   | ["id", string]
   | ["assign", "="]
   | ["semi", ";"]
@@ -39,6 +39,10 @@ export function tokenize(source: string): Token[] {
       result.push(["kw", "let"]);
     } else if (text === "mut") {
       result.push(["kw", "mut"]);
+    } else if (text === "if") {
+      result.push(["kw", "if"]);
+    } else if (text === "else") {
+      result.push(["kw", "else"]);
     } else if (text === "true") {
       result.push(["bool", true]);
     } else if (text === "false") {

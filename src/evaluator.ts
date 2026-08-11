@@ -110,5 +110,13 @@ export function evaluate(node: AstNode, env: Environment): number {
       if (!hasValue) throw new Error("Block has no value");
       return last;
     }
+
+    case "if": {
+      const condition = evaluate(node.condition, env);
+      if (condition !== 0) {
+        return evaluate(node.thenBranch, env);
+      }
+      return evaluate(node.elseBranch, env);
+    }
   }
 }
