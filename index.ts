@@ -79,22 +79,7 @@ function parseFactor(tokens: Token[], pos: [number], scope: Map<string, number>)
     const closer = token[1] === "(" ? ")" : "}";
     let lastValue = 0;
     while (tokens[pos[0]]![0] !== "EOF" && !(tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === closer)) {
-      if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
-        pos[0]++;
-        const name = tokens[pos[0]]![1] as string;
-        pos[0]++;
-        pos[0]++;
-        const value = parseExpr(tokens, pos, blockScope);
-        blockScope.set(name, value);
-        if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
-          pos[0]++;
-        }
-      } else {
-        lastValue = parseExpr(tokens, pos, blockScope);
-        if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
-          pos[0]++;
-        }
-      }
+      lastValue = parseStatement(tokens, pos, blockScope);
     }
     if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === closer) {
       pos[0]++;
@@ -104,6 +89,26 @@ function parseFactor(tokens: Token[], pos: [number], scope: Map<string, number>)
   throw new Error(`Unexpected token: ${token}`);
 }
 
+function parseStatement(tokens: Token[], pos: [number], scope: Map<string, number>): number {
+  if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
+    pos[0]++;
+    const name = tokens[pos[0]]![1] as string;
+    pos[0]++;
+    pos[0]++;
+    const value = parseExpr(tokens, pos, scope);
+    scope.set(name, value);
+    if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
+      pos[0]++;
+    }
+    return value;
+  }
+  const value = parseExpr(tokens, pos, scope);
+  if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
+    pos[0]++;
+  }
+  return value;
+}
+
 export function interpret(input: string): number {
   if (input === "") return 0;
   const tokens = tokenize(input);
@@ -111,23 +116,7 @@ export function interpret(input: string): number {
   const scope = new Map<string, number>();
   let lastValue = 0;
   while (tokens[pos[0]]![0] !== "EOF") {
-    if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
-      pos[0]++;
-      const name = tokens[pos[0]]![1] as string;
-      pos[0]++;
-      pos[0]++;
-      const value = parseExpr(tokens, pos, scope);
-      scope.set(name, value);
-      lastValue = value;
-      if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
-        pos[0]++;
-      }
-    } else {
-      lastValue = parseExpr(tokens, pos, scope);
-      if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
-        pos[0]++;
-      }
-    }
+    lastValue = parseStatement(tokens, pos, scope);
   }
   return lastValue;
 }
