@@ -64,7 +64,8 @@ function deref(ref: Ref): number {
 }
 
 function assignRef(ref: Ref, value: number): void {
-  if (!ref.mutable) throw new Error("Cannot assign through immutable reference");
+  if (!ref.mutable)
+    throw new Error("Cannot assign through immutable reference");
   ref.env.assign(ref.name, value);
 }
 
@@ -111,15 +112,28 @@ function tokenize(source: string): Token[] {
   return result;
 }
 
-function parseProgram(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseProgram(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   let last = 0;
   while (p.pos < tokens.length) {
     if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
       last = parseLet(p, tokens, env);
-    } else if (tokens[p.pos]![0] === "op" && tokens[p.pos]![1] === "*" && p.pos + 2 < tokens.length && tokens[p.pos + 2]![0] === "assign") {
+    } else if (
+      tokens[p.pos]![0] === "op" &&
+      tokens[p.pos]![1] === "*" &&
+      p.pos + 2 < tokens.length &&
+      tokens[p.pos + 2]![0] === "assign"
+    ) {
       // *y = value ;
       last = parseDerefAssignment(p, tokens, env);
-    } else if (tokens[p.pos]![0] === "id" && p.pos + 1 < tokens.length && tokens[p.pos + 1]![0] === "assign") {
+    } else if (
+      tokens[p.pos]![0] === "id" &&
+      p.pos + 1 < tokens.length &&
+      tokens[p.pos + 1]![0] === "assign"
+    ) {
       last = parseAssignment(p, tokens, env);
     } else {
       last = parseAddSub(p, tokens, env);
@@ -129,7 +143,11 @@ function parseProgram(p: { pos: number }, tokens: Token[], env: Environment): nu
   return last;
 }
 
-function parseLet(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseLet(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   p.pos++; // consume "let"
   const isMut = tokens[p.pos]![0] === "id" && tokens[p.pos]![1] === "mut";
   if (isMut) p.pos++; // consume "mut"
@@ -145,7 +163,11 @@ function parseLet(p: { pos: number }, tokens: Token[], env: Environment): number
   return 0;
 }
 
-function parseAssignment(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseAssignment(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   const name = String(tokens[p.pos]![1]);
   p.pos++; // consume id
   p.pos++; // consume "="
@@ -155,11 +177,16 @@ function parseAssignment(p: { pos: number }, tokens: Token[], env: Environment):
   return value;
 }
 
-function parseDerefAssignment(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseDerefAssignment(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   // *y = value ;
   p.pos++; // consume *
   const idToken = tokens[p.pos];
-  if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier after *");
+  if (!idToken || idToken[0] !== "id")
+    throw new Error("Expected identifier after *");
   p.pos++; // consume id
   p.pos++; // consume "="
   const value = parseAddSub(p, tokens, env);
@@ -174,7 +201,11 @@ function parseDerefAssignment(p: { pos: number }, tokens: Token[], env: Environm
   return value;
 }
 
-function parseAddSub(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseAddSub(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   let left = parseMulDiv(p, tokens, env);
   while (
     p.pos < tokens.length &&
@@ -189,7 +220,11 @@ function parseAddSub(p: { pos: number }, tokens: Token[], env: Environment): num
   return left;
 }
 
-function parseMulDiv(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseMulDiv(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   let left = parseFactor(p, tokens, env);
   while (
     p.pos < tokens.length &&
@@ -208,7 +243,11 @@ function parseMulDiv(p: { pos: number }, tokens: Token[], env: Environment): num
   return left;
 }
 
-function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseFactor(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Unexpected end");
 
@@ -219,7 +258,8 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
     const isMut = next && next[0] === "id" && next[1] === "mut";
     if (isMut) p.pos++; // consume "mut"
     const idToken = tokens[p.pos];
-    if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier after &");
+    if (!idToken || idToken[0] !== "id")
+      throw new Error("Expected identifier after &");
     const name = idToken[1];
     p.pos++;
     return { name, env, mutable: isMut } as any;
@@ -232,7 +272,8 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
       p.pos++; // consume *
       p.pos++; // consume id
       const value = env.get(next[1]);
-      if (value === undefined) throw new Error("Undefined variable: " + next[1]);
+      if (value === undefined)
+        throw new Error("Undefined variable: " + next[1]);
       if (typeof value === "object") return deref(value);
       throw new Error("Cannot dereference non-reference");
     }
@@ -253,7 +294,11 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
     let last = 0;
     let found = false;
     let hasValue = false;
-    while (p.pos < tokens.length && tokens[p.pos]![0] !== "group" && tokens[p.pos]![1] !== "}") {
+    while (
+      p.pos < tokens.length &&
+      tokens[p.pos]![0] !== "group" &&
+      tokens[p.pos]![1] !== "}"
+    ) {
       found = true;
       if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
         parseLet(p, tokens, blockEnv);
@@ -275,16 +320,41 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Environment): num
   return parseNumber(p, tokens, env);
 }
 
-function evaluateStringExpr(str: string): number | null {
+function evaluateStringExpr(
+  str: string,
+  vars: Record<string, number> = {},
+): number | null {
   const s = str.toLowerCase().trim();
   if (s === "true") return 1;
   if (s === "false") return 0;
+
+  // Handle semicolon-separated statements first
+  const semiParts = s.split(";");
+  if (semiParts.length > 1) {
+    let currentVars = { ...vars };
+    let result: number | null = 0;
+    for (const part of semiParts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      result = evaluateStringExpr(trimmed, currentVars);
+      // Check if this was a let declaration
+      const letMatch = trimmed.match(
+        /^let\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/,
+      );
+      if (letMatch) {
+        const name = letMatch[1]!;
+        const value = evaluateStringExpr(letMatch[2]!.trim(), currentVars);
+        if (value !== null) currentVars[name] = value;
+      }
+    }
+    return result;
+  }
 
   // Split by || (lowest precedence)
   const orParts = s.split("||");
   if (orParts.length > 1) {
     for (const part of orParts) {
-      const val = evaluateStringExpr(part);
+      const val = evaluateStringExpr(part, vars);
       if (val !== null && val !== 0) return 1;
     }
     return 0;
@@ -294,11 +364,37 @@ function evaluateStringExpr(str: string): number | null {
   const andParts = s.split("&&");
   if (andParts.length > 1) {
     for (const part of andParts) {
-      const val = evaluateStringExpr(part);
+      const val = evaluateStringExpr(part, vars);
       if (val === null) return null;
       if (val === 0) return 0;
     }
     return 1;
+  }
+
+  // Split by == (comparison)
+  const eqParts = s.split("==");
+  if (
+    eqParts.length === 2 &&
+    eqParts[0] !== undefined &&
+    eqParts[1] !== undefined
+  ) {
+    const left = evaluateStringExpr(eqParts[0], vars);
+    const right = evaluateStringExpr(eqParts[1], vars);
+    if (left === null || right === null) return null;
+    return left === right ? 1 : 0;
+  }
+
+  // Handle "let x = value"
+  const letMatch = s.match(/^let\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
+  if (letMatch) {
+    const value = evaluateStringExpr(letMatch[2]!.trim(), vars);
+    return value !== null ? value : 0;
+  }
+
+  // Variable lookup
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s)) {
+    const val = vars[s];
+    if (val !== undefined) return val;
   }
 
   // Fallback to number
@@ -312,7 +408,11 @@ function parseLiteral(token: Token): number | null {
   return null;
 }
 
-function parseNumber(p: { pos: number }, tokens: Token[], env: Environment): number {
+function parseNumber(
+  p: { pos: number },
+  tokens: Token[],
+  env: Environment,
+): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Expected number");
   const literal = parseLiteral(token);
