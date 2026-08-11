@@ -76,15 +76,20 @@ type Token =
   | ["id", string]
   | ["assign", "="]
   | ["semi", ";"]
-  | ["ref", "&"];
+  | ["ref", "&"]
+  | ["str", string];
 
 function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re = /(\d+\.?\d*|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+  const re = /"([^"]*)"|(\d+\.?\d*|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
-    const [text] = match;
+    const [text, strContent] = match;
     if (text === " " || text === "") continue;
+    if (strContent !== undefined) {
+      result.push(["str", strContent]);
+      continue;
+    }
     if (text === "+" || text === "-" || text === "*" || text === "/") {
       result.push(["op", text as "+" | "-" | "*" | "/"]);
     } else if (text === "&") {
@@ -276,6 +281,10 @@ function parseNumber(p: { pos: number }, tokens: Token[], env: Environment): num
   if (token[0] === "num") {
     p.pos++;
     return token[1];
+  }
+  if (token[0] === "str") {
+    p.pos++;
+    return token[1] === "true" ? 1 : 0;
   }
   if (token[0] === "id") {
     p.pos++;

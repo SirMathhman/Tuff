@@ -85,4 +85,8 @@ describe("evaluate", () => {
   it('evaluate("let mut x = 0; let y = &mut x; *y = 100; x") => 100', () => {
     expect(evaluate("let mut x = 0; let y = &mut x; *y = 100; x")).toBe(100);
   });
+
+  it('evaluate("\"true\"") => 1', () => {
+    expect(evaluate("\"true\"")).toBe(1);
+  });
 });
