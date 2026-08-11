@@ -135,9 +135,15 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
       values[values.length - 1] = toTypedValue((last.type === val.type && last.value === val.value) ? 1 : 0, "boolean");
     } else if (op === "!=") {
       values[values.length - 1] = toTypedValue((last.type !== val.type || last.value !== val.value) ? 1 : 0, "boolean");
-    } else {
+    } else if (op === "<") {
+      values[values.length - 1] = toTypedValue(last.value < val.value ? 1 : 0, "boolean");
+    } else if (op === ">") {
+      values[values.length - 1] = toTypedValue(last.value > val.value ? 1 : 0, "boolean");
+    } else if (op === "+" || op === "-") {
       ops.push(op);
       values.push(val);
+    } else {
+      throw new Error(`Unknown operator: ${op}`);
     }
     i += 2;
   }
@@ -148,12 +154,13 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
     const next = values[j + 1]!;
     if (ops[j] === "+") result = toTypedValue(result.value + next.value);
     else if (ops[j] === "-") result = toTypedValue(result.value - next.value);
+    else throw new Error(`Unknown operator: ${ops[j]}`);
   }
 
   return result;
 }
 
-const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/]|&&|\|\||==|!=)/g;
+const tokenRegex = /(\d+|\([^()]*\)|\{[^{}]*\}|[a-zA-Z_]\w*|[+\-*/<>]|&&|\|\||==|!=|#)/g;
 
 function resolveTyped(token: string, scope: Map<string, TypedValue>, mutable: Set<string>): TypedValue {
   if (token.startsWith("(") || token.startsWith("{")) {
