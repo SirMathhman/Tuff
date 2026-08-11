@@ -129,4 +129,8 @@ describe("evaluate", () => {
   it('evaluate("true == 1") => 0', () => {
     expect(evaluate("true == 1")).toBe(0);
   });
+
+  it('evaluate("1 < 2") => 1', () => {
+    expect(evaluate("1 < 2")).toBe(1);
+  });
 });
