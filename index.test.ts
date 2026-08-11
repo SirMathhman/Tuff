@@ -39,4 +39,7 @@ describe("interpret", () => {
   it('interpret("let y = 20; y") => 20', () => {
     expect(interpret("let y = 20; y")).toBe(20);
   });
+  it('interpret("let y = 20;") => 0', () => {
+    expect(interpret("let y = 20;")).toBe(0);
+  });
 });

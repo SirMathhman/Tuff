@@ -100,7 +100,7 @@ function parseStatement(tokens: Token[], pos: [number], scope: Map<string, numbe
     if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
       pos[0]++;
     }
-    return value;
+    return 0;
   }
   const value = parseExpr(tokens, pos, scope);
   if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
