@@ -25,7 +25,10 @@ function tokenize(input: string): Token[] {
 
 function parseExpr(tokens: Token[], pos: [number]): number {
   let left = parseTerm(tokens, pos);
-  while (tokens[pos[0]]![0] === "OP" && (tokens[pos[0]]![1] === "+" || tokens[pos[0]]![1] === "-")) {
+  while (
+    tokens[pos[0]]![0] === "OP" &&
+    (tokens[pos[0]]![1] === "+" || tokens[pos[0]]![1] === "-")
+  ) {
     const op = tokens[pos[0]++]![1] as "+" | "-";
     const right = parseTerm(tokens, pos);
     left = op === "+" ? left + right : left - right;
@@ -35,7 +38,10 @@ function parseExpr(tokens: Token[], pos: [number]): number {
 
 function parseTerm(tokens: Token[], pos: [number]): number {
   let left = parseFactor(tokens, pos);
-  while (tokens[pos[0]]![0] === "OP" && (tokens[pos[0]]![1] === "*" || tokens[pos[0]]![1] === "/")) {
+  while (
+    tokens[pos[0]]![0] === "OP" &&
+    (tokens[pos[0]]![1] === "*" || tokens[pos[0]]![1] === "/")
+  ) {
     const op = tokens[pos[0]++]![1] as "*" | "/";
     const right = parseFactor(tokens, pos);
     left = op === "*" ? left * right : left / right;
