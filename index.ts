@@ -92,9 +92,22 @@ function parseFactor(tokens: Token[], pos: [number], scope: Map<string, number>)
 function parseStatement(tokens: Token[], pos: [number], scope: Map<string, number>): number {
   if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
     pos[0]++;
+    if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "mut") {
+      pos[0]++;
+    }
     const name = tokens[pos[0]]![1] as string;
     pos[0]++;
     pos[0]++;
+    const value = parseExpr(tokens, pos, scope);
+    scope.set(name, value);
+    if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
+      pos[0]++;
+    }
+    return 0;
+  }
+  if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0] + 1]![0] === "OP" && tokens[pos[0] + 1]![1] === "=") {
+    const name = tokens[pos[0]]![1] as string;
+    pos[0] += 2;
     const value = parseExpr(tokens, pos, scope);
     scope.set(name, value);
     if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {

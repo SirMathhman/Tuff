@@ -42,4 +42,7 @@ describe("interpret", () => {
   it('interpret("let y = 20;") => 0', () => {
     expect(interpret("let y = 20;")).toBe(0);
   });
+  it('interpret("let mut y = 100; y = 20;") => 0', () => {
+    expect(interpret("let mut y = 100; y = 20;")).toBe(0);
+  });
 });
