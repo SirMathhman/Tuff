@@ -49,4 +49,5 @@ function assignRef(ref: Ref, value: number): void {
   ref.env.assign(ref.name, value);
 }
 
-export { Ref, deref, assignRef };
+export type { Ref };
+export { deref, assignRef };

@@ -1,5 +1,6 @@
 import type { AstNode } from "./ast";
-import { Environment, Ref, deref, assignRef } from "./environment";
+import { Environment, deref, assignRef } from "./environment";
+import type { Ref } from "./environment";
 
 export function evaluateStatements(
   statements: AstNode[],

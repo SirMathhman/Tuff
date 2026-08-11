@@ -52,14 +52,22 @@ export class Parser {
     return expr;
   }
 
-  private parseLet(): AstNode {
-    this.consume(); // "let"
+  private parseMutId(errorMsg = "Expected identifier"): {
+    name: string;
+    isMut: boolean;
+  } {
     const isMut = this.peek()?.[0] === "kw" && this.peek()![1] === "mut";
-    if (isMut) this.consume(); // "mut"
+    if (isMut) this.consume();
     const idToken = this.peek();
-    if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier");
+    if (!idToken || idToken[0] !== "id") throw new Error(errorMsg);
     const name = idToken[1];
     this.consume();
+    return { name, isMut };
+  }
+
+  private parseLet(): AstNode {
+    this.consume(); // "let"
+    const { name, isMut } = this.parseMutId();
     if (this.peek()?.[0] !== "assign") throw new Error("Expected =");
     this.consume();
     const value = this.parseAddSub();
@@ -68,7 +76,7 @@ export class Parser {
   }
 
   private parseAssign(): AstNode {
-    const name = this.consume()[1];
+    const name = this.consume()[1] as string;
     this.consume(); // "="
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
@@ -97,7 +105,7 @@ export class Parser {
       this.peek()?.[0] === "op" &&
       (this.peek()![1] === "+" || this.peek()![1] === "-")
     ) {
-      const op = this.consume()[1];
+      const op = this.consume()[1] as "+" | "-";
       const right = this.parseMulDiv();
       left = { type: "binop", op, left, right };
     }
@@ -110,7 +118,7 @@ export class Parser {
       this.peek()?.[0] === "op" &&
       (this.peek()![1] === "*" || this.peek()![1] === "/")
     ) {
-      const op = this.consume()[1];
+      const op = this.consume()[1] as "*" | "/";
       const right = this.parseFactor();
       left = { type: "binop", op, left, right };
     }
@@ -124,13 +132,8 @@ export class Parser {
     // &x or &mut x
     if (token[0] === "ref") {
       this.consume();
-      const isMut = this.peek()?.[0] === "kw" && this.peek()![1] === "mut";
-      if (isMut) this.consume();
-      const idToken = this.peek();
-      if (!idToken || idToken[0] !== "id")
-        throw new Error("Expected identifier after &");
-      this.consume();
-      return { type: "ref", name: idToken[1], mutable: isMut };
+      const { name, isMut } = this.parseMutId("Expected identifier after &");
+      return { type: "ref", name, mutable: isMut };
     }
 
     // *y — dereference
@@ -303,7 +306,7 @@ export class Parser {
       }
     }
 
-    if (statements.length === 1) return statements[0];
+    if (statements.length === 1) return statements[0]!;
     return { type: "block", statements };
   }
 }
