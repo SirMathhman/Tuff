@@ -47,9 +47,56 @@ export class Parser {
       return this.parseAssign();
     }
 
+    // Handle if/else at statement level to capture semicolon after else branch
+    if (token[0] === "kw" && token[1] === "if") {
+      const expr = this.parseIfStatement();
+      return expr;
+    }
+
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
+  }
+
+  private parseIfStatement(): AstNode {
+    this.consume(); // "if"
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
+      throw new Error("Expected ( after if");
+    this.consume(); // "("
+    const condition = this.parseAddSub();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected ) after condition");
+    this.consume(); // ")"
+
+    // Parse then branch (handle assignment)
+    const thenBranch = this.parseBranch();
+
+    if (this.peek()?.[0] === "kw" && this.peek()![1] === "else") {
+      this.consume(); // "else"
+      const elseBranch = this.parseBranch();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "if", condition, thenBranch, elseBranch };
+    }
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "if", condition, thenBranch, elseBranch: { type: "num", value: 0 } };
+  }
+
+  private parseBranch(): AstNode {
+    // Handle assignment: x = value
+    if (
+      this.peek()?.[0] === "id" &&
+      this.pos + 1 < this.tokens.length &&
+      this.tokens[this.pos + 1]![0] === "assign"
+    ) {
+      const name = this.consume()[1] as string;
+      this.consume(); // "="
+      const value = this.parseFactor();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "assign", name, value };
+    }
+    const result = this.parseFactor();
+    if (this.peek()?.[0] === "semi") this.consume();
+    return result;
   }
 
   private parseMutId(errorMsg = "Expected identifier"): {
