@@ -281,6 +281,15 @@ function parseLiteral(token: Token): number | null {
     const str = token[1].toLowerCase();
     if (str === "true") return 1;
     if (str === "false") return 0;
+    // Handle "||" logical OR
+    const parts = str.split("||");
+    if (parts.length > 1) {
+      for (const part of parts) {
+        const val = parseLiteral(["str", part.trim()]);
+        if (val !== null && val !== 0) return 1;
+      }
+      return 0;
+    }
     const num = Number(str);
     return isNaN(num) ? null : num;
   }
