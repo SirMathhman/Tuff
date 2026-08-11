@@ -2,6 +2,9 @@ export function evaluate(input: string): number {
   const trimmed = input.trim();
   if (trimmed === "") return 0;
 
+  // Handle let declarations: return 0 (no value produced)
+  if (trimmed.startsWith("let ") && trimmed.endsWith(";")) return 0;
+
   // Handle grouped expressions: ( ) or { }
   if (trimmed.startsWith("(") || trimmed.startsWith("{")) {
     const open = trimmed[0] as "(" | "{";
