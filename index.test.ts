@@ -5,4 +5,8 @@ describe("interpret", () => {
   it('interpret("") => 0', () => {
     expect(interpret("")).toBe(0);
   });
+
+  it('interpret("1") => 1', () => {
+    expect(interpret("1")).toBe(1);
+  });
 });
