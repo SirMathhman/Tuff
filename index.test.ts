@@ -137,4 +137,8 @@ describe("evaluate", () => {
   it('evaluate("1 # 2") => Error', () => {
     expect(() => evaluate("1 # 2")).toThrow();
   });
+
+  it('evaluate("let x = if (false) 1 else 2; x") => 2', () => {
+    expect(evaluate("let x = if (false) 1 else 2; x")).toBe(2);
+  });
 });

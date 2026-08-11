@@ -42,6 +42,20 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
     if (trimmed.endsWith(";")) return toTypedValue(0);
   }
 
+  // Handle if/else expressions: if (condition) value1 else value2
+  if (trimmed.startsWith("if (")) {
+    const elseIndex = findElseKeyword(trimmed);
+    if (elseIndex !== -1) {
+      const condEnd = findMatchingParen(trimmed, 2);
+      const cond = trimmed.slice(3, condEnd);
+      const thenStart = condEnd + 2;
+      const thenVal = evaluateTyped(trimmed.slice(thenStart, elseIndex).trim(), scope, mutable);
+      const elseVal = evaluateTyped(trimmed.slice(elseIndex + 5).trim(), scope, mutable);
+      const condVal = evaluateTyped(cond, scope, mutable);
+      return condVal.value ? thenVal : elseVal;
+    }
+  }
+
   // Handle assignment expressions: x = expr (but not == or !=)
   const assignMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*=(?!=)\s*(.+)$/);
   if (assignMatch) {
@@ -210,6 +224,28 @@ function applyOp(a: number, op: string, b: number): number {
   if (op === "*") return a * b;
   if (op === "/") return a / b;
   return b;
+}
+
+function findMatchingParen(input: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < input.length; i++) {
+    if (input[i] === "(") depth++;
+    else if (input[i] === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function findElseKeyword(input: string): number {
+  let depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === "(") depth++;
+    else if (input[i] === ")") depth--;
+    else if (depth === 0 && input.slice(i, i + 5) === "else ") return i;
+  }
+  return -1;
 }
 
 function findSemicolon(input: string, start: number): number {
