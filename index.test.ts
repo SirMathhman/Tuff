@@ -72,3 +72,7 @@ test("chained addition exits with result", () => {
 test("addition and subtraction exits with result", () => {
   expectValid("2 + 3 - 1", 4);
 });
+
+test("multiplication with addition respects precedence", () => {
+  expectValid("2 * 3 + 4", 10);
+});
