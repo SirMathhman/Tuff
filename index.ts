@@ -43,16 +43,14 @@ function evaluateTyped(input: string, scope: Map<string, TypedValue>, mutable: S
   }
 
   // Handle if/else expressions: if (condition) value1 else value2
-  if (trimmed.startsWith("if (")) {
-    const elseIndex = findElseKeyword(trimmed);
-    if (elseIndex !== -1) {
-      const condEnd = findMatchingParen(trimmed, 2);
-      const cond = trimmed.slice(3, condEnd);
-      const thenStart = condEnd + 2;
-      const thenVal = evaluateTyped(trimmed.slice(thenStart, elseIndex).trim(), scope, mutable);
-      const elseVal = evaluateTyped(trimmed.slice(elseIndex + 5).trim(), scope, mutable);
-      const condVal = evaluateTyped(cond, scope, mutable);
-      return condVal.value ? thenVal : elseVal;
+  if (trimmed.startsWith("if ")) {
+    const tokens = tokenizeIfElse(trimmed);
+    if (tokens) {
+      const { condition, thenExpr, elseExpr } = tokens;
+      const condVal = evaluateTyped(condition, scope, mutable);
+      return condVal.value
+        ? evaluateTyped(thenExpr, scope, mutable)
+        : evaluateTyped(elseExpr, scope, mutable);
     }
   }
 
@@ -250,6 +248,19 @@ function findAtDepth(input: string, start: number, predicate: (i: number, ch: st
 
 function findElseKeyword(input: string): number {
   return findAtDepth(input, 0, (i, _ch) => input.slice(i, i + 5) === "else ");
+}
+
+function tokenizeIfElse(input: string): { condition: string; thenExpr: string; elseExpr: string } | null {
+  // Match: if (condition) thenExpr else elseExpr
+  const match = input.match(/^if\s*\(([^()]*)\)\s*(.+)$/);
+  if (!match) return null;
+  const [, condition, rest] = match;
+  if (!rest) return null;
+  const elseIndex = findElseKeyword(rest);
+  if (elseIndex === -1) return null;
+  const thenExpr = rest.slice(0, elseIndex).trim();
+  const elseExpr = rest.slice(elseIndex + 5).trim();
+  return { condition: condition!.trim(), thenExpr, elseExpr };
 }
 
 function findSemicolon(input: string, start: number): number {
