@@ -11,21 +11,26 @@ enum Token {
     Divide,
     LParen,
     RParen,
+    Let,
+    Identifier(String),
+    Equals,
+    Semicolon,
     Eof,
 }
 
 struct Parser<'a> {
     tokens: Vec<Token>,
     pos: usize,
+    scope: std::collections::HashMap<String, i64>,
     _marker: std::marker::PhantomData<&'a str>,
 }
 
 impl<'a> Parser<'a> {
-    fn current_token(&self) -> &Token {
+    fn current_token(&self) -> Token {
         if self.pos < self.tokens.len() {
-            &self.tokens[self.pos]
+            self.tokens[self.pos].clone()
         } else {
-            &Token::Eof
+            Token::Eof
         }
     }
 
@@ -35,6 +40,22 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         token
+    }
+
+    fn parse_let_statement(&mut self) -> i64 {
+        self.eat(); // eat 'let'
+        let name = match self.current_token().clone() {
+            Token::Identifier(n) => n,
+            _ => String::new(),
+        };
+        self.eat(); // eat identifier
+        self.eat(); // eat '='
+        let value = self.parse_expression();
+        self.scope.insert(name, value);
+        if self.current_token() == Token::Semicolon {
+            self.eat();
+        }
+        0i64
     }
 
     fn parse_expression(&mut self) -> i64 {
@@ -73,10 +94,13 @@ impl<'a> Parser<'a> {
         } else if token == Token::LParen {
             self.eat();
             let value = self.parse_expression();
-            if *self.current_token() == Token::RParen {
+            if self.current_token() == Token::RParen {
                 self.eat();
             }
             value
+        } else if let Token::Identifier(name) = token {
+            self.eat();
+            *self.scope.get(&name).unwrap_or(&0)
         } else {
             0
         }
@@ -88,7 +112,7 @@ fn evaluate(input: &str) -> i64 {
     if input.trim().is_empty() {
         return 0;
     }
-    let chars = input.chars().filter(|c| !c.is_whitespace()).collect::<Vec<_>>();
+    let chars: Vec<char> = input.chars().filter(|c| !c.is_whitespace()).collect();
     let mut pos = 0;
     let mut tokens: Vec<Token> = Vec::new();
     while pos < chars.len() {
@@ -102,6 +126,8 @@ fn evaluate(input: &str) -> i64 {
             ')' => { tokens.push(Token::RParen); pos += 1; }
             '{' => { tokens.push(Token::LParen); pos += 1; }
             '}' => { tokens.push(Token::RParen); pos += 1; }
+            '=' => { tokens.push(Token::Equals); pos += 1; }
+            ';' => { tokens.push(Token::Semicolon); pos += 1; }
             _ if c.is_ascii_digit() => {
                 let mut num = String::new();
                 while pos < chars.len() && chars[pos].is_ascii_digit() {
@@ -110,15 +136,45 @@ fn evaluate(input: &str) -> i64 {
                 }
                 tokens.push(Token::Number(num.parse::<i64>().unwrap_or(0)));
             }
+            _ if c.is_ascii_alphabetic() || c == '_' => {
+                let mut ident = String::new();
+                while pos < chars.len() && (chars[pos].is_ascii_alphanumeric() || chars[pos] == '_') {
+                    ident.push(chars[pos]);
+                    pos += 1;
+                }
+                if ident == "let" {
+                    tokens.push(Token::Let);
+                } else {
+                    tokens.push(Token::Identifier(ident));
+                }
+            }
             _ => { pos += 1; }
         }
     }
     let mut parser = Parser {
         tokens,
         pos: 0,
+        scope: std::collections::HashMap::new(),
         _marker: std::marker::PhantomData,
     };
-    parser.parse_expression()
+    let mut result = 0i64;
+    let mut iterations = 0;
+    let max_iterations = 1000;
+    while parser.current_token() != Token::Eof {
+        if iterations >= max_iterations {
+            break;
+        }
+        iterations += 1;
+        if parser.current_token() == Token::Let {
+            parser.parse_let_statement();
+        } else {
+            result = parser.parse_expression();
+            if parser.current_token() == Token::Semicolon {
+                parser.eat();
+            }
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -178,5 +234,10 @@ mod tests {
     #[test]
     fn test_evaluate_nested_let() {
         assert_eq!(evaluate("let y = 2 * { let x = 3 + 4; x }; y"), 14);
+    }
+
+    #[test]
+    fn test_evaluate_let_statement_only() {
+        assert_eq!(evaluate("let x = 100;"), 0);
     }
 }
