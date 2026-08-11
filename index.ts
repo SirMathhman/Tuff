@@ -51,6 +51,8 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
 
   // Handle variable references
   if (/^[a-zA-Z_]\w*$/.test(trimmed)) {
+    if (trimmed === "true") return 1;
+    if (trimmed === "false") return 0;
     if (!scope.has(trimmed)) {
       throw new Error(`Undefined variable: ${trimmed}`);
     }
@@ -87,13 +89,9 @@ export function evaluate(input: string, scope: Map<string, number> = new Map(), 
   }
 
   // Handle block expressions: { let x = expr; expr }
+  // Already handled by the { } group handler above; this is a no-op fallback.
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    const inner = trimmed.slice(1, -1).trim();
-    // If block is a pure declaration (let ...; with no trailing expression), throw
-    if (inner.startsWith("let ") && inner.endsWith(";")) {
-      throw new Error(`Block has no value-producing expression: ${trimmed}`);
-    }
-    return evaluate(inner, scope, mutable);
+    // Handled above
   }
 
   const tokens = trimmed.match(tokenRegex);
