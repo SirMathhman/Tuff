@@ -22,7 +22,7 @@ enum Token {
 struct Parser<'a> {
     tokens: Vec<Token>,
     pos: usize,
-    scope: std::collections::HashMap<String, i64>,
+    scope: std::collections::HashMap<String, (i64, bool)>,
     _marker: std::marker::PhantomData<&'a str>,
 }
 
@@ -43,10 +43,12 @@ impl<'a> Parser<'a> {
         token
     }
 
-    fn parse_let_statement(&mut self) -> i64 {
+    fn parse_let_statement(&mut self) -> Result<i64, String> {
         self.eat(); // eat 'let'
+        let mut mutable = false;
         if self.current_token() == Token::Mut {
             self.eat(); // eat 'mut'
+            mutable = true;
         }
         let name = match self.current_token().clone() {
             Token::Identifier(n) => n,
@@ -54,87 +56,97 @@ impl<'a> Parser<'a> {
         };
         self.eat(); // eat identifier
         self.eat(); // eat '='
-        let value = self.parse_expression();
-        self.scope.insert(name, value);
+        let value = self.parse_expression()?;
+        self.scope.insert(name, (value, mutable));
         if self.current_token() == Token::Semicolon {
             self.eat();
         }
-        0i64
+        Ok(0i64)
     }
 
-    fn parse_assignment(&mut self) -> i64 {
+    fn parse_assignment(&mut self) -> Result<i64, String> {
         let name = match self.current_token().clone() {
             Token::Identifier(n) => n,
             _ => String::new(),
         };
         self.eat(); // eat identifier
         self.eat(); // eat '='
-        let value = self.parse_expression();
-        self.scope.insert(name, value);
+        let value = self.parse_expression()?;
+        if let Some((_, mutable)) = self.scope.get(&name) {
+            if !mutable {
+                return Err(format!("cannot assign to immutable variable `{}`", name));
+            }
+        }
+        self.scope.insert(name, (value, true));
         if self.current_token() == Token::Semicolon {
             self.eat();
         }
-        0i64
+        Ok(0i64)
     }
 
-    fn parse_expression(&mut self) -> i64 {
-        let mut left = self.parse_term();
+    fn parse_expression(&mut self) -> Result<i64, String> {
+        let mut left = self.parse_term()?;
         while matches!(self.current_token(), Token::Plus | Token::Minus) {
             let op = self.eat();
-            let right = self.parse_term();
+            let right = self.parse_term()?;
             left = match op {
                 Token::Plus => left + right,
                 Token::Minus => left - right,
                 _ => unreachable!(),
             };
         }
-        left
+        Ok(left)
     }
 
-    fn parse_term(&mut self) -> i64 {
-        let mut left = self.parse_factor();
+    fn parse_term(&mut self) -> Result<i64, String> {
+        let mut left = self.parse_factor()?;
         while matches!(self.current_token(), Token::Multiply | Token::Divide) {
             let op = self.eat();
-            let right = self.parse_factor();
+            let right = self.parse_factor()?;
             left = match op {
                 Token::Multiply => left * right,
                 Token::Divide => left / right,
                 _ => unreachable!(),
             };
         }
-        left
+        Ok(left)
     }
 
-    fn parse_factor(&mut self) -> i64 {
+    fn parse_factor(&mut self) -> Result<i64, String> {
         let token = self.current_token().clone();
         if let Token::Number(n) = token {
             self.eat();
-            n
+            Ok(n)
         } else if token == Token::LParen {
             self.eat();
-            let value = self.parse_expression();
+            let value = self.parse_expression()?;
             if self.current_token() == Token::RParen {
                 self.eat();
             }
-            value
+            Ok(value)
         } else if let Token::Identifier(name) = token {
             self.eat();
-            *self.scope.get(&name).unwrap_or(&0)
+            let (value, _) = self.scope.get(&name).unwrap_or(&(0, false));
+            Ok(*value)
         } else {
-            0
+            Ok(0)
         }
     }
 }
 
 #[allow(dead_code)]
-fn evaluate(input: &str) -> i64 {
+fn evaluate(input: &str) -> Result<i64, String> {
     if input.trim().is_empty() {
-        return 0;
+        return Ok(0);
     }
-    let chars: Vec<char> = input.chars().filter(|c| !c.is_whitespace()).collect();
+    let chars: Vec<char> = input.chars().collect();
     let mut pos = 0;
     let mut tokens: Vec<Token> = Vec::new();
     while pos < chars.len() {
+        if chars[pos].is_whitespace() {
+            pos += 1;
+            continue;
+        }
         let c = chars[pos];
         match c {
             '+' => { tokens.push(Token::Plus); pos += 1; }
@@ -187,17 +199,17 @@ fn evaluate(input: &str) -> i64 {
         }
         iterations += 1;
         if parser.current_token() == Token::Let {
-            parser.parse_let_statement();
+            parser.parse_let_statement()?;
         } else if matches!(parser.current_token(), Token::Identifier(_)) && parser.tokens.get(parser.pos + 1) == Some(&Token::Equals) {
-            parser.parse_assignment();
+            parser.parse_assignment()?;
         } else {
-            result = parser.parse_expression();
+            result = parser.parse_expression()?;
             if parser.current_token() == Token::Semicolon {
                 parser.eat();
             }
         }
     }
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -206,66 +218,71 @@ mod tests {
 
     #[test]
     fn test_evaluate_empty_string() {
-        assert_eq!(evaluate(""), 0);
+        assert_eq!(evaluate(""), Ok(0));
     }
 
     #[test]
     fn test_evaluate_one() {
-        assert_eq!(evaluate("1"), 1);
+        assert_eq!(evaluate("1"), Ok(1));
     }
 
     #[test]
     fn test_evaluate_addition() {
-        assert_eq!(evaluate("1 + 2"), 3);
+        assert_eq!(evaluate("1 + 2"), Ok(3));
     }
 
     #[test]
     fn test_evaluate_chained_addition() {
-        assert_eq!(evaluate("1 + 2 + 3"), 6);
+        assert_eq!(evaluate("1 + 2 + 3"), Ok(6));
     }
 
     #[test]
     fn test_evaluate_addition_subtraction() {
-        assert_eq!(evaluate("2 + 3 - 1"), 4);
+        assert_eq!(evaluate("2 + 3 - 1"), Ok(4));
     }
 
     #[test]
     fn test_evaluate_multiplication_addition() {
-        assert_eq!(evaluate("2 * 3 + 4"), 10);
+        assert_eq!(evaluate("2 * 3 + 4"), Ok(10));
     }
 
     #[test]
     fn test_evaluate_parentheses() {
-        assert_eq!(evaluate("2 * (3 + 4)"), 14);
+        assert_eq!(evaluate("2 * (3 + 4)"), Ok(14));
     }
 
     #[test]
     fn test_evaluate_multi_digit() {
-        assert_eq!(evaluate("10 + 20"), 30);
+        assert_eq!(evaluate("10 + 20"), Ok(30));
     }
 
     #[test]
     fn test_evaluate_curly_braces() {
-        assert_eq!(evaluate("2 * { 3 + 4 }"), 14);
+        assert_eq!(evaluate("2 * { 3 + 4 }"), Ok(14));
     }
 
     #[test]
     fn test_evaluate_let_binding() {
-        assert_eq!(evaluate("2 * { let x = 3 + 4; x }"), 14);
+        assert_eq!(evaluate("2 * { let x = 3 + 4; x }"), Ok(14));
     }
 
     #[test]
     fn test_evaluate_nested_let() {
-        assert_eq!(evaluate("let y = 2 * { let x = 3 + 4; x }; y"), 14);
+        assert_eq!(evaluate("let y = 2 * { let x = 3 + 4; x }; y"), Ok(14));
     }
 
     #[test]
     fn test_evaluate_let_statement_only() {
-        assert_eq!(evaluate("let x = 100;"), 0);
+        assert_eq!(evaluate("let x = 100;"), Ok(0));
     }
 
     #[test]
     fn test_evaluate_mut_let_and_reassign() {
-        assert_eq!(evaluate("let mut x = 0; x = 1; x"), 1);
+        assert_eq!(evaluate("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_evaluate_reassign_immutable() {
+        assert!(evaluate("let x = 100; x = 0;").is_err());
     }
 }
