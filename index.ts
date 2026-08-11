@@ -128,16 +128,20 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
     blockEnv.__parent = env;
     let last = 0;
     let found = false;
+    let hasValue = false;
     while (p.pos < tokens.length && tokens[p.pos]![0] !== "group" && tokens[p.pos]![1] !== "}") {
       found = true;
       if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
-        last = parseLet(p, tokens, blockEnv);
+        parseLet(p, tokens, blockEnv);
+        hasValue = false;
       } else {
         last = parseAddSub(p, tokens, blockEnv);
+        hasValue = true;
         if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
       }
     }
     if (!found) throw new Error("Empty block");
+    if (!hasValue) throw new Error("Block has no value");
     if (tokens[p.pos]![0] !== "group" || tokens[p.pos]![1] !== "}") {
       throw new Error("Expected }");
     }
