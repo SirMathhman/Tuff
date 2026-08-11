@@ -88,21 +88,29 @@ fn evaluate(input: &str) -> i64 {
     if input.trim().is_empty() {
         return 0;
     }
-    let tokens: Vec<Token> = input
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .map(|c| {
-            match c {
-                '+' => Token::Plus,
-                '-' => Token::Minus,
-                '*' => Token::Multiply,
-                '/' => Token::Divide,
-                '(' => Token::LParen,
-                ')' => Token::RParen,
-                _ => Token::Number(c.to_digit(10).map(|d| d as i64).unwrap_or(0)),
+    let chars = input.chars().filter(|c| !c.is_whitespace()).collect::<Vec<_>>();
+    let mut pos = 0;
+    let mut tokens: Vec<Token> = Vec::new();
+    while pos < chars.len() {
+        let c = chars[pos];
+        match c {
+            '+' => { tokens.push(Token::Plus); pos += 1; }
+            '-' => { tokens.push(Token::Minus); pos += 1; }
+            '*' => { tokens.push(Token::Multiply); pos += 1; }
+            '/' => { tokens.push(Token::Divide); pos += 1; }
+            '(' => { tokens.push(Token::LParen); pos += 1; }
+            ')' => { tokens.push(Token::RParen); pos += 1; }
+            _ if c.is_ascii_digit() => {
+                let mut num = String::new();
+                while pos < chars.len() && chars[pos].is_ascii_digit() {
+                    num.push(chars[pos]);
+                    pos += 1;
+                }
+                tokens.push(Token::Number(num.parse::<i64>().unwrap_or(0)));
             }
-        })
-        .collect();
+            _ => { pos += 1; }
+        }
+    }
     let mut parser = Parser {
         tokens,
         pos: 0,
@@ -148,5 +156,10 @@ mod tests {
     #[test]
     fn test_evaluate_parentheses() {
         assert_eq!(evaluate("2 * (3 + 4)"), 14);
+    }
+
+    #[test]
+    fn test_evaluate_multi_digit() {
+        assert_eq!(evaluate("10 + 20"), 30);
     }
 }
