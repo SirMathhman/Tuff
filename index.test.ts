@@ -13,4 +13,8 @@ describe("evaluate", () => {
   it('evaluate("1 + 2") => 3', () => {
     expect(evaluate("1 + 2")).toBe(3);
   });
+
+  it('evaluate("1 + 2 + 3") => 6', () => {
+    expect(evaluate("1 + 2 + 3")).toBe(6);
+  });
 });
