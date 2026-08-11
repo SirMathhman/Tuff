@@ -15,4 +15,7 @@ describe("interpret", () => {
   it('interpret("1 + 2 + 3") => 6', () => {
     expect(interpret("1 + 2 + 3")).toBe(6);
   });
+  it('interpret("2 + 3 - 4") => 1', () => {
+    expect(interpret("2 + 3 - 4")).toBe(1);
+  });
 });
