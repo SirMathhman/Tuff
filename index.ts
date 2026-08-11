@@ -11,7 +11,10 @@ export function evaluate(source: string): number {
   return result;
 }
 
-type Token = ["num", number] | ["op", "+" | "-" | "*" | "/"] | ["paren", "(" | ")"];
+type Token =
+  | ["num", number]
+  | ["op", "+" | "-" | "*" | "/"]
+  | ["paren", "(" | ")"];
 
 function tokenize(source: string): Token[] {
   const result: Token[] = [];
@@ -33,7 +36,11 @@ function tokenize(source: string): Token[] {
 
 function parseAddSub(p: { pos: number }, tokens: Token[]): number {
   let left = parseMulDiv(p, tokens);
-  while (p.pos < tokens.length && tokens[p.pos]![0] === "op" && (tokens[p.pos]![1] === "+" || tokens[p.pos]![1] === "-")) {
+  while (
+    p.pos < tokens.length &&
+    tokens[p.pos]![0] === "op" &&
+    (tokens[p.pos]![1] === "+" || tokens[p.pos]![1] === "-")
+  ) {
     const op = tokens[p.pos]![1];
     p.pos++;
     const right = parseMulDiv(p, tokens);
@@ -44,7 +51,11 @@ function parseAddSub(p: { pos: number }, tokens: Token[]): number {
 
 function parseMulDiv(p: { pos: number }, tokens: Token[]): number {
   let left = parseFactor(p, tokens);
-  while (p.pos < tokens.length && tokens[p.pos]![0] === "op" && (tokens[p.pos]![1] === "*" || tokens[p.pos]![1] === "/")) {
+  while (
+    p.pos < tokens.length &&
+    tokens[p.pos]![0] === "op" &&
+    (tokens[p.pos]![1] === "*" || tokens[p.pos]![1] === "/")
+  ) {
     const op = tokens[p.pos]![1];
     p.pos++;
     const right = parseFactor(p, tokens);
