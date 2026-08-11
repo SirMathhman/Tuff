@@ -45,4 +45,8 @@ describe("evaluate", () => {
   it('evaluate("{} * 4") => Error', () => {
     expect(() => evaluate("{} * 4")).toThrow();
   });
+
+  it('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+    expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+  });
 });
