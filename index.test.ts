@@ -51,4 +51,7 @@ describe("interpret", () => {
   it('interpret("let x = true; x") => 1', () => {
     expect(interpret("let x = true; x")).toBe(1);
   });
+  it('interpret("let x = 1; let y = 1; x == y") => 1', () => {
+    expect(interpret("let x = 1; let y = 1; x == y")).toBe(1);
+  });
 });

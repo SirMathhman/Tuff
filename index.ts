@@ -33,6 +33,9 @@ function tokenize(input: string): Token[] {
         i++;
       }
       tokens.push(["IDENT", ident]);
+    } else if (ch === "=" && input[i + 1] === "=") {
+      tokens.push(["OP", "=="]);
+      i += 2;
     } else {
       tokens.push(["OP", ch]);
       i++;
@@ -43,14 +46,27 @@ function tokenize(input: string): Token[] {
 }
 
 function parseExpr(tokens: Token[], pos: [number], ctx: Context): number {
-  let left = parseTerm(tokens, pos, ctx);
+  let left = parseComparison(tokens, pos, ctx);
   while (
     tokens[pos[0]]![0] === "OP" &&
     (tokens[pos[0]]![1] === "+" || tokens[pos[0]]![1] === "-")
   ) {
     const op = tokens[pos[0]++]![1] as "+" | "-";
-    const right = parseTerm(tokens, pos, ctx);
+    const right = parseComparison(tokens, pos, ctx);
     left = op === "+" ? left + right : left - right;
+  }
+  return left;
+}
+
+function parseComparison(tokens: Token[], pos: [number], ctx: Context): number {
+  let left = parseTerm(tokens, pos, ctx);
+  while (
+    tokens[pos[0]]![0] === "OP" &&
+    tokens[pos[0]]![1] === "=="
+  ) {
+    pos[0]++;
+    const right = parseTerm(tokens, pos, ctx);
+    left = left === right ? 1 : 0;
   }
   return left;
 }
