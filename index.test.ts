@@ -76,3 +76,7 @@ test("addition and subtraction exits with result", () => {
 test("multiplication with addition respects precedence", () => {
   expectValid("2 * 3 + 4", 10);
 });
+
+test("trailing operator is invalid", () => {
+  expectInvalid("1+", CompileErrorType.Invalid);
+});
