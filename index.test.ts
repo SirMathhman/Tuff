@@ -64,3 +64,7 @@ test("bare number exits with that value", () => {
 test("arithmetic expression exits with result", () => {
   expectValid("1 + 2", 3);
 });
+
+test("chained addition exits with result", () => {
+  expectValid("1 + 2 + 3", 6);
+});
