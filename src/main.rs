@@ -8,11 +8,7 @@ fn evaluate(input: &str) -> i64 {
         return 0;
     }
     let parts: Vec<&str> = input.split(" + ").collect();
-    if parts.len() == 2 {
-        parts[0].parse::<i64>().unwrap_or(0) + parts[1].parse::<i64>().unwrap_or(0)
-    } else {
-        input.trim().parse().unwrap_or(0)
-    }
+    parts.iter().map(|p| p.trim().parse::<i64>().unwrap_or(0)).sum()
 }
 
 #[cfg(test)]
@@ -32,5 +28,10 @@ mod tests {
     #[test]
     fn test_evaluate_addition() {
         assert_eq!(evaluate("1 + 2"), 3);
+    }
+
+    #[test]
+    fn test_evaluate_chained_addition() {
+        assert_eq!(evaluate("1 + 2 + 3"), 6);
     }
 }
