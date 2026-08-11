@@ -93,4 +93,8 @@ describe("evaluate", () => {
   it('evaluate("\"true || false\"") => 1', () => {
     expect(evaluate("\"true || false\"")).toBe(1);
   });
+
+  it('evaluate("\"true && false\"") => 0', () => {
+    expect(evaluate("\"true && false\"")).toBe(0);
+  });
 });
