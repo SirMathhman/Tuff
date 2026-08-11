@@ -55,6 +55,14 @@ function parseFactor(tokens: Token[], pos: [number]): number {
     pos[0]++;
     return token[1];
   }
+  if (token && token[0] === "OP" && token[1] === "(") {
+    pos[0]++;
+    const value = parseExpr(tokens, pos);
+    if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ")") {
+      pos[0]++;
+    }
+    return value;
+  }
   throw new Error(`Unexpected token: ${token}`);
 }
 
