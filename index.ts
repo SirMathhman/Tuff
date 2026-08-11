@@ -4,7 +4,8 @@ export function evaluate(source: string): number {
   const tokens = tokenize(source);
   const parser = { pos: 0 };
   const env: Scope = {};
-  const result = parseProgram(parser, tokens, env);
+  const mutable = new Set<string>();
+  const result = parseProgram(parser, tokens, env, mutable);
 
   if (parser.pos < tokens.length) {
     throw new Error("Invalid source: " + source);
@@ -12,7 +13,7 @@ export function evaluate(source: string): number {
   return result;
 }
 
-type Scope = Record<string, number | Ref> & { __parent?: Scope };
+type Scope = Record<string, number | Ref> & { __parent?: Scope; __mutable?: Set<string> };
 
 type Token =
   | ["num", number]
@@ -62,11 +63,14 @@ function deref(ref: Ref): number {
   return val;
 }
 
-function parseProgram(p: { pos: number }, tokens: Token[], env: Scope): number {
+function parseProgram(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<string>): number {
   let last = 0;
   while (p.pos < tokens.length) {
     if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
-      last = parseLet(p, tokens, env);
+      last = parseLet(p, tokens, env, mutable);
+    } else if (tokens[p.pos]![0] === "id" && p.pos + 1 < tokens.length && tokens[p.pos + 1]![0] === "assign") {
+      // id = expr ;
+      last = parseAssignment(p, tokens, env, mutable);
     } else {
       last = parseAddSub(p, tokens, env);
       // consume trailing semicolon if present
@@ -76,9 +80,14 @@ function parseProgram(p: { pos: number }, tokens: Token[], env: Scope): number {
   return last;
 }
 
-function parseLet(p: { pos: number }, tokens: Token[], env: Scope): number {
-  // let <id> = <expr> ;
+function parseLet(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<string>): number {
+  // let [mut] <id> = <expr> ;
   p.pos++; // consume "let"
+  // optional "mut" keyword
+  const isMut = tokens[p.pos]![0] === "id" && tokens[p.pos]![1] === "mut";
+  if (isMut) {
+    p.pos++; // consume "mut"
+  }
   const idToken = tokens[p.pos];
   if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier");
   const name = idToken[1];
@@ -87,9 +96,22 @@ function parseLet(p: { pos: number }, tokens: Token[], env: Scope): number {
   p.pos++; // consume "="
   const value = parseAddSub(p, tokens, env);
   env[name] = value;
+  if (isMut) mutable.add(name);
   // consume trailing semicolon
   if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
   return 0;
+}
+
+function parseAssignment(p: { pos: number }, tokens: Token[], env: Scope, mutable: Set<string>): number {
+  const name = tokens[p.pos]![1];
+  p.pos++; // consume id
+  p.pos++; // consume "="
+  const value = parseAddSub(p, tokens, env);
+  if (!mutable.has(String(name))) throw new Error("Cannot assign to immutable variable: " + name);
+  env[name] = value;
+  // consume trailing semicolon
+  if (p.pos < tokens.length && tokens[p.pos]![0] === "semi") p.pos++;
+  return value;
 }
 
 function parseAddSub(p: { pos: number }, tokens: Token[], env: Scope): number {
@@ -168,13 +190,14 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
     // Create a new block scope that inherits from parent
     const blockEnv: Scope = Object.create({});
     blockEnv.__parent = env;
+    const blockMutable = new Set<string>();
     let last = 0;
     let found = false;
     let hasValue = false;
     while (p.pos < tokens.length && tokens[p.pos]![0] !== "group" && tokens[p.pos]![1] !== "}") {
       found = true;
       if (tokens[p.pos]![0] === "kw" && tokens[p.pos]![1] === "let") {
-        parseLet(p, tokens, blockEnv);
+        parseLet(p, tokens, blockEnv, blockMutable);
         hasValue = false;
       } else {
         last = parseAddSub(p, tokens, blockEnv);
