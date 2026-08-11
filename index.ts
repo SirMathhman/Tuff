@@ -4,6 +4,11 @@ type Token =
   | ["IDENT", string]
   | ["EOF", null];
 
+interface Context {
+  scope: Map<string, number>;
+  mutable: Set<string>;
+}
+
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -37,33 +42,33 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
-function parseExpr(tokens: Token[], pos: [number], scope: Map<string, number>): number {
-  let left = parseTerm(tokens, pos, scope);
+function parseExpr(tokens: Token[], pos: [number], ctx: Context): number {
+  let left = parseTerm(tokens, pos, ctx);
   while (
     tokens[pos[0]]![0] === "OP" &&
     (tokens[pos[0]]![1] === "+" || tokens[pos[0]]![1] === "-")
   ) {
     const op = tokens[pos[0]++]![1] as "+" | "-";
-    const right = parseTerm(tokens, pos, scope);
+    const right = parseTerm(tokens, pos, ctx);
     left = op === "+" ? left + right : left - right;
   }
   return left;
 }
 
-function parseTerm(tokens: Token[], pos: [number], scope: Map<string, number>): number {
-  let left = parseFactor(tokens, pos, scope);
+function parseTerm(tokens: Token[], pos: [number], ctx: Context): number {
+  let left = parseFactor(tokens, pos, ctx);
   while (
     tokens[pos[0]]![0] === "OP" &&
     (tokens[pos[0]]![1] === "*" || tokens[pos[0]]![1] === "/")
   ) {
     const op = tokens[pos[0]++]![1] as "*" | "/";
-    const right = parseFactor(tokens, pos, scope);
+    const right = parseFactor(tokens, pos, ctx);
     left = op === "*" ? left * right : left / right;
   }
   return left;
 }
 
-function parseFactor(tokens: Token[], pos: [number], scope: Map<string, number>): number {
+function parseFactor(tokens: Token[], pos: [number], ctx: Context): number {
   const token = tokens[pos[0]];
   if (token && token[0] === "NUM") {
     pos[0]++;
@@ -71,15 +76,18 @@ function parseFactor(tokens: Token[], pos: [number], scope: Map<string, number>)
   }
   if (token && token[0] === "IDENT") {
     pos[0]++;
-    return scope.get(token[1])!;
+    return ctx.scope.get(token[1])!;
   }
   if (token && token[0] === "OP" && (token[1] === "(" || token[1] === "{")) {
     pos[0]++;
-    const blockScope = new Map(scope);
+    const blockCtx: Context = {
+      scope: new Map(ctx.scope),
+      mutable: new Set(ctx.mutable),
+    };
     const closer = token[1] === "(" ? ")" : "}";
     let lastValue = 0;
     while (tokens[pos[0]]![0] !== "EOF" && !(tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === closer)) {
-      lastValue = parseStatement(tokens, pos, blockScope);
+      lastValue = parseStatement(tokens, pos, blockCtx);
     }
     if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === closer) {
       pos[0]++;
@@ -89,32 +97,39 @@ function parseFactor(tokens: Token[], pos: [number], scope: Map<string, number>)
   throw new Error(`Unexpected token: ${token}`);
 }
 
-function parseStatement(tokens: Token[], pos: [number], scope: Map<string, number>): number {
+function parseStatement(tokens: Token[], pos: [number], ctx: Context): number {
   if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "let") {
     pos[0]++;
-    if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "mut") {
+    const isMut = tokens[pos[0]]![0] === "IDENT" && tokens[pos[0]]![1] === "mut";
+    if (isMut) {
       pos[0]++;
     }
     const name = tokens[pos[0]]![1] as string;
     pos[0]++;
     pos[0]++;
-    return assignAndSkip(tokens, pos, scope, name);
+    return assignAndSkip(tokens, pos, ctx, name, isMut);
   }
   if (tokens[pos[0]]![0] === "IDENT" && tokens[pos[0] + 1]![0] === "OP" && tokens[pos[0] + 1]![1] === "=") {
     const name = tokens[pos[0]]![1] as string;
+    if (!ctx.mutable.has(name)) {
+      throw new Error(`Cannot assign to immutable variable '${name}'`);
+    }
     pos[0] += 2;
-    return assignAndSkip(tokens, pos, scope, name);
+    return assignAndSkip(tokens, pos, ctx, name, false);
   }
-  const value = parseExpr(tokens, pos, scope);
+  const value = parseExpr(tokens, pos, ctx);
   if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
     pos[0]++;
   }
   return value;
 }
 
-function assignAndSkip(tokens: Token[], pos: [number], scope: Map<string, number>, name: string): number {
-  const value = parseExpr(tokens, pos, scope);
-  scope.set(name, value);
+function assignAndSkip(tokens: Token[], pos: [number], ctx: Context, name: string, isMut: boolean): number {
+  const value = parseExpr(tokens, pos, ctx);
+  ctx.scope.set(name, value);
+  if (isMut) {
+    ctx.mutable.add(name);
+  }
   if (tokens[pos[0]]![0] === "OP" && tokens[pos[0]]![1] === ";") {
     pos[0]++;
   }
@@ -125,10 +140,13 @@ export function interpret(input: string): number {
   if (input === "") return 0;
   const tokens = tokenize(input);
   const pos: [number] = [0];
-  const scope = new Map<string, number>();
+  const ctx: Context = {
+    scope: new Map(),
+    mutable: new Set(),
+  };
   let lastValue = 0;
   while (tokens[pos[0]]![0] !== "EOF") {
-    lastValue = parseStatement(tokens, pos, scope);
+    lastValue = parseStatement(tokens, pos, ctx);
   }
   return lastValue;
 }
