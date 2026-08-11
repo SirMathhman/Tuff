@@ -100,6 +100,8 @@ fn evaluate(input: &str) -> i64 {
             '/' => { tokens.push(Token::Divide); pos += 1; }
             '(' => { tokens.push(Token::LParen); pos += 1; }
             ')' => { tokens.push(Token::RParen); pos += 1; }
+            '{' => { tokens.push(Token::LParen); pos += 1; }
+            '}' => { tokens.push(Token::RParen); pos += 1; }
             _ if c.is_ascii_digit() => {
                 let mut num = String::new();
                 while pos < chars.len() && chars[pos].is_ascii_digit() {
@@ -161,5 +163,10 @@ mod tests {
     #[test]
     fn test_evaluate_multi_digit() {
         assert_eq!(evaluate("10 + 20"), 30);
+    }
+
+    #[test]
+    fn test_evaluate_curly_braces() {
+        assert_eq!(evaluate("2 * { 3 + 4 }"), 14);
     }
 }
