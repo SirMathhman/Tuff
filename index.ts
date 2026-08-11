@@ -81,7 +81,7 @@ type Token =
 
 function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re = /"([^"]*)"|(\d+\.?\d*|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-_]*)/g;
+  const re = /"([^"]*)"|(\d+\.?\d*|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
