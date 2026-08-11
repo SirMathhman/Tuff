@@ -69,4 +69,8 @@ describe("evaluate", () => {
   it('evaluate("let x = { let y = 100; }; x") => Error', () => {
     expect(() => evaluate("let x = { let y = 100; }; x")).toThrow();
   });
+
+  it('evaluate("let x = 100; let y = &x; *y") => 100', () => {
+    expect(evaluate("let x = 100; let y = &x; *y")).toBe(100);
+  });
 });

@@ -12,7 +12,7 @@ export function evaluate(source: string): number {
   return result;
 }
 
-type Scope = Record<string, number> & { __parent?: Scope };
+type Scope = Record<string, number | Ref> & { __parent?: Scope };
 
 type Token =
   | ["num", number]
@@ -21,17 +21,20 @@ type Token =
   | ["kw", "let"]
   | ["id", string]
   | ["assign", "="]
-  | ["semi", ";"];
+  | ["semi", ";"]
+  | ["ref", "&"];
 
 function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re = /(\d+\.?\d*|[+\-*/(){}=;]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+  const re = /(\d+\.?\d*|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text] = match;
     if (text === " " || text === "") continue;
     if (text === "+" || text === "-" || text === "*" || text === "/") {
       result.push(["op", text as "+" | "-" | "*" | "/"]);
+    } else if (text === "&") {
+      result.push(["ref", "&"]);
     } else if (text === "(" || text === ")" || text === "{" || text === "}") {
       result.push(["group", text as "(" | ")" | "{" | "}"]);
     } else if (text === "=") {
@@ -47,6 +50,16 @@ function tokenize(source: string): Token[] {
     }
   }
   return result;
+}
+
+// Reference type: holds a variable name and the scope it belongs to
+type Ref = { name: string; scope: Scope };
+
+function deref(ref: Ref): number {
+  const val = lookup(ref.name, ref.scope);
+  if (val === undefined) throw new Error("Reference to undefined variable");
+  if (typeof val === "object") return deref(val);
+  return val;
 }
 
 function parseProgram(p: { pos: number }, tokens: Token[], env: Scope): number {
@@ -101,6 +114,11 @@ function parseMulDiv(p: { pos: number }, tokens: Token[], env: Scope): number {
     tokens[p.pos]![0] === "op" &&
     (tokens[p.pos]![1] === "*" || tokens[p.pos]![1] === "/")
   ) {
+    // If * is followed by an identifier, it's dereference — stop
+    if (tokens[p.pos]![1] === "*") {
+      const next = tokens[p.pos + 1];
+      if (next && next[0] === "id") break;
+    }
     const op = tokens[p.pos]![1];
     p.pos++;
     const right = parseFactor(p, tokens, env);
@@ -112,6 +130,30 @@ function parseMulDiv(p: { pos: number }, tokens: Token[], env: Scope): number {
 function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Unexpected end");
+
+  // &x — address-of
+  if (token[0] === "ref") {
+    p.pos++;
+    const idToken = tokens[p.pos];
+    if (!idToken || idToken[0] !== "id") throw new Error("Expected identifier after &");
+    const name = idToken[1];
+    p.pos++;
+    return { name, scope: env } as any;
+  }
+
+  // *y — dereference
+  if (token[0] === "op" && token[1] === "*") {
+    const next = tokens[p.pos + 1];
+    if (next && next[0] === "id") {
+      p.pos++; // consume *
+      p.pos++; // consume id
+      const value = lookup(next[1], env);
+      if (value === undefined) throw new Error("Undefined variable: " + next[1]);
+      if (typeof value === "object") return deref(value);
+      throw new Error("Cannot dereference non-reference");
+    }
+  }
+
   if (token[0] === "group" && token[1] === "(") {
     p.pos++;
     const expr = parseAddSub(p, tokens, env);
@@ -151,7 +193,7 @@ function parseFactor(p: { pos: number }, tokens: Token[], env: Scope): number {
   return parseNumber(p, tokens, env);
 }
 
-function lookup(name: string, scope: Scope): number | undefined {
+function lookup(name: string, scope: Scope): number | Ref | undefined {
   let current: Scope | undefined = scope;
   while (current) {
     if (Object.prototype.hasOwnProperty.call(current, name)) return current[name];
@@ -171,6 +213,7 @@ function parseNumber(p: { pos: number }, tokens: Token[], env: Scope): number {
     p.pos++;
     const value = lookup(token[1], env);
     if (value === undefined) throw new Error("Undefined variable: " + token[1]);
+    if (typeof value === "object") return deref(value);
     return value;
   }
   throw new Error("Expected number");
