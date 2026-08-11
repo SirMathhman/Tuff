@@ -320,86 +320,119 @@ function parseFactor(
   return parseNumber(p, tokens, env);
 }
 
+type StrToken =
+  | ["num", number]
+  | ["bool", boolean]
+  | ["id", string]
+  | ["op", "&&" | "||" | "==" | "="]
+  | ["semi", ";"]
+  | ["kw", "let"];
+
+function tokenizeStr(str: string): StrToken[] {
+  const result: StrToken[] = [];
+  const re = /([a-zA-Z_][a-zA-Z0-9_]*)|(==|&&|\|\||=|;)|(\d+\.?\d*)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(str))) {
+    const [text] = match;
+    if (text === "true") result.push(["bool", true]);
+    else if (text === "false") result.push(["bool", false]);
+    else if (text === "let") result.push(["kw", "let"]);
+    else if (text === "&&" || text === "||" || text === "==" || text === "=")
+      result.push(["op", text as "&&" | "||" | "==" | "="]);
+    else if (text === ";") result.push(["semi", ";"]);
+    else if (/^[a-zA-Z_]/.test(text)) result.push(["id", text]);
+    else result.push(["num", Number(text)]);
+  }
+  return result;
+}
+
 function evaluateStringExpr(
   str: string,
   vars: Record<string, number> = {},
 ): number | null {
-  const s = str.toLowerCase().trim();
-  if (s === "true") return 1;
-  if (s === "false") return 0;
+  const tokens = tokenizeStr(str);
+  let pos = 0;
 
-  // Handle semicolon-separated statements first
-  const semiParts = s.split(";");
-  if (semiParts.length > 1) {
-    let currentVars = { ...vars };
-    let result: number | null = 0;
-    for (const part of semiParts) {
-      const trimmed = part.trim();
-      if (!trimmed) continue;
-      result = evaluateStringExpr(trimmed, currentVars);
-      // Check if this was a let declaration
-      const letMatch = trimmed.match(
-        /^let\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/,
-      );
-      if (letMatch) {
-        const name = letMatch[1]!;
-        const value = evaluateStringExpr(letMatch[2]!.trim(), currentVars);
-        if (value !== null) currentVars[name] = value;
-      }
+  function peek(): StrToken | undefined {
+    return tokens[pos];
+  }
+
+  function consume(): StrToken {
+    return tokens[pos++]!;
+  }
+
+  function parseOr(): number | null {
+    let left = parseAnd();
+    while (peek()?.[0] === "op" && peek()![1] === "||") {
+      consume();
+      const right = parseAnd();
+      if (left === null || right === null) return null;
+      left = left || right;
     }
-    return result;
+    return left;
   }
 
-  // Split by || (lowest precedence)
-  const orParts = s.split("||");
-  if (orParts.length > 1) {
-    for (const part of orParts) {
-      const val = evaluateStringExpr(part, vars);
-      if (val !== null && val !== 0) return 1;
+  function parseAnd(): number | null {
+    let left = parseEq();
+    while (peek()?.[0] === "op" && peek()![1] === "&&") {
+      consume();
+      const right = parseEq();
+      if (left === null || right === null) return null;
+      left = left && right;
     }
-    return 0;
+    return left;
   }
 
-  // Split by && (higher precedence)
-  const andParts = s.split("&&");
-  if (andParts.length > 1) {
-    for (const part of andParts) {
-      const val = evaluateStringExpr(part, vars);
-      if (val === null) return null;
-      if (val === 0) return 0;
+  function parseEq(): number | null {
+    let left = parsePrimary();
+    if (peek()?.[0] === "op" && peek()![1] === "==") {
+      consume();
+      const right = parsePrimary();
+      if (left === null || right === null) return null;
+      return left === right ? 1 : 0;
     }
-    return 1;
+    return left;
   }
 
-  // Split by == (comparison)
-  const eqParts = s.split("==");
-  if (
-    eqParts.length === 2 &&
-    eqParts[0] !== undefined &&
-    eqParts[1] !== undefined
-  ) {
-    const left = evaluateStringExpr(eqParts[0], vars);
-    const right = evaluateStringExpr(eqParts[1], vars);
-    if (left === null || right === null) return null;
-    return left === right ? 1 : 0;
+  function parsePrimary(): number | null {
+    const token = peek();
+    if (!token) return null;
+    if (token[0] === "num") {
+      consume();
+      return token[1];
+    }
+    if (token[0] === "bool") {
+      consume();
+      return token[1] ? 1 : 0;
+    }
+    if (token[0] === "id") {
+      consume();
+      const val = vars[token[1]];
+      return val !== undefined ? val : null;
+    }
+    return null;
   }
 
-  // Handle "let x = value"
-  const letMatch = s.match(/^let\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
-  if (letMatch) {
-    const value = evaluateStringExpr(letMatch[2]!.trim(), vars);
-    return value !== null ? value : 0;
+  // Handle semicolon-separated statements
+  let result: number | null = 0;
+  while (pos < tokens.length) {
+    if (peek()?.[0] === "kw" && peek()![1] === "let") {
+      consume(); // "let"
+      const idToken = peek();
+      if (!idToken || idToken[0] !== "id") return null;
+      const name = idToken[1];
+      consume(); // id
+      if (peek()?.[0] !== "op" || peek()![1] !== "=") return null;
+      consume(); // "="
+      const value = parseOr();
+      if (value !== null) vars[name] = value;
+      if (peek()?.[0] === "semi") consume();
+    } else {
+      result = parseOr();
+      if (peek()?.[0] === "semi") consume();
+    }
   }
-
-  // Variable lookup
-  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s)) {
-    const val = vars[s];
-    if (val !== undefined) return val;
-  }
-
-  // Fallback to number
-  const num = Number(s);
-  return isNaN(num) ? null : num;
+  return result;
 }
 
 function parseLiteral(token: Token): number | null {
