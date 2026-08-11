@@ -14,19 +14,19 @@ export function evaluate(source: string): number {
 type Token =
   | ["num", number]
   | ["op", "+" | "-" | "*" | "/"]
-  | ["paren", "(" | ")"];
+  | ["group", "(" | ")" | "{" | "}"];
 
 function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re = /(\d+\.?\d*|[+\-*/()])/g;
+  const re = /(\d+\.?\d*|[+\-*/(){}])/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text] = match;
     if (text === " " || text === "") continue;
     if (text === "+" || text === "-" || text === "*" || text === "/") {
       result.push(["op", text as "+" | "-" | "*" | "/"]);
-    } else if (text === "(" || text === ")") {
-      result.push(["paren", text as "(" | ")"]);
+    } else if (text === "(" || text === ")" || text === "{" || text === "}") {
+      result.push(["group", text as "(" | ")" | "{" | "}"]);
     } else {
       result.push(["num", Number(text)]);
     }
@@ -67,13 +67,22 @@ function parseMulDiv(p: { pos: number }, tokens: Token[]): number {
 function parseFactor(p: { pos: number }, tokens: Token[]): number {
   const token = tokens[p.pos];
   if (!token) throw new Error("Unexpected end");
-  if (token[0] === "paren" && token[1] === "(") {
-    p.pos++; // consume "("
+  if (token[0] === "group" && token[1] === "(") {
+    p.pos++;
     const expr = parseAddSub(p, tokens);
-    if (tokens[p.pos]![0] !== "paren" || tokens[p.pos]![1] !== ")") {
+    if (tokens[p.pos]![0] !== "group" || tokens[p.pos]![1] !== ")") {
       throw new Error("Expected )");
     }
-    p.pos++; // consume ")"
+    p.pos++;
+    return expr;
+  }
+  if (token[0] === "group" && token[1] === "{") {
+    p.pos++;
+    const expr = parseAddSub(p, tokens);
+    if (tokens[p.pos]![0] !== "group" || tokens[p.pos]![1] !== "}") {
+      throw new Error("Expected }");
+    }
+    p.pos++;
     return expr;
   }
   return parseNumber(p, tokens);
