@@ -156,7 +156,8 @@ export class Parser {
     this.consume(); // operator
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type, name, value };
+    if (type === "assign") return { type: "assign", name, value };
+    return { type: "compoundassign", name, value };
   }
 
   private parseDerefAssign(): AstNode {
