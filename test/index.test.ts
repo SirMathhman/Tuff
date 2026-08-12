@@ -409,4 +409,12 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("struct Point { x : I32, y : I32 } struct Rect { top : Point, bottom : Point } let r : Rect = Rect { top : Point { x : 0, y : 0 }, bottom : Point { x : 3, y : 4 } }; r.top.x + r.top.y + r.bottom.x + r.bottom.y") => 7', () => {
+    expect(
+      evaluate(
+        "struct Point { x : I32, y : I32 } struct Rect { top : Point, bottom : Point } let r : Rect = Rect { top : Point { x : 0, y : 0 }, bottom : Point { x : 3, y : 4 } }; r.top.x + r.top.y + r.bottom.x + r.bottom.y",
+      ),
+    ).toBe(7);
+  });
 });
