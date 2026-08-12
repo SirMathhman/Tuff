@@ -30,8 +30,25 @@ export const INT_TYPES: IntType[] = [
   },
 ];
 
-/** All type names as a union. */
+/** Float type definitions. */
+export interface FloatType {
+  name: string; // e.g. "f32"
+  suffix: string; // e.g. "F32"
+}
+
+export const FLOAT_TYPES: FloatType[] = [{ name: "f32", suffix: "F32" }];
+
+/** All numeric type names as a union. */
 export type IntTypeName = (typeof INT_TYPES)[number]["name"];
+export type FloatTypeName = (typeof FLOAT_TYPES)[number]["name"];
+export type TypeName = IntTypeName | FloatTypeName;
+
+/** All built-in type names (for `is` expressions and type-checker). */
+export const BUILTIN_TYPES: string[] = [
+  ...INT_TYPES.map((t) => t.name),
+  ...FLOAT_TYPES.map((t) => t.name),
+  "bool",
+];
 
 /** Build regex fragment for typed number literals, longest suffix first. */
 export function numberRegex(): string {
@@ -42,8 +59,11 @@ export function numberRegex(): string {
 }
 
 /** Check if a text ends with a type suffix and return the type name, or undefined. */
-export function matchSuffix(text: string): IntTypeName | undefined {
+export function matchSuffix(text: string): TypeName | undefined {
   for (const t of INT_TYPES) {
+    if (text.endsWith(t.suffix)) return t.name;
+  }
+  for (const t of FLOAT_TYPES) {
     if (text.endsWith(t.suffix)) return t.name;
   }
   return undefined;

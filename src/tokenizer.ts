@@ -1,10 +1,16 @@
-import { INT_TYPES, numberRegex, matchSuffix, type IntTypeName } from "./types";
+import {
+  INT_TYPES,
+  FLOAT_TYPES,
+  numberRegex,
+  matchSuffix,
+  type TypeName,
+} from "./types";
 
 const COMPOUND_OPS: Record<string, string> = { "+=": "+", "-=": "-" };
 export { COMPOUND_OPS };
 
 export type Token =
-  | ["num", number, IntTypeName | undefined, boolean]
+  | ["num", number, TypeName | undefined, boolean]
   | ["bool", boolean]
   | [
       "op",
@@ -56,7 +62,7 @@ export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `(${typedNums}|\\d+\\.\\d+F32|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
@@ -148,15 +154,23 @@ export function tokenize(source: string): Token[] {
     } else {
       const suffix = matchSuffix(text);
       if (suffix) {
-        const t = INT_TYPES.find((t) => t.name === suffix)!;
-        result.push([
-          "num",
-          Number(text.slice(0, -t.suffix.length)),
-          suffix,
-          false,
-        ]);
-      } else if (text.endsWith("F32")) {
-        result.push(["num", Number(text.slice(0, -3)), "f32", true]);
+        const intType = INT_TYPES.find((t) => t.name === suffix);
+        if (intType) {
+          result.push([
+            "num",
+            Number(text.slice(0, -intType.suffix.length)),
+            suffix,
+            false,
+          ]);
+        } else {
+          const floatType = FLOAT_TYPES.find((t) => t.name === suffix)!;
+          result.push([
+            "num",
+            Number(text.slice(0, -floatType.suffix.length)),
+            suffix,
+            true,
+          ]);
+        }
       } else {
         const isFloat = text.includes(".");
         result.push(["num", Number(text), undefined, isFloat]);

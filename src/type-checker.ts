@@ -1,5 +1,5 @@
 import type { AstNode, LValue, TypeNode } from "./ast";
-import { INT_TYPES, type IntTypeName } from "./types";
+import { INT_TYPES, BUILTIN_TYPES, type IntTypeName } from "./types";
 import type { Value } from "./environment";
 import type { Environment } from "./environment";
 
@@ -264,7 +264,7 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "id": {
       if (!getVar(scope, node.name)) {
         // Allow built-in type names (used in `is` expressions)
-        if (["u8", "u16", "i8", "i16", "i32", "f32", "bool"].includes(node.name.toLowerCase())) break;
+        if (BUILTIN_TYPES.includes(node.name.toLowerCase())) break;
         throw new Error(`Undefined variable: ${node.name}`);
       }
       break;
