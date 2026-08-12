@@ -24,7 +24,8 @@ export type AstNode =
   | ArrayIndex
   | StructLiteral
   | StructAccess
-  | TypeCheck;
+  | TypeCheck
+  | Cast;
 
 export interface Num {
   type: "num";
@@ -177,4 +178,10 @@ export interface TypeCheck {
   type: "type-check";
   operand: AstNode;
   typeName: string;
+}
+
+export interface Cast {
+  type: "cast";
+  expression: AstNode;
+  typeName: IntTypeName;
 }

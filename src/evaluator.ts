@@ -69,6 +69,13 @@ function evalValue(node: AstNode, env: Environment): Value {
         throw new Error(`Field not found: ${node.field}`);
       return field;
     }
+    case "cast": {
+      const value = evalValue(node.expression, env);
+      return num(
+        value.kind === "number" ? value.value : toNumber(value),
+        node.typeName.toLowerCase() as IntTypeName,
+      );
+    }
     case "binop": {
       const left = evalValue(node.left, env);
       const right = evalValue(node.right, env);
@@ -281,6 +288,12 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "continue": {
       throw new Continue();
+    }
+
+    case "cast": {
+      const value = evalValue(node.expression, env);
+      const numValue = value.kind === "number" ? value.value : toNumber(value);
+      return toNumber(num(numValue, node.typeName.toLowerCase() as IntTypeName));
     }
 
     case "type-check": {

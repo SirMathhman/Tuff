@@ -1,6 +1,7 @@
 import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
 import type { AstNode } from "./ast";
+import type { IntTypeName } from "./types";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
 
@@ -357,6 +358,19 @@ export class Parser {
       if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
         throw new Error("Expected )");
       this.consume();
+      // Check for cast: (expr)Type
+      const afterCast = this.peek();
+      if (
+        afterCast?.[0] === "id" &&
+        ["u8", "u16"].includes(afterCast[1].toLowerCase())
+      ) {
+        this.consume();
+        return {
+          type: "cast",
+          expression: expr,
+          typeName: afterCast[1].toUpperCase() as IntTypeName,
+        };
+      }
       return expr;
     }
 
