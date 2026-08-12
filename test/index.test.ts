@@ -449,4 +449,8 @@ describe("evaluate", () => {
   it('evaluate("5F32 is F32") => 1', () => {
     expect(evaluate("5F32 is F32")).toBe(1);
   });
+
+  it("evaluate(\"'a'\") => 97", () => {
+    expect(evaluate("'a'")).toBe(97);
+  });
 });

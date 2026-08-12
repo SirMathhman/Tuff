@@ -12,6 +12,7 @@ export { COMPOUND_OPS };
 export type Token =
   | ["num", number, TypeName | undefined, boolean]
   | ["bool", boolean]
+  | ["char", string]
   | [
       "op",
       (
@@ -62,7 +63,7 @@ export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|'[^']'|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
@@ -151,6 +152,8 @@ export function tokenize(source: string): Token[] {
       result.push(["bool", false]);
     } else if (/^[a-zA-Z_]/.test(text)) {
       result.push(["id", text]);
+    } else if (text.startsWith("'") && text.endsWith("'") && text.length === 3) {
+      result.push(["char", text.slice(1, 2)]);
     } else {
       const suffix = matchSuffix(text);
       if (suffix) {

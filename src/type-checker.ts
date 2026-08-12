@@ -201,6 +201,9 @@ function checkNode(node: AstNode, scope: Scope): void {
       }
       break;
 
+    case "char":
+      break;
+
     case "unop":
       if (node.op === "-") {
         const operand = node.operand;
@@ -397,6 +400,7 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "break":
     case "continue":
     case "bool":
+    case "char":
       break;
   }
 }

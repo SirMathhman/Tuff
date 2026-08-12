@@ -18,6 +18,7 @@ export type LValue =
 export type AstNode =
   | Num
   | Bool
+  | Char
   | Id
   | BinaryOp
   | UnaryOp
@@ -56,6 +57,11 @@ export interface Num {
 export interface Bool {
   type: "bool";
   value: boolean;
+}
+
+export interface Char {
+  type: "char";
+  value: string;
 }
 
 export interface Id {
