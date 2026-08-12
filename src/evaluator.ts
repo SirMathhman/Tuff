@@ -30,6 +30,8 @@ function checkType(val: Value, typeNode: TypeNode, env: Environment): boolean {
         return val.kind === "bool";
       }
       if (val.kind === "number") {
+        // Floats match F32
+        if (val.isFloat) return typeName === "f32";
         // Plain numbers (no numType) default to I32
         if (!val.numType) return typeName === "i32";
         return val.numType === typeName;

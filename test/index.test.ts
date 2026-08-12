@@ -429,4 +429,8 @@ describe("evaluate", () => {
   it('evaluate("5.0 / 2") => 2.5', () => {
     expect(evaluate("5.0 / 2")).toBe(2.5);
   });
+
+  it('evaluate("5.0 is F32") => 1', () => {
+    expect(evaluate("5.0 is F32")).toBe(1);
+  });
 });
