@@ -44,7 +44,12 @@ function getFn(
   }
   return undefined;
 }
-
+function checkAssignable(scope: Scope, name: string): void {
+  const varInfo = getVar(scope, name);
+  if (!varInfo) throw new Error(`Undefined variable: ${name}`);
+  if (!varInfo.mutable)
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+}
 /** Validate type constraints on the AST. */
 export function typeCheck(statements: AstNode[]): void {
   const scope = newScope();
@@ -108,22 +113,9 @@ function checkNode(node: AstNode, scope: Scope): void {
       break;
     }
 
-    case "assign": {
-      const varInfo = getVar(scope, node.name);
-      if (!varInfo) throw new Error(`Undefined variable: ${node.name}`);
-      if (!varInfo.mutable)
-        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
-      checkNode(node.value, scope);
-      break;
-    }
-
+    case "assign":
     case "compoundassign": {
-      const varInfo = getVar(scope, node.name);
-      if (!varInfo) throw new Error(`Undefined variable: ${node.name}`);
-      if (!varInfo.mutable)
-        throw new Error(
-          `Cannot compound-assign to immutable variable: ${node.name}`,
-        );
+      checkAssignable(scope, node.name);
       checkNode(node.value, scope);
       break;
     }
