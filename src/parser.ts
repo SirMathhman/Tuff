@@ -44,6 +44,25 @@ export class Parser {
       const fields = rawFields.map((f) => ({ name: f.name, type: f.value }));
       return { kind: "struct", fields };
     }
+    // Function type: (Type, Type) => ReturnType
+    if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
+      this.consume(); // "("
+      const params: TypeNode[] = [];
+      while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+        params.push(this.parseType());
+        if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+          this.consume(); // ","
+        }
+      }
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+        throw new Error("Expected ) in function type");
+      this.consume(); // ")"
+      if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")
+        throw new Error("Expected => in function type");
+      this.consume(); // "=>"
+      const returnType = this.parseType();
+      return { kind: "fn", params, returnType };
+    }
     // Simple type name
     const typeToken = this.peek();
     if (!typeToken || typeToken[0] !== "id")
@@ -234,15 +253,20 @@ export class Parser {
   private parseLet(): AstNode {
     this.consume(); // "let"
     const { name, isMut } = this.parseMutId();
-    // Optional type annotation: : U8, : U16
+    // Optional type annotation: : U8, : &(I32, I32) => I32
     let typeAnnotation: string | undefined;
     if (this.peek()?.[0] === "colon") {
       this.consume(); // ":"
       const typeToken = this.peek();
-      if (!typeToken || typeToken[0] !== "id")
+      if (typeToken?.[0] === "id") {
+        typeAnnotation = typeToken[1];
+        this.consume();
+      } else if (typeToken?.[0] === "ref" || typeToken?.[0] === "group") {
+        // Complex type like &(I32, I32) => I32 — parse but don't store
+        this.parseType();
+      } else {
         throw new Error("Expected type name");
-      typeAnnotation = typeToken[1];
-      this.consume();
+      }
     }
     if (this.peek()?.[0] !== "assign") throw new Error("Expected =");
     this.consume();

@@ -333,4 +333,12 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("fn add(first : I32, second : I32) : I32 => first + second; let func : &(I32, I32) => I32 = &add; func(3, 4)") => 7', () => {
+    expect(
+      evaluate(
+        "fn add(first : I32, second : I32) : I32 => first + second; let func : &(I32, I32) => I32 = &add; func(3, 4)",
+      ),
+    ).toBe(7);
+  });
 });

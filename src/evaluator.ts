@@ -51,6 +51,16 @@ function checkType(val: Value, typeNode: TypeNode, env: Environment): boolean {
       }
       return true;
     }
+    case "fn": {
+      if (val.kind !== "fnref") return false;
+      const fn = val.fn;
+      if (fn.params.length !== typeNode.params.length) return false;
+      for (let i = 0; i < fn.params.length; i++) {
+        const paramType = typeNode.params[i];
+        if (!paramType || !checkType(num(0), paramType, env)) return false;
+      }
+      return checkType(num(0), typeNode.returnType, env);
+    }
     default:
       return false;
   }
@@ -92,6 +102,11 @@ function evalValue(node: AstNode, env: Environment): Value {
       return result;
     }
     case "ref": {
+      // Check if this is a function reference (&functionName)
+      const fn = env.getFunction(node.name);
+      if (fn !== undefined && !node.mutable) {
+        return { kind: "fnref", fn };
+      }
       const ref: Ref = {
         name: node.name,
         env,
@@ -128,6 +143,11 @@ function evalValue(node: AstNode, env: Environment): Value {
         value.kind === "number" ? value.value : toNumber(value),
         node.typeName.toLowerCase() as IntTypeName,
       );
+    }
+    case "fnref": {
+      const fn = env.getFunction(node.name);
+      if (fn === undefined) throw new Error("Undefined function: " + node.name);
+      return { kind: "fnref", fn };
     }
     case "binop": {
       const left = evalValue(node.left, env);
@@ -404,13 +424,27 @@ export function evaluate(node: AstNode, env: Environment): number {
       return 0;
     }
 
+    case "fnref": {
+      return 0;
+    }
+
     case "fn-call": {
-      const fn = env.getFunction(node.name);
-      if (fn === undefined) throw new Error("Undefined function: " + node.name);
+      // First check if callee is a variable holding a fnref
+      const calleeVal = env.get(node.name);
+      let fn: import("./environment").FnDef;
+      if (calleeVal?.kind === "fnref") {
+        fn = calleeVal.fn;
+      } else {
+        // Otherwise look up as named function
+        const namedFn = env.getFunction(node.name);
+        if (namedFn === undefined)
+          throw new Error("Undefined function: " + node.name);
+        fn = namedFn;
+      }
       const fnEnv = new Environment(env);
       if (fn.params.length !== node.args.length)
         throw new Error(
-          `Function ${node.name} expects ${fn.params.length} arguments, got ${node.args.length}`,
+          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
         );
       for (let i = 0; i < fn.params.length; i++) {
         const param = fn.params[i];

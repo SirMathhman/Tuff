@@ -5,7 +5,8 @@ export type TypeNode =
   | { kind: "name"; name: string }
   | { kind: "array"; elementType: TypeNode; length: AstNode }
   | { kind: "ref"; innerType: TypeNode }
-  | { kind: "struct"; fields: { name: string; type: TypeNode }[] };
+  | { kind: "struct"; fields: { name: string; type: TypeNode }[] }
+  | { kind: "fn"; params: TypeNode[]; returnType: TypeNode };
 
 export type AstNode =
   | Num
@@ -34,7 +35,8 @@ export type AstNode =
   | TypeCheck
   | Cast
   | FnDef
-  | FnCall;
+  | FnCall
+  | FnRef;
 
 export interface Num {
   type: "num";
@@ -207,4 +209,9 @@ export interface FnCall {
   type: "fn-call";
   name: string;
   args: AstNode[];
+}
+
+export interface FnRef {
+  type: "fnref";
+  name: string;
 }
