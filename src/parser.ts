@@ -747,12 +747,7 @@ export class Parser {
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
         return this.parseFnCall(token[1]);
       }
-      let node: AstNode = { type: "id", name: token[1] };
-      // Check for array indexing: array[0]
-      while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-        const index = this.consumeArrayIndex();
-        node = { type: "array-index", array: node, index };
-      }
+      let node = this.consumeIdWithArrayIndices(token[1]);
       // Check for struct field access: pt.x
       while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
         this.consume(); // "."

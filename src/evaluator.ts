@@ -466,25 +466,23 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "array-index-assign": {
       const value = evaluate(node.value, env);
-      // Walk the chain: array[0][0] = value
-      // Extract the base and all indices
       const indices: AstNode[] = [];
       let base: AstNode = node.array;
       while (base.type === "array-index") {
         indices.unshift(base.index);
         base = base.array;
       }
-      // Evaluate base to get the root array
       let currentVal: Value = evalValue(base, env);
       if (currentVal.kind === "ref") {
         currentVal = derefValue(currentVal.ref);
       }
       if (currentVal.kind !== "array")
         throw new Error("Cannot index non-array value");
-      // Walk down to the parent of the target
       for (let i = 0; i < indices.length - 1; i++) {
         const idx = evaluate(indices[i]!, env);
-        const child = currentVal.elements[idx];
+        const child: Value | undefined = (
+          currentVal as { kind: "array"; elements: Value[] }
+        ).elements[idx];
         if (child === undefined)
           throw new Error(`Array index out of bounds: ${idx}`);
         if (child.kind === "ref") {
@@ -494,7 +492,6 @@ export function evaluate(node: AstNode, env: Environment): number {
           throw new Error("Cannot index non-array value");
         currentVal = child;
       }
-      // Assign to the final index
       const finalIdx = evaluate(indices[indices.length - 1]!, env);
       (currentVal as { kind: "array"; elements: Value[] }).elements[finalIdx] =
         num(value);
