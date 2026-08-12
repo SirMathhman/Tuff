@@ -435,7 +435,7 @@ export class Parser {
 
     if (token[0] === "num") {
       this.consume();
-      return { type: "num", value: token[1] };
+      return { type: "num", value: token[1], numType: token[2] };
     }
 
     if (token[0] === "bool") {

@@ -4,7 +4,7 @@ const COMPOUND_OPS: Record<string, string> = { "+=": "+", "-=": "-" };
 export { COMPOUND_OPS };
 
 export type Token =
-  | ["num", number]
+  | ["num", number, "u8" | undefined]
   | ["bool", boolean]
   | [
       "op",
@@ -134,7 +134,7 @@ export function tokenize(source: string): Token[] {
     } else if (/^[a-zA-Z_]/.test(text)) {
       result.push(["id", text]);
     } else if (text.endsWith("U8")) {
-      result.push(["num", Number(text.slice(0, -2))]);
+      result.push(["num", Number(text.slice(0, -2)), "u8"]);
     } else {
       result.push(["num", Number(text)]);
     }

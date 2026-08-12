@@ -1,6 +1,6 @@
 /** Discriminated union for all runtime values the language can produce. */
 export type Value =
-  | { kind: "number"; value: number }
+  | { kind: "number"; value: number; type?: "u8" }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
   | { kind: "range"; start: number; end: number }
