@@ -21,6 +21,11 @@ export function toNumber(v: Value): number {
   throw new Error(`Expected number, got ${v.kind}`);
 }
 
+/** Safely extract numType from a Value, returning undefined for non-number kinds. */
+export function getNumberType(v: Value): IntTypeName | undefined {
+  return v.kind === "number" ? v.numType : undefined;
+}
+
 export class Environment {
   private values: Record<string, Value> = {};
   private mutable: Set<string> = new Set();
