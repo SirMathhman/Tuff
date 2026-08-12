@@ -359,6 +359,13 @@ export class Parser {
       return { type: "if-expression", condition, thenBranch, elseBranch };
     }
 
+    // -x — unary minus
+    if (token[0] === "op" && token[1] === "-") {
+      this.consume();
+      const operand = this.parseFactor();
+      return { type: "unop", op: "-", operand };
+    }
+
     return this.parsePrimary();
   }
 
