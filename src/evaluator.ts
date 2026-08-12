@@ -464,6 +464,9 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
       return 0;
     case "struct-access": {
       const structVal = evalValue(node.struct, env);
+      if (node.field === "length" && structVal.kind === "array") {
+        return structVal.elements.length;
+      }
       if (structVal.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");
       const field = structVal.fields[node.field];

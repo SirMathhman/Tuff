@@ -469,4 +469,8 @@ describe("evaluate", () => {
   it('evaluate(\'let str : &Str = "apple"; str[0] is Char\') => 1', () => {
     expect(evaluate('let str : &Str = "apple"; str[0] is Char')).toBe(1);
   });
+
+  it('evaluate(\'let str : &Str = "apple"; str.length\') => 5', () => {
+    expect(evaluate('let str : &Str = "apple"; str.length')).toBe(5);
+  });
 });
