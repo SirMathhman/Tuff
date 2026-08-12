@@ -1,28 +1,30 @@
 import type { AstNode } from "./ast";
+import { INT_TYPES, getIntType, type IntTypeName } from "./types";
 
 /** Validate type constraints on the AST. */
 export function typeCheck(statements: AstNode[]): void {
-  const types: Record<string, "u8" | "u16"> = {};
+  const types: Record<string, IntTypeName> = {};
   for (const stmt of statements) {
     checkNode(stmt, types);
   }
 }
 
-function checkNode(node: AstNode, types: Record<string, "u8" | "u16">): void {
+function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
   switch (node.type) {
     case "num":
-      if (node.numType === "u8" && (node.value < 0 || node.value > 255))
-        throw new Error(`U8 value out of range: ${node.value}`);
-      if (node.numType === "u16" && (node.value < 0 || node.value > 65535))
-        throw new Error(`U16 value out of range: ${node.value}`);
+      if (node.numType) {
+        const t = getIntType(node.numType);
+        if (node.value < t.min || node.value > t.max)
+          throw new Error(`${t.suffix} value out of range: ${node.value}`);
+      }
       break;
 
     case "unop":
       if (node.op === "-") {
         const operand = node.operand;
-        if (operand.type === "num" && operand.numType === "u8")
+        if (operand.type === "num" && operand.numType && !getIntType(operand.numType).signed)
           throw new Error("Cannot negate unsigned integer");
-        if (operand.type === "id" && types[operand.name] === "u8")
+        if (operand.type === "id" && types[operand.name] && !getIntType(types[operand.name]).signed)
           throw new Error("Cannot negate unsigned integer");
       }
       checkNode(node.operand, types);
@@ -34,7 +36,7 @@ function checkNode(node: AstNode, types: Record<string, "u8" | "u16">): void {
       break;
 
     case "let":
-      if (node.value.type === "num" && (node.value.numType === "u8" || node.value.numType === "u16"))
+      if (node.value.type === "num" && node.value.numType)
         types[node.name] = node.value.numType;
       checkNode(node.value, types);
       break;

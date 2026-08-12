@@ -1,3 +1,5 @@
+import type { IntTypeName } from "./types";
+
 export type AstNode =
   | Num
   | Bool
@@ -26,7 +28,7 @@ export type AstNode =
 export interface Num {
   type: "num";
   value: number;
-  numType?: "u8" | "u16";
+  numType?: IntTypeName;
 }
 
 export interface Bool {

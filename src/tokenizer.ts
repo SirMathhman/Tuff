@@ -1,10 +1,11 @@
 import type { AstNode } from "./ast";
+import { INT_TYPES, numberRegex, matchSuffix, type IntTypeName } from "./types";
 
 const COMPOUND_OPS: Record<string, string> = { "+=": "+", "-=": "-" };
 export { COMPOUND_OPS };
 
 export type Token =
-  | ["num", number, "u8" | "u16" | undefined]
+  | ["num", number, IntTypeName | undefined]
   | ["bool", boolean]
   | [
       "op",
@@ -50,8 +51,8 @@ export type Token =
 
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re =
-    /"([^"]*)"|(\d+U16|\d+U8|\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>[\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+  const typedNums = numberRegex();
+  const re = new RegExp(`"([^"]*)"|(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|\\.\\.|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`, "g");
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -133,12 +134,14 @@ export function tokenize(source: string): Token[] {
       result.push(["bool", false]);
     } else if (/^[a-zA-Z_]/.test(text)) {
       result.push(["id", text]);
-    } else if (text.endsWith("U16")) {
-      result.push(["num", Number(text.slice(0, -3)), "u16"]);
-    } else if (text.endsWith("U8")) {
-      result.push(["num", Number(text.slice(0, -2)), "u8"]);
     } else {
-      result.push(["num", Number(text), undefined]);
+      const suffix = matchSuffix(text);
+      if (suffix) {
+        const t = INT_TYPES.find((t) => t.name === suffix)!;
+        result.push(["num", Number(text.slice(0, -t.suffix.length)), suffix]);
+      } else {
+        result.push(["num", Number(text), undefined]);
+      }
     }
   }
   return result;
