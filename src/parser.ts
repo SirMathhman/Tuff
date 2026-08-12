@@ -54,13 +54,21 @@ export class Parser {
       const returnType = this.parseType();
       return { kind: "fn", params, returnType };
     }
-    // Simple type name
+    // Simple type name (may be followed by | for union)
     const typeToken = this.peek();
     if (!typeToken || typeToken[0] !== "id")
       throw new Error("Expected type name");
     const typeName = typeToken[1];
     this.consume();
-    return { kind: "name", name: typeName };
+    let type: TypeNode = { kind: "name", name: typeName };
+    // Check for union: Type | Type
+    if (this.peek()?.[0] === "op" && this.peek()![1] === "|") {
+      this.consume(); // "|"
+      const unionTypes: TypeNode[] = [type];
+      unionTypes.push(this.parseType());
+      return { kind: "union", types: unionTypes };
+    }
+    return type;
   }
 
   private parseDelimitedList<T>(parseItem: () => T, separator: string): T[] {
@@ -445,7 +453,7 @@ export class Parser {
   private parseLet(): AstNode {
     this.consume(); // "let"
     const { name, isMut } = this.parseMutId();
-    // Optional type annotation: : U8, : &(I32, I32) => I32
+    // Optional type annotation: : U8, : &(I32, I32) => I32, : I32 | Char
     let typeAnnotation: string | undefined;
     if (this.peek()?.[0] === "colon") {
       this.consume(); // ":"
@@ -453,6 +461,17 @@ export class Parser {
       if (typeToken?.[0] === "id") {
         typeAnnotation = typeToken[1];
         this.consume();
+        // Handle union types: I32 | Char
+        while (this.peek()?.[0] === "op" && this.peek()![1] === "|") {
+          this.consume(); // "|"
+          const nextType = this.peek();
+          if (nextType?.[0] === "id") {
+            typeAnnotation += " | " + nextType[1];
+            this.consume();
+          } else {
+            throw new Error("Expected type name in union");
+          }
+        }
       } else if (typeToken?.[0] === "ref" || typeToken?.[0] === "group") {
         // Complex type like &(I32, I32) => I32 — parse but don't store
         this.parseType();

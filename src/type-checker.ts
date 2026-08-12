@@ -68,6 +68,12 @@ export function checkType(
       }
       return checkType(num(0), typeNode.returnType, env, evaluate, num);
     }
+    case "union": {
+      for (const t of typeNode.types) {
+        if (checkType(val, t, env, evaluate, num)) return true;
+      }
+      return false;
+    }
     default:
       return false;
   }
@@ -252,6 +258,8 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
           // Struct types don't need range checking
         } else if (declaredType === "Null") {
           // Null type — no range checking needed
+        } else if (declaredType.includes(" | ")) {
+          // Union type — no range checking needed
         } else {
           const alias = getTypeAlias(scope, declaredType);
           let typeName = declaredType;
