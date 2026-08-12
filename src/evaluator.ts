@@ -15,6 +15,14 @@ import { Break, Continue } from "./control-flow";
 
 /** Check if a value matches a type-node. */
 function checkType(val: Value, typeNode: TypeNode, env: Environment): boolean {
+  // Resolve type aliases
+  if (typeNode.kind === "name") {
+    const alias = env.getTypeAlias(typeNode.name);
+    if (alias) {
+      return checkType(val, alias, env);
+    }
+  }
+
   switch (typeNode.kind) {
     case "name": {
       const typeName = typeNode.name.toLowerCase();
@@ -388,6 +396,11 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "type-check": {
       const val = evalValue(node.operand, env);
       return checkType(val, node.typeNode, env) ? 1 : 0;
+    }
+
+    case "type-alias": {
+      env.declareTypeAlias(node.name, node.typeNode);
+      return 0;
     }
 
     case "array-literal": {

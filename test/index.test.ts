@@ -379,4 +379,8 @@ describe("evaluate", () => {
   it('evaluate("let mut array = [0]; array[0] = 100; array[0]") => 100', () => {
     expect(evaluate("let mut array = [0]; array[0] = 100; array[0]")).toBe(100);
   });
+
+  it('evaluate("type A = I32; let temp : A = 100; temp is A") => 1', () => {
+    expect(evaluate("type A = I32; let temp : A = 100; temp is A")).toBe(1);
+  });
 });

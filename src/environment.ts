@@ -40,6 +40,7 @@ export class Environment {
   private values: Record<string, Value> = {};
   private mutable: Set<string> = new Set();
   private functions: Record<string, FnDef> = {};
+  private typeAliases: Record<string, TypeNode> = {};
   private parent: Environment | undefined;
 
   constructor(parent?: Environment) {
@@ -82,6 +83,20 @@ export class Environment {
     }
     if (this.parent) {
       return this.parent.getFunction(name);
+    }
+    return undefined;
+  }
+
+  declareTypeAlias(name: string, typeNode: TypeNode): void {
+    this.typeAliases[name] = typeNode;
+  }
+
+  getTypeAlias(name: string): TypeNode | undefined {
+    if (Object.prototype.hasOwnProperty.call(this.typeAliases, name)) {
+      return this.typeAliases[name];
+    }
+    if (this.parent) {
+      return this.parent.getTypeAlias(name);
     }
     return undefined;
   }

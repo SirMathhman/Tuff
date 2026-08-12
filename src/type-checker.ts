@@ -12,11 +12,17 @@ function requireIntType(name: string): (typeof INT_TYPES)[number] {
 interface Scope {
   variables: Map<string, { mutable: boolean; type?: IntTypeName }>;
   functions: Map<string, { params: TypeNode[]; returnType: TypeNode }>;
+  typeAliases: Map<string, TypeNode>;
   parent?: Scope;
 }
 
 function newScope(parent?: Scope): Scope {
-  return { variables: new Map(), functions: new Map(), parent };
+  return {
+    variables: new Map(),
+    functions: new Map(),
+    typeAliases: new Map(),
+    parent,
+  };
 }
 
 function getVar(
@@ -44,6 +50,17 @@ function getFn(
   }
   return undefined;
 }
+
+function getTypeAlias(scope: Scope, name: string): TypeNode | undefined {
+  let s: Scope | undefined = scope;
+  while (s) {
+    const entry = s.typeAliases.get(name);
+    if (entry !== undefined) return entry;
+    s = s.parent;
+  }
+  return undefined;
+}
+
 function checkAssignable(scope: Scope, name: string): void {
   const varInfo = getVar(scope, name);
   if (!varInfo) throw new Error(`Undefined variable: ${name}`);
@@ -98,12 +115,27 @@ function checkNode(node: AstNode, scope: Scope): void {
           : undefined;
       const declaredType = node.typeAnnotation || valueType;
       if (declaredType) {
-        const target = requireIntType(
-          declaredType.toLowerCase() as IntTypeName,
-        );
-        const source = valueType ? requireIntType(valueType) : null;
-        if (source && target.max < source.max)
-          throw new Error(`Cannot assign ${source.suffix} to ${target.suffix}`);
+        // Check if declaredType is a type alias
+        const alias = getTypeAlias(scope, declaredType);
+        if (alias && alias.kind === "name") {
+          const target = requireIntType(
+            alias.name.toLowerCase() as IntTypeName,
+          );
+          const source = valueType ? requireIntType(valueType) : null;
+          if (source && target.max < source.max)
+            throw new Error(
+              `Cannot assign ${source.suffix} to ${target.suffix}`,
+            );
+        } else if (!alias) {
+          const target = requireIntType(
+            declaredType.toLowerCase() as IntTypeName,
+          );
+          const source = valueType ? requireIntType(valueType) : null;
+          if (source && target.max < source.max)
+            throw new Error(
+              `Cannot assign ${source.suffix} to ${target.suffix}`,
+            );
+        }
       }
       scope.variables.set(node.name, {
         mutable: node.mutable,
@@ -230,6 +262,10 @@ function checkNode(node: AstNode, scope: Scope): void {
 
     case "type-check":
       checkNode(node.operand, scope);
+      break;
+
+    case "type-alias":
+      scope.typeAliases.set(node.name, node.typeNode);
       break;
 
     case "cast":

@@ -111,12 +111,29 @@ export class Parser {
     if (this.peek()?.[0] === "semi") this.consume();
   }
 
+  private parseTypeAlias(): AstNode {
+    this.consume(); // "type"
+    const nameToken = this.consume();
+    const name = nameToken[1] as string;
+    if (this.peek()?.[0] !== "assign" || this.peek()![1] !== "=")
+      throw new Error("Expected = in type alias");
+    this.consume(); // "="
+    const typeNode = this.parseType();
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "type-alias", name, typeNode };
+  }
+
   private parseStatement(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
 
     if (token[0] === "kw" && token[1] === "let") {
       return this.parseLet();
+    }
+
+    // type Alias = Type;
+    if (token[0] === "kw" && token[1] === "type") {
+      return this.parseTypeAlias();
     }
 
     // fn name(params) : ReturnType => body;

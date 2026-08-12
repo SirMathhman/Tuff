@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "bun test test/",
+    "test": "bun test test/ --coverage",
     "typecheck": "tsc --noEmit",
     "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
     "circular": "madge ./src --circular --extensions ts",

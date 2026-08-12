@@ -36,6 +36,7 @@ export type AstNode =
   | StructAccess
   | TypeCheck
   | Cast
+  | TypeAlias
   | FnDef
   | FnCall
   | FnRef;
@@ -190,6 +191,16 @@ export interface StructAccess {
 export interface TypeCheck {
   type: "type-check";
   operand: AstNode;
+  typeNode: TypeNode;
+}
+export interface TypeAlias {
+  type: "type-alias";
+  name: string;
+  typeNode: TypeNode;
+}
+export interface TypeAlias {
+  type: "type-alias";
+  name: string;
   typeNode: TypeNode;
 }
 
