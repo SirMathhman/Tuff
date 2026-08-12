@@ -288,18 +288,7 @@ export class Parser {
     }
 
     if (token[0] === "group" && token[1] === "{") {
-      this.consume();
-      const statements: AstNode[] = [];
-      while (
-        this.peek() &&
-        !(this.peek()![0] === "group" && this.peek()![1] === "}")
-      ) {
-        statements.push(this.parseStatement());
-      }
-      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
-        throw new Error("Expected }");
-      this.consume();
-      return { type: "block", statements };
+      return this.parseBlock();
     }
 
     // if (cond) then else expr
