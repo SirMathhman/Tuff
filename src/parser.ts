@@ -47,16 +47,7 @@ export class Parser {
     // Function type: (Type, Type) => ReturnType
     if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
       this.consume(); // "("
-      const params: TypeNode[] = [];
-      while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
-        params.push(this.parseType());
-        if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-          this.consume(); // ","
-        }
-      }
-      if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
-        throw new Error("Expected ) in function type");
-      this.consume(); // ")"
+      const params = this.parseParenList(() => this.parseType());
       if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")
         throw new Error("Expected => in function type");
       this.consume(); // "=>"
