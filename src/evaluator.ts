@@ -45,7 +45,12 @@ function evalLiteral(node: AstNode): Value {
     case "char":
       return num(node.value.charCodeAt(0), undefined, undefined, true);
     case "string":
-      return { kind: "array", elements: [...node.value].map((c) => num(c.charCodeAt(0), undefined, undefined, true)) };
+      return {
+        kind: "array",
+        elements: [...node.value].map((c) =>
+          num(c.charCodeAt(0), undefined, undefined, true),
+        ),
+      };
     default:
       throw new Error(`Unexpected literal: ${node.type}`);
   }
