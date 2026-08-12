@@ -28,7 +28,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "num":
       return num(node.value, node.numType);
     case "bool":
-      return num(node.value ? 1 : 0);
+      return { kind: "bool", value: node.value };
     case "id": {
       const v = env.get(node.name);
       if (v === undefined) throw new Error("Undefined variable: " + node.name);
@@ -315,6 +315,9 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "type-check": {
       const val = evalValue(node.operand, env);
+      if (node.typeName.toLowerCase() === "bool") {
+        return val.kind === "bool" ? 1 : 0;
+      }
       if (val.kind === "number") {
         return val.numType === node.typeName.toLowerCase() ? 1 : 0;
       }

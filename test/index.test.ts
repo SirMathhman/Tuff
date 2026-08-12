@@ -296,6 +296,10 @@ describe("evaluate", () => {
     expect(evaluate("let x = (100U8 + 1I8); x is I16")).toBe(1);
   });
 
+  it('evaluate("let x = true; x is Bool") => 1', () => {
+    expect(evaluate("let x = true; x is Bool")).toBe(1);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(

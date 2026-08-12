@@ -12,7 +12,14 @@ export const INT_TYPES: IntType[] = [
   { name: "u8", suffix: "U8", min: 0, max: 255, signed: false, bits: 8 },
   { name: "u16", suffix: "U16", min: 0, max: 65535, signed: false, bits: 16 },
   { name: "i8", suffix: "I8", min: -128, max: 127, signed: true, bits: 8 },
-  { name: "i16", suffix: "I16", min: -32768, max: 32767, signed: true, bits: 16 },
+  {
+    name: "i16",
+    suffix: "I16",
+    min: -32768,
+    max: 32767,
+    signed: true,
+    bits: 16,
+  },
 ];
 
 /** All type names as a union. */

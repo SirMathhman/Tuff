@@ -3,6 +3,7 @@ import type { IntTypeName } from "./types";
 /** Discriminated union for all runtime values the language can produce. */
 export type Value =
   | { kind: "number"; value: number; numType?: IntTypeName }
+  | { kind: "bool"; value: boolean }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
   | { kind: "range"; start: number; end: number }
@@ -18,6 +19,7 @@ export function num(v: number, numType?: IntTypeName): Value {
 /** Unwrap a Value to a number, throwing if it's not a number. */
 export function toNumber(v: Value): number {
   if (v.kind === "number") return v.value;
+  if (v.kind === "bool") return v.value ? 1 : 0;
   throw new Error(`Expected number, got ${v.kind}`);
 }
 
