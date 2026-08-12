@@ -31,9 +31,14 @@ export function matchSuffix(text: string): IntTypeName | undefined {
   return undefined;
 }
 
-/** Get the type definition by name. */
-export function getIntType(name: IntTypeName): IntType {
-  const t = INT_TYPES.find((t) => t.name === name);
-  if (!t) throw new Error(`Unknown type: ${name}`);
-  return t;
+/** Find an IntType by name. */
+export function getIntType(name: string): IntType | undefined {
+  return INT_TYPES.find((t) => t.name === name);
+}
+
+/** Promote two integer types to the wider type. */
+export function promoteTypes(a: IntTypeName, b: IntTypeName): IntTypeName {
+  const aType = getIntType(a)!;
+  const bType = getIntType(b)!;
+  return aType.max >= bType.max ? a : b;
 }

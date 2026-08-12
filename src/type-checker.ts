@@ -1,5 +1,12 @@
 import type { AstNode } from "./ast";
-import { INT_TYPES, getIntType, type IntTypeName } from "./types";
+import { INT_TYPES, type IntTypeName } from "./types";
+
+/** Find an IntType by name, throwing if not found. */
+function requireIntType(name: string): (typeof INT_TYPES)[number] {
+  const t = INT_TYPES.find((t) => t.name === name);
+  if (!t) throw new Error(`Unknown type: ${name}`);
+  return t;
+}
 
 /** Validate type constraints on the AST. */
 export function typeCheck(statements: AstNode[]): void {
@@ -13,7 +20,7 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
   switch (node.type) {
     case "num":
       if (node.numType) {
-        const t = getIntType(node.numType);
+        const t = requireIntType(node.numType);
         if (node.value < t.min || node.value > t.max)
           throw new Error(`${t.suffix} value out of range: ${node.value}`);
       }
@@ -25,12 +32,12 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
         if (
           operand.type === "num" &&
           operand.numType &&
-          !getIntType(operand.numType).signed
+          !requireIntType(operand.numType).signed
         )
           throw new Error("Cannot negate unsigned integer");
         if (operand.type === "id") {
           const t = types[operand.name];
-          if (t && !getIntType(t).signed)
+          if (t && !requireIntType(t).signed)
             throw new Error("Cannot negate unsigned integer");
         }
       }
@@ -46,11 +53,11 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
       if (node.value.type === "num" && node.value.numType) {
         // Check type annotation compatibility
         if (node.typeAnnotation) {
-          const target = getIntType(
+          const target = requireIntType(
             node.typeAnnotation.toLowerCase() as IntTypeName,
           );
           const source = node.value.numType
-            ? getIntType(node.value.numType)
+            ? requireIntType(node.value.numType)
             : null;
           if (source && target.max < source.max)
             throw new Error(

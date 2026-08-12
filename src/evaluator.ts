@@ -1,5 +1,6 @@
 import type { AstNode } from "./ast";
 import type { IntTypeName } from "./types";
+import { promoteTypes } from "./types";
 import {
   Environment,
   deref,
@@ -91,9 +92,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       const leftType = getNumberType(left);
       const rightType = getNumberType(right);
       if (leftType && rightType) {
-        // Promote to wider type (U16 > U8)
-        const wider = rightType === "u16" ? "u16" : "u8";
-        return num(result, wider);
+        return num(result, promoteTypes(leftType, rightType));
       }
       const numType = leftType || rightType;
       if (numType) {
