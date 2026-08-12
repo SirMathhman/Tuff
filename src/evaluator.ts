@@ -47,6 +47,16 @@ export function evaluate(node: AstNode, env: Environment): number {
           return left || right;
         case "==":
           return left === right ? 1 : 0;
+        case "<":
+          return left < right ? 1 : 0;
+        case "<=":
+          return left <= right ? 1 : 0;
+        case ">":
+          return left > right ? 1 : 0;
+        case ">=":
+          return left >= right ? 1 : 0;
+        case "!=":
+          return left !== right ? 1 : 0;
       }
     }
 

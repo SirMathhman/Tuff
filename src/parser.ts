@@ -195,12 +195,30 @@ export class Parser {
   }
 
   private parseMulDiv(): AstNode {
-    let left = this.parseFactor();
+    let left = this.parseComparison();
     while (
       this.peek()?.[0] === "op" &&
       (this.peek()![1] === "*" || this.peek()![1] === "/")
     ) {
       const op = this.consume()[1] as "*" | "/";
+      const right = this.parseComparison();
+      left = { type: "binop", op, left, right };
+    }
+    return left;
+  }
+
+  private parseComparison(): AstNode {
+    let left = this.parseFactor();
+    while (
+      this.peek()?.[0] === "op" &&
+      (this.peek()![1] === "<" ||
+        this.peek()![1] === "<=" ||
+        this.peek()![1] === ">" ||
+        this.peek()![1] === ">=" ||
+        this.peek()![1] === "==" ||
+        this.peek()![1] === "!=")
+    ) {
+      const op = this.consume()[1] as "<" | "<=" | ">" | ">=" | "==" | "!=";
       const right = this.parseFactor();
       left = { type: "binop", op, left, right };
     }

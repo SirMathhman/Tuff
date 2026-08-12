@@ -6,7 +6,7 @@ export { COMPOUND_OPS };
 export type Token =
   | ["num", number]
   | ["bool", boolean]
-  | ["op", "+" | "-" | "*" | "/" | "&&" | "||" | "=="]
+  | ["op", "+" | "-" | "*" | "/" | "&&" | "||" | "==" | "<" | "<=" | ">" | ">=" | "!="]
   | ["group", "(" | ")" | "{" | "}"]
   | ["kw", "let" | "mut" | "if" | "else"]
   | ["id", string]
@@ -18,7 +18,7 @@ export type Token =
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const re =
-    /"([^"]*)"|(\d+\.?\d*|\+=|-=|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+    /"([^"]*)"|(\d+\.?\d*|\+=|-=|<=|>=|!=|[+\-*/(){}=;&<>]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -29,8 +29,8 @@ export function tokenize(source: string): Token[] {
     }
     if (text === "+" || text === "-" || text === "*" || text === "/") {
       result.push(["op", text as "+" | "-" | "*" | "/"]);
-    } else if (text === "&&" || text === "||" || text === "==") {
-      result.push(["op", text as "&&" | "||" | "=="]);
+    } else if (text === "&&" || text === "||" || text === "==" || text === "<" || text === "<=" || text === ">" || text === ">=" || text === "!=") {
+      result.push(["op", text as "&&" | "||" | "==" | "<" | "<=" | ">" | ">=" | "!="]);
     } else if (text === "&") {
       result.push(["ref", "&"]);
     } else if (text === "(" || text === ")" || text === "{" || text === "}") {

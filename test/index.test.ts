@@ -134,6 +134,46 @@ describe("evaluate", () => {
     expect(evaluate("let mut x = 1; x -= 2; x")).toBe(-1);
   });
 
+  it('evaluate("1 < 2") => 1', () => {
+    expect(evaluate("1 < 2")).toBe(1);
+  });
+
+  it('evaluate("2 < 1") => 0', () => {
+    expect(evaluate("2 < 1")).toBe(0);
+  });
+
+  it('evaluate("1 <= 1") => 1', () => {
+    expect(evaluate("1 <= 1")).toBe(1);
+  });
+
+  it('evaluate("2 <= 1") => 0', () => {
+    expect(evaluate("2 <= 1")).toBe(0);
+  });
+
+  it('evaluate("2 > 1") => 1', () => {
+    expect(evaluate("2 > 1")).toBe(1);
+  });
+
+  it('evaluate("1 > 2") => 0', () => {
+    expect(evaluate("1 > 2")).toBe(0);
+  });
+
+  it('evaluate("1 >= 1") => 1', () => {
+    expect(evaluate("1 >= 1")).toBe(1);
+  });
+
+  it('evaluate("0 >= 1") => 0', () => {
+    expect(evaluate("0 >= 1")).toBe(0);
+  });
+
+  it('evaluate("1 != 2") => 1', () => {
+    expect(evaluate("1 != 2")).toBe(1);
+  });
+
+  it('evaluate("1 != 1") => 0', () => {
+    expect(evaluate("1 != 1")).toBe(0);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(
