@@ -301,8 +301,13 @@ export function evaluate(node: AstNode, env: Environment): number {
       return -evaluate(node.operand, env);
 
     case "binop": {
-      const left = evaluate(node.left, env);
-      const right = evaluate(node.right, env);
+      const leftVal = evalValue(node.left, env);
+      const rightVal = evalValue(node.right, env);
+      const left = toNumber(leftVal);
+      const right = toNumber(rightVal);
+      const isFloat =
+        (leftVal.kind === "number" && leftVal.isFloat) ||
+        (rightVal.kind === "number" && rightVal.isFloat);
       switch (node.op) {
         case "+":
           return left + right;
@@ -310,14 +315,8 @@ export function evaluate(node: AstNode, env: Environment): number {
           return left - right;
         case "*":
           return left * right;
-        case "/": {
-          const leftVal = evalValue(node.left, env);
-          const rightVal = evalValue(node.right, env);
-          const leftFloat = leftVal.kind === "number" && leftVal.isFloat;
-          const rightFloat = rightVal.kind === "number" && rightVal.isFloat;
-          if (leftFloat || rightFloat) return left / right;
-          return Math.trunc(left / right);
-        }
+        case "/":
+          return isFloat ? left / right : Math.trunc(left / right);
         case "&&":
           return left && right;
         case "||":

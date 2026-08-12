@@ -149,7 +149,12 @@ export function tokenize(source: string): Token[] {
       const suffix = matchSuffix(text);
       if (suffix) {
         const t = INT_TYPES.find((t) => t.name === suffix)!;
-        result.push(["num", Number(text.slice(0, -t.suffix.length)), suffix, false]);
+        result.push([
+          "num",
+          Number(text.slice(0, -t.suffix.length)),
+          suffix,
+          false,
+        ]);
       } else {
         const isFloat = text.includes(".");
         result.push(["num", Number(text), undefined, isFloat]);
