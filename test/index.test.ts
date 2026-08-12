@@ -325,4 +325,12 @@ describe("evaluate", () => {
       ),
     ).toThrow();
   });
+
+  it('evaluate("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)") => 7', () => {
+    expect(
+      evaluate(
+        "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
+      ),
+    ).toBe(7);
+  });
 });

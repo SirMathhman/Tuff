@@ -105,6 +105,11 @@ export class Parser {
       return this.parseLet();
     }
 
+    // fn name(params) : ReturnType => body;
+    if (token[0] === "kw" && token[1] === "fn") {
+      return this.parseFnDef();
+    }
+
     if (
       token[0] === "op" &&
       token[1] === "*" &&
@@ -519,6 +524,69 @@ export class Parser {
     return { type: "block", statements };
   }
 
+  private parseFnDef(): AstNode {
+    this.consume(); // "fn"
+    const nameToken = this.peek();
+    if (!nameToken || nameToken[0] !== "id")
+      throw new Error("Expected function name");
+    const name = nameToken[1];
+    this.consume();
+
+    // Parse parameters: (name : Type, name : Type)
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
+      throw new Error("Expected ( after function name");
+    this.consume(); // "("
+    const params: { name: string; type: TypeNode }[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+      const paramName = this.peek();
+      if (!paramName || paramName[0] !== "id")
+        throw new Error("Expected parameter name");
+      const pName = paramName[1];
+      this.consume();
+      if (this.peek()?.[0] !== "colon")
+        throw new Error("Expected : after parameter name");
+      this.consume(); // ":"
+      const pType = this.parseType();
+      params.push({ name: pName, type: pType });
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume(); // ","
+      }
+    }
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected ) after parameters");
+    this.consume(); // ")"
+
+    // Parse return type: : Type
+    if (this.peek()?.[0] !== "colon")
+      throw new Error("Expected : before return type");
+    this.consume(); // ":"
+    const returnType = this.parseType();
+
+    // Parse => body
+    if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")
+      throw new Error("Expected => before function body");
+    this.consume(); // "=>"
+    const body = this.parseAddSub();
+
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "fn-def", name, params, returnType, body };
+  }
+
+  private parseFnCall(name: string): AstNode {
+    this.consume(); // "("
+    const args: AstNode[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+      args.push(this.parseAddSub());
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume(); // ","
+      }
+    }
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected ) after arguments");
+    this.consume(); // ")"
+    return { type: "fn-call", name, args };
+  }
+
   private parsePrimary(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
@@ -540,6 +608,10 @@ export class Parser {
 
     if (token[0] === "id") {
       this.consume();
+      // Check for function call: name(args)
+      if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
+        return this.parseFnCall(token[1]);
+      }
       let node: AstNode = { type: "id", name: token[1] };
       // Check for array indexing: array[0]
       while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {

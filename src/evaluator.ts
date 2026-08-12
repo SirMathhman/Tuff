@@ -394,5 +394,32 @@ export function evaluate(node: AstNode, env: Environment): number {
         throw new Error(`Field not found: ${node.field}`);
       return toNumber(field);
     }
+
+    case "fn-def": {
+      env.declareFunction(node.name, {
+        params: node.params,
+        returnType: node.returnType,
+        body: node.body,
+      });
+      return 0;
+    }
+
+    case "fn-call": {
+      const fn = env.getFunction(node.name);
+      if (fn === undefined) throw new Error("Undefined function: " + node.name);
+      const fnEnv = new Environment(env);
+      if (fn.params.length !== node.args.length)
+        throw new Error(
+          `Function ${node.name} expects ${fn.params.length} arguments, got ${node.args.length}`,
+        );
+      for (let i = 0; i < fn.params.length; i++) {
+        const param = fn.params[i];
+        const arg = node.args[i];
+        if (!param || !arg) throw new Error("Invalid function signature");
+        const argValue = evalValue(arg, env);
+        fnEnv.declare(param.name, argValue, false);
+      }
+      return evaluate(fn.body, fnEnv);
+    }
   }
 }

@@ -32,7 +32,9 @@ export type AstNode =
   | StructLiteral
   | StructAccess
   | TypeCheck
-  | Cast;
+  | Cast
+  | FnDef
+  | FnCall;
 
 export interface Num {
   type: "num";
@@ -191,4 +193,18 @@ export interface Cast {
   type: "cast";
   expression: AstNode;
   typeName: IntTypeName;
+}
+
+export interface FnDef {
+  type: "fn-def";
+  name: string;
+  params: { name: string; type: TypeNode }[];
+  returnType: TypeNode;
+  body: AstNode;
+}
+
+export interface FnCall {
+  type: "fn-call";
+  name: string;
+  args: AstNode[];
 }

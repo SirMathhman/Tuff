@@ -1,3 +1,4 @@
+import type { AstNode, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 
 /** Discriminated union for all runtime values the language can produce. */
@@ -10,6 +11,12 @@ export type Value =
   | { kind: "struct"; fields: Record<string, Value> };
 
 export type Ref = { name: string; env: Environment; mutable: boolean };
+
+export type FnDef = {
+  params: { name: string; type: TypeNode }[];
+  returnType: TypeNode;
+  body: AstNode;
+};
 
 /** Wrap a plain number in the Value union. */
 export function num(v: number, numType?: IntTypeName): Value {
@@ -31,6 +38,7 @@ export function getNumberType(v: Value): IntTypeName | undefined {
 export class Environment {
   private values: Record<string, Value> = {};
   private mutable: Set<string> = new Set();
+  private functions: Record<string, FnDef> = {};
   private parent: Environment | undefined;
 
   constructor(parent?: Environment) {
@@ -59,6 +67,20 @@ export class Environment {
     }
     if (this.parent) {
       return this.parent.get(name);
+    }
+    return undefined;
+  }
+
+  declareFunction(name: string, fn: FnDef): void {
+    this.functions[name] = fn;
+  }
+
+  getFunction(name: string): FnDef | undefined {
+    if (Object.prototype.hasOwnProperty.call(this.functions, name)) {
+      return this.functions[name];
+    }
+    if (this.parent) {
+      return this.parent.getFunction(name);
     }
     return undefined;
   }

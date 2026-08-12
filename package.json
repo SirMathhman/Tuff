@@ -7,7 +7,8 @@
     "test": "bun test test/",
     "typecheck": "tsc --noEmit",
     "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
-    "circular": "bunx madge ./src --circular --extensions ts"
+    "circular": "madge ./src --circular --extensions ts",
+    "visualize": "madge ./src --image ./docs/graph.svg --extensions ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

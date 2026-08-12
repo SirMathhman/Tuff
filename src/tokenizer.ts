@@ -25,6 +25,7 @@ export type Token =
         | ".."
         | ","
         | "."
+        | "=>"
       ),
     ]
   | ["group", "(" | ")" | "{" | "}" | "[" | "]"]
@@ -41,6 +42,7 @@ export type Token =
         | "for"
         | "in"
         | "is"
+        | "fn"
       ),
     ]
   | ["id", string]
@@ -54,7 +56,7 @@ export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `"([^"]*)"|(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|\\.\\.|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `"([^"]*)"|(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|\\.\\.|=>|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
@@ -67,6 +69,8 @@ export function tokenize(source: string): Token[] {
     }
     if (text === "+" || text === "-" || text === "*" || text === "/") {
       result.push(["op", text as "+" | "-" | "*" | "/"]);
+    } else if (text === "=>") {
+      result.push(["op", "=>"]);
     } else if (
       text === "&&" ||
       text === "||" ||
@@ -134,6 +138,8 @@ export function tokenize(source: string): Token[] {
       result.push(["kw", "in"]);
     } else if (text === "is") {
       result.push(["kw", "is"]);
+    } else if (text === "fn") {
+      result.push(["kw", "fn"]);
     } else if (text === "true") {
       result.push(["bool", true]);
     } else if (text === "false") {
