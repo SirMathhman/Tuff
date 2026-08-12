@@ -56,7 +56,7 @@ export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `(${typedNums}|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `(${typedNums}|\\d+\\.\\d+F32|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
@@ -155,6 +155,8 @@ export function tokenize(source: string): Token[] {
           suffix,
           false,
         ]);
+      } else if (text.endsWith("F32")) {
+        result.push(["num", Number(text.slice(0, -3)), "f32", true]);
       } else {
         const isFloat = text.includes(".");
         result.push(["num", Number(text), undefined, isFloat]);

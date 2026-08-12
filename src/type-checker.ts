@@ -188,9 +188,12 @@ function checkNode(node: AstNode, scope: Scope): void {
   switch (node.type) {
     case "num":
       if (node.numType) {
-        const t = requireIntType(node.numType);
-        if (node.value < t.min || node.value > t.max)
-          throw new Error(`${t.suffix} value out of range: ${node.value}`);
+        // Skip range check for float types
+        if (node.numType !== "f32") {
+          const t = requireIntType(node.numType);
+          if (node.value < t.min || node.value > t.max)
+            throw new Error(`${t.suffix} value out of range: ${node.value}`);
+        }
       }
       break;
 
@@ -259,8 +262,11 @@ function checkNode(node: AstNode, scope: Scope): void {
     }
 
     case "id": {
-      if (!getVar(scope, node.name))
+      if (!getVar(scope, node.name)) {
+        // Allow built-in type names (used in `is` expressions)
+        if (["u8", "u16", "i8", "i16", "i32", "f32", "bool"].includes(node.name.toLowerCase())) break;
         throw new Error(`Undefined variable: ${node.name}`);
+      }
       break;
     }
 
