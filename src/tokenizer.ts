@@ -22,7 +22,9 @@ export type Token =
         | ">="
         | "!="
         | ".."
-        | ","        | "."      ),
+        | ","
+        | "."
+      ),
     ]
   | ["group", "(" | ")" | "{" | "}" | "[" | "]"]
   | [
@@ -49,7 +51,7 @@ export type Token =
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const re =
-    /"([^"]*)"|(\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>[\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+    /"([^"]*)"|(\d+U8|\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>[\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -131,6 +133,8 @@ export function tokenize(source: string): Token[] {
       result.push(["bool", false]);
     } else if (/^[a-zA-Z_]/.test(text)) {
       result.push(["id", text]);
+    } else if (text.endsWith("U8")) {
+      result.push(["num", Number(text.slice(0, -2))]);
     } else {
       result.push(["num", Number(text)]);
     }

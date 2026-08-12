@@ -415,10 +415,7 @@ export class Parser {
 
   private parseBlockBody(): AstNode {
     const statements: AstNode[] = [];
-    while (
-      this.peek()?.[0] !== "group" ||
-      this.peek()![1] !== "}"
-    ) {
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
       statements.push(this.parseStatement());
     }
     this.consume(); // "}"

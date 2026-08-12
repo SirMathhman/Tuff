@@ -232,6 +232,10 @@ describe("evaluate", () => {
     expect(evaluate("let pt = { x : 3, y : 4 }; pt.x + pt.y")).toBe(7);
   });
 
+  it('evaluate("100U8") => 100', () => {
+    expect(evaluate("100U8")).toBe(100);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(
