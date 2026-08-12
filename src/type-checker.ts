@@ -251,32 +251,36 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
         node.value.type === "num" && node.value.numType
           ? node.value.numType
           : undefined;
-      const declaredType = node.typeAnnotation || valueType;
+      const declaredType = node.typeAnnotation;
       if (declaredType) {
-        const structType = getStruct(scope, declaredType);
-        if (structType) {
-          // Struct types don't need range checking
-        } else if (declaredType === "Null") {
-          // Null type — no range checking needed
-        } else if (declaredType.includes(" | ")) {
+        if (declaredType.kind === "union") {
           // Union type — no range checking needed
-        } else {
-          const alias = getTypeAlias(scope, declaredType);
-          let typeName = declaredType;
-          if (alias && alias.kind === "name") {
-            typeName = alias.name;
+        } else if (declaredType.kind === "name") {
+          const structType = getStruct(scope, declaredType.name);
+          if (structType) {
+            // Struct types don't need range checking
+          } else if (declaredType.name === "Null") {
+            // Null type — no range checking needed
+          } else {
+            const alias = getTypeAlias(scope, declaredType.name);
+            let typeName = declaredType.name;
+            if (alias && alias.kind === "name") {
+              typeName = alias.name;
+            }
+            const target = requireIntType(typeName.toLowerCase() as IntTypeName);
+            const source = valueType ? requireIntType(valueType) : null;
+            if (source && target.max < source.max)
+              throw new Error(
+                `Cannot assign ${source.suffix} to ${target.suffix}`,
+              );
           }
-          const target = requireIntType(typeName.toLowerCase() as IntTypeName);
-          const source = valueType ? requireIntType(valueType) : null;
-          if (source && target.max < source.max)
-            throw new Error(
-              `Cannot assign ${source.suffix} to ${target.suffix}`,
-            );
         }
       }
       scope.variables.set(node.name, {
         mutable: node.mutable,
-        type: declaredType,
+        type: declaredType?.kind === "name"
+          ? declaredType.name.toLowerCase() as IntTypeName
+          : valueType,
       });
       checkNode(node.value, scope);
       break;

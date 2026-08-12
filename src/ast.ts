@@ -111,7 +111,7 @@ export interface Let {
   name: string;
   mutable: boolean;
   value: AstNode;
-  typeAnnotation?: string;
+  typeAnnotation?: TypeNode;
 }
 
 export interface Block {

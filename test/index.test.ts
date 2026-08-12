@@ -502,7 +502,7 @@ describe("evaluate", () => {
     expect(evaluate("let temp : Null = null; temp == 0")).toBe(0);
   });
 
-  it('evaluate("let a : I32 | Char = \'a\'; a is Char") => 1', () => {
+  it("evaluate(\"let a : I32 | Char = 'a'; a is Char\") => 1", () => {
     expect(evaluate("let a : I32 | Char = 'a'; a is Char")).toBe(1);
   });
 });
