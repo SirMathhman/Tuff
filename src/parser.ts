@@ -811,11 +811,6 @@ export class Parser {
       return { type: "bool", value: token[1] };
     }
 
-    if (token[0] === "str") {
-      this.consume();
-      return this.parseStringExpr(token[1]);
-    }
-
     if (token[0] === "id") {
       this.consume();
       // Check for function call: name(args)
@@ -841,100 +836,5 @@ export class Parser {
     }
 
     throw new Error(`Unexpected token: ${token}`);
-  }
-
-  private parseStringExpr(str: string): AstNode {
-    // Tokenize the string content and parse it
-    const strTokens: Token[] = [];
-    const re = /([a-zA-Z_][a-zA-Z0-9_]*)|(==|&&|\|\||;)|(\d+\.?\d*)/g;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(str))) {
-      const [text] = match;
-      if (text === "true") strTokens.push(["bool", true]);
-      else if (text === "false") strTokens.push(["bool", false]);
-      else if (text === "let") strTokens.push(["kw", "let"]);
-      else if (text === "&&" || text === "||" || text === "==")
-        strTokens.push(["op", text as "&&" | "||" | "=="]);
-      else if (text === ";") strTokens.push(["semi", ";"]);
-      else if (/^[a-zA-Z_]/.test(text)) strTokens.push(["id", text]);
-      else strTokens.push(["num", Number(text), undefined]);
-    }
-
-    // Parse string expression with a mini-parser
-    let pos = 0;
-    const peek = () => strTokens[pos];
-    const consume = () => strTokens[pos++]!;
-
-    const parseOr = (): AstNode => {
-      let left = parseAnd();
-      while (peek()?.[0] === "op" && peek()![1] === "||") {
-        consume();
-        const right = parseAnd();
-        left = { type: "binop", op: "||", left, right };
-      }
-      return left;
-    };
-
-    const parseAnd = (): AstNode => {
-      let left = parseEq();
-      while (peek()?.[0] === "op" && peek()![1] === "&&") {
-        consume();
-        const right = parseEq();
-        left = { type: "binop", op: "&&", left, right };
-      }
-      return left;
-    };
-
-    const parseEq = (): AstNode => {
-      const left = parsePrimary();
-      if (peek()?.[0] === "op" && peek()![1] === "==") {
-        consume();
-        const right = parsePrimary();
-        return { type: "binop", op: "==", left, right };
-      }
-      return left;
-    };
-
-    const parsePrimary = (): AstNode => {
-      const token = peek();
-      if (!token) throw new Error("Unexpected end of string expression");
-      if (token[0] === "num") {
-        consume();
-        return { type: "num", value: token[1] };
-      }
-      if (token[0] === "bool") {
-        consume();
-        return { type: "bool", value: token[1] };
-      }
-      if (token[0] === "id") {
-        consume();
-        return { type: "id", name: token[1] };
-      }
-      throw new Error(`Unexpected token in string expression: ${token}`);
-    };
-
-    // Handle semicolon-separated statements
-    const statements: AstNode[] = [];
-    while (pos < strTokens.length) {
-      if (peek()?.[0] === "kw" && peek()![1] === "let") {
-        consume(); // "let"
-        const idToken = peek();
-        if (!idToken || idToken[0] !== "id")
-          throw new Error("Expected identifier after let");
-        const name = idToken[1];
-        consume();
-        // Skip "="
-        if (peek()?.[0] === "op" && peek()![1] === "=") consume();
-        const value = parseOr();
-        statements.push({ type: "let", name, mutable: false, value });
-        if (peek()?.[0] === "semi") consume();
-      } else {
-        statements.push(parseOr());
-        if (peek()?.[0] === "semi") consume();
-      }
-    }
-
-    if (statements.length === 1) return statements[0]!;
-    return { type: "block", statements };
   }
 }

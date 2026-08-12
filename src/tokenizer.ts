@@ -50,24 +50,18 @@ export type Token =
   | ["assign", "=" | "+=" | "-="]
   | ["semi", ";"]
   | ["ref", "&"]
-  | ["colon", ":"]
-  | ["str", string];
+  | ["colon", ":"];
 
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `"([^"]*)"|(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
-    const [text, strContent] = match;
-    if (text === " " || text === "") continue;
-    if (strContent !== undefined) {
-      result.push(["str", strContent]);
-      continue;
-    }
+    const [text] = match;
     if (text === "+" || text === "-" || text === "*" || text === "/") {
       result.push(["op", text as "+" | "-" | "*" | "/"]);
     } else if (text === "=>") {

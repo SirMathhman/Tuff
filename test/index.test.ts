@@ -87,15 +87,15 @@ describe("evaluate", () => {
   });
 
   it('evaluate("true") => 1', () => {
-    expect(evaluate('"true"')).toBe(1);
+    expect(evaluate("true")).toBe(1);
   });
 
   it('evaluate("true || false") => 1', () => {
-    expect(evaluate('"true || false"')).toBe(1);
+    expect(evaluate("true || false")).toBe(1);
   });
 
   it('evaluate("true && false") => 0', () => {
-    expect(evaluate('"true && false"')).toBe(0);
+    expect(evaluate("true && false")).toBe(0);
   });
 
   it('evaluate("let mut array = [0]; let ref = &mut array; ref[0] = 100; array[0]") => 100', () => {
@@ -133,7 +133,7 @@ describe("evaluate", () => {
   });
 
   it('evaluate("let x = 0; let y = 1; x == y") => 0', () => {
-    expect(evaluate('"let x = 0; let y = 1; x == y"')).toBe(0);
+    expect(evaluate("let x = 0; let y = 1; x == y")).toBe(0);
   });
 
   it('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
