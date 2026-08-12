@@ -1,6 +1,7 @@
 import type { AstNode } from "./ast";
 import { Environment, deref, assignRef } from "./environment";
 import type { Ref } from "./environment";
+import { Break, Continue } from "./control-flow";
 
 export function evaluateStatements(
   statements: AstNode[],
@@ -175,6 +176,3 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
   }
 }
-
-class Break extends Error {}
-class Continue extends Error {}
