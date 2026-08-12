@@ -248,6 +248,10 @@ describe("evaluate", () => {
     expect(() => evaluate("-100U8")).toThrow();
   });
 
+  it('evaluate("256U8") => Error', () => {
+    expect(() => evaluate("256U8")).toThrow();
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(
