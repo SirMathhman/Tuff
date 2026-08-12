@@ -2,6 +2,8 @@ import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
 import type { AstNode } from "./ast";
 
+const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
+
 export class Parser {
   private pos = 0;
 
@@ -211,12 +213,7 @@ export class Parser {
     let left = this.parseFactor();
     while (
       this.peek()?.[0] === "op" &&
-      (this.peek()![1] === "<" ||
-        this.peek()![1] === "<=" ||
-        this.peek()![1] === ">" ||
-        this.peek()![1] === ">=" ||
-        this.peek()![1] === "==" ||
-        this.peek()![1] === "!=")
+      COMPARISON_OPS.has(this.peek()![1])
     ) {
       const op = this.consume()[1] as "<" | "<=" | ">" | ">=" | "==" | "!=";
       const right = this.parseFactor();

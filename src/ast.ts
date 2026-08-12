@@ -31,7 +31,19 @@ export interface Id {
 
 export interface BinaryOp {
   type: "binop";
-  op: "+" | "-" | "*" | "/" | "&&" | "||" | "==" | "<" | "<=" | ">" | ">=" | "!=";
+  op:
+    | "+"
+    | "-"
+    | "*"
+    | "/"
+    | "&&"
+    | "||"
+    | "=="
+    | "<"
+    | "<="
+    | ">"
+    | ">="
+    | "!=";
   left: AstNode;
   right: AstNode;
 }
