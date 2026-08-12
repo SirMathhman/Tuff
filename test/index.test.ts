@@ -223,7 +223,9 @@ describe("evaluate", () => {
   });
 
   it('evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
-    expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+    expect(
+      evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
+    ).toBe(6);
   });
 
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {

@@ -1,7 +1,62 @@
 import type { AstNode } from "./ast";
-import { Environment, deref, assignRef } from "./environment";
-import type { Ref } from "./environment";
+import { Environment, deref, assignRef, num, toNumber } from "./environment";
+import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
+
+/** Evaluate a range expression and return { start, end }. */
+function evalRange(node: AstNode, env: Environment): { start: number; end: number } {
+  const v = evalValue(node, env);
+  if (v.kind !== "range")
+    throw new Error("Expected range value");
+  return { start: v.start, end: v.end };
+}
+
+/** Evaluate a node and return the raw Value instead of unwrapping to number. */
+function evalValue(node: AstNode, env: Environment): Value {
+  switch (node.type) {
+    case "num":
+      return num(node.value);
+    case "bool":
+      return num(node.value ? 1 : 0);
+    case "id": {
+      const v = env.get(node.name);
+      if (v === undefined)
+        throw new Error("Undefined variable: " + node.name);
+      return v;
+    }
+    case "array-literal": {
+      const elements: Value[] = node.elements.map((el) => evalValue(el, env));
+      return { kind: "array", elements };
+    }
+    case "array-index": {
+      const arr = evalValue(node.array, env);
+      const idx = evaluate(node.index, env);
+      if (arr.kind !== "array")
+        throw new Error("Cannot index non-array value");
+      const result = arr.elements[idx];
+      if (result === undefined)
+        throw new Error(`Array index out of bounds: ${idx}`);
+      return result;
+    }
+    case "ref": {
+      const ref: Ref = {
+        name: node.name,
+        env,
+        mutable: node.mutable,
+      };
+      return { kind: "ref", ref };
+    }
+    case "range": {
+      return {
+        kind: "range",
+        start: evaluate(node.start, env),
+        end: evaluate(node.end, env),
+      };
+    }
+    default:
+      return num(evaluate(node, env));
+  }
+}
 
 export function evaluateStatements(
   statements: AstNode[],
@@ -26,9 +81,9 @@ export function evaluate(node: AstNode, env: Environment): number {
       const value = env.get(node.name);
       if (value === undefined)
         throw new Error("Undefined variable: " + node.name);
-      if (typeof value === "object" && "env" in value)
-        return deref(value as any);
-      return value;
+      if (value.kind === "ref")
+        return deref(value.ref);
+      return toNumber(value);
     }
 
     case "binop": {
@@ -75,14 +130,14 @@ export function evaluate(node: AstNode, env: Environment): number {
           "if/else with block branches cannot be used as expression",
         );
       }
-      const value = evaluate(node.value, env);
+      const value = evalValue(node.value, env);
       env.declare(node.name, value, node.mutable);
       return 0;
     }
 
     case "assign": {
       const value = evaluate(node.value, env);
-      env.assign(node.name, value);
+      env.assign(node.name, num(value));
       return value;
     }
 
@@ -90,12 +145,11 @@ export function evaluate(node: AstNode, env: Environment): number {
       const current = env.get(node.name);
       if (current === undefined)
         throw new Error("Undefined variable: " + node.name);
-      const currentValue =
-        typeof current === "object" ? deref(current) : current;
+      const currentValue = toNumber(current);
       const rhs = evaluate(node.value, env);
       const compoundValue =
         node.op === "+" ? currentValue + rhs : currentValue - rhs;
-      env.assign(node.name, compoundValue);
+      env.assign(node.name, num(compoundValue));
       return compoundValue;
     }
 
@@ -111,11 +165,11 @@ export function evaluate(node: AstNode, env: Environment): number {
         type: "deref";
         operand: { type: "id"; name: string };
       };
-      const ref = env.get(target.operand.name);
-      if (ref === undefined)
+      const refVal = env.get(target.operand.name);
+      if (refVal === undefined)
         throw new Error("Undefined variable: " + target.operand.name);
-      if (typeof ref === "object") {
-        assignRef(ref, value);
+      if (refVal.kind === "ref") {
+        assignRef(refVal.ref, value);
       } else {
         throw new Error("Cannot dereference non-reference");
       }
@@ -128,7 +182,7 @@ export function evaluate(node: AstNode, env: Environment): number {
         env,
         mutable: node.mutable,
       };
-      return ref as any;
+      return 0;
     }
 
     case "block": {
@@ -169,13 +223,10 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "for-loop": {
-      const range = evaluate(node.range, env) as unknown as {
-        start: number;
-        end: number;
-      };
+      const range = evalRange(node.range, env);
       for (let i = range.start; i < range.end; i++) {
         try {
-          env.declare(node.variable, i, false);
+          env.declare(node.variable, num(i), false);
           evaluate(node.body, env);
         } catch (e) {
           if (e instanceof Break) break;
@@ -187,10 +238,8 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "range": {
-      return {
-        start: evaluate(node.start, env),
-        end: evaluate(node.end, env),
-      } as any;
+      // Handled by evalRange; shouldn't reach here directly.
+      return 0;
     }
 
     case "break": {
@@ -202,15 +251,21 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "array-literal": {
-      return node.elements.map((el) => evaluate(el, env)) as any;
+      // Arrays are stored as values, not returned as numbers.
+      // This case is only reached when an array is used in a context
+      // expecting a number, which shouldn't happen.
+      return 0;
     }
 
     case "array-index": {
-      const array = evaluate(node.array, env) as unknown as number[];
+      const arrayVal = evalValue(node.array, env);
       const index = evaluate(node.index, env);
-      const result = array[index];
-      if (result === undefined) throw new Error(`Array index out of bounds: ${index}`);
-      return result;
+      if (arrayVal.kind !== "array")
+        throw new Error("Cannot index non-array value");
+      const result = arrayVal.elements[index];
+      if (result === undefined)
+        throw new Error(`Array index out of bounds: ${index}`);
+      return toNumber(result);
     }
   }
 }

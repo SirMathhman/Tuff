@@ -74,11 +74,28 @@ export function tokenize(source: string): Token[] {
     ) {
       result.push([
         "op",
-        text as "&&" | "||" | "==" | "<" | "<=" | ">" | ">=" | "!=" | ".." | ",",
+        text as
+          | "&&"
+          | "||"
+          | "=="
+          | "<"
+          | "<="
+          | ">"
+          | ">="
+          | "!="
+          | ".."
+          | ",",
       ]);
     } else if (text === "&") {
       result.push(["ref", "&"]);
-    } else if (text === "(" || text === ")" || text === "{" || text === "}" || text === "[" || text === "]") {
+    } else if (
+      text === "(" ||
+      text === ")" ||
+      text === "{" ||
+      text === "}" ||
+      text === "[" ||
+      text === "]"
+    ) {
       result.push(["group", text as "(" | ")" | "{" | "}" | "[" | "]"]);
     } else if (text === "=") {
       result.push(["assign", "="]);
