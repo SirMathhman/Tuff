@@ -344,6 +344,18 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "type-check": {
       const val = evalValue(node.operand, env);
+      // Reference type check: &Type
+      if (node.isRef) {
+        if (val.kind !== "ref") return 0;
+        // Check the type of the referenced value
+        const refVal = env.get(val.ref.name);
+        if (refVal?.kind === "number") {
+          // Plain numbers (no numType) match any integer type
+          if (!refVal.numType) return 1;
+          return refVal.numType === node.typeName.toLowerCase() ? 1 : 0;
+        }
+        return 0;
+      }
       // Array type check: [Type; N]
       if (node.arrayLength) {
         if (val.kind !== "array") return 0;

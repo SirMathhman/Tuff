@@ -320,7 +320,7 @@ export class Parser {
       const right = this.parseMulDiv();
       left = { type: "binop", op, left, right };
     }
-    // is operator: `expr is TypeName` or `expr is [Type; N]`
+    // is operator: `expr is TypeName`, `expr is [Type; N]`, or `expr is &Type`
     if (this.peek()?.[0] === "kw" && this.peek()![1] === "is") {
       this.consume(); // "is"
       // Check for array type: [Type; N]
@@ -330,6 +330,16 @@ export class Parser {
           ...arrayType,
           operand: left,
         };
+      }
+      // Check for reference type: &Type
+      if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
+        this.consume(); // "&"
+        const typeToken = this.peek();
+        if (!typeToken || typeToken[0] !== "id")
+          throw new Error("Expected type name after &");
+        const typeName = typeToken[1];
+        this.consume();
+        return { type: "type-check", operand: left, typeName, isRef: true };
       }
       const typeToken = this.peek();
       if (!typeToken || typeToken[0] !== "id")

@@ -180,6 +180,7 @@ export interface TypeCheck {
   typeName: string;
   arrayLength?: AstNode;
   elementType?: TypeCheck;
+  isRef?: boolean;
 }
 
 export interface Cast {
