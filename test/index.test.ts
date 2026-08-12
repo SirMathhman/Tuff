@@ -178,6 +178,10 @@ describe("evaluate", () => {
     expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
   });
 
+  it('evaluate("let mut x = 0; while (x < 4) x += 1; x") => 4', () => {
+    expect(evaluate("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(
