@@ -383,4 +383,8 @@ describe("evaluate", () => {
   it('evaluate("type A = I32; let temp : A = 100; temp is A") => 1', () => {
     expect(evaluate("type A = I32; let temp : A = 100; temp is A")).toBe(1);
   });
+
+  it('evaluate("type A = I32; let temp : A = 100; temp is I32") => 1', () => {
+    expect(evaluate("type A = I32; let temp : A = 100; temp is I32")).toBe(1);
+  });
 });

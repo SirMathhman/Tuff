@@ -115,27 +115,18 @@ function checkNode(node: AstNode, scope: Scope): void {
           : undefined;
       const declaredType = node.typeAnnotation || valueType;
       if (declaredType) {
-        // Check if declaredType is a type alias
+        // Resolve to the underlying type name (may be an alias)
+        let typeName = declaredType;
         const alias = getTypeAlias(scope, declaredType);
         if (alias && alias.kind === "name") {
-          const target = requireIntType(
-            alias.name.toLowerCase() as IntTypeName,
-          );
-          const source = valueType ? requireIntType(valueType) : null;
-          if (source && target.max < source.max)
-            throw new Error(
-              `Cannot assign ${source.suffix} to ${target.suffix}`,
-            );
-        } else if (!alias) {
-          const target = requireIntType(
-            declaredType.toLowerCase() as IntTypeName,
-          );
-          const source = valueType ? requireIntType(valueType) : null;
-          if (source && target.max < source.max)
-            throw new Error(
-              `Cannot assign ${source.suffix} to ${target.suffix}`,
-            );
+          typeName = alias.name;
         }
+        const target = requireIntType(typeName.toLowerCase() as IntTypeName);
+        const source = valueType ? requireIntType(valueType) : null;
+        if (source && target.max < source.max)
+          throw new Error(
+            `Cannot assign ${source.suffix} to ${target.suffix}`,
+          );
       }
       scope.variables.set(node.name, {
         mutable: node.mutable,
