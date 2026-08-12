@@ -1,4 +1,3 @@
-import type { AstNode } from "./ast";
 import { INT_TYPES, numberRegex, matchSuffix, type IntTypeName } from "./types";
 
 const COMPOUND_OPS: Record<string, string> = { "+=": "+", "-=": "-" };

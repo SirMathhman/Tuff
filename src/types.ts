@@ -61,7 +61,6 @@ export function promoteTypes(a: IntTypeName, b: IntTypeName): IntTypeName {
   // If mixing signed and unsigned, promote to a signed type that can hold both
   if (aType.signed !== bType.signed) {
     const unsigned = aType.signed ? bType : aType;
-    const signed = aType.signed ? aType : bType;
     // Start with the wider bit width
     let bits = Math.max(aType.bits, bType.bits);
     // If the signed type can't hold the unsigned range, widen

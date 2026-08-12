@@ -1,4 +1,4 @@
-import type { AstNode, TypeCheck, TypeNode } from "./ast";
+import type { AstNode, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 import { promoteTypes } from "./types";
 import {
@@ -253,6 +253,7 @@ export function evaluate(node: AstNode, env: Environment): number {
         case "!=":
           return left !== right ? 1 : 0;
       }
+      break;
     }
 
     case "let": {
@@ -312,11 +313,6 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "ref": {
-      const ref: Ref = {
-        name: node.name,
-        env,
-        mutable: node.mutable,
-      };
       return 0;
     }
 
@@ -509,10 +505,11 @@ export function evaluate(node: AstNode, env: Environment): number {
           throw new Error(`Array index out of bounds: ${idx}`);
         if (child.kind === "ref") {
           currentVal = derefValue(child.ref);
+        } else {
+          currentVal = child;
         }
-        if (child.kind !== "array")
+        if (currentVal.kind !== "array")
           throw new Error("Cannot index non-array value");
-        currentVal = child;
       }
       const finalIdx = evaluate(indices[indices.length - 1]!, env);
       (currentVal as { kind: "array"; elements: Value[] }).elements[finalIdx] =
