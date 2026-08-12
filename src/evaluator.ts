@@ -168,7 +168,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "for-loop": {
-      const range = evaluate(node.range, env) as { start: number; end: number };
+      const range = evaluate(node.range, env) as unknown as { start: number; end: number };
       for (let i = range.start; i < range.end; i++) {
         try {
           env.declare(node.variable, i, false);
