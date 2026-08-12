@@ -129,6 +129,16 @@ export class Parser {
       return this.parseDerefAssign();
     }
 
+    // array[index] = value
+    if (
+      token[0] === "id" &&
+      this.pos + 2 < this.tokens.length &&
+      this.tokens[this.pos + 1]?.[0] === "group" &&
+      this.tokens[this.pos + 1]?.[1] === "["
+    ) {
+      return this.parseArrayIndexOrAssign();
+    }
+
     if (
       token[0] === "id" &&
       this.pos + 1 < this.tokens.length &&
@@ -179,6 +189,53 @@ export class Parser {
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
+  }
+
+  private parseArrayIndexOrAssign(): AstNode {
+    // Look ahead to check if this is array[index] = value
+    let bracketDepth = 0;
+    let closeBracketPos = -1;
+    for (let i = this.pos; i < this.tokens.length; i++) {
+      const t = this.tokens[i]!;
+      if (t[0] === "group" && t[1] === "[") bracketDepth++;
+      if (t[0] === "group" && t[1] === "]") {
+        bracketDepth--;
+        if (bracketDepth === 0) {
+          closeBracketPos = i;
+          break;
+        }
+      }
+    }
+    const isAssign =
+      closeBracketPos > 0 &&
+      closeBracketPos + 1 < this.tokens.length &&
+      this.tokens[closeBracketPos + 1]![0] === "assign";
+
+    if (isAssign) {
+      const idToken = this.consume();
+      const array: AstNode = { type: "id", name: idToken[1] as string };
+      const index = this.consumeArrayIndex();
+      this.consume(); // "="
+      const value = this.parseAddSub();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "array-index-assign", array, index, value };
+    }
+
+    // Not an assignment — parse as normal expression (array[0] + ...)
+    const expr = this.parseAddSub();
+    if (this.peek()?.[0] === "semi") this.consume();
+    return expr;
+  }
+
+  private consumeArrayIndex(): AstNode {
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "[")
+      throw new Error("Expected [");
+    this.consume(); // "["
+    const index = this.parseAddSub();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+      throw new Error("Expected ]");
+    this.consume(); // "]"
+    return index;
   }
 
   private parseIfStatement(): AstNode {
@@ -628,11 +685,7 @@ export class Parser {
       let node: AstNode = { type: "id", name: token[1] };
       // Check for array indexing: array[0]
       while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-        this.consume(); // "["
-        const index = this.parseAddSub();
-        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-          throw new Error("Expected ]");
-        this.consume(); // "]"
+        const index = this.consumeArrayIndex();
         node = { type: "array-index", array: node, index };
       }
       // Check for struct field access: pt.x

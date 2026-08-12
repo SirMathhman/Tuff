@@ -30,6 +30,7 @@ export type AstNode =
   | Range
   | ArrayLiteral
   | ArrayIndex
+  | ArrayIndexAssign
   | StructLiteral
   | StructAccess
   | TypeCheck
@@ -214,4 +215,11 @@ export interface FnCall {
 export interface FnRef {
   type: "fnref";
   name: string;
+}
+
+export interface ArrayIndexAssign {
+  type: "array-index-assign";
+  array: AstNode;
+  index: AstNode;
+  value: AstNode;
 }

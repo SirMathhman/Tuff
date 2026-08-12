@@ -455,5 +455,15 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       return evaluate(fn.body, fnEnv);
     }
+
+    case "array-index-assign": {
+      const arrayVal = evalValue(node.array, env);
+      const index = evaluate(node.index, env);
+      const value = evaluate(node.value, env);
+      if (arrayVal.kind !== "array")
+        throw new Error("Cannot index non-array value");
+      arrayVal.elements[index] = num(value);
+      return value;
+    }
   }
 }

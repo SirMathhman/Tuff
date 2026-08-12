@@ -341,4 +341,8 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("let mut array = [0]; array[0] = 100; array[0]") => 100', () => {
+    expect(evaluate("let mut array = [0]; array[0] = 100; array[0]")).toBe(100);
+  });
 });
