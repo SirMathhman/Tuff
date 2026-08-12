@@ -288,6 +288,10 @@ describe("evaluate", () => {
     expect(evaluate("let x = (100U8 + 1)U8; x is U8")).toBe(1);
   });
 
+  it('evaluate("let x = (100U8 + 1U16); x is U16") => 1', () => {
+    expect(evaluate("let x = (100U8 + 1U16); x is U16")).toBe(1);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(

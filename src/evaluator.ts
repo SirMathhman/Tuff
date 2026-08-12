@@ -1,6 +1,13 @@
 import type { AstNode } from "./ast";
 import type { IntTypeName } from "./types";
-import { Environment, deref, assignRef, num, toNumber, getNumberType } from "./environment";
+import {
+  Environment,
+  deref,
+  assignRef,
+  num,
+  toNumber,
+  getNumberType,
+} from "./environment";
 import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
 
@@ -81,7 +88,14 @@ function evalValue(node: AstNode, env: Environment): Value {
       const left = evalValue(node.left, env);
       const right = evalValue(node.right, env);
       const result = evaluate(node, env);
-      const numType = getNumberType(left) || getNumberType(right);
+      const leftType = getNumberType(left);
+      const rightType = getNumberType(right);
+      if (leftType && rightType) {
+        // Promote to wider type (U16 > U8)
+        const wider = rightType === "u16" ? "u16" : "u8";
+        return num(result, wider);
+      }
+      const numType = leftType || rightType;
       if (numType) {
         return num(result, numType);
       }
