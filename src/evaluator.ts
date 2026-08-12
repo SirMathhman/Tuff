@@ -253,7 +253,6 @@ export function evaluate(node: AstNode, env: Environment): number {
         case "!=":
           return left !== right ? 1 : 0;
       }
-      break;
     }
 
     case "let": {
@@ -402,7 +401,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "struct-def": {
       const structType: TypeNode = {
         kind: "struct",
-        fields: node.fields,
+        fields: node.fields.map((f) => ({ name: f.name, type: f.type })),
       };
       env.declareStruct(node.name, structType);
       return 0;
@@ -439,6 +438,15 @@ export function evaluate(node: AstNode, env: Environment): number {
       if (field === undefined)
         throw new Error(`Field not found: ${node.field}`);
       return toNumber(field);
+    }
+
+    case "struct-field-assign": {
+      const structVal = evalValue(node.struct, env);
+      if (structVal.kind !== "struct")
+        throw new Error("Cannot assign field on non-struct value");
+      const value = evaluate(node.value, env);
+      structVal.fields[node.field] = num(value);
+      return value;
     }
 
     case "fn-def": {

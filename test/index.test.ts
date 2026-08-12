@@ -401,4 +401,12 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("struct Point { mut x : I32, mut y : I32 } let mut pt : Point = Point { x : 0, y : 0 }; pt.x = 3; pt.y = 4; pt.x + pt.y") => 7', () => {
+    expect(
+      evaluate(
+        "struct Point { mut x : I32, mut y : I32 } let mut pt : Point = Point { x : 0, y : 0 }; pt.x = 3; pt.y = 4; pt.x + pt.y",
+      ),
+    ).toBe(7);
+  });
 });

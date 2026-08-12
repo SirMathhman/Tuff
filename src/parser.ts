@@ -78,8 +78,11 @@ export class Parser {
     parseValue: () => T,
     nameError: string,
     colonError: string,
-  ): { name: string; value: T }[] {
+  ): { name: string; mutable: boolean; value: T }[] {
     return this.parseDelimitedList(() => {
+      // Check for mut keyword
+      const isMut = this.peek()?.[0] === "kw" && this.peek()![1] === "mut";
+      if (isMut) this.consume();
       const nameToken = this.peek();
       if (!nameToken || nameToken[0] !== "id") throw new Error(nameError);
       const name = nameToken[1];
@@ -87,7 +90,7 @@ export class Parser {
       if (this.peek()?.[0] !== "colon") throw new Error(colonError);
       this.consume();
       const value = parseValue();
-      return { name, value };
+      return { name, mutable: isMut, value };
     }, ",");
   }
 
@@ -138,7 +141,11 @@ export class Parser {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
       throw new Error("Expected } in struct definition");
     this.consume(); // "}"
-    const fields = rawFields.map((f) => ({ name: f.name, type: f.value }));
+    const fields = rawFields.map((f) => ({
+      name: f.name,
+      mutable: f.mutable,
+      type: f.value,
+    }));
     return { type: "struct-def", name, fields };
   }
 
@@ -206,6 +213,18 @@ export class Parser {
       return this.parseCompoundAssign();
     }
 
+    // id.field = value — struct field assignment
+    if (
+      token[0] === "id" &&
+      this.pos + 3 < this.tokens.length &&
+      this.tokens[this.pos + 1]![0] === "op" &&
+      this.tokens[this.pos + 1]![1] === "." &&
+      this.tokens[this.pos + 2]![0] === "id" &&
+      this.tokens[this.pos + 3]![0] === "assign"
+    ) {
+      return this.parseStructFieldAssign();
+    }
+
     if (
       token[0] === "id" &&
       this.pos + 1 < this.tokens.length &&
@@ -265,6 +284,21 @@ export class Parser {
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
+  }
+
+  private parseStructFieldAssign(): AstNode {
+    const structName = this.consume()![1] as string;
+    this.consume(); // "."
+    const field = this.consume()![1] as string;
+    this.consume(); // "="
+    const value = this.parseAddSub();
+    if (this.peek()?.[0] === "semi") this.consume();
+    return {
+      type: "struct-field-assign",
+      struct: { type: "id", name: structName },
+      field,
+      value,
+    };
   }
 
   private consumeArrayIndex(): AstNode {

@@ -34,6 +34,7 @@ export type AstNode =
   | DerefArrayIndexAssign
   | StructLiteral
   | StructAccess
+  | StructFieldAssign
   | TypeCheck
   | Cast
   | TypeAlias
@@ -208,7 +209,7 @@ export interface TypeAlias {
 export interface StructDef {
   type: "struct-def";
   name: string;
-  fields: { name: string; type: TypeNode }[];
+  fields: { name: string; mutable: boolean; type: TypeNode }[];
 }
 
 export interface Cast {
@@ -246,5 +247,12 @@ export interface DerefArrayIndexAssign {
   type: "deref-array-index-assign";
   ref: AstNode;
   index: AstNode;
+  value: AstNode;
+}
+
+export interface StructFieldAssign {
+  type: "struct-field-assign";
+  struct: AstNode;
+  field: string;
   value: AstNode;
 }
