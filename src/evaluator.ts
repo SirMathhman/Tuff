@@ -69,6 +69,24 @@ function evalValue(node: AstNode, env: Environment): Value {
         throw new Error(`Field not found: ${node.field}`);
       return field;
     }
+    case "binop": {
+      const left = evalValue(node.left, env);
+      const right = evalValue(node.right, env);
+      const result = evaluate(node, env);
+      const numType = left.numType || right.numType;
+      if (numType) {
+        return num(result, numType);
+      }
+      return num(result);
+    }
+    case "unop": {
+      const operand = evalValue(node.operand, env);
+      const result = evaluate(node, env);
+      if (operand.kind === "number" && operand.numType) {
+        return num(result, operand.numType);
+      }
+      return num(result);
+    }
     default:
       return num(evaluate(node, env));
   }
