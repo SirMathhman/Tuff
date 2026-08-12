@@ -400,7 +400,6 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "break":
     case "continue":
     case "bool":
-    case "char":
       break;
   }
 }
