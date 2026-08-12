@@ -89,13 +89,7 @@ export class Parser {
     parseBranch: () => AstNode,
     requireElse = false,
   ): { condition: AstNode; thenBranch: AstNode; elseBranch: AstNode } {
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
-      throw new Error("Expected ( after if");
-    this.consume(); // "("
-    const condition = this.parseAddSub();
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
-      throw new Error("Expected ) after condition");
-    this.consume(); // ")"
+    const condition = this.parseParenCondition("if");
     const thenBranch = parseBranch();
     if (this.peek()?.[0] === "kw" && this.peek()![1] === "else") {
       this.consume(); // "else"
@@ -174,15 +168,29 @@ export class Parser {
 
   private parseWhile(): AstNode {
     this.consume(); // "while"
+    const condition = this.parseParenCondition("while");
+    const body = this.parseBlock();
+    return { type: "while-loop", condition, body };
+  }
+
+  private parseParenContext(label: string): AstNode {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
-      throw new Error("Expected ( after while");
+      throw new Error(`Expected ( after ${label}`);
     this.consume(); // "("
-    const condition = this.parseAddSub();
+    const expr = this.parseAddSub();
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
       throw new Error("Expected ) after condition");
     this.consume(); // ")"
+    return expr;
+  }
+
+  private parseParenCondition(label: string): AstNode {
+    return this.parseParenContext(label);
+  }
+
+  private parseBlock(): AstNode {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
-      throw new Error("Expected { after while condition");
+      throw new Error("Expected {");
     this.consume(); // "{"
     const statements: AstNode[] = [];
     while (
@@ -194,7 +202,7 @@ export class Parser {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
       throw new Error("Expected }");
     this.consume(); // "}"
-    return { type: "while-loop", condition, body: { type: "block", statements } };
+    return { type: "block", statements };
   }
 
   private parseDerefAssign(): AstNode {
