@@ -213,7 +213,7 @@ export class Parser {
     let left = this.parseFactor();
     while (
       this.peek()?.[0] === "op" &&
-      COMPARISON_OPS.has(this.peek()![1])
+      COMPARISON_OPS.has(this.peek()![1] as string)
     ) {
       const op = this.consume()[1] as "<" | "<=" | ">" | ">=" | "==" | "!=";
       const right = this.parseFactor();
