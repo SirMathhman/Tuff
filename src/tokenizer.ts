@@ -40,6 +40,7 @@ export type Token =
         | "continue"
         | "for"
         | "in"
+        | "is"
       ),
     ]
   | ["id", string]
@@ -131,6 +132,8 @@ export function tokenize(source: string): Token[] {
       result.push(["kw", "for"]);
     } else if (text === "in") {
       result.push(["kw", "in"]);
+    } else if (text === "is") {
+      result.push(["kw", "is"]);
     } else if (text === "true") {
       result.push(["bool", true]);
     } else if (text === "false") {

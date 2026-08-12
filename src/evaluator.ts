@@ -17,7 +17,7 @@ function evalRange(
 function evalValue(node: AstNode, env: Environment): Value {
   switch (node.type) {
     case "num":
-      return num(node.value);
+      return num(node.value, node.numType);
     case "bool":
       return num(node.value ? 1 : 0);
     case "id": {
@@ -263,6 +263,14 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "continue": {
       throw new Continue();
+    }
+
+    case "type-check": {
+      const val = evalValue(node.operand, env);
+      if (val.kind === "number") {
+        return val.numType === node.typeName.toLowerCase() ? 1 : 0;
+      }
+      return 0;
     }
 
     case "array-literal": {

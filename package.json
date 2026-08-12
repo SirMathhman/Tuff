@@ -6,10 +6,12 @@
   "scripts": {
     "test": "bun test test/",
     "typecheck": "tsc --noEmit",
-    "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
+    "cpd": "pmd cpd src/ test/ --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "circular": "bunx madge ./src --circular --extensions ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "madge": "^8.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"

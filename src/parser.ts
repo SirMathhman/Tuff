@@ -280,6 +280,16 @@ export class Parser {
       const right = this.parseMulDiv();
       left = { type: "binop", op, left, right };
     }
+    // is operator: `expr is TypeName`
+    if (this.peek()?.[0] === "kw" && this.peek()![1] === "is") {
+      this.consume(); // "is"
+      const typeToken = this.peek();
+      if (!typeToken || typeToken[0] !== "id")
+        throw new Error("Expected type name after is");
+      const typeName = typeToken[1];
+      this.consume();
+      return { type: "type-check", operand: left, typeName };
+    }
     return this.parseRangeSuffix(left);
   }
 

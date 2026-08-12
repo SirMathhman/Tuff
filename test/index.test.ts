@@ -268,6 +268,10 @@ describe("evaluate", () => {
     expect(evaluate("let x : U16 = 0U8;")).toBe(0);
   });
 
+  it('evaluate("100U8 is U8") => 1', () => {
+    expect(evaluate("100U8 is U8")).toBe(1);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(

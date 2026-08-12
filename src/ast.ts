@@ -23,7 +23,8 @@ export type AstNode =
   | ArrayLiteral
   | ArrayIndex
   | StructLiteral
-  | StructAccess;
+  | StructAccess
+  | TypeCheck;
 
 export interface Num {
   type: "num";
@@ -170,4 +171,10 @@ export interface StructAccess {
   type: "struct-access";
   struct: AstNode;
   field: string;
+}
+
+export interface TypeCheck {
+  type: "type-check";
+  operand: AstNode;
+  typeName: string;
 }

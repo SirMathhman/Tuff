@@ -1,6 +1,8 @@
+import type { IntTypeName } from "./types";
+
 /** Discriminated union for all runtime values the language can produce. */
 export type Value =
-  | { kind: "number"; value: number; type?: "u8" }
+  | { kind: "number"; value: number; numType?: IntTypeName }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
   | { kind: "range"; start: number; end: number }
@@ -9,8 +11,8 @@ export type Value =
 export type Ref = { name: string; env: Environment; mutable: boolean };
 
 /** Wrap a plain number in the Value union. */
-export function num(v: number): Value {
-  return { kind: "number", value: v };
+export function num(v: number, numType?: IntTypeName): Value {
+  return { kind: "number", value: v, numType };
 }
 
 /** Unwrap a Value to a number, throwing if it's not a number. */
