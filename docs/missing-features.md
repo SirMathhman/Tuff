@@ -11,9 +11,9 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 | Signed integers (i8–i32)   | ✅   | ✅   | ❌ (all numbers)    | ✅     |
 | Unsigned integers (u8–u16) | ✅   | ✅   | ❌                  | ❌     |
 | Booleans                   | ✅   | ✅   | ✅                  | ✅     |
-| Floating point (f32, f64)  | ❌   | ✅   | ✅ (number)         | ✅     |
-| Characters                 | ❌   | ✅   | ✅ (string)         | ✅     |
-| Strings                    | ❌   | ✅   | ✅                  | ✅     |
+| Floating point (f32, f64)  | ✅   | ✅   | ✅ (number)         | ✅     |
+| Characters                 | ✅   | ✅   | ✅ (string)         | ✅     |
+| Strings                    | ✅   | ✅   | ✅                  | ✅     |
 | Unit / Void                | ❌   | ✅   | ✅                  | ✅     |
 | Nullable / Option          | ❌   | ✅   | ✅ (undefined/null) | ✅     |
 
@@ -142,12 +142,10 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 
 ### High Priority (core language completeness)
 
-1. **Strings** — fundamental for any real program
-2. **Floating point** — needed for math, graphics, etc.
-3. **Closures / lambdas** — essential for higher-order functions
-4. **Return statements** — functions currently only return via expression
-5. **Modulo operator** — basic arithmetic gap
-6. **Dynamic arrays** — fixed-length arrays are limiting
+1. **Closures / lambdas** — essential for higher-order functions
+2. **Return statements** — functions currently only return via expression
+3. **Modulo operator** — basic arithmetic gap
+4. **Dynamic arrays** — fixed-length arrays are limiting
 
 ### Medium Priority (expressiveness)
 
