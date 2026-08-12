@@ -53,26 +53,32 @@ export class Parser {
     return { kind: "name", name: typeName };
   }
 
+  private parseDelimitedList<T>(parseItem: () => T, separator: string): T[] {
+    const items: T[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
+      items.push(parseItem());
+      if (this.peek()?.[0] === "op" && this.peek()![1] === separator) {
+        this.consume();
+      }
+    }
+    return items;
+  }
+
   private parseStructFields<T>(
     parseValue: () => T,
     nameError: string,
     colonError: string,
   ): { name: string; value: T }[] {
-    const fields: { name: string; value: T }[] = [];
-    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
+    return this.parseDelimitedList(() => {
       const nameToken = this.peek();
       if (!nameToken || nameToken[0] !== "id") throw new Error(nameError);
       const name = nameToken[1];
       this.consume();
       if (this.peek()?.[0] !== "colon") throw new Error(colonError);
-      this.consume(); // ":"
+      this.consume();
       const value = parseValue();
-      fields.push({ name, value });
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-        this.consume(); // ","
-      }
-    }
-    return fields;
+      return { name, value };
+    }, ",");
   }
 
   parse(): AstNode[] {
