@@ -1,5 +1,72 @@
 import type { AstNode, LValue, TypeNode } from "./ast";
 import { INT_TYPES, type IntTypeName } from "./types";
+import type { Value } from "./environment";
+import type { Environment } from "./environment";
+
+/** Runtime type check: does `val` match `typeNode`? */
+export function checkType(
+  val: Value,
+  typeNode: TypeNode,
+  env: Environment,
+  evaluate: (node: AstNode, env: Environment) => number,
+  num: (v: number, numType?: IntTypeName, isFloat?: boolean) => Value,
+): boolean {
+  if (typeNode.kind === "name") {
+    const alias = env.getTypeAlias(typeNode.name);
+    if (alias) return checkType(val, alias, env, evaluate, num);
+  }
+
+  switch (typeNode.kind) {
+    case "name": {
+      const typeName = typeNode.name.toLowerCase();
+      if (typeName === "bool") return val.kind === "bool";
+      if (val.kind === "number") {
+        if (val.isFloat) return typeName === "f32";
+        if (!val.numType) return typeName === "i32";
+        return val.numType === typeName;
+      }
+      return false;
+    }
+    case "array": {
+      if (val.kind !== "array") return false;
+      const length = evaluate(typeNode.length, env);
+      if (val.elements.length !== length) return false;
+      for (const elem of val.elements) {
+        if (!checkType(elem, typeNode.elementType, env, evaluate, num))
+          return false;
+      }
+      return true;
+    }
+    case "ref": {
+      if (val.kind !== "ref") return false;
+      const refVal = env.get(val.ref.name);
+      if (refVal === undefined) return false;
+      return checkType(refVal, typeNode.innerType, env, evaluate, num);
+    }
+    case "struct": {
+      if (val.kind !== "struct") return false;
+      for (const field of typeNode.fields) {
+        const fieldVal = val.fields[field.name];
+        if (fieldVal === undefined) return false;
+        if (!checkType(fieldVal, field.type, env, evaluate, num)) return false;
+      }
+      return true;
+    }
+    case "fn": {
+      if (val.kind !== "fnref") return false;
+      const fn = val.fn;
+      if (fn.params.length !== typeNode.params.length) return false;
+      for (let i = 0; i < fn.params.length; i++) {
+        const paramType = typeNode.params[i];
+        if (!paramType || !checkType(num(0), paramType, env, evaluate, num))
+          return false;
+      }
+      return checkType(num(0), typeNode.returnType, env, evaluate, num);
+    }
+    default:
+      return false;
+  }
+}
 
 /** Find an IntType by name, throwing if not found. */
 function requireIntType(name: string): (typeof INT_TYPES)[number] {

@@ -12,70 +12,7 @@ import {
 } from "./environment";
 import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
-
-/** Check if a value matches a type-node. */
-function checkType(val: Value, typeNode: TypeNode, env: Environment): boolean {
-  // Resolve type aliases
-  if (typeNode.kind === "name") {
-    const alias = env.getTypeAlias(typeNode.name);
-    if (alias) {
-      return checkType(val, alias, env);
-    }
-  }
-
-  switch (typeNode.kind) {
-    case "name": {
-      const typeName = typeNode.name.toLowerCase();
-      if (typeName === "bool") {
-        return val.kind === "bool";
-      }
-      if (val.kind === "number") {
-        // Floats match F32
-        if (val.isFloat) return typeName === "f32";
-        // Plain numbers (no numType) default to I32
-        if (!val.numType) return typeName === "i32";
-        return val.numType === typeName;
-      }
-      return false;
-    }
-    case "array": {
-      if (val.kind !== "array") return false;
-      const length = evaluate(typeNode.length, env);
-      if (val.elements.length !== length) return false;
-      for (const elem of val.elements) {
-        if (!checkType(elem, typeNode.elementType, env)) return false;
-      }
-      return true;
-    }
-    case "ref": {
-      if (val.kind !== "ref") return false;
-      const refVal = env.get(val.ref.name);
-      if (refVal === undefined) return false;
-      return checkType(refVal, typeNode.innerType, env);
-    }
-    case "struct": {
-      if (val.kind !== "struct") return false;
-      for (const field of typeNode.fields) {
-        const fieldVal = val.fields[field.name];
-        if (fieldVal === undefined) return false;
-        if (!checkType(fieldVal, field.type, env)) return false;
-      }
-      return true;
-    }
-    case "fn": {
-      if (val.kind !== "fnref") return false;
-      const fn = val.fn;
-      if (fn.params.length !== typeNode.params.length) return false;
-      for (let i = 0; i < fn.params.length; i++) {
-        const paramType = typeNode.params[i];
-        if (!paramType || !checkType(num(0), paramType, env)) return false;
-      }
-      return checkType(num(0), typeNode.returnType, env);
-    }
-    default:
-      return false;
-  }
-}
+import { checkType } from "./type-checker";
 
 /** Evaluate a range expression and return { start, end }. */
 function evalRange(
@@ -452,7 +389,7 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "type-check": {
       const val = evalValue(node.operand, env);
-      return checkType(val, node.typeNode, env) ? 1 : 0;
+      return checkType(val, node.typeNode, env, evaluate, num) ? 1 : 0;
     }
 
     case "type-alias": {
