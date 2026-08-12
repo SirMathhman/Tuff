@@ -44,7 +44,7 @@ export class Parser {
       token[0] === "id" &&
       this.pos + 1 < this.tokens.length &&
       this.tokens[this.pos + 1]![0] === "assign" &&
-      COMPOUND_OPS[this.tokens[this.pos + 1]![1]]
+      COMPOUND_OPS[this.tokens[this.pos + 1]![1] as "+=" | "-="]
     ) {
       return this.parseCompoundAssign();
     }

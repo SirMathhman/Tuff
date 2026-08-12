@@ -38,7 +38,7 @@ export function tokenize(source: string): Token[] {
     } else if (text === "=") {
       result.push(["assign", "="]);
     } else if (COMPOUND_OPS[text]) {
-      result.push(["assign", text]);
+      result.push(["assign", text as "+=" | "-="]);
     } else if (text === ";") {
       result.push(["semi", ";"]);
     } else if (text === "let") {
