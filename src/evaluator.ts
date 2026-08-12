@@ -155,14 +155,26 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "while-loop": {
       while (evaluate(node.condition, env)) {
-        const result = evaluate(node.body, env);
-        if (isNaN(result)) break; // break signal
+        try {
+          evaluate(node.body, env);
+        } catch (e) {
+          if (e instanceof Break) break;
+          if (e instanceof Continue) continue;
+          throw e;
+        }
       }
       return 0;
     }
 
     case "break": {
-      return NaN; // break signal
+      throw new Break();
+    }
+
+    case "continue": {
+      throw new Continue();
     }
   }
 }
+
+class Break extends Error {}
+class Continue extends Error {}

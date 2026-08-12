@@ -24,7 +24,7 @@ export type Token =
       ),
     ]
   | ["group", "(" | ")" | "{" | "}"]
-  | ["kw", "let" | "mut" | "if" | "else" | "while" | "break"]
+  | ["kw", "let" | "mut" | "if" | "else" | "while" | "break" | "continue"]
   | ["id", string]
   | ["assign", "=" | "+=" | "-="]
   | ["semi", ";"]
@@ -81,6 +81,8 @@ export function tokenize(source: string): Token[] {
       result.push(["kw", "while"]);
     } else if (text === "break") {
       result.push(["kw", "break"]);
+    } else if (text === "continue") {
+      result.push(["kw", "continue"]);
     } else if (text === "true") {
       result.push(["bool", true]);
     } else if (text === "false") {

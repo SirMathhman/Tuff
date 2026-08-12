@@ -183,7 +183,13 @@ describe("evaluate", () => {
   });
 
   it('evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x") => 1', () => {
-    expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(1);
+    expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } x")).toBe(
+      1,
+    );
+  });
+
+  it('evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x") => 4', () => {
+    expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } x")).toBe(4);
   });
 
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {

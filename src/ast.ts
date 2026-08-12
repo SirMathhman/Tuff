@@ -14,7 +14,8 @@ export type AstNode =
   | IfStatement
   | IfExpression
   | WhileLoop
-  | BreakStatement;
+  | BreakStatement
+  | ContinueStatement;
 
 export interface Num {
   type: "num";
@@ -120,4 +121,8 @@ export interface WhileLoop {
 
 export interface BreakStatement {
   type: "break";
+}
+
+export interface ContinueStatement {
+  type: "continue";
 }

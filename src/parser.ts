@@ -77,6 +77,13 @@ export class Parser {
       return { type: "break" };
     }
 
+    // Handle continue
+    if (token[0] === "kw" && token[1] === "continue") {
+      this.consume();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "continue" };
+    }
+
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
