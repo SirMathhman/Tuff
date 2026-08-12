@@ -140,28 +140,10 @@ export class Parser {
       token[0] === "group" &&
       token[1] === "(" &&
       this.tokens[this.pos + 1]?.[0] === "op" &&
-      this.tokens[this.pos + 1]?.[1] === "*"
+      this.tokens[this.pos + 1]?.[1] === "*" &&
+      this.findCloseBracketAndCheckAssign(this.pos)
     ) {
-      let bracketDepth = 0;
-      let closeBracketPos = -1;
-      for (let i = this.pos; i < this.tokens.length; i++) {
-        const t = this.tokens[i]!;
-        if (t[0] === "group" && t[1] === "[") bracketDepth++;
-        if (t[0] === "group" && t[1] === "]") {
-          bracketDepth--;
-          if (bracketDepth === 0) {
-            closeBracketPos = i;
-            break;
-          }
-        }
-      }
-      if (
-        closeBracketPos > 0 &&
-        closeBracketPos + 1 < this.tokens.length &&
-        this.tokens[closeBracketPos + 1]![0] === "assign"
-      ) {
-        return this.parseDerefArrayIndexAssign();
-      }
+      return this.parseDerefArrayIndexAssign();
     }
 
     // array[index] = value
@@ -227,24 +209,7 @@ export class Parser {
   }
 
   private parseArrayIndexOrAssign(): AstNode {
-    // Look ahead to check if this is array[index] = value
-    let bracketDepth = 0;
-    let closeBracketPos = -1;
-    for (let i = this.pos; i < this.tokens.length; i++) {
-      const t = this.tokens[i]!;
-      if (t[0] === "group" && t[1] === "[") bracketDepth++;
-      if (t[0] === "group" && t[1] === "]") {
-        bracketDepth--;
-        if (bracketDepth === 0) {
-          closeBracketPos = i;
-          break;
-        }
-      }
-    }
-    const isAssign =
-      closeBracketPos > 0 &&
-      closeBracketPos + 1 < this.tokens.length &&
-      this.tokens[closeBracketPos + 1]![0] === "assign";
+    const isAssign = this.findCloseBracketAndCheckAssign(this.pos);
 
     if (isAssign) {
       const idToken = this.consume();
@@ -271,6 +236,27 @@ export class Parser {
       throw new Error("Expected ]");
     this.consume(); // "]"
     return index;
+  }
+
+  private findCloseBracketAndCheckAssign(from: number): boolean {
+    let bracketDepth = 0;
+    let closeBracketPos = -1;
+    for (let i = from; i < this.tokens.length; i++) {
+      const t = this.tokens[i]!;
+      if (t[0] === "group" && t[1] === "[") bracketDepth++;
+      if (t[0] === "group" && t[1] === "]") {
+        bracketDepth--;
+        if (bracketDepth === 0) {
+          closeBracketPos = i;
+          break;
+        }
+      }
+    }
+    return (
+      closeBracketPos > 0 &&
+      closeBracketPos + 1 < this.tokens.length &&
+      this.tokens[closeBracketPos + 1]![0] === "assign"
+    );
   }
 
   private parseIfStatement(): AstNode {
@@ -434,6 +420,10 @@ export class Parser {
     return { type: "block", statements };
   }
 
+  private makeDerefNode(name: string): AstNode {
+    return { type: "deref", operand: { type: "id", name } };
+  }
+
   private parseDerefAssign(): AstNode {
     this.consume(); // "*"
     const idToken = this.peek();
@@ -442,18 +432,15 @@ export class Parser {
     this.consume();
     this.consume(); // "="
     const value = this.parseAddSub();
-    const target: AstNode = {
-      type: "deref",
-      operand: { type: "id", name: idToken[1] },
-    };
+    const target = this.makeDerefNode(idToken[1]);
     if (this.peek()?.[0] === "semi") this.consume();
     return { type: "derefassign", target, value };
   }
 
   private parseDerefArrayIndexAssign(): AstNode {
     // (*ref)[index] = value
-    this.consume(); // "*"
     this.consume(); // "("
+    this.consume(); // "*"
     const idToken = this.peek();
     if (!idToken || idToken[0] !== "id")
       throw new Error("Expected identifier after *(");
@@ -464,10 +451,7 @@ export class Parser {
     const index = this.consumeArrayIndex();
     this.consume(); // "="
     const value = this.parseAddSub();
-    const ref: AstNode = {
-      type: "deref",
-      operand: { type: "id", name: idToken[1] },
-    };
+    const ref = this.makeDerefNode(idToken[1]);
     if (this.peek()?.[0] === "semi") this.consume();
     return { type: "deref-array-index-assign", ref, index, value };
   }
