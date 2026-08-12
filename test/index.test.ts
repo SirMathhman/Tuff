@@ -474,7 +474,11 @@ describe("evaluate", () => {
     expect(evaluate('let str : &Str = "apple"; str.length')).toBe(5);
   });
 
-  it('evaluate(\'let mut counter = 0; fn add() => { counter += 1; } add(); counter\') => 1', () => {
-    expect(evaluate('let mut counter = 0; fn add() => { counter += 1; } add(); counter')).toBe(1);
+  it("evaluate('let mut counter = 0; fn add() => { counter += 1; } add(); counter') => 1", () => {
+    expect(
+      evaluate(
+        "let mut counter = 0; fn add() => { counter += 1; } add(); counter",
+      ),
+    ).toBe(1);
   });
 });
