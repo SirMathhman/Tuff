@@ -1,5 +1,11 @@
 import type { IntTypeName } from "./types";
 
+/** A type expression (e.g., `U8`, `[I32; 3]`, `&Bool`). */
+export type TypeNode =
+  | { kind: "name"; name: string }
+  | { kind: "array"; elementType: TypeNode; length: AstNode }
+  | { kind: "ref"; innerType: TypeNode };
+
 export type AstNode =
   | Num
   | Bool
@@ -177,10 +183,7 @@ export interface StructAccess {
 export interface TypeCheck {
   type: "type-check";
   operand: AstNode;
-  typeName: string;
-  arrayLength?: AstNode;
-  elementType?: TypeCheck;
-  isRef?: boolean;
+  typeNode: TypeNode;
 }
 
 export interface Cast {

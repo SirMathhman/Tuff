@@ -1,6 +1,6 @@
 import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
-import type { AstNode, TypeCheck } from "./ast";
+import type { AstNode, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
@@ -10,43 +10,33 @@ export class Parser {
 
   constructor(private tokens: Token[]) {}
 
-  private parseArrayType(): TypeCheck {
-    this.consume(); // "["
-    // Check for nested array type: [[Type; N]; M]
-    if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-      const inner = this.parseArrayType();
-      const lengthNode = this.consumeSemiAndCloseBracket();
-      return {
-        type: "type-check",
-        operand: inner.operand,
-        typeName: `[${inner.typeName}]`,
-        arrayLength: lengthNode,
-        elementType: inner,
-      };
+  private parseType(): TypeNode {
+    // Reference type: &Type
+    if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
+      this.consume(); // "&"
+      const innerType = this.parseType();
+      return { kind: "ref", innerType };
     }
+    // Array type: [Type; N]
+    if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+      this.consume(); // "["
+      const elementType = this.parseType();
+      if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
+        throw new Error("Expected ; in array type");
+      this.consume(); // ";"
+      const lengthNode = this.parseMulDiv();
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+        throw new Error("Expected ] in array type");
+      this.consume(); // "]"
+      return { kind: "array", elementType, length: lengthNode };
+    }
+    // Simple type name
     const typeToken = this.peek();
     if (!typeToken || typeToken[0] !== "id")
-      throw new Error("Expected type name in array type");
+      throw new Error("Expected type name");
     const typeName = typeToken[1];
     this.consume();
-    const lengthNode = this.consumeSemiAndCloseBracket();
-    return {
-      type: "type-check",
-      operand: { type: "num", value: 0 },
-      typeName: `[${typeName}]`,
-      arrayLength: lengthNode,
-    };
-  }
-
-  private consumeSemiAndCloseBracket(): AstNode {
-    if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
-      throw new Error("Expected ; in array type");
-    this.consume(); // ";"
-    const lengthNode = this.parseMulDiv();
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-      throw new Error("Expected ] in array type");
-    this.consume(); // "]"
-    return lengthNode;
+    return { kind: "name", name: typeName };
   }
 
   parse(): AstNode[] {
@@ -320,33 +310,11 @@ export class Parser {
       const right = this.parseMulDiv();
       left = { type: "binop", op, left, right };
     }
-    // is operator: `expr is TypeName`, `expr is [Type; N]`, or `expr is &Type`
+    // is operator: `expr is Type`
     if (this.peek()?.[0] === "kw" && this.peek()![1] === "is") {
       this.consume(); // "is"
-      // Check for array type: [Type; N]
-      if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-        const arrayType = this.parseArrayType();
-        return {
-          ...arrayType,
-          operand: left,
-        };
-      }
-      // Check for reference type: &Type
-      if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
-        this.consume(); // "&"
-        const typeToken = this.peek();
-        if (!typeToken || typeToken[0] !== "id")
-          throw new Error("Expected type name after &");
-        const typeName = typeToken[1];
-        this.consume();
-        return { type: "type-check", operand: left, typeName, isRef: true };
-      }
-      const typeToken = this.peek();
-      if (!typeToken || typeToken[0] !== "id")
-        throw new Error("Expected type name after is");
-      const typeName = typeToken[1];
-      this.consume();
-      return { type: "type-check", operand: left, typeName };
+      const typeNode = this.parseType();
+      return { type: "type-check", operand: left, typeNode };
     }
     return this.parseRangeSuffix(left);
   }

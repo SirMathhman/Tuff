@@ -1,4 +1,4 @@
-import type { AstNode, TypeCheck } from "./ast";
+import type { AstNode, TypeCheck, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 import { promoteTypes } from "./types";
 import {
@@ -12,33 +12,40 @@ import {
 import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
 
-/** Check if a value matches a type-check node. */
-function checkType(val: Value, node: TypeCheck, env: Environment): boolean {
-  if (node.arrayLength) {
-    if (val.kind !== "array") return false;
-    const length = evaluate(node.arrayLength, env);
-    if (val.elements.length !== length) return false;
-    if (node.elementType) {
+/** Check if a value matches a type-node. */
+function checkType(val: Value, typeNode: TypeNode, env: Environment): boolean {
+  switch (typeNode.kind) {
+    case "name": {
+      const typeName = typeNode.name.toLowerCase();
+      if (typeName === "bool") {
+        return val.kind === "bool";
+      }
+      if (val.kind === "number") {
+        // Plain numbers (no numType) default to I32
+        if (!val.numType) return typeName === "i32";
+        return val.numType === typeName;
+      }
+      return false;
+    }
+    case "array": {
+      if (val.kind !== "array") return false;
+      const length = evaluate(typeNode.length, env);
+      if (val.elements.length !== length) return false;
       for (const elem of val.elements) {
-        if (!checkType(elem, node.elementType, env)) return false;
+        if (!checkType(elem, typeNode.elementType, env)) return false;
       }
       return true;
     }
-    // Leaf array: [Type; N]
-    const expectedType = node.typeName.slice(1, -1).toLowerCase();
-    for (const elem of val.elements) {
-      if (elem.kind !== "number") return false;
-      if (elem.numType && elem.numType !== expectedType) return false;
+    case "ref": {
+      if (val.kind !== "ref") return false;
+      const dereferenced = deref(val.ref);
+      // Check the inner type against the dereferenced value
+      // We need to get the actual value being referenced
+      const refVal = env.get(val.ref.name);
+      if (refVal === undefined) return false;
+      return checkType(refVal, typeNode.innerType, env);
     }
-    return true;
   }
-  if (node.typeName.toLowerCase() === "bool") {
-    return val.kind === "bool";
-  }
-  if (val.kind === "number") {
-    return val.numType === node.typeName.toLowerCase();
-  }
-  return false;
 }
 
 /** Evaluate a range expression and return { start, end }. */
@@ -344,44 +351,7 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "type-check": {
       const val = evalValue(node.operand, env);
-      // Reference type check: &Type
-      if (node.isRef) {
-        if (val.kind !== "ref") return 0;
-        // Check the type of the referenced value
-        const refVal = env.get(val.ref.name);
-        if (refVal?.kind === "number") {
-          // Plain numbers (no numType) match any integer type
-          if (!refVal.numType) return 1;
-          return refVal.numType === node.typeName.toLowerCase() ? 1 : 0;
-        }
-        return 0;
-      }
-      // Array type check: [Type; N]
-      if (node.arrayLength) {
-        if (val.kind !== "array") return 0;
-        const length = evaluate(node.arrayLength, env);
-        if (val.elements.length !== length) return 0;
-        // Nested array type check
-        if (node.elementType) {
-          for (const elem of val.elements) {
-            if (!checkType(elem, node.elementType, env)) return 0;
-          }
-          return 1;
-        }
-        const expectedType = node.typeName.slice(1, -1).toLowerCase();
-        for (const elem of val.elements) {
-          if (elem.kind !== "number") return 0;
-          if (elem.numType && elem.numType !== expectedType) return 0;
-        }
-        return 1;
-      }
-      if (node.typeName.toLowerCase() === "bool") {
-        return val.kind === "bool" ? 1 : 0;
-      }
-      if (val.kind === "number") {
-        return val.numType === node.typeName.toLowerCase() ? 1 : 0;
-      }
-      return 0;
+      return checkType(val, node.typeNode, env) ? 1 : 0;
     }
 
     case "array-literal": {
