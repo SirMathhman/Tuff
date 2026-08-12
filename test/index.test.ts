@@ -206,12 +206,20 @@ describe("evaluate", () => {
 
   it('evaluate("let mut x = 0; let range = 0..4; for (i in range) { x += i; break; } x") => 0', () => {
     expect(
-      evaluate("let mut x = 0; let range = 0..4; for (i in range) { x += i; break; } x"),
+      evaluate(
+        "let mut x = 0; let range = 0..4; for (i in range) { x += i; break; } x",
+      ),
     ).toBe(0);
   });
 
   it('evaluate("let mut x = 0; for (i in 0..4) { x += i; continue; } x") => 6', () => {
-    expect(evaluate("let mut x = 0; for (i in 0..4) { x += i; continue; } x")).toBe(6);
+    expect(
+      evaluate("let mut x = 0; for (i in 0..4) { x += i; continue; } x"),
+    ).toBe(6);
+  });
+
+  it('evaluate("let x = { if (true) 3; else 2 } + 1; x") => 4', () => {
+    expect(evaluate("let x = { if (true) 3; else 2 } + 1; x")).toBe(4);
   });
 
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
