@@ -25,7 +25,20 @@ export type Token =
       ),
     ]
   | ["group", "(" | ")" | "{" | "}"]
-  | ["kw", "let" | "mut" | "if" | "else" | "while" | "break" | "continue" | "for" | "in"]
+  | [
+      "kw",
+      (
+        | "let"
+        | "mut"
+        | "if"
+        | "else"
+        | "while"
+        | "break"
+        | "continue"
+        | "for"
+        | "in"
+      ),
+    ]
   | ["id", string]
   | ["assign", "=" | "+=" | "-="]
   | ["semi", ";"]
