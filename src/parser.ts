@@ -1,6 +1,6 @@
 import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
-import type { AstNode, TypeNode } from "./ast";
+import type { AstNode, Lhs, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
@@ -172,65 +172,29 @@ export class Parser {
       return this.parseFnDef();
     }
 
-    // *x = value or (*ref)[index] = value
-    if (token[0] === "op" && token[1] === "*") {
-      // *x = value
+    // Unified LHS assignment: parse an LHS target, then check for = or +=/-=
+    const lhs = this.tryParseLhs();
+    if (lhs !== undefined) {
+      // Check for compound assignment
       if (
-        this.pos + 2 < this.tokens.length &&
-        this.tokens[this.pos + 2]![0] === "assign"
+        this.peek()?.[0] === "assign" &&
+        COMPOUND_OPS[this.peek()![1] as "+=" | "-="]
       ) {
-        return this.parseDerefAssign();
+        const opToken = this.consume()[1] as "+=" | "-=";
+        const op = opToken[0] as "+" | "-";
+        const value = this.parseAddSub();
+        this.maybeConsumeSemi();
+        return { type: "compoundassign", lhs: lhs.lhs, op, value };
       }
-    }
-
-    // (*ref)[index] = value — starts with (
-    if (
-      token[0] === "group" &&
-      token[1] === "(" &&
-      this.tokens[this.pos + 1]?.[0] === "op" &&
-      this.tokens[this.pos + 1]?.[1] === "*" &&
-      this.findCloseBracketAndCheckAssign(this.pos)
-    ) {
-      return this.parseDerefArrayIndexAssign();
-    }
-
-    // array[index] = value
-    if (
-      token[0] === "id" &&
-      this.pos + 2 < this.tokens.length &&
-      this.tokens[this.pos + 1]?.[0] === "group" &&
-      this.tokens[this.pos + 1]?.[1] === "["
-    ) {
-      return this.parseArrayIndexOrAssign();
-    }
-
-    if (
-      token[0] === "id" &&
-      this.pos + 1 < this.tokens.length &&
-      this.tokens[this.pos + 1]![0] === "assign" &&
-      COMPOUND_OPS[this.tokens[this.pos + 1]![1] as "+=" | "-="]
-    ) {
-      return this.parseCompoundAssign();
-    }
-
-    // id.field = value — struct field assignment
-    if (
-      token[0] === "id" &&
-      this.pos + 3 < this.tokens.length &&
-      this.tokens[this.pos + 1]![0] === "op" &&
-      this.tokens[this.pos + 1]![1] === "." &&
-      this.tokens[this.pos + 2]![0] === "id" &&
-      this.tokens[this.pos + 3]![0] === "assign"
-    ) {
-      return this.parseStructFieldAssign();
-    }
-
-    if (
-      token[0] === "id" &&
-      this.pos + 1 < this.tokens.length &&
-      this.tokens[this.pos + 1]![0] === "assign"
-    ) {
-      return this.parseAssign();
+      // Simple assignment
+      if (this.peek()?.[0] === "assign") {
+        this.consume(); // "="
+        const value = this.parseAddSub();
+        this.maybeConsumeSemi();
+        return { type: "assign", lhs: lhs.lhs, value };
+      }
+      // Not an assignment — parse as normal expression
+      this.pos = lhs.startPos;
     }
 
     // Handle if/else at statement level to capture semicolon after else branch
@@ -268,37 +232,94 @@ export class Parser {
     return expr;
   }
 
-  private parseArrayIndexOrAssign(): AstNode {
-    const isAssign = this.findCloseBracketAndCheckAssign(this.pos);
+  /**
+   * Try to parse an LHS target. Returns { lhs, startPos } on success,
+   * or undefined if the tokens don't form an assignable target.
+   * startPos is the position before any consumption, so we can rewind.
+   */
+  private tryParseLhs(): { lhs: Lhs; startPos: number } | undefined {
+    const startPos = this.pos;
+    const token = this.peek();
+    if (!token) return undefined;
 
-    if (isAssign) {
-      const idToken = this.consume();
-      const node = this.consumeIdWithArrayIndices(idToken[1] as string);
-      this.consume(); // "="
-      const value = this.parseAddSub();
-      if (this.peek()?.[0] === "semi") this.consume();
-      return { type: "array-index-assign", array: node, value };
+    // *x — deref of a var
+    if (token[0] === "op" && token[1] === "*") {
+      this.consume(); // "*"
+      const inner = this.tryParseLhs();
+      if (inner === undefined) {
+        this.pos = startPos;
+        return undefined;
+      }
+      return { lhs: { kind: "deref", ref: inner.lhs }, startPos };
     }
 
-    // Not an assignment — parse as normal expression (array[0] + ...)
-    const expr = this.parseAddSub();
-    if (this.peek()?.[0] === "semi") this.consume();
-    return expr;
-  }
+    // (*ref)[index] — starts with (
+    if (token[0] === "group" && token[1] === "(") {
+      // Check for (*ref)[index]
+      if (
+        this.pos + 1 < this.tokens.length &&
+        this.tokens[this.pos + 1]?.[0] === "op" &&
+        this.tokens[this.pos + 1]?.[1] === "*"
+      ) {
+        const saved = this.pos;
+        this.consume(); // "("
+        this.consume(); // "*"
+        const idToken = this.peek();
+        if (idToken && idToken[0] === "id") {
+          this.consume();
+          if (this.peek()?.[0] === "group" && this.peek()![1] === ")") {
+            this.consume(); // ")"
+            // Now consume [index] chains
+            let lhs: Lhs = {
+              kind: "deref",
+              ref: { kind: "var", name: idToken[1] },
+            };
+            while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+              this.consume(); // "["
+              const index = this.parseAddSub();
+              if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+                throw new Error("Expected ]");
+              this.consume(); // "]"
+              lhs = { kind: "index", array: lhs, index };
+            }
+            return { lhs, startPos };
+          }
+        }
+        this.pos = saved;
+        return undefined;
+      }
+    }
 
-  private parseStructFieldAssign(): AstNode {
-    const structName = this.consume()![1] as string;
-    this.consume(); // "."
-    const field = this.consume()![1] as string;
-    this.consume(); // "="
-    const value = this.parseAddSub();
-    if (this.peek()?.[0] === "semi") this.consume();
-    return {
-      type: "struct-field-assign",
-      struct: { type: "id", name: structName },
-      field,
-      value,
-    };
+    // id or id.field or id[index]
+    if (token[0] === "id") {
+      const name = this.consume()[1] as string;
+      let lhs: Lhs = { kind: "var", name };
+
+      // Consume [index] chains
+      while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+        this.consume(); // "["
+        const index = this.parseAddSub();
+        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+          throw new Error("Expected ]");
+        this.consume(); // "]"
+        lhs = { kind: "index", array: lhs, index };
+      }
+
+      // Consume .field chains
+      while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+        this.consume(); // "."
+        const fieldToken = this.peek();
+        if (!fieldToken || fieldToken[0] !== "id")
+          throw new Error("Expected field name after .");
+        const field = fieldToken[1];
+        this.consume();
+        lhs = { kind: "field", struct: lhs, field };
+      }
+
+      return { lhs, startPos };
+    }
+
+    return undefined;
   }
 
   private consumeArrayIndex(): AstNode {
@@ -393,16 +414,12 @@ export class Parser {
 
   private parseBranch(): AstNode {
     // Handle assignment: x = value
-    if (
-      this.peek()?.[0] === "id" &&
-      this.pos + 1 < this.tokens.length &&
-      this.tokens[this.pos + 1]![0] === "assign"
-    ) {
-      const name = this.consume()[1] as string;
+    const lhs = this.tryParseLhs();
+    if (lhs !== undefined && this.peek()?.[0] === "assign") {
       this.consume(); // "="
       const value = this.parseFactor();
       if (this.peek()?.[0] === "semi") this.consume();
-      return { type: "assign", name, value };
+      return { type: "assign", lhs: lhs.lhs, value };
     }
     const result = this.parseFactor();
     if (this.peek()?.[0] === "semi") this.consume();
@@ -448,20 +465,20 @@ export class Parser {
   }
 
   private parseAssign(): AstNode {
-    const name = this.consume()[1] as string;
+    const lhs = this.tryParseLhs()!;
     this.consume(); // "="
     const value = this.parseAddSub();
     this.maybeConsumeSemi();
-    return { type: "assign", name, value };
+    return { type: "assign", lhs: lhs.lhs, value };
   }
 
   private parseCompoundAssign(): AstNode {
-    const name = this.consume()[1] as string;
+    const lhs = this.tryParseLhs()!;
     const opToken = this.consume()[1] as "+=" | "-=";
     const op = opToken[0] as "+" | "-";
     const value = this.parseAddSub();
     this.maybeConsumeSemi();
-    return { type: "compoundassign", name, op, value };
+    return { type: "compoundassign", lhs: lhs.lhs, op, value };
   }
 
   private parseWhile(): AstNode {
@@ -521,42 +538,6 @@ export class Parser {
       throw new Error("Expected }");
     this.consume(); // "}"
     return { type: "block", statements };
-  }
-
-  private makeDerefNode(name: string): AstNode {
-    return { type: "deref", operand: { type: "id", name } };
-  }
-
-  private parseDerefAssign(): AstNode {
-    this.consume(); // "*"
-    const idToken = this.peek();
-    if (!idToken || idToken[0] !== "id")
-      throw new Error("Expected identifier after *");
-    this.consume();
-    this.consume(); // "="
-    const value = this.parseAddSub();
-    const target = this.makeDerefNode(idToken[1]);
-    if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "derefassign", target, value };
-  }
-
-  private parseDerefArrayIndexAssign(): AstNode {
-    // (*ref)[index] = value
-    this.consume(); // "("
-    this.consume(); // "*"
-    const idToken = this.peek();
-    if (!idToken || idToken[0] !== "id")
-      throw new Error("Expected identifier after *(");
-    this.consume();
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
-      throw new Error("Expected )");
-    this.consume(); // ")"
-    const index = this.consumeArrayIndex();
-    this.consume(); // "="
-    const value = this.parseAddSub();
-    const ref = this.makeDerefNode(idToken[1]);
-    if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "deref-array-index-assign", ref, index, value };
   }
 
   private parseAddSub(): AstNode {

@@ -1,4 +1,4 @@
-import type { AstNode, TypeNode } from "./ast";
+import type { AstNode, Lhs, TypeNode } from "./ast";
 import { INT_TYPES, type IntTypeName } from "./types";
 
 /** Find an IntType by name, throwing if not found. */
@@ -79,6 +79,45 @@ function checkAssignable(scope: Scope, name: string): void {
   if (!varInfo.mutable)
     throw new Error(`Cannot assign to immutable variable: ${name}`);
 }
+
+function checkLhsAssignable(scope: Scope, lhs: Lhs): void {
+  switch (lhs.kind) {
+    case "var":
+      checkAssignable(scope, lhs.name);
+      break;
+    case "deref":
+      // Just validate the inner LHS exists; mutability is checked at the root var
+      checkLhsExists(scope, lhs.ref);
+      break;
+    case "index":
+      checkLhsExists(scope, lhs.array);
+      checkNode(lhs.index, scope);
+      break;
+    case "field":
+      checkLhsExists(scope, lhs.struct);
+      break;
+  }
+}
+
+/** Validate that an LHS target exists (without checking mutability). */
+function checkLhsExists(scope: Scope, lhs: Lhs): void {
+  switch (lhs.kind) {
+    case "var":
+      if (!getVar(scope, lhs.name))
+        throw new Error(`Undefined variable: ${lhs.name}`);
+      break;
+    case "deref":
+      checkLhsExists(scope, lhs.ref);
+      break;
+    case "index":
+      checkLhsExists(scope, lhs.array);
+      checkNode(lhs.index, scope);
+      break;
+    case "field":
+      checkLhsExists(scope, lhs.struct);
+      break;
+  }
+}
 /** Validate type constraints on the AST. */
 export function typeCheck(statements: AstNode[]): void {
   const scope = newScope();
@@ -156,7 +195,7 @@ function checkNode(node: AstNode, scope: Scope): void {
 
     case "assign":
     case "compoundassign": {
-      checkAssignable(scope, node.name);
+      checkLhsAssignable(scope, node.lhs);
       checkNode(node.value, scope);
       break;
     }
@@ -254,11 +293,6 @@ function checkNode(node: AstNode, scope: Scope): void {
       checkNode(node.index, scope);
       break;
 
-    case "array-index-assign":
-      checkNode(node.array, scope);
-      checkNode(node.value, scope);
-      break;
-
     case "struct-literal":
       for (const f of node.fields) {
         checkNode(f.value, scope);
@@ -290,11 +324,6 @@ function checkNode(node: AstNode, scope: Scope): void {
 
     case "deref":
       checkNode(node.operand, scope);
-      break;
-
-    case "derefassign":
-      checkNode(node.target, scope);
-      checkNode(node.value, scope);
       break;
 
     case "break":

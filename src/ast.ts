@@ -8,6 +8,13 @@ export type TypeNode =
   | { kind: "struct"; fields: { name: string; type: TypeNode }[] }
   | { kind: "fn"; params: TypeNode[]; returnType: TypeNode };
 
+/** Left-hand side of an assignment. */
+export type Lhs =
+  | { kind: "var"; name: string }
+  | { kind: "deref"; ref: Lhs }
+  | { kind: "index"; array: Lhs; index: AstNode }
+  | { kind: "field"; struct: Lhs; field: string };
+
 export type AstNode =
   | Num
   | Bool
@@ -19,7 +26,6 @@ export type AstNode =
   | Ref
   | Deref
   | Assign
-  | DerefAssign
   | CompoundAssign
   | IfStatement
   | IfExpression
@@ -30,11 +36,8 @@ export type AstNode =
   | Range
   | ArrayLiteral
   | ArrayIndex
-  | ArrayIndexAssign
-  | DerefArrayIndexAssign
   | StructLiteral
   | StructAccess
-  | StructFieldAssign
   | TypeCheck
   | Cast
   | TypeAlias
@@ -110,19 +113,13 @@ export interface Deref {
 
 export interface Assign {
   type: "assign";
-  name: string;
-  value: AstNode;
-}
-
-export interface DerefAssign {
-  type: "derefassign";
-  target: AstNode;
+  lhs: Lhs;
   value: AstNode;
 }
 
 export interface CompoundAssign {
   type: "compoundassign";
-  name: string;
+  lhs: Lhs;
   op: "+" | "-";
   value: AstNode;
 }
@@ -235,24 +232,4 @@ export interface FnCall {
 export interface FnRef {
   type: "fnref";
   name: string;
-}
-
-export interface ArrayIndexAssign {
-  type: "array-index-assign";
-  array: AstNode;
-  value: AstNode;
-}
-
-export interface DerefArrayIndexAssign {
-  type: "deref-array-index-assign";
-  ref: AstNode;
-  index: AstNode;
-  value: AstNode;
-}
-
-export interface StructFieldAssign {
-  type: "struct-field-assign";
-  struct: AstNode;
-  field: string;
-  value: AstNode;
 }

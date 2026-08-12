@@ -1,4 +1,4 @@
-import type { AstNode, TypeNode } from "./ast";
+import type { AstNode, Lhs, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 import { promoteTypes } from "./types";
 import {
@@ -194,6 +194,108 @@ function evalValue(node: AstNode, env: Environment): Value {
   }
 }
 
+/** Resolve an LHS to the Value it points to (for reading). */
+function resolveLhs(lhs: Lhs, env: Environment): Value {
+  switch (lhs.kind) {
+    case "var": {
+      const v = env.get(lhs.name);
+      if (v === undefined) throw new Error("Undefined variable: " + lhs.name);
+      if (v.kind === "ref") return derefValue(v.ref);
+      return v;
+    }
+    case "deref": {
+      const inner = getLhsRaw(lhs.ref, env);
+      if (inner.kind !== "ref")
+        throw new Error("Cannot dereference non-reference");
+      return derefValue(inner.ref);
+    }
+    case "index": {
+      const arr = resolveLhs(lhs.array, env);
+      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
+      const idx = evaluate(lhs.index, env);
+      const result = arr.elements[idx];
+      if (result === undefined)
+        throw new Error(`Array index out of bounds: ${idx}`);
+      if (result.kind === "ref") return derefValue(result.ref);
+      return result;
+    }
+    case "field": {
+      const struct = resolveLhs(lhs.struct, env);
+      if (struct.kind !== "struct")
+        throw new Error("Cannot access field on non-struct value");
+      const field = struct.fields[lhs.field];
+      if (field === undefined) throw new Error(`Field not found: ${lhs.field}`);
+      return field;
+    }
+  }
+}
+
+/** Get the raw Value for an LHS without auto-dereferencing refs. */
+function getLhsRaw(lhs: Lhs, env: Environment): Value {
+  switch (lhs.kind) {
+    case "var": {
+      const v = env.get(lhs.name);
+      if (v === undefined) throw new Error("Undefined variable: " + lhs.name);
+      return v;
+    }
+    case "deref": {
+      const inner = getLhsRaw(lhs.ref, env);
+      if (inner.kind !== "ref")
+        throw new Error("Cannot dereference non-reference");
+      return derefValue(inner.ref);
+    }
+    case "index": {
+      const arr = resolveLhs(lhs.array, env);
+      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
+      const idx = evaluate(lhs.index, env);
+      const result = arr.elements[idx];
+      if (result === undefined)
+        throw new Error(`Array index out of bounds: ${idx}`);
+      return result;
+    }
+    case "field": {
+      const struct = resolveLhs(lhs.struct, env);
+      if (struct.kind !== "struct")
+        throw new Error("Cannot access field on non-struct value");
+      const field = struct.fields[lhs.field];
+      if (field === undefined) throw new Error(`Field not found: ${lhs.field}`);
+      return field;
+    }
+  }
+}
+
+/** Write a value to the target described by an LHS. */
+function writeLhs(lhs: Lhs, env: Environment, value: Value): void {
+  switch (lhs.kind) {
+    case "var": {
+      env.assign(lhs.name, value);
+      return;
+    }
+    case "deref": {
+      const inner = getLhsRaw(lhs.ref, env);
+      if (inner.kind !== "ref")
+        throw new Error("Cannot dereference non-reference");
+      assignRef(inner.ref, toNumber(value));
+      return;
+    }
+    case "index": {
+      // Navigate to the parent array, then write the final index
+      const arr = resolveLhs(lhs.array, env);
+      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
+      const idx = evaluate(lhs.index, env);
+      arr.elements[idx] = value;
+      return;
+    }
+    case "field": {
+      const struct = resolveLhs(lhs.struct, env);
+      if (struct.kind !== "struct")
+        throw new Error("Cannot assign field on non-struct value");
+      struct.fields[lhs.field] = value;
+      return;
+    }
+  }
+}
+
 export function evaluateStatements(
   statements: AstNode[],
   env: Environment,
@@ -273,43 +375,21 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "assign": {
       const value = evaluate(node.value, env);
-      env.assign(node.name, num(value));
+      writeLhs(node.lhs, env, num(value));
       return value;
     }
 
     case "compoundassign": {
-      const current = env.get(node.name);
-      if (current === undefined)
-        throw new Error("Undefined variable: " + node.name);
-      const currentValue = toNumber(current);
+      const current = toNumber(resolveLhs(node.lhs, env));
       const rhs = evaluate(node.value, env);
-      const compoundValue =
-        node.op === "+" ? currentValue + rhs : currentValue - rhs;
-      env.assign(node.name, num(compoundValue));
+      const compoundValue = node.op === "+" ? current + rhs : current - rhs;
+      writeLhs(node.lhs, env, num(compoundValue));
       return compoundValue;
     }
 
     case "deref": {
       const operand = evaluate(node.operand, env);
       return operand;
-    }
-
-    case "derefassign": {
-      const value = evaluate(node.value, env);
-      // The target is a deref of an id
-      const target = node.target as {
-        type: "deref";
-        operand: { type: "id"; name: string };
-      };
-      const refVal = env.get(target.operand.name);
-      if (refVal === undefined)
-        throw new Error("Undefined variable: " + target.operand.name);
-      if (refVal.kind === "ref") {
-        assignRef(refVal.ref, value);
-      } else {
-        throw new Error("Cannot dereference non-reference");
-      }
-      return value;
     }
 
     case "ref": {
@@ -441,15 +521,6 @@ export function evaluate(node: AstNode, env: Environment): number {
       return toNumber(field);
     }
 
-    case "struct-field-assign": {
-      const structVal = evalValue(node.struct, env);
-      if (structVal.kind !== "struct")
-        throw new Error("Cannot assign field on non-struct value");
-      const value = evaluate(node.value, env);
-      structVal.fields[node.field] = num(value);
-      return value;
-    }
-
     case "fn-def": {
       env.declareFunction(node.name, {
         params: node.params,
@@ -489,60 +560,6 @@ export function evaluate(node: AstNode, env: Environment): number {
         fnEnv.declare(param.name, argValue, false);
       }
       return evaluate(fn.body, fnEnv);
-    }
-
-    case "array-index-assign": {
-      const value = evaluate(node.value, env);
-      const indices: AstNode[] = [];
-      let base: AstNode = node.array;
-      while (base.type === "array-index") {
-        indices.unshift(base.index);
-        base = base.array;
-      }
-      let currentVal: Value = evalValue(base, env);
-      if (currentVal.kind === "ref") {
-        currentVal = derefValue(currentVal.ref);
-      }
-      if (currentVal.kind !== "array")
-        throw new Error("Cannot index non-array value");
-      for (let i = 0; i < indices.length - 1; i++) {
-        const idx = evaluate(indices[i]!, env);
-        const child: Value | undefined = (
-          currentVal as { kind: "array"; elements: Value[] }
-        ).elements[idx];
-        if (child === undefined)
-          throw new Error(`Array index out of bounds: ${idx}`);
-        if (child.kind === "ref") {
-          currentVal = derefValue(child.ref);
-        } else {
-          currentVal = child;
-        }
-        if (currentVal.kind !== "array")
-          throw new Error("Cannot index non-array value");
-      }
-      const finalIdx = evaluate(indices[indices.length - 1]!, env);
-      (currentVal as { kind: "array"; elements: Value[] }).elements[finalIdx] =
-        num(value);
-      return value;
-    }
-
-    case "deref-array-index-assign": {
-      const target = node.ref as {
-        type: "deref";
-        operand: { type: "id"; name: string };
-      };
-      const refVal = env.get(target.operand.name);
-      const index = evaluate(node.index, env);
-      const value = evaluate(node.value, env);
-      if (refVal === undefined)
-        throw new Error("Undefined variable: " + target.operand.name);
-      if (refVal.kind !== "ref")
-        throw new Error("Cannot index non-reference value");
-      const derefed = derefValue(refVal.ref);
-      if (derefed.kind !== "array")
-        throw new Error("Cannot index non-array value");
-      derefed.elements[index] = num(value);
-      return value;
     }
   }
 }
