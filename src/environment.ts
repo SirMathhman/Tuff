@@ -94,6 +94,15 @@ function deref(ref: Ref): number {
   return toNumber(val);
 }
 
+function derefValue(ref: Ref): Value {
+  const val = ref.env.get(ref.name);
+  if (val === undefined) throw new Error("Reference to undefined variable");
+  if (val.kind === "ref") return derefValue(val.ref);
+  return val;
+}
+
+export { derefValue };
+
 function assignRef(ref: Ref, value: number): void {
   if (!ref.mutable)
     throw new Error("Cannot assign through immutable reference");

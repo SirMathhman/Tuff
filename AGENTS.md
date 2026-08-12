@@ -4,12 +4,13 @@ Tuff is a custom programming language interpreter written in TypeScript, run wit
 
 ## Commands
 
-| Command             | Action                            |
-| ------------------- | --------------------------------- |
-| `bun test`          | Run tests                         |
-| `bun run typecheck` | TypeScript type check             |
-| `bun run cpd`       | Copy-paste detection (PMD)        |
-| `bun run circular`  | Circular dependency check (madge) |
+| Command             | Action                                       |
+| ------------------- | -------------------------------------------- |
+| `bun test`          | Run tests                                    |
+| `bun run typecheck` | TypeScript type check                        |
+| `bun run cpd`       | Copy-paste detection (PMD)                   |
+| `bun run circular`  | Circular dependency check (madge)            |
+| `bun run visualize` | Generate dependency graph (`docs/graph.svg`) |
 
 ## Architecture
 

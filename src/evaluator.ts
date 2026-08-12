@@ -4,6 +4,7 @@ import { promoteTypes } from "./types";
 import {
   Environment,
   deref,
+  derefValue,
   assignRef,
   num,
   toNumber,
@@ -457,9 +458,16 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "array-index-assign": {
-      const arrayVal = evalValue(node.array, env);
+      let arrayVal = evalValue(node.array, env);
       const index = evaluate(node.index, env);
       const value = evaluate(node.value, env);
+      if (arrayVal.kind === "ref") {
+        const derefed = derefValue(arrayVal.ref);
+        if (derefed.kind !== "array")
+          throw new Error("Cannot index non-array value");
+        derefed.elements[index] = num(value);
+        return value;
+      }
       if (arrayVal.kind !== "array")
         throw new Error("Cannot index non-array value");
       arrayVal.elements[index] = num(value);
