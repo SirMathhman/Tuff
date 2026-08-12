@@ -134,10 +134,7 @@ export function tokenize(source: string): Token[] {
     } else if (/^[a-zA-Z_]/.test(text)) {
       result.push(["id", text]);
     } else if (text.endsWith("U8")) {
-      const value = Number(text.slice(0, -2));
-      if (value < 0 || value > 255)
-        throw new Error(`U8 value out of range: ${value}`);
-      result.push(["num", value, "u8"]);
+      result.push(["num", Number(text.slice(0, -2)), "u8"]);
     } else {
       result.push(["num", Number(text), undefined]);
     }

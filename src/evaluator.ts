@@ -101,14 +101,8 @@ export function evaluate(node: AstNode, env: Environment): number {
       return toNumber(value);
     }
 
-    case "unop": {
-      if (node.op === "-") {
-        const operand = node.operand;
-        if (operand.type === "num" && operand.numType === "u8")
-          throw new Error("Cannot negate unsigned integer");
-      }
+    case "unop":
       return -evaluate(node.operand, env);
-    }
 
     case "binop": {
       const left = evaluate(node.left, env);
