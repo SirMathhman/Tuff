@@ -12,7 +12,8 @@ export type AstNode =
   | DerefAssign
   | CompoundAssign
   | IfStatement
-  | IfExpression;
+  | IfExpression
+  | WhileLoop;
 
 export interface Num {
   type: "num";
@@ -108,4 +109,10 @@ export interface IfExpression {
   condition: AstNode;
   thenBranch: AstNode;
   elseBranch: AstNode;
+}
+
+export interface WhileLoop {
+  type: "while-loop";
+  condition: AstNode;
+  body: AstNode;
 }

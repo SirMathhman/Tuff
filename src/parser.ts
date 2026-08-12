@@ -65,6 +65,11 @@ export class Parser {
       return expr;
     }
 
+    // Handle while loop
+    if (token[0] === "kw" && token[1] === "while") {
+      return this.parseWhile();
+    }
+
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
@@ -165,6 +170,31 @@ export class Parser {
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return { type, name, value };
+  }
+
+  private parseWhile(): AstNode {
+    this.consume(); // "while"
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
+      throw new Error("Expected ( after while");
+    this.consume(); // "("
+    const condition = this.parseAddSub();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected ) after condition");
+    this.consume(); // ")"
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
+      throw new Error("Expected { after while condition");
+    this.consume(); // "{"
+    const statements: AstNode[] = [];
+    while (
+      this.peek() &&
+      !(this.peek()![0] === "group" && this.peek()![1] === "}")
+    ) {
+      statements.push(this.parseStatement());
+    }
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+      throw new Error("Expected }");
+    this.consume(); // "}"
+    return { type: "while-loop", condition, body: { type: "block", statements } };
   }
 
   private parseDerefAssign(): AstNode {

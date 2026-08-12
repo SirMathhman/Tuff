@@ -152,5 +152,12 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       return evaluate(node.elseBranch, env);
     }
+
+    case "while-loop": {
+      while (evaluate(node.condition, env)) {
+        evaluate(node.body, env);
+      }
+      return 0;
+    }
   }
 }
