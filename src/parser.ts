@@ -515,7 +515,23 @@ export class Parser {
     if (this.peek()?.[0] === "kw" && this.peek()![1] === "is") {
       this.consume(); // "is"
       const typeNode = this.parseType();
-      return { type: "type-check", operand: left, typeNode };
+      left = { type: "type-check", operand: left, typeNode };
+    }
+    // logical operators: &&, ||
+    while (
+      this.peek()?.[0] === "op" &&
+      (this.peek()![1] === "&&" || this.peek()![1] === "||")
+    ) {
+      const op = this.consume()[1] as "&&" | "||";
+      const right = this.parseMulDiv();
+      // Handle `is` on the right side
+      let rightOperand = right;
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "is") {
+        this.consume(); // "is"
+        const typeNode = this.parseType();
+        rightOperand = { type: "type-check", operand: right, typeNode };
+      }
+      left = { type: "binop", op, left, right: rightOperand };
     }
     return this.parseRangeSuffix(left);
   }

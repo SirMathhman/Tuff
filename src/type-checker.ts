@@ -124,9 +124,7 @@ function checkNode(node: AstNode, scope: Scope): void {
         const target = requireIntType(typeName.toLowerCase() as IntTypeName);
         const source = valueType ? requireIntType(valueType) : null;
         if (source && target.max < source.max)
-          throw new Error(
-            `Cannot assign ${source.suffix} to ${target.suffix}`,
-          );
+          throw new Error(`Cannot assign ${source.suffix} to ${target.suffix}`);
       }
       scope.variables.set(node.name, {
         mutable: node.mutable,
