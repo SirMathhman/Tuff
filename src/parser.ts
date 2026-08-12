@@ -60,7 +60,7 @@ export class Parser {
       throw new Error("Expected type name");
     const typeName = typeToken[1];
     this.consume();
-    let type: TypeNode = { kind: "name", name: typeName };
+    const type: TypeNode = { kind: "name", name: typeName };
     // Check for union: Type | Type
     if (this.peek()?.[0] === "op" && this.peek()![1] === "|") {
       this.consume(); // "|"
