@@ -21,7 +21,7 @@ export function checkType(
       const typeName = typeNode.name.toLowerCase();
       if (typeName === "bool") return val.kind === "bool";
       if (val.kind === "number") {
-        if (val.isFloat) return typeName === "f32";
+        if (val.isFloat) return val.numType === typeName || (val.numType === undefined && typeName === "f32");
         if (!val.numType) return typeName === "i32";
         return val.numType === typeName;
       }
@@ -189,7 +189,7 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "num":
       if (node.numType) {
         // Skip range check for float types
-        if (node.numType !== "f32") {
+        if (!node.numType.startsWith("f")) {
           const t = requireIntType(node.numType);
           if (node.value < t.min || node.value > t.max)
             throw new Error(`${t.suffix} value out of range: ${node.value}`);

@@ -36,7 +36,10 @@ export interface FloatType {
   suffix: string; // e.g. "F32"
 }
 
-export const FLOAT_TYPES: FloatType[] = [{ name: "f32", suffix: "F32" }];
+export const FLOAT_TYPES: FloatType[] = [
+  { name: "f32", suffix: "F32" },
+  { name: "f64", suffix: "F64" },
+];
 
 /** All numeric type names as a union. */
 export type IntTypeName = (typeof INT_TYPES)[number]["name"];
