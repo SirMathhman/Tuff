@@ -44,6 +44,7 @@ export type Token =
         | "is"
         | "fn"
         | "type"
+        | "struct"
       ),
     ]
   | ["id", string]
@@ -143,6 +144,8 @@ export function tokenize(source: string): Token[] {
       result.push(["kw", "fn"]);
     } else if (text === "type") {
       result.push(["kw", "type"]);
+    } else if (text === "struct") {
+      result.push(["kw", "struct"]);
     } else if (text === "true") {
       result.push(["bool", true]);
     } else if (text === "false") {

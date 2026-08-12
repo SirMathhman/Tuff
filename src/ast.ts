@@ -37,6 +37,7 @@ export type AstNode =
   | TypeCheck
   | Cast
   | TypeAlias
+  | StructDef
   | FnDef
   | FnCall
   | FnRef;
@@ -202,6 +203,12 @@ export interface TypeAlias {
   type: "type-alias";
   name: string;
   typeNode: TypeNode;
+}
+
+export interface StructDef {
+  type: "struct-def";
+  name: string;
+  fields: { name: string; type: TypeNode }[];
 }
 
 export interface Cast {

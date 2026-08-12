@@ -41,6 +41,7 @@ export class Environment {
   private mutable: Set<string> = new Set();
   private functions: Record<string, FnDef> = {};
   private typeAliases: Record<string, TypeNode> = {};
+  private structs: Record<string, TypeNode> = {};
   private parent: Environment | undefined;
 
   constructor(parent?: Environment) {
@@ -97,6 +98,20 @@ export class Environment {
     }
     if (this.parent) {
       return this.parent.getTypeAlias(name);
+    }
+    return undefined;
+  }
+
+  declareStruct(name: string, typeNode: TypeNode): void {
+    this.structs[name] = typeNode;
+  }
+
+  getStruct(name: string): TypeNode | undefined {
+    if (Object.prototype.hasOwnProperty.call(this.structs, name)) {
+      return this.structs[name];
+    }
+    if (this.parent) {
+      return this.parent.getStruct(name);
     }
     return undefined;
   }

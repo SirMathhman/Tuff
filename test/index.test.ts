@@ -393,4 +393,12 @@ describe("evaluate", () => {
       evaluate("type A = I32; let temp : A = 100; temp is A && temp is I32"),
     ).toBe(1);
   });
+
+  it('evaluate("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y") => 7', () => {
+    expect(
+      evaluate(
+        "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y",
+      ),
+    ).toBe(7);
+  });
 });

@@ -403,6 +403,15 @@ export function evaluate(node: AstNode, env: Environment): number {
       return 0;
     }
 
+    case "struct-def": {
+      const structType: TypeNode = {
+        kind: "struct",
+        fields: node.fields,
+      };
+      env.declareStruct(node.name, structType);
+      return 0;
+    }
+
     case "array-literal": {
       // Arrays are stored as values, not returned as numbers.
       // This case is only reached when an array is used in a context

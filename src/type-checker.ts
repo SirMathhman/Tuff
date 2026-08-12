@@ -13,6 +13,7 @@ interface Scope {
   variables: Map<string, { mutable: boolean; type?: IntTypeName }>;
   functions: Map<string, { params: TypeNode[]; returnType: TypeNode }>;
   typeAliases: Map<string, TypeNode>;
+  structs: Map<string, TypeNode>;
   parent?: Scope;
 }
 
@@ -21,6 +22,7 @@ function newScope(parent?: Scope): Scope {
     variables: new Map(),
     functions: new Map(),
     typeAliases: new Map(),
+    structs: new Map(),
     parent,
   };
 }
@@ -55,6 +57,16 @@ function getTypeAlias(scope: Scope, name: string): TypeNode | undefined {
   let s: Scope | undefined = scope;
   while (s) {
     const entry = s.typeAliases.get(name);
+    if (entry !== undefined) return entry;
+    s = s.parent;
+  }
+  return undefined;
+}
+
+function getStruct(scope: Scope, name: string): TypeNode | undefined {
+  let s: Scope | undefined = scope;
+  while (s) {
+    const entry = s.structs.get(name);
     if (entry !== undefined) return entry;
     s = s.parent;
   }
@@ -115,16 +127,24 @@ function checkNode(node: AstNode, scope: Scope): void {
           : undefined;
       const declaredType = node.typeAnnotation || valueType;
       if (declaredType) {
-        // Resolve to the underlying type name (may be an alias)
-        let typeName = declaredType;
-        const alias = getTypeAlias(scope, declaredType);
-        if (alias && alias.kind === "name") {
-          typeName = alias.name;
+        // Check if it's a struct type
+        const structType = getStruct(scope, declaredType);
+        if (structType) {
+          // Struct types don't need range checking
+        } else {
+          // Check if it's a type alias
+          const alias = getTypeAlias(scope, declaredType);
+          let typeName = declaredType;
+          if (alias && alias.kind === "name") {
+            typeName = alias.name;
+          }
+          const target = requireIntType(typeName.toLowerCase() as IntTypeName);
+          const source = valueType ? requireIntType(valueType) : null;
+          if (source && target.max < source.max)
+            throw new Error(
+              `Cannot assign ${source.suffix} to ${target.suffix}`,
+            );
         }
-        const target = requireIntType(typeName.toLowerCase() as IntTypeName);
-        const source = valueType ? requireIntType(valueType) : null;
-        if (source && target.max < source.max)
-          throw new Error(`Cannot assign ${source.suffix} to ${target.suffix}`);
       }
       scope.variables.set(node.name, {
         mutable: node.mutable,
@@ -255,6 +275,13 @@ function checkNode(node: AstNode, scope: Scope): void {
 
     case "type-alias":
       scope.typeAliases.set(node.name, node.typeNode);
+      break;
+
+    case "struct-def":
+      scope.structs.set(node.name, {
+        kind: "struct",
+        fields: node.fields,
+      });
       break;
 
     case "cast":

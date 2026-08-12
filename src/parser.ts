@@ -123,6 +123,25 @@ export class Parser {
     return { type: "type-alias", name, typeNode };
   }
 
+  private parseStructDef(): AstNode {
+    this.consume(); // "struct"
+    const nameToken = this.consume();
+    const name = nameToken[1] as string;
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
+      throw new Error("Expected { in struct definition");
+    this.consume(); // "{"
+    const rawFields = this.parseStructFields(
+      () => this.parseType(),
+      "Expected field name in struct",
+      "Expected : in struct",
+    );
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+      throw new Error("Expected } in struct definition");
+    this.consume(); // "}"
+    const fields = rawFields.map((f) => ({ name: f.name, type: f.value }));
+    return { type: "struct-def", name, fields };
+  }
+
   private parseStatement(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
@@ -134,6 +153,11 @@ export class Parser {
     // type Alias = Type;
     if (token[0] === "kw" && token[1] === "type") {
       return this.parseTypeAlias();
+    }
+
+    // struct Name { field : Type, ... }
+    if (token[0] === "kw" && token[1] === "struct") {
+      return this.parseStructDef();
     }
 
     // fn name(params) : ReturnType => body;
@@ -779,6 +803,19 @@ export class Parser {
       // Check for function call: name(args)
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
         return this.parseFnCall(token[1]);
+      }
+      // Check for struct constructor: Name { field : value, ... }
+      if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {
+        this.consume(); // "{"
+        const fields = this.parseStructFields(
+          () => this.parseAddSub(),
+          "Expected field name",
+          "Expected : after field name",
+        );
+        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+          throw new Error("Expected } in struct literal");
+        this.consume(); // "}"
+        return { type: "struct-literal", fields };
       }
       let node = this.consumeIdWithArrayIndices(token[1]);
       // Check for struct field access: pt.x
