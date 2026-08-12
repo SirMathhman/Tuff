@@ -1,4 +1,5 @@
 import type { AstNode } from "./ast";
+import type { IntTypeName } from "./types";
 import { Environment, deref, assignRef, num, toNumber } from "./environment";
 import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
@@ -80,7 +81,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       const left = evalValue(node.left, env);
       const right = evalValue(node.right, env);
       const result = evaluate(node, env);
-      const numType = left.numType || right.numType;
+      const numType = (left.kind === "number" ? left.numType : undefined) || (right.kind === "number" ? right.numType : undefined);
       if (numType) {
         return num(result, numType);
       }
@@ -293,7 +294,9 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "cast": {
       const value = evalValue(node.expression, env);
       const numValue = value.kind === "number" ? value.value : toNumber(value);
-      return toNumber(num(numValue, node.typeName.toLowerCase() as IntTypeName));
+      return toNumber(
+        num(numValue, node.typeName.toLowerCase() as IntTypeName),
+      );
     }
 
     case "type-check": {
