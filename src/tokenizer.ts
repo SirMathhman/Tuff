@@ -1,5 +1,8 @@
 import type { AstNode } from "./ast";
 
+const COMPOUND_OPS: Record<string, string> = { "+=": "+", "-=": "-" };
+export { COMPOUND_OPS };
+
 export type Token =
   | ["num", number]
   | ["bool", boolean]
@@ -14,7 +17,8 @@ export type Token =
 
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re = /"([^"]*)"|(\d+\.?\d*|\+=|-=|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+  const re =
+    /"([^"]*)"|(\d+\.?\d*|\+=|-=|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -33,10 +37,8 @@ export function tokenize(source: string): Token[] {
       result.push(["group", text as "(" | ")" | "{" | "}"]);
     } else if (text === "=") {
       result.push(["assign", "="]);
-    } else if (text === "+=") {
-      result.push(["assign", "+="]);
-    } else if (text === "-=") {
-      result.push(["assign", "-="]);
+    } else if (COMPOUND_OPS[text]) {
+      result.push(["assign", text]);
     } else if (text === ";") {
       result.push(["semi", ";"]);
     } else if (text === "let") {

@@ -1,4 +1,5 @@
 import type { Token } from "./tokenizer";
+import { COMPOUND_OPS } from "./tokenizer";
 import type { AstNode } from "./ast";
 
 export class Parser {
@@ -43,7 +44,7 @@ export class Parser {
       token[0] === "id" &&
       this.pos + 1 < this.tokens.length &&
       this.tokens[this.pos + 1]![0] === "assign" &&
-      (this.tokens[this.pos + 1]![1] === "+=" || this.tokens[this.pos + 1]![1] === "-=")
+      COMPOUND_OPS[this.tokens[this.pos + 1]![1]]
     ) {
       return this.parseCompoundAssign();
     }

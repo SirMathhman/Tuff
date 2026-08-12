@@ -81,7 +81,8 @@ export function evaluate(node: AstNode, env: Environment): number {
       const currentValue =
         typeof current === "object" ? deref(current) : current;
       const rhs = evaluate(node.value, env);
-      const compoundValue = node.op === "+" ? currentValue + rhs : currentValue - rhs;
+      const compoundValue =
+        node.op === "+" ? currentValue + rhs : currentValue - rhs;
       env.assign(node.name, compoundValue);
       return compoundValue;
     }
