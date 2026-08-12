@@ -10,6 +10,7 @@ export type AstNode =
   | Deref
   | Assign
   | DerefAssign
+  | CompoundAssign
   | IfStatement
   | IfExpression;
 
@@ -73,6 +74,12 @@ export interface Assign {
 export interface DerefAssign {
   type: "derefassign";
   target: AstNode;
+  value: AstNode;
+}
+
+export interface CompoundAssign {
+  type: "compoundassign";
+  name: string;
   value: AstNode;
 }
 

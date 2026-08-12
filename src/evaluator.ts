@@ -74,6 +74,14 @@ export function evaluate(node: AstNode, env: Environment): number {
       return value;
     }
 
+    case "compoundassign": {
+      const current = env.get(node.name);
+      if (current === undefined) throw new Error("Undefined variable: " + node.name);
+      const newValue = current + evaluate(node.value, env);
+      env.assign(node.name, newValue);
+      return newValue;
+    }
+
     case "deref": {
       const operand = evaluate(node.operand, env);
       return operand;

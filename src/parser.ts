@@ -42,6 +42,15 @@ export class Parser {
     if (
       token[0] === "id" &&
       this.pos + 1 < this.tokens.length &&
+      this.tokens[this.pos + 1]![0] === "assign" &&
+      this.tokens[this.pos + 1]![1] === "+="
+    ) {
+      return this.parseCompoundAssign();
+    }
+
+    if (
+      token[0] === "id" &&
+      this.pos + 1 < this.tokens.length &&
       this.tokens[this.pos + 1]![0] === "assign"
     ) {
       return this.parseAssign();
@@ -140,6 +149,14 @@ export class Parser {
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return { type: "assign", name, value };
+  }
+
+  private parseCompoundAssign(): AstNode {
+    const name = this.consume()[1] as string;
+    this.consume(); // "+="
+    const value = this.parseAddSub();
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "compoundassign", name, value };
   }
 
   private parseDerefAssign(): AstNode {
