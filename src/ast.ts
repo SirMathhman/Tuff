@@ -31,6 +31,7 @@ export type AstNode =
   | ArrayLiteral
   | ArrayIndex
   | ArrayIndexAssign
+  | DerefArrayIndexAssign
   | StructLiteral
   | StructAccess
   | TypeCheck
@@ -220,6 +221,13 @@ export interface FnRef {
 export interface ArrayIndexAssign {
   type: "array-index-assign";
   array: AstNode;
+  index: AstNode;
+  value: AstNode;
+}
+
+export interface DerefArrayIndexAssign {
+  type: "deref-array-index-assign";
+  ref: AstNode;
   index: AstNode;
   value: AstNode;
 }

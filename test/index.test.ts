@@ -106,6 +106,14 @@ describe("evaluate", () => {
     ).toBe(100);
   });
 
+  it('evaluate("let mut array = [0]; let ref = &mut array; (*ref)[0] = 100; array[0]") => 100', () => {
+    expect(
+      evaluate(
+        "let mut array = [0]; let ref = &mut array; (*ref)[0] = 100; array[0]",
+      ),
+    ).toBe(100);
+  });
+
   it('evaluate("\"let x = 0; let y = 1; x == y\"") => 0', () => {
     expect(evaluate('"let x = 0; let y = 1; x == y"')).toBe(0);
   });

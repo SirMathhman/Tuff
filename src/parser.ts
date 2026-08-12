@@ -124,13 +124,44 @@ export class Parser {
       return this.parseFnDef();
     }
 
+    // *x = value or (*ref)[index] = value
+    if (token[0] === "op" && token[1] === "*") {
+      // *x = value
+      if (
+        this.pos + 2 < this.tokens.length &&
+        this.tokens[this.pos + 2]![0] === "assign"
+      ) {
+        return this.parseDerefAssign();
+      }
+    }
+
+    // (*ref)[index] = value — starts with (
     if (
-      token[0] === "op" &&
-      token[1] === "*" &&
-      this.pos + 2 < this.tokens.length &&
-      this.tokens[this.pos + 2]![0] === "assign"
+      token[0] === "group" &&
+      token[1] === "(" &&
+      this.tokens[this.pos + 1]?.[0] === "op" &&
+      this.tokens[this.pos + 1]?.[1] === "*"
     ) {
-      return this.parseDerefAssign();
+      let bracketDepth = 0;
+      let closeBracketPos = -1;
+      for (let i = this.pos; i < this.tokens.length; i++) {
+        const t = this.tokens[i]!;
+        if (t[0] === "group" && t[1] === "[") bracketDepth++;
+        if (t[0] === "group" && t[1] === "]") {
+          bracketDepth--;
+          if (bracketDepth === 0) {
+            closeBracketPos = i;
+            break;
+          }
+        }
+      }
+      if (
+        closeBracketPos > 0 &&
+        closeBracketPos + 1 < this.tokens.length &&
+        this.tokens[closeBracketPos + 1]![0] === "assign"
+      ) {
+        return this.parseDerefArrayIndexAssign();
+      }
     }
 
     // array[index] = value
@@ -417,6 +448,28 @@ export class Parser {
     };
     if (this.peek()?.[0] === "semi") this.consume();
     return { type: "derefassign", target, value };
+  }
+
+  private parseDerefArrayIndexAssign(): AstNode {
+    // (*ref)[index] = value
+    this.consume(); // "*"
+    this.consume(); // "("
+    const idToken = this.peek();
+    if (!idToken || idToken[0] !== "id")
+      throw new Error("Expected identifier after *(");
+    this.consume();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected )");
+    this.consume(); // ")"
+    const index = this.consumeArrayIndex();
+    this.consume(); // "="
+    const value = this.parseAddSub();
+    const ref: AstNode = {
+      type: "deref",
+      operand: { type: "id", name: idToken[1] },
+    };
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "deref-array-index-assign", ref, index, value };
   }
 
   private parseAddSub(): AstNode {

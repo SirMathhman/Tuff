@@ -174,6 +174,13 @@ function evalValue(node: AstNode, env: Environment): Value {
       }
       return num(result);
     }
+    case "deref": {
+      const operand = evalValue(node.operand, env);
+      if (operand.kind === "ref") {
+        return derefValue(operand.ref);
+      }
+      return operand;
+    }
     default:
       return num(evaluate(node, env));
   }
@@ -471,6 +478,25 @@ export function evaluate(node: AstNode, env: Environment): number {
       if (arrayVal.kind !== "array")
         throw new Error("Cannot index non-array value");
       arrayVal.elements[index] = num(value);
+      return value;
+    }
+
+    case "deref-array-index-assign": {
+      const target = node.ref as {
+        type: "deref";
+        operand: { type: "id"; name: string };
+      };
+      const refVal = env.get(target.operand.name);
+      const index = evaluate(node.index, env);
+      const value = evaluate(node.value, env);
+      if (refVal === undefined)
+        throw new Error("Undefined variable: " + target.operand.name);
+      if (refVal.kind !== "ref")
+        throw new Error("Cannot index non-reference value");
+      const derefed = derefValue(refVal.ref);
+      if (derefed.kind !== "array")
+        throw new Error("Cannot index non-array value");
+      derefed.elements[index] = num(value);
       return value;
     }
   }
