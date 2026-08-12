@@ -1,4 +1,4 @@
-import type { AstNode } from "./ast";
+import type { AstNode, TypeNode } from "./ast";
 import { INT_TYPES, type IntTypeName } from "./types";
 
 /** Find an IntType by name, throwing if not found. */
@@ -8,15 +8,52 @@ function requireIntType(name: string): (typeof INT_TYPES)[number] {
   return t;
 }
 
+/** Scope tracks variable declarations, mutability, and function signatures. */
+interface Scope {
+  variables: Map<string, { mutable: boolean; type?: IntTypeName }>;
+  functions: Map<string, { params: TypeNode[]; returnType: TypeNode }>;
+  parent?: Scope;
+}
+
+function newScope(parent?: Scope): Scope {
+  return { variables: new Map(), functions: new Map(), parent };
+}
+
+function getVar(
+  scope: Scope,
+  name: string,
+): { mutable: boolean; type?: IntTypeName } | undefined {
+  let s: Scope | undefined = scope;
+  while (s) {
+    const entry = s.variables.get(name);
+    if (entry !== undefined) return entry;
+    s = s.parent;
+  }
+  return undefined;
+}
+
+function getFn(
+  scope: Scope,
+  name: string,
+): { params: TypeNode[]; returnType: TypeNode } | undefined {
+  let s: Scope | undefined = scope;
+  while (s) {
+    const entry = s.functions.get(name);
+    if (entry !== undefined) return entry;
+    s = s.parent;
+  }
+  return undefined;
+}
+
 /** Validate type constraints on the AST. */
 export function typeCheck(statements: AstNode[]): void {
-  const types: Record<string, IntTypeName> = {};
+  const scope = newScope();
   for (const stmt of statements) {
-    checkNode(stmt, types);
+    checkNode(stmt, scope);
   }
 }
 
-function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
+function checkNode(node: AstNode, scope: Scope): void {
   switch (node.type) {
     case "num":
       if (node.numType) {
@@ -36,99 +73,190 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
         )
           throw new Error("Cannot negate unsigned integer");
         if (operand.type === "id") {
-          const t = types[operand.name];
-          if (t && !requireIntType(t).signed)
+          const varInfo = getVar(scope, operand.name);
+          if (varInfo?.type && !requireIntType(varInfo.type).signed)
             throw new Error("Cannot negate unsigned integer");
         }
       }
-      checkNode(node.operand, types);
+      checkNode(node.operand, scope);
       break;
 
     case "binop":
-      checkNode(node.left, types);
-      checkNode(node.right, types);
+      checkNode(node.left, scope);
+      checkNode(node.right, scope);
       break;
 
-    case "let":
-      if (node.value.type === "num" && node.value.numType) {
-        // Check type annotation compatibility
-        if (node.typeAnnotation) {
-          const target = requireIntType(
-            node.typeAnnotation.toLowerCase() as IntTypeName,
-          );
-          const source = node.value.numType
-            ? requireIntType(node.value.numType)
-            : null;
-          if (source && target.max < source.max)
-            throw new Error(
-              `Cannot assign ${source.suffix} to ${target.suffix}`,
-            );
-          types[node.name] = target.name;
-        } else {
-          types[node.name] = node.value.numType;
-        }
+    case "let": {
+      const valueType =
+        node.value.type === "num" && node.value.numType
+          ? node.value.numType
+          : undefined;
+      const declaredType = node.typeAnnotation || valueType;
+      if (declaredType) {
+        const target = requireIntType(
+          declaredType.toLowerCase() as IntTypeName,
+        );
+        const source = valueType ? requireIntType(valueType) : null;
+        if (source && target.max < source.max)
+          throw new Error(`Cannot assign ${source.suffix} to ${target.suffix}`);
       }
-      checkNode(node.value, types);
+      scope.variables.set(node.name, {
+        mutable: node.mutable,
+        type: declaredType,
+      });
+      checkNode(node.value, scope);
       break;
+    }
 
-    case "block":
+    case "assign": {
+      const varInfo = getVar(scope, node.name);
+      if (!varInfo) throw new Error(`Undefined variable: ${node.name}`);
+      if (!varInfo.mutable)
+        throw new Error(`Cannot assign to immutable variable: ${node.name}`);
+      checkNode(node.value, scope);
+      break;
+    }
+
+    case "compoundassign": {
+      const varInfo = getVar(scope, node.name);
+      if (!varInfo) throw new Error(`Undefined variable: ${node.name}`);
+      if (!varInfo.mutable)
+        throw new Error(
+          `Cannot compound-assign to immutable variable: ${node.name}`,
+        );
+      checkNode(node.value, scope);
+      break;
+    }
+
+    case "id": {
+      if (!getVar(scope, node.name))
+        throw new Error(`Undefined variable: ${node.name}`);
+      break;
+    }
+
+    case "ref": {
+      const varInfo = getVar(scope, node.name);
+      if (!varInfo) {
+        // Could be a function reference — check functions
+        if (!getFn(scope, node.name))
+          throw new Error(`Undefined: ${node.name}`);
+      }
+      break;
+    }
+
+    case "fnref": {
+      if (!getFn(scope, node.name))
+        throw new Error(`Undefined function: ${node.name}`);
+      break;
+    }
+
+    case "fn-def": {
+      const paramTypes = node.params.map((p) => p.type);
+      scope.functions.set(node.name, {
+        params: paramTypes,
+        returnType: node.returnType,
+      });
+      const fnScope = newScope(scope);
+      for (const param of node.params) {
+        fnScope.variables.set(param.name, { mutable: false, type: undefined });
+      }
+      checkNode(node.body, fnScope);
+      break;
+    }
+
+    case "fn-call": {
+      const fnInfo = getFn(scope, node.name);
+      if (!fnInfo) {
+        // Could be a variable holding a function reference
+        const varInfo = getVar(scope, node.name);
+        if (!varInfo) throw new Error(`Undefined function: ${node.name}`);
+      }
+      for (const arg of node.args) {
+        checkNode(arg, scope);
+      }
+      break;
+    }
+
+    case "block": {
+      const childScope = newScope(scope);
       for (const stmt of node.statements) {
-        checkNode(stmt, types);
+        checkNode(stmt, childScope);
       }
       break;
+    }
 
     case "if-statement":
     case "if-expression":
-      checkNode(node.condition, types);
-      checkNode(node.thenBranch, types);
-      checkNode(node.elseBranch, types);
+      checkNode(node.condition, scope);
+      checkNode(node.thenBranch, scope);
+      checkNode(node.elseBranch, scope);
       break;
 
     case "while-loop":
-      checkNode(node.condition, types);
-      checkNode(node.body, types);
+      checkNode(node.condition, scope);
+      checkNode(node.body, scope);
       break;
 
-    case "for-loop":
-      checkNode(node.range, types);
-      checkNode(node.body, types);
+    case "for-loop": {
+      checkNode(node.range, scope);
+      const childScope = newScope(scope);
+      childScope.variables.set(node.variable, { mutable: false });
+      checkNode(node.body, childScope);
       break;
+    }
 
     case "range":
-      checkNode(node.start, types);
-      checkNode(node.end, types);
+      checkNode(node.start, scope);
+      checkNode(node.end, scope);
       break;
 
     case "array-literal":
       for (const el of node.elements) {
-        checkNode(el, types);
+        checkNode(el, scope);
       }
       break;
 
     case "array-index":
-      checkNode(node.array, types);
-      checkNode(node.index, types);
+      checkNode(node.array, scope);
+      checkNode(node.index, scope);
+      break;
+
+    case "array-index-assign":
+      checkNode(node.array, scope);
+      checkNode(node.index, scope);
+      checkNode(node.value, scope);
       break;
 
     case "struct-literal":
       for (const f of node.fields) {
-        checkNode(f.value, types);
+        checkNode(f.value, scope);
       }
       break;
 
     case "struct-access":
-      checkNode(node.struct, types);
+      checkNode(node.struct, scope);
       break;
 
-    case "ref":
+    case "type-check":
+      checkNode(node.operand, scope);
+      break;
+
+    case "cast":
+      checkNode(node.expression, scope);
+      break;
+
     case "deref":
-    case "assign":
+      checkNode(node.operand, scope);
+      break;
+
     case "derefassign":
-    case "compoundassign":
+      checkNode(node.target, scope);
+      checkNode(node.value, scope);
+      break;
+
     case "break":
     case "continue":
     case "bool":
-    case "id":
       break;
   }
 }
