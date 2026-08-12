@@ -155,9 +155,14 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "while-loop": {
       while (evaluate(node.condition, env)) {
-        evaluate(node.body, env);
+        const result = evaluate(node.body, env);
+        if (isNaN(result)) break; // break signal
       }
       return 0;
+    }
+
+    case "break": {
+      return NaN; // break signal
     }
   }
 }

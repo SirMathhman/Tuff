@@ -70,6 +70,13 @@ export class Parser {
       return this.parseWhile();
     }
 
+    // Handle break
+    if (token[0] === "kw" && token[1] === "break") {
+      this.consume();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "break" };
+    }
+
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
@@ -169,9 +176,10 @@ export class Parser {
   private parseWhile(): AstNode {
     this.consume(); // "while"
     const condition = this.parseParenCondition("while");
-    const body = this.peek()?.[0] === "group" && this.peek()![1] === "{"
-      ? this.parseBlock()
-      : this.parseStatement();
+    const body =
+      this.peek()?.[0] === "group" && this.peek()![1] === "{"
+        ? this.parseBlock()
+        : this.parseStatement();
     return { type: "while-loop", condition, body };
   }
 
