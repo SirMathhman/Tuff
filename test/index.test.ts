@@ -453,4 +453,8 @@ describe("evaluate", () => {
   it("evaluate(\"'a'\") => 97", () => {
     expect(evaluate("'a'")).toBe(97);
   });
+
+  it("evaluate(\"'a' is Char\") => 1", () => {
+    expect(evaluate("'a' is Char")).toBe(1);
+  });
 });

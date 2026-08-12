@@ -152,7 +152,11 @@ export function tokenize(source: string): Token[] {
       result.push(["bool", false]);
     } else if (/^[a-zA-Z_]/.test(text)) {
       result.push(["id", text]);
-    } else if (text.startsWith("'") && text.endsWith("'") && text.length === 3) {
+    } else if (
+      text.startsWith("'") &&
+      text.endsWith("'") &&
+      text.length === 3
+    ) {
       result.push(["char", text.slice(1, 2)]);
     } else {
       const suffix = matchSuffix(text);

@@ -43,7 +43,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "bool":
       return { kind: "bool", value: node.value };
     case "char":
-      return num(node.value.charCodeAt(0));
+      return num(node.value.charCodeAt(0), undefined, undefined, true);
     case "id": {
       const v = env.get(node.name);
       if (v === undefined) throw new Error("Undefined variable: " + node.name);

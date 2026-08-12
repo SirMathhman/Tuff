@@ -51,6 +51,7 @@ export const BUILTIN_TYPES: string[] = [
   ...INT_TYPES.map((t) => t.name),
   ...FLOAT_TYPES.map((t) => t.name),
   "bool",
+  "char",
 ];
 
 /** Build regex fragment for typed number literals, longest suffix first. */
