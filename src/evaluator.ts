@@ -294,18 +294,33 @@ function compareEqual(a: Value, b: Value): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case "number":
-      return (a as Value & { kind: "number" }).value === (b as Value & { kind: "number" }).value;
+      return (
+        (a as Value & { kind: "number" }).value ===
+        (b as Value & { kind: "number" }).value
+      );
     case "bool":
-      return (a as Value & { kind: "bool" }).value === (b as Value & { kind: "bool" }).value;
+      return (
+        (a as Value & { kind: "bool" }).value ===
+        (b as Value & { kind: "bool" }).value
+      );
     case "null":
       return true;
     case "ref":
-      return (a as Value & { kind: "ref" }).ref.name === (b as Value & { kind: "ref" }).ref.name;
+      return (
+        (a as Value & { kind: "ref" }).ref.name ===
+        (b as Value & { kind: "ref" }).ref.name
+      );
     case "array": {
       const aEls = (a as Value & { kind: "array" }).elements;
       const bEls = (b as Value & { kind: "array" }).elements;
       if (aEls.length !== bEls.length) return false;
-      return aEls.every((el, i) => compareEqual(el, bEls[i]));
+      for (let i = 0; i < aEls.length; i++) {
+        const aEl = aEls[i];
+        const bEl = bEls[i];
+        if (aEl === undefined || bEl === undefined) return false;
+        if (!compareEqual(aEl, bEl)) return false;
+      }
+      return true;
     }
     case "struct": {
       const aFields = (a as Value & { kind: "struct" }).fields;
@@ -314,13 +329,18 @@ function compareEqual(a: Value, b: Value): boolean {
       const bKeys = Object.keys(bFields);
       if (aKeys.length !== bKeys.length) return false;
       for (const key of aKeys) {
-        if (!bFields[key] || !compareEqual(aFields[key], bFields[key]!))
-          return false;
+        const aVal = aFields[key];
+        const bVal = bFields[key];
+        if (aVal === undefined || bVal === undefined) return false;
+        if (!compareEqual(aVal, bVal)) return false;
       }
       return true;
     }
     case "fnref":
-      return (a as Value & { kind: "fnref" }).fn === (b as Value & { kind: "fnref" }).fn;
+      return (
+        (a as Value & { kind: "fnref" }).fn ===
+        (b as Value & { kind: "fnref" }).fn
+      );
     default:
       return false;
   }
