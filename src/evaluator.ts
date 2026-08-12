@@ -85,6 +85,17 @@ function evalRange(
   return { start: v.start, end: v.end };
 }
 
+/** Get element from array at index, throwing on out of bounds. */
+function getIndex(
+  arr: { kind: "array"; elements: Value[] },
+  idx: number,
+): Value {
+  const result = arr.elements[idx];
+  if (result === undefined)
+    throw new Error(`Array index out of bounds: ${idx}`);
+  return result;
+}
+
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
 function evalValue(node: AstNode, env: Environment): Value {
   switch (node.type) {
@@ -105,9 +116,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       const arr = evalValue(node.array, env);
       const idx = evaluate(node.index, env);
       if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const result = arr.elements[idx];
-      if (result === undefined)
-        throw new Error(`Array index out of bounds: ${idx}`);
+      const result = getIndex(arr, idx);
       return result;
     }
     case "ref": {
@@ -194,17 +203,17 @@ function evalValue(node: AstNode, env: Environment): Value {
   }
 }
 
-/** Resolve an LHS to the Value it points to (for reading). */
-function resolveLhs(lhs: Lhs, env: Environment): Value {
+/** Resolve an LHS to the Value it points to. */
+function resolveLhs(lhs: Lhs, env: Environment, raw = false): Value {
   switch (lhs.kind) {
     case "var": {
       const v = env.get(lhs.name);
       if (v === undefined) throw new Error("Undefined variable: " + lhs.name);
-      if (v.kind === "ref") return derefValue(v.ref);
+      if (!raw && v.kind === "ref") return derefValue(v.ref);
       return v;
     }
     case "deref": {
-      const inner = getLhsRaw(lhs.ref, env);
+      const inner = resolveLhs(lhs.ref, env, true);
       if (inner.kind !== "ref")
         throw new Error("Cannot dereference non-reference");
       return derefValue(inner.ref);
@@ -212,45 +221,8 @@ function resolveLhs(lhs: Lhs, env: Environment): Value {
     case "index": {
       const arr = resolveLhs(lhs.array, env);
       if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const idx = evaluate(lhs.index, env);
-      const result = arr.elements[idx];
-      if (result === undefined)
-        throw new Error(`Array index out of bounds: ${idx}`);
-      if (result.kind === "ref") return derefValue(result.ref);
-      return result;
-    }
-    case "field": {
-      const struct = resolveLhs(lhs.struct, env);
-      if (struct.kind !== "struct")
-        throw new Error("Cannot access field on non-struct value");
-      const field = struct.fields[lhs.field];
-      if (field === undefined) throw new Error(`Field not found: ${lhs.field}`);
-      return field;
-    }
-  }
-}
-
-/** Get the raw Value for an LHS without auto-dereferencing refs. */
-function getLhsRaw(lhs: Lhs, env: Environment): Value {
-  switch (lhs.kind) {
-    case "var": {
-      const v = env.get(lhs.name);
-      if (v === undefined) throw new Error("Undefined variable: " + lhs.name);
-      return v;
-    }
-    case "deref": {
-      const inner = getLhsRaw(lhs.ref, env);
-      if (inner.kind !== "ref")
-        throw new Error("Cannot dereference non-reference");
-      return derefValue(inner.ref);
-    }
-    case "index": {
-      const arr = resolveLhs(lhs.array, env);
-      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const idx = evaluate(lhs.index, env);
-      const result = arr.elements[idx];
-      if (result === undefined)
-        throw new Error(`Array index out of bounds: ${idx}`);
+      const result = getIndex(arr, evaluate(lhs.index, env));
+      if (!raw && result.kind === "ref") return derefValue(result.ref);
       return result;
     }
     case "field": {
@@ -272,7 +244,7 @@ function writeLhs(lhs: Lhs, env: Environment, value: Value): void {
       return;
     }
     case "deref": {
-      const inner = getLhsRaw(lhs.ref, env);
+      const inner = resolveLhs(lhs.ref, env, true);
       if (inner.kind !== "ref")
         throw new Error("Cannot dereference non-reference");
       assignRef(inner.ref, toNumber(value));

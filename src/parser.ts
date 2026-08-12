@@ -180,11 +180,8 @@ export class Parser {
         this.peek()?.[0] === "assign" &&
         COMPOUND_OPS[this.peek()![1] as "+=" | "-="]
       ) {
-        const opToken = this.consume()[1] as "+=" | "-=";
-        const op = opToken[0] as "+" | "-";
-        const value = this.parseAddSub();
-        this.maybeConsumeSemi();
-        return { type: "compoundassign", lhs: lhs.lhs, op, value };
+        this.pos = lhs.startPos;
+        return this.parseCompoundAssign();
       }
       // Simple assignment
       if (this.peek()?.[0] === "assign") {
@@ -269,19 +266,11 @@ export class Parser {
           this.consume();
           if (this.peek()?.[0] === "group" && this.peek()![1] === ")") {
             this.consume(); // ")"
-            // Now consume [index] chains
             let lhs: Lhs = {
               kind: "deref",
               ref: { kind: "var", name: idToken[1] },
             };
-            while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-              this.consume(); // "["
-              const index = this.parseAddSub();
-              if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-                throw new Error("Expected ]");
-              this.consume(); // "]"
-              lhs = { kind: "index", array: lhs, index };
-            }
+            lhs = this.consumeIndexChains(lhs);
             return { lhs, startPos };
           }
         }
@@ -295,49 +284,60 @@ export class Parser {
       const name = this.consume()[1] as string;
       let lhs: Lhs = { kind: "var", name };
 
-      // Consume [index] chains
-      while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-        this.consume(); // "["
-        const index = this.parseAddSub();
-        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-          throw new Error("Expected ]");
-        this.consume(); // "]"
-        lhs = { kind: "index", array: lhs, index };
-      }
-
-      // Consume .field chains
-      while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
-        this.consume(); // "."
-        const fieldToken = this.peek();
-        if (!fieldToken || fieldToken[0] !== "id")
-          throw new Error("Expected field name after .");
-        const field = fieldToken[1];
-        this.consume();
-        lhs = { kind: "field", struct: lhs, field };
-      }
-
+      lhs = this.consumeIndexChains(lhs);
+      lhs = this.consumeFieldChains(lhs);
       return { lhs, startPos };
     }
 
     return undefined;
   }
 
-  private consumeArrayIndex(): AstNode {
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "[")
-      throw new Error("Expected [");
-    this.consume(); // "["
-    const index = this.parseAddSub();
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-      throw new Error("Expected ]");
-    this.consume(); // "]"
-    return index;
+  private consumeIndexChains(lhs: Lhs): Lhs {
+    while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+      this.consume(); // "["
+      const index = this.parseAddSub();
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+        throw new Error("Expected ]");
+      this.consume(); // "]"
+      lhs = { kind: "index", array: lhs, index };
+    }
+    return lhs;
+  }
+
+  private consumeFieldChains(lhs: Lhs): Lhs {
+    while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+      this.consume(); // "."
+      const fieldToken = this.peek();
+      if (!fieldToken || fieldToken[0] !== "id")
+        throw new Error("Expected field name after .");
+      const field = fieldToken[1];
+      this.consume();
+      lhs = { kind: "field", struct: lhs, field };
+    }
+    return lhs;
+  }
+
+  private consumeStructAccessChains(node: AstNode): AstNode {
+    while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+      this.consume(); // "."
+      const fieldToken = this.peek();
+      if (!fieldToken || fieldToken[0] !== "id")
+        throw new Error("Expected field name after .");
+      const field = fieldToken[1];
+      this.consume();
+      node = { type: "struct-access", struct: node, field };
+    }
+    return node;
   }
 
   private consumeIdWithArrayIndices(name: string): AstNode {
+    const lhs = this.consumeIndexChains({ kind: "var", name });
+    // Convert Lhs index chain back to AstNode
     let node: AstNode = { type: "id", name };
-    while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-      const index = this.consumeArrayIndex();
-      node = { type: "array-index", array: node, index };
+    let current = lhs;
+    while (current.kind === "index") {
+      node = { type: "array-index", array: node, index: current.index };
+      current = current.array;
     }
     return node;
   }
@@ -833,16 +833,7 @@ export class Parser {
         return { type: "struct-literal", fields };
       }
       let node = this.consumeIdWithArrayIndices(token[1]);
-      // Check for struct field access: pt.x
-      while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
-        this.consume(); // "."
-        const fieldToken = this.peek();
-        if (!fieldToken || fieldToken[0] !== "id")
-          throw new Error("Expected field name after .");
-        const field = fieldToken[1];
-        this.consume();
-        node = { type: "struct-access", struct: node, field };
-      }
+      node = this.consumeStructAccessChains(node);
       return node;
     }
 

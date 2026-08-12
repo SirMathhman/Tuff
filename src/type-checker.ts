@@ -85,21 +85,12 @@ function checkLhsAssignable(scope: Scope, lhs: Lhs): void {
     case "var":
       checkAssignable(scope, lhs.name);
       break;
-    case "deref":
-      // Just validate the inner LHS exists; mutability is checked at the root var
-      checkLhsExists(scope, lhs.ref);
-      break;
-    case "index":
-      checkLhsExists(scope, lhs.array);
-      checkNode(lhs.index, scope);
-      break;
-    case "field":
-      checkLhsExists(scope, lhs.struct);
+    default:
+      checkLhsExists(scope, lhs);
       break;
   }
 }
 
-/** Validate that an LHS target exists (without checking mutability). */
 function checkLhsExists(scope: Scope, lhs: Lhs): void {
   switch (lhs.kind) {
     case "var":
