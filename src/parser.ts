@@ -204,16 +204,12 @@ export class Parser {
     if (this.peek()?.[0] !== "kw" || this.peek()![1] !== "in")
       throw new Error("Expected 'in' in for loop");
     this.consume(); // "in"
-    const start = this.parseAddSub();
-    if (this.peek()?.[0] !== "op" || this.peek()![1] !== "..")
-      throw new Error("Expected '..' in range");
-    this.consume(); // ".."
-    const end = this.parseAddSub();
+    const range = this.parseRange();
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
       throw new Error("Expected ) after for loop");
     this.consume(); // ")"
     const body = this.parseBlock();
-    return { type: "for-loop", variable, start, end, body };
+    return { type: "for-loop", variable, range, body };
   }
 
   private parseParenContext(label: string): AstNode {
@@ -274,7 +270,21 @@ export class Parser {
       const right = this.parseMulDiv();
       left = { type: "binop", op, left, right };
     }
+    return this.parseRangeSuffix(left);
+  }
+
+  private parseRangeSuffix(left: AstNode): AstNode {
+    if (this.peek()?.[0] === "op" && this.peek()![1] === "..") {
+      this.consume(); // ".."
+      const right = this.parseMulDiv();
+      return { type: "range", start: left, end: right };
+    }
     return left;
+  }
+
+  private parseRange(): AstNode {
+    const left = this.parseAddSub();
+    return this.parseRangeSuffix(left);
   }
 
   private parseMulDiv(): AstNode {

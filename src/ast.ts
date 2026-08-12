@@ -16,7 +16,8 @@ export type AstNode =
   | WhileLoop
   | BreakStatement
   | ContinueStatement
-  | ForLoop;
+  | ForLoop
+  | Range;
 
 export interface Num {
   type: "num";
@@ -126,6 +127,12 @@ export interface BreakStatement {
 
 export interface ContinueStatement {
   type: "continue";
+}
+
+export interface Range {
+  type: "range";
+  start: AstNode;
+  end: AstNode;
 }
 
 export interface ForLoop {
