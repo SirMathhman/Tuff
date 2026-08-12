@@ -1,6 +1,6 @@
 import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
-import type { AstNode } from "./ast";
+import type { AstNode, TypeCheck } from "./ast";
 import type { IntTypeName } from "./types";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
@@ -10,30 +10,15 @@ export class Parser {
 
   constructor(private tokens: Token[]) {}
 
-  private parseArrayType(): {
-    typeName: string;
-    arrayLength: AstNode;
-    elementType?: {
-      typeName: string;
-      arrayLength: AstNode;
-      elementType?: {
-        typeName: string;
-        arrayLength: AstNode;
-      };
-    };
-  } {
+  private parseArrayType(): TypeCheck {
     this.consume(); // "["
     // Check for nested array type: [[Type; N]; M]
     if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
       const inner = this.parseArrayType();
-      if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
-        throw new Error("Expected ; in array type");
-      this.consume(); // ";"
-      const lengthNode = this.parseMulDiv();
-      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-        throw new Error("Expected ] in array type");
-      this.consume(); // "]"
+      const lengthNode = this.consumeSemiAndCloseBracket();
       return {
+        type: "type-check",
+        operand: inner.operand,
         typeName: `[${inner.typeName}]`,
         arrayLength: lengthNode,
         elementType: inner,
@@ -44,6 +29,16 @@ export class Parser {
       throw new Error("Expected type name in array type");
     const typeName = typeToken[1];
     this.consume();
+    const lengthNode = this.consumeSemiAndCloseBracket();
+    return {
+      type: "type-check",
+      operand: { type: "num", value: 0 },
+      typeName: `[${typeName}]`,
+      arrayLength: lengthNode,
+    };
+  }
+
+  private consumeSemiAndCloseBracket(): AstNode {
     if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
       throw new Error("Expected ; in array type");
     this.consume(); // ";"
@@ -51,10 +46,7 @@ export class Parser {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
       throw new Error("Expected ] in array type");
     this.consume(); // "]"
-    return {
-      typeName: `[${typeName}]`,
-      arrayLength: lengthNode,
-    };
+    return lengthNode;
   }
 
   parse(): AstNode[] {
@@ -335,11 +327,8 @@ export class Parser {
       if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
         const arrayType = this.parseArrayType();
         return {
-          type: "type-check",
+          ...arrayType,
           operand: left,
-          typeName: arrayType.typeName,
-          arrayLength: arrayType.arrayLength,
-          elementType: arrayType.elementType,
         };
       }
       const typeToken = this.peek();
