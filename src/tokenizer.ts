@@ -4,7 +4,7 @@ const COMPOUND_OPS: Record<string, string> = { "+=": "+", "-=": "-" };
 export { COMPOUND_OPS };
 
 export type Token =
-  | ["num", number, IntTypeName | undefined]
+  | ["num", number, IntTypeName | undefined, boolean]
   | ["bool", boolean]
   | [
       "op",
@@ -149,9 +149,10 @@ export function tokenize(source: string): Token[] {
       const suffix = matchSuffix(text);
       if (suffix) {
         const t = INT_TYPES.find((t) => t.name === suffix)!;
-        result.push(["num", Number(text.slice(0, -t.suffix.length)), suffix]);
+        result.push(["num", Number(text.slice(0, -t.suffix.length)), suffix, false]);
       } else {
-        result.push(["num", Number(text), undefined]);
+        const isFloat = text.includes(".");
+        result.push(["num", Number(text), undefined, isFloat]);
       }
     }
   }

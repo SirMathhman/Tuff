@@ -50,6 +50,7 @@ export interface Num {
   type: "num";
   value: number;
   numType?: IntTypeName;
+  isFloat?: boolean;
 }
 
 export interface Bool {

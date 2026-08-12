@@ -3,7 +3,7 @@ import type { IntTypeName } from "./types";
 
 /** Discriminated union for all runtime values the language can produce. */
 export type Value =
-  | { kind: "number"; value: number; numType?: IntTypeName }
+  | { kind: "number"; value: number; numType?: IntTypeName; isFloat?: boolean }
   | { kind: "bool"; value: boolean }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
@@ -20,8 +20,12 @@ export type FnDef = {
 };
 
 /** Wrap a plain number in the Value union. */
-export function num(v: number, numType?: IntTypeName): Value {
-  return { kind: "number", value: v, numType };
+export function num(
+  v: number,
+  numType?: IntTypeName,
+  isFloat?: boolean,
+): Value {
+  return { kind: "number", value: v, numType, isFloat };
 }
 
 /** Unwrap a Value to a number, throwing if it's not a number. */

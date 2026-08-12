@@ -803,7 +803,12 @@ export class Parser {
 
     if (token[0] === "num") {
       this.consume();
-      return { type: "num", value: token[1], numType: token[2] };
+      return {
+        type: "num",
+        value: token[1],
+        numType: token[2],
+        isFloat: token[3],
+      };
     }
 
     if (token[0] === "bool") {

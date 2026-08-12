@@ -100,7 +100,7 @@ function getIndex(
 function evalValue(node: AstNode, env: Environment): Value {
   switch (node.type) {
     case "num":
-      return num(node.value, node.numType);
+      return num(node.value, node.numType, node.isFloat);
     case "bool":
       return { kind: "bool", value: node.value };
     case "id": {
@@ -310,8 +310,14 @@ export function evaluate(node: AstNode, env: Environment): number {
           return left - right;
         case "*":
           return left * right;
-        case "/":
+        case "/": {
+          const leftVal = evalValue(node.left, env);
+          const rightVal = evalValue(node.right, env);
+          const leftFloat = leftVal.kind === "number" && leftVal.isFloat;
+          const rightFloat = rightVal.kind === "number" && rightVal.isFloat;
+          if (leftFloat || rightFloat) return left / right;
           return Math.trunc(left / right);
+        }
         case "&&":
           return left && right;
         case "||":
