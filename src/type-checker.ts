@@ -205,6 +205,7 @@ function checkLiteral(node: AstNode): void {
     case "char":
     case "bool":
     case "string":
+    case "null":
       break;
   }
 }
@@ -249,6 +250,8 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
         const structType = getStruct(scope, declaredType);
         if (structType) {
           // Struct types don't need range checking
+        } else if (declaredType === "Null") {
+          // Null type — no range checking needed
         } else {
           const alias = getTypeAlias(scope, declaredType);
           let typeName = declaredType;
@@ -314,6 +317,11 @@ function checkFunction(node: AstNode, scope: Scope): void {
         params: paramTypes,
         returnType: node.returnType,
       });
+      // Void functions must have a block body, not a value expression
+      if (node.returnType.kind === "name" && node.returnType.name === "Void") {
+        if (node.body.type !== "block")
+          throw new Error("Void function body must be a block");
+      }
       const fnScope = newScope(scope);
       for (const param of node.params) {
         fnScope.variables.set(param.name, { mutable: false, type: undefined });

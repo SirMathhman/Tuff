@@ -829,6 +829,11 @@ export class Parser {
       return { type: "string", value: token[1] };
     }
 
+    if (token[0] === "kw" && token[1] === "null") {
+      this.consume();
+      return { type: "null" };
+    }
+
     if (token[0] === "id") {
       this.consume();
       // Check for function call: name(args)

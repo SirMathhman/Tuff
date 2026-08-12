@@ -11,6 +11,7 @@ export type Value =
       isChar?: boolean;
     }
   | { kind: "bool"; value: boolean }
+  | { kind: "null" }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
   | { kind: "range"; start: number; end: number }
@@ -36,10 +37,16 @@ export function num(
   return { kind: "number", value: v, numType, isFloat, isChar };
 }
 
+/** Create a null Value. */
+export function nullValue(): Value {
+  return { kind: "null" };
+}
+
 /** Unwrap a Value to a number, throwing if it's not a number. */
 export function toNumber(v: Value): number {
   if (v.kind === "number") return v.value;
   if (v.kind === "bool") return v.value ? 1 : 0;
+  if (v.kind === "null") return 0;
   throw new Error(`Expected number, got ${v.kind}`);
 }
 

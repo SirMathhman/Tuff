@@ -481,4 +481,24 @@ describe("evaluate", () => {
       ),
     ).toBe(1);
   });
+
+  it('evaluate("let mut counter = 0; fn add() : Void => { counter += 1; } add(); counter") => 1', () => {
+    expect(
+      evaluate(
+        "let mut counter = 0; fn add() : Void => { counter += 1; } add(); counter",
+      ),
+    ).toBe(1);
+  });
+
+  it('evaluate("fn empty() : Void => 100;") => Error', () => {
+    expect(() => evaluate("fn empty() : Void => 100;")).toThrow();
+  });
+
+  it('evaluate("let temp : Null = null; temp") => 0', () => {
+    expect(evaluate("let temp : Null = null; temp")).toBe(0);
+  });
+
+  it('evaluate("let temp : Null = null; temp == 0") => 0', () => {
+    expect(evaluate("let temp : Null = null; temp == 0")).toBe(0);
+  });
 });

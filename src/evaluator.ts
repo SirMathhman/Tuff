@@ -9,6 +9,7 @@ import {
   num,
   toNumber,
   getNumberType,
+  nullValue,
 } from "./environment";
 import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
@@ -51,6 +52,8 @@ function evalLiteral(node: AstNode): Value {
           num(c.charCodeAt(0), undefined, undefined, true),
         ),
       };
+    case "null":
+      return nullValue();
     default:
       throw new Error(`Unexpected literal: ${node.type}`);
   }
@@ -178,6 +181,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "bool":
     case "char":
     case "string":
+    case "null":
       return evalLiteral(node);
     case "id": {
       const v = env.get(node.name);
@@ -285,6 +289,43 @@ export function evaluateStatements(
   return last;
 }
 
+/** Structural equality for Value types. */
+function compareEqual(a: Value, b: Value): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "number":
+      return (a as any).value === (b as any).value;
+    case "bool":
+      return (a as any).value === (b as any).value;
+    case "null":
+      return true;
+    case "ref":
+      return (a as any).ref.name === (b as any).ref.name;
+    case "array": {
+      const aEls = (a as any).elements;
+      const bEls = (b as any).elements;
+      if (aEls.length !== bEls.length) return false;
+      return aEls.every((el: Value, i: number) => compareEqual(el, bEls[i]));
+    }
+    case "struct": {
+      const aFields = (a as any).fields;
+      const bFields = (b as any).fields;
+      const aKeys = Object.keys(aFields);
+      const bKeys = Object.keys(bFields);
+      if (aKeys.length !== bKeys.length) return false;
+      for (const key of aKeys) {
+        if (!bFields[key] || !compareEqual(aFields[key], bFields[key]))
+          return false;
+      }
+      return true;
+    }
+    case "fnref":
+      return (a as any).fn === (b as any).fn;
+    default:
+      return false;
+  }
+}
+
 /** Evaluate literal nodes (num, bool, char, string) to a number. */
 function evalLiteralNum(node: AstNode): number {
   switch (node.type) {
@@ -309,6 +350,9 @@ function evalOperatorNum(node: AstNode, env: Environment): number {
     case "binop": {
       const leftVal = evalValue(node.left, env);
       const rightVal = evalValue(node.right, env);
+      // Handle equality before numeric conversion (null !== 0)
+      if (node.op === "==") return compareEqual(leftVal, rightVal) ? 1 : 0;
+      if (node.op === "!=") return compareEqual(leftVal, rightVal) ? 0 : 1;
       const left = toNumber(leftVal);
       const right = toNumber(rightVal);
       const isFloat =
@@ -327,8 +371,6 @@ function evalOperatorNum(node: AstNode, env: Environment): number {
           return left && right;
         case "||":
           return left || right;
-        case "==":
-          return left === right ? 1 : 0;
         case "<":
           return left < right ? 1 : 0;
         case "<=":
@@ -337,8 +379,6 @@ function evalOperatorNum(node: AstNode, env: Environment): number {
           return left > right ? 1 : 0;
         case ">=":
           return left >= right ? 1 : 0;
-        case "!=":
-          return left !== right ? 1 : 0;
       }
       break;
     }

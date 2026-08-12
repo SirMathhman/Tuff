@@ -34,14 +34,14 @@ Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker →
 - **No external runtime dependencies** — only `bun:test` and dev tools
 - **Strict TypeScript** — `strict: true`, `noUncheckedIndexedAccess`, `noImplicitOverride`
 - **Error handling** — throw `Error` with descriptive messages; control flow via `Break`/`Continue` subclasses
-- **Dual eval paths** — `evaluate()` returns `number` (top-level); `evalValue()` returns `Value` (internal)
+- **Dual eval paths** — `evaluate()` returns `number` (top-level); `evalValue()` returns `Value` (internal). `Value` is `{ type: string, value: number | boolean }`
 - **Tuple tokens** — tokenizer uses `[kind, value]` tuples, not objects
 - **Naming** — camelCase functions/variables, PascalCase classes, SCREAMING_SNAKE_CASE constants
-- **Tests** — single file (`test/index.test.ts`); descriptive names showing source and expected result; `.toThrow()` for errors
+- **Tests** — single file (`test/index.test.ts`); descriptive names showing source and expected result (e.g. `evaluate("1 + 2") => 3`); `.toThrow()` for errors
 
 ## Language Features
 
-Typed integers (`u8`, `u16`, `i8`, `i16`, `i32`), booleans, `let` / `let mut`, references (`&x`, `&mut x`, `*y`), `if/else` (statement and expression), `while`, `for (in range)`, `break`/`continue`, structs (nested types), fixed-length arrays, multi-dimensional indexing, compound assignment (`+=`, `-=`), functions (`fn` with type annotations), function references, type aliases, runtime type checks (`is`), casts, blocks as expressions, type promotion.
+Typed integers (`u8`, `u16`, `i8`, `i16`, `i32`), floating point (`f32`, `f64`), characters (`char`), strings (`str`), booleans, `let` / `let mut`, references (`&x`, `&mut x`, `*y`), `if/else` (statement and expression), `while`, `for (in range)`, `break`/`continue`, structs (nested types), fixed-length arrays, multi-dimensional indexing, compound assignment (`+=`, `-=`), functions (`fn` with type annotations), function references, type aliases, runtime type checks (`is`), casts, blocks as expressions, type promotion.
 
 ## See Also
 

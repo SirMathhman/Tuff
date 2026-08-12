@@ -15,7 +15,7 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 | Characters                 | ✅   | ✅   | ✅ (string)         | ✅     |
 | Strings                    | ✅   | ✅   | ✅                  | ✅     |
 | Unit / Void                | ❌   | ✅   | ✅                  | ✅     |
-| Nullable / Option          | ❌   | ✅   | ✅ (undefined/null) | ✅     |
+| Nullable / Option          | ⚠️   | ✅   | ✅ (undefined/null) | ✅     |
 
 ## 2. Composite Types
 
