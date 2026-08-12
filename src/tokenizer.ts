@@ -136,7 +136,7 @@ export function tokenize(source: string): Token[] {
     } else if (text.endsWith("U8")) {
       result.push(["num", Number(text.slice(0, -2)), "u8"]);
     } else {
-      result.push(["num", Number(text)]);
+      result.push(["num", Number(text), undefined]);
     }
   }
   return result;

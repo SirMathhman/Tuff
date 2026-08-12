@@ -490,7 +490,7 @@ export class Parser {
         strTokens.push(["op", text as "&&" | "||" | "=="]);
       else if (text === ";") strTokens.push(["semi", ";"]);
       else if (/^[a-zA-Z_]/.test(text)) strTokens.push(["id", text]);
-      else strTokens.push(["num", Number(text)]);
+      else strTokens.push(["num", Number(text), undefined]);
     }
 
     // Parse string expression with a mini-parser
