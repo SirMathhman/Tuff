@@ -43,7 +43,7 @@ export class Parser {
       token[0] === "id" &&
       this.pos + 1 < this.tokens.length &&
       this.tokens[this.pos + 1]![0] === "assign" &&
-      this.tokens[this.pos + 1]![1] === "+="
+      (this.tokens[this.pos + 1]![1] === "+=" || this.tokens[this.pos + 1]![1] === "-=")
     ) {
       return this.parseCompoundAssign();
     }
@@ -148,16 +148,20 @@ export class Parser {
   }
 
   private parseCompoundAssign(): AstNode {
-    return this.parseAssignLike("compoundassign");
+    const name = this.consume()[1] as string;
+    const opToken = this.consume()[1] as "+=" | "-=";
+    const op = opToken[0] as "+" | "-";
+    const value = this.parseAddSub();
+    if (this.peek()?.[0] === "semi") this.consume();
+    return { type: "compoundassign", name, op, value };
   }
 
-  private parseAssignLike(type: "assign" | "compoundassign"): AstNode {
+  private parseAssignLike(type: "assign"): AstNode {
     const name = this.consume()[1] as string;
     this.consume(); // operator
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
-    if (type === "assign") return { type: "assign", name, value };
-    return { type: "compoundassign", name, value };
+    return { type, name, value };
   }
 
   private parseDerefAssign(): AstNode {

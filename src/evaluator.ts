@@ -76,9 +76,12 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "compoundassign": {
       const current = env.get(node.name);
-      if (current === undefined) throw new Error("Undefined variable: " + node.name);
-      const currentValue = typeof current === "object" ? deref(current) : current;
-      const compoundValue = currentValue + evaluate(node.value, env);
+      if (current === undefined)
+        throw new Error("Undefined variable: " + node.name);
+      const currentValue =
+        typeof current === "object" ? deref(current) : current;
+      const rhs = evaluate(node.value, env);
+      const compoundValue = node.op === "+" ? currentValue + rhs : currentValue - rhs;
       env.assign(node.name, compoundValue);
       return compoundValue;
     }

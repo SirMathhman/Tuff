@@ -80,6 +80,7 @@ export interface DerefAssign {
 export interface CompoundAssign {
   type: "compoundassign";
   name: string;
+  op: "+" | "-";
   value: AstNode;
 }
 

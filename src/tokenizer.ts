@@ -7,14 +7,14 @@ export type Token =
   | ["group", "(" | ")" | "{" | "}"]
   | ["kw", "let" | "mut" | "if" | "else"]
   | ["id", string]
-  | ["assign", "=" | "+="]
+  | ["assign", "=" | "+=" | "-="]
   | ["semi", ";"]
   | ["ref", "&"]
   | ["str", string];
 
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
-  const re = /"([^"]*)"|(\d+\.?\d*|\+=|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+  const re = /"([^"]*)"|(\d+\.?\d*|\+=|-=|[+\-*/(){}=;&]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -35,6 +35,8 @@ export function tokenize(source: string): Token[] {
       result.push(["assign", "="]);
     } else if (text === "+=") {
       result.push(["assign", "+="]);
+    } else if (text === "-=") {
+      result.push(["assign", "-="]);
     } else if (text === ";") {
       result.push(["semi", ";"]);
     } else if (text === "let") {
