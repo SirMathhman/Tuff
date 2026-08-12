@@ -215,7 +215,6 @@ function checkNode(node: AstNode, scope: Scope): void {
 
     case "array-index-assign":
       checkNode(node.array, scope);
-      checkNode(node.index, scope);
       checkNode(node.value, scope);
       break;
 

@@ -213,12 +213,11 @@ export class Parser {
 
     if (isAssign) {
       const idToken = this.consume();
-      const array: AstNode = { type: "id", name: idToken[1] as string };
-      const index = this.consumeArrayIndex();
+      const node = this.consumeIdWithArrayIndices(idToken[1] as string);
       this.consume(); // "="
       const value = this.parseAddSub();
       if (this.peek()?.[0] === "semi") this.consume();
-      return { type: "array-index-assign", array, index, value };
+      return { type: "array-index-assign", array: node, value };
     }
 
     // Not an assignment — parse as normal expression (array[0] + ...)
@@ -238,6 +237,15 @@ export class Parser {
     return index;
   }
 
+  private consumeIdWithArrayIndices(name: string): AstNode {
+    let node: AstNode = { type: "id", name };
+    while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+      const index = this.consumeArrayIndex();
+      node = { type: "array-index", array: node, index };
+    }
+    return node;
+  }
+
   private findCloseBracketAndCheckAssign(from: number): boolean {
     let bracketDepth = 0;
     let closeBracketPos = -1;
@@ -252,10 +260,30 @@ export class Parser {
         }
       }
     }
+    // Skip over any chained [index] brackets
+    let pos = closeBracketPos;
+    while (
+      pos + 1 < this.tokens.length &&
+      this.tokens[pos + 1]![0] === "group" &&
+      this.tokens[pos + 1]![1] === "["
+    ) {
+      let depth = 0;
+      for (let i = pos + 1; i < this.tokens.length; i++) {
+        if (this.tokens[i]![0] === "group" && this.tokens[i]![1] === "[")
+          depth++;
+        if (this.tokens[i]![0] === "group" && this.tokens[i]![1] === "]") {
+          depth--;
+          if (depth === 0) {
+            pos = i;
+            break;
+          }
+        }
+      }
+    }
     return (
-      closeBracketPos > 0 &&
-      closeBracketPos + 1 < this.tokens.length &&
-      this.tokens[closeBracketPos + 1]![0] === "assign"
+      pos > 0 &&
+      pos + 1 < this.tokens.length &&
+      this.tokens[pos + 1]![0] === "assign"
     );
   }
 

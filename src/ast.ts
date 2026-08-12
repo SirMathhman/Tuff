@@ -221,7 +221,6 @@ export interface FnRef {
 export interface ArrayIndexAssign {
   type: "array-index-assign";
   array: AstNode;
-  index: AstNode;
   value: AstNode;
 }
 
