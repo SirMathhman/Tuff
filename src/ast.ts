@@ -6,7 +6,8 @@ export type TypeNode =
   | { kind: "array"; elementType: TypeNode; length: AstNode }
   | { kind: "ref"; innerType: TypeNode }
   | { kind: "struct"; fields: { name: string; type: TypeNode }[] }
-  | { kind: "fn"; params: TypeNode[]; returnType: TypeNode };
+  | { kind: "fn"; params: TypeNode[]; returnType: TypeNode }
+  | { kind: "union"; types: TypeNode[] };
 
 /** Left-hand side of an assignment. */
 export type LValue =
