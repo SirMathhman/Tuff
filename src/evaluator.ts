@@ -1,4 +1,4 @@
-import type { AstNode, LValue, TypeNode } from "./ast";
+import type { AstNode, LValue } from "./ast";
 import type { IntTypeName } from "./types";
 import { promoteTypes } from "./types";
 import {
@@ -36,7 +36,7 @@ function getIndex(
 }
 
 /** Evaluate literal nodes (num, bool, char). */
-function evalLiteral(node: AstNode, env: Environment): Value {
+function evalLiteral(node: AstNode): Value {
   switch (node.type) {
     case "num":
       return num(node.value, node.numType, node.isFloat);
@@ -170,7 +170,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "num":
     case "bool":
     case "char":
-      return evalLiteral(node, env);
+      return evalLiteral(node);
     case "id": {
       const v = env.get(node.name);
       if (v === undefined) throw new Error("Undefined variable: " + node.name);
