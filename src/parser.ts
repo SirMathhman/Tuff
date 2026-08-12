@@ -10,6 +10,53 @@ export class Parser {
 
   constructor(private tokens: Token[]) {}
 
+  private parseArrayType(): {
+    typeName: string;
+    arrayLength: AstNode;
+    elementType?: {
+      typeName: string;
+      arrayLength: AstNode;
+      elementType?: {
+        typeName: string;
+        arrayLength: AstNode;
+      };
+    };
+  } {
+    this.consume(); // "["
+    // Check for nested array type: [[Type; N]; M]
+    if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+      const inner = this.parseArrayType();
+      if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
+        throw new Error("Expected ; in array type");
+      this.consume(); // ";"
+      const lengthNode = this.parseMulDiv();
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+        throw new Error("Expected ] in array type");
+      this.consume(); // "]"
+      return {
+        typeName: `[${inner.typeName}]`,
+        arrayLength: lengthNode,
+        elementType: inner,
+      };
+    }
+    const typeToken = this.peek();
+    if (!typeToken || typeToken[0] !== "id")
+      throw new Error("Expected type name in array type");
+    const typeName = typeToken[1];
+    this.consume();
+    if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
+      throw new Error("Expected ; in array type");
+    this.consume(); // ";"
+    const lengthNode = this.parseMulDiv();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+      throw new Error("Expected ] in array type");
+    this.consume(); // "]"
+    return {
+      typeName: `[${typeName}]`,
+      arrayLength: lengthNode,
+    };
+  }
+
   parse(): AstNode[] {
     const statements: AstNode[] = [];
     while (this.pos < this.tokens.length) {
@@ -286,24 +333,13 @@ export class Parser {
       this.consume(); // "is"
       // Check for array type: [Type; N]
       if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
-        this.consume(); // "["
-        const typeToken = this.peek();
-        if (!typeToken || typeToken[0] !== "id")
-          throw new Error("Expected type name in array type");
-        const typeName = typeToken[1];
-        this.consume();
-        if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
-          throw new Error("Expected ; in array type");
-        this.consume(); // ";"
-        const lengthNode = this.parseMulDiv();
-        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
-          throw new Error("Expected ] in array type");
-        this.consume(); // "]"
+        const arrayType = this.parseArrayType();
         return {
           type: "type-check",
           operand: left,
-          typeName: `[${typeName}]`,
-          arrayLength: lengthNode,
+          typeName: arrayType.typeName,
+          arrayLength: arrayType.arrayLength,
+          elementType: arrayType.elementType,
         };
       }
       const typeToken = this.peek();

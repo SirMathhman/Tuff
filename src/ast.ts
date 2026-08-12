@@ -179,6 +179,7 @@ export interface TypeCheck {
   operand: AstNode;
   typeName: string;
   arrayLength?: AstNode;
+  elementType?: TypeCheck;
 }
 
 export interface Cast {

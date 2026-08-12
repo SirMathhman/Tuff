@@ -1,4 +1,4 @@
-import type { AstNode } from "./ast";
+import type { AstNode, TypeCheck } from "./ast";
 import type { IntTypeName } from "./types";
 import { promoteTypes } from "./types";
 import {
@@ -11,6 +11,35 @@ import {
 } from "./environment";
 import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
+
+/** Check if a value matches a type-check node. */
+function checkType(val: Value, node: TypeCheck, env: Environment): boolean {
+  if (node.arrayLength) {
+    if (val.kind !== "array") return false;
+    const length = evaluate(node.arrayLength, env);
+    if (val.elements.length !== length) return false;
+    if (node.elementType) {
+      for (const elem of val.elements) {
+        if (!checkType(elem, node.elementType, env)) return false;
+      }
+      return true;
+    }
+    // Leaf array: [Type; N]
+    const expectedType = node.typeName.slice(1, -1).toLowerCase();
+    for (const elem of val.elements) {
+      if (elem.kind !== "number") return false;
+      if (elem.numType && elem.numType !== expectedType) return false;
+    }
+    return true;
+  }
+  if (node.typeName.toLowerCase() === "bool") {
+    return val.kind === "bool";
+  }
+  if (val.kind === "number") {
+    return val.numType === node.typeName.toLowerCase();
+  }
+  return false;
+}
 
 /** Evaluate a range expression and return { start, end }. */
 function evalRange(
@@ -320,10 +349,16 @@ export function evaluate(node: AstNode, env: Environment): number {
         if (val.kind !== "array") return 0;
         const length = evaluate(node.arrayLength, env);
         if (val.elements.length !== length) return 0;
+        // Nested array type check
+        if (node.elementType) {
+          for (const elem of val.elements) {
+            if (!checkType(elem, node.elementType, env)) return 0;
+          }
+          return 1;
+        }
         const expectedType = node.typeName.slice(1, -1).toLowerCase();
         for (const elem of val.elements) {
           if (elem.kind !== "number") return 0;
-          // Plain numbers (no numType) match any integer type
           if (elem.numType && elem.numType !== expectedType) return 0;
         }
         return 1;
