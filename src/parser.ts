@@ -775,11 +775,14 @@ export class Parser {
       return { name: pName, type: pType };
     });
 
-    // Parse return type: : Type
-    if (this.peek()?.[0] !== "colon")
-      throw new Error("Expected : before return type");
-    this.consume(); // ":"
-    const returnType = this.parseType();
+    // Parse return type: : Type (optional)
+    let returnType: TypeNode;
+    if (this.peek()?.[0] === "colon") {
+      this.consume(); // ":"
+      returnType = this.parseType();
+    } else {
+      returnType = { kind: "name", name: "i32" };
+    }
 
     // Parse => body
     if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")

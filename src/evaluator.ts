@@ -492,6 +492,7 @@ function evalFunction(node: AstNode, env: Environment): number {
         params: node.params,
         returnType: node.returnType,
         body: node.body,
+        env,
       });
       return 0;
     }
@@ -508,7 +509,7 @@ function evalFunction(node: AstNode, env: Environment): number {
           throw new Error("Undefined function: " + node.name);
         fn = namedFn;
       }
-      const fnEnv = new Environment(env);
+      const fnEnv = new Environment(fn.env ?? env);
       if (fn.params.length !== node.args.length)
         throw new Error(
           `Function expects ${fn.params.length} arguments, got ${node.args.length}`,

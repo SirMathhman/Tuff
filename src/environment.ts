@@ -23,6 +23,7 @@ export type FnDef = {
   params: { name: string; type: TypeNode }[];
   returnType: TypeNode;
   body: AstNode;
+  env?: Environment;
 };
 
 /** Wrap a plain number in the Value union. */
