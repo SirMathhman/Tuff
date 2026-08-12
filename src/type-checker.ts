@@ -181,6 +181,7 @@ function checkLValueExists(scope: Scope, lvalue: LValue): void {
       break;
   }
 }
+
 /** Validate type constraints on the AST. */
 export function typeCheck(statements: AstNode[]): void {
   const scope = newScope();
@@ -189,11 +190,11 @@ export function typeCheck(statements: AstNode[]): void {
   }
 }
 
-function checkNode(node: AstNode, scope: Scope): void {
+/** Check literal nodes. */
+function checkLiteral(node: AstNode, scope: Scope): void {
   switch (node.type) {
     case "num":
       if (node.numType) {
-        // Skip range check for float types
         if (!node.numType.startsWith("f")) {
           const t = requireIntType(node.numType);
           if (node.value < t.min || node.value > t.max)
@@ -201,10 +202,15 @@ function checkNode(node: AstNode, scope: Scope): void {
         }
       }
       break;
-
     case "char":
+    case "bool":
       break;
+  }
+}
 
+/** Check operator nodes. */
+function checkOperator(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "unop":
       if (node.op === "-") {
         const operand = node.operand;
@@ -222,12 +228,16 @@ function checkNode(node: AstNode, scope: Scope): void {
       }
       checkNode(node.operand, scope);
       break;
-
     case "binop":
       checkNode(node.left, scope);
       checkNode(node.right, scope);
       break;
+  }
+}
 
+/** Check declaration nodes. */
+function checkDeclaration(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "let": {
       const valueType =
         node.value.type === "num" && node.value.numType
@@ -235,12 +245,10 @@ function checkNode(node: AstNode, scope: Scope): void {
           : undefined;
       const declaredType = node.typeAnnotation || valueType;
       if (declaredType) {
-        // Check if it's a struct type
         const structType = getStruct(scope, declaredType);
         if (structType) {
           // Struct types don't need range checking
         } else {
-          // Check if it's a type alias
           const alias = getTypeAlias(scope, declaredType);
           let typeName = declaredType;
           if (alias && alias.kind === "name") {
@@ -261,39 +269,44 @@ function checkNode(node: AstNode, scope: Scope): void {
       checkNode(node.value, scope);
       break;
     }
-
     case "assign":
     case "compoundassign": {
       checkLValueAssignable(scope, node.lvalue);
       checkNode(node.value, scope);
       break;
     }
+  }
+}
 
+/** Check reference nodes. */
+function checkReference(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "id": {
       if (!getVar(scope, node.name)) {
-        // Allow built-in type names (used in `is` expressions)
         if (BUILTIN_TYPES.includes(node.name.toLowerCase())) break;
         throw new Error(`Undefined variable: ${node.name}`);
       }
       break;
     }
-
     case "ref": {
       const varInfo = getVar(scope, node.name);
       if (!varInfo) {
-        // Could be a function reference — check functions
         if (!getFn(scope, node.name))
           throw new Error(`Undefined: ${node.name}`);
       }
       break;
     }
-
     case "fnref": {
       if (!getFn(scope, node.name))
         throw new Error(`Undefined function: ${node.name}`);
       break;
     }
+  }
+}
 
+/** Check function nodes. */
+function checkFunction(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "fn-def": {
       const paramTypes = node.params.map((p) => p.type);
       scope.functions.set(node.name, {
@@ -307,11 +320,9 @@ function checkNode(node: AstNode, scope: Scope): void {
       checkNode(node.body, fnScope);
       break;
     }
-
     case "fn-call": {
       const fnInfo = getFn(scope, node.name);
       if (!fnInfo) {
-        // Could be a variable holding a function reference
         const varInfo = getVar(scope, node.name);
         if (!varInfo) throw new Error(`Undefined function: ${node.name}`);
       }
@@ -320,27 +331,22 @@ function checkNode(node: AstNode, scope: Scope): void {
       }
       break;
     }
+  }
+}
 
-    case "block": {
-      const childScope = newScope(scope);
-      for (const stmt of node.statements) {
-        checkNode(stmt, childScope);
-      }
-      break;
-    }
-
+/** Check control flow nodes. */
+function checkControlFlow(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "if-statement":
     case "if-expression":
       checkNode(node.condition, scope);
       checkNode(node.thenBranch, scope);
       checkNode(node.elseBranch, scope);
       break;
-
     case "while-loop":
       checkNode(node.condition, scope);
       checkNode(node.body, scope);
       break;
-
     case "for-loop": {
       checkNode(node.range, scope);
       const childScope = newScope(scope);
@@ -348,59 +354,117 @@ function checkNode(node: AstNode, scope: Scope): void {
       checkNode(node.body, childScope);
       break;
     }
+    case "block": {
+      const childScope = newScope(scope);
+      for (const stmt of node.statements) {
+        checkNode(stmt, childScope);
+      }
+      break;
+    }
+    case "break":
+    case "continue":
+      break;
+  }
+}
 
+/** Check collection nodes. */
+function checkCollection(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "range":
       checkNode(node.start, scope);
       checkNode(node.end, scope);
       break;
-
     case "array-literal":
       for (const el of node.elements) {
         checkNode(el, scope);
       }
       break;
-
     case "array-index":
       checkNode(node.array, scope);
       checkNode(node.index, scope);
       break;
-
     case "struct-literal":
       for (const f of node.fields) {
         checkNode(f.value, scope);
       }
       break;
-
     case "struct-access":
       checkNode(node.struct, scope);
       break;
+  }
+}
 
+/** Check type operation nodes. */
+function checkTypeOp(node: AstNode, scope: Scope): void {
+  switch (node.type) {
     case "type-check":
       checkNode(node.operand, scope);
       break;
-
     case "type-alias":
       scope.typeAliases.set(node.name, node.typeNode);
       break;
-
     case "struct-def":
       scope.structs.set(node.name, {
         kind: "struct",
         fields: node.fields,
       });
       break;
-
     case "cast":
       checkNode(node.expression, scope);
       break;
-
     case "deref":
       checkNode(node.operand, scope);
       break;
+  }
+}
 
+function checkNode(node: AstNode, scope: Scope): void {
+  switch (node.type) {
+    case "num":
+    case "char":
+    case "bool":
+      checkLiteral(node, scope);
+      return;
+    case "unop":
+    case "binop":
+      checkOperator(node, scope);
+      return;
+    case "let":
+    case "assign":
+    case "compoundassign":
+      checkDeclaration(node, scope);
+      return;
+    case "id":
+    case "ref":
+    case "fnref":
+      checkReference(node, scope);
+      return;
+    case "fn-def":
+    case "fn-call":
+      checkFunction(node, scope);
+      return;
+    case "if-statement":
+    case "if-expression":
+    case "while-loop":
+    case "for-loop":
+    case "block":
     case "break":
     case "continue":
-    case "bool":
-      break;
+      checkControlFlow(node, scope);
+      return;
+    case "range":
+    case "array-literal":
+    case "array-index":
+    case "struct-literal":
+    case "struct-access":
+      checkCollection(node, scope);
+      return;
+    case "type-check":
+    case "type-alias":
+    case "struct-def":
+    case "cast":
+    case "deref":
+      checkTypeOp(node, scope);
+      return;
   }
 }
