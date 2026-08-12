@@ -524,6 +524,20 @@ export class Parser {
     return { type: "block", statements };
   }
 
+  private parseParenList<T>(parseItem: () => T): T[] {
+    const items: T[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+      items.push(parseItem());
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume(); // ","
+      }
+    }
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected )");
+    this.consume(); // ")"
+    return items;
+  }
+
   private parseFnDef(): AstNode {
     this.consume(); // "fn"
     const nameToken = this.peek();
@@ -536,8 +550,7 @@ export class Parser {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
       throw new Error("Expected ( after function name");
     this.consume(); // "("
-    const params: { name: string; type: TypeNode }[] = [];
-    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+    const params = this.parseParenList(() => {
       const paramName = this.peek();
       if (!paramName || paramName[0] !== "id")
         throw new Error("Expected parameter name");
@@ -547,14 +560,8 @@ export class Parser {
         throw new Error("Expected : after parameter name");
       this.consume(); // ":"
       const pType = this.parseType();
-      params.push({ name: pName, type: pType });
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-        this.consume(); // ","
-      }
-    }
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
-      throw new Error("Expected ) after parameters");
-    this.consume(); // ")"
+      return { name: pName, type: pType };
+    });
 
     // Parse return type: : Type
     if (this.peek()?.[0] !== "colon")
@@ -574,16 +581,7 @@ export class Parser {
 
   private parseFnCall(name: string): AstNode {
     this.consume(); // "("
-    const args: AstNode[] = [];
-    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
-      args.push(this.parseAddSub());
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-        this.consume(); // ","
-      }
-    }
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
-      throw new Error("Expected ) after arguments");
-    this.consume(); // ")"
+    const args = this.parseParenList(() => this.parseAddSub());
     return { type: "fn-call", name, args };
   }
 
