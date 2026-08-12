@@ -22,7 +22,11 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
     case "unop":
       if (node.op === "-") {
         const operand = node.operand;
-        if (operand.type === "num" && operand.numType && !getIntType(operand.numType).signed)
+        if (
+          operand.type === "num" &&
+          operand.numType &&
+          !getIntType(operand.numType).signed
+        )
           throw new Error("Cannot negate unsigned integer");
         if (operand.type === "id") {
           const t = types[operand.name];
@@ -39,8 +43,24 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
       break;
 
     case "let":
-      if (node.value.type === "num" && node.value.numType)
-        types[node.name] = node.value.numType;
+      if (node.value.type === "num" && node.value.numType) {
+        // Check type annotation compatibility
+        if (node.typeAnnotation) {
+          const target = getIntType(
+            node.typeAnnotation.toLowerCase() as IntTypeName,
+          );
+          const source = node.value.numType
+            ? getIntType(node.value.numType)
+            : null;
+          if (source && target.max < source.max)
+            throw new Error(
+              `Cannot assign ${source.suffix} to ${target.suffix}`,
+            );
+          types[node.name] = target.name;
+        } else {
+          types[node.name] = node.value.numType;
+        }
+      }
       checkNode(node.value, types);
       break;
 

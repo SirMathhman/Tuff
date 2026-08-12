@@ -157,11 +157,21 @@ export class Parser {
   private parseLet(): AstNode {
     this.consume(); // "let"
     const { name, isMut } = this.parseMutId();
+    // Optional type annotation: : U8, : U16
+    let typeAnnotation: string | undefined;
+    if (this.peek()?.[0] === "colon") {
+      this.consume(); // ":"
+      const typeToken = this.peek();
+      if (!typeToken || typeToken[0] !== "id")
+        throw new Error("Expected type name");
+      typeAnnotation = typeToken[1];
+      this.consume();
+    }
     if (this.peek()?.[0] !== "assign") throw new Error("Expected =");
     this.consume();
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "let", name, mutable: isMut, value };
+    return { type: "let", name, mutable: isMut, value, typeAnnotation };
   }
 
   private parseAssign(): AstNode {

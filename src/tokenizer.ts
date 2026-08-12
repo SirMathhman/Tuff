@@ -52,7 +52,10 @@ export type Token =
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
-  const re = new RegExp(`"([^"]*)"|(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|\\.\\.|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`, "g");
+  const re = new RegExp(
+    `"([^"]*)"|(${typedNums}|\\d+|\\d+\\.\\d+|\\+=|-=|<=|>=|!=|\\.\\.|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    "g",
+  );
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;

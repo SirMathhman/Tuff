@@ -17,7 +17,9 @@ export type IntTypeName = (typeof INT_TYPES)[number]["name"];
 
 /** Build regex fragment for typed number literals, longest suffix first. */
 export function numberRegex(): string {
-  const suffixes = [...INT_TYPES].sort((a, b) => b.suffix.length - a.suffix.length);
+  const suffixes = [...INT_TYPES].sort(
+    (a, b) => b.suffix.length - a.suffix.length,
+  );
   return `\\d+(?:${suffixes.map((t) => t.suffix).join("|")})`;
 }
 

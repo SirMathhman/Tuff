@@ -71,6 +71,7 @@ export interface Let {
   name: string;
   mutable: boolean;
   value: AstNode;
+  typeAnnotation?: string;
 }
 
 export interface Block {
