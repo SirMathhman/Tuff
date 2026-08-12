@@ -144,19 +144,19 @@ export class Parser {
   }
 
   private parseAssign(): AstNode {
-    const name = this.consume()[1] as string;
-    this.consume(); // "="
-    const value = this.parseAddSub();
-    if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "assign", name, value };
+    return this.parseAssignLike("assign");
   }
 
   private parseCompoundAssign(): AstNode {
+    return this.parseAssignLike("compoundassign");
+  }
+
+  private parseAssignLike(type: "assign" | "compoundassign"): AstNode {
     const name = this.consume()[1] as string;
-    this.consume(); // "+="
+    this.consume(); // operator
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "compoundassign", name, value };
+    return { type, name, value };
   }
 
   private parseDerefAssign(): AstNode {
