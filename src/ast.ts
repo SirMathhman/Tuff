@@ -26,7 +26,7 @@ export type AstNode =
 export interface Num {
   type: "num";
   value: number;
-  numType?: "u8";
+  numType?: "u8" | "u16";
 }
 
 export interface Bool {
