@@ -3,7 +3,13 @@ import type { IntTypeName } from "./types";
 
 /** Discriminated union for all runtime values the language can produce. */
 export type Value =
-  | { kind: "number"; value: number; numType?: IntTypeName; isFloat?: boolean; isChar?: boolean }
+  | {
+      kind: "number";
+      value: number;
+      numType?: IntTypeName;
+      isFloat?: boolean;
+      isChar?: boolean;
+    }
   | { kind: "bool"; value: boolean }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
