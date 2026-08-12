@@ -421,4 +421,8 @@ describe("evaluate", () => {
   it('evaluate("5 / 3") => 1', () => {
     expect(evaluate("5 / 3")).toBe(1);
   });
+
+  it('evaluate("5.0") => 5', () => {
+    expect(evaluate("5.0")).toBe(5);
+  });
 });
