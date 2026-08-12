@@ -167,6 +167,22 @@ export function evaluate(node: AstNode, env: Environment): number {
       return 0;
     }
 
+    case "for-loop": {
+      const start = evaluate(node.start, env);
+      const end = evaluate(node.end, env);
+      for (let i = start; i < end; i++) {
+        try {
+          env.declare(node.variable, i, false);
+          evaluate(node.body, env);
+        } catch (e) {
+          if (e instanceof Break) break;
+          if (e instanceof Continue) continue;
+          throw e;
+        }
+      }
+      return 0;
+    }
+
     case "break": {
       throw new Break();
     }

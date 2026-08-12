@@ -70,6 +70,11 @@ export class Parser {
       return this.parseWhile();
     }
 
+    // Handle for loop
+    if (token[0] === "kw" && token[1] === "for") {
+      return this.parseFor();
+    }
+
     // Handle break
     if (token[0] === "kw" && token[1] === "break") {
       this.consume();
@@ -188,6 +193,27 @@ export class Parser {
         ? this.parseBlock()
         : this.parseStatement();
     return { type: "while-loop", condition, body };
+  }
+
+  private parseFor(): AstNode {
+    this.consume(); // "for"
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
+      throw new Error("Expected ( after for");
+    this.consume(); // "("
+    const variable = this.consume()[1] as string;
+    if (this.peek()?.[0] !== "kw" || this.peek()![1] !== "in")
+      throw new Error("Expected 'in' in for loop");
+    this.consume(); // "in"
+    const start = this.parseAddSub();
+    if (this.peek()?.[0] !== "op" || this.peek()![1] !== "..")
+      throw new Error("Expected '..' in range");
+    this.consume(); // ".."
+    const end = this.parseAddSub();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected ) after for loop");
+    this.consume(); // ")"
+    const body = this.parseBlock();
+    return { type: "for-loop", variable, start, end, body };
   }
 
   private parseParenContext(label: string): AstNode {

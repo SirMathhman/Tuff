@@ -194,6 +194,10 @@ describe("evaluate", () => {
     ).toBe(4);
   });
 
+  it('evaluate("let mut x = 0; for (i in 0..4) { x += i; } x") => 6', () => {
+    expect(evaluate("let mut x = 0; for (i in 0..4) { x += i; } x")).toBe(6);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(
