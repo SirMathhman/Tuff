@@ -417,4 +417,8 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("5 / 3") => 1', () => {
+    expect(evaluate("5 / 3")).toBe(1);
+  });
 });

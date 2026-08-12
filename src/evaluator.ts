@@ -311,7 +311,7 @@ export function evaluate(node: AstNode, env: Environment): number {
         case "*":
           return left * right;
         case "/":
-          return left / right;
+          return Math.trunc(left / right);
         case "&&":
           return left && right;
         case "||":

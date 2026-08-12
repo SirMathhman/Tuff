@@ -6,8 +6,9 @@ Tuff is a custom programming language interpreter written in TypeScript, run wit
 
 | Command             | Action                                       |
 | ------------------- | -------------------------------------------- |
-| `bun test`          | Run tests                                    |
+| `bun test`          | Run tests (`--coverage`)                     |
 | `bun run typecheck` | TypeScript type check                        |
+| `bun run lint`      | ESLint with auto-fix                         |
 | `bun run cpd`       | Copy-paste detection (PMD)                   |
 | `bun run circular`  | Circular dependency check (madge)            |
 | `bun run visualize` | Generate dependency graph (`docs/graph.svg`) |
@@ -31,15 +32,17 @@ Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker →
 ## Conventions
 
 - **No external runtime dependencies** — only `bun:test` and dev tools
-- **Strict TypeScript** — `strict: true`, `noUncheckedIndexedAccess`
+- **Strict TypeScript** — `strict: true`, `noUncheckedIndexedAccess`, `noImplicitOverride`
 - **Error handling** — throw `Error` with descriptive messages; control flow via `Break`/`Continue` subclasses
 - **Dual eval paths** — `evaluate()` returns `number` (top-level); `evalValue()` returns `Value` (internal)
 - **Tuple tokens** — tokenizer uses `[kind, value]` tuples, not objects
+- **Naming** — camelCase functions/variables, PascalCase classes, SCREAMING_SNAKE_CASE constants
+- **Tests** — single file (`test/index.test.ts`); descriptive names showing source and expected result; `.toThrow()` for errors
 
 ## Language Features
 
-Typed integers (`u8`, `i32`, …), `let` / `let mut`, references (`&x`, `*y`), `if/else`, `while`, `for (in)`, structs, arrays, blocks as expressions, compound assignment (`+=`, `-=`).
+Typed integers (`u8`, `u16`, `i8`, `i16`, `i32`), booleans, `let` / `let mut`, references (`&x`, `&mut x`, `*y`), `if/else` (statement and expression), `while`, `for (in range)`, `break`/`continue`, structs (nested types), fixed-length arrays, multi-dimensional indexing, compound assignment (`+=`, `-=`), functions (`fn` with type annotations), function references, type aliases, runtime type checks (`is`), casts, blocks as expressions, type promotion.
 
 ## See Also
 
-- [Architecture Plan](memories/repo/architecture-plan.md) — planned refactoring phases
+- [Missing Features](docs/missing-features.md) — feature comparison matrix (Tuff vs Rust/TS/Kotlin)
