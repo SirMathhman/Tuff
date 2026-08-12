@@ -305,19 +305,22 @@ export class Parser {
   }
 
   private consumeFieldChains(lhs: Lhs): Lhs {
-    while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
-      this.consume(); // "."
-      const fieldToken = this.peek();
-      if (!fieldToken || fieldToken[0] !== "id")
-        throw new Error("Expected field name after .");
-      const field = fieldToken[1];
-      this.consume();
-      lhs = { kind: "field", struct: lhs, field };
-    }
-    return lhs;
+    return this.consumeDotChains(lhs, (field) => ({
+      kind: "field",
+      struct: lhs,
+      field,
+    }));
   }
 
   private consumeStructAccessChains(node: AstNode): AstNode {
+    return this.consumeDotChains(node, (field) => ({
+      type: "struct-access",
+      struct: node,
+      field,
+    }));
+  }
+
+  private consumeDotChains<T>(acc: T, build: (field: string) => T): T {
     while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
       this.consume(); // "."
       const fieldToken = this.peek();
@@ -325,9 +328,9 @@ export class Parser {
         throw new Error("Expected field name after .");
       const field = fieldToken[1];
       this.consume();
-      node = { type: "struct-access", struct: node, field };
+      acc = build(field);
     }
-    return node;
+    return acc;
   }
 
   private consumeIdWithArrayIndices(name: string): AstNode {
