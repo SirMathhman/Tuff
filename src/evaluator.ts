@@ -35,7 +35,7 @@ function getIndex(
   return result;
 }
 
-/** Evaluate literal nodes (num, bool, char). */
+/** Evaluate literal nodes (num, bool, char, string). */
 function evalLiteral(node: AstNode): Value {
   switch (node.type) {
     case "num":
@@ -44,6 +44,8 @@ function evalLiteral(node: AstNode): Value {
       return { kind: "bool", value: node.value };
     case "char":
       return num(node.value.charCodeAt(0), undefined, undefined, true);
+    case "string":
+      return { kind: "array", elements: [...node.value].map((c) => num(c.charCodeAt(0), undefined, undefined, true)) };
     default:
       throw new Error(`Unexpected literal: ${node.type}`);
   }
@@ -170,6 +172,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "num":
     case "bool":
     case "char":
+    case "string":
       return evalLiteral(node);
     case "id": {
       const v = env.get(node.name);
@@ -277,7 +280,7 @@ export function evaluateStatements(
   return last;
 }
 
-/** Evaluate literal nodes (num, bool, char) to a number. */
+/** Evaluate literal nodes (num, bool, char, string) to a number. */
 function evalLiteralNum(node: AstNode): number {
   switch (node.type) {
     case "num":
@@ -286,6 +289,8 @@ function evalLiteralNum(node: AstNode): number {
       return node.value ? 1 : 0;
     case "char":
       return node.value.charCodeAt(0);
+    case "string":
+      return 0;
     default:
       throw new Error(`Unexpected literal: ${node.type}`);
   }

@@ -457,4 +457,8 @@ describe("evaluate", () => {
   it("evaluate(\"'a' is Char\") => 1", () => {
     expect(evaluate("'a' is Char")).toBe(1);
   });
+
+  it('evaluate(\'let str = "apple"; str[0]\') => 97', () => {
+    expect(evaluate('let str = "apple"; str[0]')).toBe(97);
+  });
 });

@@ -13,6 +13,7 @@ export type Token =
   | ["num", number, TypeName | undefined, boolean]
   | ["bool", boolean]
   | ["char", string]
+  | ["string", string]
   | [
       "op",
       (
@@ -63,7 +64,7 @@ export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|'[^']'|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|'[^']'|"[^"]*"|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
@@ -158,6 +159,8 @@ export function tokenize(source: string): Token[] {
       text.length === 3
     ) {
       result.push(["char", text.slice(1, 2)]);
+    } else if (text.startsWith('"') && text.endsWith('"')) {
+      result.push(["string", text.slice(1, -1)]);
     } else {
       const suffix = matchSuffix(text);
       if (suffix) {

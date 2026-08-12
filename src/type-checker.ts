@@ -204,6 +204,7 @@ function checkLiteral(node: AstNode): void {
       break;
     case "char":
     case "bool":
+    case "string":
       break;
   }
 }

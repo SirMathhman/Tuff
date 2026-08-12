@@ -19,6 +19,7 @@ export type AstNode =
   | Num
   | Bool
   | Char
+  | String
   | Id
   | BinaryOp
   | UnaryOp
@@ -61,6 +62,11 @@ export interface Bool {
 
 export interface Char {
   type: "char";
+  value: string;
+}
+
+export interface String {
+  type: "string";
   value: string;
 }
 
