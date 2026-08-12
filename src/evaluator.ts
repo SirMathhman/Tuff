@@ -4,10 +4,12 @@ import type { Ref, Value } from "./environment";
 import { Break, Continue } from "./control-flow";
 
 /** Evaluate a range expression and return { start, end }. */
-function evalRange(node: AstNode, env: Environment): { start: number; end: number } {
+function evalRange(
+  node: AstNode,
+  env: Environment,
+): { start: number; end: number } {
   const v = evalValue(node, env);
-  if (v.kind !== "range")
-    throw new Error("Expected range value");
+  if (v.kind !== "range") throw new Error("Expected range value");
   return { start: v.start, end: v.end };
 }
 
@@ -20,8 +22,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       return num(node.value ? 1 : 0);
     case "id": {
       const v = env.get(node.name);
-      if (v === undefined)
-        throw new Error("Undefined variable: " + node.name);
+      if (v === undefined) throw new Error("Undefined variable: " + node.name);
       return v;
     }
     case "array-literal": {
@@ -31,8 +32,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "array-index": {
       const arr = evalValue(node.array, env);
       const idx = evaluate(node.index, env);
-      if (arr.kind !== "array")
-        throw new Error("Cannot index non-array value");
+      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
       const result = arr.elements[idx];
       if (result === undefined)
         throw new Error(`Array index out of bounds: ${idx}`);
@@ -52,6 +52,19 @@ function evalValue(node: AstNode, env: Environment): Value {
         start: evaluate(node.start, env),
         end: evaluate(node.end, env),
       };
+    }
+    case "struct-literal": {
+      const fields: Record<string, Value> = {};
+      for (const f of node.fields) {
+        fields[f.name] = evalValue(f.value, env);
+      }
+      return { kind: "struct", fields };
+    }
+    case "struct-access": {
+      const struct = evalValue(node.struct, env);
+      if (struct.kind !== "struct")
+        throw new Error("Cannot access field on non-struct value");
+      return struct.fields[node.field];
     }
     default:
       return num(evaluate(node, env));
@@ -81,8 +94,7 @@ export function evaluate(node: AstNode, env: Environment): number {
       const value = env.get(node.name);
       if (value === undefined)
         throw new Error("Undefined variable: " + node.name);
-      if (value.kind === "ref")
-        return deref(value.ref);
+      if (value.kind === "ref") return deref(value.ref);
       return toNumber(value);
     }
 
@@ -266,6 +278,21 @@ export function evaluate(node: AstNode, env: Environment): number {
       if (result === undefined)
         throw new Error(`Array index out of bounds: ${index}`);
       return toNumber(result);
+    }
+
+    case "struct-literal": {
+      // Structs are stored as values, not returned as numbers.
+      return 0;
+    }
+
+    case "struct-access": {
+      const structVal = evalValue(node.struct, env);
+      if (structVal.kind !== "struct")
+        throw new Error("Cannot access field on non-struct value");
+      const field = structVal.fields[node.field];
+      if (field === undefined)
+        throw new Error(`Field not found: ${node.field}`);
+      return toNumber(field);
     }
   }
 }

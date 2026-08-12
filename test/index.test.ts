@@ -228,6 +228,10 @@ describe("evaluate", () => {
     ).toBe(6);
   });
 
+  it('evaluate("let pt = { x : 3, y : 4 }; pt.x + pt.y") => 7', () => {
+    expect(evaluate("let pt = { x : 3, y : 4 }; pt.x + pt.y")).toBe(7);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(

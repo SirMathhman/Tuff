@@ -19,7 +19,9 @@ export type AstNode =
   | ForLoop
   | Range
   | ArrayLiteral
-  | ArrayIndex;
+  | ArrayIndex
+  | StructLiteral
+  | StructAccess;
 
 export interface Num {
   type: "num";
@@ -153,4 +155,15 @@ export interface ArrayIndex {
   type: "array-index";
   array: AstNode;
   index: AstNode;
+}
+
+export interface StructLiteral {
+  type: "struct-literal";
+  fields: { name: string; value: AstNode }[];
+}
+
+export interface StructAccess {
+  type: "struct-access";
+  struct: AstNode;
+  field: string;
 }

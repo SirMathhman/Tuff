@@ -341,6 +341,15 @@ export class Parser {
     }
 
     if (token[0] === "group" && token[1] === "{") {
+      // Distinguish struct literal ({ x : 3, y : 4 }) from block ({ let x = 1; x })
+      // Look ahead: if next token is an id followed by ":", it's a struct
+      if (
+        this.pos + 2 < this.tokens.length &&
+        this.tokens[this.pos + 1]?.[0] === "id" &&
+        this.tokens[this.pos + 2]?.[0] === "colon"
+      ) {
+        return this.parseStructLiteral();
+      }
       return this.parseBlock();
     }
 
@@ -375,6 +384,28 @@ export class Parser {
     return { type: "array-literal", elements };
   }
 
+  private parseStructLiteral(): AstNode {
+    this.consume(); // "{"
+    const fields: { name: string; value: AstNode }[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
+      const nameToken = this.peek();
+      if (!nameToken || nameToken[0] !== "id")
+        throw new Error("Expected field name");
+      const name = nameToken[1];
+      this.consume();
+      if (this.peek()?.[0] !== "colon")
+        throw new Error("Expected : after field name");
+      this.consume(); // ":"
+      const value = this.parseAddSub();
+      fields.push({ name, value });
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume();
+      }
+    }
+    this.consume(); // "}"
+    return { type: "struct-literal", fields };
+  }
+
   private parsePrimary(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
@@ -405,6 +436,16 @@ export class Parser {
           throw new Error("Expected ]");
         this.consume(); // "]"
         node = { type: "array-index", array: node, index };
+      }
+      // Check for struct field access: pt.x
+      while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+        this.consume(); // "."
+        const fieldToken = this.peek();
+        if (!fieldToken || fieldToken[0] !== "id")
+          throw new Error("Expected field name after .");
+        const field = fieldToken[1];
+        this.consume();
+        node = { type: "struct-access", struct: node, field };
       }
       return node;
     }

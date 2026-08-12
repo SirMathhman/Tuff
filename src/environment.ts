@@ -3,7 +3,8 @@ export type Value =
   | { kind: "number"; value: number }
   | { kind: "ref"; ref: Ref }
   | { kind: "array"; elements: Value[] }
-  | { kind: "range"; start: number; end: number };
+  | { kind: "range"; start: number; end: number }
+  | { kind: "struct"; fields: Record<string, Value> };
 
 export type Ref = { name: string; env: Environment; mutable: boolean };
 

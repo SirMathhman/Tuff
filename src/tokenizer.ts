@@ -22,8 +22,7 @@ export type Token =
         | ">="
         | "!="
         | ".."
-        | ","
-      ),
+        | ","        | "."      ),
     ]
   | ["group", "(" | ")" | "{" | "}" | "[" | "]"]
   | [
@@ -44,12 +43,13 @@ export type Token =
   | ["assign", "=" | "+=" | "-="]
   | ["semi", ";"]
   | ["ref", "&"]
+  | ["colon", ":"]
   | ["str", string];
 
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const re =
-    /"([^"]*)"|(\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>[\],]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+    /"([^"]*)"|(\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>[\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -70,7 +70,8 @@ export function tokenize(source: string): Token[] {
       text === ">=" ||
       text === "!=" ||
       text === ".." ||
-      text === ","
+      text === "," ||
+      text === "."
     ) {
       result.push([
         "op",
@@ -84,7 +85,8 @@ export function tokenize(source: string): Token[] {
           | ">="
           | "!="
           | ".."
-          | ",",
+          | ","
+          | ".",
       ]);
     } else if (text === "&") {
       result.push(["ref", "&"]);
@@ -103,6 +105,8 @@ export function tokenize(source: string): Token[] {
       result.push(["assign", text as "+=" | "-="]);
     } else if (text === ";") {
       result.push(["semi", ";"]);
+    } else if (text === ":") {
+      result.push(["colon", ":"]);
     } else if (text === "let") {
       result.push(["kw", "let"]);
     } else if (text === "mut") {
