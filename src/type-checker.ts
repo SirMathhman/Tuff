@@ -24,8 +24,11 @@ function checkNode(node: AstNode, types: Record<string, IntTypeName>): void {
         const operand = node.operand;
         if (operand.type === "num" && operand.numType && !getIntType(operand.numType).signed)
           throw new Error("Cannot negate unsigned integer");
-        if (operand.type === "id" && types[operand.name] && !getIntType(types[operand.name]).signed)
-          throw new Error("Cannot negate unsigned integer");
+        if (operand.type === "id") {
+          const t = types[operand.name];
+          if (t && !getIntType(t).signed)
+            throw new Error("Cannot negate unsigned integer");
+        }
       }
       checkNode(node.operand, types);
       break;
