@@ -208,7 +208,9 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "array-index": {
       const array = evaluate(node.array, env) as unknown as number[];
       const index = evaluate(node.index, env);
-      return array[index];
+      const result = array[index];
+      if (result === undefined) throw new Error(`Array index out of bounds: ${index}`);
+      return result;
     }
   }
 }
