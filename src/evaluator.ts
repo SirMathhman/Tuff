@@ -315,6 +315,19 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "type-check": {
       const val = evalValue(node.operand, env);
+      // Array type check: [Type; N]
+      if (node.arrayLength) {
+        if (val.kind !== "array") return 0;
+        const length = evaluate(node.arrayLength, env);
+        if (val.elements.length !== length) return 0;
+        const expectedType = node.typeName.slice(1, -1).toLowerCase();
+        for (const elem of val.elements) {
+          if (elem.kind !== "number") return 0;
+          // Plain numbers (no numType) match any integer type
+          if (elem.numType && elem.numType !== expectedType) return 0;
+        }
+        return 1;
+      }
       if (node.typeName.toLowerCase() === "bool") {
         return val.kind === "bool" ? 1 : 0;
       }

@@ -20,6 +20,14 @@ export const INT_TYPES: IntType[] = [
     signed: true,
     bits: 16,
   },
+  {
+    name: "i32",
+    suffix: "I32",
+    min: -2147483648,
+    max: 2147483647,
+    signed: true,
+    bits: 32,
+  },
 ];
 
 /** All type names as a union. */

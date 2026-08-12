@@ -281,9 +281,31 @@ export class Parser {
       const right = this.parseMulDiv();
       left = { type: "binop", op, left, right };
     }
-    // is operator: `expr is TypeName`
+    // is operator: `expr is TypeName` or `expr is [Type; N]`
     if (this.peek()?.[0] === "kw" && this.peek()![1] === "is") {
       this.consume(); // "is"
+      // Check for array type: [Type; N]
+      if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+        this.consume(); // "["
+        const typeToken = this.peek();
+        if (!typeToken || typeToken[0] !== "id")
+          throw new Error("Expected type name in array type");
+        const typeName = typeToken[1];
+        this.consume();
+        if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
+          throw new Error("Expected ; in array type");
+        this.consume(); // ";"
+        const lengthNode = this.parseMulDiv();
+        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+          throw new Error("Expected ] in array type");
+        this.consume(); // "]"
+        return {
+          type: "type-check",
+          operand: left,
+          typeName: `[${typeName}]`,
+          arrayLength: lengthNode,
+        };
+      }
       const typeToken = this.peek();
       if (!typeToken || typeToken[0] !== "id")
         throw new Error("Expected type name after is");

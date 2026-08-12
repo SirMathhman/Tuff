@@ -300,6 +300,10 @@ describe("evaluate", () => {
     expect(evaluate("let x = true; x is Bool")).toBe(1);
   });
 
+  it('evaluate("[1, 2, 3] is [I32; 3]") => 1', () => {
+    expect(evaluate("[1, 2, 3] is [I32; 3]")).toBe(1);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(
