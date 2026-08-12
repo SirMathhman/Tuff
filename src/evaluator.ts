@@ -168,10 +168,8 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
 
     case "for-loop": {
-      const range = evaluate(node.range, env);
-      const start = typeof range === "object" && "start" in range ? range.start : range;
-      const end = typeof range === "object" && "end" in range ? range.end : range;
-      for (let i = start; i < end; i++) {
+      const range = evaluate(node.range, env) as { start: number; end: number };
+      for (let i = range.start; i < range.end; i++) {
         try {
           env.declare(node.variable, i, false);
           evaluate(node.body, env);
@@ -188,7 +186,7 @@ export function evaluate(node: AstNode, env: Environment): number {
       return {
         start: evaluate(node.start, env),
         end: evaluate(node.end, env),
-      };
+      } as any;
     }
 
     case "break": {

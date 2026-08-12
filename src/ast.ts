@@ -138,7 +138,6 @@ export interface Range {
 export interface ForLoop {
   type: "for-loop";
   variable: string;
-  start: AstNode;
-  end: AstNode;
+  range: AstNode;
   body: AstNode;
 }
