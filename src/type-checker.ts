@@ -191,7 +191,7 @@ export function typeCheck(statements: AstNode[]): void {
 }
 
 /** Check literal nodes. */
-function checkLiteral(node: AstNode, scope: Scope): void {
+function checkLiteral(node: AstNode): void {
   switch (node.type) {
     case "num":
       if (node.numType) {
@@ -423,7 +423,7 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "num":
     case "char":
     case "bool":
-      checkLiteral(node, scope);
+      checkLiteral(node);
       return;
     case "unop":
     case "binop":
