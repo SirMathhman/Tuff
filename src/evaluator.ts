@@ -294,33 +294,33 @@ function compareEqual(a: Value, b: Value): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case "number":
-      return (a as any).value === (b as any).value;
+      return (a as Value & { kind: "number" }).value === (b as Value & { kind: "number" }).value;
     case "bool":
-      return (a as any).value === (b as any).value;
+      return (a as Value & { kind: "bool" }).value === (b as Value & { kind: "bool" }).value;
     case "null":
       return true;
     case "ref":
-      return (a as any).ref.name === (b as any).ref.name;
+      return (a as Value & { kind: "ref" }).ref.name === (b as Value & { kind: "ref" }).ref.name;
     case "array": {
-      const aEls = (a as any).elements;
-      const bEls = (b as any).elements;
+      const aEls = (a as Value & { kind: "array" }).elements;
+      const bEls = (b as Value & { kind: "array" }).elements;
       if (aEls.length !== bEls.length) return false;
-      return aEls.every((el: Value, i: number) => compareEqual(el, bEls[i]));
+      return aEls.every((el, i) => compareEqual(el, bEls[i]));
     }
     case "struct": {
-      const aFields = (a as any).fields;
-      const bFields = (b as any).fields;
+      const aFields = (a as Value & { kind: "struct" }).fields;
+      const bFields = (b as Value & { kind: "struct" }).fields;
       const aKeys = Object.keys(aFields);
       const bKeys = Object.keys(bFields);
       if (aKeys.length !== bKeys.length) return false;
       for (const key of aKeys) {
-        if (!bFields[key] || !compareEqual(aFields[key], bFields[key]))
+        if (!bFields[key] || !compareEqual(aFields[key], bFields[key]!))
           return false;
       }
       return true;
     }
     case "fnref":
-      return (a as any).fn === (b as any).fn;
+      return (a as Value & { kind: "fnref" }).fn === (b as Value & { kind: "fnref" }).fn;
     default:
       return false;
   }
