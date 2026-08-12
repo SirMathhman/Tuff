@@ -441,4 +441,8 @@ describe("evaluate", () => {
   it('evaluate("5.0F64 is F64") => 1', () => {
     expect(evaluate("5.0F64 is F64")).toBe(1);
   });
+
+  it('evaluate("5F64 is F64") => 1', () => {
+    expect(evaluate("5F64 is F64")).toBe(1);
+  });
 });

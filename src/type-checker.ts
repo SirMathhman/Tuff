@@ -21,7 +21,11 @@ export function checkType(
       const typeName = typeNode.name.toLowerCase();
       if (typeName === "bool") return val.kind === "bool";
       if (val.kind === "number") {
-        if (val.isFloat) return val.numType === typeName || (val.numType === undefined && typeName === "f32");
+        if (val.isFloat)
+          return (
+            val.numType === typeName ||
+            (val.numType === undefined && typeName === "f32")
+          );
         if (!val.numType) return typeName === "i32";
         return val.numType === typeName;
       }
