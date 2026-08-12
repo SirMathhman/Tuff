@@ -1,6 +1,6 @@
 import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
-import type { AstNode, Lhs, TypeNode } from "./ast";
+import type { AstNode, LValue, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
@@ -173,14 +173,14 @@ export class Parser {
     }
 
     // Unified LHS assignment: parse an LHS target, then check for = or +=/-=
-    const lhs = this.tryParseLhs();
-    if (lhs !== undefined) {
+    const lvalue = this.tryParseLValue();
+    if (lvalue !== undefined) {
       // Check for compound assignment
       if (
         this.peek()?.[0] === "assign" &&
         COMPOUND_OPS[this.peek()![1] as "+=" | "-="]
       ) {
-        this.pos = lhs.startPos;
+        this.pos = lvalue.startPos;
         return this.parseCompoundAssign();
       }
       // Simple assignment
@@ -188,10 +188,10 @@ export class Parser {
         this.consume(); // "="
         const value = this.parseAddSub();
         this.maybeConsumeSemi();
-        return { type: "assign", lhs: lhs.lhs, value };
+        return { type: "assign", lvalue: lvalue.lvalue, value };
       }
       // Not an assignment — parse as normal expression
-      this.pos = lhs.startPos;
+      this.pos = lvalue.startPos;
     }
 
     // Handle if/else at statement level to capture semicolon after else branch
@@ -230,11 +230,11 @@ export class Parser {
   }
 
   /**
-   * Try to parse an LHS target. Returns { lhs, startPos } on success,
+   * Try to parse an LHS target. Returns { lvalue, startPos } on success,
    * or undefined if the tokens don't form an assignable target.
    * startPos is the position before any consumption, so we can rewind.
    */
-  private tryParseLhs(): { lhs: Lhs; startPos: number } | undefined {
+  private tryParseLValue(): { lvalue: LValue; startPos: number } | undefined {
     const startPos = this.pos;
     const token = this.peek();
     if (!token) return undefined;
@@ -242,12 +242,12 @@ export class Parser {
     // *x — deref of a var
     if (token[0] === "op" && token[1] === "*") {
       this.consume(); // "*"
-      const inner = this.tryParseLhs();
+      const inner = this.tryParseLValue();
       if (inner === undefined) {
         this.pos = startPos;
         return undefined;
       }
-      return { lhs: { kind: "deref", ref: inner.lhs }, startPos };
+      return { lvalue: { kind: "deref", ref: inner.lvalue }, startPos };
     }
 
     // (*ref)[index] — starts with (
@@ -266,12 +266,12 @@ export class Parser {
           this.consume();
           if (this.peek()?.[0] === "group" && this.peek()![1] === ")") {
             this.consume(); // ")"
-            let lhs: Lhs = {
+            let lvalue: LValue = {
               kind: "deref",
               ref: { kind: "var", name: idToken[1] },
             };
-            lhs = this.consumeIndexChains(lhs);
-            return { lhs, startPos };
+            lvalue = this.consumeIndexChains(lvalue);
+            return { lvalue, startPos };
           }
         }
         this.pos = saved;
@@ -282,30 +282,30 @@ export class Parser {
     // id or id.field or id[index]
     if (token[0] === "id") {
       const name = this.consume()[1] as string;
-      let lhs: Lhs = { kind: "var", name };
+      let lvalue: LValue = { kind: "var", name };
 
-      lhs = this.consumeIndexChains(lhs);
-      lhs = this.consumeFieldChains(lhs);
-      return { lhs, startPos };
+      lvalue = this.consumeIndexChains(lvalue);
+      lvalue = this.consumeFieldChains(lvalue);
+      return { lvalue, startPos };
     }
 
     return undefined;
   }
 
-  private consumeIndexChains(lhs: Lhs): Lhs {
+  private consumeIndexChains(lvalue: LValue): LValue {
     while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
       this.consume(); // "["
       const index = this.parseAddSub();
       if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
         throw new Error("Expected ]");
       this.consume(); // "]"
-      lhs = { kind: "index", array: lhs, index };
+      lvalue = { kind: "index", array: lvalue, index };
     }
-    return lhs;
+    return lvalue;
   }
 
-  private consumeFieldChains(lhs: Lhs): Lhs {
-    return this.consumeDotChains(lhs, (acc, field) => ({
+  private consumeFieldChains(lvalue: LValue): LValue {
+    return this.consumeDotChains(lvalue, (acc, field) => ({
       kind: "field",
       struct: acc,
       field,
@@ -334,10 +334,10 @@ export class Parser {
   }
 
   private consumeIdWithArrayIndices(name: string): AstNode {
-    const lhs = this.consumeIndexChains({ kind: "var", name });
-    // Convert Lhs index chain back to AstNode
+    const lvalue = this.consumeIndexChains({ kind: "var", name });
+    // Convert LValue index chain back to AstNode
     let node: AstNode = { type: "id", name };
-    let current = lhs;
+    let current = lvalue;
     while (current.kind === "index") {
       node = { type: "array-index", array: node, index: current.index };
       current = current.array;
@@ -417,12 +417,12 @@ export class Parser {
 
   private parseBranch(): AstNode {
     // Handle assignment: x = value
-    const lhs = this.tryParseLhs();
-    if (lhs !== undefined && this.peek()?.[0] === "assign") {
+    const lvalue = this.tryParseLValue();
+    if (lvalue !== undefined && this.peek()?.[0] === "assign") {
       this.consume(); // "="
       const value = this.parseFactor();
       if (this.peek()?.[0] === "semi") this.consume();
-      return { type: "assign", lhs: lhs.lhs, value };
+      return { type: "assign", lvalue: lvalue.lvalue, value };
     }
     const result = this.parseFactor();
     if (this.peek()?.[0] === "semi") this.consume();
@@ -468,20 +468,20 @@ export class Parser {
   }
 
   private parseAssign(): AstNode {
-    const lhs = this.tryParseLhs()!;
+    const lvalue = this.tryParseLValue()!;
     this.consume(); // "="
     const value = this.parseAddSub();
     this.maybeConsumeSemi();
-    return { type: "assign", lhs: lhs.lhs, value };
+    return { type: "assign", lvalue: lvalue.lvalue, value };
   }
 
   private parseCompoundAssign(): AstNode {
-    const lhs = this.tryParseLhs()!;
+    const lvalue = this.tryParseLValue()!;
     const opToken = this.consume()[1] as "+=" | "-=";
     const op = opToken[0] as "+" | "-";
     const value = this.parseAddSub();
     this.maybeConsumeSemi();
-    return { type: "compoundassign", lhs: lhs.lhs, op, value };
+    return { type: "compoundassign", lvalue: lvalue.lvalue, op, value };
   }
 
   private parseWhile(): AstNode {

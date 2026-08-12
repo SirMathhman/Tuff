@@ -9,11 +9,11 @@ export type TypeNode =
   | { kind: "fn"; params: TypeNode[]; returnType: TypeNode };
 
 /** Left-hand side of an assignment. */
-export type Lhs =
+export type LValue =
   | { kind: "var"; name: string }
-  | { kind: "deref"; ref: Lhs }
-  | { kind: "index"; array: Lhs; index: AstNode }
-  | { kind: "field"; struct: Lhs; field: string };
+  | { kind: "deref"; ref: LValue }
+  | { kind: "index"; array: LValue; index: AstNode }
+  | { kind: "field"; struct: LValue; field: string };
 
 export type AstNode =
   | Num
@@ -113,13 +113,13 @@ export interface Deref {
 
 export interface Assign {
   type: "assign";
-  lhs: Lhs;
+  lvalue: LValue;
   value: AstNode;
 }
 
 export interface CompoundAssign {
   type: "compoundassign";
-  lhs: Lhs;
+  lvalue: LValue;
   op: "+" | "-";
   value: AstNode;
 }

@@ -1,4 +1,4 @@
-import type { AstNode, Lhs, TypeNode } from "./ast";
+import type { AstNode, LValue, TypeNode } from "./ast";
 import { INT_TYPES, type IntTypeName } from "./types";
 
 /** Find an IntType by name, throwing if not found. */
@@ -80,32 +80,32 @@ function checkAssignable(scope: Scope, name: string): void {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
 }
 
-function checkLhsAssignable(scope: Scope, lhs: Lhs): void {
-  switch (lhs.kind) {
+function checkLValueAssignable(scope: Scope, lvalue: LValue): void {
+  switch (lvalue.kind) {
     case "var":
-      checkAssignable(scope, lhs.name);
+      checkAssignable(scope, lvalue.name);
       break;
     default:
-      checkLhsExists(scope, lhs);
+      checkLValueExists(scope, lvalue);
       break;
   }
 }
 
-function checkLhsExists(scope: Scope, lhs: Lhs): void {
-  switch (lhs.kind) {
+function checkLValueExists(scope: Scope, lvalue: LValue): void {
+  switch (lvalue.kind) {
     case "var":
-      if (!getVar(scope, lhs.name))
-        throw new Error(`Undefined variable: ${lhs.name}`);
+      if (!getVar(scope, lvalue.name))
+        throw new Error(`Undefined variable: ${lvalue.name}`);
       break;
     case "deref":
-      checkLhsExists(scope, lhs.ref);
+      checkLValueExists(scope, lvalue.ref);
       break;
     case "index":
-      checkLhsExists(scope, lhs.array);
-      checkNode(lhs.index, scope);
+      checkLValueExists(scope, lvalue.array);
+      checkNode(lvalue.index, scope);
       break;
     case "field":
-      checkLhsExists(scope, lhs.struct);
+      checkLValueExists(scope, lvalue.struct);
       break;
   }
 }
@@ -186,7 +186,7 @@ function checkNode(node: AstNode, scope: Scope): void {
 
     case "assign":
     case "compoundassign": {
-      checkLhsAssignable(scope, node.lhs);
+      checkLValueAssignable(scope, node.lvalue);
       checkNode(node.value, scope);
       break;
     }

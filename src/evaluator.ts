@@ -1,4 +1,4 @@
-import type { AstNode, Lhs, TypeNode } from "./ast";
+import type { AstNode, LValue, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 import { promoteTypes } from "./types";
 import {
@@ -204,47 +204,49 @@ function evalValue(node: AstNode, env: Environment): Value {
 }
 
 /** Resolve an LHS to the Value it points to. */
-function resolveLhs(lhs: Lhs, env: Environment, raw = false): Value {
-  switch (lhs.kind) {
+function resolveLValue(lvalue: LValue, env: Environment, raw = false): Value {
+  switch (lvalue.kind) {
     case "var": {
-      const v = env.get(lhs.name);
-      if (v === undefined) throw new Error("Undefined variable: " + lhs.name);
+      const v = env.get(lvalue.name);
+      if (v === undefined)
+        throw new Error("Undefined variable: " + lvalue.name);
       if (!raw && v.kind === "ref") return derefValue(v.ref);
       return v;
     }
     case "deref": {
-      const inner = resolveLhs(lhs.ref, env, true);
+      const inner = resolveLValue(lvalue.ref, env, true);
       if (inner.kind !== "ref")
         throw new Error("Cannot dereference non-reference");
       return derefValue(inner.ref);
     }
     case "index": {
-      const arr = resolveLhs(lhs.array, env);
+      const arr = resolveLValue(lvalue.array, env);
       if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const result = getIndex(arr, evaluate(lhs.index, env));
+      const result = getIndex(arr, evaluate(lvalue.index, env));
       if (!raw && result.kind === "ref") return derefValue(result.ref);
       return result;
     }
     case "field": {
-      const struct = resolveLhs(lhs.struct, env);
+      const struct = resolveLValue(lvalue.struct, env);
       if (struct.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");
-      const field = struct.fields[lhs.field];
-      if (field === undefined) throw new Error(`Field not found: ${lhs.field}`);
+      const field = struct.fields[lvalue.field];
+      if (field === undefined)
+        throw new Error(`Field not found: ${lvalue.field}`);
       return field;
     }
   }
 }
 
 /** Write a value to the target described by an LHS. */
-function writeLhs(lhs: Lhs, env: Environment, value: Value): void {
-  switch (lhs.kind) {
+function writeLValue(lvalue: LValue, env: Environment, value: Value): void {
+  switch (lvalue.kind) {
     case "var": {
-      env.assign(lhs.name, value);
+      env.assign(lvalue.name, value);
       return;
     }
     case "deref": {
-      const inner = resolveLhs(lhs.ref, env, true);
+      const inner = resolveLValue(lvalue.ref, env, true);
       if (inner.kind !== "ref")
         throw new Error("Cannot dereference non-reference");
       assignRef(inner.ref, toNumber(value));
@@ -252,17 +254,17 @@ function writeLhs(lhs: Lhs, env: Environment, value: Value): void {
     }
     case "index": {
       // Navigate to the parent array, then write the final index
-      const arr = resolveLhs(lhs.array, env);
+      const arr = resolveLValue(lvalue.array, env);
       if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const idx = evaluate(lhs.index, env);
+      const idx = evaluate(lvalue.index, env);
       arr.elements[idx] = value;
       return;
     }
     case "field": {
-      const struct = resolveLhs(lhs.struct, env);
+      const struct = resolveLValue(lvalue.struct, env);
       if (struct.kind !== "struct")
         throw new Error("Cannot assign field on non-struct value");
-      struct.fields[lhs.field] = value;
+      struct.fields[lvalue.field] = value;
       return;
     }
   }
@@ -347,15 +349,15 @@ export function evaluate(node: AstNode, env: Environment): number {
 
     case "assign": {
       const value = evaluate(node.value, env);
-      writeLhs(node.lhs, env, num(value));
+      writeLValue(node.lvalue, env, num(value));
       return value;
     }
 
     case "compoundassign": {
-      const current = toNumber(resolveLhs(node.lhs, env));
+      const current = toNumber(resolveLValue(node.lvalue, env));
       const rhs = evaluate(node.value, env);
       const compoundValue = node.op === "+" ? current + rhs : current - rhs;
-      writeLhs(node.lhs, env, num(compoundValue));
+      writeLValue(node.lvalue, env, num(compoundValue));
       return compoundValue;
     }
 
