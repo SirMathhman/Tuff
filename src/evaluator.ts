@@ -253,6 +253,7 @@ export function evaluate(node: AstNode, env: Environment): number {
         case "!=":
           return left !== right ? 1 : 0;
       }
+      break;
     }
 
     case "let": {
