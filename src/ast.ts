@@ -1,10 +1,11 @@
 import type { IntTypeName } from "./types";
 
-/** A type expression (e.g., `U8`, `[I32; 3]`, `&Bool`). */
+/** A type expression (e.g., `U8`, `[I32; 3]`, `&Bool`, `{ x : I32, y : I32 }`). */
 export type TypeNode =
   | { kind: "name"; name: string }
   | { kind: "array"; elementType: TypeNode; length: AstNode }
-  | { kind: "ref"; innerType: TypeNode };
+  | { kind: "ref"; innerType: TypeNode }
+  | { kind: "struct"; fields: { name: string; type: TypeNode }[] };
 
 export type AstNode =
   | Num

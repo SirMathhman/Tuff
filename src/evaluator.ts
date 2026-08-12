@@ -38,13 +38,21 @@ function checkType(val: Value, typeNode: TypeNode, env: Environment): boolean {
     }
     case "ref": {
       if (val.kind !== "ref") return false;
-      const dereferenced = deref(val.ref);
-      // Check the inner type against the dereferenced value
-      // We need to get the actual value being referenced
       const refVal = env.get(val.ref.name);
       if (refVal === undefined) return false;
       return checkType(refVal, typeNode.innerType, env);
     }
+    case "struct": {
+      if (val.kind !== "struct") return false;
+      for (const field of typeNode.fields) {
+        const fieldVal = val.fields[field.name];
+        if (fieldVal === undefined) return false;
+        if (!checkType(fieldVal, field.type, env)) return false;
+      }
+      return true;
+    }
+    default:
+      return false;
   }
 }
 

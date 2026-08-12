@@ -312,6 +312,12 @@ describe("evaluate", () => {
     expect(evaluate("let x = 0; let y = &x; y is &I32")).toBe(1);
   });
 
+  it('evaluate("let x = { x : 3, y : 4 }; x is { x : I32, y : I32 }") => 1', () => {
+    expect(
+      evaluate("let x = { x : 3, y : 4 }; x is { x : I32, y : I32 }"),
+    ).toBe(1);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(

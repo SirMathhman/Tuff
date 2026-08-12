@@ -30,6 +30,20 @@ export class Parser {
       this.consume(); // "]"
       return { kind: "array", elementType, length: lengthNode };
     }
+    // Struct type: { x : Type, y : Type }
+    if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {
+      this.consume(); // "{"
+      const rawFields = this.parseStructFields(
+        () => this.parseType(),
+        "Expected field name in struct type",
+        "Expected : in struct type",
+      );
+      if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+        throw new Error("Expected } in struct type");
+      this.consume(); // "}"
+      const fields = rawFields.map((f) => ({ name: f.name, type: f.value }));
+      return { kind: "struct", fields };
+    }
     // Simple type name
     const typeToken = this.peek();
     if (!typeToken || typeToken[0] !== "id")
@@ -37,6 +51,28 @@ export class Parser {
     const typeName = typeToken[1];
     this.consume();
     return { kind: "name", name: typeName };
+  }
+
+  private parseStructFields<T>(
+    parseValue: () => T,
+    nameError: string,
+    colonError: string,
+  ): { name: string; value: T }[] {
+    const fields: { name: string; value: T }[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
+      const nameToken = this.peek();
+      if (!nameToken || nameToken[0] !== "id") throw new Error(nameError);
+      const name = nameToken[1];
+      this.consume();
+      if (this.peek()?.[0] !== "colon") throw new Error(colonError);
+      this.consume(); // ":"
+      const value = parseValue();
+      fields.push({ name, value });
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume(); // ","
+      }
+    }
+    return fields;
   }
 
   parse(): AstNode[] {
@@ -459,22 +495,11 @@ export class Parser {
   }
 
   private parseStructLiteralBody(): AstNode {
-    const fields: { name: string; value: AstNode }[] = [];
-    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
-      const nameToken = this.peek();
-      if (!nameToken || nameToken[0] !== "id")
-        throw new Error("Expected field name");
-      const name = nameToken[1];
-      this.consume();
-      if (this.peek()?.[0] !== "colon")
-        throw new Error("Expected : after field name");
-      this.consume(); // ":"
-      const value = this.parseAddSub();
-      fields.push({ name, value });
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-        this.consume();
-      }
-    }
+    const fields = this.parseStructFields(
+      () => this.parseAddSub(),
+      "Expected field name",
+      "Expected : after field name",
+    );
     this.consume(); // "}"
     return { type: "struct-literal", fields };
   }
