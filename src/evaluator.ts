@@ -64,7 +64,10 @@ function evalValue(node: AstNode, env: Environment): Value {
       const struct = evalValue(node.struct, env);
       if (struct.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");
-      return struct.fields[node.field];
+      const field = struct.fields[node.field];
+      if (field === undefined)
+        throw new Error(`Field not found: ${node.field}`);
+      return field;
     }
     default:
       return num(evaluate(node, env));

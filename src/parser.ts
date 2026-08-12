@@ -341,16 +341,7 @@ export class Parser {
     }
 
     if (token[0] === "group" && token[1] === "{") {
-      // Distinguish struct literal ({ x : 3, y : 4 }) from block ({ let x = 1; x })
-      // Look ahead: if next token is an id followed by ":", it's a struct
-      if (
-        this.pos + 2 < this.tokens.length &&
-        this.tokens[this.pos + 1]?.[0] === "id" &&
-        this.tokens[this.pos + 2]?.[0] === "colon"
-      ) {
-        return this.parseStructLiteral();
-      }
-      return this.parseBlock();
+      return this.parseBraced();
     }
 
     // [1, 2, 3] — array literal
@@ -384,8 +375,24 @@ export class Parser {
     return { type: "array-literal", elements };
   }
 
-  private parseStructLiteral(): AstNode {
+  private parseBraced(): AstNode {
+    // Consume the opening brace
     this.consume(); // "{"
+
+    // Look ahead: if next token is an id followed by ":", it's a struct
+    if (
+      this.peek()?.[0] === "id" &&
+      this.pos + 1 < this.tokens.length &&
+      this.tokens[this.pos + 1]?.[0] === "colon"
+    ) {
+      return this.parseStructLiteralBody();
+    }
+
+    // Otherwise it's a block
+    return this.parseBlockBody();
+  }
+
+  private parseStructLiteralBody(): AstNode {
     const fields: { name: string; value: AstNode }[] = [];
     while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
       const nameToken = this.peek();
@@ -404,6 +411,18 @@ export class Parser {
     }
     this.consume(); // "}"
     return { type: "struct-literal", fields };
+  }
+
+  private parseBlockBody(): AstNode {
+    const statements: AstNode[] = [];
+    while (
+      this.peek()?.[0] !== "group" ||
+      this.peek()![1] !== "}"
+    ) {
+      statements.push(this.parseStatement());
+    }
+    this.consume(); // "}"
+    return { type: "block", statements };
   }
 
   private parsePrimary(): AstNode {
