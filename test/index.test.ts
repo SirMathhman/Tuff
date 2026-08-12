@@ -222,6 +222,10 @@ describe("evaluate", () => {
     expect(evaluate("let x = { if (true) 3; else 2 } + 1; x")).toBe(4);
   });
 
+  it('evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
+    expect(evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toBe(6);
+  });
+
   it('evaluate("let mut x = 0; let y = if (false) { x = 2; } else { x = 3; } x") => Error', () => {
     expect(() =>
       evaluate(

@@ -17,7 +17,9 @@ export type AstNode =
   | BreakStatement
   | ContinueStatement
   | ForLoop
-  | Range;
+  | Range
+  | ArrayLiteral
+  | ArrayIndex;
 
 export interface Num {
   type: "num";
@@ -140,4 +142,15 @@ export interface ForLoop {
   variable: string;
   range: AstNode;
   body: AstNode;
+}
+
+export interface ArrayLiteral {
+  type: "array-literal";
+  elements: AstNode[];
+}
+
+export interface ArrayIndex {
+  type: "array-index";
+  array: AstNode;
+  index: AstNode;
 }

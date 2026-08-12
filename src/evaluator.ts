@@ -200,5 +200,15 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "continue": {
       throw new Continue();
     }
+
+    case "array-literal": {
+      return node.elements.map((el) => evaluate(el, env)) as any;
+    }
+
+    case "array-index": {
+      const array = evaluate(node.array, env) as unknown as number[];
+      const index = evaluate(node.index, env);
+      return array[index];
+    }
   }
 }

@@ -22,9 +22,10 @@ export type Token =
         | ">="
         | "!="
         | ".."
+        | ","
       ),
     ]
-  | ["group", "(" | ")" | "{" | "}"]
+  | ["group", "(" | ")" | "{" | "}" | "[" | "]"]
   | [
       "kw",
       (
@@ -48,7 +49,7 @@ export type Token =
 export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const re =
-    /"([^"]*)"|(\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
+    /"([^"]*)"|(\d+|\d+\.\d+|\+=|-=|<=|>=|!=|\.\.|[+\-*/(){}=;&<>[\],]|[a-zA-Z_][a-zA-Z0-9_]*)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(source))) {
     const [text, strContent] = match;
@@ -68,16 +69,17 @@ export function tokenize(source: string): Token[] {
       text === ">" ||
       text === ">=" ||
       text === "!=" ||
-      text === ".."
+      text === ".." ||
+      text === ","
     ) {
       result.push([
         "op",
-        text as "&&" | "||" | "==" | "<" | "<=" | ">" | ">=" | "!=" | "..",
+        text as "&&" | "||" | "==" | "<" | "<=" | ">" | ">=" | "!=" | ".." | ",",
       ]);
     } else if (text === "&") {
       result.push(["ref", "&"]);
-    } else if (text === "(" || text === ")" || text === "{" || text === "}") {
-      result.push(["group", text as "(" | ")" | "{" | "}"]);
+    } else if (text === "(" || text === ")" || text === "{" || text === "}" || text === "[" || text === "]") {
+      result.push(["group", text as "(" | ")" | "{" | "}" | "[" | "]"]);
     } else if (text === "=") {
       result.push(["assign", "="]);
     } else if (COMPOUND_OPS[text]) {

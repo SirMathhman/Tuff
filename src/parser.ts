@@ -344,6 +344,11 @@ export class Parser {
       return this.parseBlock();
     }
 
+    // [1, 2, 3] — array literal
+    if (token[0] === "group" && token[1] === "[") {
+      return this.parseArrayLiteral();
+    }
+
     // if (cond) then else expr
     if (token[0] === "kw" && token[1] === "if") {
       this.consume(); // "if"
@@ -355,6 +360,19 @@ export class Parser {
     }
 
     return this.parsePrimary();
+  }
+
+  private parseArrayLiteral(): AstNode {
+    this.consume(); // "["
+    const elements: AstNode[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "]") {
+      elements.push(this.parseAddSub());
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume();
+      }
+    }
+    this.consume(); // "]"
+    return { type: "array-literal", elements };
   }
 
   private parsePrimary(): AstNode {
@@ -378,7 +396,17 @@ export class Parser {
 
     if (token[0] === "id") {
       this.consume();
-      return { type: "id", name: token[1] };
+      let node: AstNode = { type: "id", name: token[1] };
+      // Check for array indexing: array[0]
+      while (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
+        this.consume(); // "["
+        const index = this.parseAddSub();
+        if (this.peek()?.[0] !== "group" || this.peek()![1] !== "]")
+          throw new Error("Expected ]");
+        this.consume(); // "]"
+        node = { type: "array-index", array: node, index };
+      }
+      return node;
     }
 
     throw new Error(`Unexpected token: ${token}`);
