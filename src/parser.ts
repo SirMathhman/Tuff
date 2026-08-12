@@ -107,6 +107,10 @@ export class Parser {
     return this.tokens[this.pos++]!;
   }
 
+  private maybeConsumeSemi(): void {
+    if (this.peek()?.[0] === "semi") this.consume();
+  }
+
   private parseStatement(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
@@ -324,7 +328,11 @@ export class Parser {
   }
 
   private parseAssign(): AstNode {
-    return this.parseAssignLike("assign");
+    const name = this.consume()[1] as string;
+    this.consume(); // "="
+    const value = this.parseAddSub();
+    this.maybeConsumeSemi();
+    return { type: "assign", name, value };
   }
 
   private parseCompoundAssign(): AstNode {
@@ -332,16 +340,8 @@ export class Parser {
     const opToken = this.consume()[1] as "+=" | "-=";
     const op = opToken[0] as "+" | "-";
     const value = this.parseAddSub();
-    if (this.peek()?.[0] === "semi") this.consume();
+    this.maybeConsumeSemi();
     return { type: "compoundassign", name, op, value };
-  }
-
-  private parseAssignLike(type: "assign"): AstNode {
-    const name = this.consume()[1] as string;
-    this.consume(); // operator
-    const value = this.parseAddSub();
-    if (this.peek()?.[0] === "semi") this.consume();
-    return { type, name, value };
   }
 
   private parseWhile(): AstNode {
