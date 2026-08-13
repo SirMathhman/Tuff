@@ -448,13 +448,16 @@ export class Parser {
       if (this.peek()?.[0] === "semi") this.consume();
       return { type: "assign", lvalue: lvalue.lvalue, value };
     }
-    // Handle yield
+    // Handle yield/return
     const token = this.peek();
-    if (token?.[0] === "kw" && token[1] === "yield") {
+    if (
+      token?.[0] === "kw" &&
+      (token[1] === "yield" || token[1] === "return")
+    ) {
       this.consume();
       const value = this.parseFactor();
       if (this.peek()?.[0] === "semi") this.consume();
-      return { type: "yield", value };
+      return { type: token[1], value };
     }
     const result = this.parseFactor();
     if (this.peek()?.[0] === "semi") this.consume();

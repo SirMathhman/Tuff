@@ -207,8 +207,14 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (fn === undefined) throw new Error("Undefined function: " + node.name);
       return { kind: "fnref", fn };
     }
-    default:
-      return num(evaluate(node, env));
+    default: {
+      try {
+        return num(evaluate(node, env));
+      } catch (e) {
+        if (e instanceof Return) throw e;
+        throw e;
+      }
+    }
   }
 }
 
@@ -368,39 +374,44 @@ function evalOperatorNum(node: AstNode, env: Environment): number {
     case "unop":
       return -evaluate(node.operand, env);
     case "binop": {
-      const leftVal = evalValue(node.left, env);
-      const rightVal = evalValue(node.right, env);
-      // Handle equality before numeric conversion (null !== 0)
-      if (node.op === "==") return compareEqual(leftVal, rightVal) ? 1 : 0;
-      if (node.op === "!=") return compareEqual(leftVal, rightVal) ? 0 : 1;
-      const left = toNumber(leftVal);
-      const right = toNumber(rightVal);
-      const isFloat =
-        (leftVal.kind === "number" && leftVal.isFloat) ||
-        (rightVal.kind === "number" && rightVal.isFloat);
-      switch (node.op) {
-        case "+":
-          return left + right;
-        case "-":
-          return left - right;
-        case "*":
-          return left * right;
-        case "/":
-          return isFloat ? left / right : Math.trunc(left / right);
-        case "&&":
-          return left && right;
-        case "||":
-          return left || right;
-        case "<":
-          return left < right ? 1 : 0;
-        case "<=":
-          return left <= right ? 1 : 0;
-        case ">":
-          return left > right ? 1 : 0;
-        case ">=":
-          return left >= right ? 1 : 0;
+      try {
+        const leftVal = evalValue(node.left, env);
+        const rightVal = evalValue(node.right, env);
+        // Handle equality before numeric conversion (null !== 0)
+        if (node.op === "==") return compareEqual(leftVal, rightVal) ? 1 : 0;
+        if (node.op === "!=") return compareEqual(leftVal, rightVal) ? 0 : 1;
+        const left = toNumber(leftVal);
+        const right = toNumber(rightVal);
+        const isFloat =
+          (leftVal.kind === "number" && leftVal.isFloat) ||
+          (rightVal.kind === "number" && rightVal.isFloat);
+        switch (node.op) {
+          case "+":
+            return left + right;
+          case "-":
+            return left - right;
+          case "*":
+            return left * right;
+          case "/":
+            return isFloat ? left / right : Math.trunc(left / right);
+          case "&&":
+            return left && right;
+          case "||":
+            return left || right;
+          case "<":
+            return left < right ? 1 : 0;
+          case "<=":
+            return left <= right ? 1 : 0;
+          case ">":
+            return left > right ? 1 : 0;
+          case ">=":
+            return left >= right ? 1 : 0;
+        }
+        break;
+      } catch (e) {
+        if (e instanceof Return) throw e;
+        throw e;
       }
-      break;
     }
     default:
       throw new Error(`Unexpected operator: ${node.type}`);
@@ -451,7 +462,7 @@ function evalControlFlow(node: AstNode, env: Environment): number {
         try {
           return evaluate(node.thenBranch, env);
         } catch (e) {
-          if (e instanceof Yield) throw e;
+          if (e instanceof Yield || e instanceof Return) throw e;
           throw e;
         }
       }
@@ -628,6 +639,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "break":
     case "continue":
     case "yield":
+    case "return":
       return evalControlFlow(node, env);
     case "cast":
     case "type-check":
@@ -659,6 +671,7 @@ export function evaluate(node: AstNode, env: Environment): number {
           last = evaluate(stmt, blockEnv);
         } catch (e) {
           if (e instanceof Yield) return e.value;
+          if (e instanceof Return) throw e;
           throw e;
         }
       }

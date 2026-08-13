@@ -515,4 +515,10 @@ describe("evaluate", () => {
       evaluate("fn get() : I32 => { if (true) yield 2; 3 } + 4; get()"),
     ).toBe(6);
   });
+
+  it('evaluate("fn get() : I32 => { if (true) return 2; 3 } + 4; get()") => 2', () => {
+    expect(
+      evaluate("fn get() : I32 => { if (true) return 2; 3 } + 4; get()"),
+    ).toBe(2);
+  });
 });
