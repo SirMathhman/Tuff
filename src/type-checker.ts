@@ -209,7 +209,7 @@ export function typeCheck(statements: AstNode[]): void {
 
 /** Check that a literal value satisfies a type constraint. */
 function checkConstraint(typeNode: TypeNode, valueNode: AstNode): void {
-  if (!typeNode.constraint) return;
+  if (typeNode.kind !== "name" || !typeNode.constraint) return;
   const { op, value } = typeNode.constraint;
   const literalVal = valueNode.type === "num" ? valueNode.value : null;
   if (literalVal === null) return;
