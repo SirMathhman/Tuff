@@ -1,4 +1,5 @@
 import type { AstNode, LValue, TypeNode, TypeParam } from "./ast";
+import { BorrowKind, checkBorrow, checkMoved } from "./borrow-checker";
 import { INT_TYPES, BUILTIN_TYPES, type IntTypeName } from "./types";
 import type { Value } from "./environment";
 import type { Environment } from "./environment";
@@ -114,8 +115,8 @@ interface Scope {
   typeAliases: Map<string, TypeNode>;
   structs: Map<string, TypeNode>;
   typeParams?: TypeParam[];
-  // Tracks active borrows: variable name -> "mutable" | "immutable"
-  borrows: Map<string, "mutable" | "immutable">;
+  // Tracks active borrows: variable name -> borrow kind
+  borrows: Map<string, BorrowKind>;
   // Tracks moved variables (ownership transfer)
   moved: Set<string>;
   parent?: Scope;
@@ -137,7 +138,9 @@ function newScope(parent?: Scope): Scope {
 function getVar(
   scope: Scope,
   name: string,
-): { mutable: boolean; type?: IntTypeName | string; isStruct?: boolean } | undefined {
+):
+  | { mutable: boolean; type?: IntTypeName | string; isStruct?: boolean }
+  | undefined {
   let s: Scope | undefined = scope;
   while (s) {
     const entry = s.variables.get(name);
@@ -420,9 +423,8 @@ function checkReference(node: AstNode, scope: Scope): void {
         throw new Error(`Undefined variable: ${node.name}`);
       }
       // Ownership: check if variable was already moved
-      if (scope.moved.has(node.name)) {
-        throw new Error(`Use of moved variable: ${node.name}`);
-      }
+      const movedErr = checkMoved(node.name, scope.moved);
+      if (movedErr) throw new Error(movedErr);
       break;
     }
     case "ref": {
@@ -431,25 +433,17 @@ function checkReference(node: AstNode, scope: Scope): void {
         if (!getFn(scope, node.name))
           throw new Error(`Undefined: ${node.name}`);
       } else {
-        // Borrow checking: reject if there's an active mutable borrow
-        const target = node.name;
-        for (const [borrowed, kind] of scope.borrows) {
-          if (borrowed === target) {
-            if (kind === "mutable" && node.mutable === false)
-              throw new Error(
-                "Cannot create immutable reference while mutable reference exists",
-              );
-            if (kind === "mutable" && node.mutable === true)
-              throw new Error(
-                "Cannot create multiple mutable references to the same variable",
-              );
-            if (kind === "immutable" && node.mutable === true)
-              throw new Error(
-                "Cannot create mutable reference while immutable reference exists",
-              );
-          }
-        }
-        scope.borrows.set(target, node.mutable ? "mutable" : "immutable");
+        // Borrow checking
+        const borrowKind = node.mutable
+          ? BorrowKind.Mutable
+          : BorrowKind.Immutable;
+        const borrowErr = checkBorrow(
+          node.name,
+          borrowKind,
+          scope.borrows,
+        );
+        if (borrowErr) throw new Error(borrowErr);
+        scope.borrows.set(node.name, borrowKind);
       }
       break;
     }
