@@ -24,9 +24,9 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 | Fixed-length arrays           | ✅   | ✅   | ✅         | ✅     |
 | Dynamic arrays / Vec          | ❌   | ✅   | ✅         | ✅     |
 | Structs                       | ✅   | ✅   | ✅         | ✅     |
-| Enums                         | ❌   | ✅   | ❌         | ✅     |
+| Enums                         | ✅   | ✅   | ❌         | ✅     |
 | Unions / Discriminated unions | ❌   | ✅   | ✅         | ✅     |
-| Tuples                        | ❌   | ✅   | ✅         | ✅     |
+| Tuples                        | ✅   | ✅   | ✅         | ✅     |
 | Maps / Hash tables            | ❌   | ✅   | ✅         | ✅     |
 | Sets                          | ❌   | ✅   | ✅         | ✅     |
 | Generics                      | ❌   | ✅   | ✅         | ✅     |
@@ -149,12 +149,11 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 
 ### Medium Priority (expressiveness)
 
-7. **Enums** — critical for type-safe state representation
-8. **Pattern matching** — goes hand-in-hand with enums
-9. **Interfaces / traits** — polymorphism without inheritance
-10. **Bitwise operators** — needed for low-level work
-11. **Full compound assignment** — `*=`, `/=`, `%=`
-12. **Ternary operator** — compact conditional expressions
+7. **Pattern matching** — goes hand-in-hand with enums
+8. **Interfaces / traits** — polymorphism without inheritance
+9. **Bitwise operators** — needed for low-level work
+10. **Full compound assignment** — `*=`, `/=`, `%=`
+11. **Ternary operator** — compact conditional expressions
 
 ### Low Priority (advanced features)
 

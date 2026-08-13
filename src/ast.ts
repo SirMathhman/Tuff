@@ -54,6 +54,7 @@ export type AstNode =
   | StructDef
   | EnumDef
   | EnumAccess
+  | MatchExpression
   | FnDef
   | FnCall
   | FnRef;
@@ -267,6 +268,12 @@ export interface TupleAccess {
   type: "tuple-access";
   tuple: AstNode;
   index: number;
+}
+
+export interface MatchExpression {
+  type: "match";
+  target: AstNode;
+  cases: { pattern: AstNode; body: AstNode }[];
 }
 
 export interface Cast {

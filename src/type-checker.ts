@@ -81,8 +81,7 @@ export function checkType(
         const elem = val.elements[i];
         const elemType = typeNode.elementTypes[i];
         if (elem === undefined || elemType === undefined) return false;
-        if (!checkType(elem, elemType, env, evaluate, num))
-          return false;
+        if (!checkType(elem, elemType, env, evaluate, num)) return false;
       }
       return true;
     }

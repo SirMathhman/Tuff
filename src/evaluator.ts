@@ -719,6 +719,16 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       return idx;
     }
+    case "match": {
+      const targetVal = evalValue(node.target, env);
+      for (const { pattern, body } of node.cases) {
+        const patternVal = evalValue(pattern, env);
+        if (compareEqual(targetVal, patternVal)) {
+          return evaluate(body, env);
+        }
+      }
+      throw new Error("No matching case in match expression");
+    }
     default:
       return 0;
   }

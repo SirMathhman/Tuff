@@ -510,6 +510,12 @@ describe("evaluate", () => {
     );
   });
 
+  it('evaluate("let x = match (2) { case 2 => 3; case _ => 4; }; x") => 3', () => {
+    expect(evaluate("let x = match (2) { case 2 => 3; case _ => 4; }; x")).toBe(
+      3,
+    );
+  });
+
   it('evaluate("let temp : Null = null; temp == 0") => 0', () => {
     expect(evaluate("let temp : Null = null; temp == 0")).toBe(0);
   });

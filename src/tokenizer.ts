@@ -58,6 +58,8 @@ export type Token =
         | "yield"
         | "return"
         | "enum"
+        | "match"
+        | "case"
       ),
     ]
   | ["id", string]
@@ -136,6 +138,8 @@ function classifyToken(text: string): Token {
   if (text === "type") return ["kw", "type"];
   if (text === "struct") return ["kw", "struct"];
   if (text === "enum") return ["kw", "enum"];
+  if (text === "match") return ["kw", "match"];
+  if (text === "case") return ["kw", "case"];
   if (text === "null") return ["kw", "null"];
   if (text === "yield") return ["kw", "yield"];
   if (text === "return") return ["kw", "return"];

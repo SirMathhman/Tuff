@@ -198,6 +198,39 @@ export class Parser {
     return { type: "enum-def", name, variants };
   }
 
+  private parseMatch(): AstNode {
+    this.consume(); // "match"
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
+      throw new Error("Expected ( after match");
+    this.consume(); // "("
+    const target = this.parseAddSub();
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+      throw new Error("Expected ) after match target");
+    this.consume(); // ")"
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
+      throw new Error("Expected { after match");
+    this.consume(); // "{"
+    const cases: { pattern: AstNode; body: AstNode }[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "case") {
+        this.consume(); // "case"
+        const pattern = this.parseAddSub();
+        if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")
+          throw new Error("Expected => after case pattern");
+        this.consume(); // "=>"
+        const body = this.parseFactor();
+        if (this.peek()?.[0] === "semi") this.consume();
+        cases.push({ pattern, body });
+      } else {
+        throw new Error("Expected case in match");
+      }
+    }
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+      throw new Error("Expected } after match");
+    this.consume(); // "}"
+    return { type: "match", target, cases };
+  }
+
   private parseStatement(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
@@ -224,6 +257,11 @@ export class Parser {
     // fn name(params) : ReturnType => body;
     if (token[0] === "kw" && token[1] === "fn") {
       return this.parseFnDef();
+    }
+
+    // match (expr) { case PATTERN => body; ... }
+    if (token[0] === "kw" && token[1] === "match") {
+      return this.parseMatch();
     }
 
     // Unified LHS assignment: parse an LHS target, then check for = or +=/-=
@@ -375,11 +413,19 @@ export class Parser {
   }
 
   private consumeFieldChains(lvalue: LValue): LValue {
-    return this.consumeDotChain(lvalue, (n, f) => ({ kind: "field", struct: n, field: f }), (n, i) => ({ kind: "index", array: n, index: { type: "num", value: i } }));
+    return this.consumeDotChain(
+      lvalue,
+      (n, f) => ({ kind: "field", struct: n, field: f }),
+      (n, i) => ({ kind: "index", array: n, index: { type: "num", value: i } }),
+    );
   }
 
   private consumeStructAccessChains(node: AstNode): AstNode {
-    return this.consumeDotChain(node, (n, f) => ({ type: "struct-access", struct: n, field: f }), (n, i) => ({ type: "tuple-access", tuple: n, index: i }));
+    return this.consumeDotChain(
+      node,
+      (n, f) => ({ type: "struct-access", struct: n, field: f }),
+      (n, i) => ({ type: "tuple-access", tuple: n, index: i }),
+    );
   }
 
   private consumeDotChain<T>(
@@ -922,6 +968,10 @@ export class Parser {
     if (token[0] === "kw" && token[1] === "null") {
       this.consume();
       return { type: "null" };
+    }
+
+    if (token[0] === "kw" && token[1] === "match") {
+      return this.parseMatch();
     }
 
     if (token[0] === "id") {
