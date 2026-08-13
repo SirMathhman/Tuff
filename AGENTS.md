@@ -27,15 +27,15 @@ Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker →
 | `src/evaluator.ts`    | Interpreter — `evaluate()` (returns `number`), `evalValue()` (returns `Value`) |
 | `src/eval-helpers.ts` | Shared eval utilities — `evalRange`, `getIndex`, `evalLiteral`, etc.           |
 | `src/environment.ts`  | Symbol table with scoping, mutability, refs                                    |
-| `src/control-flow.ts` | `Break` / `Continue` Error subclasses                                          |
+| `src/control-flow.ts` | `Break` / `Continue` / `Yield` / `Return` Error subclasses                     |
 | `src/types.ts`        | Integer type definitions (`u8`, `i32`, …) and promotion rules                  |
 
 ## Conventions
 
 - **No external runtime dependencies** — only `bun:test` and dev tools
 - **Strict TypeScript** — `strict: true`, `noUncheckedIndexedAccess`, `noImplicitOverride`
-- **Error handling** — throw `Error` with descriptive messages; control flow via `Break`/`Continue` subclasses
-- **Dual eval paths** — `evaluate()` returns `number` (top-level); `evalValue()` returns `Value` (internal). `Value` is `{ type: string, value: number | boolean }`
+- **Error handling** — throw `Error` with descriptive messages; control flow via `Break`/`Continue`/`Yield`/`Return` subclasses
+- **Dual eval paths** — `evaluate()` returns `number` (top-level); `evalValue()` returns `Value` (internal). `Value` is a discriminated union with kinds: `number`, `bool`, `null`, `ref`, `array`, `range`, `struct`, `tuple`, `fnref`
 - **Tuple tokens** — tokenizer uses `[kind, value]` tuples, not objects
 - **Naming** — camelCase functions/variables, PascalCase classes, SCREAMING_SNAKE_CASE constants
 - **Tests** — single file (`test/index.test.ts`); descriptive names showing source and expected result (e.g. `evaluate("1 + 2") => 3`); `.toThrow()` for errors

@@ -2,90 +2,60 @@
 
 Comparison of Tuff against Rust, TypeScript, and Kotlin.
 
-Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
+Legend: ❌ Missing · ⚠️ Partial
 
 ## 1. Primitive Types
 
-| Feature                    | Tuff | Rust | TypeScript          | Kotlin |
-| -------------------------- | ---- | ---- | ------------------- | ------ |
-| Signed integers (i8–i32)   | ✅   | ✅   | ❌ (all numbers)    | ✅     |
-| Unsigned integers (u8–u16) | ✅   | ✅   | ❌                  | ❌     |
-| Booleans                   | ✅   | ✅   | ✅                  | ✅     |
-| Floating point (f32, f64)  | ✅   | ✅   | ✅ (number)         | ✅     |
-| Characters                 | ✅   | ✅   | ✅ (string)         | ✅     |
-| Strings                    | ✅   | ✅   | ✅                  | ✅     |
-| Unit / Void                | ❌   | ✅   | ✅                  | ✅     |
-| Nullable / Option          | ⚠️   | ✅   | ✅ (undefined/null) | ✅     |
+| Feature           | Tuff | Rust | TypeScript          | Kotlin |
+| ----------------- | ---- | ---- | ------------------- | ------ |
+| Unit / Void       | ❌   | ✅   | ✅                  | ✅     |
+| Nullable / Option | ⚠️   | ✅   | ✅ (undefined/null) | ✅     |
 
 ## 2. Composite Types
 
 | Feature                       | Tuff | Rust | TypeScript | Kotlin |
 | ----------------------------- | ---- | ---- | ---------- | ------ |
-| Fixed-length arrays           | ✅   | ✅   | ✅         | ✅     |
 | Dynamic arrays / Vec          | ❌   | ✅   | ✅         | ✅     |
-| Structs                       | ✅   | ✅   | ✅         | ✅     |
-| Enums                         | ✅   | ✅   | ❌         | ✅     |
-| Unions / Discriminated unions | ❌   | ✅   | ✅         | ✅     |
-| Tuples                        | ✅   | ✅   | ✅         | ✅     |
+| Unions / Discriminated unions | ✅   | ✅   | ✅         | ✅     |
 | Maps / Hash tables            | ❌   | ✅   | ✅         | ✅     |
 | Sets                          | ❌   | ✅   | ✅         | ✅     |
-| Generics                      | ❌   | ✅   | ✅         | ✅     |
+| Generics                      | ✅   | ✅   | ✅         | ✅     |
 
 ## 3. Type System
 
-| Feature                    | Tuff | Rust | TypeScript       | Kotlin |
-| -------------------------- | ---- | ---- | ---------------- | ------ |
-| Type annotations           | ✅   | ✅   | ✅               | ✅     |
-| Type inference             | ✅   | ✅   | ✅               | ✅     |
-| Type aliases               | ✅   | ✅   | ✅               | ✅     |
-| Runtime type checks (`is`) | ✅   | ✅   | ✅               | ✅     |
-| Casting                    | ✅   | ✅   | ✅               | ✅     |
-| Traits / Interfaces        | ❌   | ✅   | ✅               | ✅     |
-| Type promotion             | ✅   | ✅   | ❌               | ✅     |
-| Null safety                | ❌   | ✅   | ✅ (strict null) | ✅     |
-| Pattern matching           | ❌   | ✅   | ❌               | ✅     |
+| Feature | Tuff | Rust | TypeScript | Kotlin |- ------------------- | ---- | ---- | ---------------- | ------ |
+| Traits / Interfaces | ❌ | ✅ | ✅ | ✅ |
+| Null safety | ❌ | ✅ | ✅ (strict null) | ✅ |
+| Pattern matching | ❌ | ✅ | ❌ | ✅ |
 
 ## 4. Control Flow
 
-| Feature                | Tuff | Rust        | TypeScript        | Kotlin |
-| ---------------------- | ---- | ----------- | ----------------- | ------ |
-| if / else              | ✅   | ✅          | ✅                | ✅     |
-| if as expression       | ✅   | ✅          | ❌ (ternary only) | ✅     |
-| while loops            | ✅   | ✅          | ✅                | ✅     |
-| for-in (range)         | ✅   | ✅          | ✅                | ✅     |
-| for-in (collection)    | ❌   | ✅          | ✅                | ✅     |
-| break / continue       | ✅   | ✅          | ✅                | ✅     |
-| Labeled break/continue | ❌   | ✅          | ✅                | ✅     |
-| match / switch         | ❌   | ✅          | ✅                | ✅     |
-| when (Kotlin)          | ❌   | ❌          | ❌                | ✅     |
-| try / catch            | ❌   | ❌ (Result) | ✅                | ✅     |
-| Exceptions             | ❌   | ❌          | ✅                | ✅     |
-| Return statements      | ❌   | ✅          | ✅                | ✅     |
+| Feature                | Tuff | Rust        | TypeScript | Kotlin |
+| ---------------------- | ---- | ----------- | ---------- | ------ |
+| for-in (collection)    | ❌   | ✅          | ✅         | ✅     |
+| Labeled break/continue | ❌   | ✅          | ✅         | ✅     |
+| when (Kotlin)          | ❌   | ❌          | ❌         | ✅     |
+| try / catch            | ❌   | ❌ (Result) | ✅         | ✅     |
+| Exceptions             | ❌   | ❌          | ✅         | ✅     |
 
 ## 5. Functions
 
-| Feature              | Tuff | Rust | TypeScript | Kotlin |
-| -------------------- | ---- | ---- | ---------- | ------ |
-| Function definitions | ✅   | ✅   | ✅         | ✅     |
-| Function calls       | ✅   | ✅   | ✅         | ✅     |
-| Function references  | ✅   | ✅   | ✅         | ✅     |
-| Closures             | ❌   | ✅   | ✅         | ✅     |
-| Lambdas              | ❌   | ✅   | ✅         | ✅     |
-| Named parameters     | ❌   | ❌   | ❌         | ✅     |
-| Default parameters   | ❌   | ❌   | ✅         | ✅     |
-| Variadic arguments   | ❌   | ✅   | ✅         | ✅     |
-| Overloading          | ❌   | ❌   | ✅         | ✅     |
-| Tail recursion       | ❌   | ✅   | ❌         | ✅     |
-| Inline functions     | ❌   | ✅   | ❌         | ✅     |
-| Extension functions  | ❌   | ❌   | ❌         | ✅     |
+| Feature             | Tuff | Rust | TypeScript | Kotlin |
+| ------------------- | ---- | ---- | ---------- | ------ |
+| Closures            | ❌   | ✅   | ✅         | ✅     |
+| Lambdas             | ❌   | ✅   | ✅         | ✅     |
+| Named parameters    | ❌   | ❌   | ❌         | ✅     |
+| Default parameters  | ❌   | ❌   | ✅         | ✅     |
+| Variadic arguments  | ❌   | ✅   | ✅         | ✅     |
+| Overloading         | ❌   | ❌   | ✅         | ✅     |
+| Tail recursion      | ❌   | ✅   | ❌         | ✅     |
+| Inline functions    | ❌   | ✅   | ❌         | ✅     |
+| Extension functions | ❌   | ❌   | ❌         | ✅     |
 
 ## 6. Memory and References
 
 | Feature               | Tuff | Rust | TypeScript | Kotlin |
 | --------------------- | ---- | ---- | ---------- | ------ |
-| References (`&x`)     | ✅   | ✅   | ❌         | ❌     |
-| Mutable references    | ✅   | ✅   | ❌         | ❌     |
-| Dereference (`*x`)    | ✅   | ✅   | ❌         | ❌     |
 | Ownership / borrowing | ❌   | ✅   | ❌         | ❌     |
 | Lifetime annotations  | ❌   | ✅   | ❌         | ❌     |
 | Garbage collection    | ❌   | ❌   | ✅         | ✅     |
@@ -103,20 +73,17 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 
 ## 8. Operators
 
-| Feature                  | Tuff        | Rust     | TypeScript | Kotlin |
-| ------------------------ | ----------- | -------- | ---------- | ------ |
-| Arithmetic (+, -, \*, /) | ✅          | ✅       | ✅         | ✅     |
-| Modulo (%)               | ❌          | ✅       | ✅         | ✅     |
-| Exponentiation (\*\*)    | ❌          | ❌       | ✅         | ❌     |
-| Bitwise (&, \|, ^, ~)    | ❌          | ✅       | ✅         | ✅     |
-| Bit shift (<<, >>)       | ❌          | ✅       | ✅         | ❌     |
-| Comparison               | ✅          | ✅       | ✅         | ✅     |
-| Logical (&&, \|\|)       | ✅          | ✅       | ✅         | ✅     |
-| Compound assignment      | ⚠️ (+=, -=) | ✅ (all) | ✅         | ✅     |
-| Ternary operator         | ❌          | ❌       | ✅         | ❌     |
-| Null coalescing (??)     | ❌          | ❌       | ✅         | ✅     |
-| Elvis operator           | ❌          | ❌       | ❌         | ✅     |
-| Operator overloading     | ❌          | ✅       | ❌         | ✅     |
+| Feature               | Tuff        | Rust     | TypeScript | Kotlin |
+| --------------------- | ----------- | -------- | ---------- | ------ |
+| Modulo (%)            | ❌          | ✅       | ✅         | ✅     |
+| Exponentiation (\*\*) | ❌          | ❌       | ✅         | ❌     |
+| Bitwise (&, \|, ^, ~) | ❌          | ✅       | ✅         | ✅     |
+| Bit shift (<<, >>)    | ❌          | ✅       | ✅         | ❌     |
+| Compound assignment   | ⚠️ (+=, -=) | ✅ (all) | ✅         | ✅     |
+| Ternary operator      | ❌          | ❌       | ✅         | ❌     |
+| Null coalescing (??)  | ❌          | ❌       | ✅         | ✅     |
+| Elvis operator        | ❌          | ❌       | ❌         | ✅     |
+| Operator overloading  | ❌          | ✅       | ❌         | ✅     |
 
 ## 9. Macros and Metaprogramming
 
@@ -143,22 +110,20 @@ Legend: ✅ Supported · ❌ Missing · ⚠️ Partial
 ### High Priority (core language completeness)
 
 1. **Closures / lambdas** — essential for higher-order functions
-2. **Return statements** — functions currently only return via expression
-3. **Modulo operator** — basic arithmetic gap
-4. **Dynamic arrays** — fixed-length arrays are limiting
+2. **Modulo operator** — basic arithmetic gap
+3. **Dynamic arrays** — fixed-length arrays are limiting
 
 ### Medium Priority (expressiveness)
 
-7. **Pattern matching** — goes hand-in-hand with enums
-8. **Interfaces / traits** — polymorphism without inheritance
-9. **Bitwise operators** — needed for low-level work
-10. **Full compound assignment** — `*=`, `/=`, `%=`
-11. **Ternary operator** — compact conditional expressions
+4. **Interfaces / traits** — polymorphism without inheritance
+5. **Bitwise operators** — needed for low-level work
+6. **Full compound assignment** — `*=`, `/=`, `%=`
+7. **Ternary operator** — compact conditional expressions
 
 ### Low Priority (advanced features)
 
-13. **Generics** — type-safe reusable code
-14. **Modules** — code organization
-15. **Error handling** — try/catch or Result type
-16. **Concise syntax** — template literals, string interpolation
-17. **Operator overloading** — custom types with natural operators
+8. **Generics** — type-safe reusable code
+9. **Modules** — code organization
+10. **Error handling** — try/catch or Result type
+11. **Concise syntax** — template literals, string interpolation
+12. **Operator overloading** — custom types with natural operators
