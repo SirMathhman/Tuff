@@ -90,6 +90,18 @@ describe("evaluate", () => {
     expect(evaluate("fn pass<T : I32>(value : T) : T => value + 1;")).toBe(0);
   });
 
+  it('evaluate("let x = 0; let y = &x; let z = &x;") => 0', () => {
+    expect(evaluate("let x = 0; let y = &x; let z = &x;")).toBe(0);
+  });
+
+  it('evaluate("let x = 0; let y = &mut x; let z = &x;") => Error', () => {
+    expect(() => evaluate("let x = 0; let y = &mut x; let z = &x;")).toThrow();
+  });
+
+  it('evaluate("let x = 0; let y = &mut x; let z = &mut x;") => Error', () => {
+    expect(() => evaluate("let x = 0; let y = &mut x; let z = &mut x;")).toThrow();
+  });
+
   it('evaluate("let x = 0; x = 1; x") => Error', () => {
     expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
   });

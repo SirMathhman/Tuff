@@ -111,6 +111,8 @@ interface Scope {
   typeAliases: Map<string, TypeNode>;
   structs: Map<string, TypeNode>;
   typeParams?: TypeParam[];
+  // Tracks active borrows: variable name -> "mutable" | "immutable"
+  borrows: Map<string, "mutable" | "immutable">;
   parent?: Scope;
 }
 
@@ -121,6 +123,7 @@ function newScope(parent?: Scope): Scope {
     typeAliases: new Map(),
     structs: new Map(),
     typeParams: parent?.typeParams,
+    borrows: new Map(),
     parent,
   };
 }
@@ -404,6 +407,20 @@ function checkReference(node: AstNode, scope: Scope): void {
       if (!varInfo) {
         if (!getFn(scope, node.name))
           throw new Error(`Undefined: ${node.name}`);
+      } else {
+        // Borrow checking: reject if there's an active mutable borrow
+        const target = node.name;
+        for (const [borrowed, kind] of scope.borrows) {
+          if (borrowed === target) {
+            if (kind === "mutable" && node.mutable === false)
+              throw new Error("Cannot create immutable reference while mutable reference exists");
+            if (kind === "mutable" && node.mutable === true)
+              throw new Error("Cannot create multiple mutable references to the same variable");
+            if (kind === "immutable" && node.mutable === true)
+              throw new Error("Cannot create mutable reference while immutable reference exists");
+          }
+        }
+        scope.borrows.set(target, node.mutable ? "mutable" : "immutable");
       }
       break;
     }
