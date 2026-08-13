@@ -450,14 +450,17 @@ export class Parser {
     }
     // Handle yield/return
     const token = this.peek();
-    if (
-      token?.[0] === "kw" &&
-      (token[1] === "yield" || token[1] === "return")
-    ) {
+    if (token?.[0] === "kw" && token[1] === "yield") {
       this.consume();
       const value = this.parseFactor();
       if (this.peek()?.[0] === "semi") this.consume();
-      return { type: token[1], value };
+      return { type: "yield", value };
+    }
+    if (token?.[0] === "kw" && token[1] === "return") {
+      this.consume();
+      const value = this.parseFactor();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "return", value };
     }
     const result = this.parseFactor();
     if (this.peek()?.[0] === "semi") this.consume();
