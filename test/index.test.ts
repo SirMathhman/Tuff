@@ -605,4 +605,20 @@ describe("evaluate", () => {
   it('evaluate("let x : U8 != 100 = 100U8;") => Error', () => {
     expect(() => evaluate("let x : U8 != 100 = 100U8;")).toThrow();
   });
+
+  it('evaluate("let x : U8 >= 100 = 100U8;") => 0', () => {
+    expect(evaluate("let x : U8 >= 100 = 100U8;")).toBe(0);
+  });
+
+  it('evaluate("let x : U8 >= 100 = 50U8;") => Error', () => {
+    expect(() => evaluate("let x : U8 >= 100 = 50U8;")).toThrow();
+  });
+
+  it('evaluate("let x : U8 <= 100 = 100U8;") => 0', () => {
+    expect(evaluate("let x : U8 <= 100 = 100U8;")).toBe(0);
+  });
+
+  it('evaluate("let x : U8 <= 100 = 200U8;") => Error', () => {
+    expect(() => evaluate("let x : U8 <= 100 = 200U8;")).toThrow();
+  });
 });
