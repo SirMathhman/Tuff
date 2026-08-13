@@ -425,6 +425,10 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "match": {
       const targetVal = evalValue(node.target, env);
       for (const { pattern, body } of node.cases) {
+        if (pattern === null) {
+          // Wildcard pattern matches anything
+          return evaluate(body, env);
+        }
         const patternVal = evalValue(pattern, env);
         if (compareEqual(targetVal, patternVal)) {
           return evaluate(body, env);

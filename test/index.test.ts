@@ -539,4 +539,10 @@ describe("evaluate", () => {
       evaluate("fn get() : I32 => { if (true) return 2; 3 } + 4; get()"),
     ).toBe(2);
   });
+
+  it('evaluate("let x = match (10) { case 2 => 3; case _ => 4; }; x") => 4', () => {
+    expect(
+      evaluate("let x = match (10) { case 2 => 3; case _ => 4; }; x"),
+    ).toBe(4);
+  });
 });

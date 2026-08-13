@@ -273,7 +273,8 @@ export interface TupleAccess {
 export interface MatchExpression {
   type: "match";
   target: AstNode;
-  cases: { pattern: AstNode; body: AstNode }[];
+  cases: { pattern: AstNode | null; body: AstNode }[];
+  // null pattern represents wildcard (_)
 }
 
 export interface Cast {

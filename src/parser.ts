@@ -210,11 +210,15 @@ export class Parser {
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
       throw new Error("Expected { after match");
     this.consume(); // "{"
-    const cases: { pattern: AstNode; body: AstNode }[] = [];
+    const cases: { pattern: AstNode | null; body: AstNode }[] = [];
     while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
       if (this.peek()?.[0] === "kw" && this.peek()![1] === "case") {
         this.consume(); // "case"
-        const pattern = this.parseAddSub();
+        // Wildcard pattern: `_`
+        const pattern: AstNode | null =
+          this.peek()?.[0] === "id" && this.peek()![1] === "_"
+            ? (this.consume(), null)
+            : this.parseAddSub();
         if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")
           throw new Error("Expected => after case pattern");
         this.consume(); // "=>"
