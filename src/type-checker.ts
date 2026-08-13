@@ -99,7 +99,10 @@ function requireIntType(name: string): (typeof INT_TYPES)[number] {
 
 /** Scope tracks variable declarations, mutability, and function signatures. */
 interface Scope {
-  variables: Map<string, { mutable: boolean; type?: IntTypeName | string }>;
+  variables: Map<
+    string,
+    { mutable: boolean; type?: IntTypeName | string; isStruct?: boolean }
+  >;
   functions: Map<
     string,
     {
@@ -113,6 +116,8 @@ interface Scope {
   typeParams?: TypeParam[];
   // Tracks active borrows: variable name -> "mutable" | "immutable"
   borrows: Map<string, "mutable" | "immutable">;
+  // Tracks moved variables (ownership transfer)
+  moved: Set<string>;
   parent?: Scope;
 }
 
@@ -124,6 +129,7 @@ function newScope(parent?: Scope): Scope {
     structs: new Map(),
     typeParams: parent?.typeParams,
     borrows: new Map(),
+    moved: new Set(),
     parent,
   };
 }
@@ -131,7 +137,7 @@ function newScope(parent?: Scope): Scope {
 function getVar(
   scope: Scope,
   name: string,
-): { mutable: boolean; type?: IntTypeName } | undefined {
+): { mutable: boolean; type?: IntTypeName | string; isStruct?: boolean } | undefined {
   let s: Scope | undefined = scope;
   while (s) {
     const entry = s.variables.get(name);
@@ -373,13 +379,26 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
           }
         }
       }
+      // Mark as struct if declared type is a struct name, or if value is a struct literal
+      const isStruct =
+        (declaredType?.kind === "name" &&
+          getStruct(scope, declaredType.name) !== undefined) ||
+        node.value.type === "struct-literal";
       scope.variables.set(node.name, {
         mutable: node.mutable,
         type:
           declaredType?.kind === "name"
             ? (declaredType.name.toLowerCase() as IntTypeName)
             : valueType,
+        isStruct,
       });
+      // If the value is a struct variable being moved, mark it
+      if (node.value.type === "id") {
+        const srcVar = getVar(scope, node.value.name);
+        if (srcVar?.isStruct) {
+          scope.moved.add(node.value.name);
+        }
+      }
       checkNode(node.value, scope);
       break;
     }
@@ -400,6 +419,10 @@ function checkReference(node: AstNode, scope: Scope): void {
         if (BUILTIN_TYPES.includes(node.name.toLowerCase())) break;
         throw new Error(`Undefined variable: ${node.name}`);
       }
+      // Ownership: check if variable was already moved
+      if (scope.moved.has(node.name)) {
+        throw new Error(`Use of moved variable: ${node.name}`);
+      }
       break;
     }
     case "ref": {
@@ -413,11 +436,17 @@ function checkReference(node: AstNode, scope: Scope): void {
         for (const [borrowed, kind] of scope.borrows) {
           if (borrowed === target) {
             if (kind === "mutable" && node.mutable === false)
-              throw new Error("Cannot create immutable reference while mutable reference exists");
+              throw new Error(
+                "Cannot create immutable reference while mutable reference exists",
+              );
             if (kind === "mutable" && node.mutable === true)
-              throw new Error("Cannot create multiple mutable references to the same variable");
+              throw new Error(
+                "Cannot create multiple mutable references to the same variable",
+              );
             if (kind === "immutable" && node.mutable === true)
-              throw new Error("Cannot create mutable reference while immutable reference exists");
+              throw new Error(
+                "Cannot create mutable reference while immutable reference exists",
+              );
           }
         }
         scope.borrows.set(target, node.mutable ? "mutable" : "immutable");

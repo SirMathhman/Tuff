@@ -99,7 +99,17 @@ describe("evaluate", () => {
   });
 
   it('evaluate("let x = 0; let y = &mut x; let z = &mut x;") => Error', () => {
-    expect(() => evaluate("let x = 0; let y = &mut x; let z = &mut x;")).toThrow();
+    expect(() =>
+      evaluate("let x = 0; let y = &mut x; let z = &mut x;"),
+    ).toThrow();
+  });
+
+  it('evaluate("struct Wrapper { value : I32 } let wrapper = Wrapper { value : 100 }; let x = wrapper; let y = wrapper;") => Error', () => {
+    expect(() =>
+      evaluate(
+        "struct Wrapper { value : I32 } let wrapper = Wrapper { value : 100 }; let x = wrapper; let y = wrapper;",
+      ),
+    ).toThrow();
   });
 
   it('evaluate("let x = 0; x = 1; x") => Error', () => {
