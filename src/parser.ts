@@ -631,12 +631,15 @@ export class Parser {
     if (this.peek()?.[0] !== "kw" || this.peek()![1] !== "in")
       throw new Error("Expected 'in' in for loop");
     this.consume(); // "in"
-    const range = this.parseRange();
+    const iterable = this.parseAddSub();
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
       throw new Error("Expected ) after for loop");
     this.consume(); // ")"
-    const body = this.parseBlock();
-    return { type: "for-loop", variable, range, body };
+    const body =
+      this.peek()?.[0] === "group" && this.peek()![1] === "{"
+        ? this.parseBlock()
+        : this.parseStatement();
+    return { type: "for-loop", variable, iterable, body };
   }
 
   private parseParenContext(label: string): AstNode {

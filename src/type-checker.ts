@@ -383,7 +383,7 @@ function checkControlFlow(node: AstNode, scope: Scope): void {
       checkNode(node.body, scope);
       break;
     case "for-loop": {
-      checkNode(node.range, scope);
+      checkNode(node.iterable, scope);
       const childScope = newScope(scope);
       childScope.variables.set(node.variable, { mutable: false });
       checkNode(node.body, childScope);

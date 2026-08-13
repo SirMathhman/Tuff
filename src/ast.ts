@@ -199,7 +199,7 @@ export interface Range {
 export interface ForLoop {
   type: "for-loop";
   variable: string;
-  range: AstNode;
+  iterable: AstNode;
   body: AstNode;
 }
 

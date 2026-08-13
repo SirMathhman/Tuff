@@ -5,7 +5,6 @@ import type { Value } from "./environment";
 import { Break, Continue, Yield, Return } from "./control-flow";
 import { checkType } from "./type-checker";
 import {
-  evalRange,
   evalLiteral,
   evalCollection,
   evalReference,
@@ -209,10 +208,19 @@ function evalControlFlow(node: AstNode, env: Environment): number {
       return 0;
     }
     case "for-loop": {
-      const range = evalRange(node.range, env, evaluate, evalValue);
-      for (let i = range.start; i < range.end; i++) {
+      const iterableVal = evalValue(node.iterable, env);
+      const elements: Value[] =
+        iterableVal.kind === "range"
+          ? Array.from(
+              { length: iterableVal.end - iterableVal.start },
+              (_, i) => num(iterableVal.start + i),
+            )
+          : iterableVal.kind === "array"
+            ? iterableVal.elements
+            : [];
+      for (const elem of elements) {
         try {
-          env.declare(node.variable, num(i), false);
+          env.declare(node.variable, elem, false);
           evaluate(node.body, env);
         } catch (e) {
           if (e instanceof Break) break;

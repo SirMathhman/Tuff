@@ -545,4 +545,12 @@ describe("evaluate", () => {
       evaluate("let x = match (10) { case 2 => 3; case _ => 4; }; x"),
     ).toBe(4);
   });
+
+  it('evaluate("let array = [1, 2, 3]; let mut sum = 0; for (i in array) sum += i; sum") => 6', () => {
+    expect(
+      evaluate(
+        "let array = [1, 2, 3]; let mut sum = 0; for (i in array) sum += i; sum",
+      ),
+    ).toBe(6);
+  });
 });
