@@ -569,4 +569,12 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("fn getPair() : (I32, I32) => (3, 4); let func : &() => (I32, I32) = &getPair; let result = func(); result.0 + result.1") => 7', () => {
+    expect(
+      evaluate(
+        "fn getPair() : (I32, I32) => (3, 4); let func : &() => (I32, I32) = &getPair; let result = func(); result.0 + result.1",
+      ),
+    ).toBe(7);
+  });
 });
