@@ -349,3 +349,23 @@ export function compareEqual(a: Value, b: Value): boolean {
       return false;
   }
 }
+
+/** Evaluate a match expression. */
+export function evalMatch(
+  node: Extract<AstNode, { type: "match" }>,
+  env: Environment,
+  evaluate: (node: AstNode, env: Environment) => number,
+  evalValue: (node: AstNode, env: Environment) => Value,
+): number {
+  const targetVal = evalValue(node.target, env);
+  for (const { pattern, body } of node.cases) {
+    if (pattern === null) {
+      return evaluate(body, env);
+    }
+    const patternVal = evalValue(pattern, env);
+    if (compareEqual(targetVal, patternVal)) {
+      return evaluate(body, env);
+    }
+  }
+  throw new Error("No matching case in match expression");
+}

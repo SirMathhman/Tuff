@@ -15,6 +15,7 @@ import {
   writeLValue,
   compareEqual,
   evalTupleAccess,
+  evalMatch,
 } from "./eval-helpers";
 
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
@@ -422,20 +423,8 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       return idx;
     }
-    case "match": {
-      const targetVal = evalValue(node.target, env);
-      for (const { pattern, body } of node.cases) {
-        if (pattern === null) {
-          // Wildcard pattern matches anything
-          return evaluate(body, env);
-        }
-        const patternVal = evalValue(pattern, env);
-        if (compareEqual(targetVal, patternVal)) {
-          return evaluate(body, env);
-        }
-      }
-      throw new Error("No matching case in match expression");
-    }
+    case "match":
+      return evalMatch(node, env, evaluate, evalValue);
     case "tuple-literal":
       return 0;
     case "tuple-access":
