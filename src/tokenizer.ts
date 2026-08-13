@@ -54,6 +54,7 @@ export type Token =
         | "type"
         | "struct"
         | "null"
+        | "yield"
       ),
     ]
   | ["id", string]
@@ -130,6 +131,7 @@ function classifyToken(text: string): Token {
   if (text === "type") return ["kw", "type"];
   if (text === "struct") return ["kw", "struct"];
   if (text === "null") return ["kw", "null"];
+  if (text === "yield") return ["kw", "yield"];
   if (text === "true") return ["bool", true];
   if (text === "false") return ["bool", false];
   if (/^[a-zA-Z_]/.test(text)) return ["id", text];

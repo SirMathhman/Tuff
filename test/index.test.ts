@@ -505,4 +505,8 @@ describe("evaluate", () => {
   it("evaluate(\"let a : I32 | Char = 'a'; a is Char\") => 1", () => {
     expect(evaluate("let a : I32 | Char = 'a'; a is Char")).toBe(1);
   });
+
+  it('evaluate("{ if (true) yield 2; 3 } + 4") => 6', () => {
+    expect(evaluate("{ if (true) yield 2; 3 } + 4")).toBe(6);
+  });
 });

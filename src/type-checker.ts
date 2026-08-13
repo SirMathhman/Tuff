@@ -267,7 +267,9 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
             if (alias && alias.kind === "name") {
               typeName = alias.name;
             }
-            const target = requireIntType(typeName.toLowerCase() as IntTypeName);
+            const target = requireIntType(
+              typeName.toLowerCase() as IntTypeName,
+            );
             const source = valueType ? requireIntType(valueType) : null;
             if (source && target.max < source.max)
               throw new Error(
@@ -278,9 +280,10 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
       }
       scope.variables.set(node.name, {
         mutable: node.mutable,
-        type: declaredType?.kind === "name"
-          ? declaredType.name.toLowerCase() as IntTypeName
-          : valueType,
+        type:
+          declaredType?.kind === "name"
+            ? (declaredType.name.toLowerCase() as IntTypeName)
+            : valueType,
       });
       checkNode(node.value, scope);
       break;

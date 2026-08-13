@@ -12,7 +12,7 @@ import {
   nullValue,
 } from "./environment";
 import type { Ref, Value } from "./environment";
-import { Break, Continue } from "./control-flow";
+import { Break, Continue, Yield } from "./control-flow";
 import { checkType } from "./type-checker";
 
 /** Evaluate a range expression and return { start, end }. */
@@ -448,7 +448,12 @@ function evalControlFlow(node: AstNode, env: Environment): number {
     case "if-expression": {
       const condition = evaluate(node.condition, env);
       if (condition !== 0) {
-        return evaluate(node.thenBranch, env);
+        try {
+          return evaluate(node.thenBranch, env);
+        } catch (e) {
+          if (e instanceof Yield) throw e;
+          throw e;
+        }
       }
       return evaluate(node.elseBranch, env);
     }
@@ -482,6 +487,8 @@ function evalControlFlow(node: AstNode, env: Environment): number {
       throw new Break();
     case "continue":
       throw new Continue();
+    case "yield":
+      throw new Yield(evaluate(node.value, env));
     default:
       throw new Error(`Unexpected control flow: ${node.type}`);
   }
@@ -612,6 +619,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "for-loop":
     case "break":
     case "continue":
+    case "yield":
       return evalControlFlow(node, env);
     case "cast":
     case "type-check":
@@ -639,7 +647,12 @@ export function evaluate(node: AstNode, env: Environment): number {
         if (stmt.type !== "let") {
           hasValue = true;
         }
-        last = evaluate(stmt, blockEnv);
+        try {
+          last = evaluate(stmt, blockEnv);
+        } catch (e) {
+          if (e instanceof Yield) return e.value;
+          throw e;
+        }
       }
       if (!hasValue) throw new Error("Block has no value");
       return last;

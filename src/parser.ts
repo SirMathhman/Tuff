@@ -232,6 +232,14 @@ export class Parser {
       return { type: "continue" };
     }
 
+    // Handle yield
+    if (token[0] === "kw" && token[1] === "yield") {
+      this.consume();
+      const value = this.parseAddSub();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "yield", value };
+    }
+
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;
@@ -431,6 +439,14 @@ export class Parser {
       const value = this.parseFactor();
       if (this.peek()?.[0] === "semi") this.consume();
       return { type: "assign", lvalue: lvalue.lvalue, value };
+    }
+    // Handle yield
+    const token = this.peek();
+    if (token?.[0] === "kw" && token[1] === "yield") {
+      this.consume();
+      const value = this.parseFactor();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "yield", value };
     }
     const result = this.parseFactor();
     if (this.peek()?.[0] === "semi") this.consume();
