@@ -1,6 +1,6 @@
 import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
-import type { AstNode, LValue, TypeNode } from "./ast";
+import type { AstNode, LValue, TypeNode, TypeParam } from "./ast";
 import type { IntTypeName } from "./types";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
@@ -10,7 +10,10 @@ export class Parser {
 
   constructor(private tokens: Token[]) {}
 
-  private parseType(allowFnType: boolean = true, allowConstraint: boolean = true): TypeNode {
+  private parseType(
+    allowFnType: boolean = true,
+    allowConstraint: boolean = true,
+  ): TypeNode {
     // Reference type: &Type
     if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
       this.consume(); // "&"
@@ -921,7 +924,7 @@ export class Parser {
     this.consume();
 
     // Parse optional type parameters: <T, U> or <T : I32>
-    const typeParams: { name: string; constraint?: TypeNode }[] = [];
+    const typeParams: TypeParam[] = [];
     if (this.peek()?.[0] === "op" && this.peek()![1] === "<") {
       this.consume(); // "<"
       do {

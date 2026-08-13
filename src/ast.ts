@@ -1,5 +1,11 @@
 import type { IntTypeName } from "./types";
 
+/** A generic type parameter (e.g., `T`, `T : I32`). */
+export interface TypeParam {
+  name: string;
+  constraint?: TypeNode;
+}
+
 /** A type expression (e.g., `U8`, `[I32; 3]`, `&Bool`, `{ x : I32, y : I32 }`). */
 export type TypeNode =
   | { kind: "name"; name: string; constraint?: { op: string; value: number } }
@@ -286,7 +292,7 @@ export interface Cast {
 export interface FnDef {
   type: "fn-def";
   name: string;
-  typeParams?: { name: string; constraint?: TypeNode }[];
+  typeParams?: TypeParam[];
   params: { name: string; type: TypeNode }[];
   returnType: TypeNode;
   body: AstNode;

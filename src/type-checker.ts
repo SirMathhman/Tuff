@@ -1,4 +1,4 @@
-import type { AstNode, LValue, TypeNode } from "./ast";
+import type { AstNode, LValue, TypeNode, TypeParam } from "./ast";
 import { INT_TYPES, BUILTIN_TYPES, type IntTypeName } from "./types";
 import type { Value } from "./environment";
 import type { Environment } from "./environment";
@@ -102,11 +102,15 @@ interface Scope {
   variables: Map<string, { mutable: boolean; type?: IntTypeName | string }>;
   functions: Map<
     string,
-    { params: TypeNode[]; returnType: TypeNode; typeParams?: { name: string; constraint?: TypeNode }[] }
+    {
+      params: TypeNode[];
+      returnType: TypeNode;
+      typeParams?: TypeParam[];
+    }
   >;
   typeAliases: Map<string, TypeNode>;
   structs: Map<string, TypeNode>;
-  typeParams?: { name: string; constraint?: TypeNode }[];
+  typeParams?: TypeParam[];
   parent?: Scope;
 }
 
@@ -259,9 +263,12 @@ function checkLiteral(node: AstNode): void {
 }
 
 /** Check if a variable has an unconstrained generic type parameter type. */
-function isUnconstrainedGenericType(type: string | undefined, scope: Scope): boolean {
+function isUnconstrainedGenericType(
+  type: string | undefined,
+  scope: Scope,
+): boolean {
   if (type === undefined) return false;
-  const tp = scope.typeParams?.find(tp => tp.name === type);
+  const tp = scope.typeParams?.find((tp) => tp.name === type);
   // Generic with no constraint = reject; generic with constraint = allow
   return tp !== undefined && tp.constraint === undefined;
 }
@@ -283,7 +290,10 @@ function checkBinaryOpTypes(node: AstNode, scope: Scope): void {
   const leftType = getExprType(node.left, scope);
   const rightType = getExprType(node.right, scope);
 
-  if (isUnconstrainedGenericType(leftType, scope) || isUnconstrainedGenericType(rightType, scope)) {
+  if (
+    isUnconstrainedGenericType(leftType, scope) ||
+    isUnconstrainedGenericType(rightType, scope)
+  ) {
     throw new Error(
       `Cannot apply operator '${node.op}' to generic type parameter`,
     );
@@ -333,7 +343,7 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
           // Union type — no range checking needed
         } else if (declaredType.kind === "name") {
           // Generic type parameter — skip range checking
-          if (scope.typeParams?.some(tp => tp.name === declaredType.name)) {
+          if (scope.typeParams?.some((tp) => tp.name === declaredType.name)) {
             // skip
           } else {
             const structType = getStruct(scope, declaredType.name);
@@ -427,10 +437,11 @@ function checkFunction(node: AstNode, scope: Scope): void {
       for (const param of node.params) {
         // Store generic type param name as the type (e.g. "T") so operators can reject it
         // If the type param has a constraint, store the constraint type instead
-        const paramName = param.type.kind === "name" ? param.type.name : undefined;
+        const paramName =
+          param.type.kind === "name" ? param.type.name : undefined;
         const varType =
           paramName !== undefined &&
-          node.typeParams?.some(tp => tp.name === paramName)
+          node.typeParams?.some((tp) => tp.name === paramName)
             ? paramName
             : undefined;
         fnScope.variables.set(param.name, { mutable: false, type: varType });
