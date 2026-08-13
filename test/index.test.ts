@@ -553,4 +553,12 @@ describe("evaluate", () => {
       ),
     ).toBe(6);
   });
+
+  it('evaluate("let range = 0..4; let mut sum = 0; for (i in range) sum += i; sum") => 6', () => {
+    expect(
+      evaluate(
+        "let range = 0..4; let mut sum = 0; for (i in range) sum += i; sum",
+      ),
+    ).toBe(6);
+  });
 });
