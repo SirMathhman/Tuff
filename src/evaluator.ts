@@ -66,14 +66,17 @@ function evalValue(node: AstNode, env: Environment): Value {
         throw e;
       }
     }
-    default: {
-      try {
-        return num(evaluate(node, env));
-      } catch (e) {
-        if (e instanceof Return) throw e;
-        throw e;
-      }
-    }
+    case "block":
+    case "if-statement":
+    case "if-expression":
+    case "for-loop":
+    case "while-loop":
+    case "match":
+    case "enum-access":
+    case "type-check":
+      return num(evaluate(node, env));
+    default:
+      throw new Error(`evalValue does not handle node type: ${node.type}`);
   }
 }
 
