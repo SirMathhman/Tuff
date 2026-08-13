@@ -586,7 +586,12 @@ function evalFunction(node: AstNode, env: Environment): number {
         const arg = node.args[i]!;
         fnEnv.declare(param.name, evalValue(arg, env), false);
       }
-      return evaluate(fn.body, fnEnv);
+      try {
+        return evaluate(fn.body, fnEnv);
+      } catch (e) {
+        if (e instanceof Yield) return e.value;
+        throw e;
+      }
     }
     default:
       throw new Error(`Unexpected function: ${node.type}`);

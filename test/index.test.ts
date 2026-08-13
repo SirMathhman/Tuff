@@ -509,4 +509,8 @@ describe("evaluate", () => {
   it('evaluate("{ if (true) yield 2; 3 } + 4") => 6', () => {
     expect(evaluate("{ if (true) yield 2; 3 } + 4")).toBe(6);
   });
+
+  it('evaluate("fn get() : I32 => { if (true) yield 2; 3 } + 4; get()") => 6', () => {
+    expect(evaluate("fn get() : I32 => { if (true) yield 2; 3 } + 4; get()")).toBe(6);
+  });
 });
