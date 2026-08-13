@@ -207,6 +207,28 @@ export function typeCheck(statements: AstNode[]): void {
   }
 }
 
+/** Check that a literal value satisfies a type constraint. */
+function checkConstraint(typeNode: TypeNode, valueNode: AstNode): void {
+  if (!typeNode.constraint) return;
+  const { op, value } = typeNode.constraint;
+  const literalVal = valueNode.type === "num" ? valueNode.value : null;
+  if (literalVal === null) return;
+  const passes =
+    op === ">"
+      ? literalVal > value
+      : op === ">="
+        ? literalVal >= value
+        : op === "<"
+          ? literalVal < value
+          : op === "<="
+            ? literalVal <= value
+            : false;
+  if (!passes)
+    throw new Error(
+      `Value ${literalVal} does not satisfy constraint ${op} ${value}`,
+    );
+}
+
 /** Check literal nodes. */
 function checkLiteral(node: AstNode): void {
   switch (node.type) {
@@ -286,28 +308,7 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
               throw new Error(
                 `Cannot assign ${source.suffix} to ${target.suffix}`,
               );
-            // Validate type constraint (e.g., U8 > 0)
-            if (declaredType.constraint) {
-              const { op, value } = declaredType.constraint;
-              const literalVal =
-                node.value.type === "num" ? node.value.value : null;
-              if (literalVal !== null) {
-                const passes =
-                  op === ">"
-                    ? literalVal > value
-                    : op === ">="
-                      ? literalVal >= value
-                      : op === "<"
-                        ? literalVal < value
-                        : op === "<="
-                          ? literalVal <= value
-                          : false;
-                if (!passes)
-                  throw new Error(
-                    `Value ${literalVal} does not satisfy constraint ${op} ${value}`,
-                  );
-              }
-            }
+            checkConstraint(declaredType, node.value);
           }
         }
       }
