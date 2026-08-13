@@ -56,6 +56,16 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (fn === undefined) throw new Error("Undefined function: " + node.name);
       return { kind: "fnref", fn };
     }
+    case "fn-call": {
+      const { fn, fnEnv } = setupFnCall(node, env);
+      try {
+        return evalValue(fn.body, fnEnv);
+      } catch (e) {
+        if (e instanceof Yield) return num(e.value);
+        if (e instanceof Return) return num(e.value);
+        throw e;
+      }
+    }
     default: {
       try {
         return num(evaluate(node, env));
@@ -315,26 +325,7 @@ function evalFunction(node: AstNode, env: Environment): number {
     case "fnref":
       return 0;
     case "fn-call": {
-      const calleeVal = env.get(node.name);
-      let fn: import("./environment").FnDef;
-      if (calleeVal?.kind === "fnref") {
-        fn = calleeVal.fn;
-      } else {
-        const namedFn = env.getFunction(node.name);
-        if (namedFn === undefined)
-          throw new Error("Undefined function: " + node.name);
-        fn = namedFn;
-      }
-      const fnEnv = new Environment(fn.env ?? env);
-      if (fn.params.length !== node.args.length)
-        throw new Error(
-          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
-        );
-      for (let i = 0; i < fn.params.length; i++) {
-        const param = fn.params[i]!;
-        const arg = node.args[i]!;
-        fnEnv.declare(param.name, evalValue(arg, env), false);
-      }
+      const { fn, fnEnv } = setupFnCall(node, env);
       try {
         return evaluate(fn.body, fnEnv);
       } catch (e) {
@@ -346,6 +337,34 @@ function evalFunction(node: AstNode, env: Environment): number {
     default:
       throw new Error(`Unexpected function: ${node.type}`);
   }
+}
+
+/** Resolve a function call and return the function def + environment. */
+function setupFnCall(
+  node: AstNode,
+  env: Environment,
+): { fn: import("./environment").FnDef; fnEnv: Environment } {
+  const calleeVal = env.get(node.name);
+  let fn: import("./environment").FnDef;
+  if (calleeVal?.kind === "fnref") {
+    fn = calleeVal.fn;
+  } else {
+    const namedFn = env.getFunction(node.name);
+    if (namedFn === undefined)
+      throw new Error("Undefined function: " + node.name);
+    fn = namedFn;
+  }
+  const fnEnv = new Environment(fn.env ?? env);
+  if (fn.params.length !== node.args.length)
+    throw new Error(
+      `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
+    );
+  for (let i = 0; i < fn.params.length; i++) {
+    const param = fn.params[i]!;
+    const arg = node.args[i]!;
+    fnEnv.declare(param.name, evalValue(arg, env), false);
+  }
+  return { fn, fnEnv };
 }
 
 export function evaluate(node: AstNode, env: Environment): number {

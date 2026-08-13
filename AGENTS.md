@@ -25,6 +25,7 @@ Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker →
 | `src/ast.ts`          | Discriminated union AST types                                                  |
 | `src/type-checker.ts` | Validates integer range/signedness                                             |
 | `src/evaluator.ts`    | Interpreter — `evaluate()` (returns `number`), `evalValue()` (returns `Value`) |
+| `src/eval-helpers.ts` | Shared eval utilities — `evalRange`, `getIndex`, `evalLiteral`, etc.           |
 | `src/environment.ts`  | Symbol table with scoping, mutability, refs                                    |
 | `src/control-flow.ts` | `Break` / `Continue` Error subclasses                                          |
 | `src/types.ts`        | Integer type definitions (`u8`, `i32`, …) and promotion rules                  |

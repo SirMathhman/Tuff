@@ -10,17 +10,17 @@ export class Parser {
 
   constructor(private tokens: Token[]) {}
 
-  private parseType(): TypeNode {
+  private parseType(allowFnType: boolean = true): TypeNode {
     // Reference type: &Type
     if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
       this.consume(); // "&"
-      const innerType = this.parseType();
+      const innerType = this.parseType(allowFnType);
       return { kind: "ref", innerType };
     }
     // Array type: [Type; N]
     if (this.peek()?.[0] === "group" && this.peek()![1] === "[") {
       this.consume(); // "["
-      const elementType = this.parseType();
+      const elementType = this.parseType(allowFnType);
       if (this.peek()?.[0] !== "semi" || this.peek()![1] !== ";")
         throw new Error("Expected ; in array type");
       this.consume(); // ";"
@@ -34,7 +34,7 @@ export class Parser {
     if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {
       this.consume(); // "{"
       const rawFields = this.parseStructFields(
-        () => this.parseType(),
+        () => this.parseType(allowFnType),
         "Expected field name in struct type",
         "Expected : in struct type",
       );
@@ -47,11 +47,17 @@ export class Parser {
     // Tuple type: (Type, Type) or function type: (Type, Type) => ReturnType
     if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
       this.consume(); // "("
-      const elementTypes = this.parseParenList(() => this.parseType());
+      const elementTypes = this.parseParenList(() =>
+        this.parseType(allowFnType),
+      );
       // Check if it's a function type
-      if (this.peek()?.[0] === "op" && this.peek()![1] === "=>") {
+      if (
+        allowFnType &&
+        this.peek()?.[0] === "op" &&
+        this.peek()![1] === "=>"
+      ) {
         this.consume(); // "=>"
-        const returnType = this.parseType();
+        const returnType = this.parseType(allowFnType);
         return { kind: "fn", params: elementTypes, returnType };
       }
       // It's a tuple type
@@ -68,7 +74,7 @@ export class Parser {
     if (this.peek()?.[0] === "op" && this.peek()![1] === "|") {
       this.consume(); // "|"
       const unionTypes: TypeNode[] = [type];
-      unionTypes.push(this.parseType());
+      unionTypes.push(this.parseType(allowFnType));
       return { kind: "union", types: unionTypes };
     }
     return type;
@@ -922,7 +928,7 @@ export class Parser {
     let returnType: TypeNode;
     if (this.peek()?.[0] === "colon") {
       this.consume(); // ":"
-      returnType = this.parseType();
+      returnType = this.parseType(false);
     } else {
       returnType = { kind: "name", name: "i32" };
     }
