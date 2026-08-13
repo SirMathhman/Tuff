@@ -12,7 +12,7 @@ import {
   nullValue,
 } from "./environment";
 import type { Ref, Value } from "./environment";
-import { Break, Continue, Yield } from "./control-flow";
+import { Break, Continue, Yield, Return } from "./control-flow";
 import { checkType } from "./type-checker";
 
 /** Evaluate a range expression and return { start, end }. */
@@ -489,6 +489,8 @@ function evalControlFlow(node: AstNode, env: Environment): number {
       throw new Continue();
     case "yield":
       throw new Yield(evaluate(node.value, env));
+    case "return":
+      throw new Return(evaluate(node.value, env));
     default:
       throw new Error(`Unexpected control flow: ${node.type}`);
   }
@@ -590,6 +592,7 @@ function evalFunction(node: AstNode, env: Environment): number {
         return evaluate(fn.body, fnEnv);
       } catch (e) {
         if (e instanceof Yield) return e.value;
+        if (e instanceof Return) return e.value;
         throw e;
       }
     }

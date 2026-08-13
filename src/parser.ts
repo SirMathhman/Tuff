@@ -240,6 +240,14 @@ export class Parser {
       return { type: "yield", value };
     }
 
+    // Handle return
+    if (token[0] === "kw" && token[1] === "return") {
+      this.consume();
+      const value = this.parseAddSub();
+      if (this.peek()?.[0] === "semi") this.consume();
+      return { type: "return", value };
+    }
+
     const expr = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
     return expr;

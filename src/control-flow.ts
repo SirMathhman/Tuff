@@ -6,3 +6,9 @@ export class Yield extends Error {
     super("yield");
   }
 }
+
+export class Return extends Error {
+  constructor(public value: number) {
+    super("return");
+  }
+}

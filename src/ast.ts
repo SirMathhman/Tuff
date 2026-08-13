@@ -37,6 +37,7 @@ export type AstNode =
   | BreakStatement
   | ContinueStatement
   | YieldStatement
+  | ReturnStatement
   | ForLoop
   | Range
   | ArrayLiteral
@@ -174,6 +175,11 @@ export interface ContinueStatement {
 
 export interface YieldStatement {
   type: "yield";
+  value: AstNode;
+}
+
+export interface ReturnStatement {
+  type: "return";
   value: AstNode;
 }
 
