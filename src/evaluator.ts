@@ -1,178 +1,21 @@
-import type { AstNode, LValue } from "./ast";
+import type { AstNode } from "./ast";
 import type { IntTypeName } from "./types";
-import { promoteTypes } from "./types";
-import {
-  Environment,
-  deref,
-  derefValue,
-  assignRef,
-  num,
-  toNumber,
-  getNumberType,
-  nullValue,
-} from "./environment";
-import type { Ref, Value } from "./environment";
+import { Environment, deref, num, toNumber } from "./environment";
+import type { Value } from "./environment";
 import { Break, Continue, Yield, Return } from "./control-flow";
 import { checkType } from "./type-checker";
-
-/** Evaluate a range expression and return { start, end }. */
-function evalRange(
-  node: AstNode,
-  env: Environment,
-): { start: number; end: number } {
-  const v = evalValue(node, env);
-  if (v.kind !== "range") throw new Error("Expected range value");
-  return { start: v.start, end: v.end };
-}
-
-/** Get element from array at index, throwing on out of bounds. */
-function getIndex(
-  arr: { kind: "array"; elements: Value[] },
-  idx: number,
-): Value {
-  const result = arr.elements[idx];
-  if (result === undefined)
-    throw new Error(`Array index out of bounds: ${idx}`);
-  return result;
-}
-
-/** Evaluate literal nodes (num, bool, char, string). */
-function evalLiteral(node: AstNode): Value {
-  switch (node.type) {
-    case "num":
-      return num(node.value, node.numType, node.isFloat);
-    case "bool":
-      return { kind: "bool", value: node.value };
-    case "char":
-      return num(node.value.charCodeAt(0), undefined, undefined, true);
-    case "string":
-      return {
-        kind: "array",
-        elements: [...node.value].map((c) =>
-          num(c.charCodeAt(0), undefined, undefined, true),
-        ),
-      };
-    case "null":
-      return nullValue();
-    default:
-      throw new Error(`Unexpected literal: ${node.type}`);
-  }
-}
-
-/** Evaluate collection nodes (array, range). */
-function evalCollection(node: AstNode, env: Environment): Value {
-  switch (node.type) {
-    case "array-literal": {
-      const elements: Value[] = node.elements.map((el) => evalValue(el, env));
-      return { kind: "array", elements };
-    }
-    case "array-index": {
-      const arr = evalValue(node.array, env);
-      const idx = evaluate(node.index, env);
-      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      return getIndex(arr, idx);
-    }
-    case "range": {
-      return {
-        kind: "range",
-        start: evaluate(node.start, env),
-        end: evaluate(node.end, env),
-      };
-    }
-    default:
-      throw new Error(`Unexpected collection: ${node.type}`);
-  }
-}
-
-/** Evaluate reference nodes (ref, deref). */
-function evalReference(node: AstNode, env: Environment): Value {
-  switch (node.type) {
-    case "ref": {
-      const fn = env.getFunction(node.name);
-      if (fn !== undefined && !node.mutable) {
-        return { kind: "fnref", fn };
-      }
-      const ref: Ref = {
-        name: node.name,
-        env,
-        mutable: node.mutable,
-      };
-      return { kind: "ref", ref };
-    }
-    case "deref": {
-      const operand = evalValue(node.operand, env);
-      if (operand.kind === "ref") {
-        return derefValue(operand.ref);
-      }
-      return operand;
-    }
-    default:
-      throw new Error(`Unexpected reference: ${node.type}`);
-  }
-}
-
-/** Evaluate struct nodes (struct-literal, struct-access). */
-function evalStruct(node: AstNode, env: Environment): Value {
-  switch (node.type) {
-    case "struct-literal": {
-      const fields: Record<string, Value> = {};
-      for (const f of node.fields) {
-        fields[f.name] = evalValue(f.value, env);
-      }
-      return { kind: "struct", fields };
-    }
-    case "struct-access": {
-      const struct = evalValue(node.struct, env);
-      if (struct.kind !== "struct")
-        throw new Error("Cannot access field on non-struct value");
-      const field = struct.fields[node.field];
-      if (field === undefined)
-        throw new Error(`Field not found: ${node.field}`);
-      return field;
-    }
-    default:
-      throw new Error(`Unexpected struct: ${node.type}`);
-  }
-}
-
-/** Evaluate operator nodes (binop, unop, cast). */
-function evalOperator(node: AstNode, env: Environment): Value {
-  switch (node.type) {
-    case "binop": {
-      const left = evalValue(node.left, env);
-      const right = evalValue(node.right, env);
-      const result = evaluate(node, env);
-      const leftType = getNumberType(left);
-      const rightType = getNumberType(right);
-      if (leftType && rightType) {
-        return num(result, promoteTypes(leftType, rightType));
-      }
-      const numType = leftType || rightType;
-      if (numType) {
-        return num(result, numType);
-      }
-      return num(result);
-    }
-    case "unop": {
-      const operand = evalValue(node.operand, env);
-      const result = evaluate(node, env);
-      const numType = getNumberType(operand);
-      if (numType) {
-        return num(result, numType);
-      }
-      return num(result);
-    }
-    case "cast": {
-      const value = evalValue(node.expression, env);
-      return num(
-        value.kind === "number" ? value.value : toNumber(value),
-        node.typeName.toLowerCase() as IntTypeName,
-      );
-    }
-    default:
-      throw new Error(`Unexpected operator: ${node.type}`);
-  }
-}
+import {
+  evalRange,
+  evalLiteral,
+  evalCollection,
+  evalReference,
+  evalStruct,
+  evalOperator,
+  resolveLValue,
+  writeLValue,
+  compareEqual,
+  evalTupleAccess,
+} from "./eval-helpers";
 
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
 function evalValue(node: AstNode, env: Environment): Value {
@@ -191,30 +34,23 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "array-literal":
     case "array-index":
     case "range":
-      return evalCollection(node, env);
+      return evalCollection(node, env, evaluate, evalValue);
     case "ref":
     case "deref":
-      return evalReference(node, env);
+      return evalReference(node, env, evalValue);
     case "struct-literal":
     case "struct-access":
-      return evalStruct(node, env);
+      return evalStruct(node, env, evalValue);
     case "tuple-literal": {
       const elements = node.elements.map((el) => evalValue(el, env));
       return { kind: "tuple", elements };
     }
-    case "tuple-access": {
-      const tuple = evalValue(node.tuple, env);
-      if (tuple.kind !== "tuple")
-        throw new Error("Cannot access element on non-tuple value");
-      const elem = tuple.elements[node.index];
-      if (elem === undefined)
-        throw new Error(`Tuple index out of bounds: ${node.index}`);
-      return elem;
-    }
+    case "tuple-access":
+      return evalTupleAccess(node, env, evalValue);
     case "binop":
     case "unop":
     case "cast":
-      return evalOperator(node, env);
+      return evalOperator(node, env, evaluate, evalValue);
     case "fnref": {
       const fn = env.getFunction(node.name);
       if (fn === undefined) throw new Error("Undefined function: " + node.name);
@@ -231,72 +67,6 @@ function evalValue(node: AstNode, env: Environment): Value {
   }
 }
 
-/** Resolve an LHS to the Value it points to. */
-function resolveLValue(lvalue: LValue, env: Environment, raw = false): Value {
-  switch (lvalue.kind) {
-    case "var": {
-      const v = env.get(lvalue.name);
-      if (v === undefined)
-        throw new Error("Undefined variable: " + lvalue.name);
-      if (!raw && v.kind === "ref") return derefValue(v.ref);
-      return v;
-    }
-    case "deref": {
-      const inner = resolveLValue(lvalue.ref, env, true);
-      if (inner.kind !== "ref")
-        throw new Error("Cannot dereference non-reference");
-      return derefValue(inner.ref);
-    }
-    case "index": {
-      const arr = resolveLValue(lvalue.array, env);
-      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const result = getIndex(arr, evaluate(lvalue.index, env));
-      if (!raw && result.kind === "ref") return derefValue(result.ref);
-      return result;
-    }
-    case "field": {
-      const struct = resolveLValue(lvalue.struct, env);
-      if (struct.kind !== "struct")
-        throw new Error("Cannot access field on non-struct value");
-      const field = struct.fields[lvalue.field];
-      if (field === undefined)
-        throw new Error(`Field not found: ${lvalue.field}`);
-      return field;
-    }
-  }
-}
-
-/** Write a value to the target described by an LHS. */
-function writeLValue(lvalue: LValue, env: Environment, value: Value): void {
-  switch (lvalue.kind) {
-    case "var": {
-      env.assign(lvalue.name, value);
-      return;
-    }
-    case "deref": {
-      const inner = resolveLValue(lvalue.ref, env, true);
-      if (inner.kind !== "ref")
-        throw new Error("Cannot dereference non-reference");
-      assignRef(inner.ref, toNumber(value));
-      return;
-    }
-    case "index": {
-      const arr = resolveLValue(lvalue.array, env);
-      if (arr.kind !== "array") throw new Error("Cannot index non-array value");
-      const idx = evaluate(lvalue.index, env);
-      arr.elements[idx] = value;
-      return;
-    }
-    case "field": {
-      const struct = resolveLValue(lvalue.struct, env);
-      if (struct.kind !== "struct")
-        throw new Error("Cannot assign field on non-struct value");
-      struct.fields[lvalue.field] = value;
-      return;
-    }
-  }
-}
-
 export function evaluateStatements(
   statements: AstNode[],
   env: Environment,
@@ -306,74 +76,6 @@ export function evaluateStatements(
     last = evaluate(stmt, env);
   }
   return last;
-}
-
-/** Structural equality for Value types. */
-function compareElements(a: Value[], b: Value[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const aEl = a[i];
-    const bEl = b[i];
-    if (aEl === undefined || bEl === undefined) return false;
-    if (!compareEqual(aEl, bEl)) return false;
-  }
-  return true;
-}
-
-function compareEqual(a: Value, b: Value): boolean {
-  if (a.kind !== b.kind) return false;
-  switch (a.kind) {
-    case "number":
-      return (
-        (a as Value & { kind: "number" }).value ===
-        (b as Value & { kind: "number" }).value
-      );
-    case "bool":
-      return (
-        (a as Value & { kind: "bool" }).value ===
-        (b as Value & { kind: "bool" }).value
-      );
-    case "null":
-      return true;
-    case "ref":
-      return (
-        (a as Value & { kind: "ref" }).ref.name ===
-        (b as Value & { kind: "ref" }).ref.name
-      );
-    case "array": {
-      return compareElements(
-        (a as Value & { kind: "array" }).elements,
-        (b as Value & { kind: "array" }).elements,
-      );
-    }
-    case "struct": {
-      const aFields = (a as Value & { kind: "struct" }).fields;
-      const bFields = (b as Value & { kind: "struct" }).fields;
-      const aKeys = Object.keys(aFields);
-      const bKeys = Object.keys(bFields);
-      if (aKeys.length !== bKeys.length) return false;
-      for (const key of aKeys) {
-        const aVal = aFields[key];
-        const bVal = bFields[key];
-        if (aVal === undefined || bVal === undefined) return false;
-        if (!compareEqual(aVal, bVal)) return false;
-      }
-      return true;
-    }
-    case "tuple": {
-      return compareElements(
-        (a as Value & { kind: "tuple" }).elements,
-        (b as Value & { kind: "tuple" }).elements,
-      );
-    }
-    case "fnref":
-      return (
-        (a as Value & { kind: "fnref" }).fn ===
-        (b as Value & { kind: "fnref" }).fn
-      );
-    default:
-      return false;
-  }
 }
 
 /** Evaluate literal nodes (num, bool, char, string) to a number. */
@@ -401,7 +103,6 @@ function evalOperatorNum(node: AstNode, env: Environment): number {
       try {
         const leftVal = evalValue(node.left, env);
         const rightVal = evalValue(node.right, env);
-        // Handle equality before numeric conversion (null !== 0)
         if (node.op === "==") return compareEqual(leftVal, rightVal) ? 1 : 0;
         if (node.op === "!=") return compareEqual(leftVal, rightVal) ? 0 : 1;
         const left = toNumber(leftVal);
@@ -461,14 +162,16 @@ function evalAssignment(node: AstNode, env: Environment): number {
     }
     case "assign": {
       const value = evaluate(node.value, env);
-      writeLValue(node.lvalue, env, num(value));
+      writeLValue(node.lvalue, env, num(value), evaluate);
       return value;
     }
     case "compoundassign": {
-      const current = toNumber(resolveLValue(node.lvalue, env));
+      const current = toNumber(
+        resolveLValue(node.lvalue, env, false, evaluate),
+      );
       const rhs = evaluate(node.value, env);
       const compoundValue = node.op === "+" ? current + rhs : current - rhs;
-      writeLValue(node.lvalue, env, num(compoundValue));
+      writeLValue(node.lvalue, env, num(compoundValue), evaluate);
       return compoundValue;
     }
     default:
@@ -505,7 +208,7 @@ function evalControlFlow(node: AstNode, env: Environment): number {
       return 0;
     }
     case "for-loop": {
-      const range = evalRange(node.range, env);
+      const range = evalRange(node.range, env, evaluate, evalValue);
       for (let i = range.start; i < range.end; i++) {
         try {
           env.declare(node.variable, num(i), false);
@@ -729,6 +432,10 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       throw new Error("No matching case in match expression");
     }
+    case "tuple-literal":
+      return 0;
+    case "tuple-access":
+      return toNumber(evalTupleAccess(node, env, evalValue));
     default:
       return 0;
   }
