@@ -7,7 +7,8 @@ export type TypeNode =
   | { kind: "ref"; innerType: TypeNode }
   | { kind: "struct"; fields: { name: string; type: TypeNode }[] }
   | { kind: "fn"; params: TypeNode[]; returnType: TypeNode }
-  | { kind: "union"; types: TypeNode[] };
+  | { kind: "union"; types: TypeNode[] }
+  | { kind: "enum"; name: string };
 
 /** Left-hand side of an assignment. */
 export type LValue =
@@ -48,6 +49,8 @@ export type AstNode =
   | Cast
   | TypeAlias
   | StructDef
+  | EnumDef
+  | EnumAccess
   | FnDef
   | FnCall
   | FnRef;
@@ -238,6 +241,18 @@ export interface StructDef {
   type: "struct-def";
   name: string;
   fields: { name: string; mutable: boolean; type: TypeNode }[];
+}
+
+export interface EnumDef {
+  type: "enum-def";
+  name: string;
+  variants: string[];
+}
+
+export interface EnumAccess {
+  type: "enum-access";
+  enumName: string;
+  variant: string;
 }
 
 export interface Cast {

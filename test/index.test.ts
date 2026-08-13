@@ -498,6 +498,12 @@ describe("evaluate", () => {
     expect(evaluate("let temp : Null = null; temp")).toBe(0);
   });
 
+  it('evaluate("enum Color { Red, Green, Blue } Color::Red == Color::Green") => 0', () => {
+    expect(
+      evaluate("enum Color { Red, Green, Blue } Color::Red == Color::Green"),
+    ).toBe(0);
+  });
+
   it('evaluate("let temp : Null = null; temp == 0") => 0', () => {
     expect(evaluate("let temp : Null = null; temp == 0")).toBe(0);
   });

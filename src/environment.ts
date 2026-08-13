@@ -61,6 +61,7 @@ export class Environment {
   private functions: Record<string, FnDef> = {};
   private typeAliases: Record<string, TypeNode> = {};
   private structs: Record<string, TypeNode> = {};
+  private enums: Record<string, string[]> = {};
   private parent: Environment | undefined;
 
   constructor(parent?: Environment) {
@@ -131,6 +132,20 @@ export class Environment {
     }
     if (this.parent) {
       return this.parent.getStruct(name);
+    }
+    return undefined;
+  }
+
+  declareEnum(name: string, variants: string[]): void {
+    this.enums[name] = variants;
+  }
+
+  getEnum(name: string): string[] | undefined {
+    if (Object.prototype.hasOwnProperty.call(this.enums, name)) {
+      return this.enums[name];
+    }
+    if (this.parent) {
+      return this.parent.getEnum(name);
     }
     return undefined;
   }

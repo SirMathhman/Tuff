@@ -680,6 +680,21 @@ export function evaluate(node: AstNode, env: Environment): number {
     }
     case "range":
       return 0;
+    case "enum-def": {
+      env.declareEnum(node.name, node.variants);
+      return 0;
+    }
+    case "enum-access": {
+      const variants = env.getEnum(node.enumName);
+      if (!variants) {
+        throw new Error(`Unknown enum: ${node.enumName}`);
+      }
+      const idx = variants.indexOf(node.variant);
+      if (idx === -1) {
+        throw new Error(`Unknown variant: ${node.variant}`);
+      }
+      return idx;
+    }
     default:
       return 0;
   }

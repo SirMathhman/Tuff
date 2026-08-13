@@ -157,6 +157,33 @@ export class Parser {
     return { type: "struct-def", name, fields };
   }
 
+  private parseEnumDef(): AstNode {
+    this.consume(); // "enum"
+    const nameToken = this.consume();
+    const name = nameToken[1] as string;
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
+      throw new Error("Expected { in enum definition");
+    this.consume(); // "{"
+    const variants: string[] = [];
+    while (
+      this.peek()?.[0] !== "group" ||
+      this.peek()![1] !== "}"
+    ) {
+      const variantToken = this.peek();
+      if (!variantToken || variantToken[0] !== "id")
+        throw new Error("Expected variant name in enum");
+      variants.push(variantToken[1]);
+      this.consume();
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume();
+      }
+    }
+    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+      throw new Error("Expected } in enum definition");
+    this.consume(); // "}"
+    return { type: "enum-def", name, variants };
+  }
+
   private parseStatement(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
@@ -173,6 +200,11 @@ export class Parser {
     // struct Name { field : Type, ... }
     if (token[0] === "kw" && token[1] === "struct") {
       return this.parseStructDef();
+    }
+
+    // enum Name { Variant1, Variant2, ... }
+    if (token[0] === "kw" && token[1] === "enum") {
+      return this.parseEnumDef();
     }
 
     // fn name(params) : ReturnType => body;
@@ -865,6 +897,16 @@ export class Parser {
 
     if (token[0] === "id") {
       this.consume();
+      // Check for enum access: EnumName::Variant
+      if (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
+        this.consume(); // "::"
+        const variantToken = this.peek();
+        if (!variantToken || variantToken[0] !== "id")
+          throw new Error("Expected variant name after ::");
+        const variant = variantToken[1];
+        this.consume();
+        return { type: "enum-access", enumName: token[1], variant };
+      }
       // Check for function call: name(args)
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
         return this.parseFnCall(token[1]);

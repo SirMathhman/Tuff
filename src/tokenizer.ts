@@ -34,6 +34,7 @@ export type Token =
         | ","
         | "."
         | "=>"
+        | "::"
       ),
     ]
   | ["group", "(" | ")" | "{" | "}" | "[" | "]"]
@@ -56,6 +57,7 @@ export type Token =
         | "null"
         | "yield"
         | "return"
+        | "enum"
       ),
     ]
   | ["id", string]
@@ -84,7 +86,8 @@ function classifyToken(text: string): Token {
     text === "!=" ||
     text === ".." ||
     text === "," ||
-    text === "."
+    text === "." ||
+    text === "::"
   ) {
     return [
       "op",
@@ -100,7 +103,8 @@ function classifyToken(text: string): Token {
         | "!="
         | ".."
         | ","
-        | ".",
+        | "."
+        | "::",
     ];
   }
   if (text === "&") return ["ref", "&"];
@@ -131,6 +135,7 @@ function classifyToken(text: string): Token {
   if (text === "fn") return ["kw", "fn"];
   if (text === "type") return ["kw", "type"];
   if (text === "struct") return ["kw", "struct"];
+  if (text === "enum") return ["kw", "enum"];
   if (text === "null") return ["kw", "null"];
   if (text === "yield") return ["kw", "yield"];
   if (text === "return") return ["kw", "return"];
@@ -175,7 +180,7 @@ export function tokenize(source: string): Token[] {
   const result: Token[] = [];
   const typedNums = numberRegex();
   const re = new RegExp(
-    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|'[^']'|"[^"]*"|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|\\.\\.|=>|&&|\\|{2}|\\||[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
+    `(${typedNums}|\\d+\\.\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|\\d+(?:${FLOAT_TYPES.map((t) => t.suffix).join("|")})|'[^']'|"[^"]*"|\\d+\\.\\d+|\\d+|\\+=|-=|<=|>=|!=|==|::|\\.\\.|=>|&&|\\|{2}|\\||[+\\-*/(){}=;&<>[\\],:.]|[a-zA-Z_][a-zA-Z0-9_]*)`,
     "g",
   );
   let match: RegExpExecArray | null;
