@@ -16,6 +16,7 @@ export type Value =
   | { kind: "array"; elements: Value[] }
   | { kind: "range"; start: number; end: number }
   | { kind: "struct"; fields: Record<string, Value> }
+  | { kind: "tuple"; elements: Value[] }
   | { kind: "fnref"; fn: FnDef };
 
 export type Ref = { name: string; env: Environment; mutable: boolean };

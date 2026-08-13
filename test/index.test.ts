@@ -504,6 +504,12 @@ describe("evaluate", () => {
     ).toBe(0);
   });
 
+  it('evaluate("let tuple : (I32, I32) = (3, 4); tuple.0 + tuple.1") => 7', () => {
+    expect(evaluate("let tuple : (I32, I32) = (3, 4); tuple.0 + tuple.1")).toBe(
+      7,
+    );
+  });
+
   it('evaluate("let temp : Null = null; temp == 0") => 0', () => {
     expect(evaluate("let temp : Null = null; temp == 0")).toBe(0);
   });

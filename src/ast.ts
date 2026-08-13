@@ -8,7 +8,8 @@ export type TypeNode =
   | { kind: "struct"; fields: { name: string; type: TypeNode }[] }
   | { kind: "fn"; params: TypeNode[]; returnType: TypeNode }
   | { kind: "union"; types: TypeNode[] }
-  | { kind: "enum"; name: string };
+  | { kind: "enum"; name: string }
+  | { kind: "tuple"; elementTypes: TypeNode[] };
 
 /** Left-hand side of an assignment. */
 export type LValue =
@@ -45,6 +46,8 @@ export type AstNode =
   | ArrayIndex
   | StructLiteral
   | StructAccess
+  | TupleLiteral
+  | TupleAccess
   | TypeCheck
   | Cast
   | TypeAlias
@@ -253,6 +256,17 @@ export interface EnumAccess {
   type: "enum-access";
   enumName: string;
   variant: string;
+}
+
+export interface TupleLiteral {
+  type: "tuple-literal";
+  elements: AstNode[];
+}
+
+export interface TupleAccess {
+  type: "tuple-access";
+  tuple: AstNode;
+  index: number;
 }
 
 export interface Cast {

@@ -198,6 +198,19 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "struct-literal":
     case "struct-access":
       return evalStruct(node, env);
+    case "tuple-literal": {
+      const elements = node.elements.map((el) => evalValue(el, env));
+      return { kind: "tuple", elements };
+    }
+    case "tuple-access": {
+      const tuple = evalValue(node.tuple, env);
+      if (tuple.kind !== "tuple")
+        throw new Error("Cannot access element on non-tuple value");
+      const elem = tuple.elements[node.index];
+      if (elem === undefined)
+        throw new Error(`Tuple index out of bounds: ${node.index}`);
+      return elem;
+    }
     case "binop":
     case "unop":
     case "cast":
@@ -296,6 +309,17 @@ export function evaluateStatements(
 }
 
 /** Structural equality for Value types. */
+function compareElements(a: Value[], b: Value[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const aEl = a[i];
+    const bEl = b[i];
+    if (aEl === undefined || bEl === undefined) return false;
+    if (!compareEqual(aEl, bEl)) return false;
+  }
+  return true;
+}
+
 function compareEqual(a: Value, b: Value): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
@@ -317,16 +341,10 @@ function compareEqual(a: Value, b: Value): boolean {
         (b as Value & { kind: "ref" }).ref.name
       );
     case "array": {
-      const aEls = (a as Value & { kind: "array" }).elements;
-      const bEls = (b as Value & { kind: "array" }).elements;
-      if (aEls.length !== bEls.length) return false;
-      for (let i = 0; i < aEls.length; i++) {
-        const aEl = aEls[i];
-        const bEl = bEls[i];
-        if (aEl === undefined || bEl === undefined) return false;
-        if (!compareEqual(aEl, bEl)) return false;
-      }
-      return true;
+      return compareElements(
+        (a as Value & { kind: "array" }).elements,
+        (b as Value & { kind: "array" }).elements,
+      );
     }
     case "struct": {
       const aFields = (a as Value & { kind: "struct" }).fields;
@@ -341,6 +359,12 @@ function compareEqual(a: Value, b: Value): boolean {
         if (!compareEqual(aVal, bVal)) return false;
       }
       return true;
+    }
+    case "tuple": {
+      return compareElements(
+        (a as Value & { kind: "tuple" }).elements,
+        (b as Value & { kind: "tuple" }).elements,
+      );
     }
     case "fnref":
       return (

@@ -44,15 +44,18 @@ export class Parser {
       const fields = rawFields.map((f) => ({ name: f.name, type: f.value }));
       return { kind: "struct", fields };
     }
-    // Function type: (Type, Type) => ReturnType
+    // Tuple type: (Type, Type) or function type: (Type, Type) => ReturnType
     if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
       this.consume(); // "("
-      const params = this.parseParenList(() => this.parseType());
-      if (this.peek()?.[0] !== "op" || this.peek()![1] !== "=>")
-        throw new Error("Expected => in function type");
-      this.consume(); // "=>"
-      const returnType = this.parseType();
-      return { kind: "fn", params, returnType };
+      const elementTypes = this.parseParenList(() => this.parseType());
+      // Check if it's a function type
+      if (this.peek()?.[0] === "op" && this.peek()![1] === "=>") {
+        this.consume(); // "=>"
+        const returnType = this.parseType();
+        return { kind: "fn", params: elementTypes, returnType };
+      }
+      // It's a tuple type
+      return { kind: "tuple", elementTypes };
     }
     // Simple type name (may be followed by | for union)
     const typeToken = this.peek();
@@ -143,7 +146,10 @@ export class Parser {
     return { type: "type-alias", name, typeNode };
   }
 
-  private parseBraceDef<T>(kw: string, parseItems: () => T): { name: string; items: T } {
+  private parseBraceDef<T>(
+    kw: string,
+    parseItems: () => T,
+  ): { name: string; items: T } {
     this.consume(); // keyword
     const nameToken = this.consume();
     const name = nameToken[1] as string;
@@ -369,30 +375,33 @@ export class Parser {
   }
 
   private consumeFieldChains(lvalue: LValue): LValue {
-    return this.consumeDotChains(lvalue, (acc, field) => ({
-      kind: "field",
-      struct: acc,
-      field,
-    }));
+    return this.consumeDotChain(lvalue, (n, f) => ({ kind: "field", struct: n, field: f }), (n, i) => ({ kind: "index", array: n, index: { type: "num", value: i } }));
   }
 
   private consumeStructAccessChains(node: AstNode): AstNode {
-    return this.consumeDotChains(node, (acc, field) => ({
-      type: "struct-access",
-      struct: acc,
-      field,
-    }));
+    return this.consumeDotChain(node, (n, f) => ({ type: "struct-access", struct: n, field: f }), (n, i) => ({ type: "tuple-access", tuple: n, index: i }));
   }
 
-  private consumeDotChains<T>(acc: T, build: (acc: T, field: string) => T): T {
+  private consumeDotChain<T>(
+    acc: T,
+    buildField: (acc: T, field: string) => T,
+    buildIndex: (acc: T, index: number) => T,
+  ): T {
     while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
       this.consume(); // "."
-      const fieldToken = this.peek();
-      if (!fieldToken || fieldToken[0] !== "id")
-        throw new Error("Expected field name after .");
-      const field = fieldToken[1];
-      this.consume();
-      acc = build(acc, field);
+      const nextToken = this.peek();
+      if (!nextToken) throw new Error("Expected field/index after .");
+      if (nextToken[0] === "num") {
+        const index = nextToken[1];
+        this.consume();
+        acc = buildIndex(acc, index);
+      } else if (nextToken[0] === "id") {
+        const field = nextToken[1];
+        this.consume();
+        acc = buildField(acc, field);
+      } else {
+        throw new Error("Expected field name or numeric index after .");
+      }
     }
     return acc;
   }
@@ -708,6 +717,18 @@ export class Parser {
     if (token[0] === "group" && token[1] === "(") {
       this.consume();
       const expr = this.parseAddSub();
+      // Check if there's a comma — tuple literal: (3, 4)
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        const elements: AstNode[] = [expr];
+        while (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+          this.consume(); // ","
+          elements.push(this.parseAddSub());
+        }
+        if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
+          throw new Error("Expected ) in tuple literal");
+        this.consume(); // ")"
+        return { type: "tuple-literal", elements };
+      }
       if (this.peek()?.[0] !== "group" || this.peek()![1] !== ")")
         throw new Error("Expected )");
       this.consume();

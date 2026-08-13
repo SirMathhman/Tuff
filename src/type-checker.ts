@@ -74,6 +74,18 @@ export function checkType(
       }
       return false;
     }
+    case "tuple": {
+      if (val.kind !== "tuple") return false;
+      if (val.elements.length !== typeNode.elementTypes.length) return false;
+      for (let i = 0; i < typeNode.elementTypes.length; i++) {
+        const elem = val.elements[i];
+        const elemType = typeNode.elementTypes[i];
+        if (elem === undefined || elemType === undefined) return false;
+        if (!checkType(elem, elemType, env, evaluate, num))
+          return false;
+      }
+      return true;
+    }
     default:
       return false;
   }
