@@ -71,9 +71,14 @@ export class Parser {
     return type;
   }
 
-  private parseDelimitedList<T>(parseItem: () => T, separator: string): T[] {
+  private parseList<T>(
+    parseItem: () => T,
+    open: string,
+    close: string,
+    separator: string,
+  ): T[] {
     const items: T[] = [];
-    while (this.peek()?.[0] !== "group" || this.peek()![1] !== "}") {
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== close) {
       items.push(parseItem());
       if (this.peek()?.[0] === "op" && this.peek()![1] === separator) {
         this.consume();
@@ -87,19 +92,23 @@ export class Parser {
     nameError: string,
     colonError: string,
   ): { name: string; mutable: boolean; value: T }[] {
-    return this.parseDelimitedList(() => {
-      // Check for mut keyword
-      const isMut = this.peek()?.[0] === "kw" && this.peek()![1] === "mut";
-      if (isMut) this.consume();
-      const nameToken = this.peek();
-      if (!nameToken || nameToken[0] !== "id") throw new Error(nameError);
-      const name = nameToken[1];
-      this.consume();
-      if (this.peek()?.[0] !== "colon") throw new Error(colonError);
-      this.consume();
-      const value = parseValue();
-      return { name, mutable: isMut, value };
-    }, ",");
+    return this.parseList(
+      () => {
+        const isMut = this.peek()?.[0] === "kw" && this.peek()![1] === "mut";
+        if (isMut) this.consume();
+        const nameToken = this.peek();
+        if (!nameToken || nameToken[0] !== "id") throw new Error(nameError);
+        const name = nameToken[1];
+        this.consume();
+        if (this.peek()?.[0] !== "colon") throw new Error(colonError);
+        this.consume();
+        const value = parseValue();
+        return { name, mutable: isMut, value };
+      },
+      "{",
+      "}",
+      ",",
+    );
   }
 
   parse(): AstNode[] {
@@ -134,22 +143,29 @@ export class Parser {
     return { type: "type-alias", name, typeNode };
   }
 
-  private parseStructDef(): AstNode {
-    this.consume(); // "struct"
+  private parseBraceDef<T>(kw: string, parseItems: () => T): { name: string; items: T } {
+    this.consume(); // keyword
     const nameToken = this.consume();
     const name = nameToken[1] as string;
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
-      throw new Error("Expected { in struct definition");
+      throw new Error(`Expected { in ${kw} definition`);
     this.consume(); // "{"
-    const rawFields = this.parseStructFields(
-      () => this.parseType(),
-      "Expected field name in struct",
-      "Expected : in struct",
-    );
+    const items = parseItems();
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
-      throw new Error("Expected } in struct definition");
+      throw new Error(`Expected } in ${kw} definition`);
     this.consume(); // "}"
-    const fields = rawFields.map((f) => ({
+    return { name, items };
+  }
+
+  private parseStructDef(): AstNode {
+    const { name, items } = this.parseBraceDef("struct", () =>
+      this.parseStructFields(
+        () => this.parseType(),
+        "Expected field name in struct",
+        "Expected : in struct",
+      ),
+    );
+    const fields = items.map((f) => ({
       name: f.name,
       mutable: f.mutable,
       type: f.value,
@@ -158,29 +174,21 @@ export class Parser {
   }
 
   private parseEnumDef(): AstNode {
-    this.consume(); // "enum"
-    const nameToken = this.consume();
-    const name = nameToken[1] as string;
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "{")
-      throw new Error("Expected { in enum definition");
-    this.consume(); // "{"
-    const variants: string[] = [];
-    while (
-      this.peek()?.[0] !== "group" ||
-      this.peek()![1] !== "}"
-    ) {
-      const variantToken = this.peek();
-      if (!variantToken || variantToken[0] !== "id")
-        throw new Error("Expected variant name in enum");
-      variants.push(variantToken[1]);
-      this.consume();
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-        this.consume();
-      }
-    }
-    if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
-      throw new Error("Expected } in enum definition");
-    this.consume(); // "}"
+    const { name, items: variants } = this.parseBraceDef("enum", () =>
+      this.parseList(
+        () => {
+          const variantToken = this.peek();
+          if (!variantToken || variantToken[0] !== "id")
+            throw new Error("Expected variant name in enum");
+          const variant = variantToken[1];
+          this.consume();
+          return variant;
+        },
+        "{",
+        "}",
+        ",",
+      ),
+    );
     return { type: "enum-def", name, variants };
   }
 
