@@ -341,7 +341,7 @@ function evalFunction(node: AstNode, env: Environment): number {
 
 /** Resolve a function call and return the function def + environment. */
 function setupFnCall(
-  node: AstNode,
+  node: import("./ast").FnCall,
   env: Environment,
 ): { fn: import("./environment").FnDef; fnEnv: Environment } {
   const calleeVal = env.get(node.name);
