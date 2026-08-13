@@ -581,4 +581,8 @@ describe("evaluate", () => {
   it('evaluate("let x : U8 > 0 = 100U8;") => 0', () => {
     expect(evaluate("let x : U8 > 0 = 100U8;")).toBe(0);
   });
+
+  it('evaluate("let x : U8 > 0 = 0U8;") => Error', () => {
+    expect(() => evaluate("let x : U8 > 0 = 0U8;")).toThrow();
+  });
 });
