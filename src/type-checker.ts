@@ -286,6 +286,22 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
               throw new Error(
                 `Cannot assign ${source.suffix} to ${target.suffix}`,
               );
+            // Validate type constraint (e.g., U8 > 0)
+            if (declaredType.constraint) {
+              const { op, value } = declaredType.constraint;
+              const literalVal = node.value.type === "num" ? node.value.value : null;
+              if (literalVal !== null) {
+                const passes =
+                  op === ">" ? literalVal > value :
+                  op === ">=" ? literalVal >= value :
+                  op === "<" ? literalVal < value :
+                  op === "<=" ? literalVal <= value : false;
+                if (!passes)
+                  throw new Error(
+                    `Value ${literalVal} does not satisfy constraint ${op} ${value}`,
+                  );
+              }
+            }
           }
         }
       }

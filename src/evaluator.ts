@@ -74,10 +74,15 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "match":
     case "enum-access":
     case "type-check":
-      return num(evaluate(node, env));
+      return delegateToEvaluate(node, env);
     default:
       throw new Error(`evalValue does not handle node type: ${node.type}`);
   }
+}
+
+/** Delegate to evaluate() and wrap result in num(). */
+function delegateToEvaluate(node: AstNode, env: Environment): Value {
+  return num(evaluate(node, env));
 }
 
 export function evaluateStatements(

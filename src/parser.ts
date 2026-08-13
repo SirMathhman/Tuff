@@ -70,6 +70,19 @@ export class Parser {
     const typeName = typeToken[1];
     this.consume();
     const type: TypeNode = { kind: "name", name: typeName };
+    // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255
+    if (this.peek()?.[0] === "op") {
+      const opToken = this.peek()![1] as string;
+      if (["<", "<=", ">", ">="].includes(opToken)) {
+        this.consume();
+        const constraintToken = this.peek();
+        if (!constraintToken || constraintToken[0] !== "num")
+          throw new Error("Expected number in type constraint");
+        const constraintValue = constraintToken[1];
+        this.consume();
+        type.constraint = { op: opToken, value: constraintValue };
+      }
+    }
     // Check for union: Type | Type
     if (this.peek()?.[0] === "op" && this.peek()![1] === "|") {
       this.consume(); // "|"

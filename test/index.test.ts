@@ -577,4 +577,8 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("let x : U8 > 0 = 100U8;") => 0', () => {
+    expect(evaluate("let x : U8 > 0 = 100U8;")).toBe(0);
+  });
 });
