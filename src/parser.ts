@@ -70,10 +70,10 @@ export class Parser {
     const typeName = typeToken[1];
     this.consume();
     const type: TypeNode = { kind: "name", name: typeName };
-    // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255
+    // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255, Type == 100, Type != 0
     if (this.peek()?.[0] === "op") {
       const opToken = this.peek()![1] as string;
-      if (["<", "<=", ">", ">="].includes(opToken)) {
+      if (["<", "<=", ">", ">=", "==", "!="].includes(opToken)) {
         this.consume();
         const constraintToken = this.peek();
         if (!constraintToken || constraintToken[0] !== "num")

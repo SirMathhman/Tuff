@@ -222,7 +222,11 @@ function checkConstraint(typeNode: TypeNode, valueNode: AstNode): void {
           ? literalVal < value
           : op === "<="
             ? literalVal <= value
-            : false;
+            : op === "=="
+              ? literalVal === value
+              : op === "!="
+                ? literalVal !== value
+                : false;
   if (!passes)
     throw new Error(
       `Value ${literalVal} does not satisfy constraint ${op} ${value}`,
