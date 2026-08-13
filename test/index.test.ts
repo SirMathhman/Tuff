@@ -86,6 +86,10 @@ describe("evaluate", () => {
     expect(() => evaluate("fn pass<T>(value : T) : T => value + 1;")).toThrow();
   });
 
+  it('evaluate("fn pass<T : I32>(value : T) : T => value + 1;") => 0', () => {
+    expect(evaluate("fn pass<T : I32>(value : T) : T => value + 1;")).toBe(0);
+  });
+
   it('evaluate("let x = 0; x = 1; x") => Error', () => {
     expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
   });

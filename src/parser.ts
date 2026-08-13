@@ -10,11 +10,11 @@ export class Parser {
 
   constructor(private tokens: Token[]) {}
 
-  private parseType(allowFnType: boolean = true): TypeNode {
+  private parseType(allowFnType: boolean = true, allowConstraint: boolean = true): TypeNode {
     // Reference type: &Type
     if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
       this.consume(); // "&"
-      const innerType = this.parseType(allowFnType);
+      const innerType = this.parseType(allowFnType, false);
       return { kind: "ref", innerType };
     }
     // Array type: [Type; N]
@@ -71,7 +71,7 @@ export class Parser {
     this.consume();
     const type: TypeNode = { kind: "name", name: typeName };
     // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255, Type == 100, Type != 0
-    if (this.peek()?.[0] === "op") {
+    if (allowConstraint && this.peek()?.[0] === "op") {
       const opToken = this.peek()![1] as string;
       if (["<", "<=", ">", ">=", "==", "!="].includes(opToken)) {
         this.consume();
@@ -920,16 +920,23 @@ export class Parser {
     const name = nameToken[1];
     this.consume();
 
-    // Parse optional type parameters: <T, U>
-    const typeParams: string[] = [];
+    // Parse optional type parameters: <T, U> or <T : I32>
+    const typeParams: { name: string; constraint?: TypeNode }[] = [];
     if (this.peek()?.[0] === "op" && this.peek()![1] === "<") {
       this.consume(); // "<"
       do {
         const tp = this.peek();
         if (!tp || tp[0] !== "id")
           throw new Error("Expected type parameter name");
-        typeParams.push(tp[1]);
+        const tpName = tp[1];
         this.consume();
+        // Optional constraint: T : I32
+        let constraint: TypeNode | undefined;
+        if (this.peek()?.[0] === "colon") {
+          this.consume(); // ":"
+          constraint = this.parseType(false, false);
+        }
+        typeParams.push({ name: tpName, constraint });
       } while (
         this.peek()?.[0] === "op" &&
         this.peek()![1] === "," &&

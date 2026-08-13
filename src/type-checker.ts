@@ -99,14 +99,14 @@ function requireIntType(name: string): (typeof INT_TYPES)[number] {
 
 /** Scope tracks variable declarations, mutability, and function signatures. */
 interface Scope {
-  variables: Map<string, { mutable: boolean; type?: IntTypeName }>;
+  variables: Map<string, { mutable: boolean; type?: IntTypeName | string }>;
   functions: Map<
     string,
-    { params: TypeNode[]; returnType: TypeNode; typeParams?: string[] }
+    { params: TypeNode[]; returnType: TypeNode; typeParams?: { name: string; constraint?: TypeNode }[] }
   >;
   typeAliases: Map<string, TypeNode>;
   structs: Map<string, TypeNode>;
-  typeParams?: string[];
+  typeParams?: { name: string; constraint?: TypeNode }[];
   parent?: Scope;
 }
 
@@ -258,9 +258,12 @@ function checkLiteral(node: AstNode): void {
   }
 }
 
-/** Check if a variable has a generic type parameter type. */
-function isGenericType(type: string | undefined, scope: Scope): boolean {
-  return type !== undefined && scope.typeParams?.includes(type) === true;
+/** Check if a variable has an unconstrained generic type parameter type. */
+function isUnconstrainedGenericType(type: string | undefined, scope: Scope): boolean {
+  if (type === undefined) return false;
+  const tp = scope.typeParams?.find(tp => tp.name === type);
+  // Generic with no constraint = reject; generic with constraint = allow
+  return tp !== undefined && tp.constraint === undefined;
 }
 
 /** Get the type of an expression (for binary operator checking). */
@@ -272,7 +275,7 @@ function getExprType(node: AstNode, scope: Scope): string | undefined {
   return undefined;
 }
 
-/** Reject binary operators on generic type parameters. */
+/** Reject binary operators on unconstrained generic type parameters. */
 function checkBinaryOpTypes(node: AstNode, scope: Scope): void {
   if (node.type !== "binop") return;
   if (node.op === "&&" || node.op === "||") return; // Logical ops always ok
@@ -280,7 +283,7 @@ function checkBinaryOpTypes(node: AstNode, scope: Scope): void {
   const leftType = getExprType(node.left, scope);
   const rightType = getExprType(node.right, scope);
 
-  if (isGenericType(leftType, scope) || isGenericType(rightType, scope)) {
+  if (isUnconstrainedGenericType(leftType, scope) || isUnconstrainedGenericType(rightType, scope)) {
     throw new Error(
       `Cannot apply operator '${node.op}' to generic type parameter`,
     );
@@ -330,7 +333,7 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
           // Union type — no range checking needed
         } else if (declaredType.kind === "name") {
           // Generic type parameter — skip range checking
-          if (scope.typeParams?.includes(declaredType.name)) {
+          if (scope.typeParams?.some(tp => tp.name === declaredType.name)) {
             // skip
           } else {
             const structType = getStruct(scope, declaredType.name);
@@ -423,10 +426,12 @@ function checkFunction(node: AstNode, scope: Scope): void {
       }
       for (const param of node.params) {
         // Store generic type param name as the type (e.g. "T") so operators can reject it
+        // If the type param has a constraint, store the constraint type instead
+        const paramName = param.type.kind === "name" ? param.type.name : undefined;
         const varType =
-          param.type.kind === "name" &&
-          node.typeParams?.includes(param.type.name)
-            ? param.type.name
+          paramName !== undefined &&
+          node.typeParams?.some(tp => tp.name === paramName)
+            ? paramName
             : undefined;
         fnScope.variables.set(param.name, { mutable: false, type: varType });
       }

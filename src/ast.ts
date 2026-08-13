@@ -286,7 +286,7 @@ export interface Cast {
 export interface FnDef {
   type: "fn-def";
   name: string;
-  typeParams?: string[];
+  typeParams?: { name: string; constraint?: TypeNode }[];
   params: { name: string; type: TypeNode }[];
   returnType: TypeNode;
   body: AstNode;
