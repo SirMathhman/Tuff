@@ -78,6 +78,14 @@ describe("evaluate", () => {
     expect(evaluate("let mut x = 0; x = 1; x")).toBe(1);
   });
 
+  it('evaluate("fn pass<T>(value : T) : T => value; pass(100)") => 100', () => {
+    expect(evaluate("fn pass<T>(value : T) : T => value; pass(100)")).toBe(100);
+  });
+
+  it('evaluate("fn pass<T>(value : T) : T => value + 1;") => Error', () => {
+    expect(() => evaluate("fn pass<T>(value : T) : T => value + 1;")).toThrow();
+  });
+
   it('evaluate("let x = 0; x = 1; x") => Error', () => {
     expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
   });

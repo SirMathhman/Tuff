@@ -920,6 +920,26 @@ export class Parser {
     const name = nameToken[1];
     this.consume();
 
+    // Parse optional type parameters: <T, U>
+    const typeParams: string[] = [];
+    if (this.peek()?.[0] === "op" && this.peek()![1] === "<") {
+      this.consume(); // "<"
+      do {
+        const tp = this.peek();
+        if (!tp || tp[0] !== "id")
+          throw new Error("Expected type parameter name");
+        typeParams.push(tp[1]);
+        this.consume();
+      } while (
+        this.peek()?.[0] === "op" &&
+        this.peek()![1] === "," &&
+        (this.consume() || true)
+      );
+      if (this.peek()?.[0] !== "op" || this.peek()![1] !== ">")
+        throw new Error("Expected > after type parameters");
+      this.consume(); // ">"
+    }
+
     // Parse parameters: (name : Type, name : Type)
     if (this.peek()?.[0] !== "group" || this.peek()![1] !== "(")
       throw new Error("Expected ( after function name");
@@ -953,7 +973,14 @@ export class Parser {
     const body = this.parseAddSub();
 
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "fn-def", name, params, returnType, body };
+    return {
+      type: "fn-def",
+      name,
+      typeParams: typeParams.length ? typeParams : undefined,
+      params,
+      returnType,
+      body,
+    };
   }
 
   private parseFnCall(name: string): AstNode {

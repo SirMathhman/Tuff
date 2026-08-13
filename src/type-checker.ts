@@ -100,9 +100,13 @@ function requireIntType(name: string): (typeof INT_TYPES)[number] {
 /** Scope tracks variable declarations, mutability, and function signatures. */
 interface Scope {
   variables: Map<string, { mutable: boolean; type?: IntTypeName }>;
-  functions: Map<string, { params: TypeNode[]; returnType: TypeNode }>;
+  functions: Map<
+    string,
+    { params: TypeNode[]; returnType: TypeNode; typeParams?: string[] }
+  >;
   typeAliases: Map<string, TypeNode>;
   structs: Map<string, TypeNode>;
+  typeParams?: string[];
   parent?: Scope;
 }
 
@@ -112,6 +116,7 @@ function newScope(parent?: Scope): Scope {
     functions: new Map(),
     typeAliases: new Map(),
     structs: new Map(),
+    typeParams: parent?.typeParams,
     parent,
   };
 }
@@ -253,6 +258,35 @@ function checkLiteral(node: AstNode): void {
   }
 }
 
+/** Check if a variable has a generic type parameter type. */
+function isGenericType(type: string | undefined, scope: Scope): boolean {
+  return type !== undefined && scope.typeParams?.includes(type) === true;
+}
+
+/** Get the type of an expression (for binary operator checking). */
+function getExprType(node: AstNode, scope: Scope): string | undefined {
+  if (node.type === "id") {
+    const varInfo = getVar(scope, node.name);
+    return varInfo?.type;
+  }
+  return undefined;
+}
+
+/** Reject binary operators on generic type parameters. */
+function checkBinaryOpTypes(node: AstNode, scope: Scope): void {
+  if (node.type !== "binop") return;
+  if (node.op === "&&" || node.op === "||") return; // Logical ops always ok
+
+  const leftType = getExprType(node.left, scope);
+  const rightType = getExprType(node.right, scope);
+
+  if (isGenericType(leftType, scope) || isGenericType(rightType, scope)) {
+    throw new Error(
+      `Cannot apply operator '${node.op}' to generic type parameter`,
+    );
+  }
+}
+
 /** Check operator nodes. */
 function checkOperator(node: AstNode, scope: Scope): void {
   switch (node.type) {
@@ -276,6 +310,8 @@ function checkOperator(node: AstNode, scope: Scope): void {
     case "binop":
       checkNode(node.left, scope);
       checkNode(node.right, scope);
+      // Reject binary operators on generic type parameters
+      checkBinaryOpTypes(node, scope);
       break;
   }
 }
@@ -293,26 +329,31 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
         if (declaredType.kind === "union") {
           // Union type — no range checking needed
         } else if (declaredType.kind === "name") {
-          const structType = getStruct(scope, declaredType.name);
-          if (structType) {
-            // Struct types don't need range checking
-          } else if (declaredType.name === "Null") {
-            // Null type — no range checking needed
+          // Generic type parameter — skip range checking
+          if (scope.typeParams?.includes(declaredType.name)) {
+            // skip
           } else {
-            const alias = getTypeAlias(scope, declaredType.name);
-            let typeName = declaredType.name;
-            if (alias && alias.kind === "name") {
-              typeName = alias.name;
-            }
-            const target = requireIntType(
-              typeName.toLowerCase() as IntTypeName,
-            );
-            const source = valueType ? requireIntType(valueType) : null;
-            if (source && target.max < source.max)
-              throw new Error(
-                `Cannot assign ${source.suffix} to ${target.suffix}`,
+            const structType = getStruct(scope, declaredType.name);
+            if (structType) {
+              // Struct types don't need range checking
+            } else if (declaredType.name === "Null") {
+              // Null type — no range checking needed
+            } else {
+              const alias = getTypeAlias(scope, declaredType.name);
+              let typeName = declaredType.name;
+              if (alias && alias.kind === "name") {
+                typeName = alias.name;
+              }
+              const target = requireIntType(
+                typeName.toLowerCase() as IntTypeName,
               );
-            checkConstraint(declaredType, node.value);
+              const source = valueType ? requireIntType(valueType) : null;
+              if (source && target.max < source.max)
+                throw new Error(
+                  `Cannot assign ${source.suffix} to ${target.suffix}`,
+                );
+              checkConstraint(declaredType, node.value);
+            }
           }
         }
       }
@@ -369,6 +410,7 @@ function checkFunction(node: AstNode, scope: Scope): void {
       scope.functions.set(node.name, {
         params: paramTypes,
         returnType: node.returnType,
+        typeParams: node.typeParams,
       });
       // Void functions must have a block body, not a value expression
       if (node.returnType.kind === "name" && node.returnType.name === "Void") {
@@ -376,8 +418,17 @@ function checkFunction(node: AstNode, scope: Scope): void {
           throw new Error("Void function body must be a block");
       }
       const fnScope = newScope(scope);
+      if (node.typeParams) {
+        fnScope.typeParams = node.typeParams;
+      }
       for (const param of node.params) {
-        fnScope.variables.set(param.name, { mutable: false, type: undefined });
+        // Store generic type param name as the type (e.g. "T") so operators can reject it
+        const varType =
+          param.type.kind === "name" &&
+          node.typeParams?.includes(param.type.name)
+            ? param.type.name
+            : undefined;
+        fnScope.variables.set(param.name, { mutable: false, type: varType });
       }
       checkNode(node.body, fnScope);
       break;
