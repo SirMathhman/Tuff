@@ -6,9 +6,9 @@ Tuff is a language interpreter written in TypeScript with Bun.
 
 ### `interpret(input: string): number`
 
-Takes a string input with arithmetic operations (`+`, `-`, `*`, `/`) and parentheses (`(`, `)`) and returns the resulting number.
+Takes a string input with arithmetic operations (`+`, `-`, `*`, `/`) and grouping delimiters — parentheses (`(`, `)`) and curly braces (`{`, `}`) — and returns the resulting number.
 Multiplication (`*`) and division (`/`) have higher precedence than addition (`+`) and subtraction (`-`).
-Parentheses can be used to override the default operator precedence.
+Parentheses and curly braces can be used to override the default operator precedence.
 
 ## Tests
 

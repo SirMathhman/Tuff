@@ -2,7 +2,7 @@ export function interpret(input: string): number {
   if (input === "") return 0;
 
   const tokens = input
-    .split(/(\+|-|\*|\/|\(|\))/)
+    .split(/(\+|-|\*|\/|\(|\)|\{|\})/)
     .map((s) => s.trim())
     .filter((s) => s !== "");
 
@@ -35,10 +35,10 @@ export function interpret(input: string): number {
   }
 
   function parseFactor(): number {
-    if (tokens[pos] === "(") {
-      pos++; // consume '('
+    if (tokens[pos] === "(" || tokens[pos] === "{") {
+      pos++; // consume '(' or '{'
       const result = parseExpr();
-      pos++; // consume ')'
+      pos++; // consume ')' or '}'
       return result;
     }
     return Number(tokens[pos++]);
