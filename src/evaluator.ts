@@ -56,6 +56,14 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (fn === undefined) throw new Error("Undefined function: " + node.name);
       return { kind: "fnref", fn };
     }
+    case "fn-def": {
+      env.declareFunction(node.name, {
+        params: node.params,
+        body: node.body,
+        returnType: node.returnType,
+      });
+      return { kind: "fnref", fn: { params: node.params, body: node.body, returnType: node.returnType } };
+    }
     case "fn-call": {
       const { fn, fnEnv } = setupFnCall(node, env);
       try {

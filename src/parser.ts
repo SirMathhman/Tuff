@@ -1037,6 +1037,10 @@ export class Parser {
       return this.parseMatch();
     }
 
+    if (token[0] === "kw" && token[1] === "fn") {
+      return this.parseFnDef();
+    }
+
     if (token[0] === "id") {
       this.consume();
       // Check for enum access: EnumName::Variant

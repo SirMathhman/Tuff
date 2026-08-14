@@ -681,4 +681,12 @@ describe("evaluate", () => {
   it('evaluate("let x : U8 != 0 = 2; 4 / x") => 2', () => {
     expect(evaluate("let x : U8 != 0 = 2; 4 / x")).toBe(2);
   });
+
+  it('evaluate("let func : (I32, I32) => I32 = fn add(first : I32, second : I32) => first + second; func(3, 4)") => 7', () => {
+    expect(
+      evaluate(
+        "let func : (I32, I32) => I32 = fn add(first : I32, second : I32) => first + second; func(3, 4)",
+      ),
+    ).toBe(7);
+  });
 });
