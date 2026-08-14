@@ -240,12 +240,17 @@ export function resolveLValue(
       return field;
     }
     case "scope-field": {
-      const v = env.get(lvalue.field);
-      if (v === undefined)
-        throw new Error(`Undefined variable: ${lvalue.field}`);
-      return v;
+      return resolveScopeField(env, lvalue.field);
     }
   }
+}
+
+/** Get a variable from scope, throwing if undefined. */
+function resolveScopeField(env: Environment, field: string): Value {
+  const v = env.get(field);
+  if (v === undefined)
+    throw new Error(`Undefined variable: ${field}`);
+  return v;
 }
 
 /** Write a value to the target described by an LHS. */
@@ -282,9 +287,7 @@ export function writeLValue(
       return;
     }
     case "scope-field": {
-      const v = env.get(lvalue.field);
-      if (v === undefined)
-        throw new Error(`Undefined variable: ${lvalue.field}`);
+      resolveScopeField(env, lvalue.field);
       env.assign(lvalue.field, value);
       return;
     }
