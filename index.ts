@@ -38,8 +38,9 @@ export function interpret(input: string): number {
       (tokens[pos] === "*" || tokens[pos] === "/")
     ) {
       const op = tokens[pos++];
-      const right = parseFactor();
-      result = op === "*" ? result * right : result / right;
+      const right = parseFactor();      if (op === "/" && right === 0) {
+        throw new Error(`Division by zero`);
+      }      result = op === "*" ? result * right : result / right;
     }
     return result;
   }
@@ -59,9 +60,9 @@ export function interpret(input: string): number {
     return value;
   }
 
-  function parseBlock(): number {
+  function parseUntil(terminator: string | undefined): number {
     let result = 0;
-    while (pos < tokens.length && tokens[pos] !== "}") {
+    while (pos < tokens.length && tokens[pos] !== terminator) {
       if (tokens[pos] === "let") {
         pos++;
         const name = tokens[pos++]!;
@@ -74,7 +75,7 @@ export function interpret(input: string): number {
         if (tokens[pos] === ";") pos++;
       }
     }
-    if (tokens[pos] === "}") pos++;
+    if (terminator && tokens[pos] === terminator) pos++;
     return result;
   }
 
@@ -98,33 +99,15 @@ export function interpret(input: string): number {
     }
     if (token === "{") {
       pos++;
-      return parseBlock();
+      return parseUntil("}");
     }
     if (token !== undefined && /[a-zA-Z_]\w*/.test(token) && token !== "let") {
       pos++;
       if (scope.has(token)) return scope.get(token)!;
-      return parseNumber(token);
+      throw new Error(`Undefined variable: "${token}"`);
     }
     return parseNumber(tokens[pos++]!);
   }
 
-  function parseProgram(): number {
-    let result = 0;
-    while (pos < tokens.length) {
-      if (tokens[pos] === "let") {
-        pos++;
-        const name = tokens[pos++]!;
-        if (tokens[pos] === "=") pos++;
-        result = parseExpr();
-        scope.set(name, result);
-        if (tokens[pos] === ";") pos++;
-      } else {
-        result = parseExpr();
-        if (tokens[pos] === ";") pos++;
-      }
-    }
-    return result;
-  }
-
-  return parseProgram();
+  return parseUntil(undefined);
 }
