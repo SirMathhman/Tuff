@@ -1,5 +1,23 @@
 # tuff
 
+Tuff is a language interpreter written in TypeScript with Bun.
+
+## API
+
+### `interpret(input: string): number`
+
+Takes a string input and returns a number.
+
+## Tests
+
+Run the test suite with:
+
+```bash
+bun test
+```
+
+## Installation
+
 To install dependencies:
 
 ```bash
