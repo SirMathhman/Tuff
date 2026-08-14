@@ -682,7 +682,14 @@ export class Parser {
     this.consume();
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "let", name, mutable: isMut, value, typeAnnotation, exported };
+    return {
+      type: "let",
+      name,
+      mutable: isMut,
+      value,
+      typeAnnotation,
+      exported,
+    };
   }
 
   private parseAssign(): AstNode {
@@ -1217,7 +1224,11 @@ export class Parser {
         this.consume();
         // If moduleName is in moduleNames, treat as module access
         if (this.moduleNames?.has(token[1])) {
-          return { type: "module-access", moduleName: token[1], fieldName: field };
+          return {
+            type: "module-access",
+            moduleName: token[1],
+            fieldName: field,
+          };
         }
         return { type: "enum-access", enumName: token[1], variant: field };
       }

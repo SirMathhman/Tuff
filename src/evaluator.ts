@@ -16,6 +16,7 @@ import {
   evalTupleAccess,
   evalMatch,
   resolveScopeField,
+  evalModuleAccess,
 } from "./eval-helpers";
 
 /** Evaluate a function body, catching Yield/Return, returning Value. */
@@ -84,10 +85,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       return resolveScopeField(scope, node.field);
     }
     case "module-access": {
-      const value = env.getModuleExport(node.moduleName, node.fieldName);
-      if (value === undefined)
-        throw new Error(`Module export not found: ${node.moduleName}::${node.fieldName}`);
-      return num(value);
+      return num(evalModuleAccess(node.moduleName, node.fieldName, env));
     }
     case "tuple-literal": {
       const elements = node.elements.map((el) => evalValue(el, env));
@@ -608,12 +606,8 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       return idx;
     }
-    case "module-access": {
-      const value = env.getModuleExport(node.moduleName, node.fieldName);
-      if (value === undefined)
-        throw new Error(`Module export not found: ${node.moduleName}::${node.fieldName}`);
-      return value;
-    }
+    case "module-access":
+      return evalModuleAccess(node.moduleName, node.fieldName, env);
     case "match":
       return evalMatch(node, env, evaluate, evalValue);
     case "tuple-literal":

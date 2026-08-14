@@ -25,6 +25,20 @@ function resolveScopeField(
 }
 export { resolveScopeField };
 
+/** Resolve a module export to a number, throwing if undefined. */
+export function evalModuleAccess(
+  moduleName: string,
+  fieldName: string,
+  env: Environment,
+): number {
+  const value = env.getModuleExport(moduleName, fieldName);
+  if (value === undefined)
+    throw new Error(
+      `Module export not found: ${moduleName}::${fieldName}`,
+    );
+  return value;
+}
+
 /** Evaluate a range expression and return { start, end }. */
 export function evalRange(
   node: AstNode,

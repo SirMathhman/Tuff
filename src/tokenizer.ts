@@ -61,6 +61,7 @@ export type Token =
         | "match"
         | "case"
         | "this"
+        | "out"
       ),
     ]
   | ["id", string]
