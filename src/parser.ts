@@ -6,6 +6,7 @@ import {
   buildStructField,
   buildScopeField,
   buildTupleIndex,
+  isTypeNameThis,
 } from "./parser-utils";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
@@ -82,13 +83,10 @@ export class Parser {
     const typeName = typeToken[1];
     this.consume();
     // Check for TypeName.this
-    if (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+    if (this.tryTypeNameThis()) {
       this.consume(); // "."
-      if (this.peek()?.[0] === "kw" && this.peek()![1] === "this") {
-        this.consume(); // "this"
-        return { kind: "name", name: typeName };
-      }
-      this.pos -= 1; // Put back the "."
+      this.consume(); // "this"
+      return { kind: "name", name: typeName };
     }
     const type: TypeNode = { kind: "name", name: typeName };
     // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255, Type == 100, Type != 0
@@ -433,15 +431,8 @@ export class Parser {
 
     // TypeName.this
     if (token[0] === "id") {
-      const name = token[1];
-      if (
-        this.pos + 1 < this.tokens.length &&
-        this.tokens[this.pos + 1]?.[0] === "op" &&
-        this.tokens[this.pos + 1]?.[1] === "." &&
-        this.pos + 2 < this.tokens.length &&
-        this.tokens[this.pos + 2]?.[0] === "kw" &&
-        this.tokens[this.pos + 2]?.[1] === "this"
-      ) {
+      const name = this.tryTypeNameThis();
+      if (name) {
         this.consume(); // id
         this.consume(); // "."
         this.consume(); // "this"
@@ -467,6 +458,11 @@ export class Parser {
     }
 
     return undefined;
+  }
+
+  /** Check for TypeName.this and return the type name, or null. */
+  private tryTypeNameThis(): string | null {
+    return isTypeNameThis(this.tokens, this.pos);
   }
 
   private consumeIndexChains(lvalue: LValue): LValue {
@@ -1192,16 +1188,8 @@ export class Parser {
     }
 
     if (token[0] === "id") {
-      const name = token[1];
-      // Check for TypeName.this
-      if (
-        this.pos + 1 < this.tokens.length &&
-        this.tokens[this.pos + 1]?.[0] === "op" &&
-        this.tokens[this.pos + 1]?.[1] === "." &&
-        this.pos + 2 < this.tokens.length &&
-        this.tokens[this.pos + 2]?.[0] === "kw" &&
-        this.tokens[this.pos + 2]?.[1] === "this"
-      ) {
+      const name = isTypeNameThis(this.tokens, this.pos);
+      if (name) {
         this.consume(); // id
         this.consume(); // "."
         this.consume(); // "this"
@@ -1216,11 +1204,11 @@ export class Parser {
           throw new Error("Expected variant name after ::");
         const variant = variantToken[1];
         this.consume();
-        return { type: "enum-access", enumName: name, variant };
+        return { type: "enum-access", enumName: token[1], variant };
       }
       // Check for function call: name(args)
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
-        return this.parseFnCall(name);
+        return this.parseFnCall(token[1]);
       }
       // Check for struct constructor: Name { field : value, ... }
       if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {

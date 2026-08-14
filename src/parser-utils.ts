@@ -1,4 +1,5 @@
 import type { AstNode } from "./ast";
+import type { Token } from "./tokenizer";
 
 /**
  * Shared parsing utilities extracted from the Parser class.
@@ -8,10 +9,7 @@ import type { AstNode } from "./ast";
 /**
  * Build a struct-access node from a dot chain.
  */
-export function buildStructField(
-  node: AstNode,
-  field: string,
-): AstNode {
+export function buildStructField(node: AstNode, field: string): AstNode {
   return { type: "struct-access", struct: node, field };
 }
 
@@ -27,4 +25,24 @@ export function buildScopeField(node: AstNode, field: string): AstNode {
  */
 export function buildTupleIndex(node: AstNode, index: number): AstNode {
   return { type: "tuple-access", tuple: node, index };
+}
+
+/**
+ * Check if the tokens at the given position form `TypeName.this`.
+ * Returns the type name if so, or null otherwise.
+ */
+export function isTypeNameThis(
+  tokens: readonly Token[],
+  pos: number,
+): string | null {
+  if (
+    tokens[pos]?.[0] === "id" &&
+    tokens[pos + 1]?.[0] === "op" &&
+    tokens[pos + 1]![1] === "." &&
+    tokens[pos + 2]?.[0] === "kw" &&
+    tokens[pos + 2]![1] === "this"
+  ) {
+    return tokens[pos]![1] as string;
+  }
+  return null;
 }
