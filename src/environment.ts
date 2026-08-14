@@ -1,6 +1,19 @@
 import type { AstNode, StructDef, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 
+function resolveModulePath<T>(
+  store: Record<string, Record<string, T>>,
+  path: string[],
+): T | undefined {
+  for (let i = path.length - 1; i >= 1; i--) {
+    const modKey = path.slice(0, i).join("::");
+    const field = path[i]!;
+    const v = store[modKey]?.[field];
+    if (v !== undefined) return v;
+  }
+  return undefined;
+}
+
 /** Discriminated union for all runtime values the language can produce. */
 export type Value =
   | {
@@ -92,13 +105,7 @@ export class Environment {
   }
 
   getModuleExportByPath(path: string[]): number | undefined {
-    for (let i = path.length - 1; i >= 1; i--) {
-      const modKey = path.slice(0, i).join("::");
-      const field = path[i]!;
-      const v = this.moduleExports[modKey]?.[field];
-      if (v !== undefined) return v;
-    }
-    return undefined;
+    return resolveModulePath(this.moduleExports, path);
   }
 
   getModuleExports(): Record<string, Record<string, number>> {
@@ -119,13 +126,7 @@ export class Environment {
   }
 
   getModuleFnExportByPath(path: string[]): (() => number) | undefined {
-    for (let i = path.length - 1; i >= 1; i--) {
-      const modKey = path.slice(0, i).join("::");
-      const field = path[i]!;
-      const v = this.moduleFnExports[modKey]?.[field];
-      if (v !== undefined) return v;
-    }
-    return undefined;
+    return resolveModulePath(this.moduleFnExports, path);
   }
 
   getModuleFnExports(): Record<string, Record<string, () => number>> {
@@ -146,13 +147,7 @@ export class Environment {
   }
 
   getModuleStructExportByPath(path: string[]): StructDef | undefined {
-    for (let i = path.length - 1; i >= 1; i--) {
-      const modKey = path.slice(0, i).join("::");
-      const field = path[i]!;
-      const v = this.moduleStructExports[modKey]?.[field];
-      if (v !== undefined) return v;
-    }
-    return undefined;
+    return resolveModulePath(this.moduleStructExports, path);
   }
 
   declare(name: string, value: Value, mutable = false): void {
