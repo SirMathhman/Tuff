@@ -793,7 +793,11 @@ export class Parser {
       this.consume();
       // Check for lambda: (param : Type, ...) => body
       const lambdaParams = this.tryParseLambdaParams();
-      if (lambdaParams && this.peek()?.[0] === "op" && this.peek()![1] === "=>") {
+      if (
+        lambdaParams &&
+        this.peek()?.[0] === "op" &&
+        this.peek()![1] === "=>"
+      ) {
         this.consume(); // "=>"
         const body = this.parseAddSub();
         return { type: "lambda", params: lambdaParams, body };
@@ -938,10 +942,18 @@ export class Parser {
       return undefined;
     const params = this.parseParenList(() => {
       const nameToken = this.peek();
-      if (!nameToken || nameToken[0] !== "id") return { name: "", type: { kind: "name", name: "i32" } };
+      if (!nameToken || nameToken[0] !== "id")
+        return {
+          name: "",
+          type: { kind: "name" as const, name: "i32" as const },
+        };
       const name = nameToken[1];
       this.consume();
-      if (this.peek()?.[0] !== "colon") return { name: "", type: { kind: "name", name: "i32" } };
+      if (this.peek()?.[0] !== "colon")
+        return {
+          name: "",
+          type: { kind: "name" as const, name: "i32" as const },
+        };
       this.consume(); // ":"
       const type = this.parseType();
       return { name, type };
