@@ -67,6 +67,7 @@ export class Environment {
   private enums: Record<string, string[]> = {};
   private parent: Environment | undefined;
   private thisTypeName: string | undefined;
+  private moduleExports: Record<string, Record<string, number>> = {};
 
   constructor(parent?: Environment) {
     this.parent = parent;
@@ -78,6 +79,14 @@ export class Environment {
 
   getThisTypeName(): string | undefined {
     return this.thisTypeName ?? this.parent?.getThisTypeName();
+  }
+
+  setModuleExports(exports: Record<string, Record<string, number>>): void {
+    this.moduleExports = exports;
+  }
+
+  getModuleExport(moduleName: string, fieldName: string): number | undefined {
+    return this.moduleExports[moduleName]?.[fieldName];
   }
 
   declare(name: string, value: Value, mutable = false): void {

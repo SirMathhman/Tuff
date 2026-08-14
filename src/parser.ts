@@ -14,7 +14,10 @@ const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
 export class Parser {
   private pos = 0;
 
-  constructor(private tokens: Token[]) {}
+  constructor(
+    private tokens: Token[],
+    private moduleNames?: Set<string>,
+  ) {}
 
   private parseType(
     allowFnType: boolean = true,
@@ -276,6 +279,14 @@ export class Parser {
   private parseStatement(): AstNode {
     const token = this.peek();
     if (!token) throw new Error("Unexpected end of input");
+
+    if (token[0] === "kw" && token[1] === "out") {
+      this.consume(); // "out"
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "let") {
+        return this.parseLet(true);
+      }
+      throw new Error("Expected 'let' after 'out'");
+    }
 
     if (token[0] === "kw" && token[1] === "let") {
       return this.parseLet();
@@ -658,7 +669,7 @@ export class Parser {
     return { name, isMut };
   }
 
-  private parseLet(): AstNode {
+  private parseLet(exported = false): AstNode {
     this.consume(); // "let"
     const { name, isMut } = this.parseMutId();
     // Optional type annotation: : U8, : &(I32, I32) => I32, : I32 | Char
@@ -671,7 +682,7 @@ export class Parser {
     this.consume();
     const value = this.parseAddSub();
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "let", name, mutable: isMut, value, typeAnnotation };
+    return { type: "let", name, mutable: isMut, value, typeAnnotation, exported };
   }
 
   private parseAssign(): AstNode {
@@ -1196,15 +1207,19 @@ export class Parser {
         return { type: "this-type", typeName: name };
       }
       this.consume();
-      // Check for enum access: EnumName::Variant
+      // Check for module/enum access: Name::Field
       if (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
         this.consume(); // "::"
-        const variantToken = this.peek();
-        if (!variantToken || variantToken[0] !== "id")
-          throw new Error("Expected variant name after ::");
-        const variant = variantToken[1];
+        const fieldToken = this.peek();
+        if (!fieldToken || fieldToken[0] !== "id")
+          throw new Error("Expected field name after ::");
+        const field = fieldToken[1];
         this.consume();
-        return { type: "enum-access", enumName: token[1], variant };
+        // If moduleName is in moduleNames, treat as module access
+        if (this.moduleNames?.has(token[1])) {
+          return { type: "module-access", moduleName: token[1], fieldName: field };
+        }
+        return { type: "enum-access", enumName: token[1], variant: field };
       }
       // Check for function call: name(args)
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {

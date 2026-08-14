@@ -61,6 +61,7 @@ export type AstNode =
   | StructDef
   | EnumDef
   | EnumAccess
+  | ModuleAccess
   | MatchExpression
   | FnDef
   | FnCall
@@ -149,6 +150,13 @@ export interface Let {
   mutable: boolean;
   value: AstNode;
   typeAnnotation?: TypeNode;
+  exported?: boolean;
+}
+
+export interface ModuleAccess {
+  type: "module-access";
+  moduleName: string;
+  fieldName: string;
 }
 
 export interface Block {

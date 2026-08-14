@@ -83,6 +83,12 @@ function evalValue(node: AstNode, env: Environment): Value {
         throw new Error("Cannot access scope on non-scope value");
       return resolveScopeField(scope, node.field);
     }
+    case "module-access": {
+      const value = env.getModuleExport(node.moduleName, node.fieldName);
+      if (value === undefined)
+        throw new Error(`Module export not found: ${node.moduleName}::${node.fieldName}`);
+      return num(value);
+    }
     case "tuple-literal": {
       const elements = node.elements.map((el) => evalValue(el, env));
       return { kind: "tuple", elements };
@@ -601,6 +607,12 @@ export function evaluate(node: AstNode, env: Environment): number {
         throw new Error(`Unknown variant: ${node.variant}`);
       }
       return idx;
+    }
+    case "module-access": {
+      const value = env.getModuleExport(node.moduleName, node.fieldName);
+      if (value === undefined)
+        throw new Error(`Module export not found: ${node.moduleName}::${node.fieldName}`);
+      return value;
     }
     case "match":
       return evalMatch(node, env, evaluate, evalValue);

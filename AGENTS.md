@@ -19,7 +19,7 @@ Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker →
 
 | File                    | Role                                                                           |
 | ----------------------- | ------------------------------------------------------------------------------ |
-| `src/index.ts`            | Entry — `evaluate(source: string): number`, `evaluateModules(names, sources)`  |
+| `src/index.ts`          | Entry — `evaluate(source: string): number`, `evaluateModules(names, sources)`  |
 | `src/tokenizer.ts`      | Regex-based lexer; produces tuple tokens `[kind, value]`                       |
 | `src/parser.ts`         | Recursive descent parser; produces `AstNode[]`                                 |
 | `src/parser-utils.ts`   | Shared parsing utilities — struct/tuple/scope field builders                   |
@@ -44,7 +44,7 @@ Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker →
 
 ## Language Features
 
-Typed integers (`u8`, `u16`, `i8`, `i16`, `i32`), floating point (`f32`, `f64`), characters (`char`), strings (`str`), booleans, `let` / `let mut`, references (`&x`, `&mut x`, `*y`), `if/else` (statement and expression), `while`, `for (in range)`, `break`/`continue`, structs (nested types), fixed-length arrays, multi-dimensional indexing, compound assignment (`+=`, `-=`), functions (`fn` with type annotations), function references, type aliases, runtime type checks (`is`), casts, blocks as expressions, type promotion.
+Typed integers (`u8`, `u16`, `i8`, `i16`, `i32`), floating point (`f32`, `f64`), characters (`char`), strings (`str`), booleans, `let` / `let mut`, references (`&x`, `&mut x`, `*y`), `if/else` (statement and expression), `while`, `for (in range)`, `break`/`continue`, structs (nested types), fixed-length arrays, multi-dimensional indexing, compound assignment (`+=`, `-=`), functions (`fn` with type annotations), function references, type aliases, runtime type checks (`is`), casts, blocks as expressions, type promotion, modules (`out let` exports, `module::field` access via `evaluateModules`).
 
 ## See Also
 

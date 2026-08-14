@@ -145,6 +145,7 @@ function classifyToken(text: string): Token {
   if (text === "yield") return ["kw", "yield"];
   if (text === "return") return ["kw", "return"];
   if (text === "this") return ["kw", "this"];
+  if (text === "out") return ["kw", "out"];
   if (text === "true") return ["bool", true];
   if (text === "false") return ["bool", false];
   if (/^[a-zA-Z_]/.test(text)) return ["id", text];
