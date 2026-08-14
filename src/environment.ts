@@ -83,6 +83,7 @@ export class Environment {
   private moduleExports: Record<string, Record<string, number>> = {};
   private moduleFnExports: Record<string, Record<string, () => number>> = {};
   private moduleStructExports: Record<string, Record<string, StructDef>> = {};
+  private moduleTypeAliasExports: Record<string, Record<string, TypeNode>> = {};
 
   constructor(parent?: Environment) {
     this.parent = parent;
@@ -148,6 +149,16 @@ export class Environment {
 
   getModuleStructExportByPath(path: string[]): StructDef | undefined {
     return resolveModulePath(this.moduleStructExports, path);
+  }
+
+  setModuleTypeAliasExports(
+    exports: Record<string, Record<string, TypeNode>>,
+  ): void {
+    this.moduleTypeAliasExports = exports;
+  }
+
+  getModuleTypeAliasExportByPath(path: string[]): TypeNode | undefined {
+    return resolveModulePath(this.moduleTypeAliasExports, path);
   }
 
   declare(name: string, value: Value, mutable = false): void {

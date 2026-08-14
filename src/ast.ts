@@ -8,7 +8,12 @@ export interface TypeParam {
 
 /** A type expression (e.g., `U8`, `[I32; 3]`, `&Bool`, `{ x : I32, y : I32 }`). */
 export type TypeNode =
-  | { kind: "name"; name: string; constraint?: { op: string; value: number } }
+  | {
+      kind: "name";
+      name: string;
+      constraint?: { op: string; value: number };
+      path?: string[];
+    }
   | { kind: "array"; elementType: TypeNode; length: AstNode }
   | { kind: "ref"; innerType: TypeNode }
   | { kind: "struct"; fields: { name: string; type: TypeNode }[] }
@@ -270,11 +275,7 @@ export interface TypeAlias {
   type: "type-alias";
   name: string;
   typeNode: TypeNode;
-}
-export interface TypeAlias {
-  type: "type-alias";
-  name: string;
-  typeNode: TypeNode;
+  exported?: boolean;
 }
 
 export interface StructDef {

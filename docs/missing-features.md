@@ -68,7 +68,7 @@ Legend: ❌ Missing · ⚠️ Partial
 | Modules / imports | ⚠️   | ✅   | ✅         | ✅     |
 | Namespaces        | ❌   | ❌   | ✅         | ✅     |
 
-> **Note:** Basic module support exists (`out let` exports, `module::field` access). Nested module paths (`lib::foo::Point`) are supported.
+> **Note:** Module support includes `out let` exports, `out type` (exported type aliases), `module::field` access, and cross-module type alias references. Nested module paths (`lib::foo::Point`) are supported.
 > | Packages | ❌ | ✅ | ❌ | ✅ |
 > | Visibility modifiers | ❌ | ✅ | ❌ | ✅ |
 > | Re-exports | ❌ | ✅ | ✅ | ✅ |

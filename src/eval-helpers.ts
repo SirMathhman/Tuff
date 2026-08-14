@@ -31,9 +31,10 @@ export function evalModuleAccess(
   env: Environment,
 ): number {
   const value = env.getModuleExportByPath(modulePath);
-  if (value === undefined)
-    throw new Error(`Module export not found: ${modulePath.join("::")}`);
-  return value;
+  if (value !== undefined) return value;
+  const typeAlias = env.getModuleTypeAliasExportByPath(modulePath);
+  if (typeAlias !== undefined) return 0;
+  throw new Error(`Module export not found: ${modulePath.join("::")}`);
 }
 
 /** Evaluate a range expression and return { start, end }. */

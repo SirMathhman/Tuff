@@ -91,7 +91,21 @@ export class Parser {
       this.consume(); // "this"
       return { kind: "name", name: typeName };
     }
-    const type: TypeNode = { kind: "name", name: typeName };
+    // Check for module path: lib::foo::MyAlias
+    const path: string[] = [typeName];
+    while (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
+      this.consume(); // "::"
+      const segToken = this.peek();
+      if (!segToken || segToken[0] !== "id")
+        throw new Error("Expected identifier after :: in type");
+      path.push(segToken[1]);
+      this.consume();
+    }
+    const type: TypeNode = {
+      kind: "name",
+      name: path.join("::"),
+      path: path.length > 1 ? path : undefined,
+    };
     // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255, Type == 100, Type != 0
     if (allowConstraint && this.peek()?.[0] === "op") {
       const opToken = this.peek()![1] as string;
@@ -175,7 +189,7 @@ export class Parser {
     if (this.peek()?.[0] === "semi") this.consume();
   }
 
-  private parseTypeAlias(): AstNode {
+  private parseTypeAlias(exported: boolean = false): AstNode {
     this.consume(); // "type"
     const nameToken = this.consume();
     const name = nameToken[1] as string;
@@ -184,7 +198,7 @@ export class Parser {
     this.consume(); // "="
     const typeNode = this.parseType();
     if (this.peek()?.[0] === "semi") this.consume();
-    return { type: "type-alias", name, typeNode };
+    return { type: "type-alias", name, typeNode, exported };
   }
 
   private parseBraceDef<T>(
@@ -291,7 +305,10 @@ export class Parser {
       if (this.peek()?.[0] === "kw" && this.peek()![1] === "struct") {
         return this.parseStructDef(true);
       }
-      throw new Error("Expected 'let' or 'fn' after 'out'");
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "type") {
+        return this.parseTypeAlias(true);
+      }
+      throw new Error("Expected 'let', 'fn', 'struct', or 'type' after 'out'");
     }
 
     if (token[0] === "kw" && token[1] === "let") {

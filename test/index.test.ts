@@ -38,6 +38,15 @@ describe("evaluateModules", () => {
       }),
     ).toBe(7);
   });
+
+  it("evaluateModules with type alias cross-module reference => 7", () => {
+    expect(
+      evaluateModules(["main"], {
+        main: "let temp : lib::foo::MyAlias = 7; temp",
+        "lib::foo": "out type MyAlias = I32;",
+      }),
+    ).toBe(7);
+  });
 });
 
 describe("evaluate", () => {

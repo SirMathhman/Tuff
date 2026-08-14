@@ -13,6 +13,11 @@ export function checkType(
   num: (v: number, numType?: IntTypeName, isFloat?: boolean) => Value,
 ): boolean {
   if (typeNode.kind === "name") {
+    // Resolve module path: lib::foo::MyAlias
+    if (typeNode.path) {
+      const resolved = env.getModuleTypeAliasExportByPath(typeNode.path);
+      if (resolved) return checkType(val, resolved, env, evaluate, num);
+    }
     const alias = env.getTypeAlias(typeNode.name);
     if (alias) return checkType(val, alias, env, evaluate, num);
   }
@@ -383,6 +388,8 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
           // Generic type parameter — skip range checking
           if (scope.typeParams?.some((tp) => tp.name === declaredType.name)) {
             // skip
+          } else if (declaredType.path) {
+            // Module path type (e.g., lib::foo::MyAlias) — resolved at runtime
           } else {
             const structType = getStruct(scope, declaredType.name);
             if (structType) {

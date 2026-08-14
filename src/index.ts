@@ -3,7 +3,7 @@ import { Parser } from "./parser";
 import { typeCheck } from "./type-checker";
 import { evaluateStatements } from "./evaluator";
 import { Environment } from "./environment";
-import type { StructDef } from "./ast";
+import type { StructDef, TypeNode } from "./ast";
 
 export function evaluateModules(
   moduleNames: string[],
@@ -13,6 +13,7 @@ export function evaluateModules(
   const exports = new Map<string, Record<string, number>>();
   const fnExports = new Map<string, Record<string, () => number>>();
   const structExports = new Map<string, Record<string, StructDef>>();
+  const typeAliasExports = new Map<string, Record<string, TypeNode>>();
   // First pass: collect exports from all modules
   for (const name of Object.keys(sources)) {
     const source = sources[name]!;
@@ -24,6 +25,7 @@ export function evaluateModules(
     const modExports: Record<string, number> = {};
     const modFnExports: Record<string, () => number> = {};
     const modStructExports: Record<string, StructDef> = {};
+    const modTypeAliasExports: Record<string, TypeNode> = {};
     for (const stmt of statements) {
       if (stmt.type === "let" && stmt.exported) {
         modExports[stmt.name] = evaluateStatements([stmt.value], env);
@@ -34,10 +36,14 @@ export function evaluateModules(
       if (stmt.type === "struct-def" && stmt.exported) {
         modStructExports[stmt.name] = stmt;
       }
+      if (stmt.type === "type-alias" && stmt.exported) {
+        modTypeAliasExports[stmt.name] = stmt.typeNode;
+      }
     }
     exports.set(name, modExports);
     fnExports.set(name, modFnExports);
     structExports.set(name, modStructExports);
+    typeAliasExports.set(name, modTypeAliasExports);
   }
   // Second pass: evaluate with exports
   let result = 0;
@@ -50,6 +56,7 @@ export function evaluateModules(
     env.setModuleExports(Object.fromEntries(exports));
     env.setModuleFnExports(Object.fromEntries(fnExports));
     env.setModuleStructExports(Object.fromEntries(structExports));
+    env.setModuleTypeAliasExports(Object.fromEntries(typeAliasExports));
     result = evaluateStatements(statements, env);
   }
   return result;
