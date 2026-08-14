@@ -240,10 +240,7 @@ export function resolveLValue(
       return field;
     }
     case "scope-field": {
-      const scope = evalValue(lvalue.scope, env);
-      if (scope.kind !== "scope")
-        throw new Error("Cannot access scope on non-scope value");
-      const v = scope.env.get(lvalue.field);
+      const v = env.get(lvalue.field);
       if (v === undefined)
         throw new Error(`Undefined variable: ${lvalue.field}`);
       return v;
