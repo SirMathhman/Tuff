@@ -2,6 +2,11 @@ import type { Token } from "./tokenizer";
 import { COMPOUND_OPS } from "./tokenizer";
 import type { AstNode, LValue, TypeNode, TypeParam } from "./ast";
 import type { IntTypeName } from "./types";
+import {
+  buildStructField,
+  buildScopeField,
+  buildTupleIndex,
+} from "./parser-utils";
 
 const COMPARISON_OPS = new Set(["<", "<=", ">", ">=", "==", "!="]);
 
@@ -468,8 +473,8 @@ export class Parser {
   private consumeStructAccessChains(node: AstNode): AstNode {
     return this.consumeDotChain(
       node,
-      (n, f) => ({ type: "struct-access", struct: n, field: f }),
-      (n, i) => ({ type: "tuple-access", tuple: n, index: i }),
+      buildStructField,
+      buildTupleIndex,
       (n, f) => {
         this.consume(); // "("
         const args = this.parseParenList(() => this.parseAddSub());
@@ -481,8 +486,8 @@ export class Parser {
   private consumeScopeAccessChains(node: AstNode): AstNode {
     return this.consumeDotChain(
       node,
-      (n, f) => ({ type: "scope-access", scope: n, field: f }),
-      (n, i) => ({ type: "tuple-access", tuple: n, index: i }),
+      buildScopeField,
+      buildTupleIndex,
     );
   }
 
@@ -503,7 +508,11 @@ export class Parser {
       } else if (nextToken[0] === "id") {
         const field = nextToken[1];
         this.consume();
-        if (buildMethod && this.peek()?.[0] === "group" && this.peek()![1] === "(") {
+        if (
+          buildMethod &&
+          this.peek()?.[0] === "group" &&
+          this.peek()![1] === "("
+        ) {
           acc = buildMethod(acc, field);
         } else {
           acc = buildField(acc, field);
