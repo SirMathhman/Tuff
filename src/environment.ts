@@ -80,10 +80,14 @@ export class Environment {
   private enums: Record<string, string[]> = {};
   private parent: Environment | undefined;
   private thisTypeName: string | undefined;
-  private moduleExports: Record<string, Record<string, number>> = {};
-  private moduleFnExports: Record<string, Record<string, () => number>> = {};
-  private moduleStructExports: Record<string, Record<string, StructDef>> = {};
-  private moduleTypeAliasExports: Record<string, Record<string, TypeNode>> = {};
+  private moduleExports: Record<
+    string,
+    Record<string, Record<string, unknown>>
+  > = {};
+
+  private getStore(kind: string): Record<string, Record<string, unknown>> {
+    return (this.moduleExports[kind] ??= {});
+  }
 
   constructor(parent?: Environment) {
     this.parent = parent;
@@ -98,67 +102,84 @@ export class Environment {
   }
 
   setModuleExports(exports: Record<string, Record<string, number>>): void {
-    this.moduleExports = exports;
+    this.moduleExports["values"] = exports;
   }
 
   getModuleExport(moduleName: string, fieldName: string): number | undefined {
-    return this.moduleExports[moduleName]?.[fieldName];
+    return this.getStore("values")[moduleName]?.[fieldName] as
+      | number
+      | undefined;
   }
 
   getModuleExportByPath(path: string[]): number | undefined {
-    return resolveModulePath(this.moduleExports, path);
+    return resolveModulePath(this.getStore("values"), path) as
+      | number
+      | undefined;
   }
 
   getModuleExports(): Record<string, Record<string, number>> {
-    return this.moduleExports;
+    return this.getStore("values") as Record<string, Record<string, number>>;
   }
 
   setModuleFnExports(
     exports: Record<string, Record<string, () => number>>,
   ): void {
-    this.moduleFnExports = exports;
+    this.moduleExports["functions"] = exports;
   }
 
   getModuleFnExport(
     moduleName: string,
     fieldName: string,
   ): (() => number) | undefined {
-    return this.moduleFnExports[moduleName]?.[fieldName];
+    return this.getStore("functions")[moduleName]?.[fieldName] as
+      | (() => number)
+      | undefined;
   }
 
   getModuleFnExportByPath(path: string[]): (() => number) | undefined {
-    return resolveModulePath(this.moduleFnExports, path);
+    return resolveModulePath(this.getStore("functions"), path) as
+      | (() => number)
+      | undefined;
   }
 
   getModuleFnExports(): Record<string, Record<string, () => number>> {
-    return this.moduleFnExports;
+    return this.getStore("functions") as Record<
+      string,
+      Record<string, () => number>
+    >;
   }
 
   setModuleStructExports(
     exports: Record<string, Record<string, StructDef>>,
   ): void {
-    this.moduleStructExports = exports;
+    this.moduleExports["structs"] = exports;
   }
 
   getModuleStructExport(
     moduleName: string,
     structName: string,
   ): StructDef | undefined {
-    return this.moduleStructExports[moduleName]?.[structName];
+    return this.getStore("structs")[moduleName]?.[structName] as
+      | StructDef
+      | undefined;
   }
 
   getModuleStructExportByPath(path: string[]): StructDef | undefined {
-    return resolveModulePath(this.moduleStructExports, path);
+    return resolveModulePath(this.getStore("structs"), path) as
+      | StructDef
+      | undefined;
   }
 
   setModuleTypeAliasExports(
     exports: Record<string, Record<string, TypeNode>>,
   ): void {
-    this.moduleTypeAliasExports = exports;
+    this.moduleExports["typeAliases"] = exports;
   }
 
   getModuleTypeAliasExportByPath(path: string[]): TypeNode | undefined {
-    return resolveModulePath(this.moduleTypeAliasExports, path);
+    return resolveModulePath(this.getStore("typeAliases"), path) as
+      | TypeNode
+      | undefined;
   }
 
   declare(name: string, value: Value, mutable = false): void {
