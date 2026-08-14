@@ -52,7 +52,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "scope-access": {
       const scope = evalValue(node.scope, env);
       if (scope.kind === "this") {
-        return resolveThisField(scope, node.field);
+        return resolveScopeField(scope, node.field);
       }
       if (scope.kind !== "scope")
         throw new Error("Cannot access scope on non-scope value");
@@ -118,7 +118,11 @@ function evalValue(node: AstNode, env: Environment): Value {
           hasValue = true;
         }
         try {
-          last = evalValue(stmt, blockEnv);
+          if (stmt.type === "let") {
+            last = num(evaluate(stmt, blockEnv));
+          } else {
+            last = evalValue(stmt, blockEnv);
+          }
         } catch (e) {
           if (e instanceof Yield) return num(e.value);
           if (e instanceof Return) throw e;
@@ -365,10 +369,7 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
     case "struct-access": {
       const structVal = evalValue(node.struct, env);
       if (structVal.kind === "this") {
-        const v = structVal.env.get(node.field);
-        if (v === undefined)
-          throw new Error(`Undefined variable: ${node.field}`);
-        return toNumber(v);
+        return toNumber(resolveScopeField(structVal, node.field));
       }
       if (node.field === "length" && structVal.kind === "array") {
         return structVal.elements.length;
@@ -383,10 +384,7 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
     case "scope-access": {
       const scopeVal = evalValue(node.scope, env);
       if (scopeVal.kind === "this") {
-        const v = scopeVal.env.get(node.field);
-        if (v === undefined)
-          throw new Error(`Undefined variable: ${node.field}`);
-        return toNumber(v);
+        return toNumber(resolveScopeField(scopeVal, node.field));
       }
       if (scopeVal.kind !== "scope")
         throw new Error("Cannot access scope on non-scope value");
