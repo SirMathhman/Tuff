@@ -56,6 +56,9 @@ function evalValue(node: AstNode, env: Environment): Value {
       }
       return { kind: "scope", env };
     }
+    case "this-type": {
+      return { kind: "this", typeName: node.typeName, env };
+    }
     case "id": {
       const v = env.get(node.name);
       if (v === undefined) throw new Error("Undefined variable: " + node.name);
@@ -560,6 +563,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "ref":
       return 0;
     case "this":
+    case "this-type":
       return 0;
     case "block": {
       if (node.statements.length === 0) throw new Error("Empty block");

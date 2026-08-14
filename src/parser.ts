@@ -19,9 +19,13 @@ export class Parser {
     allowFnType: boolean = true,
     allowConstraint: boolean = true,
   ): TypeNode {
-    // Reference type: &Type
+    // Reference type: &Type or &mut Type
     if (this.peek()?.[0] === "ref" && this.peek()![1] === "&") {
       this.consume(); // "&"
+      // Handle &mut Type
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "mut") {
+        this.consume(); // "mut"
+      }
       const innerType = this.parseType(allowFnType, false);
       return { kind: "ref", innerType };
     }
@@ -77,6 +81,15 @@ export class Parser {
       throw new Error("Expected type name");
     const typeName = typeToken[1];
     this.consume();
+    // Check for TypeName.this
+    if (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+      this.consume(); // "."
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "this") {
+        this.consume(); // "this"
+        return { kind: "name", name: typeName };
+      }
+      this.pos -= 1; // Put back the "."
+    }
     const type: TypeNode = { kind: "name", name: typeName };
     // Check for constraint: Type > 0, Type >= 0, Type < 256, Type <= 255, Type == 100, Type != 0
     if (allowConstraint && this.peek()?.[0] === "op") {
@@ -418,6 +431,31 @@ export class Parser {
       }
     }
 
+    // TypeName.this
+    if (token[0] === "id") {
+      const name = token[1];
+      if (
+        this.pos + 1 < this.tokens.length &&
+        this.tokens[this.pos + 1]?.[0] === "op" &&
+        this.tokens[this.pos + 1]?.[1] === "." &&
+        this.pos + 2 < this.tokens.length &&
+        this.tokens[this.pos + 2]?.[0] === "kw" &&
+        this.tokens[this.pos + 2]?.[1] === "this"
+      ) {
+        this.consume(); // id
+        this.consume(); // "."
+        this.consume(); // "this"
+        return {
+          lvalue: {
+            kind: "scope-field",
+            scope: { type: "this-type", typeName: name },
+            field: "",
+          },
+          startPos,
+        };
+      }
+    }
+
     // id or id.field or id[index]
     if (token[0] === "id") {
       const name = this.consume()[1] as string;
@@ -426,25 +464,6 @@ export class Parser {
       lvalue = this.consumeIndexChains(lvalue);
       lvalue = this.consumeFieldChains(lvalue);
       return { lvalue, startPos };
-    }
-
-    // this.field
-    if (token[0] === "kw" && token[1] === "this") {
-      this.consume();
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
-        this.consume(); // "."
-        const fieldToken = this.peek();
-        if (!fieldToken || fieldToken[0] !== "id")
-          throw new Error("Expected field name after .");
-        const field = fieldToken[1];
-        this.consume();
-        return {
-          lvalue: { kind: "scope-field", scope: { type: "this" }, field },
-          startPos,
-        };
-      }
-      this.pos = startPos;
-      return undefined;
     }
 
     return undefined;
@@ -484,11 +503,7 @@ export class Parser {
   }
 
   private consumeScopeAccessChains(node: AstNode): AstNode {
-    return this.consumeDotChain(
-      node,
-      buildScopeField,
-      buildTupleIndex,
-    );
+    return this.consumeDotChain(node, buildScopeField, buildTupleIndex);
   }
 
   private consumeDotChain<T>(
@@ -1177,6 +1192,21 @@ export class Parser {
     }
 
     if (token[0] === "id") {
+      const name = token[1];
+      // Check for TypeName.this
+      if (
+        this.pos + 1 < this.tokens.length &&
+        this.tokens[this.pos + 1]?.[0] === "op" &&
+        this.tokens[this.pos + 1]?.[1] === "." &&
+        this.pos + 2 < this.tokens.length &&
+        this.tokens[this.pos + 2]?.[0] === "kw" &&
+        this.tokens[this.pos + 2]?.[1] === "this"
+      ) {
+        this.consume(); // id
+        this.consume(); // "."
+        this.consume(); // "this"
+        return { type: "this-type", typeName: name };
+      }
       this.consume();
       // Check for enum access: EnumName::Variant
       if (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
@@ -1186,11 +1216,11 @@ export class Parser {
           throw new Error("Expected variant name after ::");
         const variant = variantToken[1];
         this.consume();
-        return { type: "enum-access", enumName: token[1], variant };
+        return { type: "enum-access", enumName: name, variant };
       }
       // Check for function call: name(args)
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
-        return this.parseFnCall(token[1]);
+        return this.parseFnCall(name);
       }
       // Check for struct constructor: Name { field : value, ... }
       if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {

@@ -749,4 +749,12 @@ describe("evaluate", () => {
       ),
     ).toBe(1);
   });
+
+  it('evaluate("fn Counter() => { let mut value = 0; fn addOnce() : &mut Counter => { value += 1; } Counter.this } let mut c = Counter(); c.addOnce(); c.value") => 1', () => {
+    expect(
+      evaluate(
+        "fn Counter() => { let mut value = 0; fn addOnce() : &mut Counter => { value += 1; } Counter.this } let mut c = Counter(); c.addOnce(); c.value",
+      ),
+    ).toBe(1);
+  });
 });

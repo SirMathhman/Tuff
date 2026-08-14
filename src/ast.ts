@@ -69,6 +69,7 @@ export type AstNode =
   | FnRef
   | Lambda
   | This
+  | ThisType
   | ScopeAccess;
 
 export interface Num {
@@ -94,6 +95,11 @@ export interface Null {
 
 export interface This {
   type: "this";
+}
+
+export interface ThisType {
+  type: "this-type";
+  typeName: string;
 }
 
 export interface ScopeAccess {
