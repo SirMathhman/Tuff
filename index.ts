@@ -38,9 +38,11 @@ export function interpret(input: string): number {
       (tokens[pos] === "*" || tokens[pos] === "/")
     ) {
       const op = tokens[pos++];
-      const right = parseFactor();      if (op === "/" && right === 0) {
+      const right = parseFactor();
+      if (op === "/" && right === 0) {
         throw new Error(`Division by zero`);
-      }      result = op === "*" ? result * right : result / right;
+      }
+      result = op === "*" ? result * right : result / right;
     }
     return result;
   }
