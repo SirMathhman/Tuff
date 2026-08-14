@@ -725,4 +725,8 @@ describe("evaluate", () => {
   it('evaluate("fn Empty() => { let x = 100; this.x } Empty()") => 100', () => {
     expect(evaluate("fn Empty() => { let x = 100; this.x } Empty()")).toBe(100);
   });
+
+  it('evaluate("fn Wrapper(x : I32) => this; Wrapper(100).x") => 100', () => {
+    expect(evaluate("fn Wrapper(x : I32) => this; Wrapper(100).x")).toBe(100);
+  });
 });
