@@ -9,4 +9,8 @@ describe("interpret", () => {
   test('interpret("1") returns 1', () => {
     expect(interpret("1")).toBe(1);
   });
+
+  test('interpret("1 + 2") returns 3', () => {
+    expect(interpret("1 + 2")).toBe(3);
+  });
 });
