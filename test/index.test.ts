@@ -665,4 +665,20 @@ describe("evaluate", () => {
   it('evaluate("let x = { let y = 0; &y };") => Error', () => {
     expect(() => evaluate("let x = { let y = 0; &y };")).toThrow();
   });
+
+  it('evaluate("let x = 0; let y = &x; *y = 100;") => Error', () => {
+    expect(() => evaluate("let x = 0; let y = &x; *y = 100;")).toThrow();
+  });
+
+  it('evaluate("let x : U8 = 1; x") => 1', () => {
+    expect(evaluate("let x : U8 = 1; x")).toBe(1);
+  });
+
+  it('evaluate("let x : U8 = 2; 4 / x") => Error', () => {
+    expect(() => evaluate("let x : U8 = 2; 4 / x")).toThrow();
+  });
+
+  it('evaluate("let x : U8 != 0 = 2; 4 / x") => 2', () => {
+    expect(evaluate("let x : U8 != 0 = 2; 4 / x")).toBe(2);
+  });
 });

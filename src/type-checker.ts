@@ -102,7 +102,12 @@ function requireIntType(name: string): (typeof INT_TYPES)[number] {
 interface Scope {
   variables: Map<
     string,
-    { mutable: boolean; type?: IntTypeName | string; isStruct?: boolean }
+    {
+      mutable: boolean;
+      type?: IntTypeName | string;
+      isStruct?: boolean;
+      constraint?: { op: string; value: number };
+    }
   >;
   functions: Map<
     string,
@@ -136,7 +141,12 @@ function getVar(
   scope: Scope,
   name: string,
 ):
-  | { mutable: boolean; type?: IntTypeName | string; isStruct?: boolean }
+  | {
+      mutable: boolean;
+      type?: IntTypeName | string;
+      isStruct?: boolean;
+      constraint?: { op: string; value: number };
+    }
   | undefined {
   let s: Scope | undefined = scope;
   while (s) {
@@ -332,9 +342,27 @@ function checkOperator(node: AstNode, scope: Scope): void {
     case "binop":
       checkNode(node.left, scope);
       checkNode(node.right, scope);
+      // Check operator-specific constraints
+      checkOperatorConstraint(node, scope);
       // Reject binary operators on generic type parameters
       checkBinaryOpTypes(node, scope);
       break;
+  }
+}
+
+/** Check operator-specific constraints (e.g., division by zero). */
+function checkOperatorConstraint(node: AstNode, scope: Scope): void {
+  if (node.type !== "binop") return;
+  if (node.op === "/" && node.right.type === "id") {
+    const divisor = getVar(scope, node.right.name);
+    if (
+      divisor &&
+      (!divisor.constraint ||
+        (divisor.constraint.op !== "!=" && divisor.constraint.value !== 0))
+    )
+      throw new Error(
+        `Division by variable '${node.right.name}' requires != 0 constraint`,
+      );
   }
 }
 
@@ -391,6 +419,8 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
             ? (declaredType.name.toLowerCase() as IntTypeName)
             : valueType,
         isStruct,
+        constraint:
+          declaredType?.kind === "name" ? declaredType.constraint : undefined,
       });
       // If the value is a struct variable being moved, mark it
       if (node.value.type === "id") {
