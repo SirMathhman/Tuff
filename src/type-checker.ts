@@ -445,6 +445,8 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
 /** Check reference nodes. */
 function checkReference(node: AstNode, scope: Scope): void {
   switch (node.type) {
+    case "this":
+      break;
     case "id": {
       if (!getVar(scope, node.name)) {
         if (BUILTIN_TYPES.includes(node.name.toLowerCase())) break;
@@ -631,6 +633,7 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "id":
     case "ref":
     case "fnref":
+    case "this":
       checkReference(node, scope);
       return;
     case "fn-def":

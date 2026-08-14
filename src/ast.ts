@@ -64,7 +64,8 @@ export type AstNode =
   | FnDef
   | FnCall
   | FnRef
-  | Lambda;
+  | Lambda
+  | This;
 
 export interface Num {
   type: "num";
@@ -85,6 +86,10 @@ export interface Char {
 
 export interface Null {
   type: "null";
+}
+
+export interface This {
+  type: "this";
 }
 
 export interface String {

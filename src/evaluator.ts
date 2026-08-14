@@ -26,6 +26,8 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "string":
     case "null":
       return evalLiteral(node);
+    case "this":
+      return { kind: "scope", env };
     case "id": {
       const v = env.get(node.name);
       if (v === undefined) throw new Error("Undefined variable: " + node.name);
@@ -328,6 +330,12 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
       return 0;
     case "struct-access": {
       const structVal = evalValue(node.struct, env);
+      if (structVal.kind === "scope") {
+        const v = structVal.env.get(node.field);
+        if (v === undefined)
+          throw new Error(`Undefined variable: ${node.field}`);
+        return toNumber(v);
+      }
       if (node.field === "length" && structVal.kind === "array") {
         return structVal.elements.length;
       }

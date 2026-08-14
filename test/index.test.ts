@@ -705,4 +705,8 @@ describe("evaluate", () => {
       ),
     ).toBe(7);
   });
+
+  it('evaluate("let x = 100; this.x") => 100', () => {
+    expect(evaluate("let x = 100; this.x")).toBe(100);
+  });
 });

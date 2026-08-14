@@ -1088,6 +1088,13 @@ export class Parser {
       return { type: "null" };
     }
 
+    if (token[0] === "kw" && token[1] === "this") {
+      this.consume();
+      let node: AstNode = { type: "this" };
+      node = this.consumeStructAccessChains(node);
+      return node;
+    }
+
     if (token[0] === "kw" && token[1] === "match") {
       return this.parseMatch();
     }

@@ -60,6 +60,7 @@ export type Token =
         | "enum"
         | "match"
         | "case"
+        | "this"
       ),
     ]
   | ["id", string]
@@ -143,6 +144,7 @@ function classifyToken(text: string): Token {
   if (text === "null") return ["kw", "null"];
   if (text === "yield") return ["kw", "yield"];
   if (text === "return") return ["kw", "return"];
+  if (text === "this") return ["kw", "this"];
   if (text === "true") return ["bool", true];
   if (text === "false") return ["bool", false];
   if (/^[a-zA-Z_]/.test(text)) return ["id", text];
