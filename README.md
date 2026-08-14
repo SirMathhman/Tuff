@@ -1,15 +1,22 @@
-# tuff
+# Tuff
 
-To install dependencies:
+A small TypeScript project on [Bun](https://bun.com).
 
-```bash
-bun install
+## API
+
+Exports a single function:
+
+```ts
+export function evaluate(input: string): number
 ```
 
-To run:
+- `evaluate("")` returns `0`.
+- Any other input throws an `Error` (`evaluate: unsupported input: ...`).
+
+## Tests
+
+Run the tests with:
 
 ```bash
-bun run index.ts
+bun test
 ```
-
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
