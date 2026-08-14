@@ -32,7 +32,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (typeName) {
         return { kind: "this", typeName, env };
       }
-      return { kind: "scope", env };
+      throw new Error("`this` can only be used inside a function");
     }
     case "id": {
       const v = env.get(node.name);

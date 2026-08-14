@@ -245,6 +245,9 @@ export function resolveLValue(
       return field;
     }
     case "scope-field": {
+      if (!env.getThisTypeName()) {
+        throw new Error("`this` can only be used inside a function");
+      }
       return getScopeField(env, lvalue.field);
     }
   }
@@ -291,6 +294,9 @@ export function writeLValue(
       return;
     }
     case "scope-field": {
+      if (!env.getThisTypeName()) {
+        throw new Error("`this` can only be used inside a function");
+      }
       getScopeField(env, lvalue.field);
       env.assign(lvalue.field, value);
       return;

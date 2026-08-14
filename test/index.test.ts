@@ -706,12 +706,12 @@ describe("evaluate", () => {
     ).toBe(7);
   });
 
-  it('evaluate("let x = 100; this.x") => 100', () => {
-    expect(evaluate("let x = 100; this.x")).toBe(100);
+  it('evaluate("let x = 100; this.x") => Error', () => {
+    expect(() => evaluate("let x = 100; this.x")).toThrow();
   });
 
-  it('evaluate("let mut x = 0; this.x = 100; x") => 100', () => {
-    expect(evaluate("let mut x = 0; this.x = 100; x")).toBe(100);
+  it('evaluate("let mut x = 0; this.x = 100; x") => Error', () => {
+    expect(() => evaluate("let mut x = 0; this.x = 100; x")).toThrow();
   });
 
   it('evaluate("fn Empty() => this; Empty() is Empty") => 1', () => {
