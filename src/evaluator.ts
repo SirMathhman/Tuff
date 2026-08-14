@@ -16,7 +16,6 @@ import {
   evalTupleAccess,
   evalMatch,
   resolveScopeField,
-  assertThisInScope,
 } from "./eval-helpers";
 
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
@@ -33,8 +32,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (typeName) {
         return { kind: "this", typeName, env };
       }
-      assertThisInScope(env);
-      throw new Error("unreachable");
+      return { kind: "scope", env };
     }
     case "id": {
       const v = env.get(node.name);
@@ -102,6 +100,26 @@ function evalValue(node: AstNode, env: Environment): Value {
     }
     case "fn-call": {
       const { fn, fnEnv } = setupFnCall(node, env);
+      try {
+        return evalValue(fn.body, fnEnv);
+      } catch (e) {
+        if (e instanceof Yield) return num(e.value);
+        if (e instanceof Return) return num(e.value);
+        throw e;
+      }
+    }
+    case "this-fn-call": {
+      const fn = env.getFunction(node.name);
+      if (!fn) throw new Error("Undefined function: " + node.name);
+      const fnEnv = new Environment(fn.env ?? env);
+      fnEnv.setThisTypeName(node.name);
+      if (fn.params.length !== node.args.length)
+        throw new Error(
+          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
+        );
+      for (let i = 0; i < fn.params.length; i++) {
+        fnEnv.declare(fn.params[i]!.name, evalValue(node.args[i]!, env), false);
+      }
       try {
         return evalValue(fn.body, fnEnv);
       } catch (e) {
@@ -421,6 +439,26 @@ function evalFunction(node: AstNode, env: Environment): number {
         throw e;
       }
     }
+    case "this-fn-call": {
+      const fn = env.getFunction(node.name);
+      if (!fn) throw new Error("Undefined function: " + node.name);
+      const fnEnv = new Environment(fn.env ?? env);
+      fnEnv.setThisTypeName(node.name);
+      if (fn.params.length !== node.args.length)
+        throw new Error(
+          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
+        );
+      for (let i = 0; i < fn.params.length; i++) {
+        fnEnv.declare(fn.params[i]!.name, evalValue(node.args[i]!, env), false);
+      }
+      try {
+        return evaluate(fn.body, fnEnv);
+      } catch (e) {
+        if (e instanceof Yield) return e.value;
+        if (e instanceof Return) return e.value;
+        throw e;
+      }
+    }
     default:
       throw new Error(`Unexpected function: ${node.type}`);
   }
@@ -497,6 +535,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "fn-def":
     case "fnref":
     case "fn-call":
+    case "this-fn-call":
       return evalFunction(node, env);
     case "deref":
       return evaluate(node.operand, env);

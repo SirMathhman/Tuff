@@ -706,12 +706,12 @@ describe("evaluate", () => {
     ).toBe(7);
   });
 
-  it('evaluate("let x = 100; this.x") => Error', () => {
-    expect(() => evaluate("let x = 100; this.x")).toThrow();
+  it('evaluate("let x = 100; this.x") => 100', () => {
+    expect(evaluate("let x = 100; this.x")).toBe(100);
   });
 
-  it('evaluate("let mut x = 0; this.x = 100; x") => Error', () => {
-    expect(() => evaluate("let mut x = 0; this.x = 100; x")).toThrow();
+  it('evaluate("let mut x = 0; this.x = 100; x") => 100', () => {
+    expect(evaluate("let mut x = 0; this.x = 100; x")).toBe(100);
   });
 
   it('evaluate("fn Empty() => this; Empty() is Empty") => 1', () => {
@@ -728,5 +728,9 @@ describe("evaluate", () => {
 
   it('evaluate("fn Wrapper(x : I32) => this; Wrapper(100).x") => 100', () => {
     expect(evaluate("fn Wrapper(x : I32) => this; Wrapper(100).x")).toBe(100);
+  });
+
+  it('evaluate("fn get() => 100; this.get()") => 100', () => {
+    expect(evaluate("fn get() => 100; this.get()")).toBe(100);
   });
 });
