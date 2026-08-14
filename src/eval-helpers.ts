@@ -12,6 +12,14 @@ import {
 } from "./environment";
 import type { Ref, Value } from "./environment";
 
+/** Throw if `this` is used outside a function. */
+function assertThisInScope(env: Environment): void {
+  if (!env.getThisTypeName()) {
+    throw new Error("`this` can only be used inside a function");
+  }
+}
+export { assertThisInScope };
+
 /** Resolve a scope or `this` value to a field, throwing if undefined. */
 function resolveScopeField(
   scope:
@@ -245,9 +253,7 @@ export function resolveLValue(
       return field;
     }
     case "scope-field": {
-      if (!env.getThisTypeName()) {
-        throw new Error("`this` can only be used inside a function");
-      }
+      assertThisInScope(env);
       return getScopeField(env, lvalue.field);
     }
   }
@@ -294,9 +300,7 @@ export function writeLValue(
       return;
     }
     case "scope-field": {
-      if (!env.getThisTypeName()) {
-        throw new Error("`this` can only be used inside a function");
-      }
+      assertThisInScope(env);
       getScopeField(env, lvalue.field);
       env.assign(lvalue.field, value);
       return;

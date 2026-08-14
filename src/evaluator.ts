@@ -16,6 +16,7 @@ import {
   evalTupleAccess,
   evalMatch,
   resolveScopeField,
+  assertThisInScope,
 } from "./eval-helpers";
 
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
@@ -32,7 +33,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (typeName) {
         return { kind: "this", typeName, env };
       }
-      throw new Error("`this` can only be used inside a function");
+      assertThisInScope(env);
     }
     case "id": {
       const v = env.get(node.name);
