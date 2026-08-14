@@ -92,15 +92,10 @@ export class Parser {
       return { kind: "name", name: typeName };
     }
     // Check for module path: lib::foo::MyAlias
-    const path: string[] = [typeName];
-    while (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
-      this.consume(); // "::"
-      const segToken = this.peek();
-      if (!segToken || segToken[0] !== "id")
-        throw new Error("Expected identifier after :: in type");
-      path.push(segToken[1]);
-      this.consume();
-    }
+    const path = this.consumeModulePath(
+      typeName,
+      "Expected identifier after :: in type",
+    );
     const type: TypeNode = {
       kind: "name",
       name: path.join("::"),
@@ -497,6 +492,20 @@ export class Parser {
   /** Check for TypeName.this and return the type name, or null. */
   private tryTypeNameThis(): string | null {
     return isTypeNameThis(this.tokens, this.pos);
+  }
+
+  /** Consume `::id` segments and return the full path array. */
+  private consumeModulePath(startName: string, errorMsg?: string): string[] {
+    const path: string[] = [startName];
+    while (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
+      this.consume(); // "::"
+      const segToken = this.peek();
+      if (!segToken || segToken[0] !== "id")
+        throw new Error(errorMsg ?? "Expected identifier after ::");
+      path.push(segToken[1]);
+      this.consume();
+    }
+    return path;
   }
 
   private consumeIndexChains(lvalue: LValue): LValue {
@@ -1240,15 +1249,7 @@ export class Parser {
       this.consume();
       // Collect all :: id segments into path[]
       if (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
-        const path: string[] = [token[1]];
-        while (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
-          this.consume(); // "::"
-          const segToken = this.peek();
-          if (!segToken || segToken[0] !== "id")
-            throw new Error("Expected identifier after ::");
-          path.push(segToken[1]);
-          this.consume();
-        }
+        const path = this.consumeModulePath(token[1]);
         // Check if any prefix of path joined with :: exists in moduleNames
         let moduleKey: string | undefined;
         for (let i = path.length - 1; i >= 1; i--) {
