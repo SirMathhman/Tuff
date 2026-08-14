@@ -466,30 +466,16 @@ export class Parser {
   }
 
   private consumeStructAccessChains(node: AstNode): AstNode {
-    while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
-      this.consume(); // "."
-      const nextToken = this.peek();
-      if (!nextToken) throw new Error("Expected field/index after .");
-      if (nextToken[0] === "num") {
-        const index = nextToken[1];
-        this.consume();
-        node = { type: "tuple-access", tuple: node, index };
-      } else if (nextToken[0] === "id") {
-        const field = nextToken[1];
-        this.consume();
-        // Check for method call: .name(args)
-        if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
-          this.consume(); // "("
-          const args = this.parseParenList(() => this.parseAddSub());
-          node = { type: "method-call", receiver: node, name: field, args };
-        } else {
-          node = { type: "struct-access", struct: node, field };
-        }
-      } else {
-        throw new Error("Expected field name or numeric index after .");
-      }
-    }
-    return node;
+    return this.consumeDotChain(
+      node,
+      (n, f) => ({ type: "struct-access", struct: n, field: f }),
+      (n, i) => ({ type: "tuple-access", tuple: n, index: i }),
+      (n, f) => {
+        this.consume(); // "("
+        const args = this.parseParenList(() => this.parseAddSub());
+        return { type: "method-call", receiver: n, name: f, args };
+      },
+    );
   }
 
   private consumeScopeAccessChains(node: AstNode): AstNode {
@@ -504,6 +490,7 @@ export class Parser {
     acc: T,
     buildField: (acc: T, field: string) => T,
     buildIndex: (acc: T, index: number) => T,
+    buildMethod?: (acc: T, field: string) => T,
   ): T {
     while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
       this.consume(); // "."
@@ -516,7 +503,11 @@ export class Parser {
       } else if (nextToken[0] === "id") {
         const field = nextToken[1];
         this.consume();
-        acc = buildField(acc, field);
+        if (buildMethod && this.peek()?.[0] === "group" && this.peek()![1] === "(") {
+          acc = buildMethod(acc, field);
+        } else {
+          acc = buildField(acc, field);
+        }
       } else {
         throw new Error("Expected field name or numeric index after .");
       }

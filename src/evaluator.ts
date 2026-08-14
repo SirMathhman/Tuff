@@ -129,20 +129,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       return evalFnBodyValue(fn.body, fnEnv);
     }
     case "method-call": {
-      const receiver = evalValue(node.receiver, env);
-      if (receiver.kind !== "this" && receiver.kind !== "scope")
-        throw new Error("Cannot call method on non-scope value");
-      const fn = receiver.env.getFunction(node.name);
-      if (!fn) throw new Error("Undefined function: " + node.name);
-      const fnEnv = new Environment(fn.env ?? receiver.env);
-      fnEnv.setThisTypeName(node.name);
-      if (fn.params.length !== node.args.length)
-        throw new Error(
-          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
-        );
-      for (let i = 0; i < fn.params.length; i++) {
-        fnEnv.declare(fn.params[i]!.name, evalValue(node.args[i]!, env), false);
-      }
+      const { fn, fnEnv } = setupMethodCall(node, env);
       return evalFnBodyValue(fn.body, fnEnv);
     }
     case "block": {
@@ -455,20 +442,7 @@ function evalFunction(node: AstNode, env: Environment): number {
       return evalFnBodyNum(fn.body, fnEnv);
     }
     case "method-call": {
-      const receiver = evalValue(node.receiver, env);
-      if (receiver.kind !== "this" && receiver.kind !== "scope")
-        throw new Error("Cannot call method on non-scope value");
-      const fn = receiver.env.getFunction(node.name);
-      if (!fn) throw new Error("Undefined function: " + node.name);
-      const fnEnv = new Environment(fn.env ?? receiver.env);
-      fnEnv.setThisTypeName(node.name);
-      if (fn.params.length !== node.args.length)
-        throw new Error(
-          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
-        );
-      for (let i = 0; i < fn.params.length; i++) {
-        fnEnv.declare(fn.params[i]!.name, evalValue(node.args[i]!, env), false);
-      }
+      const { fn, fnEnv } = setupMethodCall(node, env);
       return evalFnBodyNum(fn.body, fnEnv);
     }
     default:
@@ -502,6 +476,19 @@ function setupThisFnCall(
   const fn = env.getFunction(node.name);
   if (!fn) throw new Error("Undefined function: " + node.name);
   return createFnEnv(fn, node.name, node.args, env);
+}
+
+/** Resolve a method call on a scope/this receiver. */
+function setupMethodCall(
+  node: import("./ast").MethodCall,
+  env: Environment,
+): { fn: import("./environment").FnDef; fnEnv: Environment } {
+  const receiver = evalValue(node.receiver, env);
+  if (receiver.kind !== "this" && receiver.kind !== "scope")
+    throw new Error("Cannot call method on non-scope value");
+  const fn = receiver.env.getFunction(node.name);
+  if (!fn) throw new Error("Undefined function: " + node.name);
+  return createFnEnv(fn, node.name, node.args, receiver.env);
 }
 
 /** Create a function environment with bound arguments. */
