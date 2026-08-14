@@ -11,6 +11,15 @@ describe("evaluateModules", () => {
       evaluateModules(["main"], { main: "lib::x", lib: "out let x = 100;" }),
     ).toBe(100);
   });
+
+  it('evaluateModules(["main"], { ["main"]: "lib::get", ["lib"]: "out fn get() => 100;" }) => 100', () => {
+    expect(
+      evaluateModules(["main"], {
+        main: "lib::get",
+        lib: "out fn get() => 100;",
+      }),
+    ).toBe(100);
+  });
 });
 
 describe("evaluate", () => {

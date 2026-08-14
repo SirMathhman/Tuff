@@ -606,8 +606,16 @@ export function evaluate(node: AstNode, env: Environment): number {
       }
       return idx;
     }
-    case "module-access":
+    case "module-access": {
+      const fnExport = env.getModuleFnExport(node.moduleName, node.fieldName);
+      if (fnExport) {
+        const fnEnv = new Environment();
+        fnEnv.setModuleExports(env.getModuleExports());
+        fnEnv.setModuleFnExports(env.getModuleFnExports());
+        return evaluate(fnExport.body, fnEnv);
+      }
       return evalModuleAccess(node.moduleName, node.fieldName, env);
+    }
     case "match":
       return evalMatch(node, env, evaluate, evalValue);
     case "tuple-literal":

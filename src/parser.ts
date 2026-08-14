@@ -285,7 +285,10 @@ export class Parser {
       if (this.peek()?.[0] === "kw" && this.peek()![1] === "let") {
         return this.parseLet(true);
       }
-      throw new Error("Expected 'let' after 'out'");
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "fn") {
+        return this.parseFnDef(true);
+      }
+      throw new Error("Expected 'let' or 'fn' after 'out'");
     }
 
     if (token[0] === "kw" && token[1] === "let") {
@@ -1045,7 +1048,7 @@ export class Parser {
     return this.tokens[this.pos + 1];
   }
 
-  private parseFnDef(): AstNode {
+  private parseFnDef(exported = false): AstNode {
     this.consume(); // "fn"
     const nameToken = this.peek();
     if (!nameToken || nameToken[0] !== "id")
@@ -1120,6 +1123,7 @@ export class Parser {
       params,
       returnType,
       body,
+      exported,
     };
   }
 

@@ -68,6 +68,7 @@ export class Environment {
   private parent: Environment | undefined;
   private thisTypeName: string | undefined;
   private moduleExports: Record<string, Record<string, number>> = {};
+  private moduleFnExports: Record<string, Record<string, FnDef>> = {};
 
   constructor(parent?: Environment) {
     this.parent = parent;
@@ -87,6 +88,22 @@ export class Environment {
 
   getModuleExport(moduleName: string, fieldName: string): number | undefined {
     return this.moduleExports[moduleName]?.[fieldName];
+  }
+
+  getModuleExports(): Record<string, Record<string, number>> {
+    return this.moduleExports;
+  }
+
+  setModuleFnExports(exports: Record<string, Record<string, FnDef>>): void {
+    this.moduleFnExports = exports;
+  }
+
+  getModuleFnExport(moduleName: string, fieldName: string): FnDef | undefined {
+    return this.moduleFnExports[moduleName]?.[fieldName];
+  }
+
+  getModuleFnExports(): Record<string, Record<string, FnDef>> {
+    return this.moduleFnExports;
   }
 
   declare(name: string, value: Value, mutable = false): void {

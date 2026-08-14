@@ -326,6 +326,7 @@ export interface FnDef {
   params: { name: string; type: TypeNode }[];
   returnType: TypeNode;
   body: AstNode;
+  exported?: boolean;
 }
 
 export interface FnCall {

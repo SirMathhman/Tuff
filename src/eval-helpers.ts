@@ -33,9 +33,7 @@ export function evalModuleAccess(
 ): number {
   const value = env.getModuleExport(moduleName, fieldName);
   if (value === undefined)
-    throw new Error(
-      `Module export not found: ${moduleName}::${fieldName}`,
-    );
+    throw new Error(`Module export not found: ${moduleName}::${fieldName}`);
   return value;
 }
 
