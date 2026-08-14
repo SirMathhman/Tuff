@@ -65,6 +65,7 @@ export type AstNode =
   | FnDef
   | FnCall
   | ThisFnCall
+  | MethodCall
   | FnRef
   | Lambda
   | This
@@ -322,6 +323,13 @@ export interface FnCall {
 export interface ThisFnCall {
   type: "this-fn-call";
   scope: AstNode;
+  name: string;
+  args: AstNode[];
+}
+
+export interface MethodCall {
+  type: "method-call";
+  receiver: AstNode;
   name: string;
   args: AstNode[];
 }

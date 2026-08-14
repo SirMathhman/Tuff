@@ -128,6 +128,23 @@ function evalValue(node: AstNode, env: Environment): Value {
       const { fn, fnEnv } = setupThisFnCall(node, env);
       return evalFnBodyValue(fn.body, fnEnv);
     }
+    case "method-call": {
+      const receiver = evalValue(node.receiver, env);
+      if (receiver.kind !== "this" && receiver.kind !== "scope")
+        throw new Error("Cannot call method on non-scope value");
+      const fn = receiver.env.getFunction(node.name);
+      if (!fn) throw new Error("Undefined function: " + node.name);
+      const fnEnv = new Environment(fn.env ?? receiver.env);
+      fnEnv.setThisTypeName(node.name);
+      if (fn.params.length !== node.args.length)
+        throw new Error(
+          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
+        );
+      for (let i = 0; i < fn.params.length; i++) {
+        fnEnv.declare(fn.params[i]!.name, evalValue(node.args[i]!, env), false);
+      }
+      return evalFnBodyValue(fn.body, fnEnv);
+    }
     case "block": {
       if (node.statements.length === 0) throw new Error("Empty block");
       const blockEnv = new Environment(env);
@@ -437,6 +454,23 @@ function evalFunction(node: AstNode, env: Environment): number {
       const { fn, fnEnv } = setupThisFnCall(node, env);
       return evalFnBodyNum(fn.body, fnEnv);
     }
+    case "method-call": {
+      const receiver = evalValue(node.receiver, env);
+      if (receiver.kind !== "this" && receiver.kind !== "scope")
+        throw new Error("Cannot call method on non-scope value");
+      const fn = receiver.env.getFunction(node.name);
+      if (!fn) throw new Error("Undefined function: " + node.name);
+      const fnEnv = new Environment(fn.env ?? receiver.env);
+      fnEnv.setThisTypeName(node.name);
+      if (fn.params.length !== node.args.length)
+        throw new Error(
+          `Function expects ${fn.params.length} arguments, got ${node.args.length}`,
+        );
+      for (let i = 0; i < fn.params.length; i++) {
+        fnEnv.declare(fn.params[i]!.name, evalValue(node.args[i]!, env), false);
+      }
+      return evalFnBodyNum(fn.body, fnEnv);
+    }
     default:
       throw new Error(`Unexpected function: ${node.type}`);
   }
@@ -532,6 +566,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "fnref":
     case "fn-call":
     case "this-fn-call":
+    case "method-call":
       return evalFunction(node, env);
     case "deref":
       return evaluate(node.operand, env);

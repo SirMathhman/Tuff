@@ -466,11 +466,30 @@ export class Parser {
   }
 
   private consumeStructAccessChains(node: AstNode): AstNode {
-    return this.consumeDotChain(
-      node,
-      (n, f) => ({ type: "struct-access", struct: n, field: f }),
-      (n, i) => ({ type: "tuple-access", tuple: n, index: i }),
-    );
+    while (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+      this.consume(); // "."
+      const nextToken = this.peek();
+      if (!nextToken) throw new Error("Expected field/index after .");
+      if (nextToken[0] === "num") {
+        const index = nextToken[1];
+        this.consume();
+        node = { type: "tuple-access", tuple: node, index };
+      } else if (nextToken[0] === "id") {
+        const field = nextToken[1];
+        this.consume();
+        // Check for method call: .name(args)
+        if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {
+          this.consume(); // "("
+          const args = this.parseParenList(() => this.parseAddSub());
+          node = { type: "method-call", receiver: node, name: field, args };
+        } else {
+          node = { type: "struct-access", struct: node, field };
+        }
+      } else {
+        throw new Error("Expected field name or numeric index after .");
+      }
+    }
+    return node;
   }
 
   private consumeScopeAccessChains(node: AstNode): AstNode {

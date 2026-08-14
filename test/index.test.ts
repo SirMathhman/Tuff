@@ -733,4 +733,8 @@ describe("evaluate", () => {
   it('evaluate("fn get() => 100; this.get()") => 100', () => {
     expect(evaluate("fn get() => 100; this.get()")).toBe(100);
   });
+
+  it('evaluate("fn Outer(value : I32) => { fn inner() => value; this } Outer(100).inner()") => 100', () => {
+    expect(evaluate("fn Outer(value : I32) => { fn inner() => value; this } Outer(100).inner()")).toBe(100);
+  });
 });
