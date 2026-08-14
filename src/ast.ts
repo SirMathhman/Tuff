@@ -22,7 +22,8 @@ export type LValue =
   | { kind: "var"; name: string }
   | { kind: "deref"; ref: LValue }
   | { kind: "index"; array: LValue; index: AstNode }
-  | { kind: "field"; struct: LValue; field: string };
+  | { kind: "field"; struct: LValue; field: string }
+  | { kind: "scope-field"; scope: AstNode; field: string };
 
 export type AstNode =
   | Num

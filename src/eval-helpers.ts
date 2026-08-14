@@ -239,6 +239,15 @@ export function resolveLValue(
         throw new Error(`Field not found: ${lvalue.field}`);
       return field;
     }
+    case "scope-field": {
+      const scope = evalValue(lvalue.scope, env);
+      if (scope.kind !== "scope")
+        throw new Error("Cannot access scope on non-scope value");
+      const v = scope.env.get(lvalue.field);
+      if (v === undefined)
+        throw new Error(`Undefined variable: ${lvalue.field}`);
+      return v;
+    }
   }
 }
 
@@ -273,6 +282,13 @@ export function writeLValue(
       if (struct.kind !== "struct")
         throw new Error("Cannot assign field on non-struct value");
       struct.fields[lvalue.field] = value;
+      return;
+    }
+    case "scope-field": {
+      const v = env.get(lvalue.field);
+      if (v === undefined)
+        throw new Error(`Undefined variable: ${lvalue.field}`);
+      env.assign(lvalue.field, value);
       return;
     }
   }

@@ -423,6 +423,22 @@ export class Parser {
       return { lvalue, startPos };
     }
 
+    // this.field
+    if (token[0] === "kw" && token[1] === "this") {
+      this.consume();
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+        this.consume(); // "."
+        const fieldToken = this.peek();
+        if (!fieldToken || fieldToken[0] !== "id")
+          throw new Error("Expected field name after .");
+        const field = fieldToken[1];
+        this.consume();
+        return { lvalue: { kind: "scope-field", scope: { type: "this" }, field }, startPos };
+      }
+      this.pos = startPos;
+      return undefined;
+    }
+
     return undefined;
   }
 
