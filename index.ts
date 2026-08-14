@@ -108,5 +108,23 @@ export function interpret(input: string): number {
     return parseNumber(tokens[pos++]!);
   }
 
-  return parseExpr();
+  function parseProgram(): number {
+    let result = 0;
+    while (pos < tokens.length) {
+      if (tokens[pos] === "let") {
+        pos++;
+        const name = tokens[pos++]!;
+        if (tokens[pos] === "=") pos++;
+        result = parseExpr();
+        scope.set(name, result);
+        if (tokens[pos] === ";") pos++;
+      } else {
+        result = parseExpr();
+        if (tokens[pos] === ";") pos++;
+      }
+    }
+    return result;
+  }
+
+  return parseProgram();
 }

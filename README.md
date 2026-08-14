@@ -20,7 +20,15 @@ Inside `{}` blocks, you can declare variables using `let`:
 
 Variables are scoped to the block in which they are declared and can be referenced by name in subsequent expressions within the same block.
 
-## Tests
+You can also use `let` at the top level (outside of any block):
+
+```
+let y = { let x = 2 + 3; x } * 4; y
+```
+
+This returns `20`.
+
+#### Tests
 
 Run the test suite with:
 
