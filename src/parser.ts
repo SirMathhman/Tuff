@@ -1078,7 +1078,9 @@ export class Parser {
   private parseFnCall(name: string): AstNode {
     this.consume(); // "("
     const args = this.parseParenList(() => this.parseAddSub());
-    return { type: "fn-call", name, args };
+    let node: AstNode = { type: "fn-call", name, args };
+    node = this.consumeStructAccessChains(node);
+    return node;
   }
 
   private parsePrimary(): AstNode {

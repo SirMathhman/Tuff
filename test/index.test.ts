@@ -717,4 +717,8 @@ describe("evaluate", () => {
   it('evaluate("fn Empty() => this; Empty() is Empty") => 1', () => {
     expect(evaluate("fn Empty() => this; Empty() is Empty")).toBe(1);
   });
+
+  it('evaluate("fn Empty() => { let x = 100; this } Empty().x") => 100', () => {
+    expect(evaluate("fn Empty() => { let x = 100; this } Empty().x")).toBe(100);
+  });
 });

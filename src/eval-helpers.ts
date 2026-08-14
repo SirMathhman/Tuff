@@ -146,6 +146,12 @@ export function evalStruct(
     }
     case "struct-access": {
       const struct = evalValue(node.struct, env);
+      if (struct.kind === "this") {
+        const v = struct.env.get(node.field);
+        if (v === undefined)
+          throw new Error(`Undefined variable: ${node.field}`);
+        return v;
+      }
       if (struct.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");
       const field = struct.fields[node.field];

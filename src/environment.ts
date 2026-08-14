@@ -19,7 +19,7 @@ export type Value =
   | { kind: "tuple"; elements: Value[] }
   | { kind: "fnref"; fn: FnDef }
   | { kind: "scope"; env: Environment }
-  | { kind: "this"; typeName: string };
+  | { kind: "this"; typeName: string; env: Environment };
 
 export type Ref = { name: string; env: Environment; mutable: boolean };
 

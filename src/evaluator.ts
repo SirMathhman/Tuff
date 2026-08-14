@@ -30,7 +30,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "this": {
       const typeName = env.getThisTypeName();
       if (typeName) {
-        return { kind: "this", typeName };
+        return { kind: "this", typeName, env };
       }
       return { kind: "scope", env };
     }
@@ -51,6 +51,12 @@ function evalValue(node: AstNode, env: Environment): Value {
       return evalStruct(node, env, evalValue);
     case "scope-access": {
       const scope = evalValue(node.scope, env);
+      if (scope.kind === "this") {
+        const v = scope.env.get(node.field);
+        if (v === undefined)
+          throw new Error(`Undefined variable: ${node.field}`);
+        return v;
+      }
       if (scope.kind !== "scope")
         throw new Error("Cannot access scope on non-scope value");
       return resolveScopeField(scope, node.field);
@@ -105,7 +111,19 @@ function evalValue(node: AstNode, env: Environment): Value {
         throw e;
       }
     }
-    case "block":
+    case "block": {
+      if (node.statements.length === 0) throw new Error("Empty block");
+      const blockEnv = new Environment(env);
+      let last: Value = num(0);
+      for (const stmt of node.statements) {
+        if (stmt.type === "let") {
+          last = num(evaluate(stmt, blockEnv));
+        } else {
+          last = evalValue(stmt, blockEnv);
+        }
+      }
+      return last;
+    }
     case "if-statement":
     case "if-expression":
     case "for-loop":
@@ -342,6 +360,12 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
       return 0;
     case "struct-access": {
       const structVal = evalValue(node.struct, env);
+      if (structVal.kind === "this") {
+        const v = structVal.env.get(node.field);
+        if (v === undefined)
+          throw new Error(`Undefined variable: ${node.field}`);
+        return toNumber(v);
+      }
       if (node.field === "length" && structVal.kind === "array") {
         return structVal.elements.length;
       }
@@ -354,6 +378,12 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
     }
     case "scope-access": {
       const scopeVal = evalValue(node.scope, env);
+      if (scopeVal.kind === "this") {
+        const v = scopeVal.env.get(node.field);
+        if (v === undefined)
+          throw new Error(`Undefined variable: ${node.field}`);
+        return toNumber(v);
+      }
       if (scopeVal.kind !== "scope")
         throw new Error("Cannot access scope on non-scope value");
       return toNumber(resolveScopeField(scopeVal, node.field));
@@ -467,6 +497,8 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "deref":
       return evaluate(node.operand, env);
     case "ref":
+      return 0;
+    case "this":
       return 0;
     case "block": {
       if (node.statements.length === 0) throw new Error("Empty block");
