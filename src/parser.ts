@@ -981,14 +981,14 @@ export class Parser {
     return this.parseBlockBody();
   }
 
-  private parseStructLiteralBody(): AstNode {
+  private parseStructLiteralBody(typeName?: string): AstNode {
     const fields = this.parseStructFields(
       () => this.parseAddSub(),
       "Expected field name",
       "Expected : after field name",
     );
     this.consume(); // "}"
-    return { type: "struct-literal", fields };
+    return { type: "struct-literal", typeName, fields };
   }
 
   private parseBlockBody(): AstNode {
@@ -1234,19 +1234,7 @@ export class Parser {
           // Check for module-qualified struct literal: lib::Point { ... }
           if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {
             this.consume(); // "{"
-            const fields = this.parseStructFields(
-              () => this.parseAddSub(),
-              "Expected field name",
-              "Expected : after field name",
-            );
-            if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
-              throw new Error("Expected } in struct literal");
-            this.consume(); // "}"
-            return {
-              type: "struct-literal",
-              typeName: field,
-              fields,
-            };
+            return this.parseStructLiteralBody(field);
           }
           return {
             type: "module-access",
