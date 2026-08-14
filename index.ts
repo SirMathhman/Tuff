@@ -1,10 +1,19 @@
+import { tokenize } from "./tokenizer";
+
+function formatError(input: string, pos: number, message: string): string {
+  const start = Math.max(0, pos - 10);
+  const end = Math.min(input.length, pos + 10);
+  const snippet = input.slice(start, end);
+  const caretPos = pos - start;
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < input.length ? "..." : "";
+  return `${message}\n  ${prefix}"${snippet}"${suffix}\n  ${" ".repeat(caretPos)}^`;
+}
+
 export function interpret(input: string): number {
   if (input === "") return 0;
 
-  const tokens = input
-    .split(/(\+|-|\*|\/|\(|\)|\{|\}|=|;|let)/)
-    .map((s) => s.trim())
-    .filter((s) => s !== "");
+  const tokens = tokenize(input);
 
   let pos = 0;
   const scope = new Map<string, number>();
@@ -38,7 +47,14 @@ export function interpret(input: string): number {
   function parseNumber(token: string): number {
     const value = Number(token);
     if (Number.isNaN(value)) {
-      throw new Error(`Invalid number: "${token}"`);
+      const idx = input.indexOf(token);
+      throw new Error(
+        formatError(
+          input,
+          idx,
+          `Invalid number: "${token}" — did you mean to use a numeric literal?`,
+        ),
+      );
     }
     return value;
   }
@@ -68,8 +84,13 @@ export function interpret(input: string): number {
       pos++;
       const result = parseExpr();
       if (tokens[pos] !== ")") {
+        const idx = input.indexOf(tokens[pos] || "");
         throw new Error(
-          `Expected closing bracket ")" but found "${tokens[pos] || "end of input"}"`,
+          formatError(
+            input,
+            idx,
+            `Expected closing bracket ")" but found "${tokens[pos] || "end of input"}" — add a ")" to close the expression`,
+          ),
         );
       }
       pos++;
@@ -89,5 +110,3 @@ export function interpret(input: string): number {
 
   return parseExpr();
 }
-
-console.log("Hello via Bun!");
