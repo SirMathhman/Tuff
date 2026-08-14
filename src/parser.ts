@@ -204,7 +204,7 @@ export class Parser {
     return { name, items };
   }
 
-  private parseStructDef(): AstNode {
+  private parseStructDef(exported = false): AstNode {
     const { name, items } = this.parseBraceDef("struct", () =>
       this.parseStructFields(
         () => this.parseType(),
@@ -217,7 +217,7 @@ export class Parser {
       mutable: f.mutable,
       type: f.value,
     }));
-    return { type: "struct-def", name, fields };
+    return { type: "struct-def", name, fields, exported };
   }
 
   private parseEnumDef(): AstNode {
@@ -287,6 +287,9 @@ export class Parser {
       }
       if (this.peek()?.[0] === "kw" && this.peek()![1] === "fn") {
         return this.parseFnDef(true);
+      }
+      if (this.peek()?.[0] === "kw" && this.peek()![1] === "struct") {
+        return this.parseStructDef(true);
       }
       throw new Error("Expected 'let' or 'fn' after 'out'");
     }
@@ -1228,6 +1231,23 @@ export class Parser {
         this.consume();
         // If moduleName is in moduleNames, treat as module access
         if (this.moduleNames?.has(token[1])) {
+          // Check for module-qualified struct literal: lib::Point { ... }
+          if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {
+            this.consume(); // "{"
+            const fields = this.parseStructFields(
+              () => this.parseAddSub(),
+              "Expected field name",
+              "Expected : after field name",
+            );
+            if (this.peek()?.[0] !== "group" || this.peek()![1] !== "}")
+              throw new Error("Expected } in struct literal");
+            this.consume(); // "}"
+            return {
+              type: "struct-literal",
+              typeName: field,
+              fields,
+            };
+          }
           return {
             type: "module-access",
             moduleName: token[1],

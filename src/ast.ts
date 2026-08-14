@@ -252,6 +252,7 @@ export interface ArrayIndex {
 
 export interface StructLiteral {
   type: "struct-literal";
+  typeName?: string;
   fields: { name: string; value: AstNode }[];
 }
 
@@ -281,6 +282,7 @@ export interface StructDef {
   type: "struct-def";
   name: string;
   fields: { name: string; mutable: boolean; type: TypeNode }[];
+  exported?: boolean;
 }
 
 export interface EnumDef {

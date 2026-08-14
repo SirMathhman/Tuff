@@ -1,4 +1,4 @@
-import type { AstNode, TypeNode } from "./ast";
+import type { AstNode, StructDef, TypeNode } from "./ast";
 import type { IntTypeName } from "./types";
 
 /** Discriminated union for all runtime values the language can produce. */
@@ -69,6 +69,7 @@ export class Environment {
   private thisTypeName: string | undefined;
   private moduleExports: Record<string, Record<string, number>> = {};
   private moduleFnExports: Record<string, Record<string, () => number>> = {};
+  private moduleStructExports: Record<string, Record<string, StructDef>> = {};
 
   constructor(parent?: Environment) {
     this.parent = parent;
@@ -94,16 +95,34 @@ export class Environment {
     return this.moduleExports;
   }
 
-  setModuleFnExports(exports: Record<string, Record<string, () => number>>): void {
+  setModuleFnExports(
+    exports: Record<string, Record<string, () => number>>,
+  ): void {
     this.moduleFnExports = exports;
   }
 
-  getModuleFnExport(moduleName: string, fieldName: string): (() => number) | undefined {
+  getModuleFnExport(
+    moduleName: string,
+    fieldName: string,
+  ): (() => number) | undefined {
     return this.moduleFnExports[moduleName]?.[fieldName];
   }
 
   getModuleFnExports(): Record<string, Record<string, () => number>> {
     return this.moduleFnExports;
+  }
+
+  setModuleStructExports(
+    exports: Record<string, Record<string, StructDef>>,
+  ): void {
+    this.moduleStructExports = exports;
+  }
+
+  getModuleStructExport(
+    moduleName: string,
+    structName: string,
+  ): StructDef | undefined {
+    return this.moduleStructExports[moduleName]?.[structName];
   }
 
   declare(name: string, value: Value, mutable = false): void {
