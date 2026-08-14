@@ -34,14 +34,29 @@ export function interpret(input: string): number {
     return result;
   }
 
+  function parseNumber(token: string): number {
+    const value = Number(token);
+    if (Number.isNaN(value)) {
+      throw new Error(`Invalid number: "${token}"`);
+    }
+    return value;
+  }
+
   function parseFactor(): number {
-    if (tokens[pos] === "(" || tokens[pos] === "{") {
-      pos++; // consume '(' or '{'
+    const open = tokens[pos];
+    if (open === "(" || open === "{") {
+      const close = open === "(" ? ")" : "}";
+      pos++;
       const result = parseExpr();
-      pos++; // consume ')' or '}'
+      if (tokens[pos] !== close) {
+        throw new Error(
+          `Expected closing bracket "${close}" but found "${tokens[pos] || "end of input"}"`,
+        );
+      }
+      pos++;
       return result;
     }
-    return Number(tokens[pos++]);
+    return parseNumber(tokens[pos++]!);
   }
 
   return parseExpr();
