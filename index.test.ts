@@ -21,4 +21,8 @@ describe("interpret", () => {
   test('interpret("2 * 3 + 4") returns 10', () => {
     expect(interpret("2 * 3 + 4")).toBe(10);
   });
+
+  test('interpret("(2 + 3) * 4") returns 20', () => {
+    expect(interpret("(2 + 3) * 4")).toBe(20);
+  });
 });

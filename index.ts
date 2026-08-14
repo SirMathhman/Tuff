@@ -1,28 +1,50 @@
 export function interpret(input: string): number {
   if (input === "") return 0;
 
-  // Tokenize into numbers and operators
   const tokens = input
-    .split(/(\+|-|\*|\/)/)
+    .split(/(\+|-|\*|\/|\(|\))/)
     .map((s) => s.trim())
     .filter((s) => s !== "");
 
-  // Pass 1: evaluate * and / (high precedence)
-  const reduced: number[] = [Number(tokens[0])];
-  for (let i = 1; i < tokens.length; i += 2) {
-    const op = tokens[i];
-    const num = Number(tokens[i + 1]);
-    if (op === "*") {
-      reduced[reduced.length - 1]! *= num;
-    } else if (op === "/") {
-      reduced[reduced.length - 1]! /= num;
-    } else {
-      reduced.push(op === "+" ? num : -num);
+  let pos = 0;
+
+  function parseExpr(): number {
+    let result = parseTerm();
+    while (
+      pos < tokens.length &&
+      (tokens[pos] === "+" || tokens[pos] === "-")
+    ) {
+      const op = tokens[pos++];
+      const right = parseTerm();
+      result = op === "+" ? result + right : result - right;
     }
+    return result;
   }
 
-  // Pass 2: evaluate + and - (low precedence)
-  return reduced.reduce((a, b) => a + b, 0);
+  function parseTerm(): number {
+    let result = parseFactor();
+    while (
+      pos < tokens.length &&
+      (tokens[pos] === "*" || tokens[pos] === "/")
+    ) {
+      const op = tokens[pos++];
+      const right = parseFactor();
+      result = op === "*" ? result * right : result / right;
+    }
+    return result;
+  }
+
+  function parseFactor(): number {
+    if (tokens[pos] === "(") {
+      pos++; // consume '('
+      const result = parseExpr();
+      pos++; // consume ')'
+      return result;
+    }
+    return Number(tokens[pos++]);
+  }
+
+  return parseExpr();
 }
 
 console.log("Hello via Bun!");
