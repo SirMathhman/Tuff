@@ -609,10 +609,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "module-access": {
       const fnExport = env.getModuleFnExport(node.moduleName, node.fieldName);
       if (fnExport) {
-        const fnEnv = new Environment();
-        fnEnv.setModuleExports(env.getModuleExports());
-        fnEnv.setModuleFnExports(env.getModuleFnExports());
-        return evaluate(fnExport.body, fnEnv);
+        return fnExport();
       }
       return evalModuleAccess(node.moduleName, node.fieldName, env);
     }

@@ -68,7 +68,7 @@ export class Environment {
   private parent: Environment | undefined;
   private thisTypeName: string | undefined;
   private moduleExports: Record<string, Record<string, number>> = {};
-  private moduleFnExports: Record<string, Record<string, FnDef>> = {};
+  private moduleFnExports: Record<string, Record<string, () => number>> = {};
 
   constructor(parent?: Environment) {
     this.parent = parent;
@@ -94,15 +94,15 @@ export class Environment {
     return this.moduleExports;
   }
 
-  setModuleFnExports(exports: Record<string, Record<string, FnDef>>): void {
+  setModuleFnExports(exports: Record<string, Record<string, () => number>>): void {
     this.moduleFnExports = exports;
   }
 
-  getModuleFnExport(moduleName: string, fieldName: string): FnDef | undefined {
+  getModuleFnExport(moduleName: string, fieldName: string): (() => number) | undefined {
     return this.moduleFnExports[moduleName]?.[fieldName];
   }
 
-  getModuleFnExports(): Record<string, Record<string, FnDef>> {
+  getModuleFnExports(): Record<string, Record<string, () => number>> {
     return this.moduleFnExports;
   }
 
