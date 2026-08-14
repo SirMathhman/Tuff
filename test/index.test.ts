@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { evaluate } from "../src/index";
+import { evaluate, evaluateModules } from "../src/index";
+
+describe("evaluateModules", () => {
+  it('evaluateModules(["main"], { ["main"]: "100" }) => 100', () => {
+    expect(evaluateModules(["main"], { main: "100" })).toBe(100);
+  });
+});
 
 describe("evaluate", () => {
   it('evaluate("") => 0', () => {

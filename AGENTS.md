@@ -17,18 +17,20 @@ Tuff is a custom programming language interpreter written in TypeScript, run wit
 
 Classic compiler pipeline: `Source → Tokenizer → Parser → Type Checker → Evaluator → Result`
 
-| File                  | Role                                                                           |
-| --------------------- | ------------------------------------------------------------------------------ |
-| `src/index.ts`        | Entry — `evaluate(source: string): number`                                     |
-| `src/tokenizer.ts`    | Regex-based lexer; produces tuple tokens `[kind, value]`                       |
-| `src/parser.ts`       | Recursive descent parser; produces `AstNode[]`                                 |
-| `src/ast.ts`          | Discriminated union AST types                                                  |
-| `src/type-checker.ts` | Validates integer range/signedness                                             |
-| `src/evaluator.ts`    | Interpreter — `evaluate()` (returns `number`), `evalValue()` (returns `Value`) |
-| `src/eval-helpers.ts` | Shared eval utilities — `evalRange`, `getIndex`, `evalLiteral`, etc.           |
-| `src/environment.ts`  | Symbol table with scoping, mutability, refs                                    |
-| `src/control-flow.ts` | `Break` / `Continue` / `Yield` / `Return` Error subclasses                     |
-| `src/types.ts`        | Integer type definitions (`u8`, `i32`, …) and promotion rules                  |
+| File                    | Role                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `src/index.ts`            | Entry — `evaluate(source: string): number`, `evaluateModules(names, sources)`  |
+| `src/tokenizer.ts`      | Regex-based lexer; produces tuple tokens `[kind, value]`                       |
+| `src/parser.ts`         | Recursive descent parser; produces `AstNode[]`                                 |
+| `src/parser-utils.ts`   | Shared parsing utilities — struct/tuple/scope field builders                   |
+| `src/ast.ts`            | Discriminated union AST types                                                  |
+| `src/type-checker.ts`   | Validates integer range/signedness                                             |
+| `src/borrow-checker.ts` | Ownership tracker — `OwnershipTracker` for borrow/move semantics               |
+| `src/evaluator.ts`      | Interpreter — `evaluate()` (returns `number`), `evalValue()` (returns `Value`) |
+| `src/eval-helpers.ts`   | Shared eval utilities — `evalRange`, `getIndex`, `evalLiteral`, etc.           |
+| `src/environment.ts`    | Symbol table with scoping, mutability, refs                                    |
+| `src/control-flow.ts`   | `Break` / `Continue` / `Yield` / `Return` Error subclasses                     |
+| `src/types.ts`          | Integer type definitions (`u8`, `i32`, …) and promotion rules                  |
 
 ## Conventions
 
