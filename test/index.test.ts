@@ -741,4 +741,12 @@ describe("evaluate", () => {
       ),
     ).toBe(100);
   });
+
+  it('evaluate("fn Counter() => { let mut value = 0; fn addOnce() : Void => { value += 1; } this } let mut c = Counter(); c.addOnce(); c.value") => 1', () => {
+    expect(
+      evaluate(
+        "fn Counter() => { let mut value = 0; fn addOnce() : Void => { value += 1; } this } let mut c = Counter(); c.addOnce(); c.value",
+      ),
+    ).toBe(1);
+  });
 });
