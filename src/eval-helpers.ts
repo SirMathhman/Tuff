@@ -240,13 +240,13 @@ export function resolveLValue(
       return field;
     }
     case "scope-field": {
-      return resolveScopeField(env, lvalue.field);
+      return getScopeField(env, lvalue.field);
     }
   }
 }
 
 /** Get a variable from scope, throwing if undefined. */
-function resolveScopeField(env: Environment, field: string): Value {
+function getScopeField(env: Environment, field: string): Value {
   const v = env.get(field);
   if (v === undefined)
     throw new Error(`Undefined variable: ${field}`);
@@ -287,7 +287,7 @@ export function writeLValue(
       return;
     }
     case "scope-field": {
-      resolveScopeField(env, lvalue.field);
+      getScopeField(env, lvalue.field);
       env.assign(lvalue.field, value);
       return;
     }
