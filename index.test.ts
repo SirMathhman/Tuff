@@ -13,4 +13,8 @@ describe("interpret", () => {
   test('interpret("1 + 2") returns 3', () => {
     expect(interpret("1 + 2")).toBe(3);
   });
+
+  test('interpret("2 + 3 - 4") returns 1', () => {
+    expect(interpret("2 + 3 - 4")).toBe(1);
+  });
 });

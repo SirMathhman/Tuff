@@ -6,7 +6,7 @@ Tuff is a language interpreter written in TypeScript with Bun.
 
 ### `interpret(input: string): number`
 
-Takes a string input and returns a number.
+Takes a string input with addition (`+`) and subtraction (`-`) operations and returns the resulting number.
 
 ## Tests
 
