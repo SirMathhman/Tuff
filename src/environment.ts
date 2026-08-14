@@ -91,6 +91,16 @@ export class Environment {
     return this.moduleExports[moduleName]?.[fieldName];
   }
 
+  getModuleExportByPath(path: string[]): number | undefined {
+    for (let i = path.length - 1; i >= 1; i--) {
+      const modKey = path.slice(0, i).join("::");
+      const field = path[i]!;
+      const v = this.moduleExports[modKey]?.[field];
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  }
+
   getModuleExports(): Record<string, Record<string, number>> {
     return this.moduleExports;
   }
@@ -108,6 +118,16 @@ export class Environment {
     return this.moduleFnExports[moduleName]?.[fieldName];
   }
 
+  getModuleFnExportByPath(path: string[]): (() => number) | undefined {
+    for (let i = path.length - 1; i >= 1; i--) {
+      const modKey = path.slice(0, i).join("::");
+      const field = path[i]!;
+      const v = this.moduleFnExports[modKey]?.[field];
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  }
+
   getModuleFnExports(): Record<string, Record<string, () => number>> {
     return this.moduleFnExports;
   }
@@ -123,6 +143,16 @@ export class Environment {
     structName: string,
   ): StructDef | undefined {
     return this.moduleStructExports[moduleName]?.[structName];
+  }
+
+  getModuleStructExportByPath(path: string[]): StructDef | undefined {
+    for (let i = path.length - 1; i >= 1; i--) {
+      const modKey = path.slice(0, i).join("::");
+      const field = path[i]!;
+      const v = this.moduleStructExports[modKey]?.[field];
+      if (v !== undefined) return v;
+    }
+    return undefined;
   }
 
   declare(name: string, value: Value, mutable = false): void {

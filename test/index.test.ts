@@ -29,6 +29,15 @@ describe("evaluateModules", () => {
       }),
     ).toBe(7);
   });
+
+  it('evaluateModules(["main"], { ["main"]: "let pt = lib::foo::Point { x : 3, y : 4 }; pt.x + pt.y", ["lib", "foo"]: "out struct Point { x : I32, y : I32 }" }) => 7', () => {
+    expect(
+      evaluateModules(["main"], {
+        main: "let pt = lib::foo::Point { x : 3, y : 4 }; pt.x + pt.y",
+        "lib::foo": "out struct Point { x : I32, y : I32 }",
+      }),
+    ).toBe(7);
+  });
 });
 
 describe("evaluate", () => {

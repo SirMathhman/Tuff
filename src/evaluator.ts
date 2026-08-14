@@ -85,7 +85,7 @@ function evalValue(node: AstNode, env: Environment): Value {
       return resolveScopeField(scope, node.field);
     }
     case "module-access": {
-      return num(evalModuleAccess(node.moduleName, node.fieldName, env));
+      return num(evalModuleAccess(node.modulePath, env));
     }
     case "tuple-literal": {
       const elements = node.elements.map((el) => evalValue(el, env));
@@ -607,11 +607,11 @@ export function evaluate(node: AstNode, env: Environment): number {
       return idx;
     }
     case "module-access": {
-      const fnExport = env.getModuleFnExport(node.moduleName, node.fieldName);
+      const fnExport = env.getModuleFnExportByPath(node.modulePath);
       if (fnExport) {
         return fnExport();
       }
-      return evalModuleAccess(node.moduleName, node.fieldName, env);
+      return evalModuleAccess(node.modulePath, env);
     }
     case "match":
       return evalMatch(node, env, evaluate, evalValue);

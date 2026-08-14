@@ -155,8 +155,7 @@ export interface Let {
 
 export interface ModuleAccess {
   type: "module-access";
-  moduleName: string;
-  fieldName: string;
+  modulePath: string[];
 }
 
 export interface Block {

@@ -1221,28 +1221,41 @@ export class Parser {
         return { type: "this-type", typeName: name };
       }
       this.consume();
-      // Check for module/enum access: Name::Field
+      // Collect all :: id segments into path[]
       if (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
-        this.consume(); // "::"
-        const fieldToken = this.peek();
-        if (!fieldToken || fieldToken[0] !== "id")
-          throw new Error("Expected field name after ::");
-        const field = fieldToken[1];
-        this.consume();
-        // If moduleName is in moduleNames, treat as module access
-        if (this.moduleNames?.has(token[1])) {
-          // Check for module-qualified struct literal: lib::Point { ... }
+        const path: string[] = [token[1]];
+        while (this.peek()?.[0] === "op" && this.peek()![1] === "::") {
+          this.consume(); // "::"
+          const segToken = this.peek();
+          if (!segToken || segToken[0] !== "id")
+            throw new Error("Expected identifier after ::");
+          path.push(segToken[1]);
+          this.consume();
+        }
+        // Check if any prefix of path joined with :: exists in moduleNames
+        let moduleKey: string | undefined;
+        for (let i = path.length - 1; i >= 1; i--) {
+          const candidate = path.slice(0, i).join("::");
+          if (this.moduleNames?.has(candidate)) {
+            moduleKey = candidate;
+            break;
+          }
+        }
+        if (moduleKey) {
+          // Check for module-qualified struct literal: lib::foo::Point { ... }
           if (this.peek()?.[0] === "group" && this.peek()![1] === "{") {
             this.consume(); // "{"
-            return this.parseStructLiteralBody(field);
+            return this.parseStructLiteralBody(path[path.length - 1]);
           }
           return {
             type: "module-access",
-            moduleName: token[1],
-            fieldName: field,
+            modulePath: path,
           };
         }
-        return { type: "enum-access", enumName: token[1], variant: field };
+        // Fallback: enum access (only for 2-element paths)
+        if (path.length === 2)
+          return { type: "enum-access", enumName: path[0]!, variant: path[1]! };
+        throw new Error(`Unknown path: ${path.join("::")}`);
       }
       // Check for function call: name(args)
       if (this.peek()?.[0] === "group" && this.peek()![1] === "(") {

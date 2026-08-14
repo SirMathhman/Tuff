@@ -65,8 +65,10 @@ Legend: ❌ Missing · ⚠️ Partial
 
 | Feature              | Tuff | Rust | TypeScript | Kotlin |
 | -------------------- | ---- | ---- | ---------- | ------ |
-| Modules / imports    | ❌   | ✅   | ✅         | ✅     |
+| Modules / imports    | ⚠️   | ✅   | ✅         | ✅     |
 | Namespaces           | ❌   | ❌   | ✅         | ✅     |
+
+> **Note:** Basic module support exists (`out let` exports, `module::field` access). Nested module paths (`lib::foo::Point`) are supported.
 | Packages             | ❌   | ✅   | ❌         | ✅     |
 | Visibility modifiers | ❌   | ✅   | ❌         | ✅     |
 | Re-exports           | ❌   | ✅   | ✅         | ✅     |

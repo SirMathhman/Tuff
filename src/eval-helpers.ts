@@ -27,13 +27,12 @@ export { resolveScopeField };
 
 /** Resolve a module export to a number, throwing if undefined. */
 export function evalModuleAccess(
-  moduleName: string,
-  fieldName: string,
+  modulePath: string[],
   env: Environment,
 ): number {
-  const value = env.getModuleExport(moduleName, fieldName);
+  const value = env.getModuleExportByPath(modulePath);
   if (value === undefined)
-    throw new Error(`Module export not found: ${moduleName}::${fieldName}`);
+    throw new Error(`Module export not found: ${modulePath.join("::")}`);
   return value;
 }
 
