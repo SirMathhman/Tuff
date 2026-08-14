@@ -18,7 +18,8 @@ export type Value =
   | { kind: "struct"; fields: Record<string, Value> }
   | { kind: "tuple"; elements: Value[] }
   | { kind: "fnref"; fn: FnDef }
-  | { kind: "scope"; env: Environment };
+  | { kind: "scope"; env: Environment }
+  | { kind: "this"; typeName: string };
 
 export type Ref = { name: string; env: Environment; mutable: boolean };
 
@@ -65,9 +66,18 @@ export class Environment {
   private structs: Record<string, TypeNode> = {};
   private enums: Record<string, string[]> = {};
   private parent: Environment | undefined;
+  private thisTypeName: string | undefined;
 
   constructor(parent?: Environment) {
     this.parent = parent;
+  }
+
+  setThisTypeName(name: string): void {
+    this.thisTypeName = name;
+  }
+
+  getThisTypeName(): string | undefined {
+    return this.thisTypeName ?? this.parent?.getThisTypeName();
   }
 
   declare(name: string, value: Value, mutable = false): void {

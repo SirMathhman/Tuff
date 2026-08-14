@@ -248,8 +248,7 @@ export function resolveLValue(
 /** Get a variable from scope, throwing if undefined. */
 function getScopeField(env: Environment, field: string): Value {
   const v = env.get(field);
-  if (v === undefined)
-    throw new Error(`Undefined variable: ${field}`);
+  if (v === undefined) throw new Error(`Undefined variable: ${field}`);
   return v;
 }
 

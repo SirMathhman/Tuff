@@ -27,8 +27,13 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "string":
     case "null":
       return evalLiteral(node);
-    case "this":
+    case "this": {
+      const typeName = env.getThisTypeName();
+      if (typeName) {
+        return { kind: "this", typeName };
+      }
       return { kind: "scope", env };
+    }
     case "id": {
       const v = env.get(node.name);
       if (v === undefined) throw new Error("Undefined variable: " + node.name);
@@ -403,6 +408,7 @@ function setupFnCall(
     fn = namedFn;
   }
   const fnEnv = new Environment(fn.env ?? env);
+  fnEnv.setThisTypeName(node.name);
   if (fn.params.length !== node.args.length)
     throw new Error(
       `Function expects ${fn.params.length} arguments, got ${node.args.length}`,

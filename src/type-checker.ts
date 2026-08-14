@@ -22,6 +22,7 @@ export function checkType(
       const typeName = typeNode.name.toLowerCase();
       if (typeName === "bool") return val.kind === "bool";
       if (typeName === "char") return val.kind === "number" && !!val.isChar;
+      if (val.kind === "this") return val.typeName.toLowerCase() === typeName;
       if (val.kind === "number") {
         if (val.isFloat)
           return (

@@ -433,7 +433,10 @@ export class Parser {
           throw new Error("Expected field name after .");
         const field = fieldToken[1];
         this.consume();
-        return { lvalue: { kind: "scope-field", scope: { type: "this" }, field }, startPos };
+        return {
+          lvalue: { kind: "scope-field", scope: { type: "this" }, field },
+          startPos,
+        };
       }
       this.pos = startPos;
       return undefined;
