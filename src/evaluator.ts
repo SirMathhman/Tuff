@@ -15,6 +15,8 @@ import {
   compareEqual,
   evalTupleAccess,
   evalMatch,
+  resolveScopeField,
+  resolveScopeField,
 } from "./eval-helpers";
 
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
@@ -331,10 +333,7 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
     case "struct-access": {
       const structVal = evalValue(node.struct, env);
       if (structVal.kind === "scope") {
-        const v = structVal.env.get(node.field);
-        if (v === undefined)
-          throw new Error(`Undefined variable: ${node.field}`);
-        return toNumber(v);
+        return toNumber(resolveScopeField(structVal, node.field));
       }
       if (node.field === "length" && structVal.kind === "array") {
         return structVal.elements.length;

@@ -12,6 +12,18 @@ import {
 } from "./environment";
 import type { Ref, Value } from "./environment";
 
+/** Resolve a scope value to a field, throwing if undefined. */
+function resolveScopeField(
+  scope: { kind: "scope"; env: Environment },
+  field: string,
+): Value {
+  const v = scope.env.get(field);
+  if (v === undefined)
+    throw new Error(`Undefined variable: ${field}`);
+  return v;
+}
+export { resolveScopeField };
+
 /** Evaluate a range expression and return { start, end }. */
 export function evalRange(
   node: AstNode,
@@ -136,10 +148,7 @@ export function evalStruct(
     case "struct-access": {
       const struct = evalValue(node.struct, env);
       if (struct.kind === "scope") {
-        const v = struct.env.get(node.field);
-        if (v === undefined)
-          throw new Error(`Undefined variable: ${node.field}`);
-        return v;
+        return resolveScopeField(struct, node.field);
       }
       if (struct.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");
