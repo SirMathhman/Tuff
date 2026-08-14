@@ -18,8 +18,7 @@ function resolveScopeField(
   field: string,
 ): Value {
   const v = scope.env.get(field);
-  if (v === undefined)
-    throw new Error(`Undefined variable: ${field}`);
+  if (v === undefined) throw new Error(`Undefined variable: ${field}`);
   return v;
 }
 export { resolveScopeField };
@@ -147,9 +146,6 @@ export function evalStruct(
     }
     case "struct-access": {
       const struct = evalValue(node.struct, env);
-      if (struct.kind === "scope") {
-        return resolveScopeField(struct, node.field);
-      }
       if (struct.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");
       const field = struct.fields[node.field];

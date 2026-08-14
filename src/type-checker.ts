@@ -587,6 +587,9 @@ function checkCollection(node: AstNode, scope: Scope): void {
     case "struct-access":
       checkNode(node.struct, scope);
       break;
+    case "scope-access":
+      checkNode(node.scope, scope);
+      break;
   }
 }
 
@@ -654,6 +657,7 @@ function checkNode(node: AstNode, scope: Scope): void {
     case "array-index":
     case "struct-literal":
     case "struct-access":
+    case "scope-access":
       checkCollection(node, scope);
       return;
     case "type-check":

@@ -454,6 +454,14 @@ export class Parser {
     );
   }
 
+  private consumeScopeAccessChains(node: AstNode): AstNode {
+    return this.consumeDotChain(
+      node,
+      (n, f) => ({ type: "scope-access", scope: n, field: f }),
+      (n, i) => ({ type: "tuple-access", tuple: n, index: i }),
+    );
+  }
+
   private consumeDotChain<T>(
     acc: T,
     buildField: (acc: T, field: string) => T,
@@ -1091,7 +1099,8 @@ export class Parser {
     if (token[0] === "kw" && token[1] === "this") {
       this.consume();
       let node: AstNode = { type: "this" };
-      node = this.consumeStructAccessChains(node);
+      // `this.field` produces `scope-access`; `this[0]` or chained struct access falls through
+      node = this.consumeScopeAccessChains(node);
       return node;
     }
 

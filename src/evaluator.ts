@@ -44,6 +44,12 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "struct-literal":
     case "struct-access":
       return evalStruct(node, env, evalValue);
+    case "scope-access": {
+      const scope = evalValue(node.scope, env);
+      if (scope.kind !== "scope")
+        throw new Error("Cannot access scope on non-scope value");
+      return resolveScopeField(scope, node.field);
+    }
     case "tuple-literal": {
       const elements = node.elements.map((el) => evalValue(el, env));
       return { kind: "tuple", elements };
@@ -331,9 +337,6 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
       return 0;
     case "struct-access": {
       const structVal = evalValue(node.struct, env);
-      if (structVal.kind === "scope") {
-        return toNumber(resolveScopeField(structVal, node.field));
-      }
       if (node.field === "length" && structVal.kind === "array") {
         return structVal.elements.length;
       }
@@ -343,6 +346,12 @@ function evalCollectionNum(node: AstNode, env: Environment): number {
       if (field === undefined)
         throw new Error(`Field not found: ${node.field}`);
       return toNumber(field);
+    }
+    case "scope-access": {
+      const scopeVal = evalValue(node.scope, env);
+      if (scopeVal.kind !== "scope")
+        throw new Error("Cannot access scope on non-scope value");
+      return toNumber(resolveScopeField(scopeVal, node.field));
     }
     default:
       throw new Error(`Unexpected collection: ${node.type}`);
@@ -443,6 +452,7 @@ export function evaluate(node: AstNode, env: Environment): number {
     case "array-index":
     case "struct-literal":
     case "struct-access":
+    case "scope-access":
       return evalCollectionNum(node, env);
     case "fn-def":
     case "fnref":
