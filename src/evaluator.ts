@@ -34,6 +34,7 @@ function evalValue(node: AstNode, env: Environment): Value {
         return { kind: "this", typeName, env };
       }
       assertThisInScope(env);
+      throw new Error("unreachable");
     }
     case "id": {
       const v = env.get(node.name);
