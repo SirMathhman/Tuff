@@ -64,6 +64,7 @@ export type AstNode =
   | MatchExpression
   | FnDef
   | FnCall
+  | ThisFnCall
   | FnRef
   | Lambda
   | This
@@ -314,6 +315,13 @@ export interface FnDef {
 
 export interface FnCall {
   type: "fn-call";
+  name: string;
+  args: AstNode[];
+}
+
+export interface ThisFnCall {
+  type: "this-fn-call";
+  scope: AstNode;
   name: string;
   args: AstNode[];
 }

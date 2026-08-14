@@ -1120,8 +1120,32 @@ export class Parser {
     if (token[0] === "kw" && token[1] === "this") {
       this.consume();
       let node: AstNode = { type: "this" };
-      // `this.field` produces `scope-access`; `this[0]` or chained struct access falls through
-      node = this.consumeScopeAccessChains(node);
+      // Check for `this.fn()` — function call on `this`
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ".") {
+        this.consume(); // "."
+        const nextToken = this.peek();
+        if (
+          nextToken &&
+          nextToken[0] === "id" &&
+          this.tokens[this.pos + 1]?.[0] === "group" &&
+          this.tokens[this.pos + 1]![1] === "("
+        ) {
+          const fnName = nextToken[1];
+          this.consume(); // id
+          this.consume(); // "("
+          const args = this.parseParenList(() => this.parseAddSub());
+          node = {
+            type: "this-fn-call",
+            scope: { type: "this" },
+            name: fnName,
+            args,
+          };
+        } else {
+          node = this.consumeScopeAccessChains(node);
+        }
+      } else {
+        node = this.consumeScopeAccessChains(node);
+      }
       return node;
     }
 
