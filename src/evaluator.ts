@@ -16,7 +16,6 @@ import {
   evalTupleAccess,
   evalMatch,
   resolveScopeField,
-  resolveScopeField,
 } from "./eval-helpers";
 
 /** Evaluate a node and return the raw Value instead of unwrapping to number. */
