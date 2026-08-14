@@ -3,6 +3,7 @@ import { Parser } from "./parser";
 import { typeCheck } from "./type-checker";
 import { evaluateStatements } from "./evaluator";
 import { Environment } from "./environment";
+import type { AstNode, TypeNode } from "./ast";
 
 export function evaluateModules(
   moduleNames: string[],
