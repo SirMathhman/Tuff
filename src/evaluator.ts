@@ -77,7 +77,7 @@ function evalValue(node: AstNode, env: Environment): Value {
         fn: {
           params: node.params,
           body: node.body,
-          returnType: { kind: "name", name: "i32" },
+          returnType: node.returnType ?? { kind: "name", name: "i32" },
         },
       };
     }

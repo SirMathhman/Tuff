@@ -791,16 +791,20 @@ export class Parser {
 
     if (token[0] === "group" && token[1] === "(") {
       this.consume();
-      // Check for lambda: (param : Type, ...) => body
+      // Check for lambda: (param : Type, ...) [: ReturnType] => body
       const lambdaParams = this.tryParseLambdaParams();
-      if (
-        lambdaParams &&
-        this.peek()?.[0] === "op" &&
-        this.peek()![1] === "=>"
-      ) {
-        this.consume(); // "=>"
-        const body = this.parseAddSub();
-        return { type: "lambda", params: lambdaParams, body };
+      if (lambdaParams) {
+        // Check for optional return type: : Type
+        let returnType: TypeNode | undefined;
+        if (this.peek()?.[0] === "colon") {
+          this.consume(); // ":"
+          returnType = this.parseType();
+        }
+        if (this.peek()?.[0] === "op" && this.peek()![1] === "=>") {
+          this.consume(); // "=>"
+          const body = this.parseAddSub();
+          return { type: "lambda", params: lambdaParams, body, returnType };
+        }
       }
       // Reset and parse as regular parenthesized expression
       this.pos -= 1;

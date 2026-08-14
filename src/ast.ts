@@ -314,4 +314,5 @@ export interface Lambda {
   type: "lambda";
   params: { name: string; type: TypeNode }[];
   body: AstNode;
+  returnType?: TypeNode;
 }
