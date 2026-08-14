@@ -936,24 +936,16 @@ export class Parser {
     const first = this.peek();
     if (first?.[0] !== "id" || this.peekNext()?.[0] !== "colon")
       return undefined;
-    const params: { name: string; type: TypeNode }[] = [];
-    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+    const params = this.parseParenList(() => {
       const nameToken = this.peek();
-      if (!nameToken || nameToken[0] !== "id") return undefined;
+      if (!nameToken || nameToken[0] !== "id") return { name: "", type: { kind: "name", name: "i32" } };
       const name = nameToken[1];
       this.consume();
-      if (this.peek()?.[0] !== "colon") return undefined;
+      if (this.peek()?.[0] !== "colon") return { name: "", type: { kind: "name", name: "i32" } };
       this.consume(); // ":"
       const type = this.parseType();
-      params.push({ name, type });
-      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
-        this.consume(); // ","
-      }
-    }
-    // Consume closing paren
-    if (this.peek()?.[0] === "group" && this.peek()![1] === ")") {
-      this.consume();
-    }
+      return { name, type };
+    });
     return params;
   }
 
