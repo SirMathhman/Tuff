@@ -23,6 +23,17 @@ function resolveScopeField(
 }
 export { resolveScopeField };
 
+/** Resolve a `this` value to a field, throwing if undefined. */
+function resolveThisField(
+  thisVal: { kind: "this"; env: Environment },
+  field: string,
+): Value {
+  const v = thisVal.env.get(field);
+  if (v === undefined) throw new Error(`Undefined variable: ${field}`);
+  return v;
+}
+export { resolveThisField };
+
 /** Evaluate a range expression and return { start, end }. */
 export function evalRange(
   node: AstNode,
@@ -147,10 +158,7 @@ export function evalStruct(
     case "struct-access": {
       const struct = evalValue(node.struct, env);
       if (struct.kind === "this") {
-        const v = struct.env.get(node.field);
-        if (v === undefined)
-          throw new Error(`Undefined variable: ${node.field}`);
-        return v;
+        return resolveThisField(struct, node.field);
       }
       if (struct.kind !== "struct")
         throw new Error("Cannot access field on non-struct value");

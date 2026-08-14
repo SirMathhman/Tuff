@@ -52,10 +52,7 @@ function evalValue(node: AstNode, env: Environment): Value {
     case "scope-access": {
       const scope = evalValue(node.scope, env);
       if (scope.kind === "this") {
-        const v = scope.env.get(node.field);
-        if (v === undefined)
-          throw new Error(`Undefined variable: ${node.field}`);
-        return v;
+        return resolveThisField(scope, node.field);
       }
       if (scope.kind !== "scope")
         throw new Error("Cannot access scope on non-scope value");
@@ -115,13 +112,20 @@ function evalValue(node: AstNode, env: Environment): Value {
       if (node.statements.length === 0) throw new Error("Empty block");
       const blockEnv = new Environment(env);
       let last: Value = num(0);
+      let hasValue = false;
       for (const stmt of node.statements) {
-        if (stmt.type === "let") {
-          last = num(evaluate(stmt, blockEnv));
-        } else {
+        if (stmt.type !== "let") {
+          hasValue = true;
+        }
+        try {
           last = evalValue(stmt, blockEnv);
+        } catch (e) {
+          if (e instanceof Yield) return num(e.value);
+          if (e instanceof Return) throw e;
+          throw e;
         }
       }
+      if (!hasValue) throw new Error("Block has no value");
       return last;
     }
     case "if-statement":
