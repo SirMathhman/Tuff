@@ -1,5 +1,5 @@
 import type { AstNode, LValue, TypeNode, TypeParam } from "./ast";
-import { BorrowKind, checkBorrow, checkMoved } from "./borrow-checker";
+import { BorrowKind, OwnershipTracker } from "./borrow-checker";
 import { INT_TYPES, BUILTIN_TYPES, type IntTypeName } from "./types";
 import type { Value } from "./environment";
 import type { Environment } from "./environment";
@@ -115,10 +115,8 @@ interface Scope {
   typeAliases: Map<string, TypeNode>;
   structs: Map<string, TypeNode>;
   typeParams?: TypeParam[];
-  // Tracks active borrows: variable name -> borrow kind
-  borrows: Map<string, BorrowKind>;
-  // Tracks moved variables (ownership transfer)
-  moved: Set<string>;
+  // Centralized ownership tracking
+  ownership: OwnershipTracker;
   parent?: Scope;
 }
 
@@ -129,8 +127,7 @@ function newScope(parent?: Scope): Scope {
     typeAliases: new Map(),
     structs: new Map(),
     typeParams: parent?.typeParams,
-    borrows: new Map(),
-    moved: new Set(),
+    ownership: new OwnershipTracker(),
     parent,
   };
 }
@@ -399,8 +396,9 @@ function checkDeclaration(node: AstNode, scope: Scope): void {
       if (node.value.type === "id") {
         const srcVar = getVar(scope, node.value.name);
         if (srcVar?.isStruct) {
-          scope.moved.add(node.value.name);
+          scope.ownership.markMoved(node.value.name);
         }
+        scope.ownership.checkCopy(node.value.name);
       }
       checkNode(node.value, scope);
       break;
@@ -422,9 +420,7 @@ function checkReference(node: AstNode, scope: Scope): void {
         if (BUILTIN_TYPES.includes(node.name.toLowerCase())) break;
         throw new Error(`Undefined variable: ${node.name}`);
       }
-      // Ownership: check if variable was already moved
-      const movedErr = checkMoved(node.name, scope.moved);
-      if (movedErr) throw new Error(movedErr);
+      scope.ownership.checkUse(node.name);
       break;
     }
     case "ref": {
@@ -433,17 +429,11 @@ function checkReference(node: AstNode, scope: Scope): void {
         if (!getFn(scope, node.name))
           throw new Error(`Undefined: ${node.name}`);
       } else {
-        // Borrow checking
+        scope.ownership.checkUse(node.name);
         const borrowKind = node.mutable
           ? BorrowKind.Mutable
           : BorrowKind.Immutable;
-        const borrowErr = checkBorrow(
-          node.name,
-          borrowKind,
-          scope.borrows,
-        );
-        if (borrowErr) throw new Error(borrowErr);
-        scope.borrows.set(node.name, borrowKind);
+        scope.ownership.recordBorrow(node.name, borrowKind);
       }
       break;
     }
@@ -528,6 +518,11 @@ function checkControlFlow(node: AstNode, scope: Scope): void {
       for (const stmt of node.statements) {
         checkNode(stmt, childScope);
       }
+      const dangling = childScope.ownership.checkBlockEnd(
+        childScope.variables.keys(),
+      );
+      for (const name of dangling)
+        throw new Error(`Cannot return reference to local variable '${name}'`);
       break;
     }
     case "break":

@@ -655,4 +655,14 @@ describe("evaluate", () => {
   it('evaluate("let x : U8 <= 100 = 200U8;") => Error', () => {
     expect(() => evaluate("let x : U8 <= 100 = 200U8;")).toThrow();
   });
+
+  it('evaluate("let array = [0]; let borrow = &array; let copy = array;") => Error', () => {
+    expect(() =>
+      evaluate("let array = [0]; let borrow = &array; let copy = array;"),
+    ).toThrow();
+  });
+
+  it('evaluate("let x = { let y = 0; &y };") => Error', () => {
+    expect(() => evaluate("let x = { let y = 0; &y };")).toThrow();
+  });
 });
