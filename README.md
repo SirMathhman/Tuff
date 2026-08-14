@@ -10,6 +10,16 @@ Takes a string input with arithmetic operations (`+`, `-`, `*`, `/`) and groupin
 Multiplication (`*`) and division (`/`) have higher precedence than addition (`+`) and subtraction (`-`).
 Parentheses and curly braces can be used to override the default operator precedence.
 
+#### Variables
+
+Inside `{}` blocks, you can declare variables using `let`:
+
+```
+{let x = 5; x + 3}
+```
+
+Variables are scoped to the block in which they are declared and can be referenced by name in subsequent expressions within the same block.
+
 ## Tests
 
 Run the test suite with:

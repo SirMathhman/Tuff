@@ -2,11 +2,12 @@ export function interpret(input: string): number {
   if (input === "") return 0;
 
   const tokens = input
-    .split(/(\+|-|\*|\/|\(|\)|\{|\})/)
+    .split(/(\+|-|\*|\/|\(|\)|\{|\}|=|;|let)/)
     .map((s) => s.trim())
     .filter((s) => s !== "");
 
   let pos = 0;
+  const scope = new Map<string, number>();
 
   function parseExpr(): number {
     let result = parseTerm();
@@ -42,19 +43,46 @@ export function interpret(input: string): number {
     return value;
   }
 
+  function parseBlock(): number {
+    let result = 0;
+    while (pos < tokens.length && tokens[pos] !== "}") {
+      if (tokens[pos] === "let") {
+        pos++;
+        const name = tokens[pos++]!;
+        if (tokens[pos] === "=") pos++;
+        result = parseExpr();
+        scope.set(name, result);
+        if (tokens[pos] === ";") pos++;
+      } else {
+        result = parseExpr();
+        if (tokens[pos] === ";") pos++;
+      }
+    }
+    if (tokens[pos] === "}") pos++;
+    return result;
+  }
+
   function parseFactor(): number {
-    const open = tokens[pos];
-    if (open === "(" || open === "{") {
-      const close = open === "(" ? ")" : "}";
+    const token = tokens[pos];
+    if (token === "(") {
       pos++;
       const result = parseExpr();
-      if (tokens[pos] !== close) {
+      if (tokens[pos] !== ")") {
         throw new Error(
-          `Expected closing bracket "${close}" but found "${tokens[pos] || "end of input"}"`,
+          `Expected closing bracket ")" but found "${tokens[pos] || "end of input"}"`,
         );
       }
       pos++;
       return result;
+    }
+    if (token === "{") {
+      pos++;
+      return parseBlock();
+    }
+    if (token !== undefined && /[a-zA-Z_]\w*/.test(token) && token !== "let") {
+      pos++;
+      if (scope.has(token)) return scope.get(token)!;
+      return parseNumber(token);
     }
     return parseNumber(tokens[pos++]!);
   }
