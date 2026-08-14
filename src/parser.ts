@@ -791,6 +791,16 @@ export class Parser {
 
     if (token[0] === "group" && token[1] === "(") {
       this.consume();
+      // Check for lambda: (param : Type, ...) => body
+      const lambdaParams = this.tryParseLambdaParams();
+      if (lambdaParams && this.peek()?.[0] === "op" && this.peek()![1] === "=>") {
+        this.consume(); // "=>"
+        const body = this.parseAddSub();
+        return { type: "lambda", params: lambdaParams, body };
+      }
+      // Reset and parse as regular parenthesized expression
+      this.pos -= 1;
+      this.consume();
       const expr = this.parseAddSub();
       // Check if there's a comma — tuple literal: (3, 4)
       if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
@@ -913,6 +923,43 @@ export class Parser {
       throw new Error("Expected )");
     this.consume(); // ")"
     return items;
+  }
+
+  /**
+   * Try to parse lambda parameters: (name : Type, name : Type).
+   * Returns params array if it looks like a lambda, or undefined.
+   */
+  private tryParseLambdaParams():
+    | { name: string; type: TypeNode }[]
+    | undefined {
+    // Check if next token is an identifier followed by a colon (type annotation)
+    const first = this.peek();
+    if (first?.[0] !== "id" || this.peekNext()?.[0] !== "colon")
+      return undefined;
+    const params: { name: string; type: TypeNode }[] = [];
+    while (this.peek()?.[0] !== "group" || this.peek()![1] !== ")") {
+      const nameToken = this.peek();
+      if (!nameToken || nameToken[0] !== "id") return undefined;
+      const name = nameToken[1];
+      this.consume();
+      if (this.peek()?.[0] !== "colon") return undefined;
+      this.consume(); // ":"
+      const type = this.parseType();
+      params.push({ name, type });
+      if (this.peek()?.[0] === "op" && this.peek()![1] === ",") {
+        this.consume(); // ","
+      }
+    }
+    // Consume closing paren
+    if (this.peek()?.[0] === "group" && this.peek()![1] === ")") {
+      this.consume();
+    }
+    return params;
+  }
+
+  /** Peek at the token after the current one without consuming. */
+  private peekNext(): Token | undefined {
+    return this.tokens[this.pos + 1];
   }
 
   private parseFnDef(): AstNode {

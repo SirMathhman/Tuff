@@ -62,7 +62,24 @@ function evalValue(node: AstNode, env: Environment): Value {
         body: node.body,
         returnType: node.returnType,
       });
-      return { kind: "fnref", fn: { params: node.params, body: node.body, returnType: node.returnType } };
+      return {
+        kind: "fnref",
+        fn: {
+          params: node.params,
+          body: node.body,
+          returnType: node.returnType,
+        },
+      };
+    }
+    case "lambda": {
+      return {
+        kind: "fnref",
+        fn: {
+          params: node.params,
+          body: node.body,
+          returnType: { kind: "name", name: "i32" },
+        },
+      };
     }
     case "fn-call": {
       const { fn, fnEnv } = setupFnCall(node, env);

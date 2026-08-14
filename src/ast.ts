@@ -63,7 +63,8 @@ export type AstNode =
   | MatchExpression
   | FnDef
   | FnCall
-  | FnRef;
+  | FnRef
+  | Lambda;
 
 export interface Num {
   type: "num";
@@ -307,4 +308,10 @@ export interface FnCall {
 export interface FnRef {
   type: "fnref";
   name: string;
+}
+
+export interface Lambda {
+  type: "lambda";
+  params: { name: string; type: TypeNode }[];
+  body: AstNode;
 }
