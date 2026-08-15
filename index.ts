@@ -102,14 +102,19 @@ class Parser {
   }
 
   parse(): Expr {
+    const expr = this.parseLetBlock();
+    if (this.pos < this.tokens.length) {
+      throw new Error("interpret: unexpected trailing tokens");
+    }
+    return expr;
+  }
+
+  private parseLetBlock(): Expr {
     const bindings: { name: string; value: Expr }[] = [];
     while (this.peek()?.type === "let") {
       bindings.push(this.parseLetBinding());
     }
     const body = this.parseExpression();
-    if (this.pos < this.tokens.length) {
-      throw new Error("interpret: unexpected trailing tokens");
-    }
     if (bindings.length === 0) {
       return body;
     }
@@ -184,16 +189,12 @@ class Parser {
       return { kind: "paren", operand: inner };
     }
     if (t.type === "lbrace") {
-      const bindings: { name: string; value: Expr }[] = [];
-      while (this.peek()?.type === "let") {
-        bindings.push(this.parseLetBinding());
-      }
-      const body = this.parseExpression();
+      const inner = this.parseLetBlock();
       const close = this.next();
       if (close.type !== "rbrace") {
         throw new Error("interpret: expected closing brace");
       }
-      return { kind: "let", bindings, body };
+      return inner;
     }
     if (t.type === "ident") {
       return { kind: "var", name: t.value };
