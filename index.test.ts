@@ -85,4 +85,28 @@ describe("evaluate", () => {
   test('evaluate("true == 1") => 0', () => {
     expect(evaluate("true == 1")).toBe(0);
   });
+
+  test('evaluate("1 < 2") => 1', () => {
+    expect(evaluate("1 < 2")).toBe(1);
+  });
+
+  test('evaluate("2 <= 2") => 1', () => {
+    expect(evaluate("2 <= 2")).toBe(1);
+  });
+
+  test('evaluate("3 > 2") => 1', () => {
+    expect(evaluate("3 > 2")).toBe(1);
+  });
+
+  test('evaluate("2 >= 3") => 0', () => {
+    expect(evaluate("2 >= 3")).toBe(0);
+  });
+
+  test('evaluate("1 != 2") => 1', () => {
+    expect(evaluate("1 != 2")).toBe(1);
+  });
+
+  test('evaluate("1 + 2 < 4") => 1', () => {
+    expect(evaluate("1 + 2 < 4")).toBe(1);
+  });
 });

@@ -185,15 +185,51 @@ function asNumber(value: Value): number {
   return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
 
-function valuesEqual(scope: Scope, a: Value, b: Value): boolean {
+const COMPARISON_OPS = ["==", "!=", "<", "<=", ">", ">="] as const;
+type ComparisonOp = (typeof COMPARISON_OPS)[number];
+
+function isComparisonOp(token: Token | undefined): token is ComparisonOp {
+  return (
+    token === "==" ||
+    token === "!=" ||
+    token === "<" ||
+    token === "<=" ||
+    token === ">" ||
+    token === ">="
+  );
+}
+
+function compareValues(
+  scope: Scope,
+  op: ComparisonOp,
+  a: Value,
+  b: Value,
+): boolean {
   const left = dereference(scope, a);
   const right = dereference(scope, b);
+  // Type-strict: a boolean only compares against a boolean.
   if (typeof left === "boolean" || typeof right === "boolean") {
-    return (
-      typeof left === "boolean" && typeof right === "boolean" && left === right
-    );
+    if (typeof left !== "boolean" || typeof right !== "boolean") return false;
+    return compareNumbers(op, left ? 1 : 0, right ? 1 : 0);
   }
-  return left === right;
+  return compareNumbers(op, left, right);
+}
+
+function compareNumbers(op: ComparisonOp, l: number, r: number): boolean {
+  switch (op) {
+    case "==":
+      return l === r;
+    case "!=":
+      return l !== r;
+    case "<":
+      return l < r;
+    case "<=":
+      return l <= r;
+    case ">":
+      return l > r;
+    case ">=":
+      return l >= r;
+  }
 }
 
 function tokenize(input: string): Token[] {
@@ -215,6 +251,18 @@ function tokenize(input: string): Token[] {
     } else if (ch === "=" && input[i + 1] === "=") {
       tokens.push("==" as Token);
       i += 2;
+    } else if (ch === "!" && input[i + 1] === "=") {
+      tokens.push("!=" as Token);
+      i += 2;
+    } else if (ch === "<" && input[i + 1] === "=") {
+      tokens.push("<=" as Token);
+      i += 2;
+    } else if (ch === ">" && input[i + 1] === "=") {
+      tokens.push(">=" as Token);
+      i += 2;
+    } else if (ch === "<" || ch === ">") {
+      tokens.push(ch as Token);
+      i++;
     } else if ("+-*/(){}=;&".includes(ch)) {
       tokens.push(ch as Token);
       i++;
@@ -238,9 +286,10 @@ function parseComparison(
   scope: Scope,
 ): { value: Value; pos: number } {
   let { value, pos: next } = parseExpression(tokens, pos, scope);
-  while (next < tokens.length && tokens[next] === "==") {
+  while (next < tokens.length && isComparisonOp(tokens[next])) {
+    const op = tokens[next] as ComparisonOp;
     const rhs = parseExpression(tokens, next + 1, scope);
-    value = valuesEqual(scope, value, rhs.value) ? 1 : 0;
+    value = compareValues(scope, op, value, rhs.value) ? 1 : 0;
     next = rhs.pos;
   }
   return { value, pos: next };
