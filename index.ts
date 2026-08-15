@@ -11,10 +11,10 @@ function tokenize(input: string): Token[] {
     const ch = input[i]!;
     if (ch === " " || ch === "\t") {
       i++;
-    } else if (ch === "(") {
+    } else if (ch === "(" || ch === "{") {
       tokens.push({ type: "lparen" });
       i++;
-    } else if (ch === ")") {
+    } else if (ch === ")" || ch === "}") {
       tokens.push({ type: "rparen" });
       i++;
     } else if ("+-*/".includes(ch)) {
