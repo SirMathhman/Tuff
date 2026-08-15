@@ -52,3 +52,7 @@ test('interpret("(1 2)") throws', () => {
 test('interpret(")") throws', () => {
   expect(() => interpret(")")).toThrow();
 });
+
+test('interpret("{ 2 + 3 } * 4") => 20', () => {
+  expect(interpret("{ 2 + 3 } * 4")).toBe(20);
+});

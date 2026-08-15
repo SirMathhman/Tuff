@@ -2,7 +2,9 @@ type Token =
   | { type: "num"; value: number }
   | { type: "op"; value: "+" | "-" | "*" | "/" }
   | { type: "lparen" }
-  | { type: "rparen" };
+  | { type: "rparen" }
+  | { type: "lbrace" }
+  | { type: "rbrace" };
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -25,6 +27,16 @@ function tokenize(input: string): Token[] {
     }
     if (ch === ")") {
       tokens.push({ type: "rparen" });
+      i++;
+      continue;
+    }
+    if (ch === "{") {
+      tokens.push({ type: "lbrace" });
+      i++;
+      continue;
+    }
+    if (ch === "}") {
+      tokens.push({ type: "rbrace" });
       i++;
       continue;
     }
@@ -111,11 +123,12 @@ class Parser {
     if (t.type === "op" && t.value === "-") {
       return { kind: "neg", operand: this.parseFactor() };
     }
-    if (t.type === "lparen") {
+    if (t.type === "lparen" || t.type === "lbrace") {
       const inner = this.parseExpression();
       const close = this.next();
-      if (close.type !== "rparen") {
-        throw new Error("interpret: expected closing parenthesis");
+      const expected = t.type === "lparen" ? "rparen" : "rbrace";
+      if (close.type !== expected) {
+        throw new Error("interpret: expected closing delimiter");
       }
       return { kind: "paren", operand: inner };
     }
