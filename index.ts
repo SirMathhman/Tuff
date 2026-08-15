@@ -33,7 +33,10 @@ function readToken(input: string, i: number): { token: Token; next: number } {
   if (/\d/.test(ch)) {
     let j = i;
     while (j < input.length && /\d/.test(input.charAt(j))) j++;
-    return { token: { type: "num", value: Number(input.slice(i, j)) }, next: j };
+    return {
+      token: { type: "num", value: Number(input.slice(i, j)) },
+      next: j,
+    };
   }
   if (/[a-zA-Z_]/.test(ch)) {
     let j = i;
@@ -41,7 +44,10 @@ function readToken(input: string, i: number): { token: Token; next: number } {
     const word = input.slice(i, j);
     if (word === "let") return { token: { type: "let" }, next: j };
     if (word === "true" || word === "false")
-      return { token: { type: "bool", value: word === "true" ? 1 : 0 }, next: j };
+      return {
+        token: { type: "bool", value: word === "true" ? 1 : 0 },
+        next: j,
+      };
     return { token: { type: "ident", value: word }, next: j };
   }
   const twoChar = input.slice(i, i + 2);
@@ -51,7 +57,10 @@ function readToken(input: string, i: number): { token: Token; next: number } {
   const single = singleCharTokens[ch];
   if (single) {
     return {
-      token: single === "op" ? { type: "op", value: ch } : ({ type: single } as Token),
+      token:
+        single === "op"
+          ? { type: "op", value: ch }
+          : ({ type: single } as Token),
       next: i + 1,
     };
   }
@@ -74,8 +83,12 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
+type Value =
+  | { kind: "num"; value: number }
+  | { kind: "bool"; value: number };
+
 interface Binding {
-  value: number;
+  value: Value;
   mutable: boolean;
 }
 
@@ -97,7 +110,7 @@ class Parser {
     return undefined;
   }
 
-  private define(name: string, value: number, mutable: boolean): void {
+  private define(name: string, value: Value, mutable: boolean): void {
     const scope = this.scopes[this.scopes.length - 1];
     if (!scope) throw new Error("No active scope");
     scope.set(name, { value, mutable });
@@ -112,13 +125,13 @@ class Parser {
   }
 
   parseProgram(): number {
-    let value = 0;
+    let value: Value = { kind: "num", value: 0 };
     while (this.pos < this.tokens.length) {
       this.needsValue = false;
       value = this.parseStatement().value;
       if (this.peek()?.type === "semicolon") this.next();
     }
-    return value;
+    return value.value;
   }
 
   private peek(): Token | undefined {
@@ -130,9 +143,10 @@ class Parser {
   }
 
   private parseStatement(): {
-    value: number;
+    value: Value;
     isStatement: boolean;
   } {
+    const zero: Value = { kind: "num", value: 0 };
     const tok = this.peek();
     if (tok?.type === "let") {
       this.next();
@@ -148,7 +162,7 @@ class Parser {
       this.needsValue = true;
       const rhs = this.parseExpression();
       this.define(nameTok.value, rhs, isMut);
-      return { value: 0, isStatement: true };
+      return { value: zero, isStatement: true };
     }
     if (tok?.type === "ident") {
       const saved = this.pos;
@@ -163,25 +177,28 @@ class Parser {
         if (!binding.mutable)
           throw new Error(`Cannot assign to immutable variable: ${tok.value}`);
         binding.value = rhs;
-        return { value: 0, isStatement: true };
+        return { value: zero, isStatement: true };
       }
       this.pos = saved;
     }
     return { value: this.parseExpression(), isStatement: false };
   }
 
-  private parseExpression(): number {
+  private parseExpression(): Value {
     return this.parseLogicalOr();
   }
 
-  private parseLogicalOr(): number {
+  private parseLogicalOr(): Value {
     let left = this.parseComparison();
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && tok.value === "||") {
         this.next();
         const right = this.parseComparison();
-        left = left !== 0 || right !== 0 ? 1 : 0;
+        left = {
+          kind: "bool",
+          value: left.value !== 0 || right.value !== 0 ? 1 : 0,
+        };
       } else {
         break;
       }
@@ -189,14 +206,18 @@ class Parser {
     return left;
   }
 
-  private parseComparison(): number {
+  private parseComparison(): Value {
     let left = this.parseAdditive();
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && tok.value === "==") {
         this.next();
         const right = this.parseAdditive();
-        left = left === right ? 1 : 0;
+        left = {
+          kind: "bool",
+          value:
+            left.kind === right.kind && left.value === right.value ? 1 : 0,
+        };
       } else {
         break;
       }
@@ -204,14 +225,17 @@ class Parser {
     return left;
   }
 
-  private parseAdditive(): number {
+  private parseAdditive(): Value {
     let left = this.parseMultiplicative();
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && (tok.value === "+" || tok.value === "-")) {
         this.next();
         const right = this.parseMultiplicative();
-        left = tok.value === "+" ? left + right : left - right;
+        left = {
+          kind: "num",
+          value: tok.value === "+" ? left.value + right.value : left.value - right.value,
+        };
       } else {
         break;
       }
@@ -219,14 +243,17 @@ class Parser {
     return left;
   }
 
-  private parseMultiplicative(): number {
+  private parseMultiplicative(): Value {
     let left = this.parsePrimary();
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && (tok.value === "*" || tok.value === "/")) {
         this.next();
         const right = this.parsePrimary();
-        left = tok.value === "*" ? left * right : left / right;
+        left = {
+          kind: "num",
+          value: tok.value === "*" ? left.value * right.value : left.value / right.value,
+        };
       } else {
         break;
       }
@@ -234,10 +261,10 @@ class Parser {
     return left;
   }
 
-  private parsePrimary(): number {
+  private parsePrimary(): Value {
     const tok = this.next();
-    if (tok?.type === "num") return tok.value;
-    if (tok?.type === "bool") return tok.value;
+    if (tok?.type === "num") return { kind: "num", value: tok.value };
+    if (tok?.type === "bool") return { kind: "bool", value: tok.value };
     if (tok?.type === "ident") {
       const binding = this.lookup(tok.value);
       if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
@@ -254,10 +281,10 @@ class Parser {
     throw new Error("Unexpected token in expression");
   }
 
-  private parseBlockBody(): number {
+  private parseBlockBody(): Value {
     this.pushScope();
     const needsValue = this.needsValue;
-    let value = 0;
+    let value: Value = { kind: "num", value: 0 };
     let lastWasStatement = false;
     let hasStatements = false;
     while (this.peek()?.type !== "rbrace") {

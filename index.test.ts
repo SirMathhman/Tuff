@@ -97,4 +97,8 @@ describe("let and mut", () => {
   test('evaluate("let x = 1; let y = 2; x == y") => 0', () => {
     expect(evaluate("let x = 1; let y = 2; x == y")).toBe(0);
   });
+
+  test('evaluate("true == 1") => 0', () => {
+    expect(evaluate("true == 1")).toBe(0);
+  });
 });
