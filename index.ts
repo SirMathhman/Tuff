@@ -1,28 +1,49 @@
+const OPS: Record<
+  string,
+  { prec: number; apply: (a: number, b: number) => number }
+> = {
+  "+": { prec: 1, apply: (a, b) => a + b },
+  "-": { prec: 1, apply: (a, b) => a - b },
+  "*": { prec: 2, apply: (a, b) => a * b },
+  "/": { prec: 2, apply: (a, b) => a / b },
+};
+
 export function evaluate(input: string): number {
-  const tokens = input.trim().match(/\d+|[+\-*/]/g);
+  const tokens = input.trim().match(/\d+|[+\-*/()]/g);
   if (!tokens) return 0;
 
-  // First pass: resolve * and / left to right
-  const reduced: string[] = [tokens[0]];
-  for (let i = 1; i < tokens.length; i += 2) {
-    const op = tokens[i];
-    const next = tokens[i + 1];
-    if (op === "*" || op === "/") {
-      const prev = Number(reduced.pop());
-      reduced.push(
-        String(op === "*" ? prev * Number(next!) : prev / Number(next!)),
-      );
+  const output: number[] = [];
+  const ops: string[] = [];
+
+  for (const tok of tokens) {
+    if (/^\d+$/.test(tok)) {
+      output.push(Number(tok));
+    } else if (tok === "(") {
+      ops.push(tok);
+    } else if (tok === ")") {
+      while (ops.length && ops[ops.length - 1] !== "(") {
+        applyOp(output, ops.pop()!);
+      }
+      ops.pop(); // discard "("
     } else {
-      reduced.push(op!, next!);
+      const cur = OPS[tok]!;
+      while (
+        ops.length &&
+        ops[ops.length - 1] !== "(" &&
+        OPS[ops[ops.length - 1]!]!.prec >= cur.prec
+      ) {
+        applyOp(output, ops.pop()!);
+      }
+      ops.push(tok);
     }
   }
+  while (ops.length) applyOp(output, ops.pop()!);
 
-  // Second pass: resolve + and - left to right
-  let total = Number(reduced[0]);
-  for (let i = 1; i < reduced.length; i += 2) {
-    const op = reduced[i];
-    const next = Number(reduced[i + 1]);
-    total = op === "+" ? total + next : total - next;
-  }
-  return total;
+  return output.length ? output[output.length - 1]! : 0;
+}
+
+function applyOp(output: number[], op: string) {
+  const b = output.pop()!;
+  const a = output.pop()!;
+  output.push(OPS[op]!.apply(a, b));
 }
