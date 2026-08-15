@@ -295,6 +295,8 @@ function parseFactor(
   if (token === "{") {
     return parseBlock(tokens, pos, scope);
   }
+  if (token === "true") return { value: 1, pos: pos + 1 };
+  if (token === "false") return { value: 0, pos: pos + 1 };
   if (typeof token === "number") return { value: token, pos: pos + 1 };
   if (typeof token === "string" && token !== "let" && token !== "mut") {
     const varInfo = scope.get(token);
