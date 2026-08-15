@@ -78,6 +78,7 @@ class Parser {
 
   parse(): number {
     this.letStatements();
+    if (this.pos >= this.tokens.length) return 0;
     const result = this.expression();
     if (this.pos < this.tokens.length)
       throw new Error("Unexpected token after expression");
