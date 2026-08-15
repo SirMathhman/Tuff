@@ -4,7 +4,11 @@ type Token =
   | { type: "lparen" }
   | { type: "rparen" }
   | { type: "lbrace" }
-  | { type: "rbrace" };
+  | { type: "rbrace" }
+  | { type: "ident"; value: string }
+  | { type: "let" }
+  | { type: "assign" }
+  | { type: "semi" };
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -40,6 +44,27 @@ function tokenize(input: string): Token[] {
       i++;
       continue;
     }
+    if (ch === "=") {
+      tokens.push({ type: "assign" });
+      i++;
+      continue;
+    }
+    if (ch === ";") {
+      tokens.push({ type: "semi" });
+      i++;
+      continue;
+    }
+    const identMatch = input.slice(i).match(/^[a-zA-Z_][a-zA-Z0-9_]*/);
+    if (identMatch) {
+      const name = identMatch[0];
+      if (name === "let") {
+        tokens.push({ type: "let" });
+      } else {
+        tokens.push({ type: "ident", value: name });
+      }
+      i += name.length;
+      continue;
+    }
     const numMatch = input.slice(i).match(/^\d+(\.\d+)?/);
     if (numMatch) {
       tokens.push({ type: "num", value: Number(numMatch[0]) });
@@ -55,7 +80,9 @@ type Expr =
   | { kind: "num"; value: number }
   | { kind: "bin"; op: "+" | "-" | "*" | "/"; left: Expr; right: Expr }
   | { kind: "neg"; operand: Expr }
-  | { kind: "paren"; operand: Expr };
+  | { kind: "paren"; operand: Expr }
+  | { kind: "var"; name: string }
+  | { kind: "let"; bindings: { name: string; value: Expr }[]; body: Expr };
 
 class Parser {
   private pos = 0;
@@ -123,30 +150,71 @@ class Parser {
     if (t.type === "op" && t.value === "-") {
       return { kind: "neg", operand: this.parseFactor() };
     }
-    if (t.type === "lparen" || t.type === "lbrace") {
+    if (t.type === "lparen") {
       const inner = this.parseExpression();
       const close = this.next();
-      const expected = t.type === "lparen" ? "rparen" : "rbrace";
-      if (close.type !== expected) {
-        throw new Error("interpret: expected closing delimiter");
+      if (close.type !== "rparen") {
+        throw new Error("interpret: expected closing parenthesis");
       }
       return { kind: "paren", operand: inner };
+    }
+    if (t.type === "lbrace") {
+      const bindings: { name: string; value: Expr }[] = [];
+      while (this.peek()?.type === "let") {
+        this.next();
+        const nameTok = this.next();
+        if (nameTok.type !== "ident") {
+          throw new Error("interpret: expected variable name after let");
+        }
+        const eq = this.next();
+        if (eq.type !== "assign") {
+          throw new Error("interpret: expected = after variable name");
+        }
+        const value = this.parseExpression();
+        const semi = this.next();
+        if (semi.type !== "semi") {
+          throw new Error("interpret: expected ; after let binding");
+        }
+        bindings.push({ name: nameTok.value, value });
+      }
+      const body = this.parseExpression();
+      const close = this.next();
+      if (close.type !== "rbrace") {
+        throw new Error("interpret: expected closing brace");
+      }
+      return { kind: "let", bindings, body };
+    }
+    if (t.type === "ident") {
+      return { kind: "var", name: t.value };
     }
     throw new Error("interpret: expected a number");
   }
 }
 
-function evaluate(node: Expr): number {
+function evaluate(node: Expr, env: Map<string, number>): number {
   switch (node.kind) {
     case "num":
       return node.value;
+    case "var": {
+      if (!env.has(node.name)) {
+        throw new Error(`interpret: undefined variable "${node.name}"`);
+      }
+      return env.get(node.name)!;
+    }
     case "neg":
-      return -evaluate(node.operand);
+      return -evaluate(node.operand, env);
     case "paren":
-      return evaluate(node.operand);
+      return evaluate(node.operand, env);
+    case "let": {
+      const scope = new Map(env);
+      for (const binding of node.bindings) {
+        scope.set(binding.name, evaluate(binding.value, scope));
+      }
+      return evaluate(node.body, scope);
+    }
     case "bin": {
-      const left = evaluate(node.left);
-      const right = evaluate(node.right);
+      const left = evaluate(node.left, env);
+      const right = evaluate(node.right, env);
       switch (node.op) {
         case "+":
           return left + right;
@@ -164,5 +232,5 @@ function evaluate(node: Expr): number {
 export function interpret(input: string): number {
   const tokens = tokenize(input.trim());
   const ast = new Parser(tokens).parse();
-  return evaluate(ast);
+  return evaluate(ast, new Map());
 }

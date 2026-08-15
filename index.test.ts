@@ -56,3 +56,27 @@ test('interpret(")") throws', () => {
 test('interpret("{ 2 + 3 } * 4") => 20', () => {
   expect(interpret("{ 2 + 3 } * 4")).toBe(20);
 });
+
+test('interpret("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(interpret("{ let x = 2 + 3; x } * 4")).toBe(20);
+});
+
+test('interpret("@") throws', () => {
+  expect(() => interpret("@")).toThrow();
+});
+
+test('interpret("{ let = 1; }") throws', () => {
+  expect(() => interpret("{ let = 1; }")).toThrow();
+});
+
+test('interpret("{ let x 1; x }") throws', () => {
+  expect(() => interpret("{ let x 1; x }")).toThrow();
+});
+
+test('interpret("{ let x = 1 x }") throws', () => {
+  expect(() => interpret("{ let x = 1 x }")).toThrow();
+});
+
+test('interpret("{ let x = 1; x 2 }") throws', () => {
+  expect(() => interpret("{ let x = 1; x 2 }")).toThrow();
+});
