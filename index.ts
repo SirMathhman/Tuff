@@ -102,7 +102,7 @@ class Parser {
   parseProgram(): number {
     let value = 0;
     while (this.pos < this.tokens.length) {
-      value = this.parseStatement();
+      value = this.parseStatement(false).value;
       if (this.peek()?.type === "semicolon") this.next();
     }
     return value;
@@ -116,7 +116,9 @@ class Parser {
     return this.tokens[this.pos++];
   }
 
-  private parseStatement(): number {
+  private parseStatement(
+    needsValue: boolean,
+  ): { value: number; isStatement: boolean } {
     const tok = this.peek();
     if (tok?.type === "let") {
       this.next();
@@ -129,9 +131,9 @@ class Parser {
       const eq = this.next();
       if (eq?.type !== "op" || eq.value !== "=")
         throw new Error("Expected = after let identifier");
-      const rhs = this.parseExpression();
+      const rhs = this.parseExpression(true);
       this.define(nameTok.value, rhs, isMut);
-      return 0;
+      return { value: 0, isStatement: true };
     }
     if (tok?.type === "ident") {
       const saved = this.pos;
@@ -139,30 +141,30 @@ class Parser {
       const eq = this.peek();
       if (eq?.type === "op" && eq.value === "=") {
         this.next();
-        const rhs = this.parseExpression();
+        const rhs = this.parseExpression(true);
         const binding = this.lookup(tok.value);
         if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
         if (!binding.mutable)
           throw new Error(`Cannot assign to immutable variable: ${tok.value}`);
         binding.value = rhs;
-        return 0;
+        return { value: 0, isStatement: true };
       }
       this.pos = saved;
     }
-    return this.parseExpression();
+    return { value: this.parseExpression(needsValue), isStatement: false };
   }
 
-  private parseExpression(): number {
-    return this.parseAdditive();
+  private parseExpression(needsValue: boolean): number {
+    return this.parseAdditive(needsValue);
   }
 
-  private parseAdditive(): number {
-    let left = this.parseMultiplicative();
+  private parseAdditive(needsValue: boolean): number {
+    let left = this.parseMultiplicative(needsValue);
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && (tok.value === "+" || tok.value === "-")) {
         this.next();
-        const right = this.parseMultiplicative();
+        const right = this.parseMultiplicative(needsValue);
         left = tok.value === "+" ? left + right : left - right;
       } else {
         break;
@@ -171,13 +173,13 @@ class Parser {
     return left;
   }
 
-  private parseMultiplicative(): number {
-    let left = this.parsePrimary();
+  private parseMultiplicative(needsValue: boolean): number {
+    let left = this.parsePrimary(needsValue);
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && (tok.value === "*" || tok.value === "/")) {
         this.next();
-        const right = this.parsePrimary();
+        const right = this.parsePrimary(needsValue);
         left = tok.value === "*" ? left * right : left / right;
       } else {
         break;
@@ -186,7 +188,7 @@ class Parser {
     return left;
   }
 
-  private parsePrimary(): number {
+  private parsePrimary(needsValue: boolean): number {
     const tok = this.next();
     if (tok?.type === "num") return tok.value;
     if (tok?.type === "ident") {
@@ -195,26 +197,28 @@ class Parser {
       return binding.value;
     }
     if (tok?.type === "lparen") {
-      const value = this.parseExpression();
+      const value = this.parseExpression(needsValue);
       if (this.next()?.type !== "rparen") throw new Error("Expected )");
       return value;
     }
     if (tok?.type === "lbrace") {
-      return this.parseBlockBody();
+      return this.parseBlockBody(needsValue);
     }
     throw new Error("Unexpected token in expression");
   }
 
-  private parseBlockBody(): number {
+  private parseBlockBody(needsValue: boolean): number {
     this.pushScope();
     let value = 0;
-    let lastWasLet = false;
+    let lastWasStatement = false;
     while (this.peek()?.type !== "rbrace") {
-      lastWasLet = this.peek()?.type === "let";
-      value = this.parseStatement();
+      const result = this.parseStatement(false);
+      value = result.value;
+      lastWasStatement = result.isStatement;
       if (this.peek()?.type === "semicolon") this.next();
     }
-    if (lastWasLet) throw new Error("Block must end with an expression");
+    if (needsValue && lastWasStatement)
+      throw new Error("Block must end with an expression");
     if (this.next()?.type !== "rbrace") throw new Error("Expected }");
     this.popScope();
     return value;
