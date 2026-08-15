@@ -59,6 +59,10 @@ describe("blocks", () => {
   test('evaluate("let mut x = 0; let y = { x = 100; };") => Error', () => {
     expect(() => evaluate("let mut x = 0; let y = { x = 100; };")).toThrow();
   });
+
+  test('evaluate("let mut x = 0; let y = { {} };") => Error', () => {
+    expect(() => evaluate("let mut x = 0; let y = { {} };")).toThrow();
+  });
 });
 
 describe("let and mut", () => {

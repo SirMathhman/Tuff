@@ -116,9 +116,10 @@ class Parser {
     return this.tokens[this.pos++];
   }
 
-  private parseStatement(
-    needsValue: boolean,
-  ): { value: number; isStatement: boolean } {
+  private parseStatement(needsValue: boolean): {
+    value: number;
+    isStatement: boolean;
+  } {
     const tok = this.peek();
     if (tok?.type === "let") {
       this.next();
@@ -211,17 +212,45 @@ class Parser {
     this.pushScope();
     let value = 0;
     let lastWasStatement = false;
+    let hasStatements = false;
     while (this.peek()?.type !== "rbrace") {
-      const result = this.parseStatement(false);
+      const isLast = this.isLastStatementInBlock();
+      const result = this.parseStatement(needsValue && isLast);
       value = result.value;
       lastWasStatement = result.isStatement;
+      hasStatements = true;
       if (this.peek()?.type === "semicolon") this.next();
     }
+    if (needsValue && !hasStatements)
+      throw new Error("Block must end with an expression");
     if (needsValue && lastWasStatement)
       throw new Error("Block must end with an expression");
     if (this.next()?.type !== "rbrace") throw new Error("Expected }");
     this.popScope();
     return value;
+  }
+
+  private isLastStatementInBlock(): boolean {
+    let depth = 0;
+    let i = this.pos;
+    while (i < this.tokens.length) {
+      const tok = this.tokens[i];
+      if (!tok) return false;
+      if (tok.type === "lbrace") depth++;
+      else if (tok.type === "rbrace") {
+        if (depth === 0) return true;
+        depth--;
+      } else if (
+        depth === 0 &&
+        tok.type === "semicolon" &&
+        i + 1 < this.tokens.length &&
+        this.tokens[i + 1]?.type !== "rbrace"
+      ) {
+        return false;
+      }
+      i++;
+    }
+    return false;
   }
 }
 
