@@ -108,6 +108,14 @@ class Parser {
     return t;
   }
 
+  private expectIdent(): { type: "ident"; value: string } {
+    const t = this.next();
+    if (t.type !== "ident") {
+      throw new Error("interpret: expected variable name");
+    }
+    return t;
+  }
+
   parse(): Expr {
     const expr = this.parseLetBlock();
     if (this.pos < this.tokens.length) {
@@ -143,10 +151,7 @@ class Parser {
     if (this.peek()?.type === "mut") {
       this.next();
     }
-    const nameTok = this.next();
-    if (nameTok.type !== "ident") {
-      throw new Error("interpret: expected variable name after let");
-    }
+    const nameTok = this.expectIdent();
     const eq = this.next();
     if (eq.type !== "assign") {
       throw new Error("interpret: expected = after variable name");
@@ -160,7 +165,7 @@ class Parser {
   }
 
   private parseAssign(): Stmt {
-    const nameTok = this.next() as { type: "ident"; value: string };
+    const nameTok = this.expectIdent();
     this.next();
     const value = this.parseExpression();
     const semi = this.next();
