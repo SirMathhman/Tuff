@@ -2,7 +2,11 @@ type Token =
   | { type: "number"; value: number }
   | { type: "op"; value: string }
   | { type: "lparen" }
-  | { type: "rparen" };
+  | { type: "rparen" }
+  | { type: "keyword"; value: string }
+  | { type: "ident"; value: string }
+  | { type: "assign" }
+  | { type: "semicolon" };
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -20,6 +24,26 @@ function tokenize(input: string): Token[] {
     } else if ("+-*/".includes(ch)) {
       tokens.push({ type: "op", value: ch });
       i++;
+    } else if (ch === "=") {
+      tokens.push({ type: "assign" });
+      i++;
+    } else if (ch === ";") {
+      tokens.push({ type: "semicolon" });
+      i++;
+    } else if (
+      ch === "l" &&
+      input.startsWith("let", i) &&
+      (i + 3 >= input.length || !/[a-zA-Z0-9_]/.test(input[i + 3]!))
+    ) {
+      tokens.push({ type: "keyword", value: "let" });
+      i += 3;
+    } else if (/[a-zA-Z_]/.test(ch)) {
+      let name = "";
+      while (i < input.length && /[a-zA-Z0-9_]/.test(input[i]!)) {
+        name += input[i]!;
+        i++;
+      }
+      tokens.push({ type: "ident", value: name });
     } else if (/[0-9.]/.test(ch)) {
       let num = "";
       while (i < input.length && /[0-9.]/.test(input[i]!)) {
@@ -36,7 +60,10 @@ function tokenize(input: string): Token[] {
 
 class Parser {
   private pos = 0;
-  constructor(private tokens: Token[]) {}
+  constructor(
+    private tokens: Token[],
+    private scope: Map<string, number> = new Map()
+  ) {}
 
   private peek(): Token | undefined {
     return this.tokens[this.pos];
@@ -102,12 +129,39 @@ class Parser {
       this.next();
       return (t as any).value;
     }
+    if (t.type === "ident") {
+      this.next();
+      const value = this.scope.get(t.value);
+      if (value === undefined)
+        throw new Error(`Unknown variable: ${t.value}`);
+      return value;
+    }
     if (t.type === "lparen") {
       this.next();
+      const prevScope = this.scope;
+      this.scope = new Map(prevScope);
+      while (
+        this.peek()?.type === "keyword" &&
+        (this.peek() as { value: string }).value === "let"
+      ) {
+        this.next();
+        const nameTok = this.next();
+        if (nameTok.type !== "ident")
+          throw new Error("Expected variable name after let");
+        const assignTok = this.next();
+        if (assignTok.type !== "assign")
+          throw new Error("Expected = after variable name");
+        const value = this.expression();
+        const semiTok = this.next();
+        if (semiTok.type !== "semicolon")
+          throw new Error("Expected ; after let statement");
+        this.scope.set(nameTok.value, value);
+      }
       const result = this.expression();
       if (this.peek()?.type !== "rparen")
-        throw new Error("Expected closing parenthesis");
+        throw new Error("Expected closing delimiter");
       this.next();
+      this.scope = prevScope;
       return result;
     }
     throw new Error(`Unexpected token: ${JSON.stringify(t)}`);
