@@ -49,4 +49,8 @@ describe("evaluate", () => {
   test('evaluate("let y = { let x = 2 + 3; } * 4; y") => Error', () => {
     expect(() => evaluate("let y = { let x = 2 + 3; } * 4; y")).toThrow();
   });
+
+  test('evaluate("let y = { let x = 100; x }; x") => Error', () => {
+    expect(() => evaluate("let y = { let x = 100; x }; x")).toThrow();
+  });
 });
