@@ -77,10 +77,31 @@ class Parser {
   }
 
   parse(): number {
+    this.letStatements();
     const result = this.expression();
     if (this.pos < this.tokens.length)
       throw new Error("Unexpected token after expression");
     return result;
+  }
+
+  private letStatements(): void {
+    while (
+      this.peek()?.type === "keyword" &&
+      (this.peek() as { value: string }).value === "let"
+    ) {
+      this.next();
+      const nameTok = this.next();
+      if (nameTok.type !== "ident")
+        throw new Error("Expected variable name after let");
+      const assignTok = this.next();
+      if (assignTok.type !== "assign")
+        throw new Error("Expected = after variable name");
+      const value = this.expression();
+      const semiTok = this.next();
+      if (semiTok.type !== "semicolon")
+        throw new Error("Expected ; after let statement");
+      this.scope.set(nameTok.value, value);
+    }
   }
 
   private expression(): number {
@@ -139,23 +160,7 @@ class Parser {
       this.next();
       const prevScope = this.scope;
       this.scope = new Map(prevScope);
-      while (
-        this.peek()?.type === "keyword" &&
-        (this.peek() as { value: string }).value === "let"
-      ) {
-        this.next();
-        const nameTok = this.next();
-        if (nameTok.type !== "ident")
-          throw new Error("Expected variable name after let");
-        const assignTok = this.next();
-        if (assignTok.type !== "assign")
-          throw new Error("Expected = after variable name");
-        const value = this.expression();
-        const semiTok = this.next();
-        if (semiTok.type !== "semicolon")
-          throw new Error("Expected ; after let statement");
-        this.scope.set(nameTok.value, value);
-      }
+      this.letStatements();
       const result = this.expression();
       if (this.peek()?.type !== "rparen")
         throw new Error("Expected closing delimiter");
