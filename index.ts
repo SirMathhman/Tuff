@@ -9,7 +9,9 @@ export function evaluate(input: string): number {
     const next = tokens[i + 1];
     if (op === "*" || op === "/") {
       const prev = Number(reduced.pop());
-      reduced.push(String(op === "*" ? prev * Number(next!) : prev / Number(next!)));
+      reduced.push(
+        String(op === "*" ? prev * Number(next!) : prev / Number(next!)),
+      );
     } else {
       reduced.push(op!, next!);
     }
