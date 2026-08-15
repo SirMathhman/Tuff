@@ -87,3 +87,15 @@ test('interpret("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
 test('interpret("let x = 0; let x = 1; x") => 1', () => {
   expect(interpret("let x = 0; let x = 1; x")).toBe(1);
 });
+
+test('interpret("let mut x = 0; x = 1; x") => 1', () => {
+  expect(interpret("let mut x = 0; x = 1; x")).toBe(1);
+});
+
+test('interpret("let x = 0; x = 1 x") throws', () => {
+  expect(() => interpret("let x = 0; x = 1 x")).toThrow();
+});
+
+test('interpret("x = 1; x") throws', () => {
+  expect(() => interpret("x = 1; x")).toThrow();
+});

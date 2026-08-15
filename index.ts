@@ -7,6 +7,7 @@ type Token =
   | { type: "rbrace" }
   | { type: "ident"; value: string }
   | { type: "let" }
+  | { type: "mut" }
   | { type: "assign" }
   | { type: "semi" };
 
@@ -59,6 +60,8 @@ function tokenize(input: string): Token[] {
       const name = identMatch[0];
       if (name === "let") {
         tokens.push({ type: "let" });
+      } else if (name === "mut") {
+        tokens.push({ type: "mut" });
       } else {
         tokens.push({ type: "ident", value: name });
       }
@@ -76,13 +79,17 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
+type Stmt =
+  | { kind: "bind"; name: string; value: Expr }
+  | { kind: "assign"; name: string; value: Expr };
+
 type Expr =
   | { kind: "num"; value: number }
   | { kind: "bin"; op: "+" | "-" | "*" | "/"; left: Expr; right: Expr }
   | { kind: "neg"; operand: Expr }
   | { kind: "paren"; operand: Expr }
   | { kind: "var"; name: string }
-  | { kind: "let"; bindings: { name: string; value: Expr }[]; body: Expr };
+  | { kind: "let"; stmts: Stmt[]; body: Expr };
 
 class Parser {
   private pos = 0;
@@ -110,19 +117,32 @@ class Parser {
   }
 
   private parseLetBlock(): Expr {
-    const bindings: { name: string; value: Expr }[] = [];
-    while (this.peek()?.type === "let") {
-      bindings.push(this.parseLetBinding());
+    const stmts: Stmt[] = [];
+    for (;;) {
+      const t = this.peek();
+      if (t?.type === "let") {
+        stmts.push(this.parseLetBinding());
+      } else if (
+        t?.type === "ident" &&
+        this.tokens[this.pos + 1]?.type === "assign"
+      ) {
+        stmts.push(this.parseAssign());
+      } else {
+        break;
+      }
     }
     const body = this.parseExpression();
-    if (bindings.length === 0) {
+    if (stmts.length === 0) {
       return body;
     }
-    return { kind: "let", bindings, body };
+    return { kind: "let", stmts, body };
   }
 
-  private parseLetBinding(): { name: string; value: Expr } {
+  private parseLetBinding(): Stmt {
     this.next();
+    if (this.peek()?.type === "mut") {
+      this.next();
+    }
     const nameTok = this.next();
     if (nameTok.type !== "ident") {
       throw new Error("interpret: expected variable name after let");
@@ -136,7 +156,18 @@ class Parser {
     if (semi.type !== "semi") {
       throw new Error("interpret: expected ; after let binding");
     }
-    return { name: nameTok.value, value };
+    return { kind: "bind", name: nameTok.value, value };
+  }
+
+  private parseAssign(): Stmt {
+    const nameTok = this.next() as { type: "ident"; value: string };
+    this.next();
+    const value = this.parseExpression();
+    const semi = this.next();
+    if (semi.type !== "semi") {
+      throw new Error("interpret: expected ; after assignment");
+    }
+    return { kind: "assign", name: nameTok.value, value };
   }
 
   private parseExpression(): Expr {
@@ -219,8 +250,11 @@ function evaluate(node: Expr, env: Map<string, number>): number {
       return evaluate(node.operand, env);
     case "let": {
       const scope = new Map(env);
-      for (const binding of node.bindings) {
-        scope.set(binding.name, evaluate(binding.value, scope));
+      for (const stmt of node.stmts) {
+        if (stmt.kind === "assign" && !scope.has(stmt.name)) {
+          throw new Error(`interpret: undefined variable "${stmt.name}"`);
+        }
+        scope.set(stmt.name, evaluate(stmt.value, scope));
       }
       return evaluate(node.body, scope);
     }
