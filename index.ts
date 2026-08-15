@@ -102,11 +102,36 @@ class Parser {
   }
 
   parse(): Expr {
-    const expr = this.parseExpression();
+    const bindings: { name: string; value: Expr }[] = [];
+    while (this.peek()?.type === "let") {
+      bindings.push(this.parseLetBinding());
+    }
+    const body = this.parseExpression();
     if (this.pos < this.tokens.length) {
       throw new Error("interpret: unexpected trailing tokens");
     }
-    return expr;
+    if (bindings.length === 0) {
+      return body;
+    }
+    return { kind: "let", bindings, body };
+  }
+
+  private parseLetBinding(): { name: string; value: Expr } {
+    this.next();
+    const nameTok = this.next();
+    if (nameTok.type !== "ident") {
+      throw new Error("interpret: expected variable name after let");
+    }
+    const eq = this.next();
+    if (eq.type !== "assign") {
+      throw new Error("interpret: expected = after variable name");
+    }
+    const value = this.parseExpression();
+    const semi = this.next();
+    if (semi.type !== "semi") {
+      throw new Error("interpret: expected ; after let binding");
+    }
+    return { name: nameTok.value, value };
   }
 
   private parseExpression(): Expr {
@@ -161,21 +186,7 @@ class Parser {
     if (t.type === "lbrace") {
       const bindings: { name: string; value: Expr }[] = [];
       while (this.peek()?.type === "let") {
-        this.next();
-        const nameTok = this.next();
-        if (nameTok.type !== "ident") {
-          throw new Error("interpret: expected variable name after let");
-        }
-        const eq = this.next();
-        if (eq.type !== "assign") {
-          throw new Error("interpret: expected = after variable name");
-        }
-        const value = this.parseExpression();
-        const semi = this.next();
-        if (semi.type !== "semi") {
-          throw new Error("interpret: expected ; after let binding");
-        }
-        bindings.push({ name: nameTok.value, value });
+        bindings.push(this.parseLetBinding());
       }
       const body = this.parseExpression();
       const close = this.next();
