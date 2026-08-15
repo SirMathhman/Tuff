@@ -61,4 +61,8 @@ describe("evaluate", () => {
   test('evaluate("let x = 1; let y = &x; *y") => 1', () => {
     expect(evaluate("let x = 1; let y = &x; *y")).toBe(1);
   });
+
+  test('evaluate("let x = 1; let y = &x; y") => Error', () => {
+    expect(() => evaluate("let x = 1; let y = &x; y")).toThrow();
+  });
 });

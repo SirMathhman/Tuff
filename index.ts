@@ -6,7 +6,7 @@ export function evaluate(input: string): number {
   if (pos !== tokens.length) {
     throw new Error(`Unexpected token: ${tokens[pos]}`);
   }
-  return dereference(scope, value);
+  return asNumber(value);
 }
 
 function parseProgram(
@@ -104,6 +104,12 @@ function dereference(scope: Scope, value: Value): number {
   return current;
 }
 
+function asNumber(value: Value): number {
+  if (typeof value === "object")
+    throw new Error(`Expected number, got reference to '${value.ref}'`);
+  return value;
+}
+
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -151,8 +157,8 @@ function parseExpression(
     const rhs = parseTerm(tokens, next + 1, scope);
     value =
       op === "+"
-        ? dereference(scope, value) + dereference(scope, rhs.value)
-        : dereference(scope, value) - dereference(scope, rhs.value);
+        ? asNumber(value) + asNumber(rhs.value)
+        : asNumber(value) - asNumber(rhs.value);
     next = rhs.pos;
   }
   return { value, pos: next };
@@ -172,8 +178,8 @@ function parseTerm(
     const rhs = parseFactor(tokens, next + 1, scope);
     value =
       op === "*"
-        ? dereference(scope, value) * dereference(scope, rhs.value)
-        : dereference(scope, value) / dereference(scope, rhs.value);
+        ? asNumber(value) * asNumber(rhs.value)
+        : asNumber(value) / asNumber(rhs.value);
     next = rhs.pos;
   }
   return { value, pos: next };
@@ -189,7 +195,7 @@ function parseFactor(
   if (token === "+") return parseFactor(tokens, pos + 1, scope);
   if (token === "-") {
     const { value, pos: next } = parseFactor(tokens, pos + 1, scope);
-    return { value: -dereference(scope, value), pos: next };
+    return { value: -asNumber(value), pos: next };
   }
   if (token === "*") {
     const { value, pos: next } = parseFactor(tokens, pos + 1, scope);
