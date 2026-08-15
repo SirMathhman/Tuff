@@ -208,10 +208,13 @@ class Parser {
   private parseBlockBody(): number {
     this.pushScope();
     let value = 0;
+    let lastWasLet = false;
     while (this.peek()?.type !== "rbrace") {
+      lastWasLet = this.peek()?.type === "let";
       value = this.parseStatement();
       if (this.peek()?.type === "semicolon") this.next();
     }
+    if (lastWasLet) throw new Error("Block must end with an expression");
     if (this.next()?.type !== "rbrace") throw new Error("Expected }");
     this.popScope();
     return value;
