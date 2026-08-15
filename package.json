@@ -1,12 +1,16 @@
 {
   "name": "tuff",
-  "module": "index.ts",
-  "type": "module",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
-  "peerDependencies": {
+  "devDependencies": {
+    "@jest/globals": "^30.4.1",
+    "@types/jest": "latest",
+    "@types/node": "^26.2.0",
+    "jest": "latest",
+    "ts-jest": "latest",
     "typescript": "^5"
   }
 }

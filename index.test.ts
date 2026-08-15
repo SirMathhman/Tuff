@@ -1,5 +1,5 @@
-import { test, expect } from "bun:test";
-import { interpret } from "./index.ts";
+import { test, expect } from "@jest/globals";
+import { interpret } from "./index";
 
 test('interpret("") throws', () => {
   expect(() => interpret("")).toThrow();

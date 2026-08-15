@@ -3,13 +3,17 @@
 To install dependencies:
 
 ```bash
-bun install
+pnpm install
 ```
 
-To run:
+To run the tests:
 
 ```bash
-bun run index.ts
+pnpm test
 ```
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+To run the tests with coverage:
+
+```bash
+pnpm test:coverage
+```
