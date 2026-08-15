@@ -1,18 +1,19 @@
 export function evaluate(input: string): number {
   if (input === "") return 0;
   const tokens = tokenize(input);
-  const { value, pos } = parseProgram(tokens, 0, new Map());
+  const scope = new Map();
+  const { value, pos } = parseProgram(tokens, 0, scope);
   if (pos !== tokens.length) {
     throw new Error(`Unexpected token: ${tokens[pos]}`);
   }
-  return value;
+  return dereference(scope, value);
 }
 
 function parseProgram(
   tokens: Token[],
   pos: number,
   scope: Scope,
-): { value: number; pos: number } {
+): { value: Value; pos: number } {
   let next = pos;
   while (next < tokens.length && isStatementStart(tokens, next)) {
     next = parseStatement(tokens, next, scope).pos;
@@ -80,7 +81,7 @@ function parseEqualsExpr(
   tokens: Token[],
   pos: number,
   scope: Scope,
-): { value: number; pos: number } {
+): { value: Value; pos: number } {
   if (tokens[pos] !== "=") throw new Error("Expected '='");
   const { value, pos: afterExpr } = parseExpression(tokens, pos + 1, scope);
   let next = afterExpr;
@@ -89,8 +90,19 @@ function parseEqualsExpr(
 }
 
 type Token = number | string;
-type Var = { value: number; mutable: boolean };
+type Value = number | { ref: string };
+type Var = { value: Value; mutable: boolean };
 type Scope = Map<string, Var>;
+
+function dereference(scope: Scope, value: Value): number {
+  let current = value;
+  while (typeof current === "object") {
+    const target = scope.get(current.ref);
+    if (!target) throw new Error(`Undefined variable: ${current.ref}`);
+    current = target.value;
+  }
+  return current;
+}
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -108,7 +120,7 @@ function tokenize(input: string): Token[] {
       const value = Number(num);
       if (Number.isNaN(value)) throw new Error(`Invalid number: ${num}`);
       tokens.push(value);
-    } else if ("+-*/(){}=;".includes(ch)) {
+    } else if ("+-*/(){}=;&".includes(ch)) {
       tokens.push(ch as Token);
       i++;
     } else if (/[a-zA-Z_]/.test(ch)) {
@@ -129,7 +141,7 @@ function parseExpression(
   tokens: Token[],
   pos: number,
   scope: Scope,
-): { value: number; pos: number } {
+): { value: Value; pos: number } {
   let { value, pos: next } = parseTerm(tokens, pos, scope);
   while (
     next < tokens.length &&
@@ -137,7 +149,10 @@ function parseExpression(
   ) {
     const op = tokens[next] as "+" | "-";
     const rhs = parseTerm(tokens, next + 1, scope);
-    value = op === "+" ? value + rhs.value : value - rhs.value;
+    value =
+      op === "+"
+        ? dereference(scope, value) + dereference(scope, rhs.value)
+        : dereference(scope, value) - dereference(scope, rhs.value);
     next = rhs.pos;
   }
   return { value, pos: next };
@@ -147,7 +162,7 @@ function parseTerm(
   tokens: Token[],
   pos: number,
   scope: Scope,
-): { value: number; pos: number } {
+): { value: Value; pos: number } {
   let { value, pos: next } = parseFactor(tokens, pos, scope);
   while (
     next < tokens.length &&
@@ -155,7 +170,10 @@ function parseTerm(
   ) {
     const op = tokens[next] as "*" | "/";
     const rhs = parseFactor(tokens, next + 1, scope);
-    value = op === "*" ? value * rhs.value : value / rhs.value;
+    value =
+      op === "*"
+        ? dereference(scope, value) * dereference(scope, rhs.value)
+        : dereference(scope, value) / dereference(scope, rhs.value);
     next = rhs.pos;
   }
   return { value, pos: next };
@@ -165,13 +183,23 @@ function parseFactor(
   tokens: Token[],
   pos: number,
   scope: Scope,
-): { value: number; pos: number } {
+): { value: Value; pos: number } {
   const token = tokens[pos];
   if (token === undefined) throw new Error("Unexpected end of input");
   if (token === "+") return parseFactor(tokens, pos + 1, scope);
   if (token === "-") {
     const { value, pos: next } = parseFactor(tokens, pos + 1, scope);
-    return { value: -value, pos: next };
+    return { value: -dereference(scope, value), pos: next };
+  }
+  if (token === "*") {
+    const { value, pos: next } = parseFactor(tokens, pos + 1, scope);
+    return { value: dereference(scope, value), pos: next };
+  }
+  if (token === "&") {
+    const name = tokens[pos + 1];
+    if (typeof name !== "string" || !scope.has(name))
+      throw new Error(`Undefined variable: ${name}`);
+    return { value: { ref: name }, pos: pos + 2 };
   }
   if (token === "(") {
     const { value, pos: next } = parseExpression(tokens, pos + 1, scope);
@@ -194,7 +222,7 @@ function parseBlock(
   tokens: Token[],
   pos: number,
   parentScope: Scope,
-): { value: number; pos: number } {
+): { value: Value; pos: number } {
   const scope = new Map(parentScope);
   let next = pos + 1; // skip '{'
   while (next < tokens.length && isStatementStart(tokens, next)) {
