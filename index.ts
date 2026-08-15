@@ -75,15 +75,41 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
+interface Binding {
+  value: number;
+  mutable: boolean;
+}
+
 class Parser {
   private pos = 0;
 
-  private mutable = new Set<string>();
+  private scopes: Map<string, Binding>[] = [new Map()];
 
-  constructor(
-    private tokens: Token[],
-    private env: Map<string, number>,
-  ) {}
+  constructor(private tokens: Token[]) {}
+
+  private lookup(name: string): Binding | undefined {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const scope = this.scopes[i];
+      if (!scope) continue;
+      const binding = scope.get(name);
+      if (binding) return binding;
+    }
+    return undefined;
+  }
+
+  private define(name: string, value: number, mutable: boolean): void {
+    const scope = this.scopes[this.scopes.length - 1];
+    if (!scope) throw new Error("No active scope");
+    scope.set(name, { value, mutable });
+  }
+
+  private pushScope(): void {
+    this.scopes.push(new Map());
+  }
+
+  private popScope(): void {
+    this.scopes.pop();
+  }
 
   parseProgram(): number {
     let value = 0;
@@ -116,8 +142,7 @@ class Parser {
       if (eq?.type !== "op" || eq.value !== "=")
         throw new Error("Expected = after let identifier");
       const rhs = this.parseExpression();
-      this.env.set(nameTok.value, rhs);
-      if (isMut) this.mutable.add(nameTok.value);
+      this.define(nameTok.value, rhs, isMut);
       return 0;
     }
     if (tok?.type === "ident") {
@@ -127,9 +152,11 @@ class Parser {
       if (eq?.type === "op" && eq.value === "=") {
         this.next();
         const rhs = this.parseExpression();
-        if (!this.mutable.has(tok.value))
+        const binding = this.lookup(tok.value);
+        if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
+        if (!binding.mutable)
           throw new Error(`Cannot assign to immutable variable: ${tok.value}`);
-        this.env.set(tok.value, rhs);
+        binding.value = rhs;
         return 0;
       }
       this.pos = saved;
@@ -175,10 +202,9 @@ class Parser {
     const tok = this.next();
     if (tok?.type === "num") return tok.value;
     if (tok?.type === "ident") {
-      const value = this.env.get(tok.value);
-      if (value === undefined)
-        throw new Error(`Undefined variable: ${tok.value}`);
-      return value;
+      const binding = this.lookup(tok.value);
+      if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
+      return binding.value;
     }
     if (tok?.type === "lparen") {
       const value = this.parseExpression();
@@ -192,12 +218,14 @@ class Parser {
   }
 
   private parseBlockBody(): number {
+    this.pushScope();
     let value = 0;
     while (this.peek()?.type !== "rbrace") {
       value = this.parseStatement();
       if (this.peek()?.type === "semicolon") this.next();
     }
     if (this.next()?.type !== "rbrace") throw new Error("Expected }");
+    this.popScope();
     return value;
   }
 }
@@ -205,6 +233,6 @@ class Parser {
 export function evaluate(input: string): number {
   const tokens = tokenize(input);
   if (tokens.length === 0) return 0;
-  const parser = new Parser(tokens, new Map());
+  const parser = new Parser(tokens);
   return parser.parseProgram();
 }
