@@ -14,18 +14,42 @@ function parseProgram(
   scope: Scope,
 ): { value: number; pos: number } {
   let next = pos;
-  while (next < tokens.length && tokens[next] === "let") {
-    next = parseLet(tokens, next, scope).pos;
+  while (next < tokens.length && isStatementStart(tokens, next)) {
+    next = parseStatement(tokens, next, scope).pos;
   }
   return parseExpression(tokens, next, scope);
 }
 
-function parseLet(
+function isStatementStart(tokens: Token[], pos: number): boolean {
+  const token = tokens[pos];
+  if (token === "let") return true;
+  if (
+    typeof token === "string" &&
+    token !== "let" &&
+    token !== "mut" &&
+    tokens[pos + 1] === "="
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function parseStatement(
   tokens: Token[],
   pos: number,
   scope: Scope,
 ): { pos: number } {
+  if (tokens[pos] === "let") return parseLet(tokens, pos, scope);
+  return parseAssignment(tokens, pos, scope);
+}
+
+function parseLet(tokens: Token[], pos: number, scope: Scope): { pos: number } {
   let next = pos + 1; // skip 'let'
+  let mutable = false;
+  if (tokens[next] === "mut") {
+    mutable = true;
+    next++; // skip 'mut'
+  }
   const name = tokens[next];
   if (typeof name !== "string")
     throw new Error("Expected variable name after 'let'");
@@ -33,14 +57,36 @@ function parseLet(
   if (tokens[next] !== "=") throw new Error(`Expected '=' after '${name}'`);
   next++; // skip '='
   const { value, pos: afterExpr } = parseExpression(tokens, next, scope);
-  scope.set(name, value);
+  scope.set(name, { value, mutable });
+  next = afterExpr;
+  if (tokens[next] === ";") next++; // skip ';'
+  return { pos: next };
+}
+
+function parseAssignment(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { pos: number } {
+  const name = tokens[pos];
+  if (typeof name !== "string")
+    throw new Error(`Expected variable name, got '${name}'`);
+  const varInfo = scope.get(name);
+  if (!varInfo) throw new Error(`Undefined variable: ${name}`);
+  if (!varInfo.mutable) throw new Error(`Cannot assign to immutable variable: ${name}`);
+  let next = pos + 1; // skip name
+  if (tokens[next] !== "=") throw new Error(`Expected '=' after '${name}'`);
+  next++; // skip '='
+  const { value, pos: afterExpr } = parseExpression(tokens, next, scope);
+  varInfo.value = value;
   next = afterExpr;
   if (tokens[next] === ";") next++; // skip ';'
   return { pos: next };
 }
 
 type Token = number | string;
-type Scope = Map<string, number>;
+type Var = { value: number; mutable: boolean };
+type Scope = Map<string, Var>;
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -132,9 +178,10 @@ function parseFactor(
     return parseBlock(tokens, pos, scope);
   }
   if (typeof token === "number") return { value: token, pos: pos + 1 };
-  if (typeof token === "string" && token !== "let") {
-    if (!scope.has(token)) throw new Error(`Undefined variable: ${token}`);
-    return { value: scope.get(token)!, pos: pos + 1 };
+  if (typeof token === "string" && token !== "let" && token !== "mut") {
+    const varInfo = scope.get(token);
+    if (!varInfo) throw new Error(`Undefined variable: ${token}`);
+    return { value: varInfo.value, pos: pos + 1 };
   }
   throw new Error(`Unexpected token: ${token}`);
 }
@@ -146,8 +193,8 @@ function parseBlock(
 ): { value: number; pos: number } {
   const scope = new Map(parentScope);
   let next = pos + 1; // skip '{'
-  while (next < tokens.length && tokens[next] === "let") {
-    next = parseLet(tokens, next, scope).pos;
+  while (next < tokens.length && isStatementStart(tokens, next)) {
+    next = parseStatement(tokens, next, scope).pos;
   }
   const { value, pos: afterFinal } = parseExpression(tokens, next, scope);
   if (tokens[afterFinal] !== "}") throw new Error("Expected '}'");
