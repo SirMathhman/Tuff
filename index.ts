@@ -9,6 +9,19 @@ type Token =
   | { type: "semicolon" }
   | { type: "let" };
 
+const singleCharTokens: Record<string, Token["type"]> = {
+  "(": "lparen",
+  ")": "rparen",
+  "{": "lbrace",
+  "}": "rbrace",
+  ";": "semicolon",
+  "+": "op",
+  "-": "op",
+  "*": "op",
+  "/": "op",
+  "=": "op",
+};
+
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -35,38 +48,13 @@ function tokenize(input: string): Token[] {
       i = j;
       continue;
     }
-    if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
-      tokens.push({ type: "op", value: ch });
-      i++;
-      continue;
-    }
-    if (ch === "(") {
-      tokens.push({ type: "lparen" });
-      i++;
-      continue;
-    }
-    if (ch === ")") {
-      tokens.push({ type: "rparen" });
-      i++;
-      continue;
-    }
-    if (ch === "{") {
-      tokens.push({ type: "lbrace" });
-      i++;
-      continue;
-    }
-    if (ch === "}") {
-      tokens.push({ type: "rbrace" });
-      i++;
-      continue;
-    }
-    if (ch === ";") {
-      tokens.push({ type: "semicolon" });
-      i++;
-      continue;
-    }
-    if (ch === "=") {
-      tokens.push({ type: "op", value: "=" });
+    const single = singleCharTokens[ch];
+    if (single) {
+      tokens.push(
+        single === "op"
+          ? { type: "op", value: ch }
+          : ({ type: single } as Token),
+      );
       i++;
       continue;
     }
