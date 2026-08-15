@@ -104,6 +104,8 @@ class Parser {
     const tok = this.peek();
     if (tok?.type === "let") {
       this.next();
+      const mutTok = this.peek();
+      if (mutTok?.type === "ident" && mutTok.value === "mut") this.next();
       const nameTok = this.next();
       if (nameTok?.type !== "ident")
         throw new Error("Expected identifier after let");
@@ -113,6 +115,18 @@ class Parser {
       const rhs = this.parseExpression();
       this.env.set(nameTok.value, rhs);
       return 0;
+    }
+    if (tok?.type === "ident") {
+      const saved = this.pos;
+      this.next();
+      const eq = this.peek();
+      if (eq?.type === "op" && eq.value === "=") {
+        this.next();
+        const rhs = this.parseExpression();
+        this.env.set(tok.value, rhs);
+        return 0;
+      }
+      this.pos = saved;
     }
     return this.parseExpression();
   }
