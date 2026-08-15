@@ -97,7 +97,6 @@ interface Binding {
 
 class Parser {
   private pos = 0;
-  private needsValue = false;
 
   private scopes: Map<string, Binding>[] = [new Map()];
 
@@ -135,8 +134,7 @@ class Parser {
   parseProgram(): number {
     let value: Value = { kind: "num", value: 0 };
     while (this.pos < this.tokens.length) {
-      this.needsValue = false;
-      value = this.parseStatement().value;
+      value = this.parseStatement(false).value;
       if (this.peek()?.type === "semicolon") this.next();
     }
     return this.num(value);
@@ -150,7 +148,7 @@ class Parser {
     return this.tokens[this.pos++];
   }
 
-  private parseStatement(): {
+  private parseStatement(needsValue: boolean): {
     value: Value;
     isStatement: boolean;
   } {
@@ -167,8 +165,7 @@ class Parser {
       const eq = this.next();
       if (eq?.type !== "op" || eq.value !== "=")
         throw new Error("Expected = after let identifier");
-      this.needsValue = true;
-      const rhs = this.parseExpression();
+      const rhs = this.parseExpression(true);
       this.define(nameTok.value, rhs, isMut);
       return { value: zero, isStatement: true };
     }
@@ -178,8 +175,7 @@ class Parser {
       const eq = this.peek();
       if (eq?.type === "op" && eq.value === "=") {
         this.next();
-        this.needsValue = true;
-        const rhs = this.parseExpression();
+        const rhs = this.parseExpression(true);
         const binding = this.lookup(tok.value);
         if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
         if (!binding.mutable)
@@ -189,20 +185,20 @@ class Parser {
       }
       this.pos = saved;
     }
-    return { value: this.parseExpression(), isStatement: false };
+    return { value: this.parseExpression(needsValue), isStatement: false };
   }
 
-  private parseExpression(): Value {
-    return this.parseLogicalOr();
+  private parseExpression(needsValue: boolean): Value {
+    return this.parseLogicalOr(needsValue);
   }
 
-  private parseLogicalOr(): Value {
-    let left = this.parseComparison();
+  private parseLogicalOr(needsValue: boolean): Value {
+    let left = this.parseComparison(needsValue);
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && tok.value === "||") {
         this.next();
-        const right = this.parseComparison();
+        const right = this.parseComparison(needsValue);
         left = {
           kind: "bool",
           value: this.num(left) !== 0 || this.num(right) !== 0,
@@ -214,13 +210,13 @@ class Parser {
     return left;
   }
 
-  private parseComparison(): Value {
-    let left = this.parseAdditive();
+  private parseComparison(needsValue: boolean): Value {
+    let left = this.parseAdditive(needsValue);
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && this.isComparisonOp(tok.value)) {
         this.next();
-        const right = this.parseAdditive();
+        const right = this.parseAdditive(needsValue);
         left = {
           kind: "bool",
           value: this.compare(tok.value, left, right),
@@ -262,13 +258,13 @@ class Parser {
     }
   }
 
-  private parseAdditive(): Value {
-    let left = this.parseMultiplicative();
+  private parseAdditive(needsValue: boolean): Value {
+    let left = this.parseMultiplicative(needsValue);
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && (tok.value === "+" || tok.value === "-")) {
         this.next();
-        const right = this.parseMultiplicative();
+        const right = this.parseMultiplicative(needsValue);
         left = {
           kind: "num",
           value:
@@ -283,13 +279,13 @@ class Parser {
     return left;
   }
 
-  private parseMultiplicative(): Value {
-    let left = this.parsePrimary();
+  private parseMultiplicative(needsValue: boolean): Value {
+    let left = this.parsePrimary(needsValue);
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && (tok.value === "*" || tok.value === "/")) {
         this.next();
-        const right = this.parsePrimary();
+        const right = this.parsePrimary(needsValue);
         left = {
           kind: "num",
           value:
@@ -304,7 +300,7 @@ class Parser {
     return left;
   }
 
-  private parsePrimary(): Value {
+  private parsePrimary(needsValue: boolean): Value {
     const tok = this.next();
     if (tok?.type === "num") return { kind: "num", value: tok.value };
     if (tok?.type === "bool") return { kind: "bool", value: tok.value };
@@ -314,34 +310,31 @@ class Parser {
       return binding.value;
     }
     if (tok?.type === "lparen") {
-      const value = this.parseExpression();
+      const value = this.parseExpression(needsValue);
       if (this.next()?.type !== "rparen") throw new Error("Expected )");
       return value;
     }
     if (tok?.type === "lbrace") {
-      return this.parseBlockBody();
+      return this.parseBlockBody(needsValue);
     }
     throw new Error("Unexpected token in expression");
   }
 
-  private parseBlockBody(): Value {
+  private parseBlockBody(needsValue: boolean): Value {
     this.pushScope();
-    const needsValue = this.needsValue;
     let value: Value = { kind: "num", value: 0 };
     let lastWasStatement = false;
     let hasStatements = false;
     while (this.peek()?.type !== "rbrace") {
       const saved = this.pos;
-      this.needsValue = false;
-      const result = this.parseStatement();
+      const result = this.parseStatement(false);
       value = result.value;
       lastWasStatement = result.isStatement;
       hasStatements = true;
       const isLast = this.peek()?.type === "rbrace";
       if (isLast && needsValue) {
         this.pos = saved;
-        this.needsValue = true;
-        const last = this.parseStatement();
+        const last = this.parseStatement(true);
         value = last.value;
         lastWasStatement = last.isStatement;
       }
@@ -353,7 +346,6 @@ class Parser {
       throw new Error("Block must end with an expression");
     if (this.next()?.type !== "rbrace") throw new Error("Expected }");
     this.popScope();
-    this.needsValue = false;
     return value;
   }
 }
