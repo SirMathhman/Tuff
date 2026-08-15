@@ -7,7 +7,8 @@ type Token =
   | { type: "lbrace" }
   | { type: "rbrace" }
   | { type: "semicolon" }
-  | { type: "let" };
+  | { type: "let" }
+  | { type: "bool"; value: number };
 
 const singleCharTokens: Record<string, Token["type"]> = {
   "(": "lparen",
@@ -42,9 +43,13 @@ function tokenize(input: string): Token[] {
       let j = i;
       while (j < input.length && /[a-zA-Z0-9_]/.test(input.charAt(j))) j++;
       const word = input.slice(i, j);
-      tokens.push(
-        word === "let" ? { type: "let" } : { type: "ident", value: word },
-      );
+      if (word === "let") {
+        tokens.push({ type: "let" });
+      } else if (word === "true" || word === "false") {
+        tokens.push({ type: "bool", value: word === "true" ? 1 : 0 });
+      } else {
+        tokens.push({ type: "ident", value: word });
+      }
       i = j;
       continue;
     }
@@ -216,8 +221,7 @@ class Parser {
   private parsePrimary(): number {
     const tok = this.next();
     if (tok?.type === "num") return tok.value;
-    if (tok?.type === "ident" && tok.value === "true") return 1;
-    if (tok?.type === "ident" && tok.value === "false") return 0;
+    if (tok?.type === "bool") return tok.value;
     if (tok?.type === "ident") {
       const binding = this.lookup(tok.value);
       if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
