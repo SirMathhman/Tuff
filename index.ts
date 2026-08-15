@@ -78,6 +78,8 @@ function tokenize(input: string): Token[] {
 class Parser {
   private pos = 0;
 
+  private mutable = new Set<string>();
+
   constructor(
     private tokens: Token[],
     private env: Map<string, number>,
@@ -105,7 +107,8 @@ class Parser {
     if (tok?.type === "let") {
       this.next();
       const mutTok = this.peek();
-      if (mutTok?.type === "ident" && mutTok.value === "mut") this.next();
+      const isMut = mutTok?.type === "ident" && mutTok.value === "mut";
+      if (isMut) this.next();
       const nameTok = this.next();
       if (nameTok?.type !== "ident")
         throw new Error("Expected identifier after let");
@@ -114,6 +117,7 @@ class Parser {
         throw new Error("Expected = after let identifier");
       const rhs = this.parseExpression();
       this.env.set(nameTok.value, rhs);
+      if (isMut) this.mutable.add(nameTok.value);
       return 0;
     }
     if (tok?.type === "ident") {
@@ -123,6 +127,8 @@ class Parser {
       if (eq?.type === "op" && eq.value === "=") {
         this.next();
         const rhs = this.parseExpression();
+        if (!this.mutable.has(tok.value))
+          throw new Error(`Cannot assign to immutable variable: ${tok.value}`);
         this.env.set(tok.value, rhs);
         return 0;
       }
