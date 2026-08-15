@@ -1,11 +1,42 @@
 export function evaluate(input: string): number {
   if (input === "") return 0;
   const tokens = tokenize(input);
-  const value = parseExpression(tokens, 0, new Map());
-  if (value.pos !== tokens.length) {
-    throw new Error(`Unexpected token: ${tokens[value.pos]}`);
+  const { value, pos } = parseProgram(tokens, 0, new Map());
+  if (pos !== tokens.length) {
+    throw new Error(`Unexpected token: ${tokens[pos]}`);
   }
-  return value.value;
+  return value;
+}
+
+function parseProgram(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { value: number; pos: number } {
+  let next = pos;
+  while (next < tokens.length && tokens[next] === "let") {
+    next = parseLet(tokens, next, scope).pos;
+  }
+  return parseExpression(tokens, next, scope);
+}
+
+function parseLet(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { pos: number } {
+  let next = pos + 1; // skip 'let'
+  const name = tokens[next];
+  if (typeof name !== "string")
+    throw new Error("Expected variable name after 'let'");
+  next++; // skip name
+  if (tokens[next] !== "=") throw new Error(`Expected '=' after '${name}'`);
+  next++; // skip '='
+  const { value, pos: afterExpr } = parseExpression(tokens, next, scope);
+  scope.set(name, value);
+  next = afterExpr;
+  if (tokens[next] === ";") next++; // skip ';'
+  return { pos: next };
 }
 
 type Token = number | string;
@@ -116,16 +147,7 @@ function parseBlock(
   const scope = new Map(parentScope);
   let next = pos + 1; // skip '{'
   while (next < tokens.length && tokens[next] === "let") {
-    next++; // skip 'let'
-    const name = tokens[next];
-    if (typeof name !== "string") throw new Error("Expected variable name after 'let'");
-    next++; // skip name
-    if (tokens[next] !== "=") throw new Error(`Expected '=' after '${name}'`);
-    next++; // skip '='
-    const { value, pos: afterExpr } = parseExpression(tokens, next, scope);
-    scope.set(name, value);
-    next = afterExpr;
-    if (tokens[next] === ";") next++; // skip ';'
+    next = parseLet(tokens, next, scope).pos;
   }
   const { value, pos: afterFinal } = parseExpression(tokens, next, scope);
   if (tokens[afterFinal] !== "}") throw new Error("Expected '}'");
