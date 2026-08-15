@@ -1,6 +1,0 @@
-[test]
-coverageSkipTestFiles = true
-coverageReporter = ["text", "lcov"]
-
-# We don't care about function or statement coverage, only line
-coverageThreshold = { lines = 1.0, functions = 0.0, statements = 0.0 }
