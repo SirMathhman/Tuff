@@ -192,6 +192,7 @@ class Parser {
   private parsePrimary(needsValue: boolean): number {
     const tok = this.next();
     if (tok?.type === "num") return tok.value;
+    if (tok?.type === "ident" && tok.value === "true") return 1;
     if (tok?.type === "ident") {
       const binding = this.lookup(tok.value);
       if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
@@ -214,11 +215,18 @@ class Parser {
     let lastWasStatement = false;
     let hasStatements = false;
     while (this.peek()?.type !== "rbrace") {
-      const isLast = this.isLastStatementInBlock();
-      const result = this.parseStatement(needsValue && isLast);
+      const saved = this.pos;
+      const result = this.parseStatement(false);
       value = result.value;
       lastWasStatement = result.isStatement;
       hasStatements = true;
+      const isLast = this.peek()?.type === "rbrace";
+      if (isLast && needsValue) {
+        this.pos = saved;
+        const last = this.parseStatement(true);
+        value = last.value;
+        lastWasStatement = last.isStatement;
+      }
       if (this.peek()?.type === "semicolon") this.next();
     }
     if (needsValue && !hasStatements)
@@ -228,29 +236,6 @@ class Parser {
     if (this.next()?.type !== "rbrace") throw new Error("Expected }");
     this.popScope();
     return value;
-  }
-
-  private isLastStatementInBlock(): boolean {
-    let depth = 0;
-    let i = this.pos;
-    while (i < this.tokens.length) {
-      const tok = this.tokens[i];
-      if (!tok) return false;
-      if (tok.type === "lbrace") depth++;
-      else if (tok.type === "rbrace") {
-        if (depth === 0) return true;
-        depth--;
-      } else if (
-        depth === 0 &&
-        tok.type === "semicolon" &&
-        i + 1 < this.tokens.length &&
-        this.tokens[i + 1]?.type !== "rbrace"
-      ) {
-        return false;
-      }
-      i++;
-    }
-    return false;
   }
 }
 
