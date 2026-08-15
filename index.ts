@@ -25,6 +25,7 @@ function isStatementStart(tokens: Token[], pos: number): boolean {
   const token = tokens[pos];
   if (token === "let") return true;
   if (token === "*") return isDerefAssignment(tokens, pos);
+  if (token === "{") return isBlockStatement(tokens, pos);
   if (
     typeof token === "string" &&
     token !== "let" &&
@@ -34,6 +35,33 @@ function isStatementStart(tokens: Token[], pos: number): boolean {
     return true;
   }
   return false;
+}
+
+function isBlockStatement(tokens: Token[], pos: number): boolean {
+  if (tokens[pos] !== "{") return false;
+  const close = findMatchingBrace(tokens, pos);
+  if (close === -1) return false;
+  const after = tokens[close + 1];
+  // A block is an expression when it's the operand of an operator or inside parens.
+  return (
+    after !== "+" &&
+    after !== "-" &&
+    after !== "*" &&
+    after !== "/" &&
+    after !== ")"
+  );
+}
+
+function findMatchingBrace(tokens: Token[], pos: number): number {
+  let depth = 0;
+  for (let i = pos; i < tokens.length; i++) {
+    if (tokens[i] === "{") depth++;
+    else if (tokens[i] === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
 }
 
 function isDerefAssignment(tokens: Token[], pos: number): boolean {
@@ -49,7 +77,22 @@ function parseStatement(
 ): { pos: number } {
   if (tokens[pos] === "let") return parseLet(tokens, pos, scope);
   if (tokens[pos] === "*") return parseDerefAssignment(tokens, pos, scope);
+  if (tokens[pos] === "{") return parseBlockStatement(tokens, pos, scope);
   return parseAssignment(tokens, pos, scope);
+}
+
+function parseBlockStatement(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { pos: number } {
+  const blockScope = new Map(scope);
+  let next = pos + 1; // skip '{'
+  while (next < tokens.length && isStatementStart(tokens, next)) {
+    next = parseStatement(tokens, next, blockScope).pos;
+  }
+  if (tokens[next] !== "}") throw new Error("Expected '}'");
+  return { pos: next + 1 };
 }
 
 function parseDerefAssignment(
