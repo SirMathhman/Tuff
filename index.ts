@@ -8,7 +8,7 @@ export function evaluate(input: string): number {
   return value.value;
 }
 
-type Token = number | "+" | "-" | "*" | "/" | "(" | ")";
+type Token = number | "+" | "-" | "*" | "/" | "(" | ")" | "{" | "}";
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -26,7 +26,7 @@ function tokenize(input: string): Token[] {
       const value = Number(num);
       if (Number.isNaN(value)) throw new Error(`Invalid number: ${num}`);
       tokens.push(value);
-    } else if ("+-*/()".includes(ch)) {
+    } else if ("+-*/(){}".includes(ch)) {
       tokens.push(ch as Token);
       i++;
     } else {
@@ -81,9 +81,10 @@ function parseFactor(
     const { value, pos: next } = parseFactor(tokens, pos + 1);
     return { value: -value, pos: next };
   }
-  if (token === "(") {
+  if (token === "(" || token === "{") {
     const { value, pos: next } = parseExpression(tokens, pos + 1);
-    if (tokens[next] !== ")") throw new Error("Expected ')'");
+    const closing = token === "(" ? ")" : "}";
+    if (tokens[next] !== closing) throw new Error(`Expected '${closing}'`);
     return { value, pos: next + 1 };
   }
   if (typeof token === "number") return { value: token, pos: pos + 1 };
