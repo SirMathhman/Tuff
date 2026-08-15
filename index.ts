@@ -9,7 +9,8 @@ const OPS: Record<
 };
 
 export function evaluate(input: string): number {
-  const tokens = input.trim().match(/\d+|[+\-*/()]/g);
+  const normalized = input.replace(/\{/g, "(").replace(/\}/g, ")");
+  const tokens = normalized.trim().match(/\d+|[+\-*/()]/g);
   if (!tokens) return 0;
 
   const output: number[] = [];
