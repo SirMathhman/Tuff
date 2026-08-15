@@ -8,7 +8,7 @@ type Token =
   | { type: "rbrace" }
   | { type: "semicolon" }
   | { type: "let" }
-  | { type: "bool"; value: number };
+  | { type: "bool"; value: boolean };
 
 const singleCharTokens: Record<string, Token["type"]> = {
   "(": "lparen",
@@ -45,7 +45,7 @@ function readToken(input: string, i: number): { token: Token; next: number } {
     if (word === "let") return { token: { type: "let" }, next: j };
     if (word === "true" || word === "false")
       return {
-        token: { type: "bool", value: word === "true" ? 1 : 0 },
+        token: { type: "bool", value: word === "true" },
         next: j,
       };
     return { token: { type: "ident", value: word }, next: j };
@@ -85,7 +85,7 @@ function tokenize(input: string): Token[] {
 
 type Value =
   | { kind: "num"; value: number }
-  | { kind: "bool"; value: number };
+  | { kind: "bool"; value: boolean };
 
 interface Binding {
   value: Value;
@@ -124,6 +124,11 @@ class Parser {
     this.scopes.pop();
   }
 
+  private num(v: Value): number {
+    if (v.kind === "bool") return v.value ? 1 : 0;
+    return v.value;
+  }
+
   parseProgram(): number {
     let value: Value = { kind: "num", value: 0 };
     while (this.pos < this.tokens.length) {
@@ -131,7 +136,7 @@ class Parser {
       value = this.parseStatement().value;
       if (this.peek()?.type === "semicolon") this.next();
     }
-    return value.value;
+    return this.num(value);
   }
 
   private peek(): Token | undefined {
@@ -197,7 +202,7 @@ class Parser {
         const right = this.parseComparison();
         left = {
           kind: "bool",
-          value: left.value !== 0 || right.value !== 0 ? 1 : 0,
+          value: this.num(left) !== 0 || this.num(right) !== 0,
         };
       } else {
         break;
@@ -215,8 +220,7 @@ class Parser {
         const right = this.parseAdditive();
         left = {
           kind: "bool",
-          value:
-            left.kind === right.kind && left.value === right.value ? 1 : 0,
+          value: left.kind === right.kind && left.value === right.value,
         };
       } else {
         break;
@@ -234,7 +238,10 @@ class Parser {
         const right = this.parseMultiplicative();
         left = {
           kind: "num",
-          value: tok.value === "+" ? left.value + right.value : left.value - right.value,
+          value:
+            tok.value === "+"
+              ? this.num(left) + this.num(right)
+              : this.num(left) - this.num(right),
         };
       } else {
         break;
@@ -252,7 +259,10 @@ class Parser {
         const right = this.parsePrimary();
         left = {
           kind: "num",
-          value: tok.value === "*" ? left.value * right.value : left.value / right.value,
+          value:
+            tok.value === "*"
+              ? this.num(left) * this.num(right)
+              : this.num(left) / this.num(right),
         };
       } else {
         break;
