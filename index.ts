@@ -164,11 +164,12 @@ function parseEqualsExpr(
 }
 
 type Token = number | string;
-type Value = number | { ref: string; mutable: boolean };
+type Scalar = number | boolean;
+type Value = Scalar | { ref: string; mutable: boolean };
 type Var = { value: Value; mutable: boolean };
 type Scope = Map<string, Var>;
 
-function dereference(scope: Scope, value: Value): number {
+function dereference(scope: Scope, value: Value): Scalar {
   let current = value;
   while (typeof current === "object") {
     const target = scope.get(current.ref);
@@ -181,7 +182,18 @@ function dereference(scope: Scope, value: Value): number {
 function asNumber(value: Value): number {
   if (typeof value === "object")
     throw new Error(`Expected number, got reference to '${value.ref}'`);
-  return value;
+  return typeof value === "boolean" ? (value ? 1 : 0) : value;
+}
+
+function valuesEqual(scope: Scope, a: Value, b: Value): boolean {
+  const left = dereference(scope, a);
+  const right = dereference(scope, b);
+  if (typeof left === "boolean" || typeof right === "boolean") {
+    return (
+      typeof left === "boolean" && typeof right === "boolean" && left === right
+    );
+  }
+  return left === right;
 }
 
 function tokenize(input: string): Token[] {
@@ -228,7 +240,7 @@ function parseComparison(
   let { value, pos: next } = parseExpression(tokens, pos, scope);
   while (next < tokens.length && tokens[next] === "==") {
     const rhs = parseExpression(tokens, next + 1, scope);
-    value = asNumber(value) === asNumber(rhs.value) ? 1 : 0;
+    value = valuesEqual(scope, value, rhs.value) ? 1 : 0;
     next = rhs.pos;
   }
   return { value, pos: next };
@@ -312,8 +324,8 @@ function parseFactor(
   if (token === "{") {
     return parseBlock(tokens, pos, scope);
   }
-  if (token === "true") return { value: 1, pos: pos + 1 };
-  if (token === "false") return { value: 0, pos: pos + 1 };
+  if (token === "true") return { value: true, pos: pos + 1 };
+  if (token === "false") return { value: false, pos: pos + 1 };
   if (typeof token === "number") return { value: token, pos: pos + 1 };
   if (typeof token === "string" && token !== "let" && token !== "mut") {
     const varInfo = scope.get(token);
