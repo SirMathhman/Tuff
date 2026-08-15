@@ -58,6 +58,11 @@ function tokenize(input: string): Token[] {
       i += 2;
       continue;
     }
+    if (ch === "=" && input.charAt(i + 1) === "=") {
+      tokens.push({ type: "op", value: "==" });
+      i += 2;
+      continue;
+    }
     const single = singleCharTokens[ch];
     if (single) {
       tokens.push(
@@ -174,13 +179,28 @@ class Parser {
   }
 
   private parseLogicalOr(): number {
-    let left = this.parseAdditive();
+    let left = this.parseComparison();
     for (;;) {
       const tok = this.peek();
       if (tok?.type === "op" && tok.value === "||") {
         this.next();
-        const right = this.parseAdditive();
+        const right = this.parseComparison();
         left = left !== 0 || right !== 0 ? 1 : 0;
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private parseComparison(): number {
+    let left = this.parseAdditive();
+    for (;;) {
+      const tok = this.peek();
+      if (tok?.type === "op" && tok.value === "==") {
+        this.next();
+        const right = this.parseAdditive();
+        left = left === right ? 1 : 0;
       } else {
         break;
       }
