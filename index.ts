@@ -13,21 +13,21 @@ function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {
-    const ch = input[i];
+    const ch = input.charAt(i);
     if (/\s/.test(ch)) {
       i++;
       continue;
     }
     if (/\d/.test(ch)) {
       let j = i;
-      while (j < input.length && /\d/.test(input[j])) j++;
+      while (j < input.length && /\d/.test(input.charAt(j))) j++;
       tokens.push({ type: "num", value: Number(input.slice(i, j)) });
       i = j;
       continue;
     }
     if (/[a-zA-Z_]/.test(ch)) {
       let j = i;
-      while (j < input.length && /[a-zA-Z0-9_]/.test(input[j])) j++;
+      while (j < input.length && /[a-zA-Z0-9_]/.test(input.charAt(j))) j++;
       const word = input.slice(i, j);
       tokens.push(
         word === "let" ? { type: "let" } : { type: "ident", value: word },
