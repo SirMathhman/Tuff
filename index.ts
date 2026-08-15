@@ -80,8 +80,11 @@ function tokenize(input: string): Token[] {
 }
 
 type Stmt =
-  | { kind: "bind"; name: string; value: Expr }
+  | { kind: "bind"; name: string; value: Expr; mutable: boolean }
   | { kind: "assign"; name: string; value: Expr };
+
+type Var = { value: number; mutable: boolean };
+type Env = Map<string, Var>;
 
 type Expr =
   | { kind: "num"; value: number }
@@ -148,8 +151,10 @@ class Parser {
 
   private parseLetBinding(): Stmt {
     this.next();
+    let mutable = false;
     if (this.peek()?.type === "mut") {
       this.next();
+      mutable = true;
     }
     const nameTok = this.expectIdent();
     const eq = this.next();
@@ -161,7 +166,7 @@ class Parser {
     if (semi.type !== "semi") {
       throw new Error("interpret: expected ; after let binding");
     }
-    return { kind: "bind", name: nameTok.value, value };
+    return { kind: "bind", name: nameTok.value, value, mutable };
   }
 
   private parseAssign(): Stmt {
@@ -239,15 +244,16 @@ class Parser {
   }
 }
 
-function evaluate(node: Expr, env: Map<string, number>): number {
+function evaluate(node: Expr, env: Env): number {
   switch (node.kind) {
     case "num":
       return node.value;
     case "var": {
-      if (!env.has(node.name)) {
+      const v = env.get(node.name);
+      if (!v) {
         throw new Error(`interpret: undefined variable "${node.name}"`);
       }
-      return env.get(node.name)!;
+      return v.value;
     }
     case "neg":
       return -evaluate(node.operand, env);
@@ -256,10 +262,18 @@ function evaluate(node: Expr, env: Map<string, number>): number {
     case "let": {
       const scope = new Map(env);
       for (const stmt of node.stmts) {
-        if (stmt.kind === "assign" && !scope.has(stmt.name)) {
-          throw new Error(`interpret: undefined variable "${stmt.name}"`);
+        if (stmt.kind === "assign") {
+          const existing = scope.get(stmt.name);
+          if (!existing) {
+            throw new Error(`interpret: undefined variable "${stmt.name}"`);
+          }
+          if (!existing.mutable) {
+            throw new Error(`interpret: cannot assign to immutable variable "${stmt.name}"`);
+          }
+          scope.set(stmt.name, { value: evaluate(stmt.value, scope), mutable: true });
+        } else {
+          scope.set(stmt.name, { value: evaluate(stmt.value, scope), mutable: stmt.mutable });
         }
-        scope.set(stmt.name, evaluate(stmt.value, scope));
       }
       return evaluate(node.body, scope);
     }
