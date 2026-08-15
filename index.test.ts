@@ -20,3 +20,7 @@ test('interpret("1 + 2") => 3', () => {
 test('interpret("1 + 2 + 3") => 6', () => {
   expect(interpret("1 + 2 + 3")).toBe(6);
 });
+
+test('interpret("(2 + 3) * 4") => 20', () => {
+  expect(interpret("(2 + 3) * 4")).toBe(20);
+});

@@ -1,6 +1,8 @@
 type Token =
   | { type: "num"; value: number }
-  | { type: "op"; value: "+" | "-" | "*" | "/" };
+  | { type: "op"; value: "+" | "-" | "*" | "/" }
+  | { type: "lparen" }
+  | { type: "rparen" };
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -13,6 +15,16 @@ function tokenize(input: string): Token[] {
     }
     if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
       tokens.push({ type: "op", value: ch });
+      i++;
+      continue;
+    }
+    if (ch === "(") {
+      tokens.push({ type: "lparen" });
+      i++;
+      continue;
+    }
+    if (ch === ")") {
+      tokens.push({ type: "rparen" });
       i++;
       continue;
     }
@@ -30,7 +42,8 @@ function tokenize(input: string): Token[] {
 type Expr =
   | { kind: "num"; value: number }
   | { kind: "bin"; op: "+" | "-" | "*" | "/"; left: Expr; right: Expr }
-  | { kind: "neg"; operand: Expr };
+  | { kind: "neg"; operand: Expr }
+  | { kind: "paren"; operand: Expr };
 
 class Parser {
   private pos = 0;
@@ -98,6 +111,14 @@ class Parser {
     if (t.type === "op" && t.value === "-") {
       return { kind: "neg", operand: this.parseFactor() };
     }
+    if (t.type === "lparen") {
+      const inner = this.parseExpression();
+      const close = this.next();
+      if (close.type !== "rparen") {
+        throw new Error("interpret: expected closing parenthesis");
+      }
+      return { kind: "paren", operand: inner };
+    }
     throw new Error("interpret: expected a number");
   }
 }
@@ -108,6 +129,8 @@ function evaluate(node: Expr): number {
       return node.value;
     case "neg":
       return -evaluate(node.operand);
+    case "paren":
+      return evaluate(node.operand);
     case "bin": {
       const left = evaluate(node.left);
       const right = evaluate(node.right);
