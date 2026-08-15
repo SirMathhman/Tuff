@@ -24,6 +24,7 @@ function parseProgram(
 function isStatementStart(tokens: Token[], pos: number): boolean {
   const token = tokens[pos];
   if (token === "let") return true;
+  if (token === "*") return isDerefAssignment(tokens, pos);
   if (
     typeof token === "string" &&
     token !== "let" &&
@@ -35,13 +36,46 @@ function isStatementStart(tokens: Token[], pos: number): boolean {
   return false;
 }
 
+function isDerefAssignment(tokens: Token[], pos: number): boolean {
+  if (tokens[pos] !== "*") return false;
+  const name = tokens[pos + 1];
+  return typeof name === "string" && tokens[pos + 2] === "=";
+}
+
 function parseStatement(
   tokens: Token[],
   pos: number,
   scope: Scope,
 ): { pos: number } {
   if (tokens[pos] === "let") return parseLet(tokens, pos, scope);
+  if (tokens[pos] === "*") return parseDerefAssignment(tokens, pos, scope);
   return parseAssignment(tokens, pos, scope);
+}
+
+function parseDerefAssignment(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { pos: number } {
+  const { value, pos: afterLhs } = parseFactor(tokens, pos + 1, scope);
+  if (typeof value !== "object")
+    throw new Error("Expected a reference to assign through");
+  const varInfo = requireMutable(scope, value.ref);
+  const { value: newValue, pos: afterExpr } = parseEqualsExpr(
+    tokens,
+    afterLhs,
+    scope,
+  );
+  varInfo.value = newValue;
+  return { pos: afterExpr };
+}
+
+function requireMutable(scope: Scope, name: string): Var {
+  const varInfo = scope.get(name);
+  if (!varInfo) throw new Error(`Undefined variable: ${name}`);
+  if (!varInfo.mutable)
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  return varInfo;
 }
 
 function parseLet(tokens: Token[], pos: number, scope: Scope): { pos: number } {
@@ -68,10 +102,7 @@ function parseAssignment(
   const name = tokens[pos];
   if (typeof name !== "string")
     throw new Error(`Expected variable name, got '${name}'`);
-  const varInfo = scope.get(name);
-  if (!varInfo) throw new Error(`Undefined variable: ${name}`);
-  if (!varInfo.mutable)
-    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  const varInfo = requireMutable(scope, name);
   const { value, pos: afterExpr } = parseEqualsExpr(tokens, pos + 1, scope);
   varInfo.value = value;
   return { pos: afterExpr };
@@ -90,7 +121,7 @@ function parseEqualsExpr(
 }
 
 type Token = number | string;
-type Value = number | { ref: string };
+type Value = number | { ref: string; mutable: boolean };
 type Var = { value: Value; mutable: boolean };
 type Scope = Map<string, Var>;
 
@@ -202,10 +233,16 @@ function parseFactor(
     return { value: dereference(scope, value), pos: next };
   }
   if (token === "&") {
-    const name = tokens[pos + 1];
+    let next = pos + 1;
+    let mutable = false;
+    if (tokens[next] === "mut") {
+      mutable = true;
+      next++; // skip 'mut'
+    }
+    const name = tokens[next];
     if (typeof name !== "string" || !scope.has(name))
       throw new Error(`Undefined variable: ${name}`);
-    return { value: { ref: name }, pos: pos + 2 };
+    return { value: { ref: name, mutable }, pos: next + 1 };
   }
   if (token === "(") {
     const { value, pos: next } = parseExpression(tokens, pos + 1, scope);
