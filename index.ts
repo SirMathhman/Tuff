@@ -106,37 +106,35 @@ class Parser {
 
   private expression(): number {
     let left = this.term();
-    while (
-      this.peek()?.type === "op" &&
-      ["+", "-"].includes((this.peek() as any).value)
-    ) {
-      const op = (this.next() as any).value;
+    while (true) {
+      const t = this.peek();
+      if (t?.type !== "op" || !["+", "-"].includes(t.value)) break;
+      this.next();
       const right = this.term();
-      left = op === "+" ? left + right : left - right;
+      left = t.value === "+" ? left + right : left - right;
     }
     return left;
   }
 
   private term(): number {
     let left = this.factor();
-    while (
-      this.peek()?.type === "op" &&
-      ["*", "/"].includes((this.peek() as any).value)
-    ) {
-      const op = (this.next() as any).value;
+    while (true) {
+      const t = this.peek();
+      if (t?.type !== "op" || !["*", "/"].includes(t.value)) break;
+      this.next();
       const right = this.factor();
-      left = op === "*" ? left * right : left / right;
+      left = t.value === "*" ? left * right : left / right;
     }
     return left;
   }
 
   private factor(): number {
     const t = this.peek();
-    if (t?.type === "op" && (t as any).value === "+") {
+    if (t?.type === "op" && t.value === "+") {
       this.next();
       return this.factor();
     }
-    if (t?.type === "op" && (t as any).value === "-") {
+    if (t?.type === "op" && t.value === "-") {
       this.next();
       return -this.factor();
     }
@@ -148,7 +146,7 @@ class Parser {
     if (!t) throw new Error("Unexpected end of expression");
     if (t.type === "number") {
       this.next();
-      return (t as any).value;
+      return t.value;
     }
     if (t.type === "ident") {
       this.next();
