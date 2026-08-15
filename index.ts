@@ -23,6 +23,41 @@ const singleCharTokens: Record<string, Token["type"]> = {
   "=": "op",
 };
 
+const multiCharTokens: Record<string, string> = {
+  "||": "||",
+  "==": "==",
+};
+
+function readToken(input: string, i: number): { token: Token; next: number } {
+  const ch = input.charAt(i);
+  if (/\d/.test(ch)) {
+    let j = i;
+    while (j < input.length && /\d/.test(input.charAt(j))) j++;
+    return { token: { type: "num", value: Number(input.slice(i, j)) }, next: j };
+  }
+  if (/[a-zA-Z_]/.test(ch)) {
+    let j = i;
+    while (j < input.length && /[a-zA-Z0-9_]/.test(input.charAt(j))) j++;
+    const word = input.slice(i, j);
+    if (word === "let") return { token: { type: "let" }, next: j };
+    if (word === "true" || word === "false")
+      return { token: { type: "bool", value: word === "true" ? 1 : 0 }, next: j };
+    return { token: { type: "ident", value: word }, next: j };
+  }
+  const twoChar = input.slice(i, i + 2);
+  if (multiCharTokens[twoChar]) {
+    return { token: { type: "op", value: twoChar }, next: i + 2 };
+  }
+  const single = singleCharTokens[ch];
+  if (single) {
+    return {
+      token: single === "op" ? { type: "op", value: ch } : ({ type: single } as Token),
+      next: i + 1,
+    };
+  }
+  throw new Error(`Unexpected character: ${ch}`);
+}
+
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -32,48 +67,9 @@ function tokenize(input: string): Token[] {
       i++;
       continue;
     }
-    if (/\d/.test(ch)) {
-      let j = i;
-      while (j < input.length && /\d/.test(input.charAt(j))) j++;
-      tokens.push({ type: "num", value: Number(input.slice(i, j)) });
-      i = j;
-      continue;
-    }
-    if (/[a-zA-Z_]/.test(ch)) {
-      let j = i;
-      while (j < input.length && /[a-zA-Z0-9_]/.test(input.charAt(j))) j++;
-      const word = input.slice(i, j);
-      if (word === "let") {
-        tokens.push({ type: "let" });
-      } else if (word === "true" || word === "false") {
-        tokens.push({ type: "bool", value: word === "true" ? 1 : 0 });
-      } else {
-        tokens.push({ type: "ident", value: word });
-      }
-      i = j;
-      continue;
-    }
-    if (ch === "|" && input.charAt(i + 1) === "|") {
-      tokens.push({ type: "op", value: "||" });
-      i += 2;
-      continue;
-    }
-    if (ch === "=" && input.charAt(i + 1) === "=") {
-      tokens.push({ type: "op", value: "==" });
-      i += 2;
-      continue;
-    }
-    const single = singleCharTokens[ch];
-    if (single) {
-      tokens.push(
-        single === "op"
-          ? { type: "op", value: ch }
-          : ({ type: single } as Token),
-      );
-      i++;
-      continue;
-    }
-    throw new Error(`Unexpected character: ${ch}`);
+    const { token, next } = readToken(input, i);
+    tokens.push(token);
+    i = next;
   }
   return tokens;
 }
