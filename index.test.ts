@@ -77,4 +77,8 @@ describe("evaluate", () => {
   test('evaluate("let x = true; x") => 1', () => {
     expect(evaluate("let x = true; x")).toBe(1);
   });
+
+  test('evaluate("let x = 1; let y = 2; x == y") => 0', () => {
+    expect(evaluate("let x = 1; let y = 2; x == y")).toBe(0);
+  });
 });

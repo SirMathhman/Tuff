@@ -18,7 +18,7 @@ function parseProgram(
   while (next < tokens.length && isStatementStart(tokens, next)) {
     next = parseStatement(tokens, next, scope).pos;
   }
-  return parseExpression(tokens, next, scope);
+  return parseComparison(tokens, next, scope);
 }
 
 function isStatementStart(tokens: Token[], pos: number): boolean {
@@ -157,7 +157,7 @@ function parseEqualsExpr(
   scope: Scope,
 ): { value: Value; pos: number } {
   if (tokens[pos] !== "=") throw new Error("Expected '='");
-  const { value, pos: afterExpr } = parseExpression(tokens, pos + 1, scope);
+  const { value, pos: afterExpr } = parseComparison(tokens, pos + 1, scope);
   let next = afterExpr;
   if (tokens[next] === ";") next++; // skip ';'
   return { value, pos: next };
@@ -200,6 +200,9 @@ function tokenize(input: string): Token[] {
       const value = Number(num);
       if (Number.isNaN(value)) throw new Error(`Invalid number: ${num}`);
       tokens.push(value);
+    } else if (ch === "=" && input[i + 1] === "=") {
+      tokens.push("==" as Token);
+      i += 2;
     } else if ("+-*/(){}=;&".includes(ch)) {
       tokens.push(ch as Token);
       i++;
@@ -215,6 +218,20 @@ function tokenize(input: string): Token[] {
     }
   }
   return tokens;
+}
+
+function parseComparison(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { value: Value; pos: number } {
+  let { value, pos: next } = parseExpression(tokens, pos, scope);
+  while (next < tokens.length && tokens[next] === "==") {
+    const rhs = parseExpression(tokens, next + 1, scope);
+    value = asNumber(value) === asNumber(rhs.value) ? 1 : 0;
+    next = rhs.pos;
+  }
+  return { value, pos: next };
 }
 
 function parseExpression(
@@ -288,7 +305,7 @@ function parseFactor(
     return { value: { ref: name, mutable }, pos: next + 1 };
   }
   if (token === "(") {
-    const { value, pos: next } = parseExpression(tokens, pos + 1, scope);
+    const { value, pos: next } = parseComparison(tokens, pos + 1, scope);
     if (tokens[next] !== ")") throw new Error("Expected ')'");
     return { value, pos: next + 1 };
   }
