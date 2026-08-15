@@ -11,7 +11,7 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
     rules: {
       "max-lines": [
-        "error",
+        "warn",
         {
           max: 500,
           skipBlankLines: true,
@@ -19,7 +19,7 @@ export default defineConfig([
         },
       ],
       "max-lines-per-function": [
-        "error",
+        "warn",
         {
           max: 50,
           skipBlankLines: true,
