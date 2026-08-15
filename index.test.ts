@@ -53,4 +53,8 @@ describe("evaluate", () => {
   test('evaluate("let x = 100; 1") => 1', () => {
     expect(evaluate("let x = 100; 1")).toBe(1);
   });
+
+  test('evaluate("let x = 1; let y = 2; x + y") => 3', () => {
+    expect(evaluate("let x = 1; let y = 2; x + y")).toBe(3);
+  });
 });
