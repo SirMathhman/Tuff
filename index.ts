@@ -62,7 +62,7 @@ class Parser {
   private pos = 0;
   constructor(
     private tokens: Token[],
-    private scope: Map<string, number> = new Map()
+    private scope: Map<string, number> = new Map(),
   ) {}
 
   private peek(): Token | undefined {
@@ -132,8 +132,7 @@ class Parser {
     if (t.type === "ident") {
       this.next();
       const value = this.scope.get(t.value);
-      if (value === undefined)
-        throw new Error(`Unknown variable: ${t.value}`);
+      if (value === undefined) throw new Error(`Unknown variable: ${t.value}`);
       return value;
     }
     if (t.type === "lparen") {
