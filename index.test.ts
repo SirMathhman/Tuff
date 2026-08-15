@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
 
-describe("evaluate", () => {
-  test('evaluate("") => 0', () => {
-    expect(evaluate("")).toBe(0);
-  });
+test('evaluate("") => 0', () => {
+  expect(evaluate("")).toBe(0);
+});
 
+describe("arithmetic", () => {
   test('evaluate("1") => 1', () => {
     expect(evaluate("1")).toBe(1);
   });
@@ -33,7 +33,9 @@ describe("evaluate", () => {
   test('evaluate("(2 + 3) * 4") => 20', () => {
     expect(evaluate("(2 + 3) * 4")).toBe(20);
   });
+});
 
+describe("blocks", () => {
   test('evaluate("{ 2 + 3 } * 4") => 20', () => {
     expect(evaluate("{ 2 + 3 } * 4")).toBe(20);
   });
@@ -46,6 +48,20 @@ describe("evaluate", () => {
     expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
   });
 
+  test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
+    expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
+  });
+
+  test('evaluate("let x = { let y = 100; }; x") => Error', () => {
+    expect(() => evaluate("let x = { let y = 100; }; x")).toThrow();
+  });
+
+  test('evaluate("let mut x = 0; let y = { x = 100; };") => Error', () => {
+    expect(() => evaluate("let mut x = 0; let y = { x = 100; };")).toThrow();
+  });
+});
+
+describe("let and mut", () => {
   test('evaluate("let x = 100;") => 0', () => {
     expect(evaluate("let x = 100;")).toBe(0);
   });
@@ -64,17 +80,5 @@ describe("evaluate", () => {
 
   test('evaluate("let x = 0; x = 1; x") => Error', () => {
     expect(() => evaluate("let x = 0; x = 1; x")).toThrow();
-  });
-
-  test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
-    expect(evaluate("let mut x = 0; { x = 1; } x")).toBe(1);
-  });
-
-  test('evaluate("let x = { let y = 100; }; x") => Error', () => {
-    expect(() => evaluate("let x = { let y = 100; }; x")).toThrow();
-  });
-
-  test('evaluate("let mut x = 0; let y = { x = 100; };") => Error', () => {
-    expect(() => evaluate("let mut x = 0; let y = { x = 100; };")).toThrow();
   });
 });
