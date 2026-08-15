@@ -121,4 +121,8 @@ describe("let and mut", () => {
   test('evaluate("let x = 1; let y = 2; x != y") => 1', () => {
     expect(evaluate("let x = 1; let y = 2; x != y")).toBe(1);
   });
+
+  test('evaluate("let mut x = 1; x += 2; x") => 3', () => {
+    expect(evaluate("let mut x = 1; x += 2; x")).toBe(3);
+  });
 });

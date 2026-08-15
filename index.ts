@@ -31,6 +31,7 @@ const multiCharTokens: Record<string, string> = {
   "<=": "<=",
   ">=": ">=",
   "!=": "!=",
+  "+=": "+=",
 };
 
 function readToken(input: string, i: number): { token: Token; next: number } {
@@ -173,14 +174,17 @@ class Parser {
       const saved = this.pos;
       this.next();
       const eq = this.peek();
-      if (eq?.type === "op" && eq.value === "=") {
+      if (eq?.type === "op" && (eq.value === "=" || eq.value === "+=")) {
         this.next();
         const rhs = this.parseExpression(true);
         const binding = this.lookup(tok.value);
         if (!binding) throw new Error(`Undefined variable: ${tok.value}`);
         if (!binding.mutable)
           throw new Error(`Cannot assign to immutable variable: ${tok.value}`);
-        binding.value = rhs;
+        binding.value =
+          eq.value === "+="
+            ? { kind: "num", value: this.num(binding.value) + this.num(rhs) }
+            : rhs;
         return { value: zero, isStatement: true };
       }
       this.pos = saved;
