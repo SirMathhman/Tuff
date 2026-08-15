@@ -54,13 +54,9 @@ function parseLet(tokens: Token[], pos: number, scope: Scope): { pos: number } {
   if (typeof name !== "string")
     throw new Error("Expected variable name after 'let'");
   next++; // skip name
-  if (tokens[next] !== "=") throw new Error(`Expected '=' after '${name}'`);
-  next++; // skip '='
-  const { value, pos: afterExpr } = parseExpression(tokens, next, scope);
+  const { value, pos: afterExpr } = parseEqualsExpr(tokens, next, scope);
   scope.set(name, { value, mutable });
-  next = afterExpr;
-  if (tokens[next] === ";") next++; // skip ';'
-  return { pos: next };
+  return { pos: afterExpr };
 }
 
 function parseAssignment(
@@ -73,15 +69,23 @@ function parseAssignment(
     throw new Error(`Expected variable name, got '${name}'`);
   const varInfo = scope.get(name);
   if (!varInfo) throw new Error(`Undefined variable: ${name}`);
-  if (!varInfo.mutable) throw new Error(`Cannot assign to immutable variable: ${name}`);
-  let next = pos + 1; // skip name
-  if (tokens[next] !== "=") throw new Error(`Expected '=' after '${name}'`);
-  next++; // skip '='
-  const { value, pos: afterExpr } = parseExpression(tokens, next, scope);
+  if (!varInfo.mutable)
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  const { value, pos: afterExpr } = parseEqualsExpr(tokens, pos + 1, scope);
   varInfo.value = value;
-  next = afterExpr;
+  return { pos: afterExpr };
+}
+
+function parseEqualsExpr(
+  tokens: Token[],
+  pos: number,
+  scope: Scope,
+): { value: number; pos: number } {
+  if (tokens[pos] !== "=") throw new Error("Expected '='");
+  const { value, pos: afterExpr } = parseExpression(tokens, pos + 1, scope);
+  let next = afterExpr;
   if (tokens[next] === ";") next++; // skip ';'
-  return { pos: next };
+  return { value, pos: next };
 }
 
 type Token = number | string;
