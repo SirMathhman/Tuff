@@ -12,3 +12,7 @@ test('interpret("1") => 1', () => {
 test('interpret("abc") throws', () => {
   expect(() => interpret("abc")).toThrow();
 });
+
+test('interpret("1 + 2") => 3', () => {
+  expect(interpret("1 + 2")).toBe(3);
+});
