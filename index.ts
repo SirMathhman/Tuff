@@ -21,11 +21,16 @@ const singleCharTokens: Record<string, Token["type"]> = {
   "*": "op",
   "/": "op",
   "=": "op",
+  "<": "op",
+  ">": "op",
 };
 
 const multiCharTokens: Record<string, string> = {
   "||": "||",
   "==": "==",
+  "<=": "<=",
+  ">=": ">=",
+  "!=": "!=",
 };
 
 function readToken(input: string, i: number): { token: Token; next: number } {
@@ -83,9 +88,7 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
-type Value =
-  | { kind: "num"; value: number }
-  | { kind: "bool"; value: boolean };
+type Value = { kind: "num"; value: number } | { kind: "bool"; value: boolean };
 
 interface Binding {
   value: Value;
@@ -215,18 +218,48 @@ class Parser {
     let left = this.parseAdditive();
     for (;;) {
       const tok = this.peek();
-      if (tok?.type === "op" && tok.value === "==") {
+      if (tok?.type === "op" && this.isComparisonOp(tok.value)) {
         this.next();
         const right = this.parseAdditive();
         left = {
           kind: "bool",
-          value: left.kind === right.kind && left.value === right.value,
+          value: this.compare(tok.value, left, right),
         };
       } else {
         break;
       }
     }
     return left;
+  }
+
+  private isComparisonOp(op: string): boolean {
+    return (
+      op === "==" ||
+      op === "!=" ||
+      op === "<" ||
+      op === "<=" ||
+      op === ">" ||
+      op === ">="
+    );
+  }
+
+  private compare(op: string, left: Value, right: Value): boolean {
+    switch (op) {
+      case "==":
+        return left.kind === right.kind && left.value === right.value;
+      case "!=":
+        return !(left.kind === right.kind && left.value === right.value);
+      case "<":
+        return this.num(left) < this.num(right);
+      case "<=":
+        return this.num(left) <= this.num(right);
+      case ">":
+        return this.num(left) > this.num(right);
+      case ">=":
+        return this.num(left) >= this.num(right);
+      default:
+        throw new Error(`Unknown operator: ${op}`);
+    }
   }
 
   private parseAdditive(): Value {

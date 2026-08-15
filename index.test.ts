@@ -101,4 +101,24 @@ describe("let and mut", () => {
   test('evaluate("true == 1") => 0', () => {
     expect(evaluate("true == 1")).toBe(0);
   });
+
+  test('evaluate("let x = 1; let y = 2; x < y") => 1', () => {
+    expect(evaluate("let x = 1; let y = 2; x < y")).toBe(1);
+  });
+
+  test('evaluate("let x = 2; let y = 2; x <= y") => 1', () => {
+    expect(evaluate("let x = 2; let y = 2; x <= y")).toBe(1);
+  });
+
+  test('evaluate("let x = 2; let y = 1; x > y") => 1', () => {
+    expect(evaluate("let x = 2; let y = 1; x > y")).toBe(1);
+  });
+
+  test('evaluate("let x = 1; let y = 2; x >= y") => 0', () => {
+    expect(evaluate("let x = 1; let y = 2; x >= y")).toBe(0);
+  });
+
+  test('evaluate("let x = 1; let y = 2; x != y") => 1', () => {
+    expect(evaluate("let x = 1; let y = 2; x != y")).toBe(1);
+  });
 });
