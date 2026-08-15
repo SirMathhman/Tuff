@@ -1,3 +1,4 @@
 export function evaluate(input: string): number {
-  return 0;
+  const n = Number(input);
+  return Number.isFinite(n) ? n : 0;
 }
