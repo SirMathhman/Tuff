@@ -109,4 +109,8 @@ describe("evaluate", () => {
   test('evaluate("1 + 2 < 4") => 1', () => {
     expect(evaluate("1 + 2 < 4")).toBe(1);
   });
+
+  test('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
+    expect(evaluate("let x = if (false) 2 else 3; x")).toBe(3);
+  });
 });

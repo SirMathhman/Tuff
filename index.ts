@@ -373,6 +373,33 @@ function parseFactor(
   if (token === "{") {
     return parseBlock(tokens, pos, scope);
   }
+  if (token === "if") {
+    if (tokens[pos + 1] !== "(") throw new Error("Expected '(' after 'if'");
+    const { value: cond, pos: afterCond } = parseComparison(
+      tokens,
+      pos + 2,
+      scope,
+    );
+    if (tokens[afterCond] !== ")")
+      throw new Error("Expected ')' after if condition");
+    const { value: thenVal, pos: afterThen } = parseComparison(
+      tokens,
+      afterCond + 1,
+      scope,
+    );
+    if (tokens[afterThen] === "else") {
+      const { value: elseVal, pos: afterElse } = parseComparison(
+        tokens,
+        afterThen + 1,
+        scope,
+      );
+      return {
+        value: asNumber(cond) !== 0 ? thenVal : elseVal,
+        pos: afterElse,
+      };
+    }
+    return { value: asNumber(cond) !== 0 ? thenVal : 0, pos: afterThen };
+  }
   if (token === "true") return { value: true, pos: pos + 1 };
   if (token === "false") return { value: false, pos: pos + 1 };
   if (typeof token === "number") return { value: token, pos: pos + 1 };
