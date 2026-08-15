@@ -27,48 +27,99 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
-function parseExpression(tokens: Token[]): number {
-  let left = parseTerm(tokens);
-  for (;;) {
-    const t = tokens[0];
-    if (t && t.type === "op" && (t.value === "+" || t.value === "-")) {
-      tokens.shift();
-      const right = parseTerm(tokens);
-      left = t.value === "+" ? left + right : left - right;
-    } else {
-      break;
-    }
+type Expr =
+  | { kind: "num"; value: number }
+  | { kind: "bin"; op: "+" | "-" | "*" | "/"; left: Expr; right: Expr }
+  | { kind: "neg"; operand: Expr };
+
+class Parser {
+  private pos = 0;
+  constructor(private readonly tokens: Token[]) {}
+
+  private peek(): Token | undefined {
+    return this.tokens[this.pos];
   }
-  return left;
+
+  private next(): Token {
+    const t = this.tokens[this.pos];
+    if (!t) {
+      throw new Error("interpret: unexpected end of expression");
+    }
+    this.pos++;
+    return t;
+  }
+
+  parse(): Expr {
+    const expr = this.parseExpression();
+    if (this.pos < this.tokens.length) {
+      throw new Error("interpret: unexpected trailing tokens");
+    }
+    return expr;
+  }
+
+  private parseExpression(): Expr {
+    let left = this.parseTerm();
+    for (;;) {
+      const t = this.peek();
+      if (t && t.type === "op" && (t.value === "+" || t.value === "-")) {
+        this.next();
+        const right = this.parseTerm();
+        left = { kind: "bin", op: t.value, left, right };
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private parseTerm(): Expr {
+    let left = this.parseFactor();
+    for (;;) {
+      const t = this.peek();
+      if (t && t.type === "op" && (t.value === "*" || t.value === "/")) {
+        this.next();
+        const right = this.parseFactor();
+        left = { kind: "bin", op: t.value, left, right };
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private parseFactor(): Expr {
+    const t = this.next();
+    if (t.type === "num") {
+      return { kind: "num", value: t.value };
+    }
+    if (t.type === "op" && t.value === "-") {
+      return { kind: "neg", operand: this.parseFactor() };
+    }
+    throw new Error("interpret: expected a number");
+  }
 }
 
-function parseTerm(tokens: Token[]): number {
-  let left = parseFactor(tokens);
-  for (;;) {
-    const t = tokens[0];
-    if (t && t.type === "op" && (t.value === "*" || t.value === "/")) {
-      tokens.shift();
-      const right = parseFactor(tokens);
-      left = t.value === "*" ? left * right : left / right;
-    } else {
-      break;
+function evaluate(node: Expr): number {
+  switch (node.kind) {
+    case "num":
+      return node.value;
+    case "neg":
+      return -evaluate(node.operand);
+    case "bin": {
+      const left = evaluate(node.left);
+      const right = evaluate(node.right);
+      switch (node.op) {
+        case "+":
+          return left + right;
+        case "-":
+          return left - right;
+        case "*":
+          return left * right;
+        case "/":
+          return left / right;
+      }
     }
   }
-  return left;
-}
-
-function parseFactor(tokens: Token[]): number {
-  const t = tokens.shift();
-  if (!t) {
-    throw new Error("interpret: unexpected end of expression");
-  }
-  if (t.type === "num") {
-    return t.value;
-  }
-  if (t.type === "op" && t.value === "-") {
-    return -parseFactor(tokens);
-  }
-  throw new Error("interpret: expected a number");
 }
 
 export function interpret(input: string): number {
@@ -80,9 +131,6 @@ export function interpret(input: string): number {
   if (tokens.length === 0) {
     return 0;
   }
-  const result = parseExpression(tokens);
-  if (tokens.length > 0) {
-    throw new Error(`interpret: invalid expression "${input}"`);
-  }
-  return result;
+  const ast = new Parser(tokens).parse();
+  return evaluate(ast);
 }
