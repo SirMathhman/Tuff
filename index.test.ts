@@ -8,3 +8,7 @@ test('interpret("") => 0', () => {
 test('interpret("1") => 1', () => {
   expect(interpret("1")).toBe(1);
 });
+
+test('interpret("abc") throws', () => {
+  expect(() => interpret("abc")).toThrow();
+});
