@@ -58,6 +58,9 @@ class Parser {
   }
 
   private parseExpression(): Expr {
+    if (!this.peek()) {
+      throw new Error("interpret: empty expression");
+    }
     let left = this.parseTerm();
     for (;;) {
       const t = this.peek();
@@ -123,14 +126,7 @@ function evaluate(node: Expr): number {
 }
 
 export function interpret(input: string): number {
-  const trimmed = input.trim();
-  if (trimmed === "") {
-    return 0;
-  }
-  const tokens = tokenize(trimmed);
-  if (tokens.length === 0) {
-    return 0;
-  }
+  const tokens = tokenize(input.trim());
   const ast = new Parser(tokens).parse();
   return evaluate(ast);
 }
