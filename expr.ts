@@ -4,7 +4,7 @@ const NUMBER_RE = /^[+-]?(\d+(\.\d+)?)/;
 
 /**
  * Parses and evaluates an arithmetic expression of numbers with +, -, and *.
- * Left-associative; * binds tighter than + and -. No parentheses.
+ * Left-associative; * binds tighter than + and -. Supports parentheses.
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
@@ -30,8 +30,63 @@ export function parseExpression(source: string): Result<number, Error> {
     return { ok: true, value: Number(match[0]) };
   };
 
+  const parseAdditive = (): Result<number, Error> => {
+    const first = parseTerm();
+    if (!first.ok) {
+      return first;
+    }
+    let value = first.value;
+    for (;;) {
+      skipSpaces();
+      if (pos >= source.length || source[pos] === ")") {
+        return { ok: true, value };
+      }
+      const op = source[pos];
+      if (op !== "+" && op !== "-") {
+        return {
+          ok: false,
+          error: new Error(
+            `parseExpression: unexpected character "${op}" at position ${pos} in "${source}". ` +
+              `Fix: use only numbers, "+", "-", "*", and parentheses (e.g. "(2 + 3) * 4").`,
+          ),
+        };
+      }
+      pos += 1;
+      skipSpaces();
+      const next = parseTerm();
+      if (!next.ok) {
+        return next;
+      }
+      value = op === "+" ? value + next.value : value - next.value;
+    }
+  };
+
+  const parseFactor = (): Result<number, Error> => {
+    skipSpaces();
+    if (pos < source.length && source[pos] === "(") {
+      pos += 1;
+      const inner = parseAdditive();
+      if (!inner.ok) {
+        return inner;
+      }
+      skipSpaces();
+      if (pos >= source.length || source[pos] !== ")") {
+        return {
+          ok: false,
+          error: new Error(
+            `parseExpression: expected ")" at position ${pos} in "${source}". ` +
+              `Fix: close the parenthesized group (e.g. "(2 + 3)").`,
+          ),
+        };
+      }
+      pos += 1;
+      return { ok: true, value: inner.value };
+    }
+    return parseNumber();
+  };
+
   const parseTerm = (): Result<number, Error> => {
-    const first = parseNumber();
+    const first = parseFactor();
     if (!first.ok) {
       return first;
     }
@@ -43,7 +98,7 @@ export function parseExpression(source: string): Result<number, Error> {
       }
       pos += 1;
       skipSpaces();
-      const next = parseNumber();
+      const next = parseFactor();
       if (!next.ok) {
         return next;
       }
@@ -52,33 +107,5 @@ export function parseExpression(source: string): Result<number, Error> {
   };
 
   skipSpaces();
-  const first = parseTerm();
-  if (!first.ok) {
-    return first;
-  }
-
-  let value = first.value;
-  for (;;) {
-    skipSpaces();
-    if (pos >= source.length) {
-      return { ok: true, value };
-    }
-    const op = source[pos];
-    if (op !== "+" && op !== "-") {
-      return {
-        ok: false,
-        error: new Error(
-          `parseExpression: unexpected character "${op}" at position ${pos} in "${source}". ` +
-            `Fix: use only numbers, "+", "-", and "*" (e.g. "1 + 2 * 3").`,
-        ),
-      };
-    }
-    pos += 1;
-    skipSpaces();
-    const next = parseTerm();
-    if (!next.ok) {
-      return next;
-    }
-    value = op === "+" ? value + next.value : value - next.value;
-  }
+  return parseAdditive();
 }
