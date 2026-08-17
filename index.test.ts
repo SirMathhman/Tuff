@@ -51,6 +51,13 @@ describe("evaluateTuff", () => {
     });
   });
 
+  it('returns 1 for "let mut x = 0; x = 1; x"', () => {
+    expect(evaluateTuff("let mut x = 0; x = 1; x")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);
@@ -161,5 +168,37 @@ describe("evaluateTuff", () => {
 
   it("evaluates top-level statements separated by ';'", () => {
     expect(evaluateTuff("1; 2")).toEqual({ ok: true, value: 2 });
+  });
+
+  it("returns an error when ';' is missing after an assignment", () => {
+    const result = evaluateTuff("let mut x = 0; x = 1");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when the assignment value is invalid", () => {
+    const result = evaluateTuff("let mut x = 0; x = 1 +;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when assigning to an unknown identifier", () => {
+    const result = evaluateTuff("x = 1;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when assigning to an immutable binding", () => {
+    const result = evaluateTuff("let x = 0; x = 1;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
   });
 });

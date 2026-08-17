@@ -8,16 +8,32 @@ const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
  * Left-associative; * binds tighter than + and -. Supports ( ) and { } groups.
  * "let name = expr;" bindings may appear at the top level or inside { } blocks
  * (scoped to the block), e.g. "let y = { let x = 2 + 3; x } * 4; y".
+ * "let mut name = expr;" creates a mutable binding that can be reassigned
+ * with "name = expr;", e.g. "let mut x = 0; x = 1; x".
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
-  const scopes: Map<string, number>[] = [];
+  const scopes: Map<string, { value: number; mutable: boolean }>[] = [];
 
-  const lookup = (name: string): number | undefined => {
+  const lookup = (
+    name: string,
+  ): { value: number; mutable: boolean } | undefined => {
     for (let i = scopes.length - 1; i >= 0; i -= 1) {
       const v = scopes[i]?.get(name);
       if (v !== undefined) {
         return v;
+      }
+    }
+    return undefined;
+  };
+
+  const findBindingScope = (
+    name: string,
+  ): Map<string, { value: number; mutable: boolean }> | undefined => {
+    for (let i = scopes.length - 1; i >= 0; i -= 1) {
+      const scope = scopes[i];
+      if (scope?.has(name)) {
+        return scope;
       }
     }
     return undefined;
@@ -61,17 +77,17 @@ export function parseExpression(source: string): Result<number, Error> {
   };
 
   const resolveIdentifier = (name: string): Result<number, Error> => {
-    const value = lookup(name);
-    if (value === undefined) {
+    const binding = lookup(name);
+    if (binding === undefined) {
       return {
         ok: false,
         error: new Error(
           `parseExpression: unknown identifier "${name}" in "${source}". ` +
-            `Fix: bind it first with "let ${name} = <expr>;" in an enclosing { } block.`,
+            `Fix: bind it first with "let ${name} = <expr>;" at the top level or in an enclosing { } block.`,
         ),
       };
     }
-    return { ok: true, value };
+    return { ok: true, value: binding.value };
   };
 
   const parseStatement = (): Result<number, Error> => {
@@ -84,6 +100,18 @@ export function parseExpression(source: string): Result<number, Error> {
       ) {
         pos = afterLet;
         skipSpaces();
+        let mutable = false;
+        if (source.startsWith("mut", pos)) {
+          const afterMut = pos + 3;
+          if (
+            afterMut >= source.length ||
+            !/[A-Za-z0-9_]/.test(source[afterMut] ?? "")
+          ) {
+            mutable = true;
+            pos = afterMut;
+            skipSpaces();
+          }
+        }
         const nameResult = parseIdentifier();
         if (!nameResult.ok) {
           return nameResult;
@@ -115,9 +143,64 @@ export function parseExpression(source: string): Result<number, Error> {
           };
         }
         pos += 1;
-        scopes[scopes.length - 1]?.set(name, valueResult.value);
+        scopes[scopes.length - 1]?.set(name, {
+          value: valueResult.value,
+          mutable,
+        });
         return { ok: true, value: valueResult.value };
       }
+    }
+    return parseAssignment();
+  };
+
+  const parseAssignment = (): Result<number, Error> => {
+    if (pos < source.length && /[A-Za-z_]/.test(source[pos] ?? "")) {
+      const startPos = pos;
+      const match = IDENT_RE.exec(source.slice(pos));
+      const name = match?.[0] ?? "";
+      pos += name.length;
+      skipSpaces();
+      if (source[pos] === "=") {
+        pos += 1;
+        const valueResult = parseAdditive();
+        if (!valueResult.ok) {
+          return valueResult;
+        }
+        skipSpaces();
+        if (source[pos] !== ";") {
+          return {
+            ok: false,
+            error: new Error(
+              `parseExpression: expected ";" after the assignment to "${name}" at position ${pos} in "${source}". ` +
+                `Fix: end the assignment with ";" (e.g. "${name} = 1;").`,
+            ),
+          };
+        }
+        pos += 1;
+        const scope = findBindingScope(name);
+        if (!scope) {
+          return {
+            ok: false,
+            error: new Error(
+              `parseExpression: cannot assign to unknown identifier "${name}" in "${source}". ` +
+                `Fix: bind it first with "let ${name} = <expr>;" or "let mut ${name} = <expr>;".`,
+            ),
+          };
+        }
+        const binding = scope.get(name);
+        if (!binding?.mutable) {
+          return {
+            ok: false,
+            error: new Error(
+              `parseExpression: cannot assign to immutable binding "${name}" in "${source}". ` +
+                `Fix: declare it with "let mut ${name} = <expr>;" to allow reassignment.`,
+            ),
+          };
+        }
+        scope.set(name, { value: valueResult.value, mutable: true });
+        return { ok: true, value: valueResult.value };
+      }
+      pos = startPos;
     }
     return parseAdditive();
   };
