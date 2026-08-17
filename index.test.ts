@@ -25,6 +25,10 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
   });
 
+  it('returns 14 for "2 + 3 * 4"', () => {
+    expect(evaluateTuff("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);
