@@ -21,6 +21,10 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
   });
 
+  it('returns 10 for "2 * 3 + 4"', () => {
+    expect(evaluateTuff("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);
@@ -30,7 +34,7 @@ describe("evaluateTuff", () => {
   });
 
   it("returns an error for an unexpected character", () => {
-    const result = evaluateTuff("1 * 2");
+    const result = evaluateTuff("1 $ 2");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBeInstanceOf(Error);
@@ -39,6 +43,14 @@ describe("evaluateTuff", () => {
 
   it("returns an error when a number is missing after an operator", () => {
     const result = evaluateTuff("1 +");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when a number is missing after *", () => {
+    const result = evaluateTuff("1 *");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBeInstanceOf(Error);

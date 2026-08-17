@@ -3,8 +3,8 @@ import type { Result } from "./index";
 const NUMBER_RE = /^[+-]?(\d+(\.\d+)?)/;
 
 /**
- * Parses and evaluates an arithmetic expression of numbers with + and -.
- * Left-associative, no parentheses.
+ * Parses and evaluates an arithmetic expression of numbers with +, -, and *.
+ * Left-associative; * binds tighter than + and -. No parentheses.
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
@@ -30,8 +30,29 @@ export function parseExpression(source: string): Result<number, Error> {
     return { ok: true, value: Number(match[0]) };
   };
 
+  const parseTerm = (): Result<number, Error> => {
+    const first = parseNumber();
+    if (!first.ok) {
+      return first;
+    }
+    let value = first.value;
+    for (;;) {
+      skipSpaces();
+      if (pos >= source.length || source[pos] !== "*") {
+        return { ok: true, value };
+      }
+      pos += 1;
+      skipSpaces();
+      const next = parseNumber();
+      if (!next.ok) {
+        return next;
+      }
+      value = value * next.value;
+    }
+  };
+
   skipSpaces();
-  const first = parseNumber();
+  const first = parseTerm();
   if (!first.ok) {
     return first;
   }
@@ -48,13 +69,13 @@ export function parseExpression(source: string): Result<number, Error> {
         ok: false,
         error: new Error(
           `parseExpression: unexpected character "${op}" at position ${pos} in "${source}". ` +
-            `Fix: use only numbers, "+", and "-" (e.g. "1 + 2").`,
+            `Fix: use only numbers, "+", "-", and "*" (e.g. "1 + 2 * 3").`,
         ),
       };
     }
     pos += 1;
     skipSpaces();
-    const next = parseNumber();
+    const next = parseTerm();
     if (!next.ok) {
       return next;
     }
