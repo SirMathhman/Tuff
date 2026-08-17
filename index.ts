@@ -39,7 +39,7 @@ class ExpressionParser {
 
   parse(): number {
     this.skipWhitespace();
-    this.parseLetDeclarations();
+    this.parseStatements();
     const value = this.parseExpression();
     this.skipWhitespace();
     if (this.pos < this.text.length) {
@@ -121,7 +121,7 @@ class ExpressionParser {
 
   /** Parses a `{ let x = expr; ... expr }` block. The opening `{` is already consumed. */
   private parseBlock(): number {
-    this.parseLetDeclarations();
+    this.parseStatements();
     const value = this.parseExpression();
     this.skipWhitespace();
     if (this.peek() !== "}") {
@@ -131,27 +131,55 @@ class ExpressionParser {
     return value;
   }
 
-  /** Parses zero or more `let name = expression;` declarations into the current scope. */
-  private parseLetDeclarations(): void {
+  /**
+   * Parses zero or more statements: `let [mut] name = expression;`
+   * declarations and `name = expression;` reassignments.
+   */
+  private parseStatements(): void {
     for (;;) {
       this.skipWhitespace();
-      if (!this.isKeyword("let")) {
-        break;
-      }
-      this.pos += 3;
-      this.skipWhitespace();
-      const name = this.parseIdentifier();
-      this.skipWhitespace();
-      if (this.peek() !== "=") {
-        throw new Error("Expected '=' after variable name");
-      }
-      this.pos++;
-      const value = this.parseExpression();
-      this.scope.set(name, value);
-      this.skipWhitespace();
-      if (this.peek() === ";") {
+      if (this.isKeyword("let")) {
+        this.pos += 3;
+        this.skipWhitespace();
+        if (this.isKeyword("mut")) {
+          this.pos += 3;
+          this.skipWhitespace();
+        }
+        const name = this.parseIdentifier();
+        this.skipWhitespace();
+        if (this.peek() !== "=") {
+          throw new Error("Expected '=' after variable name");
+        }
         this.pos++;
+        const value = this.parseExpression();
+        this.scope.set(name, value);
+        this.skipWhitespace();
+        if (this.peek() === ";") {
+          this.pos++;
+        }
+        continue;
       }
+      // Reassignment: `name = expression;`
+      if (this.peek() !== undefined && /[A-Za-z_]/.test(this.peek()!)) {
+        const start = this.pos;
+        const name = this.parseIdentifier();
+        this.skipWhitespace();
+        if (this.peek() === "=") {
+          if (!this.scope.has(name)) {
+            throw new Error(`Unknown variable '${name}'`);
+          }
+          this.pos++;
+          const value = this.parseExpression();
+          this.scope.set(name, value);
+          this.skipWhitespace();
+          if (this.peek() === ";") {
+            this.pos++;
+          }
+          continue;
+        }
+        this.pos = start;
+      }
+      break;
     }
   }
 
