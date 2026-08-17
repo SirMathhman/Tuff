@@ -3,6 +3,12 @@ import type { Result } from "./index";
 const NUMBER_RE = /^[+-]?(\d+(\.\d+)?)/;
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 
+type Value =
+  | { kind: "num"; num: number }
+  | { kind: "ref"; name: string; scope: Map<string, Binding> };
+
+type Binding = { value: Value; mutable: boolean };
+
 /**
  * Parses and evaluates an arithmetic expression of numbers with +, -, and *.
  * Left-associative; * binds tighter than + and -. Supports ( ) and { } groups.
@@ -10,14 +16,14 @@ const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
  * (scoped to the block), e.g. "let y = { let x = 2 + 3; x } * 4; y".
  * "let mut name = expr;" creates a mutable binding that can be reassigned
  * with "name = expr;", e.g. "let mut x = 0; x = 1; x".
+ * "&name" takes a reference to a binding and "*name" dereferences one,
+ * e.g. "let x = 1; let y = &x; *y".
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
-  const scopes: Map<string, { value: number; mutable: boolean }>[] = [];
+  const scopes: Map<string, Binding>[] = [];
 
-  const lookup = (
-    name: string,
-  ): { value: number; mutable: boolean } | undefined => {
+  const lookup = (name: string): Binding | undefined => {
     for (let i = scopes.length - 1; i >= 0; i -= 1) {
       const v = scopes[i]?.get(name);
       if (v !== undefined) {
@@ -27,9 +33,7 @@ export function parseExpression(source: string): Result<number, Error> {
     return undefined;
   };
 
-  const findBindingScope = (
-    name: string,
-  ): Map<string, { value: number; mutable: boolean }> | undefined => {
+  const findBindingScope = (name: string): Map<string, Binding> | undefined => {
     for (let i = scopes.length - 1; i >= 0; i -= 1) {
       const scope = scopes[i];
       if (scope?.has(name)) {
@@ -39,13 +43,42 @@ export function parseExpression(source: string): Result<number, Error> {
     return undefined;
   };
 
+  const toNumber = (v: Value): Result<number, Error> => {
+    if (v.kind === "num") {
+      return { ok: true, value: v.num };
+    }
+    return {
+      ok: false,
+      error: new Error(
+        `parseExpression: expected a number but found a reference in "${source}". ` +
+          `Fix: dereference it with "*" (e.g. "*y") to get its value.`,
+      ),
+    };
+  };
+
+  const deref = (v: Value): Result<Value, Error> => {
+    if (v.kind === "ref") {
+      // A ref is only ever created for a binding that exists, and bindings
+      // are never removed from a scope (only reassigned), so this is safe.
+      const binding = v.scope.get(v.name)!;
+      return { ok: true, value: binding.value };
+    }
+    return {
+      ok: false,
+      error: new Error(
+        `parseExpression: cannot dereference a non-reference value in "${source}". ` +
+          `Fix: use "*" only on a reference (e.g. "*y" where "y = &x").`,
+      ),
+    };
+  };
+
   const skipSpaces = (): void => {
     while (pos < source.length && source[pos] === " ") {
       pos += 1;
     }
   };
 
-  const parseNumber = (): Result<number, Error> => {
+  const parseNumber = (): Result<Value, Error> => {
     const match = NUMBER_RE.exec(source.slice(pos));
     if (!match) {
       return {
@@ -57,7 +90,7 @@ export function parseExpression(source: string): Result<number, Error> {
       };
     }
     pos += match[0].length;
-    return { ok: true, value: Number(match[0]) };
+    return { ok: true, value: { kind: "num", num: Number(match[0]) } };
   };
 
   const parseIdentifier = (): Result<string, Error> => {
@@ -76,7 +109,7 @@ export function parseExpression(source: string): Result<number, Error> {
     return { ok: true, value: name };
   };
 
-  const resolveIdentifier = (name: string): Result<number, Error> => {
+  const resolveIdentifier = (name: string): Result<Value, Error> => {
     const binding = lookup(name);
     if (binding === undefined) {
       return {
@@ -90,7 +123,7 @@ export function parseExpression(source: string): Result<number, Error> {
     return { ok: true, value: binding.value };
   };
 
-  const parseStatement = (): Result<number, Error> => {
+  const parseStatement = (): Result<Value, Error> => {
     skipSpaces();
     if (source.startsWith("let", pos)) {
       const afterLet = pos + 3;
@@ -153,7 +186,7 @@ export function parseExpression(source: string): Result<number, Error> {
     return parseAssignment();
   };
 
-  const parseAssignment = (): Result<number, Error> => {
+  const parseAssignment = (): Result<Value, Error> => {
     if (pos < source.length && /[A-Za-z_]/.test(source[pos] ?? "")) {
       const startPos = pos;
       const match = IDENT_RE.exec(source.slice(pos));
@@ -205,9 +238,9 @@ export function parseExpression(source: string): Result<number, Error> {
     return parseAdditive();
   };
 
-  const parseBlock = (): Result<number, Error> => {
+  const parseBlock = (): Result<Value, Error> => {
     scopes.push(new Map());
-    let last: Result<number, Error> = {
+    let last: Result<Value, Error> = {
       ok: false,
       error: new Error(
         `parseExpression: empty block in "${source}". ` +
@@ -234,7 +267,7 @@ export function parseExpression(source: string): Result<number, Error> {
     return last;
   };
 
-  const parseAdditive = (): Result<number, Error> => {
+  const parseAdditive = (): Result<Value, Error> => {
     const first = parseTerm();
     if (!first.ok) {
       return first;
@@ -266,13 +299,51 @@ export function parseExpression(source: string): Result<number, Error> {
       if (!next.ok) {
         return next;
       }
-      value = op === "+" ? value + next.value : value - next.value;
+      const left = toNumber(value);
+      if (!left.ok) {
+        return left;
+      }
+      const right = toNumber(next.value);
+      if (!right.ok) {
+        return right;
+      }
+      value = {
+        kind: "num",
+        num: op === "+" ? left.value + right.value : left.value - right.value,
+      };
     }
   };
 
-  const parseFactor = (): Result<number, Error> => {
+  const parseFactor = (): Result<Value, Error> => {
     skipSpaces();
     const open = source[pos];
+    if (open === "&") {
+      pos += 1;
+      const nameResult = parseIdentifier();
+      if (!nameResult.ok) {
+        return nameResult;
+      }
+      const name = nameResult.value;
+      const scope = findBindingScope(name);
+      if (!scope) {
+        return {
+          ok: false,
+          error: new Error(
+            `parseExpression: cannot take a reference to unknown identifier "${name}" in "${source}". ` +
+              `Fix: bind it first with "let ${name} = <expr>;".`,
+          ),
+        };
+      }
+      return { ok: true, value: { kind: "ref", name, scope } };
+    }
+    if (open === "*") {
+      pos += 1;
+      const inner = parseFactor();
+      if (!inner.ok) {
+        return inner;
+      }
+      return deref(inner.value);
+    }
     if (open === "{") {
       pos += 1;
       const inner = parseBlock();
@@ -320,7 +391,7 @@ export function parseExpression(source: string): Result<number, Error> {
     return parseNumber();
   };
 
-  const parseTerm = (): Result<number, Error> => {
+  const parseTerm = (): Result<Value, Error> => {
     const first = parseFactor();
     if (!first.ok) {
       return first;
@@ -337,13 +408,21 @@ export function parseExpression(source: string): Result<number, Error> {
       if (!next.ok) {
         return next;
       }
-      value = value * next.value;
+      const left = toNumber(value);
+      if (!left.ok) {
+        return left;
+      }
+      const right = toNumber(next.value);
+      if (!right.ok) {
+        return right;
+      }
+      value = { kind: "num", num: left.value * right.value };
     }
   };
 
-  const parseProgram = (): Result<number, Error> => {
+  const parseProgram = (): Result<Value, Error> => {
     scopes.push(new Map());
-    let last: Result<number, Error> = {
+    let last: Result<Value, Error> = {
       ok: false,
       error: new Error(
         `parseExpression: empty program in "${source}". ` +
@@ -370,5 +449,9 @@ export function parseExpression(source: string): Result<number, Error> {
     return last;
   };
 
-  return parseProgram();
+  const programResult = parseProgram();
+  if (!programResult.ok) {
+    return programResult;
+  }
+  return toNumber(programResult.value);
 }

@@ -58,6 +58,77 @@ describe("evaluateTuff", () => {
     });
   });
 
+  it('returns 1 for "let x = 1; let y = &x; *y"', () => {
+    expect(evaluateTuff("let x = 1; let y = &x; *y")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
+
+  it("returns an error when taking a reference to an unknown identifier", () => {
+    const result = evaluateTuff("let y = &z;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when '&' is not followed by an identifier", () => {
+    const result = evaluateTuff("let y = &;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when dereferencing a non-reference", () => {
+    const result = evaluateTuff("let x = 1; *x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when using a reference in addition", () => {
+    const result = evaluateTuff("let x = 1; let y = &x; y + 1");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when using a reference in multiplication", () => {
+    const result = evaluateTuff("let x = 1; let y = &x; y * 2");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when a reference is the right operand of +", () => {
+    const result = evaluateTuff("let x = 1; let y = &x; 1 + y");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when a reference is the right operand of *", () => {
+    const result = evaluateTuff("let x = 1; let y = &x; 2 * y");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when '*' is not followed by a valid operand", () => {
+    const result = evaluateTuff("let x = 1; *");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);
