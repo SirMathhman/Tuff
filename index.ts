@@ -23,6 +23,7 @@ export function interpret(input: string): number {
  */
 class ExpressionParser {
   private pos = 0;
+  private scope = new Map<string, number>();
 
   constructor(private readonly text: string) {}
 
@@ -38,6 +39,7 @@ class ExpressionParser {
 
   parse(): number {
     this.skipWhitespace();
+    this.parseLetDeclarations();
     const value = this.parseExpression();
     this.skipWhitespace();
     if (this.pos < this.text.length) {
@@ -49,7 +51,8 @@ class ExpressionParser {
   private parseExpression(): number {
     let value = this.parseTerm();
     for (;;) {
-      this.skipWhitespace();e
+      this.skipWhitespace();
+      const ch = this.peek();
       if (ch === "+") {
         this.pos++;
         value += this.parseTerm();
@@ -92,18 +95,88 @@ class ExpressionParser {
       this.pos++;
       return -this.parseFactor();
     }
-    if (ch === "(" || ch === "{") {
+    if (ch === "(") {
       this.pos++;
       const value = this.parseExpression();
       this.skipWhitespace();
-      const close = this.peek();
-      if (close !== ")" && close !== "}") {
+      if (this.peek() !== ")") {
         throw new Error("Expected closing parenthesis");
       }
       this.pos++;
       return value;
     }
+    if (ch === "{") {
+      this.pos++;
+      return this.parseBlock();
+    }
+    if (ch !== undefined && /[A-Za-z_]/.test(ch)) {
+      const name = this.parseIdentifier();
+      if (!this.scope.has(name)) {
+        throw new Error(`Unknown variable '${name}'`);
+      }
+      return this.scope.get(name)!;
+    }
     return this.parseNumber();
+  }
+
+  /** Parses a `{ let x = expr; ... expr }` block. The opening `{` is already consumed. */
+  private parseBlock(): number {
+    this.parseLetDeclarations();
+    const value = this.parseExpression();
+    this.skipWhitespace();
+    if (this.peek() !== "}") {
+      throw new Error("Expected '}'");
+    }
+    this.pos++;
+    return value;
+  }
+
+  /** Parses zero or more `let name = expression;` declarations into the current scope. */
+  private parseLetDeclarations(): void {
+    for (;;) {
+      this.skipWhitespace();
+      if (!this.isKeyword("let")) {
+        break;
+      }
+      this.pos += 3;
+      this.skipWhitespace();
+      const name = this.parseIdentifier();
+      this.skipWhitespace();
+      if (this.peek() !== "=") {
+        throw new Error("Expected '=' after variable name");
+      }
+      this.pos++;
+      const value = this.parseExpression();
+      this.scope.set(name, value);
+      this.skipWhitespace();
+      if (this.peek() === ";") {
+        this.pos++;
+      }
+    }
+  }
+
+  /** True if the keyword starts at the current position and is not part of a longer identifier. */
+  private isKeyword(word: string): boolean {
+    if (!this.text.startsWith(word, this.pos)) {
+      return false;
+    }
+    const next = this.text[this.pos + word.length];
+    return next === undefined || !/[A-Za-z0-9_]/.test(next);
+  }
+
+  private parseIdentifier(): string {
+    this.skipWhitespace();
+    const start = this.pos;
+    while (
+      this.pos < this.text.length &&
+      /[A-Za-z0-9_]/.test(this.text[this.pos]!)
+    ) {
+      this.pos++;
+    }
+    if (start === this.pos) {
+      throw new Error(`Expected identifier at position ${start}`);
+    }
+    return this.text.slice(start, this.pos);
   }
 
   private parseNumber(): number {
