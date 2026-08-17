@@ -20,4 +20,20 @@ describe("evaluateTuff", () => {
       expect(result.error).toBeInstanceOf(Error);
     }
   });
+
+  it("returns an error for an unexpected character", () => {
+    const result = evaluateTuff("1 * 2");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when a number is missing after an operator", () => {
+    const result = evaluateTuff("1 +");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
 });
