@@ -60,4 +60,8 @@ describe("interpret", () => {
   test('interpret("(1 + 2") => 0', () => {
     expect(interpret("(1 + 2")).toBe(0);
   });
+
+  test('interpret("{ 2 + 3 } * 4") => 20', () => {
+    expect(interpret("{ 2 + 3 } * 4")).toBe(20);
+  });
 });

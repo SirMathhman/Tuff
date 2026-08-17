@@ -93,11 +93,12 @@ class ExpressionParser {
       this.pos++;
       return -this.parseFactor();
     }
-    if (ch === "(") {
+    if (ch === "(" || ch === "{") {
       this.pos++;
       const value = this.parseExpression();
       this.skipWhitespace();
-      if (this.peek() !== ")") {
+      const close = this.peek();
+      if (close !== ")" && close !== "}") {
         throw new Error("Expected closing parenthesis");
       }
       this.pos++;
