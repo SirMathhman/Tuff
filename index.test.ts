@@ -13,6 +13,10 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("1 + 2")).toEqual({ ok: true, value: 3 });
   });
 
+  it('returns 6 for "1 + 2 + 3"', () => {
+    expect(evaluateTuff("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);
