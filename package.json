@@ -3,8 +3,13 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "test": "bun test",
+    "format:prettier": "prettier --write ."
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "prettier": "^3.4.2"
   },
   "peerDependencies": {
     "typescript": "^5"
