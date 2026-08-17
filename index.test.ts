@@ -33,6 +33,10 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  it('returns 20 for "{ 2 + 3 } * 4"', () => {
+    expect(evaluateTuff("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);

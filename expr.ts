@@ -4,7 +4,7 @@ const NUMBER_RE = /^[+-]?(\d+(\.\d+)?)/;
 
 /**
  * Parses and evaluates an arithmetic expression of numbers with +, -, and *.
- * Left-associative; * binds tighter than + and -. Supports parentheses.
+ * Left-associative; * binds tighter than + and -. Supports ( ) and { } groups.
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
@@ -38,7 +38,7 @@ export function parseExpression(source: string): Result<number, Error> {
     let value = first.value;
     for (;;) {
       skipSpaces();
-      if (pos >= source.length || source[pos] === ")") {
+      if (pos >= source.length || source[pos] === ")" || source[pos] === "}") {
         return { ok: true, value };
       }
       const op = source[pos];
@@ -47,7 +47,7 @@ export function parseExpression(source: string): Result<number, Error> {
           ok: false,
           error: new Error(
             `parseExpression: unexpected character "${op}" at position ${pos} in "${source}". ` +
-              `Fix: use only numbers, "+", "-", "*", and parentheses (e.g. "(2 + 3) * 4").`,
+              `Fix: use only numbers, "+", "-", "*", and ( ) or { } groups (e.g. "(2 + 3) * 4").`,
           ),
         };
       }
@@ -63,19 +63,21 @@ export function parseExpression(source: string): Result<number, Error> {
 
   const parseFactor = (): Result<number, Error> => {
     skipSpaces();
-    if (pos < source.length && source[pos] === "(") {
+    const open = source[pos];
+    if (open === "(" || open === "{") {
+      const close = open === "(" ? ")" : "}";
       pos += 1;
       const inner = parseAdditive();
       if (!inner.ok) {
         return inner;
       }
       skipSpaces();
-      if (pos >= source.length || source[pos] !== ")") {
+      if (pos >= source.length || source[pos] !== close) {
         return {
           ok: false,
           error: new Error(
-            `parseExpression: expected ")" at position ${pos} in "${source}". ` +
-              `Fix: close the parenthesized group (e.g. "(2 + 3)").`,
+            `parseExpression: expected "${close}" at position ${pos} in "${source}". ` +
+              `Fix: close the group with its matching delimiter (e.g. "(2 + 3)" or "{ 2 + 3 }").`,
           ),
         };
       }
