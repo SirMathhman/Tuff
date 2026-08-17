@@ -6,7 +6,8 @@
   "scripts": {
     "test": "jest --coverage",
     "format:prettier": "prettier --write .",
-    "lint:eslint": "eslint . --fix"
+    "lint:eslint": "eslint . --fix --max-warnings 10",
+    "cpd": "pmd cpd *.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
