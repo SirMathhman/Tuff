@@ -119,6 +119,7 @@ class ExpressionParser {
         end++;
       }
     }
+    this.pos = end;
     if (start === end) {
       throw new Error(`Expected number at position ${start}`);
     }
