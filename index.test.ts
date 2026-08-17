@@ -88,4 +88,8 @@ describe("interpret", () => {
   test('interpret("let mut x = 0; x = 1; x") => 1', () => {
     expect(interpret("let mut x = 0; x = 1; x")).toBe(1);
   });
+
+  test('interpret("x = 1; x") => 0', () => {
+    expect(interpret("x = 1; x")).toBe(0);
+  });
 });
