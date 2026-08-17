@@ -72,4 +72,16 @@ describe("interpret", () => {
   test('interpret("let y = { let x = 2 + 3; x } * 4; y ") => 20', () => {
     expect(interpret("let y = { let x = 2 + 3; x } * 4; y ")).toBe(20);
   });
+
+  test('interpret("{ 2 + 3") => 0', () => {
+    expect(interpret("{ 2 + 3")).toBe(0);
+  });
+
+  test('interpret("let x 2") => 0', () => {
+    expect(interpret("let x 2")).toBe(0);
+  });
+
+  test('interpret("let = 2") => 0', () => {
+    expect(interpret("let = 2")).toBe(0);
+  });
 });
