@@ -8,6 +8,10 @@
       {
         "type": "command",
         "command": "cmd /c \"bun run format:prettier\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      },
+      {
+        "type": "command",
+        "command": "cmd /c \"bun run lint:eslint\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
