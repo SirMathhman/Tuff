@@ -5,8 +5,12 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("")).toEqual({ ok: true, value: 0 });
   });
 
-  it("returns 1 for \"1\"", () => {
+  it('returns 1 for "1"', () => {
     expect(evaluateTuff("1")).toEqual({ ok: true, value: 1 });
+  });
+
+  it('returns 3 for "1 + 2"', () => {
+    expect(evaluateTuff("1 + 2")).toEqual({ ok: true, value: 3 });
   });
 
   it("returns an error for invalid input", () => {
