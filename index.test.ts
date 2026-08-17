@@ -1,5 +1,4 @@
-import { describe, expect, test } from "bun:test";
-import { interpret } from "./index.ts";
+import { interpret } from "./index";
 
 describe("interpret", () => {
   test('interpret("") => 0', () => {
