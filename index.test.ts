@@ -44,6 +44,13 @@ describe("evaluateTuff", () => {
     });
   });
 
+  it('returns 20 for "let y = { let x = 2 + 3; x } * 4; y"', () => {
+    expect(evaluateTuff("let y = { let x = 2 + 3; x } * 4; y")).toEqual({
+      ok: true,
+      value: 20,
+    });
+  });
+
   it("returns an error for invalid input", () => {
     const result = evaluateTuff("something invalid");
     expect(result.ok).toBe(false);
@@ -150,5 +157,9 @@ describe("evaluateTuff", () => {
 
   it("evaluates a block with multiple statements separated by ';'", () => {
     expect(evaluateTuff("{ 1; 2 }")).toEqual({ ok: true, value: 2 });
+  });
+
+  it("evaluates top-level statements separated by ';'", () => {
+    expect(evaluateTuff("1; 2")).toEqual({ ok: true, value: 2 });
   });
 });

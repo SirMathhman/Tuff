@@ -6,8 +6,8 @@ const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 /**
  * Parses and evaluates an arithmetic expression of numbers with +, -, and *.
  * Left-associative; * binds tighter than + and -. Supports ( ) and { } groups.
- * { } blocks may contain "let name = expr;" bindings (scoped to the block)
- * followed by a final expression, e.g. "{ let x = 2 + 3; x }".
+ * "let name = expr;" bindings may appear at the top level or inside { } blocks
+ * (scoped to the block), e.g. "let y = { let x = 2 + 3; x } * 4; y".
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
@@ -258,6 +258,34 @@ export function parseExpression(source: string): Result<number, Error> {
     }
   };
 
-  skipSpaces();
-  return parseAdditive();
+  const parseProgram = (): Result<number, Error> => {
+    scopes.push(new Map());
+    let last: Result<number, Error> = {
+      ok: false,
+      error: new Error(
+        `parseExpression: empty program in "${source}". ` +
+          `Fix: provide an expression or a "let" binding.`,
+      ),
+    };
+    for (;;) {
+      skipSpaces();
+      if (pos >= source.length) {
+        break;
+      }
+      const stmt = parseStatement();
+      if (!stmt.ok) {
+        scopes.pop();
+        return stmt;
+      }
+      last = stmt;
+      skipSpaces();
+      if (source[pos] === ";") {
+        pos += 1;
+      }
+    }
+    scopes.pop();
+    return last;
+  };
+
+  return parseProgram();
 }
