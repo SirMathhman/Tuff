@@ -7,7 +7,7 @@ module.exports = {
   testMatch: ["**/*.test.ts"],
   coverageThreshold: {
     global: {
-      lines: 100
+      lines: 100,
     },
   },
 };

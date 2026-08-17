@@ -49,8 +49,7 @@ class ExpressionParser {
   private parseExpression(): number {
     let value = this.parseTerm();
     for (;;) {
-      this.skipWhitespace();
-      const ch = this.peek();
+      this.skipWhitespace();e
       if (ch === "+") {
         this.pos++;
         value += this.parseTerm();
