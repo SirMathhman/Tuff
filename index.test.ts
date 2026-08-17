@@ -201,4 +201,12 @@ describe("evaluateTuff", () => {
       expect(result.error).toBeInstanceOf(Error);
     }
   });
+
+  it('returns an error for "let x = 0; x = 1; x"', () => {
+    const result = evaluateTuff("let x = 0; x = 1; x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
 });
