@@ -18,6 +18,10 @@ export enum EvalErrorCode {
   DerefOfNonReference = "DerefOfNonReference",
   AssignmentToImmutableThroughReference = "AssignmentToImmutableThroughReference",
   ReferenceInExpression = "ReferenceInExpression",
+  IndexOnNonArray = "IndexOnNonArray",
+  IndexMustBeNumber = "IndexMustBeNumber",
+  IndexOutOfBounds = "IndexOutOfBounds",
+  ExpectedCommaOrCloseBracket = "ExpectedCommaOrCloseBracket",
 }
 
 export interface EvalError {

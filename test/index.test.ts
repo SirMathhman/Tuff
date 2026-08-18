@@ -101,6 +101,12 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
+    expect(
+      valueOf("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
+    ).toBe(6);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);

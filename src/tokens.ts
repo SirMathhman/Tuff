@@ -17,7 +17,7 @@ export interface OpToken {
 
 export interface ParenToken {
   type: "paren";
-  paren: "(" | ")" | "{" | "}";
+  paren: "(" | ")" | "{" | "}" | "[" | "]";
 }
 
 export interface IdentToken {
@@ -59,6 +59,10 @@ export interface EqToken {
   type: "eq";
 }
 
+export interface CommaToken {
+  type: "comma";
+}
+
 export type Token =
   | NumToken
   | OpToken
@@ -71,7 +75,8 @@ export type Token =
   | BoolToken
   | OrToken
   | AndToken
-  | EqToken;
+  | EqToken
+  | CommaToken;
 
 export interface TokenizeSuccess extends EvalSuccess {
   tokens: Token[];
@@ -101,8 +106,20 @@ export function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
-    if (ch === "(" || ch === ")" || ch === "{" || ch === "}") {
+    if (
+      ch === "(" ||
+      ch === ")" ||
+      ch === "{" ||
+      ch === "}" ||
+      ch === "[" ||
+      ch === "]"
+    ) {
       tokens.push({ type: "paren", paren: ch });
+      i++;
+      continue;
+    }
+    if (ch === ",") {
+      tokens.push({ type: "comma" });
       i++;
       continue;
     }
