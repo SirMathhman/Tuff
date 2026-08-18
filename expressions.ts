@@ -41,6 +41,18 @@ export function parseExpression(
       break;
     }
   }
+  // "&&" binds tighter than "||" and is left-associative.
+  while (next < tokens.length) {
+    const andTok = tokens[next];
+    if (andTok && andTok.type === "and") {
+      const rhs = parseExpression(tokens, next + 1, env, parseBlock);
+      if (!rhs.ok) return rhs;
+      value = value !== 0 && rhs.value !== 0 ? 1 : 0;
+      next = rhs.next;
+    } else {
+      break;
+    }
+  }
   // "||" has the lowest precedence and is right-associative.
   const orTok = tokens[next];
   if (orTok && orTok.type === "or") {
