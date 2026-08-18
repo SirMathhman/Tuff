@@ -22,13 +22,7 @@ export interface EvaluateError {
 
 const NUMBER_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 
-export function evaluate(input: string): Result<number, EvaluateError> {
-  if (input === "") {
-    return { ok: true, value: 0 };
-  }
-  if (NUMBER_PATTERN.test(input)) {
-    return { ok: true, value: Number(input) };
-  }
+function unsupported(input: string): Result<number, EvaluateError> {
   return {
     ok: false,
     error: {
@@ -36,8 +30,22 @@ export function evaluate(input: string): Result<number, EvaluateError> {
       input,
       message:
         `evaluate() does not support input (got ${JSON.stringify(input)}). ` +
-        "Only the empty string and numeric literals are implemented. " +
+        "Only the empty string, numeric literals, and addition of numeric literals are implemented. " +
         "Provide a spec for the expression grammar to extend this.",
     },
   };
+}
+
+export function evaluate(input: string): Result<number, EvaluateError> {
+  if (input === "") {
+    return { ok: true, value: 0 };
+  }
+  if (NUMBER_PATTERN.test(input)) {
+    return { ok: true, value: Number(input) };
+  }
+  const terms = input.split(/\s*\+\s*/);
+  if (terms.length > 1 && terms.every((t) => NUMBER_PATTERN.test(t))) {
+    return { ok: true, value: terms.reduce((sum, t) => sum + Number(t), 0) };
+  }
+  return unsupported(input);
 }

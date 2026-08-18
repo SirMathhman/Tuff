@@ -18,6 +18,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("1 + 2") => 3', () => {
+    const result = evaluate("1 + 2");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(3);
+    }
+  });
+
   test('evaluate("abc") => Err(UnsupportedInput)', () => {
     const result = evaluate("abc");
     expect(result.ok).toBe(false);
