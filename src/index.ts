@@ -32,6 +32,37 @@ export function evaluate(source: string): EvalResult {
   if (Number.isFinite(value)) {
     return { ok: true, value };
   }
+  const plusIndex = trimmed.indexOf("+");
+  if (plusIndex !== -1) {
+    const left = trimmed.slice(0, plusIndex).trim();
+    const right = trimmed.slice(plusIndex + 1).trim();
+    const leftValue = Number(left);
+    const rightValue = Number(right);
+    if (left !== "" && right !== "" && Number.isFinite(leftValue) && Number.isFinite(rightValue)) {
+      return { ok: true, value: leftValue + rightValue };
+    }
+    return {
+      ok: false,
+      error: {
+        kind: "not-implemented",
+        source,
+        offset: source.indexOf(trimmed) + plusIndex,
+        message: `Only addition of two numeric literals is implemented. "${trimmed}" is not supported yet.`,
+      },
+    };
+  }
+  const minusIndex = trimmed.indexOf("-");
+  if (minusIndex !== -1) {
+    return {
+      ok: false,
+      error: {
+        kind: "not-implemented",
+        source,
+        offset: source.indexOf(trimmed) + minusIndex,
+        message: `Subtraction is not implemented yet. Only numeric literals and "a + b" expressions are supported.`,
+      },
+    };
+  }
   return {
     ok: false,
     error: {
