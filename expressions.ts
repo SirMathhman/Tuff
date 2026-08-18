@@ -41,6 +41,14 @@ export function parseExpression(
       break;
     }
   }
+  // "||" has the lowest precedence and is right-associative.
+  const orTok = tokens[next];
+  if (orTok && orTok.type === "or") {
+    const rhs = parseExpression(tokens, next + 1, env, parseBlock);
+    if (!rhs.ok) return rhs;
+    value = value !== 0 || rhs.value !== 0 ? 1 : 0;
+    next = rhs.next;
+  }
   return { ok: true, value, next };
 }
 

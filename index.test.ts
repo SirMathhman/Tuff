@@ -69,6 +69,10 @@ describe("evaluate", () => {
     expect(valueOf("let x = true; x")).toBe(1);
   });
 
+  test('evaluate("true || false") => 1', () => {
+    expect(valueOf("true || false")).toBe(1);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);

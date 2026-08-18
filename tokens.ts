@@ -47,6 +47,10 @@ export interface BoolToken {
   value: boolean;
 }
 
+export interface OrToken {
+  type: "or";
+}
+
 export type Token =
   | NumToken
   | OpToken
@@ -56,7 +60,8 @@ export type Token =
   | AssignToken
   | SemicolonToken
   | RefToken
-  | BoolToken;
+  | BoolToken
+  | OrToken;
 
 export interface TokenizeSuccess extends EvalSuccess {
   tokens: Token[];
@@ -106,6 +111,19 @@ export function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
+    if (ch === "|") {
+      if (input[i + 1] === "|") {
+        tokens.push({ type: "or" });
+        i += 2;
+        continue;
+      }
+      return err(
+        EvalErrorCode.UnexpectedCharacter,
+        input,
+        `Unexpected character "|". Use "||" for logical or.`,
+        i,
+      );
+    }
     if (/[a-zA-Z_]/.test(ch)) {
       let j = i;
       while (j < input.length && /[a-zA-Z0-9_]/.test(input[j] ?? "")) j++;
@@ -121,7 +139,7 @@ export function tokenize(input: string): TokenizeResult {
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ;, &, true, false, and identifiers are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ;, &, ||, true, false, and identifiers are allowed.`,
       i,
     );
   }
