@@ -24,10 +24,12 @@ export type { EvaluateError, EvaluateResult } from "./errors.js";
  * to a number-initialized binding, or a number to a boolean-initialized
  * one) is a `type-mismatch` error; non-literal right-hand sides never
  * mismatch. Assigning a value to a reference binding (`y = expr;` where
- * `y` is a reference) is a `reference-assignment` error. Multiplication
- * binds tighter than addition and subtraction,
- * which are evaluated left to right. Empty input is a defined case and
- * evaluates to 0.
+ * `y` is a reference) is a `reference-assignment` error. The if
+ * expression `if (cond) then else other` evaluates the parenthesized
+ * condition and yields the then branch when it is non-zero, otherwise
+ * the else branch; `if` and `else` are reserved words. Multiplication
+ * binds tighter than addition and subtraction, which are evaluated left
+ * to right. Empty input is a defined case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();

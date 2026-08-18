@@ -5,6 +5,7 @@ import {
   parseDereferenceAssignment,
   parseReferenceBinding,
 } from "./reference.js";
+import { parseIfExpression } from "./if-expression.js";
 
 /**
  * A value binding: a number, whether it may be assigned, and the kind of
@@ -40,7 +41,8 @@ export type Binding =
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
  *   factor       = number | boolean | identifier | '(' expression ')'
- *                 | block | '*' dereference
+ *                 | block | '*' dereference | ifExpression
+ *   ifExpression = 'if' '(' expression ')' expression 'else' expression
  *   boolean      = 'true' | 'false'
  *   dereference  = identifier
  *   block        = '{' statement* expression '}'
@@ -160,7 +162,7 @@ export class Parser {
     return isIdentifier(token) && this.tokens[this.pos + 1] === "=";
   }
 
-  private parseExpression(): number | null {
+  parseExpression(): number | null {
     let value = this.parseTerm();
     if (value === null) {
       return null;
@@ -198,8 +200,7 @@ export class Parser {
       return null;
     }
     if (typeof token === "number" || token === "true" || token === "false") {
-      this.advance();
-      return typeof token === "number" ? token : token === "true" ? 1 : 0;
+      return this.parseLiteral();
     }
     if (token === "(" || token === "{") {
       this.advance();
@@ -225,6 +226,9 @@ export class Parser {
     if (token === "*") {
       return parseDereference(this);
     }
+    if (token === "if") {
+      return parseIfExpression(this);
+    }
     if (isIdentifier(token)) {
       this.advance();
       const binding = this.lookup(token);
@@ -239,6 +243,15 @@ export class Parser {
       return binding.value;
     }
     return null;
+  }
+
+  /**
+   * Parses a number or boolean literal at the current position. The token
+   * must already be known to be a literal.
+   */
+  private parseLiteral(): number {
+    const token = this.advance() as number | "true" | "false";
+    return typeof token === "number" ? token : token === "true" ? 1 : 0;
   }
 
   /**

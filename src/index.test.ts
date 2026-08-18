@@ -28,6 +28,60 @@ test('returns 0 for the input "false"', () => {
   expect(evaluate("false")).toEqual({ ok: true, value: 0 });
 });
 
+test("returns 3 for a false if condition selecting the else branch", () => {
+  expect(evaluate("let x = if (false) 2 else 3; x")).toEqual({ ok: true, value: 3 });
+});
+
+test("returns 2 for a true if condition selecting the then branch", () => {
+  expect(evaluate("if (true) 2 else 3")).toEqual({ ok: true, value: 2 });
+});
+
+// Coverage: non-zero numeric condition selects the then branch.
+test("returns 2 for a non-zero numeric if condition", () => {
+  expect(evaluate("if (1) 2 else 3")).toEqual({ ok: true, value: 2 });
+});
+
+// Coverage: if expression used as a factor in a larger expression.
+test("returns 6 for an if expression multiplied by 2", () => {
+  expect(evaluate("if (false) 2 else 3 * 2")).toEqual({ ok: true, value: 6 });
+});
+
+// Coverage: if expression missing the condition parenthesis.
+test("returns a structured error for an if expression missing (", () => {
+  expectError("if true 2 else 3", {
+    kind: "malformed-expression",
+    input: "if true 2 else 3",
+    reason: 'Unexpected end of expression in "if true 2 else 3"',
+  });
+});
+
+// Coverage: if expression missing the else keyword.
+test("returns a structured error for an if expression missing else", () => {
+  expectError("if (true) 2 3", {
+    kind: "malformed-expression",
+    input: "if (true) 2 3",
+    reason: 'Unexpected end of expression in "if (true) 2 3"',
+  });
+});
+
+// Coverage: if expression condition not closed with ).
+test("returns a structured error for an if expression with an unclosed condition", () => {
+  expectError("if (true 2 else 3", {
+    kind: "malformed-expression",
+    input: "if (true 2 else 3",
+    reason: 'Unexpected end of expression in "if (true 2 else 3"',
+  });
+});
+
+// Coverage: if expression with an empty else branch.
+test("returns a structured error for an if expression with an empty else branch", () => {
+  expectError("if (true) 2 else", {
+    kind: "malformed-expression",
+    input: "if (true) 2 else",
+    reason: 'Unexpected end of expression in "if (true) 2 else"',
+  });
+});
+
 test("returns 1 for a boolean binding read back", () => {
   expect(evaluate("let x = true; x")).toEqual({ ok: true, value: 1 });
 });

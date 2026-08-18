@@ -21,6 +21,8 @@ export type Token =
 const NON_IDENTIFIERS: ReadonlySet<string> = new Set([
   "let",
   "mut",
+  "if",
+  "else",
   "true",
   "false",
   "=",
