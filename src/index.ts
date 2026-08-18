@@ -27,6 +27,17 @@ function notImplemented(source: string, offset: number, message: string): EvalRe
 }
 
 /**
+ * Builds a structured "not supported yet" error result for an unsupported expression.
+ */
+function unsupportedExpression(source: string, offset: number): EvalResult {
+  return notImplemented(
+    source,
+    offset,
+    `Only numeric literals and "a + b" expressions are implemented. "${source.trim()}" is not supported yet.`,
+  );
+}
+
+/**
  * Builds a structured "invalid literal" error result.
  */
 function invalidLiteral(source: string, offset: number, value: string): EvalResult {
@@ -69,11 +80,7 @@ export function evaluate(source: string): EvalResult {
       }
       return invalidLiteral(source, token.offset, token.value);
     }
-    return notImplemented(
-      source,
-      token.offset,
-      `Only numeric literals and "a + b" expressions are implemented. "${source.trim()}" is not supported yet.`,
-    );
+    return unsupportedExpression(source, token.offset);
   }
   if (tokens.length === 2 && tokens[0].kind === "minus" && tokens[1].kind === "number") {
     const value = Number(tokens[1].value);
@@ -102,9 +109,5 @@ export function evaluate(source: string): EvalResult {
     }
   }
   const firstOp = tokens.find((t) => t.kind !== "number");
-  return notImplemented(
-    source,
-    firstOp ? firstOp.offset : tokens[0].offset,
-    `Only numeric literals and "a + b" expressions are implemented. "${source.trim()}" is not supported yet.`,
-  );
+  return unsupportedExpression(source, firstOp ? firstOp.offset : tokens[0].offset);
 }
