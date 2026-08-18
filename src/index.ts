@@ -22,16 +22,20 @@ export function evaluate(input: string): EvaluateResult {
   if (trimmed === "") {
     return { ok: true, value: 0 };
   }
-  const value = Number(trimmed);
-  if (Number.isNaN(value)) {
-    return {
-      ok: false,
-      error: {
-        kind: "invalid-number",
-        input,
-        reason: `Cannot parse "${input}" as a number`,
-      },
-    };
+  let sum = 0;
+  for (const operand of trimmed.split("+")) {
+    const value = Number(operand.trim());
+    if (Number.isNaN(value)) {
+      return {
+        ok: false,
+        error: {
+          kind: "invalid-number",
+          input,
+          reason: `Cannot parse "${input}" as a number`,
+        },
+      };
+    }
+    sum += value;
   }
-  return { ok: true, value };
+  return { ok: true, value: sum };
 }
