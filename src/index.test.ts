@@ -1,6 +1,6 @@
 import { evaluate } from "./index.js";
 
-describe("evaluate", () => {
+describe("arithmetic", () => {
   it("returns 0 for an empty string", () => {
     expect(evaluate("")).toEqual({ ok: true, value: 0 });
   });
@@ -33,6 +33,12 @@ describe("evaluate", () => {
     expect(evaluate("2 * 3 * 4")).toEqual({ ok: true, value: 24 });
   });
 
+  it("returns the parsed number for valid numeric input", () => {
+    expect(evaluate("42")).toEqual({ ok: true, value: 42 });
+  });
+});
+
+describe("grouping", () => {
   it('returns 20 for the input "(2 + 3) * 4"', () => {
     expect(evaluate("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
   });
@@ -40,7 +46,9 @@ describe("evaluate", () => {
   it('returns 20 for the input "{ 2 + 3 } * 4"', () => {
     expect(evaluate("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
   });
+});
 
+describe("let statements and scoping", () => {
   it('returns 20 for the input "{ let x = 2 + 3; x } * 4"', () => {
     expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
   });
@@ -53,6 +61,70 @@ describe("evaluate", () => {
     expect(evaluate("let a = 1; let b = a + 1; a + b")).toEqual({ ok: true, value: 3 });
   });
 
+  it("returns 2 for multiple let statements in a block", () => {
+    expect(evaluate("{ let a = 1; let b = a + 1; a * b }")).toEqual({ ok: true, value: 2 });
+  });
+
+  it("returns 2 for a shadowed variable in a nested block", () => {
+    expect(evaluate("{ let x = 1; { let x = 2; x } }")).toEqual({ ok: true, value: 2 });
+  });
+
+  it("returns 1 for a variable read from an outer block", () => {
+    expect(evaluate("{ let x = 1; { x } }")).toEqual({ ok: true, value: 1 });
+  });
+});
+
+describe("unknown variable errors", () => {
+  it("returns a structured error for an unknown variable", () => {
+    expect(evaluate("x")).toEqual({
+      ok: false,
+      error: {
+        kind: "unknown-variable",
+        input: "x",
+        name: "x",
+        reason: 'Unknown variable "x" in "x"',
+      },
+    });
+  });
+
+  it("returns a structured error for a variable used outside its block", () => {
+    expect(evaluate("{ let x = 1; x } + x")).toEqual({
+      ok: false,
+      error: {
+        kind: "unknown-variable",
+        input: "{ let x = 1; x } + x",
+        name: "x",
+        reason: 'Unknown variable "x" in "{ let x = 1; x } + x"',
+      },
+    });
+  });
+
+  it("returns a structured error for an unknown variable after *", () => {
+    expect(evaluate("2 * abc")).toEqual({
+      ok: false,
+      error: {
+        kind: "unknown-variable",
+        input: "2 * abc",
+        name: "abc",
+        reason: 'Unknown variable "abc" in "2 * abc"',
+      },
+    });
+  });
+
+  it("returns a structured error for an unknown variable with a multi-character name", () => {
+    expect(evaluate("abc")).toEqual({
+      ok: false,
+      error: {
+        kind: "unknown-variable",
+        input: "abc",
+        name: "abc",
+        reason: 'Unknown variable "abc" in "abc"',
+      },
+    });
+  });
+});
+
+describe("top-level let statement errors", () => {
   it("returns a structured error for a top-level let statement missing =", () => {
     expect(evaluate("let x 1; x")).toEqual({
       ok: false,
@@ -85,43 +157,9 @@ describe("evaluate", () => {
       },
     });
   });
+});
 
-  it("returns 2 for multiple let statements in a block", () => {
-    expect(evaluate("{ let a = 1; let b = a + 1; a * b }")).toEqual({ ok: true, value: 2 });
-  });
-
-  it("returns 2 for a shadowed variable in a nested block", () => {
-    expect(evaluate("{ let x = 1; { let x = 2; x } }")).toEqual({ ok: true, value: 2 });
-  });
-
-  it("returns 1 for a variable read from an outer block", () => {
-    expect(evaluate("{ let x = 1; { x } }")).toEqual({ ok: true, value: 1 });
-  });
-
-  it("returns a structured error for an unknown variable", () => {
-    expect(evaluate("x")).toEqual({
-      ok: false,
-      error: {
-        kind: "unknown-variable",
-        input: "x",
-        name: "x",
-        reason: 'Unknown variable "x" in "x"',
-      },
-    });
-  });
-
-  it("returns a structured error for a variable used outside its block", () => {
-    expect(evaluate("{ let x = 1; x } + x")).toEqual({
-      ok: false,
-      error: {
-        kind: "unknown-variable",
-        input: "{ let x = 1; x } + x",
-        name: "x",
-        reason: 'Unknown variable "x" in "{ let x = 1; x } + x"',
-      },
-    });
-  });
-
+describe("block let statement errors", () => {
   it("returns a structured error for a let statement missing =", () => {
     expect(evaluate("{ let x 1; x }")).toEqual({
       ok: false,
@@ -165,7 +203,9 @@ describe("evaluate", () => {
       },
     });
   });
+});
 
+describe("malformed let statement errors", () => {
   it("returns a structured error for a dangling let", () => {
     expect(evaluate("{ let")).toEqual({
       ok: false,
@@ -187,7 +227,9 @@ describe("evaluate", () => {
       },
     });
   });
+});
 
+describe("malformed expression errors", () => {
   it("returns a structured error for a malformed expression", () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
@@ -221,22 +263,6 @@ describe("evaluate", () => {
     });
   });
 
-  it("returns a structured error for an unknown variable after *", () => {
-    expect(evaluate("2 * abc")).toEqual({
-      ok: false,
-      error: {
-        kind: "unknown-variable",
-        input: "2 * abc",
-        name: "abc",
-        reason: 'Unknown variable "abc" in "2 * abc"',
-      },
-    });
-  });
-
-  it("returns the parsed number for valid numeric input", () => {
-    expect(evaluate("42")).toEqual({ ok: true, value: 42 });
-  });
-
   // Coverage: identifier between two numbers (tokenize gap branch).
   it("returns a structured error for an identifier between numbers", () => {
     expect(evaluate("1 a 2")).toEqual({
@@ -248,7 +274,9 @@ describe("evaluate", () => {
       },
     });
   });
+});
 
+describe("tokenization errors", () => {
   // Coverage: unrecognized character between tokens (tokenize gap branch).
   it("returns a structured error for an unrecognized character between tokens", () => {
     expect(evaluate("1 @ 2")).toEqual({
@@ -281,18 +309,6 @@ describe("evaluate", () => {
         kind: "malformed-expression",
         input: "(1 +",
         reason: 'Unexpected end of expression in "(1 +"',
-      },
-    });
-  });
-
-  it("returns a structured error for an unknown variable with a multi-character name", () => {
-    expect(evaluate("abc")).toEqual({
-      ok: false,
-      error: {
-        kind: "unknown-variable",
-        input: "abc",
-        name: "abc",
-        reason: 'Unknown variable "abc" in "abc"',
       },
     });
   });
