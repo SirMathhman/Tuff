@@ -13,7 +13,9 @@ export type { EvaluateError, EvaluateResult } from "./errors.js";
  * may appear at the top level and inside curly-brace blocks, each
  * followed by an optional final expression (a program with no final
  * expression evaluates to 0), e.g.
- * `let y = { let x = 2 + 3; x } * 4; y`; variables are only visible
+ * `let y = { let x = 2 + 3; x } * 4; y`; a block used as a statement
+ * may omit its trailing expression, while a block used as an expression
+ * requires one; variables are only visible
  * inside the block (or top level) that declares them, and only `mut`
  * bindings may be assigned. References are created with `&x` (shared)
  * or `&mut x` (mutable, requires a `mut` binding) and read with the

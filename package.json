@@ -19,7 +19,8 @@
     "format:prettier": "prettier --check .",
     "lint:typecheck": "tsc --noEmit",
     "lint:eslint": "eslint .",
-    "lint:pmd:cpd": "pmd cpd --minimum-tokens 100 --language typescript src"
+    "lint:pmd:cpd": "pmd cpd --minimum-tokens 100 --language typescript src",
+    "madge:visualize": "pnpx madge ./src --image ./docs/graph.svg --extensions ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

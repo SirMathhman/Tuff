@@ -213,6 +213,10 @@ test("returns 2 for a mutable variable assigned inside a block", () => {
   expect(evaluate("let mut x = 1; { x = 2; x }")).toEqual({ ok: true, value: 2 });
 });
 
+test("returns 1 for a statement block with no trailing expression", () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toEqual({ ok: true, value: 1 });
+});
+
 test("returns 3 for a let mut statement inside a block", () => {
   expect(evaluate("{ let mut x = 1; x = 2; x + 1 }")).toEqual({ ok: true, value: 3 });
 });
@@ -376,6 +380,33 @@ test("returns a structured error for an unclosed block", () => {
     kind: "malformed-expression",
     input: "{ let x = 1; x",
     reason: 'Unexpected end of expression in "{ let x = 1; x"',
+  });
+});
+
+// Coverage: statement block whose trailing expression is unclosed.
+test("returns a structured error for an unclosed statement block", () => {
+  expectError("let mut x = 0; { x = 1; x", {
+    kind: "malformed-expression",
+    input: "let mut x = 0; { x = 1; x",
+    reason: 'Unexpected end of expression in "let mut x = 0; { x = 1; x"',
+  });
+});
+
+// Coverage: statement block containing a malformed statement.
+test("returns a structured error for a statement block with a malformed statement", () => {
+  expectError("let mut x = 0; { let y 1; }", {
+    kind: "malformed-expression",
+    input: "let mut x = 0; { let y 1; }",
+    reason: 'Unexpected end of expression in "let mut x = 0; { let y 1; }"',
+  });
+});
+
+// Coverage: expression block containing a malformed statement.
+test("returns a structured error for an expression block with a malformed statement", () => {
+  expectError("1 + { let x 1; x }", {
+    kind: "malformed-expression",
+    input: "1 + { let x 1; x }",
+    reason: 'Unexpected end of expression in "1 + { let x 1; x }"',
   });
 });
 

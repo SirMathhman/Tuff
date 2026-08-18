@@ -6,6 +6,7 @@ import {
   parseReferenceBinding,
 } from "./reference.js";
 import { parseIfExpression } from "./if-expression.js";
+import { parseStatementBlock } from "./statement-block.js";
 
 /**
  * A value binding: a number, whether it may be assigned, and the kind of
@@ -37,7 +38,8 @@ export type Binding =
  *
  * Grammar:
  *   program      = statement* expression?
- *   statement    = letStatement | assignmentStatement
+ *   statement    = letStatement | assignmentStatement | statementBlock
+ *   statementBlock = '{' statement* expression? '}'
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
  *   factor       = number | boolean | identifier | '(' expression ')'
@@ -52,8 +54,8 @@ export type Binding =
  *                      | '*' identifier '=' expression ';'
  */
 export class Parser {
-  private pos = 0;
-  private scopes: Map<string, Binding>[] = [];
+  pos = 0;
+  scopes: Map<string, Binding>[] = [];
   error: ParseError | null = null;
 
   constructor(private readonly tokens: Token[]) {}
@@ -129,7 +131,7 @@ export class Parser {
    * The current scope must already be pushed. Returns false when a
    * statement is malformed.
    */
-  private parseStatements(): boolean {
+  parseStatements(): boolean {
     for (;;) {
       const token = this.peek();
       if (token === undefined) {
@@ -138,6 +140,17 @@ export class Parser {
       if (token === "let") {
         if (!this.parseLetStatement()) {
           return false;
+        }
+      } else if (token === "{") {
+        const before = this.pos;
+        if (!parseStatementBlock(this)) {
+          return false;
+        }
+        if (this.pos === before) {
+          // The block has a trailing expression, so it is an expression
+          // block, not a statement block. Stop the statement loop and let
+          // the caller parse it as an expression.
+          return true;
         }
       } else if (this.isAssignmentStart()) {
         if (!this.parseAssignmentStatement()) {
