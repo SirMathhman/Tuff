@@ -13,6 +13,10 @@ describe("evaluate: happy paths", () => {
     expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
   });
 
+  it('evaluates "1 + 2 + 3" to 6', () => {
+    expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
+  });
+
   it('evaluates "2 * 3 + 4" to 10 (precedence)', () => {
     expect(evaluate("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
   });
