@@ -1,12 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { evaluateTuff } from "../src/index.ts";
+import { evaluateTuff, TuffErrorReason } from "../src/index.ts";
 
 describe("evaluateTuff", () => {
-  test("empty source evaluates to 0", () => {
-    expect(evaluateTuff("")).toBe(0);
+  test("empty source fails with EmptySource", () => {
+    expect(evaluateTuff("")).toEqual({
+      ok: false,
+      error: { reason: TuffErrorReason.EmptySource, source: "" },
+    });
   });
 
   test('numeric source "1" evaluates to 1', () => {
-    expect(evaluateTuff("1")).toBe(1);
+    expect(evaluateTuff("1")).toEqual({ ok: true, value: 1 });
+  });
+
+  test("non-numeric source fails with NotANumber", () => {
+    expect(evaluateTuff("abc")).toEqual({
+      ok: false,
+      error: { reason: TuffErrorReason.NotANumber, source: "abc" },
+    });
   });
 });
