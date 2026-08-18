@@ -49,6 +49,10 @@ describe("evaluate", () => {
     expect(valueOf("{ let x = 2 + 3; x } * 4")).toBe(20);
   });
 
+  test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+    expect(valueOf("let y = { let x = 2 + 3; x } * 4; y")).toBe(20);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);

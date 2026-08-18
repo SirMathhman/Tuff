@@ -252,12 +252,12 @@ function parseFactor(tokens: Token[], pos: number, env: Env): ParseResult {
 }
 
 /**
- * Parses the body of a `{ ... }` block: zero or more `let ident = expr ;`
- * bindings followed by a trailing expression whose value is the block's value.
- * `pos` points just past the opening `{`. Returns `next` just past the `}`.
+ * Parses zero or more `let ident = expr ;` bindings followed by a trailing
+ * expression. Bindings are added to a child env so they don't leak out.
+ * Returns the trailing expression's value and `next` just past it.
  */
-function parseBlock(tokens: Token[], pos: number, env: Env): ParseResult {
-  const blockEnv = new Map(env);
+function parseStatements(tokens: Token[], pos: number, env: Env): ParseResult {
+  const localEnv = new Map(env);
   let cursor = pos;
   while (cursor < tokens.length) {
     const tok = tokens[cursor];
@@ -281,7 +281,7 @@ function parseBlock(tokens: Token[], pos: number, env: Env): ParseResult {
           cursor + 2,
         );
       }
-      const value = parseExpression(tokens, cursor + 3, blockEnv);
+      const value = parseExpression(tokens, cursor + 3, localEnv);
       if (!value.ok) return value;
       const semi = tokens[value.next];
       if (!semi || semi.type !== "semicolon") {
@@ -292,31 +292,39 @@ function parseBlock(tokens: Token[], pos: number, env: Env): ParseResult {
           value.next,
         );
       }
-      blockEnv.set(ident.name, value.value);
+      localEnv.set(ident.name, value.value);
       cursor = value.next + 1;
       continue;
     }
     break;
   }
-  const trailing = parseExpression(tokens, cursor, blockEnv);
-  if (!trailing.ok) return trailing;
-  const close = tokens[trailing.next];
+  return parseExpression(tokens, cursor, localEnv);
+}
+
+/**
+ * Parses the body of a `{ ... }` block: statements followed by a closing `}`.
+ * `pos` points just past the opening `{`. Returns `next` just past the `}`.
+ */
+function parseBlock(tokens: Token[], pos: number, env: Env): ParseResult {
+  const body = parseStatements(tokens, pos, env);
+  if (!body.ok) return body;
+  const close = tokens[body.next];
   if (!close || close.type !== "paren" || close.paren !== "}") {
     return err(
       EvalErrorCode.ExpectedCloseParen,
       "",
       'A closing "}" was expected. Add a matching "}".',
-      trailing.next,
+      body.next,
     );
   }
-  return { ok: true, value: trailing.value, next: trailing.next + 1 };
+  return { ok: true, value: body.value, next: body.next + 1 };
 }
 
 export function evaluate(input: string): EvalResult {
   if (input === "") return { ok: true, value: 0 };
   const tokens = tokenize(input);
   if (!tokens.ok) return tokens;
-  const result = parseExpression(tokens.tokens, 0, new Map());
+  const result = parseStatements(tokens.tokens, 0, new Map());
   if (!result.ok) return result;
   if (result.next !== tokens.tokens.length) {
     return err(
