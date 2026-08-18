@@ -45,6 +45,7 @@ export function evaluateTuff(tuffSource: string): TuffResult {
       },
     };
   }
+  const offset = tuffSource.length - tuffSource.trimStart().length;
   const outcome = evaluateExpression(trimmed);
   if (!outcome.ok) {
     return {
@@ -52,7 +53,7 @@ export function evaluateTuff(tuffSource: string): TuffResult {
       error: {
         reason: evaluatorReason[outcome.reason],
         source: tuffSource,
-        position: outcome.position,
+        position: outcome.position + offset,
       },
     };
   }

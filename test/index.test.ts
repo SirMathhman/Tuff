@@ -70,4 +70,15 @@ describe("evaluateTuff error positions", () => {
       },
     });
   });
+
+  test("position accounts for leading whitespace", () => {
+    expect(evaluateTuff("  1 + abc")).toEqual({
+      ok: false,
+      error: {
+        reason: TuffErrorReason.NotANumber,
+        source: "  1 + abc",
+        position: 6,
+      },
+    });
+  });
 });
