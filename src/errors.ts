@@ -6,7 +6,8 @@ export type EvaluateError =
   | { kind: "malformed-expression"; input: string; reason: string }
   | { kind: "unknown-variable"; input: string; name: string; reason: string }
   | { kind: "immutable-assignment"; input: string; name: string; reason: string }
-  | { kind: "invalid-dereference"; input: string; name: string; reason: string };
+  | { kind: "invalid-dereference"; input: string; name: string; reason: string }
+  | { kind: "reference-as-value"; input: string; name: string; reason: string };
 
 /**
  * The result of evaluating a Tuff expression.
@@ -19,7 +20,11 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
  */
 export type ParseError =
   | { kind: "malformed-expression" }
-  | { kind: "unknown-variable" | "immutable-assignment" | "invalid-dereference"; name: string };
+  | {
+      kind:
+        "unknown-variable" | "immutable-assignment" | "invalid-dereference" | "reference-as-value";
+      name: string;
+    };
 
 /**
  * The result of parsing a token stream.

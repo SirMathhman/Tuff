@@ -74,10 +74,18 @@ function toEvaluateError(error: ParseError, input: string): EvaluateError {
       reason: `Cannot assign to immutable variable "${error.name}" in "${input}"`,
     };
   }
+  if (error.kind === "invalid-dereference") {
+    return {
+      kind: "invalid-dereference",
+      input,
+      name: error.name,
+      reason: `Cannot dereference non-reference "${error.name}" in "${input}"`,
+    };
+  }
   return {
-    kind: "invalid-dereference",
+    kind: "reference-as-value",
     input,
     name: error.name,
-    reason: `Cannot dereference non-reference "${error.name}" in "${input}"`,
+    reason: `Cannot use reference "${error.name}" as a value in "${input}"`,
   };
 }

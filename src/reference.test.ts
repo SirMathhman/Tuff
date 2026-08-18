@@ -48,9 +48,10 @@ test("returns a structured error for a mutable reference to an immutable binding
 
 test("returns a structured error for reading a reference as a value", () => {
   expectError("let x = 1; let y = &x; y", {
-    kind: "malformed-expression",
+    kind: "reference-as-value",
     input: "let x = 1; let y = &x; y",
-    reason: 'Unexpected end of expression in "let x = 1; let y = &x; y"',
+    name: "y",
+    reason: 'Cannot use reference "y" as a value in "let x = 1; let y = &x; y"',
   });
 });
 

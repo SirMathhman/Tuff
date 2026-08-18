@@ -179,6 +179,7 @@ export class Parser {
         return null;
       }
       if (binding.kind === "ref") {
+        this.error = { kind: "reference-as-value", name: token };
         return null;
       }
       return binding.value;
