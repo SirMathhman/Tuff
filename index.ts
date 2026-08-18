@@ -8,7 +8,12 @@ interface OpToken {
   op: "+" | "-" | "*" | "/";
 }
 
-type Token = NumToken | OpToken;
+interface ParenToken {
+  type: "paren";
+  paren: "(" | ")";
+}
+
+type Token = NumToken | OpToken | ParenToken;
 
 /**
  * Structured error codes for `evaluate`. Each error answers:
@@ -19,6 +24,8 @@ export enum EvalErrorCode {
   UnexpectedEnd = "UnexpectedEnd",
   ExpectedNumber = "ExpectedNumber",
   TrailingTokens = "TrailingTokens",
+  ExpectedCloseParen = "ExpectedCloseParen",
+  UnbalancedParen = "UnbalancedParen",
 }
 
 interface EvalError {
@@ -86,10 +93,15 @@ function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
+    if (ch === "(" || ch === ")") {
+      tokens.push({ type: "paren", paren: ch });
+      i++;
+      continue;
+    }
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits and + - * / are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, and ( ) are allowed.`,
       i,
     );
   }
@@ -145,10 +157,24 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
     );
   }
   if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
+  if (tok.type === "paren" && tok.paren === "(") {
+    const inner = parseExpression(tokens, pos + 1);
+    if (!inner.ok) return inner;
+    const close = tokens[inner.next];
+    if (!close || close.type !== "paren" || close.paren !== ")") {
+      return err(
+        EvalErrorCode.ExpectedCloseParen,
+        "",
+        "A closing parenthesis was expected. Add a matching ).",
+        inner.next,
+      );
+    }
+    return { ok: true, value: inner.value, next: inner.next + 1 };
+  }
   return err(
     EvalErrorCode.ExpectedNumber,
     "",
-    "A number was expected here. Check operator placement.",
+    "A number or ( was expected here. Check operator placement.",
     pos,
   );
 }

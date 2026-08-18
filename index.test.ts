@@ -33,6 +33,10 @@ describe("evaluate", () => {
     expect(valueOf("2 * 3 + 4")).toBe(10);
   });
 
+  test('evaluate("2 + (3 * 4)") => 14', () => {
+    expect(valueOf("2 + (3 * 4)")).toBe(14);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);
