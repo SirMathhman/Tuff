@@ -1,0 +1,142 @@
+import { EvalErrorCode, err } from "./errors.ts";
+import type { Token } from "./tokens.ts";
+import type { Env } from "./env.ts";
+import {
+  parseExpression,
+  type ParseBlockFn,
+  type ParseResult,
+} from "./expressions.ts";
+import {
+  parseAssignment,
+  parseBindingValue,
+  parseDerefAssignment,
+} from "./assignments.ts";
+
+/**
+ * Parses a `let [mut] ident = expr ;` binding. `pos` points at the `let`
+ * keyword. Returns `next` just past the terminating `;`.
+ */
+export function parseLetBinding(
+  tokens: Token[],
+  pos: number,
+  env: Env,
+  parseBlock: ParseBlockFn,
+): ParseResult {
+  let cursor = pos + 1;
+  let mutable = false;
+  const maybeMut = tokens[cursor];
+  if (maybeMut && maybeMut.type === "keyword" && maybeMut.keyword === "mut") {
+    mutable = true;
+    cursor++;
+  }
+  const ident = tokens[cursor];
+  if (!ident || ident.type !== "ident") {
+    return err(
+      EvalErrorCode.ExpectedIdentifier,
+      "",
+      "An identifier was expected after 'let'.",
+      cursor,
+    );
+  }
+  const assign = tokens[cursor + 1];
+  if (!assign || assign.type !== "assign") {
+    return err(
+      EvalErrorCode.ExpectedAssign,
+      "",
+      `"=" was expected after the variable name "${ident.name}".`,
+      cursor + 1,
+    );
+  }
+  return parseBindingValue(
+    tokens,
+    cursor + 2,
+    env,
+    ident.name,
+    mutable,
+    parseBlock,
+  );
+}
+
+/**
+ * Parses zero or more statements (`let [mut] ident = expr ;`,
+ * `ident = expr ;`, or `*ident = expr ;`) followed by a trailing expression.
+ * Statements run in a child env so bindings don't leak out. Returns the
+ * trailing expression's value and `next` just past it.
+ */
+export function parseStatements(
+  tokens: Token[],
+  pos: number,
+  env: Env,
+): ParseResult {
+  const localEnv = new Map(env);
+  let cursor = pos;
+  while (cursor < tokens.length) {
+    const tok = tokens[cursor];
+    if (!tok) break;
+    if (tok.type === "keyword" && tok.keyword === "let") {
+      const binding = parseLetBinding(tokens, cursor, localEnv, parseBlock);
+      if (!binding.ok) return binding;
+      cursor = binding.next;
+      continue;
+    }
+    if (tok.type === "ident") {
+      const nextTok = tokens[cursor + 1];
+      if (nextTok && nextTok.type === "assign") {
+        const assignment = parseAssignment(
+          tokens,
+          cursor,
+          localEnv,
+          parseBlock,
+        );
+        if (!assignment.ok) return assignment;
+        cursor = assignment.next;
+        continue;
+      }
+    }
+    if (tok.type === "op" && tok.op === "*") {
+      const derefTarget = tokens[cursor + 1];
+      const assignTok = tokens[cursor + 2];
+      if (
+        derefTarget &&
+        derefTarget.type === "ident" &&
+        assignTok &&
+        assignTok.type === "assign"
+      ) {
+        const assignment = parseDerefAssignment(
+          tokens,
+          cursor,
+          localEnv,
+          parseBlock,
+        );
+        if (!assignment.ok) return assignment;
+        cursor = assignment.next;
+        continue;
+      }
+    }
+    break;
+  }
+  return parseExpression(tokens, cursor, localEnv, parseBlock);
+}
+
+/**
+ * Parses the body of a `{ ... }` block: statements followed by a closing `}`.
+ * `pos` points just past the opening `{`. Returns `next` just past the `}`.
+ */
+export function parseBlock(
+  tokens: Token[],
+  pos: number,
+  env: Env,
+): ParseResult {
+  const body = parseStatements(tokens, pos, env);
+  if (!body.ok) return body;
+  const close = tokens[body.next];
+  if (!close || close.type !== "paren" || close.paren !== "}") {
+    return err(
+      EvalErrorCode.ExpectedCloseParen,
+      "",
+      'A closing "}" was expected. Add a matching "}".',
+      body.next,
+    );
+  }
+  return { ok: true, value: body.value, next: body.next + 1 };
+}
