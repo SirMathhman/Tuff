@@ -1,17 +1,14 @@
-import {
-  EvalErrorCode,
-  err,
-  type EvalFailure,
-  type EvalSuccess,
-} from "./errors.ts";
+import { EvalErrorCode, err, type EvalFailure } from "./errors.ts";
 import type { Token } from "./tokens.ts";
-import type { Env } from "./env.ts";
+import type { Env, Value } from "./env.ts";
 
-export interface ParseSuccess extends EvalSuccess {
+export interface Parsed {
+  ok: true;
+  value: Value;
   next: number;
 }
 
-export type ParseResult = ParseSuccess | EvalFailure;
+export type ParseResult = Parsed | EvalFailure;
 
 /** Parses a `{ ... }` block. Provided by the statements module. */
 export type ParseBlockFn = (
@@ -19,6 +16,23 @@ export type ParseBlockFn = (
   pos: number,
   env: Env,
 ) => ParseResult;
+
+function num(n: number): Value {
+  return { kind: "num", num: n };
+}
+
+function bool(b: boolean): Value {
+  return { kind: "bool", num: b ? 1 : 0 };
+}
+
+function truthy(v: Value): boolean {
+  return v.num !== 0;
+}
+
+/** Type-sensitive equality: kinds must match, then numeric values. */
+function eq(a: Value, b: Value): boolean {
+  return a.kind === b.kind && a.num === b.num;
+}
 
 export function parseExpression(
   tokens: Token[],
@@ -35,7 +49,9 @@ export function parseExpression(
     if (tok && tok.type === "op" && (tok.op === "+" || tok.op === "-")) {
       const rhs = parseTerm(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
-      value = tok.op === "+" ? value + rhs.value : value - rhs.value;
+      value = num(
+        tok.op === "+" ? value.num + rhs.value.num : value.num - rhs.value.num,
+      );
       next = rhs.next;
     } else {
       break;
@@ -47,7 +63,7 @@ export function parseExpression(
     if (eqTok && eqTok.type === "eq") {
       const rhs = parseExpression(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
-      value = value === rhs.value ? 1 : 0;
+      value = bool(eq(value, rhs.value));
       next = rhs.next;
     } else {
       break;
@@ -59,7 +75,7 @@ export function parseExpression(
     if (andTok && andTok.type === "and") {
       const rhs = parseExpression(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
-      value = value !== 0 && rhs.value !== 0 ? 1 : 0;
+      value = bool(truthy(value) && truthy(rhs.value));
       next = rhs.next;
     } else {
       break;
@@ -70,7 +86,7 @@ export function parseExpression(
   if (orTok && orTok.type === "or") {
     const rhs = parseExpression(tokens, next + 1, env, parseBlock);
     if (!rhs.ok) return rhs;
-    value = value !== 0 || rhs.value !== 0 ? 1 : 0;
+    value = bool(truthy(value) || truthy(rhs.value));
     next = rhs.next;
   }
   return { ok: true, value, next };
@@ -91,7 +107,11 @@ export function parseTerm(
     if (tok && tok.type === "op" && (tok.op === "*" || tok.op === "/")) {
       const rhs = parseFactor(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
-      value = tok.op === "*" ? value * rhs.value : value / rhs.value;
+      value = num(
+        tok.op === "*"
+          ? value.num * rhs.value.num
+          : value.num / rhs.value.num,
+      );
       next = rhs.next;
     } else {
       break;
@@ -115,9 +135,9 @@ export function parseFactor(
       pos,
     );
   }
-  if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
+  if (tok.type === "num") return { ok: true, value: num(tok.value), next: pos + 1 };
   if (tok.type === "bool") {
-    return { ok: true, value: tok.value ? 1 : 0, next: pos + 1 };
+    return { ok: true, value: bool(tok.value), next: pos + 1 };
   }
   if (tok.type === "op" && tok.op === "*") {
     // Unary dereference: "*y" where y is a reference binding.

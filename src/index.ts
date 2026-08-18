@@ -18,5 +18,5 @@ export function evaluate(input: string): EvalResult {
       "Unexpected trailing tokens. Remove extra characters or operators.",
     );
   }
-  return { ok: true, value: result.value };
+  return { ok: true, value: result.value.num };
 }
