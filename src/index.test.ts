@@ -249,6 +249,14 @@ test("returns a structured error for a block of only an assignment", () => {
   });
 });
 
+test("returns a structured error for an expression block containing only a statement block", () => {
+  expectError("let x = { {} };", {
+    kind: "malformed-expression",
+    input: "let x = { {} };",
+    reason: 'Unexpected end of expression in "let x = { {} };"',
+  });
+});
+
 test("returns a structured error for an unknown variable", () => {
   expectError("x", {
     kind: "unknown-variable",
