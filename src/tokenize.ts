@@ -1,5 +1,19 @@
 export type Token =
-  number | "+" | "-" | "*" | "&" | "(" | ")" | "{" | "}" | "let" | "=" | ";" | string;
+  | number
+  | "+"
+  | "-"
+  | "*"
+  | "&"
+  | "("
+  | ")"
+  | "{"
+  | "}"
+  | "let"
+  | "true"
+  | "false"
+  | "="
+  | ";"
+  | string;
 
 /**
  * All non-identifier string tokens. Identifiers are any other string.
@@ -7,6 +21,8 @@ export type Token =
 const NON_IDENTIFIERS: ReadonlySet<string> = new Set([
   "let",
   "mut",
+  "true",
+  "false",
   "=",
   ";",
   "+",
@@ -39,7 +55,14 @@ export function tokenize(input: string): Token[] | null {
     if (match[1] !== undefined) {
       tokens.push(Number(match[1]));
     } else if (match[2] !== undefined) {
-      tokens.push(match[2] === "let" ? "let" : match[2] === "mut" ? "mut" : match[2]);
+      const word = match[2];
+      tokens.push(
+        word === "let" || word === "true" || word === "false"
+          ? word
+          : word === "mut"
+            ? "mut"
+            : word,
+      );
     } else if (match[3] !== undefined) {
       tokens.push(match[3] as "(" | ")" | "{" | "}" | "=" | ";" | "&");
     } else {

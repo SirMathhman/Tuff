@@ -22,8 +22,9 @@ type Binding = ValueBinding | { kind: "ref"; target: ValueBinding; mutable: bool
  *   statement    = letStatement | assignmentStatement
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
- *   factor       = number | identifier | '(' expression ')'
+ *   factor       = number | boolean | identifier | '(' expression ')'
  *                 | block | '*' dereference
+ *   boolean      = 'true' | 'false'
  *   dereference  = identifier
  *   block        = '{' statement* expression '}'
  *   letStatement = 'let' 'mut'? identifier '=' (expression | reference) ';'
@@ -142,9 +143,9 @@ export class Parser {
     if (token === undefined) {
       return null;
     }
-    if (typeof token === "number") {
+    if (typeof token === "number" || token === "true" || token === "false") {
       this.advance();
-      return token;
+      return typeof token === "number" ? token : token === "true" ? 1 : 0;
     }
     if (token === "(" || token === "{") {
       this.advance();

@@ -12,6 +12,50 @@ test('returns 1 for the input "1"', () => {
   expect(evaluate("1")).toEqual({ ok: true, value: 1 });
 });
 
+test('returns 1 for the input "true"', () => {
+  expect(evaluate("true")).toEqual({ ok: true, value: 1 });
+});
+
+test('returns 0 for the input "false"', () => {
+  expect(evaluate("false")).toEqual({ ok: true, value: 0 });
+});
+
+test("returns 1 for a boolean binding read back", () => {
+  expect(evaluate("let x = true; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("returns 0 for a false binding read back", () => {
+  expect(evaluate("let x = false; x")).toEqual({ ok: true, value: 0 });
+});
+
+test("returns 2 for adding two true literals", () => {
+  expect(evaluate("true + true")).toEqual({ ok: true, value: 2 });
+});
+
+test("returns 0 for reassigning a mutable boolean binding", () => {
+  expect(evaluate("let mut x = true; x = false; x")).toEqual({ ok: true, value: 0 });
+});
+
+test("returns 1 for a reference read through a boolean binding", () => {
+  expect(evaluate("let x = true; let y = &x; *y")).toEqual({ ok: true, value: 1 });
+});
+
+test("returns a structured error for a binding named true", () => {
+  expectError("let true = 1; true", {
+    kind: "malformed-expression",
+    input: "let true = 1; true",
+    reason: 'Unexpected end of expression in "let true = 1; true"',
+  });
+});
+
+test("returns a structured error for a binding named false", () => {
+  expectError("let false = 0; false", {
+    kind: "malformed-expression",
+    input: "let false = 0; false",
+    reason: 'Unexpected end of expression in "let false = 0; false"',
+  });
+});
+
 test('returns 3 for the input "1 + 2"', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });

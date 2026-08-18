@@ -17,9 +17,10 @@ export type { EvaluateError, EvaluateResult } from "./errors.js";
  * bindings may be assigned. References are created with `&x` (shared)
  * or `&mut x` (mutable, requires a `mut` binding) and read with the
  * prefix `*` operator; `*y = expr;` writes through a mutable reference.
- * Multiplication binds tighter than addition and subtraction, which are
- * evaluated left to right. Empty input is a defined case and evaluates
- * to 0.
+ * The boolean literals `true` and `false` evaluate to 1 and 0 and are
+ * reserved words. Multiplication binds tighter than addition and
+ * subtraction, which are evaluated left to right. Empty input is a
+ * defined case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
