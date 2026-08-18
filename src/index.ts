@@ -11,28 +11,87 @@ export interface Err<E> {
 export type Result<T, E> = Ok<T> | Err<E>;
 
 export enum EvaluateErrorKind {
-  UnsupportedInput = "UnsupportedInput",
+  ParseError = "ParseError",
 }
 
 export interface EvaluateError {
   kind: EvaluateErrorKind;
   input: string;
+  position: number;
   message: string;
 }
 
-const NUMBER_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+const NUMBER_PATTERN = /^(\d+(\.\d*)?|\.\d+)/;
 
-function unsupported(input: string): Result<number, EvaluateError> {
+function skipWhitespace(input: string, pos: number): number {
+  while (pos < input.length && /\s/.test(input.charAt(pos))) {
+    pos++;
+  }
+  return pos;
+}
+
+function parseNumber(
+  input: string,
+  pos: number,
+): Result<[number, number], number> {
+  const match = NUMBER_PATTERN.exec(input.slice(pos));
+  if (!match) {
+    return { ok: false, error: pos };
+  }
+  return { ok: true, value: [Number(match[0]), pos + match[0].length] };
+}
+
+function parseTerm(
+  input: string,
+  pos: number,
+): Result<[number, number], number> {
+  pos = skipWhitespace(input, pos);
+  if (input[pos] === "-") {
+    const inner = parseTerm(input, pos + 1);
+    if (!inner.ok) {
+      return inner;
+    }
+    return { ok: true, value: [-inner.value[0], inner.value[1]] };
+  }
+  return parseNumber(input, pos);
+}
+
+function parseExpression(
+  input: string,
+  pos: number,
+): Result<[number, number], number> {
+  const first = parseTerm(input, pos);
+  if (!first.ok) {
+    return first;
+  }
+  let [value, next] = first.value;
+  for (;;) {
+    const opPos = skipWhitespace(input, next);
+    if (input[opPos] !== "+") {
+      break;
+    }
+    const right = parseTerm(input, opPos + 1);
+    if (!right.ok) {
+      return right;
+    }
+    value += right.value[0];
+    next = right.value[1];
+  }
+  return { ok: true, value: [value, next] };
+}
+
+function parseError(
+  input: string,
+  position: number,
+  reason: string,
+): EvaluateError {
   return {
-    ok: false,
-    error: {
-      kind: EvaluateErrorKind.UnsupportedInput,
-      input,
-      message:
-        `evaluate() does not support input (got ${JSON.stringify(input)}). ` +
-        "Only the empty string, numeric literals, and addition of numeric literals are implemented. " +
-        "Provide a spec for the expression grammar to extend this.",
-    },
+    kind: EvaluateErrorKind.ParseError,
+    input,
+    position,
+    message:
+      `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
+      'Provide an expression of numeric literals joined by "+" (e.g. "1 + 2").',
   };
 }
 
@@ -40,12 +99,24 @@ export function evaluate(input: string): Result<number, EvaluateError> {
   if (input === "") {
     return { ok: true, value: 0 };
   }
-  if (NUMBER_PATTERN.test(input)) {
-    return { ok: true, value: Number(input) };
+  const parsed = parseExpression(input, 0);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parseError(input, parsed.error, "expected a number"),
+    };
   }
-  const terms = input.split(/\s*\+\s*/);
-  if (terms.length > 1 && terms.every((t) => NUMBER_PATTERN.test(t))) {
-    return { ok: true, value: terms.reduce((sum, t) => sum + Number(t), 0) };
+  const [value, end] = parsed.value;
+  const rest = skipWhitespace(input, end);
+  if (rest < input.length) {
+    return {
+      ok: false,
+      error: parseError(
+        input,
+        rest,
+        `unexpected character ${JSON.stringify(input[rest])}`,
+      ),
+    };
   }
-  return unsupported(input);
+  return { ok: true, value };
 }

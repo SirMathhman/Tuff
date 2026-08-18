@@ -26,13 +26,38 @@ describe("evaluate", () => {
     }
   });
 
-  test('evaluate("abc") => Err(UnsupportedInput)', () => {
+  test('evaluate("abc") => Err(ParseError) at position 0', () => {
     const result = evaluate("abc");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.kind).toBe(EvaluateErrorKind.UnsupportedInput);
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
       expect(result.error.input).toBe("abc");
+      expect(result.error.position).toBe(0);
       expect(result.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('evaluate("1 + 2 x") => Err(ParseError) at position 6', () => {
+    const result = evaluate("1 + 2 x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.position).toBe(6);
+    }
+  });
+
+  test('evaluate("1 + + 2") => Err(ParseError) at position 4', () => {
+    const result = evaluate("1 + + 2");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.position).toBe(4);
+    }
+  });
+
+  test('evaluate("1 + -2") => -1', () => {
+    const result = evaluate("1 + -2");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(-1);
     }
   });
 });
