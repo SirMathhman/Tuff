@@ -13,7 +13,32 @@ interface ParenToken {
   paren: "(" | ")" | "{" | "}";
 }
 
-type Token = NumToken | OpToken | ParenToken;
+interface IdentToken {
+  type: "ident";
+  name: string;
+}
+
+interface KeywordToken {
+  type: "keyword";
+  keyword: "let";
+}
+
+interface AssignToken {
+  type: "assign";
+}
+
+interface SemicolonToken {
+  type: "semicolon";
+}
+
+type Token =
+  | NumToken
+  | OpToken
+  | ParenToken
+  | IdentToken
+  | KeywordToken
+  | AssignToken
+  | SemicolonToken;
 
 const OPEN_PARENS: Record<string, string> = {
   "(": ")",
@@ -30,6 +55,10 @@ export enum EvalErrorCode {
   ExpectedNumber = "ExpectedNumber",
   TrailingTokens = "TrailingTokens",
   ExpectedCloseParen = "ExpectedCloseParen",
+  UnknownVariable = "UnknownVariable",
+  ExpectedIdentifier = "ExpectedIdentifier",
+  ExpectedAssign = "ExpectedAssign",
+  ExpectedSemicolon = "ExpectedSemicolon",
 }
 
 interface EvalError {
@@ -102,25 +131,46 @@ function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
+    if (ch === "=") {
+      tokens.push({ type: "assign" });
+      i++;
+      continue;
+    }
+    if (ch === ";") {
+      tokens.push({ type: "semicolon" });
+      i++;
+      continue;
+    }
+    if (/[a-zA-Z_]/.test(ch)) {
+      let j = i;
+      while (j < input.length && /[a-zA-Z0-9_]/.test(input[j] ?? "")) j++;
+      const word = input.slice(i, j);
+      if (word === "let") tokens.push({ type: "keyword", keyword: "let" });
+      else tokens.push({ type: "ident", name: word });
+      i = j;
+      continue;
+    }
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, and ( ) are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ;, and identifiers are allowed.`,
       i,
     );
   }
   return { ok: true, value: 0, tokens };
 }
 
-function parseExpression(tokens: Token[], pos: number): ParseResult {
-  const term = parseTerm(tokens, pos);
+type Env = Map<string, number>;
+
+function parseExpression(tokens: Token[], pos: number, env: Env): ParseResult {
+  const term = parseTerm(tokens, pos, env);
   if (!term.ok) return term;
   let value = term.value;
   let next = term.next;
   while (next < tokens.length) {
     const tok = tokens[next];
     if (tok && tok.type === "op" && (tok.op === "+" || tok.op === "-")) {
-      const rhs = parseTerm(tokens, next + 1);
+      const rhs = parseTerm(tokens, next + 1, env);
       if (!rhs.ok) return rhs;
       value = tok.op === "+" ? value + rhs.value : value - rhs.value;
       next = rhs.next;
@@ -131,15 +181,15 @@ function parseExpression(tokens: Token[], pos: number): ParseResult {
   return { ok: true, value, next };
 }
 
-function parseTerm(tokens: Token[], pos: number): ParseResult {
-  const factor = parseFactor(tokens, pos);
+function parseTerm(tokens: Token[], pos: number, env: Env): ParseResult {
+  const factor = parseFactor(tokens, pos, env);
   if (!factor.ok) return factor;
   let value = factor.value;
   let next = factor.next;
   while (next < tokens.length) {
     const tok = tokens[next];
     if (tok && tok.type === "op" && (tok.op === "*" || tok.op === "/")) {
-      const rhs = parseFactor(tokens, next + 1);
+      const rhs = parseFactor(tokens, next + 1, env);
       if (!rhs.ok) return rhs;
       value = tok.op === "*" ? value * rhs.value : value / rhs.value;
       next = rhs.next;
@@ -150,7 +200,7 @@ function parseTerm(tokens: Token[], pos: number): ParseResult {
   return { ok: true, value, next };
 }
 
-function parseFactor(tokens: Token[], pos: number): ParseResult {
+function parseFactor(tokens: Token[], pos: number, env: Env): ParseResult {
   const tok = tokens[pos];
   if (!tok) {
     return err(
@@ -161,9 +211,26 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
     );
   }
   if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
+  if (tok.type === "ident") {
+    const bound = env.get(tok.name);
+    if (bound === undefined) {
+      return err(
+        EvalErrorCode.UnknownVariable,
+        "",
+        `Variable "${tok.name}" is not defined. Declare it with "let ${tok.name} = ...".`,
+        pos,
+      );
+    }
+    return { ok: true, value: bound, next: pos + 1 };
+  }
   if (tok.type === "paren" && tok.paren in OPEN_PARENS) {
     const expectedClose = OPEN_PARENS[tok.paren];
-    const inner = parseExpression(tokens, pos + 1);
+    if (tok.paren === "{") {
+      const block = parseBlock(tokens, pos + 1, env);
+      if (!block.ok) return block;
+      return { ok: true, value: block.value, next: block.next };
+    }
+    const inner = parseExpression(tokens, pos + 1, env);
     if (!inner.ok) return inner;
     const close = tokens[inner.next];
     if (!close || close.type !== "paren" || close.paren !== expectedClose) {
@@ -179,16 +246,77 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
   return err(
     EvalErrorCode.ExpectedNumber,
     "",
-    "A number or ( was expected here. Check operator placement.",
+    "A number, variable, or ( was expected here. Check operator placement.",
     pos,
   );
+}
+
+/**
+ * Parses the body of a `{ ... }` block: zero or more `let ident = expr ;`
+ * bindings followed by a trailing expression whose value is the block's value.
+ * `pos` points just past the opening `{`. Returns `next` just past the `}`.
+ */
+function parseBlock(tokens: Token[], pos: number, env: Env): ParseResult {
+  const blockEnv = new Map(env);
+  let cursor = pos;
+  while (cursor < tokens.length) {
+    const tok = tokens[cursor];
+    if (!tok) break;
+    if (tok.type === "keyword" && tok.keyword === "let") {
+      const ident = tokens[cursor + 1];
+      if (!ident || ident.type !== "ident") {
+        return err(
+          EvalErrorCode.ExpectedIdentifier,
+          "",
+          "An identifier was expected after 'let'.",
+          cursor + 1,
+        );
+      }
+      const assign = tokens[cursor + 2];
+      if (!assign || assign.type !== "assign") {
+        return err(
+          EvalErrorCode.ExpectedAssign,
+          "",
+          `"=" was expected after the variable name "${ident.name}".`,
+          cursor + 2,
+        );
+      }
+      const value = parseExpression(tokens, cursor + 3, blockEnv);
+      if (!value.ok) return value;
+      const semi = tokens[value.next];
+      if (!semi || semi.type !== "semicolon") {
+        return err(
+          EvalErrorCode.ExpectedSemicolon,
+          "",
+          `";" was expected after the value of "${ident.name}".`,
+          value.next,
+        );
+      }
+      blockEnv.set(ident.name, value.value);
+      cursor = value.next + 1;
+      continue;
+    }
+    break;
+  }
+  const trailing = parseExpression(tokens, cursor, blockEnv);
+  if (!trailing.ok) return trailing;
+  const close = tokens[trailing.next];
+  if (!close || close.type !== "paren" || close.paren !== "}") {
+    return err(
+      EvalErrorCode.ExpectedCloseParen,
+      "",
+      'A closing "}" was expected. Add a matching "}".',
+      trailing.next,
+    );
+  }
+  return { ok: true, value: trailing.value, next: trailing.next + 1 };
 }
 
 export function evaluate(input: string): EvalResult {
   if (input === "") return { ok: true, value: 0 };
   const tokens = tokenize(input);
   if (!tokens.ok) return tokens;
-  const result = parseExpression(tokens.tokens, 0);
+  const result = parseExpression(tokens.tokens, 0, new Map());
   if (!result.ok) return result;
   if (result.next !== tokens.tokens.length) {
     return err(

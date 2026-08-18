@@ -45,11 +45,15 @@ describe("evaluate", () => {
     expect(valueOf("{ 2 + 3 } * 4")).toBe(20);
   });
 
+  test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
+    expect(valueOf("{ let x = 2 + 3; x } * 4")).toBe(20);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe(EvalErrorCode.UnexpectedCharacter);
+      expect(result.error.code).toBe(EvalErrorCode.UnknownVariable);
     }
   });
 });
