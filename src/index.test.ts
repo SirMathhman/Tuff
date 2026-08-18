@@ -1,4 +1,5 @@
 import { add, evaluate } from "./index.js";
+import { tokenize } from "./lexer.js";
 
 describe("add", () => {
   it("adds two numbers", () => {
@@ -70,5 +71,97 @@ describe("evaluate", () => {
       expect(result.error.offset).toBe(0);
       expect(result.error.message).toContain("not a valid numeric literal");
     }
+  });
+
+  it('returns -5 for the negative literal "-5"', () => {
+    expect(evaluate("-5")).toEqual({ ok: true, value: -5 });
+  });
+
+  it("returns a not-implemented error for a lone operator", () => {
+    const result = evaluate("+");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("not-implemented");
+      expect(result.error.offset).toBe(0);
+    }
+  });
+
+  it("returns an invalid-literal error for a malformed number", () => {
+    const result = evaluate("1.2.3");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("invalid-literal");
+      expect(result.error.offset).toBe(0);
+    }
+  });
+
+  it("returns an invalid-literal error for a malformed negative number", () => {
+    const result = evaluate("-1.2.3");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("invalid-literal");
+      expect(result.error.offset).toBe(1);
+    }
+  });
+
+  it("returns an invalid-literal error when the right operand is malformed", () => {
+    const result = evaluate("1 + 2.3.4");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("invalid-literal");
+      expect(result.error.offset).toBe(4);
+    }
+  });
+
+  it("returns an invalid-literal error when the left operand is malformed", () => {
+    const result = evaluate("1.2.3 + 4");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("invalid-literal");
+      expect(result.error.offset).toBe(0);
+    }
+  });
+
+  it("returns a not-implemented error for a repeated operator", () => {
+    const result = evaluate("1 + +");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("not-implemented");
+      expect(result.error.offset).toBe(2);
+    }
+  });
+
+  it("returns a not-implemented error for two literals with no operator", () => {
+    const result = evaluate("1 2");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("not-implemented");
+      expect(result.error.offset).toBe(0);
+    }
+  });
+});
+
+describe("tokenize", () => {
+  it("tokenizes an addition expression with offsets", () => {
+    expect(tokenize("1 + 2")).toEqual([
+      { kind: "number", value: "1", offset: 0 },
+      { kind: "plus", offset: 2 },
+      { kind: "number", value: "2", offset: 4 },
+    ]);
+  });
+
+  it("tokenizes a negative literal", () => {
+    expect(tokenize("-5")).toEqual([
+      { kind: "minus", offset: 0 },
+      { kind: "number", value: "5", offset: 1 },
+    ]);
+  });
+
+  it("emits invalid tokens for non-numeric characters", () => {
+    expect(tokenize("a")).toEqual([{ kind: "invalid", value: "a", offset: 0 }]);
+  });
+
+  it("returns no tokens for whitespace-only input", () => {
+    expect(tokenize("   ")).toEqual([]);
   });
 });
