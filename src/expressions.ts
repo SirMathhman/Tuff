@@ -50,13 +50,19 @@ export function parseExpression(
       break;
     }
   }
-  // "==" binds tighter than "&&" and is left-associative.
+  // "==" and "<" bind tighter than "&&" and are left-associative.
   while (next < tokens.length) {
-    const eqTok = tokens[next];
-    if (eqTok && eqTok.type === "eq") {
+    const cmpTok = tokens[next];
+    if (cmpTok && (cmpTok.type === "eq" || cmpTok.type === "lt")) {
       const rhs = parseExpression(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
-      value = bool(eq(value, rhs.value));
+      const result =
+        cmpTok.type === "eq"
+          ? eq(value, rhs.value)
+          : value.kind === "num" &&
+            rhs.value.kind === "num" &&
+            value.num < rhs.value.num;
+      value = bool(result);
       next = rhs.next;
     } else {
       break;

@@ -85,6 +85,10 @@ describe("evaluate", () => {
     expect(valueOf("true == 1")).toBe(0);
   });
 
+  test('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
+    expect(valueOf("let x = 0; let y = 1; x < y")).toBe(1);
+  });
+
   test('evaluate("let x = 0; x == &x") => Err', () => {
     const result = evaluate("let x = 0; x == &x");
     expect(result.ok).toBe(false);

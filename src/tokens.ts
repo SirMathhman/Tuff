@@ -59,6 +59,10 @@ export interface EqToken {
   type: "eq";
 }
 
+export interface LtToken {
+  type: "lt";
+}
+
 export interface CommaToken {
   type: "comma";
 }
@@ -76,6 +80,7 @@ export type Token =
   | OrToken
   | AndToken
   | EqToken
+  | LtToken
   | CommaToken;
 
 export interface TokenizeSuccess extends EvalSuccess {
@@ -138,6 +143,11 @@ export function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
+    if (ch === "<") {
+      tokens.push({ type: "lt" });
+      i++;
+      continue;
+    }
     if (ch === "|") {
       if (input[i + 1] === "|") {
         tokens.push({ type: "or" });
@@ -176,7 +186,7 @@ export function tokenize(input: string): TokenizeResult {
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ==, ;, &, &&, ||, true, false, and identifiers are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ==, <, ;, &, &&, ||, true, false, and identifiers are allowed.`,
       i,
     );
   }
