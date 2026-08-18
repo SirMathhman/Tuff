@@ -27,6 +27,24 @@ function eq(a: Value, b: Value): boolean {
   return a.kind === b.kind && a.num === b.num;
 }
 
+/**
+ * Type-sensitive comparison: kinds must match, then numeric values.
+ * `op` is one of "<", "<=", ">", ">=".
+ */
+function cmp(a: Value, b: Value, op: "<" | "<=" | ">" | ">="): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (op) {
+    case "<":
+      return a.num < b.num;
+    case "<=":
+      return a.num <= b.num;
+    case ">":
+      return a.num > b.num;
+    case ">=":
+      return a.num >= b.num;
+  }
+}
+
 export function parseExpression(
   tokens: Token[],
   pos: number,
@@ -50,18 +68,19 @@ export function parseExpression(
       break;
     }
   }
-  // "==" and "<" bind tighter than "&&" and are left-associative.
+  // Comparisons (==, !=, <, <=, >, >=) bind tighter than "&&" and are
+  // left-associative.
   while (next < tokens.length) {
     const cmpTok = tokens[next];
-    if (cmpTok && (cmpTok.type === "eq" || cmpTok.type === "lt")) {
+    if (cmpTok && cmpTok.type === "cmp") {
       const rhs = parseExpression(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
       const result =
-        cmpTok.type === "eq"
+        cmpTok.cmp === "=="
           ? eq(value, rhs.value)
-          : value.kind === "num" &&
-            rhs.value.kind === "num" &&
-            value.num < rhs.value.num;
+          : cmpTok.cmp === "!="
+            ? !eq(value, rhs.value)
+            : cmp(value, rhs.value, cmpTok.cmp);
       value = bool(result);
       next = rhs.next;
     } else {

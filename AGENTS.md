@@ -26,7 +26,7 @@ Source lives in `src/`, tests in `test/`, helper scripts in `scripts/`. The eval
 - `src/tokens.ts` — token types and `tokenize()`.
 - `src/env.ts` — `Value`/`Binding`/`Place` types, `Env`, `resolvePlace`/`writePlace`.
 - `src/parse.ts` — shared parse types (`Parsed`, `ParseResult`, `ParseBlockFn`, `ParseExpressionFn`).
-- `src/expressions.ts` — `parseExpression`/`parseTerm` (arithmetic, `==`, `&&`, `||`).
+- `src/expressions.ts` — `parseExpression`/`parseTerm` (arithmetic, comparisons `==`/`!=`/`<`/`<=`/`>`/`>=`, `&&`, `||`).
 - `src/factors.ts` — `parseFactor` (literals, ident, `*` deref, array literals, parens), `parseIndexStep`, index access.
 - `src/assignments.ts` — `parseBindingValue` (`let` values and `&[mut]` refs to places), `parsePlace`, `parseAssignment`, `parseDerefAssignment`.
 - `src/statements.ts` — `parseLetBinding`, `parseStatements`, `parseBlock`.

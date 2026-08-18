@@ -55,12 +55,9 @@ export interface AndToken {
   type: "and";
 }
 
-export interface EqToken {
-  type: "eq";
-}
-
-export interface LtToken {
-  type: "lt";
+export interface CmpToken {
+  type: "cmp";
+  cmp: "==" | "!=" | "<" | "<=" | ">" | ">=";
 }
 
 export interface CommaToken {
@@ -79,8 +76,7 @@ export type Token =
   | BoolToken
   | OrToken
   | AndToken
-  | EqToken
-  | LtToken
+  | CmpToken
   | CommaToken;
 
 export interface TokenizeSuccess extends EvalSuccess {
@@ -130,7 +126,7 @@ export function tokenize(input: string): TokenizeResult {
     }
     if (ch === "=") {
       if (input[i + 1] === "=") {
-        tokens.push({ type: "eq" });
+        tokens.push({ type: "cmp", cmp: "==" });
         i += 2;
         continue;
       }
@@ -138,13 +134,41 @@ export function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
-    if (ch === ";") {
-      tokens.push({ type: "semicolon" });
+    if (ch === "!") {
+      if (input[i + 1] === "=") {
+        tokens.push({ type: "cmp", cmp: "!=" });
+        i += 2;
+        continue;
+      }
+      return err(
+        EvalErrorCode.UnexpectedCharacter,
+        input,
+        `Unexpected character "!". Use "!=" for inequality.`,
+        i,
+      );
+    }
+    if (ch === "<") {
+      if (input[i + 1] === "=") {
+        tokens.push({ type: "cmp", cmp: "<=" });
+        i += 2;
+        continue;
+      }
+      tokens.push({ type: "cmp", cmp: "<" });
       i++;
       continue;
     }
-    if (ch === "<") {
-      tokens.push({ type: "lt" });
+    if (ch === ">") {
+      if (input[i + 1] === "=") {
+        tokens.push({ type: "cmp", cmp: ">=" });
+        i += 2;
+        continue;
+      }
+      tokens.push({ type: "cmp", cmp: ">" });
+      i++;
+      continue;
+    }
+    if (ch === ";") {
+      tokens.push({ type: "semicolon" });
       i++;
       continue;
     }
@@ -186,7 +210,7 @@ export function tokenize(input: string): TokenizeResult {
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ==, <, ;, &, &&, ||, true, false, and identifiers are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ==, !=, <, <=, >, >=, ;, &, &&, ||, true, false, and identifiers are allowed.`,
       i,
     );
   }

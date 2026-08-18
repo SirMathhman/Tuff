@@ -89,6 +89,26 @@ describe("evaluate", () => {
     expect(valueOf("let x = 0; let y = 1; x < y")).toBe(1);
   });
 
+  test('evaluate("let x = 1; let y = 1; x <= y") => 1', () => {
+    expect(valueOf("let x = 1; let y = 1; x <= y")).toBe(1);
+  });
+
+  test('evaluate("let x = 2; let y = 1; x > y") => 1', () => {
+    expect(valueOf("let x = 2; let y = 1; x > y")).toBe(1);
+  });
+
+  test('evaluate("let x = 1; let y = 1; x >= y") => 1', () => {
+    expect(valueOf("let x = 1; let y = 1; x >= y")).toBe(1);
+  });
+
+  test('evaluate("let x = 1; let y = 2; x != y") => 1', () => {
+    expect(valueOf("let x = 1; let y = 2; x != y")).toBe(1);
+  });
+
+  test('evaluate("true != 1") => 1', () => {
+    expect(valueOf("true != 1")).toBe(1);
+  });
+
   test('evaluate("let x = 0; x == &x") => Err', () => {
     const result = evaluate("let x = 0; x == &x");
     expect(result.ok).toBe(false);
