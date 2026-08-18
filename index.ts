@@ -68,6 +68,7 @@ export enum EvalErrorCode {
   AssignmentToUnknown = "AssignmentToUnknown",
   ExpectedReferenceTarget = "ExpectedReferenceTarget",
   DerefOfNonReference = "DerefOfNonReference",
+  AssignmentToImmutableThroughReference = "AssignmentToImmutableThroughReference",
 }
 
 interface EvalError {
@@ -356,30 +357,41 @@ function parseBindingValue(
   name: string,
   mutable: boolean,
 ): ParseResult {
-  // "&ident" creates a reference binding instead of a value binding.
+  // "&[mut] ident" creates a reference binding instead of a value binding.
   const refTok = tokens[pos];
-  const refTarget = tokens[pos + 1];
-  if (refTok && refTok.type === "ref" && refTarget && refTarget.type === "ident") {
-    const target = env.get(refTarget.name);
-    if (target === undefined) {
-      return err(
-        EvalErrorCode.UnknownVariable,
-        "",
-        `Variable "${refTarget.name}" is not defined. Declare it with "let ${refTarget.name} = ..." before taking a reference.`,
-        pos + 1,
-      );
+  if (refTok && refTok.type === "ref") {
+    let refCursor = pos + 1;
+    const maybeMut = tokens[refCursor];
+    if (maybeMut && maybeMut.type === "keyword" && maybeMut.keyword === "mut") {
+      refCursor++;
     }
-    const semi = tokens[pos + 2];
-    if (!semi || semi.type !== "semicolon") {
-      return err(
-        EvalErrorCode.ExpectedSemicolon,
-        "",
-        `";" was expected after the reference "&${refTarget.name}".`,
-        pos + 2,
-      );
+    const refTarget = tokens[refCursor];
+    if (refTarget && refTarget.type === "ident") {
+      const target = env.get(refTarget.name);
+      if (target === undefined) {
+        return err(
+          EvalErrorCode.UnknownVariable,
+          "",
+          `Variable "${refTarget.name}" is not defined. Declare it with "let ${refTarget.name} = ..." before taking a reference.`,
+          refCursor,
+        );
+      }
+      const semi = tokens[refCursor + 1];
+      if (!semi || semi.type !== "semicolon") {
+        return err(
+          EvalErrorCode.ExpectedSemicolon,
+          "",
+          `";" was expected after the reference "&${refTarget.name}".`,
+          refCursor + 1,
+        );
+      }
+      env.set(name, {
+        value: target.value,
+        mutable,
+        refTo: refTarget.name,
+      });
+      return { ok: true, value: target.value, next: refCursor + 2 };
     }
-    env.set(name, { value: target.value, mutable, refTo: refTarget.name });
-    return { ok: true, value: target.value, next: pos + 3 };
   }
   const value = parseExpression(tokens, pos, env);
   if (!value.ok) return value;
@@ -440,10 +452,79 @@ function parseAssignment(tokens: Token[], pos: number, env: Env): ParseResult {
 }
 
 /**
- * Parses zero or more statements (`let [mut] ident = expr ;` or
- * `ident = expr ;`) followed by a trailing expression. Statements run in a
- * child env so bindings don't leak out. Returns the trailing expression's
- * value and `next` just past it.
+ * Parses a `*ident = expr ;` dereference-assignment statement. `pos` points
+ * at the `*`. The referenced variable must be mutable. Returns `next` just
+ * past the terminating `;`.
+ */
+function parseDerefAssignment(
+  tokens: Token[],
+  pos: number,
+  env: Env,
+): ParseResult {
+  const refIdent = tokens[pos + 1];
+  if (!refIdent || refIdent.type !== "ident") {
+    return err(
+      EvalErrorCode.ExpectedReferenceTarget,
+      "",
+      `A variable name was expected after "*". Write "*<variable> = ..." to assign through a reference.`,
+      pos + 1,
+    );
+  }
+  const refBinding = env.get(refIdent.name);
+  if (refBinding === undefined) {
+    return err(
+      EvalErrorCode.UnknownVariable,
+      "",
+      `Variable "${refIdent.name}" is not defined. Declare it with "let ${refIdent.name} = ...".`,
+      pos + 1,
+    );
+  }
+  if (refBinding.refTo === undefined) {
+    return err(
+      EvalErrorCode.DerefOfNonReference,
+      "",
+      `Variable "${refIdent.name}" is not a reference. Create one with "let ${refIdent.name} = &<variable>".`,
+      pos,
+    );
+  }
+  const target = env.get(refBinding.refTo);
+  if (target === undefined) {
+    return err(
+      EvalErrorCode.UnknownVariable,
+      "",
+      `Variable "${refBinding.refTo}" is not defined. It was referenced by "${refIdent.name}".`,
+      pos,
+    );
+  }
+  if (!target.mutable) {
+    return err(
+      EvalErrorCode.AssignmentToImmutableThroughReference,
+      "",
+      `Variable "${refBinding.refTo}" is immutable. Declare it with "let mut ${refBinding.refTo} = ..." to assign through a reference.`,
+      pos,
+    );
+  }
+  const value = parseExpression(tokens, pos + 3, env);
+  if (!value.ok) return value;
+  const semi = tokens[value.next];
+  if (!semi || semi.type !== "semicolon") {
+    return err(
+      EvalErrorCode.ExpectedSemicolon,
+      "",
+      `";" was expected after the value of "*${refIdent.name}".`,
+      value.next,
+    );
+  }
+  target.value = value.value;
+  refBinding.value = value.value;
+  return { ok: true, value: value.value, next: value.next + 1 };
+}
+
+/**
+ * Parses zero or more statements (`let [mut] ident = expr ;`,
+ * `ident = expr ;`, or `*ident = expr ;`) followed by a trailing expression.
+ * Statements run in a child env so bindings don't leak out. Returns the
+ * trailing expression's value and `next` just past it.
  */
 function parseStatements(tokens: Token[], pos: number, env: Env): ParseResult {
   const localEnv = new Map(env);
@@ -461,6 +542,21 @@ function parseStatements(tokens: Token[], pos: number, env: Env): ParseResult {
       const nextTok = tokens[cursor + 1];
       if (nextTok && nextTok.type === "assign") {
         const assignment = parseAssignment(tokens, cursor, localEnv);
+        if (!assignment.ok) return assignment;
+        cursor = assignment.next;
+        continue;
+      }
+    }
+    if (tok.type === "op" && tok.op === "*") {
+      const derefTarget = tokens[cursor + 1];
+      const assignTok = tokens[cursor + 2];
+      if (
+        derefTarget &&
+        derefTarget.type === "ident" &&
+        assignTok &&
+        assignTok.type === "assign"
+      ) {
+        const assignment = parseDerefAssignment(tokens, cursor, localEnv);
         if (!assignment.ok) return assignment;
         cursor = assignment.next;
         continue;

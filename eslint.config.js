@@ -3,6 +3,14 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(...tseslint.configs.recommended, {
   ignores: ["node_modules/"],
   rules: {
+    "max-lines": [
+      "error",
+      {
+        max: 300,
+        skipBlankLines: true,
+        skipComments: true,
+      },
+    ],
     "no-restricted-syntax": [
       "error",
       {
