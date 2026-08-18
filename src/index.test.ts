@@ -41,6 +41,10 @@ describe("evaluate: happy paths", () => {
     expect(evaluate("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  it('evaluates "{ let x = 2 + 3; x } * 4" to 20 (let binding in block)', () => {
+    expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   it('evaluates "-1 + 2" to 1 (unary minus)', () => {
     expect(evaluate("-1 + 2")).toEqual({ ok: true, value: 1 });
   });
