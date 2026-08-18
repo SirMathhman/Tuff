@@ -13,6 +13,10 @@ describe("evaluate", () => {
     expect(valueOf("")).toBe(0);
   });
 
+  test('evaluate("let x = 100;") => 0', () => {
+    expect(valueOf("let x = 100;")).toBe(0);
+  });
+
   test('evaluate("1") => 1', () => {
     expect(valueOf("1")).toBe(1);
   });
