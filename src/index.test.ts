@@ -33,6 +33,10 @@ describe("evaluate: happy paths", () => {
     expect(evaluate("(1 + 2) * 3")).toEqual({ ok: true, value: 9 });
   });
 
+  it('evaluates "(2 + 3) * 4" to 20 (parentheses)', () => {
+    expect(evaluate("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   it('evaluates "-1 + 2" to 1 (unary minus)', () => {
     expect(evaluate("-1 + 2")).toEqual({ ok: true, value: 1 });
   });
