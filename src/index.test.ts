@@ -45,6 +45,47 @@ describe("evaluate", () => {
     expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  it('returns 20 for the input "let y = { let x = 2 + 3; x } * 4; y"', () => {
+    expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toEqual({ ok: true, value: 20 });
+  });
+
+  it("returns 3 for multiple top-level let statements", () => {
+    expect(evaluate("let a = 1; let b = a + 1; a + b")).toEqual({ ok: true, value: 3 });
+  });
+
+  it("returns a structured error for a top-level let statement missing =", () => {
+    expect(evaluate("let x 1; x")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "let x 1; x",
+        reason: 'Unexpected end of expression in "let x 1; x"',
+      },
+    });
+  });
+
+  it("returns a structured error for a top-level let statement missing ;", () => {
+    expect(evaluate("let x = 1 x")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "let x = 1 x",
+        reason: 'Unexpected end of expression in "let x = 1 x"',
+      },
+    });
+  });
+
+  it("returns a structured error for a dangling top-level let", () => {
+    expect(evaluate("let")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "let",
+        reason: 'Unexpected end of expression in "let"',
+      },
+    });
+  });
+
   it("returns 2 for multiple let statements in a block", () => {
     expect(evaluate("{ let a = 1; let b = a + 1; a * b }")).toEqual({ ok: true, value: 2 });
   });

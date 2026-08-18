@@ -15,12 +15,12 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
  * Evaluates a Tuff expression.
  *
  * Supports addition, subtraction, and multiplication, as well as
- * parentheses or curly braces for grouping. Curly braces may also open a
- * block of `let` statements followed by a final expression, e.g.
- * `{ let x = 2 + 3; x }`; variables are only visible inside the block
- * that declares them. Multiplication binds tighter than addition and
- * subtraction, which are evaluated left to right. Empty input is a defined
- * case and evaluates to 0.
+ * parentheses or curly braces for grouping. `let` statements may appear
+ * at the top level and inside curly-brace blocks, each followed by a
+ * final expression, e.g. `let y = { let x = 2 + 3; x } * 4; y`; variables
+ * are only visible inside the block (or top level) that declares them.
+ * Multiplication binds tighter than addition and subtraction, which are
+ * evaluated left to right. Empty input is a defined case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
@@ -41,7 +41,7 @@ export function evaluate(input: string): EvaluateResult {
   }
 
   const parser = new Parser(tokens);
-  const value = parser.parseExpression();
+  const value = parser.parseProgram();
   if (parser.unknownVariable !== null) {
     return {
       ok: false,
@@ -122,6 +122,7 @@ function tokenize(input: string): Token[] | null {
  * Recursive-descent parser over a token stream.
  *
  * Grammar:
+ *   program      = letStatement* expression
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
  *   factor       = number | identifier | '(' expression ')' | block
@@ -145,6 +146,34 @@ class Parser {
 
   private advance(): Token | undefined {
     return this.tokens[this.pos++];
+  }
+
+  /**
+   * Parses the top-level program: zero or more `let` statements followed
+   * by a final expression, in a fresh top-level scope.
+   */
+  parseProgram(): number | null {
+    this.scopes.push(new Map());
+    if (!this.parseLetStatements()) {
+      this.scopes.pop();
+      return null;
+    }
+    const value = this.parseExpression();
+    this.scopes.pop();
+    return value;
+  }
+
+  /**
+   * Parses zero or more `let` statements. The current scope must already
+   * be pushed. Returns false when a statement is malformed.
+   */
+  private parseLetStatements(): boolean {
+    while (this.peek() === "let") {
+      if (!this.parseLetStatement()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   parseExpression(): number | null {
@@ -192,11 +221,9 @@ class Parser {
       this.advance();
       if (token === "{") {
         this.scopes.push(new Map());
-        while (this.peek() === "let") {
-          if (!this.parseLetStatement()) {
-            this.scopes.pop();
-            return null;
-          }
+        if (!this.parseLetStatements()) {
+          this.scopes.pop();
+          return null;
         }
       }
       const value = this.parseExpression();
