@@ -65,6 +65,13 @@ describe("evaluateTuff", () => {
     });
   });
 
+  it('returns 100 for "let mut x = 0; let y = &mut x; *y = 100; x"', () => {
+    expect(evaluateTuff("let mut x = 0; let y = &mut x; *y = 100; x")).toEqual({
+      ok: true,
+      value: 100,
+    });
+  });
+
   it("returns an error when taking a reference to an unknown identifier", () => {
     const result = evaluateTuff("let y = &z;");
     expect(result.ok).toBe(false);
@@ -123,6 +130,62 @@ describe("evaluateTuff", () => {
 
   it("returns an error when '*' is not followed by a valid operand", () => {
     const result = evaluateTuff("let x = 1; *");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when taking a mutable reference to an immutable binding", () => {
+    const result = evaluateTuff("let x = 1; let y = &mut x;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when assigning through a non-reference", () => {
+    const result = evaluateTuff("let x = 1; *x = 2;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when assigning through an immutable reference", () => {
+    const result = evaluateTuff("let x = 1; let y = &x; *y = 2;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when the value assigned through a reference is invalid", () => {
+    const result = evaluateTuff("let mut x = 0; let y = &mut x; *y = 1 +;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when ';' is missing after an assignment through a reference", () => {
+    const result = evaluateTuff("let mut x = 0; let y = &mut x; *y = 1");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when assigning a reference through a reference", () => {
+    const result = evaluateTuff("let mut x = 0; let z = 5; let y = &mut x; *y = &z;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it("returns an error when a dereference inside parentheses is invalid", () => {
+    const result = evaluateTuff("let x = 1; (*");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBeInstanceOf(Error);

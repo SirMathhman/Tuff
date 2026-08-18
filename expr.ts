@@ -5,7 +5,12 @@ const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 
 type Value =
   | { kind: "num"; num: number }
-  | { kind: "ref"; name: string; scope: Map<string, Binding> };
+  | {
+      kind: "ref";
+      name: string;
+      scope: Map<string, Binding>;
+      mutable: boolean;
+    };
 
 type Binding = { value: Value; mutable: boolean };
 
@@ -18,6 +23,9 @@ type Binding = { value: Value; mutable: boolean };
  * with "name = expr;", e.g. "let mut x = 0; x = 1; x".
  * "&name" takes a reference to a binding and "*name" dereferences one,
  * e.g. "let x = 1; let y = &x; *y".
+ * "&mut name" takes a mutable reference (the target must be a "mut" binding),
+ * and "*ref = expr;" assigns through a mutable reference,
+ * e.g. "let mut x = 0; let y = &mut x; *y = 100; x".
  */
 export function parseExpression(source: string): Result<number, Error> {
   let pos = 0;
@@ -187,6 +195,58 @@ export function parseExpression(source: string): Result<number, Error> {
   };
 
   const parseAssignment = (): Result<Value, Error> => {
+    skipSpaces();
+    if (source[pos] === "*") {
+      // "*x" is ambiguous: a deref expression, or the lvalue of "*x = ...".
+      // Parse the operand, then only treat it as an assignment if "=" follows.
+      const startPos = pos;
+      pos += 1;
+      const operand = parseFactor();
+      if (!operand.ok) {
+        return operand;
+      }
+      skipSpaces();
+      if (source[pos] === "=") {
+        const ref = operand.value;
+        if (ref.kind !== "ref" || !ref.mutable) {
+          return {
+            ok: false,
+            error: new Error(
+              `parseExpression: cannot assign through a non-mutable reference in "${source}". ` +
+                `Fix: take a mutable reference with "&mut" (e.g. "let y = &mut x;"), or read the value with "*y".`,
+            ),
+          };
+        }
+        pos += 1;
+        const valueResult = parseAdditive();
+        if (!valueResult.ok) {
+          return valueResult;
+        }
+        skipSpaces();
+        if (source[pos] !== ";") {
+          return {
+            ok: false,
+            error: new Error(
+              `parseExpression: expected ";" after the assignment through "*${ref.name}" at position ${pos} in "${source}". ` +
+                `Fix: end the assignment with ";" (e.g. "*${ref.name} = 1;").`,
+            ),
+          };
+        }
+        pos += 1;
+        const num = toNumber(valueResult.value);
+        if (!num.ok) {
+          return num;
+        }
+        const target = ref.scope.get(ref.name)!;
+        ref.scope.set(ref.name, {
+          value: { kind: "num", num: num.value },
+          mutable: target.mutable,
+        });
+        return { ok: true, value: { kind: "num", num: num.value } };
+      }
+      // Not an assignment; it is a deref expression. Restore and fall through.
+      pos = startPos;
+    }
     if (pos < source.length && /[A-Za-z_]/.test(source[pos] ?? "")) {
       const startPos = pos;
       const match = IDENT_RE.exec(source.slice(pos));
@@ -319,6 +379,18 @@ export function parseExpression(source: string): Result<number, Error> {
     const open = source[pos];
     if (open === "&") {
       pos += 1;
+      let refMutable = false;
+      if (source.startsWith("mut", pos)) {
+        const afterMut = pos + 3;
+        if (
+          afterMut >= source.length ||
+          !/[A-Za-z0-9_]/.test(source[afterMut] ?? "")
+        ) {
+          refMutable = true;
+          pos = afterMut;
+          skipSpaces();
+        }
+      }
       const nameResult = parseIdentifier();
       if (!nameResult.ok) {
         return nameResult;
@@ -334,7 +406,20 @@ export function parseExpression(source: string): Result<number, Error> {
           ),
         };
       }
-      return { ok: true, value: { kind: "ref", name, scope } };
+      const target = scope.get(name);
+      if (refMutable && !target?.mutable) {
+        return {
+          ok: false,
+          error: new Error(
+            `parseExpression: cannot take a mutable reference to immutable binding "${name}" in "${source}". ` +
+              `Fix: declare "${name}" with "let mut ${name} = <expr>;" to allow a mutable reference.`,
+          ),
+        };
+      }
+      return {
+        ok: true,
+        value: { kind: "ref", name, scope, mutable: refMutable },
+      };
     }
     if (open === "*") {
       pos += 1;
