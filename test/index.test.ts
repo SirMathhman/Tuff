@@ -13,6 +13,10 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("1")).toEqual({ ok: true, value: 1 });
   });
 
+  test('arithmetic source "1 + 2" evaluates to 3', () => {
+    expect(evaluateTuff("1 + 2")).toEqual({ ok: true, value: 3 });
+  });
+
   test("non-numeric source fails with NotANumber", () => {
     expect(evaluateTuff("abc")).toEqual({
       ok: false,

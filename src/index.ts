@@ -1,6 +1,9 @@
+import { evaluateExpression } from "./evaluator.ts";
+
 export enum TuffErrorReason {
   EmptySource = "EmptySource",
   NotANumber = "NotANumber",
+  InvalidExpression = "InvalidExpression",
 }
 
 export interface TuffError {
@@ -28,12 +31,12 @@ export function evaluateTuff(tuffSource: string): TuffResult {
       error: { reason: TuffErrorReason.EmptySource, source: tuffSource },
     };
   }
-  const value = Number(trimmed);
-  if (!Number.isFinite(value)) {
+  const outcome = evaluateExpression(trimmed);
+  if (!outcome.ok) {
     return {
       ok: false,
-      error: { reason: TuffErrorReason.NotANumber, source: tuffSource },
+      error: { reason: TuffErrorReason[outcome.reason], source: tuffSource },
     };
   }
-  return { ok: true, value };
+  return { ok: true, value: outcome.value };
 }
