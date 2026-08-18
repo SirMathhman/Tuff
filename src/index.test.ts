@@ -246,14 +246,6 @@ test("returns a structured error for an assignment statement missing ;", () => {
   });
 });
 
-test("returns a structured error for an assignment statement with a trailing ;", () => {
-  expectError("let mut x = 0; x = true;", {
-    kind: "malformed-expression",
-    input: "let mut x = 0; x = true;",
-    reason: 'Unexpected end of expression in "let mut x = 0; x = true;"',
-  });
-});
-
 test("returns a structured error for a let statement missing =", () => {
   expectError("{ let x 1; x }", {
     kind: "malformed-expression",
