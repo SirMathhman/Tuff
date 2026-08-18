@@ -26,6 +26,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("1 + 2 + 3") => 6', () => {
+    const result = evaluate("1 + 2 + 3");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(6);
+    }
+  });
+
   test('evaluate("abc") => Err(ParseError) at position 0', () => {
     const result = evaluate("abc");
     expect(result.ok).toBe(false);
