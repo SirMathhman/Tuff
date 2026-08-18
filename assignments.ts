@@ -24,11 +24,7 @@ export function parseBindingValue(
   if (refTok && refTok.type === "ref") {
     let refCursor = pos + 1;
     const maybeMut = tokens[refCursor];
-    if (
-      maybeMut &&
-      maybeMut.type === "keyword" &&
-      maybeMut.keyword === "mut"
-    ) {
+    if (maybeMut && maybeMut.type === "keyword" && maybeMut.keyword === "mut") {
       refCursor++;
     }
     const refTarget = tokens[refCursor];

@@ -10,8 +10,24 @@ This project runs on **Bun**, not Node. Use `bun` for all package and script com
 
 - Install deps: `bun install`
 - Run the entrypoint: `bun run index.ts`
+- Run tests: `bun test`
+- Lint: `bun run lint:eslint`
 
-There is no build step, test runner, or linter configured yet. `tsconfig.json` sets `noEmit: true`, so TypeScript is type-checked but not compiled to output.
+There is no build step. `tsconfig.json` sets `noEmit: true`, so TypeScript is type-checked but not compiled to output.
+
+## Architecture
+
+The evaluator is split into small modules (eslint enforces `max-lines` of 300 per file — keep files under that):
+
+- `errors.ts` — `EvalErrorCode` enum, `EvalResult`/`EvalError` types, `err()` helper.
+- `tokens.ts` — token types and `tokenize()`.
+- `env.ts` — `Binding` and `Env` types.
+- `expressions.ts` — `parseExpression`/`parseTerm`/`parseFactor` (arithmetic, parens, `*` deref).
+- `assignments.ts` — `parseBindingValue` (`let` values and `&[mut]` refs), `parseAssignment`, `parseDerefAssignment`.
+- `statements.ts` — `parseLetBinding`, `parseStatements`, `parseBlock`.
+- `index.ts` — `evaluate()` entrypoint; re-exports `EvalErrorCode`.
+
+Dependency direction is one-way: `statements` → `assignments` → `expressions` → `errors`/`tokens`/`env`. `expressions` and `statements` are mutually recursive, so `parseBlock` is passed in as a `ParseBlockFn` callback rather than imported — do not create a circular import between them.
 
 ## TypeScript conventions
 
