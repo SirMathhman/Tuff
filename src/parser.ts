@@ -1,68 +1,79 @@
 import type { AstNode } from "./ast.js";
 import type { TuffError } from "./errors.js";
 import type { Token } from "./lexer.js";
+import type { SourcePosition } from "./position.js";
 import type { Result } from "./result.js";
 
-function fail(input: string, message: string): Result<AstNode, TuffError> {
-  return {
-    ok: false,
-    error: {
-      kind: "unsupported_expression",
-      input,
-      message,
-    },
-  };
-}
-
 /**
- * Parses a token list into an AST.
+ * A recursive-descent parser that builds an AST from a token list.
  *
- * @param tokens - The tokens produced by the lexer.
- * @param input - The raw input, carried into errors for diagnostics.
- * @returns A Result holding the AST, or a structured error.
+ * The cursor (`index`) is instance state so each grammar level is a small,
+ * independently testable method.
  */
-export function parse(tokens: Token[], input: string): Result<AstNode, TuffError> {
-  let index = 0;
+class Parser {
+  private index = 0;
+
+  constructor(
+    private readonly tokens: Token[],
+    private readonly input: string,
+  ) {}
+
+  private fail(position: SourcePosition, message: string): Result<AstNode, TuffError> {
+    return {
+      ok: false,
+      error: {
+        kind: "unsupported_expression",
+        input: this.input,
+        position,
+        message,
+      },
+    };
+  }
+
+  // The position of the token at `i`, or the end of input if there is none.
+  private posAt(i: number): SourcePosition {
+    return this.tokens[i]?.pos ?? { line: 1, column: this.input.length + 1 };
+  }
 
   // A primary is a number or a parenthesized expression.
-  function parsePrimary(): Result<AstNode, TuffError> {
-    const token = tokens[index];
+  private parsePrimary(): Result<AstNode, TuffError> {
+    const token = this.tokens[this.index];
 
     if (token?.kind === "number") {
-      index += 1;
+      this.index += 1;
       return { ok: true, value: { kind: "number", value: token.value } };
     }
 
     if (token?.kind === "lparen") {
-      index += 1;
-      const inner = parseExpression();
+      this.index += 1;
+      const inner = this.parseExpression();
       if (!inner.ok) {
         return inner;
       }
 
-      if (tokens[index]?.kind !== "rparen") {
-        return fail(input, "Expected a closing parenthesis");
+      if (this.tokens[this.index]?.kind !== "rparen") {
+        return this.fail(this.posAt(this.index), "Expected a closing parenthesis");
       }
 
-      index += 1;
+      this.index += 1;
       return inner;
     }
 
-    return fail(input, "Expected a number or parenthesized expression");
+    return this.fail(this.posAt(this.index), "Expected a number or parenthesized expression");
   }
 
   // A term is a primary with `*` applied (higher precedence than `+`/`-`).
-  function parseTerm(): Result<AstNode, TuffError> {
-    const left = parsePrimary();
+  private parseTerm(): Result<AstNode, TuffError> {
+    const left = this.parsePrimary();
     if (!left.ok) {
       return left;
     }
 
     let node: AstNode = left.value;
 
-    while (tokens[index]?.kind === "times") {
-      index += 1;
-      const right = parsePrimary();
+    while (this.tokens[this.index]?.kind === "times") {
+      this.index += 1;
+      const right = this.parsePrimary();
       if (!right.ok) {
         return right;
       }
@@ -73,36 +84,49 @@ export function parse(tokens: Token[], input: string): Result<AstNode, TuffError
   }
 
   // An expression is a term with `+`/`-` applied (lower precedence).
-  function parseExpression(): Result<AstNode, TuffError> {
-    const left = parseTerm();
+  private parseExpression(): Result<AstNode, TuffError> {
+    const left = this.parseTerm();
     if (!left.ok) {
       return left;
     }
 
     let node: AstNode = left.value;
 
-    let op = tokens[index]?.kind;
+    let op = this.tokens[this.index]?.kind;
     while (op === "plus" || op === "minus") {
-      index += 1;
-      const right = parseTerm();
+      this.index += 1;
+      const right = this.parseTerm();
       if (!right.ok) {
         return right;
       }
       node = { kind: "binary", op, left: node, right: right.value };
-      op = tokens[index]?.kind;
+      op = this.tokens[this.index]?.kind;
     }
 
     return { ok: true, value: node };
   }
 
-  const result = parseExpression();
-  if (!result.ok) {
+  parse(): Result<AstNode, TuffError> {
+    const result = this.parseExpression();
+    if (!result.ok) {
+      return result;
+    }
+
+    if (this.index < this.tokens.length) {
+      return this.fail(this.posAt(this.index), "Unexpected trailing tokens");
+    }
+
     return result;
   }
+}
 
-  if (index < tokens.length) {
-    return fail(input, "Unexpected trailing tokens");
-  }
-
-  return result;
+/**
+ * Parses a token list into an AST.
+ *
+ * @param tokens - The tokens produced by the lexer.
+ * @param input - The raw input, carried into errors for diagnostics.
+ * @returns A Result holding the AST, or a structured error.
+ */
+export function parse(tokens: Token[], input: string): Result<AstNode, TuffError> {
+  return new Parser(tokens, input).parse();
 }

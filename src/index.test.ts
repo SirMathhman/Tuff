@@ -41,6 +41,18 @@ describe("evaluate", () => {
     if (!result.ok) {
       expect(result.error.kind).toBe("unsupported_expression");
       expect(result.error.input).toBe("1 +");
+      expect(result.error.position).toEqual({ line: 1, column: 4 });
+    }
+  });
+
+  it("reports the source position of an unexpected character", () => {
+    const result = evaluate("1 + x");
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.kind).toBe("unsupported_expression");
+      expect(result.error.position).toEqual({ line: 1, column: 5 });
     }
   });
 });
