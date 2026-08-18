@@ -113,6 +113,10 @@ describe("evaluate", () => {
     expect(valueOf("let x = if (false) 2 else 3; x")).toBe(3);
   });
 
+  test('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+    expect(valueOf("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
+  });
+
   test('evaluate("true != 1") => 1', () => {
     expect(valueOf("true != 1")).toBe(1);
   });
