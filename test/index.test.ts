@@ -188,4 +188,36 @@ describe("evaluate", () => {
       expect(result.error.position).toBe(0);
     }
   });
+
+  test('evaluate("((1))") => 1', () => {
+    const result = evaluate("((1))");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(1);
+    }
+  });
+
+  test('evaluate("(1 + 2") => Err(ParseError)', () => {
+    const result = evaluate("(1 + 2");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
+  test('evaluate("1 + 2)") => Err(ParseError)', () => {
+    const result = evaluate("1 + 2)");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
+  test('evaluate(deeply nested parens) => Err(ParseError)', () => {
+    const result = evaluate("(".repeat(1001) + "1" + ")".repeat(1001));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
 });

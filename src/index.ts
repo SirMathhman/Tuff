@@ -139,10 +139,40 @@ function parseError(
   };
 }
 
+const MAX_PAREN_DEPTH = 1000;
+
+function parenDepthError(input: string): ParseFailure | null {
+  let depth = 0;
+  let maxDepth = 0;
+  let maxDepthPos = 0;
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === "(") {
+      depth++;
+      if (depth > maxDepth) {
+        maxDepth = depth;
+        maxDepthPos = i;
+      }
+    } else if (input[i] === ")") {
+      depth--;
+    }
+  }
+  if (maxDepth <= MAX_PAREN_DEPTH) {
+    return null;
+  }
+  return { position: maxDepthPos, reason: "expression nesting too deep" };
+}
+
 export function evaluate(input: string): Result<number, EvaluateError> {
   const start = skipWhitespace(input, 0);
   if (start === input.length) {
     return { ok: true, value: 0 };
+  }
+  const tooDeep = parenDepthError(input);
+  if (tooDeep) {
+    return {
+      ok: false,
+      error: parseError(input, tooDeep.position, tooDeep.reason),
+    };
   }
   const parsed = parseExpression(input, start);
   if (!parsed.ok) {
