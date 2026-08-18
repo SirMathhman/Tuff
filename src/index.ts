@@ -4,7 +4,8 @@
  * An empty (or whitespace-only) input evaluates to 0.
  *
  * Supports integers and decimals, the operators `+`, `-`, `*`, `/`,
- * unary `+`/`-`, and parentheses, honoring standard operator precedence.
+ * unary `+`/`-`, and parentheses or braces as grouping delimiters,
+ * honoring standard operator precedence.
  *
  * Malformed input does not throw; it returns a structured error via
  * `Result<number, TuffError>`.
@@ -29,7 +30,9 @@ type Token =
   | { type: "number"; value: number; position: SourcePosition }
   | { type: "op"; value: "+" | "-" | "*" | "/"; position: SourcePosition }
   | { type: "lparen"; position: SourcePosition }
-  | { type: "rparen"; position: SourcePosition };
+  | { type: "rparen"; position: SourcePosition }
+  | { type: "lbrace"; position: SourcePosition }
+  | { type: "rbrace"; position: SourcePosition };
 
 function tokenize(input: string): Result<Token[], TuffError> {
   const tokens: Token[] = [];
@@ -73,6 +76,12 @@ function lexToken(
   if (ch === ")") {
     return { ok: true, value: { token: { type: "rparen", position }, length: 1 } };
   }
+  if (ch === "{") {
+    return { ok: true, value: { token: { type: "lbrace", position }, length: 1 } };
+  }
+  if (ch === "}") {
+    return { ok: true, value: { token: { type: "rbrace", position }, length: 1 } };
+  }
   if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
     return { ok: true, value: { token: { type: "op", value: ch, position }, length: 1 } };
   }
@@ -84,7 +93,7 @@ function lexToken(
         kind: "lex",
         message: `Unexpected character "${ch}"`,
         position,
-        hint: `Only digits, ".", "+", "-", "*", "/", "(", and ")" are allowed at this position.`,
+        hint: `Only digits, ".", "+", "-", "*", "/", "(", ")", "{", and "}" are allowed at this position.`,
       },
     };
   }
@@ -136,8 +145,8 @@ function parsePrimary(parser: Parser): Result<number, TuffError> {
     parser.pos += 1;
     return { ok: true, value: token.value };
   }
-  if (token.type === "lparen") {
-    return parseParenthesized(parser, token);
+  if (token.type === "lparen" || token.type === "lbrace") {
+    return parseGrouped(parser, token);
   }
   if (token.type === "op" && (token.value === "+" || token.value === "-")) {
     return parseUnary(parser, token);
@@ -166,21 +175,23 @@ function unexpectedEnd(parser: Parser): { ok: false; error: TuffError } {
   };
 }
 
-function parseParenthesized(parser: Parser, open: Token): Result<number, TuffError> {
+function parseGrouped(parser: Parser, open: Token): Result<number, TuffError> {
   parser.pos += 1;
   const value = parseAdditive(parser);
   if (!value.ok) {
     return value;
   }
+  const isParen = open.type === "lparen";
+  const expectedClose = isParen ? "rparen" : "rbrace";
   const closing = peek(parser);
-  if (!closing || closing.type !== "rparen") {
+  if (!closing || closing.type !== expectedClose) {
     return {
       ok: false,
       error: {
         kind: "parse",
-        message: "Expected a closing parenthesis",
+        message: `Expected a closing ${isParen ? "parenthesis" : "brace"}`,
         position: closing ? closing.position : open.position,
-        hint: `Add a ")" to close the parenthesis opened at column ${open.position.column}.`,
+        hint: `Add a ${isParen ? '")"' : '"}"'} to close the ${isParen ? "parenthesis" : "brace"} opened at column ${open.position.column}.`,
       },
     };
   }
@@ -250,5 +261,9 @@ function describeToken(token: Token): string {
       return "(";
     case "rparen":
       return ")";
+    case "lbrace":
+      return "{";
+    case "rbrace":
+      return "}";
   }
 }
