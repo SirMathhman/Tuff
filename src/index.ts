@@ -165,6 +165,55 @@ function parseExpression(
   return { ok: true, value: [value, next] };
 }
 
+function parseLetStatement(
+  input: string,
+  pos: number,
+  scope: Scope,
+  declaredHere: Set<string>,
+): Result<number, ParseFailure> {
+  let p = skipWhitespace(input, pos + 3);
+  const namePos = p;
+  const ident = parseIdentifier(input, p);
+  if (!ident.ok) {
+    return ident;
+  }
+  const name = ident.value[0];
+  if (declaredHere.has(name)) {
+    return {
+      ok: false,
+      error: {
+        position: namePos,
+        reason: `variable '${name}' is already declared in this block`,
+      },
+    };
+  }
+  p = skipWhitespace(input, ident.value[1]);
+  if (input.charAt(p) !== "=") {
+    return {
+      ok: false,
+      error: {
+        position: p,
+        reason: `expected '=' after variable name '${name}'`,
+      },
+    };
+  }
+  p = skipWhitespace(input, p + 1);
+  const expr = parseExpression(input, p, scope);
+  if (!expr.ok) {
+    return expr;
+  }
+  scope.set(name, expr.value[0]);
+  declaredHere.add(name);
+  p = skipWhitespace(input, expr.value[1]);
+  if (input.charAt(p) !== ";") {
+    return {
+      ok: false,
+      error: { position: p, reason: "expected ';' after a 'let' statement" },
+    };
+  }
+  return { ok: true, value: skipWhitespace(input, p + 1) };
+}
+
 function parseBlock(
   input: string,
   pos: number,
@@ -184,48 +233,12 @@ function parseBlock(
       input.startsWith("let", pos) &&
       !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
     ) {
-      let p = skipWhitespace(input, pos + 3);
-      const namePos = p;
-      const ident = parseIdentifier(input, p);
-      if (!ident.ok) {
-        return ident;
+      const stmt = parseLetStatement(input, pos, child, declaredHere);
+      if (!stmt.ok) {
+        return stmt;
       }
-      const name = ident.value[0];
-      if (declaredHere.has(name)) {
-        return {
-          ok: false,
-          error: {
-            position: namePos,
-            reason: `variable '${name}' is already declared in this block`,
-          },
-        };
-      }
-      p = skipWhitespace(input, ident.value[1]);
-      if (input.charAt(p) !== "=") {
-        return {
-          ok: false,
-          error: {
-            position: p,
-            reason: `expected '=' after variable name '${name}'`,
-          },
-        };
-      }
-      p = skipWhitespace(input, p + 1);
-      const expr = parseExpression(input, p, child);
-      if (!expr.ok) {
-        return expr;
-      }
-      child.set(name, expr.value[0]);
-      declaredHere.add(name);
-      p = skipWhitespace(input, expr.value[1]);
-      if (input.charAt(p) === ";") {
-        pos = skipWhitespace(input, p + 1);
-        continue;
-      }
-      return {
-        ok: false,
-        error: { position: p, reason: "expected ';' after a 'let' statement" },
-      };
+      pos = stmt.value;
+      continue;
     }
     const expr = parseExpression(input, pos, child);
     if (!expr.ok) {
@@ -246,6 +259,33 @@ function parseBlock(
   }
 }
 
+function parseProgram(
+  input: string,
+  pos: number,
+  scope: Scope,
+): Result<[number, number], ParseFailure> {
+  const declaredHere = new Set<string>();
+  for (;;) {
+    pos = skipWhitespace(input, pos);
+    if (
+      input.startsWith("let", pos) &&
+      !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
+    ) {
+      const stmt = parseLetStatement(input, pos, scope, declaredHere);
+      if (!stmt.ok) {
+        return stmt;
+      }
+      pos = stmt.value;
+      continue;
+    }
+    const expr = parseExpression(input, pos, scope);
+    if (!expr.ok) {
+      return expr;
+    }
+    return { ok: true, value: [expr.value[0], expr.value[1]] };
+  }
+}
+
 function parseError(
   input: string,
   position: number,
@@ -257,7 +297,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3"), with "let" bindings inside braces (e.g. "{ let x = 1 + 2; x }"); a name may not be redeclared within the same block, though nested blocks may shadow it.',
+      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3"), with "let" bindings at the top level or inside braces (e.g. "let x = 1 + 2; x"); a name may not be redeclared within the same block, though nested blocks may shadow it.',
   };
 }
 
@@ -296,7 +336,7 @@ export function evaluate(input: string): Result<number, EvaluateError> {
       error: parseError(input, tooDeep.position, tooDeep.reason),
     };
   }
-  const parsed = parseExpression(input, start, new Map());
+  const parsed = parseProgram(input, start, new Map());
   if (!parsed.ok) {
     return {
       ok: false,

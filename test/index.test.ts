@@ -162,6 +162,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+    const result = evaluate("let y = { let x = 2 + 3; x } * 4; y");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(20);
+    }
+  });
+
   test('evaluate("2 - 3 * 4") => -10', () => {
     const result = evaluate("2 - 3 * 4");
     expect(result.ok).toBe(true);
