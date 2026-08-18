@@ -15,7 +15,7 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "test:jest": "jest --coverage",
+    "test:jest": "jest",
     "format:prettier": "prettier --check .",
     "lint:typecheck": "tsc --noEmit",
     "lint:eslint": "eslint .",
