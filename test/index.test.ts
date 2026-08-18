@@ -50,6 +50,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("2 + 3 - 4") => 1', () => {
+    const result = evaluate("2 + 3 - 4");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(1);
+    }
+  });
+
   test('evaluate("abc") => Err(ParseError) at position 0', () => {
     const result = evaluate("abc");
     expect(result.ok).toBe(false);

@@ -67,14 +67,15 @@ function parseExpression(
   let [value, next] = first.value;
   for (;;) {
     const opPos = skipWhitespace(input, next);
-    if (input[opPos] !== "+") {
+    const op = input.charAt(opPos);
+    if (op !== "+" && op !== "-") {
       break;
     }
     const right = parseTerm(input, opPos + 1);
     if (!right.ok) {
       return right;
     }
-    value += right.value[0];
+    value = op === "+" ? value + right.value[0] : value - right.value[0];
     next = right.value[1];
   }
   return { ok: true, value: [value, next] };
@@ -91,7 +92,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals joined by "+" (e.g. "1 + 2").',
+      'Provide an expression of numeric literals combined with "+" and "-" (e.g. "1 + 2").',
   };
 }
 
