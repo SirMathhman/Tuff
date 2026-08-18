@@ -10,7 +10,59 @@ interface OpToken {
 
 type Token = NumToken | OpToken;
 
-function tokenize(input: string): Token[] {
+/**
+ * Structured error codes for `evaluate`. Each error answers:
+ * what happened, where, why it's an error, and how to fix it.
+ */
+enum EvalErrorCode {
+  UnexpectedCharacter = "UnexpectedCharacter",
+  UnexpectedEnd = "UnexpectedEnd",
+  ExpectedNumber = "ExpectedNumber",
+  TrailingTokens = "TrailingTokens",
+}
+
+interface EvalError {
+  code: EvalErrorCode;
+  /** The full input that failed, so the caller can locate the problem. */
+  input: string;
+  /** 0-based index into `input` where the problem was detected, if known. */
+  position?: number;
+  /** Human-readable explanation of what went wrong and how to fix it. */
+  message: string;
+}
+
+interface EvalSuccess {
+  ok: true;
+  value: number;
+}
+
+interface EvalFailure {
+  ok: false;
+  error: EvalError;
+}
+
+interface TokenizeSuccess extends EvalSuccess {
+  tokens: Token[];
+}
+
+type TokenizeResult = TokenizeSuccess | EvalFailure;
+
+interface ParseSuccess extends EvalSuccess {
+  next: number;
+}
+
+type ParseResult = ParseSuccess | EvalFailure;
+
+function err(
+  code: EvalErrorCode,
+  input: string,
+  message: string,
+  position?: number,
+): EvalFailure {
+  return { ok: false, error: { code, input, message, position } };
+}
+
+function tokenize(input: string): TokenizeResult {
   const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {
@@ -32,54 +84,81 @@ function tokenize(input: string): Token[] {
       i++;
       continue;
     }
-    throw new Error(`evaluate: unexpected character "${ch}" in "${input}"`);
+    return err(
+      EvalErrorCode.UnexpectedCharacter,
+      input,
+      `Unexpected character "${ch}". Only digits and + - * / are allowed.`,
+      i,
+    );
   }
-  return tokens;
+  return { ok: true, value: 0, tokens };
 }
 
-function parseExpression(tokens: Token[], pos: number): [number, number] {
-  let [value, next] = parseTerm(tokens, pos);
+function parseExpression(tokens: Token[], pos: number): ParseResult {
+  const term = parseTerm(tokens, pos);
+  if (!term.ok) return term;
+  let value = term.value;
+  let next = term.next;
   while (next < tokens.length) {
     const tok = tokens[next];
     if (tok && tok.type === "op" && (tok.op === "+" || tok.op === "-")) {
-      const [rhs, after] = parseTerm(tokens, next + 1);
-      value = tok.op === "+" ? value + rhs : value - rhs;
-      next = after;
+      const rhs = parseTerm(tokens, next + 1);
+      if (!rhs.ok) return rhs;
+      value = tok.op === "+" ? value + rhs.value : value - rhs.value;
+      next = rhs.next;
     } else {
       break;
     }
   }
-  return [value, next];
+  return { ok: true, value, next };
 }
 
-function parseTerm(tokens: Token[], pos: number): [number, number] {
-  let [value, next] = parseFactor(tokens, pos);
+function parseTerm(tokens: Token[], pos: number): ParseResult {
+  const factor = parseFactor(tokens, pos);
+  if (!factor.ok) return factor;
+  let value = factor.value;
+  let next = factor.next;
   while (next < tokens.length) {
     const tok = tokens[next];
     if (tok && tok.type === "op" && (tok.op === "*" || tok.op === "/")) {
-      const [rhs, after] = parseFactor(tokens, next + 1);
-      value = tok.op === "*" ? value * rhs : value / rhs;
-      next = after;
+      const rhs = parseFactor(tokens, next + 1);
+      if (!rhs.ok) return rhs;
+      value = tok.op === "*" ? value * rhs.value : value / rhs.value;
+      next = rhs.next;
     } else {
       break;
     }
   }
-  return [value, next];
+  return { ok: true, value, next };
 }
 
-function parseFactor(tokens: Token[], pos: number): [number, number] {
+function parseFactor(tokens: Token[], pos: number): ParseResult {
   const tok = tokens[pos];
-  if (!tok) throw new Error(`evaluate: unexpected end of expression`);
-  if (tok.type === "num") return [tok.value, pos + 1];
-  throw new Error(`evaluate: expected a number at position ${pos}`);
+  if (!tok) {
+    return err(
+      EvalErrorCode.UnexpectedEnd,
+      "",
+      "Expression ended before a number was found. Add a number.",
+      pos,
+    );
+  }
+  if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
+  return err(
+    EvalErrorCode.ExpectedNumber,
+    "",
+    "A number was expected here. Check operator placement.",
+    pos,
+  );
 }
 
 export function evaluate(input: string): number {
   if (input === "") return 0;
   const tokens = tokenize(input);
-  const [value, next] = parseExpression(tokens, 0);
-  if (next !== tokens.length) {
-    throw new Error(`evaluate: unexpected trailing tokens in "${input}"`);
+  if (!tokens.ok || !tokens.tokens) return 0;
+  const result = parseExpression(tokens.tokens, 0);
+  if (!result.ok) return 0;
+  if (result.next !== tokens.tokens.length) {
+    return 0;
   }
-  return value;
+  return result.value;
 }
