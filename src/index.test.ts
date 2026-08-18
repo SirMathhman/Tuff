@@ -14,4 +14,12 @@ describe("evaluate", () => {
   it("returns 0 for empty input", () => {
     expect(evaluate("")).toBe(0);
   });
+
+  it("returns 0 for whitespace-only input", () => {
+    expect(evaluate("   ")).toBe(0);
+  });
+
+  it("throws for non-empty input", () => {
+    expect(() => evaluate("1+1")).toThrow("Not implemented: 1+1");
+  });
 });
