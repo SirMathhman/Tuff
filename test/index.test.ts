@@ -98,6 +98,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("{ 2 + 3 } * 4") => 20', () => {
+    const result = evaluate("{ 2 + 3 } * 4");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(20);
+    }
+  });
+
   test('evaluate("2 - 3 * 4") => -10', () => {
     const result = evaluate("2 - 3 * 4");
     expect(result.ok).toBe(true);
@@ -213,7 +221,7 @@ describe("evaluate", () => {
     }
   });
 
-  test('evaluate(deeply nested parens) => Err(ParseError)', () => {
+  test("evaluate(deeply nested parens) => Err(ParseError)", () => {
     const result = evaluate("(".repeat(1001) + "1" + ")".repeat(1001));
     expect(result.ok).toBe(false);
     if (!result.ok) {

@@ -58,16 +58,17 @@ function parseFactor(
     }
     return { ok: true, value: [-inner.value[0], inner.value[1]] };
   }
-  if (input[pos] === "(") {
+  if (input[pos] === "(" || input[pos] === "{") {
+    const close = input[pos] === "(" ? ")" : "}";
     const inner = parseExpression(input, pos + 1);
     if (!inner.ok) {
       return inner;
     }
     const closePos = skipWhitespace(input, inner.value[1]);
-    if (input.charAt(closePos) !== ")") {
+    if (input.charAt(closePos) !== close) {
       return {
         ok: false,
-        error: { position: closePos, reason: "expected ')'" },
+        error: { position: closePos, reason: `expected '${close}'` },
       };
     }
     return { ok: true, value: [inner.value[0], closePos + 1] };
@@ -135,7 +136,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses (e.g. "(1 + 2) * 3").',
+      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3").',
   };
 }
 
@@ -146,13 +147,13 @@ function parenDepthError(input: string): ParseFailure | null {
   let maxDepth = 0;
   let maxDepthPos = 0;
   for (let i = 0; i < input.length; i++) {
-    if (input[i] === "(") {
+    if (input[i] === "(" || input[i] === "{") {
       depth++;
       if (depth > maxDepth) {
         maxDepth = depth;
         maxDepthPos = i;
       }
-    } else if (input[i] === ")") {
+    } else if (input[i] === ")" || input[i] === "}") {
       depth--;
     }
   }
