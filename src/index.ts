@@ -10,9 +10,7 @@ export type EvaluateError = {
 /**
  * The result of evaluating a Tuff expression.
  */
-export type EvaluateResult =
-  | { ok: true; value: number }
-  | { ok: false; error: EvaluateError };
+export type EvaluateResult = { ok: true; value: number } | { ok: false; error: EvaluateError };
 
 /**
  * Evaluates a Tuff expression.
