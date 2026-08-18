@@ -4,7 +4,8 @@
 export type EvaluateError =
   | { kind: "invalid-number"; input: string; reason: string }
   | { kind: "malformed-expression"; input: string; reason: string }
-  | { kind: "unknown-variable"; input: string; name: string; reason: string };
+  | { kind: "unknown-variable"; input: string; name: string; reason: string }
+  | { kind: "immutable-assignment"; input: string; name: string; reason: string };
 
 /**
  * The result of evaluating a Tuff expression.
@@ -15,12 +16,15 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
  * Evaluates a Tuff expression.
  *
  * Supports addition, subtraction, and multiplication, as well as
- * parentheses or curly braces for grouping. `let` statements may appear
- * at the top level and inside curly-brace blocks, each followed by a
- * final expression, e.g. `let y = { let x = 2 + 3; x } * 4; y`; variables
- * are only visible inside the block (or top level) that declares them.
- * Multiplication binds tighter than addition and subtraction, which are
- * evaluated left to right. Empty input is a defined case and evaluates to 0.
+ * parentheses or curly braces for grouping. `let` statements (optionally
+ * `let mut` for mutable bindings) and assignment statements (`x = expr;`)
+ * may appear at the top level and inside curly-brace blocks, each
+ * followed by a final expression, e.g.
+ * `let y = { let x = 2 + 3; x } * 4; y`; variables are only visible
+ * inside the block (or top level) that declares them, and only `mut`
+ * bindings may be assigned. Multiplication binds tighter than addition
+ * and subtraction, which are evaluated left to right. Empty input is a
+ * defined case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
@@ -42,16 +46,9 @@ export function evaluate(input: string): EvaluateResult {
 
   const parser = new Parser(tokens);
   const value = parser.parseProgram();
-  if (parser.unknownVariable !== null) {
-    return {
-      ok: false,
-      error: {
-        kind: "unknown-variable",
-        input,
-        name: parser.unknownVariable,
-        reason: `Unknown variable "${parser.unknownVariable}" in "${input}"`,
-      },
-    };
+  const error = parserError(parser, input);
+  if (error !== null) {
+    return { ok: false, error };
   }
   if (value === null || !parser.atEnd()) {
     return {
@@ -66,6 +63,30 @@ export function evaluate(input: string): EvaluateResult {
   return { ok: true, value };
 }
 
+/**
+ * Builds the structured error for a variable-related parse failure, or
+ * null when the parser did not record one.
+ */
+function parserError(parser: Parser, input: string): EvaluateError | null {
+  if (parser.unknownVariable !== null) {
+    return {
+      kind: "unknown-variable",
+      input,
+      name: parser.unknownVariable,
+      reason: `Unknown variable "${parser.unknownVariable}" in "${input}"`,
+    };
+  }
+  if (parser.immutableVariable !== null) {
+    return {
+      kind: "immutable-assignment",
+      input,
+      name: parser.immutableVariable,
+      reason: `Cannot assign to immutable variable "${parser.immutableVariable}" in "${input}"`,
+    };
+  }
+  return null;
+}
+
 type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}" | "let" | "=" | ";" | string;
 
 /**
@@ -73,6 +94,7 @@ type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}" | "let" | "=" | ";
  */
 const NON_IDENTIFIERS: ReadonlySet<string> = new Set([
   "let",
+  "mut",
   "=",
   ";",
   "+",
@@ -104,7 +126,7 @@ function tokenize(input: string): Token[] | null {
     if (match[1] !== undefined) {
       tokens.push(Number(match[1]));
     } else if (match[2] !== undefined) {
-      tokens.push(match[2] === "let" ? "let" : match[2]);
+      tokens.push(match[2] === "let" ? "let" : match[2] === "mut" ? "mut" : match[2]);
     } else if (match[3] !== undefined) {
       tokens.push(match[3] as "(" | ")" | "{" | "}" | "=" | ";");
     } else {
@@ -122,17 +144,20 @@ function tokenize(input: string): Token[] | null {
  * Recursive-descent parser over a token stream.
  *
  * Grammar:
- *   program      = letStatement* expression
+ *   program      = statement* expression
+ *   statement    = letStatement | assignmentStatement
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
  *   factor       = number | identifier | '(' expression ')' | block
- *   block        = '{' letStatement* expression '}'
- *   letStatement = 'let' identifier '=' expression ';'
+ *   block        = '{' statement* expression '}'
+ *   letStatement = 'let' 'mut'? identifier '=' expression ';'
+ *   assignmentStatement = identifier '=' expression ';'
  */
 class Parser {
   private pos = 0;
-  private scopes: Map<string, number>[] = [];
+  private scopes: Map<string, Binding>[] = [];
   unknownVariable: string | null = null;
+  immutableVariable: string | null = null;
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -154,7 +179,7 @@ class Parser {
    */
   parseProgram(): number | null {
     this.scopes.push(new Map());
-    if (!this.parseLetStatements()) {
+    if (!this.parseStatements()) {
       this.scopes.pop();
       return null;
     }
@@ -164,16 +189,28 @@ class Parser {
   }
 
   /**
-   * Parses zero or more `let` statements. The current scope must already
-   * be pushed. Returns false when a statement is malformed.
+   * Parses zero or more statements (`let` declarations and assignments).
+   * The current scope must already be pushed. Returns false when a
+   * statement is malformed.
    */
-  private parseLetStatements(): boolean {
-    while (this.peek() === "let") {
-      if (!this.parseLetStatement()) {
-        return false;
+  private parseStatements(): boolean {
+    for (;;) {
+      const token = this.peek();
+      if (token === undefined) {
+        return true;
+      }
+      if (token === "let") {
+        if (!this.parseLetStatement()) {
+          return false;
+        }
+      } else if (isIdentifier(token) && this.tokens[this.pos + 1] === "=") {
+        if (!this.parseAssignmentStatement()) {
+          return false;
+        }
+      } else {
+        return true;
       }
     }
-    return true;
   }
 
   parseExpression(): number | null {
@@ -221,7 +258,7 @@ class Parser {
       this.advance();
       if (token === "{") {
         this.scopes.push(new Map());
-        if (!this.parseLetStatements()) {
+        if (!this.parseStatements()) {
           this.scopes.pop();
           return null;
         }
@@ -240,12 +277,12 @@ class Parser {
     }
     if (isIdentifier(token)) {
       this.advance();
-      const value = this.lookup(token);
-      if (value === null) {
+      const binding = this.lookup(token);
+      if (binding === null) {
         this.unknownVariable = token;
         return null;
       }
-      return value;
+      return binding.value;
     }
     return null;
   }
@@ -256,6 +293,11 @@ class Parser {
    */
   private parseLetStatement(): boolean {
     this.advance(); // "let"
+    let mutable = false;
+    if (this.peek() === "mut") {
+      this.advance();
+      mutable = true;
+    }
     const name = this.peek();
     if (name === undefined || !isIdentifier(name)) {
       return false;
@@ -273,17 +315,50 @@ class Parser {
       return false;
     }
     this.advance();
-    this.scopes[this.scopes.length - 1].set(name, value);
+    this.scopes[this.scopes.length - 1].set(name, { value, mutable });
     return true;
   }
 
-  private lookup(name: string): number | null {
+  /**
+   * Parses `identifier = expression ;`. The variable must already be
+   * declared as `mut` in an enclosing scope.
+   */
+  private parseAssignmentStatement(): boolean {
+    const name = this.advance() as string;
+    this.advance(); // "="
+    const value = this.parseExpression();
+    if (value === null) {
+      return false;
+    }
+    if (this.peek() !== ";") {
+      return false;
+    }
+    this.advance();
+    const binding = this.lookup(name);
+    if (binding === null) {
+      this.unknownVariable = name;
+      return false;
+    }
+    if (!binding.mutable) {
+      this.immutableVariable = name;
+      return false;
+    }
+    binding.value = value;
+    return true;
+  }
+
+  private lookup(name: string): Binding | null {
     for (let i = this.scopes.length - 1; i >= 0; i--) {
-      const value = this.scopes[i].get(name);
-      if (value !== undefined) {
-        return value;
+      const binding = this.scopes[i].get(name);
+      if (binding !== undefined) {
+        return binding;
       }
     }
     return null;
   }
 }
+
+/**
+ * A variable binding: its current value and whether it may be assigned.
+ */
+type Binding = { value: number; mutable: boolean };

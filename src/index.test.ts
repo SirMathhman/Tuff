@@ -1,4 +1,8 @@
-import { evaluate } from "./index.js";
+import { evaluate, type EvaluateError } from "./index.js";
+
+function expectError(input: string, error: EvaluateError): void {
+  expect(evaluate(input)).toEqual({ ok: false, error });
+}
 
 test("returns 0 for an empty string", () => {
   expect(evaluate("")).toEqual({ ok: true, value: 0 });
@@ -56,6 +60,22 @@ test("returns 3 for multiple top-level let statements", () => {
   expect(evaluate("let a = 1; let b = a + 1; a + b")).toEqual({ ok: true, value: 3 });
 });
 
+test('returns 1 for the input "let mut x = 0; x = 1; x"', () => {
+  expect(evaluate("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("returns 5 for repeated assignments to a mutable variable", () => {
+  expect(evaluate("let mut x = 1; x = 2; x = x + 3; x")).toEqual({ ok: true, value: 5 });
+});
+
+test("returns 2 for a mutable variable assigned inside a block", () => {
+  expect(evaluate("let mut x = 1; { x = 2; x }")).toEqual({ ok: true, value: 2 });
+});
+
+test("returns 3 for a let mut statement inside a block", () => {
+  expect(evaluate("{ let mut x = 1; x = 2; x + 1 }")).toEqual({ ok: true, value: 3 });
+});
+
 test("returns 2 for multiple let statements in a block", () => {
   expect(evaluate("{ let a = 1; let b = a + 1; a * b }")).toEqual({ ok: true, value: 2 });
 });
@@ -69,229 +89,223 @@ test("returns 1 for a variable read from an outer block", () => {
 });
 
 test("returns a structured error for an unknown variable", () => {
-  expect(evaluate("x")).toEqual({
-    ok: false,
-    error: {
-      kind: "unknown-variable",
-      input: "x",
-      name: "x",
-      reason: 'Unknown variable "x" in "x"',
-    },
+  expectError("x", {
+    kind: "unknown-variable",
+    input: "x",
+    name: "x",
+    reason: 'Unknown variable "x" in "x"',
   });
 });
 
 test("returns a structured error for a variable used outside its block", () => {
-  expect(evaluate("{ let x = 1; x } + x")).toEqual({
-    ok: false,
-    error: {
-      kind: "unknown-variable",
-      input: "{ let x = 1; x } + x",
-      name: "x",
-      reason: 'Unknown variable "x" in "{ let x = 1; x } + x"',
-    },
+  expectError("{ let x = 1; x } + x", {
+    kind: "unknown-variable",
+    input: "{ let x = 1; x } + x",
+    name: "x",
+    reason: 'Unknown variable "x" in "{ let x = 1; x } + x"',
   });
 });
 
 test("returns a structured error for an unknown variable after *", () => {
-  expect(evaluate("2 * abc")).toEqual({
-    ok: false,
-    error: {
-      kind: "unknown-variable",
-      input: "2 * abc",
-      name: "abc",
-      reason: 'Unknown variable "abc" in "2 * abc"',
-    },
+  expectError("2 * abc", {
+    kind: "unknown-variable",
+    input: "2 * abc",
+    name: "abc",
+    reason: 'Unknown variable "abc" in "2 * abc"',
   });
 });
 
 test("returns a structured error for an unknown variable with a multi-character name", () => {
-  expect(evaluate("abc")).toEqual({
-    ok: false,
-    error: {
-      kind: "unknown-variable",
-      input: "abc",
-      name: "abc",
-      reason: 'Unknown variable "abc" in "abc"',
-    },
+  expectError("abc", {
+    kind: "unknown-variable",
+    input: "abc",
+    name: "abc",
+    reason: 'Unknown variable "abc" in "abc"',
+  });
+});
+
+test("returns a structured error for an assignment to an unknown variable", () => {
+  expectError("y = 1; y", {
+    kind: "unknown-variable",
+    input: "y = 1; y",
+    name: "y",
+    reason: 'Unknown variable "y" in "y = 1; y"',
+  });
+});
+
+test("returns a structured error for an assignment to an immutable variable", () => {
+  expectError("let x = 0; x = 1; x", {
+    kind: "immutable-assignment",
+    input: "let x = 0; x = 1; x",
+    name: "x",
+    reason: 'Cannot assign to immutable variable "x" in "let x = 0; x = 1; x"',
+  });
+});
+
+test("returns a structured error for an assignment to an immutable variable from a block", () => {
+  expectError("let x = 0; { x = 1; x }", {
+    kind: "immutable-assignment",
+    input: "let x = 0; { x = 1; x }",
+    name: "x",
+    reason: 'Cannot assign to immutable variable "x" in "let x = 0; { x = 1; x }"',
   });
 });
 
 test("returns a structured error for a top-level let statement missing =", () => {
-  expect(evaluate("let x 1; x")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "let x 1; x",
-      reason: 'Unexpected end of expression in "let x 1; x"',
-    },
+  expectError("let x 1; x", {
+    kind: "malformed-expression",
+    input: "let x 1; x",
+    reason: 'Unexpected end of expression in "let x 1; x"',
   });
 });
 
 test("returns a structured error for a top-level let statement missing ;", () => {
-  expect(evaluate("let x = 1 x")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "let x = 1 x",
-      reason: 'Unexpected end of expression in "let x = 1 x"',
-    },
+  expectError("let x = 1 x", {
+    kind: "malformed-expression",
+    input: "let x = 1 x",
+    reason: 'Unexpected end of expression in "let x = 1 x"',
   });
 });
 
 test("returns a structured error for a dangling top-level let", () => {
-  expect(evaluate("let")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "let",
-      reason: 'Unexpected end of expression in "let"',
-    },
+  expectError("let", {
+    kind: "malformed-expression",
+    input: "let",
+    reason: 'Unexpected end of expression in "let"',
+  });
+});
+
+// Coverage: statements end with no final expression (parseStatements end branch).
+test("returns a structured error for statements with no final expression", () => {
+  expectError("let x = 1;", {
+    kind: "malformed-expression",
+    input: "let x = 1;",
+    reason: 'Unexpected end of expression in "let x = 1;"',
+  });
+});
+
+// Coverage: assignment statement with no value (parseAssignmentStatement null branch).
+test("returns a structured error for an assignment statement with no value", () => {
+  expectError("let mut x = 0; x = ; x", {
+    kind: "malformed-expression",
+    input: "let mut x = 0; x = ; x",
+    reason: 'Unexpected end of expression in "let mut x = 0; x = ; x"',
+  });
+});
+
+// Coverage: assignment statement missing ; (parseAssignmentStatement semicolon branch).
+test("returns a structured error for an assignment statement missing ;", () => {
+  expectError("let mut x = 0; x = 1 x", {
+    kind: "malformed-expression",
+    input: "let mut x = 0; x = 1 x",
+    reason: 'Unexpected end of expression in "let mut x = 0; x = 1 x"',
   });
 });
 
 test("returns a structured error for a let statement missing =", () => {
-  expect(evaluate("{ let x 1; x }")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "{ let x 1; x }",
-      reason: 'Unexpected end of expression in "{ let x 1; x }"',
-    },
+  expectError("{ let x 1; x }", {
+    kind: "malformed-expression",
+    input: "{ let x 1; x }",
+    reason: 'Unexpected end of expression in "{ let x 1; x }"',
   });
 });
 
 test("returns a structured error for a let statement missing ;", () => {
-  expect(evaluate("{ let x = 1 x }")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "{ let x = 1 x }",
-      reason: 'Unexpected end of expression in "{ let x = 1 x }"',
-    },
+  expectError("{ let x = 1 x }", {
+    kind: "malformed-expression",
+    input: "{ let x = 1 x }",
+    reason: 'Unexpected end of expression in "{ let x = 1 x }"',
   });
 });
 
 test("returns a structured error for an unclosed block", () => {
-  expect(evaluate("{ let x = 1; x")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "{ let x = 1; x",
-      reason: 'Unexpected end of expression in "{ let x = 1; x"',
-    },
+  expectError("{ let x = 1; x", {
+    kind: "malformed-expression",
+    input: "{ let x = 1; x",
+    reason: 'Unexpected end of expression in "{ let x = 1; x"',
   });
 });
 
 test("returns a structured error for a let statement with no name", () => {
-  expect(evaluate("{ let }")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "{ let }",
-      reason: 'Unexpected end of expression in "{ let }"',
-    },
+  expectError("{ let }", {
+    kind: "malformed-expression",
+    input: "{ let }",
+    reason: 'Unexpected end of expression in "{ let }"',
   });
 });
 
 test("returns a structured error for a dangling let", () => {
-  expect(evaluate("{ let")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "{ let",
-      reason: 'Unexpected end of expression in "{ let"',
-    },
+  expectError("{ let", {
+    kind: "malformed-expression",
+    input: "{ let",
+    reason: 'Unexpected end of expression in "{ let"',
   });
 });
 
 test("returns a structured error for a let statement with no value", () => {
-  expect(evaluate("{ let x = ; }")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "{ let x = ; }",
-      reason: 'Unexpected end of expression in "{ let x = ; }"',
-    },
+  expectError("{ let x = ; }", {
+    kind: "malformed-expression",
+    input: "{ let x = ; }",
+    reason: 'Unexpected end of expression in "{ let x = ; }"',
   });
 });
 
 test("returns a structured error for a malformed expression", () => {
-  expect(evaluate("1 +")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "1 +",
-      reason: 'Unexpected end of expression in "1 +"',
-    },
+  expectError("1 +", {
+    kind: "malformed-expression",
+    input: "1 +",
+    reason: 'Unexpected end of expression in "1 +"',
   });
 });
 
 test("returns a structured error for a missing operand", () => {
-  expect(evaluate("1 + + 2")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "1 + + 2",
-      reason: 'Unexpected end of expression in "1 + + 2"',
-    },
+  expectError("1 + + 2", {
+    kind: "malformed-expression",
+    input: "1 + + 2",
+    reason: 'Unexpected end of expression in "1 + + 2"',
   });
 });
 
 test("returns a structured error for a missing operand after *", () => {
-  expect(evaluate("2 * ")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "2 * ",
-      reason: 'Unexpected end of expression in "2 * "',
-    },
+  expectError("2 * ", {
+    kind: "malformed-expression",
+    input: "2 * ",
+    reason: 'Unexpected end of expression in "2 * "',
   });
 });
 
 // Coverage: identifier between two numbers (tokenize gap branch).
 test("returns a structured error for an identifier between numbers", () => {
-  expect(evaluate("1 a 2")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "1 a 2",
-      reason: 'Unexpected end of expression in "1 a 2"',
-    },
+  expectError("1 a 2", {
+    kind: "malformed-expression",
+    input: "1 a 2",
+    reason: 'Unexpected end of expression in "1 a 2"',
   });
 });
 
 // Coverage: unrecognized character between tokens (tokenize gap branch).
 test("returns a structured error for an unrecognized character between tokens", () => {
-  expect(evaluate("1 @ 2")).toEqual({
-    ok: false,
-    error: {
-      kind: "invalid-number",
-      input: "1 @ 2",
-      reason: 'Cannot parse "1 @ 2" as a number',
-    },
+  expectError("1 @ 2", {
+    kind: "invalid-number",
+    input: "1 @ 2",
+    reason: 'Cannot parse "1 @ 2" as a number',
   });
 });
 
 // Coverage: unrecognized trailing character (tokenize tail branch).
 test("returns a structured error for an unrecognized trailing character", () => {
-  expect(evaluate("1 + @")).toEqual({
-    ok: false,
-    error: {
-      kind: "invalid-number",
-      input: "1 + @",
-      reason: 'Cannot parse "1 + @" as a number',
-    },
+  expectError("1 + @", {
+    kind: "invalid-number",
+    input: "1 + @",
+    reason: 'Cannot parse "1 + @" as a number',
   });
 });
 
 // Coverage: unclosed parenthesis (parser paren branch).
 test("returns a structured error for an unclosed parenthesis", () => {
-  expect(evaluate("(1 +")).toEqual({
-    ok: false,
-    error: {
-      kind: "malformed-expression",
-      input: "(1 +",
-      reason: 'Unexpected end of expression in "(1 +"',
-    },
+  expectError("(1 +", {
+    kind: "malformed-expression",
+    input: "(1 +",
+    reason: 'Unexpected end of expression in "(1 +"',
   });
 });
