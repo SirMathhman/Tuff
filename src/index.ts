@@ -96,10 +96,11 @@ function parseError(
 }
 
 export function evaluate(input: string): Result<number, EvaluateError> {
-  if (input === "") {
+  const start = skipWhitespace(input, 0);
+  if (start === input.length) {
     return { ok: true, value: 0 };
   }
-  const parsed = parseExpression(input, 0);
+  const parsed = parseExpression(input, start);
   if (!parsed.ok) {
     return {
       ok: false,
