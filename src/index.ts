@@ -5,7 +5,8 @@ export type EvaluateError =
   | { kind: "invalid-number"; input: string; reason: string }
   | { kind: "malformed-expression"; input: string; reason: string }
   | { kind: "unknown-variable"; input: string; name: string; reason: string }
-  | { kind: "immutable-assignment"; input: string; name: string; reason: string };
+  | { kind: "immutable-assignment"; input: string; name: string; reason: string }
+  | { kind: "invalid-dereference"; input: string; name: string; reason: string };
 
 /**
  * The result of evaluating a Tuff expression.
@@ -22,9 +23,12 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
  * followed by a final expression, e.g.
  * `let y = { let x = 2 + 3; x } * 4; y`; variables are only visible
  * inside the block (or top level) that declares them, and only `mut`
- * bindings may be assigned. Multiplication binds tighter than addition
- * and subtraction, which are evaluated left to right. Empty input is a
- * defined case and evaluates to 0.
+ * bindings may be assigned. References are created with `&x` (shared)
+ * or `&mut x` (mutable, requires a `mut` binding) and read with the
+ * prefix `*` operator; `*y = expr;` writes through a mutable reference.
+ * Multiplication binds tighter than addition and subtraction, which are
+ * evaluated left to right. Empty input is a defined case and evaluates
+ * to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
@@ -84,10 +88,18 @@ function parserError(parser: Parser, input: string): EvaluateError | null {
       reason: `Cannot assign to immutable variable "${parser.immutableVariable}" in "${input}"`,
     };
   }
+  if (parser.invalidDereference !== null) {
+    return {
+      kind: "invalid-dereference",
+      input,
+      name: parser.invalidDereference,
+      reason: `Cannot dereference non-reference "${parser.invalidDereference}" in "${input}"`,
+    };
+  }
   return null;
 }
 
-type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}" | "let" | "=" | ";" | string;
+type Token = number | "+" | "-" | "*" | "&" | "(" | ")" | "{" | "}" | "let" | "=" | ";" | string;
 
 /**
  * All non-identifier string tokens. Identifiers are any other string.
@@ -100,6 +112,7 @@ const NON_IDENTIFIERS: ReadonlySet<string> = new Set([
   "+",
   "-",
   "*",
+  "&",
   "(",
   ")",
   "{",
@@ -116,7 +129,7 @@ function isIdentifier(token: Token): token is string {
  */
 function tokenize(input: string): Token[] | null {
   const tokens: Token[] = [];
-  const pattern = /(\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|([(){}=;])|([*+-])/g;
+  const pattern = /(\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|([(){}=;&])|([*+-])/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(input)) !== null) {
@@ -128,7 +141,7 @@ function tokenize(input: string): Token[] | null {
     } else if (match[2] !== undefined) {
       tokens.push(match[2] === "let" ? "let" : match[2] === "mut" ? "mut" : match[2]);
     } else if (match[3] !== undefined) {
-      tokens.push(match[3] as "(" | ")" | "{" | "}" | "=" | ";");
+      tokens.push(match[3] as "(" | ")" | "{" | "}" | "=" | ";" | "&");
     } else {
       tokens.push(match[4] as "+" | "-" | "*");
     }
@@ -148,16 +161,21 @@ function tokenize(input: string): Token[] | null {
  *   statement    = letStatement | assignmentStatement
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
- *   factor       = number | identifier | '(' expression ')' | block
+ *   factor       = number | identifier | '(' expression ')'
+ *                 | block | '*' dereference
+ *   dereference  = identifier
  *   block        = '{' statement* expression '}'
- *   letStatement = 'let' 'mut'? identifier '=' expression ';'
+ *   letStatement = 'let' 'mut'? identifier '=' (expression | reference) ';'
+ *   reference    = '&' 'mut'? identifier
  *   assignmentStatement = identifier '=' expression ';'
+ *                      | '*' identifier '=' expression ';'
  */
 class Parser {
   private pos = 0;
   private scopes: Map<string, Binding>[] = [];
   unknownVariable: string | null = null;
   immutableVariable: string | null = null;
+  invalidDereference: string | null = null;
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -203,7 +221,7 @@ class Parser {
         if (!this.parseLetStatement()) {
           return false;
         }
-      } else if (isIdentifier(token) && this.tokens[this.pos + 1] === "=") {
+      } else if (this.isAssignmentStart()) {
         if (!this.parseAssignmentStatement()) {
           return false;
         }
@@ -211,6 +229,19 @@ class Parser {
         return true;
       }
     }
+  }
+
+  /**
+   * Returns true when the token at the current position begins an
+   * assignment statement: `identifier =` or `*identifier =`.
+   */
+  private isAssignmentStart(): boolean {
+    const token = this.peek() as Token;
+    if (token === "*") {
+      const name = this.tokens[this.pos + 1];
+      return isIdentifier(name) && this.tokens[this.pos + 2] === "=";
+    }
+    return isIdentifier(token) && this.tokens[this.pos + 1] === "=";
   }
 
   parseExpression(): number | null {
@@ -275,6 +306,9 @@ class Parser {
       this.advance();
       return value;
     }
+    if (token === "*") {
+      return this.parseDereference();
+    }
     if (isIdentifier(token)) {
       this.advance();
       const binding = this.lookup(token);
@@ -282,9 +316,36 @@ class Parser {
         this.unknownVariable = token;
         return null;
       }
+      if (binding.kind === "ref") {
+        return null;
+      }
       return binding.value;
     }
     return null;
+  }
+
+  /**
+   * Parses a dereference expression `*identifier`. The target must be a
+   * reference binding; otherwise an invalid-dereference error is recorded.
+   * Returns the current value of the referenced variable.
+   */
+  private parseDereference(): number | null {
+    this.advance(); // "*"
+    const name = this.peek();
+    if (name === undefined || !isIdentifier(name)) {
+      return null;
+    }
+    this.advance();
+    const binding = this.lookup(name);
+    if (binding === null) {
+      this.unknownVariable = name;
+      return null;
+    }
+    if (binding.kind !== "ref") {
+      this.invalidDereference = name;
+      return null;
+    }
+    return binding.target.value;
   }
 
   /**
@@ -307,6 +368,18 @@ class Parser {
       return false;
     }
     this.advance();
+    if (this.peek() === "&") {
+      const ref = this.parseReferenceBinding();
+      if (ref === null) {
+        return false;
+      }
+      if (this.peek() !== ";") {
+        return false;
+      }
+      this.advance();
+      this.scopes[this.scopes.length - 1].set(name, ref);
+      return true;
+    }
     const value = this.parseExpression();
     if (value === null) {
       return false;
@@ -315,8 +388,41 @@ class Parser {
       return false;
     }
     this.advance();
-    this.scopes[this.scopes.length - 1].set(name, { value, mutable });
+    this.scopes[this.scopes.length - 1].set(name, { kind: "value", value, mutable });
     return true;
+  }
+
+  /**
+   * Parses a reference initializer `&identifier` or `&mut identifier`.
+   * The target must be a known value binding; `&mut` additionally requires
+   * the target to be a `mut` binding. Returns a reference binding that
+   * points directly at the target binding object.
+   */
+  private parseReferenceBinding(): Binding | null {
+    this.advance(); // "&"
+    let mutable = false;
+    if (this.peek() === "mut") {
+      this.advance();
+      mutable = true;
+    }
+    const name = this.peek();
+    if (name === undefined || !isIdentifier(name)) {
+      return null;
+    }
+    this.advance();
+    const binding = this.lookup(name);
+    if (binding === null) {
+      this.unknownVariable = name;
+      return null;
+    }
+    if (binding.kind === "ref") {
+      return null;
+    }
+    if (mutable && !binding.mutable) {
+      this.immutableVariable = name;
+      return null;
+    }
+    return { kind: "ref", target: binding, mutable };
   }
 
   /**
@@ -324,6 +430,10 @@ class Parser {
    * declared as `mut` in an enclosing scope.
    */
   private parseAssignmentStatement(): boolean {
+    const first = this.peek();
+    if (first === "*") {
+      return this.parseDereferenceAssignment();
+    }
     const name = this.advance() as string;
     this.advance(); // "="
     const value = this.parseExpression();
@@ -339,11 +449,47 @@ class Parser {
       this.unknownVariable = name;
       return false;
     }
+    if (binding.kind === "ref") {
+      return false;
+    }
     if (!binding.mutable) {
       this.immutableVariable = name;
       return false;
     }
     binding.value = value;
+    return true;
+  }
+
+  /**
+   * Parses `*identifier = expression ;`. The target must be a mutable
+   * reference binding; the write is applied to the referenced variable.
+   */
+  private parseDereferenceAssignment(): boolean {
+    this.advance(); // "*"
+    const name = this.advance() as string; // identifier (guaranteed by isAssignmentStart)
+    this.advance(); // "=" (guaranteed by isAssignmentStart)
+    const value = this.parseExpression();
+    if (value === null) {
+      return false;
+    }
+    if (this.peek() !== ";") {
+      return false;
+    }
+    this.advance();
+    const binding = this.lookup(name);
+    if (binding === null) {
+      this.unknownVariable = name;
+      return false;
+    }
+    if (binding.kind !== "ref") {
+      this.invalidDereference = name;
+      return false;
+    }
+    if (!binding.mutable) {
+      this.immutableVariable = name;
+      return false;
+    }
+    binding.target.value = value;
     return true;
   }
 
@@ -359,6 +505,14 @@ class Parser {
 }
 
 /**
- * A variable binding: its current value and whether it may be assigned.
+ * A value binding: a number and whether it may be assigned.
  */
-type Binding = { value: number; mutable: boolean };
+type ValueBinding = { kind: "value"; value: number; mutable: boolean };
+
+/**
+ * A variable binding. A `value` binding holds a number; a `ref` binding
+ * points directly at a value binding object (so it tracks reassignment and
+ * is unaffected by shadowing), with `mutable` indicating whether writes
+ * through it are allowed.
+ */
+type Binding = ValueBinding | { kind: "ref"; target: ValueBinding; mutable: boolean };
