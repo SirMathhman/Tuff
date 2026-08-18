@@ -43,12 +43,12 @@ function tokenize(source: string): TokenizeResult {
       i++;
       continue;
     }
-    if (ch === "(") {
+    if (ch === "(" || ch === "{") {
       tokens.push({ kind: "lparen", value: ch, position: i });
       i++;
       continue;
     }
-    if (ch === ")") {
+    if (ch === ")" || ch === "}") {
       tokens.push({ kind: "rparen", value: ch, position: i });
       i++;
       continue;

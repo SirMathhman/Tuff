@@ -21,6 +21,10 @@ describe("evaluateTuff basics", () => {
     expect(evaluateTuff("1 + 2")).toEqual({ ok: true, value: 3 });
   });
 
+  test('braced source "{ 2 + 3 } * 4" evaluates to 20', () => {
+    expect(evaluateTuff("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   test("non-numeric source fails with NotANumber", () => {
     expect(evaluateTuff("abc")).toEqual({
       ok: false,
