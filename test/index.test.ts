@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evaluate } from "../src/index.ts";
+import { evaluate, EvaluateErrorKind } from "../src/index.ts";
 
 describe("evaluate", () => {
   test('evaluate("") => 0', () => {
@@ -15,6 +15,16 @@ describe("evaluate", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toBe(1);
+    }
+  });
+
+  test('evaluate("abc") => Err(UnsupportedInput)', () => {
+    const result = evaluate("abc");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.UnsupportedInput);
+      expect(result.error.input).toBe("abc");
+      expect(result.error.message.length).toBeGreaterThan(0);
     }
   });
 });
