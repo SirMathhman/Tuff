@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "lint:eslint": "eslint ."
+    "lint:eslint": "eslint .",
+    "analyze:pmd-cpd": "pmd cpd -d index.ts,index.test.ts -l typescript --minimum-tokens=100 --no-fail-on-error"
   },
   "devDependencies": {
     "@types/bun": "latest",
