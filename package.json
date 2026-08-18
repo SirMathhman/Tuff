@@ -6,7 +6,7 @@
   "scripts": {
     "test": "bun test",
     "lint:eslint": "eslint .",
-    "analyze:pmd-cpd": "pmd cpd -d src/index.ts,test/index.test.ts -l typescript --minimum-tokens=100 --no-fail-on-error",
+    "analyze:pmd-cpd": "pmd cpd -d src,test -l typescript --minimum-tokens=100 --no-fail-on-error",
     "check:clutter": "bun run scripts/check-clutter.ts"
   },
   "devDependencies": {
