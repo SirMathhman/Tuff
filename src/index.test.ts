@@ -8,6 +8,10 @@ test("returns 0 for an empty string", () => {
   expect(evaluate("")).toEqual({ ok: true, value: 0 });
 });
 
+test("returns 0 for a binding with no trailing expression", () => {
+  expect(evaluate("let x = 100;")).toEqual({ ok: true, value: 0 });
+});
+
 test('returns 1 for the input "1"', () => {
   expect(evaluate("1")).toEqual({ ok: true, value: 1 });
 });
@@ -219,13 +223,9 @@ test("returns a structured error for a dangling top-level let", () => {
   });
 });
 
-// Coverage: statements end with no final expression (parseStatements end branch).
-test("returns a structured error for statements with no final expression", () => {
-  expectError("let x = 1;", {
-    kind: "malformed-expression",
-    input: "let x = 1;",
-    reason: 'Unexpected end of expression in "let x = 1;"',
-  });
+// Coverage: statements end with no final expression (parseProgram atEnd branch).
+test("returns 0 for statements with no final expression", () => {
+  expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
 });
 
 // Coverage: assignment statement with no value (parseAssignmentStatement null branch).

@@ -18,7 +18,7 @@ type Binding = ValueBinding | { kind: "ref"; target: ValueBinding; mutable: bool
  * Recursive-descent parser over a token stream.
  *
  * Grammar:
- *   program      = statement* expression
+ *   program      = statement* expression?
  *   statement    = letStatement | assignmentStatement
  *   expression   = term (('+' | '-') term)*
  *   term         = factor ('*' factor)*
@@ -53,11 +53,19 @@ export class Parser {
 
   /**
    * Parses the top-level program: zero or more `let` statements followed
-   * by a final expression, in a fresh top-level scope.
+   * by an optional final expression, in a fresh top-level scope. A program
+   * with no final expression evaluates to 0.
    */
   parseProgram(): ParseResult {
     this.scopes.push(new Map());
-    const value = this.parseStatements() ? this.parseExpression() : null;
+    let value: number | null;
+    if (!this.parseStatements()) {
+      value = null;
+    } else if (this.atEnd()) {
+      value = 0;
+    } else {
+      value = this.parseExpression();
+    }
     this.scopes.pop();
     if (this.error !== null) {
       return { ok: false, error: this.error };

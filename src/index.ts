@@ -11,7 +11,8 @@ export type { EvaluateError, EvaluateResult } from "./errors.js";
  * parentheses or curly braces for grouping. `let` statements (optionally
  * `let mut` for mutable bindings) and assignment statements (`x = expr;`)
  * may appear at the top level and inside curly-brace blocks, each
- * followed by a final expression, e.g.
+ * followed by an optional final expression (a program with no final
+ * expression evaluates to 0), e.g.
  * `let y = { let x = 2 + 3; x } * 4; y`; variables are only visible
  * inside the block (or top level) that declares them, and only `mut`
  * bindings may be assigned. References are created with `&x` (shared)
