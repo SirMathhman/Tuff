@@ -1,7 +1,7 @@
-import { evaluate } from "./index";
+import { evaluate } from "./index.js";
 
 describe("evaluate", () => {
-  it('returns 0 for empty string', () => {
+  it("returns 0 for empty string", () => {
     expect(evaluate("")).toBe(0);
   });
 });
