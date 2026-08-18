@@ -80,7 +80,14 @@ export function parseFactor(
     );
   }
   if (!base.ok) return base;
-  return applyIndexAccess(tokens, base.next, env, parseBlock, parseExpression, base.value);
+  return applyIndexAccess(
+    tokens,
+    base.next,
+    env,
+    parseBlock,
+    parseExpression,
+    base.value,
+  );
 }
 
 /** Parses `ident` and returns its bound value. */

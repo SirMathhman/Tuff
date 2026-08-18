@@ -106,7 +106,13 @@ export function parseTerm(
   while (next < tokens.length) {
     const tok = tokens[next];
     if (tok && tok.type === "op" && (tok.op === "*" || tok.op === "/")) {
-      const rhs = parseFactor(tokens, next + 1, env, parseBlock, parseExpression);
+      const rhs = parseFactor(
+        tokens,
+        next + 1,
+        env,
+        parseBlock,
+        parseExpression,
+      );
       if (!rhs.ok) return rhs;
       value = num(
         tok.op === "*" ? value.num * rhs.value.num : value.num / rhs.value.num,
