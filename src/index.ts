@@ -41,19 +41,43 @@ function parseNumber(
   return { ok: true, value: [Number(match[0]), pos + match[0].length] };
 }
 
-function parseTerm(
+function parseFactor(
   input: string,
   pos: number,
 ): Result<[number, number], number> {
   pos = skipWhitespace(input, pos);
   if (input[pos] === "-") {
-    const inner = parseTerm(input, pos + 1);
+    const inner = parseFactor(input, pos + 1);
     if (!inner.ok) {
       return inner;
     }
     return { ok: true, value: [-inner.value[0], inner.value[1]] };
   }
   return parseNumber(input, pos);
+}
+
+function parseTerm(
+  input: string,
+  pos: number,
+): Result<[number, number], number> {
+  const first = parseFactor(input, pos);
+  if (!first.ok) {
+    return first;
+  }
+  let [value, next] = first.value;
+  for (;;) {
+    const opPos = skipWhitespace(input, next);
+    if (input.charAt(opPos) !== "*") {
+      break;
+    }
+    const right = parseFactor(input, opPos + 1);
+    if (!right.ok) {
+      return right;
+    }
+    value *= right.value[0];
+    next = right.value[1];
+  }
+  return { ok: true, value: [value, next] };
 }
 
 function parseExpression(
@@ -92,7 +116,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals combined with "+" and "-" (e.g. "1 + 2").',
+      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2").',
   };
 }
 
