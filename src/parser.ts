@@ -35,8 +35,30 @@ export function parse(tokens: Token[], input: string): Result<AstNode, TuffError
     return { ok: true, value: { kind: "number", value: token.value } };
   }
 
-  function parseExpression(): Result<AstNode, TuffError> {
+  // A term is a number with `*` applied (higher precedence than `+`/`-`).
+  function parseTerm(): Result<AstNode, TuffError> {
     const left = parseNumber();
+    if (!left.ok) {
+      return left;
+    }
+
+    let node: AstNode = left.value;
+
+    while (tokens[index]?.kind === "times") {
+      index += 1;
+      const right = parseNumber();
+      if (!right.ok) {
+        return right;
+      }
+      node = { kind: "binary", op: "times", left: node, right: right.value };
+    }
+
+    return { ok: true, value: node };
+  }
+
+  // An expression is a term with `+`/`-` applied (lower precedence).
+  function parseExpression(): Result<AstNode, TuffError> {
+    const left = parseTerm();
     if (!left.ok) {
       return left;
     }
@@ -46,7 +68,7 @@ export function parse(tokens: Token[], input: string): Result<AstNode, TuffError
     let op = tokens[index]?.kind;
     while (op === "plus" || op === "minus") {
       index += 1;
-      const right = parseNumber();
+      const right = parseTerm();
       if (!right.ok) {
         return right;
       }

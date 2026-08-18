@@ -12,7 +12,7 @@ export type NumberNode = { kind: "number"; value: number };
 /** A binary arithmetic node. */
 export type BinaryNode = {
   kind: "binary";
-  op: "plus" | "minus";
+  op: "plus" | "minus" | "times";
   left: AstNode;
   right: AstNode;
 };

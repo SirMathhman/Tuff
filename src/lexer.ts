@@ -1,7 +1,11 @@
 import type { TuffError } from "./errors.js";
 import type { Result } from "./result.js";
 
-export type Token = { kind: "number"; value: number } | { kind: "plus" } | { kind: "minus" };
+export type Token =
+  | { kind: "number"; value: number }
+  | { kind: "plus" }
+  | { kind: "minus" }
+  | { kind: "times" };
 
 function fail(input: string, message: string): Result<Token[], TuffError> {
   return {
@@ -42,6 +46,12 @@ export function lex(input: string): Result<Token[], TuffError> {
     // otherwise it starts a negative numeric literal.
     if (ch === "-" && tokens.length > 0) {
       tokens.push({ kind: "minus" });
+      i += 1;
+      continue;
+    }
+
+    if (ch === "*") {
+      tokens.push({ kind: "times" });
       i += 1;
       continue;
     }

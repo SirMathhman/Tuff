@@ -10,7 +10,8 @@ import type { Result } from "./result.js";
  * @param input - The expression to evaluate.
  * @returns A Result holding the numeric value, or a structured error.
  *          An empty (or whitespace-only) expression evaluates to 0.
- *          Numeric literals and binary `+`/`-` expressions are supported.
+ *          Numeric literals and binary `+`/`-`/`*` expressions are supported,
+ *          with `*` binding tighter than `+`/`-`.
  */
 export function evaluate(input: string): Result<number, TuffError> {
   const trimmed = input.trim();

@@ -17,5 +17,12 @@ export function evaluateAst(node: AstNode): number {
   const left = evaluateAst(node.left);
   const right = evaluateAst(node.right);
 
-  return node.op === "plus" ? left + right : left - right;
+  switch (node.op) {
+    case "plus":
+      return left + right;
+    case "minus":
+      return left - right;
+    case "times":
+      return left * right;
+  }
 }
