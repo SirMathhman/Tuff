@@ -28,6 +28,8 @@ Each layer depends only on the layer below it. No circular dependencies (enforce
   - **why** — the rule or expectation that was violated,
   - **how to fix** — an actionable hint for the user.
 - The CLI layer is the only place that converts errors into exit codes and console output.
+- **Tokens carry source positions from the lexer.** Every token is produced with its `{ offset, line, column }`, and every downstream error (parse, eval) derives its position from the token that triggered it. This makes "where" answerable at every layer without re-scanning the source.
+- The public API (`evaluate` and friends) returns `Result<number, TuffError>`; no public function throws.
 
 ## Testing
 
