@@ -25,7 +25,6 @@ export enum EvalErrorCode {
   ExpectedNumber = "ExpectedNumber",
   TrailingTokens = "TrailingTokens",
   ExpectedCloseParen = "ExpectedCloseParen",
-  UnbalancedParen = "UnbalancedParen",
 }
 
 interface EvalError {
