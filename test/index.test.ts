@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evaluate, EvalErrorCode } from "./index.ts";
+import { evaluate, EvalErrorCode } from "../src/index.ts";
 
 function valueOf(input: string): number {
   const result = evaluate(input);
