@@ -13,8 +13,13 @@ export function add(a: number, b: number): number {
  * @throws {Error} For any other input (not implemented yet).
  */
 export function evaluate(source: string): number {
-  if (source.trim() === "") {
+  const trimmed = source.trim();
+  if (trimmed === "") {
     return 0;
+  }
+  const value = Number(trimmed);
+  if (Number.isFinite(value)) {
+    return value;
   }
   throw new Error(`Not implemented: ${source}`);
 }

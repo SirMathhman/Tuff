@@ -19,6 +19,14 @@ describe("evaluate", () => {
     expect(evaluate("   ")).toBe(0);
   });
 
+  it('returns 1 for the numeric literal "1"', () => {
+    expect(evaluate("1")).toBe(1);
+  });
+
+  it('returns 3.14 for the decimal literal "3.14"', () => {
+    expect(evaluate("3.14")).toBe(3.14);
+  });
+
   it("throws for non-empty input", () => {
     expect(() => evaluate("1+1")).toThrow("Not implemented: 1+1");
   });
