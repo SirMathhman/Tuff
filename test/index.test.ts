@@ -93,6 +93,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("let x = 0; &x") => Err', () => {
+    const result = evaluate("let x = 0; &x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(EvalErrorCode.ReferenceInExpression);
+    }
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);
