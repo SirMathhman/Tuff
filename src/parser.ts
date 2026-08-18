@@ -1,5 +1,10 @@
 import { type ParseError, type ParseResult } from "./errors.js";
 import { isIdentifier, type Token } from "./tokenize.js";
+import {
+  parseDereference,
+  parseDereferenceAssignment,
+  parseReferenceBinding,
+} from "./reference.js";
 
 /**
  * A value binding: a number, whether it may be assigned, and the kind of
@@ -18,7 +23,13 @@ type ValueBinding = {
  * is unaffected by shadowing), with `mutable` indicating whether writes
  * through it are allowed.
  */
-type Binding = ValueBinding | { kind: "ref"; target: ValueBinding; mutable: boolean };
+export type Binding =
+  | ValueBinding
+  | {
+      kind: "ref";
+      target: ValueBinding;
+      mutable: boolean;
+    };
 
 /**
  * Recursive-descent parser over a token stream.
@@ -41,7 +52,7 @@ type Binding = ValueBinding | { kind: "ref"; target: ValueBinding; mutable: bool
 export class Parser {
   private pos = 0;
   private scopes: Map<string, Binding>[] = [];
-  private error: ParseError | null = null;
+  error: ParseError | null = null;
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -49,11 +60,11 @@ export class Parser {
     return this.pos >= this.tokens.length;
   }
 
-  private peek(): Token | undefined {
+  peek(): Token | undefined {
     return this.tokens[this.pos];
   }
 
-  private advance(): Token | undefined {
+  advance(): Token | undefined {
     return this.tokens[this.pos++];
   }
 
@@ -74,7 +85,7 @@ export class Parser {
    * from the binding's initialized kind. A non-literal right-hand side
    * (an expression or identifier) never mismatches.
    */
-  private checkTypeMismatch(
+  checkTypeMismatch(
     name: string,
     binding: ValueBinding,
     literal: "boolean" | "number" | null,
@@ -212,7 +223,7 @@ export class Parser {
       return value;
     }
     if (token === "*") {
-      return this.parseDereference();
+      return parseDereference(this);
     }
     if (isIdentifier(token)) {
       this.advance();
@@ -228,30 +239,6 @@ export class Parser {
       return binding.value;
     }
     return null;
-  }
-
-  /**
-   * Parses a dereference expression `*identifier`. The target must be a
-   * reference binding; otherwise an invalid-dereference error is recorded.
-   * Returns the current value of the referenced variable.
-   */
-  private parseDereference(): number | null {
-    this.advance(); // "*"
-    const name = this.peek();
-    if (name === undefined || !isIdentifier(name)) {
-      return null;
-    }
-    this.advance();
-    const binding = this.lookup(name);
-    if (binding === null) {
-      this.error = { kind: "unknown-variable", name };
-      return null;
-    }
-    if (binding.kind !== "ref") {
-      this.error = { kind: "invalid-dereference", name };
-      return null;
-    }
-    return binding.target.value;
   }
 
   /**
@@ -275,7 +262,7 @@ export class Parser {
     }
     this.advance();
     if (this.peek() === "&") {
-      const ref = this.parseReferenceBinding();
+      const ref = parseReferenceBinding(this);
       if (ref === null) {
         return false;
       }
@@ -305,44 +292,11 @@ export class Parser {
   }
 
   /**
-   * Parses a reference initializer `&identifier` or `&mut identifier`.
-   * The target must be a known value binding; `&mut` additionally requires
-   * the target to be a `mut` binding. Returns a reference binding that
-   * points directly at the target binding object.
-   */
-  private parseReferenceBinding(): Binding | null {
-    this.advance(); // "&"
-    let mutable = false;
-    if (this.peek() === "mut") {
-      this.advance();
-      mutable = true;
-    }
-    const name = this.peek();
-    if (name === undefined || !isIdentifier(name)) {
-      return null;
-    }
-    this.advance();
-    const binding = this.lookup(name);
-    if (binding === null) {
-      this.error = { kind: "unknown-variable", name };
-      return null;
-    }
-    if (binding.kind === "ref") {
-      return null;
-    }
-    if (mutable && !binding.mutable) {
-      this.error = { kind: "immutable-assignment", name };
-      return null;
-    }
-    return { kind: "ref", target: binding, mutable };
-  }
-
-  /**
    * Parses `= expression ;` and returns the parsed value together with the
    * literal kind of the right-hand side. Returns null when the right-hand
    * side is malformed.
    */
-  private parseAssignmentRhs(): { literal: "boolean" | "number" | null; value: number } | null {
+  parseAssignmentRhs(): { literal: "boolean" | "number" | null; value: number } | null {
     this.advance(); // "="
     const literal = this.literalKind();
     const value = this.parseExpression();
@@ -360,7 +314,7 @@ export class Parser {
    * Looks up a binding by name, recording an unknown-variable error and
    * returning null when it is not found.
    */
-  private lookupOrError(name: string): Binding | null {
+  lookupOrError(name: string): Binding | null {
     const binding = this.lookup(name);
     if (binding === null) {
       this.error = { kind: "unknown-variable", name };
@@ -376,7 +330,7 @@ export class Parser {
   private parseAssignmentStatement(): boolean {
     const first = this.peek();
     if (first === "*") {
-      return this.parseDereferenceAssignment();
+      return parseDereferenceAssignment(this);
     }
     const name = this.advance() as string;
     const rhs = this.parseAssignmentRhs();
@@ -401,37 +355,7 @@ export class Parser {
     return true;
   }
 
-  /**
-   * Parses `*identifier = expression ;`. The target must be a mutable
-   * reference binding; the write is applied to the referenced variable.
-   */
-  private parseDereferenceAssignment(): boolean {
-    this.advance(); // "*"
-    const name = this.advance() as string; // identifier (guaranteed by isAssignmentStart)
-    const rhs = this.parseAssignmentRhs();
-    if (rhs === null) {
-      return false;
-    }
-    const binding = this.lookupOrError(name);
-    if (binding === null) {
-      return false;
-    }
-    if (binding.kind !== "ref") {
-      this.error = { kind: "invalid-dereference", name };
-      return false;
-    }
-    if (!this.checkTypeMismatch(name, binding.target, rhs.literal)) {
-      return false;
-    }
-    if (!binding.mutable) {
-      this.error = { kind: "immutable-assignment", name };
-      return false;
-    }
-    binding.target.value = rhs.value;
-    return true;
-  }
-
-  private lookup(name: string): Binding | null {
+  lookup(name: string): Binding | null {
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       const binding = this.scopes[i].get(name);
       if (binding !== undefined) {
