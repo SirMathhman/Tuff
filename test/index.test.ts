@@ -106,6 +106,46 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
+    const result = evaluate("{ let x = 2 + 3; x } * 4");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(20);
+    }
+  });
+
+  test('evaluate("{ let x = 2 + 3; x * x }") => 25', () => {
+    const result = evaluate("{ let x = 2 + 3; x * x }");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(25);
+    }
+  });
+
+  test('evaluate("{ let x = 1; let y = x + 1; y }") => 2', () => {
+    const result = evaluate("{ let x = 1; let y = x + 1; y }");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(2);
+    }
+  });
+
+  test('evaluate("{ x }") => Err(ParseError)', () => {
+    const result = evaluate("{ x }");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
+  test('evaluate("{ let x = 5 }") => Err(ParseError)', () => {
+    const result = evaluate("{ let x = 5 }");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
   test('evaluate("2 - 3 * 4") => -10', () => {
     const result = evaluate("2 - 3 * 4");
     expect(result.ok).toBe(true);

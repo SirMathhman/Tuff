@@ -46,32 +46,70 @@ function parseNumber(
   return { ok: true, value: [Number(match[0]), pos + match[0].length] };
 }
 
+type Scope = Map<string, number>;
+
+const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*/;
+
+function parseIdentifier(
+  input: string,
+  pos: number,
+): Result<[string, number], ParseFailure> {
+  const match = IDENTIFIER_PATTERN.exec(input.slice(pos));
+  if (!match) {
+    return {
+      ok: false,
+      error: { position: pos, reason: "expected an identifier" },
+    };
+  }
+  return { ok: true, value: [match[0], pos + match[0].length] };
+}
+
 function parseFactor(
   input: string,
   pos: number,
+  scope: Scope,
 ): Result<[number, number], ParseFailure> {
   pos = skipWhitespace(input, pos);
   if (input[pos] === "-") {
-    const inner = parseFactor(input, pos + 1);
+    const inner = parseFactor(input, pos + 1, scope);
     if (!inner.ok) {
       return inner;
     }
     return { ok: true, value: [-inner.value[0], inner.value[1]] };
   }
-  if (input[pos] === "(" || input[pos] === "{") {
-    const close = input[pos] === "(" ? ")" : "}";
-    const inner = parseExpression(input, pos + 1);
+  if (input[pos] === "(") {
+    const inner = parseExpression(input, pos + 1, scope);
     if (!inner.ok) {
       return inner;
     }
     const closePos = skipWhitespace(input, inner.value[1]);
-    if (input.charAt(closePos) !== close) {
+    if (input.charAt(closePos) !== ")") {
       return {
         ok: false,
-        error: { position: closePos, reason: `expected '${close}'` },
+        error: { position: closePos, reason: "expected ')'" },
       };
     }
     return { ok: true, value: [inner.value[0], closePos + 1] };
+  }
+  if (input[pos] === "{") {
+    return parseBlock(input, pos + 1, scope);
+  }
+  if (/[A-Za-z_]/.test(input.charAt(pos))) {
+    const ident = parseIdentifier(input, pos);
+    if (!ident.ok) {
+      return ident;
+    }
+    const value = scope.get(ident.value[0]);
+    if (value === undefined) {
+      return {
+        ok: false,
+        error: {
+          position: pos,
+          reason: `unknown variable '${ident.value[0]}'`,
+        },
+      };
+    }
+    return { ok: true, value: [value, ident.value[1]] };
   }
   return parseNumber(input, pos);
 }
@@ -79,8 +117,9 @@ function parseFactor(
 function parseTerm(
   input: string,
   pos: number,
+  scope: Scope,
 ): Result<[number, number], ParseFailure> {
-  const first = parseFactor(input, pos);
+  const first = parseFactor(input, pos, scope);
   if (!first.ok) {
     return first;
   }
@@ -90,7 +129,7 @@ function parseTerm(
     if (input.charAt(opPos) !== "*") {
       break;
     }
-    const right = parseFactor(input, opPos + 1);
+    const right = parseFactor(input, opPos + 1, scope);
     if (!right.ok) {
       return right;
     }
@@ -103,8 +142,9 @@ function parseTerm(
 function parseExpression(
   input: string,
   pos: number,
+  scope: Scope,
 ): Result<[number, number], ParseFailure> {
-  const first = parseTerm(input, pos);
+  const first = parseTerm(input, pos, scope);
   if (!first.ok) {
     return first;
   }
@@ -115,7 +155,7 @@ function parseExpression(
     if (op !== "+" && op !== "-") {
       break;
     }
-    const right = parseTerm(input, opPos + 1);
+    const right = parseTerm(input, opPos + 1, scope);
     if (!right.ok) {
       return right;
     }
@@ -123,6 +163,75 @@ function parseExpression(
     next = right.value[1];
   }
   return { ok: true, value: [value, next] };
+}
+
+function parseBlock(
+  input: string,
+  pos: number,
+  scope: Scope,
+): Result<[number, number], ParseFailure> {
+  const child = new Map(scope);
+  for (;;) {
+    pos = skipWhitespace(input, pos);
+    if (input.charAt(pos) === "}") {
+      return {
+        ok: false,
+        error: { position: pos, reason: "expected an expression in block" },
+      };
+    }
+    if (
+      input.startsWith("let", pos) &&
+      !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
+    ) {
+      let p = skipWhitespace(input, pos + 3);
+      const ident = parseIdentifier(input, p);
+      if (!ident.ok) {
+        return ident;
+      }
+      const name = ident.value[0];
+      p = skipWhitespace(input, ident.value[1]);
+      if (input.charAt(p) !== "=") {
+        return {
+          ok: false,
+          error: {
+            position: p,
+            reason: `expected '=' after variable name '${name}'`,
+          },
+        };
+      }
+      p = skipWhitespace(input, p + 1);
+      const expr = parseExpression(input, p, child);
+      if (!expr.ok) {
+        return expr;
+      }
+      child.set(name, expr.value[0]);
+      p = skipWhitespace(input, expr.value[1]);
+      if (input.charAt(p) === ";") {
+        pos = skipWhitespace(input, p + 1);
+        continue;
+      }
+      return {
+        ok: false,
+        error: { position: p, reason: "expected ';' after a 'let' statement" },
+      };
+    }
+    const expr = parseExpression(input, pos, child);
+    if (!expr.ok) {
+      return expr;
+    }
+    pos = skipWhitespace(input, expr.value[1]);
+    if (input.charAt(pos) === ";") {
+      pos = skipWhitespace(input, pos + 1);
+      continue;
+    }
+    if (input.charAt(pos) === "}") {
+      return { ok: true, value: [expr.value[0], pos + 1] };
+    }
+    return {
+      ok: false,
+      error: { position: pos, reason: "expected ';' or '}' after expression" },
+    };
+  }
 }
 
 function parseError(
@@ -136,7 +245,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3").',
+      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3"), with "let" bindings inside braces (e.g. "{ let x = 1 + 2; x }").',
   };
 }
 
@@ -175,7 +284,7 @@ export function evaluate(input: string): Result<number, EvaluateError> {
       error: parseError(input, tooDeep.position, tooDeep.reason),
     };
   }
-  const parsed = parseExpression(input, start);
+  const parsed = parseExpression(input, start, new Map());
   if (!parsed.ok) {
     return {
       ok: false,
