@@ -51,14 +51,47 @@ describe("evaluate", () => {
     }
   });
 
-  it("returns a not-implemented error for chained addition", () => {
-    const result = evaluate("1 + 2 + 3");
+  it('returns 6 for the chained addition expression "1 + 2 + 3"', () => {
+    expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
+  });
+
+  it('returns 10 for the 4-term chained addition expression "1+2+3+4"', () => {
+    expect(evaluate("1+2+3+4")).toEqual({ ok: true, value: 10 });
+  });
+
+  it("returns an invalid-literal error when a chain term is malformed", () => {
+    const result = evaluate("1 + 2 + 1.2.3");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("invalid-literal");
+      expect(result.error.offset).toBe(8);
+    }
+  });
+
+  it("returns a not-implemented error for a chain starting with a minus", () => {
+    const result = evaluate("-1 + 2 + 3");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.kind).toBe("not-implemented");
-      expect(result.error.source).toBe("1 + 2 + 3");
+      expect(result.error.offset).toBe(0);
+    }
+  });
+
+  it("returns a not-implemented error for four literals with no operators", () => {
+    const result = evaluate("1 2 3 4");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("not-implemented");
+      expect(result.error.offset).toBe(0);
+    }
+  });
+
+  it("returns a not-implemented error for a chain with a trailing operator", () => {
+    const result = evaluate("1 + 2 +");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("not-implemented");
       expect(result.error.offset).toBe(2);
-      expect(result.error.message).toContain("not supported yet");
     }
   });
 

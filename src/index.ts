@@ -1,4 +1,4 @@
-import { tokenize } from "./lexer.js";
+import { tokenize, type Token } from "./lexer.js";
 
 /**
  * Entry point for the Tuff compiler.
@@ -53,11 +53,27 @@ function invalidLiteral(source: string, offset: number, value: string): EvalResu
 }
 
 /**
+ * Checks whether a token sequence is an addition chain: a number followed by
+ * any number of "plus number" pairs.
+ */
+function isAdditionChain(tokens: Token[]): boolean {
+  if (tokens[0].kind !== "number") {
+    return false;
+  }
+  for (let i = 1; i < tokens.length; i += 2) {
+    if (tokens[i].kind !== "plus" || tokens[i + 1]?.kind !== "number") {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Evaluates a source expression.
  *
  * Supported: numeric literals (including a leading minus, e.g. "-5") and
- * addition of two numeric literals ("a + b"). Everything else yields a
- * structured error.
+ * addition chains of numeric literals ("a + b", "a + b + c", ...).
+ * Everything else yields a structured error.
  *
  * @param source - The source expression to evaluate.
  * @returns The evaluated value, or a structured error describing the problem.
@@ -107,6 +123,19 @@ export function evaluate(source: string): EvalResult {
         `Subtraction is not implemented yet. Only numeric literals and "a + b" expressions are supported.`,
       );
     }
+  }
+  if (tokens.length >= 4 && isAdditionChain(tokens)) {
+    let sum = 0;
+    for (const token of tokens) {
+      if (token.kind === "number") {
+        const value = Number(token.value);
+        if (!Number.isFinite(value)) {
+          return invalidLiteral(source, token.offset, token.value);
+        }
+        sum += value;
+      }
+    }
+    return { ok: true, value: sum };
   }
   const firstOp = tokens.find((t) => t.kind !== "number");
   return unsupportedExpression(source, firstOp ? firstOp.offset : tokens[0].offset);
