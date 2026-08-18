@@ -20,7 +20,8 @@
     "lint:typecheck": "tsc --noEmit",
     "lint:eslint": "eslint .",
     "lint:pmd:cpd": "pmd cpd --minimum-tokens 100 --language typescript src",
-    "madge:visualize": "pnpx madge ./src --image ./docs/graph.svg --extensions ts"
+    "madge:visualize": "madge ./src --image ./docs/graph.svg --extensions ts",
+    "madge:circular": "madge ./src --extensions ts --circular"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

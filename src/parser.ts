@@ -1,5 +1,6 @@
 import { type ParseError, type ParseResult } from "./errors.js";
 import { isIdentifier, type Token } from "./tokenize.js";
+import { type Binding, type ParserApi, type ValueBinding } from "./parser-api.js";
 import {
   parseDereference,
   parseDereferenceAssignment,
@@ -8,30 +9,7 @@ import {
 import { parseIfExpression } from "./if-expression.js";
 import { parseStatementBlock } from "./statement-block.js";
 
-/**
- * A value binding: a number, whether it may be assigned, and the kind of
- * value it was initialized with (a boolean literal or a number).
- */
-type ValueBinding = {
-  kind: "value";
-  value: number;
-  mutable: boolean;
-  literal: "number" | "boolean";
-};
-
-/**
- * A variable binding. A `value` binding holds a number; a `ref` binding
- * points directly at a value binding object (so it tracks reassignment and
- * is unaffected by shadowing), with `mutable` indicating whether writes
- * through it are allowed.
- */
-export type Binding =
-  | ValueBinding
-  | {
-      kind: "ref";
-      target: ValueBinding;
-      mutable: boolean;
-    };
+export type { Binding } from "./parser-api.js";
 
 /**
  * Recursive-descent parser over a token stream.
@@ -53,7 +31,7 @@ export type Binding =
  *   assignmentStatement = identifier '=' expression ';'
  *                      | '*' identifier '=' expression ';'
  */
-export class Parser {
+export class Parser implements ParserApi {
   pos = 0;
   scopes: Map<string, Binding>[] = [];
   error: ParseError | null = null;

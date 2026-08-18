@@ -1,12 +1,12 @@
 import { isIdentifier } from "./tokenize.js";
-import type { Binding, Parser } from "./parser.js";
+import type { Binding, ParserApi } from "./parser-api.js";
 
 /**
  * Parses a dereference expression `*identifier`. The target must be a
  * reference binding; otherwise an invalid-dereference error is recorded.
  * Returns the current value of the referenced variable.
  */
-export function parseDereference(parser: Parser): number | null {
+export function parseDereference(parser: ParserApi): number | null {
   parser.advance(); // "*"
   const name = parser.peek();
   if (name === undefined || !isIdentifier(name)) {
@@ -31,7 +31,7 @@ export function parseDereference(parser: Parser): number | null {
  * the target to be a `mut` binding. Returns a reference binding that
  * points directly at the target binding object.
  */
-export function parseReferenceBinding(parser: Parser): Binding | null {
+export function parseReferenceBinding(parser: ParserApi): Binding | null {
   parser.advance(); // "&"
   let mutable = false;
   if (parser.peek() === "mut") {
@@ -62,7 +62,7 @@ export function parseReferenceBinding(parser: Parser): Binding | null {
  * Parses `*identifier = expression ;`. The target must be a mutable
  * reference binding; the write is applied to the referenced variable.
  */
-export function parseDereferenceAssignment(parser: Parser): boolean {
+export function parseDereferenceAssignment(parser: ParserApi): boolean {
   parser.advance(); // "*"
   const name = parser.advance() as string; // identifier (guaranteed by isAssignmentStart)
   const rhs = parser.parseAssignmentRhs();

@@ -1,4 +1,4 @@
-import type { Parser } from "./parser.js";
+import type { ParserApi } from "./parser-api.js";
 
 /**
  * Parses an if expression `if (condition) then else other`. The
@@ -6,7 +6,7 @@ import type { Parser } from "./parser.js";
  * the then branch, otherwise the else branch. Both branches are full
  * expressions. Returns null when the expression is malformed.
  */
-export function parseIfExpression(parser: Parser): number | null {
+export function parseIfExpression(parser: ParserApi): number | null {
   parser.advance(); // "if"
   if (parser.peek() !== "(") {
     return null;

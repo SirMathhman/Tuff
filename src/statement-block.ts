@@ -1,4 +1,4 @@
-import type { Parser } from "./parser.js";
+import type { ParserApi } from "./parser-api.js";
 
 /**
  * Parses a statement block `{` statement* `}`. Unlike a block used as an
@@ -8,7 +8,7 @@ import type { Parser } from "./parser.js";
  * caller is left to parse it as an expression. Returns false only when a
  * statement inside the block is malformed.
  */
-export function parseStatementBlock(parser: Parser): boolean {
+export function parseStatementBlock(parser: ParserApi): boolean {
   const startPos = parser.pos;
   parser.advance(); // "{"
   parser.scopes.push(new Map());
