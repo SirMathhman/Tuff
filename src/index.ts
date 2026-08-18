@@ -3,7 +3,8 @@
  */
 export type EvaluateError =
   | { kind: "invalid-number"; input: string; reason: string }
-  | { kind: "malformed-expression"; input: string; reason: string };
+  | { kind: "malformed-expression"; input: string; reason: string }
+  | { kind: "unknown-variable"; input: string; name: string; reason: string };
 
 /**
  * The result of evaluating a Tuff expression.
@@ -14,9 +15,12 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
  * Evaluates a Tuff expression.
  *
  * Supports addition, subtraction, and multiplication, as well as
- * parentheses or curly braces for grouping. Multiplication binds tighter
- * than addition and subtraction, which are evaluated left to right. Empty
- * input is a defined case and evaluates to 0.
+ * parentheses or curly braces for grouping. Curly braces may also open a
+ * block of `let` statements followed by a final expression, e.g.
+ * `{ let x = 2 + 3; x }`; variables are only visible inside the block
+ * that declares them. Multiplication binds tighter than addition and
+ * subtraction, which are evaluated left to right. Empty input is a defined
+ * case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
@@ -38,6 +42,17 @@ export function evaluate(input: string): EvaluateResult {
 
   const parser = new Parser(tokens);
   const value = parser.parseExpression();
+  if (parser.unknownVariable !== null) {
+    return {
+      ok: false,
+      error: {
+        kind: "unknown-variable",
+        input,
+        name: parser.unknownVariable,
+        reason: `Unknown variable "${parser.unknownVariable}" in "${input}"`,
+      },
+    };
+  }
   if (value === null || !parser.atEnd()) {
     return {
       ok: false,
@@ -51,7 +66,27 @@ export function evaluate(input: string): EvaluateResult {
   return { ok: true, value };
 }
 
-type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}";
+type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}" | "let" | "=" | ";" | string;
+
+/**
+ * All non-identifier string tokens. Identifiers are any other string.
+ */
+const NON_IDENTIFIERS: ReadonlySet<string> = new Set([
+  "let",
+  "=",
+  ";",
+  "+",
+  "-",
+  "*",
+  "(",
+  ")",
+  "{",
+  "}",
+]);
+
+function isIdentifier(token: Token): token is string {
+  return typeof token === "string" && !NON_IDENTIFIERS.has(token);
+}
 
 /**
  * Splits an expression into tokens, or returns null when the input
@@ -59,7 +94,7 @@ type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}";
  */
 function tokenize(input: string): Token[] | null {
   const tokens: Token[] = [];
-  const pattern = /(\d+(?:\.\d+)?)|([(){}])|([*+-])/g;
+  const pattern = /(\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|([(){}=;])|([*+-])/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(input)) !== null) {
@@ -69,9 +104,11 @@ function tokenize(input: string): Token[] | null {
     if (match[1] !== undefined) {
       tokens.push(Number(match[1]));
     } else if (match[2] !== undefined) {
-      tokens.push(match[2] as "(" | ")" | "{" | "}");
+      tokens.push(match[2] === "let" ? "let" : match[2]);
+    } else if (match[3] !== undefined) {
+      tokens.push(match[3] as "(" | ")" | "{" | "}" | "=" | ";");
     } else {
-      tokens.push(match[3] as "+" | "-" | "*");
+      tokens.push(match[4] as "+" | "-" | "*");
     }
     lastIndex = pattern.lastIndex;
   }
@@ -85,12 +122,16 @@ function tokenize(input: string): Token[] | null {
  * Recursive-descent parser over a token stream.
  *
  * Grammar:
- *   expression = term (('+' | '-') term)*
- *   term       = factor ('*' factor)*
- *   factor     = number | '(' expression ')'
+ *   expression   = term (('+' | '-') term)*
+ *   term         = factor ('*' factor)*
+ *   factor       = number | identifier | '(' expression ')' | block
+ *   block        = '{' letStatement* expression '}'
+ *   letStatement = 'let' identifier '=' expression ';'
  */
 class Parser {
   private pos = 0;
+  private scopes: Map<string, number>[] = [];
+  unknownVariable: string | null = null;
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -149,13 +190,72 @@ class Parser {
     }
     if (token === "(" || token === "{") {
       this.advance();
+      if (token === "{") {
+        this.scopes.push(new Map());
+        while (this.peek() === "let") {
+          if (!this.parseLetStatement()) {
+            this.scopes.pop();
+            return null;
+          }
+        }
+      }
       const value = this.parseExpression();
       const expected = token === "(" ? ")" : "}";
-      if (value === null || this.peek() !== expected) {
+      const closed = value !== null && this.peek() === expected;
+      if (token === "{") {
+        this.scopes.pop();
+      }
+      if (!closed) {
         return null;
       }
       this.advance();
       return value;
+    }
+    if (isIdentifier(token)) {
+      this.advance();
+      const value = this.lookup(token);
+      if (value === null) {
+        this.unknownVariable = token;
+        return null;
+      }
+      return value;
+    }
+    return null;
+  }
+
+  /**
+   * Parses `let identifier = expression ;`. The current block's scope must
+   * already be pushed. Returns false when the statement is malformed.
+   */
+  private parseLetStatement(): boolean {
+    this.advance(); // "let"
+    const name = this.peek();
+    if (name === undefined || !isIdentifier(name)) {
+      return false;
+    }
+    this.advance();
+    if (this.peek() !== "=") {
+      return false;
+    }
+    this.advance();
+    const value = this.parseExpression();
+    if (value === null) {
+      return false;
+    }
+    if (this.peek() !== ";") {
+      return false;
+    }
+    this.advance();
+    this.scopes[this.scopes.length - 1].set(name, value);
+    return true;
+  }
+
+  private lookup(name: string): number | null {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const value = this.scopes[i].get(name);
+      if (value !== undefined) {
+        return value;
+      }
     }
     return null;
   }
