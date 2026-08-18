@@ -24,6 +24,12 @@ Each layer depends only on the layer below it. No circular dependencies (enforce
 - Compiler internals (`tokenize`, `parseExpression`, AST types) are implementation details of the `compiler/` layer. They may be exported from their own modules for per-layer testing, but consumers of the package should only depend on `index.ts`.
 - Adding a feature (new operator, new delimiter, new error kind) must not require editing more than one layer's file plus `errors.ts` if a new error variant is needed.
 
+## Public API Surface
+
+- `src/index.ts` is the only public entry point. It exposes `evaluate` (and any future top-level entry points) plus re-exports of the shared types (`Result`, `SourcePosition`, `TuffError`).
+- Compiler internals (`tokenize`, `parseExpression`, AST types) are implementation details of the `compiler/` layer. They may be exported from their own modules for per-layer testing, but consumers of the package should only depend on `index.ts`.
+- Adding a feature (new operator, new delimiter, new error kind) must not require editing more than one layer's file plus `errors.ts` if a new error variant is needed.
+
 ## Error Handling
 
 - No thrown exceptions across module boundaries. Fallible operations return a Result:
