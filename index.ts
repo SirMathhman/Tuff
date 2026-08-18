@@ -14,7 +14,7 @@ type Token = NumToken | OpToken;
  * Structured error codes for `evaluate`. Each error answers:
  * what happened, where, why it's an error, and how to fix it.
  */
-enum EvalErrorCode {
+export enum EvalErrorCode {
   UnexpectedCharacter = "UnexpectedCharacter",
   UnexpectedEnd = "UnexpectedEnd",
   ExpectedNumber = "ExpectedNumber",
@@ -40,6 +40,8 @@ interface EvalFailure {
   ok: false;
   error: EvalError;
 }
+
+type EvalResult = EvalSuccess | EvalFailure;
 
 interface TokenizeSuccess extends EvalSuccess {
   tokens: Token[];
@@ -151,14 +153,18 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
   );
 }
 
-export function evaluate(input: string): number {
-  if (input === "") return 0;
+export function evaluate(input: string): EvalResult {
+  if (input === "") return { ok: true, value: 0 };
   const tokens = tokenize(input);
-  if (!tokens.ok || !tokens.tokens) return 0;
+  if (!tokens.ok) return tokens;
   const result = parseExpression(tokens.tokens, 0);
-  if (!result.ok) return 0;
+  if (!result.ok) return result;
   if (result.next !== tokens.tokens.length) {
-    return 0;
+    return err(
+      EvalErrorCode.TrailingTokens,
+      input,
+      "Unexpected trailing tokens. Remove extra characters or operators.",
+    );
   }
-  return result.value;
+  return { ok: true, value: result.value };
 }
