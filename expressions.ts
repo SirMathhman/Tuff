@@ -84,6 +84,9 @@ export function parseFactor(
     );
   }
   if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
+  if (tok.type === "bool") {
+    return { ok: true, value: tok.value ? 1 : 0, next: pos + 1 };
+  }
   if (tok.type === "op" && tok.op === "*") {
     // Unary dereference: "*y" where y is a reference binding.
     const inner = tokens[pos + 1];
