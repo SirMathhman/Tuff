@@ -22,7 +22,7 @@ class Parser {
     return {
       ok: false,
       error: {
-        kind: "unsupported_expression",
+        kind: "unexpected_token",
         input: this.input,
         position,
         message,
@@ -54,10 +54,17 @@ class Parser {
       }
 
       if (this.tokens[this.index]?.kind !== expectedCloser) {
-        return this.fail(
-          this.posAt(this.index),
-          `Expected a closing ${token.kind === "lparen" ? "parenthesis" : "brace"}`,
-        );
+        const delimiter = token.kind === "lparen" ? "parenthesis" : "brace";
+        return {
+          ok: false,
+          error: {
+            kind: "unclosed_delimiter",
+            input: this.input,
+            position: this.posAt(this.index),
+            delimiter,
+            message: `Expected a closing ${delimiter}`,
+          },
+        };
       }
 
       this.index += 1;

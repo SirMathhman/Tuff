@@ -43,7 +43,7 @@ describe("evaluate", () => {
     expect(result.ok).toBe(false);
 
     if (!result.ok) {
-      expect(result.error.kind).toBe("unsupported_expression");
+      expect(result.error.kind).toBe("unexpected_token");
       expect(result.error.input).toBe("1 +");
       expect(result.error.position).toEqual({ line: 1, column: 4 });
     }
@@ -55,7 +55,8 @@ describe("evaluate", () => {
     expect(result.ok).toBe(false);
 
     if (!result.ok) {
-      expect(result.error.kind).toBe("unsupported_expression");
+      expect(result.error.kind).toBe("unexpected_character");
+      expect(result.error.character).toBe("x");
       expect(result.error.position).toEqual({ line: 1, column: 5 });
     }
   });

@@ -15,15 +15,16 @@ export type Token =
 function fail(
   input: string,
   position: SourcePosition,
-  message: string,
+  character: string,
 ): Result<Token[], TuffError> {
   return {
     ok: false,
     error: {
-      kind: "unsupported_expression",
+      kind: "unexpected_character",
       input,
       position,
-      message,
+      character,
+      message: `Unexpected character ${JSON.stringify(character)}`,
     },
   };
 }
@@ -89,11 +90,7 @@ export function lex(input: string): Result<Token[], TuffError> {
       continue;
     }
 
-    return fail(
-      input,
-      { line, column },
-      `Unexpected character ${JSON.stringify(ch)} at line ${line}, column ${column}`,
-    );
+    return fail(input, { line, column }, ch);
   }
 
   return { ok: true, value: tokens };

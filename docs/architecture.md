@@ -33,8 +33,13 @@ evaluator  → value (src/evaluator.ts)
 
 - No exceptions. Every fallible function returns a Result:
   `{ ok: true; value: T } | { ok: false; error: E }`.
-- Errors are structured (discriminated union / enum-like), not bare strings.
-  Each error answers: what happened, where (source position), why it is an
+- Errors are a discriminated union keyed on `kind` (one variant per failure
+  mode, e.g. `unexpected_character`, `unexpected_token`, `unclosed_delimiter`),
+  not bare strings. Each variant carries only the data that distinguishes it
+  (e.g. the offending character, the expected delimiter) plus a `message`
+  that does not duplicate data already in the structure (positions are
+  reported via `position`, never embedded in `message`).
+- Each error answers: what happened, where (source position), why it is an
   error, and how to fix it.
 - Errors carry source positions (line/column) from the lexer so diagnostics
   can point at the offending input.
