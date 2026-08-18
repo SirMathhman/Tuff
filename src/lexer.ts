@@ -8,7 +8,9 @@ export type Token =
   | { kind: "minus"; pos: SourcePosition }
   | { kind: "times"; pos: SourcePosition }
   | { kind: "lparen"; pos: SourcePosition }
-  | { kind: "rparen"; pos: SourcePosition };
+  | { kind: "rparen"; pos: SourcePosition }
+  | { kind: "lbrace"; pos: SourcePosition }
+  | { kind: "rbrace"; pos: SourcePosition };
 
 function fail(
   input: string,
@@ -26,12 +28,17 @@ function fail(
   };
 }
 
-const OPERATORS: Record<string, "plus" | "minus" | "times" | "lparen" | "rparen"> = {
+const OPERATORS: Record<
+  string,
+  "plus" | "minus" | "times" | "lparen" | "rparen" | "lbrace" | "rbrace"
+> = {
   "+": "plus",
   "-": "minus",
   "*": "times",
   "(": "lparen",
   ")": "rparen",
+  "{": "lbrace",
+  "}": "rbrace",
 };
 
 /**

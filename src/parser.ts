@@ -44,15 +44,20 @@ class Parser {
       return { ok: true, value: { kind: "number", value: token.value } };
     }
 
-    if (token?.kind === "lparen") {
+    // Parentheses and braces are interchangeable grouping delimiters.
+    if (token?.kind === "lparen" || token?.kind === "lbrace") {
+      const expectedCloser = token.kind === "lparen" ? "rparen" : "rbrace";
       this.index += 1;
       const inner = this.parseExpression();
       if (!inner.ok) {
         return inner;
       }
 
-      if (this.tokens[this.index]?.kind !== "rparen") {
-        return this.fail(this.posAt(this.index), "Expected a closing parenthesis");
+      if (this.tokens[this.index]?.kind !== expectedCloser) {
+        return this.fail(
+          this.posAt(this.index),
+          `Expected a closing ${token.kind === "lparen" ? "parenthesis" : "brace"}`,
+        );
       }
 
       this.index += 1;
