@@ -13,6 +13,10 @@ describe("evaluate", () => {
     expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
   });
 
+  it('returns 6 for the input "1 + 2 + 3"', () => {
+    expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
+  });
+
   it("returns the parsed number for valid numeric input", () => {
     expect(evaluate("42")).toEqual({ ok: true, value: 42 });
   });
