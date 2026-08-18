@@ -24,20 +24,36 @@ function fail(input: string, message: string): Result<AstNode, TuffError> {
 export function parse(tokens: Token[], input: string): Result<AstNode, TuffError> {
   let index = 0;
 
-  function parseNumber(): Result<AstNode, TuffError> {
+  // A primary is a number or a parenthesized expression.
+  function parsePrimary(): Result<AstNode, TuffError> {
     const token = tokens[index];
 
-    if (token?.kind !== "number") {
-      return fail(input, "Expected a number");
+    if (token?.kind === "number") {
+      index += 1;
+      return { ok: true, value: { kind: "number", value: token.value } };
     }
 
-    index += 1;
-    return { ok: true, value: { kind: "number", value: token.value } };
+    if (token?.kind === "lparen") {
+      index += 1;
+      const inner = parseExpression();
+      if (!inner.ok) {
+        return inner;
+      }
+
+      if (tokens[index]?.kind !== "rparen") {
+        return fail(input, "Expected a closing parenthesis");
+      }
+
+      index += 1;
+      return inner;
+    }
+
+    return fail(input, "Expected a number or parenthesized expression");
   }
 
-  // A term is a number with `*` applied (higher precedence than `+`/`-`).
+  // A term is a primary with `*` applied (higher precedence than `+`/`-`).
   function parseTerm(): Result<AstNode, TuffError> {
-    const left = parseNumber();
+    const left = parsePrimary();
     if (!left.ok) {
       return left;
     }
@@ -46,7 +62,7 @@ export function parse(tokens: Token[], input: string): Result<AstNode, TuffError
 
     while (tokens[index]?.kind === "times") {
       index += 1;
-      const right = parseNumber();
+      const right = parsePrimary();
       if (!right.ok) {
         return right;
       }

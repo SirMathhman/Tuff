@@ -5,7 +5,9 @@ export type Token =
   | { kind: "number"; value: number }
   | { kind: "plus" }
   | { kind: "minus" }
-  | { kind: "times" };
+  | { kind: "times" }
+  | { kind: "lparen" }
+  | { kind: "rparen" };
 
 function fail(input: string, message: string): Result<Token[], TuffError> {
   return {
@@ -52,6 +54,18 @@ export function lex(input: string): Result<Token[], TuffError> {
 
     if (ch === "*") {
       tokens.push({ kind: "times" });
+      i += 1;
+      continue;
+    }
+
+    if (ch === "(") {
+      tokens.push({ kind: "lparen" });
+      i += 1;
+      continue;
+    }
+
+    if (ch === ")") {
+      tokens.push({ kind: "rparen" });
       i += 1;
       continue;
     }
