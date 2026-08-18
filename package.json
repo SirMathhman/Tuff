@@ -16,7 +16,7 @@
   "main": "./src/index.ts",
   "scripts": {
     "test:jest": "jest",
-    "format:prettier": "prettier --check .",
+    "format:prettier": "prettier --write .",
     "lint:typecheck": "tsc --noEmit",
     "lint:eslint": "eslint .",
     "lint:pmd:cpd": "pmd cpd --minimum-tokens 100 --language typescript src",
