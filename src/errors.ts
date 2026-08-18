@@ -12,3 +12,16 @@ export type EvaluateError =
  * The result of evaluating a Tuff expression.
  */
 export type EvaluateResult = { ok: true; value: number } | { ok: false; error: EvaluateError };
+
+/**
+ * A parse failure recorded by the parser, before it is mapped to an
+ * `EvaluateError` (which adds the input and a human-readable reason).
+ */
+export type ParseError =
+  | { kind: "malformed-expression" }
+  | { kind: "unknown-variable" | "immutable-assignment" | "invalid-dereference"; name: string };
+
+/**
+ * The result of parsing a token stream.
+ */
+export type ParseResult = { ok: true; value: number } | { ok: false; error: ParseError };

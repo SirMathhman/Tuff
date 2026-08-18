@@ -1,3 +1,4 @@
+import { type ParseError, type ParseResult } from "./errors.js";
 import { isIdentifier, type Token } from "./tokenize.js";
 
 /**
@@ -33,13 +34,11 @@ type Binding = ValueBinding | { kind: "ref"; target: ValueBinding; mutable: bool
 export class Parser {
   private pos = 0;
   private scopes: Map<string, Binding>[] = [];
-  unknownVariable: string | null = null;
-  immutableVariable: string | null = null;
-  invalidDereference: string | null = null;
+  private error: ParseError | null = null;
 
   constructor(private readonly tokens: Token[]) {}
 
-  atEnd(): boolean {
+  private atEnd(): boolean {
     return this.pos >= this.tokens.length;
   }
 
@@ -55,15 +54,17 @@ export class Parser {
    * Parses the top-level program: zero or more `let` statements followed
    * by a final expression, in a fresh top-level scope.
    */
-  parseProgram(): number | null {
+  parseProgram(): ParseResult {
     this.scopes.push(new Map());
-    if (!this.parseStatements()) {
-      this.scopes.pop();
-      return null;
-    }
-    const value = this.parseExpression();
+    const value = this.parseStatements() ? this.parseExpression() : null;
     this.scopes.pop();
-    return value;
+    if (this.error !== null) {
+      return { ok: false, error: this.error };
+    }
+    if (value === null || !this.atEnd()) {
+      return { ok: false, error: { kind: "malformed-expression" } };
+    }
+    return { ok: true, value };
   }
 
   /**
@@ -104,7 +105,7 @@ export class Parser {
     return isIdentifier(token) && this.tokens[this.pos + 1] === "=";
   }
 
-  parseExpression(): number | null {
+  private parseExpression(): number | null {
     let value = this.parseTerm();
     if (value === null) {
       return null;
@@ -173,7 +174,7 @@ export class Parser {
       this.advance();
       const binding = this.lookup(token);
       if (binding === null) {
-        this.unknownVariable = token;
+        this.error = { kind: "unknown-variable", name: token };
         return null;
       }
       if (binding.kind === "ref") {
@@ -198,11 +199,11 @@ export class Parser {
     this.advance();
     const binding = this.lookup(name);
     if (binding === null) {
-      this.unknownVariable = name;
+      this.error = { kind: "unknown-variable", name };
       return null;
     }
     if (binding.kind !== "ref") {
-      this.invalidDereference = name;
+      this.error = { kind: "invalid-dereference", name };
       return null;
     }
     return binding.target.value;
@@ -272,14 +273,14 @@ export class Parser {
     this.advance();
     const binding = this.lookup(name);
     if (binding === null) {
-      this.unknownVariable = name;
+      this.error = { kind: "unknown-variable", name };
       return null;
     }
     if (binding.kind === "ref") {
       return null;
     }
     if (mutable && !binding.mutable) {
-      this.immutableVariable = name;
+      this.error = { kind: "immutable-assignment", name };
       return null;
     }
     return { kind: "ref", target: binding, mutable };
@@ -306,14 +307,14 @@ export class Parser {
     this.advance();
     const binding = this.lookup(name);
     if (binding === null) {
-      this.unknownVariable = name;
+      this.error = { kind: "unknown-variable", name };
       return false;
     }
     if (binding.kind === "ref") {
       return false;
     }
     if (!binding.mutable) {
-      this.immutableVariable = name;
+      this.error = { kind: "immutable-assignment", name };
       return false;
     }
     binding.value = value;
@@ -338,15 +339,15 @@ export class Parser {
     this.advance();
     const binding = this.lookup(name);
     if (binding === null) {
-      this.unknownVariable = name;
+      this.error = { kind: "unknown-variable", name };
       return false;
     }
     if (binding.kind !== "ref") {
-      this.invalidDereference = name;
+      this.error = { kind: "invalid-dereference", name };
       return false;
     }
     if (!binding.mutable) {
-      this.immutableVariable = name;
+      this.error = { kind: "immutable-assignment", name };
       return false;
     }
     binding.target.value = value;

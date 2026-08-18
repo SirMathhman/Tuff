@@ -1,4 +1,4 @@
-import { type EvaluateError, type EvaluateResult } from "./errors.js";
+import { type EvaluateError, type EvaluateResult, type ParseError } from "./errors.js";
 import { tokenize } from "./tokenize.js";
 import { Parser } from "./parser.js";
 
@@ -39,53 +39,44 @@ export function evaluate(input: string): EvaluateResult {
     };
   }
 
-  const parser = new Parser(tokens);
-  const value = parser.parseProgram();
-  const error = parserError(parser, input);
-  if (error !== null) {
-    return { ok: false, error };
+  const parsed = new Parser(tokens).parseProgram();
+  if (!parsed.ok) {
+    return { ok: false, error: toEvaluateError(parsed.error, input) };
   }
-  if (value === null || !parser.atEnd()) {
-    return {
-      ok: false,
-      error: {
-        kind: "malformed-expression",
-        input,
-        reason: `Unexpected end of expression in "${input}"`,
-      },
-    };
-  }
-  return { ok: true, value };
+  return { ok: true, value: parsed.value };
 }
 
 /**
- * Builds the structured error for a variable-related parse failure, or
- * null when the parser did not record one.
+ * Maps a parse failure to the structured `EvaluateError` for the input.
  */
-function parserError(parser: Parser, input: string): EvaluateError | null {
-  if (parser.unknownVariable !== null) {
+function toEvaluateError(error: ParseError, input: string): EvaluateError {
+  if (error.kind === "malformed-expression") {
+    return {
+      kind: "malformed-expression",
+      input,
+      reason: `Unexpected end of expression in "${input}"`,
+    };
+  }
+  if (error.kind === "unknown-variable") {
     return {
       kind: "unknown-variable",
       input,
-      name: parser.unknownVariable,
-      reason: `Unknown variable "${parser.unknownVariable}" in "${input}"`,
+      name: error.name,
+      reason: `Unknown variable "${error.name}" in "${input}"`,
     };
   }
-  if (parser.immutableVariable !== null) {
+  if (error.kind === "immutable-assignment") {
     return {
       kind: "immutable-assignment",
       input,
-      name: parser.immutableVariable,
-      reason: `Cannot assign to immutable variable "${parser.immutableVariable}" in "${input}"`,
+      name: error.name,
+      reason: `Cannot assign to immutable variable "${error.name}" in "${input}"`,
     };
   }
-  if (parser.invalidDereference !== null) {
-    return {
-      kind: "invalid-dereference",
-      input,
-      name: parser.invalidDereference,
-      reason: `Cannot dereference non-reference "${parser.invalidDereference}" in "${input}"`,
-    };
-  }
-  return null;
+  return {
+    kind: "invalid-dereference",
+    input,
+    name: error.name,
+    reason: `Cannot dereference non-reference "${error.name}" in "${input}"`,
+  };
 }
