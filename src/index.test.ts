@@ -9,6 +9,10 @@ describe("evaluate", () => {
     expect(evaluate("1")).toEqual({ ok: true, value: 1 });
   });
 
+  it("returns 3 for the expression 1 + 2", () => {
+    expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
+  });
+
   it("returns a structured error for unsupported expressions", () => {
     const result = evaluate("1 +");
 
