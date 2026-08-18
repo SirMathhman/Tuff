@@ -9,4 +9,12 @@ describe("evaluate", () => {
       expect(result.value).toBe(0);
     }
   });
+
+  test('evaluate("1") => 1', () => {
+    const result = evaluate("1");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(1);
+    }
+  });
 });
