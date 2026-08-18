@@ -17,6 +17,10 @@ describe("evaluate", () => {
     expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
   });
 
+  it("returns 1 for the expression 2 + 3 - 4", () => {
+    expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
+  });
+
   it("returns a structured error for unsupported expressions", () => {
     const result = evaluate("1 +");
 

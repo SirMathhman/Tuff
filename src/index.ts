@@ -1,7 +1,10 @@
 import type { TuffError } from "./errors.js";
 import type { Result } from "./result.js";
 
-type Token = { kind: "number"; value: number } | { kind: "plus" };
+type Token =
+  | { kind: "number"; value: number }
+  | { kind: "plus" }
+  | { kind: "minus" };
 
 function fail<T>(input: string, message: string): Result<T, TuffError> {
   return {
@@ -28,6 +31,14 @@ function tokenize(input: string): Result<Token[], TuffError> {
 
     if (ch === "+") {
       tokens.push({ kind: "plus" });
+      i += 1;
+      continue;
+    }
+
+    // A `-` is a binary operator only when it follows a token;
+    // otherwise it starts a negative numeric literal.
+    if (ch === "-" && tokens.length > 0) {
+      tokens.push({ kind: "minus" });
       i += 1;
       continue;
     }
@@ -67,13 +78,14 @@ function parse(tokens: Token[], input: string): Result<number, TuffError> {
 
     let total = left.value;
 
-    while (tokens[index]?.kind === "plus") {
+    while (tokens[index]?.kind === "plus" || tokens[index]?.kind === "minus") {
+      const op = tokens[index].kind;
       index += 1;
       const right = parseNumber();
       if (!right.ok) {
         return right;
       }
-      total += right.value;
+      total = op === "plus" ? total + right.value : total - right.value;
     }
 
     return { ok: true, value: total };
@@ -97,7 +109,7 @@ function parse(tokens: Token[], input: string): Result<number, TuffError> {
  * @param input - The expression to evaluate.
  * @returns A Result holding the numeric value, or a structured error.
  *          An empty (or whitespace-only) expression evaluates to 0.
- *          Numeric literals and binary `+` expressions are supported.
+ *          Numeric literals and binary `+`/`-` expressions are supported.
  */
 export function evaluate(input: string): Result<number, TuffError> {
   const trimmed = input.trim();
