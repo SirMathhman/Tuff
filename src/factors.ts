@@ -2,6 +2,7 @@ import { EvalErrorCode, err, type EvalFailure } from "./errors.ts";
 import type { Token } from "./tokens.ts";
 import { resolvePlace, type Env, type Value } from "./env.ts";
 import type { ParseBlockFn, ParseExpressionFn, ParseResult } from "./parse.ts";
+import { parseIf } from "./if.ts";
 
 export interface IndexStepParsed {
   ok: true;
@@ -84,6 +85,8 @@ export function parseFactor(
     base = parseDeref(tokens, pos, env);
   } else if (tok.type === "ident") {
     base = lookupIdent(tokens, pos, env);
+  } else if (tok.type === "keyword" && tok.keyword === "if") {
+    base = parseIf(tokens, pos, env, parseBlock, parseExpression);
   } else if (tok.type === "paren" && tok.paren === "[") {
     base = parseArrayLiteral(tokens, pos, env, parseBlock, parseExpression);
   } else if (tok.type === "paren" && tok.paren in OPEN_PARENS) {

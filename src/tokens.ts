@@ -27,7 +27,7 @@ export interface IdentToken {
 
 export interface KeywordToken {
   type: "keyword";
-  keyword: "let" | "mut";
+  keyword: "let" | "mut" | "if" | "else";
 }
 
 export interface AssignToken {
@@ -211,6 +211,9 @@ export function tokenize(input: string): TokenizeResult {
       const word = input.slice(i, j);
       if (word === "let") tokens.push({ type: "keyword", keyword: "let" });
       else if (word === "mut") tokens.push({ type: "keyword", keyword: "mut" });
+      else if (word === "if") tokens.push({ type: "keyword", keyword: "if" });
+      else if (word === "else")
+        tokens.push({ type: "keyword", keyword: "else" });
       else if (word === "true") tokens.push({ type: "bool", value: true });
       else if (word === "false") tokens.push({ type: "bool", value: false });
       else tokens.push({ type: "ident", name: word });
@@ -220,7 +223,7 @@ export function tokenize(input: string): TokenizeResult {
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, +=, ==, !=, <, <=, >, >=, ;, &, &&, ||, true, false, and identifiers are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, if, else, =, +=, ==, !=, <, <=, >, >=, ;, &, &&, ||, true, false, and identifiers are allowed.`,
       i,
     );
   }

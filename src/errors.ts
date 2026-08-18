@@ -24,6 +24,8 @@ export enum EvalErrorCode {
   ExpectedCommaOrCloseBracket = "ExpectedCommaOrCloseBracket",
   ReferenceTargetMustBeVariable = "ReferenceTargetMustBeVariable",
   CompoundAssignNeedsNumber = "CompoundAssignNeedsNumber",
+  ExpectedIfConditionClose = "ExpectedIfConditionClose",
+  ExpectedElse = "ExpectedElse",
 }
 
 export interface EvalError {
