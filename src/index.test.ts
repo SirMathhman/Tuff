@@ -237,6 +237,14 @@ test("returns a structured error for a block with no trailing expression", () =>
   });
 });
 
+test("returns a structured error for a block of only an assignment", () => {
+  expectError("let mut x = 0; let y = { x = 1; }; y", {
+    kind: "malformed-expression",
+    input: "let mut x = 0; let y = { x = 1; }; y",
+    reason: 'Unexpected end of expression in "let mut x = 0; let y = { x = 1; }; y"',
+  });
+});
+
 test("returns a structured error for an unknown variable", () => {
   expectError("x", {
     kind: "unknown-variable",
