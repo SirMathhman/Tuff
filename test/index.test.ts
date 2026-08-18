@@ -121,6 +121,12 @@ describe("evaluate", () => {
     expect(valueOf("let x = if (false) 2 else if (false) 3 else 4; x")).toBe(4);
   });
 
+  test('evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x") => 2', () => {
+    expect(
+      valueOf("let mut x = 0; if (false) { x = 1; } else { x = 2; } x"),
+    ).toBe(2);
+  });
+
   test('evaluate("true != 1") => 1', () => {
     expect(valueOf("true != 1")).toBe(1);
   });

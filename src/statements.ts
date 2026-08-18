@@ -12,6 +12,7 @@ import {
   parseDerefAssignment,
 } from "./assignments.ts";
 import { parseCompoundAssignment } from "./compound.ts";
+import { parseIf } from "./if.ts";
 
 /**
  * Parses a `let [mut] ident = expr ;` binding. `pos` points at the `let`
@@ -115,6 +116,22 @@ export function parseStatements(
       const block = parseBlock(tokens, cursor + 1, localEnv);
       if (!block.ok) return block;
       cursor = block.next;
+      continue;
+    }
+    if (tok.type === "keyword" && tok.keyword === "if" && cursor > pos) {
+      // An "if" that follows a statement (i.e. after a ";") is an if
+      // statement; its value is discarded and parsing continues with the
+      // next statement. An "if" at the start of the list is an expression
+      // and is left to the trailing expression parse.
+      const branch = parseIf(
+        tokens,
+        cursor,
+        localEnv,
+        parseBlock,
+        parseExpression,
+      );
+      if (!branch.ok) return branch;
+      cursor = branch.next;
       continue;
     }
     if (tok.type === "op" && tok.op === "*") {
