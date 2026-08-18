@@ -17,6 +17,32 @@ describe("evaluate", () => {
     expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
   });
 
+  it('returns 1 for the input "2 + 3 - 4"', () => {
+    expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
+  });
+
+  it("returns a structured error for a malformed expression", () => {
+    expect(evaluate("1 +")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "1 +",
+        reason: 'Unexpected end of expression in "1 +"',
+      },
+    });
+  });
+
+  it("returns a structured error for a missing operand", () => {
+    expect(evaluate("1 + + 2")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "1 + + 2",
+        reason: 'Unexpected end of expression in "1 + + 2"',
+      },
+    });
+  });
+
   it("returns the parsed number for valid numeric input", () => {
     expect(evaluate("42")).toEqual({ ok: true, value: 42 });
   });
