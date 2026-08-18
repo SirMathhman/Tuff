@@ -90,6 +90,22 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("2 - 3 * 4") => -10', () => {
+    const result = evaluate("2 - 3 * 4");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(-10);
+    }
+  });
+
+  test('evaluate("10 - 2 - 3") => 5', () => {
+    const result = evaluate("10 - 2 - 3");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(5);
+    }
+  });
+
   test('evaluate("-2 * 3") => -6', () => {
     const result = evaluate("-2 * 3");
     expect(result.ok).toBe(true);
