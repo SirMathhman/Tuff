@@ -31,6 +31,10 @@ interface SemicolonToken {
   type: "semicolon";
 }
 
+interface RefToken {
+  type: "ref";
+}
+
 type Token =
   | NumToken
   | OpToken
@@ -38,7 +42,8 @@ type Token =
   | IdentToken
   | KeywordToken
   | AssignToken
-  | SemicolonToken;
+  | SemicolonToken
+  | RefToken;
 
 const OPEN_PARENS: Record<string, string> = {
   "(": ")",
@@ -61,6 +66,8 @@ export enum EvalErrorCode {
   ExpectedSemicolon = "ExpectedSemicolon",
   AssignmentToImmutable = "AssignmentToImmutable",
   AssignmentToUnknown = "AssignmentToUnknown",
+  ExpectedReferenceTarget = "ExpectedReferenceTarget",
+  DerefOfNonReference = "DerefOfNonReference",
 }
 
 interface EvalError {
@@ -143,6 +150,11 @@ function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
+    if (ch === "&") {
+      tokens.push({ type: "ref" });
+      i++;
+      continue;
+    }
     if (/[a-zA-Z_]/.test(ch)) {
       let j = i;
       while (j < input.length && /[a-zA-Z0-9_]/.test(input[j] ?? "")) j++;
@@ -156,7 +168,7 @@ function tokenize(input: string): TokenizeResult {
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ;, and identifiers are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ;, &, and identifiers are allowed.`,
       i,
     );
   }
@@ -166,6 +178,8 @@ function tokenize(input: string): TokenizeResult {
 interface Binding {
   value: number;
   mutable: boolean;
+  /** When set, this binding is a reference to another variable. */
+  refTo?: string;
 }
 
 type Env = Map<string, Binding>;
@@ -219,6 +233,45 @@ function parseFactor(tokens: Token[], pos: number, env: Env): ParseResult {
     );
   }
   if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
+  if (tok.type === "op" && tok.op === "*") {
+    // Unary dereference: "*y" where y is a reference binding.
+    const inner = tokens[pos + 1];
+    if (!inner || inner.type !== "ident") {
+      return err(
+        EvalErrorCode.ExpectedReferenceTarget,
+        "",
+        `A variable name was expected after "*". Write "*<variable>" to dereference.`,
+        pos + 1,
+      );
+    }
+    const bound = env.get(inner.name);
+    if (bound === undefined) {
+      return err(
+        EvalErrorCode.UnknownVariable,
+        "",
+        `Variable "${inner.name}" is not defined. Declare it with "let ${inner.name} = ...".`,
+        pos + 1,
+      );
+    }
+    if (bound.refTo === undefined) {
+      return err(
+        EvalErrorCode.DerefOfNonReference,
+        "",
+        `Variable "${inner.name}" is not a reference. Create one with "let ${inner.name} = &<variable>".`,
+        pos,
+      );
+    }
+    const target = env.get(bound.refTo);
+    if (target === undefined) {
+      return err(
+        EvalErrorCode.UnknownVariable,
+        "",
+        `Variable "${bound.refTo}" is not defined. It was referenced by "${inner.name}".`,
+        pos,
+      );
+    }
+    return { ok: true, value: target.value, next: pos + 2 };
+  }
   if (tok.type === "ident") {
     const bound = env.get(tok.name);
     if (bound === undefined) {
@@ -263,11 +316,7 @@ function parseFactor(tokens: Token[], pos: number, env: Env): ParseResult {
  * Parses a `let [mut] ident = expr ;` binding. `pos` points at the `let`
  * keyword. Returns `next` just past the terminating `;`.
  */
-function parseLetBinding(
-  tokens: Token[],
-  pos: number,
-  env: Env,
-): ParseResult {
+function parseLetBinding(tokens: Token[], pos: number, env: Env): ParseResult {
   let cursor = pos + 1;
   let mutable = false;
   const maybeMut = tokens[cursor];
@@ -307,6 +356,31 @@ function parseBindingValue(
   name: string,
   mutable: boolean,
 ): ParseResult {
+  // "&ident" creates a reference binding instead of a value binding.
+  const refTok = tokens[pos];
+  const refTarget = tokens[pos + 1];
+  if (refTok && refTok.type === "ref" && refTarget && refTarget.type === "ident") {
+    const target = env.get(refTarget.name);
+    if (target === undefined) {
+      return err(
+        EvalErrorCode.UnknownVariable,
+        "",
+        `Variable "${refTarget.name}" is not defined. Declare it with "let ${refTarget.name} = ..." before taking a reference.`,
+        pos + 1,
+      );
+    }
+    const semi = tokens[pos + 2];
+    if (!semi || semi.type !== "semicolon") {
+      return err(
+        EvalErrorCode.ExpectedSemicolon,
+        "",
+        `";" was expected after the reference "&${refTarget.name}".`,
+        pos + 2,
+      );
+    }
+    env.set(name, { value: target.value, mutable, refTo: refTarget.name });
+    return { ok: true, value: target.value, next: pos + 3 };
+  }
   const value = parseExpression(tokens, pos, env);
   if (!value.ok) return value;
   const semi = tokens[value.next];
@@ -326,11 +400,7 @@ function parseBindingValue(
  * Parses an `ident = expr ;` reassignment statement. `pos` points at the
  * identifier. Returns `next` just past the terminating `;`.
  */
-function parseAssignment(
-  tokens: Token[],
-  pos: number,
-  env: Env,
-): ParseResult {
+function parseAssignment(tokens: Token[], pos: number, env: Env): ParseResult {
   const ident = tokens[pos];
   if (!ident || ident.type !== "ident") {
     return err(

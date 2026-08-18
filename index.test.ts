@@ -57,6 +57,10 @@ describe("evaluate", () => {
     expect(valueOf("let mut x = 0; x = 1; x")).toBe(1);
   });
 
+  test('evaluate("let x = 1; let y = &x; *y") => 1', () => {
+    expect(valueOf("let x = 1; let y = &x; *y")).toBe(1);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);

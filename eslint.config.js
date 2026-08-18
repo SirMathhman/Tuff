@@ -9,6 +9,10 @@ export default tseslint.config(...tseslint.configs.recommended, {
         selector: "TSTypeLiteral",
         message: "Use a named interface instead.",
       },
+      {
+        selector: "ThrowStatement",
+        message: "Use a Result monad instead.",
+      },
     ],
   },
 });
