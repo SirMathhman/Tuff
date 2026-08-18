@@ -4,13 +4,13 @@ The Tuff compiler: a small expression language evaluated by `evaluate()` in `src
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| Test (with coverage) | `pnpm test:jest` |
-| Format check | `pnpm format:prettier` |
-| Typecheck | `pnpm lint:typecheck` |
-| Lint | `pnpm lint:eslint` |
-| Duplication check | `pnpm lint:pmd:cpd` |
+| Task                 | Command                |
+| -------------------- | ---------------------- |
+| Test (with coverage) | `pnpm test:jest`       |
+| Format check         | `pnpm format:prettier` |
+| Typecheck            | `pnpm lint:typecheck`  |
+| Lint                 | `pnpm lint:eslint`     |
+| Duplication check    | `pnpm lint:pmd:cpd`    |
 
 There is no plain `test` script. A `Stop` hook (`.github/hooks/hooks.json`) runs all five of these automatically and blocks the stop if any fail — keep the tree green before finishing.
 
