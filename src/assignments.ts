@@ -9,11 +9,7 @@ import {
 } from "./env.ts";
 import { parseExpression } from "./expressions.ts";
 import { parseIndexStep } from "./factors.ts";
-import type {
-  ParseBlockFn,
-  ParseExpressionFn,
-  ParseResult,
-} from "./parse.ts";
+import type { ParseBlockFn, ParseExpressionFn, ParseResult } from "./parse.ts";
 
 export interface PlaceParsed {
   ok: true;
@@ -67,7 +63,13 @@ export function parsePlace(
   for (;;) {
     const open = tokens[cursor];
     if (!open || open.type !== "paren" || open.paren !== "[") break;
-    const step = parseIndexStep(tokens, cursor, env, parseBlock, parseExpression);
+    const step = parseIndexStep(
+      tokens,
+      cursor,
+      env,
+      parseBlock,
+      parseExpression,
+    );
     if (!step.ok) return step;
     indices.push(step.index);
     cursor = step.next;

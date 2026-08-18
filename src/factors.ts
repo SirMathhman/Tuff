@@ -259,7 +259,13 @@ function applyIndexAccess(
         cursor,
       );
     }
-    const step = parseIndexStep(tokens, cursor, env, parseBlock, parseExpression);
+    const step = parseIndexStep(
+      tokens,
+      cursor,
+      env,
+      parseBlock,
+      parseExpression,
+    );
     if (!step.ok) return step;
     const idx = step.index;
     const items = current.items ?? [];
