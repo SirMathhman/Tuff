@@ -143,6 +143,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("let x = {};") => Err', () => {
+    const result = evaluate("let x = {};");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(EvalErrorCode.EmptyBlock);
+    }
+  });
+
   test('evaluate("let x = 0; &x") => Err', () => {
     const result = evaluate("let x = 0; &x");
     expect(result.ok).toBe(false);

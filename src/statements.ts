@@ -176,6 +176,14 @@ export function parseBlock(
 ): ParseResult {
   const body = parseStatements(tokens, pos, env);
   if (!body.ok) return body;
+  if (body.next === pos) {
+    return err(
+      EvalErrorCode.EmptyBlock,
+      "",
+      `A block must contain at least one statement or expression. Add a statement or expression inside the "{ }".`,
+      pos,
+    );
+  }
   const close = tokens[body.next];
   if (!close || close.type !== "paren" || close.paren !== "}") {
     return err(

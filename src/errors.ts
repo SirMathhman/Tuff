@@ -26,6 +26,7 @@ export enum EvalErrorCode {
   CompoundAssignNeedsNumber = "CompoundAssignNeedsNumber",
   ExpectedIfConditionClose = "ExpectedIfConditionClose",
   ExpectedElse = "ExpectedElse",
+  EmptyBlock = "EmptyBlock",
 }
 
 export interface EvalError {
