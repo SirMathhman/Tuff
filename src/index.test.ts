@@ -229,6 +229,14 @@ test("returns 1 for a variable read from an outer block", () => {
   expect(evaluate("{ let x = 1; { x } }")).toEqual({ ok: true, value: 1 });
 });
 
+test("returns a structured error for a block with no trailing expression", () => {
+  expectError("let x = { let y = 0; }; x", {
+    kind: "malformed-expression",
+    input: "let x = { let y = 0; }; x",
+    reason: 'Unexpected end of expression in "let x = { let y = 0; }; x"',
+  });
+});
+
 test("returns a structured error for an unknown variable", () => {
   expectError("x", {
     kind: "unknown-variable",
