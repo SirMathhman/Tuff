@@ -33,6 +33,10 @@ describe("evaluate", () => {
     expect(evaluate("2 * 3 * 4")).toEqual({ ok: true, value: 24 });
   });
 
+  it('returns 20 for the input "(2 + 3) * 4"', () => {
+    expect(evaluate("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   it("returns a structured error for a malformed expression", () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
@@ -79,6 +83,30 @@ describe("evaluate", () => {
 
   it("returns the parsed number for valid numeric input", () => {
     expect(evaluate("42")).toEqual({ ok: true, value: 42 });
+  });
+
+  // Coverage: non-numeric operand between two numbers (tokenize gap branch).
+  it("returns a structured error for a non-numeric operand between numbers", () => {
+    expect(evaluate("1 a 2")).toEqual({
+      ok: false,
+      error: {
+        kind: "invalid-number",
+        input: "1 a 2",
+        reason: 'Cannot parse "1 a 2" as a number',
+      },
+    });
+  });
+
+  // Coverage: unclosed parenthesis (parser paren branch).
+  it("returns a structured error for an unclosed parenthesis", () => {
+    expect(evaluate("(1 +")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "(1 +",
+        reason: 'Unexpected end of expression in "(1 +"',
+      },
+    });
   });
 
   it("returns a structured error for invalid input", () => {
