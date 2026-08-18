@@ -92,4 +92,28 @@ describe("evaluate", () => {
       expect(result.value).toBe(-1);
     }
   });
+
+  test('evaluate("1.5 + 2") => 3.5', () => {
+    const result = evaluate("1.5 + 2");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(3.5);
+    }
+  });
+
+  test('evaluate("1 - -2") => 3', () => {
+    const result = evaluate("1 - -2");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(3);
+    }
+  });
+
+  test('evaluate("+1") => Err(ParseError) at position 0', () => {
+    const result = evaluate("+1");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.position).toBe(0);
+    }
+  });
 });
