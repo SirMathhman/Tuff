@@ -82,6 +82,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("2 + 3 * 4") => 14', () => {
+    const result = evaluate("2 + 3 * 4");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(14);
+    }
+  });
+
   test('evaluate("-2 * 3") => -6', () => {
     const result = evaluate("-2 * 3");
     expect(result.ok).toBe(true);
