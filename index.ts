@@ -10,10 +10,15 @@ interface OpToken {
 
 interface ParenToken {
   type: "paren";
-  paren: "(" | ")";
+  paren: "(" | ")" | "{" | "}";
 }
 
 type Token = NumToken | OpToken | ParenToken;
+
+const OPEN_PARENS: Record<string, string> = {
+  "(": ")",
+  "{": "}",
+};
 
 /**
  * Structured error codes for `evaluate`. Each error answers:
@@ -92,7 +97,7 @@ function tokenize(input: string): TokenizeResult {
       i++;
       continue;
     }
-    if (ch === "(" || ch === ")") {
+    if (ch === "(" || ch === ")" || ch === "{" || ch === "}") {
       tokens.push({ type: "paren", paren: ch });
       i++;
       continue;
@@ -156,15 +161,16 @@ function parseFactor(tokens: Token[], pos: number): ParseResult {
     );
   }
   if (tok.type === "num") return { ok: true, value: tok.value, next: pos + 1 };
-  if (tok.type === "paren" && tok.paren === "(") {
+  if (tok.type === "paren" && tok.paren in OPEN_PARENS) {
+    const expectedClose = OPEN_PARENS[tok.paren];
     const inner = parseExpression(tokens, pos + 1);
     if (!inner.ok) return inner;
     const close = tokens[inner.next];
-    if (!close || close.type !== "paren" || close.paren !== ")") {
+    if (!close || close.type !== "paren" || close.paren !== expectedClose) {
       return err(
         EvalErrorCode.ExpectedCloseParen,
         "",
-        "A closing parenthesis was expected. Add a matching ).",
+        `A closing "${expectedClose}" was expected. Add a matching "${expectedClose}".`,
         inner.next,
       );
     }
