@@ -11,6 +11,7 @@ import {
   parseBindingValue,
   parseDerefAssignment,
 } from "./assignments.ts";
+import { parseCompoundAssignment } from "./compound.ts";
 
 /**
  * Parses a `let [mut] ident = expr ;` binding. `pos` points at the `let`
@@ -59,7 +60,8 @@ export function parseLetBinding(
 
 /**
  * Parses zero or more statements (`let [mut] ident = expr ;`,
- * `ident = expr ;`, or `*ident = expr ;`) followed by a trailing expression.
+ * `ident = expr ;`, `ident += expr ;`, or `*ident = expr ;`) followed by a
+ * trailing expression.
  * Statements run in a child env so bindings don't leak out. Returns the
  * trailing expression's value and `next` just past it.
  */
@@ -83,6 +85,17 @@ export function parseStatements(
       const nextTok = tokens[cursor + 1];
       if (nextTok && nextTok.type === "assign") {
         const assignment = parseAssignment(
+          tokens,
+          cursor,
+          localEnv,
+          parseBlock,
+        );
+        if (!assignment.ok) return assignment;
+        cursor = assignment.next;
+        continue;
+      }
+      if (nextTok && nextTok.type === "plusAssign") {
+        const assignment = parseCompoundAssignment(
           tokens,
           cursor,
           localEnv,

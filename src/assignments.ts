@@ -3,6 +3,7 @@ import type { Token } from "./tokens.ts";
 import {
   resolvePlace,
   writePlace,
+  type Binding,
   type Env,
   type Place,
   type Value,
@@ -17,6 +18,15 @@ export interface PlaceParsed {
   value: Value;
   next: number;
 }
+
+export interface MutableBindingParsed {
+  ok: true;
+  binding: Binding;
+}
+
+export type MutableBindingResult =
+  | MutableBindingParsed
+  | ReturnType<typeof err>;
 
 export type PlaceResult = PlaceParsed | ReturnType<typeof err>;
 
@@ -188,12 +198,27 @@ export function parseAssignment(
       pos + 1,
     );
   }
-  const existing = env.get(ident.name);
+  const existing = requireMutableBinding(env, ident.name, pos);
+  if (!existing.ok) return existing;
+  return parseBindingValue(tokens, pos + 2, env, ident.name, true, parseBlock);
+}
+
+/**
+ * Looks up `name` in `env` and requires it to be mutable. Returns the
+ * binding on success, or a structured error (unknown or immutable) on
+ * failure. Shared by the `=` and `+=` assignment parsers.
+ */
+export function requireMutableBinding(
+  env: Env,
+  name: string,
+  pos: number,
+): MutableBindingResult {
+  const existing = env.get(name);
   if (existing === undefined) {
     return err(
       EvalErrorCode.AssignmentToUnknown,
       "",
-      `Variable "${ident.name}" is not defined. Declare it with "let ${ident.name} = ..." first.`,
+      `Variable "${name}" is not defined. Declare it with "let ${name} = ..." first.`,
       pos,
     );
   }
@@ -201,11 +226,11 @@ export function parseAssignment(
     return err(
       EvalErrorCode.AssignmentToImmutable,
       "",
-      `Variable "${ident.name}" is immutable. Declare it with "let mut ${ident.name} = ..." to reassign.`,
+      `Variable "${name}" is immutable. Declare it with "let mut ${name} = ..." to reassign.`,
       pos,
     );
   }
-  return parseBindingValue(tokens, pos + 2, env, ident.name, true, parseBlock);
+  return { ok: true, binding: existing };
 }
 
 /**

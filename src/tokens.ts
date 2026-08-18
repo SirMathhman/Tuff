@@ -34,6 +34,10 @@ export interface AssignToken {
   type: "assign";
 }
 
+export interface PlusAssignToken {
+  type: "plusAssign";
+}
+
 export interface SemicolonToken {
   type: "semicolon";
 }
@@ -71,6 +75,7 @@ export type Token =
   | IdentToken
   | KeywordToken
   | AssignToken
+  | PlusAssignToken
   | SemicolonToken
   | RefToken
   | BoolToken
@@ -100,6 +105,11 @@ export function tokenize(input: string): TokenizeResult {
       while (j < input.length && /[0-9]/.test(input[j] ?? "")) j++;
       tokens.push({ type: "num", value: Number(input.slice(i, j)) });
       i = j;
+      continue;
+    }
+    if (ch === "+" && input[i + 1] === "=") {
+      tokens.push({ type: "plusAssign" });
+      i += 2;
       continue;
     }
     if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
@@ -210,7 +220,7 @@ export function tokenize(input: string): TokenizeResult {
     return err(
       EvalErrorCode.UnexpectedCharacter,
       input,
-      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, ==, !=, <, <=, >, >=, ;, &, &&, ||, true, false, and identifiers are allowed.`,
+      `Unexpected character "${ch}". Only digits, + - * /, ( ) { }, let, =, +=, ==, !=, <, <=, >, >=, ;, &, &&, ||, true, false, and identifiers are allowed.`,
       i,
     );
   }
