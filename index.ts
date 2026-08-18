@@ -1,6 +1,14 @@
-type Token =
-  | { type: "num"; value: number }
-  | { type: "op"; op: "+" | "-" | "*" | "/" };
+interface NumToken {
+  type: "num";
+  value: number;
+}
+
+interface OpToken {
+  type: "op";
+  op: "+" | "-" | "*" | "/";
+}
+
+type Token = NumToken | OpToken;
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
