@@ -37,6 +37,10 @@ describe("evaluate", () => {
     expect(evaluate("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  it('returns 20 for the input "{ 2 + 3 } * 4"', () => {
+    expect(evaluate("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   it("returns a structured error for a malformed expression", () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,

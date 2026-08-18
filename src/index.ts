@@ -14,9 +14,9 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
  * Evaluates a Tuff expression.
  *
  * Supports addition, subtraction, and multiplication, as well as
- * parentheses for grouping. Multiplication binds tighter than addition
- * and subtraction, which are evaluated left to right. Empty input is a
- * defined case and evaluates to 0.
+ * parentheses or curly braces for grouping. Multiplication binds tighter
+ * than addition and subtraction, which are evaluated left to right. Empty
+ * input is a defined case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
@@ -51,7 +51,7 @@ export function evaluate(input: string): EvaluateResult {
   return { ok: true, value };
 }
 
-type Token = number | "+" | "-" | "*" | "(" | ")";
+type Token = number | "+" | "-" | "*" | "(" | ")" | "{" | "}";
 
 /**
  * Splits an expression into tokens, or returns null when the input
@@ -59,7 +59,7 @@ type Token = number | "+" | "-" | "*" | "(" | ")";
  */
 function tokenize(input: string): Token[] | null {
   const tokens: Token[] = [];
-  const pattern = /(\d+(?:\.\d+)?)|([()])|([*+-])/g;
+  const pattern = /(\d+(?:\.\d+)?)|([(){}])|([*+-])/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(input)) !== null) {
@@ -69,7 +69,7 @@ function tokenize(input: string): Token[] | null {
     if (match[1] !== undefined) {
       tokens.push(Number(match[1]));
     } else if (match[2] !== undefined) {
-      tokens.push(match[2] as "(" | ")");
+      tokens.push(match[2] as "(" | ")" | "{" | "}");
     } else {
       tokens.push(match[3] as "+" | "-" | "*");
     }
@@ -147,10 +147,11 @@ class Parser {
       this.advance();
       return token;
     }
-    if (token === "(") {
+    if (token === "(" || token === "{") {
       this.advance();
       const value = this.parseExpression();
-      if (value === null || this.peek() !== ")") {
+      const expected = token === "(" ? ")" : "}";
+      if (value === null || this.peek() !== expected) {
         return null;
       }
       this.advance();
