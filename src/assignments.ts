@@ -120,6 +120,7 @@ export function parseBindingValue(
   name: string,
   mutable: boolean,
   parseBlock: ParseBlockFn,
+  reassign = false,
 ): ParseResult {
   // "&[mut] <place>" creates a reference binding instead of a value binding.
   const refTok = tokens[pos];
@@ -146,11 +147,15 @@ export function parseBindingValue(
           place.next,
         );
       }
-      env.set(name, {
-        value: place.value,
-        mutable,
-        place: place.place,
-      });
+      // Reassignments mutate the binding in place so the write is visible
+      // through env copies (e.g. blocks); "let" always creates a new binding.
+      const existing = reassign ? env.get(name) : undefined;
+      if (existing) {
+        existing.value = place.value;
+        existing.place = place.place;
+      } else {
+        env.set(name, { value: place.value, mutable, place: place.place });
+      }
       return { ok: true, value: place.value, next: place.next + 1 };
     }
     return place;
@@ -166,7 +171,14 @@ export function parseBindingValue(
       value.next,
     );
   }
-  env.set(name, { value: value.value, mutable });
+  // Reassignments mutate the binding in place so the write is visible
+  // through env copies (e.g. blocks); "let" always creates a new binding.
+  const existing = reassign ? env.get(name) : undefined;
+  if (existing) {
+    existing.value = value.value;
+  } else {
+    env.set(name, { value: value.value, mutable });
+  }
   return { ok: true, value: value.value, next: value.next + 1 };
 }
 
@@ -200,7 +212,15 @@ export function parseAssignment(
   }
   const existing = requireMutableBinding(env, ident.name, pos);
   if (!existing.ok) return existing;
-  return parseBindingValue(tokens, pos + 2, env, ident.name, true, parseBlock);
+  return parseBindingValue(
+    tokens,
+    pos + 2,
+    env,
+    ident.name,
+    true,
+    parseBlock,
+    true,
+  );
 }
 
 /**

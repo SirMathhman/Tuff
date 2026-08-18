@@ -106,6 +106,17 @@ export function parseStatements(
         continue;
       }
     }
+    if (tok.type === "paren" && tok.paren === "{" && cursor > pos) {
+      // A bare "{ ... }" that follows a statement (i.e. after a ";") is a
+      // block statement; its value is discarded and parsing continues with
+      // the next statement. A "{" at the start of the list is a block
+      // expression (e.g. "{ 2 + 3 } * 4") and is left to the trailing
+      // expression parse.
+      const block = parseBlock(tokens, cursor + 1, localEnv);
+      if (!block.ok) return block;
+      cursor = block.next;
+      continue;
+    }
     if (tok.type === "op" && tok.op === "*") {
       const derefTarget = tokens[cursor + 1];
       const assignTok = tokens[cursor + 2];
@@ -127,6 +138,12 @@ export function parseStatements(
       }
     }
     break;
+  }
+  // A trailing expression is optional: a block (or the top level) may end
+  // right after its statements, in which case the value is 0.
+  const trailing = tokens[cursor];
+  if (!trailing || (trailing.type === "paren" && trailing.paren === "}")) {
+    return { ok: true, value: { kind: "num", num: 0 }, next: cursor };
   }
   return parseExpression(tokens, cursor, localEnv, parseBlock);
 }
