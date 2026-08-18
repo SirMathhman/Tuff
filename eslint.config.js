@@ -11,6 +11,14 @@ export default tseslint.config(...tseslint.configs.recommended, {
         skipComments: true,
       },
     ],
+    "max-lines-per-function": [
+      "error",
+      {
+        max: 50,
+        skipBlankLines: true,
+        skipComments: true,
+      },
+    ],
     "no-restricted-syntax": [
       "error",
       {
