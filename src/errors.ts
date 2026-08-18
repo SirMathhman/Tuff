@@ -22,6 +22,7 @@ export enum EvalErrorCode {
   IndexMustBeNumber = "IndexMustBeNumber",
   IndexOutOfBounds = "IndexOutOfBounds",
   ExpectedCommaOrCloseBracket = "ExpectedCommaOrCloseBracket",
+  ReferenceTargetMustBeVariable = "ReferenceTargetMustBeVariable",
 }
 
 export interface EvalError {

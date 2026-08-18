@@ -107,6 +107,14 @@ describe("evaluate", () => {
     ).toBe(6);
   });
 
+  test('evaluate("let mut array = [0]; let ref = &mut (array[0]); *ref = 1; array[0]") => 1', () => {
+    expect(
+      valueOf(
+        "let mut array = [0]; let ref = &mut (array[0]); *ref = 1; array[0]",
+      ),
+    ).toBe(1);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);

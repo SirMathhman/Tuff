@@ -1,6 +1,6 @@
 import { EvalErrorCode, err } from "./errors.ts";
 import type { Token } from "./tokens.ts";
-import type { Env, Value } from "./env.ts";
+import { resolvePlace, type Env, type Value } from "./env.ts";
 import type { ParseBlockFn, ParseResult } from "./expressions.ts";
 
 /** Parses a full expression. Provided by the expressions module. */
@@ -133,7 +133,7 @@ function parseDeref(tokens: Token[], pos: number, env: Env): ParseResult {
       pos + 1,
     );
   }
-  if (bound.refTo === undefined) {
+  if (bound.place === undefined) {
     return err(
       EvalErrorCode.DerefOfNonReference,
       "",
@@ -141,16 +141,16 @@ function parseDeref(tokens: Token[], pos: number, env: Env): ParseResult {
       pos,
     );
   }
-  const target = env.get(bound.refTo);
+  const target = resolvePlace(env, bound.place);
   if (target === undefined) {
     return err(
       EvalErrorCode.UnknownVariable,
       "",
-      `Variable "${bound.refTo}" is not defined. It was referenced by "${inner.name}".`,
+      `The place referenced by "${inner.name}" is no longer valid. Check the variable and array indices it points to.`,
       pos,
     );
   }
-  return { ok: true, value: target.value, next: pos + 2 };
+  return { ok: true, value: target, next: pos + 2 };
 }
 
 /**
