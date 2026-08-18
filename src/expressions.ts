@@ -1,22 +1,14 @@
-import type { EvalFailure } from "./errors.ts";
 import type { Token } from "./tokens.ts";
 import type { Env, Value } from "./env.ts";
 import { parseFactor } from "./factors.ts";
+import type { ParseBlockFn, ParseResult } from "./parse.ts";
 
-export interface Parsed {
-  ok: true;
-  value: Value;
-  next: number;
-}
-
-export type ParseResult = Parsed | EvalFailure;
-
-/** Parses a `{ ... }` block. Provided by the statements module. */
-export type ParseBlockFn = (
-  tokens: Token[],
-  pos: number,
-  env: Env,
-) => ParseResult;
+export type {
+  Parsed,
+  ParseBlockFn,
+  ParseExpressionFn,
+  ParseResult,
+} from "./parse.ts";
 
 function num(n: number): Value {
   return { kind: "num", num: n };

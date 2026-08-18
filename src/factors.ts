@@ -1,15 +1,48 @@
-import { EvalErrorCode, err } from "./errors.ts";
+import { EvalErrorCode, err, type EvalFailure } from "./errors.ts";
 import type { Token } from "./tokens.ts";
 import { resolvePlace, type Env, type Value } from "./env.ts";
-import type { ParseBlockFn, ParseResult } from "./expressions.ts";
+import type { ParseBlockFn, ParseExpressionFn, ParseResult } from "./parse.ts";
 
-/** Parses a full expression. Provided by the expressions module. */
-export type ParseExpressionFn = (
+export interface IndexStepParsed {
+  ok: true;
+  index: number;
+  next: number;
+}
+
+export type IndexStepResult = IndexStepParsed | EvalFailure;
+
+/**
+ * Parses a single `[ index ]` step. `pos` points at the `[`. Returns the
+ * numeric index and `next` just past the `]`.
+ */
+export function parseIndexStep(
   tokens: Token[],
   pos: number,
   env: Env,
   parseBlock: ParseBlockFn,
-) => ParseResult;
+  parseExpression: ParseExpressionFn,
+): IndexStepResult {
+  const index = parseExpression(tokens, pos + 1, env, parseBlock);
+  if (!index.ok) return index;
+  const close = tokens[index.next];
+  if (!close || close.type !== "paren" || close.paren !== "]") {
+    return err(
+      EvalErrorCode.ExpectedCloseParen,
+      "",
+      `A closing "]" was expected after the index. Add a matching "]".`,
+      index.next,
+    );
+  }
+  if (index.value.kind !== "num") {
+    return err(
+      EvalErrorCode.IndexMustBeNumber,
+      "",
+      `An array index must be a number, but it is a ${index.value.kind}.`,
+      pos + 1,
+    );
+  }
+  return { ok: true, index: index.value.num, next: index.next + 1 };
+}
 
 function num(n: number): Value {
   return { kind: "num", num: n };
@@ -226,26 +259,9 @@ function applyIndexAccess(
         cursor,
       );
     }
-    const index = parseExpression(tokens, cursor + 1, env, parseBlock);
-    if (!index.ok) return index;
-    const close = tokens[index.next];
-    if (!close || close.type !== "paren" || close.paren !== "]") {
-      return err(
-        EvalErrorCode.ExpectedCloseParen,
-        "",
-        `A closing "]" was expected after the index. Add a matching "]".`,
-        index.next,
-      );
-    }
-    if (index.value.kind !== "num") {
-      return err(
-        EvalErrorCode.IndexMustBeNumber,
-        "",
-        `An array index must be a number, but it is a ${index.value.kind}.`,
-        cursor + 1,
-      );
-    }
-    const idx = index.value.num;
+    const step = parseIndexStep(tokens, cursor, env, parseBlock, parseExpression);
+    if (!step.ok) return step;
+    const idx = step.index;
     const items = current.items ?? [];
     if (!Number.isInteger(idx) || idx < 0 || idx >= items.length) {
       return err(
@@ -265,7 +281,7 @@ function applyIndexAccess(
       );
     }
     current = item;
-    cursor = index.next + 1;
+    cursor = step.next;
   }
   return { ok: true, value: current, next: cursor };
 }

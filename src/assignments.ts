@@ -7,12 +7,13 @@ import {
   type Place,
   type Value,
 } from "./env.ts";
-import {
-  parseExpression,
-  type ParseBlockFn,
-  type ParseResult,
-} from "./expressions.ts";
-import type { ParseExpressionFn } from "./factors.ts";
+import { parseExpression } from "./expressions.ts";
+import { parseIndexStep } from "./factors.ts";
+import type {
+  ParseBlockFn,
+  ParseExpressionFn,
+  ParseResult,
+} from "./parse.ts";
 
 export interface PlaceParsed {
   ok: true;
@@ -66,27 +67,10 @@ export function parsePlace(
   for (;;) {
     const open = tokens[cursor];
     if (!open || open.type !== "paren" || open.paren !== "[") break;
-    const index = parseExpression(tokens, cursor + 1, env, parseBlock);
-    if (!index.ok) return index;
-    const close = tokens[index.next];
-    if (!close || close.type !== "paren" || close.paren !== "]") {
-      return err(
-        EvalErrorCode.ExpectedCloseParen,
-        "",
-        `A closing "]" was expected after the index. Add a matching "]".`,
-        index.next,
-      );
-    }
-    if (index.value.kind !== "num") {
-      return err(
-        EvalErrorCode.IndexMustBeNumber,
-        "",
-        `An array index must be a number, but it is a ${index.value.kind}.`,
-        cursor + 1,
-      );
-    }
-    indices.push(index.value.num);
-    cursor = index.next + 1;
+    const step = parseIndexStep(tokens, cursor, env, parseBlock, parseExpression);
+    if (!step.ok) return step;
+    indices.push(step.index);
+    cursor = step.next;
   }
   if (first.type === "paren") {
     const close = tokens[cursor];
