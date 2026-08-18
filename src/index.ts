@@ -30,13 +30,18 @@ function skipWhitespace(input: string, pos: number): number {
   return pos;
 }
 
+interface ParseFailure {
+  position: number;
+  reason: string;
+}
+
 function parseNumber(
   input: string,
   pos: number,
-): Result<[number, number], number> {
+): Result<[number, number], ParseFailure> {
   const match = NUMBER_PATTERN.exec(input.slice(pos));
   if (!match) {
-    return { ok: false, error: pos };
+    return { ok: false, error: { position: pos, reason: "expected a number" } };
   }
   return { ok: true, value: [Number(match[0]), pos + match[0].length] };
 }
@@ -44,7 +49,7 @@ function parseNumber(
 function parseFactor(
   input: string,
   pos: number,
-): Result<[number, number], number> {
+): Result<[number, number], ParseFailure> {
   pos = skipWhitespace(input, pos);
   if (input[pos] === "-") {
     const inner = parseFactor(input, pos + 1);
@@ -53,13 +58,27 @@ function parseFactor(
     }
     return { ok: true, value: [-inner.value[0], inner.value[1]] };
   }
+  if (input[pos] === "(") {
+    const inner = parseExpression(input, pos + 1);
+    if (!inner.ok) {
+      return inner;
+    }
+    const closePos = skipWhitespace(input, inner.value[1]);
+    if (input.charAt(closePos) !== ")") {
+      return {
+        ok: false,
+        error: { position: closePos, reason: "expected ')'" },
+      };
+    }
+    return { ok: true, value: [inner.value[0], closePos + 1] };
+  }
   return parseNumber(input, pos);
 }
 
 function parseTerm(
   input: string,
   pos: number,
-): Result<[number, number], number> {
+): Result<[number, number], ParseFailure> {
   const first = parseFactor(input, pos);
   if (!first.ok) {
     return first;
@@ -83,7 +102,7 @@ function parseTerm(
 function parseExpression(
   input: string,
   pos: number,
-): Result<[number, number], number> {
+): Result<[number, number], ParseFailure> {
   const first = parseTerm(input, pos);
   if (!first.ok) {
     return first;
@@ -116,7 +135,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2").',
+      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses (e.g. "(1 + 2) * 3").',
   };
 }
 
@@ -129,7 +148,7 @@ export function evaluate(input: string): Result<number, EvaluateError> {
   if (!parsed.ok) {
     return {
       ok: false,
-      error: parseError(input, parsed.error, "expected a number"),
+      error: parseError(input, parsed.error.position, parsed.error.reason),
     };
   }
   const [value, end] = parsed.value;
