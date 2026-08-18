@@ -12,6 +12,10 @@ test("returns 0 for a binding with no trailing expression", () => {
   expect(evaluate("let x = 100;")).toEqual({ ok: true, value: 0 });
 });
 
+test("returns 0 for a binding and assignment with no trailing expression", () => {
+  expect(evaluate("let mut x = 0; x = 1;")).toEqual({ ok: true, value: 0 });
+});
+
 test('returns 1 for the input "1"', () => {
   expect(evaluate("1")).toEqual({ ok: true, value: 1 });
 });
