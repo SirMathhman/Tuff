@@ -23,7 +23,9 @@ export type { EvaluateError, EvaluateResult } from "./errors.js";
  * initialized with, and assigning a literal of the other kind (a boolean
  * to a number-initialized binding, or a number to a boolean-initialized
  * one) is a `type-mismatch` error; non-literal right-hand sides never
- * mismatch. Multiplication binds tighter than addition and subtraction,
+ * mismatch. Assigning a value to a reference binding (`y = expr;` where
+ * `y` is a reference) is a `reference-assignment` error. Multiplication
+ * binds tighter than addition and subtraction,
  * which are evaluated left to right. Empty input is a defined case and
  * evaluates to 0.
  */
@@ -63,30 +65,6 @@ function toEvaluateError(error: ParseError, input: string): EvaluateError {
       reason: `Unexpected end of expression in "${input}"`,
     };
   }
-  if (error.kind === "unknown-variable") {
-    return {
-      kind: "unknown-variable",
-      input,
-      name: error.name,
-      reason: `Unknown variable "${error.name}" in "${input}"`,
-    };
-  }
-  if (error.kind === "immutable-assignment") {
-    return {
-      kind: "immutable-assignment",
-      input,
-      name: error.name,
-      reason: `Cannot assign to immutable variable "${error.name}" in "${input}"`,
-    };
-  }
-  if (error.kind === "invalid-dereference") {
-    return {
-      kind: "invalid-dereference",
-      input,
-      name: error.name,
-      reason: `Cannot dereference non-reference "${error.name}" in "${input}"`,
-    };
-  }
   if (error.kind === "type-mismatch") {
     return {
       kind: "type-mismatch",
@@ -96,9 +74,36 @@ function toEvaluateError(error: ParseError, input: string): EvaluateError {
     };
   }
   return {
-    kind: "reference-as-value",
+    kind: error.kind,
     input,
     name: error.name,
-    reason: `Cannot use reference "${error.name}" as a value in "${input}"`,
+    reason: reasonFor(error.kind, error.name, input),
   };
+}
+
+/**
+ * Builds the human-readable reason for a name-based parse error.
+ */
+function reasonFor(
+  kind:
+    | "unknown-variable"
+    | "immutable-assignment"
+    | "invalid-dereference"
+    | "reference-as-value"
+    | "reference-assignment",
+  name: string,
+  input: string,
+): string {
+  switch (kind) {
+    case "unknown-variable":
+      return `Unknown variable "${name}" in "${input}"`;
+    case "immutable-assignment":
+      return `Cannot assign to immutable variable "${name}" in "${input}"`;
+    case "invalid-dereference":
+      return `Cannot dereference non-reference "${name}" in "${input}"`;
+    case "reference-as-value":
+      return `Cannot use reference "${name}" as a value in "${input}"`;
+    case "reference-assignment":
+      return `Cannot assign value to reference "${name}" in "${input}"`;
+  }
 }

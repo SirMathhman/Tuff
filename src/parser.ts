@@ -342,6 +342,7 @@ export class Parser {
       return false;
     }
     if (binding.kind === "ref") {
+      this.error = { kind: "reference-assignment", name };
       return false;
     }
     if (!this.checkTypeMismatch(name, binding, rhs.literal)) {

@@ -101,9 +101,19 @@ test("returns a structured error for a reference to a reference", () => {
 
 test("returns a structured error for an assignment to a reference variable", () => {
   expectError("let x = 1; let y = &x; y = 2; y", {
-    kind: "malformed-expression",
+    kind: "reference-assignment",
     input: "let x = 1; let y = &x; y = 2; y",
-    reason: 'Unexpected end of expression in "let x = 1; let y = &x; y = 2; y"',
+    name: "y",
+    reason: 'Cannot assign value to reference "y" in "let x = 1; let y = &x; y = 2; y"',
+  });
+});
+
+test("returns a structured error for assigning a value to a reference binding", () => {
+  expectError("let x = 0; let mut y = &x; y = x;", {
+    kind: "reference-assignment",
+    input: "let x = 0; let mut y = &x; y = x;",
+    name: "y",
+    reason: 'Cannot assign value to reference "y" in "let x = 0; let mut y = &x; y = x;"',
   });
 });
 

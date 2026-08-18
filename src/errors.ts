@@ -8,7 +8,8 @@ export type EvaluateError =
   | { kind: "immutable-assignment"; input: string; name: string; reason: string }
   | { kind: "invalid-dereference"; input: string; name: string; reason: string }
   | { kind: "reference-as-value"; input: string; name: string; reason: string }
-  | { kind: "type-mismatch"; input: string; name: string; reason: string };
+  | { kind: "type-mismatch"; input: string; name: string; reason: string }
+  | { kind: "reference-assignment"; input: string; name: string; reason: string };
 
 /**
  * The result of evaluating a Tuff expression.
@@ -23,7 +24,11 @@ export type ParseError =
   | { kind: "malformed-expression" }
   | {
       kind:
-        "unknown-variable" | "immutable-assignment" | "invalid-dereference" | "reference-as-value";
+        | "unknown-variable"
+        | "immutable-assignment"
+        | "invalid-dereference"
+        | "reference-as-value"
+        | "reference-assignment";
       name: string;
     }
   | {
