@@ -171,6 +171,7 @@ function parseBlock(
   scope: Scope,
 ): Result<[number, number], ParseFailure> {
   const child = new Map(scope);
+  const declaredHere = new Set<string>();
   for (;;) {
     pos = skipWhitespace(input, pos);
     if (input.charAt(pos) === "}") {
@@ -184,11 +185,21 @@ function parseBlock(
       !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
     ) {
       let p = skipWhitespace(input, pos + 3);
+      const namePos = p;
       const ident = parseIdentifier(input, p);
       if (!ident.ok) {
         return ident;
       }
       const name = ident.value[0];
+      if (declaredHere.has(name)) {
+        return {
+          ok: false,
+          error: {
+            position: namePos,
+            reason: `variable '${name}' is already declared in this block`,
+          },
+        };
+      }
       p = skipWhitespace(input, ident.value[1]);
       if (input.charAt(p) !== "=") {
         return {
@@ -205,6 +216,7 @@ function parseBlock(
         return expr;
       }
       child.set(name, expr.value[0]);
+      declaredHere.add(name);
       p = skipWhitespace(input, expr.value[1]);
       if (input.charAt(p) === ";") {
         pos = skipWhitespace(input, p + 1);
@@ -245,7 +257,7 @@ function parseError(
     position,
     message:
       `evaluate() failed to parse ${JSON.stringify(input)}: ${reason} at position ${position}. ` +
-      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3"), with "let" bindings inside braces (e.g. "{ let x = 1 + 2; x }").',
+      'Provide an expression of numeric literals combined with "+", "-", and "*" (e.g. "1 + 2"), optionally grouped with parentheses or braces (e.g. "(1 + 2) * 3"), with "let" bindings inside braces (e.g. "{ let x = 1 + 2; x }"); a name may not be redeclared within the same block, though nested blocks may shadow it.',
   };
 }
 

@@ -146,6 +146,22 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("{ let x = 1; let x = 2; x }") => Err(ParseError)', () => {
+    const result = evaluate("{ let x = 1; let x = 2; x }");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
+  test('evaluate("{ let x = 1; { let x = 5; x } }") => 5', () => {
+    const result = evaluate("{ let x = 1; { let x = 5; x } }");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(5);
+    }
+  });
+
   test('evaluate("2 - 3 * 4") => -10', () => {
     const result = evaluate("2 - 3 * 4");
     expect(result.ok).toBe(true);
