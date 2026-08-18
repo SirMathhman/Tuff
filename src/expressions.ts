@@ -41,6 +41,18 @@ export function parseExpression(
       break;
     }
   }
+  // "==" binds tighter than "&&" and is left-associative.
+  while (next < tokens.length) {
+    const eqTok = tokens[next];
+    if (eqTok && eqTok.type === "eq") {
+      const rhs = parseExpression(tokens, next + 1, env, parseBlock);
+      if (!rhs.ok) return rhs;
+      value = value === rhs.value ? 1 : 0;
+      next = rhs.next;
+    } else {
+      break;
+    }
+  }
   // "&&" binds tighter than "||" and is left-associative.
   while (next < tokens.length) {
     const andTok = tokens[next];
