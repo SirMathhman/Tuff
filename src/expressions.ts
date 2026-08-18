@@ -108,9 +108,7 @@ export function parseTerm(
       const rhs = parseFactor(tokens, next + 1, env, parseBlock);
       if (!rhs.ok) return rhs;
       value = num(
-        tok.op === "*"
-          ? value.num * rhs.value.num
-          : value.num / rhs.value.num,
+        tok.op === "*" ? value.num * rhs.value.num : value.num / rhs.value.num,
       );
       next = rhs.next;
     } else {
@@ -135,9 +133,18 @@ export function parseFactor(
       pos,
     );
   }
-  if (tok.type === "num") return { ok: true, value: num(tok.value), next: pos + 1 };
+  if (tok.type === "num")
+    return { ok: true, value: num(tok.value), next: pos + 1 };
   if (tok.type === "bool") {
     return { ok: true, value: bool(tok.value), next: pos + 1 };
+  }
+  if (tok.type === "ref") {
+    return err(
+      EvalErrorCode.ReferenceInExpression,
+      "",
+      `"&" takes a reference and can only be used in a "let" binding (e.g. "let y = &x"). To read the value a reference points to, use "*" (e.g. "*y").`,
+      pos,
+    );
   }
   if (tok.type === "op" && tok.op === "*") {
     // Unary dereference: "*y" where y is a reference binding.

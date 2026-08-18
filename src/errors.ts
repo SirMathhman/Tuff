@@ -17,6 +17,7 @@ export enum EvalErrorCode {
   ExpectedReferenceTarget = "ExpectedReferenceTarget",
   DerefOfNonReference = "DerefOfNonReference",
   AssignmentToImmutableThroughReference = "AssignmentToImmutableThroughReference",
+  ReferenceInExpression = "ReferenceInExpression",
 }
 
 export interface EvalError {

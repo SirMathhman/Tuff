@@ -85,6 +85,14 @@ describe("evaluate", () => {
     expect(valueOf("true == 1")).toBe(0);
   });
 
+  test('evaluate("let x = 0; x == &x") => Err', () => {
+    const result = evaluate("let x = 0; x == &x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(EvalErrorCode.ReferenceInExpression);
+    }
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);
