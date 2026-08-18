@@ -5,7 +5,7 @@ describe("evaluate", () => {
     expect(evaluate("")).toEqual({ ok: true, value: 0 });
   });
 
-  it("returns 1 for the input \"1\"", () => {
+  it('returns 1 for the input "1"', () => {
     expect(evaluate("1")).toEqual({ ok: true, value: 1 });
   });
 
