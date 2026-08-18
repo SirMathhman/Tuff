@@ -13,15 +13,16 @@ export type EvaluateResult = { ok: true; value: number } | { ok: false; error: E
 /**
  * Evaluates a Tuff expression.
  *
- * Supports addition and subtraction, evaluated left to right.
- * Empty input is a defined case and evaluates to 0.
+ * Supports addition, subtraction, and multiplication. Multiplication
+ * binds tighter than addition and subtraction, which are evaluated
+ * left to right. Empty input is a defined case and evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
   if (trimmed === "") {
     return { ok: true, value: 0 };
   }
-  const tokens = trimmed.split(/([+-])/);
+  const tokens = trimmed.split(/([*+-])/);
   let value = 0;
   let sign = 1;
   for (let i = 0; i < tokens.length; i += 2) {
@@ -47,7 +48,34 @@ export function evaluate(input: string): EvaluateResult {
         },
       };
     }
-    value += sign * num;
+    let term = num;
+    while (tokens[i + 1] === "*") {
+      i += 2;
+      const next = tokens[i].trim();
+      if (next === "") {
+        return {
+          ok: false,
+          error: {
+            kind: "malformed-expression",
+            input,
+            reason: `Unexpected end of expression in "${input}"`,
+          },
+        };
+      }
+      const nextNum = Number(next);
+      if (Number.isNaN(nextNum)) {
+        return {
+          ok: false,
+          error: {
+            kind: "invalid-number",
+            input,
+            reason: `Cannot parse "${input}" as a number`,
+          },
+        };
+      }
+      term *= nextNum;
+    }
+    value += sign * term;
     sign = tokens[i + 1] === "-" ? -1 : 1;
   }
   return { ok: true, value };

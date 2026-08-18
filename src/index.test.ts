@@ -21,6 +21,14 @@ describe("evaluate", () => {
     expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
   });
 
+  it('returns 10 for the input "2 * 3 + 4"', () => {
+    expect(evaluate("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
+  });
+
+  it('returns 24 for the input "2 * 3 * 4"', () => {
+    expect(evaluate("2 * 3 * 4")).toEqual({ ok: true, value: 24 });
+  });
+
   it("returns a structured error for a malformed expression", () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
@@ -39,6 +47,28 @@ describe("evaluate", () => {
         kind: "malformed-expression",
         input: "1 + + 2",
         reason: 'Unexpected end of expression in "1 + + 2"',
+      },
+    });
+  });
+
+  it("returns a structured error for a missing operand after *", () => {
+    expect(evaluate("2 * ")).toEqual({
+      ok: false,
+      error: {
+        kind: "malformed-expression",
+        input: "2 * ",
+        reason: 'Unexpected end of expression in "2 * "',
+      },
+    });
+  });
+
+  it("returns a structured error for an invalid operand after *", () => {
+    expect(evaluate("2 * abc")).toEqual({
+      ok: false,
+      error: {
+        kind: "invalid-number",
+        input: "2 * abc",
+        reason: 'Cannot parse "2 * abc" as a number',
       },
     });
   });
