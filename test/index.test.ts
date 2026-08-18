@@ -170,6 +170,38 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("let x = 1; x") => 1', () => {
+    const result = evaluate("let x = 1; x");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(1);
+    }
+  });
+
+  test('evaluate("let x = 1; let y = x + 1; y") => 2', () => {
+    const result = evaluate("let x = 1; let y = x + 1; y");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(2);
+    }
+  });
+
+  test('evaluate("let x = 1;") => Err(ParseError)', () => {
+    const result = evaluate("let x = 1;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
+  test('evaluate("let x = 1; let x = 2; x") => Err(ParseError)', () => {
+    const result = evaluate("let x = 1; let x = 2; x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe(EvaluateErrorKind.ParseError);
+    }
+  });
+
   test('evaluate("2 - 3 * 4") => -10', () => {
     const result = evaluate("2 - 3 * 4");
     expect(result.ok).toBe(true);

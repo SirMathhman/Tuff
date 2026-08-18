@@ -214,63 +214,34 @@ function parseLetStatement(
   return { ok: true, value: skipWhitespace(input, p + 1) };
 }
 
-function parseBlock(
-  input: string,
-  pos: number,
-  scope: Scope,
-): Result<[number, number], ParseFailure> {
-  const child = new Map(scope);
-  const declaredHere = new Set<string>();
-  for (;;) {
-    pos = skipWhitespace(input, pos);
-    if (input.charAt(pos) === "}") {
-      return {
-        ok: false,
-        error: { position: pos, reason: "expected an expression in block" },
-      };
-    }
-    if (
-      input.startsWith("let", pos) &&
-      !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
-    ) {
-      const stmt = parseLetStatement(input, pos, child, declaredHere);
-      if (!stmt.ok) {
-        return stmt;
-      }
-      pos = stmt.value;
-      continue;
-    }
-    const expr = parseExpression(input, pos, child);
-    if (!expr.ok) {
-      return expr;
-    }
-    pos = skipWhitespace(input, expr.value[1]);
-    if (input.charAt(pos) === ";") {
-      pos = skipWhitespace(input, pos + 1);
-      continue;
-    }
-    if (input.charAt(pos) === "}") {
-      return { ok: true, value: [expr.value[0], pos + 1] };
-    }
-    return {
-      ok: false,
-      error: { position: pos, reason: "expected ';' or '}' after expression" },
-    };
-  }
+function isLetKeyword(input: string, pos: number): boolean {
+  return (
+    input.startsWith("let", pos) && !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
+  );
 }
 
-function parseProgram(
+interface StatementListOptions {
+  isTerminator: (input: string, pos: number) => boolean;
+  emptyError: string;
+  trailingError: string;
+}
+
+function parseStatementList(
   input: string,
   pos: number,
   scope: Scope,
+  declaredHere: Set<string>,
+  options: StatementListOptions,
 ): Result<[number, number], ParseFailure> {
-  const declaredHere = new Set<string>();
   for (;;) {
     pos = skipWhitespace(input, pos);
-    if (
-      input.startsWith("let", pos) &&
-      !/[A-Za-z0-9_]/.test(input.charAt(pos + 3))
-    ) {
+    if (options.isTerminator(input, pos)) {
+      return {
+        ok: false,
+        error: { position: pos, reason: options.emptyError },
+      };
+    }
+    if (isLetKeyword(input, pos)) {
       const stmt = parseLetStatement(input, pos, scope, declaredHere);
       if (!stmt.ok) {
         return stmt;
@@ -282,8 +253,51 @@ function parseProgram(
     if (!expr.ok) {
       return expr;
     }
-    return { ok: true, value: [expr.value[0], expr.value[1]] };
+    pos = skipWhitespace(input, expr.value[1]);
+    if (input.charAt(pos) === ";") {
+      pos = skipWhitespace(input, pos + 1);
+      continue;
+    }
+    if (options.isTerminator(input, pos)) {
+      return { ok: true, value: [expr.value[0], pos] };
+    }
+    return {
+      ok: false,
+      error: { position: pos, reason: options.trailingError },
+    };
   }
+}
+
+function parseBlock(
+  input: string,
+  pos: number,
+  scope: Scope,
+): Result<[number, number], ParseFailure> {
+  const child = new Map(scope);
+  const declaredHere = new Set<string>();
+  const parsed = parseStatementList(input, pos, child, declaredHere, {
+    isTerminator: (i, p) => i.charAt(p) === "}",
+    emptyError: "expected an expression in block",
+    trailingError: "expected ';' or '}' after expression",
+  });
+  if (!parsed.ok) {
+    return parsed;
+  }
+  const [value, termPos] = parsed.value;
+  return { ok: true, value: [value, termPos + 1] };
+}
+
+function parseProgram(
+  input: string,
+  pos: number,
+  scope: Scope,
+): Result<[number, number], ParseFailure> {
+  const declaredHere = new Set<string>();
+  return parseStatementList(input, pos, scope, declaredHere, {
+    isTerminator: (i, p) => p >= i.length,
+    emptyError: "expected an expression",
+    trailingError: "expected ';' after expression",
+  });
 }
 
 function parseError(
