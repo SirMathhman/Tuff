@@ -19,9 +19,13 @@ export type { EvaluateError, EvaluateResult } from "./errors.js";
  * or `&mut x` (mutable, requires a `mut` binding) and read with the
  * prefix `*` operator; `*y = expr;` writes through a mutable reference.
  * The boolean literals `true` and `false` evaluate to 1 and 0 and are
- * reserved words. Multiplication binds tighter than addition and
- * subtraction, which are evaluated left to right. Empty input is a
- * defined case and evaluates to 0.
+ * reserved words. A binding remembers the kind of literal it was
+ * initialized with, and assigning a literal of the other kind (a boolean
+ * to a number-initialized binding, or a number to a boolean-initialized
+ * one) is a `type-mismatch` error; non-literal right-hand sides never
+ * mismatch. Multiplication binds tighter than addition and subtraction,
+ * which are evaluated left to right. Empty input is a defined case and
+ * evaluates to 0.
  */
 export function evaluate(input: string): EvaluateResult {
   const trimmed = input.trim();
@@ -81,6 +85,14 @@ function toEvaluateError(error: ParseError, input: string): EvaluateError {
       input,
       name: error.name,
       reason: `Cannot dereference non-reference "${error.name}" in "${input}"`,
+    };
+  }
+  if (error.kind === "type-mismatch") {
+    return {
+      kind: "type-mismatch",
+      input,
+      name: error.name,
+      reason: `Cannot assign ${error.from} literal to ${error.to} variable "${error.name}" in "${input}"`,
     };
   }
   return {

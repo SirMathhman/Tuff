@@ -2,9 +2,15 @@ import { type ParseError, type ParseResult } from "./errors.js";
 import { isIdentifier, type Token } from "./tokenize.js";
 
 /**
- * A value binding: a number and whether it may be assigned.
+ * A value binding: a number, whether it may be assigned, and the kind of
+ * value it was initialized with (a boolean literal or a number).
  */
-type ValueBinding = { kind: "value"; value: number; mutable: boolean };
+type ValueBinding = {
+  kind: "value";
+  value: number;
+  mutable: boolean;
+  literal: "number" | "boolean";
+};
 
 /**
  * A variable binding. A `value` binding holds a number; a `ref` binding
@@ -49,6 +55,35 @@ export class Parser {
 
   private advance(): Token | undefined {
     return this.tokens[this.pos++];
+  }
+
+  /**
+   * Returns the literal kind of the token at the current position when it is
+   * a boolean or number literal, otherwise null.
+   */
+  private literalKind(): "boolean" | "number" | null {
+    const token = this.peek();
+    if (token === "true" || token === "false") {
+      return "boolean";
+    }
+    return typeof token === "number" ? "number" : null;
+  }
+
+  /**
+   * Records a type-mismatch error when the assigned literal's kind differs
+   * from the binding's initialized kind. A non-literal right-hand side
+   * (an expression or identifier) never mismatches.
+   */
+  private checkTypeMismatch(
+    name: string,
+    binding: ValueBinding,
+    literal: "boolean" | "number" | null,
+  ): boolean {
+    if (literal === null || literal === binding.literal) {
+      return true;
+    }
+    this.error = { kind: "type-mismatch", name, from: literal, to: binding.literal };
+    return false;
   }
 
   /**
@@ -251,6 +286,7 @@ export class Parser {
       this.scopes[this.scopes.length - 1].set(name, ref);
       return true;
     }
+    const literal = this.literalKind();
     const value = this.parseExpression();
     if (value === null) {
       return false;
@@ -259,7 +295,12 @@ export class Parser {
       return false;
     }
     this.advance();
-    this.scopes[this.scopes.length - 1].set(name, { kind: "value", value, mutable });
+    this.scopes[this.scopes.length - 1].set(name, {
+      kind: "value",
+      value,
+      mutable,
+      literal: literal ?? "number",
+    });
     return true;
   }
 
@@ -297,6 +338,38 @@ export class Parser {
   }
 
   /**
+   * Parses `= expression ;` and returns the parsed value together with the
+   * literal kind of the right-hand side. Returns null when the right-hand
+   * side is malformed.
+   */
+  private parseAssignmentRhs(): { literal: "boolean" | "number" | null; value: number } | null {
+    this.advance(); // "="
+    const literal = this.literalKind();
+    const value = this.parseExpression();
+    if (value === null) {
+      return null;
+    }
+    if (this.peek() !== ";") {
+      return null;
+    }
+    this.advance();
+    return { literal, value };
+  }
+
+  /**
+   * Looks up a binding by name, recording an unknown-variable error and
+   * returning null when it is not found.
+   */
+  private lookupOrError(name: string): Binding | null {
+    const binding = this.lookup(name);
+    if (binding === null) {
+      this.error = { kind: "unknown-variable", name };
+      return null;
+    }
+    return binding;
+  }
+
+  /**
    * Parses `identifier = expression ;`. The variable must already be
    * declared as `mut` in an enclosing scope.
    */
@@ -306,28 +379,25 @@ export class Parser {
       return this.parseDereferenceAssignment();
     }
     const name = this.advance() as string;
-    this.advance(); // "="
-    const value = this.parseExpression();
-    if (value === null) {
+    const rhs = this.parseAssignmentRhs();
+    if (rhs === null) {
       return false;
     }
-    if (this.peek() !== ";") {
-      return false;
-    }
-    this.advance();
-    const binding = this.lookup(name);
+    const binding = this.lookupOrError(name);
     if (binding === null) {
-      this.error = { kind: "unknown-variable", name };
       return false;
     }
     if (binding.kind === "ref") {
+      return false;
+    }
+    if (!this.checkTypeMismatch(name, binding, rhs.literal)) {
       return false;
     }
     if (!binding.mutable) {
       this.error = { kind: "immutable-assignment", name };
       return false;
     }
-    binding.value = value;
+    binding.value = rhs.value;
     return true;
   }
 
@@ -338,29 +408,26 @@ export class Parser {
   private parseDereferenceAssignment(): boolean {
     this.advance(); // "*"
     const name = this.advance() as string; // identifier (guaranteed by isAssignmentStart)
-    this.advance(); // "=" (guaranteed by isAssignmentStart)
-    const value = this.parseExpression();
-    if (value === null) {
+    const rhs = this.parseAssignmentRhs();
+    if (rhs === null) {
       return false;
     }
-    if (this.peek() !== ";") {
-      return false;
-    }
-    this.advance();
-    const binding = this.lookup(name);
+    const binding = this.lookupOrError(name);
     if (binding === null) {
-      this.error = { kind: "unknown-variable", name };
       return false;
     }
     if (binding.kind !== "ref") {
       this.error = { kind: "invalid-dereference", name };
       return false;
     }
+    if (!this.checkTypeMismatch(name, binding.target, rhs.literal)) {
+      return false;
+    }
     if (!binding.mutable) {
       this.error = { kind: "immutable-assignment", name };
       return false;
     }
-    binding.target.value = value;
+    binding.target.value = rhs.value;
     return true;
   }
 

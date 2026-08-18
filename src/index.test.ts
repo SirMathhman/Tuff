@@ -44,6 +44,41 @@ test("returns 0 for reassigning a mutable boolean binding", () => {
   expect(evaluate("let mut x = true; x = false; x")).toEqual({ ok: true, value: 0 });
 });
 
+test("returns a structured error for assigning a boolean to a numeric binding", () => {
+  expectError("let mut x = 0; x = false;", {
+    kind: "type-mismatch",
+    input: "let mut x = 0; x = false;",
+    name: "x",
+    reason: 'Cannot assign boolean literal to number variable "x" in "let mut x = 0; x = false;"',
+  });
+});
+
+// Coverage: number literal assigned to a boolean binding (type-mismatch, from number).
+test("returns a structured error for assigning a number to a boolean binding", () => {
+  expectError("let mut x = true; x = 1;", {
+    kind: "type-mismatch",
+    input: "let mut x = true; x = 1;",
+    name: "x",
+    reason: 'Cannot assign number literal to boolean variable "x" in "let mut x = true; x = 1;"',
+  });
+});
+
+// Coverage: type-mismatch through a mutable reference write.
+test("returns a structured error for a boolean write through a numeric reference", () => {
+  expectError("let mut x = 0; let y = &mut x; *y = true;", {
+    kind: "type-mismatch",
+    input: "let mut x = 0; let y = &mut x; *y = true;",
+    name: "y",
+    reason:
+      'Cannot assign boolean literal to number variable "y" in "let mut x = 0; let y = &mut x; *y = true;"',
+  });
+});
+
+// Coverage: non-literal right-hand side never mismatches (identifier RHS).
+test("returns 0 for assigning an identifier to a numeric binding", () => {
+  expect(evaluate("let mut x = 0; let y = 1; x = y;")).toEqual({ ok: true, value: 0 });
+});
+
 test("returns 1 for a reference read through a boolean binding", () => {
   expect(evaluate("let x = true; let y = &x; *y")).toEqual({ ok: true, value: 1 });
 });
