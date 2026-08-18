@@ -1,4 +1,4 @@
-import { add } from "./index.js";
+import { add, evaluate } from "./index.js";
 
 describe("add", () => {
   it("adds two numbers", () => {
@@ -7,5 +7,11 @@ describe("add", () => {
 
   it("handles negative numbers", () => {
     expect(add(-1, 1)).toBe(0);
+  });
+});
+
+describe("evaluate", () => {
+  it("returns 0 for empty input", () => {
+    expect(evaluate("")).toBe(0);
   });
 });
