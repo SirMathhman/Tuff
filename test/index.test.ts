@@ -115,6 +115,10 @@ describe("evaluate", () => {
     ).toBe(1);
   });
 
+  test('evaluate("let array = [100]; array[(2 + 3) - 5]") => 100', () => {
+    expect(valueOf("let array = [100]; array[(2 + 3) - 5]")).toBe(100);
+  });
+
   test('evaluate("something invalid") => Err', () => {
     const result = evaluate("something invalid");
     expect(result.ok).toBe(false);
