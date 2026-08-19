@@ -5,9 +5,22 @@ export type Value =
   | { kind: "ident"; name: string; position: number }
   | {
       kind: "binary";
-      operator: "==" | "!=" | "<" | "<=" | ">" | ">=";
+      operator: "==" | "!=" | "<" | "<=" | ">" | ">=" | "+";
       left: Value;
       right: Value;
+      position: number;
+    }
+  | {
+      /** An array literal (`[1, 2, 3]`), a homogeneous list of values. */
+      kind: "array";
+      elements: Value[];
+      position: number;
+    }
+  | {
+      /** An element of an array (`arr[i]`), a number index into the target. */
+      kind: "index";
+      target: Value;
+      index: Value;
       position: number;
     }
   | {

@@ -13,20 +13,37 @@ export type Token =
   | { kind: "bool"; value: boolean; position: number }
   | { kind: "assign"; position: number }
   | { kind: "compoundAssign"; operator: "+="; position: number }
-  | { kind: "binary"; operator: "==" | "!=" | "<" | "<=" | ">" | ">="; position: number }
+  | {
+      kind: "binary";
+      operator: "==" | "!=" | "<" | "<=" | ">" | ">=" | "+";
+      position: number;
+    }
   | { kind: "semicolon"; position: number }
   | { kind: "addressOf"; mutable: boolean; position: number }
   | { kind: "deref"; position: number }
   | { kind: "lbrace"; position: number }
   | { kind: "rbrace"; position: number }
   | { kind: "lparen"; position: number }
-  | { kind: "rparen"; position: number };
+  | { kind: "rparen"; position: number }
+  | { kind: "lbracket"; position: number }
+  | { kind: "rbracket"; position: number }
+  | { kind: "comma"; position: number };
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
 const SINGLE_CHAR_TOKENS: Record<
   string,
-  "assign" | "semicolon" | "addressOf" | "deref" | "lbrace" | "rbrace" | "lparen" | "rparen"
+  | "assign"
+  | "semicolon"
+  | "addressOf"
+  | "deref"
+  | "lbrace"
+  | "rbrace"
+  | "lparen"
+  | "rparen"
+  | "lbracket"
+  | "rbracket"
+  | "comma"
 > = {
   "=": "assign",
   ";": "semicolon",
@@ -36,6 +53,9 @@ const SINGLE_CHAR_TOKENS: Record<
   "}": "rbrace",
   "(": "lparen",
   ")": "rparen",
+  "[": "lbracket",
+  "]": "rbracket",
+  ",": "comma",
 };
 
 /**
@@ -75,7 +95,7 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       i += 2;
       continue;
     }
-    if (char === "<" || char === ">") {
+    if (char === "<" || char === ">" || char === "+") {
       tokens.push({ kind: "binary", operator: char, position: i });
       i += 1;
       continue;

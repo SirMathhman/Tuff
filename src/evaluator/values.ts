@@ -6,6 +6,7 @@ import { lookup, type ScopeStack } from "../scopes.js";
 export type TypedValue =
   | { type: "number"; value: number }
   | { type: "bool"; value: boolean }
+  | { type: `array<${TypeName}>`; elements: TypedValue[] }
   | { type: `ptr<${TypeName}>`; ref: Variable };
 
 /** A variable's value with its type, so assignments can be type-checked. */
@@ -20,9 +21,17 @@ export type Scopes = ScopeStack<Variable>;
 /** A pointer variant of `TypedValue`, at any nesting depth. */
 type PointerValue = Extract<TypedValue, { type: `ptr<${TypeName}>` }>;
 
+/** An array variant of `TypedValue`. */
+type ArrayValue = Extract<TypedValue, { type: `array<${TypeName}>` }>;
+
 /** Type guard: is this a pointer value? */
 export function isPointer(t: TypedValue): t is PointerValue {
   return t.type.startsWith("ptr<");
+}
+
+/** Type guard: is this an array value? */
+function isArray(t: TypedValue): t is ArrayValue {
+  return t.type.startsWith("array<");
 }
 
 /** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
@@ -37,6 +46,9 @@ function evalBinary(
   const right = valueToTyped(value.right, scopes);
   if (!right.ok) {
     return right;
+  }
+  if (value.operator === "+") {
+    return evalAddition(value, left.value, right.value);
   }
   if (value.operator === "==" || value.operator === "!=") {
     const l = left.value;
@@ -92,6 +104,77 @@ function evalOrdering(
           ? leftNum.value > rightNum.value
           : leftNum.value >= rightNum.value;
   return ok({ type: "number", value: result ? 1 : 0 });
+}
+
+/** Evaluate `a + b`: numeric addition (both operands are numbers). */
+function evalAddition(
+  value: Extract<Value, { kind: "binary" }>,
+  l: TypedValue,
+  r: TypedValue,
+): Result<TypedValue, EvalError> {
+  // Operands are checked to be numbers by the typecheck pass; defensive fallback.
+  if (l.type !== "number" || r.type !== "number") {
+    return err({
+      kind: "TypeMismatch",
+      name: "+",
+      expected: "number",
+      actual: l.type !== "number" ? l.type : r.type,
+      position: value.position,
+    });
+  }
+  return ok({ type: "number", value: l.value + r.value });
+}
+
+/** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
+function evalArray(
+  value: Extract<Value, { kind: "array" }>,
+  scopes: Scopes,
+): Result<TypedValue, EvalError> {
+  const elements: TypedValue[] = [];
+  for (const element of value.elements) {
+    const typed = valueToTyped(element, scopes);
+    if (!typed.ok) {
+      return typed;
+    }
+    elements.push(typed.value);
+  }
+  const elementType = elements[0]?.type ?? "number";
+  return ok({ type: `array<${elementType}>`, elements });
+}
+
+/** Evaluate `arr[i]`: the element of an array at a numeric index. */
+function evalIndex(
+  value: Extract<Value, { kind: "index" }>,
+  scopes: Scopes,
+): Result<TypedValue, EvalError> {
+  const target = valueToTyped(value.target, scopes);
+  if (!target.ok) {
+    return target;
+  }
+  const index = valueToNumber(value.index, scopes);
+  if (!index.ok) {
+    return index;
+  }
+  if (!isArray(target.value)) {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "array<number>",
+      actual: target.value.type,
+      position: value.position,
+    });
+  }
+  const element = target.value.elements[index.value];
+  if (element === undefined) {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "number",
+      actual: "out-of-range",
+      position: value.position,
+    });
+  }
+  return ok(element);
 }
 
 /** Evaluate `&name`: a pointer to the variable's value (pointers may nest). */
@@ -156,6 +239,12 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
   if (value.kind === "binary") {
     return evalBinary(value, scopes);
   }
+  if (value.kind === "array") {
+    return evalArray(value, scopes);
+  }
+  if (value.kind === "index") {
+    return evalIndex(value, scopes);
+  }
   if (value.kind === "addressOf") {
     return evalAddressOf(value, scopes);
   }
@@ -175,7 +264,7 @@ export function valueToNumber(value: Value, scopes: Scopes): Result<number, Eval
   if (!typed.ok) {
     return typed;
   }
-  if (isPointer(typed.value)) {
+  if (isPointer(typed.value) || isArray(typed.value)) {
     return err({
       kind: "TypeMismatch",
       name: "*",

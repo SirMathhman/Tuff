@@ -81,6 +81,48 @@ test("evaluate returns a TypeMismatch error when writing a bool through a number
     error: { kind: "TypeMismatch", name: "y", expected: "number", actual: "bool", position: 31 },
   });
 });
+test('evaluate returns 6 for "let array = [1, 2, 3]; return array[0] + array[1] + array[2];"', () => {
+  expect(evaluate("let array = [1, 2, 3]; return array[0] + array[1] + array[2];")).toEqual({
+    ok: true,
+    value: 6,
+  });
+});
+test('evaluate returns 3 for "let array = [1, 2, 3]; return array[2];"', () => {
+  expect(evaluate("let array = [1, 2, 3]; return array[2];")).toEqual({ ok: true, value: 3 });
+});
+test('evaluate returns 1 for "return [1, 2, 3][0];"', () => {
+  expect(evaluate("return [1, 2, 3][0];")).toEqual({ ok: true, value: 1 });
+});
+test('evaluate returns 4 for "let array = [1, 2, 3]; return array[0] + 3;"', () => {
+  expect(evaluate("let array = [1, 2, 3]; return array[0] + 3;")).toEqual({ ok: true, value: 4 });
+});
+test('evaluate returns 1 for "let array = [1, 2, 3]; return array[0] == 1;"', () => {
+  expect(evaluate("let array = [1, 2, 3]; return array[0] == 1;")).toEqual({ ok: true, value: 1 });
+});
+test("evaluate returns a TypeMismatch error for a heterogeneous array literal", () => {
+  expect(evaluate("let array = [1, true]; return array[0];")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "[", expected: "number", actual: "bool", position: 16 },
+  });
+});
+test("evaluate returns a TypeMismatch error when indexing a non-array", () => {
+  expect(evaluate("let x = 1; return x[0];")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "array<number>",
+      actual: "number",
+      position: 19,
+    },
+  });
+});
+test("evaluate returns a TypeMismatch error when adding a bool", () => {
+  expect(evaluate("return true + 1;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "+", expected: "number", actual: "bool", position: 7 },
+  });
+});
 // Coverage for the typecheck pass rejecting pointer operands to ordering operators.
 test("evaluate returns a TypeMismatch error for a pointer operand to an ordering operator", () => {
   expect(evaluate("let a = 1; let p = &a; return p < p;")).toEqual({
