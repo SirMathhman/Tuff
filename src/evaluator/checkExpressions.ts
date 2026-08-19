@@ -108,8 +108,9 @@ function checkIndex(value: ValueIndex, scopes: DeclScopes): Result<null, EvalErr
 
 /**
  * Check that a value expression can coerce to a number (numbers and bools can;
- * arrays, pointers, and ranges cannot). Used for `return` values and `if`/`while`
- * conditions, where the evaluator would otherwise emit a placeholder error.
+ * arrays, pointers, and ranges cannot). Used for `return` values, `if`/`while`
+ * conditions, and `..` range bounds, where the evaluator would otherwise emit
+ * a placeholder error.
  */
 export function checkNumericCoercible(
   value: Value,
@@ -189,7 +190,17 @@ export function checkExpression(value: Value, scopes: DeclScopes): Result<null, 
     if (!start.ok) {
       return start;
     }
-    return checkExpression(value.end, scopes);
+    const end = checkExpression(value.end, scopes);
+    if (!end.ok) {
+      return end;
+    }
+    // Bounds must be numeric-coercible so the evaluator never has to emit a
+    // placeholder error for a `..` construct the user did not write.
+    const startType = checkNumericCoercible(value.start, scopes, "..");
+    if (!startType.ok) {
+      return startType;
+    }
+    return checkNumericCoercible(value.end, scopes, "..");
   }
   return ok(null);
 }

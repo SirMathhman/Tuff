@@ -280,3 +280,29 @@ test("evalProgram returns a TypeMismatch error when the for range is not a range
     },
   });
 });
+
+test("evalProgram returns a TypeMismatch error for a non-number range bound", () => {
+  expect(evalSource("let r = [1]..2; return 1;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "..",
+      expected: "number",
+      actual: "array<number>",
+      position: 8,
+    },
+  });
+});
+
+test("evalProgram reports the range bound, not the loop, for a non-number bound in a for range", () => {
+  expect(evalSource("for (i in [1]..2) { } return 1;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "..",
+      expected: "number",
+      actual: "array<number>",
+      position: 10,
+    },
+  });
+});
