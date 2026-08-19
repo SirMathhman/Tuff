@@ -25,7 +25,7 @@ function expressionType(value: Value, scopes: DeclScopes): TypeName {
     return "number";
   }
   if (value.kind === "addressOf") {
-    return `ptr<${expressionType(value.target, scopes)}>` as TypeName;
+    return `ptr<${expressionType(value.target, scopes)}>`;
   }
   if (value.kind === "deref") {
     const target = expressionType(value.target, scopes);

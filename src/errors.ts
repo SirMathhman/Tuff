@@ -17,8 +17,13 @@ export function err<E>(error: E): Err<E> {
   return { ok: false, error };
 }
 
-/** A static type name: a primitive or a pointer to a primitive. */
-export type TypeName = "number" | "bool" | "ptr<number>" | "ptr<bool>";
+/**
+ * A static type name: a primitive, or a pointer type (possibly nested, e.g.
+ * `ptr<ptr<number>>`) represented as a string. Pointer types are built
+ * dynamically, so they are carried as plain strings rather than a recursive
+ * template-literal alias (which TypeScript rejects).
+ */
+export type TypeName = "number" | "bool" | (string & {});
 
 /**
  * Structured errors produced by `evaluate`.

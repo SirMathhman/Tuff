@@ -45,6 +45,9 @@ test('evaluate returns 3 for "let mut x = 1; x += 2; return x;"', () => {
 test('evaluate returns 1 for "let x = 1; let y = &x; return *y;"', () => {
   expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
 });
+test('evaluate returns 1 for "let x = 1; let y = &x; let z = &y; return **z;"', () => {
+  expect(evaluate("let x = 1; let y = &x; let z = &y; return **z;")).toEqual({ ok: true, value: 1 });
+});
 test('evaluate returns 2 for "let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;"', () => {
   expect(evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;")).toEqual({
     ok: true,

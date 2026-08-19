@@ -1,19 +1,26 @@
 import type { Value } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
+import { err, ok, type EvalError, type Result, type TypeName } from "../errors.js";
 import { lookup, type ScopeStack } from "../scopes.js";
 
 /** A value with its type, so `==` can compare type-strictly. */
 export type TypedValue =
   | { type: "number"; value: number }
   | { type: "bool"; value: boolean }
-  | { type: "ptr<number>"; ref: Variable }
-  | { type: "ptr<bool>"; ref: Variable };
+  | { type: `ptr<${TypeName}>`; ref: Variable };
 
 /** A variable's value with its type, so assignments can be type-checked. */
 export type Variable = { value: TypedValue; mutable: boolean };
 
 /** A stack of variable scopes, innermost last. */
 export type Scopes = ScopeStack<Variable>;
+
+/** A pointer variant of `TypedValue`, at any nesting depth. */
+type PointerValue = Extract<TypedValue, { type: `ptr<${TypeName}>` }>;
+
+/** Type guard: is this a pointer value? */
+function isPointer(t: TypedValue): t is PointerValue {
+  return t.type.startsWith("ptr<");
+}
 
 /** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
 function evalBinary(
@@ -63,17 +70,21 @@ function evalBinary(
   return ok({ type: "number", value: result ? 1 : 0 });
 }
 
-/** Evaluate `&name`: a pointer to the variable's value. */
+/** Evaluate `&name`: a pointer to the variable's value (pointers may nest). */
 function evalAddressOf(
   value: Extract<Value, { kind: "addressOf" }>,
   scopes: Scopes,
 ): Result<TypedValue, EvalError> {
+  const target = valueToTyped(value.target, scopes);
+  if (!target.ok) {
+    return target;
+  }
   if (value.target.kind !== "ident") {
     return err({
       kind: "TypeMismatch",
       name: "&",
       expected: "number",
-      actual: "bool",
+      actual: target.value.type,
       position: value.position,
     });
   }
@@ -81,17 +92,7 @@ function evalAddressOf(
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
   }
-  const base = variable.value.type;
-  if (base !== "number" && base !== "bool") {
-    return err({
-      kind: "TypeMismatch",
-      name: "&",
-      expected: "number",
-      actual: base,
-      position: value.position,
-    });
-  }
-  return ok({ type: `ptr<${base}>` as "ptr<number>", ref: variable });
+  return ok({ type: `ptr<${variable.value.type}>`, ref: variable });
 }
 
 /** Evaluate `*ptr`: the value a pointer refers to. */
@@ -103,7 +104,7 @@ function evalDeref(
   if (!target.ok) {
     return target;
   }
-  if (target.value.type !== "ptr<number>" && target.value.type !== "ptr<bool>") {
+  if (!isPointer(target.value)) {
     return err({
       kind: "TypeMismatch",
       name: "*",
@@ -150,7 +151,7 @@ export function valueToNumber(value: Value, scopes: Scopes): Result<number, Eval
   if (!typed.ok) {
     return typed;
   }
-  if (typed.value.type === "ptr<number>" || typed.value.type === "ptr<bool>") {
+  if (isPointer(typed.value)) {
     return err({
       kind: "TypeMismatch",
       name: "*",
