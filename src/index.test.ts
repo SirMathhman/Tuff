@@ -41,6 +41,10 @@ describe("evaluate", () => {
     expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  it("returns 20 for the expression let y = { let x = 2 + 3; x } * 4; y", () => {
+    expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toEqual({ ok: true, value: 20 });
+  });
+
   it("returns a structured error for unsupported expressions", () => {
     const result = evaluate("1 +");
 
