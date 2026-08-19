@@ -6,4 +6,8 @@ describe("evaluate", () => {
   });
   it('returns 1 for "return 1;"', () => {
     expect(evaluate("return 1;")).toBe(1);
-  });});
+  });
+  it('returns 1 for "let x = 1; return x;"', () => {
+    expect(evaluate("let x = 1; return x;")).toBe(1);
+  });
+});
