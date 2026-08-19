@@ -206,6 +206,93 @@ const SINGLE_CHAR_TOKENS: Record<
   ",": "comma",
 };
 
+const TWO_CHAR_OPERATORS: Record<string, "==" | "!=" | "<=" | ">="> = {
+  "==": "==",
+  "!=": "!=",
+  "<=": "<=",
+  ">=": ">=",
+};
+
+/** A successful match: the produced token and how many source chars to skip. */
+interface Match {
+  token: Token;
+  advance: number;
+}
+
+/** Matches the multi-char specials `+=` and `&mut`. */
+function matchSpecial(source: string, i: number): Match | undefined {
+  if (source.startsWith("+=", i)) {
+    return {
+      token: { kind: "compoundAssign", operator: "+=", position: i },
+      advance: 2,
+    };
+  }
+  if (source.startsWith("&mut", i)) {
+    return { token: { kind: "addressOf", mutable: true, position: i }, advance: 4 };
+  }
+  return undefined;
+}
+
+/** Matches two-char (`==`, `!=`, `<=`, `>=`) and single-char (`<`, `>`, `+`) binary operators. */
+function matchBinary(source: string, i: number): Match | undefined {
+  const twoCharOperator = TWO_CHAR_OPERATORS[source.slice(i, i + 2)];
+  if (twoCharOperator) {
+    return { token: { kind: "binary", operator: twoCharOperator, position: i }, advance: 2 };
+  }
+  const char = source[i];
+  if (char === "<" || char === ">" || char === "+") {
+    return { token: { kind: "binary", operator: char, position: i }, advance: 1 };
+  }
+  return undefined;
+}
+
+/** Matches the single-char punctuation table (`SINGLE_CHAR_TOKENS`). */
+function matchSingleChar(source: string, i: number): Match | undefined {
+  const kind = SINGLE_CHAR_TOKENS[source[i]];
+  if (!kind) {
+    return undefined;
+  }
+  const token: Token =
+    kind === "addressOf"
+      ? { kind: "addressOf", mutable: false, position: i }
+      : { kind, position: i };
+  return { token, advance: 1 };
+}
+
+/** Matches identifiers, keywords, and boolean literals. */
+function matchWord(source: string, i: number): Match | undefined {
+  const word = IDENT_RE.exec(source.slice(i))?.[0];
+  if (!word) {
+    return undefined;
+  }
+  const token: Token =
+    word === "true" || word === "false"
+      ? { kind: "bool", value: word === "true", position: i }
+      : word === "let" ||
+          word === "mut" ||
+          word === "return" ||
+          word === "if" ||
+          word === "else" ||
+          word === "while" ||
+          word === "break" ||
+          word === "continue"
+        ? { kind: word, position: i }
+        : { kind: "ident", value: word, position: i };
+  return { token, advance: word.length };
+}
+
+/** Matches a numeric literal. */
+function matchNumber(source: string, i: number): Match | undefined {
+  const match = NUMBER_RE.exec(source.slice(i));
+  if (!match) {
+    return undefined;
+  }
+  return {
+    token: { kind: "number", value: Number(match[0]), position: i },
+    advance: match[0].length,
+  };
+}
+
 /**
  * Tokenize a source program.
  * @param source - The source text to tokenize.
@@ -220,74 +307,17 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       i++;
       continue;
     }
-    const twoCharOperators: Record<string, "==" | "!=" | "<=" | ">="> = {
-      "==": "==",
-      "!=": "!=",
-      "<=": "<=",
-      ">=": ">=",
-    };
-    if (source.startsWith("+=", i)) {
-      tokens.push({ kind: "compoundAssign", operator: "+=", position: i });
-      i += 2;
-      continue;
+    const match =
+      matchSpecial(source, i) ??
+      matchBinary(source, i) ??
+      matchSingleChar(source, i) ??
+      matchWord(source, i) ??
+      matchNumber(source, i);
+    if (!match) {
+      return err({ kind: "UnexpectedToken", character: char, position: i });
     }
-    if (source.startsWith("&mut", i)) {
-      tokens.push({ kind: "addressOf", mutable: true, position: i });
-      i += 4;
-      continue;
-    }
-    const twoChar = source.slice(i, i + 2);
-    const twoCharOperator = twoCharOperators[twoChar];
-    if (twoCharOperator) {
-      tokens.push({ kind: "binary", operator: twoCharOperator, position: i });
-      i += 2;
-      continue;
-    }
-    if (char === "<" || char === ">" || char === "+") {
-      tokens.push({ kind: "binary", operator: char, position: i });
-      i += 1;
-      continue;
-    }
-    const singleCharKind = SINGLE_CHAR_TOKENS[char];
-    if (singleCharKind) {
-      if (singleCharKind === "addressOf") {
-        tokens.push({ kind: "addressOf", mutable: false, position: i });
-      } else {
-        tokens.push({ kind: singleCharKind, position: i });
-      }
-      i++;
-      continue;
-    }
-    const rest = source.slice(i);
-    const identMatch = IDENT_RE.exec(rest);
-    if (identMatch) {
-      const word = identMatch[0];
-      if (word === "true" || word === "false") {
-        tokens.push({ kind: "bool", value: word === "true", position: i });
-      } else if (
-        word === "let" ||
-        word === "mut" ||
-        word === "return" ||
-        word === "if" ||
-        word === "else" ||
-        word === "while" ||
-        word === "break" ||
-        word === "continue"
-      ) {
-        tokens.push({ kind: word, position: i });
-      } else {
-        tokens.push({ kind: "ident", value: word, position: i });
-      }
-      i += word.length;
-      continue;
-    }
-    const numberMatch = NUMBER_RE.exec(rest);
-    if (numberMatch) {
-      tokens.push({ kind: "number", value: Number(numberMatch[0]), position: i });
-      i += numberMatch[0].length;
-      continue;
-    }
-    return err({ kind: "UnexpectedToken", character: char, position: i });
+    tokens.push(match.token);
+    i += match.advance;
   }
   return ok(tokens);
 }
