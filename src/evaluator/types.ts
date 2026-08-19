@@ -23,9 +23,18 @@ export function typeToString(type: Type): string {
   return type.kind;
 }
 
-/** Two types are equal when their display names match. */
+/** Two types are equal when their structure matches (kind, element, pointee, mutability). */
 export function typesEqual(a: Type, b: Type): boolean {
-  return typeToString(a) === typeToString(b);
+  if (a.kind !== b.kind) {
+    return false;
+  }
+  if (a.kind === "array" && b.kind === "array") {
+    return typesEqual(a.element, b.element);
+  }
+  if (a.kind === "ptr" && b.kind === "ptr") {
+    return a.mutable === b.mutable && typesEqual(a.pointee, b.pointee);
+  }
+  return true;
 }
 
 /** A variable's declared type and mutability, tracked across scopes. */

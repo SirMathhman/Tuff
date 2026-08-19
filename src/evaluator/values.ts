@@ -1,13 +1,19 @@
 import type { Value } from "../ast.js";
-import { err, ok, type EvalError, type Result, type TypeName } from "../errors.js";
+import { err, ok, type EvalError, type Result } from "../errors.js";
 import { lookup, type ScopeStack } from "../scopes.js";
+import { typeToString, type Type } from "./types.js";
 
-/** A value with its type, so `==` can compare type-strictly. */
+/**
+ * A value with its static type, so `==` can compare type-strictly. `kind` is
+ * the discriminant (matching the structured `Type` from the typecheck pass);
+ * each variant carries the payload for that kind, so narrowing on `kind` also
+ * narrows the payload.
+ */
 export type TypedValue =
-  | { type: "number"; value: number }
-  | { type: "bool"; value: boolean }
-  | { type: `array<${TypeName}>`; elements: TypedValue[] }
-  | { type: `ptr<${TypeName}>`; ref: Variable };
+  | { kind: "number"; value: number }
+  | { kind: "bool"; value: boolean }
+  | { kind: "array"; element: Type; elements: TypedValue[] }
+  | { kind: "ptr"; mutable: boolean; pointee: Type; ref: Variable };
 
 /** A variable's value with its type, so assignments can be type-checked. */
 export interface Variable {
@@ -19,19 +25,19 @@ export interface Variable {
 export type Scopes = ScopeStack<Variable>;
 
 /** A pointer variant of `TypedValue`, at any nesting depth. */
-type PointerValue = Extract<TypedValue, { type: `ptr<${TypeName}>` }>;
+type PointerValue = Extract<TypedValue, { kind: "ptr" }>;
 
 /** An array variant of `TypedValue`. */
-type ArrayValue = Extract<TypedValue, { type: `array<${TypeName}>` }>;
+type ArrayValue = Extract<TypedValue, { kind: "array" }>;
 
 /** Type guard: is this a pointer value? */
 export function isPointer(t: TypedValue): t is PointerValue {
-  return t.type.startsWith("ptr<");
+  return t.kind === "ptr";
 }
 
 /** Type guard: is this an array value? */
 function isArray(t: TypedValue): t is ArrayValue {
-  return t.type.startsWith("array<");
+  return t.kind === "array";
 }
 
 /** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
@@ -54,13 +60,13 @@ function evalBinary(
     const l = left.value;
     const r = right.value;
     let equal = false;
-    if (l.type === "number" && r.type === "number") {
+    if (l.kind === "number" && r.kind === "number") {
       equal = l.value === r.value;
-    } else if (l.type === "bool" && r.type === "bool") {
+    } else if (l.kind === "bool" && r.kind === "bool") {
       equal = l.value === r.value;
     }
     const result = value.operator === "==" ? equal : !equal;
-    return ok({ type: "number", value: result ? 1 : 0 });
+    return ok({ kind: "number", value: result ? 1 : 0 });
   }
   return evalOrdering(value, left.value, right.value);
 }
@@ -73,17 +79,17 @@ function evalOrdering(
 ): Result<TypedValue, EvalError> {
   // Pointers are rejected by the typecheck pass; this is a defensive fallback.
   const toNum = (t: TypedValue): Result<number, EvalError> => {
-    if (t.type === "number") {
+    if (t.kind === "number") {
       return ok(t.value);
     }
-    if (t.type === "bool") {
+    if (t.kind === "bool") {
       return ok(t.value ? 1 : 0);
     }
     return err({
       kind: "TypeMismatch",
       name: value.operator,
       expected: "number",
-      actual: t.type,
+      actual: typeToString(t),
       position: value.position,
     });
   };
@@ -103,7 +109,7 @@ function evalOrdering(
         : value.operator === ">"
           ? leftNum.value > rightNum.value
           : leftNum.value >= rightNum.value;
-  return ok({ type: "number", value: result ? 1 : 0 });
+  return ok({ kind: "number", value: result ? 1 : 0 });
 }
 
 /** Evaluate `a + b`: numeric addition (both operands are numbers). */
@@ -113,16 +119,16 @@ function evalAddition(
   r: TypedValue,
 ): Result<TypedValue, EvalError> {
   // Operands are checked to be numbers by the typecheck pass; defensive fallback.
-  if (l.type !== "number" || r.type !== "number") {
+  if (l.kind !== "number" || r.kind !== "number") {
     return err({
       kind: "TypeMismatch",
       name: "+",
       expected: "number",
-      actual: l.type !== "number" ? l.type : r.type,
+      actual: l.kind !== "number" ? typeToString(l) : typeToString(r),
       position: value.position,
     });
   }
-  return ok({ type: "number", value: l.value + r.value });
+  return ok({ kind: "number", value: l.value + r.value });
 }
 
 /** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
@@ -138,8 +144,9 @@ function evalArray(
     }
     elements.push(typed.value);
   }
-  const elementType = elements[0]?.type ?? "number";
-  return ok({ type: `array<${elementType}>`, elements });
+  const first = elements[0];
+  const element: Type = first ?? { kind: "number" };
+  return ok({ kind: "array", element, elements });
 }
 
 /** Evaluate `arr[i]`: the element of an array at a numeric index. */
@@ -160,7 +167,7 @@ function evalIndex(
       kind: "TypeMismatch",
       name: "[",
       expected: "array<number>",
-      actual: target.value.type,
+      actual: typeToString(target.value),
       position: value.position,
     });
   }
@@ -191,7 +198,7 @@ function evalAddressOf(
       kind: "TypeMismatch",
       name: "&",
       expected: "number",
-      actual: target.value.type,
+      actual: typeToString(target.value),
       position: value.position,
     });
   }
@@ -199,7 +206,12 @@ function evalAddressOf(
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
   }
-  return ok({ type: `ptr<${variable.value.type}>`, ref: variable });
+  return ok({
+    kind: "ptr",
+    mutable: value.mutable,
+    pointee: variable.value,
+    ref: variable,
+  });
 }
 
 /** Evaluate `*ptr`: the value a pointer refers to. */
@@ -216,7 +228,7 @@ function evalDeref(
       kind: "TypeMismatch",
       name: "*",
       expected: "ptr<number>",
-      actual: target.value.type,
+      actual: typeToString(target.value),
       position: value.position,
     });
   }
@@ -231,10 +243,10 @@ function evalDeref(
  */
 export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
-    return ok({ type: "number", value: value.value });
+    return ok({ kind: "number", value: value.value });
   }
   if (value.kind === "bool") {
-    return ok({ type: "bool", value: value.value });
+    return ok({ kind: "bool", value: value.value });
   }
   if (value.kind === "binary") {
     return evalBinary(value, scopes);
@@ -269,9 +281,9 @@ export function valueToNumber(value: Value, scopes: Scopes): Result<number, Eval
       kind: "TypeMismatch",
       name: "*",
       expected: "number",
-      actual: typed.value.type,
+      actual: typeToString(typed.value),
       position: value.position,
     });
   }
-  return ok(typed.value.type === "bool" ? (typed.value.value ? 1 : 0) : typed.value.value);
+  return ok(typed.value.kind === "bool" ? (typed.value.value ? 1 : 0) : typed.value.value);
 }

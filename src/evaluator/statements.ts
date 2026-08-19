@@ -1,6 +1,7 @@
 import type { Statement, Value } from "../ast.js";
 import type { EvalError } from "../errors.js";
 import { lookup, withScope } from "../scopes.js";
+import { typeToString } from "./types.js";
 import {
   isPointer,
   valueToNumber,
@@ -48,9 +49,9 @@ function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: S
  */
 function writeValue(variable: Variable, value: TypedValue, compound: boolean): void {
   if (compound) {
-    const base = variable.value.type === "number" ? variable.value.value : 0;
-    const addend = value.type === "number" ? value.value : 0;
-    variable.value = { type: "number", value: base + addend };
+    const base = variable.value.kind === "number" ? variable.value.value : 0;
+    const addend = value.kind === "number" ? value.value : 0;
+    variable.value = { kind: "number", value: base + addend };
     return;
   }
   variable.value = value;
@@ -98,7 +99,7 @@ function evalDerefAssign(
         kind: "TypeMismatch",
         name: "*",
         expected: "ptr<number>",
-        actual: pointer.value.type,
+        actual: typeToString(pointer.value),
         position: statement.position,
       },
     };
