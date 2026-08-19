@@ -59,6 +59,14 @@ export interface ValueDeref {
   position: number;
 }
 
+/** An array element as an assignment target (`arr[i]`). */
+export interface ValueIndexAssign {
+  kind: "indexAssign";
+  target: Value;
+  index: Value;
+  position: number;
+}
+
 /** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
   | ValueNumber
@@ -68,7 +76,8 @@ export type Value =
   | ValueArray
   | ValueIndex
   | ValueAddressOf
-  | ValueDeref;
+  | ValueDeref
+  | ValueIndexAssign;
 
 /** A variable declaration (`let` / `let mut`). */
 export interface StatementLet {
@@ -79,10 +88,10 @@ export interface StatementLet {
   position: number;
 }
 
-/** An assignment to an identifier or a dereference (`*ptr = value`). */
+/** An assignment to an identifier, a dereference, or an array element. */
 export interface StatementAssign {
   kind: "assign";
-  /** The lvalue being assigned: an identifier or a dereference (`*ptr`). */
+  /** The lvalue being assigned: an identifier, a dereference (`*ptr`), or an array element (`arr[i]`). */
   target: Value;
   value: Value;
   /** Present when the statement is a compound assignment (`+=`). */

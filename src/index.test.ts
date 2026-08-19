@@ -99,6 +99,72 @@ test('evaluate returns 4 for "let array = [1, 2, 3]; return array[0] + 3;"', () 
 test('evaluate returns 1 for "let array = [1, 2, 3]; return array[0] == 1;"', () => {
   expect(evaluate("let array = [1, 2, 3]; return array[0] == 1;")).toEqual({ ok: true, value: 1 });
 });
+test('evaluate returns 1 for "let mut array = [0]; array[0] = 1; return array[0];"', () => {
+  expect(evaluate("let mut array = [0]; array[0] = 1; return array[0];")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test('evaluate returns 4 for "let mut array = [1, 2]; array[1] = 3; return array[0] + array[1];"', () => {
+  expect(evaluate("let mut array = [1, 2]; array[1] = 3; return array[0] + array[1];")).toEqual({
+    ok: true,
+    value: 4,
+  });
+});
+test('evaluate returns 1 for "let mut array = [0]; array[0] += 1; return array[0];"', () => {
+  expect(evaluate("let mut array = [0]; array[0] += 1; return array[0];")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test('evaluate returns 5 for "let mut array = [0]; let p = &mut array; p[0] = 5; return array[0];"', () => {
+  expect(evaluate("let mut array = [0]; let p = &mut array; p[0] = 5; return array[0];")).toEqual({
+    ok: true,
+    value: 5,
+  });
+});
+test("evaluate returns an ImmutableAssignment error when indexing into a non-mut array", () => {
+  expect(evaluate("let array = [0]; array[0] = 1; return array[0];")).toEqual({
+    ok: false,
+    error: { kind: "ImmutableAssignment", name: "array", position: 17 },
+  });
+});
+test("evaluate returns a TypeMismatch error when assigning a bool into a number array", () => {
+  expect(evaluate("let mut array = [0]; array[0] = true; return array[0];")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "array",
+      expected: "number",
+      actual: "bool",
+      position: 26,
+    },
+  });
+});
+test("evaluate returns a TypeMismatch error when indexing into a non-array", () => {
+  expect(evaluate("let mut x = 1; x[0] = 2; return x;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "array<number>",
+      actual: "number",
+      position: 16,
+    },
+  });
+});
+test("evaluate returns a TypeMismatch error for a non-number index in an assignment", () => {
+  expect(evaluate("let mut array = [0]; array[true] = 1; return array[0];")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "number",
+      actual: "bool",
+      position: 27,
+    },
+  });
+});
 test("evaluate returns a TypeMismatch error for a heterogeneous array literal", () => {
   expect(evaluate("let array = [1, true]; return array[0];")).toEqual({
     ok: false,

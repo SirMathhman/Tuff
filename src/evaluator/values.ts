@@ -66,7 +66,7 @@ export function isPointer(t: TypedValue): t is PointerValue {
 }
 
 /** Type guard: is this an array value? */
-function isArray(t: TypedValue): t is ArrayValue {
+export function isArray(t: TypedValue): t is ArrayValue {
   return t.kind === "array";
 }
 

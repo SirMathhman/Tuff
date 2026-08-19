@@ -6,21 +6,75 @@ import type {
   StatementContinue,
   StatementWhile,
   Value,
+  ValueIndexAssign,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, withScope } from "../core/scopes.js";
 import { checkExpression } from "./checkExpressions.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 
-/** The base identifier name of an lvalue (an ident, or a deref chain ending in one). */
+/** The base identifier name of an lvalue (an ident, or a deref/index chain ending in one). */
 function baseIdentName(value: Value): string {
   if (value.kind === "deref") {
+    return baseIdentName(value.target);
+  }
+  if (value.kind === "indexAssign") {
     return baseIdentName(value.target);
   }
   if (value.kind === "ident") {
     return value.name;
   }
   return "";
+}
+
+/**
+ * Check that the array an index assignment writes into is mutable, returning
+ * the base identifier name for error payloads. An ident must be declared
+ * `mut`; a deref must point through a mutable pointer.
+ */
+function checkMutableArrayTarget(target: Value, scopes: DeclScopes): Result<string, EvalError> {
+  if (target.kind === "ident") {
+    const decl = lookup(scopes, target.name);
+    if (!decl) {
+      return err({ kind: "UnknownIdentifier", name: target.name, position: target.position });
+    }
+    if (!decl.mutable) {
+      // A mutable pointer to an array permits element writes even when the
+      // pointer variable itself is not `mut` (matching `*ptr = value`).
+      if (!(decl.type.kind === "ptr" && decl.type.mutable)) {
+        return err({ kind: "ImmutableAssignment", name: target.name, position: target.position });
+      }
+    }
+    return ok(target.name);
+  }
+  if (target.kind === "deref") {
+    const pointerType = expressionType(target.target, scopes);
+    if (pointerType.kind !== "ptr") {
+      return err({
+        kind: "TypeMismatch",
+        name: "*",
+        expected: "ptr<number>",
+        actual: typeToString(pointerType),
+        position: target.position,
+      });
+    }
+    if (!pointerType.mutable) {
+      return err({
+        kind: "ImmutableAssignment",
+        name: baseIdentName(target),
+        position: target.position,
+      });
+    }
+    return ok(baseIdentName(target));
+  }
+  // The parser only produces ident or deref targets; this is a defensive fallback.
+  return err({
+    kind: "TypeMismatch",
+    name: "[",
+    expected: "array<number>",
+    actual: typeToString(expressionType(target, scopes)),
+    position: target.position,
+  });
 }
 
 /**
@@ -118,7 +172,13 @@ function checkAssign(statement: StatementAssign, scopes: DeclScopes): Result<nul
     return check(name, pointerType.pointee, actual, statement.position);
   }
 
-  // The parser only produces ident or deref targets; this is a defensive fallback.
+  // Index target (`arr[i] = value`): the array must be mutable, the index a
+  // number, and the value must match the element type.
+  if (target.kind === "indexAssign") {
+    return checkIndexAssign(target, name, actual, check, scopes);
+  }
+
+  // The parser only produces ident, deref, or index targets; defensive fallback.
   return err({
     kind: "TypeMismatch",
     name: "*",
@@ -126,6 +186,53 @@ function checkAssign(statement: StatementAssign, scopes: DeclScopes): Result<nul
     actual: typeToString(expressionType(target, scopes)),
     position: statement.position,
   });
+}
+
+/**
+ * Check an index assignment target (`arr[i] = value`): the array must be
+ * mutable, the index a number, and the value must match the element type.
+ */
+function checkIndexAssign(
+  target: ValueIndexAssign,
+  name: string,
+  actual: Type,
+  check: (name: string, target: Type, actual: Type, position: number) => Result<null, EvalError>,
+  scopes: DeclScopes,
+): Result<null, EvalError> {
+  const mutableTarget = checkMutableArrayTarget(target.target, scopes);
+  if (!mutableTarget.ok) {
+    return mutableTarget;
+  }
+  const index = checkExpression(target.index, scopes);
+  if (!index.ok) {
+    return index;
+  }
+  // Resolve through a mutable pointer to the array it points at (matching
+  // `*ptr = value` semantics); otherwise the target must be an array directly.
+  let targetType = expressionType(target.target, scopes);
+  if (targetType.kind === "ptr") {
+    targetType = targetType.pointee;
+  }
+  if (targetType.kind !== "array") {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "array<number>",
+      actual: typeToString(targetType),
+      position: target.position,
+    });
+  }
+  const indexType = expressionType(target.index, scopes);
+  if (indexType.kind !== "number") {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "number",
+      actual: typeToString(indexType),
+      position: target.index.position,
+    });
+  }
+  return check(name, targetType.element, actual, target.position);
 }
 
 /** Check a `while` loop: the condition is a value and the body is checked in a loop scope. */

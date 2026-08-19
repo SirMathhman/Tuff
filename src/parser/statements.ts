@@ -133,26 +133,41 @@ function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalErr
 
 /**
  * Parse an assignment target (lvalue): an identifier or a dereference
- * (`*ptr`), which may nest (`**p`).
+ * (`*ptr`), which may nest (`**p`), optionally indexed (`arr[i]`).
  */
 function parseLValue(cursor: Cursor): Result<Value, EvalError> {
   const token = peek(cursor);
   if (!token) {
     return unexpected(cursor);
   }
+  let value: Value;
   if (token.kind === "ident") {
     advance(cursor);
-    return ok({ kind: "ident", name: token.value, position: token.position });
-  }
-  if (token.kind === "deref") {
+    value = { kind: "ident", name: token.value, position: token.position };
+  } else if (token.kind === "deref") {
     advance(cursor);
     const target = parseLValue(cursor);
     if (!target.ok) {
       return target;
     }
-    return ok({ kind: "deref", target: target.value, position: token.position });
+    value = { kind: "deref", target: target.value, position: token.position };
+  } else {
+    return unexpected(cursor);
   }
-  return unexpected(cursor);
+  while (peek(cursor)?.kind === "lbracket") {
+    const bracket = peek(cursor)!;
+    advance(cursor);
+    const index = parseValue(cursor);
+    if (!index.ok) {
+      return index;
+    }
+    if (peek(cursor)?.kind !== "rbracket") {
+      return unexpected(cursor);
+    }
+    advance(cursor);
+    value = { kind: "indexAssign", target: value, index: index.value, position: bracket.position };
+  }
+  return ok(value);
 }
 
 /** Parse a `target = value` or `target += value` assignment statement. */
