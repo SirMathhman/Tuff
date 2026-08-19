@@ -19,8 +19,8 @@ test("parse parses a let declaration with a number literal", () => {
           kind: "let",
           name: "x",
           mutable: false,
-          value: { kind: "number", value: 1 },
-          index: 0,
+          value: { kind: "number", value: 1, position: 8 },
+          position: 0,
         },
       ],
     },
@@ -36,8 +36,8 @@ test("parse parses a mutable let declaration with a bool literal", () => {
           kind: "let",
           name: "x",
           mutable: true,
-          value: { kind: "bool", value: true },
-          index: 0,
+          value: { kind: "bool", value: true, position: 12 },
+          position: 0,
         },
       ],
     },
@@ -52,8 +52,8 @@ test("parse parses an assignment statement", () => {
         {
           kind: "assign",
           name: "x",
-          value: { kind: "number", value: 2 },
-          index: 0,
+          value: { kind: "number", value: 2, position: 4 },
+          position: 0,
         },
       ],
     },
@@ -64,7 +64,9 @@ test("parse parses a return statement with an identifier", () => {
   expect(parseSource("return x;")).toEqual({
     ok: true,
     value: {
-      statements: [{ kind: "return", value: { kind: "ident", name: "x" }, index: 0 }],
+      statements: [
+        { kind: "return", value: { kind: "ident", name: "x", position: 7 }, position: 0 },
+      ],
     },
   });
 });
@@ -79,26 +81,33 @@ test("parse parses a binary == expression", () => {
           value: {
             kind: "binary",
             operator: "==",
-            left: { kind: "ident", name: "x" },
-            right: { kind: "ident", name: "y" },
+            left: { kind: "ident", name: "x", position: 7 },
+            right: { kind: "ident", name: "y", position: 12 },
+            position: 7,
           },
-          index: 0,
+          position: 0,
         },
       ],
     },
   });
 });
 
-test("parse flattens block contents into the statement list", () => {
+test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
     ok: true,
     value: {
       statements: [
         {
-          kind: "assign",
-          name: "x",
-          value: { kind: "number", value: 1 },
-          index: 0,
+          kind: "block",
+          statements: [
+            {
+              kind: "assign",
+              name: "x",
+              value: { kind: "number", value: 1, position: 6 },
+              position: 2,
+            },
+          ],
+          position: 0,
         },
       ],
     },
@@ -112,13 +121,13 @@ test("parse returns an EmptyProgram error for empty input", () => {
 test("parse returns an UnexpectedStatement error for unrecognized input", () => {
   expect(parseSource("garbage")).toEqual({
     ok: false,
-    error: { kind: "UnexpectedStatement", statement: "garbage", index: 0 },
+    error: { kind: "UnexpectedStatement", statement: "garbage", position: 0 },
   });
 });
 
 test("parse returns an UnexpectedStatement error for a stray closing brace", () => {
   expect(parseSource("}")).toEqual({
     ok: false,
-    error: { kind: "UnexpectedStatement", statement: "}", index: 0 },
+    error: { kind: "UnexpectedStatement", statement: "}", position: 0 },
   });
 });

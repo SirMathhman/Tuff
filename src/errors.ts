@@ -39,24 +39,24 @@ export type EvalError =
       kind: "UnexpectedStatement";
       /** The offending statement text. */
       statement: string;
-      /** Zero-based index of the statement. */
-      index: number;
+      /** Zero-based character offset of the statement's first token. */
+      position: number;
     }
   | {
       /** A `return` referenced a variable that was never declared. Fix: declare it with `let` first. */
       kind: "UnknownIdentifier";
       /** The undeclared variable name. */
       name: string;
-      /** Zero-based index of the statement. */
-      index: number;
+      /** Zero-based character offset of the statement that used the variable. */
+      position: number;
     }
   | {
       /** An assignment to a variable declared without `mut`. Fix: declare it with `let mut`. */
       kind: "ImmutableAssignment";
       /** The immutable variable name. */
       name: string;
-      /** Zero-based index of the statement. */
-      index: number;
+      /** Zero-based character offset of the assignment statement. */
+      position: number;
     }
   | {
       /** The program ended without a `return` statement. Fix: add a `return` statement. */
