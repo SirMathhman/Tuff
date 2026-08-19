@@ -19,7 +19,7 @@
     "format:prettier": "prettier --write .",
     "lint:typecheck": "tsc --noEmit",
     "lint:eslint": "eslint .",
-    "lint:pmd:cpd": "pmd cpd --minimum-tokens 100 --language typescript src",
+    "lint:pmd:cpd": "pmd cpd --minimum-tokens 50 --language typescript src --ignore-identifiers --ignore-literals",
     "madge:visualize": "madge ./src --image ./docs/graph.svg --extensions ts",
     "madge:circular": "madge ./src --extensions ts --circular"
   },
