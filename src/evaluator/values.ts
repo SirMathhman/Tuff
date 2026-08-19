@@ -47,26 +47,47 @@ function evalBinary(
     const result = value.operator === "==" ? equal : !equal;
     return ok({ type: "number", value: result ? 1 : 0 });
   }
-  // Ordering operators compare numerically; bools coerce to 1/0.
-  const toNum = (t: TypedValue): number => {
+  return evalOrdering(value, left.value, right.value);
+}
+
+/** Compare two typed values with an ordering operator; bools coerce to 1/0. */
+function evalOrdering(
+  value: Extract<Value, { kind: "binary" }>,
+  l: TypedValue,
+  r: TypedValue,
+): Result<TypedValue, EvalError> {
+  // Pointers are rejected by the typecheck pass; this is a defensive fallback.
+  const toNum = (t: TypedValue): Result<number, EvalError> => {
     if (t.type === "number") {
-      return t.value;
+      return ok(t.value);
     }
     if (t.type === "bool") {
-      return t.value ? 1 : 0;
+      return ok(t.value ? 1 : 0);
     }
-    throw new Error(`pointer value in ordering operator: ${t.type}`);
+    return err({
+      kind: "TypeMismatch",
+      name: value.operator,
+      expected: "number",
+      actual: t.type,
+      position: value.position,
+    });
   };
-  const leftNum = toNum(left.value);
-  const rightNum = toNum(right.value);
+  const leftNum = toNum(l);
+  if (!leftNum.ok) {
+    return leftNum;
+  }
+  const rightNum = toNum(r);
+  if (!rightNum.ok) {
+    return rightNum;
+  }
   const result =
     value.operator === "<"
-      ? leftNum < rightNum
+      ? leftNum.value < rightNum.value
       : value.operator === "<="
-        ? leftNum <= rightNum
+        ? leftNum.value <= rightNum.value
         : value.operator === ">"
-          ? leftNum > rightNum
-          : leftNum >= rightNum;
+          ? leftNum.value > rightNum.value
+          : leftNum.value >= rightNum.value;
   return ok({ type: "number", value: result ? 1 : 0 });
 }
 

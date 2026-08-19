@@ -34,6 +34,37 @@ function expressionType(value: Value, scopes: DeclScopes): TypeName {
   return lookup(scopes, value.name)?.type ?? "number";
 }
 
+/** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
+function checkBinary(
+  value: Extract<Value, { kind: "binary" }>,
+  scopes: DeclScopes,
+): Result<null, EvalError> {
+  const left = checkExpression(value.left, scopes);
+  if (!left.ok) {
+    return left;
+  }
+  const right = checkExpression(value.right, scopes);
+  if (!right.ok) {
+    return right;
+  }
+  if (value.operator !== "==" && value.operator !== "!=") {
+    // Ordering operators compare numerically; pointers have no numeric value.
+    for (const operand of [value.left, value.right]) {
+      const type = expressionType(operand, scopes);
+      if (type.startsWith("ptr<")) {
+        return err({
+          kind: "TypeMismatch",
+          name: value.operator,
+          expected: "number",
+          actual: type,
+          position: value.position,
+        });
+      }
+    }
+  }
+  return ok(null);
+}
+
 /**
  * Check that every identifier in a value expression is declared in the current
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
@@ -47,11 +78,7 @@ function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalErr
     return ok(null);
   }
   if (value.kind === "binary") {
-    const left = checkExpression(value.left, scopes);
-    if (!left.ok) {
-      return left;
-    }
-    return checkExpression(value.right, scopes);
+    return checkBinary(value, scopes);
   }
   if (value.kind === "addressOf") {
     if (value.target.kind !== "ident") {
