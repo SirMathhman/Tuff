@@ -171,6 +171,20 @@ test("evaluate returns a TypeMismatch error for a heterogeneous array literal", 
     error: { kind: "TypeMismatch", name: "[", expected: "number", actual: "bool", position: 16 },
   });
 });
+// Coverage for the IndexOutOfBounds error on an out-of-range array index.
+test("evaluate returns an IndexOutOfBounds error for an out-of-range index", () => {
+  expect(evaluate("let array = [0]; return array[5];")).toEqual({
+    ok: false,
+    error: { kind: "IndexOutOfBounds", index: 5, length: 1, position: 29 },
+  });
+});
+// Coverage for the typecheck pass rejecting a non-variable addressOf target.
+test("evaluate returns a TypeMismatch error when taking the address of a non-variable", () => {
+  expect(evaluate("return &5;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "&", expected: "variable", actual: "number", position: 7 },
+  });
+});
 test("evaluate returns a TypeMismatch error when indexing a non-array", () => {
   expect(evaluate("let x = 1; return x[0];")).toEqual({
     ok: false,

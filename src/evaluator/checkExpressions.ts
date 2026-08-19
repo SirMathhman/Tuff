@@ -132,7 +132,7 @@ export function checkExpression(value: Value, scopes: DeclScopes): Result<null, 
       return err({
         kind: "TypeMismatch",
         name: "&",
-        expected: "number",
+        expected: "variable",
         actual: typeToString(expressionType(value.target, scopes)),
         position: value.position,
       });

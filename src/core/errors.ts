@@ -64,6 +64,17 @@ export interface EvalErrorImmutableAssignment {
   position: number;
 }
 
+/** An array index was out of bounds. Fix: use an index within the array's length. */
+export interface EvalErrorIndexOutOfBounds {
+  kind: "IndexOutOfBounds";
+  /** The index that was out of bounds. */
+  index: number;
+  /** The array's length. */
+  length: number;
+  /** Zero-based character offset of the index expression. */
+  position: number;
+}
+
 /** A value of the wrong type was assigned to a variable. Fix: assign a value of the variable's type. */
 export interface EvalErrorTypeMismatch {
   kind: "TypeMismatch";
@@ -106,6 +117,7 @@ export type EvalError =
   | EvalErrorUnexpectedStatement
   | EvalErrorUnknownIdentifier
   | EvalErrorImmutableAssignment
+  | EvalErrorIndexOutOfBounds
   | EvalErrorTypeMismatch
   | EvalErrorMissingReturn
   | EvalErrorBreakOutsideLoop

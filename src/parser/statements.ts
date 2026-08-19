@@ -1,7 +1,12 @@
 import type { Statement, Value } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
-import { consumeSemicolon, parseIndexSuffixes, parseValue, parseValueAndSemicolon } from "./expressions.js";
+import {
+  consumeSemicolon,
+  parseIndexSuffixes,
+  parseValue,
+  parseValueAndSemicolon,
+} from "./expressions.js";
 
 /**
  * Parse the `= value` tail shared by `let` and assignment statements: an

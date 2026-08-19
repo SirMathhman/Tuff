@@ -170,10 +170,9 @@ function evalIndexAssign(
     return {
       kind: "error",
       error: {
-        kind: "TypeMismatch",
-        name: "[",
-        expected: "number",
-        actual: "out-of-range",
+        kind: "IndexOutOfBounds",
+        index: index.value,
+        length: array.value.elements.length,
         position: statement.position,
       },
     };

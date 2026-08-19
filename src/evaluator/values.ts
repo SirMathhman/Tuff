@@ -195,10 +195,9 @@ function evalIndex(value: ValueIndex, scopes: Scopes): Result<TypedValue, EvalEr
   const element = target.value.elements[index.value];
   if (element === undefined) {
     return err({
-      kind: "TypeMismatch",
-      name: "[",
-      expected: "number",
-      actual: "out-of-range",
+      kind: "IndexOutOfBounds",
+      index: index.value,
+      length: target.value.elements.length,
       position: value.position,
     });
   }
@@ -215,7 +214,7 @@ function evalAddressOf(value: ValueAddressOf, scopes: Scopes): Result<TypedValue
     return err({
       kind: "TypeMismatch",
       name: "&",
-      expected: "number",
+      expected: "variable",
       actual: typeToString(target.value),
       position: value.position,
     });
