@@ -128,6 +128,15 @@ test("tokenize tokenizes if/else keywords and parentheses", () => {
   });
 });
 
+test("tokenize tokenizes the break keyword", () => {
+  expect(tokenize("break;")).toEqual({
+    ok: true,
+    value: [
+      { kind: "break", position: 0 },
+      { kind: "semicolon", position: 5 },
+    ],
+  });
+});
 test("tokenize returns an UnexpectedToken error for an unknown character", () => {
   expect(tokenize("let x = @;")).toEqual({
     ok: false,

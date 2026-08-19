@@ -122,12 +122,24 @@ export interface StatementWhile {
   position: number;
 }
 
+/** A `break` statement that exits the enclosing `while` loop. */
+export interface StatementBreak {
+  kind: "break";
+  position: number;
+}
+
 /**
  * A single program statement. `position` is the zero-based source offset of
  * the statement's first token.
  */
 export type Statement =
-  StatementLet | StatementAssign | StatementReturn | StatementBlock | StatementIf | StatementWhile;
+  | StatementLet
+  | StatementAssign
+  | StatementReturn
+  | StatementBlock
+  | StatementIf
+  | StatementWhile
+  | StatementBreak;
 
 /** A parsed program: a list of top-level statements. */
 export interface Program {

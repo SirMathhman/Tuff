@@ -1,4 +1,4 @@
-import type { Program, Statement, StatementAssign, Value } from "../core/ast.js";
+import type { Program, Statement, StatementAssign, StatementWhile, Value } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, withScope } from "../core/scopes.js";
 import { checkExpression } from "./checkExpressions.js";
@@ -15,10 +15,17 @@ function baseIdentName(value: Value): string {
   return "";
 }
 
-/** Check a list of statements, tracking declarations across nested scopes. */
-function checkStatements(statements: Statement[], scopes: DeclScopes): Result<null, EvalError> {
+/**
+ * Check a list of statements, tracking declarations across nested scopes.
+ * `inLoop` is true when the list is a `while` body, so a `break` is valid.
+ */
+function checkStatements(
+  statements: Statement[],
+  scopes: DeclScopes,
+  inLoop: boolean,
+): Result<null, EvalError> {
   for (const statement of statements) {
-    const result = checkStatement(statement, scopes);
+    const result = checkStatement(statement, scopes, inLoop);
     if (!result.ok) {
       return result;
     }
@@ -113,8 +120,24 @@ function checkAssign(statement: StatementAssign, scopes: DeclScopes): Result<nul
   });
 }
 
-/** Check a single statement, validating types and identifier declarations. */
-function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, EvalError> {
+/** Check a `while` loop: the condition is a value and the body is checked in a loop scope. */
+function checkWhile(statement: StatementWhile, scopes: DeclScopes): Result<null, EvalError> {
+  const condition = checkExpression(statement.condition, scopes);
+  if (!condition.ok) {
+    return condition;
+  }
+  return withScope(scopes, () => checkStatements(statement.body, scopes, true));
+}
+
+/**
+ * Check a single statement, validating types and identifier declarations.
+ * `inLoop` is true when the statement is inside a `while` body.
+ */
+function checkStatement(
+  statement: Statement,
+  scopes: DeclScopes,
+  inLoop: boolean,
+): Result<null, EvalError> {
   if (statement.kind === "let") {
     const initializer = checkExpression(statement.value, scopes);
     if (!initializer.ok) {
@@ -134,7 +157,7 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
   }
 
   if (statement.kind === "block") {
-    return withScope(scopes, () => checkStatements(statement.statements, scopes));
+    return withScope(scopes, () => checkStatements(statement.statements, scopes, inLoop));
   }
 
   if (statement.kind === "if") {
@@ -142,23 +165,26 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
     if (!condition.ok) {
       return condition;
     }
-    const then = withScope(scopes, () => checkStatements(statement.then, scopes));
+    const then = withScope(scopes, () => checkStatements(statement.then, scopes, inLoop));
     if (!then.ok) {
       return then;
     }
     if (statement.else) {
       const elseBranch = statement.else;
-      return withScope(scopes, () => checkStatements(elseBranch, scopes));
+      return withScope(scopes, () => checkStatements(elseBranch, scopes, inLoop));
     }
     return ok(null);
   }
 
-  // while
-  const condition = checkExpression(statement.condition, scopes);
-  if (!condition.ok) {
-    return condition;
+  if (statement.kind === "while") {
+    return checkWhile(statement, scopes);
   }
-  return withScope(scopes, () => checkStatements(statement.body, scopes));
+
+  // break
+  if (!inLoop) {
+    return err({ kind: "BreakOutsideLoop", position: statement.position });
+  }
+  return ok(null);
 }
 
 /**
@@ -169,5 +195,5 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
  * @returns `ok(null)` when the program is well-typed, or the first `EvalError`.
  */
 export function typecheck(program: Program): Result<null, EvalError> {
-  return checkStatements(program.statements, [new Map()]);
+  return checkStatements(program.statements, [new Map()], false);
 }

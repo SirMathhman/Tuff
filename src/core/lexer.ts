@@ -138,6 +138,12 @@ export interface TokenComma {
   position: number;
 }
 
+/** The `break` keyword. */
+export interface TokenBreak {
+  kind: "break";
+  position: number;
+}
+
 /** A lexical token with its zero-based source position. */
 export type Token =
   | TokenLet
@@ -146,6 +152,7 @@ export type Token =
   | TokenIf
   | TokenElse
   | TokenWhile
+  | TokenBreak
   | TokenIdent
   | TokenNumber
   | TokenBool
@@ -256,7 +263,8 @@ export function tokenize(source: string): Result<Token[], EvalError> {
         word === "return" ||
         word === "if" ||
         word === "else" ||
-        word === "while"
+        word === "while" ||
+        word === "break"
       ) {
         tokens.push({ kind: word, position: i });
       } else {

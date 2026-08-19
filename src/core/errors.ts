@@ -82,6 +82,13 @@ export interface EvalErrorMissingReturn {
   kind: "MissingReturn";
 }
 
+/** A `break` was used outside of a `while` loop. Fix: move it inside a loop. */
+export interface EvalErrorBreakOutsideLoop {
+  kind: "BreakOutsideLoop";
+  /** Zero-based character offset of the `break` statement. */
+  position: number;
+}
+
 /**
  * Structured errors produced by `evaluate`.
  * Each variant answers: what went wrong, where, and how to fix it.
@@ -93,4 +100,5 @@ export type EvalError =
   | EvalErrorUnknownIdentifier
   | EvalErrorImmutableAssignment
   | EvalErrorTypeMismatch
-  | EvalErrorMissingReturn;
+  | EvalErrorMissingReturn
+  | EvalErrorBreakOutsideLoop;

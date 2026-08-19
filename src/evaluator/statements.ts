@@ -28,12 +28,17 @@ export interface OutcomeError {
   error: EvalError;
 }
 
+/** A `break` exited the enclosing `while` loop. */
+export interface OutcomeBreak {
+  kind: "break";
+}
+
 /**
  * The outcome of evaluating a statement or statement list. `value` means a
- * `return` short-circuited; `void` means it completed normally; `error` means
- * evaluation failed.
+ * `return` short-circuited; `void` means it completed normally; `break` means
+ * a `while` loop was exited; `error` means evaluation failed.
  */
-export type Outcome = OutcomeValue | OutcomeVoid | OutcomeError;
+export type Outcome = OutcomeValue | OutcomeVoid | OutcomeBreak | OutcomeError;
 
 /**
  * Evaluate an assignment to an identifier or a dereference (`*ptr = value`).
@@ -135,6 +140,9 @@ function evalWhile(statement: StatementWhile, scopes: Scopes): Outcome {
       break;
     }
     const body = withScope(scopes, () => evalStatements(statement.body, scopes, false));
+    if (body.kind === "break") {
+      break;
+    }
     if (body.kind !== "void") {
       return body;
     }
@@ -179,6 +187,10 @@ function evalStatement(statement: Statement, scopes: Scopes): Outcome {
     }
     const branch = condition.value !== 0 ? statement.then : (statement.else ?? []);
     return withScope(scopes, () => evalStatements(branch, scopes, false));
+  }
+
+  if (statement.kind === "break") {
+    return { kind: "break" };
   }
 
   return evalWhile(statement, scopes);

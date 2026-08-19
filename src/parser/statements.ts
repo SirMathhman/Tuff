@@ -1,7 +1,7 @@
 import type { Statement, Value } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
-import { parseValue, parseValueAndSemicolon } from "./expressions.js";
+import { consumeSemicolon, parseValue, parseValueAndSemicolon } from "./expressions.js";
 
 /**
  * Parse the `= value` tail shared by `let` and assignment statements: an
@@ -103,6 +103,13 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
   });
 }
 
+/** Parse a `break` statement that exits the enclosing `while` loop. */
+function parseBreak(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  consumeSemicolon(cursor);
+  return ok({ kind: "break", position });
+}
+
 /** Parse a `while (condition) { ... }` loop statement. */
 function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalError> {
   advance(cursor);
@@ -183,6 +190,9 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   }
   if (head.kind === "while") {
     return parseWhile(cursor, head.position);
+  }
+  if (head.kind === "break") {
+    return parseBreak(cursor, head.position);
   }
   if (head.kind === "ident" || head.kind === "deref") {
     const target = parseLValue(cursor);

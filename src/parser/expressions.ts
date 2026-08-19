@@ -162,7 +162,7 @@ export function parseValue(cursor: Cursor): Result<Value, EvalError> {
 }
 
 /** Consume an optional trailing semicolon after a statement. */
-function consumeSemicolon(cursor: Cursor): void {
+export function consumeSemicolon(cursor: Cursor): void {
   if (peek(cursor)?.kind === "semicolon") {
     advance(cursor);
   }

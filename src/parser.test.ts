@@ -202,6 +202,22 @@ test("parse parses a while loop statement", () => {
   });
 });
 
+test("parse parses a break statement inside a while loop", () => {
+  expect(parseSource("while (x) { break; }")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "while",
+          condition: { kind: "ident", name: "x", position: 7 },
+          body: [{ kind: "break", position: 12 }],
+          position: 0,
+        },
+      ],
+    },
+  });
+});
+
 test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
     ok: true,

@@ -181,3 +181,15 @@ test("evaluate returns an UnexpectedStatement error for unrecognized input", () 
 test("evaluate returns a MissingReturn error when no return statement is present", () => {
   expect(evaluate("let x = 1;")).toEqual({ ok: false, error: { kind: "MissingReturn" } });
 });
+test('evaluate returns 1 for "let mut x = 0; while (x < 4) { x += 1; break; } return x;"', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; break; } return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test("evaluate returns a BreakOutsideLoop error for a break outside a while loop", () => {
+  expect(evaluate("break; return 1;")).toEqual({
+    ok: false,
+    error: { kind: "BreakOutsideLoop", position: 0 },
+  });
+});
