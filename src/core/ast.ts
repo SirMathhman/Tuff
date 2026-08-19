@@ -1,69 +1,133 @@
+/** A numeric literal. */
+export interface ValueNumber {
+  kind: "number";
+  value: number;
+  position: number;
+}
+
+/** A boolean literal. */
+export interface ValueBool {
+  kind: "bool";
+  value: boolean;
+  position: number;
+}
+
+/** A reference to a declared variable. */
+export interface ValueIdent {
+  kind: "ident";
+  name: string;
+  position: number;
+}
+
+/** A binary operation between two value expressions. */
+export interface ValueBinary {
+  kind: "binary";
+  operator: "==" | "!=" | "<" | "<=" | ">" | ">=" | "+";
+  left: Value;
+  right: Value;
+  position: number;
+}
+
+/** An array literal (`[1, 2, 3]`), a homogeneous list of values. */
+export interface ValueArray {
+  kind: "array";
+  elements: Value[];
+  position: number;
+}
+
+/** An element of an array (`arr[i]`), a number index into the target. */
+export interface ValueIndex {
+  kind: "index";
+  target: Value;
+  index: Value;
+  position: number;
+}
+
+/** The address of a variable (`&name` / `&mut name`), a pointer to its type. */
+export interface ValueAddressOf {
+  kind: "addressOf";
+  /** True when taken with `&mut`, yielding a mutable pointer. */
+  mutable: boolean;
+  target: Value;
+  position: number;
+}
+
+/** The value a pointer refers to (`*ptr`). */
+export interface ValueDeref {
+  kind: "deref";
+  target: Value;
+  position: number;
+}
+
 /** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
-  | { kind: "number"; value: number; position: number }
-  | { kind: "bool"; value: boolean; position: number }
-  | { kind: "ident"; name: string; position: number }
-  | {
-      kind: "binary";
-      operator: "==" | "!=" | "<" | "<=" | ">" | ">=" | "+";
-      left: Value;
-      right: Value;
-      position: number;
-    }
-  | {
-      /** An array literal (`[1, 2, 3]`), a homogeneous list of values. */
-      kind: "array";
-      elements: Value[];
-      position: number;
-    }
-  | {
-      /** An element of an array (`arr[i]`), a number index into the target. */
-      kind: "index";
-      target: Value;
-      index: Value;
-      position: number;
-    }
-  | {
-      /** The address of a variable (`&name` / `&mut name`), a pointer to its type. */
-      kind: "addressOf";
-      /** True when taken with `&mut`, yielding a mutable pointer. */
-      mutable: boolean;
-      target: Value;
-      position: number;
-    }
-  | {
-      /** The value a pointer refers to (`*ptr`). */
-      kind: "deref";
-      target: Value;
-      position: number;
-    };
+  | ValueNumber
+  | ValueBool
+  | ValueIdent
+  | ValueBinary
+  | ValueArray
+  | ValueIndex
+  | ValueAddressOf
+  | ValueDeref;
+
+/** A variable declaration (`let` / `let mut`). */
+export interface StatementLet {
+  kind: "let";
+  name: string;
+  mutable: boolean;
+  value: Value;
+  position: number;
+}
+
+/** An assignment to an identifier or a dereference (`*ptr = value`). */
+export interface StatementAssign {
+  kind: "assign";
+  /** The lvalue being assigned: an identifier or a dereference (`*ptr`). */
+  target: Value;
+  value: Value;
+  /** Present when the statement is a compound assignment (`+=`). */
+  compound?: "+=";
+  position: number;
+}
+
+/** A `return` statement. */
+export interface StatementReturn {
+  kind: "return";
+  value: Value;
+  position: number;
+}
+
+/** A block of statements. */
+export interface StatementBlock {
+  kind: "block";
+  statements: Statement[];
+  position: number;
+}
+
+/** An `if` statement with an optional `else` branch. */
+export interface StatementIf {
+  kind: "if";
+  condition: Value;
+  then: Statement[];
+  /** Present only when an `else` branch was written. */
+  else?: Statement[];
+  position: number;
+}
+
+/** A `while` loop. */
+export interface StatementWhile {
+  kind: "while";
+  condition: Value;
+  body: Statement[];
+  position: number;
+}
 
 /**
  * A single program statement. `position` is the zero-based source offset of
  * the statement's first token.
  */
 export type Statement =
-  | { kind: "let"; name: string; mutable: boolean; value: Value; position: number }
-  | {
-      kind: "assign";
-      /** The lvalue being assigned: an identifier or a dereference (`*ptr`). */
-      target: Value;
-      value: Value;
-      /** Present when the statement is a compound assignment (`+=`). */
-      compound?: "+=";
-      position: number;
-    }
-  | { kind: "return"; value: Value; position: number }
-  | { kind: "block"; statements: Statement[]; position: number }
-  | {
-      kind: "if";
-      condition: Value;
-      then: Statement[];
-      /** Present only when an `else` branch was written. */
-      else?: Statement[];
-      position: number;
-    }
-  | { kind: "while"; condition: Value; body: Statement[]; position: number };
+  StatementLet | StatementAssign | StatementReturn | StatementBlock | StatementIf | StatementWhile;
 
 /** A parsed program: a list of top-level statements. */
 export interface Program {

@@ -1,4 +1,4 @@
-import type { Statement, Value } from "../core/ast.js";
+import type { Statement, StatementAssign, StatementWhile, ValueDeref } from "../core/ast.js";
 import type { EvalError } from "../core/errors.js";
 import { lookup, withScope } from "../core/scopes.js";
 import { typeToString } from "./types.js";
@@ -11,20 +11,36 @@ import {
   type Variable,
 } from "./values.js";
 
+/** A `return` short-circuited evaluation with its value. */
+export interface OutcomeValue {
+  kind: "value";
+  value: number;
+}
+
+/** Evaluation completed normally. */
+export interface OutcomeVoid {
+  kind: "void";
+}
+
+/** Evaluation failed with a structured error. */
+export interface OutcomeError {
+  kind: "error";
+  error: EvalError;
+}
+
 /**
  * The outcome of evaluating a statement or statement list. `value` means a
  * `return` short-circuited; `void` means it completed normally; `error` means
  * evaluation failed.
  */
-export type Outcome =
-  { kind: "value"; value: number } | { kind: "void" } | { kind: "error"; error: EvalError };
+export type Outcome = OutcomeValue | OutcomeVoid | OutcomeError;
 
 /**
  * Evaluate an assignment to an identifier or a dereference (`*ptr = value`).
  * Type correctness is guaranteed by the static `typecheck` pass, so this only
  * resolves values. `+=` is numeric addition.
  */
-function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: Scopes): Outcome {
+function evalAssign(statement: StatementAssign, scopes: Scopes): Outcome {
   const target = statement.target;
   const value = valueToTyped(statement.value, scopes);
   if (!value.ok) {
@@ -59,7 +75,7 @@ function writeValue(variable: Variable, value: TypedValue, compound: boolean): v
 
 /** Evaluate `ident = value` or `ident += value` on a looked-up variable. */
 function evalIdentAssign(
-  statement: Extract<Statement, { kind: "assign" }>,
+  statement: StatementAssign,
   name: string,
   value: TypedValue,
   scopes: Scopes,
@@ -83,8 +99,8 @@ function evalIdentAssign(
 
 /** Evaluate `*ptr = value` by writing through the (mutable) pointer. */
 function evalDerefAssign(
-  statement: Extract<Statement, { kind: "assign" }>,
-  target: Extract<Value, { kind: "deref" }>,
+  statement: StatementAssign,
+  target: ValueDeref,
   value: TypedValue,
   scopes: Scopes,
 ): Outcome {
@@ -109,7 +125,7 @@ function evalDerefAssign(
 }
 
 /** Evaluate a `while (condition) { ... }` loop, re-checking the condition each pass. */
-function evalWhile(statement: Extract<Statement, { kind: "while" }>, scopes: Scopes): Outcome {
+function evalWhile(statement: StatementWhile, scopes: Scopes): Outcome {
   while (true) {
     const condition = valueToNumber(statement.condition, scopes);
     if (!condition.ok) {

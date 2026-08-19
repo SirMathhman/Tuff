@@ -1,13 +1,10 @@
-import type { Value } from "../core/ast.js";
+import type { Value, ValueArray, ValueBinary, ValueIndex } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes } from "./types.js";
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
-function checkBinary(
-  value: Extract<Value, { kind: "binary" }>,
-  scopes: DeclScopes,
-): Result<null, EvalError> {
+function checkBinary(value: ValueBinary, scopes: DeclScopes): Result<null, EvalError> {
   const left = checkExpression(value.left, scopes);
   if (!left.ok) {
     return left;
@@ -51,10 +48,7 @@ function checkBinary(
 }
 
 /** Check an array literal: every element is declared and all share one type. */
-function checkArray(
-  value: Extract<Value, { kind: "array" }>,
-  scopes: DeclScopes,
-): Result<null, EvalError> {
+function checkArray(value: ValueArray, scopes: DeclScopes): Result<null, EvalError> {
   for (const element of value.elements) {
     const result = checkExpression(element, scopes);
     if (!result.ok) {
@@ -80,10 +74,7 @@ function checkArray(
 }
 
 /** Check an index expression: the target is an array and the index is a number. */
-function checkIndex(
-  value: Extract<Value, { kind: "index" }>,
-  scopes: DeclScopes,
-): Result<null, EvalError> {
+function checkIndex(value: ValueIndex, scopes: DeclScopes): Result<null, EvalError> {
   const target = checkExpression(value.target, scopes);
   if (!target.ok) {
     return target;

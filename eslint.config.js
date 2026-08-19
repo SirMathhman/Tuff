@@ -21,5 +21,12 @@ export default tseslint.config(js.configs.recommended, ...tseslint.configs.recom
       },
     ],
     "@typescript-eslint/consistent-type-definitions": "error",
+    "no-restricted-syntax": [
+      "error",
+      {
+        selector: "TSTypeLiteral",
+        message: "Use named interfaces instead.",
+      },
+    ],
   },
 });

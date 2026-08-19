@@ -1,16 +1,35 @@
 import type { Value } from "../core/ast.js";
 import { lookup, type ScopeStack } from "../core/scopes.js";
 
+/** The `number` type. */
+export interface TypeNumber {
+  kind: "number";
+}
+
+/** The `bool` type. */
+export interface TypeBool {
+  kind: "bool";
+}
+
+/** An array of a single element type. */
+export interface TypeArray {
+  kind: "array";
+  element: Type;
+}
+
 /**
- * A static type: a primitive, an array, or a (possibly nested) pointer
- * carrying a mutability flag. Pointers are structured so `&mut` can be
- * distinguished from `&` when checking assignments through a dereference.
+ * A (possibly nested) pointer carrying a mutability flag. Pointers are
+ * structured so `&mut` can be distinguished from `&` when checking
+ * assignments through a dereference.
  */
-export type Type =
-  | { kind: "number" }
-  | { kind: "bool" }
-  | { kind: "array"; element: Type }
-  | { kind: "ptr"; mutable: boolean; pointee: Type };
+export interface TypePtr {
+  kind: "ptr";
+  mutable: boolean;
+  pointee: Type;
+}
+
+/** A static type: a primitive, an array, or a pointer. */
+export type Type = TypeNumber | TypeBool | TypeArray | TypePtr;
 
 /** Render a type as its display name (e.g. `ptr<number>`, `array<number>`). */
 export function typeToString(type: Type): string {

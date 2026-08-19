@@ -1,7 +1,41 @@
-import type { Value } from "../core/ast.js";
+import type {
+  Value,
+  ValueArray,
+  ValueBinary,
+  ValueDeref,
+  ValueIndex,
+  ValueAddressOf,
+} from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, type ScopeStack } from "../core/scopes.js";
 import { typeToString, type Type } from "./types.js";
+
+/** A numeric value. */
+export interface TypedValueNumber {
+  kind: "number";
+  value: number;
+}
+
+/** A boolean value. */
+export interface TypedValueBool {
+  kind: "bool";
+  value: boolean;
+}
+
+/** An array value: its element type and the elements. */
+export interface TypedValueArray {
+  kind: "array";
+  element: Type;
+  elements: TypedValue[];
+}
+
+/** A pointer value: mutability, the pointee type, and the referenced variable. */
+export interface TypedValuePtr {
+  kind: "ptr";
+  mutable: boolean;
+  pointee: Type;
+  ref: Variable;
+}
 
 /**
  * A value with its static type, so `==` can compare type-strictly. `kind` is
@@ -9,11 +43,7 @@ import { typeToString, type Type } from "./types.js";
  * each variant carries the payload for that kind, so narrowing on `kind` also
  * narrows the payload.
  */
-export type TypedValue =
-  | { kind: "number"; value: number }
-  | { kind: "bool"; value: boolean }
-  | { kind: "array"; element: Type; elements: TypedValue[] }
-  | { kind: "ptr"; mutable: boolean; pointee: Type; ref: Variable };
+export type TypedValue = TypedValueNumber | TypedValueBool | TypedValueArray | TypedValuePtr;
 
 /** A variable's value with its type, so assignments can be type-checked. */
 export interface Variable {
@@ -25,10 +55,10 @@ export interface Variable {
 export type Scopes = ScopeStack<Variable>;
 
 /** A pointer variant of `TypedValue`, at any nesting depth. */
-type PointerValue = Extract<TypedValue, { kind: "ptr" }>;
+type PointerValue = TypedValuePtr;
 
 /** An array variant of `TypedValue`. */
-type ArrayValue = Extract<TypedValue, { kind: "array" }>;
+type ArrayValue = TypedValueArray;
 
 /** Type guard: is this a pointer value? */
 export function isPointer(t: TypedValue): t is PointerValue {
@@ -41,10 +71,7 @@ function isArray(t: TypedValue): t is ArrayValue {
 }
 
 /** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
-function evalBinary(
-  value: Extract<Value, { kind: "binary" }>,
-  scopes: Scopes,
-): Result<TypedValue, EvalError> {
+function evalBinary(value: ValueBinary, scopes: Scopes): Result<TypedValue, EvalError> {
   const left = valueToTyped(value.left, scopes);
   if (!left.ok) {
     return left;
@@ -73,7 +100,7 @@ function evalBinary(
 
 /** Compare two typed values with an ordering operator; bools coerce to 1/0. */
 function evalOrdering(
-  value: Extract<Value, { kind: "binary" }>,
+  value: ValueBinary,
   l: TypedValue,
   r: TypedValue,
 ): Result<TypedValue, EvalError> {
@@ -114,7 +141,7 @@ function evalOrdering(
 
 /** Evaluate `a + b`: numeric addition (both operands are numbers). */
 function evalAddition(
-  value: Extract<Value, { kind: "binary" }>,
+  value: ValueBinary,
   l: TypedValue,
   r: TypedValue,
 ): Result<TypedValue, EvalError> {
@@ -132,10 +159,7 @@ function evalAddition(
 }
 
 /** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
-function evalArray(
-  value: Extract<Value, { kind: "array" }>,
-  scopes: Scopes,
-): Result<TypedValue, EvalError> {
+function evalArray(value: ValueArray, scopes: Scopes): Result<TypedValue, EvalError> {
   const elements: TypedValue[] = [];
   for (const element of value.elements) {
     const typed = valueToTyped(element, scopes);
@@ -150,10 +174,7 @@ function evalArray(
 }
 
 /** Evaluate `arr[i]`: the element of an array at a numeric index. */
-function evalIndex(
-  value: Extract<Value, { kind: "index" }>,
-  scopes: Scopes,
-): Result<TypedValue, EvalError> {
+function evalIndex(value: ValueIndex, scopes: Scopes): Result<TypedValue, EvalError> {
   const target = valueToTyped(value.target, scopes);
   if (!target.ok) {
     return target;
@@ -185,10 +206,7 @@ function evalIndex(
 }
 
 /** Evaluate `&name`: a pointer to the variable's value (pointers may nest). */
-function evalAddressOf(
-  value: Extract<Value, { kind: "addressOf" }>,
-  scopes: Scopes,
-): Result<TypedValue, EvalError> {
+function evalAddressOf(value: ValueAddressOf, scopes: Scopes): Result<TypedValue, EvalError> {
   const target = valueToTyped(value.target, scopes);
   if (!target.ok) {
     return target;
@@ -215,10 +233,7 @@ function evalAddressOf(
 }
 
 /** Evaluate `*ptr`: the value a pointer refers to. */
-function evalDeref(
-  value: Extract<Value, { kind: "deref" }>,
-  scopes: Scopes,
-): Result<TypedValue, EvalError> {
+function evalDeref(value: ValueDeref, scopes: Scopes): Result<TypedValue, EvalError> {
   const target = valueToTyped(value.target, scopes);
   if (!target.ok) {
     return target;

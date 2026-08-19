@@ -1,4 +1,4 @@
-import type { Program, Statement, Value } from "../core/ast.js";
+import type { Program, Statement, StatementAssign, Value } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, withScope } from "../core/scopes.js";
 import { checkExpression } from "./checkExpressions.js";
@@ -66,10 +66,7 @@ function checkPlain(
 }
 
 /** Check an assignment statement: `ident = value` or `*ptr = value` (and `+=`). */
-function checkAssign(
-  statement: Extract<Statement, { kind: "assign" }>,
-  scopes: DeclScopes,
-): Result<null, EvalError> {
+function checkAssign(statement: StatementAssign, scopes: DeclScopes): Result<null, EvalError> {
   const target = statement.target;
   const name = baseIdentName(target);
   const value = checkExpression(statement.value, scopes);

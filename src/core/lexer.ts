@@ -1,33 +1,167 @@
 import { err, ok, type EvalError, type Result } from "./errors.js";
 
+/** The `let` keyword. */
+export interface TokenLet {
+  kind: "let";
+  position: number;
+}
+
+/** The `mut` keyword. */
+export interface TokenMut {
+  kind: "mut";
+  position: number;
+}
+
+/** The `return` keyword. */
+export interface TokenReturn {
+  kind: "return";
+  position: number;
+}
+
+/** The `if` keyword. */
+export interface TokenIf {
+  kind: "if";
+  position: number;
+}
+
+/** The `else` keyword. */
+export interface TokenElse {
+  kind: "else";
+  position: number;
+}
+
+/** The `while` keyword. */
+export interface TokenWhile {
+  kind: "while";
+  position: number;
+}
+
+/** An identifier. */
+export interface TokenIdent {
+  kind: "ident";
+  value: string;
+  position: number;
+}
+
+/** A numeric literal. */
+export interface TokenNumber {
+  kind: "number";
+  value: number;
+  position: number;
+}
+
+/** A boolean literal. */
+export interface TokenBool {
+  kind: "bool";
+  value: boolean;
+  position: number;
+}
+
+/** The `=` assignment operator. */
+export interface TokenAssign {
+  kind: "assign";
+  position: number;
+}
+
+/** The `+=` compound assignment operator. */
+export interface TokenCompoundAssign {
+  kind: "compoundAssign";
+  operator: "+=";
+  position: number;
+}
+
+/** A binary operator. */
+export interface TokenBinary {
+  kind: "binary";
+  operator: "==" | "!=" | "<" | "<=" | ">" | ">=" | "+";
+  position: number;
+}
+
+/** A `;` statement terminator. */
+export interface TokenSemicolon {
+  kind: "semicolon";
+  position: number;
+}
+
+/** The `&` / `&mut` address-of operator. */
+export interface TokenAddressOf {
+  kind: "addressOf";
+  mutable: boolean;
+  position: number;
+}
+
+/** The `*` dereference operator. */
+export interface TokenDeref {
+  kind: "deref";
+  position: number;
+}
+
+/** A `{` token. */
+export interface TokenLbrace {
+  kind: "lbrace";
+  position: number;
+}
+
+/** A `}` token. */
+export interface TokenRbrace {
+  kind: "rbrace";
+  position: number;
+}
+
+/** A `(` token. */
+export interface TokenLparen {
+  kind: "lparen";
+  position: number;
+}
+
+/** A `)` token. */
+export interface TokenRparen {
+  kind: "rparen";
+  position: number;
+}
+
+/** A `[` token. */
+export interface TokenLbracket {
+  kind: "lbracket";
+  position: number;
+}
+
+/** A `]` token. */
+export interface TokenRbracket {
+  kind: "rbracket";
+  position: number;
+}
+
+/** A `,` token. */
+export interface TokenComma {
+  kind: "comma";
+  position: number;
+}
+
 /** A lexical token with its zero-based source position. */
 export type Token =
-  | { kind: "let"; position: number }
-  | { kind: "mut"; position: number }
-  | { kind: "return"; position: number }
-  | { kind: "if"; position: number }
-  | { kind: "else"; position: number }
-  | { kind: "while"; position: number }
-  | { kind: "ident"; value: string; position: number }
-  | { kind: "number"; value: number; position: number }
-  | { kind: "bool"; value: boolean; position: number }
-  | { kind: "assign"; position: number }
-  | { kind: "compoundAssign"; operator: "+="; position: number }
-  | {
-      kind: "binary";
-      operator: "==" | "!=" | "<" | "<=" | ">" | ">=" | "+";
-      position: number;
-    }
-  | { kind: "semicolon"; position: number }
-  | { kind: "addressOf"; mutable: boolean; position: number }
-  | { kind: "deref"; position: number }
-  | { kind: "lbrace"; position: number }
-  | { kind: "rbrace"; position: number }
-  | { kind: "lparen"; position: number }
-  | { kind: "rparen"; position: number }
-  | { kind: "lbracket"; position: number }
-  | { kind: "rbracket"; position: number }
-  | { kind: "comma"; position: number };
+  | TokenLet
+  | TokenMut
+  | TokenReturn
+  | TokenIf
+  | TokenElse
+  | TokenWhile
+  | TokenIdent
+  | TokenNumber
+  | TokenBool
+  | TokenAssign
+  | TokenCompoundAssign
+  | TokenBinary
+  | TokenSemicolon
+  | TokenAddressOf
+  | TokenDeref
+  | TokenLbrace
+  | TokenRbrace
+  | TokenLparen
+  | TokenRparen
+  | TokenLbracket
+  | TokenRbracket
+  | TokenComma;
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
