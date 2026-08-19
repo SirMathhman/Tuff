@@ -25,6 +25,17 @@ test("evalProgram coerces a bool return to a number", () => {
   expect(evalSource("return false;")).toEqual({ ok: true, value: 0 });
 });
 
+test("evalProgram adds with a compound += assignment", () => {
+  expect(evalSource("let mut x = 1; x += 2; return x;")).toEqual({ ok: true, value: 3 });
+});
+
+test("evalProgram returns an ImmutableAssignment error for += on a non-mut variable", () => {
+  expect(evalSource("let x = 1; x += 2; return x;")).toEqual({
+    ok: false,
+    error: { kind: "ImmutableAssignment", name: "x", position: 11 },
+  });
+});
+
 test("evalProgram compares with a type-strict ==", () => {
   expect(evalSource("return 1 == 1;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return 1 == 2;")).toEqual({ ok: true, value: 0 });

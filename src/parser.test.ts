@@ -60,6 +60,23 @@ test("parse parses an assignment statement", () => {
   });
 });
 
+test("parse parses a compound assignment statement", () => {
+  expect(parseSource("x += 2;")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "assign",
+          name: "x",
+          value: { kind: "number", value: 2, position: 5 },
+          compound: "+=",
+          position: 0,
+        },
+      ],
+    },
+  });
+});
+
 test("parse parses a return statement with an identifier", () => {
   expect(parseSource("return x;")).toEqual({
     ok: true,

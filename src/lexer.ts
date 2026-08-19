@@ -11,6 +11,7 @@ export type Token =
   | { kind: "number"; value: number; position: number }
   | { kind: "bool"; value: boolean; position: number }
   | { kind: "assign"; position: number }
+  | { kind: "compoundAssign"; operator: "+="; position: number }
   | { kind: "binary"; operator: "==" | "!=" | "<" | "<=" | ">" | ">="; position: number }
   | { kind: "semicolon"; position: number }
   | { kind: "lbrace"; position: number }
@@ -52,6 +53,11 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       "<=": "<=",
       ">=": ">=",
     };
+    if (source.startsWith("+=", i)) {
+      tokens.push({ kind: "compoundAssign", operator: "+=", position: i });
+      i += 2;
+      continue;
+    }
     const twoChar = source.slice(i, i + 2);
     const twoCharOperator = twoCharOperators[twoChar];
     if (twoCharOperator) {

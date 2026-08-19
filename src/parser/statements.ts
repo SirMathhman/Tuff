@@ -62,6 +62,16 @@ function consumeSemicolon(cursor: Cursor): void {
   }
 }
 
+/** Parse a value expression followed by an optional trailing semicolon. */
+function parseValueAndSemicolon(cursor: Cursor): Result<Value, EvalError> {
+  const value = parseValue(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return value;
+}
+
 /**
  * Parse the `= value` tail shared by `let` and assignment statements: an
  * assign token, a value expression, and an optional trailing semicolon.
@@ -71,12 +81,7 @@ function parseAssignedValue(cursor: Cursor): Result<Value, EvalError> {
     return unexpected(cursor);
   }
   advance(cursor);
-  const value = parseValue(cursor);
-  if (!value.ok) {
-    return value;
-  }
-  consumeSemicolon(cursor);
-  return value;
+  return parseValueAndSemicolon(cursor);
 }
 
 /** Parse a `let [mut] name = value` declaration. */
@@ -147,12 +152,27 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
     }
     elseBranch = elseBlock.value;
   }
-  return ok({ kind: "if", condition: condition.value, then: then.value, else: elseBranch, position });
+  return ok({
+    kind: "if",
+    condition: condition.value,
+    then: then.value,
+    else: elseBranch,
+    position,
+  });
 }
 
-/** Parse an `ident = value` assignment statement. */
+/** Parse an `ident = value` or `ident += value` assignment statement. */
 function parseAssign(cursor: Cursor, name: string, position: number): Result<Statement, EvalError> {
   advance(cursor);
+  const operator = peek(cursor);
+  if (operator?.kind === "compoundAssign") {
+    advance(cursor);
+    const value = parseValueAndSemicolon(cursor);
+    if (!value.ok) {
+      return value;
+    }
+    return ok({ kind: "assign", name, value: value.value, compound: "+=", position });
+  }
   const value = parseAssignedValue(cursor);
   if (!value.ok) {
     return value;

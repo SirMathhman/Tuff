@@ -17,7 +17,14 @@ export type Value =
  */
 export type Statement =
   | { kind: "let"; name: string; mutable: boolean; value: Value; position: number }
-  | { kind: "assign"; name: string; value: Value; position: number }
+  | {
+      kind: "assign";
+      name: string;
+      value: Value;
+      /** Present when the statement is a compound assignment (`+=`). */
+      compound?: "+=";
+      position: number;
+    }
   | { kind: "return"; value: Value; position: number }
   | { kind: "block"; statements: Statement[]; position: number }
   | {

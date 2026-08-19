@@ -54,6 +54,17 @@ test("tokenize tokenizes the == operator", () => {
   });
 });
 
+test("tokenize tokenizes the += operator", () => {
+  expect(tokenize("x += 2")).toEqual({
+    ok: true,
+    value: [
+      { kind: "ident", value: "x", position: 0 },
+      { kind: "compoundAssign", operator: "+=", position: 2 },
+      { kind: "number", value: 2, position: 5 },
+    ],
+  });
+});
+
 test("tokenize tokenizes the < operator", () => {
   expect(tokenize("x < y")).toEqual({
     ok: true,

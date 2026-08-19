@@ -107,7 +107,7 @@ function evalStatement(statement: Statement, scopes: Scopes): Result<number, Eva
     if (!value.ok) {
       return value;
     }
-    variable.value = value.value;
+    variable.value = statement.compound ? variable.value + value.value : value.value;
     return ok(0);
   }
 
@@ -123,7 +123,7 @@ function evalStatement(statement: Statement, scopes: Scopes): Result<number, Eva
     if (!condition.ok) {
       return condition;
     }
-    const branch = condition.value !== 0 ? statement.then : statement.else ?? [];
+    const branch = condition.value !== 0 ? statement.then : (statement.else ?? []);
     scopes.push(new Map());
     const result = evalStatements(branch, scopes, false);
     scopes.pop();
