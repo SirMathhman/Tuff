@@ -1,5 +1,6 @@
 import type { AssignNode, AstNode, BinaryNode, LetNode, VariableNode } from "./ast.js";
 import type { TuffError } from "./errors.js";
+import type { SourcePosition } from "./position.js";
 import type { Result } from "./result.js";
 
 /** A variable binding: its current value and whether it may be reassigned. */
@@ -33,21 +34,35 @@ function evalNode(node: AstNode, env: Env, input: string): Result<number, TuffEr
   }
 }
 
-function evalVariable(node: VariableNode, env: Env, input: string): Result<number, TuffError> {
-  const binding = env.get(node.name);
+/** Looks up a binding, or returns an `undefined_variable` error. */
+function lookup(
+  name: string,
+  pos: SourcePosition,
+  env: Env,
+  input: string,
+): Result<Binding, TuffError> {
+  const binding = env.get(name);
   if (binding === undefined) {
     return {
       ok: false,
       error: {
         kind: "undefined_variable",
         input,
-        position: node.pos,
-        name: node.name,
-        message: `Undefined variable ${JSON.stringify(node.name)}`,
+        position: pos,
+        name,
+        message: `Undefined variable ${JSON.stringify(name)}`,
       },
     };
   }
-  return { ok: true, value: binding.value };
+  return { ok: true, value: binding };
+}
+
+function evalVariable(node: VariableNode, env: Env, input: string): Result<number, TuffError> {
+  const binding = lookup(node.name, node.pos, env, input);
+  if (!binding.ok) {
+    return binding;
+  }
+  return { ok: true, value: binding.value.value };
 }
 
 function evalLet(node: LetNode, env: Env, input: string): Result<number, TuffError> {
@@ -71,21 +86,12 @@ function evalLet(node: LetNode, env: Env, input: string): Result<number, TuffErr
 }
 
 function evalAssign(node: AssignNode, env: Env, input: string): Result<number, TuffError> {
-  const binding = env.get(node.name);
-  if (binding === undefined) {
-    return {
-      ok: false,
-      error: {
-        kind: "undefined_variable",
-        input,
-        position: node.pos,
-        name: node.name,
-        message: `Undefined variable ${JSON.stringify(node.name)}`,
-      },
-    };
+  const binding = lookup(node.name, node.pos, env, input);
+  if (!binding.ok) {
+    return binding;
   }
 
-  if (!binding.mut) {
+  if (!binding.value.mut) {
     return {
       ok: false,
       error: {
@@ -102,7 +108,7 @@ function evalAssign(node: AssignNode, env: Env, input: string): Result<number, T
   if (!value.ok) {
     return value;
   }
-  binding.value = value.value;
+  binding.value.value = value.value;
   return { ok: true, value: value.value };
 }
 
