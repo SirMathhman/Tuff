@@ -1,12 +1,7 @@
-import type {
-  StatementAssign,
-  Value,
-  ValueDeref,
-  ValueIndexAssign,
-} from "../core/ast.js";
+import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import type { Outcome } from "./statements.js";
+import type { Outcome } from "./outcome.js";
 import { typeToString } from "./types.js";
 import {
   isArray,
