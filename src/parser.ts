@@ -13,9 +13,6 @@ import type { Result } from "./result.js";
 class Parser {
   private index = 0;
 
-  // How many brace groups the cursor is currently inside.
-  private braceDepth = 0;
-
   constructor(
     private readonly tokens: Token[],
     private readonly input: string,
@@ -51,37 +48,27 @@ class Parser {
     if (token?.kind === "lparen" || token?.kind === "lbrace") {
       const expectedCloser = token.kind === "lparen" ? "rparen" : "rbrace";
       this.index += 1;
-      if (token.kind === "lbrace") {
-        this.braceDepth += 1;
-      }
-
-      try {
-        const inner = this.parseExpression();
-        if (!inner.ok) {
-          return inner;
-        }
-
-        if (this.tokens[this.index]?.kind !== expectedCloser) {
-          const delimiter = token.kind === "lparen" ? "parenthesis" : "brace";
-          return {
-            ok: false,
-            error: {
-              kind: "unclosed_delimiter",
-              input: this.input,
-              position: this.posAt(this.index),
-              delimiter,
-              message: `Expected a closing ${delimiter}`,
-            },
-          };
-        }
-
-        this.index += 1;
+      const inner = this.parseExpression();
+      if (!inner.ok) {
         return inner;
-      } finally {
-        if (token.kind === "lbrace") {
-          this.braceDepth -= 1;
-        }
       }
+
+      if (this.tokens[this.index]?.kind !== expectedCloser) {
+        const delimiter = token.kind === "lparen" ? "parenthesis" : "brace";
+        return {
+          ok: false,
+          error: {
+            kind: "unclosed_delimiter",
+            input: this.input,
+            position: this.posAt(this.index),
+            delimiter,
+            message: `Expected a closing ${delimiter}`,
+          },
+        };
+      }
+
+      this.index += 1;
+      return inner;
     }
 
     if (token?.kind === "identifier") {
@@ -135,10 +122,18 @@ class Parser {
       return statements;
     }
 
-    // A `let` inside braces must be followed by a body expression;
-    // a top-level binding may be bare (it evaluates to 0).
-    if (statements.value.length === 0 && this.braceDepth > 0) {
-      return this.fail(this.posAt(this.index), "Expected an expression after `;`");
+    // A binding with no statements is only valid at the end of input;
+    // otherwise a body expression is required.
+    if (statements.value.length === 0 && this.index < this.tokens.length) {
+      return {
+        ok: false,
+        error: {
+          kind: "let_without_body",
+          input: this.input,
+          position: this.posAt(this.index),
+          message: "Expected an expression after the `;` of a `let` binding",
+        },
+      };
     }
 
     return {

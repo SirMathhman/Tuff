@@ -130,9 +130,9 @@ describe("evaluate", () => {
     expect(result.ok).toBe(false);
 
     if (!result.ok) {
-      expect(result.error.kind).toBe("unexpected_token");
+      expect(result.error.kind).toBe("let_without_body");
 
-      if (result.error.kind === "unexpected_token") {
+      if (result.error.kind === "let_without_body") {
         expect(result.error.position).toEqual({ line: 1, column: 24 });
       }
     }

@@ -64,4 +64,14 @@ export type TuffError =
       name: string;
       /** A human-readable description of the error. */
       message: string;
+    }
+  | {
+      /** The category of the error. */
+      kind: "let_without_body";
+      /** The raw input that caused the error. */
+      input: string;
+      /** The source position where the error occurred. */
+      position: SourcePosition;
+      /** A human-readable description of the error. */
+      message: string;
     };
