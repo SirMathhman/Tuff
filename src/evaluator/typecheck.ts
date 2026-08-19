@@ -1,8 +1,8 @@
 import type { Program, Statement, Value } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
+import { err, ok, type EvalError, type Result, type TypeName } from "../errors.js";
 
 /** A variable's declared type and mutability, tracked across scopes. */
-type Decl = { type: "number" | "bool"; mutable: boolean };
+type Decl = { type: TypeName; mutable: boolean };
 
 /** A stack of variable declarations, innermost last. */
 type DeclScopes = Map<string, Decl>[];
@@ -21,9 +21,10 @@ function lookupDecl(scopes: DeclScopes, name: string): Decl | undefined {
 /**
  * The static type of a value expression. Literals carry their own type;
  * identifiers take the type of their declaration; every binary operator
- * (`==`, `!=`, `<`, `<=`, `>`, `>=`) yields a number.
+ * (`==`, `!=`, `<`, `<=`, `>`, `>=`) yields a number; `&name` yields a
+ * pointer to the variable's type; `*ptr` yields the pointed-to type.
  */
-function expressionType(value: Value, scopes: DeclScopes): "number" | "bool" {
+function expressionType(value: Value, scopes: DeclScopes): TypeName {
   if (value.kind === "number") {
     return "number";
   }
@@ -32,6 +33,13 @@ function expressionType(value: Value, scopes: DeclScopes): "number" | "bool" {
   }
   if (value.kind === "binary") {
     return "number";
+  }
+  if (value.kind === "addressOf") {
+    return `ptr<${expressionType(value.target, scopes)}>` as TypeName;
+  }
+  if (value.kind === "deref") {
+    const target = expressionType(value.target, scopes);
+    return target.startsWith("ptr<") ? target.slice(4, -1) as TypeName : target;
   }
   return lookupDecl(scopes, value.name)?.type ?? "number";
 }
@@ -55,6 +63,26 @@ function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalErr
     }
     return checkExpression(value.right, scopes);
   }
+  if (value.kind === "addressOf") {
+    return checkExpression(value.target, scopes);
+  }
+  if (value.kind === "deref") {
+    const target = checkExpression(value.target, scopes);
+    if (!target.ok) {
+      return target;
+    }
+    const targetType = expressionType(value.target, scopes);
+    if (!targetType.startsWith("ptr<")) {
+      return err({
+        kind: "TypeMismatch",
+        name: "*",
+        expected: "ptr<number>",
+        actual: targetType,
+        position: value.position,
+      });
+    }
+    return ok(null);
+  }
   return ok(null);
 }
 
@@ -65,6 +93,50 @@ function checkStatements(statements: Statement[], scopes: DeclScopes): Result<nu
     if (!result.ok) {
       return result;
     }
+  }
+  return ok(null);
+}
+
+/** Check an `ident = value` or `ident += value` assignment statement. */
+function checkAssign(
+  statement: Extract<Statement, { kind: "assign" }>,
+  scopes: DeclScopes,
+): Result<null, EvalError> {
+  const decl = lookupDecl(scopes, statement.name);
+  if (!decl) {
+    return err({
+      kind: "UnknownIdentifier",
+      name: statement.name,
+      position: statement.position,
+    });
+  }
+  const value = checkExpression(statement.value, scopes);
+  if (!value.ok) {
+    return value;
+  }
+  const actual = expressionType(statement.value, scopes);
+  if (statement.compound) {
+    // `+=` is numeric addition: both the variable and the value must be numbers.
+    const mismatch = decl.type !== "number" ? decl.type : actual;
+    if (mismatch !== "number") {
+      return err({
+        kind: "TypeMismatch",
+        name: statement.name,
+        expected: "number",
+        actual: mismatch,
+        position: statement.position,
+      });
+    }
+    return ok(null);
+  }
+  if (actual !== decl.type) {
+    return err({
+      kind: "TypeMismatch",
+      name: statement.name,
+      expected: decl.type,
+      actual,
+      position: statement.position,
+    });
   }
   return ok(null);
 }
@@ -82,43 +154,7 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
   }
 
   if (statement.kind === "assign") {
-    const decl = lookupDecl(scopes, statement.name);
-    if (!decl) {
-      return err({
-        kind: "UnknownIdentifier",
-        name: statement.name,
-        position: statement.position,
-      });
-    }
-    const value = checkExpression(statement.value, scopes);
-    if (!value.ok) {
-      return value;
-    }
-    const actual = expressionType(statement.value, scopes);
-    if (statement.compound) {
-      // `+=` is numeric addition: both the variable and the value must be numbers.
-      const mismatch = decl.type !== "number" ? decl.type : actual;
-      if (mismatch !== "number") {
-        return err({
-          kind: "TypeMismatch",
-          name: statement.name,
-          expected: "number",
-          actual: mismatch,
-          position: statement.position,
-        });
-      }
-      return ok(null);
-    }
-    if (actual !== decl.type) {
-      return err({
-        kind: "TypeMismatch",
-        name: statement.name,
-        expected: decl.type,
-        actual,
-        position: statement.position,
-      });
-    }
-    return ok(null);
+    return checkAssign(statement, scopes);
   }
 
   if (statement.kind === "return") {

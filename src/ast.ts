@@ -9,6 +9,18 @@ export type Value =
       left: Value;
       right: Value;
       position: number;
+    }
+  | {
+      /** The address of a variable (`&name`), a pointer to its type. */
+      kind: "addressOf";
+      target: Value;
+      position: number;
+    }
+  | {
+      /** The value a pointer refers to (`*ptr`). */
+      kind: "deref";
+      target: Value;
+      position: number;
     };
 
 /**

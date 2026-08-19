@@ -42,6 +42,9 @@ test('evaluate returns 1 for "let x = 1; let y = 2; return x != y;"', () => {
 test('evaluate returns 3 for "let mut x = 1; x += 2; return x;"', () => {
   expect(evaluate("let mut x = 1; x += 2; return x;")).toEqual({ ok: true, value: 3 });
 });
+test('evaluate returns 1 for "let x = 1; let y = &x; return *y;"', () => {
+  expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
+});
 test('evaluate returns 2 for "let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;"', () => {
   expect(evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;")).toEqual({
     ok: true,

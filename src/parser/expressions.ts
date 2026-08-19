@@ -20,6 +20,15 @@ function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
     advance(cursor);
     return ok({ kind: "ident", name: token.value, position: token.position });
   }
+  if (token.kind === "addressOf" || token.kind === "deref") {
+    const operator = token.kind;
+    advance(cursor);
+    const target = parsePrimary(cursor);
+    if (!target.ok) {
+      return target;
+    }
+    return ok({ kind: operator, target: target.value, position: token.position });
+  }
   return unexpected(cursor);
 }
 

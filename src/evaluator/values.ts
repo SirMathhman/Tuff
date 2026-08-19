@@ -2,7 +2,11 @@ import type { Value } from "../ast.js";
 import { err, ok, type EvalError, type Result } from "../errors.js";
 
 /** A value with its type, so `==` can compare type-strictly. */
-export type TypedValue = { type: "number"; value: number } | { type: "bool"; value: boolean };
+export type TypedValue =
+  | { type: "number"; value: number }
+  | { type: "bool"; value: boolean }
+  | { type: "ptr<number>"; ref: Variable }
+  | { type: "ptr<bool>"; ref: Variable };
 
 /** A variable's value with its type, so assignments can be type-checked. */
 export type Variable = { value: TypedValue; mutable: boolean };
@@ -62,6 +66,42 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
             : leftNum >= rightNum;
     return ok({ type: "number", value: result ? 1 : 0 });
   }
+  if (value.kind === "addressOf") {
+    const target = valueToTyped(value.target, scopes);
+    if (!target.ok) {
+      return target;
+    }
+    if (target.value.type !== "number" && target.value.type !== "bool") {
+      return err({
+        kind: "TypeMismatch",
+        name: "&",
+        expected: "number",
+        actual: target.value.type,
+        position: value.position,
+      });
+    }
+    const variable = lookup(scopes, value.target.name);
+    if (!variable) {
+      return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
+    }
+    return ok({ type: `ptr<${variable.value.type}>` as "ptr<number>", ref: variable });
+  }
+  if (value.kind === "deref") {
+    const target = valueToTyped(value.target, scopes);
+    if (!target.ok) {
+      return target;
+    }
+    if (target.value.type !== "ptr<number>" && target.value.type !== "ptr<bool>") {
+      return err({
+        kind: "TypeMismatch",
+        name: "*",
+        expected: "ptr<number>",
+        actual: target.value.type,
+        position: value.position,
+      });
+    }
+    return ok(target.value.ref.value);
+  }
   const variable = lookup(scopes, value.name);
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
@@ -74,6 +114,15 @@ export function valueToNumber(value: Value, scopes: Scopes): Result<number, Eval
   const typed = valueToTyped(value, scopes);
   if (!typed.ok) {
     return typed;
+  }
+  if (typed.value.type === "ptr<number>" || typed.value.type === "ptr<bool>") {
+    return err({
+      kind: "TypeMismatch",
+      name: "*",
+      expected: "number",
+      actual: typed.value.type,
+      position: value.position,
+    });
   }
   return ok(typed.value.type === "bool" ? (typed.value.value ? 1 : 0) : typed.value.value);
 }

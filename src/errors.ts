@@ -17,6 +17,9 @@ export function err<E>(error: E): Err<E> {
   return { ok: false, error };
 }
 
+/** A static type name: a primitive or a pointer to a primitive. */
+export type TypeName = "number" | "bool" | "ptr<number>" | "ptr<bool>";
+
 /**
  * Structured errors produced by `evaluate`.
  * Each variant answers: what went wrong, where, and how to fix it.
@@ -64,9 +67,9 @@ export type EvalError =
       /** The variable name. */
       name: string;
       /** The variable's type, set by its initializer. */
-      expected: "number" | "bool";
+      expected: TypeName;
       /** The type of the value being assigned. */
-      actual: "number" | "bool";
+      actual: TypeName;
       /** Zero-based character offset of the assignment statement. */
       position: number;
     }

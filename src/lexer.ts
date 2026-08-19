@@ -15,6 +15,8 @@ export type Token =
   | { kind: "compoundAssign"; operator: "+="; position: number }
   | { kind: "binary"; operator: "==" | "!=" | "<" | "<=" | ">" | ">="; position: number }
   | { kind: "semicolon"; position: number }
+  | { kind: "addressOf"; position: number }
+  | { kind: "deref"; position: number }
   | { kind: "lbrace"; position: number }
   | { kind: "rbrace"; position: number }
   | { kind: "lparen"; position: number }
@@ -24,10 +26,12 @@ const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
 const SINGLE_CHAR_TOKENS: Record<
   string,
-  "assign" | "semicolon" | "lbrace" | "rbrace" | "lparen" | "rparen"
+  "assign" | "semicolon" | "addressOf" | "deref" | "lbrace" | "rbrace" | "lparen" | "rparen"
 > = {
   "=": "assign",
   ";": "semicolon",
+  "&": "addressOf",
+  "*": "deref",
   "{": "lbrace",
   "}": "rbrace",
   "(": "lparen",
