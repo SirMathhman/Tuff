@@ -17,30 +17,47 @@ function lookup(scopes: Scopes, name: string): Variable | undefined {
   return undefined;
 }
 
-/** Convert a value expression to a number, or an error for undeclared identifiers. */
-function valueToNumber(value: Value, scopes: Scopes): Result<number, EvalError> {
+/** A value with its type, so `==` can compare type-strictly. */
+type TypedValue = { type: "number"; value: number } | { type: "bool"; value: boolean };
+
+/**
+ * Evaluate a value expression to a typed value, or an error for undeclared
+ * identifiers. `==` compares type-strictly: a bool and a number are never
+ * equal. Variables are untyped numbers.
+ */
+function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
-    return ok(value.value);
+    return ok({ type: "number", value: value.value });
   }
   if (value.kind === "bool") {
-    return ok(value.value ? 1 : 0);
+    return ok({ type: "bool", value: value.value });
   }
   if (value.kind === "binary") {
-    const left = valueToNumber(value.left, scopes);
+    const left = valueToTyped(value.left, scopes);
     if (!left.ok) {
       return left;
     }
-    const right = valueToNumber(value.right, scopes);
+    const right = valueToTyped(value.right, scopes);
     if (!right.ok) {
       return right;
     }
-    return ok(left.value === right.value ? 1 : 0);
+    const equal = left.value.type === right.value.type && left.value.value === right.value.value;
+    return ok({ type: "number", value: equal ? 1 : 0 });
   }
   const variable = lookup(scopes, value.name);
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
   }
-  return ok(variable.value);
+  return ok({ type: "number", value: variable.value });
+}
+
+/** Convert a value expression to a number, or an error for undeclared identifiers. */
+function valueToNumber(value: Value, scopes: Scopes): Result<number, EvalError> {
+  const typed = valueToTyped(value, scopes);
+  if (!typed.ok) {
+    return typed;
+  }
+  return ok(typed.value.type === "bool" ? (typed.value.value ? 1 : 0) : typed.value.value);
 }
 
 /** Evaluate a single statement within the current scope stack. */

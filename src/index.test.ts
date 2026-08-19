@@ -21,6 +21,9 @@ test('evaluate returns 1 for "let x = true; return x;"', () => {
 test('evaluate returns 0 for "let x = 1; let y = 2; return x == y;"', () => {
   expect(evaluate("let x = 1; let y = 2; return x == y;")).toEqual({ ok: true, value: 0 });
 });
+test('evaluate returns 0 for "return true == 1;"', () => {
+  expect(evaluate("return true == 1;")).toEqual({ ok: true, value: 0 });
+});
 test("evaluate returns an ImmutableAssignment error when assigning to a non-mut variable", () => {
   expect(evaluate("let x = 0; x = 1; return x;")).toEqual({
     ok: false,
