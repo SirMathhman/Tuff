@@ -28,8 +28,14 @@ export interface TypePtr {
   pointee: Type;
 }
 
-/** A static type: a primitive, an array, or a pointer. */
-export type Type = TypeNumber | TypeBool | TypeArray | TypePtr;
+/** A numeric range (`start..end`), exclusive of `end`. */
+export interface TypeRange {
+  kind: "range";
+  element: Type;
+}
+
+/** A static type: a primitive, an array, a pointer, or a range. */
+export type Type = TypeNumber | TypeBool | TypeArray | TypePtr | TypeRange;
 
 /** Render a type as its display name (e.g. `ptr<number>`, `array<number>`). */
 export function typeToString(type: Type): string {
@@ -38,6 +44,9 @@ export function typeToString(type: Type): string {
   }
   if (type.kind === "array") {
     return `array<${typeToString(type.element)}>`;
+  }
+  if (type.kind === "range") {
+    return `range<${typeToString(type.element)}>`;
   }
   return type.kind;
 }
@@ -52,6 +61,9 @@ export function typesEqual(a: Type, b: Type): boolean {
   }
   if (a.kind === "ptr" && b.kind === "ptr") {
     return a.mutable === b.mutable && typesEqual(a.pointee, b.pointee);
+  }
+  if (a.kind === "range" && b.kind === "range") {
+    return typesEqual(a.element, b.element);
   }
   return true;
 }
@@ -103,6 +115,9 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
     const target = expressionType(value.target, scopes);
     const arrayType = target.kind === "ptr" ? target.pointee : target;
     return arrayType.kind === "array" ? arrayType.element : { kind: "number" };
+  }
+  if (value.kind === "range") {
+    return { kind: "range", element: expressionType(value.start, scopes) };
   }
   return lookup(scopes, value.name)?.type ?? { kind: "number" };
 }

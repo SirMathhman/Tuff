@@ -5,6 +5,7 @@ import type {
   ValueDeref,
   ValueIndex,
   ValueAddressOf,
+  ValueRange,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, type ScopeStack } from "../core/scopes.js";
@@ -43,7 +44,8 @@ export interface TypedValuePtr {
  * each variant carries the payload for that kind, so narrowing on `kind` also
  * narrows the payload.
  */
-export type TypedValue = TypedValueNumber | TypedValueBool | TypedValueArray | TypedValuePtr;
+export type TypedValue =
+  TypedValueNumber | TypedValueBool | TypedValueArray | TypedValuePtr | TypedValueRange;
 
 /** A variable's value with its type, so assignments can be type-checked. */
 export interface Variable {
@@ -54,11 +56,23 @@ export interface Variable {
 /** A stack of variable scopes, innermost last. */
 export type Scopes = ScopeStack<Variable>;
 
+/** A numeric range value, exclusive of `end`. */
+export interface TypedValueRange {
+  kind: "range";
+  /** The element type of the range (matching the `range` type). */
+  element: Type;
+  start: number;
+  end: number;
+}
+
 /** A pointer variant of `TypedValue`, at any nesting depth. */
 type PointerValue = TypedValuePtr;
 
 /** An array variant of `TypedValue`. */
 type ArrayValue = TypedValueArray;
+
+/** A range variant of `TypedValue`. */
+type RangeValue = TypedValueRange;
 
 /** Type guard: is this a pointer value? */
 export function isPointer(t: TypedValue): t is PointerValue {
@@ -68,6 +82,11 @@ export function isPointer(t: TypedValue): t is PointerValue {
 /** Type guard: is this an array value? */
 export function isArray(t: TypedValue): t is ArrayValue {
   return t.kind === "array";
+}
+
+/** Type guard: is this a range value? */
+export function isRange(t: TypedValue): t is RangeValue {
+  return t.kind === "range";
 }
 
 /** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
@@ -249,6 +268,19 @@ function evalDeref(value: ValueDeref, scopes: Scopes): Result<TypedValue, EvalEr
   return ok(target.value.ref.value);
 }
 
+/** Evaluate a `start..end` range into a typed range value (bounds are numbers). */
+function evalRange(value: ValueRange, scopes: Scopes): Result<TypedValue, EvalError> {
+  const start = valueToNumber(value.start, scopes);
+  if (!start.ok) {
+    return start;
+  }
+  const end = valueToNumber(value.end, scopes);
+  if (!end.ok) {
+    return end;
+  }
+  return ok({ kind: "range", element: { kind: "number" }, start: start.value, end: end.value });
+}
+
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
  * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
@@ -287,6 +319,9 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
       position: value.position,
     });
   }
+  if (value.kind === "range") {
+    return evalRange(value, scopes);
+  }
   const variable = lookup(scopes, value.name);
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
@@ -300,7 +335,7 @@ export function valueToNumber(value: Value, scopes: Scopes): Result<number, Eval
   if (!typed.ok) {
     return typed;
   }
-  if (isPointer(typed.value) || isArray(typed.value)) {
+  if (isPointer(typed.value) || isArray(typed.value) || isRange(typed.value)) {
     return err({
       kind: "TypeMismatch",
       name: "*",

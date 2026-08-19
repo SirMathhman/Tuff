@@ -67,6 +67,14 @@ export interface ValueIndexAssign {
   position: number;
 }
 
+/** A numeric range (`start..end`), exclusive of `end`. */
+export interface ValueRange {
+  kind: "range";
+  start: Value;
+  end: Value;
+  position: number;
+}
+
 /** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
   | ValueNumber
@@ -77,7 +85,8 @@ export type Value =
   | ValueIndex
   | ValueAddressOf
   | ValueDeref
-  | ValueIndexAssign;
+  | ValueIndexAssign
+  | ValueRange;
 
 /** A variable declaration (`let` / `let mut`). */
 export interface StatementLet {
@@ -131,15 +140,13 @@ export interface StatementWhile {
   position: number;
 }
 
-/** A `for (i in start..end) { ... }` loop over a numeric range, exclusive of `end`. */
+/** A `for (i in range) { ... }` loop over a numeric range, exclusive of its end. */
 export interface StatementFor {
   kind: "for";
   /** The loop variable, bound to each value in the range. */
   variable: string;
-  /** The inclusive start of the range. */
-  start: Value;
-  /** The exclusive end of the range. */
-  end: Value;
+  /** The range to iterate: a `start..end` expression or a variable of range type. */
+  range: Value;
   body: Statement[];
   position: number;
 }

@@ -165,6 +165,20 @@ export function parseValue(cursor: Cursor): Result<Value, EvalError> {
       position: value.value.position,
     });
   }
+  if (peek(cursor)?.kind === "range") {
+    const rangeToken = peek(cursor)!;
+    advance(cursor);
+    const end = parseValue(cursor);
+    if (!end.ok) {
+      return end;
+    }
+    return ok({
+      kind: "range",
+      start: value.value,
+      end: end.value,
+      position: rangeToken.position,
+    });
+  }
   return value;
 }
 

@@ -18,6 +18,7 @@ import {
   type Scopes,
   type TypedValue,
   type TypedValueArray,
+  type TypedValueRange,
   type Variable,
 } from "./values.js";
 
@@ -265,15 +266,13 @@ function evalWhile(statement: StatementWhile, scopes: Scopes): Outcome {
  * of `end`. The loop variable is a fresh mutable number each iteration.
  */
 function evalFor(statement: StatementFor, scopes: Scopes): Outcome {
-  const start = valueToNumber(statement.start, scopes);
-  if (!start.ok) {
-    return { kind: "error", error: start.error };
+  const range = valueToTyped(statement.range, scopes);
+  if (!range.ok) {
+    return { kind: "error", error: range.error };
   }
-  const end = valueToNumber(statement.end, scopes);
-  if (!end.ok) {
-    return { kind: "error", error: end.error };
-  }
-  for (let i = start.value; i < end.value; i++) {
+  // The typecheck pass guarantees `statement.range` is a `range<number>`.
+  const bounds = range.value as TypedValueRange;
+  for (let i = bounds.start; i < bounds.end; i++) {
     const body = withScope(scopes, () => {
       scopes[scopes.length - 1].set(statement.variable, {
         value: { kind: "number", value: i },

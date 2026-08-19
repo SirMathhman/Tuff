@@ -254,3 +254,29 @@ test("evalProgram returns an UnknownIdentifier error with the variable name and 
     error: { kind: "UnknownIdentifier", name: "y", position: 7 },
   });
 });
+
+test('evalProgram sums a for loop over a range: "let mut sum = 0; for (i in 0..4) { sum += i; } return sum;"', () => {
+  expect(evalSource("let mut sum = 0; for (i in 0..4) { sum += i; } return sum;")).toEqual({
+    ok: true,
+    value: 6,
+  });
+});
+
+test("evalProgram sums a for loop over a range stored in a variable", () => {
+  expect(
+    evalSource("let mut sum = 0; let range = 0..4; for (i in range) { sum += i; } return sum;"),
+  ).toEqual({ ok: true, value: 6 });
+});
+
+test("evalProgram returns a TypeMismatch error when the for range is not a range", () => {
+  expect(evalSource("let x = 1; for (i in x) { } return 1;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "in",
+      expected: "range<number>",
+      actual: "number",
+      position: 21,
+    },
+  });
+});

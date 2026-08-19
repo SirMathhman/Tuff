@@ -146,6 +146,23 @@ test("tokenize tokenizes the continue keyword", () => {
     ],
   });
 });
+test("tokenize tokenizes the for/in keywords and the .. range operator", () => {
+  expect(tokenize("for (i in 0..4) { }")).toEqual({
+    ok: true,
+    value: [
+      { kind: "for", position: 0 },
+      { kind: "lparen", position: 4 },
+      { kind: "ident", value: "i", position: 5 },
+      { kind: "in", position: 7 },
+      { kind: "number", value: 0, position: 10 },
+      { kind: "range", position: 11 },
+      { kind: "number", value: 4, position: 13 },
+      { kind: "rparen", position: 14 },
+      { kind: "lbrace", position: 16 },
+      { kind: "rbrace", position: 18 },
+    ],
+  });
+});
 test("tokenize returns an UnexpectedToken error for an unknown character", () => {
   expect(tokenize("let x = @;")).toEqual({
     ok: false,

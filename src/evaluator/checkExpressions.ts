@@ -1,4 +1,4 @@
-import type { Value, ValueArray, ValueBinary, ValueIndex } from "../core/ast.js";
+import type { Value, ValueArray, ValueBinary, ValueDeref, ValueIndex } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes } from "./types.js";
@@ -30,10 +30,10 @@ function checkBinary(value: ValueBinary, scopes: DeclScopes): Result<null, EvalE
     return ok(null);
   }
   if (value.operator !== "==" && value.operator !== "!=") {
-    // Ordering operators compare numerically; pointers have no numeric value.
+    // Ordering operators compare numerically; only numbers and bools coerce.
     for (const operand of [value.left, value.right]) {
       const type = expressionType(operand, scopes);
-      if (type.kind === "ptr") {
+      if (type.kind !== "number" && type.kind !== "bool") {
         return err({
           kind: "TypeMismatch",
           name: value.operator,
@@ -108,7 +108,7 @@ function checkIndex(value: ValueIndex, scopes: DeclScopes): Result<null, EvalErr
 
 /**
  * Check that a value expression can coerce to a number (numbers and bools can;
- * arrays and pointers cannot). Used for `return` values and `if`/`while`
+ * arrays, pointers, and ranges cannot). Used for `return` values and `if`/`while`
  * conditions, where the evaluator would otherwise emit a placeholder error.
  */
 export function checkNumericCoercible(
@@ -117,12 +117,31 @@ export function checkNumericCoercible(
   name: string,
 ): Result<null, EvalError> {
   const type = expressionType(value, scopes);
-  if (type.kind === "array" || type.kind === "ptr") {
+  if (type.kind === "array" || type.kind === "ptr" || type.kind === "range") {
     return err({
       kind: "TypeMismatch",
       name,
       expected: "number",
       actual: typeToString(type),
+      position: value.position,
+    });
+  }
+  return ok(null);
+}
+
+/** Check a `*ptr` dereference: the target must be a pointer. */
+function checkDeref(value: ValueDeref, scopes: DeclScopes): Result<null, EvalError> {
+  const target = checkExpression(value.target, scopes);
+  if (!target.ok) {
+    return target;
+  }
+  const targetType = expressionType(value.target, scopes);
+  if (targetType.kind !== "ptr") {
+    return err({
+      kind: "TypeMismatch",
+      name: "*",
+      expected: "ptr<number>",
+      actual: typeToString(targetType),
       position: value.position,
     });
   }
@@ -163,21 +182,14 @@ export function checkExpression(value: Value, scopes: DeclScopes): Result<null, 
     return checkExpression(value.target, scopes);
   }
   if (value.kind === "deref") {
-    const target = checkExpression(value.target, scopes);
-    if (!target.ok) {
-      return target;
+    return checkDeref(value, scopes);
+  }
+  if (value.kind === "range") {
+    const start = checkExpression(value.start, scopes);
+    if (!start.ok) {
+      return start;
     }
-    const targetType = expressionType(value.target, scopes);
-    if (targetType.kind !== "ptr") {
-      return err({
-        kind: "TypeMismatch",
-        name: "*",
-        expected: "ptr<number>",
-        actual: typeToString(targetType),
-        position: value.position,
-      });
-    }
-    return ok(null);
+    return checkExpression(value.end, scopes);
   }
   return ok(null);
 }

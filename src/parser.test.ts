@@ -202,6 +202,28 @@ test("parse parses a while loop statement", () => {
   });
 });
 
+test("parse parses a for loop over a range value", () => {
+  expect(parseSource("for (i in 0..4) { }")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "for",
+          variable: "i",
+          range: {
+            kind: "range",
+            start: { kind: "number", value: 0, position: 10 },
+            end: { kind: "number", value: 4, position: 13 },
+            position: 11,
+          },
+          body: [],
+          position: 0,
+        },
+      ],
+    },
+  });
+});
+
 test("parse parses a break statement inside a while loop", () => {
   expect(parseSource("while (x) { break; }")).toEqual({
     ok: true,

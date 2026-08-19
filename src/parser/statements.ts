@@ -127,17 +127,9 @@ function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError
     return unexpected(cursor);
   }
   advance(cursor);
-  const start = parseValue(cursor);
-  if (!start.ok) {
-    return start;
-  }
-  if (peek(cursor)?.kind !== "range") {
-    return unexpected(cursor);
-  }
-  advance(cursor);
-  const end = parseValue(cursor);
-  if (!end.ok) {
-    return end;
+  const range = parseValue(cursor);
+  if (!range.ok) {
+    return range;
   }
   if (peek(cursor)?.kind !== "rparen") {
     return unexpected(cursor);
@@ -150,8 +142,7 @@ function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError
   return ok({
     kind: "for",
     variable: variable.value,
-    start: start.value,
-    end: end.value,
+    range: range.value,
     body: body.value,
     position,
   });
