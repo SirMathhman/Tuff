@@ -11,7 +11,15 @@ import type {
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { expressionType, intLiteralInRange, promote, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
+import {
+  expressionType,
+  intLiteralInRange,
+  promote,
+  typeToString,
+  typesEqual,
+  type DeclScopes,
+  type Type,
+} from "./types.js";
 
 /**
  * A block-statement checker, threaded through the expression checker as an

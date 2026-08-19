@@ -62,7 +62,16 @@ export function typeToString(type: Type): string {
 }
 
 /** The promotion rank of an integer type: wider types rank higher; `number` is widest. */
-const INT_RANK: Record<string, number> = { u8: 1, i8: 1, u16: 2, i16: 2, u32: 3, i32: 3, u64: 4, i64: 4 };
+const INT_RANK: Record<string, number> = {
+  u8: 1,
+  i8: 1,
+  u16: 2,
+  i16: 2,
+  u32: 3,
+  i32: 3,
+  u64: 4,
+  i64: 4,
+};
 
 /** The inclusive value range of each integer type. */
 const INT_BOUNDS: Record<string, [number, number]> = {

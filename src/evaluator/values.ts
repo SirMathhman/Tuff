@@ -140,7 +140,9 @@ function evalAddition(
     l.kind === "int" ? { kind: "int", name: l.name } : { kind: "number" },
     r.kind === "int" ? { kind: "int", name: r.name } : { kind: "number" },
   );
-  return result.kind === "int" ? ok({ kind: "int", name: result.name, value: sum }) : ok({ kind: "number", value: sum });
+  return result.kind === "int"
+    ? ok({ kind: "int", name: result.name, value: sum })
+    : ok({ kind: "number", value: sum });
 }
 
 /** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
