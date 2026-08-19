@@ -12,7 +12,7 @@ import type {
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, withScope } from "../core/scopes.js";
-import { checkExpression } from "./checkExpressions.js";
+import { checkExpression, checkNumericCoercible } from "./checkExpressions.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 
 /** The base identifier name of an lvalue (an ident, or a deref/index chain ending in one). */
@@ -246,6 +246,10 @@ function checkWhile(statement: StatementWhile, scopes: DeclScopes): Result<null,
   if (!condition.ok) {
     return condition;
   }
+  const coercible = checkNumericCoercible(statement.condition, scopes, "while");
+  if (!coercible.ok) {
+    return coercible;
+  }
   return withScope(scopes, () => checkStatements(statement.body, scopes, true));
 }
 
@@ -318,7 +322,11 @@ function checkStatement(
   }
 
   if (statement.kind === "return") {
-    return checkExpression(statement.value, scopes);
+    const value = checkExpression(statement.value, scopes);
+    if (!value.ok) {
+      return value;
+    }
+    return checkNumericCoercible(statement.value, scopes, "return");
   }
 
   if (statement.kind === "block") {
@@ -329,6 +337,10 @@ function checkStatement(
     const condition = checkExpression(statement.condition, scopes);
     if (!condition.ok) {
       return condition;
+    }
+    const coercible = checkNumericCoercible(statement.condition, scopes, "if");
+    if (!coercible.ok) {
+      return coercible;
     }
     const then = withScope(scopes, () => checkStatements(statement.then, scopes, inLoop));
     if (!then.ok) {

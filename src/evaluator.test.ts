@@ -83,6 +83,54 @@ test("evalProgram type-checks a while body", () => {
   });
 });
 
+// Coverage for the numeric-coercibility check on return values and loop/if conditions.
+test("evalProgram returns a TypeMismatch error when returning a non-numeric value", () => {
+  expect(evalSource("let a = [1]; return a;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "return",
+      expected: "number",
+      actual: "array<number>",
+      position: 20,
+    },
+  });
+  expect(evalSource("let x = 1; let p = &x; return p;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "return",
+      expected: "number",
+      actual: "ptr<number>",
+      position: 30,
+    },
+  });
+});
+test("evalProgram returns a TypeMismatch error for a non-numeric if condition", () => {
+  expect(evalSource("let a = [1]; if (a) { return 2; } return 1;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "if",
+      expected: "number",
+      actual: "array<number>",
+      position: 17,
+    },
+  });
+});
+test("evalProgram returns a TypeMismatch error for a non-numeric while condition", () => {
+  expect(evalSource("let a = [1]; while (a) { } return 1;")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "while",
+      expected: "number",
+      actual: "array<number>",
+      position: 20,
+    },
+  });
+});
+
 test("evalProgram compares with a type-strict ==", () => {
   expect(evalSource("return 1 == 1;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return 1 == 2;")).toEqual({ ok: true, value: 0 });

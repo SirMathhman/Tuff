@@ -107,6 +107,29 @@ function checkIndex(value: ValueIndex, scopes: DeclScopes): Result<null, EvalErr
 }
 
 /**
+ * Check that a value expression can coerce to a number (numbers and bools can;
+ * arrays and pointers cannot). Used for `return` values and `if`/`while`
+ * conditions, where the evaluator would otherwise emit a placeholder error.
+ */
+export function checkNumericCoercible(
+  value: Value,
+  scopes: DeclScopes,
+  name: string,
+): Result<null, EvalError> {
+  const type = expressionType(value, scopes);
+  if (type.kind === "array" || type.kind === "ptr") {
+    return err({
+      kind: "TypeMismatch",
+      name,
+      expected: "number",
+      actual: typeToString(type),
+      position: value.position,
+    });
+  }
+  return ok(null);
+}
+
+/**
  * Check that every identifier in a value expression is declared in the current
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
  * reference found.
