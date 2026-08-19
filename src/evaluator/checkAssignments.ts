@@ -1,7 +1,7 @@
 import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { checkExpression } from "./checkExpressions.js";
+import { checkExpression, type BlockChecker } from "./checkExpressions.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 
 /** The base identifier name of an lvalue (an ident, or a deref/index chain ending in one). */
@@ -126,12 +126,13 @@ function checkIndexAssign(
   actual: Type,
   check: (name: string, target: Type, actual: Type, position: number) => Result<null, EvalError>,
   scopes: DeclScopes,
+  block: BlockChecker,
 ): Result<null, EvalError> {
   const mutableTarget = checkMutableArrayTarget(target.target, scopes);
   if (!mutableTarget.ok) {
     return mutableTarget;
   }
-  const index = checkExpression(target.index, scopes);
+  const index = checkExpression(target.index, scopes, block);
   if (!index.ok) {
     return index;
   }
@@ -167,10 +168,11 @@ function checkIndexAssign(
 export function checkAssign(
   statement: StatementAssign,
   scopes: DeclScopes,
+  block: BlockChecker,
 ): Result<null, EvalError> {
   const target = statement.target;
   const name = baseIdentName(target);
-  const value = checkExpression(statement.value, scopes);
+  const value = checkExpression(statement.value, scopes, block);
   if (!value.ok) {
     return value;
   }
@@ -198,7 +200,7 @@ export function checkAssign(
   // Index target (`arr[i] = value`): the array must be mutable, the index a
   // number, and the value must match the element type.
   if (target.kind === "indexAssign") {
-    return checkIndexAssign(target, name, actual, check, scopes);
+    return checkIndexAssign(target, name, actual, check, scopes, block);
   }
 
   // The parser only produces ident, deref, or index targets; defensive fallback.

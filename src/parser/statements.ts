@@ -6,11 +6,15 @@ import {
   consumeSemicolon,
   parseValue,
   parseValueAndSemicolon,
-  registerBlockValueParser,
+  type BlockValueParser,
 } from "./expressions.js";
 
 /** Parse a `let [mut] name = value` declaration. */
-function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError> {
+function parseLet(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
   advance(cursor);
   let mutable = false;
   if (peek(cursor)?.kind === "mut") {
@@ -22,7 +26,7 @@ function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError
     return unexpected(cursor);
   }
   advance(cursor);
-  const value = parseAssignedValue(cursor);
+  const value = parseAssignedValue(cursor, block);
   if (!value.ok) {
     return value;
   }
@@ -30,9 +34,13 @@ function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError
 }
 
 /** Parse a `return value` statement. */
-function parseReturn(cursor: Cursor, position: number): Result<Statement, EvalError> {
+function parseReturn(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
   advance(cursor);
-  const value = parseValueAndSemicolon(cursor);
+  const value = parseValueAndSemicolon(cursor, block);
   if (!value.ok) {
     return value;
   }
@@ -40,22 +48,27 @@ function parseReturn(cursor: Cursor, position: number): Result<Statement, EvalEr
 }
 
 /** Parse a `{ ... }` block into its statement list. */
-function parseBlock(cursor: Cursor, allowExpr: boolean): Result<Statement[], EvalError> {
+function parseBlock(
+  cursor: Cursor,
+  allowExpr: boolean,
+  block: BlockValueParser,
+): Result<Statement[], EvalError> {
   if (peek(cursor)?.kind !== "lbrace") {
     return unexpected(cursor);
   }
   advance(cursor);
-  return parseStatements(cursor, true, allowExpr);
+  return parseStatements(cursor, true, allowExpr, block);
 }
 
 /**
  * Parse a `{ ... }` block as a value expression: its value is that of its
- * final bare expression, so the block must end in one. Registered with the
- * expression parser (which cannot import this module without a cycle).
+ * final bare expression, so the block must end in one. Passed to the
+ * expression parser as an explicit dependency (which cannot import this
+ * module without a cycle).
  */
-function parseBlockValue(cursor: Cursor): Result<Value, EvalError> {
+export function parseBlockValue(cursor: Cursor): Result<Value, EvalError> {
   const position = peek(cursor)?.position ?? 0;
-  const statements = parseBlock(cursor, true);
+  const statements = parseBlock(cursor, true, parseBlockValue);
   if (!statements.ok) {
     return statements;
   }
@@ -71,20 +84,16 @@ function parseBlockValue(cursor: Cursor): Result<Value, EvalError> {
   return ok(block);
 }
 
-// The expression parser needs this to parse `{ ... }` as a value; registering
-// it here (rather than importing it there) keeps the module graph acyclic.
-registerBlockValueParser(parseBlockValue);
-
 /**
  * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
  * expression, and a matching rparen.
  */
-function parseCondition(cursor: Cursor): Result<Value, EvalError> {
+function parseCondition(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
   if (peek(cursor)?.kind !== "lparen") {
     return unexpected(cursor);
   }
   advance(cursor);
-  const condition = parseValue(cursor);
+  const condition = parseValue(cursor, block);
   if (!condition.ok) {
     return condition;
   }
@@ -95,21 +104,46 @@ function parseCondition(cursor: Cursor): Result<Value, EvalError> {
   return condition;
 }
 
-/** Parse an `if (condition) { ... } [else { ... }]` statement. */
-function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError> {
+/** The parsed head of an `if`/`while`: its condition and block body. */
+interface ConditionAndBody {
+  condition: Value;
+  body: Statement[];
+}
+
+/**
+ * Parse the shared head of `if`/`while`: the keyword, a `( condition )` group,
+ * and the block body. Returns the condition and body on success.
+ */
+function parseConditionAndBody(
+  cursor: Cursor,
+  block: BlockValueParser,
+): Result<ConditionAndBody, EvalError> {
   advance(cursor);
-  const condition = parseCondition(cursor);
+  const condition = parseCondition(cursor, block);
   if (!condition.ok) {
     return condition;
   }
-  const then = parseBlock(cursor, false);
-  if (!then.ok) {
-    return then;
+  const body = parseBlock(cursor, false, block);
+  if (!body.ok) {
+    return body;
+  }
+  return ok({ condition: condition.value, body: body.value });
+}
+
+/** Parse an `if (condition) { ... } [else { ... }]` statement. */
+function parseIf(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
+  const head = parseConditionAndBody(cursor, block);
+  if (!head.ok) {
+    return head;
   }
   let elseBranch: Statement[] | undefined;
   if (peek(cursor)?.kind === "else") {
     advance(cursor);
-    const elseBlock = parseBlock(cursor, false);
+    const elseBlock = parseBlock(cursor, false, block);
     if (!elseBlock.ok) {
       return elseBlock;
     }
@@ -117,8 +151,8 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
   }
   return ok({
     kind: "if",
-    condition: condition.value,
-    then: then.value,
+    condition: head.value.condition,
+    then: head.value.body,
     else: elseBranch,
     position,
   });
@@ -128,7 +162,11 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
  * Parse a `for (i in start..end) { ... }` loop: a `for` keyword, a parenthesized
  * `ident in value..value` range (exclusive of `end`), and a block body.
  */
-function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError> {
+function parseFor(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
   advance(cursor);
   if (peek(cursor)?.kind !== "lparen") {
     return unexpected(cursor);
@@ -143,7 +181,7 @@ function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError
     return unexpected(cursor);
   }
   advance(cursor);
-  const range = parseValue(cursor);
+  const range = parseValue(cursor, block);
   if (!range.ok) {
     return range;
   }
@@ -151,7 +189,7 @@ function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError
     return unexpected(cursor);
   }
   advance(cursor);
-  const body = parseBlock(cursor, false);
+  const body = parseBlock(cursor, false, block);
   if (!body.ok) {
     return body;
   }
@@ -179,17 +217,21 @@ function parseContinue(cursor: Cursor, position: number): Result<Statement, Eval
 }
 
 /** Parse a `while (condition) { ... }` loop statement. */
-function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalError> {
-  advance(cursor);
-  const condition = parseCondition(cursor);
-  if (!condition.ok) {
-    return condition;
+function parseWhile(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
+  const head = parseConditionAndBody(cursor, block);
+  if (!head.ok) {
+    return head;
   }
-  const body = parseBlock(cursor, false);
-  if (!body.ok) {
-    return body;
-  }
-  return ok({ kind: "while", condition: condition.value, body: body.value, position });
+  return ok({
+    kind: "while",
+    condition: head.value.condition,
+    body: head.value.body,
+    position,
+  });
 }
 
 /**
@@ -197,25 +239,29 @@ function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalErr
  * consuming an optional trailing semicolon. When `allowExpr` is set (top level
  * only), a bare value expression may be parsed as the implicit program result.
  */
-function parseStatement(cursor: Cursor, allowExpr: boolean): Result<Statement, EvalError> {
+function parseStatement(
+  cursor: Cursor,
+  allowExpr: boolean,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
   const head = peek(cursor);
   if (!head) {
     return unexpected(cursor);
   }
   if (head.kind === "let") {
-    return parseLet(cursor, head.position);
+    return parseLet(cursor, head.position, block);
   }
   if (head.kind === "return") {
-    return parseReturn(cursor, head.position);
+    return parseReturn(cursor, head.position, block);
   }
   if (head.kind === "if") {
-    return parseIf(cursor, head.position);
+    return parseIf(cursor, head.position, block);
   }
   if (head.kind === "while") {
-    return parseWhile(cursor, head.position);
+    return parseWhile(cursor, head.position, block);
   }
   if (head.kind === "for") {
-    return parseFor(cursor, head.position);
+    return parseFor(cursor, head.position, block);
   }
   if (head.kind === "break") {
     return parseBreak(cursor, head.position);
@@ -224,7 +270,7 @@ function parseStatement(cursor: Cursor, allowExpr: boolean): Result<Statement, E
     return parseContinue(cursor, head.position);
   }
   if (head.kind === "ident" || head.kind === "deref") {
-    return parseIdentOrExpr(cursor, head.position, allowExpr);
+    return parseIdentOrExpr(cursor, head.position, allowExpr, block);
   }
   if (
     allowExpr &&
@@ -233,7 +279,7 @@ function parseStatement(cursor: Cursor, allowExpr: boolean): Result<Statement, E
       head.kind === "lbracket" ||
       head.kind === "addressOf")
   ) {
-    return parseExprStatement(cursor, head.position);
+    return parseExprStatement(cursor, head.position, block);
   }
   return unexpected(cursor);
 }
@@ -248,6 +294,7 @@ export function parseStatements(
   cursor: Cursor,
   inBlock: boolean,
   allowExpr: boolean,
+  block: BlockValueParser,
 ): Result<Statement[], EvalError> {
   const statements: Statement[] = [];
   while (!atEnd(cursor)) {
@@ -260,7 +307,7 @@ export function parseStatements(
       return ok(statements);
     }
     if (head.kind === "lbrace") {
-      const inner = parseBlock(cursor, false);
+      const inner = parseBlock(cursor, false, block);
       if (!inner.ok) {
         return inner;
       }
@@ -268,7 +315,7 @@ export function parseStatements(
       continue;
     }
     cursor.statementStart = head.position;
-    const statement = parseStatement(cursor, allowExpr);
+    const statement = parseStatement(cursor, allowExpr, block);
     if (!statement.ok) {
       return statement;
     }

@@ -3,21 +3,19 @@ import { ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, peek, unexpected, type Cursor } from "./cursor.js";
 
 /**
- * A block-value parser, registered by the statement parser at load time.
- * Expressions and statements mutually recurse through block values
- * (`{ ... }` as a value), so the statement parser hands its block-value
- * parser in here rather than importing it (which would be a module cycle).
+ * A block-value parser, threaded through the expression parser as an explicit
+ * dependency. Expressions and statements mutually recurse through block values
+ * (`{ ... }` as a value), so the statement parser passes its block-value parser
+ * in here rather than importing it (which would be a module cycle).
  */
-type BlockValueParser = (cursor: Cursor) => Result<Value, EvalError>;
-let blockValueParser: BlockValueParser | undefined;
-
-/** Register the block-value parser (called once by the statement parser). */
-export function registerBlockValueParser(parser: BlockValueParser): void {
-  blockValueParser = parser;
-}
+export type BlockValueParser = (cursor: Cursor) => Result<Value, EvalError>;
 
 /** Parse an array literal `[e1, e2, ...]`. */
-function parseArrayLiteral(cursor: Cursor, position: number): Result<Value, EvalError> {
+function parseArrayLiteral(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Value, EvalError> {
   advance(cursor); // consume `[`
   const elements: Value[] = [];
   if (peek(cursor)?.kind === "rbracket") {
@@ -25,7 +23,7 @@ function parseArrayLiteral(cursor: Cursor, position: number): Result<Value, Eval
     return ok({ kind: "array", elements, position });
   }
   for (;;) {
-    const element = parseValue(cursor);
+    const element = parseValue(cursor, block);
     if (!element.ok) {
       return element;
     }
@@ -43,8 +41,8 @@ function parseArrayLiteral(cursor: Cursor, position: number): Result<Value, Eval
   }
 }
 
-/** Parse a primary value: a number, bool, identifier, or array literal. */
-function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
+/** Parse a primary value: a number, bool, identifier, array, or block. */
+function parsePrimary(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
   const token = peek(cursor);
   if (!token) {
     return unexpected(cursor);
@@ -62,18 +60,15 @@ function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
     return ok({ kind: "ident", name: token.value, position: token.position });
   }
   if (token.kind === "lbracket") {
-    return parseArrayLiteral(cursor, token.position);
+    return parseArrayLiteral(cursor, token.position, block);
   }
   if (token.kind === "lbrace") {
-    if (!blockValueParser) {
-      return unexpected(cursor);
-    }
-    return blockValueParser(cursor);
+    return block(cursor);
   }
   if (token.kind === "addressOf" || token.kind === "deref") {
     const operator = token.kind;
     advance(cursor);
-    const target = parsePrimary(cursor);
+    const target = parsePrimary(cursor, block);
     if (!target.ok) {
       return target;
     }
@@ -98,11 +93,12 @@ export function parseIndexSuffixes(
   cursor: Cursor,
   value: Value,
   kind: "index" | "indexAssign",
+  block: BlockValueParser,
 ): Result<Value, EvalError> {
   while (peek(cursor)?.kind === "lbracket") {
     const bracket = peek(cursor)!;
     advance(cursor);
-    const index = parseValue(cursor);
+    const index = parseValue(cursor, block);
     if (!index.ok) {
       return index;
     }
@@ -119,20 +115,20 @@ export function parseIndexSuffixes(
  * Parse a postfix expression: a primary followed by zero or more index
  * operations (`[i]`), which bind tighter than any binary operator.
  */
-function parsePostfix(cursor: Cursor): Result<Value, EvalError> {
-  const value = parsePrimary(cursor);
+function parsePostfix(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
+  const value = parsePrimary(cursor, block);
   if (!value.ok) {
     return value;
   }
-  return parseIndexSuffixes(cursor, value.value, "index");
+  return parseIndexSuffixes(cursor, value.value, "index", block);
 }
 
 /**
  * Parse an additive expression: a postfix followed by zero or more `+`
  * operations, chained left-associatively.
  */
-function parseAdditive(cursor: Cursor): Result<Value, EvalError> {
-  let value = parsePostfix(cursor);
+function parseAdditive(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
+  let value = parsePostfix(cursor, block);
   if (!value.ok) {
     return value;
   }
@@ -142,7 +138,7 @@ function parseAdditive(cursor: Cursor): Result<Value, EvalError> {
       break;
     }
     advance(cursor);
-    const right = parsePostfix(cursor);
+    const right = parsePostfix(cursor, block);
     if (!right.ok) {
       return right;
     }
@@ -162,8 +158,8 @@ function parseAdditive(cursor: Cursor): Result<Value, EvalError> {
  * comparison operations (`==`, `!=`, `<`, `<=`, `>`, `>=`), chained
  * left-associatively.
  */
-export function parseValue(cursor: Cursor): Result<Value, EvalError> {
-  let value = parseAdditive(cursor);
+export function parseValue(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
+  let value = parseAdditive(cursor, block);
   if (!value.ok) {
     return value;
   }
@@ -173,7 +169,7 @@ export function parseValue(cursor: Cursor): Result<Value, EvalError> {
       break;
     }
     advance(cursor);
-    const right = parseAdditive(cursor);
+    const right = parseAdditive(cursor, block);
     if (!right.ok) {
       return right;
     }
@@ -188,7 +184,7 @@ export function parseValue(cursor: Cursor): Result<Value, EvalError> {
   if (peek(cursor)?.kind === "range") {
     const rangeToken = peek(cursor)!;
     advance(cursor);
-    const end = parseValue(cursor);
+    const end = parseValue(cursor, block);
     if (!end.ok) {
       return end;
     }
@@ -210,8 +206,11 @@ export function consumeSemicolon(cursor: Cursor): void {
 }
 
 /** Parse a value expression followed by an optional trailing semicolon. */
-export function parseValueAndSemicolon(cursor: Cursor): Result<Value, EvalError> {
-  const value = parseValue(cursor);
+export function parseValueAndSemicolon(
+  cursor: Cursor,
+  block: BlockValueParser,
+): Result<Value, EvalError> {
+  const value = parseValue(cursor, block);
   if (!value.ok) {
     return value;
   }

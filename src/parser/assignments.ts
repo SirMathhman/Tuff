@@ -6,25 +6,29 @@ import {
   parseIndexSuffixes,
   parseValue,
   parseValueAndSemicolon,
+  type BlockValueParser,
 } from "./expressions.js";
 
 /**
  * Parse the `= value` tail shared by `let` and assignment statements: an
  * assign token, a value expression, and an optional trailing semicolon.
  */
-export function parseAssignedValue(cursor: Cursor): Result<Value, EvalError> {
+export function parseAssignedValue(
+  cursor: Cursor,
+  block: BlockValueParser,
+): Result<Value, EvalError> {
   if (peek(cursor)?.kind !== "assign") {
     return unexpected(cursor);
   }
   advance(cursor);
-  return parseValueAndSemicolon(cursor);
+  return parseValueAndSemicolon(cursor, block);
 }
 
 /**
  * Parse an assignment target (lvalue): an identifier or a dereference
  * (`*ptr`), which may nest (`**p`), optionally indexed (`arr[i]`).
  */
-function parseLValue(cursor: Cursor): Result<Value, EvalError> {
+function parseLValue(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
   const token = peek(cursor);
   if (!token) {
     return unexpected(cursor);
@@ -35,7 +39,7 @@ function parseLValue(cursor: Cursor): Result<Value, EvalError> {
     value = { kind: "ident", name: token.value, position: token.position };
   } else if (token.kind === "deref") {
     advance(cursor);
-    const target = parseLValue(cursor);
+    const target = parseLValue(cursor, block);
     if (!target.ok) {
       return target;
     }
@@ -43,7 +47,7 @@ function parseLValue(cursor: Cursor): Result<Value, EvalError> {
   } else {
     return unexpected(cursor);
   }
-  return parseIndexSuffixes(cursor, value, "indexAssign");
+  return parseIndexSuffixes(cursor, value, "indexAssign", block);
 }
 
 /** Parse a `target = value` or `target += value` assignment statement. */
@@ -51,17 +55,18 @@ function parseAssign(
   cursor: Cursor,
   target: Value,
   position: number,
+  block: BlockValueParser,
 ): Result<Statement, EvalError> {
   const operator = peek(cursor);
   if (operator?.kind === "compoundAssign") {
     advance(cursor);
-    const value = parseValueAndSemicolon(cursor);
+    const value = parseValueAndSemicolon(cursor, block);
     if (!value.ok) {
       return value;
     }
     return ok({ kind: "assign", target, value: value.value, compound: "+=", position });
   }
-  const value = parseAssignedValue(cursor);
+  const value = parseAssignedValue(cursor, block);
   if (!value.ok) {
     return value;
   }
@@ -76,15 +81,16 @@ export function parseIdentOrExpr(
   cursor: Cursor,
   position: number,
   allowExpr: boolean,
+  block: BlockValueParser,
 ): Result<Statement, EvalError> {
   const save = cursor.pos;
-  const target = parseLValue(cursor);
+  const target = parseLValue(cursor, block);
   if (!target.ok) {
     return target;
   }
   const next = peek(cursor);
   if (next?.kind === "assign" || next?.kind === "compoundAssign") {
-    return parseAssign(cursor, target.value, position);
+    return parseAssign(cursor, target.value, position, block);
   }
   // Not an assignment: a bare expression is allowed only as the final
   // statement of its list. Re-parse from the saved position as a value.
@@ -92,12 +98,16 @@ export function parseIdentOrExpr(
     return unexpected(cursor);
   }
   cursor.pos = save;
-  return parseExprStatement(cursor, position);
+  return parseExprStatement(cursor, position, block);
 }
 
 /** Parse a bare value expression as the implicit program-result statement. */
-export function parseExprStatement(cursor: Cursor, position: number): Result<Statement, EvalError> {
-  const value = parseValue(cursor);
+export function parseExprStatement(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<Statement, EvalError> {
+  const value = parseValue(cursor, block);
   if (!value.ok) {
     return value;
   }

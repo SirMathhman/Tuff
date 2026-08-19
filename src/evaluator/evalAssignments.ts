@@ -3,25 +3,24 @@ import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import type { Outcome } from "./outcome.js";
 import { typeToString } from "./types.js";
+import { valueToNumber, valueToTyped, type ValueContext } from "./values.js";
 import {
   isArray,
   isPointer,
-  valueToNumber,
-  valueToTyped,
   type Scopes,
   type TypedValue,
   type TypedValueArray,
   type Variable,
-} from "./values.js";
+} from "./typedValues.js";
 
 /**
  * Evaluate an assignment to an identifier or a dereference (`*ptr = value`).
  * Type correctness is guaranteed by the static `typecheck` pass, so this only
  * resolves values. `+=` is numeric addition.
  */
-export function evalAssign(statement: StatementAssign, scopes: Scopes): Outcome {
+export function evalAssign(statement: StatementAssign, scopes: Scopes, ctx: ValueContext): Outcome {
   const target = statement.target;
-  const value = valueToTyped(statement.value, scopes);
+  const value = valueToTyped(statement.value, scopes, ctx);
   if (!value.ok) {
     return { kind: "error", error: value.error };
   }
@@ -29,10 +28,10 @@ export function evalAssign(statement: StatementAssign, scopes: Scopes): Outcome 
     return evalIdentAssign(statement, target.name, value.value, scopes);
   }
   if (target.kind === "deref") {
-    return evalDerefAssign(statement, target, value.value, scopes);
+    return evalDerefAssign(statement, target, value.value, scopes, ctx);
   }
   if (target.kind === "indexAssign") {
-    return evalIndexAssign(statement, target, value.value, scopes);
+    return evalIndexAssign(statement, target, value.value, scopes, ctx);
   }
   // The parser only produces ident, deref, or index targets; defensive fallback.
   return {
@@ -85,8 +84,9 @@ function evalDerefAssign(
   target: ValueDeref,
   value: TypedValue,
   scopes: Scopes,
+  ctx: ValueContext,
 ): Outcome {
-  const pointer = valueToTyped(target.target, scopes);
+  const pointer = valueToTyped(target.target, scopes, ctx);
   if (!pointer.ok) {
     return { kind: "error", error: pointer.error };
   }
@@ -115,12 +115,13 @@ function evalIndexAssign(
   target: ValueIndexAssign,
   value: TypedValue,
   scopes: Scopes,
+  ctx: ValueContext,
 ): Outcome {
-  const array = resolveArrayTarget(target.target, scopes);
+  const array = resolveArrayTarget(target.target, scopes, ctx);
   if (!array.ok) {
     return { kind: "error", error: array.error };
   }
-  const index = valueToNumber(target.index, scopes);
+  const index = valueToNumber(target.index, scopes, ctx);
   if (!index.ok) {
     return { kind: "error", error: index.error };
   }
@@ -141,7 +142,11 @@ function evalIndexAssign(
 }
 
 /** Resolve an index-assignment target (an ident or a deref chain) to its array value. */
-function resolveArrayTarget(target: Value, scopes: Scopes): Result<TypedValueArray, EvalError> {
+function resolveArrayTarget(
+  target: Value,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValueArray, EvalError> {
   if (target.kind === "ident") {
     const variable = lookup(scopes, target.name);
     if (!variable) {
@@ -165,31 +170,40 @@ function resolveArrayTarget(target: Value, scopes: Scopes): Result<TypedValueArr
     return ok(value);
   }
   if (target.kind === "deref") {
-    const pointer = valueToTyped(target.target, scopes);
-    if (!pointer.ok) {
-      return pointer;
-    }
-    if (!isPointer(pointer.value)) {
-      return err({
-        kind: "TypeMismatch",
-        name: "*",
-        expected: "ptr<number>",
-        actual: typeToString(pointer.value),
-        position: target.position,
-      });
-    }
-    const pointee = pointer.value.ref.value;
-    if (!isArray(pointee)) {
-      return err({
-        kind: "TypeMismatch",
-        name: "[",
-        expected: "array<number>",
-        actual: typeToString(pointee),
-        position: target.position,
-      });
-    }
-    return ok(pointee);
+    return resolveDerefArrayTarget(target, scopes, ctx);
   }
   // The parser only produces ident or deref targets; this is a defensive fallback.
   return err({ kind: "UnknownIdentifier", name: "", position: target.position });
+}
+
+/** Resolve a `*ptr` index-assignment target to the array the pointer refers to. */
+function resolveDerefArrayTarget(
+  target: ValueDeref,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValueArray, EvalError> {
+  const pointer = valueToTyped(target.target, scopes, ctx);
+  if (!pointer.ok) {
+    return pointer;
+  }
+  if (!isPointer(pointer.value)) {
+    return err({
+      kind: "TypeMismatch",
+      name: "*",
+      expected: "ptr<number>",
+      actual: typeToString(pointer.value),
+      position: target.position,
+    });
+  }
+  const pointee = pointer.value.ref.value;
+  if (!isArray(pointee)) {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "array<number>",
+      actual: typeToString(pointee),
+      position: target.position,
+    });
+  }
+  return ok(pointee);
 }

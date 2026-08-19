@@ -9,108 +9,38 @@ import type {
   ValueRange,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
-import { lookup, type ScopeStack } from "../core/scopes.js";
+import { lookup } from "../core/scopes.js";
 import { typeToString, type Type } from "./types.js";
+import { isArray, isPointer, isRange, type Scopes, type TypedValue } from "./typedValues.js";
 
 /**
- * A block-value evaluator, registered by the statement evaluator at load time.
- * Block values and statements mutually recurse (a block value's statements are
- * evaluated by the statement evaluator), so the statement evaluator hands its
- * block-value evaluator in here rather than importing it (module cycle).
+ * A block-value evaluator, threaded through the value evaluator as an explicit
+ * dependency. Block values and statements mutually recurse (a block value's
+ * statements are evaluated by the statement evaluator), so the statement
+ * evaluator passes its block-value evaluator in here rather than importing it
+ * (module cycle).
  */
-type BlockValueEvaluator = (value: ValueBlock, scopes: Scopes) => Result<TypedValue, EvalError>;
-let blockValueEvaluator: BlockValueEvaluator | undefined;
+export type BlockValueEvaluator = (
+  value: ValueBlock,
+  scopes: Scopes,
+) => Result<TypedValue, EvalError>;
 
-/** Register the block-value evaluator (called once by the statement evaluator). */
-export function registerBlockValueEvaluator(evaluator: BlockValueEvaluator): void {
-  blockValueEvaluator = evaluator;
-}
-
-/** A numeric value. */
-export interface TypedValueNumber {
-  kind: "number";
-  value: number;
-}
-
-/** A boolean value. */
-export interface TypedValueBool {
-  kind: "bool";
-  value: boolean;
-}
-
-/** An array value: its element type and the elements. */
-export interface TypedValueArray {
-  kind: "array";
-  element: Type;
-  elements: TypedValue[];
-}
-
-/** A pointer value: mutability, the pointee type, and the referenced variable. */
-export interface TypedValuePtr {
-  kind: "ptr";
-  mutable: boolean;
-  pointee: Type;
-  ref: Variable;
-}
-
-/**
- * A value with its static type, so `==` can compare type-strictly. `kind` is
- * the discriminant (matching the structured `Type` from the typecheck pass);
- * each variant carries the payload for that kind, so narrowing on `kind` also
- * narrows the payload.
- */
-export type TypedValue =
-  TypedValueNumber | TypedValueBool | TypedValueArray | TypedValuePtr | TypedValueRange;
-
-/** A variable's value with its type, so assignments can be type-checked. */
-export interface Variable {
-  value: TypedValue;
-  mutable: boolean;
-}
-
-/** A stack of variable scopes, innermost last. */
-export type Scopes = ScopeStack<Variable>;
-
-/** A numeric range value, exclusive of `end`. */
-export interface TypedValueRange {
-  kind: "range";
-  /** The element type of the range (matching the `range` type). */
-  element: Type;
-  start: number;
-  end: number;
-}
-
-/** A pointer variant of `TypedValue`, at any nesting depth. */
-type PointerValue = TypedValuePtr;
-
-/** An array variant of `TypedValue`. */
-type ArrayValue = TypedValueArray;
-
-/** A range variant of `TypedValue`. */
-type RangeValue = TypedValueRange;
-
-/** Type guard: is this a pointer value? */
-export function isPointer(t: TypedValue): t is PointerValue {
-  return t.kind === "ptr";
-}
-
-/** Type guard: is this an array value? */
-export function isArray(t: TypedValue): t is ArrayValue {
-  return t.kind === "array";
-}
-
-/** Type guard: is this a range value? */
-export function isRange(t: TypedValue): t is RangeValue {
-  return t.kind === "range";
+/** The block-value evaluator, threaded through value evaluation. */
+export interface ValueContext {
+  evalBlock: BlockValueEvaluator;
 }
 
 /** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
-function evalBinary(value: ValueBinary, scopes: Scopes): Result<TypedValue, EvalError> {
-  const left = valueToTyped(value.left, scopes);
+function evalBinary(
+  value: ValueBinary,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  const left = valueToTyped(value.left, scopes, ctx);
   if (!left.ok) {
     return left;
   }
-  const right = valueToTyped(value.right, scopes);
+  const right = valueToTyped(value.right, scopes, ctx);
   if (!right.ok) {
     return right;
   }
@@ -193,10 +123,14 @@ function evalAddition(
 }
 
 /** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
-function evalArray(value: ValueArray, scopes: Scopes): Result<TypedValue, EvalError> {
+function evalArray(
+  value: ValueArray,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
   const elements: TypedValue[] = [];
   for (const element of value.elements) {
-    const typed = valueToTyped(element, scopes);
+    const typed = valueToTyped(element, scopes, ctx);
     if (!typed.ok) {
       return typed;
     }
@@ -208,12 +142,16 @@ function evalArray(value: ValueArray, scopes: Scopes): Result<TypedValue, EvalEr
 }
 
 /** Evaluate `arr[i]`: the element of an array at a numeric index. */
-function evalIndex(value: ValueIndex, scopes: Scopes): Result<TypedValue, EvalError> {
-  const target = valueToTyped(value.target, scopes);
+function evalIndex(
+  value: ValueIndex,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  const target = valueToTyped(value.target, scopes, ctx);
   if (!target.ok) {
     return target;
   }
-  const index = valueToNumber(value.index, scopes);
+  const index = valueToNumber(value.index, scopes, ctx);
   if (!index.ok) {
     return index;
   }
@@ -239,8 +177,12 @@ function evalIndex(value: ValueIndex, scopes: Scopes): Result<TypedValue, EvalEr
 }
 
 /** Evaluate `&name`: a pointer to the variable's value (pointers may nest). */
-function evalAddressOf(value: ValueAddressOf, scopes: Scopes): Result<TypedValue, EvalError> {
-  const target = valueToTyped(value.target, scopes);
+function evalAddressOf(
+  value: ValueAddressOf,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  const target = valueToTyped(value.target, scopes, ctx);
   if (!target.ok) {
     return target;
   }
@@ -266,8 +208,12 @@ function evalAddressOf(value: ValueAddressOf, scopes: Scopes): Result<TypedValue
 }
 
 /** Evaluate `*ptr`: the value a pointer refers to. */
-function evalDeref(value: ValueDeref, scopes: Scopes): Result<TypedValue, EvalError> {
-  const target = valueToTyped(value.target, scopes);
+function evalDeref(
+  value: ValueDeref,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  const target = valueToTyped(value.target, scopes, ctx);
   if (!target.ok) {
     return target;
   }
@@ -284,12 +230,16 @@ function evalDeref(value: ValueDeref, scopes: Scopes): Result<TypedValue, EvalEr
 }
 
 /** Evaluate a `start..end` range into a typed range value (bounds are numbers). */
-function evalRange(value: ValueRange, scopes: Scopes): Result<TypedValue, EvalError> {
-  const start = valueToNumber(value.start, scopes);
+function evalRange(
+  value: ValueRange,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  const start = valueToNumber(value.start, scopes, ctx);
   if (!start.ok) {
     return start;
   }
-  const end = valueToNumber(value.end, scopes);
+  const end = valueToNumber(value.end, scopes, ctx);
   if (!end.ok) {
     return end;
   }
@@ -302,7 +252,11 @@ function evalRange(value: ValueRange, scopes: Scopes): Result<TypedValue, EvalEr
  * equal. Ordering operators (`<`, `<=`, `>`, `>=`) compare numerically, with
  * bools coerced to 1/0.
  */
-export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalError> {
+export function valueToTyped(
+  value: Value,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
     return ok({ kind: "number", value: value.value });
   }
@@ -310,19 +264,19 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
     return ok({ kind: "bool", value: value.value });
   }
   if (value.kind === "binary") {
-    return evalBinary(value, scopes);
+    return evalBinary(value, scopes, ctx);
   }
   if (value.kind === "array") {
-    return evalArray(value, scopes);
+    return evalArray(value, scopes, ctx);
   }
   if (value.kind === "index") {
-    return evalIndex(value, scopes);
+    return evalIndex(value, scopes, ctx);
   }
   if (value.kind === "addressOf") {
-    return evalAddressOf(value, scopes);
+    return evalAddressOf(value, scopes, ctx);
   }
   if (value.kind === "deref") {
-    return evalDeref(value, scopes);
+    return evalDeref(value, scopes, ctx);
   }
   if (value.kind === "indexAssign") {
     // An lvalue is never read as a value; the typecheck pass rejects this.
@@ -335,13 +289,10 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
     });
   }
   if (value.kind === "range") {
-    return evalRange(value, scopes);
+    return evalRange(value, scopes, ctx);
   }
   if (value.kind === "block") {
-    if (!blockValueEvaluator) {
-      return err({ kind: "UnknownIdentifier", name: "", position: value.position });
-    }
-    return blockValueEvaluator(value, scopes);
+    return ctx.evalBlock(value, scopes);
   }
   const variable = lookup(scopes, value.name);
   if (!variable) {
@@ -351,8 +302,12 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
 }
 
 /** Convert a value expression to a number, or an error for undeclared identifiers. */
-export function valueToNumber(value: Value, scopes: Scopes): Result<number, EvalError> {
-  const typed = valueToTyped(value, scopes);
+export function valueToNumber(
+  value: Value,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<number, EvalError> {
+  const typed = valueToTyped(value, scopes, ctx);
   if (!typed.ok) {
     return typed;
   }

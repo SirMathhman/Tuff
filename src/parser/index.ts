@@ -2,7 +2,7 @@ import type { Program } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import type { Token } from "../core/lexer.js";
 import { type Cursor } from "./cursor.js";
-import { parseStatements } from "./statements.js";
+import { parseBlockValue, parseStatements } from "./statements.js";
 
 /**
  * Parse a token stream into a program using a cursor-based recursive descent
@@ -13,7 +13,7 @@ import { parseStatements } from "./statements.js";
  */
 export function parse(tokens: Token[], source: string): Result<Program, EvalError> {
   const cursor: Cursor = { tokens, source, pos: 0, statementStart: 0 };
-  const statements = parseStatements(cursor, false, true);
+  const statements = parseStatements(cursor, false, true, parseBlockValue);
   if (!statements.ok) {
     return statements;
   }

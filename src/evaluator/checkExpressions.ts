@@ -3,7 +3,6 @@ import type {
   Value,
   ValueArray,
   ValueBinary,
-  ValueBlock,
   ValueDeref,
   ValueIndex,
   ValueRange,
@@ -13,34 +12,24 @@ import { lookup } from "../core/scopes.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes } from "./types.js";
 
 /**
- * A block-statement checker, registered by the typechecker at load time.
- * Block values and statements mutually recurse (a block value's statements are
- * checked by the statement checker), so the typechecker hands its checker in
- * here rather than importing it (which would be a module cycle).
+ * A block-statement checker, threaded through the expression checker as an
+ * explicit dependency. Block values and statements mutually recurse (a block
+ * value's statements are checked by the statement checker), so the typechecker
+ * passes its checker in here rather than importing it (module cycle).
  */
-type BlockChecker = (statements: Statement[], scopes: DeclScopes) => Result<null, EvalError>;
-let blockChecker: BlockChecker | undefined;
-
-/** Register the block-statement checker (called once by the typechecker). */
-export function registerBlockChecker(checker: BlockChecker): void {
-  blockChecker = checker;
-}
-
-/** Check a `{ ... }` block value: its statements are checked in a fresh scope. */
-function checkBlockValue(value: ValueBlock, scopes: DeclScopes): Result<null, EvalError> {
-  if (!blockChecker) {
-    return ok(null);
-  }
-  return blockChecker(value.statements, scopes);
-}
+export type BlockChecker = (statements: Statement[], scopes: DeclScopes) => Result<null, EvalError>;
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
-function checkBinary(value: ValueBinary, scopes: DeclScopes): Result<null, EvalError> {
-  const left = checkExpression(value.left, scopes);
+function checkBinary(
+  value: ValueBinary,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
+  const left = checkExpression(value.left, scopes, block);
   if (!left.ok) {
     return left;
   }
-  const right = checkExpression(value.right, scopes);
+  const right = checkExpression(value.right, scopes, block);
   if (!right.ok) {
     return right;
   }
@@ -79,9 +68,13 @@ function checkBinary(value: ValueBinary, scopes: DeclScopes): Result<null, EvalE
 }
 
 /** Check an array literal: every element is declared and all share one type. */
-function checkArray(value: ValueArray, scopes: DeclScopes): Result<null, EvalError> {
+function checkArray(
+  value: ValueArray,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
   for (const element of value.elements) {
-    const result = checkExpression(element, scopes);
+    const result = checkExpression(element, scopes, block);
     if (!result.ok) {
       return result;
     }
@@ -105,12 +98,16 @@ function checkArray(value: ValueArray, scopes: DeclScopes): Result<null, EvalErr
 }
 
 /** Check an index expression: the target is an array and the index is a number. */
-function checkIndex(value: ValueIndex, scopes: DeclScopes): Result<null, EvalError> {
-  const target = checkExpression(value.target, scopes);
+function checkIndex(
+  value: ValueIndex,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
+  const target = checkExpression(value.target, scopes, block);
   if (!target.ok) {
     return target;
   }
-  const index = checkExpression(value.index, scopes);
+  const index = checkExpression(value.index, scopes, block);
   if (!index.ok) {
     return index;
   }
@@ -162,8 +159,12 @@ export function checkNumericCoercible(
 }
 
 /** Check a `*ptr` dereference: the target must be a pointer. */
-function checkDeref(value: ValueDeref, scopes: DeclScopes): Result<null, EvalError> {
-  const target = checkExpression(value.target, scopes);
+function checkDeref(
+  value: ValueDeref,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
+  const target = checkExpression(value.target, scopes, block);
   if (!target.ok) {
     return target;
   }
@@ -181,12 +182,16 @@ function checkDeref(value: ValueDeref, scopes: DeclScopes): Result<null, EvalErr
 }
 
 /** Check a `start..end` range: both bounds are declared and numeric-coercible. */
-function checkRange(value: ValueRange, scopes: DeclScopes): Result<null, EvalError> {
-  const start = checkExpression(value.start, scopes);
+function checkRange(
+  value: ValueRange,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
+  const start = checkExpression(value.start, scopes, block);
   if (!start.ok) {
     return start;
   }
-  const end = checkExpression(value.end, scopes);
+  const end = checkExpression(value.end, scopes, block);
   if (!end.ok) {
     return end;
   }
@@ -204,7 +209,11 @@ function checkRange(value: ValueRange, scopes: DeclScopes): Result<null, EvalErr
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
  * reference found.
  */
-export function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalError> {
+export function checkExpression(
+  value: Value,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
   if (value.kind === "ident") {
     if (!lookup(scopes, value.name)) {
       return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
@@ -212,13 +221,13 @@ export function checkExpression(value: Value, scopes: DeclScopes): Result<null, 
     return ok(null);
   }
   if (value.kind === "binary") {
-    return checkBinary(value, scopes);
+    return checkBinary(value, scopes, block);
   }
   if (value.kind === "array") {
-    return checkArray(value, scopes);
+    return checkArray(value, scopes, block);
   }
   if (value.kind === "index") {
-    return checkIndex(value, scopes);
+    return checkIndex(value, scopes, block);
   }
   if (value.kind === "addressOf") {
     if (value.target.kind !== "ident") {
@@ -230,16 +239,16 @@ export function checkExpression(value: Value, scopes: DeclScopes): Result<null, 
         position: value.position,
       });
     }
-    return checkExpression(value.target, scopes);
+    return checkExpression(value.target, scopes, block);
   }
   if (value.kind === "deref") {
-    return checkDeref(value, scopes);
+    return checkDeref(value, scopes, block);
   }
   if (value.kind === "range") {
-    return checkRange(value, scopes);
+    return checkRange(value, scopes, block);
   }
   if (value.kind === "block") {
-    return checkBlockValue(value, scopes);
+    return block(value.statements, scopes);
   }
   return ok(null);
 }
