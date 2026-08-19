@@ -1,5 +1,5 @@
 import { evalProgram } from "./evaluator.js";
-import { parse } from "./parser.js";
+import { parse } from "./parser/index.js";
 import { tokenize } from "./lexer.js";
 import type { EvalError, Result } from "./errors.js";
 

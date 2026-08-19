@@ -1,7 +1,7 @@
 import { evalProgram } from "./evaluator.js";
 import type { EvalError, Result } from "./errors.js";
 import { tokenize } from "./lexer.js";
-import { parse } from "./parser.js";
+import { parse } from "./parser/index.js";
 
 /**
  * Evaluate a program of `let`/`let mut` declarations, assignments, `return` statements,

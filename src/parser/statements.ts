@@ -1,48 +1,6 @@
-import type { Program, Statement, Value } from "./ast.js";
-import { err, ok, type EvalError, type Result } from "./errors.js";
-import type { Token } from "./lexer.js";
-
-/**
- * A cursor over the token stream. The parser advances it with `advance` and
- * inspects it with `peek`/`atEnd` — it never matches statements by fixed
- * token offsets or range-length arithmetic.
- */
-type Cursor = {
-  tokens: Token[];
-  source: string;
-  pos: number;
-  /** Source offset where the current statement began (for error text). */
-  statementStart: number;
-};
-
-function peek(cursor: Cursor): Token | undefined {
-  return cursor.tokens[cursor.pos];
-}
-
-function advance(cursor: Cursor): void {
-  cursor.pos++;
-}
-
-function atEnd(cursor: Cursor): boolean {
-  return cursor.pos >= cursor.tokens.length;
-}
-
-/**
- * The source text of the statement the cursor is currently parsing: from the
- * statement's first token up to the current cursor position.
- */
-function statementText(cursor: Cursor): string {
-  const end = atEnd(cursor) ? cursor.source.length : peek(cursor)!.position;
-  return cursor.source.slice(cursor.statementStart, end).trim();
-}
-
-function unexpected(cursor: Cursor): Result<never, EvalError> {
-  return err({
-    kind: "UnexpectedStatement",
-    statement: statementText(cursor),
-    position: cursor.statementStart,
-  });
-}
+import type { Statement, Value } from "../ast.js";
+import { err, ok, type EvalError, type Result } from "../errors.js";
+import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
 
 /** Parse a primary value: a number, bool, or identifier literal. */
 function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
@@ -230,7 +188,7 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
  * Parse a list of statements, recursing into `{ ... }` blocks. When `inBlock`
  * is set, a `}` ends the block; at the top level a `}` is an error.
  */
-function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statement[], EvalError> {
+export function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statement[], EvalError> {
   const statements: Statement[] = [];
   while (!atEnd(cursor)) {
     const head = peek(cursor)!;
@@ -257,23 +215,4 @@ function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statement[], 
     statements.push(statement.value);
   }
   return ok(statements);
-}
-
-/**
- * Parse a token stream into a program using a cursor-based recursive descent
- * approach.
- * @param tokens - The token list from `tokenize`.
- * @param source - The original source text (used for error messages).
- * @returns A `Result` carrying the program, or a structured `EvalError`.
- */
-export function parse(tokens: Token[], source: string): Result<Program, EvalError> {
-  const cursor: Cursor = { tokens, source, pos: 0, statementStart: 0 };
-  const statements = parseStatements(cursor, false);
-  if (!statements.ok) {
-    return statements;
-  }
-  if (statements.value.length === 0) {
-    return err({ kind: "EmptyProgram" });
-  }
-  return ok({ statements: statements.value });
 }

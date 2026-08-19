@@ -1,4 +1,4 @@
-import { parse } from "./parser.js";
+import { parse } from "./parser/index.js";
 import { tokenize } from "./lexer.js";
 
 /** Tokenize then parse, returning the parse result directly. */
@@ -126,34 +126,37 @@ const IF_CASES = [
   },
 ] as const;
 
-test.each(IF_CASES)("parse parses an if statement $label", ({ source, else: elseBranch, returnPosition }) => {
-  expect(parseSource(source)).toEqual({
-    ok: true,
-    value: {
-      statements: [
-        {
-          kind: "if",
-          condition: { kind: "ident", name: "x", position: 4 },
-          then: [
-            {
-              kind: "assign",
-              name: "x",
-              value: { kind: "number", value: 1, position: 13 },
-              position: 9,
-            },
-          ],
-          else: elseBranch,
-          position: 0,
-        },
-        {
-          kind: "return",
-          value: { kind: "ident", name: "x", position: returnPosition + 7 },
-          position: returnPosition,
-        },
-      ],
-    },
-  });
-});
+test.each(IF_CASES)(
+  "parse parses an if statement $label",
+  ({ source, else: elseBranch, returnPosition }) => {
+    expect(parseSource(source)).toEqual({
+      ok: true,
+      value: {
+        statements: [
+          {
+            kind: "if",
+            condition: { kind: "ident", name: "x", position: 4 },
+            then: [
+              {
+                kind: "assign",
+                name: "x",
+                value: { kind: "number", value: 1, position: 13 },
+                position: 9,
+              },
+            ],
+            else: elseBranch,
+            position: 0,
+          },
+          {
+            kind: "return",
+            value: { kind: "ident", name: "x", position: returnPosition + 7 },
+            position: returnPosition,
+          },
+        ],
+      },
+    });
+  },
+);
 
 test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
