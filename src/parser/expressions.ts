@@ -165,6 +165,33 @@ function parseAdditive(cursor: Cursor, block: BlockValueParser): Result<Value, E
 }
 
 /**
+ * Parse an `is` type-test: an additive expression optionally followed by
+ * `is <TypeName>`. `is` binds tighter than comparisons but looser than
+ * additive, so `100U8 is U8 == 1` parses as `(100U8 is U8) == 1`.
+ */
+function parseIs(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
+  const operand = parseAdditive(cursor, block);
+  if (!operand.ok) {
+    return operand;
+  }
+  if (peek(cursor)?.kind !== "is") {
+    return operand;
+  }
+  advance(cursor); // consume `is`
+  const name = peek(cursor);
+  if (name?.kind !== "ident") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  return ok({
+    kind: "is",
+    operand: operand.value,
+    type: name.value,
+    position: name.position,
+  });
+}
+
+/**
  * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
  * expression, and a matching rparen.
  */
@@ -299,12 +326,12 @@ function parseMatch(
 }
 
 /**
- * Parse a value expression: an additive expression followed by zero or more
- * comparison operations (`==`, `!=`, `<`, `<=`, `>`, `>=`), chained
+ * Parse a value expression: an `is`-type-test expression followed by zero or
+ * more comparison operations (`==`, `!=`, `<`, `<=`, `>`, `>=`), chained
  * left-associatively.
  */
 export function parseValue(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
-  let value = parseAdditive(cursor, block);
+  let value = parseIs(cursor, block);
   if (!value.ok) {
     return value;
   }
@@ -314,7 +341,7 @@ export function parseValue(cursor: Cursor, block: BlockValueParser): Result<Valu
       break;
     }
     advance(cursor);
-    const right = parseAdditive(cursor, block);
+    const right = parseIs(cursor, block);
     if (!right.ok) {
       return right;
     }

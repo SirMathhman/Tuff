@@ -30,6 +30,20 @@ export interface ValueBinary {
   position: number;
 }
 
+/**
+ * An `is` type-test: `operand is TypeName`. Yields a number (`1` when the
+ * operand's type equals the named type, `0` otherwise). The type name is
+ * stored raw; the typecheck/evaluator resolve it against the `Type` model.
+ */
+export interface ValueIs {
+  kind: "is";
+  operand: Value;
+  /** The raw type name as written (`U8`, `Number`, `Bool`, ...). */
+  type: string;
+  /** Zero-based character offset of the type name. */
+  position: number;
+}
+
 /** An array literal (`[1, 2, 3]`), a homogeneous list of values. */
 export interface ValueArray {
   kind: "array";
@@ -148,6 +162,7 @@ export type Value =
   | ValueBool
   | ValueIdent
   | ValueBinary
+  | ValueIs
   | ValueArray
   | ValueIndex
   | ValueAddressOf

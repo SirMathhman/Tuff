@@ -105,6 +105,25 @@ export function promote(a: Type, b: Type): Type {
   return { kind: "number" };
 }
 
+/**
+ * Resolve a type name as written in an `is` type-test to a `Type`. Accepts
+ * the integer names (`U8`..`U64`, `I8`..`I64`, case-insensitive), `Number`,
+ * and `Bool`; returns `undefined` for anything else.
+ */
+export function typeFromName(name: string): Type | undefined {
+  const lower = name.toLowerCase();
+  if (INT_BOUNDS[lower]) {
+    return { kind: "int", name: lower };
+  }
+  if (lower === "number") {
+    return { kind: "number" };
+  }
+  if (lower === "bool") {
+    return { kind: "bool" };
+  }
+  return undefined;
+}
+
 /** Two types are equal when their structure matches (kind, element, pointee, mutability). */
 export function typesEqual(a: Type, b: Type): boolean {
   if (a.kind !== b.kind) {
@@ -154,6 +173,9 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
     if (value.operator === "+") {
       return promote(expressionType(value.left, scopes), expressionType(value.right, scopes));
     }
+    return { kind: "number" };
+  }
+  if (value.kind === "is") {
     return { kind: "number" };
   }
   if (value.kind === "array") {

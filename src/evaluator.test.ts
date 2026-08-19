@@ -79,6 +79,32 @@ test("evalProgram coerces a bool return to a number", () => {
   expect(evalSource("return false;")).toEqual({ ok: true, value: 0 });
 });
 
+test("evalProgram evaluates an is type-test to 1 when the types match", () => {
+  expect(evalSource("100U8 is U8")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram evaluates an is type-test to 0 when the types differ", () => {
+  expect(evalSource("100U8 is U16")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram evaluates an is type-test against Number and Bool", () => {
+  expect(evalSource("1 is Number")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("100U8 is Number")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("true is Bool")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("true is Number")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram binds is tighter than comparisons", () => {
+  expect(evalSource("100U8 is U8 == 1")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram returns an UnknownType error for an is type-test with an unknown type name", () => {
+  expect(evalSource("1 is Foo")).toEqual({
+    ok: false,
+    error: { kind: "UnknownType", name: "Foo", position: 5 },
+  });
+});
+
 test("evalProgram evaluates an if expression to its else branch when the condition is false", () => {
   expect(evalSource("let x = if (false) 2 else 3; x")).toEqual({ ok: true, value: 3 });
 });

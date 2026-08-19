@@ -127,6 +127,15 @@ export interface EvalErrorInvalidIntegerSuffix {
   position: number;
 }
 
+/** An `is` type-test names a type that does not exist. Fix: use a valid type name (`U8`..`U64`, `I8`..`I64`, `Number`, `Bool`). */
+export interface EvalErrorUnknownType {
+  kind: "UnknownType";
+  /** The type name as written. */
+  name: string;
+  /** Zero-based character offset of the type name. */
+  position: number;
+}
+
 /** A `break` was used outside of a `while` loop. Fix: move it inside a loop. */
 export interface EvalErrorBreakOutsideLoop {
   kind: "BreakOutsideLoop";
@@ -158,5 +167,6 @@ export type EvalError =
   | EvalErrorMissingWildcardArm
   | EvalErrorIntegerOutOfRange
   | EvalErrorInvalidIntegerSuffix
+  | EvalErrorUnknownType
   | EvalErrorBreakOutsideLoop
   | EvalErrorContinueOutsideLoop;

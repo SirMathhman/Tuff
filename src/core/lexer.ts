@@ -182,6 +182,12 @@ export interface TokenCase {
   position: number;
 }
 
+/** The `is` type-test operator. */
+export interface TokenIs {
+  kind: "is";
+  position: number;
+}
+
 /** The `=>` arm arrow. */
 export interface TokenArrow {
   kind: "arrow";
@@ -208,6 +214,7 @@ export type Token =
   | TokenContinue
   | TokenMatch
   | TokenCase
+  | TokenIs
   | TokenArrow
   | TokenWildcard
   | TokenIdent
@@ -340,7 +347,8 @@ function matchWord(source: string, i: number): Match | undefined {
           word === "break" ||
           word === "continue" ||
           word === "match" ||
-          word === "case"
+          word === "case" ||
+          word === "is"
         ? { kind: word, position: i }
         : { kind: "ident", value: word, position: i };
   return { token, advance: word.length };
@@ -359,7 +367,11 @@ function matchNumber(source: string, i: number): Result<Match, EvalError> | unde
   const rest = source.slice(i + match[0].length);
   // An integer suffix only applies to integer literals (`1.5U8` is not a u8).
   const suffixMatch = match[0].includes(".") ? undefined : /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
-  if (suffixMatch && INT_SUFFIXES.has(suffixMatch.toUpperCase()) && suffixMatch !== suffixMatch.toUpperCase()) {
+  if (
+    suffixMatch &&
+    INT_SUFFIXES.has(suffixMatch.toUpperCase()) &&
+    suffixMatch !== suffixMatch.toUpperCase()
+  ) {
     // A lowercase spelling of a valid suffix: a dedicated error, not an identifier.
     return err({
       kind: "InvalidIntegerSuffix",
@@ -367,7 +379,8 @@ function matchNumber(source: string, i: number): Result<Match, EvalError> | unde
       position: i + match[0].length,
     });
   }
-  const suffix = suffixMatch && INT_SUFFIXES.has(suffixMatch) ? suffixMatch.toLowerCase() : undefined;
+  const suffix =
+    suffixMatch && INT_SUFFIXES.has(suffixMatch) ? suffixMatch.toLowerCase() : undefined;
   return ok({
     token: { kind: "number", value: Number(match[0]), suffix, position: i },
     advance: match[0].length + (suffix?.length ?? 0),

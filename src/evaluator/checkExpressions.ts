@@ -6,6 +6,7 @@ import type {
   ValueDeref,
   ValueIf,
   ValueIndex,
+  ValueIs,
   ValueMatch,
   ValueRange,
 } from "../core/ast.js";
@@ -15,6 +16,7 @@ import {
   expressionType,
   intLiteralInRange,
   promote,
+  typeFromName,
   typeToString,
   typesEqual,
   type DeclScopes,
@@ -308,6 +310,18 @@ function checkMatch(
   return ok(null);
 }
 
+/** Check an `is` type-test: the operand is declared and the type name resolves. */
+function checkIs(value: ValueIs, scopes: DeclScopes, block: BlockChecker): Result<null, EvalError> {
+  const operand = checkExpression(value.operand, scopes, block);
+  if (!operand.ok) {
+    return operand;
+  }
+  if (!typeFromName(value.type)) {
+    return err({ kind: "UnknownType", name: value.type, position: value.position });
+  }
+  return ok(null);
+}
+
 /**
  * Check that every identifier in a value expression is declared in the current
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
@@ -338,6 +352,9 @@ export function checkExpression(
   }
   if (value.kind === "binary") {
     return checkBinary(value, scopes, block);
+  }
+  if (value.kind === "is") {
+    return checkIs(value, scopes, block);
   }
   if (value.kind === "array") {
     return checkArray(value, scopes, block);

@@ -6,13 +6,14 @@ import type {
   ValueDeref,
   ValueIf,
   ValueIndex,
+  ValueIs,
   ValueAddressOf,
   ValueMatch,
   ValueRange,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { promote, typeToString, type Type } from "./types.js";
+import { promote, typeFromName, typeToString, typesEqual, type Type } from "./types.js";
 import {
   isArray,
   isPointer,
@@ -305,6 +306,41 @@ function evalMatch(
   return err({ kind: "MissingWildcardArm", position: value.position });
 }
 
+/** The static `Type` of a typed value (used by `is` type-tests). */
+function typeOfValue(typed: TypedValue): Type {
+  if (typed.kind === "number") {
+    return { kind: "number" };
+  }
+  if (typed.kind === "bool") {
+    return { kind: "bool" };
+  }
+  if (typed.kind === "int") {
+    return { kind: "int", name: typed.name };
+  }
+  if (typed.kind === "array") {
+    return { kind: "array", element: typed.element };
+  }
+  if (typed.kind === "ptr") {
+    return { kind: "ptr", mutable: typed.mutable, pointee: typed.pointee };
+  }
+  return { kind: "range", element: typed.element };
+}
+
+/** Evaluate an `is` type-test: `1` when the operand's type equals the named type, else `0`. */
+function evalIs(value: ValueIs, scopes: Scopes, ctx: ValueContext): Result<TypedValue, EvalError> {
+  const operand = valueToTyped(value.operand, scopes, ctx);
+  if (!operand.ok) {
+    return operand;
+  }
+  const named = typeFromName(value.type);
+  // The typecheck pass rejects unknown names; this is a defensive fallback.
+  if (!named) {
+    return err({ kind: "UnknownType", name: value.type, position: value.position });
+  }
+  const equal = typesEqual(typeOfValue(operand.value), named);
+  return ok({ kind: "number", value: equal ? 1 : 0 });
+}
+
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
  * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
@@ -326,6 +362,9 @@ export function valueToTyped(
   }
   if (value.kind === "binary") {
     return evalBinary(value, scopes, ctx);
+  }
+  if (value.kind === "is") {
+    return evalIs(value, scopes, ctx);
   }
   if (value.kind === "array") {
     return evalArray(value, scopes, ctx);
