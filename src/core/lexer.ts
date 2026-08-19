@@ -353,7 +353,8 @@ function matchNumber(source: string, i: number): Match | undefined {
     return undefined;
   }
   const rest = source.slice(i + match[0].length);
-  const suffixMatch = /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
+  // An integer suffix only applies to integer literals (`1.5U8` is not a u8).
+  const suffixMatch = match[0].includes(".") ? undefined : /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
   const suffix =
     suffixMatch && INT_SUFFIXES.has(suffixMatch.toLowerCase())
       ? suffixMatch.toLowerCase()

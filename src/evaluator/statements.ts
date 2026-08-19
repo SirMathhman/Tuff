@@ -15,7 +15,7 @@ const valueCtx: ValueContext = { evalBlock: evalBlockValue };
 /** Evaluate a `while (condition) { ... }` loop, re-checking the condition each pass. */
 function evalWhile(statement: StatementWhile, scopes: Scopes, ctx: ValueContext): Outcome {
   while (true) {
-    const condition = valueToNumber(statement.condition, scopes, ctx);
+    const condition = valueToNumber(statement.condition, scopes, ctx, "while");
     if (!condition.ok) {
       return { kind: "error", error: condition.error };
     }
@@ -85,7 +85,7 @@ function evalFor(statement: StatementFor, scopes: Scopes, ctx: ValueContext): Ou
  * program's numeric result.
  */
 function evalResultExpression(value: Value, scopes: Scopes, ctx: ValueContext): Outcome {
-  const number = valueToNumber(value, scopes, ctx);
+  const number = valueToNumber(value, scopes, ctx, "return");
   if (!number.ok) {
     return { kind: "error", error: number.error };
   }
@@ -124,7 +124,7 @@ function evalStatement(statement: Statement, scopes: Scopes, ctx: ValueContext):
   }
 
   if (statement.kind === "if") {
-    const condition = valueToNumber(statement.condition, scopes, ctx);
+    const condition = valueToNumber(statement.condition, scopes, ctx, "if");
     if (!condition.ok) {
       return { kind: "error", error: condition.error };
     }
@@ -176,7 +176,9 @@ function evalBlockValue(value: ValueBlock, scopes: Scopes): Result<TypedValue, E
   return withScope(scopes, () => {
     const last = value.statements[value.statements.length - 1];
     if (!last || last.kind !== "expr") {
-      return err({ kind: "UnknownIdentifier", name: "", position: value.position });
+      // The parser guarantees a block value ends in a bare expression; this is
+      // a defensive fallback for a block the parser did not produce.
+      return err({ kind: "UnexpectedStatement", statement: "{ ... }", position: value.position });
     }
     for (const statement of value.statements.slice(0, -1)) {
       const result = evalStatement(statement, scopes, valueCtx);

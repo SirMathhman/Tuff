@@ -172,7 +172,7 @@ function evalIndex(
   if (!target.ok) {
     return target;
   }
-  const index = valueToNumber(value.index, scopes, ctx);
+  const index = valueToNumber(value.index, scopes, ctx, "[");
   if (!index.ok) {
     return index;
   }
@@ -256,11 +256,11 @@ function evalRange(
   scopes: Scopes,
   ctx: ValueContext,
 ): Result<TypedValue, EvalError> {
-  const start = valueToNumber(value.start, scopes, ctx);
+  const start = valueToNumber(value.start, scopes, ctx, "..");
   if (!start.ok) {
     return start;
   }
-  const end = valueToNumber(value.end, scopes, ctx);
+  const end = valueToNumber(value.end, scopes, ctx, "..");
   if (!end.ok) {
     return end;
   }
@@ -269,7 +269,7 @@ function evalRange(
 
 /** Evaluate an `if` expression: the value of the branch its condition selects. */
 function evalIf(value: ValueIf, scopes: Scopes, ctx: ValueContext): Result<TypedValue, EvalError> {
-  const condition = valueToNumber(value.condition, scopes, ctx);
+  const condition = valueToNumber(value.condition, scopes, ctx, "if");
   if (!condition.ok) {
     return condition;
   }
@@ -282,7 +282,7 @@ function evalMatch(
   scopes: Scopes,
   ctx: ValueContext,
 ): Result<TypedValue, EvalError> {
-  const scrutinee = valueToNumber(value.scrutinee, scopes, ctx);
+  const scrutinee = valueToNumber(value.scrutinee, scopes, ctx, "match");
   if (!scrutinee.ok) {
     return scrutinee;
   }
@@ -366,11 +366,16 @@ export function valueToTyped(
   return ok(variable.value);
 }
 
-/** Convert a value expression to a number, or an error for undeclared identifiers. */
+/**
+ * Convert a value expression to a number, or an error for undeclared
+ * identifiers. `name` is the construct being coerced (e.g. `while`, `return`),
+ * used in the defensive `TypeMismatch` payload so it names what the user wrote.
+ */
 export function valueToNumber(
   value: Value,
   scopes: Scopes,
   ctx: ValueContext,
+  name: string,
 ): Result<number, EvalError> {
   const typed = valueToTyped(value, scopes, ctx);
   if (!typed.ok) {
@@ -379,7 +384,7 @@ export function valueToNumber(
   if (isPointer(typed.value) || isArray(typed.value) || isRange(typed.value)) {
     return err({
       kind: "TypeMismatch",
-      name: "*",
+      name,
       expected: "number",
       actual: typeToString(typed.value),
       position: value.position,

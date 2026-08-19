@@ -36,7 +36,13 @@ export function evalAssign(statement: StatementAssign, scopes: Scopes, ctx: Valu
   // The parser only produces ident, deref, or index targets; defensive fallback.
   return {
     kind: "error",
-    error: { kind: "UnknownIdentifier", name: "", position: statement.position },
+    error: {
+      kind: "TypeMismatch",
+      name: "=",
+      expected: "lvalue",
+      actual: statement.target.kind,
+      position: statement.position,
+    },
   };
 }
 
@@ -121,7 +127,7 @@ function evalIndexAssign(
   if (!array.ok) {
     return { kind: "error", error: array.error };
   }
-  const index = valueToNumber(target.index, scopes, ctx);
+  const index = valueToNumber(target.index, scopes, ctx, "[");
   if (!index.ok) {
     return { kind: "error", error: index.error };
   }
@@ -173,7 +179,13 @@ function resolveArrayTarget(
     return resolveDerefArrayTarget(target, scopes, ctx);
   }
   // The parser only produces ident or deref targets; this is a defensive fallback.
-  return err({ kind: "UnknownIdentifier", name: "", position: target.position });
+  return err({
+    kind: "TypeMismatch",
+    name: "[",
+    expected: "lvalue",
+    actual: target.kind,
+    position: target.position,
+  });
 }
 
 /** Resolve a `*ptr` index-assignment target to the array the pointer refers to. */
