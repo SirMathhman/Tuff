@@ -1,16 +1,18 @@
 import { err, ok, type EvalError, type Result } from "./errors.js";
 
 const NUMBER = "-?\\d+(?:\\.\\d+)?";
-const LET_RE = new RegExp(`^\\s*let\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(${NUMBER})\\s*$`);
-const RETURN_RE = new RegExp(`^\\s*return\\s+(${NUMBER}|[A-Za-z_$][\\w$]*)\\s*$`);
+const IDENT = "[A-Za-z_$][\\w$]*";
+const LET_RE = new RegExp(`^\\s*let\\s+(mut\\s+)?(${IDENT})\\s*=\\s*(${NUMBER})\\s*$`);
+const ASSIGN_RE = new RegExp(`^\\s*(${IDENT})\\s*=\\s*(${NUMBER})\\s*$`);
+const RETURN_RE = new RegExp(`^\\s*return\\s+(${NUMBER}|${IDENT})\\s*$`);
 
 /**
- * Evaluate a program of `let` and `return` statements.
+ * Evaluate a program of `let`/`let mut` declarations, assignments, and `return` statements.
  * @param expression - The program to evaluate.
  * @returns A `Result` carrying the numeric result, or a structured `EvalError`.
  */
 export function evaluate(expression: string): Result<number, EvalError> {
-  const variables = new Map<string, number>();
+  const variables = new Map<string, { value: number; mutable: boolean }>();
   const statements = expression
     .split(";")
     .map((statement) => statement.trim())
@@ -25,15 +27,32 @@ export function evaluate(expression: string): Result<number, EvalError> {
 
     const letMatch = LET_RE.exec(statement);
     if (letMatch) {
-      variables.set(letMatch[1], Number(letMatch[2]));
+      variables.set(letMatch[2], {
+        value: Number(letMatch[3]),
+        mutable: letMatch[1] !== undefined,
+      });
+      continue;
+    }
+
+    const assignMatch = ASSIGN_RE.exec(statement);
+    if (assignMatch) {
+      const variable = variables.get(assignMatch[1]);
+      if (!variable) {
+        return err({ kind: "UnknownIdentifier", name: assignMatch[1], index });
+      }
+      if (!variable.mutable) {
+        return err({ kind: "ImmutableAssignment", name: assignMatch[1], index });
+      }
+      variable.value = Number(assignMatch[2]);
       continue;
     }
 
     const returnMatch = RETURN_RE.exec(statement);
     if (returnMatch) {
       const value = returnMatch[1];
-      if (variables.has(value)) {
-        return ok(variables.get(value)!);
+      const variable = variables.get(value);
+      if (variable) {
+        return ok(variable.value);
       }
       if (/^[A-Za-z_$]/.test(value)) {
         return err({ kind: "UnknownIdentifier", name: value, index });

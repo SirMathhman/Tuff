@@ -43,6 +43,14 @@ export type EvalError =
       index: number;
     }
   | {
+      /** An assignment to a variable declared without `mut`. Fix: declare it with `let mut`. */
+      kind: "ImmutableAssignment";
+      /** The immutable variable name. */
+      name: string;
+      /** Zero-based index of the statement. */
+      index: number;
+    }
+  | {
       /** The program ended without a `return` statement. Fix: add a `return` statement. */
       kind: "MissingReturn";
     };
