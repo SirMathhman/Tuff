@@ -15,7 +15,7 @@ export type Token =
   | { kind: "compoundAssign"; operator: "+="; position: number }
   | { kind: "binary"; operator: "==" | "!=" | "<" | "<=" | ">" | ">="; position: number }
   | { kind: "semicolon"; position: number }
-  | { kind: "addressOf"; position: number }
+  | { kind: "addressOf"; mutable: boolean; position: number }
   | { kind: "deref"; position: number }
   | { kind: "lbrace"; position: number }
   | { kind: "rbrace"; position: number }
@@ -63,6 +63,11 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       i += 2;
       continue;
     }
+    if (source.startsWith("&mut", i)) {
+      tokens.push({ kind: "addressOf", mutable: true, position: i });
+      i += 4;
+      continue;
+    }
     const twoChar = source.slice(i, i + 2);
     const twoCharOperator = twoCharOperators[twoChar];
     if (twoCharOperator) {
@@ -77,7 +82,11 @@ export function tokenize(source: string): Result<Token[], EvalError> {
     }
     const singleCharKind = SINGLE_CHAR_TOKENS[char];
     if (singleCharKind) {
-      tokens.push({ kind: singleCharKind, position: i });
+      if (singleCharKind === "addressOf") {
+        tokens.push({ kind: "addressOf", mutable: false, position: i });
+      } else {
+        tokens.push({ kind: singleCharKind, position: i });
+      }
       i++;
       continue;
     }

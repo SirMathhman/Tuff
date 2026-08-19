@@ -51,7 +51,7 @@ test("parse parses an assignment statement", () => {
       statements: [
         {
           kind: "assign",
-          name: "x",
+          target: { kind: "ident", name: "x", position: 0 },
           value: { kind: "number", value: 2, position: 4 },
           position: 0,
         },
@@ -67,7 +67,7 @@ test("parse parses a compound assignment statement", () => {
       statements: [
         {
           kind: "assign",
-          name: "x",
+          target: { kind: "ident", name: "x", position: 0 },
           value: { kind: "number", value: 2, position: 5 },
           compound: "+=",
           position: 0,
@@ -128,7 +128,7 @@ const IF_CASES = [
     else: [
       {
         kind: "assign",
-        name: "x",
+        target: { kind: "ident", name: "x", position: 25 },
         value: { kind: "number", value: 2, position: 29 },
         position: 25,
       },
@@ -156,7 +156,7 @@ test.each(IF_CASES)(
             then: [
               {
                 kind: "assign",
-                name: "x",
+                target: { kind: "ident", name: "x", position: 9 },
                 value: { kind: "number", value: 1, position: 13 },
                 position: 9,
               },
@@ -192,7 +192,7 @@ test("parse parses a while loop statement", () => {
           body: [
             {
               kind: "assign",
-              name: "x",
+              target: { kind: "ident", name: "x", position: 16 },
               value: { kind: "number", value: 1, position: 21 },
               compound: "+=",
               position: 16,
@@ -220,7 +220,7 @@ test("parse parses a block as a block statement", () => {
           statements: [
             {
               kind: "assign",
-              name: "x",
+              target: { kind: "ident", name: "x", position: 2 },
               value: { kind: "number", value: 1, position: 6 },
               position: 2,
             },

@@ -51,6 +51,36 @@ test('evaluate returns 1 for "let x = 1; let y = &x; let z = &y; return **z;"', 
     value: 1,
   });
 });
+test('evaluate returns 1 for "let mut x = 0; let y = &mut x; *y = 1; return x;"', () => {
+  expect(evaluate("let mut x = 0; let y = &mut x; *y = 1; return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test('evaluate returns 1 for "let mut x = 0; let y = &mut x; *y = 1; return *y;"', () => {
+  expect(evaluate("let mut x = 0; let y = &mut x; *y = 1; return *y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test('evaluate returns 3 for "let mut x = 1; let y = &mut x; *y += 2; return x;"', () => {
+  expect(evaluate("let mut x = 1; let y = &mut x; *y += 2; return x;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+test("evaluate returns an ImmutableAssignment error when writing through an immutable pointer", () => {
+  expect(evaluate("let x = 0; let y = &x; *y = 1; return x;")).toEqual({
+    ok: false,
+    error: { kind: "ImmutableAssignment", name: "y", position: 23 },
+  });
+});
+test("evaluate returns a TypeMismatch error when writing a bool through a number pointer", () => {
+  expect(evaluate("let mut x = 0; let y = &mut x; *y = true; return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "y", expected: "number", actual: "bool", position: 31 },
+  });
+});
 // Coverage for the typecheck pass rejecting pointer operands to ordering operators.
 test("evaluate returns a TypeMismatch error for a pointer operand to an ordering operator", () => {
   expect(evaluate("let a = 1; let p = &a; return p < p;")).toEqual({

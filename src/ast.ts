@@ -11,8 +11,10 @@ export type Value =
       position: number;
     }
   | {
-      /** The address of a variable (`&name`), a pointer to its type. */
+      /** The address of a variable (`&name` / `&mut name`), a pointer to its type. */
       kind: "addressOf";
+      /** True when taken with `&mut`, yielding a mutable pointer. */
+      mutable: boolean;
       target: Value;
       position: number;
     }
@@ -31,7 +33,8 @@ export type Statement =
   | { kind: "let"; name: string; mutable: boolean; value: Value; position: number }
   | {
       kind: "assign";
-      name: string;
+      /** The lvalue being assigned: an identifier or a dereference (`*ptr`). */
+      target: Value;
       value: Value;
       /** Present when the statement is a compound assignment (`+=`). */
       compound?: "+=";
@@ -50,4 +53,6 @@ export type Statement =
   | { kind: "while"; condition: Value; body: Statement[]; position: number };
 
 /** A parsed program: a list of top-level statements. */
-export interface Program { statements: Statement[] }
+export interface Program {
+  statements: Statement[];
+}

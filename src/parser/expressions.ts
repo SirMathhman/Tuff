@@ -27,7 +27,15 @@ function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
     if (!target.ok) {
       return target;
     }
-    return ok({ kind: operator, target: target.value, position: token.position });
+    if (operator === "addressOf") {
+      return ok({
+        kind: "addressOf",
+        mutable: token.mutable,
+        target: target.value,
+        position: token.position,
+      });
+    }
+    return ok({ kind: "deref", target: target.value, position: token.position });
   }
   return unexpected(cursor);
 }

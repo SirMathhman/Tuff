@@ -1,8 +1,14 @@
 /** A successful result carrying a value. */
-export interface Ok<T> { ok: true; value: T }
+export interface Ok<T> {
+  ok: true;
+  value: T;
+}
 
 /** A failed result carrying a structured error. */
-export interface Err<E> { ok: false; error: E }
+export interface Err<E> {
+  ok: false;
+  error: E;
+}
 
 /** A discriminated union of success and failure. */
 export type Result<T, E> = Ok<T> | Err<E>;

@@ -117,9 +117,36 @@ function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalErr
   return ok({ kind: "while", condition: condition.value, body: body.value, position });
 }
 
-/** Parse an `ident = value` or `ident += value` assignment statement. */
-function parseAssign(cursor: Cursor, name: string, position: number): Result<Statement, EvalError> {
-  advance(cursor);
+/**
+ * Parse an assignment target (lvalue): an identifier or a dereference
+ * (`*ptr`), which may nest (`**p`).
+ */
+function parseLValue(cursor: Cursor): Result<Value, EvalError> {
+  const token = peek(cursor);
+  if (!token) {
+    return unexpected(cursor);
+  }
+  if (token.kind === "ident") {
+    advance(cursor);
+    return ok({ kind: "ident", name: token.value, position: token.position });
+  }
+  if (token.kind === "deref") {
+    advance(cursor);
+    const target = parseLValue(cursor);
+    if (!target.ok) {
+      return target;
+    }
+    return ok({ kind: "deref", target: target.value, position: token.position });
+  }
+  return unexpected(cursor);
+}
+
+/** Parse a `target = value` or `target += value` assignment statement. */
+function parseAssign(
+  cursor: Cursor,
+  target: Value,
+  position: number,
+): Result<Statement, EvalError> {
   const operator = peek(cursor);
   if (operator?.kind === "compoundAssign") {
     advance(cursor);
@@ -127,13 +154,13 @@ function parseAssign(cursor: Cursor, name: string, position: number): Result<Sta
     if (!value.ok) {
       return value;
     }
-    return ok({ kind: "assign", name, value: value.value, compound: "+=", position });
+    return ok({ kind: "assign", target, value: value.value, compound: "+=", position });
   }
   const value = parseAssignedValue(cursor);
   if (!value.ok) {
     return value;
   }
-  return ok({ kind: "assign", name, value: value.value, position });
+  return ok({ kind: "assign", target, value: value.value, position });
 }
 
 /**
@@ -157,8 +184,12 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   if (head.kind === "while") {
     return parseWhile(cursor, head.position);
   }
-  if (head.kind === "ident") {
-    return parseAssign(cursor, head.value, head.position);
+  if (head.kind === "ident" || head.kind === "deref") {
+    const target = parseLValue(cursor);
+    if (!target.ok) {
+      return target;
+    }
+    return parseAssign(cursor, target.value, head.position);
   }
   return unexpected(cursor);
 }

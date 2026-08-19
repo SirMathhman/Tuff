@@ -1,9 +1,44 @@
 import type { Program, Statement, Value } from "../ast.js";
-import { err, ok, type EvalError, type Result, type TypeName } from "../errors.js";
+import { err, ok, type EvalError, type Result } from "../errors.js";
 import { lookup, withScope, type ScopeStack } from "../scopes.js";
 
+/**
+ * A static type: a primitive, or a (possibly nested) pointer carrying a
+ * mutability flag. Pointers are structured so `&mut` can be distinguished
+ * from `&` when checking assignments through a dereference.
+ */
+type Type =
+  { kind: "number" } | { kind: "bool" } | { kind: "ptr"; mutable: boolean; pointee: Type };
+
+/** Render a type as its display name (e.g. `ptr<number>`), for error messages. */
+function typeToString(type: Type): string {
+  if (type.kind === "ptr") {
+    return `ptr<${typeToString(type.pointee)}>`;
+  }
+  return type.kind;
+}
+
+/** Two types are equal when their display names match. */
+function typesEqual(a: Type, b: Type): boolean {
+  return typeToString(a) === typeToString(b);
+}
+
+/** The base identifier name of an lvalue (an ident, or a deref chain ending in one). */
+function baseIdentName(value: Value): string {
+  if (value.kind === "deref") {
+    return baseIdentName(value.target);
+  }
+  if (value.kind === "ident") {
+    return value.name;
+  }
+  return "";
+}
+
 /** A variable's declared type and mutability, tracked across scopes. */
-interface Decl { type: TypeName; mutable: boolean }
+interface Decl {
+  type: Type;
+  mutable: boolean;
+}
 
 /** A stack of variable declarations, innermost last. */
 type DeclScopes = ScopeStack<Decl>;
@@ -14,24 +49,24 @@ type DeclScopes = ScopeStack<Decl>;
  * (`==`, `!=`, `<`, `<=`, `>`, `>=`) yields a number; `&name` yields a
  * pointer to the variable's type; `*ptr` yields the pointed-to type.
  */
-function expressionType(value: Value, scopes: DeclScopes): TypeName {
+function expressionType(value: Value, scopes: DeclScopes): Type {
   if (value.kind === "number") {
-    return "number";
+    return { kind: "number" };
   }
   if (value.kind === "bool") {
-    return "bool";
+    return { kind: "bool" };
   }
   if (value.kind === "binary") {
-    return "number";
+    return { kind: "number" };
   }
   if (value.kind === "addressOf") {
-    return `ptr<${expressionType(value.target, scopes)}>`;
+    return { kind: "ptr", mutable: value.mutable, pointee: expressionType(value.target, scopes) };
   }
   if (value.kind === "deref") {
     const target = expressionType(value.target, scopes);
-    return target.startsWith("ptr<") ? (target.slice(4, -1) as TypeName) : target;
+    return target.kind === "ptr" ? target.pointee : target;
   }
-  return lookup(scopes, value.name)?.type ?? "number";
+  return lookup(scopes, value.name)?.type ?? { kind: "number" };
 }
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
@@ -51,12 +86,12 @@ function checkBinary(
     // Ordering operators compare numerically; pointers have no numeric value.
     for (const operand of [value.left, value.right]) {
       const type = expressionType(operand, scopes);
-      if (type.startsWith("ptr<")) {
+      if (type.kind === "ptr") {
         return err({
           kind: "TypeMismatch",
           name: value.operator,
           expected: "number",
-          actual: type,
+          actual: typeToString(type),
           position: value.position,
         });
       }
@@ -86,7 +121,7 @@ function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalErr
         kind: "TypeMismatch",
         name: "&",
         expected: "number",
-        actual: expressionType(value.target, scopes),
+        actual: typeToString(expressionType(value.target, scopes)),
         position: value.position,
       });
     }
@@ -98,12 +133,12 @@ function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalErr
       return target;
     }
     const targetType = expressionType(value.target, scopes);
-    if (!targetType.startsWith("ptr<")) {
+    if (targetType.kind !== "ptr") {
       return err({
         kind: "TypeMismatch",
         name: "*",
         expected: "ptr<number>",
-        actual: targetType,
+        actual: typeToString(targetType),
         position: value.position,
       });
     }
@@ -123,48 +158,94 @@ function checkStatements(statements: Statement[], scopes: DeclScopes): Result<nu
   return ok(null);
 }
 
-/** Check an `ident = value` or `ident += value` assignment statement. */
+/** Check a `+=` assignment: both the target and the value must be numbers. */
+function checkCompound(
+  name: string,
+  target: Type,
+  actual: Type,
+  position: number,
+): Result<null, EvalError> {
+  const mismatch = target.kind !== "number" ? target : actual;
+  if (mismatch.kind !== "number") {
+    return err({
+      kind: "TypeMismatch",
+      name,
+      expected: "number",
+      actual: typeToString(mismatch),
+      position,
+    });
+  }
+  return ok(null);
+}
+
+/** Check a plain assignment: the value's type must equal the target's type. */
+function checkPlain(
+  name: string,
+  target: Type,
+  actual: Type,
+  position: number,
+): Result<null, EvalError> {
+  if (!typesEqual(actual, target)) {
+    return err({
+      kind: "TypeMismatch",
+      name,
+      expected: typeToString(target),
+      actual: typeToString(actual),
+      position,
+    });
+  }
+  return ok(null);
+}
+
+/** Check an assignment statement: `ident = value` or `*ptr = value` (and `+=`). */
 function checkAssign(
   statement: Extract<Statement, { kind: "assign" }>,
   scopes: DeclScopes,
 ): Result<null, EvalError> {
-  const decl = lookup(scopes, statement.name);
-  if (!decl) {
-    return err({
-      kind: "UnknownIdentifier",
-      name: statement.name,
-      position: statement.position,
-    });
-  }
+  const target = statement.target;
+  const name = baseIdentName(target);
   const value = checkExpression(statement.value, scopes);
   if (!value.ok) {
     return value;
   }
   const actual = expressionType(statement.value, scopes);
-  if (statement.compound) {
-    // `+=` is numeric addition: both the variable and the value must be numbers.
-    const mismatch = decl.type !== "number" ? decl.type : actual;
-    if (mismatch !== "number") {
+  const check = statement.compound ? checkCompound : checkPlain;
+
+  if (target.kind === "ident") {
+    const decl = lookup(scopes, target.name);
+    if (!decl) {
+      return err({ kind: "UnknownIdentifier", name: target.name, position: statement.position });
+    }
+    return check(name, decl.type, actual, statement.position);
+  }
+
+  // Deref target (`*ptr = value`): the pointer must be mutable and the value
+  // must match the pointee type.
+  if (target.kind === "deref") {
+    const pointerType = expressionType(target.target, scopes);
+    if (pointerType.kind !== "ptr") {
       return err({
         kind: "TypeMismatch",
-        name: statement.name,
-        expected: "number",
-        actual: mismatch,
+        name: "*",
+        expected: "ptr<number>",
+        actual: typeToString(pointerType),
         position: statement.position,
       });
     }
-    return ok(null);
+    if (!pointerType.mutable) {
+      return err({ kind: "ImmutableAssignment", name, position: statement.position });
+    }
+    return check(name, pointerType.pointee, actual, statement.position);
   }
-  if (actual !== decl.type) {
-    return err({
-      kind: "TypeMismatch",
-      name: statement.name,
-      expected: decl.type,
-      actual,
-      position: statement.position,
-    });
-  }
-  return ok(null);
+
+  // The parser only produces ident or deref targets; this is a defensive fallback.
+  return err({
+    kind: "TypeMismatch",
+    name: "*",
+    expected: "ptr<number>",
+    actual: typeToString(expressionType(target, scopes)),
+    position: statement.position,
+  });
 }
 
 /** Check a single statement, validating types and identifier declarations. */
