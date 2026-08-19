@@ -98,6 +98,48 @@ export interface ValueIf {
   position: number;
 }
 
+/** A number-literal `match` pattern. */
+export interface MatchPatternNumber {
+  kind: "number";
+  value: number;
+  position: number;
+}
+
+/** A bool-literal `match` pattern. */
+export interface MatchPatternBool {
+  kind: "bool";
+  value: boolean;
+  position: number;
+}
+
+/** The `_` wildcard `match` pattern. */
+export interface MatchPatternWildcard {
+  kind: "wildcard";
+  position: number;
+}
+
+/** A `match` arm's pattern: a number/bool literal or the `_` wildcard. */
+export type MatchPattern = MatchPatternNumber | MatchPatternBool | MatchPatternWildcard;
+
+/** A `match` arm: `case pattern => value`. */
+export interface MatchArm {
+  pattern: MatchPattern;
+  value: Value;
+  position: number;
+}
+
+/**
+ * A `match` expression: `match (scrutinee) { case p1 => v1; ... }`. The value
+ * is that of the first arm whose pattern matches the scrutinee; a `_` arm is
+ * required so the expression is total.
+ */
+export interface ValueMatch {
+  kind: "match";
+  scrutinee: Value;
+  arms: MatchArm[];
+  position: number;
+}
+
 /** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
   | ValueNumber
@@ -111,7 +153,8 @@ export type Value =
   | ValueIndexAssign
   | ValueRange
   | ValueBlock
-  | ValueIf;
+  | ValueIf
+  | ValueMatch;
 
 /** A variable declaration (`let` / `let mut`). */
 export interface StatementLet {

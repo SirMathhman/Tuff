@@ -100,6 +100,13 @@ export interface EvalErrorReturnInBlockValue {
   position: number;
 }
 
+/** A `match` expression has no `_` wildcard arm, so it may not match. Fix: add a `case _ => ...` arm. */
+export interface EvalErrorMissingWildcardArm {
+  kind: "MissingWildcardArm";
+  /** Zero-based character offset of the `match` expression. */
+  position: number;
+}
+
 /** A `break` was used outside of a `while` loop. Fix: move it inside a loop. */
 export interface EvalErrorBreakOutsideLoop {
   kind: "BreakOutsideLoop";
@@ -128,5 +135,6 @@ export type EvalError =
   | EvalErrorTypeMismatch
   | EvalErrorMissingReturn
   | EvalErrorReturnInBlockValue
+  | EvalErrorMissingWildcardArm
   | EvalErrorBreakOutsideLoop
   | EvalErrorContinueOutsideLoop;

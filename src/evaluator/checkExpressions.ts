@@ -6,11 +6,12 @@ import type {
   ValueDeref,
   ValueIf,
   ValueIndex,
+  ValueMatch,
   ValueRange,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { expressionType, typeToString, typesEqual, type DeclScopes } from "./types.js";
+import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 
 /**
  * A block-statement checker, threaded through the expression checker as an
@@ -241,6 +242,62 @@ function checkIf(value: ValueIf, scopes: DeclScopes, block: BlockChecker): Resul
 }
 
 /**
+ * Check a `match` expression: the scrutinee is declared and numeric-coercible,
+ * every arm's pattern type matches the scrutinee's, all arm values share one
+ * type, and a `_` wildcard arm is present (so the expression is total).
+ */
+function checkMatch(
+  value: ValueMatch,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<null, EvalError> {
+  const scrutinee = checkExpression(value.scrutinee, scopes, block);
+  if (!scrutinee.ok) {
+    return scrutinee;
+  }
+  const scrutineeType = checkNumericCoercible(value.scrutinee, scopes, "match");
+  if (!scrutineeType.ok) {
+    return scrutineeType;
+  }
+  const scrutineeStatic = expressionType(value.scrutinee, scopes);
+  let armType: Type | undefined;
+  for (const arm of value.arms) {
+    if (arm.pattern.kind !== "wildcard") {
+      const patternType: Type =
+        arm.pattern.kind === "number" ? { kind: "number" } : { kind: "bool" };
+      if (!typesEqual(patternType, scrutineeStatic)) {
+        return err({
+          kind: "TypeMismatch",
+          name: "case",
+          expected: typeToString(scrutineeStatic),
+          actual: typeToString(patternType),
+          position: arm.pattern.position,
+        });
+      }
+    }
+    const checked = checkExpression(arm.value, scopes, block);
+    if (!checked.ok) {
+      return checked;
+    }
+    const value = expressionType(arm.value, scopes);
+    if (armType && !typesEqual(armType, value)) {
+      return err({
+        kind: "TypeMismatch",
+        name: "match",
+        expected: typeToString(armType),
+        actual: typeToString(value),
+        position: arm.position,
+      });
+    }
+    armType = value;
+  }
+  if (!value.arms.some((arm) => arm.pattern.kind === "wildcard")) {
+    return err({ kind: "MissingWildcardArm", position: value.position });
+  }
+  return ok(null);
+}
+
+/**
  * Check that every identifier in a value expression is declared in the current
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
  * reference found.
@@ -285,6 +342,9 @@ export function checkExpression(
   }
   if (value.kind === "if") {
     return checkIf(value, scopes, block);
+  }
+  if (value.kind === "match") {
+    return checkMatch(value, scopes, block);
   }
   if (value.kind === "block") {
     return block(value.statements, scopes);

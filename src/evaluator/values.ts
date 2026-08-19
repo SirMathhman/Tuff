@@ -7,6 +7,7 @@ import type {
   ValueIf,
   ValueIndex,
   ValueAddressOf,
+  ValueMatch,
   ValueRange,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
@@ -256,6 +257,33 @@ function evalIf(value: ValueIf, scopes: Scopes, ctx: ValueContext): Result<Typed
   return valueToTyped(condition.value !== 0 ? value.then : value.else, scopes, ctx);
 }
 
+/** Evaluate a `match` expression: the value of the first arm whose pattern matches. */
+function evalMatch(
+  value: ValueMatch,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  const scrutinee = valueToNumber(value.scrutinee, scopes, ctx);
+  if (!scrutinee.ok) {
+    return scrutinee;
+  }
+  for (const arm of value.arms) {
+    const pattern = arm.pattern;
+    const matches =
+      pattern.kind === "wildcard"
+        ? true
+        : pattern.kind === "number"
+          ? scrutinee.value === pattern.value
+          : scrutinee.value === (pattern.value ? 1 : 0);
+    if (matches) {
+      return valueToTyped(arm.value, scopes, ctx);
+    }
+  }
+  // The typecheck pass requires a `_` arm, so this is unreachable; the
+  // fallback is defensive.
+  return err({ kind: "MissingWildcardArm", position: value.position });
+}
+
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
  * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
@@ -303,6 +331,9 @@ export function valueToTyped(
   }
   if (value.kind === "if") {
     return evalIf(value, scopes, ctx);
+  }
+  if (value.kind === "match") {
+    return evalMatch(value, scopes, ctx);
   }
   if (value.kind === "block") {
     return ctx.evalBlock(value, scopes);

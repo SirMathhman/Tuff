@@ -1,4 +1,4 @@
-import type { Value, ValueBlock, ValueIf } from "../core/ast.js";
+import type { Value, ValueBlock, ValueIf, ValueMatch } from "../core/ast.js";
 import { lookup, withScope, type ScopeStack } from "../core/scopes.js";
 
 /** The `number` type. */
@@ -122,6 +122,9 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
   if (value.kind === "if") {
     return ifType(value, scopes);
   }
+  if (value.kind === "match") {
+    return matchType(value, scopes);
+  }
   if (value.kind === "block") {
     return blockType(value, scopes);
   }
@@ -134,6 +137,15 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
  */
 function ifType(value: ValueIf, scopes: DeclScopes): Type {
   return expressionType(value.then, scopes);
+}
+
+/**
+ * The static type of a `match` expression: the type of its arms (the
+ * typecheck pass guarantees all arms share one type).
+ */
+function matchType(value: ValueMatch, scopes: DeclScopes): Type {
+  const first = value.arms[0];
+  return first ? expressionType(first.value, scopes) : { kind: "number" };
 }
 
 /**

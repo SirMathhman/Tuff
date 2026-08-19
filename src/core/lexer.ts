@@ -168,6 +168,30 @@ export interface TokenContinue {
   position: number;
 }
 
+/** The `match` keyword. */
+export interface TokenMatch {
+  kind: "match";
+  position: number;
+}
+
+/** The `case` keyword. */
+export interface TokenCase {
+  kind: "case";
+  position: number;
+}
+
+/** The `=>` arm arrow. */
+export interface TokenArrow {
+  kind: "arrow";
+  position: number;
+}
+
+/** The `_` wildcard pattern. */
+export interface TokenWildcard {
+  kind: "wildcard";
+  position: number;
+}
+
 /** A lexical token with its zero-based source position. */
 export type Token =
   | TokenLet
@@ -180,6 +204,10 @@ export type Token =
   | TokenIn
   | TokenBreak
   | TokenContinue
+  | TokenMatch
+  | TokenCase
+  | TokenArrow
+  | TokenWildcard
   | TokenIdent
   | TokenNumber
   | TokenBool
@@ -213,6 +241,7 @@ const SINGLE_CHAR_TOKENS: Record<
   | "lbracket"
   | "rbracket"
   | "comma"
+  | "wildcard"
 > = {
   "=": "assign",
   ";": "semicolon",
@@ -225,6 +254,7 @@ const SINGLE_CHAR_TOKENS: Record<
   "[": "lbracket",
   "]": "rbracket",
   ",": "comma",
+  _: "wildcard",
 };
 
 const TWO_CHAR_OPERATORS: Record<string, "==" | "!=" | "<=" | ">="> = {
@@ -262,6 +292,9 @@ function matchBinary(source: string, i: number): Match | undefined {
   const twoCharOperator = TWO_CHAR_OPERATORS[source.slice(i, i + 2)];
   if (twoCharOperator) {
     return { token: { kind: "binary", operator: twoCharOperator, position: i }, advance: 2 };
+  }
+  if (source.startsWith("=>", i)) {
+    return { token: { kind: "arrow", position: i }, advance: 2 };
   }
   const char = source[i];
   if (char === "<" || char === ">" || char === "+") {
@@ -301,7 +334,9 @@ function matchWord(source: string, i: number): Match | undefined {
           word === "for" ||
           word === "in" ||
           word === "break" ||
-          word === "continue"
+          word === "continue" ||
+          word === "match" ||
+          word === "case"
         ? { kind: word, position: i }
         : { kind: "ident", value: word, position: i };
   return { token, advance: word.length };

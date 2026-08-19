@@ -1,5 +1,5 @@
-import type { Value, ValueIf } from "../core/ast.js";
-import { ok, type EvalError, type Result } from "../core/errors.js";
+import type { MatchArm, MatchPattern, Value, ValueIf, ValueMatch } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, peek, unexpected, type Cursor } from "./cursor.js";
 
 /**
@@ -67,6 +67,9 @@ function parsePrimary(cursor: Cursor, block: BlockValueParser): Result<Value, Ev
   }
   if (token.kind === "if") {
     return parseIf(cursor, token.position, block);
+  }
+  if (token.kind === "match") {
+    return parseMatch(cursor, token.position, block);
   }
   if (token.kind === "addressOf" || token.kind === "deref") {
     const operator = token.kind;
@@ -210,6 +213,87 @@ function parseIf(
     else: elseBranch.value,
     position,
   });
+}
+
+/** Parse a `case` pattern: a number/bool literal or the `_` wildcard. */
+function parseMatchPattern(cursor: Cursor): Result<MatchPattern, EvalError> {
+  const head = peek(cursor);
+  if (!head) {
+    return unexpected(cursor);
+  }
+  if (head.kind === "wildcard") {
+    advance(cursor);
+    return ok({ kind: "wildcard", position: head.position });
+  }
+  if (head.kind === "number") {
+    advance(cursor);
+    return ok({ kind: "number", value: head.value, position: head.position });
+  }
+  if (head.kind === "bool") {
+    advance(cursor);
+    return ok({ kind: "bool", value: head.value, position: head.position });
+  }
+  return unexpected(cursor);
+}
+
+/** Parse one `match` arm: `case pattern => value;`. */
+function parseMatchArm(cursor: Cursor, block: BlockValueParser): Result<MatchArm, EvalError> {
+  const armStart = peek(cursor)!.position;
+  advance(cursor); // consume `case`
+  const pattern = parseMatchPattern(cursor);
+  if (!pattern.ok) {
+    return pattern;
+  }
+  if (peek(cursor)?.kind !== "arrow") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const value = parseValue(cursor, block);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return ok({ pattern: pattern.value, value: value.value, position: armStart });
+}
+
+/**
+ * Parse a `match` expression: `match (scrutinee) { case p1 => v1; ... }`.
+ * Patterns are number/bool literals or the `_` wildcard; a `_` arm is
+ * required so the expression is total.
+ */
+function parseMatch(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<ValueMatch, EvalError> {
+  advance(cursor); // consume `match`
+  const scrutinee = parseCondition(cursor, block);
+  if (!scrutinee.ok) {
+    return scrutinee;
+  }
+  if (peek(cursor)?.kind !== "lbrace") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const arms: MatchArm[] = [];
+  while (peek(cursor)?.kind === "case") {
+    const arm = parseMatchArm(cursor, block);
+    if (!arm.ok) {
+      return arm;
+    }
+    arms.push(arm.value);
+  }
+  if (arms.length === 0) {
+    return unexpected(cursor);
+  }
+  if (peek(cursor)?.kind !== "rbrace") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  if (!arms.some((arm) => arm.pattern.kind === "wildcard")) {
+    return err({ kind: "MissingWildcardArm", position });
+  }
+  return ok({ kind: "match", scrutinee: scrutinee.value, arms, position });
 }
 
 /**

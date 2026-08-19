@@ -40,6 +40,60 @@ test("evalProgram evaluates an else-if chain to the final else branch when all c
   });
 });
 
+test("evalProgram evaluates a match expression to the first matching arm", () => {
+  expect(evalSource("let x = match (1) { case 1 => 2; case _ => 3; }; x")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
+test("evalProgram evaluates a match expression to its wildcard arm when no literal arm matches", () => {
+  expect(evalSource("let x = match (2) { case 1 => 2; case _ => 3; }; x")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
+test("evalProgram evaluates a match expression over a bool scrutinee", () => {
+  expect(evalSource("let x = match (true) { case true => 1; case _ => 0; }; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test("evalProgram returns a MissingWildcardArm error for a match without a wildcard arm", () => {
+  expect(evalSource("let x = match (1) { case 1 => 2; }; x")).toEqual({
+    ok: false,
+    error: { kind: "MissingWildcardArm", position: 8 },
+  });
+});
+
+test("evalProgram returns a TypeMismatch error when a match pattern's type differs from the scrutinee's", () => {
+  expect(evalSource("let x = match (1) { case true => 2; case _ => 3; }; x")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "case",
+      expected: "number",
+      actual: "bool",
+      position: 25,
+    },
+  });
+});
+
+test("evalProgram returns a TypeMismatch error when a match's arms have different types", () => {
+  expect(evalSource("let x = match (1) { case 1 => 2; case _ => true; }; x")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "match",
+      expected: "number",
+      actual: "bool",
+      position: 33,
+    },
+  });
+});
+
 test("evalProgram returns a TypeMismatch error when an if expression's branches have different types", () => {
   expect(evalSource("let x = if (true) 1 else true; x")).toEqual({
     ok: false,
