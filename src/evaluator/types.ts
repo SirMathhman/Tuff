@@ -1,4 +1,4 @@
-import type { Value, ValueBlock } from "../core/ast.js";
+import type { Value, ValueBlock, ValueIf } from "../core/ast.js";
 import { lookup, withScope, type ScopeStack } from "../core/scopes.js";
 
 /** The `number` type. */
@@ -119,10 +119,21 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
   if (value.kind === "range") {
     return { kind: "range", element: expressionType(value.start, scopes) };
   }
+  if (value.kind === "if") {
+    return ifType(value, scopes);
+  }
   if (value.kind === "block") {
     return blockType(value, scopes);
   }
   return lookup(scopes, value.name)?.type ?? { kind: "number" };
+}
+
+/**
+ * The static type of an `if` expression: the type of its branches (the
+ * typecheck pass guarantees both branches share one type).
+ */
+function ifType(value: ValueIf, scopes: DeclScopes): Type {
+  return expressionType(value.then, scopes);
 }
 
 /**

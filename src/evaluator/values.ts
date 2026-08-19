@@ -4,6 +4,7 @@ import type {
   ValueBinary,
   ValueBlock,
   ValueDeref,
+  ValueIf,
   ValueIndex,
   ValueAddressOf,
   ValueRange,
@@ -246,6 +247,15 @@ function evalRange(
   return ok({ kind: "range", element: { kind: "number" }, start: start.value, end: end.value });
 }
 
+/** Evaluate an `if` expression: the value of the branch its condition selects. */
+function evalIf(value: ValueIf, scopes: Scopes, ctx: ValueContext): Result<TypedValue, EvalError> {
+  const condition = valueToNumber(value.condition, scopes, ctx);
+  if (!condition.ok) {
+    return condition;
+  }
+  return valueToTyped(condition.value !== 0 ? value.then : value.else, scopes, ctx);
+}
+
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
  * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
@@ -290,6 +300,9 @@ export function valueToTyped(
   }
   if (value.kind === "range") {
     return evalRange(value, scopes, ctx);
+  }
+  if (value.kind === "if") {
+    return evalIf(value, scopes, ctx);
   }
   if (value.kind === "block") {
     return ctx.evalBlock(value, scopes);

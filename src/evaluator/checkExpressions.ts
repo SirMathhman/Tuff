@@ -4,6 +4,7 @@ import type {
   ValueArray,
   ValueBinary,
   ValueDeref,
+  ValueIf,
   ValueIndex,
   ValueRange,
 } from "../core/ast.js";
@@ -205,6 +206,41 @@ function checkRange(
 }
 
 /**
+ * Check an `if` expression: the condition is declared and numeric-coercible,
+ * both branches are declared, and the branches share one type.
+ */
+function checkIf(value: ValueIf, scopes: DeclScopes, block: BlockChecker): Result<null, EvalError> {
+  const condition = checkExpression(value.condition, scopes, block);
+  if (!condition.ok) {
+    return condition;
+  }
+  const then = checkExpression(value.then, scopes, block);
+  if (!then.ok) {
+    return then;
+  }
+  const elseBranch = checkExpression(value.else, scopes, block);
+  if (!elseBranch.ok) {
+    return elseBranch;
+  }
+  const conditionType = checkNumericCoercible(value.condition, scopes, "if");
+  if (!conditionType.ok) {
+    return conditionType;
+  }
+  const thenType = expressionType(value.then, scopes);
+  const elseType = expressionType(value.else, scopes);
+  if (!typesEqual(thenType, elseType)) {
+    return err({
+      kind: "TypeMismatch",
+      name: "if",
+      expected: typeToString(thenType),
+      actual: typeToString(elseType),
+      position: value.position,
+    });
+  }
+  return ok(null);
+}
+
+/**
  * Check that every identifier in a value expression is declared in the current
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
  * reference found.
@@ -246,6 +282,9 @@ export function checkExpression(
   }
   if (value.kind === "range") {
     return checkRange(value, scopes, block);
+  }
+  if (value.kind === "if") {
+    return checkIf(value, scopes, block);
   }
   if (value.kind === "block") {
     return block(value.statements, scopes);

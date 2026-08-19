@@ -85,6 +85,19 @@ export interface ValueBlock {
   position: number;
 }
 
+/**
+ * An `if` expression: `if (condition) then else else`. Both branches are value
+ * expressions of the same type; the expression's value is that of the taken
+ * branch.
+ */
+export interface ValueIf {
+  kind: "if";
+  condition: Value;
+  then: Value;
+  else: Value;
+  position: number;
+}
+
 /** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
   | ValueNumber
@@ -97,7 +110,8 @@ export type Value =
   | ValueDeref
   | ValueIndexAssign
   | ValueRange
-  | ValueBlock;
+  | ValueBlock
+  | ValueIf;
 
 /** A variable declaration (`let` / `let mut`). */
 export interface StatementLet {

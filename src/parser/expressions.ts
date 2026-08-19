@@ -1,4 +1,4 @@
-import type { Value } from "../core/ast.js";
+import type { Value, ValueIf } from "../core/ast.js";
 import { ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, peek, unexpected, type Cursor } from "./cursor.js";
 
@@ -64,6 +64,9 @@ function parsePrimary(cursor: Cursor, block: BlockValueParser): Result<Value, Ev
   }
   if (token.kind === "lbrace") {
     return block(cursor);
+  }
+  if (token.kind === "if") {
+    return parseIf(cursor, token.position, block);
   }
   if (token.kind === "addressOf" || token.kind === "deref") {
     const operator = token.kind;
@@ -151,6 +154,65 @@ function parseAdditive(cursor: Cursor, block: BlockValueParser): Result<Value, E
     });
   }
   return value;
+}
+
+/**
+ * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
+ * expression, and a matching rparen.
+ */
+export function parseCondition(
+  cursor: Cursor,
+  block: BlockValueParser,
+): Result<Value, EvalError> {
+  if (peek(cursor)?.kind !== "lparen") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const condition = parseValue(cursor, block);
+  if (!condition.ok) {
+    return condition;
+  }
+  if (peek(cursor)?.kind !== "rparen") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  return condition;
+}
+
+/**
+ * Parse an `if` expression: `if (condition) then else else`. The branches are
+ * value expressions (not blocks); the else-branch may itself be an `if`
+ * expression, so `else if` chains naturally.
+ */
+function parseIf(
+  cursor: Cursor,
+  position: number,
+  block: BlockValueParser,
+): Result<ValueIf, EvalError> {
+  advance(cursor); // consume `if`
+  const condition = parseCondition(cursor, block);
+  if (!condition.ok) {
+    return condition;
+  }
+  const then = parseValue(cursor, block);
+  if (!then.ok) {
+    return then;
+  }
+  if (peek(cursor)?.kind !== "else") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const elseBranch = parseValue(cursor, block);
+  if (!elseBranch.ok) {
+    return elseBranch;
+  }
+  return ok({
+    kind: "if",
+    condition: condition.value,
+    then: then.value,
+    else: elseBranch.value,
+    position,
+  });
 }
 
 /**

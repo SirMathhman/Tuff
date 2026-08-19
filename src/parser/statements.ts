@@ -4,6 +4,7 @@ import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
 import { parseAssignedValue, parseExprStatement, parseIdentOrExpr } from "./assignments.js";
 import {
   consumeSemicolon,
+  parseCondition,
   parseValue,
   parseValueAndSemicolon,
   type BlockValueParser,
@@ -82,26 +83,6 @@ export function parseBlockValue(cursor: Cursor): Result<Value, EvalError> {
   }
   const block: ValueBlock = { kind: "block", statements: statements.value, position };
   return ok(block);
-}
-
-/**
- * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
- * expression, and a matching rparen.
- */
-function parseCondition(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
-  if (peek(cursor)?.kind !== "lparen") {
-    return unexpected(cursor);
-  }
-  advance(cursor);
-  const condition = parseValue(cursor, block);
-  if (!condition.ok) {
-    return condition;
-  }
-  if (peek(cursor)?.kind !== "rparen") {
-    return unexpected(cursor);
-  }
-  advance(cursor);
-  return condition;
 }
 
 /** The parsed head of an `if`/`while`: its condition and block body. */

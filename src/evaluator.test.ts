@@ -25,6 +25,27 @@ test("evalProgram coerces a bool return to a number", () => {
   expect(evalSource("return false;")).toEqual({ ok: true, value: 0 });
 });
 
+test("evalProgram evaluates an if expression to its else branch when the condition is false", () => {
+  expect(evalSource("let x = if (false) 2 else 3; x")).toEqual({ ok: true, value: 3 });
+});
+
+test("evalProgram evaluates an if expression to its then branch when the condition is true", () => {
+  expect(evalSource("return if (1 < 2) 5 else 6;")).toEqual({ ok: true, value: 5 });
+});
+
+test("evalProgram returns a TypeMismatch error when an if expression's branches have different types", () => {
+  expect(evalSource("let x = if (true) 1 else true; x")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "if",
+      expected: "number",
+      actual: "bool",
+      position: 8,
+    },
+  });
+});
+
 test("evalProgram adds with a compound += assignment", () => {
   expect(evalSource("let mut x = 1; x += 2; return x;")).toEqual({ ok: true, value: 3 });
 });
