@@ -91,6 +91,20 @@ describe("evaluate", () => {
     }
   });
 
+  it("returns a structured error for an empty brace initializer", () => {
+    const result = evaluate("let x = {};");
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.kind).toBe("unexpected_token");
+
+      if (result.error.kind === "unexpected_token") {
+        expect(result.error.position).toEqual({ line: 1, column: 10 });
+      }
+    }
+  });
+
   it("returns a structured error for undefined variables", () => {
     const result = evaluate("1 + x");
 
