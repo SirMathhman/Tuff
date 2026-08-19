@@ -1,5 +1,5 @@
 import type { MatchArm, MatchPattern, Value, ValueIf, ValueMatch } from "../core/ast.js";
-import { err, ok, type EvalError, type Result } from "../core/errors.js";
+import { ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, peek, unexpected, type Cursor } from "./cursor.js";
 
 /**
@@ -290,9 +290,6 @@ function parseMatch(
     return unexpected(cursor);
   }
   advance(cursor);
-  if (!arms.some((arm) => arm.pattern.kind === "wildcard")) {
-    return err({ kind: "MissingWildcardArm", position });
-  }
   return ok({ kind: "match", scrutinee: scrutinee.value, arms, position });
 }
 
