@@ -12,14 +12,15 @@ import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { withScope } from "../core/scopes.js";
 import { checkAssign } from "./checkAssignments.js";
 import { checkExpression, checkNumericCoercible, type BlockChecker } from "./checkExpressions.js";
-import { expressionType, typeToString, type DeclScopes } from "./types.js";
+import { typeToString, type DeclScopes, type Type } from "./types.js";
 
 /**
  * Check a `{ ... }` block value's statements in a fresh scope. Passed to the
  * expression checker as an explicit dependency (which cannot import this
- * module without a cycle).
+ * module without a cycle). Returns the block value's type (that of its final
+ * bare expression).
  */
-function checkBlock(statements: Statement[], scopes: DeclScopes): Result<null, EvalError> {
+function checkBlock(statements: Statement[], scopes: DeclScopes): Result<Type, EvalError> {
   return withScope(scopes, () => checkStatements(statements, scopes, false, true, checkBlock));
 }
 
@@ -28,6 +29,8 @@ function checkBlock(statements: Statement[], scopes: DeclScopes): Result<null, E
  * `inLoop` is true when the list is a `while` body, so a `break` is valid.
  * `inBlockValue` is true when the list is a `{ ... }` block value, so a
  * `return` is rejected (a block value yields its final bare expression).
+ * Returns the type of the final statement when it is a bare expression, else
+ * `number` (used as the block value's type).
  */
 function checkStatements(
   statements: Statement[],
@@ -35,14 +38,16 @@ function checkStatements(
   inLoop: boolean,
   inBlockValue: boolean,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
+  let lastType: Type = { kind: "number" };
   for (const statement of statements) {
     const result = checkStatement(statement, scopes, inLoop, inBlockValue, block);
     if (!result.ok) {
       return result;
     }
+    lastType = statement.kind === "expr" ? result.value : { kind: "number" };
   }
-  return ok(null);
+  return ok(lastType);
 }
 
 /** Check a loop condition: it is a value and numeric-coercible. */
@@ -56,7 +61,7 @@ function checkLoopCondition(
   if (!checked.ok) {
     return checked;
   }
-  return checkNumericCoercible(condition, scopes, name);
+  return checkNumericCoercible(checked.value, name, condition.position);
 }
 
 /** Check a `while` loop: the condition is a value and the body is checked in a loop scope. */
@@ -64,7 +69,7 @@ function checkWhile(
   statement: StatementWhile,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const condition = checkLoopCondition(statement.condition, scopes, "while", block);
   if (!condition.ok) {
     return condition;
@@ -81,12 +86,12 @@ function checkFor(
   statement: StatementFor,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const range = checkExpression(statement.range, scopes, block);
   if (!range.ok) {
     return range;
   }
-  const rangeType = expressionType(statement.range, scopes);
+  const rangeType = range.value;
   if (rangeType.kind !== "range" || rangeType.element.kind !== "number") {
     return err({
       kind: "TypeMismatch",
@@ -106,9 +111,9 @@ function checkFor(
 function checkLoopControl(
   statement: StatementBreak | StatementContinue,
   inLoop: boolean,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   if (inLoop) {
-    return ok(null);
+    return ok({ kind: "number" });
   }
   return err({
     kind: statement.kind === "break" ? "BreakOutsideLoop" : "ContinueOutsideLoop",
@@ -123,7 +128,7 @@ function checkIf(
   inLoop: boolean,
   inBlockValue: boolean,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const condition = checkLoopCondition(statement.condition, scopes, "if", block);
   if (!condition.ok) {
     return condition;
@@ -140,7 +145,7 @@ function checkIf(
       checkStatements(elseBranch, scopes, inLoop, inBlockValue, block),
     );
   }
-  return ok(null);
+  return ok({ kind: "number" });
 }
 
 /**
@@ -155,19 +160,23 @@ function checkStatement(
   inLoop: boolean,
   inBlockValue: boolean,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   if (statement.kind === "let") {
     const initializer = checkExpression(statement.value, scopes, block);
     if (!initializer.ok) {
       return initializer;
     }
-    const type = expressionType(statement.value, scopes);
+    const type = initializer.value;
     scopes[scopes.length - 1].set(statement.name, { type, mutable: statement.mutable });
-    return ok(null);
+    return ok({ kind: "number" });
   }
 
   if (statement.kind === "assign") {
-    return checkAssign(statement, scopes, block);
+    const result = checkAssign(statement, scopes, block);
+    if (!result.ok) {
+      return result;
+    }
+    return ok({ kind: "number" });
   }
 
   if (statement.kind === "return") {
@@ -178,7 +187,11 @@ function checkStatement(
     if (!value.ok) {
       return value;
     }
-    return checkNumericCoercible(statement.value, scopes, "return");
+    const coercible = checkNumericCoercible(value.value, "return", statement.value.position);
+    if (!coercible.ok) {
+      return coercible;
+    }
+    return ok({ kind: "number" });
   }
 
   // A bare expression is a value; its numeric-coercibility is enforced only
@@ -226,7 +239,11 @@ export function typecheck(program: Program): Result<null, EvalError> {
   // must coerce to a number just like a `return` value.
   const last = program.statements[program.statements.length - 1];
   if (last && last.kind === "expr") {
-    return checkNumericCoercible(last.value, scopes, "return");
+    const checked = checkExpression(last.value, scopes, checkBlock);
+    if (!checked.ok) {
+      return checked;
+    }
+    return checkNumericCoercible(checked.value, "return", last.value.position);
   }
   return ok(null);
 }

@@ -2,7 +2,7 @@ import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../co
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import { checkExpression, type BlockChecker } from "./checkExpressions.js";
-import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
+import { typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 
 /** The base identifier name of an lvalue (an ident, or a deref/index chain ending in one). */
 function baseIdentName(value: Value): string {
@@ -20,7 +20,11 @@ function baseIdentName(value: Value): string {
  * the base identifier name for error payloads. An ident must be declared
  * `mut`; a deref must point through a mutable pointer.
  */
-function checkMutableArrayTarget(target: Value, scopes: DeclScopes): Result<string, EvalError> {
+function checkMutableArrayTarget(
+  target: Value,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<string, EvalError> {
   if (target.kind === "ident") {
     const decl = lookup(scopes, target.name);
     if (!decl) {
@@ -36,18 +40,22 @@ function checkMutableArrayTarget(target: Value, scopes: DeclScopes): Result<stri
     return ok(target.name);
   }
   if (target.kind === "deref") {
-    const pointee = checkMutablePointer(target, target.position, scopes);
+    const pointee = checkMutablePointer(target, target.position, scopes, block);
     if (!pointee.ok) {
       return pointee;
     }
     return ok(baseIdentName(target));
   }
   // The parser only produces ident or deref targets; this is a defensive fallback.
+  const targetType = checkExpression(target, scopes, block);
+  if (!targetType.ok) {
+    return targetType;
+  }
   return err({
     kind: "TypeMismatch",
     name: "[",
     expected: "array<number>",
-    actual: typeToString(expressionType(target, scopes)),
+    actual: typeToString(targetType.value),
     position: target.position,
   });
 }
@@ -60,8 +68,13 @@ function checkMutablePointer(
   target: ValueDeref,
   position: number,
   scopes: DeclScopes,
+  block: BlockChecker,
 ): Result<Type, EvalError> {
-  const pointerType = expressionType(target.target, scopes);
+  const pointer = checkExpression(target.target, scopes, block);
+  if (!pointer.ok) {
+    return pointer;
+  }
+  const pointerType = pointer.value;
   if (pointerType.kind !== "ptr") {
     return err({
       kind: "TypeMismatch",
@@ -128,7 +141,7 @@ function checkIndexAssign(
   scopes: DeclScopes,
   block: BlockChecker,
 ): Result<null, EvalError> {
-  const mutableTarget = checkMutableArrayTarget(target.target, scopes);
+  const mutableTarget = checkMutableArrayTarget(target.target, scopes, block);
   if (!mutableTarget.ok) {
     return mutableTarget;
   }
@@ -138,7 +151,11 @@ function checkIndexAssign(
   }
   // Resolve through a mutable pointer to the array it points at (matching
   // `*ptr = value` semantics); otherwise the target must be an array directly.
-  let targetType = expressionType(target.target, scopes);
+  const targetChecked = checkExpression(target.target, scopes, block);
+  if (!targetChecked.ok) {
+    return targetChecked;
+  }
+  let targetType = targetChecked.value;
   if (targetType.kind === "ptr") {
     targetType = targetType.pointee;
   }
@@ -151,7 +168,7 @@ function checkIndexAssign(
       position: target.position,
     });
   }
-  const indexType = expressionType(target.index, scopes);
+  const indexType = index.value;
   if (indexType.kind !== "number") {
     return err({
       kind: "TypeMismatch",
@@ -176,7 +193,7 @@ export function checkAssign(
   if (!value.ok) {
     return value;
   }
-  const actual = expressionType(statement.value, scopes);
+  const actual = value.value;
   const check = statement.compound ? checkCompound : checkPlain;
 
   if (target.kind === "ident") {
@@ -190,7 +207,7 @@ export function checkAssign(
   // Deref target (`*ptr = value`): the pointer must be mutable and the value
   // must match the pointee type.
   if (target.kind === "deref") {
-    const pointee = checkMutablePointer(target, statement.position, scopes);
+    const pointee = checkMutablePointer(target, statement.position, scopes, block);
     if (!pointee.ok) {
       return pointee;
     }
@@ -204,11 +221,15 @@ export function checkAssign(
   }
 
   // The parser only produces ident, deref, or index targets; defensive fallback.
+  const targetType = checkExpression(target, scopes, block);
+  if (!targetType.ok) {
+    return targetType;
+  }
   return err({
     kind: "TypeMismatch",
     name: "*",
     expected: "ptr<number>",
-    actual: typeToString(expressionType(target, scopes)),
+    actual: typeToString(targetType.value),
     position: statement.position,
   });
 }

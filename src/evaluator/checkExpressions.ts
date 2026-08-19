@@ -13,7 +13,6 @@ import type {
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import {
-  expressionType,
   intLiteralInRange,
   promote,
   typeFromName,
@@ -27,16 +26,17 @@ import {
  * A block-statement checker, threaded through the expression checker as an
  * explicit dependency. Block values and statements mutually recurse (a block
  * value's statements are checked by the statement checker), so the typechecker
- * passes its checker in here rather than importing it (module cycle).
+ * passes its checker in here rather than importing it (module cycle). It
+ * returns the block value's type (that of its final bare expression).
  */
-export type BlockChecker = (statements: Statement[], scopes: DeclScopes) => Result<null, EvalError>;
+export type BlockChecker = (statements: Statement[], scopes: DeclScopes) => Result<Type, EvalError>;
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
 function checkBinary(
   value: ValueBinary,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const left = checkExpression(value.left, scopes, block);
   if (!left.ok) {
     return left;
@@ -48,8 +48,8 @@ function checkBinary(
   if (value.operator === "+") {
     // Arithmetic addition: both operands must be numbers or integers; the
     // result is the promoted type of the two operands.
-    const leftType = expressionType(value.left, scopes);
-    const rightType = expressionType(value.right, scopes);
+    const leftType = left.value;
+    const rightType = right.value;
     const conforms = (t: Type): boolean => t.kind === "number" || t.kind === "int";
     if (!conforms(leftType) || !conforms(rightType)) {
       const promoted = promote(leftType, rightType);
@@ -62,24 +62,23 @@ function checkBinary(
         position: value.position,
       });
     }
-    return ok(null);
+    return ok(promote(leftType, rightType));
   }
   if (value.operator !== "==" && value.operator !== "!=") {
     // Ordering operators compare numerically; numbers, bools, and integers coerce.
-    for (const operand of [value.left, value.right]) {
-      const type = expressionType(operand, scopes);
-      if (type.kind !== "number" && type.kind !== "bool" && type.kind !== "int") {
+    for (const operand of [left.value, right.value]) {
+      if (operand.kind !== "number" && operand.kind !== "bool" && operand.kind !== "int") {
         return err({
           kind: "TypeMismatch",
           name: value.operator,
           expected: "number",
-          actual: typeToString(type),
+          actual: typeToString(operand),
           position: value.position,
         });
       }
     }
   }
-  return ok(null);
+  return ok({ kind: "number" });
 }
 
 /** Check an array literal: every element is declared and all share one type. */
@@ -87,29 +86,30 @@ function checkArray(
   value: ValueArray,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
+  const elementTypes: Type[] = [];
   for (const element of value.elements) {
     const result = checkExpression(element, scopes, block);
     if (!result.ok) {
       return result;
     }
+    elementTypes.push(result.value);
   }
-  const first = value.elements[0];
+  const first = elementTypes[0];
   if (first) {
-    const elementType = expressionType(first, scopes);
-    for (const element of value.elements.slice(1)) {
-      if (!typesEqual(expressionType(element, scopes), elementType)) {
+    for (let i = 1; i < elementTypes.length; i++) {
+      if (!typesEqual(elementTypes[i], first)) {
         return err({
           kind: "TypeMismatch",
           name: "[",
-          expected: typeToString(elementType),
-          actual: typeToString(expressionType(element, scopes)),
-          position: element.position,
+          expected: typeToString(first),
+          actual: typeToString(elementTypes[i]),
+          position: value.elements[i].position,
         });
       }
     }
   }
-  return ok(null);
+  return ok({ kind: "array", element: first ?? { kind: "number" } });
 }
 
 /** Check an index expression: the target is an array and the index is a number. */
@@ -117,7 +117,7 @@ function checkIndex(
   value: ValueIndex,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const target = checkExpression(value.target, scopes, block);
   if (!target.ok) {
     return target;
@@ -126,7 +126,7 @@ function checkIndex(
   if (!index.ok) {
     return index;
   }
-  const targetType = expressionType(value.target, scopes);
+  const targetType = target.value;
   if (targetType.kind !== "array") {
     return err({
       kind: "TypeMismatch",
@@ -136,7 +136,7 @@ function checkIndex(
       position: value.position,
     });
   }
-  const indexType = expressionType(value.index, scopes);
+  const indexType = index.value;
   if (indexType.kind !== "number") {
     return err({
       kind: "TypeMismatch",
@@ -146,28 +146,27 @@ function checkIndex(
       position: value.index.position,
     });
   }
-  return ok(null);
+  return ok(targetType.element);
 }
 
 /**
- * Check that a value expression can coerce to a number (numbers and bools can;
+ * Check that a type can coerce to a number (numbers, bools, and integers can;
  * arrays, pointers, and ranges cannot). Used for `return` values, `if`/`while`
  * conditions, and `..` range bounds, where the evaluator would otherwise emit
  * a placeholder error.
  */
 export function checkNumericCoercible(
-  value: Value,
-  scopes: DeclScopes,
+  type: Type,
   name: string,
+  position: number,
 ): Result<null, EvalError> {
-  const type = expressionType(value, scopes);
   if (type.kind === "array" || type.kind === "ptr" || type.kind === "range") {
     return err({
       kind: "TypeMismatch",
       name,
       expected: "number",
       actual: typeToString(type),
-      position: value.position,
+      position,
     });
   }
   return ok(null);
@@ -178,12 +177,12 @@ function checkDeref(
   value: ValueDeref,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const target = checkExpression(value.target, scopes, block);
   if (!target.ok) {
     return target;
   }
-  const targetType = expressionType(value.target, scopes);
+  const targetType = target.value;
   if (targetType.kind !== "ptr") {
     return err({
       kind: "TypeMismatch",
@@ -193,7 +192,7 @@ function checkDeref(
       position: value.position,
     });
   }
-  return ok(null);
+  return ok(targetType.pointee);
 }
 
 /** Check a `start..end` range: both bounds are declared and numeric-coercible. */
@@ -201,7 +200,7 @@ function checkRange(
   value: ValueRange,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const start = checkExpression(value.start, scopes, block);
   if (!start.ok) {
     return start;
@@ -212,18 +211,22 @@ function checkRange(
   }
   // Bounds must be numeric-coercible so the evaluator never has to emit a
   // placeholder error for a `..` construct the user did not write.
-  const startType = checkNumericCoercible(value.start, scopes, "..");
-  if (!startType.ok) {
-    return startType;
+  const startCoercible = checkNumericCoercible(start.value, "..", value.start.position);
+  if (!startCoercible.ok) {
+    return startCoercible;
   }
-  return checkNumericCoercible(value.end, scopes, "..");
+  const endCoercible = checkNumericCoercible(end.value, "..", value.end.position);
+  if (!endCoercible.ok) {
+    return endCoercible;
+  }
+  return ok({ kind: "range", element: start.value });
 }
 
 /**
  * Check an `if` expression: the condition is declared and numeric-coercible,
  * both branches are declared, and the branches share one type.
  */
-function checkIf(value: ValueIf, scopes: DeclScopes, block: BlockChecker): Result<null, EvalError> {
+function checkIf(value: ValueIf, scopes: DeclScopes, block: BlockChecker): Result<Type, EvalError> {
   const condition = checkExpression(value.condition, scopes, block);
   if (!condition.ok) {
     return condition;
@@ -236,12 +239,12 @@ function checkIf(value: ValueIf, scopes: DeclScopes, block: BlockChecker): Resul
   if (!elseBranch.ok) {
     return elseBranch;
   }
-  const conditionType = checkNumericCoercible(value.condition, scopes, "if");
-  if (!conditionType.ok) {
-    return conditionType;
+  const conditionCoercible = checkNumericCoercible(condition.value, "if", value.condition.position);
+  if (!conditionCoercible.ok) {
+    return conditionCoercible;
   }
-  const thenType = expressionType(value.then, scopes);
-  const elseType = expressionType(value.else, scopes);
+  const thenType = then.value;
+  const elseType = elseBranch.value;
   if (!typesEqual(thenType, elseType)) {
     return err({
       kind: "TypeMismatch",
@@ -251,7 +254,7 @@ function checkIf(value: ValueIf, scopes: DeclScopes, block: BlockChecker): Resul
       position: value.position,
     });
   }
-  return ok(null);
+  return ok(thenType);
 }
 
 /**
@@ -263,16 +266,20 @@ function checkMatch(
   value: ValueMatch,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
+): Result<Type, EvalError> {
   const scrutinee = checkExpression(value.scrutinee, scopes, block);
   if (!scrutinee.ok) {
     return scrutinee;
   }
-  const scrutineeType = checkNumericCoercible(value.scrutinee, scopes, "match");
-  if (!scrutineeType.ok) {
-    return scrutineeType;
+  const scrutineeCoercible = checkNumericCoercible(
+    scrutinee.value,
+    "match",
+    value.scrutinee.position,
+  );
+  if (!scrutineeCoercible.ok) {
+    return scrutineeCoercible;
   }
-  const scrutineeStatic = expressionType(value.scrutinee, scopes);
+  const scrutineeStatic = scrutinee.value;
   let armType: Type | undefined;
   for (const arm of value.arms) {
     if (arm.pattern.kind !== "wildcard") {
@@ -292,26 +299,26 @@ function checkMatch(
     if (!checked.ok) {
       return checked;
     }
-    const value = expressionType(arm.value, scopes);
-    if (armType && !typesEqual(armType, value)) {
+    const armValue = checked.value;
+    if (armType && !typesEqual(armType, armValue)) {
       return err({
         kind: "TypeMismatch",
         name: "match",
         expected: typeToString(armType),
-        actual: typeToString(value),
+        actual: typeToString(armValue),
         position: arm.position,
       });
     }
-    armType = value;
+    armType = armValue;
   }
   if (!value.arms.some((arm) => arm.pattern.kind === "wildcard")) {
     return err({ kind: "MissingWildcardArm", position: value.position });
   }
-  return ok(null);
+  return ok(armType ?? { kind: "number" });
 }
 
 /** Check an `is` type-test: the operand is declared and the type name resolves. */
-function checkIs(value: ValueIs, scopes: DeclScopes, block: BlockChecker): Result<null, EvalError> {
+function checkIs(value: ValueIs, scopes: DeclScopes, block: BlockChecker): Result<Type, EvalError> {
   const operand = checkExpression(value.operand, scopes, block);
   if (!operand.ok) {
     return operand;
@@ -319,7 +326,7 @@ function checkIs(value: ValueIs, scopes: DeclScopes, block: BlockChecker): Resul
   if (!typeFromName(value.type)) {
     return err({ kind: "UnknownType", name: value.type, position: value.position });
   }
-  return ok(null);
+  return ok({ kind: "number" });
 }
 
 /**
@@ -331,24 +338,31 @@ export function checkExpression(
   value: Value,
   scopes: DeclScopes,
   block: BlockChecker,
-): Result<null, EvalError> {
-  if (value.kind === "number" && value.suffix) {
-    // A suffixed integer literal must fit within its type's range.
-    if (!intLiteralInRange(value.suffix, value.value)) {
-      return err({
-        kind: "IntegerOutOfRange",
-        type: value.suffix,
-        value: value.value,
-        position: value.position,
-      });
+): Result<Type, EvalError> {
+  if (value.kind === "number") {
+    if (value.suffix) {
+      // A suffixed integer literal must fit within its type's range.
+      if (!intLiteralInRange(value.suffix, value.value)) {
+        return err({
+          kind: "IntegerOutOfRange",
+          type: value.suffix,
+          value: value.value,
+          position: value.position,
+        });
+      }
+      return ok({ kind: "int", name: value.suffix });
     }
-    return ok(null);
+    return ok({ kind: "number" });
+  }
+  if (value.kind === "bool") {
+    return ok({ kind: "bool" });
   }
   if (value.kind === "ident") {
-    if (!lookup(scopes, value.name)) {
+    const decl = lookup(scopes, value.name);
+    if (!decl) {
       return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
     }
-    return ok(null);
+    return ok(decl.type);
   }
   if (value.kind === "binary") {
     return checkBinary(value, scopes, block);
@@ -364,15 +378,23 @@ export function checkExpression(
   }
   if (value.kind === "addressOf") {
     if (value.target.kind !== "ident") {
+      const target = checkExpression(value.target, scopes, block);
+      if (!target.ok) {
+        return target;
+      }
       return err({
         kind: "TypeMismatch",
         name: "&",
         expected: "variable",
-        actual: typeToString(expressionType(value.target, scopes)),
+        actual: typeToString(target.value),
         position: value.position,
       });
     }
-    return checkExpression(value.target, scopes, block);
+    const target = checkExpression(value.target, scopes, block);
+    if (!target.ok) {
+      return target;
+    }
+    return ok({ kind: "ptr", mutable: value.mutable, pointee: target.value });
   }
   if (value.kind === "deref") {
     return checkDeref(value, scopes, block);
@@ -389,5 +411,6 @@ export function checkExpression(
   if (value.kind === "block") {
     return block(value.statements, scopes);
   }
-  return ok(null);
+  // An lvalue is never read as a value; the evaluator rejects it.
+  return ok({ kind: "number" });
 }
