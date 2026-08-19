@@ -62,6 +62,27 @@ test("evalProgram returns a TypeMismatch error for += on a bool variable", () =>
   });
 });
 
+test("evalProgram type-checks a never-executed if branch", () => {
+  expect(evalSource("let mut x = 0; if (false) { x = true; } return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 28 },
+  });
+});
+
+test("evalProgram type-checks a never-executed else branch", () => {
+  expect(evalSource("let mut x = 0; if (true) { x = 1; } else { x = true; } return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 43 },
+  });
+});
+
+test("evalProgram type-checks a while body", () => {
+  expect(evalSource("let mut x = 0; while (false) { x = true; } return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 31 },
+  });
+});
+
 test("evalProgram compares with a type-strict ==", () => {
   expect(evalSource("return 1 == 1;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return 1 == 2;")).toEqual({ ok: true, value: 0 });

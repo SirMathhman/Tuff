@@ -1,13 +1,6 @@
 import type { Statement } from "../ast.js";
 import type { EvalError } from "../errors.js";
-import {
-  lookup,
-  valueToNumber,
-  valueToTyped,
-  type Scopes,
-  type TypedValue,
-  type Variable,
-} from "./values.js";
+import { lookup, valueToNumber, valueToTyped, type Scopes } from "./values.js";
 
 /**
  * The outcome of evaluating a statement or statement list. `value` means a
@@ -18,34 +11,10 @@ export type Outcome =
   { kind: "value"; value: number } | { kind: "void" } | { kind: "error"; error: EvalError };
 
 /**
- * Evaluate an `ident += value` compound assignment. `+=` is numeric addition,
- * so both the variable and the value must be numbers.
+ * Evaluate an `ident = value` or `ident += value` assignment. Type correctness
+ * is guaranteed by the static `typecheck` pass, so this only resolves values.
+ * `+=` is numeric addition.
  */
-function evalCompoundAssign(
-  statement: Extract<Statement, { kind: "assign" }>,
-  variable: Variable,
-  value: TypedValue,
-): Outcome {
-  const actual = variable.value.type !== "number" ? variable.value.type : value.type;
-  if (actual !== "number") {
-    return {
-      kind: "error",
-      error: {
-        kind: "TypeMismatch",
-        name: statement.name,
-        expected: "number",
-        actual,
-        position: statement.position,
-      },
-    };
-  }
-  const base = variable.value.type === "number" ? variable.value.value : 0;
-  const addend = value.type === "number" ? value.value : 0;
-  variable.value = { type: "number", value: base + addend };
-  return { kind: "void" };
-}
-
-/** Evaluate an `ident = value` or `ident += value` assignment. */
 function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: Scopes): Outcome {
   const variable = lookup(scopes, statement.name);
   if (!variable) {
@@ -65,19 +34,10 @@ function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: S
     return { kind: "error", error: value.error };
   }
   if (statement.compound) {
-    return evalCompoundAssign(statement, variable, value.value);
-  }
-  if (value.value.type !== variable.value.type) {
-    return {
-      kind: "error",
-      error: {
-        kind: "TypeMismatch",
-        name: statement.name,
-        expected: variable.value.type,
-        actual: value.value.type,
-        position: statement.position,
-      },
-    };
+    const base = variable.value.type === "number" ? variable.value.value : 0;
+    const addend = value.value.type === "number" ? value.value.value : 0;
+    variable.value = { type: "number", value: base + addend };
+    return { kind: "void" };
   }
   variable.value = value.value;
   return { kind: "void" };

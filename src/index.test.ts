@@ -66,6 +66,12 @@ test("evaluate returns a TypeMismatch error when assigning a bool to a number va
     error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 15 },
   });
 });
+test("evaluate returns a TypeMismatch error for a type error in a never-executed branch", () => {
+  expect(evaluate("let mut x = 0; if (false) { x = true; } return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 28 },
+  });
+});
 test("evaluate returns an UnknownIdentifier error for an undeclared variable", () => {
   expect(evaluate("return y;")).toEqual({
     ok: false,
