@@ -1,7 +1,38 @@
-import type { Value, ValueArray, ValueBinary, ValueDeref, ValueIndex } from "../core/ast.js";
+import type {
+  Statement,
+  Value,
+  ValueArray,
+  ValueBinary,
+  ValueBlock,
+  ValueDeref,
+  ValueIndex,
+  ValueRange,
+} from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes } from "./types.js";
+
+/**
+ * A block-statement checker, registered by the typechecker at load time.
+ * Block values and statements mutually recurse (a block value's statements are
+ * checked by the statement checker), so the typechecker hands its checker in
+ * here rather than importing it (which would be a module cycle).
+ */
+type BlockChecker = (statements: Statement[], scopes: DeclScopes) => Result<null, EvalError>;
+let blockChecker: BlockChecker | undefined;
+
+/** Register the block-statement checker (called once by the typechecker). */
+export function registerBlockChecker(checker: BlockChecker): void {
+  blockChecker = checker;
+}
+
+/** Check a `{ ... }` block value: its statements are checked in a fresh scope. */
+function checkBlockValue(value: ValueBlock, scopes: DeclScopes): Result<null, EvalError> {
+  if (!blockChecker) {
+    return ok(null);
+  }
+  return blockChecker(value.statements, scopes);
+}
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
 function checkBinary(value: ValueBinary, scopes: DeclScopes): Result<null, EvalError> {
@@ -149,6 +180,25 @@ function checkDeref(value: ValueDeref, scopes: DeclScopes): Result<null, EvalErr
   return ok(null);
 }
 
+/** Check a `start..end` range: both bounds are declared and numeric-coercible. */
+function checkRange(value: ValueRange, scopes: DeclScopes): Result<null, EvalError> {
+  const start = checkExpression(value.start, scopes);
+  if (!start.ok) {
+    return start;
+  }
+  const end = checkExpression(value.end, scopes);
+  if (!end.ok) {
+    return end;
+  }
+  // Bounds must be numeric-coercible so the evaluator never has to emit a
+  // placeholder error for a `..` construct the user did not write.
+  const startType = checkNumericCoercible(value.start, scopes, "..");
+  if (!startType.ok) {
+    return startType;
+  }
+  return checkNumericCoercible(value.end, scopes, "..");
+}
+
 /**
  * Check that every identifier in a value expression is declared in the current
  * scope stack. Returns an `UnknownIdentifier` error for the first undeclared
@@ -186,21 +236,10 @@ export function checkExpression(value: Value, scopes: DeclScopes): Result<null, 
     return checkDeref(value, scopes);
   }
   if (value.kind === "range") {
-    const start = checkExpression(value.start, scopes);
-    if (!start.ok) {
-      return start;
-    }
-    const end = checkExpression(value.end, scopes);
-    if (!end.ok) {
-      return end;
-    }
-    // Bounds must be numeric-coercible so the evaluator never has to emit a
-    // placeholder error for a `..` construct the user did not write.
-    const startType = checkNumericCoercible(value.start, scopes, "..");
-    if (!startType.ok) {
-      return startType;
-    }
-    return checkNumericCoercible(value.end, scopes, "..");
+    return checkRange(value, scopes);
+  }
+  if (value.kind === "block") {
+    return checkBlockValue(value, scopes);
   }
   return ok(null);
 }

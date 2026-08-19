@@ -13,7 +13,7 @@ import { parseStatements } from "./statements.js";
  */
 export function parse(tokens: Token[], source: string): Result<Program, EvalError> {
   const cursor: Cursor = { tokens, source, pos: 0, statementStart: 0 };
-  const statements = parseStatements(cursor, false);
+  const statements = parseStatements(cursor, false, true);
   if (!statements.ok) {
     return statements;
   }

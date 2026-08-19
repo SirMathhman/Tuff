@@ -10,7 +10,11 @@ import type {
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { withScope } from "../core/scopes.js";
 import { checkAssign } from "./checkAssignments.js";
-import { checkExpression, checkNumericCoercible } from "./checkExpressions.js";
+import {
+  checkExpression,
+  checkNumericCoercible,
+  registerBlockChecker,
+} from "./checkExpressions.js";
 import { expressionType, typeToString, type DeclScopes } from "./types.js";
 
 /**
@@ -140,14 +144,10 @@ function checkStatement(
     return checkNumericCoercible(statement.value, scopes, "return");
   }
 
-  // A bare expression is the implicit program result, so it must coerce to a
-  // number just like a `return` value.
+  // A bare expression is a value; its numeric-coercibility is enforced only
+  // when it is the top-level program result (see `typecheck`).
   if (statement.kind === "expr") {
-    const value = checkExpression(statement.value, scopes);
-    if (!value.ok) {
-      return value;
-    }
-    return checkNumericCoercible(statement.value, scopes, "return");
+    return checkExpression(statement.value, scopes);
   }
 
   if (statement.kind === "block") {
@@ -178,5 +178,22 @@ function checkStatement(
  * @returns `ok(null)` when the program is well-typed, or the first `EvalError`.
  */
 export function typecheck(program: Program): Result<null, EvalError> {
-  return checkStatements(program.statements, [new Map()], false);
+  const scopes: DeclScopes = [new Map()];
+  const result = checkStatements(program.statements, scopes, false);
+  if (!result.ok) {
+    return result;
+  }
+  // The top-level final bare expression is the implicit program result, so it
+  // must coerce to a number just like a `return` value.
+  const last = program.statements[program.statements.length - 1];
+  if (last && last.kind === "expr") {
+    return checkNumericCoercible(last.value, scopes, "return");
+  }
+  return ok(null);
 }
+
+// The expression checker needs this to check `{ ... }` block values; registering
+// it here (rather than importing it there) keeps the module graph acyclic.
+registerBlockChecker((statements, scopes) =>
+  withScope(scopes, () => checkStatements(statements, scopes, false)),
+);

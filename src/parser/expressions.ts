@@ -2,6 +2,20 @@ import type { Value } from "../core/ast.js";
 import { ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, peek, unexpected, type Cursor } from "./cursor.js";
 
+/**
+ * A block-value parser, registered by the statement parser at load time.
+ * Expressions and statements mutually recurse through block values
+ * (`{ ... }` as a value), so the statement parser hands its block-value
+ * parser in here rather than importing it (which would be a module cycle).
+ */
+type BlockValueParser = (cursor: Cursor) => Result<Value, EvalError>;
+let blockValueParser: BlockValueParser | undefined;
+
+/** Register the block-value parser (called once by the statement parser). */
+export function registerBlockValueParser(parser: BlockValueParser): void {
+  blockValueParser = parser;
+}
+
 /** Parse an array literal `[e1, e2, ...]`. */
 function parseArrayLiteral(cursor: Cursor, position: number): Result<Value, EvalError> {
   advance(cursor); // consume `[`
@@ -49,6 +63,12 @@ function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
   }
   if (token.kind === "lbracket") {
     return parseArrayLiteral(cursor, token.position);
+  }
+  if (token.kind === "lbrace") {
+    if (!blockValueParser) {
+      return unexpected(cursor);
+    }
+    return blockValueParser(cursor);
   }
   if (token.kind === "addressOf" || token.kind === "deref") {
     const operator = token.kind;

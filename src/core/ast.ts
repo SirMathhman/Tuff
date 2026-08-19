@@ -75,6 +75,16 @@ export interface ValueRange {
   position: number;
 }
 
+/**
+ * A `{ ... }` block used as a value expression. Its value is that of its final
+ * bare expression, so the block must end in one.
+ */
+export interface ValueBlock {
+  kind: "block";
+  statements: Statement[];
+  position: number;
+}
+
 /** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
   | ValueNumber
@@ -86,7 +96,8 @@ export type Value =
   | ValueAddressOf
   | ValueDeref
   | ValueIndexAssign
-  | ValueRange;
+  | ValueRange
+  | ValueBlock;
 
 /** A variable declaration (`let` / `let mut`). */
 export interface StatementLet {

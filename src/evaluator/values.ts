@@ -2,6 +2,7 @@ import type {
   Value,
   ValueArray,
   ValueBinary,
+  ValueBlock,
   ValueDeref,
   ValueIndex,
   ValueAddressOf,
@@ -10,6 +11,20 @@ import type {
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, type ScopeStack } from "../core/scopes.js";
 import { typeToString, type Type } from "./types.js";
+
+/**
+ * A block-value evaluator, registered by the statement evaluator at load time.
+ * Block values and statements mutually recurse (a block value's statements are
+ * evaluated by the statement evaluator), so the statement evaluator hands its
+ * block-value evaluator in here rather than importing it (module cycle).
+ */
+type BlockValueEvaluator = (value: ValueBlock, scopes: Scopes) => Result<TypedValue, EvalError>;
+let blockValueEvaluator: BlockValueEvaluator | undefined;
+
+/** Register the block-value evaluator (called once by the statement evaluator). */
+export function registerBlockValueEvaluator(evaluator: BlockValueEvaluator): void {
+  blockValueEvaluator = evaluator;
+}
 
 /** A numeric value. */
 export interface TypedValueNumber {
@@ -321,6 +336,12 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
   }
   if (value.kind === "range") {
     return evalRange(value, scopes);
+  }
+  if (value.kind === "block") {
+    if (!blockValueEvaluator) {
+      return err({ kind: "UnknownIdentifier", name: "", position: value.position });
+    }
+    return blockValueEvaluator(value, scopes);
   }
   const variable = lookup(scopes, value.name);
   if (!variable) {

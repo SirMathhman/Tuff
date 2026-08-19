@@ -1,8 +1,16 @@
-import type { Statement, StatementFor, StatementWhile, Value } from "../core/ast.js";
+import type { Statement, StatementFor, StatementWhile, Value, ValueBlock } from "../core/ast.js";
+import { err, type EvalError, type Result } from "../core/errors.js";
 import { withScope } from "../core/scopes.js";
 import { evalAssign } from "./evalAssignments.js";
 import type { Outcome } from "./outcome.js";
-import { valueToNumber, valueToTyped, type Scopes, type TypedValueRange } from "./values.js";
+import {
+  registerBlockValueEvaluator,
+  valueToNumber,
+  valueToTyped,
+  type Scopes,
+  type TypedValue,
+  type TypedValueRange,
+} from "./values.js";
 
 /** Evaluate a `while (condition) { ... }` loop, re-checking the condition each pass. */
 function evalWhile(statement: StatementWhile, scopes: Scopes): Outcome {
@@ -144,3 +152,32 @@ export function evalStatements(
   }
   return requireReturn ? { kind: "error", error: { kind: "MissingReturn" } } : { kind: "void" };
 }
+
+/**
+ * Evaluate a `{ ... }` block value: run its statements in a fresh scope, and
+ * take the final bare expression's value (its type is preserved, so a block
+ * can yield a non-number). The parser guarantees the last statement is an
+ * `expr`; the fallback is defensive.
+ */
+function evalBlockValue(value: ValueBlock, scopes: Scopes): Result<TypedValue, EvalError> {
+  return withScope(scopes, () => {
+    const last = value.statements[value.statements.length - 1];
+    if (!last || last.kind !== "expr") {
+      return err({ kind: "UnknownIdentifier", name: "", position: value.position });
+    }
+    for (const statement of value.statements.slice(0, -1)) {
+      const result = evalStatement(statement, scopes);
+      if (result.kind === "error") {
+        return err(result.error);
+      }
+      if (result.kind !== "void") {
+        return err({ kind: "MissingReturn" });
+      }
+    }
+    return valueToTyped(last.value, scopes);
+  });
+}
+
+// The value evaluator needs this to evaluate `{ ... }` block values; registering
+// it here (rather than importing it there) keeps the module graph acyclic.
+registerBlockValueEvaluator(evalBlockValue);

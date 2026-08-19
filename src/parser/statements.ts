@@ -1,24 +1,13 @@
-import type { Statement, Value } from "../core/ast.js";
+import type { Statement, Value, ValueBlock } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
+import { parseAssignedValue, parseExprStatement, parseIdentOrExpr } from "./assignments.js";
 import {
   consumeSemicolon,
-  parseIndexSuffixes,
   parseValue,
   parseValueAndSemicolon,
+  registerBlockValueParser,
 } from "./expressions.js";
-
-/**
- * Parse the `= value` tail shared by `let` and assignment statements: an
- * assign token, a value expression, and an optional trailing semicolon.
- */
-function parseAssignedValue(cursor: Cursor): Result<Value, EvalError> {
-  if (peek(cursor)?.kind !== "assign") {
-    return unexpected(cursor);
-  }
-  advance(cursor);
-  return parseValueAndSemicolon(cursor);
-}
 
 /** Parse a `let [mut] name = value` declaration. */
 function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError> {
@@ -51,13 +40,40 @@ function parseReturn(cursor: Cursor, position: number): Result<Statement, EvalEr
 }
 
 /** Parse a `{ ... }` block into its statement list. */
-function parseBlock(cursor: Cursor): Result<Statement[], EvalError> {
+function parseBlock(cursor: Cursor, allowExpr: boolean): Result<Statement[], EvalError> {
   if (peek(cursor)?.kind !== "lbrace") {
     return unexpected(cursor);
   }
   advance(cursor);
-  return parseStatements(cursor, true);
+  return parseStatements(cursor, true, allowExpr);
 }
+
+/**
+ * Parse a `{ ... }` block as a value expression: its value is that of its
+ * final bare expression, so the block must end in one. Registered with the
+ * expression parser (which cannot import this module without a cycle).
+ */
+function parseBlockValue(cursor: Cursor): Result<Value, EvalError> {
+  const position = peek(cursor)?.position ?? 0;
+  const statements = parseBlock(cursor, true);
+  if (!statements.ok) {
+    return statements;
+  }
+  const last = statements.value[statements.value.length - 1];
+  if (!last || last.kind !== "expr") {
+    return err({
+      kind: "UnexpectedStatement",
+      statement: "{ ... }",
+      position,
+    });
+  }
+  const block: ValueBlock = { kind: "block", statements: statements.value, position };
+  return ok(block);
+}
+
+// The expression parser needs this to parse `{ ... }` as a value; registering
+// it here (rather than importing it there) keeps the module graph acyclic.
+registerBlockValueParser(parseBlockValue);
 
 /**
  * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
@@ -86,14 +102,14 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
   if (!condition.ok) {
     return condition;
   }
-  const then = parseBlock(cursor);
+  const then = parseBlock(cursor, false);
   if (!then.ok) {
     return then;
   }
   let elseBranch: Statement[] | undefined;
   if (peek(cursor)?.kind === "else") {
     advance(cursor);
-    const elseBlock = parseBlock(cursor);
+    const elseBlock = parseBlock(cursor, false);
     if (!elseBlock.ok) {
       return elseBlock;
     }
@@ -135,7 +151,7 @@ function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError
     return unexpected(cursor);
   }
   advance(cursor);
-  const body = parseBlock(cursor);
+  const body = parseBlock(cursor, false);
   if (!body.ok) {
     return body;
   }
@@ -169,59 +185,11 @@ function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalErr
   if (!condition.ok) {
     return condition;
   }
-  const body = parseBlock(cursor);
+  const body = parseBlock(cursor, false);
   if (!body.ok) {
     return body;
   }
   return ok({ kind: "while", condition: condition.value, body: body.value, position });
-}
-
-/**
- * Parse an assignment target (lvalue): an identifier or a dereference
- * (`*ptr`), which may nest (`**p`), optionally indexed (`arr[i]`).
- */
-function parseLValue(cursor: Cursor): Result<Value, EvalError> {
-  const token = peek(cursor);
-  if (!token) {
-    return unexpected(cursor);
-  }
-  let value: Value;
-  if (token.kind === "ident") {
-    advance(cursor);
-    value = { kind: "ident", name: token.value, position: token.position };
-  } else if (token.kind === "deref") {
-    advance(cursor);
-    const target = parseLValue(cursor);
-    if (!target.ok) {
-      return target;
-    }
-    value = { kind: "deref", target: target.value, position: token.position };
-  } else {
-    return unexpected(cursor);
-  }
-  return parseIndexSuffixes(cursor, value, "indexAssign");
-}
-
-/** Parse a `target = value` or `target += value` assignment statement. */
-function parseAssign(
-  cursor: Cursor,
-  target: Value,
-  position: number,
-): Result<Statement, EvalError> {
-  const operator = peek(cursor);
-  if (operator?.kind === "compoundAssign") {
-    advance(cursor);
-    const value = parseValueAndSemicolon(cursor);
-    if (!value.ok) {
-      return value;
-    }
-    return ok({ kind: "assign", target, value: value.value, compound: "+=", position });
-  }
-  const value = parseAssignedValue(cursor);
-  if (!value.ok) {
-    return value;
-  }
-  return ok({ kind: "assign", target, value: value.value, position });
 }
 
 /**
@@ -271,47 +239,16 @@ function parseStatement(cursor: Cursor, allowExpr: boolean): Result<Statement, E
 }
 
 /**
- * Parse an identifier or dereference as either an assignment (`x = v`, `x += v`)
- * or, when `allowExpr` is set and no assignment follows, a bare expression.
- */
-function parseIdentOrExpr(
-  cursor: Cursor,
-  position: number,
-  allowExpr: boolean,
-): Result<Statement, EvalError> {
-  const save = cursor.pos;
-  const target = parseLValue(cursor);
-  if (!target.ok) {
-    return target;
-  }
-  const next = peek(cursor);
-  if (next?.kind === "assign" || next?.kind === "compoundAssign") {
-    return parseAssign(cursor, target.value, position);
-  }
-  // Not an assignment: a bare expression is allowed only as the final
-  // top-level statement. Re-parse from the saved position as a value.
-  if (!allowExpr) {
-    return unexpected(cursor);
-  }
-  cursor.pos = save;
-  return parseExprStatement(cursor, position);
-}
-
-/** Parse a bare value expression as the implicit program-result statement. */
-function parseExprStatement(cursor: Cursor, position: number): Result<Statement, EvalError> {
-  const value = parseValue(cursor);
-  if (!value.ok) {
-    return value;
-  }
-  consumeSemicolon(cursor);
-  return ok({ kind: "expr", value: value.value, position });
-}
-
-/**
  * Parse a list of statements, recursing into `{ ... }` blocks. When `inBlock`
- * is set, a `}` ends the block; at the top level a `}` is an error.
+ * is set, a `}` ends the block; at the top level a `}` is an error. When
+ * `allowExpr` is set, a bare value expression may be parsed as the final
+ * statement (the implicit result of the list).
  */
-export function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statement[], EvalError> {
+export function parseStatements(
+  cursor: Cursor,
+  inBlock: boolean,
+  allowExpr: boolean,
+): Result<Statement[], EvalError> {
   const statements: Statement[] = [];
   while (!atEnd(cursor)) {
     const head = peek(cursor)!;
@@ -323,7 +260,7 @@ export function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statem
       return ok(statements);
     }
     if (head.kind === "lbrace") {
-      const inner = parseBlock(cursor);
+      const inner = parseBlock(cursor, false);
       if (!inner.ok) {
         return inner;
       }
@@ -331,13 +268,17 @@ export function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statem
       continue;
     }
     cursor.statementStart = head.position;
-    const statement = parseStatement(cursor, !inBlock);
+    const statement = parseStatement(cursor, allowExpr);
     if (!statement.ok) {
       return statement;
     }
-    // A bare expression is only valid as the final top-level statement.
-    if (statement.value.kind === "expr" && !atEnd(cursor)) {
-      return unexpected(cursor);
+    // A bare expression is only valid as the final statement of its list:
+    // followed by end-of-input (top level) or a closing `}` (block value).
+    if (statement.value.kind === "expr") {
+      const next = peek(cursor);
+      if (!atEnd(cursor) && next?.kind !== "rbrace") {
+        return unexpected(cursor);
+      }
     }
     statements.push(statement.value);
   }

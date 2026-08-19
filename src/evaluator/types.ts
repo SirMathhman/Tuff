@@ -1,5 +1,5 @@
-import type { Value } from "../core/ast.js";
-import { lookup, type ScopeStack } from "../core/scopes.js";
+import type { Value, ValueBlock } from "../core/ast.js";
+import { lookup, withScope, type ScopeStack } from "../core/scopes.js";
 
 /** The `number` type. */
 export interface TypeNumber {
@@ -119,5 +119,28 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
   if (value.kind === "range") {
     return { kind: "range", element: expressionType(value.start, scopes) };
   }
+  if (value.kind === "block") {
+    return blockType(value, scopes);
+  }
   return lookup(scopes, value.name)?.type ?? { kind: "number" };
+}
+
+/**
+ * The static type of a `{ ... }` block value: the type of its final bare
+ * expression, with the block's top-level `let` declarations in scope.
+ */
+function blockType(value: ValueBlock, scopes: DeclScopes): Type {
+  return withScope(scopes, () => {
+    for (const statement of value.statements) {
+      if (statement.kind === "let") {
+        const type = expressionType(statement.value, scopes);
+        scopes[scopes.length - 1].set(statement.name, { type, mutable: statement.mutable });
+      }
+    }
+    const last = value.statements[value.statements.length - 1];
+    if (last && last.kind === "expr") {
+      return expressionType(last.value, scopes);
+    }
+    return { kind: "number" };
+  });
 }
