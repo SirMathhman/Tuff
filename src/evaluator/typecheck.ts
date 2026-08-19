@@ -6,6 +6,7 @@ import type {
   StatementContinue,
   StatementWhile,
   Value,
+  ValueDeref,
   ValueIndexAssign,
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
@@ -48,22 +49,9 @@ function checkMutableArrayTarget(target: Value, scopes: DeclScopes): Result<stri
     return ok(target.name);
   }
   if (target.kind === "deref") {
-    const pointerType = expressionType(target.target, scopes);
-    if (pointerType.kind !== "ptr") {
-      return err({
-        kind: "TypeMismatch",
-        name: "*",
-        expected: "ptr<number>",
-        actual: typeToString(pointerType),
-        position: target.position,
-      });
-    }
-    if (!pointerType.mutable) {
-      return err({
-        kind: "ImmutableAssignment",
-        name: baseIdentName(target),
-        position: target.position,
-      });
+    const pointee = checkMutablePointer(target, target.position, scopes);
+    if (!pointee.ok) {
+      return pointee;
     }
     return ok(baseIdentName(target));
   }
@@ -75,6 +63,31 @@ function checkMutableArrayTarget(target: Value, scopes: DeclScopes): Result<stri
     actual: typeToString(expressionType(target, scopes)),
     position: target.position,
   });
+}
+
+/**
+ * Check that `target` is a mutable pointer and return its pointee type.
+ * Shared by `*ptr = value` and the array-mutability check for `arr[i] = value`.
+ */
+function checkMutablePointer(
+  target: ValueDeref,
+  position: number,
+  scopes: DeclScopes,
+): Result<Type, EvalError> {
+  const pointerType = expressionType(target.target, scopes);
+  if (pointerType.kind !== "ptr") {
+    return err({
+      kind: "TypeMismatch",
+      name: "*",
+      expected: "ptr<number>",
+      actual: typeToString(pointerType),
+      position,
+    });
+  }
+  if (!pointerType.mutable) {
+    return err({ kind: "ImmutableAssignment", name: baseIdentName(target), position });
+  }
+  return ok(pointerType.pointee);
 }
 
 /**
@@ -156,20 +169,11 @@ function checkAssign(statement: StatementAssign, scopes: DeclScopes): Result<nul
   // Deref target (`*ptr = value`): the pointer must be mutable and the value
   // must match the pointee type.
   if (target.kind === "deref") {
-    const pointerType = expressionType(target.target, scopes);
-    if (pointerType.kind !== "ptr") {
-      return err({
-        kind: "TypeMismatch",
-        name: "*",
-        expected: "ptr<number>",
-        actual: typeToString(pointerType),
-        position: statement.position,
-      });
+    const pointee = checkMutablePointer(target, statement.position, scopes);
+    if (!pointee.ok) {
+      return pointee;
     }
-    if (!pointerType.mutable) {
-      return err({ kind: "ImmutableAssignment", name, position: statement.position });
-    }
-    return check(name, pointerType.pointee, actual, statement.position);
+    return check(name, pointee.value, actual, statement.position);
   }
 
   // Index target (`arr[i] = value`): the array must be mutable, the index a

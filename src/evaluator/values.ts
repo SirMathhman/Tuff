@@ -278,6 +278,16 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
   if (value.kind === "deref") {
     return evalDeref(value, scopes);
   }
+  if (value.kind === "indexAssign") {
+    // An lvalue is never read as a value; the typecheck pass rejects this.
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "value",
+      actual: "lvalue",
+      position: value.position,
+    });
+  }
   const variable = lookup(scopes, value.name);
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });

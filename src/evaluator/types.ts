@@ -99,5 +99,10 @@ export function expressionType(value: Value, scopes: DeclScopes): Type {
     const target = expressionType(value.target, scopes);
     return target.kind === "ptr" ? target.pointee : target;
   }
+  if (value.kind === "indexAssign") {
+    const target = expressionType(value.target, scopes);
+    const arrayType = target.kind === "ptr" ? target.pointee : target;
+    return arrayType.kind === "array" ? arrayType.element : { kind: "number" };
+  }
   return lookup(scopes, value.name)?.type ?? { kind: "number" };
 }

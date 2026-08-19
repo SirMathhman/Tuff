@@ -1,7 +1,7 @@
 import type { Statement, Value } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
-import { consumeSemicolon, parseValue, parseValueAndSemicolon } from "./expressions.js";
+import { consumeSemicolon, parseIndexSuffixes, parseValue, parseValueAndSemicolon } from "./expressions.js";
 
 /**
  * Parse the `= value` tail shared by `let` and assignment statements: an
@@ -154,20 +154,7 @@ function parseLValue(cursor: Cursor): Result<Value, EvalError> {
   } else {
     return unexpected(cursor);
   }
-  while (peek(cursor)?.kind === "lbracket") {
-    const bracket = peek(cursor)!;
-    advance(cursor);
-    const index = parseValue(cursor);
-    if (!index.ok) {
-      return index;
-    }
-    if (peek(cursor)?.kind !== "rbracket") {
-      return unexpected(cursor);
-    }
-    advance(cursor);
-    value = { kind: "indexAssign", target: value, index: index.value, position: bracket.position };
-  }
-  return ok(value);
+  return parseIndexSuffixes(cursor, value, "indexAssign");
 }
 
 /** Parse a `target = value` or `target += value` assignment statement. */

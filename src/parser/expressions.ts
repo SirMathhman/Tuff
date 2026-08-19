@@ -71,14 +71,14 @@ function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
 }
 
 /**
- * Parse a postfix expression: a primary followed by zero or more index
- * operations (`[i]`), which bind tighter than any binary operator.
+ * Parse zero or more index suffixes (`[i]`) applied to `value`, producing
+ * nodes of the given kind (`"index"` for reads, `"indexAssign"` for lvalues).
  */
-function parsePostfix(cursor: Cursor): Result<Value, EvalError> {
-  let value = parsePrimary(cursor);
-  if (!value.ok) {
-    return value;
-  }
+export function parseIndexSuffixes(
+  cursor: Cursor,
+  value: Value,
+  kind: "index" | "indexAssign",
+): Result<Value, EvalError> {
   while (peek(cursor)?.kind === "lbracket") {
     const bracket = peek(cursor)!;
     advance(cursor);
@@ -90,14 +90,21 @@ function parsePostfix(cursor: Cursor): Result<Value, EvalError> {
       return unexpected(cursor);
     }
     advance(cursor);
-    value = ok({
-      kind: "index",
-      target: value.value,
-      index: index.value,
-      position: bracket.position,
-    });
+    value = { kind, target: value, index: index.value, position: bracket.position };
   }
-  return value;
+  return ok(value);
+}
+
+/**
+ * Parse a postfix expression: a primary followed by zero or more index
+ * operations (`[i]`), which bind tighter than any binary operator.
+ */
+function parsePostfix(cursor: Cursor): Result<Value, EvalError> {
+  const value = parsePrimary(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  return parseIndexSuffixes(cursor, value.value, "index");
 }
 
 /**
