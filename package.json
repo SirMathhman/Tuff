@@ -20,6 +20,7 @@
     "lint:typecheck": "tsc --noEmit",
     "lint:eslint": "eslint .",
     "lint:pmd:cpd": "pmd cpd --minimum-tokens 50 --language typescript src --ignore-identifiers --ignore-literals",
+    "lint:circular-packages": "bun ./scripts/find-circular-packages.ts",
     "madge:visualize": "madge ./src --image ./docs/graph.svg --extensions ts",
     "madge:circular": "madge ./src --extensions ts --circular"
   },
@@ -43,5 +44,8 @@
         "splines": "ortho"
       }
     }
+  },
+  "dependencies": {
+    "@types/madge": "^5.0.3"
   }
 }
