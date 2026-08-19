@@ -34,6 +34,12 @@ test("evalProgram compares with a type-strict ==", () => {
   expect(evalSource("return false == 0;")).toEqual({ ok: true, value: 0 });
 });
 
+test("evalProgram compares with <", () => {
+  expect(evalSource("let x = 0; let y = 1; return x < y;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("let x = 1; let y = 0; return x < y;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return 1 < 1;")).toEqual({ ok: true, value: 0 });
+});
+
 test("evalProgram chains == right-associatively", () => {
   expect(evalSource("return 1 == 1 == 1;")).toEqual({ ok: true, value: 1 });
   // 2 == (3 == 0) -> 2 == 0 -> 0 (a left-associative parse would give 1)

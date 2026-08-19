@@ -92,6 +92,27 @@ test("parse parses a binary == expression", () => {
   });
 });
 
+test("parse parses a binary < expression", () => {
+  expect(parseSource("return x < y;")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "return",
+          value: {
+            kind: "binary",
+            operator: "<",
+            left: { kind: "ident", name: "x", position: 7 },
+            right: { kind: "ident", name: "y", position: 11 },
+            position: 7,
+          },
+          position: 0,
+        },
+      ],
+    },
+  });
+});
+
 test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
     ok: true,

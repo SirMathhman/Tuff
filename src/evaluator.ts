@@ -41,8 +41,14 @@ function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalErro
     if (!right.ok) {
       return right;
     }
-    const equal = left.value.type === right.value.type && left.value.value === right.value.value;
-    return ok({ type: "number", value: equal ? 1 : 0 });
+    if (value.operator === "==") {
+      const equal = left.value.type === right.value.type && left.value.value === right.value.value;
+      return ok({ type: "number", value: equal ? 1 : 0 });
+    }
+    // "<" compares numerically; bools coerce to 1/0.
+    const leftNum = left.value.type === "bool" ? (left.value.value ? 1 : 0) : left.value.value;
+    const rightNum = right.value.type === "bool" ? (right.value.value ? 1 : 0) : right.value.value;
+    return ok({ type: "number", value: leftNum < rightNum ? 1 : 0 });
   }
   const variable = lookup(scopes, value.name);
   if (!variable) {
