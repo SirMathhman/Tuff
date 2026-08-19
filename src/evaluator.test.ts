@@ -33,6 +33,10 @@ test("evalProgram evaluates an if expression to its then branch when the conditi
   expect(evalSource("return if (1 < 2) 5 else 6;")).toEqual({ ok: true, value: 5 });
 });
 
+test("evalProgram evaluates an else-if chain to the final else branch when all conditions are false", () => {
+  expect(evalSource("let x = if (false) 2 else if (false) 3 else 4; x")).toEqual({ ok: true, value: 4 });
+});
+
 test("evalProgram returns a TypeMismatch error when an if expression's branches have different types", () => {
   expect(evalSource("let x = if (true) 1 else true; x")).toEqual({
     ok: false,
