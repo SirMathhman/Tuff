@@ -1,22 +1,12 @@
 import type { Program, Statement, Value } from "../ast.js";
 import { err, ok, type EvalError, type Result, type TypeName } from "../errors.js";
+import { lookup, withScope, type ScopeStack } from "../scopes.js";
 
 /** A variable's declared type and mutability, tracked across scopes. */
 type Decl = { type: TypeName; mutable: boolean };
 
 /** A stack of variable declarations, innermost last. */
-type DeclScopes = Map<string, Decl>[];
-
-/** Find a declaration by walking the scopes from innermost outward. */
-function lookupDecl(scopes: DeclScopes, name: string): Decl | undefined {
-  for (let i = scopes.length - 1; i >= 0; i--) {
-    const decl = scopes[i].get(name);
-    if (decl) {
-      return decl;
-    }
-  }
-  return undefined;
-}
+type DeclScopes = ScopeStack<Decl>;
 
 /**
  * The static type of a value expression. Literals carry their own type;
@@ -39,9 +29,9 @@ function expressionType(value: Value, scopes: DeclScopes): TypeName {
   }
   if (value.kind === "deref") {
     const target = expressionType(value.target, scopes);
-    return target.startsWith("ptr<") ? target.slice(4, -1) as TypeName : target;
+    return target.startsWith("ptr<") ? (target.slice(4, -1) as TypeName) : target;
   }
-  return lookupDecl(scopes, value.name)?.type ?? "number";
+  return lookup(scopes, value.name)?.type ?? "number";
 }
 
 /**
@@ -51,7 +41,7 @@ function expressionType(value: Value, scopes: DeclScopes): TypeName {
  */
 function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalError> {
   if (value.kind === "ident") {
-    if (!lookupDecl(scopes, value.name)) {
+    if (!lookup(scopes, value.name)) {
       return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
     }
     return ok(null);
@@ -102,7 +92,7 @@ function checkAssign(
   statement: Extract<Statement, { kind: "assign" }>,
   scopes: DeclScopes,
 ): Result<null, EvalError> {
-  const decl = lookupDecl(scopes, statement.name);
+  const decl = lookup(scopes, statement.name);
   if (!decl) {
     return err({
       kind: "UnknownIdentifier",
@@ -162,10 +152,7 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
   }
 
   if (statement.kind === "block") {
-    scopes.push(new Map());
-    const result = checkStatements(statement.statements, scopes);
-    scopes.pop();
-    return result;
+    return withScope(scopes, () => checkStatements(statement.statements, scopes));
   }
 
   if (statement.kind === "if") {
@@ -173,17 +160,13 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
     if (!condition.ok) {
       return condition;
     }
-    scopes.push(new Map());
-    const then = checkStatements(statement.then, scopes);
-    scopes.pop();
+    const then = withScope(scopes, () => checkStatements(statement.then, scopes));
     if (!then.ok) {
       return then;
     }
     if (statement.else) {
-      scopes.push(new Map());
-      const elseBranch = checkStatements(statement.else, scopes);
-      scopes.pop();
-      return elseBranch;
+      const elseBranch = statement.else;
+      return withScope(scopes, () => checkStatements(elseBranch, scopes));
     }
     return ok(null);
   }
@@ -193,10 +176,7 @@ function checkStatement(statement: Statement, scopes: DeclScopes): Result<null, 
   if (!condition.ok) {
     return condition;
   }
-  scopes.push(new Map());
-  const body = checkStatements(statement.body, scopes);
-  scopes.pop();
-  return body;
+  return withScope(scopes, () => checkStatements(statement.body, scopes));
 }
 
 /**

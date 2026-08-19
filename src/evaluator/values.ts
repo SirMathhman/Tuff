@@ -1,5 +1,6 @@
 import type { Value } from "../ast.js";
 import { err, ok, type EvalError, type Result } from "../errors.js";
+import { lookup, type ScopeStack } from "../scopes.js";
 
 /** A value with its type, so `==` can compare type-strictly. */
 export type TypedValue =
@@ -12,18 +13,7 @@ export type TypedValue =
 export type Variable = { value: TypedValue; mutable: boolean };
 
 /** A stack of variable scopes, innermost last. */
-export type Scopes = Map<string, Variable>[];
-
-/** Find a variable by walking the scopes from innermost outward. */
-export function lookup(scopes: Scopes, name: string): Variable | undefined {
-  for (let i = scopes.length - 1; i >= 0; i--) {
-    const variable = scopes[i].get(name);
-    if (variable) {
-      return variable;
-    }
-  }
-  return undefined;
-}
+export type Scopes = ScopeStack<Variable>;
 
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared

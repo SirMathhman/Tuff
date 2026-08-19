@@ -1,6 +1,7 @@
 import type { Statement } from "../ast.js";
 import type { EvalError } from "../errors.js";
-import { lookup, valueToNumber, valueToTyped, type Scopes } from "./values.js";
+import { lookup, withScope } from "../scopes.js";
+import { valueToNumber, valueToTyped, type Scopes } from "./values.js";
 
 /**
  * The outcome of evaluating a statement or statement list. `value` means a
@@ -53,9 +54,7 @@ function evalWhile(statement: Extract<Statement, { kind: "while" }>, scopes: Sco
     if (condition.value === 0) {
       break;
     }
-    scopes.push(new Map());
-    const body = evalStatements(statement.body, scopes, false);
-    scopes.pop();
+    const body = withScope(scopes, () => evalStatements(statement.body, scopes, false));
     if (body.kind !== "void") {
       return body;
     }
@@ -90,10 +89,7 @@ function evalStatement(statement: Statement, scopes: Scopes): Outcome {
   }
 
   if (statement.kind === "block") {
-    scopes.push(new Map());
-    const result = evalStatements(statement.statements, scopes, false);
-    scopes.pop();
-    return result;
+    return withScope(scopes, () => evalStatements(statement.statements, scopes, false));
   }
 
   if (statement.kind === "if") {
@@ -102,10 +98,7 @@ function evalStatement(statement: Statement, scopes: Scopes): Outcome {
       return { kind: "error", error: condition.error };
     }
     const branch = condition.value !== 0 ? statement.then : (statement.else ?? []);
-    scopes.push(new Map());
-    const result = evalStatements(branch, scopes, false);
-    scopes.pop();
-    return result;
+    return withScope(scopes, () => evalStatements(branch, scopes, false));
   }
 
   return evalWhile(statement, scopes);
