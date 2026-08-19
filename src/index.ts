@@ -16,7 +16,8 @@ import type { Result } from "./result.js";
  *          `let [mut] x = expr; stmt; ...` where each statement is an
  *          expression or an assignment (`x = expr`, only for `mut`
  *          bindings). A top-level binding with no statements evaluates
- *          to 0; a binding inside braces must have at least one.
+ *          to 0. Braces form block expressions: `{ stmt; ... }`
+ *          evaluates to the value of its last statement.
  */
 export function evaluate(input: string): Result<number, TuffError> {
   const trimmed = input.trim();

@@ -108,6 +108,10 @@ test("returns 1 for the expression let mut x = 0; x = 1; x", () => {
   expect(evaluate("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
 });
 
+test("returns 1 for the expression let mut x = 0; { x = 1; } x", () => {
+  expect(evaluate("let mut x = 0; { x = 1; } x")).toEqual({ ok: true, value: 1 });
+});
+
 test("returns a structured error for assigning to a non-mut variable", () => {
   const result = evaluate("let x = 0; x = 1; x");
 

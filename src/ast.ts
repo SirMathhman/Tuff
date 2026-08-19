@@ -41,5 +41,11 @@ export type LetNode = {
   statements: AstNode[];
 };
 
+/** A block expression node: `{ stmt; ... }`, valued by its last statement. */
+export type BlockNode = {
+  kind: "block";
+  statements: AstNode[];
+};
+
 /** Any Tuff AST node. */
-export type AstNode = NumberNode | BinaryNode | VariableNode | LetNode | AssignNode;
+export type AstNode = NumberNode | BinaryNode | VariableNode | LetNode | AssignNode | BlockNode;

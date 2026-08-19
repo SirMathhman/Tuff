@@ -1,4 +1,4 @@
-import type { AssignNode, AstNode, BinaryNode, LetNode, VariableNode } from "./ast.js";
+import type { AssignNode, AstNode, BinaryNode, BlockNode, LetNode, VariableNode } from "./ast.js";
 import type { TuffError } from "./errors.js";
 import type { SourcePosition } from "./position.js";
 import type { Result } from "./result.js";
@@ -29,6 +29,8 @@ function evalNode(node: AstNode, env: Env, input: string): Result<number, TuffEr
       return evalLet(node, env, input);
     case "assign":
       return evalAssign(node, env, input);
+    case "block":
+      return evalBlock(node, env, input);
     case "binary":
       return evalBinary(node, env, input);
   }
@@ -110,6 +112,18 @@ function evalAssign(node: AssignNode, env: Env, input: string): Result<number, T
   }
   binding.value.value = value.value;
   return { ok: true, value: value.value };
+}
+
+function evalBlock(node: BlockNode, env: Env, input: string): Result<number, TuffError> {
+  // A block is valued by its last statement; earlier ones run for effect.
+  let result: Result<number, TuffError> = { ok: true, value: 0 };
+  for (const statement of node.statements) {
+    result = evalNode(statement, env, input);
+    if (!result.ok) {
+      return result;
+    }
+  }
+  return result;
 }
 
 function evalBinary(node: BinaryNode, env: Env, input: string): Result<number, TuffError> {

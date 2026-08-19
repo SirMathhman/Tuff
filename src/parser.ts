@@ -44,31 +44,34 @@ class Parser {
       return { ok: true, value: { kind: "number", value: token.value } };
     }
 
-    // Parentheses and braces are interchangeable grouping delimiters.
-    if (token?.kind === "lparen" || token?.kind === "lbrace") {
-      const expectedCloser = token.kind === "lparen" ? "rparen" : "rbrace";
+    // Parentheses group a single expression; braces hold a block of
+    // statements and evaluate to the value of the last one.
+    if (token?.kind === "lparen") {
       this.index += 1;
       const inner = this.parseExpression();
       if (!inner.ok) {
         return inner;
       }
 
-      if (this.tokens[this.index]?.kind !== expectedCloser) {
-        const delimiter = token.kind === "lparen" ? "parenthesis" : "brace";
+      if (this.tokens[this.index]?.kind !== "rparen") {
         return {
           ok: false,
           error: {
             kind: "unclosed_delimiter",
             input: this.input,
             position: this.posAt(this.index),
-            delimiter,
-            message: `Expected a closing ${delimiter}`,
+            delimiter: "parenthesis",
+            message: "Expected a closing parenthesis",
           },
         };
       }
 
       this.index += 1;
       return inner;
+    }
+
+    if (token?.kind === "lbrace") {
+      return this.parseBlock();
     }
 
     if (token?.kind === "identifier") {
@@ -148,6 +151,37 @@ class Parser {
     };
   }
 
+  // A block expression: `{ stmt; ... }`, valued by its last statement.
+  private parseBlock(): Result<AstNode, TuffError> {
+    this.index += 1; // consume `{`
+
+    const statements = this.parseStatements();
+    if (!statements.ok) {
+      return statements;
+    }
+
+    if (this.tokens[this.index]?.kind !== "rbrace") {
+      return {
+        ok: false,
+        error: {
+          kind: "unclosed_delimiter",
+          input: this.input,
+          position: this.posAt(this.index),
+          delimiter: "brace",
+          message: "Expected a closing brace",
+        },
+      };
+    }
+    this.index += 1;
+
+    // An empty block has no value.
+    if (statements.value.length === 0) {
+      return this.fail(this.posAt(this.index - 1), "Expected a statement in the block");
+    }
+
+    return { ok: true, value: { kind: "block", statements: statements.value } };
+  }
+
   // A `;`-separated sequence of statements, each an assignment or an
   // expression. Stops at end of input or a closing brace.
   private parseStatements(): Result<AstNode[], TuffError> {
@@ -160,10 +194,15 @@ class Parser {
       }
       statements.push(statement.value);
 
-      if (this.tokens[this.index]?.kind !== "semicolon") {
+      if (this.tokens[this.index]?.kind === "semicolon") {
+        this.index += 1;
+        continue;
+      }
+
+      // A block's closing `}` already terminates its statement.
+      if (statement.value.kind !== "block") {
         break;
       }
-      this.index += 1;
     }
 
     return { ok: true, value: statements };
