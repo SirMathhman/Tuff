@@ -20,21 +20,24 @@ import { expressionType, typeToString, type DeclScopes } from "./types.js";
  * module without a cycle).
  */
 function checkBlock(statements: Statement[], scopes: DeclScopes): Result<null, EvalError> {
-  return withScope(scopes, () => checkStatements(statements, scopes, false, checkBlock));
+  return withScope(scopes, () => checkStatements(statements, scopes, false, true, checkBlock));
 }
 
 /**
  * Check a list of statements, tracking declarations across nested scopes.
  * `inLoop` is true when the list is a `while` body, so a `break` is valid.
+ * `inBlockValue` is true when the list is a `{ ... }` block value, so a
+ * `return` is rejected (a block value yields its final bare expression).
  */
 function checkStatements(
   statements: Statement[],
   scopes: DeclScopes,
   inLoop: boolean,
+  inBlockValue: boolean,
   block: BlockChecker,
 ): Result<null, EvalError> {
   for (const statement of statements) {
-    const result = checkStatement(statement, scopes, inLoop, block);
+    const result = checkStatement(statement, scopes, inLoop, inBlockValue, block);
     if (!result.ok) {
       return result;
     }
@@ -66,7 +69,7 @@ function checkWhile(
   if (!condition.ok) {
     return condition;
   }
-  return withScope(scopes, () => checkStatements(statement.body, scopes, true, block));
+  return withScope(scopes, () => checkStatements(statement.body, scopes, true, false, block));
 }
 
 /**
@@ -95,7 +98,7 @@ function checkFor(
   }
   return withScope(scopes, () => {
     scopes[scopes.length - 1].set(statement.variable, { type: { kind: "number" }, mutable: true });
-    return checkStatements(statement.body, scopes, true, block);
+    return checkStatements(statement.body, scopes, true, false, block);
   });
 }
 
@@ -118,31 +121,39 @@ function checkIf(
   statement: StatementIf,
   scopes: DeclScopes,
   inLoop: boolean,
+  inBlockValue: boolean,
   block: BlockChecker,
 ): Result<null, EvalError> {
   const condition = checkLoopCondition(statement.condition, scopes, "if", block);
   if (!condition.ok) {
     return condition;
   }
-  const then = withScope(scopes, () => checkStatements(statement.then, scopes, inLoop, block));
+  const then = withScope(scopes, () =>
+    checkStatements(statement.then, scopes, inLoop, inBlockValue, block),
+  );
   if (!then.ok) {
     return then;
   }
   if (statement.else) {
     const elseBranch = statement.else;
-    return withScope(scopes, () => checkStatements(elseBranch, scopes, inLoop, block));
+    return withScope(scopes, () =>
+      checkStatements(elseBranch, scopes, inLoop, inBlockValue, block),
+    );
   }
   return ok(null);
 }
 
 /**
  * Check a single statement, validating types and identifier declarations.
- * `inLoop` is true when the statement is inside a `while` body.
+ * `inLoop` is true when the statement is inside a `while` body; `inBlockValue`
+ * is true when it is inside a `{ ... }` block value, where `return` is
+ * rejected.
  */
 function checkStatement(
   statement: Statement,
   scopes: DeclScopes,
   inLoop: boolean,
+  inBlockValue: boolean,
   block: BlockChecker,
 ): Result<null, EvalError> {
   if (statement.kind === "let") {
@@ -160,6 +171,9 @@ function checkStatement(
   }
 
   if (statement.kind === "return") {
+    if (inBlockValue) {
+      return err({ kind: "ReturnInBlockValue", position: statement.position });
+    }
     const value = checkExpression(statement.value, scopes, block);
     if (!value.ok) {
       return value;
@@ -174,11 +188,13 @@ function checkStatement(
   }
 
   if (statement.kind === "block") {
-    return withScope(scopes, () => checkStatements(statement.statements, scopes, inLoop, block));
+    return withScope(scopes, () =>
+      checkStatements(statement.statements, scopes, inLoop, inBlockValue, block),
+    );
   }
 
   if (statement.kind === "if") {
-    return checkIf(statement, scopes, inLoop, block);
+    return checkIf(statement, scopes, inLoop, inBlockValue, block);
   }
 
   if (statement.kind === "while") {
@@ -202,7 +218,7 @@ function checkStatement(
  */
 export function typecheck(program: Program): Result<null, EvalError> {
   const scopes: DeclScopes = [new Map()];
-  const result = checkStatements(program.statements, scopes, false, checkBlock);
+  const result = checkStatements(program.statements, scopes, false, false, checkBlock);
   if (!result.ok) {
     return result;
   }

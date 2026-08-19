@@ -184,7 +184,9 @@ function evalBlockValue(value: ValueBlock, scopes: Scopes): Result<TypedValue, E
         return err(result.error);
       }
       if (result.kind !== "void") {
-        return err({ kind: "MissingReturn" });
+        // The typecheck pass rejects `return` in block values; this is a
+        // defensive fallback for a non-void statement the checker missed.
+        return err({ kind: "ReturnInBlockValue", position: statement.position });
       }
     }
     return valueToTyped(last.value, scopes, valueCtx);

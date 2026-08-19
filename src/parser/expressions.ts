@@ -160,10 +160,7 @@ function parseAdditive(cursor: Cursor, block: BlockValueParser): Result<Value, E
  * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
  * expression, and a matching rparen.
  */
-export function parseCondition(
-  cursor: Cursor,
-  block: BlockValueParser,
-): Result<Value, EvalError> {
+export function parseCondition(cursor: Cursor, block: BlockValueParser): Result<Value, EvalError> {
   if (peek(cursor)?.kind !== "lparen") {
     return unexpected(cursor);
   }

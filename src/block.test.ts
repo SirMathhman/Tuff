@@ -37,6 +37,20 @@ test("evaluate returns an UnknownIdentifier error for an undeclared identifier i
   });
 });
 
+test("evaluate returns a ReturnInBlockValue error for a return inside a block value", () => {
+  expect(evaluate("let x = { return 1; 2 }; x")).toEqual({
+    ok: false,
+    error: { kind: "ReturnInBlockValue", position: 10 },
+  });
+});
+
+test("evaluate returns a ReturnInBlockValue error for a return nested in an if inside a block value", () => {
+  expect(evaluate("let x = { if (true) { return 1; } 2 }; x")).toEqual({
+    ok: false,
+    error: { kind: "ReturnInBlockValue", position: 22 },
+  });
+});
+
 test("parse parses a block value as a ValueBlock inside a let initializer", () => {
   const tokens = tokenize("let x = { let y = 100; y }; x");
   expect(tokens.ok).toBe(true);

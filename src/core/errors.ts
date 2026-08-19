@@ -93,6 +93,13 @@ export interface EvalErrorMissingReturn {
   kind: "MissingReturn";
 }
 
+/** A `return` statement was used inside a `{ ... }` block value. Fix: end the block in a bare expression instead. */
+export interface EvalErrorReturnInBlockValue {
+  kind: "ReturnInBlockValue";
+  /** Zero-based character offset of the `return` statement. */
+  position: number;
+}
+
 /** A `break` was used outside of a `while` loop. Fix: move it inside a loop. */
 export interface EvalErrorBreakOutsideLoop {
   kind: "BreakOutsideLoop";
@@ -120,5 +127,6 @@ export type EvalError =
   | EvalErrorIndexOutOfBounds
   | EvalErrorTypeMismatch
   | EvalErrorMissingReturn
+  | EvalErrorReturnInBlockValue
   | EvalErrorBreakOutsideLoop
   | EvalErrorContinueOutsideLoop;
