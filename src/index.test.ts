@@ -76,6 +76,21 @@ describe("evaluate", () => {
     }
   });
 
+  it("keeps error positions consistent with the input when leading whitespace is trimmed", () => {
+    const result = evaluate("  1 + $");
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.kind).toBe("unexpected_character");
+
+      if (result.error.kind === "unexpected_character") {
+        expect(result.error.input).toBe("1 + $");
+        expect(result.error.position).toEqual({ line: 1, column: 5 });
+      }
+    }
+  });
+
   it("returns a structured error for undefined variables", () => {
     const result = evaluate("1 + x");
 

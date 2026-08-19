@@ -28,12 +28,14 @@ export function evaluate(input: string): Result<number, TuffError> {
     return tokens;
   }
 
-  const ast = parse(tokens.value, input);
+  // Positions are measured against the trimmed string, so carry it into
+  // errors to keep `position` and `input` consistent.
+  const ast = parse(tokens.value, trimmed);
   if (!ast.ok) {
     return ast;
   }
 
-  const value = evaluateAst(ast.value, input);
+  const value = evaluateAst(ast.value, trimmed);
   if (!value.ok) {
     return value;
   }
