@@ -54,6 +54,15 @@ function checkExpression(value: Value, scopes: DeclScopes): Result<null, EvalErr
     return checkExpression(value.right, scopes);
   }
   if (value.kind === "addressOf") {
+    if (value.target.kind !== "ident") {
+      return err({
+        kind: "TypeMismatch",
+        name: "&",
+        expected: "number",
+        actual: expressionType(value.target, scopes),
+        position: value.position,
+      });
+    }
     return checkExpression(value.target, scopes);
   }
   if (value.kind === "deref") {

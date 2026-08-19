@@ -15,6 +15,106 @@ export type Variable = { value: TypedValue; mutable: boolean };
 /** A stack of variable scopes, innermost last. */
 export type Scopes = ScopeStack<Variable>;
 
+/** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
+function evalBinary(
+  value: Extract<Value, { kind: "binary" }>,
+  scopes: Scopes,
+): Result<TypedValue, EvalError> {
+  const left = valueToTyped(value.left, scopes);
+  if (!left.ok) {
+    return left;
+  }
+  const right = valueToTyped(value.right, scopes);
+  if (!right.ok) {
+    return right;
+  }
+  if (value.operator === "==" || value.operator === "!=") {
+    const l = left.value;
+    const r = right.value;
+    let equal = false;
+    if (l.type === "number" && r.type === "number") {
+      equal = l.value === r.value;
+    } else if (l.type === "bool" && r.type === "bool") {
+      equal = l.value === r.value;
+    }
+    const result = value.operator === "==" ? equal : !equal;
+    return ok({ type: "number", value: result ? 1 : 0 });
+  }
+  // Ordering operators compare numerically; bools coerce to 1/0.
+  const toNum = (t: TypedValue): number => {
+    if (t.type === "number") {
+      return t.value;
+    }
+    if (t.type === "bool") {
+      return t.value ? 1 : 0;
+    }
+    throw new Error(`pointer value in ordering operator: ${t.type}`);
+  };
+  const leftNum = toNum(left.value);
+  const rightNum = toNum(right.value);
+  const result =
+    value.operator === "<"
+      ? leftNum < rightNum
+      : value.operator === "<="
+        ? leftNum <= rightNum
+        : value.operator === ">"
+          ? leftNum > rightNum
+          : leftNum >= rightNum;
+  return ok({ type: "number", value: result ? 1 : 0 });
+}
+
+/** Evaluate `&name`: a pointer to the variable's value. */
+function evalAddressOf(
+  value: Extract<Value, { kind: "addressOf" }>,
+  scopes: Scopes,
+): Result<TypedValue, EvalError> {
+  if (value.target.kind !== "ident") {
+    return err({
+      kind: "TypeMismatch",
+      name: "&",
+      expected: "number",
+      actual: "bool",
+      position: value.position,
+    });
+  }
+  const variable = lookup(scopes, value.target.name);
+  if (!variable) {
+    return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
+  }
+  const base = variable.value.type;
+  if (base !== "number" && base !== "bool") {
+    return err({
+      kind: "TypeMismatch",
+      name: "&",
+      expected: "number",
+      actual: base,
+      position: value.position,
+    });
+  }
+  return ok({ type: `ptr<${base}>` as "ptr<number>", ref: variable });
+}
+
+/** Evaluate `*ptr`: the value a pointer refers to. */
+function evalDeref(
+  value: Extract<Value, { kind: "deref" }>,
+  scopes: Scopes,
+): Result<TypedValue, EvalError> {
+  const target = valueToTyped(value.target, scopes);
+  if (!target.ok) {
+    return target;
+  }
+  if (target.value.type !== "ptr<number>" && target.value.type !== "ptr<bool>") {
+    return err({
+      kind: "TypeMismatch",
+      name: "*",
+      expected: "ptr<number>",
+      actual: target.value.type,
+      position: value.position,
+    });
+  }
+  return ok(target.value.ref.value);
+}
+
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
  * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
@@ -29,68 +129,13 @@ export function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, E
     return ok({ type: "bool", value: value.value });
   }
   if (value.kind === "binary") {
-    const left = valueToTyped(value.left, scopes);
-    if (!left.ok) {
-      return left;
-    }
-    const right = valueToTyped(value.right, scopes);
-    if (!right.ok) {
-      return right;
-    }
-    if (value.operator === "==" || value.operator === "!=") {
-      const equal = left.value.type === right.value.type && left.value.value === right.value.value;
-      const result = value.operator === "==" ? equal : !equal;
-      return ok({ type: "number", value: result ? 1 : 0 });
-    }
-    // Ordering operators compare numerically; bools coerce to 1/0.
-    const toNum = (t: TypedValue): number => (t.type === "bool" ? (t.value ? 1 : 0) : t.value);
-    const leftNum = toNum(left.value);
-    const rightNum = toNum(right.value);
-    const result =
-      value.operator === "<"
-        ? leftNum < rightNum
-        : value.operator === "<="
-          ? leftNum <= rightNum
-          : value.operator === ">"
-            ? leftNum > rightNum
-            : leftNum >= rightNum;
-    return ok({ type: "number", value: result ? 1 : 0 });
+    return evalBinary(value, scopes);
   }
   if (value.kind === "addressOf") {
-    const target = valueToTyped(value.target, scopes);
-    if (!target.ok) {
-      return target;
-    }
-    if (target.value.type !== "number" && target.value.type !== "bool") {
-      return err({
-        kind: "TypeMismatch",
-        name: "&",
-        expected: "number",
-        actual: target.value.type,
-        position: value.position,
-      });
-    }
-    const variable = lookup(scopes, value.target.name);
-    if (!variable) {
-      return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
-    }
-    return ok({ type: `ptr<${variable.value.type}>` as "ptr<number>", ref: variable });
+    return evalAddressOf(value, scopes);
   }
   if (value.kind === "deref") {
-    const target = valueToTyped(value.target, scopes);
-    if (!target.ok) {
-      return target;
-    }
-    if (target.value.type !== "ptr<number>" && target.value.type !== "ptr<bool>") {
-      return err({
-        kind: "TypeMismatch",
-        name: "*",
-        expected: "ptr<number>",
-        actual: target.value.type,
-        position: value.position,
-      });
-    }
-    return ok(target.value.ref.value);
+    return evalDeref(value, scopes);
   }
   const variable = lookup(scopes, value.name);
   if (!variable) {
