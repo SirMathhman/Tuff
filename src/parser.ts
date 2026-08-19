@@ -103,6 +103,23 @@ function consumeSemicolon(cursor: Cursor): void {
   }
 }
 
+/**
+ * Parse the `= value` tail shared by `let` and assignment statements: an
+ * assign token, a value expression, and an optional trailing semicolon.
+ */
+function parseAssignedValue(cursor: Cursor): Result<Value, EvalError> {
+  if (peek(cursor)?.kind !== "assign") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const value = parseValue(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return value;
+}
+
 /** Parse a `let [mut] name = value` declaration. */
 function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError> {
   advance(cursor);
@@ -116,15 +133,10 @@ function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError
     return unexpected(cursor);
   }
   advance(cursor);
-  if (peek(cursor)?.kind !== "assign") {
-    return unexpected(cursor);
-  }
-  advance(cursor);
-  const value = parseValue(cursor);
+  const value = parseAssignedValue(cursor);
   if (!value.ok) {
     return value;
   }
-  consumeSemicolon(cursor);
   return ok({ kind: "let", name: name.value, mutable, value: value.value, position });
 }
 
@@ -142,15 +154,10 @@ function parseReturn(cursor: Cursor, position: number): Result<Statement, EvalEr
 /** Parse an `ident = value` assignment statement. */
 function parseAssign(cursor: Cursor, name: string, position: number): Result<Statement, EvalError> {
   advance(cursor);
-  if (peek(cursor)?.kind !== "assign") {
-    return unexpected(cursor);
-  }
-  advance(cursor);
-  const value = parseValue(cursor);
+  const value = parseAssignedValue(cursor);
   if (!value.ok) {
     return value;
   }
-  consumeSemicolon(cursor);
   return ok({ kind: "assign", name, value: value.value, position });
 }
 
