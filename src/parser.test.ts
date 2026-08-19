@@ -175,6 +175,41 @@ test.each(IF_CASES)(
   },
 );
 
+test("parse parses a while loop statement", () => {
+  expect(parseSource("while (x < 4) { x += 1; } return x;")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "while",
+          condition: {
+            kind: "binary",
+            operator: "<",
+            left: { kind: "ident", name: "x", position: 7 },
+            right: { kind: "number", value: 4, position: 11 },
+            position: 7,
+          },
+          body: [
+            {
+              kind: "assign",
+              name: "x",
+              value: { kind: "number", value: 1, position: 21 },
+              compound: "+=",
+              position: 16,
+            },
+          ],
+          position: 0,
+        },
+        {
+          kind: "return",
+          value: { kind: "ident", name: "x", position: 33 },
+          position: 26,
+        },
+      ],
+    },
+  });
+});
+
 test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
     ok: true,

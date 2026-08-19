@@ -48,6 +48,12 @@ test('evaluate returns 2 for "let mut x = 0; if (false) { x = 1; } else { x = 2;
     value: 2,
   });
 });
+test('evaluate returns 4 for "let mut x = 0; while (x < 4) { x += 1; } return x;"', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } return x;")).toEqual({
+    ok: true,
+    value: 4,
+  });
+});
 test("evaluate returns an ImmutableAssignment error when assigning to a non-mut variable", () => {
   expect(evaluate("let x = 0; x = 1; return x;")).toEqual({
     ok: false,

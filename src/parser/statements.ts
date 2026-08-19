@@ -54,9 +54,11 @@ function parseBlock(cursor: Cursor): Result<Statement[], EvalError> {
   return parseStatements(cursor, true);
 }
 
-/** Parse an `if (condition) { ... } [else { ... }]` statement. */
-function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError> {
-  advance(cursor);
+/**
+ * Parse a `( condition )` group shared by `if` and `while`: an lparen, a value
+ * expression, and a matching rparen.
+ */
+function parseCondition(cursor: Cursor): Result<Value, EvalError> {
   if (peek(cursor)?.kind !== "lparen") {
     return unexpected(cursor);
   }
@@ -69,6 +71,16 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
     return unexpected(cursor);
   }
   advance(cursor);
+  return condition;
+}
+
+/** Parse an `if (condition) { ... } [else { ... }]` statement. */
+function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  const condition = parseCondition(cursor);
+  if (!condition.ok) {
+    return condition;
+  }
   const then = parseBlock(cursor);
   if (!then.ok) {
     return then;
@@ -91,6 +103,20 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
   });
 }
 
+/** Parse a `while (condition) { ... }` loop statement. */
+function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  const condition = parseCondition(cursor);
+  if (!condition.ok) {
+    return condition;
+  }
+  const body = parseBlock(cursor);
+  if (!body.ok) {
+    return body;
+  }
+  return ok({ kind: "while", condition: condition.value, body: body.value, position });
+}
+
 /** Parse an `ident = value` or `ident += value` assignment statement. */
 function parseAssign(cursor: Cursor, name: string, position: number): Result<Statement, EvalError> {
   advance(cursor);
@@ -111,7 +137,7 @@ function parseAssign(cursor: Cursor, name: string, position: number): Result<Sta
 }
 
 /**
- * Parse a single statement (`let`, `return`, `if`, or `ident = value`),
+ * Parse a single statement (`let`, `return`, `if`, `while`, or `ident = value`),
  * consuming an optional trailing semicolon.
  */
 function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
@@ -127,6 +153,9 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   }
   if (head.kind === "if") {
     return parseIf(cursor, head.position);
+  }
+  if (head.kind === "while") {
+    return parseWhile(cursor, head.position);
   }
   if (head.kind === "ident") {
     return parseAssign(cursor, head.value, head.position);

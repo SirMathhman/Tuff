@@ -34,7 +34,8 @@ export type Statement =
       /** Present only when an `else` branch was written. */
       else?: Statement[];
       position: number;
-    };
+    }
+  | { kind: "while"; condition: Value; body: Statement[]; position: number };
 
 /** A parsed program: a list of top-level statements. */
 export type Program = { statements: Statement[] };

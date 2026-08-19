@@ -77,38 +77,83 @@ function valueToNumber(value: Value, scopes: Scopes): Result<number, EvalError> 
   return ok(typed.value.type === "bool" ? (typed.value.value ? 1 : 0) : typed.value.value);
 }
 
+/**
+ * The outcome of evaluating a statement or statement list. `value` means a
+ * `return` short-circuited; `void` means it completed normally; `error` means
+ * evaluation failed.
+ */
+type Outcome =
+  | { kind: "value"; value: number }
+  | { kind: "void" }
+  | { kind: "error"; error: EvalError };
+
+/** Evaluate an `ident = value` or `ident += value` assignment. */
+function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: Scopes): Outcome {
+  const variable = lookup(scopes, statement.name);
+  if (!variable) {
+    return {
+      kind: "error",
+      error: { kind: "UnknownIdentifier", name: statement.name, position: statement.position },
+    };
+  }
+  if (!variable.mutable) {
+    return {
+      kind: "error",
+      error: { kind: "ImmutableAssignment", name: statement.name, position: statement.position },
+    };
+  }
+  const value = valueToNumber(statement.value, scopes);
+  if (!value.ok) {
+    return { kind: "error", error: value.error };
+  }
+  variable.value = statement.compound ? variable.value + value.value : value.value;
+  return { kind: "void" };
+}
+
+/** Evaluate a `while (condition) { ... }` loop, re-checking the condition each pass. */
+function evalWhile(statement: Extract<Statement, { kind: "while" }>, scopes: Scopes): Outcome {
+  while (true) {
+    const condition = valueToNumber(statement.condition, scopes);
+    if (!condition.ok) {
+      return { kind: "error", error: condition.error };
+    }
+    if (condition.value === 0) {
+      break;
+    }
+    scopes.push(new Map());
+    const body = evalStatements(statement.body, scopes, false);
+    scopes.pop();
+    if (body.kind !== "void") {
+      return body;
+    }
+  }
+  return { kind: "void" };
+}
+
 /** Evaluate a single statement within the current scope stack. */
-function evalStatement(statement: Statement, scopes: Scopes): Result<number, EvalError> {
+function evalStatement(statement: Statement, scopes: Scopes): Outcome {
   if (statement.kind === "let") {
     const value = valueToNumber(statement.value, scopes);
     if (!value.ok) {
-      return value;
+      return { kind: "error", error: value.error };
     }
     scopes[scopes.length - 1].set(statement.name, {
       value: value.value,
       mutable: statement.mutable,
     });
-    return ok(0);
+    return { kind: "void" };
   }
 
   if (statement.kind === "assign") {
-    const variable = lookup(scopes, statement.name);
-    if (!variable) {
-      return err({ kind: "UnknownIdentifier", name: statement.name, position: statement.position });
-    }
-    if (!variable.mutable) {
-      return err({
-        kind: "ImmutableAssignment",
-        name: statement.name,
-        position: statement.position,
-      });
-    }
+    return evalAssign(statement, scopes);
+  }
+
+  if (statement.kind === "return") {
     const value = valueToNumber(statement.value, scopes);
     if (!value.ok) {
-      return value;
+      return { kind: "error", error: value.error };
     }
-    variable.value = statement.compound ? variable.value + value.value : value.value;
-    return ok(0);
+    return { kind: "value", value: value.value };
   }
 
   if (statement.kind === "block") {
@@ -121,7 +166,7 @@ function evalStatement(statement: Statement, scopes: Scopes): Result<number, Eva
   if (statement.kind === "if") {
     const condition = valueToNumber(statement.condition, scopes);
     if (!condition.ok) {
-      return condition;
+      return { kind: "error", error: condition.error };
     }
     const branch = condition.value !== 0 ? statement.then : (statement.else ?? []);
     scopes.push(new Map());
@@ -130,32 +175,21 @@ function evalStatement(statement: Statement, scopes: Scopes): Result<number, Eva
     return result;
   }
 
-  const value = valueToNumber(statement.value, scopes);
-  if (!value.ok) {
-    return value;
-  }
-  return ok(value.value);
+  return evalWhile(statement, scopes);
 }
 
 /**
  * Evaluate a list of statements; a `return` short-circuits the rest. Only the
  * top level (`requireReturn`) must end in a `return`.
  */
-function evalStatements(
-  statements: Statement[],
-  scopes: Scopes,
-  requireReturn: boolean,
-): Result<number, EvalError> {
+function evalStatements(statements: Statement[], scopes: Scopes, requireReturn: boolean): Outcome {
   for (const statement of statements) {
     const result = evalStatement(statement, scopes);
-    if (!result.ok) {
-      return result;
-    }
-    if (statement.kind === "return") {
+    if (result.kind !== "void") {
       return result;
     }
   }
-  return requireReturn ? err({ kind: "MissingReturn" }) : ok(0);
+  return requireReturn ? { kind: "error", error: { kind: "MissingReturn" } } : { kind: "void" };
 }
 
 /**
@@ -164,5 +198,12 @@ function evalStatements(
  * @returns A `Result` carrying the numeric result, or a structured `EvalError`.
  */
 export function evalProgram(program: Program): Result<number, EvalError> {
-  return evalStatements(program.statements, [new Map()], true);
+  const outcome = evalStatements(program.statements, [new Map()], true);
+  if (outcome.kind === "value") {
+    return ok(outcome.value);
+  }
+  if (outcome.kind === "error") {
+    return err(outcome.error);
+  }
+  return err({ kind: "MissingReturn" });
 }

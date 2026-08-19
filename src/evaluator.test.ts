@@ -113,6 +113,27 @@ test("evalProgram keeps an inner-block assignment to a shadowed variable local",
   });
 });
 
+test("evalProgram loops with a while statement", () => {
+  expect(evalSource("let mut x = 0; while (x < 4) { x += 1; } return x;")).toEqual({
+    ok: true,
+    value: 4,
+  });
+});
+
+test("evalProgram skips a while body when the condition is false", () => {
+  expect(evalSource("let mut x = 0; while (false) { x = 1; } return x;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test("evalProgram scopes while bodies like blocks", () => {
+  expect(evalSource("let x = 1; while (false) { let x = 2; } return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test("evalProgram allows a block without a return", () => {
   expect(evalSource("{ let x = 1; } return 2;")).toEqual({ ok: true, value: 2 });
 });

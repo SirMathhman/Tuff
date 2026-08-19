@@ -7,6 +7,7 @@ export type Token =
   | { kind: "return"; position: number }
   | { kind: "if"; position: number }
   | { kind: "else"; position: number }
+  | { kind: "while"; position: number }
   | { kind: "ident"; value: string; position: number }
   | { kind: "number"; value: number; position: number }
   | { kind: "bool"; value: boolean; position: number }
@@ -87,7 +88,8 @@ export function tokenize(source: string): Result<Token[], EvalError> {
         word === "mut" ||
         word === "return" ||
         word === "if" ||
-        word === "else"
+        word === "else" ||
+        word === "while"
       ) {
         tokens.push({ kind: word, position: i });
       } else {
