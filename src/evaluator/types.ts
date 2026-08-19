@@ -11,6 +11,13 @@ export interface TypeBool {
   kind: "bool";
 }
 
+/** A fixed-width integer type (`u8`, `i32`, ...), distinct from `number`. */
+export interface TypeInt {
+  kind: "int";
+  /** The suffix name: `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, or `i64`. */
+  name: string;
+}
+
 /** An array of a single element type. */
 export interface TypeArray {
   kind: "array";
@@ -35,7 +42,7 @@ export interface TypeRange {
 }
 
 /** A static type: a primitive, an array, a pointer, or a range. */
-export type Type = TypeNumber | TypeBool | TypeArray | TypePtr | TypeRange;
+export type Type = TypeNumber | TypeBool | TypeInt | TypeArray | TypePtr | TypeRange;
 
 /** Render a type as its display name (e.g. `ptr<number>`, `array<number>`). */
 export function typeToString(type: Type): string {
@@ -48,7 +55,45 @@ export function typeToString(type: Type): string {
   if (type.kind === "range") {
     return `range<${typeToString(type.element)}>`;
   }
+  if (type.kind === "int") {
+    return type.name;
+  }
   return type.kind;
+}
+
+/** The promotion rank of an integer type: wider types rank higher; `number` is widest. */
+const INT_RANK: Record<string, number> = { u8: 1, i8: 1, u16: 2, i16: 2, u32: 3, i32: 3, u64: 4, i64: 4 };
+
+/** The inclusive value range of each integer type. */
+const INT_BOUNDS: Record<string, [number, number]> = {
+  u8: [0, 255],
+  u16: [0, 65535],
+  u32: [0, 4294967295],
+  u64: [0, 2 ** 64 - 1],
+  i8: [-128, 127],
+  i16: [-32768, 32767],
+  i32: [-(2 ** 31), 2 ** 31 - 1],
+  i64: [-(2 ** 63), 2 ** 63 - 1],
+};
+
+/** Whether a literal value fits in the named integer type. */
+export function intLiteralInRange(name: string, value: number): boolean {
+  const bounds = INT_BOUNDS[name];
+  return bounds ? value >= bounds[0] && value <= bounds[1] : false;
+}
+
+/**
+ * Promote two arithmetic operand types to their common result type: the wider
+ * of two integer types, or `number` when either operand is a `number`.
+ */
+export function promote(a: Type, b: Type): Type {
+  if (a.kind === "number" || b.kind === "number") {
+    return { kind: "number" };
+  }
+  if (a.kind === "int" && b.kind === "int") {
+    return INT_RANK[a.name] >= INT_RANK[b.name] ? a : b;
+  }
+  return { kind: "number" };
 }
 
 /** Two types are equal when their structure matches (kind, element, pointee, mutability). */
@@ -64,6 +109,9 @@ export function typesEqual(a: Type, b: Type): boolean {
   }
   if (a.kind === "range" && b.kind === "range") {
     return typesEqual(a.element, b.element);
+  }
+  if (a.kind === "int" && b.kind === "int") {
+    return a.name === b.name;
   }
   return true;
 }
@@ -87,12 +135,16 @@ export type DeclScopes = ScopeStack<Decl>;
  */
 export function expressionType(value: Value, scopes: DeclScopes): Type {
   if (value.kind === "number") {
-    return { kind: "number" };
+    return value.suffix ? { kind: "int", name: value.suffix } : { kind: "number" };
   }
   if (value.kind === "bool") {
     return { kind: "bool" };
   }
   if (value.kind === "binary") {
+    // `+` promotes its operands; comparisons and equality yield a number.
+    if (value.operator === "+") {
+      return promote(expressionType(value.left, scopes), expressionType(value.right, scopes));
+    }
     return { kind: "number" };
   }
   if (value.kind === "array") {

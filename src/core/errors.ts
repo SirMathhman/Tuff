@@ -107,6 +107,17 @@ export interface EvalErrorMissingWildcardArm {
   position: number;
 }
 
+/** An integer literal is outside the range of its suffixed type. Fix: use a wider type or a smaller value. */
+export interface EvalErrorIntegerOutOfRange {
+  kind: "IntegerOutOfRange";
+  /** The integer type the literal was suffixed with (e.g. `u8`). */
+  type: string;
+  /** The literal's numeric value. */
+  value: number;
+  /** Zero-based character offset of the literal. */
+  position: number;
+}
+
 /** A `break` was used outside of a `while` loop. Fix: move it inside a loop. */
 export interface EvalErrorBreakOutsideLoop {
   kind: "BreakOutsideLoop";
@@ -136,5 +147,6 @@ export type EvalError =
   | EvalErrorMissingReturn
   | EvalErrorReturnInBlockValue
   | EvalErrorMissingWildcardArm
+  | EvalErrorIntegerOutOfRange
   | EvalErrorBreakOutsideLoop
   | EvalErrorContinueOutsideLoop;

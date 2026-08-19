@@ -1,7 +1,9 @@
-/** A numeric literal. */
+/** A numeric literal, optionally suffixed with an integer type (`100U8`). */
 export interface ValueNumber {
   kind: "number";
   value: number;
+  /** The integer-type suffix (`u8`, `i32`, ...), when present. */
+  suffix?: string;
   position: number;
 }
 

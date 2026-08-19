@@ -24,6 +24,49 @@ test("evalProgram evaluates a bare top-level number literal to its value", () =>
   expect(evalSource("100")).toEqual({ ok: true, value: 100 });
 });
 
+test("evalProgram evaluates a suffixed integer literal to its value", () => {
+  expect(evalSource("100U8")).toEqual({ ok: true, value: 100 });
+});
+
+test("evalProgram evaluates a suffixed integer literal in a return statement", () => {
+  expect(evalSource("return 100U8;")).toEqual({ ok: true, value: 100 });
+});
+
+test("evalProgram promotes same-type integer addition to that type", () => {
+  expect(evalSource("return 1U8 + 2U8;")).toEqual({ ok: true, value: 3 });
+});
+
+test("evalProgram promotes mixed integer addition to the wider type", () => {
+  expect(evalSource("return 1U8 + 2U16;")).toEqual({ ok: true, value: 3 });
+});
+
+test("evalProgram promotes integer + number addition to number", () => {
+  expect(evalSource("return 1U8 + 2;")).toEqual({ ok: true, value: 3 });
+});
+
+test("evalProgram compares suffixed integers with an ordering operator", () => {
+  expect(evalSource("return 1U8 < 2U8;")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram compares suffixed integers with equality type-strictly", () => {
+  expect(evalSource("return 1U8 == 1U8;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("return 1U8 == 1U16;")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram returns an IntegerOutOfRange error for a literal outside its type's range", () => {
+  expect(evalSource("return 300U8;")).toEqual({
+    ok: false,
+    error: { kind: "IntegerOutOfRange", type: "u8", value: 300, position: 7 },
+  });
+});
+
+test("evalProgram returns a TypeMismatch error when assigning a number to an integer variable", () => {
+  expect(evalSource("let mut x = 1U8; x = 2;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "u8", actual: "number", position: 17 },
+  });
+});
+
 test("evalProgram coerces a bool return to a number", () => {
   expect(evalSource("return true;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return false;")).toEqual({ ok: true, value: 0 });

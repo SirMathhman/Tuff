@@ -12,8 +12,16 @@ import type {
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { typeToString, type Type } from "./types.js";
-import { isArray, isPointer, isRange, type Scopes, type TypedValue } from "./typedValues.js";
+import { promote, typeToString, type Type } from "./types.js";
+import {
+  isArray,
+  isPointer,
+  isRange,
+  type Scopes,
+  type TypedValue,
+  type TypedValueInt,
+  type TypedValueNumber,
+} from "./typedValues.js";
 
 /**
  * A block-value evaluator, threaded through the value evaluator as an explicit
@@ -57,6 +65,9 @@ function evalBinary(
       equal = l.value === r.value;
     } else if (l.kind === "bool" && r.kind === "bool") {
       equal = l.value === r.value;
+    } else if (l.kind === "int" && r.kind === "int") {
+      // Type-strict: integers compare equal only within the same type.
+      equal = l.name === r.name && l.value === r.value;
     }
     const result = value.operator === "==" ? equal : !equal;
     return ok({ kind: "number", value: result ? 1 : 0 });
@@ -72,7 +83,7 @@ function evalOrdering(
 ): Result<TypedValue, EvalError> {
   // Pointers are rejected by the typecheck pass; this is a defensive fallback.
   const toNum = (t: TypedValue): Result<number, EvalError> => {
-    if (t.kind === "number") {
+    if (t.kind === "number" || t.kind === "int") {
       return ok(t.value);
     }
     if (t.kind === "bool") {
@@ -105,23 +116,31 @@ function evalOrdering(
   return ok({ kind: "number", value: result ? 1 : 0 });
 }
 
-/** Evaluate `a + b`: numeric addition (both operands are numbers). */
+/** Evaluate `a + b`: numeric addition over numbers and integers. */
 function evalAddition(
   value: ValueBinary,
   l: TypedValue,
   r: TypedValue,
 ): Result<TypedValue, EvalError> {
-  // Operands are checked to be numbers by the typecheck pass; defensive fallback.
-  if (l.kind !== "number" || r.kind !== "number") {
+  // Operands are checked to be numbers or integers by the typecheck pass;
+  // defensive fallback.
+  const numeric = (t: TypedValue): t is TypedValueNumber | TypedValueInt =>
+    t.kind === "number" || t.kind === "int";
+  if (!numeric(l) || !numeric(r)) {
     return err({
       kind: "TypeMismatch",
       name: "+",
       expected: "number",
-      actual: l.kind !== "number" ? typeToString(l) : typeToString(r),
+      actual: !numeric(l) ? typeToString(l) : typeToString(r),
       position: value.position,
     });
   }
-  return ok({ kind: "number", value: l.value + r.value });
+  const sum = l.value + r.value;
+  const result = promote(
+    l.kind === "int" ? { kind: "int", name: l.name } : { kind: "number" },
+    r.kind === "int" ? { kind: "int", name: r.name } : { kind: "number" },
+  );
+  return result.kind === "int" ? ok({ kind: "int", name: result.name, value: sum }) : ok({ kind: "number", value: sum });
 }
 
 /** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
@@ -296,7 +315,9 @@ export function valueToTyped(
   ctx: ValueContext,
 ): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
-    return ok({ kind: "number", value: value.value });
+    return value.suffix
+      ? ok({ kind: "int", name: value.suffix, value: value.value })
+      : ok({ kind: "number", value: value.value });
   }
   if (value.kind === "bool") {
     return ok({ kind: "bool", value: value.value });
@@ -364,5 +385,8 @@ export function valueToNumber(
       position: value.position,
     });
   }
-  return ok(typed.value.kind === "bool" ? (typed.value.value ? 1 : 0) : typed.value.value);
+  if (typed.value.kind === "bool") {
+    return ok(typed.value.value ? 1 : 0);
+  }
+  return ok(typed.value.value);
 }

@@ -11,7 +11,7 @@ import type {
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
+import { expressionType, intLiteralInRange, promote, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 
 /**
  * A block-statement checker, threaded through the expression checker as an
@@ -36,26 +36,29 @@ function checkBinary(
     return right;
   }
   if (value.operator === "+") {
-    // Arithmetic addition: both operands must be numbers.
-    for (const operand of [value.left, value.right]) {
-      const type = expressionType(operand, scopes);
-      if (type.kind !== "number") {
-        return err({
-          kind: "TypeMismatch",
-          name: value.operator,
-          expected: "number",
-          actual: typeToString(type),
-          position: value.position,
-        });
-      }
+    // Arithmetic addition: both operands must be numbers or integers; the
+    // result is the promoted type of the two operands.
+    const leftType = expressionType(value.left, scopes);
+    const rightType = expressionType(value.right, scopes);
+    const conforms = (t: Type): boolean => t.kind === "number" || t.kind === "int";
+    if (!conforms(leftType) || !conforms(rightType)) {
+      const promoted = promote(leftType, rightType);
+      const offending = !conforms(leftType) ? leftType : rightType;
+      return err({
+        kind: "TypeMismatch",
+        name: value.operator,
+        expected: typeToString(promoted),
+        actual: typeToString(offending),
+        position: value.position,
+      });
     }
     return ok(null);
   }
   if (value.operator !== "==" && value.operator !== "!=") {
-    // Ordering operators compare numerically; only numbers and bools coerce.
+    // Ordering operators compare numerically; numbers, bools, and integers coerce.
     for (const operand of [value.left, value.right]) {
       const type = expressionType(operand, scopes);
-      if (type.kind !== "number" && type.kind !== "bool") {
+      if (type.kind !== "number" && type.kind !== "bool" && type.kind !== "int") {
         return err({
           kind: "TypeMismatch",
           name: value.operator,
@@ -307,6 +310,18 @@ export function checkExpression(
   scopes: DeclScopes,
   block: BlockChecker,
 ): Result<null, EvalError> {
+  if (value.kind === "number" && value.suffix) {
+    // A suffixed integer literal must fit within its type's range.
+    if (!intLiteralInRange(value.suffix, value.value)) {
+      return err({
+        kind: "IntegerOutOfRange",
+        type: value.suffix,
+        value: value.value,
+        position: value.position,
+      });
+    }
+    return ok(null);
+  }
   if (value.kind === "ident") {
     if (!lookup(scopes, value.name)) {
       return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });

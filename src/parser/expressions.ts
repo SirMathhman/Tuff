@@ -49,7 +49,12 @@ function parsePrimary(cursor: Cursor, block: BlockValueParser): Result<Value, Ev
   }
   if (token.kind === "number") {
     advance(cursor);
-    return ok({ kind: "number", value: token.value, position: token.position });
+    return ok({
+      kind: "number",
+      value: token.value,
+      suffix: token.suffix,
+      position: token.position,
+    });
   }
   if (token.kind === "bool") {
     advance(cursor);

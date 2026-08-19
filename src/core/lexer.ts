@@ -55,10 +55,12 @@ export interface TokenIdent {
   position: number;
 }
 
-/** A numeric literal. */
+/** A numeric literal, optionally suffixed with an integer type (`100U8`). */
 export interface TokenNumber {
   kind: "number";
   value: number;
+  /** The integer-type suffix (`u8`, `i32`, ...), when present. */
+  suffix?: string;
   position: number;
 }
 
@@ -228,6 +230,8 @@ export type Token =
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
+/** The integer-type literal suffixes (`100U8`, `1I32`, ...). */
+const INT_SUFFIXES = new Set(["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"]);
 const SINGLE_CHAR_TOKENS: Record<
   string,
   | "assign"
@@ -342,15 +346,21 @@ function matchWord(source: string, i: number): Match | undefined {
   return { token, advance: word.length };
 }
 
-/** Matches a numeric literal. */
+/** Matches a numeric literal, optionally followed by an integer-type suffix. */
 function matchNumber(source: string, i: number): Match | undefined {
   const match = NUMBER_RE.exec(source.slice(i));
   if (!match) {
     return undefined;
   }
+  const rest = source.slice(i + match[0].length);
+  const suffixMatch = /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
+  const suffix =
+    suffixMatch && INT_SUFFIXES.has(suffixMatch.toLowerCase())
+      ? suffixMatch.toLowerCase()
+      : undefined;
   return {
-    token: { kind: "number", value: Number(match[0]), position: i },
-    advance: match[0].length,
+    token: { kind: "number", value: Number(match[0]), suffix, position: i },
+    advance: match[0].length + (suffix?.length ?? 0),
   };
 }
 

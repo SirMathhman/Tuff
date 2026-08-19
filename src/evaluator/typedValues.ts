@@ -13,6 +13,14 @@ export interface TypedValueBool {
   value: boolean;
 }
 
+/** A fixed-width integer value (e.g. `100U8`), distinct from a plain number. */
+export interface TypedValueInt {
+  kind: "int";
+  /** The integer type name (`u8`, `i32`, ...). */
+  name: string;
+  value: number;
+}
+
 /** An array value: its element type and the elements. */
 export interface TypedValueArray {
   kind: "array";
@@ -35,7 +43,12 @@ export interface TypedValuePtr {
  * narrows the payload.
  */
 export type TypedValue =
-  TypedValueNumber | TypedValueBool | TypedValueArray | TypedValuePtr | TypedValueRange;
+  | TypedValueNumber
+  | TypedValueBool
+  | TypedValueInt
+  | TypedValueArray
+  | TypedValuePtr
+  | TypedValueRange;
 
 /** A variable's value with its type, so assignments can be type-checked. */
 export interface Variable {
