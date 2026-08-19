@@ -4,7 +4,10 @@
  * @returns The numeric result of the expression.
  */
 export function evaluate(expression: string): number {
-  // Stub: returns 0 for any input until a real implementation exists.
-  void expression;
-  return 0;
+  // Stub: handles `return <number>;` statements; returns 0 otherwise.
+  const match = /^\s*return\s+(-?\d+(?:\.\d+)?)\s*;\s*$/.exec(expression);
+  if (!match) {
+    return 0;
+  }
+  return Number(match[1]);
 }
