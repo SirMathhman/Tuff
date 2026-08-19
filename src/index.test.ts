@@ -105,6 +105,25 @@ describe("evaluate", () => {
     }
   });
 
+  it("returns 1 for the expression let mut x = 0; x = 1; x", () => {
+    expect(evaluate("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+  });
+
+  it("returns a structured error for assigning to a non-mut variable", () => {
+    const result = evaluate("let x = 0; x = 1; x");
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.kind).toBe("assignment_to_immutable");
+
+      if (result.error.kind === "assignment_to_immutable") {
+        expect(result.error.name).toBe("x");
+        expect(result.error.position).toEqual({ line: 1, column: 12 });
+      }
+    }
+  });
+
   it("returns a structured error for a brace initializer whose let has no body", () => {
     const result = evaluate("let x = { let y = 100; };");
 

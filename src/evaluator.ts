@@ -1,6 +1,11 @@
-import type { AstNode, BinaryNode, LetNode, VariableNode } from "./ast.js";
+import type { AssignNode, AstNode, BinaryNode, LetNode, VariableNode } from "./ast.js";
 import type { TuffError } from "./errors.js";
 import type { Result } from "./result.js";
+
+/** A variable binding: its current value and whether it may be reassigned. */
+type Binding = { value: number; mut: boolean };
+
+type Env = Map<string, Binding>;
 
 /**
  * Computes the numeric value of an AST.
@@ -13,11 +18,7 @@ export function evaluateAst(node: AstNode, input: string): Result<number, TuffEr
   return evalNode(node, new Map(), input);
 }
 
-function evalNode(
-  node: AstNode,
-  env: Map<string, number>,
-  input: string,
-): Result<number, TuffError> {
+function evalNode(node: AstNode, env: Env, input: string): Result<number, TuffError> {
   switch (node.kind) {
     case "number":
       return { ok: true, value: node.value };
@@ -25,18 +26,16 @@ function evalNode(
       return evalVariable(node, env, input);
     case "let":
       return evalLet(node, env, input);
+    case "assign":
+      return evalAssign(node, env, input);
     case "binary":
       return evalBinary(node, env, input);
   }
 }
 
-function evalVariable(
-  node: VariableNode,
-  env: Map<string, number>,
-  input: string,
-): Result<number, TuffError> {
-  const value = env.get(node.name);
-  if (value === undefined) {
+function evalVariable(node: VariableNode, env: Env, input: string): Result<number, TuffError> {
+  const binding = env.get(node.name);
+  if (binding === undefined) {
     return {
       ok: false,
       error: {
@@ -48,34 +47,66 @@ function evalVariable(
       },
     };
   }
-  return { ok: true, value };
+  return { ok: true, value: binding.value };
 }
 
-function evalLet(
-  node: LetNode,
-  env: Map<string, number>,
-  input: string,
-): Result<number, TuffError> {
+function evalLet(node: LetNode, env: Env, input: string): Result<number, TuffError> {
   const initializer = evalNode(node.initializer, env, input);
   if (!initializer.ok) {
     return initializer;
   }
   const next = new Map(env);
-  next.set(node.name, initializer.value);
+  next.set(node.name, { value: initializer.value, mut: node.mut });
 
-  // A bare binding (no body after the `;`) evaluates to 0.
-  if (node.body === undefined) {
-    return { ok: true, value: 0 };
+  // The value of the binding is the value of its last statement,
+  // or 0 when there are no statements.
+  let result: Result<number, TuffError> = { ok: true, value: 0 };
+  for (const statement of node.statements) {
+    result = evalNode(statement, next, input);
+    if (!result.ok) {
+      return result;
+    }
   }
-
-  return evalNode(node.body, next, input);
+  return result;
 }
 
-function evalBinary(
-  node: BinaryNode,
-  env: Map<string, number>,
-  input: string,
-): Result<number, TuffError> {
+function evalAssign(node: AssignNode, env: Env, input: string): Result<number, TuffError> {
+  const binding = env.get(node.name);
+  if (binding === undefined) {
+    return {
+      ok: false,
+      error: {
+        kind: "undefined_variable",
+        input,
+        position: node.pos,
+        name: node.name,
+        message: `Undefined variable ${JSON.stringify(node.name)}`,
+      },
+    };
+  }
+
+  if (!binding.mut) {
+    return {
+      ok: false,
+      error: {
+        kind: "assignment_to_immutable",
+        input,
+        position: node.pos,
+        name: node.name,
+        message: `Cannot assign to immutable variable ${JSON.stringify(node.name)}`,
+      },
+    };
+  }
+
+  const value = evalNode(node.value, env, input);
+  if (!value.ok) {
+    return value;
+  }
+  binding.value = value.value;
+  return { ok: true, value: value.value };
+}
+
+function evalBinary(node: BinaryNode, env: Env, input: string): Result<number, TuffError> {
   const left = evalNode(node.left, env, input);
   if (!left.ok) {
     return left;

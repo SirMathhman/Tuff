@@ -52,4 +52,16 @@ export type TuffError =
       name: string;
       /** A human-readable description of the error. */
       message: string;
+    }
+  | {
+      /** The category of the error. */
+      kind: "assignment_to_immutable";
+      /** The raw input that caused the error. */
+      input: string;
+      /** The source position where the error occurred. */
+      position: SourcePosition;
+      /** The name of the immutable variable that was assigned. */
+      name: string;
+      /** A human-readable description of the error. */
+      message: string;
     };

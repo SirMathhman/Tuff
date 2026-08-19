@@ -12,6 +12,7 @@ export type Token =
   | { kind: "lbrace"; pos: SourcePosition }
   | { kind: "rbrace"; pos: SourcePosition }
   | { kind: "let"; pos: SourcePosition }
+  | { kind: "mut"; pos: SourcePosition }
   | { kind: "equals"; pos: SourcePosition }
   | { kind: "semicolon"; pos: SourcePosition }
   | { kind: "identifier"; value: string; pos: SourcePosition };
@@ -49,6 +50,16 @@ const OPERATORS: Record<
 };
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*/;
+
+function keywordOrIdentifier(value: string, pos: SourcePosition): Token {
+  if (value === "let") {
+    return { kind: "let", pos };
+  }
+  if (value === "mut") {
+    return { kind: "mut", pos };
+  }
+  return { kind: "identifier", value, pos };
+}
 
 /**
  * Converts source text into a flat list of tokens.
@@ -101,11 +112,7 @@ export function lex(input: string): Result<Token[], TuffError> {
     const ident = IDENTIFIER.exec(input.slice(i));
     if (ident) {
       const value = ident[0];
-      if (value === "let") {
-        tokens.push({ kind: "let", pos: { line, column } });
-      } else {
-        tokens.push({ kind: "identifier", value, pos: { line, column } });
-      }
+      tokens.push(keywordOrIdentifier(value, { line, column }));
       advance(value.length);
       continue;
     }

@@ -13,8 +13,10 @@ import type { Result } from "./result.js";
  *          Numeric literals and binary `+`/`-`/`*` expressions are supported,
  *          with `*` binding tighter than `+`/`-`. Parentheses or braces
  *          override precedence. `let` bindings are supported:
- *          `let x = expr; expr` (the body after the `;` is optional;
- *          a bare binding evaluates to 0).
+ *          `let [mut] x = expr; stmt; ...` where each statement is an
+ *          expression or an assignment (`x = expr`, only for `mut`
+ *          bindings). A top-level binding with no statements evaluates
+ *          to 0; a binding inside braces must have at least one.
  */
 export function evaluate(input: string): Result<number, TuffError> {
   const trimmed = input.trim();

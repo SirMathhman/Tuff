@@ -22,14 +22,24 @@ export type BinaryNode = {
 /** A variable reference node. */
 export type VariableNode = { kind: "variable"; name: string; pos: SourcePosition };
 
-/** A `let` binding node: `let name = initializer; body?`. */
+/** An assignment statement node: `name = value`. */
+export type AssignNode = {
+  kind: "assign";
+  name: string;
+  pos: SourcePosition;
+  value: AstNode;
+};
+
+/** A `let` binding node: `let [mut] name = initializer; stmt*`. */
 export type LetNode = {
   kind: "let";
   name: string;
+  /** Whether the binding may be reassigned. */
+  mut: boolean;
   initializer: AstNode;
-  /** The expression after the `;`, if any. */
-  body?: AstNode;
+  /** The `;`-separated statements after the initializer. */
+  statements: AstNode[];
 };
 
 /** Any Tuff AST node. */
-export type AstNode = NumberNode | BinaryNode | VariableNode | LetNode;
+export type AstNode = NumberNode | BinaryNode | VariableNode | LetNode | AssignNode;
