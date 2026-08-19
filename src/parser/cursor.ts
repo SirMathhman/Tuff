@@ -1,5 +1,5 @@
-import { err, type EvalError, type Result } from "../errors.js";
-import type { Token } from "../lexer.js";
+import { err, type EvalError, type Result } from "../core/errors.js";
+import type { Token } from "../core/lexer.js";
 
 /**
  * A cursor over the token stream. The parser advances it with `advance` and

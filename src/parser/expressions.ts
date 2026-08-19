@@ -1,5 +1,5 @@
-import type { Value } from "../ast.js";
-import { ok, type EvalError, type Result } from "../errors.js";
+import type { Value } from "../core/ast.js";
+import { ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, peek, unexpected, type Cursor } from "./cursor.js";
 
 /** Parse an array literal `[e1, e2, ...]`. */

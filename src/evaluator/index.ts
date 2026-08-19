@@ -1,5 +1,5 @@
-import type { Program } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
+import type { Program } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { typecheck } from "./typecheck.js";
 import { evalStatements } from "./statements.js";
 

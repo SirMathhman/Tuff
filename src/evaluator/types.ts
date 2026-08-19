@@ -1,5 +1,5 @@
-import type { Value } from "../ast.js";
-import { lookup, type ScopeStack } from "../scopes.js";
+import type { Value } from "../core/ast.js";
+import { lookup, type ScopeStack } from "../core/scopes.js";
 
 /**
  * A static type: a primitive, an array, or a (possibly nested) pointer

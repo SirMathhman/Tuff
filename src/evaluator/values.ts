@@ -1,6 +1,6 @@
-import type { Value } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
-import { lookup, type ScopeStack } from "../scopes.js";
+import type { Value } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
+import { lookup, type ScopeStack } from "../core/scopes.js";
 import { typeToString, type Type } from "./types.js";
 
 /**

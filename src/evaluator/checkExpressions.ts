@@ -1,6 +1,6 @@
-import type { Value } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
-import { lookup } from "../scopes.js";
+import type { Value } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
+import { lookup } from "../core/scopes.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes } from "./types.js";
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */

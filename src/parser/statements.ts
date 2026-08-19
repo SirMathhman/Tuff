@@ -1,5 +1,5 @@
-import type { Statement, Value } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
+import type { Statement, Value } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { advance, atEnd, peek, unexpected, type Cursor } from "./cursor.js";
 import { parseValue, parseValueAndSemicolon } from "./expressions.js";
 

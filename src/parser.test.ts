@@ -1,5 +1,5 @@
 import { parse } from "./parser/index.js";
-import { tokenize } from "./lexer.js";
+import { tokenize } from "./core/lexer.js";
 
 /** Tokenize then parse, returning the parse result directly. */
 function parseSource(source: string) {

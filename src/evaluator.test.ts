@@ -1,7 +1,7 @@
 import { evalProgram } from "./evaluator/index.js";
 import { parse } from "./parser/index.js";
-import { tokenize } from "./lexer.js";
-import type { EvalError, Result } from "./errors.js";
+import { tokenize } from "./core/lexer.js";
+import type { EvalError, Result } from "./core/errors.js";
 
 /** Tokenize, parse, and evaluate a source program in one step. */
 function evalSource(source: string): Result<number, EvalError> {

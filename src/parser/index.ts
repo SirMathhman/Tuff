@@ -1,6 +1,6 @@
-import type { Program } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
-import type { Token } from "../lexer.js";
+import type { Program } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
+import type { Token } from "../core/lexer.js";
 import { type Cursor } from "./cursor.js";
 import { parseStatements } from "./statements.js";
 

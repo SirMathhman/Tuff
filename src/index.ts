@@ -1,6 +1,6 @@
 import { evalProgram } from "./evaluator/index.js";
-import type { EvalError, Result } from "./errors.js";
-import { tokenize } from "./lexer.js";
+import type { EvalError, Result } from "./core/errors.js";
+import { tokenize } from "./core/lexer.js";
 import { parse } from "./parser/index.js";
 
 /**

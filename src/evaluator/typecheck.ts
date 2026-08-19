@@ -1,6 +1,6 @@
-import type { Program, Statement, Value } from "../ast.js";
-import { err, ok, type EvalError, type Result } from "../errors.js";
-import { lookup, withScope } from "../scopes.js";
+import type { Program, Statement, Value } from "../core/ast.js";
+import { err, ok, type EvalError, type Result } from "../core/errors.js";
+import { lookup, withScope } from "../core/scopes.js";
 import { checkExpression } from "./checkExpressions.js";
 import { expressionType, typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
 

@@ -1,6 +1,6 @@
-import type { Statement, Value } from "../ast.js";
-import type { EvalError } from "../errors.js";
-import { lookup, withScope } from "../scopes.js";
+import type { Statement, Value } from "../core/ast.js";
+import type { EvalError } from "../core/errors.js";
+import { lookup, withScope } from "../core/scopes.js";
 import { typeToString } from "./types.js";
 import {
   isPointer,
