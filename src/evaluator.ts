@@ -118,6 +118,18 @@ function evalStatement(statement: Statement, scopes: Scopes): Result<number, Eva
     return result;
   }
 
+  if (statement.kind === "if") {
+    const condition = valueToNumber(statement.condition, scopes);
+    if (!condition.ok) {
+      return condition;
+    }
+    const branch = condition.value !== 0 ? statement.then : statement.else ?? [];
+    scopes.push(new Map());
+    const result = evalStatements(branch, scopes, false);
+    scopes.pop();
+    return result;
+  }
+
   const value = valueToNumber(statement.value, scopes);
   if (!value.ok) {
     return value;

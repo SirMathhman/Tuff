@@ -100,6 +100,23 @@ test("tokenize tokenizes the <=, >, >=, and != operators", () => {
   });
 });
 
+test("tokenize tokenizes if/else keywords and parentheses", () => {
+  expect(tokenize("if (x) { } else { }")).toEqual({
+    ok: true,
+    value: [
+      { kind: "if", position: 0 },
+      { kind: "lparen", position: 3 },
+      { kind: "ident", value: "x", position: 4 },
+      { kind: "rparen", position: 5 },
+      { kind: "lbrace", position: 7 },
+      { kind: "rbrace", position: 9 },
+      { kind: "else", position: 11 },
+      { kind: "lbrace", position: 16 },
+      { kind: "rbrace", position: 18 },
+    ],
+  });
+});
+
 test("tokenize returns an UnexpectedToken error for an unknown character", () => {
   expect(tokenize("let x = @;")).toEqual({
     ok: false,

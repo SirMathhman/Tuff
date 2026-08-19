@@ -63,6 +63,34 @@ test("evalProgram chains == left-associatively", () => {
   expect(evalSource("return 2 == 3 == 0;")).toEqual({ ok: true, value: 1 });
 });
 
+test("evalProgram runs the else branch when the if condition is false", () => {
+  expect(evalSource("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
+test("evalProgram runs the then branch when the if condition is true", () => {
+  expect(evalSource("let mut x = 0; if (true) { x = 1; } else { x = 2; } return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test("evalProgram skips an if without else when the condition is false", () => {
+  expect(evalSource("let mut x = 0; if (false) { x = 1; } return x;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test("evalProgram scopes if branches like blocks", () => {
+  expect(evalSource("let x = 1; if (true) { let x = 2; } return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test("evalProgram shadows a variable in an inner block and restores it after", () => {
   expect(evalSource("let x = 1; { let x = 2; } return x;")).toEqual({ ok: true, value: 1 });
 });

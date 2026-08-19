@@ -5,6 +5,8 @@ export type Token =
   | { kind: "let"; position: number }
   | { kind: "mut"; position: number }
   | { kind: "return"; position: number }
+  | { kind: "if"; position: number }
+  | { kind: "else"; position: number }
   | { kind: "ident"; value: string; position: number }
   | { kind: "number"; value: number; position: number }
   | { kind: "bool"; value: boolean; position: number }
@@ -12,15 +14,22 @@ export type Token =
   | { kind: "binary"; operator: "==" | "!=" | "<" | "<=" | ">" | ">="; position: number }
   | { kind: "semicolon"; position: number }
   | { kind: "lbrace"; position: number }
-  | { kind: "rbrace"; position: number };
+  | { kind: "rbrace"; position: number }
+  | { kind: "lparen"; position: number }
+  | { kind: "rparen"; position: number };
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
-const SINGLE_CHAR_TOKENS: Record<string, "assign" | "semicolon" | "lbrace" | "rbrace"> = {
+const SINGLE_CHAR_TOKENS: Record<
+  string,
+  "assign" | "semicolon" | "lbrace" | "rbrace" | "lparen" | "rparen"
+> = {
   "=": "assign",
   ";": "semicolon",
   "{": "lbrace",
   "}": "rbrace",
+  "(": "lparen",
+  ")": "rparen",
 };
 
 /**
@@ -67,7 +76,13 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       const word = identMatch[0];
       if (word === "true" || word === "false") {
         tokens.push({ kind: "bool", value: word === "true", position: i });
-      } else if (word === "let" || word === "mut" || word === "return") {
+      } else if (
+        word === "let" ||
+        word === "mut" ||
+        word === "return" ||
+        word === "if" ||
+        word === "else"
+      ) {
         tokens.push({ kind: word, position: i });
       } else {
         tokens.push({ kind: "ident", value: word, position: i });

@@ -104,6 +104,57 @@ test.each(BINARY_OPERATORS)(
   },
 );
 
+const IF_CASES = [
+  {
+    label: "with an else branch",
+    source: "if (x) { x = 1; } else { x = 2; } return x;",
+    else: [
+      {
+        kind: "assign",
+        name: "x",
+        value: { kind: "number", value: 2, position: 29 },
+        position: 25,
+      },
+    ],
+    returnPosition: 34,
+  },
+  {
+    label: "without an else branch",
+    source: "if (x) { x = 1; } return x;",
+    else: undefined,
+    returnPosition: 18,
+  },
+] as const;
+
+test.each(IF_CASES)("parse parses an if statement $label", ({ source, else: elseBranch, returnPosition }) => {
+  expect(parseSource(source)).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "if",
+          condition: { kind: "ident", name: "x", position: 4 },
+          then: [
+            {
+              kind: "assign",
+              name: "x",
+              value: { kind: "number", value: 1, position: 13 },
+              position: 9,
+            },
+          ],
+          else: elseBranch,
+          position: 0,
+        },
+        {
+          kind: "return",
+          value: { kind: "ident", name: "x", position: returnPosition + 7 },
+          position: returnPosition,
+        },
+      ],
+    },
+  });
+});
+
 test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
     ok: true,

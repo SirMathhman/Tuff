@@ -19,7 +19,15 @@ export type Statement =
   | { kind: "let"; name: string; mutable: boolean; value: Value; position: number }
   | { kind: "assign"; name: string; value: Value; position: number }
   | { kind: "return"; value: Value; position: number }
-  | { kind: "block"; statements: Statement[]; position: number };
+  | { kind: "block"; statements: Statement[]; position: number }
+  | {
+      kind: "if";
+      condition: Value;
+      then: Statement[];
+      /** Present only when an `else` branch was written. */
+      else?: Statement[];
+      position: number;
+    };
 
 /** A parsed program: a list of top-level statements. */
 export type Program = { statements: Statement[] };

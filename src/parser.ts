@@ -152,6 +152,46 @@ function parseReturn(cursor: Cursor, position: number): Result<Statement, EvalEr
   return ok({ kind: "return", value: value.value, position });
 }
 
+/** Parse a `{ ... }` block into its statement list. */
+function parseBlock(cursor: Cursor): Result<Statement[], EvalError> {
+  if (peek(cursor)?.kind !== "lbrace") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  return parseStatements(cursor, true);
+}
+
+/** Parse an `if (condition) { ... } [else { ... }]` statement. */
+function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  if (peek(cursor)?.kind !== "lparen") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const condition = parseValue(cursor);
+  if (!condition.ok) {
+    return condition;
+  }
+  if (peek(cursor)?.kind !== "rparen") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const then = parseBlock(cursor);
+  if (!then.ok) {
+    return then;
+  }
+  let elseBranch: Statement[] | undefined;
+  if (peek(cursor)?.kind === "else") {
+    advance(cursor);
+    const elseBlock = parseBlock(cursor);
+    if (!elseBlock.ok) {
+      return elseBlock;
+    }
+    elseBranch = elseBlock.value;
+  }
+  return ok({ kind: "if", condition: condition.value, then: then.value, else: elseBranch, position });
+}
+
 /** Parse an `ident = value` assignment statement. */
 function parseAssign(cursor: Cursor, name: string, position: number): Result<Statement, EvalError> {
   advance(cursor);
@@ -163,8 +203,8 @@ function parseAssign(cursor: Cursor, name: string, position: number): Result<Sta
 }
 
 /**
- * Parse a single statement (`let`, `return`, or `ident = value`), consuming an
- * optional trailing semicolon.
+ * Parse a single statement (`let`, `return`, `if`, or `ident = value`),
+ * consuming an optional trailing semicolon.
  */
 function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   const head = peek(cursor);
@@ -176,6 +216,9 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   }
   if (head.kind === "return") {
     return parseReturn(cursor, head.position);
+  }
+  if (head.kind === "if") {
+    return parseIf(cursor, head.position);
   }
   if (head.kind === "ident") {
     return parseAssign(cursor, head.value, head.position);
@@ -199,8 +242,7 @@ function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statement[], 
       return ok(statements);
     }
     if (head.kind === "lbrace") {
-      advance(cursor);
-      const inner = parseStatements(cursor, true);
+      const inner = parseBlock(cursor);
       if (!inner.ok) {
         return inner;
       }
