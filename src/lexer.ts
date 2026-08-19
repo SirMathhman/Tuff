@@ -10,7 +10,11 @@ export type Token =
   | { kind: "lparen"; pos: SourcePosition }
   | { kind: "rparen"; pos: SourcePosition }
   | { kind: "lbrace"; pos: SourcePosition }
-  | { kind: "rbrace"; pos: SourcePosition };
+  | { kind: "rbrace"; pos: SourcePosition }
+  | { kind: "let"; pos: SourcePosition }
+  | { kind: "equals"; pos: SourcePosition }
+  | { kind: "semicolon"; pos: SourcePosition }
+  | { kind: "identifier"; value: string; pos: SourcePosition };
 
 function fail(
   input: string,
@@ -31,7 +35,7 @@ function fail(
 
 const OPERATORS: Record<
   string,
-  "plus" | "minus" | "times" | "lparen" | "rparen" | "lbrace" | "rbrace"
+  "plus" | "minus" | "times" | "lparen" | "rparen" | "lbrace" | "rbrace" | "equals" | "semicolon"
 > = {
   "+": "plus",
   "-": "minus",
@@ -40,7 +44,11 @@ const OPERATORS: Record<
   ")": "rparen",
   "{": "lbrace",
   "}": "rbrace",
+  "=": "equals",
+  ";": "semicolon",
 };
+
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*/;
 
 /**
  * Converts source text into a flat list of tokens.
@@ -87,6 +95,18 @@ export function lex(input: string): Result<Token[], TuffError> {
     if (match) {
       tokens.push({ kind: "number", value: Number(match[0]), pos: { line, column } });
       advance(match[0].length);
+      continue;
+    }
+
+    const ident = IDENTIFIER.exec(input.slice(i));
+    if (ident) {
+      const value = ident[0];
+      if (value === "let") {
+        tokens.push({ kind: "let", pos: { line, column } });
+      } else {
+        tokens.push({ kind: "identifier", value, pos: { line, column } });
+      }
+      advance(value.length);
       continue;
     }
 

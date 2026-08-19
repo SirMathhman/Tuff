@@ -6,6 +6,8 @@
  * values from it).
  */
 
+import type { SourcePosition } from "./position.js";
+
 /** A numeric literal node. */
 export type NumberNode = { kind: "number"; value: number };
 
@@ -17,5 +19,16 @@ export type BinaryNode = {
   right: AstNode;
 };
 
+/** A variable reference node. */
+export type VariableNode = { kind: "variable"; name: string; pos: SourcePosition };
+
+/** A `let` binding node: `let name = initializer; body`. */
+export type LetNode = {
+  kind: "let";
+  name: string;
+  initializer: AstNode;
+  body: AstNode;
+};
+
 /** Any Tuff AST node. */
-export type AstNode = NumberNode | BinaryNode;
+export type AstNode = NumberNode | BinaryNode | VariableNode | LetNode;

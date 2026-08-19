@@ -37,6 +37,10 @@ describe("evaluate", () => {
     expect(evaluate("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  it("returns 20 for the expression { let x = 2 + 3; x } * 4", () => {
+    expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   it("returns a structured error for unsupported expressions", () => {
     const result = evaluate("1 +");
 
@@ -50,7 +54,7 @@ describe("evaluate", () => {
   });
 
   it("reports the source position of an unexpected character", () => {
-    const result = evaluate("1 + x");
+    const result = evaluate("1 + $");
 
     expect(result.ok).toBe(false);
 
@@ -58,7 +62,22 @@ describe("evaluate", () => {
       expect(result.error.kind).toBe("unexpected_character");
 
       if (result.error.kind === "unexpected_character") {
-        expect(result.error.character).toBe("x");
+        expect(result.error.character).toBe("$");
+        expect(result.error.position).toEqual({ line: 1, column: 5 });
+      }
+    }
+  });
+
+  it("returns a structured error for undefined variables", () => {
+    const result = evaluate("1 + x");
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.kind).toBe("undefined_variable");
+
+      if (result.error.kind === "undefined_variable") {
+        expect(result.error.name).toBe("x");
         expect(result.error.position).toEqual({ line: 1, column: 5 });
       }
     }

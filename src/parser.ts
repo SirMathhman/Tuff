@@ -71,7 +71,55 @@ class Parser {
       return inner;
     }
 
-    return this.fail(this.posAt(this.index), "Expected a number or parenthesized expression");
+    if (token?.kind === "identifier") {
+      this.index += 1;
+      return { ok: true, value: { kind: "variable", name: token.value, pos: token.pos } };
+    }
+
+    if (token?.kind === "let") {
+      return this.parseLet();
+    }
+
+    return this.fail(
+      this.posAt(this.index),
+      "Expected a number, identifier, or parenthesized expression",
+    );
+  }
+
+  // A `let` binding: `let name = initializer; body`.
+  private parseLet(): Result<AstNode, TuffError> {
+    this.index += 1; // consume `let`
+
+    const name = this.tokens[this.index];
+    if (name?.kind !== "identifier") {
+      return this.fail(this.posAt(this.index), "Expected a variable name after `let`");
+    }
+    this.index += 1;
+
+    if (this.tokens[this.index]?.kind !== "equals") {
+      return this.fail(this.posAt(this.index), "Expected `=` after the variable name");
+    }
+    this.index += 1;
+
+    const initializer = this.parseExpression();
+    if (!initializer.ok) {
+      return initializer;
+    }
+
+    if (this.tokens[this.index]?.kind !== "semicolon") {
+      return this.fail(this.posAt(this.index), "Expected `;` after the initializer");
+    }
+    this.index += 1;
+
+    const body = this.parseExpression();
+    if (!body.ok) {
+      return body;
+    }
+
+    return {
+      ok: true,
+      value: { kind: "let", name: name.value, initializer: initializer.value, body: body.value },
+    };
   }
 
   // A term is a primary with `*` applied (higher precedence than `+`/`-`).

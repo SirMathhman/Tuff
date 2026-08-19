@@ -12,7 +12,8 @@ import type { Result } from "./result.js";
  *          An empty (or whitespace-only) expression evaluates to 0.
  *          Numeric literals and binary `+`/`-`/`*` expressions are supported,
  *          with `*` binding tighter than `+`/`-`. Parentheses or braces
- *          override precedence.
+ *          override precedence. Braces may also hold `let` bindings:
+ *          `{ let x = expr; expr }`.
  */
 export function evaluate(input: string): Result<number, TuffError> {
   const trimmed = input.trim();
@@ -31,5 +32,10 @@ export function evaluate(input: string): Result<number, TuffError> {
     return ast;
   }
 
-  return { ok: true, value: evaluateAst(ast.value) };
+  const value = evaluateAst(ast.value, input);
+  if (!value.ok) {
+    return value;
+  }
+
+  return { ok: true, value: value.value };
 }

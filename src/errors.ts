@@ -40,4 +40,16 @@ export type TuffError =
       delimiter: "parenthesis" | "brace";
       /** A human-readable description of the error. */
       message: string;
+    }
+  | {
+      /** The category of the error. */
+      kind: "undefined_variable";
+      /** The raw input that caused the error. */
+      input: string;
+      /** The source position where the error occurred. */
+      position: SourcePosition;
+      /** The name of the variable that was not defined. */
+      name: string;
+      /** A human-readable description of the error. */
+      message: string;
     };
