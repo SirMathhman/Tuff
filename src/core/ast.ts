@@ -131,6 +131,19 @@ export interface StatementWhile {
   position: number;
 }
 
+/** A `for (i in start..end) { ... }` loop over a numeric range, exclusive of `end`. */
+export interface StatementFor {
+  kind: "for";
+  /** The loop variable, bound to each value in the range. */
+  variable: string;
+  /** The inclusive start of the range. */
+  start: Value;
+  /** The exclusive end of the range. */
+  end: Value;
+  body: Statement[];
+  position: number;
+}
+
 /** A `break` statement that exits the enclosing `while` loop. */
 export interface StatementBreak {
   kind: "break";
@@ -154,6 +167,7 @@ export type Statement =
   | StatementBlock
   | StatementIf
   | StatementWhile
+  | StatementFor
   | StatementBreak
   | StatementContinue;
 

@@ -108,6 +108,55 @@ function parseIf(cursor: Cursor, position: number): Result<Statement, EvalError>
   });
 }
 
+/**
+ * Parse a `for (i in start..end) { ... }` loop: a `for` keyword, a parenthesized
+ * `ident in value..value` range (exclusive of `end`), and a block body.
+ */
+function parseFor(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  if (peek(cursor)?.kind !== "lparen") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const variable = peek(cursor);
+  if (variable?.kind !== "ident") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  if (peek(cursor)?.kind !== "in") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const start = parseValue(cursor);
+  if (!start.ok) {
+    return start;
+  }
+  if (peek(cursor)?.kind !== "range") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const end = parseValue(cursor);
+  if (!end.ok) {
+    return end;
+  }
+  if (peek(cursor)?.kind !== "rparen") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const body = parseBlock(cursor);
+  if (!body.ok) {
+    return body;
+  }
+  return ok({
+    kind: "for",
+    variable: variable.value,
+    start: start.value,
+    end: end.value,
+    body: body.value,
+    position,
+  });
+}
+
 /** Parse a `break` statement that exits the enclosing `while` loop. */
 function parseBreak(cursor: Cursor, position: number): Result<Statement, EvalError> {
   advance(cursor);
@@ -204,6 +253,9 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   }
   if (head.kind === "while") {
     return parseWhile(cursor, head.position);
+  }
+  if (head.kind === "for") {
+    return parseFor(cursor, head.position);
   }
   if (head.kind === "break") {
     return parseBreak(cursor, head.position);

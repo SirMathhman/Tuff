@@ -4,6 +4,7 @@ import type {
   StatementAssign,
   StatementBreak,
   StatementContinue,
+  StatementFor,
   StatementWhile,
   Value,
   ValueDeref,
@@ -248,7 +249,38 @@ function checkWhile(statement: StatementWhile, scopes: DeclScopes): Result<null,
   return withScope(scopes, () => checkStatements(statement.body, scopes, true));
 }
 
-/** Check a `break` or `continue` statement: it must be inside a `while` body. */
+/**
+ * Check a `for (i in start..end)` loop (exclusive of `end`): both range bounds
+ * must be numbers, and the body is checked in a loop scope where the variable
+ * is a mutable number.
+ */
+function checkFor(statement: StatementFor, scopes: DeclScopes): Result<null, EvalError> {
+  const start = checkExpression(statement.start, scopes);
+  if (!start.ok) {
+    return start;
+  }
+  const end = checkExpression(statement.end, scopes);
+  if (!end.ok) {
+    return end;
+  }
+  for (const bound of [statement.start, statement.end]) {
+    if (expressionType(bound, scopes).kind !== "number") {
+      return err({
+        kind: "TypeMismatch",
+        name: "..",
+        expected: "number",
+        actual: typeToString(expressionType(bound, scopes)),
+        position: bound.position,
+      });
+    }
+  }
+  return withScope(scopes, () => {
+    scopes[scopes.length - 1].set(statement.variable, { type: { kind: "number" }, mutable: true });
+    return checkStatements(statement.body, scopes, true);
+  });
+}
+
+/** Check a `break` or `continue` statement: it must be inside a loop body. */
 function checkLoopControl(
   statement: StatementBreak | StatementContinue,
   inLoop: boolean,
@@ -311,6 +343,10 @@ function checkStatement(
 
   if (statement.kind === "while") {
     return checkWhile(statement, scopes);
+  }
+
+  if (statement.kind === "for") {
+    return checkFor(statement, scopes);
   }
 
   // break / continue

@@ -1,6 +1,7 @@
 import type {
   Statement,
   StatementAssign,
+  StatementFor,
   StatementWhile,
   Value,
   ValueDeref,
@@ -259,6 +260,40 @@ function evalWhile(statement: StatementWhile, scopes: Scopes): Outcome {
   return { kind: "void" };
 }
 
+/**
+ * Evaluate a `for (i in start..end) { ... }` loop over a numeric range, exclusive
+ * of `end`. The loop variable is a fresh mutable number each iteration.
+ */
+function evalFor(statement: StatementFor, scopes: Scopes): Outcome {
+  const start = valueToNumber(statement.start, scopes);
+  if (!start.ok) {
+    return { kind: "error", error: start.error };
+  }
+  const end = valueToNumber(statement.end, scopes);
+  if (!end.ok) {
+    return { kind: "error", error: end.error };
+  }
+  for (let i = start.value; i < end.value; i++) {
+    const body = withScope(scopes, () => {
+      scopes[scopes.length - 1].set(statement.variable, {
+        value: { kind: "number", value: i },
+        mutable: true,
+      });
+      return evalStatements(statement.body, scopes, false);
+    });
+    if (body.kind === "break") {
+      break;
+    }
+    if (body.kind === "continue") {
+      continue;
+    }
+    if (body.kind !== "void") {
+      return body;
+    }
+  }
+  return { kind: "void" };
+}
+
 /** Evaluate a single statement within the current scope stack. */
 function evalStatement(statement: Statement, scopes: Scopes): Outcome {
   if (statement.kind === "let") {
@@ -304,6 +339,10 @@ function evalStatement(statement: Statement, scopes: Scopes): Outcome {
 
   if (statement.kind === "continue") {
     return { kind: "continue" };
+  }
+
+  if (statement.kind === "for") {
+    return evalFor(statement, scopes);
   }
 
   return evalWhile(statement, scopes);

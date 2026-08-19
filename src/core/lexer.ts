@@ -36,6 +36,18 @@ export interface TokenWhile {
   position: number;
 }
 
+/** The `for` keyword. */
+export interface TokenFor {
+  kind: "for";
+  position: number;
+}
+
+/** The `in` keyword (range loops). */
+export interface TokenIn {
+  kind: "in";
+  position: number;
+}
+
 /** An identifier. */
 export interface TokenIdent {
   kind: "ident";
@@ -138,6 +150,12 @@ export interface TokenComma {
   position: number;
 }
 
+/** The `..` range operator (exclusive of the end, in `for` loops). */
+export interface TokenRange {
+  kind: "range";
+  position: number;
+}
+
 /** The `break` keyword. */
 export interface TokenBreak {
   kind: "break";
@@ -158,6 +176,8 @@ export type Token =
   | TokenIf
   | TokenElse
   | TokenWhile
+  | TokenFor
+  | TokenIn
   | TokenBreak
   | TokenContinue
   | TokenIdent
@@ -175,7 +195,8 @@ export type Token =
   | TokenRparen
   | TokenLbracket
   | TokenRbracket
-  | TokenComma;
+  | TokenComma
+  | TokenRange;
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
@@ -219,13 +240,16 @@ interface Match {
   advance: number;
 }
 
-/** Matches the multi-char specials `+=` and `&mut`. */
+/** Matches the multi-char specials `+=`, `&mut`, and `..`. */
 function matchSpecial(source: string, i: number): Match | undefined {
   if (source.startsWith("+=", i)) {
     return {
       token: { kind: "compoundAssign", operator: "+=", position: i },
       advance: 2,
     };
+  }
+  if (source.startsWith("..", i)) {
+    return { token: { kind: "range", position: i }, advance: 2 };
   }
   if (source.startsWith("&mut", i)) {
     return { token: { kind: "addressOf", mutable: true, position: i }, advance: 4 };
@@ -274,6 +298,8 @@ function matchWord(source: string, i: number): Match | undefined {
           word === "if" ||
           word === "else" ||
           word === "while" ||
+          word === "for" ||
+          word === "in" ||
           word === "break" ||
           word === "continue"
         ? { kind: word, position: i }
