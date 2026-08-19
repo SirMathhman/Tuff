@@ -110,6 +110,13 @@ function parseBreak(cursor: Cursor, position: number): Result<Statement, EvalErr
   return ok({ kind: "break", position });
 }
 
+/** Parse a `continue` statement that skips to the next loop iteration. */
+function parseContinue(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  consumeSemicolon(cursor);
+  return ok({ kind: "continue", position });
+}
+
 /** Parse a `while (condition) { ... }` loop statement. */
 function parseWhile(cursor: Cursor, position: number): Result<Statement, EvalError> {
   advance(cursor);
@@ -193,6 +200,9 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
   }
   if (head.kind === "break") {
     return parseBreak(cursor, head.position);
+  }
+  if (head.kind === "continue") {
+    return parseContinue(cursor, head.position);
   }
   if (head.kind === "ident" || head.kind === "deref") {
     const target = parseLValue(cursor);

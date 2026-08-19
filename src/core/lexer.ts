@@ -144,6 +144,12 @@ export interface TokenBreak {
   position: number;
 }
 
+/** The `continue` keyword. */
+export interface TokenContinue {
+  kind: "continue";
+  position: number;
+}
+
 /** A lexical token with its zero-based source position. */
 export type Token =
   | TokenLet
@@ -153,6 +159,7 @@ export type Token =
   | TokenElse
   | TokenWhile
   | TokenBreak
+  | TokenContinue
   | TokenIdent
   | TokenNumber
   | TokenBool
@@ -264,7 +271,8 @@ export function tokenize(source: string): Result<Token[], EvalError> {
         word === "if" ||
         word === "else" ||
         word === "while" ||
-        word === "break"
+        word === "break" ||
+        word === "continue"
       ) {
         tokens.push({ kind: word, position: i });
       } else {

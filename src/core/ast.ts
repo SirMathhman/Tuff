@@ -128,6 +128,12 @@ export interface StatementBreak {
   position: number;
 }
 
+/** A `continue` statement that skips to the next iteration of the enclosing `while` loop. */
+export interface StatementContinue {
+  kind: "continue";
+  position: number;
+}
+
 /**
  * A single program statement. `position` is the zero-based source offset of
  * the statement's first token.
@@ -139,7 +145,8 @@ export type Statement =
   | StatementBlock
   | StatementIf
   | StatementWhile
-  | StatementBreak;
+  | StatementBreak
+  | StatementContinue;
 
 /** A parsed program: a list of top-level statements. */
 export interface Program {

@@ -33,12 +33,18 @@ export interface OutcomeBreak {
   kind: "break";
 }
 
+/** A `continue` skipped to the next iteration of the enclosing `while` loop. */
+export interface OutcomeContinue {
+  kind: "continue";
+}
+
 /**
  * The outcome of evaluating a statement or statement list. `value` means a
  * `return` short-circuited; `void` means it completed normally; `break` means
- * a `while` loop was exited; `error` means evaluation failed.
+ * a `while` loop was exited; `continue` means the loop skipped to its next
+ * iteration; `error` means evaluation failed.
  */
-export type Outcome = OutcomeValue | OutcomeVoid | OutcomeBreak | OutcomeError;
+export type Outcome = OutcomeValue | OutcomeVoid | OutcomeBreak | OutcomeContinue | OutcomeError;
 
 /**
  * Evaluate an assignment to an identifier or a dereference (`*ptr = value`).
@@ -143,6 +149,9 @@ function evalWhile(statement: StatementWhile, scopes: Scopes): Outcome {
     if (body.kind === "break") {
       break;
     }
+    if (body.kind === "continue") {
+      continue;
+    }
     if (body.kind !== "void") {
       return body;
     }
@@ -191,6 +200,10 @@ function evalStatement(statement: Statement, scopes: Scopes): Outcome {
 
   if (statement.kind === "break") {
     return { kind: "break" };
+  }
+
+  if (statement.kind === "continue") {
+    return { kind: "continue" };
   }
 
   return evalWhile(statement, scopes);

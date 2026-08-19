@@ -193,3 +193,15 @@ test("evaluate returns a BreakOutsideLoop error for a break outside a while loop
     error: { kind: "BreakOutsideLoop", position: 0 },
   });
 });
+test('evaluate returns 4 for "let mut x = 0; while (x < 4) { x += 1; continue; } return x;"', () => {
+  expect(evaluate("let mut x = 0; while (x < 4) { x += 1; continue; } return x;")).toEqual({
+    ok: true,
+    value: 4,
+  });
+});
+test("evaluate returns a ContinueOutsideLoop error for a continue outside a while loop", () => {
+  expect(evaluate("continue; return 1;")).toEqual({
+    ok: false,
+    error: { kind: "ContinueOutsideLoop", position: 0 },
+  });
+});

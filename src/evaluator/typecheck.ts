@@ -1,4 +1,12 @@
-import type { Program, Statement, StatementAssign, StatementWhile, Value } from "../core/ast.js";
+import type {
+  Program,
+  Statement,
+  StatementAssign,
+  StatementBreak,
+  StatementContinue,
+  StatementWhile,
+  Value,
+} from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup, withScope } from "../core/scopes.js";
 import { checkExpression } from "./checkExpressions.js";
@@ -129,6 +137,20 @@ function checkWhile(statement: StatementWhile, scopes: DeclScopes): Result<null,
   return withScope(scopes, () => checkStatements(statement.body, scopes, true));
 }
 
+/** Check a `break` or `continue` statement: it must be inside a `while` body. */
+function checkLoopControl(
+  statement: StatementBreak | StatementContinue,
+  inLoop: boolean,
+): Result<null, EvalError> {
+  if (inLoop) {
+    return ok(null);
+  }
+  return err({
+    kind: statement.kind === "break" ? "BreakOutsideLoop" : "ContinueOutsideLoop",
+    position: statement.position,
+  });
+}
+
 /**
  * Check a single statement, validating types and identifier declarations.
  * `inLoop` is true when the statement is inside a `while` body.
@@ -180,11 +202,8 @@ function checkStatement(
     return checkWhile(statement, scopes);
   }
 
-  // break
-  if (!inLoop) {
-    return err({ kind: "BreakOutsideLoop", position: statement.position });
-  }
-  return ok(null);
+  // break / continue
+  return checkLoopControl(statement, inLoop);
 }
 
 /**

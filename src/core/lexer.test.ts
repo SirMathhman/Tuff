@@ -137,6 +137,15 @@ test("tokenize tokenizes the break keyword", () => {
     ],
   });
 });
+test("tokenize tokenizes the continue keyword", () => {
+  expect(tokenize("continue;")).toEqual({
+    ok: true,
+    value: [
+      { kind: "continue", position: 0 },
+      { kind: "semicolon", position: 8 },
+    ],
+  });
+});
 test("tokenize returns an UnexpectedToken error for an unknown character", () => {
   expect(tokenize("let x = @;")).toEqual({
     ok: false,

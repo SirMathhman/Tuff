@@ -89,6 +89,13 @@ export interface EvalErrorBreakOutsideLoop {
   position: number;
 }
 
+/** A `continue` was used outside of a `while` loop. Fix: move it inside a loop. */
+export interface EvalErrorContinueOutsideLoop {
+  kind: "ContinueOutsideLoop";
+  /** Zero-based character offset of the `continue` statement. */
+  position: number;
+}
+
 /**
  * Structured errors produced by `evaluate`.
  * Each variant answers: what went wrong, where, and how to fix it.
@@ -101,4 +108,5 @@ export type EvalError =
   | EvalErrorImmutableAssignment
   | EvalErrorTypeMismatch
   | EvalErrorMissingReturn
-  | EvalErrorBreakOutsideLoop;
+  | EvalErrorBreakOutsideLoop
+  | EvalErrorContinueOutsideLoop;
