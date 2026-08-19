@@ -56,8 +56,11 @@ describe("evaluate", () => {
 
     if (!result.ok) {
       expect(result.error.kind).toBe("unexpected_character");
-      expect(result.error.character).toBe("x");
-      expect(result.error.position).toEqual({ line: 1, column: 5 });
+
+      if (result.error.kind === "unexpected_character") {
+        expect(result.error.character).toBe("x");
+        expect(result.error.position).toEqual({ line: 1, column: 5 });
+      }
     }
   });
 });
