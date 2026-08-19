@@ -20,6 +20,10 @@ test("evalProgram returns the value of a return statement", () => {
   expect(evalSource("return 1;")).toEqual({ ok: true, value: 1 });
 });
 
+test("evalProgram evaluates a bare top-level number literal to its value", () => {
+  expect(evalSource("100")).toEqual({ ok: true, value: 100 });
+});
+
 test("evalProgram coerces a bool return to a number", () => {
   expect(evalSource("return true;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return false;")).toEqual({ ok: true, value: 0 });
