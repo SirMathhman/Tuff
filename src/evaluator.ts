@@ -1,7 +1,8 @@
 import type { Program, Statement, Value } from "./ast.js";
 import { err, ok, type EvalError, type Result } from "./errors.js";
 
-type Variable = { value: number; mutable: boolean };
+/** A variable's value with its type, so assignments can be type-checked. */
+type Variable = { value: TypedValue; mutable: boolean };
 
 /** A stack of variable scopes, innermost last. */
 type Scopes = Map<string, Variable>[];
@@ -65,7 +66,7 @@ function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalErro
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
   }
-  return ok({ type: "number", value: variable.value });
+  return ok(variable.value);
 }
 
 /** Convert a value expression to a number, or an error for undeclared identifiers. */
@@ -83,9 +84,35 @@ function valueToNumber(value: Value, scopes: Scopes): Result<number, EvalError> 
  * evaluation failed.
  */
 type Outcome =
-  | { kind: "value"; value: number }
-  | { kind: "void" }
-  | { kind: "error"; error: EvalError };
+  { kind: "value"; value: number } | { kind: "void" } | { kind: "error"; error: EvalError };
+
+/**
+ * Evaluate an `ident += value` compound assignment. `+=` is numeric addition,
+ * so both the variable and the value must be numbers.
+ */
+function evalCompoundAssign(
+  statement: Extract<Statement, { kind: "assign" }>,
+  variable: Variable,
+  value: TypedValue,
+): Outcome {
+  const actual = variable.value.type !== "number" ? variable.value.type : value.type;
+  if (actual !== "number") {
+    return {
+      kind: "error",
+      error: {
+        kind: "TypeMismatch",
+        name: statement.name,
+        expected: "number",
+        actual,
+        position: statement.position,
+      },
+    };
+  }
+  const base = variable.value.type === "number" ? variable.value.value : 0;
+  const addend = value.type === "number" ? value.value : 0;
+  variable.value = { type: "number", value: base + addend };
+  return { kind: "void" };
+}
 
 /** Evaluate an `ident = value` or `ident += value` assignment. */
 function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: Scopes): Outcome {
@@ -102,11 +129,26 @@ function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: S
       error: { kind: "ImmutableAssignment", name: statement.name, position: statement.position },
     };
   }
-  const value = valueToNumber(statement.value, scopes);
+  const value = valueToTyped(statement.value, scopes);
   if (!value.ok) {
     return { kind: "error", error: value.error };
   }
-  variable.value = statement.compound ? variable.value + value.value : value.value;
+  if (statement.compound) {
+    return evalCompoundAssign(statement, variable, value.value);
+  }
+  if (value.value.type !== variable.value.type) {
+    return {
+      kind: "error",
+      error: {
+        kind: "TypeMismatch",
+        name: statement.name,
+        expected: variable.value.type,
+        actual: value.value.type,
+        position: statement.position,
+      },
+    };
+  }
+  variable.value = value.value;
   return { kind: "void" };
 }
 
@@ -133,7 +175,7 @@ function evalWhile(statement: Extract<Statement, { kind: "while" }>, scopes: Sco
 /** Evaluate a single statement within the current scope stack. */
 function evalStatement(statement: Statement, scopes: Scopes): Outcome {
   if (statement.kind === "let") {
-    const value = valueToNumber(statement.value, scopes);
+    const value = valueToTyped(statement.value, scopes);
     if (!value.ok) {
       return { kind: "error", error: value.error };
     }

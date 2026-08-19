@@ -59,6 +59,18 @@ export type EvalError =
       position: number;
     }
   | {
+      /** A value of the wrong type was assigned to a variable. Fix: assign a value of the variable's type. */
+      kind: "TypeMismatch";
+      /** The variable name. */
+      name: string;
+      /** The variable's type, set by its initializer. */
+      expected: "number" | "bool";
+      /** The type of the value being assigned. */
+      actual: "number" | "bool";
+      /** Zero-based character offset of the assignment statement. */
+      position: number;
+    }
+  | {
       /** The program ended without a `return` statement. Fix: add a `return` statement. */
       kind: "MissingReturn";
     };

@@ -60,6 +60,12 @@ test("evaluate returns an ImmutableAssignment error when assigning to a non-mut 
     error: { kind: "ImmutableAssignment", name: "x", position: 11 },
   });
 });
+test("evaluate returns a TypeMismatch error when assigning a bool to a number variable", () => {
+  expect(evaluate("let mut x = 0; x = true;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 15 },
+  });
+});
 test("evaluate returns an UnknownIdentifier error for an undeclared variable", () => {
   expect(evaluate("return y;")).toEqual({
     ok: false,

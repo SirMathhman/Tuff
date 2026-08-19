@@ -36,6 +36,32 @@ test("evalProgram returns an ImmutableAssignment error for += on a non-mut varia
   });
 });
 
+test("evalProgram returns a TypeMismatch error when assigning a bool to a number variable", () => {
+  expect(evalSource("let mut x = 0; x = true; return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 15 },
+  });
+});
+
+test("evalProgram returns a TypeMismatch error when assigning a number to a bool variable", () => {
+  expect(evalSource("let mut x = true; x = 0; return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "bool", actual: "number", position: 18 },
+  });
+});
+
+test("evalProgram allows assigning a value of the same type", () => {
+  expect(evalSource("let mut x = 0; x = 1; return x;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("let mut x = true; x = false; return x;")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram returns a TypeMismatch error for += on a bool variable", () => {
+  expect(evalSource("let mut x = true; x += 1; return x;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 18 },
+  });
+});
+
 test("evalProgram compares with a type-strict ==", () => {
   expect(evalSource("return 1 == 1;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return 1 == 2;")).toEqual({ ok: true, value: 0 });
