@@ -22,8 +22,9 @@ type TypedValue = { type: "number"; value: number } | { type: "bool"; value: boo
 
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
- * identifiers. `==` compares type-strictly: a bool and a number are never
- * equal. Variables are untyped numbers.
+ * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
+ * equal. Ordering operators (`<`, `<=`, `>`, `>=`) compare numerically, with
+ * bools coerced to 1/0. Variables are untyped numbers.
  */
 function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
@@ -41,14 +42,24 @@ function valueToTyped(value: Value, scopes: Scopes): Result<TypedValue, EvalErro
     if (!right.ok) {
       return right;
     }
-    if (value.operator === "==") {
+    if (value.operator === "==" || value.operator === "!=") {
       const equal = left.value.type === right.value.type && left.value.value === right.value.value;
-      return ok({ type: "number", value: equal ? 1 : 0 });
+      const result = value.operator === "==" ? equal : !equal;
+      return ok({ type: "number", value: result ? 1 : 0 });
     }
-    // "<" compares numerically; bools coerce to 1/0.
-    const leftNum = left.value.type === "bool" ? (left.value.value ? 1 : 0) : left.value.value;
-    const rightNum = right.value.type === "bool" ? (right.value.value ? 1 : 0) : right.value.value;
-    return ok({ type: "number", value: leftNum < rightNum ? 1 : 0 });
+    // Ordering operators compare numerically; bools coerce to 1/0.
+    const toNum = (t: TypedValue): number => (t.type === "bool" ? (t.value ? 1 : 0) : t.value);
+    const leftNum = toNum(left.value);
+    const rightNum = toNum(right.value);
+    const result =
+      value.operator === "<"
+        ? leftNum < rightNum
+        : value.operator === "<="
+          ? leftNum <= rightNum
+          : value.operator === ">"
+            ? leftNum > rightNum
+            : leftNum >= rightNum;
+    return ok({ type: "number", value: result ? 1 : 0 });
   }
   const variable = lookup(scopes, value.name);
   if (!variable) {

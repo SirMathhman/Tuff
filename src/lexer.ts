@@ -9,7 +9,7 @@ export type Token =
   | { kind: "number"; value: number; position: number }
   | { kind: "bool"; value: boolean; position: number }
   | { kind: "assign"; position: number }
-  | { kind: "binary"; operator: "==" | "<"; position: number }
+  | { kind: "binary"; operator: "==" | "!=" | "<" | "<=" | ">" | ">="; position: number }
   | { kind: "semicolon"; position: number }
   | { kind: "lbrace"; position: number }
   | { kind: "rbrace"; position: number };
@@ -37,13 +37,21 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       i++;
       continue;
     }
-    if (source.startsWith("==", i)) {
-      tokens.push({ kind: "binary", operator: "==", position: i });
+    const twoCharOperators: Record<string, "==" | "!=" | "<=" | ">="> = {
+      "==": "==",
+      "!=": "!=",
+      "<=": "<=",
+      ">=": ">=",
+    };
+    const twoChar = source.slice(i, i + 2);
+    const twoCharOperator = twoCharOperators[twoChar];
+    if (twoCharOperator) {
+      tokens.push({ kind: "binary", operator: twoCharOperator, position: i });
       i += 2;
       continue;
     }
-    if (char === "<") {
-      tokens.push({ kind: "binary", operator: "<", position: i });
+    if (char === "<" || char === ">") {
+      tokens.push({ kind: "binary", operator: char, position: i });
       i += 1;
       continue;
     }

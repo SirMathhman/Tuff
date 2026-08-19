@@ -40,6 +40,23 @@ test("evalProgram compares with <", () => {
   expect(evalSource("return 1 < 1;")).toEqual({ ok: true, value: 0 });
 });
 
+test("evalProgram compares with <=, >, and >=", () => {
+  expect(evalSource("return 1 <= 1;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("return 2 <= 1;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return 1 > 0;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("return 1 > 1;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return 1 >= 1;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("return 0 >= 1;")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram compares with a type-strict !=", () => {
+  expect(evalSource("return 1 != 2;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("return 1 != 1;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return true != false;")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("return true != true;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return true != 1;")).toEqual({ ok: true, value: 1 });
+});
+
 test("evalProgram chains == left-associatively", () => {
   expect(evalSource("return 1 == 1 == 1;")).toEqual({ ok: true, value: 1 });
   // (2 == 3) == 0 -> 0 == 0 -> 1 (a right-associative parse would give 0)

@@ -67,7 +67,8 @@ function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
 
 /**
  * Parse a value expression: a primary (number, bool, ident) followed by zero
- * or more binary operations (`==`, `<`), chained left-associatively.
+ * or more binary operations (`==`, `!=`, `<`, `<=`, `>`, `>=`), chained
+ * left-associatively.
  */
 function parseValue(cursor: Cursor): Result<Value, EvalError> {
   const left = parsePrimary(cursor);

@@ -5,7 +5,7 @@ export type Value =
   | { kind: "ident"; name: string; position: number }
   | {
       kind: "binary";
-      operator: "==" | "<";
+      operator: "==" | "!=" | "<" | "<=" | ">" | ">=";
       left: Value;
       right: Value;
       position: number;

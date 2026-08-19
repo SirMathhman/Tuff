@@ -71,47 +71,38 @@ test("parse parses a return statement with an identifier", () => {
   });
 });
 
-test("parse parses a binary == expression", () => {
-  expect(parseSource("return x == y;")).toEqual({
-    ok: true,
-    value: {
-      statements: [
-        {
-          kind: "return",
-          value: {
-            kind: "binary",
-            operator: "==",
-            left: { kind: "ident", name: "x", position: 7 },
-            right: { kind: "ident", name: "y", position: 12 },
-            position: 7,
-          },
-          position: 0,
-        },
-      ],
-    },
-  });
-});
+const BINARY_OPERATORS = [
+  { operator: "==", rightPosition: 12 },
+  { operator: "!=", rightPosition: 12 },
+  { operator: "<", rightPosition: 11 },
+  { operator: "<=", rightPosition: 12 },
+  { operator: ">", rightPosition: 11 },
+  { operator: ">=", rightPosition: 12 },
+] as const;
 
-test("parse parses a binary < expression", () => {
-  expect(parseSource("return x < y;")).toEqual({
-    ok: true,
-    value: {
-      statements: [
-        {
-          kind: "return",
-          value: {
-            kind: "binary",
-            operator: "<",
-            left: { kind: "ident", name: "x", position: 7 },
-            right: { kind: "ident", name: "y", position: 11 },
-            position: 7,
+test.each(BINARY_OPERATORS)(
+  "parse parses a binary $operator expression",
+  ({ operator, rightPosition }) => {
+    expect(parseSource(`return x ${operator} y;`)).toEqual({
+      ok: true,
+      value: {
+        statements: [
+          {
+            kind: "return",
+            value: {
+              kind: "binary",
+              operator,
+              left: { kind: "ident", name: "x", position: 7 },
+              right: { kind: "ident", name: "y", position: rightPosition },
+              position: 7,
+            },
+            position: 0,
           },
-          position: 0,
-        },
-      ],
-    },
-  });
-});
+        ],
+      },
+    });
+  },
+);
 
 test("parse parses a block as a block statement", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
