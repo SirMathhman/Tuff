@@ -22,12 +22,13 @@ export type BinaryNode = {
 /** A variable reference node. */
 export type VariableNode = { kind: "variable"; name: string; pos: SourcePosition };
 
-/** A `let` binding node: `let name = initializer; body`. */
+/** A `let` binding node: `let name = initializer; body?`. */
 export type LetNode = {
   kind: "let";
   name: string;
   initializer: AstNode;
-  body: AstNode;
+  /** The expression after the `;`, if any. */
+  body?: AstNode;
 };
 
 /** Any Tuff AST node. */

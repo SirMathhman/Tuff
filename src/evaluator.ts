@@ -62,6 +62,12 @@ function evalLet(
   }
   const next = new Map(env);
   next.set(node.name, initializer.value);
+
+  // A bare binding (no body after the `;`) evaluates to 0.
+  if (node.body === undefined) {
+    return { ok: true, value: 0 };
+  }
+
   return evalNode(node.body, next, input);
 }
 

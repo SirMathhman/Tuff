@@ -45,6 +45,10 @@ describe("evaluate", () => {
     expect(evaluate("let y = { let x = 2 + 3; x } * 4; y")).toEqual({ ok: true, value: 20 });
   });
 
+  it("returns 0 for a let binding with no body", () => {
+    expect(evaluate("let x = 100;")).toEqual({ ok: true, value: 0 });
+  });
+
   it("returns a structured error for unsupported expressions", () => {
     const result = evaluate("1 +");
 

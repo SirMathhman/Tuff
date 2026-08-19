@@ -111,6 +111,14 @@ class Parser {
     }
     this.index += 1;
 
+    // The body after the `;` is optional; a bare binding evaluates to 0.
+    if (this.index >= this.tokens.length) {
+      return {
+        ok: true,
+        value: { kind: "let", name: name.value, initializer: initializer.value },
+      };
+    }
+
     const body = this.parseExpression();
     if (!body.ok) {
       return body;
