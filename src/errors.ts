@@ -27,6 +27,14 @@ export type EvalError =
       kind: "EmptyProgram";
     }
   | {
+      /** The lexer encountered a character it cannot tokenize. Fix: remove or replace the character. */
+      kind: "UnexpectedToken";
+      /** The offending character. */
+      character: string;
+      /** Zero-based character offset in the source. */
+      position: number;
+    }
+  | {
       /** A statement the evaluator does not recognize. Fix: use `let` or `return` statements. */
       kind: "UnexpectedStatement";
       /** The offending statement text. */
