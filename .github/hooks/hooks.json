@@ -23,7 +23,7 @@
       },
       {
         "type": "command",
-        "command": "cmd /c \"pnpm run lint:lint:circular-packages 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"pnpm run lint:circular-packages 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       },
       {
         "type": "command",
