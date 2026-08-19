@@ -1,7 +1,14 @@
 import type { Statement, Value } from "../ast.js";
 import type { EvalError } from "../errors.js";
 import { lookup, withScope } from "../scopes.js";
-import { isPointer, valueToNumber, valueToTyped, type Scopes, type TypedValue } from "./values.js";
+import {
+  isPointer,
+  valueToNumber,
+  valueToTyped,
+  type Scopes,
+  type TypedValue,
+  type Variable,
+} from "./values.js";
 
 /**
  * The outcome of evaluating a statement or statement list. `value` means a
@@ -35,6 +42,20 @@ function evalAssign(statement: Extract<Statement, { kind: "assign" }>, scopes: S
   };
 }
 
+/**
+ * Write a value to a variable: a plain assignment, or numeric addition when
+ * `compound` (`+=`).
+ */
+function writeValue(variable: Variable, value: TypedValue, compound: boolean): void {
+  if (compound) {
+    const base = variable.value.type === "number" ? variable.value.value : 0;
+    const addend = value.type === "number" ? value.value : 0;
+    variable.value = { type: "number", value: base + addend };
+    return;
+  }
+  variable.value = value;
+}
+
 /** Evaluate `ident = value` or `ident += value` on a looked-up variable. */
 function evalIdentAssign(
   statement: Extract<Statement, { kind: "assign" }>,
@@ -55,13 +76,7 @@ function evalIdentAssign(
       error: { kind: "ImmutableAssignment", name, position: statement.position },
     };
   }
-  if (statement.compound) {
-    const base = variable.value.type === "number" ? variable.value.value : 0;
-    const addend = value.type === "number" ? value.value : 0;
-    variable.value = { type: "number", value: base + addend };
-    return { kind: "void" };
-  }
-  variable.value = value;
+  writeValue(variable, value, statement.compound === "+=");
   return { kind: "void" };
 }
 
@@ -88,14 +103,7 @@ function evalDerefAssign(
       },
     };
   }
-  const variable = pointer.value.ref;
-  if (statement.compound) {
-    const base = variable.value.type === "number" ? variable.value.value : 0;
-    const addend = value.type === "number" ? value.value : 0;
-    variable.value = { type: "number", value: base + addend };
-    return { kind: "void" };
-  }
-  variable.value = value;
+  writeValue(pointer.value.ref, value, statement.compound === "+=");
   return { kind: "void" };
 }
 

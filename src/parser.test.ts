@@ -44,38 +44,30 @@ test("parse parses a mutable let declaration with a bool literal", () => {
   });
 });
 
-test("parse parses an assignment statement", () => {
-  expect(parseSource("x = 2;")).toEqual({
-    ok: true,
-    value: {
-      statements: [
-        {
-          kind: "assign",
-          target: { kind: "ident", name: "x", position: 0 },
-          value: { kind: "number", value: 2, position: 4 },
-          position: 0,
-        },
-      ],
-    },
-  });
-});
+const ASSIGN_CASES = [
+  { label: "plain", source: "x = 2;", valuePosition: 4, compound: undefined },
+  { label: "compound", source: "x += 2;", valuePosition: 5, compound: "+=" as const },
+] as const;
 
-test("parse parses a compound assignment statement", () => {
-  expect(parseSource("x += 2;")).toEqual({
-    ok: true,
-    value: {
-      statements: [
-        {
-          kind: "assign",
-          target: { kind: "ident", name: "x", position: 0 },
-          value: { kind: "number", value: 2, position: 5 },
-          compound: "+=",
-          position: 0,
-        },
-      ],
-    },
-  });
-});
+test.each(ASSIGN_CASES)(
+  "parse parses an $label assignment statement",
+  ({ source, valuePosition, compound }) => {
+    expect(parseSource(source)).toEqual({
+      ok: true,
+      value: {
+        statements: [
+          {
+            kind: "assign",
+            target: { kind: "ident", name: "x", position: 0 },
+            value: { kind: "number", value: 2, position: valuePosition },
+            compound,
+            position: 0,
+          },
+        ],
+      },
+    });
+  },
+);
 
 test("parse parses a return statement with an identifier", () => {
   expect(parseSource("return x;")).toEqual({
