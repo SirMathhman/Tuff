@@ -43,6 +43,17 @@ test("tokenize tokenizes negative and decimal numbers", () => {
   });
 });
 
+test("tokenize tokenizes the == operator", () => {
+  expect(tokenize("x == y")).toEqual({
+    ok: true,
+    value: [
+      { kind: "ident", value: "x", position: 0 },
+      { kind: "binary", operator: "==", position: 2 },
+      { kind: "ident", value: "y", position: 5 },
+    ],
+  });
+});
+
 test("tokenize returns an UnexpectedToken error for an unknown character", () => {
   expect(tokenize("let x = @;")).toEqual({
     ok: false,

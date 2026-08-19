@@ -1,8 +1,9 @@
-/** A value expression: a literal or a variable reference. */
+/** A value expression: a literal, a variable reference, or a binary operation. */
 export type Value =
   | { kind: "number"; value: number }
   | { kind: "bool"; value: boolean }
-  | { kind: "ident"; name: string };
+  | { kind: "ident"; name: string }
+  | { kind: "binary"; operator: "=="; left: Value; right: Value };
 
 /** A single program statement. `index` is its position in the flattened statement list. */
 export type Statement =

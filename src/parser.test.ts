@@ -69,6 +69,26 @@ test("parse parses a return statement with an identifier", () => {
   });
 });
 
+test("parse parses a binary == expression", () => {
+  expect(parseSource("return x == y;")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "return",
+          value: {
+            kind: "binary",
+            operator: "==",
+            left: { kind: "ident", name: "x" },
+            right: { kind: "ident", name: "y" },
+          },
+          index: 0,
+        },
+      ],
+    },
+  });
+});
+
 test("parse flattens block contents into the statement list", () => {
   expect(parseSource("{ x = 1; }")).toEqual({
     ok: true,

@@ -9,6 +9,7 @@ export type Token =
   | { kind: "number"; value: number; position: number }
   | { kind: "bool"; value: boolean; position: number }
   | { kind: "assign"; position: number }
+  | { kind: "binary"; operator: "=="; position: number }
   | { kind: "semicolon"; position: number }
   | { kind: "lbrace"; position: number }
   | { kind: "rbrace"; position: number };
@@ -34,6 +35,11 @@ export function tokenize(source: string): Result<Token[], EvalError> {
     const char = source[i];
     if (/\s/.test(char)) {
       i++;
+      continue;
+    }
+    if (source.startsWith("==", i)) {
+      tokens.push({ kind: "binary", operator: "==", position: i });
+      i += 2;
       continue;
     }
     const singleCharKind = SINGLE_CHAR_TOKENS[char];

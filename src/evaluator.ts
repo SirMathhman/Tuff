@@ -15,6 +15,17 @@ function valueToNumber(
   if (value.kind === "bool") {
     return ok(value.value ? 1 : 0);
   }
+  if (value.kind === "binary") {
+    const left = valueToNumber(value.left, variables, index);
+    if (!left.ok) {
+      return left;
+    }
+    const right = valueToNumber(value.right, variables, index);
+    if (!right.ok) {
+      return right;
+    }
+    return ok(left.value === right.value ? 1 : 0);
+  }
   const variable = variables.get(value.name);
   if (!variable) {
     return err({ kind: "UnknownIdentifier", name: value.name, index });
