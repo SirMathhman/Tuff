@@ -1,157 +1,220 @@
 import type { Program, Statement, Value } from "./ast.js";
-import { err, ok, type Err, type EvalError, type Result } from "./errors.js";
+import { err, ok, type EvalError, type Result } from "./errors.js";
 import type { Token } from "./lexer.js";
 
-type Range = { start: number; end: number };
-
 /**
- * Group tokens into top-level statement ranges, flattening `{ ... }` blocks.
- * A stray `}` at depth 0 marks the remainder as a single malformed statement.
+ * A cursor over the token stream. The parser advances it with `advance` and
+ * inspects it with `peek`/`atEnd` — it never matches statements by fixed
+ * token offsets or range-length arithmetic.
  */
-function collectStatementRanges(tokens: Token[]): Range[] {
-  const ranges: Range[] = [];
-  let depth = 0;
-  let i = 0;
-  while (i < tokens.length) {
-    const token = tokens[i];
-    if (token.kind === "semicolon") {
-      i++;
-      continue;
-    }
-    if (token.kind === "rbrace") {
-      if (depth === 0) {
-        ranges.push({ start: i, end: tokens.length });
-        break;
-      }
-      depth--;
-      i++;
-      continue;
-    }
-    if (token.kind === "lbrace") {
-      depth++;
-      i++;
-      continue;
-    }
-    let j = i;
-    while (j < tokens.length && tokens[j].kind !== "semicolon" && tokens[j].kind !== "rbrace") {
-      j++;
-    }
-    ranges.push({ start: i, end: j });
-    i = j;
-  }
-  return ranges;
+type Cursor = {
+  tokens: Token[];
+  source: string;
+  pos: number;
+  /** Source offset where the current statement began (for error text). */
+  statementStart: number;
+};
+
+function peek(cursor: Cursor): Token | undefined {
+  return cursor.tokens[cursor.pos];
+}
+
+function advance(cursor: Cursor): void {
+  cursor.pos++;
+}
+
+function atEnd(cursor: Cursor): boolean {
+  return cursor.pos >= cursor.tokens.length;
 }
 
 /**
- * Parse a value (literal, ident, or binary operation) starting at the given range offset.
- * Returns the value and the offset just past the last consumed token.
+ * The source text of the statement the cursor is currently parsing: from the
+ * statement's first token up to the current cursor position.
  */
-function parseValue(
-  tokens: Token[],
-  rangeStart: number,
-  offset: number,
-): { value: Value; next: number } | undefined {
-  const token = tokens[rangeStart + offset];
+function statementText(cursor: Cursor): string {
+  const end = atEnd(cursor) ? cursor.source.length : peek(cursor)!.position;
+  return cursor.source.slice(cursor.statementStart, end).trim();
+}
+
+function unexpected(cursor: Cursor): Result<never, EvalError> {
+  return err({
+    kind: "UnexpectedStatement",
+    statement: statementText(cursor),
+    position: cursor.statementStart,
+  });
+}
+
+/**
+ * Parse a value expression: a primary (number, bool, ident) followed by zero
+ * or more `==` binary operations, chained left-associatively.
+ */
+function parseValue(cursor: Cursor): Result<Value, EvalError> {
+  const token = peek(cursor);
+  if (!token) {
+    return unexpected(cursor);
+  }
   let value: Value | undefined;
-  if (token?.kind === "number") {
-    value = { kind: "number", value: token.value };
-  } else if (token?.kind === "bool") {
-    value = { kind: "bool", value: token.value };
-  } else if (token?.kind === "ident") {
-    value = { kind: "ident", name: token.value };
+  if (token.kind === "number") {
+    value = { kind: "number", value: token.value, position: token.position };
+  } else if (token.kind === "bool") {
+    value = { kind: "bool", value: token.value, position: token.position };
+  } else if (token.kind === "ident") {
+    value = { kind: "ident", name: token.value, position: token.position };
   }
   if (!value) {
-    return undefined;
+    return unexpected(cursor);
   }
-  let next = offset + 1;
-  const operator = tokens[rangeStart + next];
-  if (operator?.kind === "binary") {
-    const right = parseValue(tokens, rangeStart, next + 1);
-    if (!right) {
-      return undefined;
+  const position = token.position;
+  advance(cursor);
+  while (true) {
+    const operatorToken = peek(cursor);
+    if (operatorToken?.kind !== "binary") {
+      break;
     }
-    value = { kind: "binary", operator: operator.operator, left: value, right: right.value };
-    next = right.next;
+    advance(cursor);
+    const right = parseValue(cursor);
+    if (!right.ok) {
+      return right;
+    }
+    value = {
+      kind: "binary",
+      operator: operatorToken.operator,
+      left: value,
+      right: right.value,
+      position,
+    };
   }
-  return { value, next };
+  return ok(value);
+}
+
+/** Consume an optional trailing semicolon after a statement. */
+function consumeSemicolon(cursor: Cursor): void {
+  if (peek(cursor)?.kind === "semicolon") {
+    advance(cursor);
+  }
+}
+
+/** Parse a `let [mut] name = value` declaration. */
+function parseLet(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  let mutable = false;
+  if (peek(cursor)?.kind === "mut") {
+    mutable = true;
+    advance(cursor);
+  }
+  const name = peek(cursor);
+  if (name?.kind !== "ident" || peek(cursor) === undefined) {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  if (peek(cursor)?.kind !== "assign") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const value = parseValue(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return ok({ kind: "let", name: name.value, mutable, value: value.value, position });
+}
+
+/** Parse a `return value` statement. */
+function parseReturn(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  const value = parseValue(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return ok({ kind: "return", value: value.value, position });
+}
+
+/** Parse an `ident = value` assignment statement. */
+function parseAssign(cursor: Cursor, name: string, position: number): Result<Statement, EvalError> {
+  advance(cursor);
+  if (peek(cursor)?.kind !== "assign") {
+    return unexpected(cursor);
+  }
+  advance(cursor);
+  const value = parseValue(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return ok({ kind: "assign", name, value: value.value, position });
 }
 
 /**
- * Parse one statement range into a `Statement`, or return an `UnexpectedStatement` error.
+ * Parse a single statement (`let`, `return`, or `ident = value`), consuming an
+ * optional trailing semicolon.
  */
-function parseStatement(
-  tokens: Token[],
-  source: string,
-  range: Range,
-  index: number,
-): Result<Statement, EvalError> {
-  const at = (offset: number) => tokens[range.start + offset];
-  const statementText = () =>
-    source
-      .slice(
-        tokens[range.start].position,
-        range.end < tokens.length ? tokens[range.end].position : source.length,
-      )
-      .trim();
-  const unexpected = (): Err<EvalError> =>
-    err({ kind: "UnexpectedStatement", statement: statementText(), index });
-
-  if (at(0)?.kind === "let") {
-    let offset = 1;
-    let mutable = false;
-    if (at(offset)?.kind === "mut") {
-      mutable = true;
-      offset++;
-    }
-    const name = at(offset);
-    if (name?.kind !== "ident" || at(offset + 1)?.kind !== "assign") {
-      return unexpected();
-    }
-    const value = parseValue(tokens, range.start, offset + 2);
-    if (!value || range.start + value.next !== range.end) {
-      return unexpected();
-    }
-    return ok({ kind: "let", name: name.value, mutable, value: value.value, index });
+function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
+  const head = peek(cursor);
+  if (!head) {
+    return unexpected(cursor);
   }
-
-  if (at(0)?.kind === "return") {
-    const value = parseValue(tokens, range.start, 1);
-    if (!value || range.start + value.next !== range.end) {
-      return unexpected();
-    }
-    return ok({ kind: "return", value: value.value, index });
+  if (head.kind === "let") {
+    return parseLet(cursor, head.position);
   }
-
-  const name = at(0);
-  if (name?.kind === "ident" && at(1)?.kind === "assign") {
-    const value = parseValue(tokens, range.start, 2);
-    if (!value || range.start + value.next !== range.end) {
-      return unexpected();
-    }
-    return ok({ kind: "assign", name: name.value, value: value.value, index });
+  if (head.kind === "return") {
+    return parseReturn(cursor, head.position);
   }
-
-  return unexpected();
+  if (head.kind === "ident") {
+    return parseAssign(cursor, head.value, head.position);
+  }
+  return unexpected(cursor);
 }
 
 /**
- * Parse a token stream into a program.
- * @param tokens - The token list from `tokenize`.
- * @param source - The original source text (used for error messages).
- * @returns A `Result` carrying the program, or a structured `EvalError`.
+ * Parse a list of statements, recursing into `{ ... }` blocks. When `inBlock`
+ * is set, a `}` ends the block; at the top level a `}` is an error.
  */
-export function parse(tokens: Token[], source: string): Result<Program, EvalError> {
-  const ranges = collectStatementRanges(tokens);
-  if (ranges.length === 0) {
-    return err({ kind: "EmptyProgram" });
-  }
+function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statement[], EvalError> {
   const statements: Statement[] = [];
-  for (let index = 0; index < ranges.length; index++) {
-    const statement = parseStatement(tokens, source, ranges[index], index);
+  while (!atEnd(cursor)) {
+    const head = peek(cursor)!;
+    if (head.kind === "rbrace") {
+      if (!inBlock) {
+        return err({ kind: "UnexpectedStatement", statement: "}", position: head.position });
+      }
+      advance(cursor);
+      return ok(statements);
+    }
+    if (head.kind === "lbrace") {
+      advance(cursor);
+      const inner = parseStatements(cursor, true);
+      if (!inner.ok) {
+        return inner;
+      }
+      statements.push({ kind: "block", statements: inner.value, position: head.position });
+      continue;
+    }
+    cursor.statementStart = head.position;
+    const statement = parseStatement(cursor);
     if (!statement.ok) {
       return statement;
     }
     statements.push(statement.value);
   }
-  return ok({ statements });
+  return ok(statements);
+}
+
+/**
+ * Parse a token stream into a program using a cursor-based recursive descent
+ * approach.
+ * @param tokens - The token list from `tokenize`.
+ * @param source - The original source text (used for error messages).
+ * @returns A `Result` carrying the program, or a structured `EvalError`.
+ */
+export function parse(tokens: Token[], source: string): Result<Program, EvalError> {
+  const cursor: Cursor = { tokens, source, pos: 0, statementStart: 0 };
+  const statements = parseStatements(cursor, false);
+  if (!statements.ok) {
+    return statements;
+  }
+  if (statements.value.length === 0) {
+    return err({ kind: "EmptyProgram" });
+  }
+  return ok({ statements: statements.value });
 }
