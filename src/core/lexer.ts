@@ -230,8 +230,8 @@ export type Token =
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
-/** The integer-type literal suffixes (`100U8`, `1I32`, ...). */
-const INT_SUFFIXES = new Set(["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"]);
+/** The integer-type literal suffixes (`100U8`, `1I32`, ...); uppercase only. */
+const INT_SUFFIXES = new Set(["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"]);
 const SINGLE_CHAR_TOKENS: Record<
   string,
   | "assign"
@@ -346,8 +346,12 @@ function matchWord(source: string, i: number): Match | undefined {
   return { token, advance: word.length };
 }
 
-/** Matches a numeric literal, optionally followed by an integer-type suffix. */
-function matchNumber(source: string, i: number): Match | undefined {
+/**
+ * Matches a numeric literal, optionally followed by an uppercase integer-type
+ * suffix. A lowercase suffix (`100u8`) is a dedicated error; any other word
+ * after the number is left for the caller to tokenize as an identifier.
+ */
+function matchNumber(source: string, i: number): Result<Match, EvalError> | undefined {
   const match = NUMBER_RE.exec(source.slice(i));
   if (!match) {
     return undefined;
@@ -355,20 +359,26 @@ function matchNumber(source: string, i: number): Match | undefined {
   const rest = source.slice(i + match[0].length);
   // An integer suffix only applies to integer literals (`1.5U8` is not a u8).
   const suffixMatch = match[0].includes(".") ? undefined : /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
-  const suffix =
-    suffixMatch && INT_SUFFIXES.has(suffixMatch.toLowerCase())
-      ? suffixMatch.toLowerCase()
-      : undefined;
-  return {
+  if (suffixMatch && INT_SUFFIXES.has(suffixMatch.toUpperCase()) && suffixMatch !== suffixMatch.toUpperCase()) {
+    // A lowercase spelling of a valid suffix: a dedicated error, not an identifier.
+    return err({
+      kind: "InvalidIntegerSuffix",
+      suffix: suffixMatch,
+      position: i + match[0].length,
+    });
+  }
+  const suffix = suffixMatch && INT_SUFFIXES.has(suffixMatch) ? suffixMatch.toLowerCase() : undefined;
+  return ok({
     token: { kind: "number", value: Number(match[0]), suffix, position: i },
     advance: match[0].length + (suffix?.length ?? 0),
-  };
+  });
 }
 
 /**
  * Tokenize a source program.
  * @param source - The source text to tokenize.
- * @returns A `Result` carrying the token list, or an `UnexpectedToken` error.
+ * @returns A `Result` carrying the token list, or an `UnexpectedToken` or
+ * `InvalidIntegerSuffix` error.
  */
 export function tokenize(source: string): Result<Token[], EvalError> {
   const tokens: Token[] = [];
@@ -383,13 +393,21 @@ export function tokenize(source: string): Result<Token[], EvalError> {
       matchSpecial(source, i) ??
       matchBinary(source, i) ??
       matchSingleChar(source, i) ??
-      matchWord(source, i) ??
-      matchNumber(source, i);
-    if (!match) {
+      matchWord(source, i);
+    if (match) {
+      tokens.push(match.token);
+      i += match.advance;
+      continue;
+    }
+    const number = matchNumber(source, i);
+    if (!number) {
       return err({ kind: "UnexpectedToken", character: char, position: i });
     }
-    tokens.push(match.token);
-    i += match.advance;
+    if (!number.ok) {
+      return number;
+    }
+    tokens.push(number.value.token);
+    i += number.value.advance;
   }
   return ok(tokens);
 }

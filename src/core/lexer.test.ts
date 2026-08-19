@@ -43,6 +43,20 @@ test("tokenize tokenizes negative and decimal numbers", () => {
   });
 });
 
+test("tokenize tokenizes an uppercase integer suffix", () => {
+  expect(tokenize("100U8")).toEqual({
+    ok: true,
+    value: [{ kind: "number", value: 100, suffix: "u8", position: 0 }],
+  });
+});
+
+test("tokenize returns an InvalidIntegerSuffix error for a lowercase integer suffix", () => {
+  expect(tokenize("100u8")).toEqual({
+    ok: false,
+    error: { kind: "InvalidIntegerSuffix", suffix: "u8", position: 3 },
+  });
+});
+
 test("tokenize tokenizes the == operator", () => {
   expect(tokenize("x == y")).toEqual({
     ok: true,

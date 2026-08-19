@@ -118,6 +118,15 @@ export interface EvalErrorIntegerOutOfRange {
   position: number;
 }
 
+/** A number literal carries a lowercase integer suffix (e.g. `100u8`). Fix: use the uppercase suffix (`100U8`). */
+export interface EvalErrorInvalidIntegerSuffix {
+  kind: "InvalidIntegerSuffix";
+  /** The offending suffix as written (e.g. `u8`). */
+  suffix: string;
+  /** Zero-based character offset of the suffix. */
+  position: number;
+}
+
 /** A `break` was used outside of a `while` loop. Fix: move it inside a loop. */
 export interface EvalErrorBreakOutsideLoop {
   kind: "BreakOutsideLoop";
@@ -148,5 +157,6 @@ export type EvalError =
   | EvalErrorReturnInBlockValue
   | EvalErrorMissingWildcardArm
   | EvalErrorIntegerOutOfRange
+  | EvalErrorInvalidIntegerSuffix
   | EvalErrorBreakOutsideLoop
   | EvalErrorContinueOutsideLoop;

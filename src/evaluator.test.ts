@@ -28,6 +28,13 @@ test("evalProgram evaluates a suffixed integer literal to its value", () => {
   expect(evalSource("100U8")).toEqual({ ok: true, value: 100 });
 });
 
+test("evalProgram returns an InvalidIntegerSuffix error for a lowercase integer suffix", () => {
+  expect(evalSource("100u8")).toEqual({
+    ok: false,
+    error: { kind: "InvalidIntegerSuffix", suffix: "u8", position: 3 },
+  });
+});
+
 test("evalProgram evaluates a suffixed integer literal in a return statement", () => {
   expect(evalSource("return 100U8;")).toEqual({ ok: true, value: 100 });
 });
