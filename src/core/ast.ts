@@ -164,6 +164,16 @@ export interface StatementContinue {
 }
 
 /**
+ * A bare value expression used as the final top-level statement. Its value is
+ * the program's implicit result, so an explicit `return` is not required.
+ */
+export interface StatementExpr {
+  kind: "expr";
+  value: Value;
+  position: number;
+}
+
+/**
  * A single program statement. `position` is the zero-based source offset of
  * the statement's first token.
  */
@@ -176,7 +186,8 @@ export type Statement =
   | StatementWhile
   | StatementFor
   | StatementBreak
-  | StatementContinue;
+  | StatementContinue
+  | StatementExpr;
 
 /** A parsed program: a list of top-level statements. */
 export interface Program {

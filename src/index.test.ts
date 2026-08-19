@@ -252,10 +252,10 @@ test("evaluate returns an UnknownIdentifier error for an undeclared variable", (
     error: { kind: "UnknownIdentifier", name: "y", position: 7 },
   });
 });
-test("evaluate returns an UnexpectedStatement error for unrecognized input", () => {
+test("evaluate returns an UnknownIdentifier error for a lone undeclared identifier", () => {
   expect(evaluate("garbage")).toEqual({
     ok: false,
-    error: { kind: "UnexpectedStatement", statement: "garbage", position: 0 },
+    error: { kind: "UnknownIdentifier", name: "garbage", position: 0 },
   });
 });
 test("evaluate returns a MissingReturn error when no return statement is present", () => {

@@ -140,6 +140,16 @@ function checkStatement(
     return checkNumericCoercible(statement.value, scopes, "return");
   }
 
+  // A bare expression is the implicit program result, so it must coerce to a
+  // number just like a `return` value.
+  if (statement.kind === "expr") {
+    const value = checkExpression(statement.value, scopes);
+    if (!value.ok) {
+      return value;
+    }
+    return checkNumericCoercible(statement.value, scopes, "return");
+  }
+
   if (statement.kind === "block") {
     return withScope(scopes, () => checkStatements(statement.statements, scopes, inLoop));
   }

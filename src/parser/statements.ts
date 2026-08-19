@@ -226,9 +226,10 @@ function parseAssign(
 
 /**
  * Parse a single statement (`let`, `return`, `if`, `while`, or `ident = value`),
- * consuming an optional trailing semicolon.
+ * consuming an optional trailing semicolon. When `allowExpr` is set (top level
+ * only), a bare value expression may be parsed as the implicit program result.
  */
-function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
+function parseStatement(cursor: Cursor, allowExpr: boolean): Result<Statement, EvalError> {
   const head = peek(cursor);
   if (!head) {
     return unexpected(cursor);
@@ -255,13 +256,55 @@ function parseStatement(cursor: Cursor): Result<Statement, EvalError> {
     return parseContinue(cursor, head.position);
   }
   if (head.kind === "ident" || head.kind === "deref") {
-    const target = parseLValue(cursor);
-    if (!target.ok) {
-      return target;
-    }
-    return parseAssign(cursor, target.value, head.position);
+    return parseIdentOrExpr(cursor, head.position, allowExpr);
+  }
+  if (
+    allowExpr &&
+    (head.kind === "number" ||
+      head.kind === "bool" ||
+      head.kind === "lbracket" ||
+      head.kind === "addressOf")
+  ) {
+    return parseExprStatement(cursor, head.position);
   }
   return unexpected(cursor);
+}
+
+/**
+ * Parse an identifier or dereference as either an assignment (`x = v`, `x += v`)
+ * or, when `allowExpr` is set and no assignment follows, a bare expression.
+ */
+function parseIdentOrExpr(
+  cursor: Cursor,
+  position: number,
+  allowExpr: boolean,
+): Result<Statement, EvalError> {
+  const save = cursor.pos;
+  const target = parseLValue(cursor);
+  if (!target.ok) {
+    return target;
+  }
+  const next = peek(cursor);
+  if (next?.kind === "assign" || next?.kind === "compoundAssign") {
+    return parseAssign(cursor, target.value, position);
+  }
+  // Not an assignment: a bare expression is allowed only as the final
+  // top-level statement. Re-parse from the saved position as a value.
+  if (!allowExpr) {
+    return unexpected(cursor);
+  }
+  cursor.pos = save;
+  return parseExprStatement(cursor, position);
+}
+
+/** Parse a bare value expression as the implicit program-result statement. */
+function parseExprStatement(cursor: Cursor, position: number): Result<Statement, EvalError> {
+  const value = parseValue(cursor);
+  if (!value.ok) {
+    return value;
+  }
+  consumeSemicolon(cursor);
+  return ok({ kind: "expr", value: value.value, position });
 }
 
 /**
@@ -288,9 +331,13 @@ export function parseStatements(cursor: Cursor, inBlock: boolean): Result<Statem
       continue;
     }
     cursor.statementStart = head.position;
-    const statement = parseStatement(cursor);
+    const statement = parseStatement(cursor, !inBlock);
     if (!statement.ok) {
       return statement;
+    }
+    // A bare expression is only valid as the final top-level statement.
+    if (statement.value.kind === "expr" && !atEnd(cursor)) {
+      return unexpected(cursor);
     }
     statements.push(statement.value);
   }

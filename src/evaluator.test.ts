@@ -306,3 +306,35 @@ test("evalProgram reports the range bound, not the loop, for a non-number bound 
     },
   });
 });
+
+test('evalProgram returns 100 for "let x = 100; x" (a bare final expression is the result)', () => {
+  expect(evalSource("let x = 100; x")).toEqual({ ok: true, value: 100 });
+});
+
+test('evalProgram returns 3 for "1 + 2" (a bare literal expression is the result)', () => {
+  expect(evalSource("1 + 2")).toEqual({ ok: true, value: 3 });
+});
+
+test('evalProgram returns 1 for "let x = 1; x;" (a trailing semicolon is allowed)', () => {
+  expect(evalSource("let x = 1; x;")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram returns a TypeMismatch error when the final expression is not numeric", () => {
+  expect(evalSource("let a = [1]; a")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "return",
+      expected: "number",
+      actual: "array<number>",
+      position: 13,
+    },
+  });
+});
+
+test("evalProgram returns an UnexpectedStatement error when a bare expression is not final", () => {
+  expect(evalSource("let x = 1; x; let y = 2; return y;")).toEqual({
+    ok: false,
+    error: { kind: "UnexpectedStatement", statement: "x;", position: 11 },
+  });
+});

@@ -282,10 +282,14 @@ test("parse returns an EmptyProgram error for empty input", () => {
   expect(parseSource("")).toEqual({ ok: false, error: { kind: "EmptyProgram" } });
 });
 
-test("parse returns an UnexpectedStatement error for unrecognized input", () => {
+test("parse parses a lone identifier as a bare final expression", () => {
   expect(parseSource("garbage")).toEqual({
-    ok: false,
-    error: { kind: "UnexpectedStatement", statement: "garbage", position: 0 },
+    ok: true,
+    value: {
+      statements: [
+        { kind: "expr", value: { kind: "ident", name: "garbage", position: 0 }, position: 0 },
+      ],
+    },
   });
 });
 
