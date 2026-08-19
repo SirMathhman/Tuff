@@ -2,9 +2,21 @@ import { err, ok, type EvalError, type Result } from "./errors.js";
 
 const NUMBER = "-?\\d+(?:\\.\\d+)?";
 const IDENT = "[A-Za-z_$][\\w$]*";
-const LET_RE = new RegExp(`^\\s*let\\s+(mut\\s+)?(${IDENT})\\s*=\\s*(${NUMBER})\\s*$`);
-const ASSIGN_RE = new RegExp(`^\\s*(${IDENT})\\s*=\\s*(${NUMBER})\\s*$`);
-const RETURN_RE = new RegExp(`^\\s*return\\s+(${NUMBER}|${IDENT})\\s*$`);
+const VALUE = `(?:true|false|${NUMBER})`;
+const LET_RE = new RegExp(`^\\s*let\\s+(mut\\s+)?(${IDENT})\\s*=\\s*(${VALUE})\\s*$`);
+const ASSIGN_RE = new RegExp(`^\\s*(${IDENT})\\s*=\\s*(${VALUE})\\s*$`);
+const RETURN_RE = new RegExp(`^\\s*return\\s+(${VALUE}|${IDENT})\\s*$`);
+
+/** Convert a literal value token (`true`, `false`, or a number) to a number. */
+function toNumber(value: string): number {
+  if (value === "true") {
+    return 1;
+  }
+  if (value === "false") {
+    return 0;
+  }
+  return Number(value);
+}
 
 /**
  * Split a program into statements, flattening the contents of `{ ... }` blocks.
@@ -47,9 +59,7 @@ function extractStatements(source: string): string[] {
     statements.push(source.slice(i, end));
     i = end + 1;
   }
-  return statements
-    .map((statement) => statement.trim())
-    .filter((statement) => statement !== "");
+  return statements.map((statement) => statement.trim()).filter((statement) => statement !== "");
 }
 
 /**
@@ -72,7 +82,7 @@ export function evaluate(expression: string): Result<number, EvalError> {
     const letMatch = LET_RE.exec(statement);
     if (letMatch) {
       variables.set(letMatch[2], {
-        value: Number(letMatch[3]),
+        value: toNumber(letMatch[3]),
         mutable: letMatch[1] !== undefined,
       });
       continue;
@@ -87,13 +97,16 @@ export function evaluate(expression: string): Result<number, EvalError> {
       if (!variable.mutable) {
         return err({ kind: "ImmutableAssignment", name: assignMatch[1], index });
       }
-      variable.value = Number(assignMatch[2]);
+      variable.value = toNumber(assignMatch[2]);
       continue;
     }
 
     const returnMatch = RETURN_RE.exec(statement);
     if (returnMatch) {
       const value = returnMatch[1];
+      if (value === "true" || value === "false") {
+        return ok(toNumber(value));
+      }
       const variable = variables.get(value);
       if (variable) {
         return ok(variable.value);
@@ -101,7 +114,7 @@ export function evaluate(expression: string): Result<number, EvalError> {
       if (/^[A-Za-z_$]/.test(value)) {
         return err({ kind: "UnknownIdentifier", name: value, index });
       }
-      return ok(Number(value));
+      return ok(toNumber(value));
     }
 
     return err({ kind: "UnexpectedStatement", statement, index });
