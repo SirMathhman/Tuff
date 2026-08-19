@@ -13,6 +13,9 @@ describe("evaluate", () => {
   it('returns 1 for "let mut x = 0; x = 1; return x;"', () => {
     expect(evaluate("let mut x = 0; x = 1; return x;")).toEqual({ ok: true, value: 1 });
   });
+  it('returns 1 for "let mut x = 0; { x = 1; } return x;"', () => {
+    expect(evaluate("let mut x = 0; { x = 1; } return x;")).toEqual({ ok: true, value: 1 });
+  });
   it("returns an ImmutableAssignment error when assigning to a non-mut variable", () => {
     expect(evaluate("let x = 0; x = 1; return x;")).toEqual({
       ok: false,

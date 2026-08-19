@@ -7,16 +7,60 @@ const ASSIGN_RE = new RegExp(`^\\s*(${IDENT})\\s*=\\s*(${NUMBER})\\s*$`);
 const RETURN_RE = new RegExp(`^\\s*return\\s+(${NUMBER}|${IDENT})\\s*$`);
 
 /**
- * Evaluate a program of `let`/`let mut` declarations, assignments, and `return` statements.
+ * Split a program into statements, flattening the contents of `{ ... }` blocks.
+ * Unbalanced braces are left in place so they fail statement classification.
+ */
+function extractStatements(source: string): string[] {
+  const statements: string[] = [];
+  let i = 0;
+  while (i < source.length) {
+    const char = source[i];
+    if (/\s/.test(char)) {
+      i++;
+      continue;
+    }
+    if (char === "{") {
+      let depth = 1;
+      let end = i + 1;
+      while (end < source.length && depth > 0) {
+        if (source[end] === "{") {
+          depth++;
+        } else if (source[end] === "}") {
+          depth--;
+        }
+        end++;
+      }
+      if (depth !== 0) {
+        statements.push(source.slice(i));
+        break;
+      }
+      statements.push(...extractStatements(source.slice(i + 1, end - 1)));
+      i = end;
+      continue;
+    }
+    if (char === "}") {
+      statements.push(source.slice(i));
+      break;
+    }
+    const semi = source.indexOf(";", i);
+    const end = semi === -1 ? source.length : semi;
+    statements.push(source.slice(i, end));
+    i = end + 1;
+  }
+  return statements
+    .map((statement) => statement.trim())
+    .filter((statement) => statement !== "");
+}
+
+/**
+ * Evaluate a program of `let`/`let mut` declarations, assignments, `return` statements,
+ * and `{ ... }` blocks.
  * @param expression - The program to evaluate.
  * @returns A `Result` carrying the numeric result, or a structured `EvalError`.
  */
 export function evaluate(expression: string): Result<number, EvalError> {
   const variables = new Map<string, { value: number; mutable: boolean }>();
-  const statements = expression
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter((statement) => statement !== "");
+  const statements = extractStatements(expression);
 
   if (statements.length === 0) {
     return err({ kind: "EmptyProgram" });
