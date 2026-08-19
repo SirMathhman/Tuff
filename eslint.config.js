@@ -20,5 +20,6 @@ export default tseslint.config(js.configs.recommended, ...tseslint.configs.recom
         skipComments: true,
       },
     ],
+    "@typescript-eslint/consistent-type-definitions": "error",
   },
 });

@@ -46,13 +46,22 @@ test('evaluate returns 1 for "let x = 1; let y = &x; return *y;"', () => {
   expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
 });
 test('evaluate returns 1 for "let x = 1; let y = &x; let z = &y; return **z;"', () => {
-  expect(evaluate("let x = 1; let y = &x; let z = &y; return **z;")).toEqual({ ok: true, value: 1 });
+  expect(evaluate("let x = 1; let y = &x; let z = &y; return **z;")).toEqual({
+    ok: true,
+    value: 1,
+  });
 });
 // Coverage for the typecheck pass rejecting pointer operands to ordering operators.
 test("evaluate returns a TypeMismatch error for a pointer operand to an ordering operator", () => {
   expect(evaluate("let a = 1; let p = &a; return p < p;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "<", expected: "number", actual: "ptr<number>", position: 30 },
+    error: {
+      kind: "TypeMismatch",
+      name: "<",
+      expected: "number",
+      actual: "ptr<number>",
+      position: 30,
+    },
   });
 });
 test('evaluate returns 2 for "let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;"', () => {

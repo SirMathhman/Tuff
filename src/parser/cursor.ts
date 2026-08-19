@@ -6,13 +6,13 @@ import type { Token } from "../lexer.js";
  * inspects it with `peek`/`atEnd` — it never matches statements by fixed
  * token offsets or range-length arithmetic.
  */
-export type Cursor = {
+export interface Cursor {
   tokens: Token[];
   source: string;
   pos: number;
   /** Source offset where the current statement began (for error text). */
   statementStart: number;
-};
+}
 
 export function peek(cursor: Cursor): Token | undefined {
   return cursor.tokens[cursor.pos];

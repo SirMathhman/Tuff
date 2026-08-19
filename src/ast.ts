@@ -50,4 +50,4 @@ export type Statement =
   | { kind: "while"; condition: Value; body: Statement[]; position: number };
 
 /** A parsed program: a list of top-level statements. */
-export type Program = { statements: Statement[] };
+export interface Program { statements: Statement[] }

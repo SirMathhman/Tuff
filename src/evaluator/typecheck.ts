@@ -3,7 +3,7 @@ import { err, ok, type EvalError, type Result, type TypeName } from "../errors.j
 import { lookup, withScope, type ScopeStack } from "../scopes.js";
 
 /** A variable's declared type and mutability, tracked across scopes. */
-type Decl = { type: TypeName; mutable: boolean };
+interface Decl { type: TypeName; mutable: boolean }
 
 /** A stack of variable declarations, innermost last. */
 type DeclScopes = ScopeStack<Decl>;

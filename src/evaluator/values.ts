@@ -9,7 +9,7 @@ export type TypedValue =
   | { type: `ptr<${TypeName}>`; ref: Variable };
 
 /** A variable's value with its type, so assignments can be type-checked. */
-export type Variable = { value: TypedValue; mutable: boolean };
+export interface Variable { value: TypedValue; mutable: boolean }
 
 /** A stack of variable scopes, innermost last. */
 export type Scopes = ScopeStack<Variable>;
