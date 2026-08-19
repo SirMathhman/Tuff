@@ -44,35 +44,44 @@ function unexpected(cursor: Cursor): Result<never, EvalError> {
   });
 }
 
-/**
- * Parse a value expression: a primary (number, bool, ident) followed by zero
- * or more `==` binary operations, chained left-associatively.
- */
-function parseValue(cursor: Cursor): Result<Value, EvalError> {
+/** Parse a primary value: a number, bool, or identifier literal. */
+function parsePrimary(cursor: Cursor): Result<Value, EvalError> {
   const token = peek(cursor);
   if (!token) {
     return unexpected(cursor);
   }
-  let value: Value | undefined;
   if (token.kind === "number") {
-    value = { kind: "number", value: token.value, position: token.position };
-  } else if (token.kind === "bool") {
-    value = { kind: "bool", value: token.value, position: token.position };
-  } else if (token.kind === "ident") {
-    value = { kind: "ident", name: token.value, position: token.position };
+    advance(cursor);
+    return ok({ kind: "number", value: token.value, position: token.position });
   }
-  if (!value) {
-    return unexpected(cursor);
+  if (token.kind === "bool") {
+    advance(cursor);
+    return ok({ kind: "bool", value: token.value, position: token.position });
   }
-  const position = token.position;
-  advance(cursor);
+  if (token.kind === "ident") {
+    advance(cursor);
+    return ok({ kind: "ident", name: token.value, position: token.position });
+  }
+  return unexpected(cursor);
+}
+
+/**
+ * Parse a value expression: a primary (number, bool, ident) followed by zero
+ * or more binary operations (`==`, `<`), chained left-associatively.
+ */
+function parseValue(cursor: Cursor): Result<Value, EvalError> {
+  const left = parsePrimary(cursor);
+  if (!left.ok) {
+    return left;
+  }
+  let value = left.value;
   while (true) {
     const operatorToken = peek(cursor);
     if (operatorToken?.kind !== "binary") {
       break;
     }
     advance(cursor);
-    const right = parseValue(cursor);
+    const right = parsePrimary(cursor);
     if (!right.ok) {
       return right;
     }
@@ -81,7 +90,7 @@ function parseValue(cursor: Cursor): Result<Value, EvalError> {
       operator: operatorToken.operator,
       left: value,
       right: right.value,
-      position,
+      position: value.position,
     };
   }
   return ok(value);

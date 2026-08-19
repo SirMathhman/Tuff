@@ -40,10 +40,10 @@ test("evalProgram compares with <", () => {
   expect(evalSource("return 1 < 1;")).toEqual({ ok: true, value: 0 });
 });
 
-test("evalProgram chains == right-associatively", () => {
+test("evalProgram chains == left-associatively", () => {
   expect(evalSource("return 1 == 1 == 1;")).toEqual({ ok: true, value: 1 });
-  // 2 == (3 == 0) -> 2 == 0 -> 0 (a left-associative parse would give 1)
-  expect(evalSource("return 2 == 3 == 0;")).toEqual({ ok: true, value: 0 });
+  // (2 == 3) == 0 -> 0 == 0 -> 1 (a right-associative parse would give 0)
+  expect(evalSource("return 2 == 3 == 0;")).toEqual({ ok: true, value: 1 });
 });
 
 test("evalProgram shadows a variable in an inner block and restores it after", () => {
