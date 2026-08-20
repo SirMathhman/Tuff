@@ -24,15 +24,13 @@ impl std::error::Error for Error {}
 
 /// Interprets `input` and returns its value.
 ///
-/// The bare minimum for now: an empty string is `0`; otherwise the input
-/// must be a single integer literal.
+/// The bare minimum for now: an empty string is `0`; anything else is
+/// not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         Ok(0)
     } else {
-        input
-            .parse::<i64>()
-            .map_err(|_| Error::UnsupportedSyntax { offset: 0 })
+        Err(Error::UnsupportedSyntax { offset: 0 })
     }
 }
 
@@ -45,14 +43,12 @@ mod tests {
         assert_eq!(interpret(""), Ok(0));
     }
 
-    #[test]
-    fn integer_literal() {
-        assert_eq!(interpret("1"), Ok(1));
-    }
-
     // Coverage test: non-empty input must yield Err, not panic.
     #[test]
     fn non_empty_input_is_unsupported() {
-        assert_eq!(interpret("x"), Err(Error::UnsupportedSyntax { offset: 0 }));
+        assert_eq!(
+            interpret("x"),
+            Err(Error::UnsupportedSyntax { offset: 0 })
+        );
     }
 }
