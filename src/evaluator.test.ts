@@ -125,6 +125,7 @@ test("evalProgram evaluates an is type-test to 0 when the types differ", () => {
 test("evalProgram evaluates an is type-test against Bool", () => {
   expect(evalSource("true is Bool")).toEqual({ ok: true, value: 1 });
   expect(evalSource("1 is Bool")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("let x = true; x is Bool")).toEqual({ ok: true, value: 1 });
 });
 
 test("evalProgram evaluates an is type-test subtype-aware", () => {
