@@ -31,21 +31,26 @@ pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
     }
-    Ok(input
-        .split('+')
-        .map(|part| parse_digit(part.trim()))
-        .collect::<Result<Vec<_>, _>>()?
-        .iter()
-        .sum())
+    let mut total = 0;
+    let mut base = 0;
+    for part in input.split('+') {
+        total += parse_digit(part, base)?;
+        base += part.len() + 1; // part plus the `+` that follows it
+    }
+    Ok(total)
 }
 
-/// Parses a single ASCII digit, or reports unsupported syntax.
-fn parse_digit(input: &str) -> Result<i64, Error> {
-    match input {
+/// Parses a single ASCII digit, or reports unsupported syntax at the
+/// first non-whitespace character of `part` (offsets relative to the
+/// original input via `base`).
+fn parse_digit(part: &str, base: usize) -> Result<i64, Error> {
+    match part.trim() {
         digit if digit.len() == 1 && digit.chars().next().unwrap().is_ascii_digit() => {
             Ok((digit.as_bytes()[0] - b'0') as i64)
         }
-        _ => Err(Error::UnsupportedSyntax { offset: 0 }),
+        _ => Err(Error::UnsupportedSyntax {
+            offset: base + part.len() - part.trim_start().len(),
+        }),
     }
 }
 
@@ -77,5 +82,13 @@ mod tests {
     #[test]
     fn non_empty_input_is_unsupported() {
         assert_eq!(interpret("x"), Err(Error::UnsupportedSyntax { offset: 0 }));
+    }
+
+    #[test]
+    fn unsupported_syntax_reports_true_offset() {
+        assert_eq!(
+            interpret("1 + x"),
+            Err(Error::UnsupportedSyntax { offset: 4 })
+        );
     }
 }
