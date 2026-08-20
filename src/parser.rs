@@ -27,7 +27,7 @@ impl<'a> Parser<'a> {
         loop {
             self.skip_spaces();
             if self.pos >= self.input.len() {
-                return value.ok_or(Error::UnsupportedSyntax { offset: self.pos });
+                return value.ok_or(Error::EmptyProgram { offset: self.pos });
             }
             value = Some(self.parse_statement()?);
             self.skip_spaces();
@@ -37,7 +37,7 @@ impl<'a> Parser<'a> {
             if self.peek() == Some(b';') {
                 self.pos += 1;
             } else {
-                return Err(Error::UnsupportedSyntax { offset: self.pos });
+                return Err(Error::ExpectedSemicolon { offset: self.pos });
             }
         }
     }
@@ -137,7 +137,10 @@ impl<'a> Parser<'a> {
                     self.parse_identifier()
                 }
             }
-            _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
+            _ => Err(Error::UnexpectedToken {
+                offset: self.pos,
+                found: self.peek(),
+            }),
         }
     }
 
@@ -184,11 +187,11 @@ impl<'a> Parser<'a> {
             if self.peek() == Some(close) {
                 self.pos += 1;
                 if last_was_let {
-                    return Err(Error::UnsupportedSyntax {
+                    return Err(Error::BlockMustEndWithExpression {
                         offset: self.pos - 1,
                     });
                 }
-                return value.ok_or(Error::UnsupportedSyntax {
+                return value.ok_or(Error::BlockMustEndWithExpression {
                     offset: self.pos - 1,
                 });
             }
@@ -206,13 +209,18 @@ impl<'a> Parser<'a> {
                 Some(c) if c == close => {
                     self.pos += 1;
                     if last_was_let {
-                        return Err(Error::UnsupportedSyntax {
+                        return Err(Error::BlockMustEndWithExpression {
                             offset: self.pos - 1,
                         });
                     }
                     return Ok(value.unwrap());
                 }
-                _ => return Err(Error::UnsupportedSyntax { offset: self.pos }),
+                _ => {
+                    return Err(Error::ExpectedClosingDelimiter {
+                        offset: self.pos,
+                        expected: close,
+                    })
+                }
             }
         }
     }
@@ -239,7 +247,7 @@ impl<'a> Parser<'a> {
         let (name, _) = self.parse_identifier_name()?;
         self.skip_spaces();
         if self.peek() != Some(b'=') {
-            return Err(Error::UnsupportedSyntax { offset: self.pos });
+            return Err(Error::ExpectedEquals { offset: self.pos });
         }
         self.pos += 1;
         let value = self.parse_or()?;
@@ -267,7 +275,10 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         if start == self.pos {
-            return Err(Error::UnsupportedSyntax { offset: start });
+            return Err(Error::UnexpectedToken {
+                offset: start,
+                found: self.peek(),
+            });
         }
         Ok((self.input[start..self.pos].to_string(), start))
     }
@@ -294,7 +305,10 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 Ok(value)
             }
-            _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
+            _ => Err(Error::ExpectedClosingDelimiter {
+                offset: self.pos,
+                expected: close,
+            }),
         }
     }
 
