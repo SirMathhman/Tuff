@@ -65,33 +65,55 @@ function evalOrdering(
   l: TypedValue,
   r: TypedValue,
 ): Result<TypedValue, EvalError> {
-  const toNum = (t: TypedValue): number => {
+  // The typecheck pass guarantees numeric operands; this is a defensive
+  // fallback for a non-numeric operand reaching the evaluator.
+  const toNum = (t: TypedValue): Result<number, EvalError> => {
     if (t.kind === "number" || t.kind === "int" || t.kind === "float") {
-      return t.value;
+      return ok(t.value);
     }
     if (t.kind === "bool") {
-      return t.value ? 1 : 0;
+      return ok(t.value ? 1 : 0);
     }
-    throw new Error(`unreachable: non-numeric operand in ordering: ${t.kind}`);
+    return err({
+      kind: "TypeMismatch",
+      name: value.operator,
+      expected: "number",
+      actual: typeToString(typeOfValue(t)),
+      position: value.position,
+    });
   };
   const a = toNum(l);
+  if (!a.ok) {
+    return a;
+  }
   const b = toNum(r);
+  if (!b.ok) {
+    return b;
+  }
   let result: boolean;
   switch (value.operator) {
     case "<":
-      result = a < b;
+      result = a.value < b.value;
       break;
     case "<=":
-      result = a <= b;
+      result = a.value <= b.value;
       break;
     case ">":
-      result = a > b;
+      result = a.value > b.value;
       break;
     case ">=":
-      result = a >= b;
+      result = a.value >= b.value;
       break;
     default:
-      throw new Error(`unreachable: unknown ordering operator: ${value.operator}`);
+      // The typecheck pass guarantees a known ordering operator; this is a
+      // defensive fallback for an unknown operator reaching the evaluator.
+      return err({
+        kind: "TypeMismatch",
+        name: value.operator,
+        expected: "ordering operator",
+        actual: value.operator,
+        position: value.position,
+      });
   }
   return ok({ kind: "bool", value: result });
 }

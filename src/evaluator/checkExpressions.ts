@@ -112,6 +112,16 @@ export function checkExpression(
   if (value.kind === "block") {
     return block(value.statements, scopes);
   }
-  // An lvalue is never read as a value; the evaluator rejects it.
+  // An lvalue is never read as a value; reject it here so the evaluator's
+  // defensive branch stays unreachable.
+  if (value.kind === "indexAssign") {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "value",
+      actual: "lvalue",
+      position: value.position,
+    });
+  }
   return ok({ kind: "int", name: INT_ANY });
 }
