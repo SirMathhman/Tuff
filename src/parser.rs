@@ -419,3 +419,165 @@ impl<'a> Parser<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{interpret, Error};
+
+    #[test]
+    fn empty_string_is_zero() {
+        assert_eq!(interpret(""), Ok(0));
+    }
+
+    #[test]
+    fn single_digit_one() {
+        assert_eq!(interpret("1"), Ok(1));
+    }
+
+    #[test]
+    fn multi_digit_number() {
+        assert_eq!(interpret("20"), Ok(20));
+    }
+
+    #[test]
+    fn addition_of_two_digits() {
+        assert_eq!(interpret("1 + 2"), Ok(3));
+    }
+
+    #[test]
+    fn addition_of_three_digits() {
+        assert_eq!(interpret("1 + 2 + 3"), Ok(6));
+    }
+
+    #[test]
+    fn mixed_addition_and_subtraction() {
+        assert_eq!(interpret("2 + 3 - 4"), Ok(1));
+    }
+
+    #[test]
+    fn multiplication_binds_tighter_than_addition() {
+        assert_eq!(interpret("2 * 3 + 4"), Ok(10));
+    }
+
+    #[test]
+    fn addition_then_multiplication_term() {
+        assert_eq!(interpret("2 + 3 * 4"), Ok(14));
+    }
+
+    #[test]
+    fn parenthesized_group() {
+        assert_eq!(interpret("(2 + 3) * 4"), Ok(20));
+    }
+
+    #[test]
+    fn curly_braced_group() {
+        assert_eq!(interpret("{ 2 + 3 } * 4"), Ok(20));
+    }
+
+    #[test]
+    fn let_binding_in_block() {
+        assert_eq!(interpret("{ let x = 2 + 3; x } * 4"), Ok(20));
+    }
+
+    #[test]
+    fn top_level_let_binding() {
+        assert_eq!(interpret("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
+    }
+
+    #[test]
+    fn let_statement_evaluates_to_zero() {
+        assert_eq!(interpret("let x = 100;"), Ok(0));
+    }
+
+    #[test]
+    fn block_must_end_with_expression() {
+        // The inner block ends with a `let` statement, not an
+        // expression; the closing `}` is at offset 23.
+        assert_eq!(
+            interpret("let x = { let y = 100; }; x"),
+            Err(Error::BlockMustEndWithExpression { offset: 23 })
+        );
+    }
+
+    #[test]
+    fn boolean_literal_true_is_one() {
+        assert_eq!(interpret("let x = true; x"), Ok(1));
+    }
+
+    #[test]
+    fn or_of_booleans() {
+        assert_eq!(interpret("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
+    fn equality_of_unequal_values() {
+        assert_eq!(interpret("let x = 1; let y = 2; x == y"), Ok(0));
+    }
+
+    #[test]
+    fn boolean_is_not_equal_to_integer() {
+        assert_eq!(interpret("true == 1"), Ok(0));
+    }
+
+    #[test]
+    fn mutable_binding_assignment() {
+        assert_eq!(interpret("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn mutable_binding_assignment_in_block() {
+        assert_eq!(interpret("{ let mut x = 0; x = 1; x }"), Ok(1));
+    }
+
+    #[test]
+    fn assignment_to_immutable_binding_is_reported() {
+        assert_eq!(
+            interpret("let x = 0; x = 1; x"),
+            Err(Error::AssignmentToImmutable {
+                offset: 11,
+                name: "x".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn multiplication_overflow_is_reported() {
+        // 9^20 does not fit in an i64; the 19th `*` is at offset 74.
+        let input = "9 * ".repeat(19) + "9";
+        assert_eq!(interpret(&input), Err(Error::Overflow { offset: 74 }));
+    }
+
+    // Coverage test: non-empty input must yield Err, not panic.
+    #[test]
+    fn non_empty_input_is_unsupported() {
+        assert_eq!(
+            interpret("@"),
+            Err(Error::UnexpectedToken {
+                offset: 0,
+                found: Some(b'@')
+            })
+        );
+    }
+
+    #[test]
+    fn unsupported_syntax_reports_true_offset() {
+        assert_eq!(
+            interpret("1 + @"),
+            Err(Error::UnexpectedToken {
+                offset: 4,
+                found: Some(b'@')
+            })
+        );
+    }
+
+    #[test]
+    fn undefined_variable_is_reported() {
+        assert_eq!(
+            interpret("x"),
+            Err(Error::UndefinedVariable {
+                offset: 0,
+                name: "x".into()
+            })
+        );
+    }
+}
