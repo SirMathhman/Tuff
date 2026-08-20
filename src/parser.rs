@@ -510,6 +510,16 @@ mod tests {
     }
 
     #[test]
+    fn nested_block_must_end_with_expression_not_assignment() {
+        // The inner block ends with an assignment statement, not an
+        // expression; its closing `}` is at offset 36.
+        assert_eq!(
+            interpret("let mut x = 0; let y = { { x = 100; } };"),
+            Err(Error::BlockMustEndWithExpression { offset: 36 })
+        );
+    }
+
+    #[test]
     fn boolean_literal_true_is_one() {
         assert_eq!(interpret("let x = true; x"), Ok(1));
     }
