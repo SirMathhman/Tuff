@@ -35,11 +35,11 @@ impl std::error::Error for Error {}
 
 /// Interprets `input` and returns its value.
 ///
-/// The bare minimum for now: an empty string is `0`; a single digit is
-/// its value; a chain of single digits joined by `+`, `-`, or `*`
-/// (optional surrounding spaces) is evaluated with `*` binding tighter
-/// than `+`/`-`; parentheses or curly braces group subexpressions;
-/// anything else is not yet supported.
+/// The bare minimum for now: an empty string is `0`; a non-negative
+/// integer literal is its value; a chain of literals joined by `+`,
+/// `-`, or `*` (optional surrounding spaces) is evaluated with `*`
+/// binding tighter than `+`/`-`; parentheses or curly braces group
+/// subexpressions; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `factor = digit | '(' expr ')' | '{' expr '}'`.
+    /// Parses `factor = number | '(' expr ')' | '{' expr '}'`.
     fn parse_factor(&mut self) -> Result<i64, Error> {
         self.skip_spaces();
         match self.peek() {
@@ -115,12 +115,21 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 self.parse_grouped(b'}')
             }
-            Some(digit @ b'0'..=b'9') => {
-                self.pos += 1;
-                Ok((digit - b'0') as i64)
-            }
+            Some(b'0'..=b'9') => self.parse_number(),
             _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
         }
+    }
+
+    /// Parses a non-negative integer literal starting at the current
+    /// position, reporting overflow if it does not fit in an `i64`.
+    fn parse_number(&mut self) -> Result<i64, Error> {
+        let start = self.pos;
+        while matches!(self.peek(), Some(b'0'..=b'9')) {
+            self.pos += 1;
+        }
+        self.input[start..self.pos]
+            .parse::<i64>()
+            .map_err(|_| Error::Overflow { offset: start })
     }
 
     /// Parses `expr close` after the opening delimiter was consumed;
@@ -162,6 +171,11 @@ mod tests {
     #[test]
     fn single_digit_one() {
         assert_eq!(interpret("1"), Ok(1));
+    }
+
+    #[test]
+    fn multi_digit_number() {
+        assert_eq!(interpret("20"), Ok(20));
     }
 
     #[test]
