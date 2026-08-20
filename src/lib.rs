@@ -118,6 +118,11 @@ mod tests {
         assert_eq!(interpret("2 * 3 + 4"), Ok(10));
     }
 
+    #[test]
+    fn addition_then_multiplication_term() {
+        assert_eq!(interpret("2 + 3 * 4"), Ok(14));
+    }
+
     // Coverage test: non-empty input must yield Err, not panic.
     #[test]
     fn non_empty_input_is_unsupported() {
