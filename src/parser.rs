@@ -318,21 +318,14 @@ impl<'a> Parser<'a> {
             mutable = true;
             self.pos += 4; // skip `mut `
         }
-        let (name, _) = self.parse_identifier_name()?;
-        self.skip_spaces();
-        if self.peek() != Some(b'=') {
-            return Err(Error::ExpectedEquals { offset: self.pos });
-        }
-        self.pos += 1;
-        let value = self.parse_or()?;
+        let (name, _, value) = self.parse_name_equals_expr()?;
         self.env.last_mut().unwrap().push((name, mutable, value));
         Ok(Value::Int(0))
     }
 
-    /// Parses `name = expr`: the right-hand side is evaluated and the
-    /// binding is updated; the statement evaluates to the assigned
-    /// value. Only bindings declared `mut` may be assigned.
-    fn parse_assignment(&mut self) -> Result<Value, Error> {
+    /// Parses `name = expr`, returning the name, its offset, and the
+    /// value of the right-hand side.
+    fn parse_name_equals_expr(&mut self) -> Result<(String, usize, Value), Error> {
         let (name, offset) = self.parse_identifier_name()?;
         self.skip_spaces();
         if self.peek() != Some(b'=') {
@@ -340,6 +333,14 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1;
         let value = self.parse_or()?;
+        Ok((name, offset, value))
+    }
+
+    /// Parses `name = expr`: the right-hand side is evaluated and the
+    /// binding is updated; the statement evaluates to the assigned
+    /// value. Only bindings declared `mut` may be assigned.
+    fn parse_assignment(&mut self) -> Result<Value, Error> {
+        let (name, offset, value) = self.parse_name_equals_expr()?;
         for scope in self.env.iter_mut().rev() {
             if let Some((_, mutable, stored)) = scope.iter_mut().find(|(n, _, _)| *n == name) {
                 if !*mutable {
