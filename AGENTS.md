@@ -4,7 +4,7 @@ Tuff is a small compiler/evaluator for an expression language. Pipeline: `core` 
 
 ## Language features
 
-`let`/assignment (incl. `+=`, deref and index lvalues), `if`/`while` statements and `if` expressions, `for (i in start..end)` ranges, `match` with literal/`_` patterns (a wildcard arm is required), pointers (`&`/`&mut`, `*`), arrays with index lvalues, `is` type tests, suffixed numeric literals (`U8`–`U64`, `I8`–`I64`, `USize`, `F32`/`F64`), and `{ ... }` block values. Booleans evaluate to `1`/`0` in numeric contexts.
+`let`/assignment (incl. `+=`, deref and index lvalues), `if`/`while` statements and `if` expressions, `for (i in start..end)` ranges, `match` with literal/`_` patterns (a wildcard arm is required), pointers (`&`/`&mut`, `*`), arrays with index lvalues, `is` type tests, suffixed numeric literals (`U8`–`U64`, `I8`–`I64`, `USize`, `F32`/`F64`), parenthesized expressions, and `{ ... }` block values. Booleans evaluate to `1`/`0` in numeric contexts.
 
 ## Commands
 

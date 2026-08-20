@@ -67,6 +67,18 @@ function parsePrimary(cursor: Cursor, block: BlockValueParser): Result<Value, Ev
   if (token.kind === "lbracket") {
     return parseArrayLiteral(cursor, token.position, block);
   }
+  if (token.kind === "lparen") {
+    advance(cursor); // consume `(`
+    const inner = parseValue(cursor, block);
+    if (!inner.ok) {
+      return inner;
+    }
+    if (peek(cursor)?.kind !== "rparen") {
+      return unexpected(cursor);
+    }
+    advance(cursor); // consume `)`
+    return inner;
+  }
   if (token.kind === "lbrace") {
     return block(cursor);
   }

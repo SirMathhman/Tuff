@@ -126,6 +126,7 @@ test("evalProgram evaluates an is type-test against Bool", () => {
   expect(evalSource("true is Bool")).toEqual({ ok: true, value: 1 });
   expect(evalSource("1 is Bool")).toEqual({ ok: true, value: 0 });
   expect(evalSource("let x = true; x is Bool")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("(100U8 is U8) is Bool")).toEqual({ ok: true, value: 1 });
 });
 
 test("evalProgram evaluates an is type-test subtype-aware", () => {
@@ -150,6 +151,12 @@ test("evalProgram returns an UnknownType error for an is type-test against the i
 });
 test("evalProgram binds is tighter than comparisons", () => {
   expect(evalSource("100U8 is U8 == true")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram evaluates a parenthesized expression", () => {
+  expect(evalSource("(1 + 2) + 3")).toEqual({ ok: true, value: 6 });
+  expect(evalSource("((true))")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("let x = (100U8 is U8); x")).toEqual({ ok: true, value: 1 });
 });
 
 test("evalProgram returns an UnknownType error for an is type-test with an unknown type name", () => {

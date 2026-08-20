@@ -258,6 +258,7 @@ function parseStatement(
     (head.kind === "number" ||
       head.kind === "bool" ||
       head.kind === "lbracket" ||
+      head.kind === "lparen" ||
       head.kind === "addressOf")
   ) {
     return parseExprStatement(cursor, head.position, block);

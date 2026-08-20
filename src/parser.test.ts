@@ -44,6 +44,40 @@ test("parse parses a mutable let declaration with a bool literal", () => {
   });
 });
 
+test("parse parses a parenthesized expression as its inner value", () => {
+  expect(parseSource("(1 + 2) + 3;")).toEqual({
+    ok: true,
+    value: {
+      statements: [
+        {
+          kind: "expr",
+          value: {
+            kind: "binary",
+            operator: "+",
+            left: {
+              kind: "binary",
+              operator: "+",
+              left: { kind: "number", value: 1, position: 1 },
+              right: { kind: "number", value: 2, position: 5 },
+              position: 1,
+            },
+            right: { kind: "number", value: 3, position: 10 },
+            position: 1,
+          },
+          position: 0,
+        },
+      ],
+    },
+  });
+});
+
+test("parse returns an UnexpectedStatement error for an unclosed parenthesized expression", () => {
+  expect(parseSource("(1 + 2")).toEqual({
+    ok: false,
+    error: { kind: "UnexpectedStatement", statement: "(1 + 2", position: 0 },
+  });
+});
+
 const ASSIGN_CASES = [
   { label: "plain", source: "x = 2;", valuePosition: 4, compound: undefined },
   { label: "compound", source: "x += 2;", valuePosition: 5, compound: "+=" as const },
