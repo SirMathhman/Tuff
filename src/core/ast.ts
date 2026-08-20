@@ -1,8 +1,8 @@
-/** A numeric literal, optionally suffixed with an integer type (`100U8`). */
+/** A numeric literal, optionally suffixed with a type (`100U8`, `1.5F64`). */
 export interface ValueNumber {
   kind: "number";
   value: number;
-  /** The integer-type suffix (`u8`, `i32`, ...), when present. */
+  /** The type suffix (`u8`, `i32`, `f32`, ...), when present. */
   suffix?: string;
   position: number;
 }
@@ -118,6 +118,8 @@ export interface ValueIf {
 export interface MatchPatternNumber {
   kind: "number";
   value: number;
+  /** The type suffix (`u8`, `f32`, ...), when present. */
+  suffix?: string;
   position: number;
 }
 

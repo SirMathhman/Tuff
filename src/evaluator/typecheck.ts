@@ -11,7 +11,12 @@ import type {
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { withScope } from "../core/scopes.js";
 import { checkAssign } from "./checkAssignments.js";
-import { checkExpression, checkNumericCoercible, type BlockChecker } from "./checkExpressions.js";
+import {
+  checkBool,
+  checkExpression,
+  checkNumericCoercible,
+  type BlockChecker,
+} from "./checkExpressions.js";
 import { typeToString, type DeclScopes, type Type } from "./types.js";
 
 /**
@@ -50,7 +55,7 @@ function checkStatements(
   return ok(lastType);
 }
 
-/** Check a loop condition: it is a value and numeric-coercible. */
+/** Check a loop condition: it is a value of type `Bool`. */
 function checkLoopCondition(
   condition: Value,
   scopes: DeclScopes,
@@ -61,7 +66,7 @@ function checkLoopCondition(
   if (!checked.ok) {
     return checked;
   }
-  return checkNumericCoercible(checked.value, name, condition.position);
+  return checkBool(checked.value, name, condition.position);
 }
 
 /** Check a `while` loop: the condition is a value and the body is checked in a loop scope. */
@@ -78,9 +83,10 @@ function checkWhile(
 }
 
 /**
- * Check a `for (i in range)` loop: the range must be a numeric range (a
- * `start..end` expression or a variable of range type), and the body is
- * checked in a loop scope where the variable is a mutable number.
+ * Check a `for (i in range)` loop: the range must be an integer range (a
+ * `start..end` expression or a variable of range type over any integer type),
+ * and the body is checked in a loop scope where the variable is a mutable
+ * value of the range's element type.
  */
 function checkFor(
   statement: StatementFor,
@@ -92,17 +98,18 @@ function checkFor(
     return range;
   }
   const rangeType = range.value;
-  if (rangeType.kind !== "range" || rangeType.element.kind !== "number") {
+  if (rangeType.kind !== "range" || rangeType.element.kind !== "int") {
     return err({
       kind: "TypeMismatch",
       name: "in",
-      expected: "range<number>",
+      expected: "range<integer>",
       actual: typeToString(rangeType),
       position: statement.range.position,
     });
   }
+  const elementType = rangeType.element;
   return withScope(scopes, () => {
-    scopes[scopes.length - 1].set(statement.variable, { type: { kind: "number" }, mutable: true });
+    scopes[scopes.length - 1].set(statement.variable, { type: elementType, mutable: true });
     return checkStatements(statement.body, scopes, true, false, block);
   });
 }
@@ -121,7 +128,7 @@ function checkLoopControl(
   });
 }
 
-/** Check an `if` statement: the condition is numeric-coercible and both branches are checked. */
+/** Check an `if` statement: the condition is a `Bool` and both branches are checked. */
 function checkIf(
   statement: StatementIf,
   scopes: DeclScopes,

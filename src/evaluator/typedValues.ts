@@ -21,6 +21,14 @@ export interface TypedValueInt {
   value: number;
 }
 
+/** A fixed-width float value (e.g. `1.5F64`), distinct from a plain number. */
+export interface TypedValueFloat {
+  kind: "float";
+  /** The float type name (`f32`, `f64`). */
+  name: string;
+  value: number;
+}
+
 /** An array value: its element type and the elements. */
 export interface TypedValueArray {
   kind: "array";
@@ -46,6 +54,7 @@ export type TypedValue =
   | TypedValueNumber
   | TypedValueBool
   | TypedValueInt
+  | TypedValueFloat
   | TypedValueArray
   | TypedValuePtr
   | TypedValueRange;

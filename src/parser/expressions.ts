@@ -259,7 +259,7 @@ function parseMatchPattern(cursor: Cursor): Result<MatchPattern, EvalError> {
   }
   if (head.kind === "number") {
     advance(cursor);
-    return ok({ kind: "number", value: head.value, position: head.position });
+    return ok({ kind: "number", value: head.value, suffix: head.suffix, position: head.position });
   }
   if (head.kind === "bool") {
     advance(cursor);

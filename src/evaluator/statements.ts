@@ -37,15 +37,16 @@ function evalWhile(statement: StatementWhile, scopes: Scopes, ctx: ValueContext)
 }
 
 /**
- * Evaluate a `for (i in start..end) { ... }` loop over a numeric range, exclusive
- * of `end`. The loop variable is a fresh mutable number each iteration.
+ * Evaluate a `for (i in start..end)` loop over an integer range, exclusive of
+ * `end`. The loop variable is a fresh mutable value of the range's element
+ * type each iteration.
  */
 function evalFor(statement: StatementFor, scopes: Scopes, ctx: ValueContext): Outcome {
   const range = valueToTyped(statement.range, scopes, ctx);
   if (!range.ok) {
     return { kind: "error", error: range.error };
   }
-  // The typecheck pass guarantees `statement.range` is a `range<number>`; the
+  // The typecheck pass guarantees `statement.range` is a `range<integer>`; the
   // guard is a defensive fallback for a non-range value.
   if (!isRange(range.value)) {
     return {
@@ -53,7 +54,22 @@ function evalFor(statement: StatementFor, scopes: Scopes, ctx: ValueContext): Ou
       error: {
         kind: "TypeMismatch",
         name: "in",
-        expected: "range<number>",
+        expected: "range<integer>",
+        actual: typeToString(range.value),
+        position: statement.range.position,
+      },
+    };
+  }
+  const elementType = range.value.element;
+  // The typecheck pass guarantees the range's element is an integer type; the
+  // guard is a defensive fallback.
+  if (elementType.kind !== "int") {
+    return {
+      kind: "error",
+      error: {
+        kind: "TypeMismatch",
+        name: "in",
+        expected: "range<integer>",
         actual: typeToString(range.value),
         position: statement.range.position,
       },
@@ -61,8 +77,10 @@ function evalFor(statement: StatementFor, scopes: Scopes, ctx: ValueContext): Ou
   }
   for (let i = range.value.start; i < range.value.end; i++) {
     const body = withScope(scopes, () => {
+      // The loop variable carries the range's element type (possibly the
+      // `Int` supertype).
       scopes[scopes.length - 1].set(statement.variable, {
-        value: { kind: "number", value: i },
+        value: { kind: "int", name: elementType.name, value: i },
         mutable: true,
       });
       return evalStatements(statement.body, scopes, false, ctx);

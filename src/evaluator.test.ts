@@ -28,10 +28,10 @@ test("evalProgram evaluates a suffixed integer literal to its value", () => {
   expect(evalSource("100U8")).toEqual({ ok: true, value: 100 });
 });
 
-test("evalProgram returns an InvalidIntegerSuffix error for a lowercase integer suffix", () => {
+test("evalProgram returns an InvalidNumberSuffix error for a lowercase integer suffix", () => {
   expect(evalSource("100u8")).toEqual({
     ok: false,
-    error: { kind: "InvalidIntegerSuffix", suffix: "u8", position: 3 },
+    error: { kind: "InvalidNumberSuffix", suffix: "u8", position: 3 },
   });
 });
 
@@ -47,17 +47,38 @@ test("evalProgram promotes mixed integer addition to the wider type", () => {
   expect(evalSource("return 1U8 + 2U16;")).toEqual({ ok: true, value: 3 });
 });
 
-test("evalProgram promotes integer + number addition to number", () => {
+test("evalProgram promotes integer + Int addition to the concrete type", () => {
   expect(evalSource("return 1U8 + 2;")).toEqual({ ok: true, value: 3 });
+});
+
+test("evalProgram promotes concrete integer addition to the range-based least upper bound", () => {
+  expect(evalSource("return 1U8 + 1I32;")).toEqual({ ok: true, value: 2 });
+  expect(evalSource("return 1U32 + 1I32;")).toEqual({ ok: true, value: 2 });
+  expect(evalSource("return 1USize + 1U8;")).toEqual({ ok: true, value: 2 });
+  expect(evalSource("return 1USize + 1U64;")).toEqual({ ok: true, value: 2 });
+});
+
+test("evalProgram returns a TypeMismatch error when + has no common integer type", () => {
+  expect(evalSource("return 1U64 + 1I64;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "+", expected: "u64", actual: "i64", position: 7 },
+  });
 });
 
 test("evalProgram compares suffixed integers with an ordering operator", () => {
   expect(evalSource("return 1U8 < 2U8;")).toEqual({ ok: true, value: 1 });
 });
 
-test("evalProgram compares suffixed integers with equality type-strictly", () => {
+test("evalProgram compares suffixed integers with equality subtype-aware", () => {
   expect(evalSource("return 1U8 == 1U8;")).toEqual({ ok: true, value: 1 });
-  expect(evalSource("return 1U8 == 1U16;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return 1U8 == 2U8;")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram returns a TypeMismatch error when == compares unrelated concrete ints", () => {
+  expect(evalSource("return 1U8 == 1U16;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "==", expected: "u8", actual: "u16", position: 7 },
+  });
 });
 
 test("evalProgram returns an IntegerOutOfRange error for a literal outside its type's range", () => {
@@ -67,10 +88,24 @@ test("evalProgram returns an IntegerOutOfRange error for a literal outside its t
   });
 });
 
+test("evalProgram accepts an unsuffixed integer literal within the Int span", () => {
+  expect(evalSource("return 2147483648;")).toEqual({ ok: true, value: 2147483648 });
+});
+
+// The spec's 2^64 boundary is not representable in a JS double (it rounds to
+// the same value as the 2^64 - 1 bound), so use 2^65, which is representable
+// and unambiguously above the Int span.
+test("evalProgram returns an IntegerOutOfRange error for an unsuffixed integer literal above the Int span", () => {
+  expect(evalSource("return 36893488147419103232;")).toEqual({
+    ok: false,
+    error: { kind: "IntegerOutOfRange", type: "int", value: 36893488147419103000, position: 7 },
+  });
+});
+
 test("evalProgram returns a TypeMismatch error when assigning a number to an integer variable", () => {
   expect(evalSource("let mut x = 1U8; x = 2;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "u8", actual: "number", position: 17 },
+    error: { kind: "TypeMismatch", name: "x", expected: "u8", actual: "int", position: 17 },
   });
 });
 
@@ -87,15 +122,33 @@ test("evalProgram evaluates an is type-test to 0 when the types differ", () => {
   expect(evalSource("100U8 is U16")).toEqual({ ok: true, value: 0 });
 });
 
-test("evalProgram evaluates an is type-test against Number and Bool", () => {
-  expect(evalSource("1 is Number")).toEqual({ ok: true, value: 1 });
-  expect(evalSource("100U8 is Number")).toEqual({ ok: true, value: 0 });
+test("evalProgram evaluates an is type-test against Bool", () => {
   expect(evalSource("true is Bool")).toEqual({ ok: true, value: 1 });
-  expect(evalSource("true is Number")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("1 is Bool")).toEqual({ ok: true, value: 0 });
 });
 
+test("evalProgram evaluates an is type-test subtype-aware", () => {
+  expect(evalSource("1 is U8")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("100 is I32")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("100I32 is I32")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("100USize is U64")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("1U64 is USize")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("1.5 is F32")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("1.5 is F64")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram returns an UnknownType error for an is type-test against the internal supertypes", () => {
+  expect(evalSource("1 is Int")).toEqual({
+    ok: false,
+    error: { kind: "UnknownType", name: "Int", position: 5 },
+  });
+  expect(evalSource("1.5 is Float")).toEqual({
+    ok: false,
+    error: { kind: "UnknownType", name: "Float", position: 7 },
+  });
+});
 test("evalProgram binds is tighter than comparisons", () => {
-  expect(evalSource("100U8 is U8 == 1")).toEqual({ ok: true, value: 1 });
+  expect(evalSource("100U8 is U8 == true")).toEqual({ ok: true, value: 1 });
 });
 
 test("evalProgram returns an UnknownType error for an is type-test with an unknown type name", () => {
@@ -154,7 +207,7 @@ test("evalProgram returns a TypeMismatch error when a match pattern's type diffe
     error: {
       kind: "TypeMismatch",
       name: "case",
-      expected: "number",
+      expected: "int",
       actual: "bool",
       position: 25,
     },
@@ -167,7 +220,7 @@ test("evalProgram returns a TypeMismatch error when a match's arms have differen
     error: {
       kind: "TypeMismatch",
       name: "match",
-      expected: "number",
+      expected: "int",
       actual: "bool",
       position: 33,
     },
@@ -180,7 +233,7 @@ test("evalProgram returns a TypeMismatch error when an if expression's branches 
     error: {
       kind: "TypeMismatch",
       name: "if",
-      expected: "number",
+      expected: "int",
       actual: "bool",
       position: 8,
     },
@@ -201,14 +254,14 @@ test("evalProgram returns an ImmutableAssignment error for += on a non-mut varia
 test("evalProgram returns a TypeMismatch error when assigning a bool to a number variable", () => {
   expect(evalSource("let mut x = 0; x = true; return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 15 },
+    error: { kind: "TypeMismatch", name: "x", expected: "int", actual: "bool", position: 15 },
   });
 });
 
 test("evalProgram returns a TypeMismatch error when assigning a number to a bool variable", () => {
   expect(evalSource("let mut x = true; x = 0; return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "bool", actual: "number", position: 18 },
+    error: { kind: "TypeMismatch", name: "x", expected: "bool", actual: "int", position: 18 },
   });
 });
 
@@ -224,24 +277,43 @@ test("evalProgram returns a TypeMismatch error for += on a bool variable", () =>
   });
 });
 
+test("evalProgram adds with a compound += assignment across concrete integer types", () => {
+  expect(evalSource("let mut x = 0U16; x += 1U8; return x;")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram adds with a compound += assignment on a float variable", () => {
+  expect(evalSource("let mut x = 1.5; x += 0.5; return x;")).toEqual({ ok: true, value: 2 });
+});
+
+test("evalProgram allows assigning a concrete integer to an Int variable", () => {
+  expect(evalSource("let mut x = 1; x = 1U8; return x;")).toEqual({ ok: true, value: 1 });
+});
+
+test("evalProgram returns a TypeMismatch error when assigning an Int to a concrete integer variable", () => {
+  expect(evalSource("let mut y = 1U8; y = 1; return y;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "y", expected: "u8", actual: "int", position: 17 },
+  });
+});
+
 test("evalProgram type-checks a never-executed if branch", () => {
   expect(evalSource("let mut x = 0; if (false) { x = true; } return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 28 },
+    error: { kind: "TypeMismatch", name: "x", expected: "int", actual: "bool", position: 28 },
   });
 });
 
 test("evalProgram type-checks a never-executed else branch", () => {
   expect(evalSource("let mut x = 0; if (true) { x = 1; } else { x = true; } return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 43 },
+    error: { kind: "TypeMismatch", name: "x", expected: "int", actual: "bool", position: 43 },
   });
 });
 
 test("evalProgram type-checks a while body", () => {
   expect(evalSource("let mut x = 0; while (false) { x = true; } return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 31 },
+    error: { kind: "TypeMismatch", name: "x", expected: "int", actual: "bool", position: 31 },
   });
 });
 
@@ -253,7 +325,7 @@ test("evalProgram returns a TypeMismatch error when returning a non-numeric valu
       kind: "TypeMismatch",
       name: "return",
       expected: "number",
-      actual: "array<number>",
+      actual: "array<int>",
       position: 20,
     },
   });
@@ -263,7 +335,7 @@ test("evalProgram returns a TypeMismatch error when returning a non-numeric valu
       kind: "TypeMismatch",
       name: "return",
       expected: "number",
-      actual: "ptr<number>",
+      actual: "ptr<int>",
       position: 30,
     },
   });
@@ -274,8 +346,8 @@ test("evalProgram returns a TypeMismatch error for a non-numeric if condition", 
     error: {
       kind: "TypeMismatch",
       name: "if",
-      expected: "number",
-      actual: "array<number>",
+      expected: "bool",
+      actual: "array<int>",
       position: 17,
     },
   });
@@ -286,20 +358,33 @@ test("evalProgram returns a TypeMismatch error for a non-numeric while condition
     error: {
       kind: "TypeMismatch",
       name: "while",
-      expected: "number",
-      actual: "array<number>",
+      expected: "bool",
+      actual: "array<int>",
       position: 20,
     },
   });
 });
 
-test("evalProgram compares with a type-strict ==", () => {
+test("evalProgram returns a TypeMismatch error for an integer if condition", () => {
+  expect(evalSource("if (1) { return 2; } return 1;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "if", expected: "bool", actual: "int", position: 4 },
+  });
+});
+
+test("evalProgram compares with a subtype-aware ==", () => {
   expect(evalSource("return 1 == 1;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return 1 == 2;")).toEqual({ ok: true, value: 0 });
+  expect(evalSource("return 1 == 1U8;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return true == true;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return true == false;")).toEqual({ ok: true, value: 0 });
-  expect(evalSource("return true == 1;")).toEqual({ ok: true, value: 0 });
-  expect(evalSource("return false == 0;")).toEqual({ ok: true, value: 0 });
+});
+
+test("evalProgram returns a TypeMismatch error when == compares a bool and a number", () => {
+  expect(evalSource("return true == 1;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "==", expected: "bool", actual: "int", position: 7 },
+  });
 });
 
 test("evalProgram compares with <", () => {
@@ -317,18 +402,18 @@ test("evalProgram compares with <=, >, and >=", () => {
   expect(evalSource("return 0 >= 1;")).toEqual({ ok: true, value: 0 });
 });
 
-test("evalProgram compares with a type-strict !=", () => {
+test("evalProgram compares with a subtype-aware !=", () => {
   expect(evalSource("return 1 != 2;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return 1 != 1;")).toEqual({ ok: true, value: 0 });
   expect(evalSource("return true != false;")).toEqual({ ok: true, value: 1 });
   expect(evalSource("return true != true;")).toEqual({ ok: true, value: 0 });
-  expect(evalSource("return true != 1;")).toEqual({ ok: true, value: 1 });
 });
 
-test("evalProgram chains == left-associatively", () => {
-  expect(evalSource("return 1 == 1 == 1;")).toEqual({ ok: true, value: 1 });
-  // (2 == 3) == 0 -> 0 == 0 -> 1 (a right-associative parse would give 0)
-  expect(evalSource("return 2 == 3 == 0;")).toEqual({ ok: true, value: 1 });
+test("evalProgram returns a TypeMismatch error when chaining ==", () => {
+  expect(evalSource("return 1 == 1 == 1;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "==", expected: "bool", actual: "int", position: 7 },
+  });
 });
 
 test("evalProgram runs the else branch when the if condition is false", () => {
@@ -436,8 +521,8 @@ test("evalProgram returns a TypeMismatch error when the for range is not a range
     error: {
       kind: "TypeMismatch",
       name: "in",
-      expected: "range<number>",
-      actual: "number",
+      expected: "range<integer>",
+      actual: "int",
       position: 21,
     },
   });
@@ -450,7 +535,7 @@ test("evalProgram returns a TypeMismatch error for a non-number range bound", ()
       kind: "TypeMismatch",
       name: "..",
       expected: "number",
-      actual: "array<number>",
+      actual: "array<int>",
       position: 8,
     },
   });
@@ -463,7 +548,7 @@ test("evalProgram reports the range bound, not the loop, for a non-number bound 
       kind: "TypeMismatch",
       name: "..",
       expected: "number",
-      actual: "array<number>",
+      actual: "array<int>",
       position: 10,
     },
   });
@@ -488,7 +573,7 @@ test("evalProgram returns a TypeMismatch error when the final expression is not 
       kind: "TypeMismatch",
       name: "return",
       expected: "number",
-      actual: "array<number>",
+      actual: "array<int>",
       position: 13,
     },
   });

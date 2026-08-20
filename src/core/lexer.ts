@@ -55,11 +55,11 @@ export interface TokenIdent {
   position: number;
 }
 
-/** A numeric literal, optionally suffixed with an integer type (`100U8`). */
+/** A numeric literal, optionally suffixed with a type (`100U8`, `1USize`, `1.5F64`). */
 export interface TokenNumber {
   kind: "number";
   value: number;
-  /** The integer-type suffix (`u8`, `i32`, ...), when present. */
+  /** The type suffix (`u8`, `i32`, `f32`, ...), when present. */
   suffix?: string;
   position: number;
 }
@@ -237,8 +237,14 @@ export type Token =
 
 const IDENT_RE = /^[A-Za-z_$][\w$]*/;
 const NUMBER_RE = /^-?\d+(?:\.\d+)?/;
-/** The integer-type literal suffixes (`100U8`, `1I32`, ...); uppercase only. */
-const INT_SUFFIXES = new Set(["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"]);
+/** The integer-type literal suffixes in their canonical spelling (`100U8`, `1I32`, `1USize`, ...). */
+const INT_SUFFIXES = new Set(["U8", "U16", "U32", "U64", "USize", "I8", "I16", "I32", "I64"]);
+/** The float-type literal suffixes in their canonical spelling (`1.5F32`, `1F64`, ...). */
+const FLOAT_SUFFIXES = new Set(["F32", "F64"]);
+/** The lowercase spellings of the valid suffixes, for the `InvalidNumberSuffix` error. */
+const LOWER_SUFFIXES = new Set(
+  [...INT_SUFFIXES, ...FLOAT_SUFFIXES].map((suffix) => suffix.toLowerCase()),
+);
 const SINGLE_CHAR_TOKENS: Record<
   string,
   | "assign"
@@ -355,8 +361,9 @@ function matchWord(source: string, i: number): Match | undefined {
 }
 
 /**
- * Matches a numeric literal, optionally followed by an uppercase integer-type
- * suffix. A lowercase suffix (`100u8`) is a dedicated error; any other word
+ * Matches a numeric literal, optionally followed by an uppercase type suffix
+ * (integer suffixes on integer literals, float suffixes on any literal).
+ * A lowercase suffix (`100u8`, `1.5f32`) is a dedicated error; any other word
  * after the number is left for the caller to tokenize as an identifier.
  */
 function matchNumber(source: string, i: number): Result<Match, EvalError> | undefined {
@@ -364,26 +371,38 @@ function matchNumber(source: string, i: number): Result<Match, EvalError> | unde
   if (!match) {
     return undefined;
   }
+  const fractional = match[0].includes(".");
   const rest = source.slice(i + match[0].length);
-  // An integer suffix only applies to integer literals (`1.5U8` is not a u8).
-  const suffixMatch = match[0].includes(".") ? undefined : /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
-  if (
-    suffixMatch &&
-    INT_SUFFIXES.has(suffixMatch.toUpperCase()) &&
-    suffixMatch !== suffixMatch.toUpperCase()
-  ) {
-    // A lowercase spelling of a valid suffix: a dedicated error, not an identifier.
-    return err({
-      kind: "InvalidIntegerSuffix",
-      suffix: suffixMatch,
-      position: i + match[0].length,
-    });
+  const suffixMatch = /^[A-Za-z][A-Za-z0-9]*/.exec(rest)?.[0];
+  if (suffixMatch) {
+    const isIntSuffix = INT_SUFFIXES.has(suffixMatch);
+    const isFloatSuffix = FLOAT_SUFFIXES.has(suffixMatch);
+    if (!isIntSuffix && !isFloatSuffix && LOWER_SUFFIXES.has(suffixMatch)) {
+      // A lowercase spelling of a valid suffix: a dedicated error, not an identifier.
+      return err({
+        kind: "InvalidNumberSuffix",
+        suffix: suffixMatch,
+        position: i + match[0].length,
+      });
+    }
+    // Integer suffixes apply only to integer literals (`1.5U8` is not a u8);
+    // float suffixes apply to any numeric literal (`1F32` is a 1.0 f32).
+    const valid = fractional ? isFloatSuffix : isIntSuffix || isFloatSuffix;
+    if (valid) {
+      return ok({
+        token: {
+          kind: "number",
+          value: Number(match[0]),
+          suffix: suffixMatch.toLowerCase(),
+          position: i,
+        },
+        advance: match[0].length + suffixMatch.length,
+      });
+    }
   }
-  const suffix =
-    suffixMatch && INT_SUFFIXES.has(suffixMatch) ? suffixMatch.toLowerCase() : undefined;
   return ok({
-    token: { kind: "number", value: Number(match[0]), suffix, position: i },
-    advance: match[0].length + (suffix?.length ?? 0),
+    token: { kind: "number", value: Number(match[0]), position: i },
+    advance: match[0].length,
   });
 }
 
@@ -391,7 +410,7 @@ function matchNumber(source: string, i: number): Result<Match, EvalError> | unde
  * Tokenize a source program.
  * @param source - The source text to tokenize.
  * @returns A `Result` carrying the token list, or an `UnexpectedToken` or
- * `InvalidIntegerSuffix` error.
+ * `InvalidNumberSuffix` error.
  */
 export function tokenize(source: string): Result<Token[], EvalError> {
   const tokens: Token[] = [];

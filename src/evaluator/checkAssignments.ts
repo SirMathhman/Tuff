@@ -2,7 +2,15 @@ import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../co
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import { checkExpression, type BlockChecker } from "./checkExpressions.js";
-import { typeToString, typesEqual, type DeclScopes, type Type } from "./types.js";
+import {
+  INT_ANY,
+  isSubtype,
+  isUnsignedInt,
+  promote,
+  typeToString,
+  type DeclScopes,
+  type Type,
+} from "./types.js";
 
 /** The base identifier name of an lvalue (an ident, or a deref/index chain ending in one). */
 function baseIdentName(value: Value): string {
@@ -90,15 +98,20 @@ function checkMutablePointer(
   return ok(pointerType.pointee);
 }
 
-/** Check a `+=` assignment: both the target and the value must be numbers. */
+/**
+ * Check a `+=` assignment: the target and the value must be numeric, and the
+ * promoted type of the two must be assignable to the target's type (e.g.
+ * `x: u16; x += 1U8` is valid because `u16 + u8` is `u16`).
+ */
 function checkCompound(
   name: string,
   target: Type,
   actual: Type,
   position: number,
 ): Result<null, EvalError> {
-  const mismatch = target.kind !== "number" ? target : actual;
-  if (mismatch.kind !== "number") {
+  const numeric = (t: Type): boolean => t.kind === "int" || t.kind === "float";
+  if (!numeric(target) || !numeric(actual)) {
+    const mismatch = !numeric(target) ? target : actual;
     return err({
       kind: "TypeMismatch",
       name,
@@ -107,17 +120,27 @@ function checkCompound(
       position,
     });
   }
+  const promoted = promote(target, actual);
+  if (!promoted || !isSubtype(promoted, target)) {
+    return err({
+      kind: "TypeMismatch",
+      name,
+      expected: typeToString(target),
+      actual: typeToString(promoted ?? actual),
+      position,
+    });
+  }
   return ok(null);
 }
 
-/** Check a plain assignment: the value's type must equal the target's type. */
+/** Check a plain assignment: the value's type must be a subtype of the target's type. */
 function checkPlain(
   name: string,
   target: Type,
   actual: Type,
   position: number,
 ): Result<null, EvalError> {
-  if (!typesEqual(actual, target)) {
+  if (!isSubtype(actual, target)) {
     return err({
       kind: "TypeMismatch",
       name,
@@ -169,11 +192,13 @@ function checkIndexAssign(
     });
   }
   const indexType = index.value;
-  if (indexType.kind !== "number") {
+  const validIndex =
+    indexType.kind === "int" && (indexType.name === INT_ANY || isUnsignedInt(indexType.name));
+  if (!validIndex) {
     return err({
       kind: "TypeMismatch",
       name: "[",
-      expected: "number",
+      expected: "usize",
       actual: typeToString(indexType),
       position: target.index.position,
     });

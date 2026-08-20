@@ -2,7 +2,7 @@ import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../co
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import type { Outcome } from "./outcome.js";
-import { typeToString } from "./types.js";
+import { promote, typeToString, type Type } from "./types.js";
 import { valueToNumber, valueToTyped, type ValueContext } from "./values.js";
 import {
   isArray,
@@ -10,6 +10,8 @@ import {
   type Scopes,
   type TypedValue,
   type TypedValueArray,
+  type TypedValueFloat,
+  type TypedValueInt,
   type Variable,
 } from "./typedValues.js";
 
@@ -46,15 +48,44 @@ export function evalAssign(statement: StatementAssign, scopes: Scopes, ctx: Valu
   };
 }
 
+/** Type guard: is this a numeric (integer or float) typed value? */
+function isNumeric(t: TypedValue): t is TypedValueInt | TypedValueFloat {
+  return t.kind === "int" || t.kind === "float";
+}
+
+/** The static `Type` of a numeric typed value (for `+=` promotion). */
+function numericType(t: TypedValueInt | TypedValueFloat): Type {
+  return t.kind === "int" ? { kind: "int", name: t.name } : { kind: "float", name: t.name };
+}
+
 /**
- * Write a value to a variable: a plain assignment, or numeric addition when
- * `compound` (`+=`).
+ * Write a value to a variable: a plain assignment, or addition typed by
+ * promotion when `compound` (`+=`). The typecheck pass guarantees the
+ * promoted type is assignable to the variable's type.
  */
 function writeValue(variable: Variable, value: TypedValue, compound: boolean): void {
   if (compound) {
-    const base = variable.value.kind === "number" ? variable.value.value : 0;
-    const addend = value.kind === "number" ? value.value : 0;
-    variable.value = { kind: "number", value: base + addend };
+    const base = variable.value;
+    // The typecheck pass guarantees both sides are numeric; defensive fallback.
+    if (!isNumeric(base) || !isNumeric(value)) {
+      variable.value = value;
+      return;
+    }
+    const sum = base.value + value.value;
+    const promoted = promote(numericType(base), numericType(value));
+    // The typecheck pass guarantees a common type; defensive fallback.
+    if (!promoted) {
+      variable.value = value;
+      return;
+    }
+    if (promoted.kind === "int") {
+      variable.value = { kind: "int", name: promoted.name, value: sum };
+    } else if (promoted.kind === "float") {
+      variable.value = { kind: "float", name: promoted.name, value: sum };
+    } else {
+      // Promotion of two numeric types is always int or float; defensive.
+      variable.value = value;
+    }
     return;
   }
   variable.value = value;

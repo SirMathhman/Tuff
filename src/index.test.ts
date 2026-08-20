@@ -21,8 +21,11 @@ test('evaluate returns 1 for "let x = true; return x;"', () => {
 test('evaluate returns 0 for "let x = 1; let y = 2; return x == y;"', () => {
   expect(evaluate("let x = 1; let y = 2; return x == y;")).toEqual({ ok: true, value: 0 });
 });
-test('evaluate returns 0 for "return true == 1;"', () => {
-  expect(evaluate("return true == 1;")).toEqual({ ok: true, value: 0 });
+test('evaluate returns a TypeMismatch error for "return true == 1;"', () => {
+  expect(evaluate("return true == 1;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "==", expected: "bool", actual: "int", position: 7 },
+  });
 });
 test('evaluate returns 1 for "let x = 0; let y = 1; return x < y;"', () => {
   expect(evaluate("let x = 0; let y = 1; return x < y;")).toEqual({ ok: true, value: 1 });
@@ -78,7 +81,7 @@ test("evaluate returns an ImmutableAssignment error when writing through an immu
 test("evaluate returns a TypeMismatch error when writing a bool through a number pointer", () => {
   expect(evaluate("let mut x = 0; let y = &mut x; *y = true; return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "y", expected: "number", actual: "bool", position: 31 },
+    error: { kind: "TypeMismatch", name: "y", expected: "int", actual: "bool", position: 31 },
   });
 });
 test('evaluate returns 6 for "let array = [1, 2, 3]; return array[0] + array[1] + array[2];"', () => {
@@ -135,7 +138,7 @@ test("evaluate returns a TypeMismatch error when assigning a bool into a number 
     error: {
       kind: "TypeMismatch",
       name: "array",
-      expected: "number",
+      expected: "int",
       actual: "bool",
       position: 26,
     },
@@ -148,7 +151,7 @@ test("evaluate returns a TypeMismatch error when indexing into a non-array", () 
       kind: "TypeMismatch",
       name: "[",
       expected: "array<number>",
-      actual: "number",
+      actual: "int",
       position: 16,
     },
   });
@@ -159,16 +162,28 @@ test("evaluate returns a TypeMismatch error for a non-number index in an assignm
     error: {
       kind: "TypeMismatch",
       name: "[",
-      expected: "number",
+      expected: "usize",
       actual: "bool",
       position: 27,
+    },
+  });
+});
+test("evaluate returns a TypeMismatch error when indexing with a signed integer", () => {
+  expect(evaluate("let array = [0]; return array[1I32];")).toEqual({
+    ok: false,
+    error: {
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "usize",
+      actual: "i32",
+      position: 30,
     },
   });
 });
 test("evaluate returns a TypeMismatch error for a heterogeneous array literal", () => {
   expect(evaluate("let array = [1, true]; return array[0];")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "[", expected: "number", actual: "bool", position: 16 },
+    error: { kind: "TypeMismatch", name: "[", expected: "int", actual: "bool", position: 16 },
   });
 });
 // Coverage for the IndexOutOfBounds error on an out-of-range array index.
@@ -182,7 +197,7 @@ test("evaluate returns an IndexOutOfBounds error for an out-of-range index", () 
 test("evaluate returns a TypeMismatch error when taking the address of a non-variable", () => {
   expect(evaluate("return &5;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "&", expected: "variable", actual: "number", position: 7 },
+    error: { kind: "TypeMismatch", name: "&", expected: "variable", actual: "int", position: 7 },
   });
 });
 test("evaluate returns a TypeMismatch error when indexing a non-array", () => {
@@ -192,7 +207,7 @@ test("evaluate returns a TypeMismatch error when indexing a non-array", () => {
       kind: "TypeMismatch",
       name: "[",
       expected: "array<number>",
-      actual: "number",
+      actual: "int",
       position: 19,
     },
   });
@@ -211,7 +226,7 @@ test("evaluate returns a TypeMismatch error for a pointer operand to an ordering
       kind: "TypeMismatch",
       name: "<",
       expected: "number",
-      actual: "ptr<number>",
+      actual: "ptr<int>",
       position: 30,
     },
   });
@@ -237,13 +252,13 @@ test("evaluate returns an ImmutableAssignment error when assigning to a non-mut 
 test("evaluate returns a TypeMismatch error when assigning a bool to a number variable", () => {
   expect(evaluate("let mut x = 0; x = true;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 15 },
+    error: { kind: "TypeMismatch", name: "x", expected: "int", actual: "bool", position: 15 },
   });
 });
 test("evaluate returns a TypeMismatch error for a type error in a never-executed branch", () => {
   expect(evaluate("let mut x = 0; if (false) { x = true; } return x;")).toEqual({
     ok: false,
-    error: { kind: "TypeMismatch", name: "x", expected: "number", actual: "bool", position: 28 },
+    error: { kind: "TypeMismatch", name: "x", expected: "int", actual: "bool", position: 28 },
   });
 });
 test("evaluate returns an UnknownIdentifier error for an undeclared variable", () => {

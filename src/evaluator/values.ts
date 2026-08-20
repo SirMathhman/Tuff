@@ -13,15 +13,24 @@ import type {
 } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { promote, typeFromName, typeToString, typesEqual, type Type } from "./types.js";
+import {
+  FLOAT_ANY,
+  INT_ANY,
+  INT_BOUNDS,
+  isSubtype,
+  promote,
+  typeFromName,
+  typeToString,
+  type Type,
+} from "./types.js";
 import {
   isArray,
   isPointer,
   isRange,
   type Scopes,
   type TypedValue,
+  type TypedValueFloat,
   type TypedValueInt,
-  type TypedValueNumber,
 } from "./typedValues.js";
 
 /**
@@ -41,7 +50,7 @@ export interface ValueContext {
   evalBlock: BlockValueEvaluator;
 }
 
-/** Evaluate a binary operation: `==`/`!=` compare type-strictly; ordering operators compare numerically. */
+/** Evaluate a binary operation: `==`/`!=` compare subtype-aware; ordering operators compare numerically. All yield a `Bool`. */
 function evalBinary(
   value: ValueBinary,
   scopes: Scopes,
@@ -61,17 +70,25 @@ function evalBinary(
   if (value.operator === "==" || value.operator === "!=") {
     const l = left.value;
     const r = right.value;
-    let equal = false;
-    if (l.kind === "number" && r.kind === "number") {
-      equal = l.value === r.value;
-    } else if (l.kind === "bool" && r.kind === "bool") {
-      equal = l.value === r.value;
-    } else if (l.kind === "int" && r.kind === "int") {
-      // Type-strict: integers compare equal only within the same type.
-      equal = l.name === r.name && l.value === r.value;
+    // The typecheck pass guarantees the operand types are comparable; this is
+    // a defensive fallback for incomparable types.
+    const comparable =
+      (l.kind === "bool" && r.kind === "bool") ||
+      ((l.kind === "int" || l.kind === "float") &&
+        (r.kind === "int" || r.kind === "float") &&
+        (isSubtype(typeOfValue(l), typeOfValue(r)) || isSubtype(typeOfValue(r), typeOfValue(l))));
+    if (!comparable) {
+      return err({
+        kind: "TypeMismatch",
+        name: value.operator,
+        expected: typeToString(typeOfValue(l)),
+        actual: typeToString(typeOfValue(r)),
+        position: value.position,
+      });
     }
+    const equal = l.kind === r.kind && l.value === r.value;
     const result = value.operator === "==" ? equal : !equal;
-    return ok({ kind: "number", value: result ? 1 : 0 });
+    return ok({ kind: "bool", value: result });
   }
   return evalOrdering(value, left.value, right.value);
 }
@@ -84,7 +101,7 @@ function evalOrdering(
 ): Result<TypedValue, EvalError> {
   // Pointers are rejected by the typecheck pass; this is a defensive fallback.
   const toNum = (t: TypedValue): Result<number, EvalError> => {
-    if (t.kind === "number" || t.kind === "int") {
+    if (t.kind === "number" || t.kind === "int" || t.kind === "float") {
       return ok(t.value);
     }
     if (t.kind === "bool") {
@@ -114,19 +131,19 @@ function evalOrdering(
         : value.operator === ">"
           ? leftNum.value > rightNum.value
           : leftNum.value >= rightNum.value;
-  return ok({ kind: "number", value: result ? 1 : 0 });
+  return ok({ kind: "bool", value: result });
 }
 
-/** Evaluate `a + b`: numeric addition over numbers and integers. */
+/** Evaluate `a + b`: addition over integers and floats, typed by promotion. */
 function evalAddition(
   value: ValueBinary,
   l: TypedValue,
   r: TypedValue,
 ): Result<TypedValue, EvalError> {
-  // Operands are checked to be numbers or integers by the typecheck pass;
+  // Operands are checked to be integers or floats by the typecheck pass;
   // defensive fallback.
-  const numeric = (t: TypedValue): t is TypedValueNumber | TypedValueInt =>
-    t.kind === "number" || t.kind === "int";
+  const numeric = (t: TypedValue): t is TypedValueInt | TypedValueFloat =>
+    t.kind === "int" || t.kind === "float";
   if (!numeric(l) || !numeric(r)) {
     return err({
       kind: "TypeMismatch",
@@ -137,13 +154,35 @@ function evalAddition(
     });
   }
   const sum = l.value + r.value;
-  const result = promote(
-    l.kind === "int" ? { kind: "int", name: l.name } : { kind: "number" },
-    r.kind === "int" ? { kind: "int", name: r.name } : { kind: "number" },
-  );
-  return result.kind === "int"
-    ? ok({ kind: "int", name: result.name, value: sum })
-    : ok({ kind: "number", value: sum });
+  const leftType: Type =
+    l.kind === "int" ? { kind: "int", name: l.name } : { kind: "float", name: l.name };
+  const rightType: Type =
+    r.kind === "int" ? { kind: "int", name: r.name } : { kind: "float", name: r.name };
+  const result = promote(leftType, rightType);
+  // The typecheck pass guarantees a common type exists; defensive fallback.
+  if (!result) {
+    return err({
+      kind: "TypeMismatch",
+      name: "+",
+      expected: typeToString(leftType),
+      actual: typeToString(rightType),
+      position: value.position,
+    });
+  }
+  if (result.kind === "int") {
+    return ok({ kind: "int", name: result.name, value: sum });
+  }
+  if (result.kind === "float") {
+    return ok({ kind: "float", name: result.name, value: sum });
+  }
+  // Promotion of two numeric types is always int or float; defensive.
+  return err({
+    kind: "TypeMismatch",
+    name: "+",
+    expected: typeToString(leftType),
+    actual: typeToString(rightType),
+    position: value.position,
+  });
 }
 
 /** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
@@ -253,12 +292,16 @@ function evalDeref(
   return ok(target.value.ref.value);
 }
 
-/** Evaluate a `start..end` range into a typed range value (bounds are numbers). */
+/** Evaluate a `start..end` range into a typed range value (bounds are numeric). */
 function evalRange(
   value: ValueRange,
   scopes: Scopes,
   ctx: ValueContext,
 ): Result<TypedValue, EvalError> {
+  const startTyped = valueToTyped(value.start, scopes, ctx);
+  if (!startTyped.ok) {
+    return startTyped;
+  }
   const start = valueToNumber(value.start, scopes, ctx, "..");
   if (!start.ok) {
     return start;
@@ -267,7 +310,12 @@ function evalRange(
   if (!end.ok) {
     return end;
   }
-  return ok({ kind: "range", element: { kind: "number" }, start: start.value, end: end.value });
+  return ok({
+    kind: "range",
+    element: typeOfValue(startTyped.value),
+    start: start.value,
+    end: end.value,
+  });
 }
 
 /** Evaluate an `if` expression: the value of the branch its condition selects. */
@@ -306,7 +354,7 @@ function evalMatch(
   return err({ kind: "MissingWildcardArm", position: value.position });
 }
 
-/** The static `Type` of a typed value (used by `is` type-tests). */
+/** The static `Type` of a typed value (used by `is` type-tests and `+`). */
 function typeOfValue(typed: TypedValue): Type {
   if (typed.kind === "number") {
     return { kind: "number" };
@@ -317,6 +365,9 @@ function typeOfValue(typed: TypedValue): Type {
   if (typed.kind === "int") {
     return { kind: "int", name: typed.name };
   }
+  if (typed.kind === "float") {
+    return { kind: "float", name: typed.name };
+  }
   if (typed.kind === "array") {
     return { kind: "array", element: typed.element };
   }
@@ -326,7 +377,7 @@ function typeOfValue(typed: TypedValue): Type {
   return { kind: "range", element: typed.element };
 }
 
-/** Evaluate an `is` type-test: `1` when the operand's type equals the named type, else `0`. */
+/** Evaluate an `is` type-test: `true` when the operand's type is a subtype of the named type, else `false`. */
 function evalIs(value: ValueIs, scopes: Scopes, ctx: ValueContext): Result<TypedValue, EvalError> {
   const operand = valueToTyped(value.operand, scopes, ctx);
   if (!operand.ok) {
@@ -337,15 +388,15 @@ function evalIs(value: ValueIs, scopes: Scopes, ctx: ValueContext): Result<Typed
   if (!named) {
     return err({ kind: "UnknownType", name: value.type, position: value.position });
   }
-  const equal = typesEqual(typeOfValue(operand.value), named);
-  return ok({ kind: "number", value: equal ? 1 : 0 });
+  const matches = isSubtype(typeOfValue(operand.value), named);
+  return ok({ kind: "bool", value: matches });
 }
 
 /**
  * Evaluate a value expression to a typed value, or an error for undeclared
- * identifiers. `==`/`!=` compare type-strictly: a bool and a number are never
- * equal. Ordering operators (`<`, `<=`, `>`, `>=`) compare numerically, with
- * bools coerced to 1/0.
+ * identifiers. `==`/`!=` compare subtype-aware: a `u8` and an `Int` compare
+ * as numbers. Ordering operators (`<`, `<=`, `>`, `>=`) compare numerically,
+ * with bools coerced to 1/0. All comparisons yield a `Bool`.
  */
 export function valueToTyped(
   value: Value,
@@ -353,9 +404,16 @@ export function valueToTyped(
   ctx: ValueContext,
 ): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
-    return value.suffix
-      ? ok({ kind: "int", name: value.suffix, value: value.value })
-      : ok({ kind: "number", value: value.value });
+    if (value.suffix) {
+      return INT_BOUNDS[value.suffix]
+        ? ok({ kind: "int", name: value.suffix, value: value.value })
+        : ok({ kind: "float", name: value.suffix, value: value.value });
+    }
+    // Unsuffixed literals are the family supertypes: integer literals are
+    // `Int`, fractional literals are `Float`.
+    return Number.isInteger(value.value)
+      ? ok({ kind: "int", name: INT_ANY, value: value.value })
+      : ok({ kind: "float", name: FLOAT_ANY, value: value.value });
   }
   if (value.kind === "bool") {
     return ok({ kind: "bool", value: value.value });

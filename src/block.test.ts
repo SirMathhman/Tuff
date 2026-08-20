@@ -24,7 +24,7 @@ test("evaluate returns a TypeMismatch error when a block value yielding an array
       kind: "TypeMismatch",
       name: "return",
       expected: "number",
-      actual: "array<number>",
+      actual: "array<int>",
       position: 28,
     },
   });

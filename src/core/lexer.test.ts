@@ -50,10 +50,24 @@ test("tokenize tokenizes an uppercase integer suffix", () => {
   });
 });
 
-test("tokenize returns an InvalidIntegerSuffix error for a lowercase integer suffix", () => {
+test("tokenize returns an InvalidNumberSuffix error for a lowercase integer suffix", () => {
   expect(tokenize("100u8")).toEqual({
     ok: false,
-    error: { kind: "InvalidIntegerSuffix", suffix: "u8", position: 3 },
+    error: { kind: "InvalidNumberSuffix", suffix: "u8", position: 3 },
+  });
+});
+
+test("tokenize tokenizes a USize integer suffix", () => {
+  expect(tokenize("1USize")).toEqual({
+    ok: true,
+    value: [{ kind: "number", value: 1, suffix: "usize", position: 0 }],
+  });
+});
+
+test("tokenize returns an InvalidNumberSuffix error for a lowercase USize suffix", () => {
+  expect(tokenize("100usize")).toEqual({
+    ok: false,
+    error: { kind: "InvalidNumberSuffix", suffix: "usize", position: 3 },
   });
 });
 

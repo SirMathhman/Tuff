@@ -107,10 +107,10 @@ export interface EvalErrorMissingWildcardArm {
   position: number;
 }
 
-/** An integer literal is outside the range of its suffixed type. Fix: use a wider type or a smaller value. */
+/** An integer literal is outside the range of its type (its suffix, or `int` for unsuffixed literals). Fix: use a wider type or a smaller value. */
 export interface EvalErrorIntegerOutOfRange {
   kind: "IntegerOutOfRange";
-  /** The integer type the literal was suffixed with (e.g. `u8`). */
+  /** The integer type the literal has (its suffix, e.g. `u8`, or `int` when unsuffixed). */
   type: string;
   /** The literal's numeric value. */
   value: number;
@@ -118,16 +118,16 @@ export interface EvalErrorIntegerOutOfRange {
   position: number;
 }
 
-/** A number literal carries a lowercase integer suffix (e.g. `100u8`). Fix: use the uppercase suffix (`100U8`). */
-export interface EvalErrorInvalidIntegerSuffix {
-  kind: "InvalidIntegerSuffix";
-  /** The offending suffix as written (e.g. `u8`). */
+/** A number literal carries a lowercase type suffix (e.g. `100u8`, `1.5f32`). Fix: use the uppercase suffix (`100U8`, `1.5F32`). */
+export interface EvalErrorInvalidNumberSuffix {
+  kind: "InvalidNumberSuffix";
+  /** The offending suffix as written (e.g. `u8`, `f32`). */
   suffix: string;
   /** Zero-based character offset of the suffix. */
   position: number;
 }
 
-/** An `is` type-test names a type that does not exist. Fix: use a valid type name (`U8`..`U64`, `I8`..`I64`, `Number`, `Bool`). */
+/** An `is` type-test names a type that does not exist. Fix: use a valid type name (`U8`..`U64`, `USize`, `I8`..`I64`, `F32`, `F64`, `Bool`). `Int` and `Float` are internal supertypes and cannot be named. */
 export interface EvalErrorUnknownType {
   kind: "UnknownType";
   /** The type name as written. */
@@ -166,7 +166,7 @@ export type EvalError =
   | EvalErrorReturnInBlockValue
   | EvalErrorMissingWildcardArm
   | EvalErrorIntegerOutOfRange
-  | EvalErrorInvalidIntegerSuffix
+  | EvalErrorInvalidNumberSuffix
   | EvalErrorUnknownType
   | EvalErrorBreakOutsideLoop
   | EvalErrorContinueOutsideLoop;
