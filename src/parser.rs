@@ -113,17 +113,30 @@ impl<'a> Parser<'a> {
 
     /// Parses the statements of a block; the opening delimiter has
     /// already been consumed and `close` is the expected closing one.
+    /// A block must end with an expression, so a trailing `let`
+    /// statement is an error.
     fn parse_block_body(&mut self, close: u8) -> Result<i64, Error> {
         let mut value = None;
+        let mut last_was_let = false;
         loop {
             self.skip_spaces();
             if self.peek() == Some(close) {
                 self.pos += 1;
+                if last_was_let {
+                    return Err(Error::UnsupportedSyntax {
+                        offset: self.pos - 1,
+                    });
+                }
                 return value.ok_or(Error::UnsupportedSyntax {
                     offset: self.pos - 1,
                 });
             }
-            value = Some(self.parse_statement()?);
+            last_was_let = self.is_let();
+            value = Some(if last_was_let {
+                self.parse_let()?
+            } else {
+                self.parse_expr()?
+            });
             self.skip_spaces();
             match self.peek() {
                 Some(b';') => {
@@ -131,6 +144,11 @@ impl<'a> Parser<'a> {
                 }
                 Some(c) if c == close => {
                     self.pos += 1;
+                    if last_was_let {
+                        return Err(Error::UnsupportedSyntax {
+                            offset: self.pos - 1,
+                        });
+                    }
                     return Ok(value.unwrap());
                 }
                 _ => return Err(Error::UnsupportedSyntax { offset: self.pos }),
@@ -138,20 +156,25 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Whether the next statement is a `let` binding.
+    fn is_let(&self) -> bool {
+        self.peek() == Some(b'l') && self.input[self.pos..].starts_with("let ")
+    }
+
     /// Parses a statement: `let name = expr` or an expression.
     fn parse_statement(&mut self) -> Result<i64, Error> {
         self.skip_spaces();
-        if self.peek() == Some(b'l') && self.input[self.pos..].starts_with("let ") {
-            self.pos += 4;
+        if self.is_let() {
             return self.parse_let();
         }
         self.parse_expr()
     }
 
-    /// Parses `let name = expr` after the `let` keyword was consumed.
-    /// The binding is recorded in the current scope; the statement
-    /// itself evaluates to `0`.
+    /// Parses `let name = expr`, consuming the `let` keyword. The
+    /// binding is recorded in the current scope; the statement itself
+    /// evaluates to `0`.
     fn parse_let(&mut self) -> Result<i64, Error> {
+        self.pos += 4; // skip `let `
         let (name, _) = self.parse_identifier_name()?;
         self.skip_spaces();
         if self.peek() != Some(b'=') {

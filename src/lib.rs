@@ -143,6 +143,16 @@ mod tests {
     }
 
     #[test]
+    fn block_must_end_with_expression() {
+        // The inner block ends with a `let` statement, not an
+        // expression; the closing `}` is at offset 23.
+        assert_eq!(
+            interpret("let x = { let y = 100; }; x"),
+            Err(Error::UnsupportedSyntax { offset: 23 })
+        );
+    }
+
+    #[test]
     fn multiplication_overflow_is_reported() {
         // 9^20 does not fit in an i64; the 19th `*` is at offset 74.
         let input = "9 * ".repeat(19) + "9";
