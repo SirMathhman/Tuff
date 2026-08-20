@@ -27,60 +27,98 @@ impl std::error::Error for Error {}
 /// The bare minimum for now: an empty string is `0`; a single digit is
 /// its value; a chain of single digits joined by `+`, `-`, or `*`
 /// (optional surrounding spaces) is evaluated with `*` binding tighter
-/// than `+`/`-`; anything else is not yet supported.
+/// than `+`/`-`; parentheses group subexpressions; anything else is
+/// not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
     }
-    let mut total = 0;
-    let mut sign = 1;
-    let mut base = 0;
-    loop {
-        while base < input.len() && input.as_bytes()[base] == b' ' {
-            base += 1;
-        }
-        // Parse a product term: digit (* digit)*
-        let mut term = parse_digit(&input[base..], base)?;
-        base += 1; // skip the digit
-        loop {
-            while base < input.len() && input.as_bytes()[base] == b' ' {
-                base += 1;
-            }
-            if base < input.len() && input.as_bytes()[base] == b'*' {
-                base += 1;
-                while base < input.len() && input.as_bytes()[base] == b' ' {
-                    base += 1;
-                }
-                term *= parse_digit(&input[base..], base)?;
-                base += 1; // skip the digit
-            } else {
-                break;
-            }
-        }
-        total += sign * term;
-        while base < input.len() && input.as_bytes()[base] == b' ' {
-            base += 1;
-        }
-        if base >= input.len() {
-            break;
-        }
-        match input.as_bytes()[base] {
-            b'+' => sign = 1,
-            b'-' => sign = -1,
-            _ => return Err(Error::UnsupportedSyntax { offset: base }),
-        }
-        base += 1;
+    let mut parser = Parser { input, pos: 0 };
+    let value = parser.parse_expr()?;
+    parser.skip_spaces();
+    if parser.pos < input.len() {
+        return Err(Error::UnsupportedSyntax { offset: parser.pos });
     }
-    Ok(total)
+    Ok(value)
 }
 
-/// Parses the first character of `rest` as a single ASCII digit, or
-/// reports unsupported syntax at that character (offsets relative to
-/// the original input via `base`).
-fn parse_digit(rest: &str, base: usize) -> Result<i64, Error> {
-    match rest.chars().next() {
-        Some(digit) if digit.is_ascii_digit() => Ok((digit as u8 - b'0') as i64),
-        _ => Err(Error::UnsupportedSyntax { offset: base }),
+/// Recursive-descent parser over `input`, tracking the byte offset
+/// (`pos`) so errors can point at the original source.
+struct Parser<'a> {
+    input: &'a str,
+    pos: usize,
+}
+
+impl<'a> Parser<'a> {
+    /// Parses `expr = term (('+' | '-') term)*`.
+    fn parse_expr(&mut self) -> Result<i64, Error> {
+        let mut total = self.parse_term()?;
+        loop {
+            self.skip_spaces();
+            match self.peek() {
+                Some(b'+') => {
+                    self.pos += 1;
+                    total += self.parse_term()?;
+                }
+                Some(b'-') => {
+                    self.pos += 1;
+                    total -= self.parse_term()?;
+                }
+                _ => return Ok(total),
+            }
+        }
+    }
+
+    /// Parses `term = factor ('*' factor)*`.
+    fn parse_term(&mut self) -> Result<i64, Error> {
+        let mut term = self.parse_factor()?;
+        loop {
+            self.skip_spaces();
+            if self.peek() == Some(b'*') {
+                self.pos += 1;
+                term *= self.parse_factor()?;
+            } else {
+                return Ok(term);
+            }
+        }
+    }
+
+    /// Parses `factor = digit | '(' expr ')'`.
+    fn parse_factor(&mut self) -> Result<i64, Error> {
+        self.skip_spaces();
+        match self.peek() {
+            Some(b'(') => {
+                self.pos += 1;
+                let value = self.parse_expr()?;
+                self.skip_spaces();
+                match self.peek() {
+                    Some(b')') => {
+                        self.pos += 1;
+                        Ok(value)
+                    }
+                    _ => Err(Error::UnsupportedSyntax {
+                        offset: self.pos,
+                    }),
+                }
+            }
+            Some(digit @ b'0'..=b'9') => {
+                self.pos += 1;
+                Ok((digit - b'0') as i64)
+            }
+            _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
+        }
+    }
+
+    /// The byte at the current position, if any.
+    fn peek(&self) -> Option<u8> {
+        self.input.as_bytes().get(self.pos).copied()
+    }
+
+    /// Advances past any spaces.
+    fn skip_spaces(&mut self) {
+        while self.peek() == Some(b' ') {
+            self.pos += 1;
+        }
     }
 }
 
@@ -121,6 +159,11 @@ mod tests {
     #[test]
     fn addition_then_multiplication_term() {
         assert_eq!(interpret("2 + 3 * 4"), Ok(14));
+    }
+
+    #[test]
+    fn parenthesized_group() {
+        assert_eq!(interpret("(2 + 3) * 4"), Ok(20));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
