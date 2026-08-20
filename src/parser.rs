@@ -592,6 +592,20 @@ mod tests {
     }
 
     #[test]
+    fn type_mismatch_in_if_branch_is_reported() {
+        // `1` starts at offset 43; `a` holds a boolean.
+        assert_eq!(
+            interpret("let x = if (false) { let mut a = true; a = 1; a } else { let y = 3; y }; x"),
+            Err(Error::TypeMismatch {
+                offset: 43,
+                name: "a".to_string(),
+                expected: "boolean".to_string(),
+                found: "integer".to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn nested_block_must_end_with_expression_not_assignment() {
         // The inner block ends with an assignment statement, not an
         // expression; its closing `}` is at offset 36.
