@@ -37,7 +37,7 @@ impl fmt::Display for Error {
             Error::UndefinedVariable { offset, name } => {
                 write!(
                     f,
-                    "undefined variable '{name}' at offset {offset}: bind it with a `let` in an enclosing block"
+                    "undefined variable '{name}' at offset {offset}: bind it with a `let` before this point"
                 )
             }
         }
@@ -53,8 +53,9 @@ impl std::error::Error for Error {}
 /// `-`, or `*` (optional surrounding spaces) is evaluated with `*`
 /// binding tighter than `+`/`-`; parentheses group subexpressions;
 /// curly braces delimit blocks of `let` bindings ending in an
-/// expression, whose value is the block's value; anything else is not
-/// yet supported.
+/// expression, whose value is the block's value; the top level is a
+/// sequence of `;`-separated statements whose value is the value of
+/// the last statement; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -64,12 +65,7 @@ pub fn interpret(input: &str) -> Result<i64, Error> {
         pos: 0,
         env: Vec::new(),
     };
-    let value = parser.parse_expr()?;
-    parser.skip_spaces();
-    if parser.pos < input.len() {
-        return Err(Error::UnsupportedSyntax { offset: parser.pos });
-    }
-    Ok(value)
+    parser.parse_program()
 }
 
 /// Recursive-descent parser over `input`, tracking the byte offset
@@ -83,6 +79,41 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Parses the top-level program: `;`-separated statements; the
+    /// program's value is the value of the last statement.
+    fn parse_program(&mut self) -> Result<i64, Error> {
+        self.env.push(Vec::new());
+        let value = self.parse_program_body();
+        self.env.pop();
+        value
+    }
+
+    /// Parses the statements of the program; the program ends at the
+    /// end of the input.
+    fn parse_program_body(&mut self) -> Result<i64, Error> {
+        let mut value = None;
+        loop {
+            self.skip_spaces();
+            if self.pos >= self.input.len() {
+                return value.ok_or(Error::UnsupportedSyntax {
+                    offset: self.pos,
+                });
+            }
+            value = Some(self.parse_statement()?);
+            self.skip_spaces();
+            if self.pos >= self.input.len() {
+                return Ok(value.unwrap());
+            }
+            if self.peek() == Some(b';') {
+                self.pos += 1;
+            } else {
+                return Err(Error::UnsupportedSyntax {
+                    offset: self.pos,
+                });
+            }
+        }
+    }
+
     /// Parses `expr = term (('+' | '-') term)*`.
     fn parse_expr(&mut self) -> Result<i64, Error> {
         let mut total = self.parse_term()?;
@@ -174,11 +205,7 @@ impl<'a> Parser<'a> {
                     self.pos += 1;
                     return Ok(value.unwrap());
                 }
-                _ => {
-                    return Err(Error::UnsupportedSyntax {
-                        offset: self.pos,
-                    })
-                }
+                _ => return Err(Error::UnsupportedSyntax { offset: self.pos }),
             }
         }
     }
@@ -330,6 +357,14 @@ mod tests {
     }
 
     #[test]
+    fn top_level_let_binding() {
+        assert_eq!(
+            interpret("let y = { let x = 2 + 3; x } * 4; y"),
+            Ok(20)
+        );
+    }
+
+    #[test]
     fn multiplication_overflow_is_reported() {
         // 9^20 does not fit in an i64; the 19th `*` is at offset 74.
         let input = "9 * ".repeat(19) + "9";
@@ -354,7 +389,10 @@ mod tests {
     fn undefined_variable_is_reported() {
         assert_eq!(
             interpret("x"),
-            Err(Error::UndefinedVariable { offset: 0, name: "x".into() })
+            Err(Error::UndefinedVariable {
+                offset: 0,
+                name: "x".into()
+            })
         );
     }
 }
