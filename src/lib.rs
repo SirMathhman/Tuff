@@ -55,6 +55,13 @@ pub enum Error {
         /// The name of the undefined variable.
         name: String,
     },
+    /// An assignment targeted a binding that was not declared `mut`.
+    AssignmentToImmutable {
+        /// Byte offset of the variable name.
+        offset: usize,
+        /// The name of the immutable variable.
+        name: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -114,6 +121,12 @@ impl fmt::Display for Error {
                     "undefined variable '{name}' at offset {offset}: bind it with a `let` before this point"
                 )
             }
+            Error::AssignmentToImmutable { offset, name } => {
+                write!(
+                    f,
+                    "cannot assign to '{name}' at offset {offset}: it was not declared `mut`; declare it with `let mut`"
+                )
+            }
         }
     }
 }
@@ -135,8 +148,10 @@ impl std::error::Error for Error {}
 /// values of the same kind (e.g. `true == 1` is `0`), while
 /// arithmetic treats `true` as `1` and `false` as `0`; `==` binds
 /// looser than `+`, `-`, and `*`; `||` yields `1` if either side is
-/// non-zero and binds looser than `==`, `+`, `-`, and `*`; anything
-/// else is not yet supported.
+/// non-zero and binds looser than `==`, `+`, `-`, and `*`; `let mut`
+/// declares a mutable binding, and `name = expr` assigns to it
+/// (evaluating to the assigned value); assigning to a non-`mut`
+/// binding is an error; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -246,6 +261,11 @@ mod tests {
     #[test]
     fn boolean_is_not_equal_to_integer() {
         assert_eq!(interpret("true == 1"), Ok(0));
+    }
+
+    #[test]
+    fn mutable_binding_assignment() {
+        assert_eq!(interpret("let mut x = 0; x = 1; x"), Ok(1));
     }
 
     #[test]

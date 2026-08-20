@@ -33,11 +33,12 @@ impl Value {
 /// Recursive-descent parser over `input`, tracking the byte offset
 /// (`pos`) so errors can point at the original source, and the
 /// environment (`env`): a stack of scopes, each a list of `let`
-/// bindings in declaration order.
+/// bindings in declaration order; each binding records whether it
+/// was declared `mut`.
 pub(crate) struct Parser<'a> {
     pub(crate) input: &'a str,
     pub(crate) pos: usize,
-    pub(crate) env: Vec<Vec<(String, Value)>>,
+    pub(crate) env: Vec<Vec<(String, bool, Value)>>,
 }
 
 impl<'a> Parser<'a> {
@@ -269,23 +270,54 @@ impl<'a> Parser<'a> {
 
     /// Whether the next statement is a `let` binding.
     fn is_let(&self) -> bool {
-        self.peek() == Some(b'l') && self.input[self.pos..].starts_with("let ")
+        self.peek() == Some(b'l')
+            && (self.input[self.pos..].starts_with("let ")
+                || self.input[self.pos..].starts_with("let mut "))
     }
 
-    /// Parses a statement: `let name = expr` or an expression.
+    /// Whether the next statement is an assignment: an identifier
+    /// followed by `=`.
+    fn is_assignment(&mut self) -> bool {
+        if !matches!(self.peek(), Some(b'a'..=b'z')) {
+            return false;
+        }
+        let start = self.pos;
+        while matches!(self.peek(), Some(b'a'..=b'z')) {
+            self.pos += 1;
+        }
+        self.skip_spaces();
+        // A single `=` starts an assignment; `==` is the equality
+        // operator, not an assignment.
+        let is_assignment =
+            self.peek() == Some(b'=') && self.input.as_bytes().get(self.pos + 1) != Some(&b'=');
+        self.pos = start;
+        is_assignment
+    }
+
+    /// Parses a statement: `let [mut] name = expr`, `name = expr`, or
+    /// an expression.
     fn parse_statement(&mut self) -> Result<Value, Error> {
         self.skip_spaces();
         if self.is_let() {
             return self.parse_let();
         }
+        if self.is_assignment() {
+            return self.parse_assignment();
+        }
         self.parse_or()
     }
 
-    /// Parses `let name = expr`, consuming the `let` keyword. The
-    /// binding is recorded in the current scope; the statement itself
-    /// evaluates to `0`.
+    /// Parses `let [mut] name = expr`, consuming the `let` keyword.
+    /// The binding is recorded in the current scope; the statement
+    /// itself evaluates to `0`.
     fn parse_let(&mut self) -> Result<Value, Error> {
-        self.pos += 4; // skip `let `
+        self.pos += 4; // skip `let`
+        self.skip_spaces();
+        let mut mutable = false;
+        if self.input[self.pos..].starts_with("mut ") {
+            mutable = true;
+            self.pos += 4; // skip `mut `
+        }
         let (name, _) = self.parse_identifier_name()?;
         self.skip_spaces();
         if self.peek() != Some(b'=') {
@@ -293,8 +325,31 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1;
         let value = self.parse_or()?;
-        self.env.last_mut().unwrap().push((name, value));
+        self.env.last_mut().unwrap().push((name, mutable, value));
         Ok(Value::Int(0))
+    }
+
+    /// Parses `name = expr`: the right-hand side is evaluated and the
+    /// binding is updated; the statement evaluates to the assigned
+    /// value. Only bindings declared `mut` may be assigned.
+    fn parse_assignment(&mut self) -> Result<Value, Error> {
+        let (name, offset) = self.parse_identifier_name()?;
+        self.skip_spaces();
+        if self.peek() != Some(b'=') {
+            return Err(Error::ExpectedEquals { offset: self.pos });
+        }
+        self.pos += 1;
+        let value = self.parse_or()?;
+        for scope in self.env.iter_mut().rev() {
+            if let Some((_, mutable, stored)) = scope.iter_mut().find(|(n, _, _)| *n == name) {
+                if !*mutable {
+                    return Err(Error::AssignmentToImmutable { offset, name });
+                }
+                *stored = value;
+                return Ok(value);
+            }
+        }
+        Err(Error::UndefinedVariable { offset, name })
     }
 
     /// Parses an identifier and looks up its binding in the
@@ -302,7 +357,7 @@ impl<'a> Parser<'a> {
     fn parse_identifier(&mut self) -> Result<Value, Error> {
         let (name, offset) = self.parse_identifier_name()?;
         for scope in self.env.iter().rev() {
-            if let Some((_, value)) = scope.iter().find(|(n, _)| *n == name) {
+            if let Some((_, _, value)) = scope.iter().find(|(n, _, _)| *n == name) {
                 return Ok(*value);
             }
         }
