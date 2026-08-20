@@ -1,5 +1,35 @@
 use crate::Error;
 
+/// A value produced by an expression: an integer or a boolean.
+/// Booleans are distinct from integers — `==` only yields `true`
+/// for two values of the same kind — but arithmetic treats a
+/// boolean as its numeric value (`true` is `1`, `false` is `0`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Value {
+    Int(i64),
+    Bool(bool),
+}
+
+impl Value {
+    /// Whether the value is truthy: non-zero for integers, the
+    /// stored value for booleans.
+    pub(crate) fn is_truthy(self) -> bool {
+        match self {
+            Value::Int(n) => n != 0,
+            Value::Bool(b) => b,
+        }
+    }
+
+    /// The numeric value of the value (`true` is `1`, `false` is
+    /// `0`).
+    pub(crate) fn as_i64(self) -> i64 {
+        match self {
+            Value::Int(n) => n,
+            Value::Bool(b) => i64::from(b),
+        }
+    }
+}
+
 /// Recursive-descent parser over `input`, tracking the byte offset
 /// (`pos`) so errors can point at the original source, and the
 /// environment (`env`): a stack of scopes, each a list of `let`
@@ -7,13 +37,13 @@ use crate::Error;
 pub(crate) struct Parser<'a> {
     pub(crate) input: &'a str,
     pub(crate) pos: usize,
-    pub(crate) env: Vec<Vec<(String, i64)>>,
+    pub(crate) env: Vec<Vec<(String, Value)>>,
 }
 
 impl<'a> Parser<'a> {
     /// Parses the top-level program: `;`-separated statements; the
     /// program's value is the value of the last statement.
-    pub(crate) fn parse_program(&mut self) -> Result<i64, Error> {
+    pub(crate) fn parse_program(&mut self) -> Result<Value, Error> {
         self.env.push(Vec::new());
         let value = self.parse_program_body();
         self.env.pop();
@@ -22,8 +52,8 @@ impl<'a> Parser<'a> {
 
     /// Parses the statements of the program; the program ends at the
     /// end of the input.
-    fn parse_program_body(&mut self) -> Result<i64, Error> {
-        let mut value = None;
+    fn parse_program_body(&mut self) -> Result<Value, Error> {
+        let mut value: Option<Value> = None;
         loop {
             self.skip_spaces();
             if self.pos >= self.input.len() {
@@ -43,15 +73,15 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `or = eq ('||' eq)*`; `||` binds looser than `==`, `+`,
-    /// `-`, and `*`, and yields `1` if either side is non-zero.
-    fn parse_or(&mut self) -> Result<i64, Error> {
+    /// `-`, and `*`, and yields `true` if either side is truthy.
+    fn parse_or(&mut self) -> Result<Value, Error> {
         let mut value = self.parse_eq()?;
         loop {
             self.skip_spaces();
             if self.input[self.pos..].starts_with("||") {
                 self.pos += 2;
                 let rhs = self.parse_eq()?;
-                value = i64::from(value != 0 || rhs != 0);
+                value = Value::Bool(value.is_truthy() || rhs.is_truthy());
             } else {
                 return Ok(value);
             }
@@ -59,15 +89,16 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `eq = expr ('==' expr)*`; `==` binds looser than `+`,
-    /// `-`, and `*`, and yields `1` if both sides are equal.
-    fn parse_eq(&mut self) -> Result<i64, Error> {
+    /// `-`, and `*`, and yields `true` only if both sides are the same
+    /// kind and equal.
+    fn parse_eq(&mut self) -> Result<Value, Error> {
         let mut value = self.parse_expr()?;
         loop {
             self.skip_spaces();
             if self.input[self.pos..].starts_with("==") {
                 self.pos += 2;
                 let rhs = self.parse_expr()?;
-                value = i64::from(value == rhs);
+                value = Value::Bool(value == rhs);
             } else {
                 return Ok(value);
             }
@@ -75,7 +106,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `expr = term (('+' | '-') term)*`.
-    fn parse_expr(&mut self) -> Result<i64, Error> {
+    fn parse_expr(&mut self) -> Result<Value, Error> {
         let mut total = self.parse_term()?;
         loop {
             self.skip_spaces();
@@ -83,16 +114,24 @@ impl<'a> Parser<'a> {
                 Some(b'+') => {
                     let offset = self.pos;
                     self.pos += 1;
-                    total = total
-                        .checked_add(self.parse_term()?)
-                        .ok_or(Error::Overflow { offset })?;
+                    let rhs = self.parse_term()?.as_i64();
+                    total = Value::Int(
+                        total
+                            .as_i64()
+                            .checked_add(rhs)
+                            .ok_or(Error::Overflow { offset })?,
+                    );
                 }
                 Some(b'-') => {
                     let offset = self.pos;
                     self.pos += 1;
-                    total = total
-                        .checked_sub(self.parse_term()?)
-                        .ok_or(Error::Overflow { offset })?;
+                    let rhs = self.parse_term()?.as_i64();
+                    total = Value::Int(
+                        total
+                            .as_i64()
+                            .checked_sub(rhs)
+                            .ok_or(Error::Overflow { offset })?,
+                    );
                 }
                 _ => return Ok(total),
             }
@@ -100,16 +139,19 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `term = factor ('*' factor)*`.
-    fn parse_term(&mut self) -> Result<i64, Error> {
+    fn parse_term(&mut self) -> Result<Value, Error> {
         let mut term = self.parse_factor()?;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
                 let offset = self.pos;
                 self.pos += 1;
-                term = term
-                    .checked_mul(self.parse_factor()?)
-                    .ok_or(Error::Overflow { offset })?;
+                let rhs = self.parse_factor()?.as_i64();
+                term = Value::Int(
+                    term.as_i64()
+                        .checked_mul(rhs)
+                        .ok_or(Error::Overflow { offset })?,
+                );
             } else {
                 return Ok(term);
             }
@@ -118,7 +160,7 @@ impl<'a> Parser<'a> {
 
     /// Parses `factor = number | boolean | identifier | '(' expr ')'
     /// | block`.
-    fn parse_factor(&mut self) -> Result<i64, Error> {
+    fn parse_factor(&mut self) -> Result<Value, Error> {
         self.skip_spaces();
         match self.peek() {
             Some(b'(') => {
@@ -144,14 +186,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses a boolean literal (`true` is `1`, `false` is `0`) if
-    /// the current position starts one; otherwise returns `None`.
-    fn parse_boolean(&mut self) -> Option<i64> {
+    /// Parses a boolean literal if the current position starts one;
+    /// otherwise returns `None`.
+    fn parse_boolean(&mut self) -> Option<Value> {
         let rest = &self.input[self.pos..];
         let (value, len) = if rest.starts_with("true") {
-            (1, 4)
+            (Value::Bool(true), 4)
         } else if rest.starts_with("false") {
-            (0, 5)
+            (Value::Bool(false), 5)
         } else {
             return None;
         };
@@ -168,7 +210,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a block: `let` bindings separated by `;`, ending in an
     /// expression whose value is the block's value.
-    fn parse_block(&mut self, close: u8) -> Result<i64, Error> {
+    fn parse_block(&mut self, close: u8) -> Result<Value, Error> {
         self.env.push(Vec::new());
         let value = self.parse_block_body(close);
         self.env.pop();
@@ -179,8 +221,8 @@ impl<'a> Parser<'a> {
     /// already been consumed and `close` is the expected closing one.
     /// A block must end with an expression, so a trailing `let`
     /// statement is an error.
-    fn parse_block_body(&mut self, close: u8) -> Result<i64, Error> {
-        let mut value = None;
+    fn parse_block_body(&mut self, close: u8) -> Result<Value, Error> {
+        let mut value: Option<Value> = None;
         let mut last_was_let = false;
         loop {
             self.skip_spaces();
@@ -219,7 +261,7 @@ impl<'a> Parser<'a> {
                     return Err(Error::ExpectedClosingDelimiter {
                         offset: self.pos,
                         expected: close,
-                    })
+                    });
                 }
             }
         }
@@ -231,7 +273,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a statement: `let name = expr` or an expression.
-    fn parse_statement(&mut self) -> Result<i64, Error> {
+    fn parse_statement(&mut self) -> Result<Value, Error> {
         self.skip_spaces();
         if self.is_let() {
             return self.parse_let();
@@ -242,7 +284,7 @@ impl<'a> Parser<'a> {
     /// Parses `let name = expr`, consuming the `let` keyword. The
     /// binding is recorded in the current scope; the statement itself
     /// evaluates to `0`.
-    fn parse_let(&mut self) -> Result<i64, Error> {
+    fn parse_let(&mut self) -> Result<Value, Error> {
         self.pos += 4; // skip `let `
         let (name, _) = self.parse_identifier_name()?;
         self.skip_spaces();
@@ -252,12 +294,12 @@ impl<'a> Parser<'a> {
         self.pos += 1;
         let value = self.parse_or()?;
         self.env.last_mut().unwrap().push((name, value));
-        Ok(0)
+        Ok(Value::Int(0))
     }
 
     /// Parses an identifier and looks up its binding in the
     /// environment, innermost scope first.
-    fn parse_identifier(&mut self) -> Result<i64, Error> {
+    fn parse_identifier(&mut self) -> Result<Value, Error> {
         let (name, offset) = self.parse_identifier_name()?;
         for scope in self.env.iter().rev() {
             if let Some((_, value)) = scope.iter().find(|(n, _)| *n == name) {
@@ -285,19 +327,20 @@ impl<'a> Parser<'a> {
 
     /// Parses a non-negative integer literal starting at the current
     /// position, reporting overflow if it does not fit in an `i64`.
-    fn parse_number(&mut self) -> Result<i64, Error> {
+    fn parse_number(&mut self) -> Result<Value, Error> {
         let start = self.pos;
         while matches!(self.peek(), Some(b'0'..=b'9')) {
             self.pos += 1;
         }
         self.input[start..self.pos]
             .parse::<i64>()
+            .map(Value::Int)
             .map_err(|_| Error::Overflow { offset: start })
     }
 
     /// Parses `expr close` after the opening delimiter was consumed;
     /// `close` is the expected matching closing delimiter.
-    fn parse_grouped(&mut self, close: u8) -> Result<i64, Error> {
+    fn parse_grouped(&mut self, close: u8) -> Result<Value, Error> {
         let value = self.parse_or()?;
         self.skip_spaces();
         match self.peek() {

@@ -130,11 +130,13 @@ impl std::error::Error for Error {}
 /// curly braces delimit blocks of `let` bindings ending in an
 /// expression, whose value is the block's value; the top level is a
 /// sequence of `;`-separated statements whose value is the value of
-/// the last statement; a `let` statement evaluates to `0`; `==`
-/// yields `1` if both sides are equal and binds looser than `+`, `-`,
-/// and `*`; `||` yields `1` if either side is non-zero and binds
-/// looser than `==`, `+`, `-`, and `*`; anything else is not yet
-/// supported.
+/// the last statement; a `let` statement evaluates to `0`; booleans
+/// are distinct from integers, so `==` yields `1` only for two
+/// values of the same kind (e.g. `true == 1` is `0`), while
+/// arithmetic treats `true` as `1` and `false` as `0`; `==` binds
+/// looser than `+`, `-`, and `*`; `||` yields `1` if either side is
+/// non-zero and binds looser than `==`, `+`, `-`, and `*`; anything
+/// else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -144,7 +146,7 @@ pub fn interpret(input: &str) -> Result<i64, Error> {
         pos: 0,
         env: Vec::new(),
     };
-    parser.parse_program()
+    parser.parse_program().map(|value| value.as_i64())
 }
 
 #[cfg(test)]
@@ -239,6 +241,11 @@ mod tests {
     #[test]
     fn equality_of_unequal_values() {
         assert_eq!(interpret("let x = 1; let y = 2; x == y"), Ok(0));
+    }
+
+    #[test]
+    fn boolean_is_not_equal_to_integer() {
+        assert_eq!(interpret("true == 1"), Ok(0));
     }
 
     #[test]
