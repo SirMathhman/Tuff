@@ -239,11 +239,7 @@ impl<'a> Parser<'a> {
                 });
             }
             last_was_let = self.is_let();
-            value = Some(if last_was_let {
-                self.parse_let()?
-            } else {
-                self.parse_or()?
-            });
+            value = Some(self.parse_statement()?);
             self.skip_spaces();
             match self.peek() {
                 Some(b';') => {

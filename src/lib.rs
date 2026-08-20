@@ -269,6 +269,11 @@ mod tests {
     }
 
     #[test]
+    fn mutable_binding_assignment_in_block() {
+        assert_eq!(interpret("{ let mut x = 0; x = 1; x }"), Ok(1));
+    }
+
+    #[test]
     fn assignment_to_immutable_binding_is_reported() {
         assert_eq!(
             interpret("let x = 0; x = 1; x"),
