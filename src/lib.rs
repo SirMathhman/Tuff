@@ -25,32 +25,44 @@ impl std::error::Error for Error {}
 /// Interprets `input` and returns its value.
 ///
 /// The bare minimum for now: an empty string is `0`; a single digit is
-/// its value; a chain of single digits joined by `+` (optional
+/// its value; a chain of single digits joined by `+` or `-` (optional
 /// surrounding spaces) is their sum; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
     }
     let mut total = 0;
+    let mut sign = 1;
     let mut base = 0;
-    for part in input.split('+') {
-        total += parse_digit(part, base)?;
-        base += part.len() + 1; // part plus the `+` that follows it
+    loop {
+        while base < input.len() && input.as_bytes()[base] == b' ' {
+            base += 1;
+        }
+        total += sign * parse_digit(&input[base..], base)?;
+        base += 1; // skip the digit
+        while base < input.len() && input.as_bytes()[base] == b' ' {
+            base += 1;
+        }
+        if base >= input.len() {
+            break;
+        }
+        match input.as_bytes()[base] {
+            b'+' => sign = 1,
+            b'-' => sign = -1,
+            _ => return Err(Error::UnsupportedSyntax { offset: base }),
+        }
+        base += 1;
     }
     Ok(total)
 }
 
-/// Parses a single ASCII digit, or reports unsupported syntax at the
-/// first non-whitespace character of `part` (offsets relative to the
-/// original input via `base`).
-fn parse_digit(part: &str, base: usize) -> Result<i64, Error> {
-    match part.trim() {
-        digit if digit.len() == 1 && digit.chars().next().unwrap().is_ascii_digit() => {
-            Ok((digit.as_bytes()[0] - b'0') as i64)
-        }
-        _ => Err(Error::UnsupportedSyntax {
-            offset: base + part.len() - part.trim_start().len(),
-        }),
+/// Parses the first character of `rest` as a single ASCII digit, or
+/// reports unsupported syntax at that character (offsets relative to
+/// the original input via `base`).
+fn parse_digit(rest: &str, base: usize) -> Result<i64, Error> {
+    match rest.chars().next() {
+        Some(digit) if digit.is_ascii_digit() => Ok((digit as u8 - b'0') as i64),
+        _ => Err(Error::UnsupportedSyntax { offset: base }),
     }
 }
 
@@ -76,6 +88,11 @@ mod tests {
     #[test]
     fn addition_of_three_digits() {
         assert_eq!(interpret("1 + 2 + 3"), Ok(6));
+    }
+
+    #[test]
+    fn mixed_addition_and_subtraction() {
+        assert_eq!(interpret("2 + 3 - 4"), Ok(1));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
