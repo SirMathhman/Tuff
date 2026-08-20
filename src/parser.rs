@@ -220,16 +220,16 @@ impl<'a> Parser<'a> {
 
     /// Parses the statements of a block; the opening delimiter has
     /// already been consumed and `close` is the expected closing one.
-    /// A block must end with an expression, so a trailing `let`
-    /// statement is an error.
+    /// A block must end with an expression, so a trailing `let` or
+    /// assignment statement is an error.
     fn parse_block_body(&mut self, close: u8) -> Result<Value, Error> {
         let mut value: Option<Value> = None;
-        let mut last_was_let = false;
+        let mut last_was_statement = false;
         loop {
             self.skip_spaces();
             if self.peek() == Some(close) {
                 self.pos += 1;
-                if last_was_let {
+                if last_was_statement {
                     return Err(Error::BlockMustEndWithExpression {
                         offset: self.pos - 1,
                     });
@@ -238,7 +238,7 @@ impl<'a> Parser<'a> {
                     offset: self.pos - 1,
                 });
             }
-            last_was_let = self.is_let();
+            last_was_statement = self.is_let() || self.is_assignment();
             value = Some(self.parse_statement()?);
             self.skip_spaces();
             match self.peek() {
@@ -247,7 +247,7 @@ impl<'a> Parser<'a> {
                 }
                 Some(c) if c == close => {
                     self.pos += 1;
-                    if last_was_let {
+                    if last_was_statement {
                         return Err(Error::BlockMustEndWithExpression {
                             offset: self.pos - 1,
                         });
@@ -422,7 +422,7 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{interpret, Error};
+    use crate::{Error, interpret};
 
     #[test]
     fn empty_string_is_zero() {
@@ -496,6 +496,16 @@ mod tests {
         assert_eq!(
             interpret("let x = { let y = 100; }; x"),
             Err(Error::BlockMustEndWithExpression { offset: 23 })
+        );
+    }
+
+    #[test]
+    fn block_must_end_with_expression_not_assignment() {
+        // The inner block ends with an assignment statement, not an
+        // expression; the closing `}` is at offset 34.
+        assert_eq!(
+            interpret("let mut x = 0; let y = { x = 100; };"),
+            Err(Error::BlockMustEndWithExpression { offset: 34 })
         );
     }
 
