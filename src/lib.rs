@@ -24,13 +24,15 @@ impl std::error::Error for Error {}
 
 /// Interprets `input` and returns its value.
 ///
-/// The bare minimum for now: an empty string is `0`; anything else is
-/// not yet supported.
+/// The bare minimum for now: an empty string is `0`; a single digit is
+/// its value; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
-    if input.is_empty() {
-        Ok(0)
-    } else {
-        Err(Error::UnsupportedSyntax { offset: 0 })
+    match input {
+        "" => Ok(0),
+        digit if digit.len() == 1 && digit.chars().next().unwrap().is_ascii_digit() => {
+            Ok((digit.as_bytes()[0] - b'0') as i64)
+        }
+        _ => Err(Error::UnsupportedSyntax { offset: 0 }),
     }
 }
 
@@ -41,6 +43,11 @@ mod tests {
     #[test]
     fn empty_string_is_zero() {
         assert_eq!(interpret(""), Ok(0));
+    }
+
+    #[test]
+    fn single_digit_one() {
+        assert_eq!(interpret("1"), Ok(1));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
