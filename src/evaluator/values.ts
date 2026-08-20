@@ -1,13 +1,9 @@
 import type {
   Value,
-  ValueArray,
-  ValueBinary,
-  ValueBlock,
+  ValueAddressOf,
   ValueDeref,
   ValueIf,
-  ValueIndex,
   ValueIs,
-  ValueAddressOf,
   ValueMatch,
   ValueRange,
 } from "../core/ast.js";
@@ -18,234 +14,33 @@ import {
   INT_ANY,
   INT_BOUNDS,
   isSubtype,
-  promote,
   typeFromName,
   typeToString,
   type Type,
+  type TypeFloat,
+  type TypeInt,
 } from "./types.js";
+import { isArray, isPointer, isRange, type Scopes, type TypedValue } from "./typedValues.js";
+import { evalArray, evalBinary, evalIndex } from "./evalBinaryOps.js";
 import {
-  isArray,
-  isPointer,
-  isRange,
-  type Scopes,
-  type TypedValue,
-  type TypedValueFloat,
-  type TypedValueInt,
-} from "./typedValues.js";
+  typeOfValue,
+  type ValueContext,
+  type ValueToNumberFn,
+  type ValueToTypedFn,
+} from "./valueHelpers.js";
 
-/**
- * A block-value evaluator, threaded through the value evaluator as an explicit
- * dependency. Block values and statements mutually recurse (a block value's
- * statements are evaluated by the statement evaluator), so the statement
- * evaluator passes its block-value evaluator in here rather than importing it
- * (module cycle).
- */
-export type BlockValueEvaluator = (
-  value: ValueBlock,
-  scopes: Scopes,
-) => Result<TypedValue, EvalError>;
-
-/** The block-value evaluator, threaded through value evaluation. */
-export interface ValueContext {
-  evalBlock: BlockValueEvaluator;
-}
-
-/** Evaluate a binary operation: `==`/`!=` compare subtype-aware; ordering operators compare numerically. All yield a `Bool`. */
-function evalBinary(
-  value: ValueBinary,
-  scopes: Scopes,
-  ctx: ValueContext,
-): Result<TypedValue, EvalError> {
-  const left = valueToTyped(value.left, scopes, ctx);
-  if (!left.ok) {
-    return left;
-  }
-  const right = valueToTyped(value.right, scopes, ctx);
-  if (!right.ok) {
-    return right;
-  }
-  if (value.operator === "+") {
-    return evalAddition(value, left.value, right.value);
-  }
-  if (value.operator === "==" || value.operator === "!=") {
-    const l = left.value;
-    const r = right.value;
-    // The typecheck pass guarantees the operand types are comparable; this is
-    // a defensive fallback for incomparable types.
-    const comparable =
-      (l.kind === "bool" && r.kind === "bool") ||
-      ((l.kind === "int" || l.kind === "float") &&
-        (r.kind === "int" || r.kind === "float") &&
-        (isSubtype(typeOfValue(l), typeOfValue(r)) || isSubtype(typeOfValue(r), typeOfValue(l))));
-    if (!comparable) {
-      return err({
-        kind: "TypeMismatch",
-        name: value.operator,
-        expected: typeToString(typeOfValue(l)),
-        actual: typeToString(typeOfValue(r)),
-        position: value.position,
-      });
-    }
-    const equal = l.kind === r.kind && l.value === r.value;
-    const result = value.operator === "==" ? equal : !equal;
-    return ok({ kind: "bool", value: result });
-  }
-  return evalOrdering(value, left.value, right.value);
-}
-
-/** Compare two typed values with an ordering operator; bools coerce to 1/0. */
-function evalOrdering(
-  value: ValueBinary,
-  l: TypedValue,
-  r: TypedValue,
-): Result<TypedValue, EvalError> {
-  // Pointers are rejected by the typecheck pass; this is a defensive fallback.
-  const toNum = (t: TypedValue): Result<number, EvalError> => {
-    if (t.kind === "number" || t.kind === "int" || t.kind === "float") {
-      return ok(t.value);
-    }
-    if (t.kind === "bool") {
-      return ok(t.value ? 1 : 0);
-    }
-    return err({
-      kind: "TypeMismatch",
-      name: value.operator,
-      expected: "number",
-      actual: typeToString(t),
-      position: value.position,
-    });
-  };
-  const leftNum = toNum(l);
-  if (!leftNum.ok) {
-    return leftNum;
-  }
-  const rightNum = toNum(r);
-  if (!rightNum.ok) {
-    return rightNum;
-  }
-  const result =
-    value.operator === "<"
-      ? leftNum.value < rightNum.value
-      : value.operator === "<="
-        ? leftNum.value <= rightNum.value
-        : value.operator === ">"
-          ? leftNum.value > rightNum.value
-          : leftNum.value >= rightNum.value;
-  return ok({ kind: "bool", value: result });
-}
-
-/** Evaluate `a + b`: addition over integers and floats, typed by promotion. */
-function evalAddition(
-  value: ValueBinary,
-  l: TypedValue,
-  r: TypedValue,
-): Result<TypedValue, EvalError> {
-  // Operands are checked to be integers or floats by the typecheck pass;
-  // defensive fallback.
-  const numeric = (t: TypedValue): t is TypedValueInt | TypedValueFloat =>
-    t.kind === "int" || t.kind === "float";
-  if (!numeric(l) || !numeric(r)) {
-    return err({
-      kind: "TypeMismatch",
-      name: "+",
-      expected: "number",
-      actual: !numeric(l) ? typeToString(l) : typeToString(r),
-      position: value.position,
-    });
-  }
-  const sum = l.value + r.value;
-  const leftType: Type =
-    l.kind === "int" ? { kind: "int", name: l.name } : { kind: "float", name: l.name };
-  const rightType: Type =
-    r.kind === "int" ? { kind: "int", name: r.name } : { kind: "float", name: r.name };
-  const result = promote(leftType, rightType);
-  // The typecheck pass guarantees a common type exists; defensive fallback.
-  if (!result) {
-    return err({
-      kind: "TypeMismatch",
-      name: "+",
-      expected: typeToString(leftType),
-      actual: typeToString(rightType),
-      position: value.position,
-    });
-  }
-  if (result.kind === "int") {
-    return ok({ kind: "int", name: result.name, value: sum });
-  }
-  if (result.kind === "float") {
-    return ok({ kind: "float", name: result.name, value: sum });
-  }
-  // Promotion of two numeric types is always int or float; defensive.
-  return err({
-    kind: "TypeMismatch",
-    name: "+",
-    expected: typeToString(leftType),
-    actual: typeToString(rightType),
-    position: value.position,
-  });
-}
-
-/** Evaluate an array literal `[e1, e2, ...]` into a typed array value. */
-function evalArray(
-  value: ValueArray,
-  scopes: Scopes,
-  ctx: ValueContext,
-): Result<TypedValue, EvalError> {
-  const elements: TypedValue[] = [];
-  for (const element of value.elements) {
-    const typed = valueToTyped(element, scopes, ctx);
-    if (!typed.ok) {
-      return typed;
-    }
-    elements.push(typed.value);
-  }
-  const first = elements[0];
-  const element: Type = first ?? { kind: "number" };
-  return ok({ kind: "array", element, elements });
-}
-
-/** Evaluate `arr[i]`: the element of an array at a numeric index. */
-function evalIndex(
-  value: ValueIndex,
-  scopes: Scopes,
-  ctx: ValueContext,
-): Result<TypedValue, EvalError> {
-  const target = valueToTyped(value.target, scopes, ctx);
-  if (!target.ok) {
-    return target;
-  }
-  const index = valueToNumber(value.index, scopes, ctx, "[");
-  if (!index.ok) {
-    return index;
-  }
-  if (!isArray(target.value)) {
-    return err({
-      kind: "TypeMismatch",
-      name: "[",
-      expected: "array<number>",
-      actual: typeToString(target.value),
-      position: value.position,
-    });
-  }
-  const element = target.value.elements[index.value];
-  if (element === undefined) {
-    return err({
-      kind: "IndexOutOfBounds",
-      index: index.value,
-      length: target.value.elements.length,
-      position: value.position,
-    });
-  }
-  return ok(element);
-}
+// Re-exported so the statement and assignment evaluators can import the value
+// context from the value evaluator (their existing import site).
+export type { ValueContext };
 
 /** Evaluate `&name`: a pointer to the variable's value (pointers may nest). */
 function evalAddressOf(
   value: ValueAddressOf,
   scopes: Scopes,
   ctx: ValueContext,
+  toTyped: ValueToTypedFn,
 ): Result<TypedValue, EvalError> {
-  const target = valueToTyped(value.target, scopes, ctx);
+  const target = toTyped(value.target, scopes, ctx);
   if (!target.ok) {
     return target;
   }
@@ -275,8 +70,9 @@ function evalDeref(
   value: ValueDeref,
   scopes: Scopes,
   ctx: ValueContext,
+  toTyped: ValueToTypedFn,
 ): Result<TypedValue, EvalError> {
-  const target = valueToTyped(value.target, scopes, ctx);
+  const target = toTyped(value.target, scopes, ctx);
   if (!target.ok) {
     return target;
   }
@@ -297,16 +93,18 @@ function evalRange(
   value: ValueRange,
   scopes: Scopes,
   ctx: ValueContext,
+  toTyped: ValueToTypedFn,
+  toNumber: ValueToNumberFn,
 ): Result<TypedValue, EvalError> {
-  const startTyped = valueToTyped(value.start, scopes, ctx);
+  const startTyped = toTyped(value.start, scopes, ctx);
   if (!startTyped.ok) {
     return startTyped;
   }
-  const start = valueToNumber(value.start, scopes, ctx, "..");
+  const start = toNumber(value.start, scopes, ctx, "..");
   if (!start.ok) {
     return start;
   }
-  const end = valueToNumber(value.end, scopes, ctx, "..");
+  const end = toNumber(value.end, scopes, ctx, "..");
   if (!end.ok) {
     return end;
   }
@@ -319,12 +117,18 @@ function evalRange(
 }
 
 /** Evaluate an `if` expression: the value of the branch its condition selects. */
-function evalIf(value: ValueIf, scopes: Scopes, ctx: ValueContext): Result<TypedValue, EvalError> {
-  const condition = valueToNumber(value.condition, scopes, ctx, "if");
+function evalIf(
+  value: ValueIf,
+  scopes: Scopes,
+  ctx: ValueContext,
+  toTyped: ValueToTypedFn,
+  toNumber: ValueToNumberFn,
+): Result<TypedValue, EvalError> {
+  const condition = toNumber(value.condition, scopes, ctx, "if");
   if (!condition.ok) {
     return condition;
   }
-  return valueToTyped(condition.value !== 0 ? value.then : value.else, scopes, ctx);
+  return toTyped(condition.value !== 0 ? value.then : value.else, scopes, ctx);
 }
 
 /** Evaluate a `match` expression: the value of the first arm whose pattern matches. */
@@ -332,8 +136,10 @@ function evalMatch(
   value: ValueMatch,
   scopes: Scopes,
   ctx: ValueContext,
+  toTyped: ValueToTypedFn,
+  toNumber: ValueToNumberFn,
 ): Result<TypedValue, EvalError> {
-  const scrutinee = valueToNumber(value.scrutinee, scopes, ctx, "match");
+  const scrutinee = toNumber(value.scrutinee, scopes, ctx, "match");
   if (!scrutinee.ok) {
     return scrutinee;
   }
@@ -346,7 +152,7 @@ function evalMatch(
           ? scrutinee.value === pattern.value
           : scrutinee.value === (pattern.value ? 1 : 0);
     if (matches) {
-      return valueToTyped(arm.value, scopes, ctx);
+      return toTyped(arm.value, scopes, ctx);
     }
   }
   // The typecheck pass requires a `_` arm, so this is unreachable; the
@@ -354,32 +160,14 @@ function evalMatch(
   return err({ kind: "MissingWildcardArm", position: value.position });
 }
 
-/** The static `Type` of a typed value (used by `is` type-tests and `+`). */
-function typeOfValue(typed: TypedValue): Type {
-  if (typed.kind === "number") {
-    return { kind: "number" };
-  }
-  if (typed.kind === "bool") {
-    return { kind: "bool" };
-  }
-  if (typed.kind === "int") {
-    return { kind: "int", name: typed.name };
-  }
-  if (typed.kind === "float") {
-    return { kind: "float", name: typed.name };
-  }
-  if (typed.kind === "array") {
-    return { kind: "array", element: typed.element };
-  }
-  if (typed.kind === "ptr") {
-    return { kind: "ptr", mutable: typed.mutable, pointee: typed.pointee };
-  }
-  return { kind: "range", element: typed.element };
-}
-
 /** Evaluate an `is` type-test: `true` when the operand's type is a subtype of the named type, else `false`. */
-function evalIs(value: ValueIs, scopes: Scopes, ctx: ValueContext): Result<TypedValue, EvalError> {
-  const operand = valueToTyped(value.operand, scopes, ctx);
+function evalIs(
+  value: ValueIs,
+  scopes: Scopes,
+  ctx: ValueContext,
+  toTyped: ValueToTypedFn,
+): Result<TypedValue, EvalError> {
+  const operand = toTyped(value.operand, scopes, ctx);
   if (!operand.ok) {
     return operand;
   }
@@ -390,6 +178,20 @@ function evalIs(value: ValueIs, scopes: Scopes, ctx: ValueContext): Result<Typed
   }
   const matches = isSubtype(typeOfValue(operand.value), named);
   return ok({ kind: "bool", value: matches });
+}
+
+/** The static `Type` of a numeric literal (suffixed or the family supertype). */
+function numberLiteralType(value: { value: number; suffix?: string }): TypeInt | TypeFloat {
+  if (value.suffix) {
+    return INT_BOUNDS[value.suffix]
+      ? { kind: "int", name: value.suffix }
+      : { kind: "float", name: value.suffix };
+  }
+  // Unsuffixed literals are the family supertypes: integer literals are
+  // `Int`, fractional literals are `Float`.
+  return Number.isInteger(value.value)
+    ? { kind: "int", name: INT_ANY }
+    : { kind: "float", name: FLOAT_ANY };
 }
 
 /**
@@ -404,37 +206,32 @@ export function valueToTyped(
   ctx: ValueContext,
 ): Result<TypedValue, EvalError> {
   if (value.kind === "number") {
-    if (value.suffix) {
-      return INT_BOUNDS[value.suffix]
-        ? ok({ kind: "int", name: value.suffix, value: value.value })
-        : ok({ kind: "float", name: value.suffix, value: value.value });
+    const type = numberLiteralType(value);
+    if (type.kind === "int") {
+      return ok({ kind: "int", name: type.name, value: value.value });
     }
-    // Unsuffixed literals are the family supertypes: integer literals are
-    // `Int`, fractional literals are `Float`.
-    return Number.isInteger(value.value)
-      ? ok({ kind: "int", name: INT_ANY, value: value.value })
-      : ok({ kind: "float", name: FLOAT_ANY, value: value.value });
+    return ok({ kind: "float", name: type.name, value: value.value });
   }
   if (value.kind === "bool") {
     return ok({ kind: "bool", value: value.value });
   }
   if (value.kind === "binary") {
-    return evalBinary(value, scopes, ctx);
+    return evalBinary(value, scopes, ctx, valueToTyped);
   }
   if (value.kind === "is") {
-    return evalIs(value, scopes, ctx);
+    return evalIs(value, scopes, ctx, valueToTyped);
   }
   if (value.kind === "array") {
-    return evalArray(value, scopes, ctx);
+    return evalArray(value, scopes, ctx, valueToTyped);
   }
   if (value.kind === "index") {
-    return evalIndex(value, scopes, ctx);
+    return evalIndex(value, scopes, ctx, valueToTyped, valueToNumber);
   }
   if (value.kind === "addressOf") {
-    return evalAddressOf(value, scopes, ctx);
+    return evalAddressOf(value, scopes, ctx, valueToTyped);
   }
   if (value.kind === "deref") {
-    return evalDeref(value, scopes, ctx);
+    return evalDeref(value, scopes, ctx, valueToTyped);
   }
   if (value.kind === "indexAssign") {
     // An lvalue is never read as a value; the typecheck pass rejects this.
@@ -447,13 +244,13 @@ export function valueToTyped(
     });
   }
   if (value.kind === "range") {
-    return evalRange(value, scopes, ctx);
+    return evalRange(value, scopes, ctx, valueToTyped, valueToNumber);
   }
   if (value.kind === "if") {
-    return evalIf(value, scopes, ctx);
+    return evalIf(value, scopes, ctx, valueToTyped, valueToNumber);
   }
   if (value.kind === "match") {
-    return evalMatch(value, scopes, ctx);
+    return evalMatch(value, scopes, ctx, valueToTyped, valueToNumber);
   }
   if (value.kind === "block") {
     return ctx.evalBlock(value, scopes);

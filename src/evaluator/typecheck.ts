@@ -11,12 +11,8 @@ import type {
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { withScope } from "../core/scopes.js";
 import { checkAssign } from "./checkAssignments.js";
-import {
-  checkBool,
-  checkExpression,
-  checkNumericCoercible,
-  type BlockChecker,
-} from "./checkExpressions.js";
+import { checkExpression } from "./checkExpressions.js";
+import { checkBool, checkNumericCoercible, type BlockChecker } from "./checkPredicates.js";
 import { typeToString, type DeclScopes, type Type } from "./types.js";
 
 /**

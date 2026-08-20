@@ -1,7 +1,8 @@
 import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
-import { checkExpression, type BlockChecker } from "./checkExpressions.js";
+import { checkExpression } from "./checkExpressions.js";
+import type { BlockChecker } from "./checkPredicates.js";
 import {
   INT_ANY,
   isSubtype,
