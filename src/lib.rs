@@ -8,6 +8,11 @@ pub enum Error {
         /// Byte offset of the first offending character.
         offset: usize,
     },
+    /// The result of an operation does not fit in an `i64`.
+    Overflow {
+        /// Byte offset of the operator that caused the overflow.
+        offset: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -15,6 +20,12 @@ impl fmt::Display for Error {
         match self {
             Error::UnsupportedSyntax { offset } => {
                 write!(f, "unsupported syntax at offset {offset}")
+            }
+            Error::Overflow { offset } => {
+                write!(
+                    f,
+                    "arithmetic overflow at offset {offset}: the result does not fit in an i64; reduce the operands"
+                )
             }
         }
     }
@@ -57,12 +68,18 @@ impl<'a> Parser<'a> {
             self.skip_spaces();
             match self.peek() {
                 Some(b'+') => {
+                    let offset = self.pos;
                     self.pos += 1;
-                    total += self.parse_term()?;
+                    total = total
+                        .checked_add(self.parse_term()?)
+                        .ok_or(Error::Overflow { offset })?;
                 }
                 Some(b'-') => {
+                    let offset = self.pos;
                     self.pos += 1;
-                    total -= self.parse_term()?;
+                    total = total
+                        .checked_sub(self.parse_term()?)
+                        .ok_or(Error::Overflow { offset })?;
                 }
                 _ => return Ok(total),
             }
@@ -75,8 +92,11 @@ impl<'a> Parser<'a> {
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
+                let offset = self.pos;
                 self.pos += 1;
-                term *= self.parse_factor()?;
+                term = term
+                    .checked_mul(self.parse_factor()?)
+                    .ok_or(Error::Overflow { offset })?;
             } else {
                 return Ok(term);
             }
@@ -177,6 +197,13 @@ mod tests {
     #[test]
     fn curly_braced_group() {
         assert_eq!(interpret("{ 2 + 3 } * 4"), Ok(20));
+    }
+
+    #[test]
+    fn multiplication_overflow_is_reported() {
+        // 9^20 does not fit in an i64; the 19th `*` is at offset 74.
+        let input = "9 * ".repeat(19) + "9";
+        assert_eq!(interpret(&input), Err(Error::Overflow { offset: 74 }));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
