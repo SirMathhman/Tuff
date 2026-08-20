@@ -46,9 +46,6 @@ mod tests {
     // Coverage test: non-empty input must yield Err, not panic.
     #[test]
     fn non_empty_input_is_unsupported() {
-        assert_eq!(
-            interpret("x"),
-            Err(Error::UnsupportedSyntax { offset: 0 })
-        );
+        assert_eq!(interpret("x"), Err(Error::UnsupportedSyntax { offset: 0 }));
     }
 }
