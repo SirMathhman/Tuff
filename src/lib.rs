@@ -27,8 +27,8 @@ impl std::error::Error for Error {}
 /// The bare minimum for now: an empty string is `0`; a single digit is
 /// its value; a chain of single digits joined by `+`, `-`, or `*`
 /// (optional surrounding spaces) is evaluated with `*` binding tighter
-/// than `+`/`-`; parentheses group subexpressions; anything else is
-/// not yet supported.
+/// than `+`/`-`; parentheses or curly braces group subexpressions;
+/// anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -83,27 +83,35 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `factor = digit | '(' expr ')'`.
+    /// Parses `factor = digit | '(' expr ')' | '{' expr '}'`.
     fn parse_factor(&mut self) -> Result<i64, Error> {
         self.skip_spaces();
         match self.peek() {
             Some(b'(') => {
                 self.pos += 1;
-                let value = self.parse_expr()?;
-                self.skip_spaces();
-                match self.peek() {
-                    Some(b')') => {
-                        self.pos += 1;
-                        Ok(value)
-                    }
-                    _ => Err(Error::UnsupportedSyntax {
-                        offset: self.pos,
-                    }),
-                }
+                self.parse_grouped(b')')
+            }
+            Some(b'{') => {
+                self.pos += 1;
+                self.parse_grouped(b'}')
             }
             Some(digit @ b'0'..=b'9') => {
                 self.pos += 1;
                 Ok((digit - b'0') as i64)
+            }
+            _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
+        }
+    }
+
+    /// Parses `expr close` after the opening delimiter was consumed;
+    /// `close` is the expected matching closing delimiter.
+    fn parse_grouped(&mut self, close: u8) -> Result<i64, Error> {
+        let value = self.parse_expr()?;
+        self.skip_spaces();
+        match self.peek() {
+            Some(c) if c == close => {
+                self.pos += 1;
+                Ok(value)
             }
             _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
         }
@@ -164,6 +172,11 @@ mod tests {
     #[test]
     fn parenthesized_group() {
         assert_eq!(interpret("(2 + 3) * 4"), Ok(20));
+    }
+
+    #[test]
+    fn curly_braced_group() {
+        assert_eq!(interpret("{ 2 + 3 } * 4"), Ok(20));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
