@@ -149,6 +149,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `let name = expr` after the `let` keyword was consumed.
+    /// The binding is recorded in the current scope; the statement
+    /// itself evaluates to `0`.
     fn parse_let(&mut self) -> Result<i64, Error> {
         let (name, _) = self.parse_identifier_name()?;
         self.skip_spaces();
@@ -158,7 +160,7 @@ impl<'a> Parser<'a> {
         self.pos += 1;
         let value = self.parse_expr()?;
         self.env.last_mut().unwrap().push((name, value));
-        Ok(value)
+        Ok(0)
     }
 
     /// Parses an identifier and looks up its binding in the

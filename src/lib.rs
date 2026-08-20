@@ -59,7 +59,8 @@ impl std::error::Error for Error {}
 /// curly braces delimit blocks of `let` bindings ending in an
 /// expression, whose value is the block's value; the top level is a
 /// sequence of `;`-separated statements whose value is the value of
-/// the last statement; anything else is not yet supported.
+/// the last statement; a `let` statement evaluates to `0`; anything
+/// else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -134,6 +135,11 @@ mod tests {
     #[test]
     fn top_level_let_binding() {
         assert_eq!(interpret("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
+    }
+
+    #[test]
+    fn let_statement_evaluates_to_zero() {
+        assert_eq!(interpret("let x = 100;"), Ok(0));
     }
 
     #[test]
