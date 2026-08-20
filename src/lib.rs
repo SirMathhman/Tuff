@@ -25,16 +25,18 @@ impl std::error::Error for Error {}
 /// Interprets `input` and returns its value.
 ///
 /// The bare minimum for now: an empty string is `0`; a single digit is
-/// its value; `d + d` (single digits, optional surrounding spaces) is
-/// their sum; anything else is not yet supported.
+/// its value; a chain of single digits joined by `+` (optional
+/// surrounding spaces) is their sum; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
-    if let Some((left, right)) = input.split_once('+') {
-        return Ok(parse_digit(left.trim())? + parse_digit(right.trim())?);
-    }
     if input.is_empty() {
         return Ok(0);
     }
-    parse_digit(input)
+    Ok(input
+        .split('+')
+        .map(|part| parse_digit(part.trim()))
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .sum())
 }
 
 /// Parses a single ASCII digit, or reports unsupported syntax.
@@ -64,6 +66,11 @@ mod tests {
     #[test]
     fn addition_of_two_digits() {
         assert_eq!(interpret("1 + 2"), Ok(3));
+    }
+
+    #[test]
+    fn addition_of_three_digits() {
+        assert_eq!(interpret("1 + 2 + 3"), Ok(6));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
