@@ -160,7 +160,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `factor = number | boolean | identifier | '(' expr ')'
-    /// | block`.
+    /// | block | if`.
     fn parse_factor(&mut self) -> Result<Value, Error> {
         self.skip_spaces();
         match self.peek() {
@@ -174,6 +174,9 @@ impl<'a> Parser<'a> {
             }
             Some(b'0'..=b'9') => self.parse_number(),
             Some(b'a'..=b'z') => {
+                if self.input[self.pos..].starts_with("if ") {
+                    return self.parse_if();
+                }
                 if let Some(value) = self.parse_boolean() {
                     Ok(value)
                 } else {
@@ -185,6 +188,39 @@ impl<'a> Parser<'a> {
                 found: self.peek(),
             }),
         }
+    }
+
+    /// Parses `if (cond) then else alt`: the condition is a
+    /// parenthesized expression; if it is truthy the value is the
+    /// `then` expression, otherwise the `else` expression.
+    fn parse_if(&mut self) -> Result<Value, Error> {
+        self.pos += 3; // skip `if`
+        self.skip_spaces();
+        if self.peek() != Some(b'(') {
+            return Err(Error::ExpectedClosingDelimiter {
+                offset: self.pos,
+                expected: b'(',
+            });
+        }
+        self.pos += 1;
+        let cond = self.parse_or()?;
+        self.skip_spaces();
+        if self.peek() != Some(b')') {
+            return Err(Error::ExpectedClosingDelimiter {
+                offset: self.pos,
+                expected: b')',
+            });
+        }
+        self.pos += 1;
+        self.skip_spaces();
+        let then = self.parse_or()?;
+        self.skip_spaces();
+        if !self.input[self.pos..].starts_with("else ") {
+            return Err(Error::ExpectedElse { offset: self.pos });
+        }
+        self.pos += 5; // skip `else `
+        let alt = self.parse_or()?;
+        Ok(if cond.is_truthy() { then } else { alt })
     }
 
     /// Parses a boolean literal if the current position starts one;
@@ -507,6 +543,11 @@ mod tests {
             interpret("let mut x = 0; let y = { x = 100; };"),
             Err(Error::BlockMustEndWithExpression { offset: 34 })
         );
+    }
+
+    #[test]
+    fn if_expression_takes_else_branch_when_condition_is_false() {
+        assert_eq!(interpret("let x = if (false) 2 else 3; x"), Ok(3));
     }
 
     #[test]

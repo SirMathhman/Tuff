@@ -59,6 +59,11 @@ pub enum Error {
         /// The name of the immutable variable.
         name: String,
     },
+    /// An `if` expression was not followed by an `else` branch.
+    ExpectedElse {
+        /// Byte offset of the character where `else` was expected.
+        offset: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -122,6 +127,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "cannot assign to '{name}' at offset {offset}: it was not declared `mut`; declare it with `let mut`"
+                )
+            }
+            Error::ExpectedElse { offset } => {
+                write!(
+                    f,
+                    "expected 'else' at offset {offset}: an `if` expression needs an `else` branch"
                 )
             }
         }

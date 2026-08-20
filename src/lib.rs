@@ -23,7 +23,9 @@ use parser::Parser;
 /// non-zero and binds looser than `==`, `+`, `-`, and `*`; `let mut`
 /// declares a mutable binding, and `name = expr` assigns to it
 /// (evaluating to the assigned value); assigning to a non-`mut`
-/// binding is an error; anything else is not yet supported.
+/// binding is an error; `if (cond) a else b` evaluates to `a` when
+/// `cond` is truthy and `b` otherwise; anything else is not yet
+/// supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
