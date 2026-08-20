@@ -60,9 +60,11 @@ impl std::error::Error for Error {}
 /// curly braces delimit blocks of `let` bindings ending in an
 /// expression, whose value is the block's value; the top level is a
 /// sequence of `;`-separated statements whose value is the value of
-/// the last statement; a `let` statement evaluates to `0`; `||`
-/// yields `1` if either side is non-zero and binds looser than `+`,
-/// `-`, and `*`; anything else is not yet supported.
+/// the last statement; a `let` statement evaluates to `0`; `==`
+/// yields `1` if both sides are equal and binds looser than `+`, `-`,
+/// and `*`; `||` yields `1` if either side is non-zero and binds
+/// looser than `==`, `+`, `-`, and `*`; anything else is not yet
+/// supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -162,6 +164,11 @@ mod tests {
     #[test]
     fn or_of_booleans() {
         assert_eq!(interpret("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
+    fn equality_of_unequal_values() {
+        assert_eq!(interpret("let x = 1; let y = 2; x == y"), Ok(0));
     }
 
     #[test]

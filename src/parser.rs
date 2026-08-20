@@ -42,16 +42,32 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `or = expr ('||' expr)*`; `||` binds looser than `+`,
+    /// Parses `or = eq ('||' eq)*`; `||` binds looser than `==`, `+`,
     /// `-`, and `*`, and yields `1` if either side is non-zero.
     fn parse_or(&mut self) -> Result<i64, Error> {
-        let mut value = self.parse_expr()?;
+        let mut value = self.parse_eq()?;
         loop {
             self.skip_spaces();
             if self.input[self.pos..].starts_with("||") {
                 self.pos += 2;
-                let rhs = self.parse_expr()?;
+                let rhs = self.parse_eq()?;
                 value = i64::from(value != 0 || rhs != 0);
+            } else {
+                return Ok(value);
+            }
+        }
+    }
+
+    /// Parses `eq = expr ('==' expr)*`; `==` binds looser than `+`,
+    /// `-`, and `*`, and yields `1` if both sides are equal.
+    fn parse_eq(&mut self) -> Result<i64, Error> {
+        let mut value = self.parse_expr()?;
+        loop {
+            self.skip_spaces();
+            if self.input[self.pos..].starts_with("==") {
+                self.pos += 2;
+                let rhs = self.parse_expr()?;
+                value = i64::from(value == rhs);
             } else {
                 return Ok(value);
             }
