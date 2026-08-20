@@ -53,7 +53,8 @@ impl std::error::Error for Error {}
 /// Interprets `input` and returns its value.
 ///
 /// The bare minimum for now: an empty string is `0`; a non-negative
-/// integer literal is its value; a chain of literals joined by `+`,
+/// integer literal is its value; the boolean literals `true` and
+/// `false` are `1` and `0`; a chain of literals joined by `+`,
 /// `-`, or `*` (optional surrounding spaces) is evaluated with `*`
 /// binding tighter than `+`/`-`; parentheses group subexpressions;
 /// curly braces delimit blocks of `let` bindings ending in an
@@ -150,6 +151,11 @@ mod tests {
             interpret("let x = { let y = 100; }; x"),
             Err(Error::UnsupportedSyntax { offset: 23 })
         );
+    }
+
+    #[test]
+    fn boolean_literal_true_is_one() {
+        assert_eq!(interpret("let x = true; x"), Ok(1));
     }
 
     #[test]

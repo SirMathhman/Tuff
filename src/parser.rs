@@ -84,7 +84,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `factor = number | identifier | '(' expr ')' | block`.
+    /// Parses `factor = number | boolean | identifier | '(' expr ')'
+    /// | block`.
     fn parse_factor(&mut self) -> Result<i64, Error> {
         self.skip_spaces();
         match self.peek() {
@@ -97,9 +98,37 @@ impl<'a> Parser<'a> {
                 self.parse_block(b'}')
             }
             Some(b'0'..=b'9') => self.parse_number(),
-            Some(b'a'..=b'z') => self.parse_identifier(),
+            Some(b'a'..=b'z') => {
+                if let Some(value) = self.parse_boolean() {
+                    Ok(value)
+                } else {
+                    self.parse_identifier()
+                }
+            }
             _ => Err(Error::UnsupportedSyntax { offset: self.pos }),
         }
+    }
+
+    /// Parses a boolean literal (`true` is `1`, `false` is `0`) if
+    /// the current position starts one; otherwise returns `None`.
+    fn parse_boolean(&mut self) -> Option<i64> {
+        let rest = &self.input[self.pos..];
+        let (value, len) = if rest.starts_with("true") {
+            (1, 4)
+        } else if rest.starts_with("false") {
+            (0, 5)
+        } else {
+            return None;
+        };
+        if rest
+            .as_bytes()
+            .get(len)
+            .is_some_and(|c| c.is_ascii_lowercase())
+        {
+            return None;
+        }
+        self.pos += len;
+        Some(value)
     }
 
     /// Parses a block: `let` bindings separated by `;`, ending in an
