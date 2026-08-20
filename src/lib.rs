@@ -25,8 +25,9 @@ impl std::error::Error for Error {}
 /// Interprets `input` and returns its value.
 ///
 /// The bare minimum for now: an empty string is `0`; a single digit is
-/// its value; a chain of single digits joined by `+` or `-` (optional
-/// surrounding spaces) is their sum; anything else is not yet supported.
+/// its value; a chain of single digits joined by `+`, `-`, or `*`
+/// (optional surrounding spaces) is evaluated with `*` binding tighter
+/// than `+`/`-`; anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);
@@ -38,8 +39,25 @@ pub fn interpret(input: &str) -> Result<i64, Error> {
         while base < input.len() && input.as_bytes()[base] == b' ' {
             base += 1;
         }
-        total += sign * parse_digit(&input[base..], base)?;
+        // Parse a product term: digit (* digit)*
+        let mut term = parse_digit(&input[base..], base)?;
         base += 1; // skip the digit
+        loop {
+            while base < input.len() && input.as_bytes()[base] == b' ' {
+                base += 1;
+            }
+            if base < input.len() && input.as_bytes()[base] == b'*' {
+                base += 1;
+                while base < input.len() && input.as_bytes()[base] == b' ' {
+                    base += 1;
+                }
+                term *= parse_digit(&input[base..], base)?;
+                base += 1; // skip the digit
+            } else {
+                break;
+            }
+        }
+        total += sign * term;
         while base < input.len() && input.as_bytes()[base] == b' ' {
             base += 1;
         }
@@ -93,6 +111,11 @@ mod tests {
     #[test]
     fn mixed_addition_and_subtraction() {
         assert_eq!(interpret("2 + 3 - 4"), Ok(1));
+    }
+
+    #[test]
+    fn multiplication_binds_tighter_than_addition() {
+        assert_eq!(interpret("2 * 3 + 4"), Ok(10));
     }
 
     // Coverage test: non-empty input must yield Err, not panic.
