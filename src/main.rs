@@ -1,21 +1,17 @@
-fn main() {
-    println!("Hello, world!");
-}
+use std::process::ExitCode;
 
-pub fn interpret(input: &str) -> i64 {
-    if input.is_empty() {
-        0
-    } else {
-        unimplemented!()
-    }
-}
+use tuffc::interpret;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_string_is_zero() {
-        assert_eq!(interpret(""), 0);
+fn main() -> ExitCode {
+    let input = std::env::args().nth(1).unwrap_or_default();
+    match interpret(&input) {
+        Ok(value) => {
+            println!("{value}");
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("error: {err}");
+            ExitCode::FAILURE
+        }
     }
 }
