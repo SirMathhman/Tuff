@@ -25,8 +25,9 @@ use parser::Parser;
 /// (evaluating to the assigned value); assigning to a non-`mut`
 /// binding or a value of a different kind is an error; `if (cond) a
 /// else b` evaluates to `a` when
-/// `cond` is truthy and `b` otherwise; anything else is not yet
-/// supported.
+/// `cond` is truthy and `b` otherwise; both branches are checked, but
+/// only the chosen branch's side effects persist; anything else is
+/// not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);

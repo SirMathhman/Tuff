@@ -221,13 +221,21 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1;
         self.skip_spaces();
+        // Both branches are checked (parsed and evaluated) so that
+        // errors in either are reported, but each runs in a snapshot
+        // of the environment so only the chosen branch's value is
+        // used and neither branch's side effects persist.
+        let then_env = self.env.clone();
         let then = self.parse_or()?;
+        self.env = then_env;
         self.skip_spaces();
         if !self.input[self.pos..].starts_with("else ") {
             return Err(Error::ExpectedElse { offset: self.pos });
         }
         self.pos += 5; // skip `else `
+        let alt_env = self.env.clone();
         let alt = self.parse_or()?;
+        self.env = alt_env;
         Ok(if cond.is_truthy() { then } else { alt })
     }
 
@@ -588,6 +596,16 @@ mod tests {
                 expected: "boolean".to_string(),
                 found: "integer".to_string(),
             })
+        );
+    }
+
+    #[test]
+    fn unchosen_if_branch_side_effects_do_not_persist() {
+        // The then-branch assigns to `x`, but the condition is false,
+        // so `x` keeps its original value.
+        assert_eq!(
+            interpret("let mut x = 0; let y = if (false) { x = 1; 2 } else 3; x"),
+            Ok(0)
         );
     }
 
