@@ -2,16 +2,8 @@ import type { StatementAssign, Value, ValueDeref, ValueIndexAssign } from "../co
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
 import { lookup } from "../core/scopes.js";
 import { checkExpression } from "./checkExpressions.js";
-import type { BlockChecker } from "./checkPredicates.js";
-import {
-  INT_ANY,
-  isSubtype,
-  isUnsignedInt,
-  promote,
-  typeToString,
-  type DeclScopes,
-  type Type,
-} from "./types.js";
+import { checkIndexType, type BlockChecker } from "./checkPredicates.js";
+import { isSubtype, promote, typeToString, type DeclScopes, type Type } from "./types.js";
 
 /** The base identifier name of an lvalue (an ident, or a deref/index chain ending in one). */
 function baseIdentName(value: Value): string {
@@ -193,16 +185,9 @@ function checkIndexAssign(
     });
   }
   const indexType = index.value;
-  const validIndex =
-    indexType.kind === "int" && (indexType.name === INT_ANY || isUnsignedInt(indexType.name));
-  if (!validIndex) {
-    return err({
-      kind: "TypeMismatch",
-      name: "[",
-      expected: "usize",
-      actual: typeToString(indexType),
-      position: target.index.position,
-    });
+  const validIndex = checkIndexType(indexType, target.index.position);
+  if (!validIndex.ok) {
+    return validIndex;
   }
   return check(name, targetType.element, actual, target.position);
 }

@@ -136,29 +136,17 @@ function numberPatternType(pattern: MatchPatternNumber): Type {
 }
 
 /**
- * Check a `match` expression: the scrutinee is declared and numeric-coercible,
- * every arm's pattern type matches the scrutinee's, all arm values share one
- * type, and a `_` wildcard arm is present (so the expression is total).
+ * Check every `match` arm: each non-wildcard pattern's type is comparable with
+ * the scrutinee's, and all arm values share one type. Returns the common arm
+ * type (or `Int` when there are no arms).
  */
-export function checkMatch(
+function checkMatchArms(
   value: ValueMatch,
+  scrutineeStatic: Type,
   scopes: DeclScopes,
   block: BlockChecker,
   check: CheckExpressionFn,
 ): Result<Type, EvalError> {
-  const scrutinee = check(value.scrutinee, scopes, block);
-  if (!scrutinee.ok) {
-    return scrutinee;
-  }
-  const scrutineeCoercible = checkNumericCoercible(
-    scrutinee.value,
-    "match",
-    value.scrutinee.position,
-  );
-  if (!scrutineeCoercible.ok) {
-    return scrutineeCoercible;
-  }
-  const scrutineeStatic = scrutinee.value;
   let armType: Type | undefined;
   for (const arm of value.arms) {
     if (arm.pattern.kind !== "wildcard") {
@@ -192,10 +180,40 @@ export function checkMatch(
     }
     armType = armValue;
   }
+  return ok(armType ?? { kind: "int", name: INT_ANY });
+}
+
+/**
+ * Check a `match` expression: the scrutinee is declared and numeric-coercible,
+ * every arm's pattern type matches the scrutinee's, all arm values share one
+ * type, and a `_` wildcard arm is present (so the expression is total).
+ */
+export function checkMatch(
+  value: ValueMatch,
+  scopes: DeclScopes,
+  block: BlockChecker,
+  check: CheckExpressionFn,
+): Result<Type, EvalError> {
+  const scrutinee = check(value.scrutinee, scopes, block);
+  if (!scrutinee.ok) {
+    return scrutinee;
+  }
+  const scrutineeCoercible = checkNumericCoercible(
+    scrutinee.value,
+    "match",
+    value.scrutinee.position,
+  );
+  if (!scrutineeCoercible.ok) {
+    return scrutineeCoercible;
+  }
+  const arms = checkMatchArms(value, scrutinee.value, scopes, block, check);
+  if (!arms.ok) {
+    return arms;
+  }
   if (!value.arms.some((arm) => arm.pattern.kind === "wildcard")) {
     return err({ kind: "MissingWildcardArm", position: value.position });
   }
-  return ok(armType ?? { kind: "int", name: INT_ANY });
+  return arms;
 }
 
 /** Check an `is` type-test: the operand is declared and the type name resolves. */

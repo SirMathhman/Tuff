@@ -1,7 +1,9 @@
 import type {
   Value,
   ValueAddressOf,
+  ValueBlock,
   ValueDeref,
+  ValueIdent,
   ValueIf,
   ValueIs,
   ValueMatch,
@@ -16,7 +18,6 @@ import {
   isSubtype,
   typeFromName,
   typeToString,
-  type Type,
   type TypeFloat,
   type TypeInt,
 } from "./types.js";
@@ -33,9 +34,12 @@ import {
 // context from the value evaluator (their existing import site).
 export type { ValueContext };
 
-/** Evaluate `&name`: a pointer to the variable's value (pointers may nest). */
-function evalAddressOf(
-  value: ValueAddressOf,
+/**
+ * Evaluate a pointer operation: `&name` (a pointer to a variable's value,
+ * pointers may nest) or `*ptr` (the value a pointer refers to).
+ */
+function evalPointerOp(
+  value: ValueAddressOf | ValueDeref,
   scopes: Scopes,
   ctx: ValueContext,
   toTyped: ValueToTypedFn,
@@ -44,37 +48,26 @@ function evalAddressOf(
   if (!target.ok) {
     return target;
   }
-  if (value.target.kind !== "ident") {
-    return err({
-      kind: "TypeMismatch",
-      name: "&",
-      expected: "variable",
-      actual: typeToString(target.value),
-      position: value.position,
+  if (value.kind === "addressOf") {
+    if (value.target.kind !== "ident") {
+      return err({
+        kind: "TypeMismatch",
+        name: "&",
+        expected: "variable",
+        actual: typeToString(target.value),
+        position: value.position,
+      });
+    }
+    const variable = lookup(scopes, value.target.name);
+    if (!variable) {
+      return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
+    }
+    return ok({
+      kind: "ptr",
+      mutable: value.mutable,
+      pointee: variable.value,
+      ref: variable,
     });
-  }
-  const variable = lookup(scopes, value.target.name);
-  if (!variable) {
-    return err({ kind: "UnknownIdentifier", name: value.target.name, position: value.position });
-  }
-  return ok({
-    kind: "ptr",
-    mutable: value.mutable,
-    pointee: variable.value,
-    ref: variable,
-  });
-}
-
-/** Evaluate `*ptr`: the value a pointer refers to. */
-function evalDeref(
-  value: ValueDeref,
-  scopes: Scopes,
-  ctx: ValueContext,
-  toTyped: ValueToTypedFn,
-): Result<TypedValue, EvalError> {
-  const target = toTyped(value.target, scopes, ctx);
-  if (!target.ok) {
-    return target;
   }
   if (!isPointer(target.value)) {
     return err({
@@ -180,8 +173,14 @@ function evalIs(
   return ok({ kind: "bool", value: matches });
 }
 
+/** A numeric literal's payload (value and optional type suffix). */
+interface NumberLiteral {
+  value: number;
+  suffix?: string;
+}
+
 /** The static `Type` of a numeric literal (suffixed or the family supertype). */
-function numberLiteralType(value: { value: number; suffix?: string }): TypeInt | TypeFloat {
+function numberLiteralType(value: NumberLiteral): TypeInt | TypeFloat {
   if (value.suffix) {
     return INT_BOUNDS[value.suffix]
       ? { kind: "int", name: value.suffix }
@@ -192,6 +191,34 @@ function numberLiteralType(value: { value: number; suffix?: string }): TypeInt |
   return Number.isInteger(value.value)
     ? { kind: "int", name: INT_ANY }
     : { kind: "float", name: FLOAT_ANY };
+}
+
+/** The compound value kinds handled by {@link evalCompoundValue}. */
+type CompoundValue = ValueRange | ValueIf | ValueMatch | ValueBlock | ValueIdent;
+
+/** Evaluate the compound value kinds: `range`, `if`, `match`, `block`, and identifiers. */
+function evalCompoundValue(
+  value: CompoundValue,
+  scopes: Scopes,
+  ctx: ValueContext,
+): Result<TypedValue, EvalError> {
+  if (value.kind === "range") {
+    return evalRange(value, scopes, ctx, valueToTyped, valueToNumber);
+  }
+  if (value.kind === "if") {
+    return evalIf(value, scopes, ctx, valueToTyped, valueToNumber);
+  }
+  if (value.kind === "match") {
+    return evalMatch(value, scopes, ctx, valueToTyped, valueToNumber);
+  }
+  if (value.kind === "block") {
+    return ctx.evalBlock(value, scopes);
+  }
+  const variable = lookup(scopes, value.name);
+  if (!variable) {
+    return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
+  }
+  return ok(variable.value);
 }
 
 /**
@@ -227,11 +254,8 @@ export function valueToTyped(
   if (value.kind === "index") {
     return evalIndex(value, scopes, ctx, valueToTyped, valueToNumber);
   }
-  if (value.kind === "addressOf") {
-    return evalAddressOf(value, scopes, ctx, valueToTyped);
-  }
-  if (value.kind === "deref") {
-    return evalDeref(value, scopes, ctx, valueToTyped);
+  if (value.kind === "addressOf" || value.kind === "deref") {
+    return evalPointerOp(value, scopes, ctx, valueToTyped);
   }
   if (value.kind === "indexAssign") {
     // An lvalue is never read as a value; the typecheck pass rejects this.
@@ -243,23 +267,7 @@ export function valueToTyped(
       position: value.position,
     });
   }
-  if (value.kind === "range") {
-    return evalRange(value, scopes, ctx, valueToTyped, valueToNumber);
-  }
-  if (value.kind === "if") {
-    return evalIf(value, scopes, ctx, valueToTyped, valueToNumber);
-  }
-  if (value.kind === "match") {
-    return evalMatch(value, scopes, ctx, valueToTyped, valueToNumber);
-  }
-  if (value.kind === "block") {
-    return ctx.evalBlock(value, scopes);
-  }
-  const variable = lookup(scopes, value.name);
-  if (!variable) {
-    return err({ kind: "UnknownIdentifier", name: value.name, position: value.position });
-  }
-  return ok(variable.value);
+  return evalCompoundValue(value, scopes, ctx);
 }
 
 /**

@@ -1,14 +1,81 @@
 import type { ValueArray, ValueBinary, ValueIndex } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
+import { INT_ANY, promote, typeToString, type DeclScopes, type Type } from "./types.js";
 import {
-  INT_ANY,
-  isUnsignedInt,
-  promote,
-  typeToString,
-  type DeclScopes,
-  type Type,
-} from "./types.js";
-import { comparableTypes, type BlockChecker, type CheckExpressionFn } from "./checkPredicates.js";
+  checkIndexType,
+  comparableTypes,
+  type BlockChecker,
+  type CheckExpressionFn,
+} from "./checkPredicates.js";
+
+/** Check `a + b`: both operands numeric, result the promoted type. */
+function checkAddition(
+  value: ValueBinary,
+  leftType: Type,
+  rightType: Type,
+): Result<Type, EvalError> {
+  // Arithmetic addition: both operands must be integers or floats; the
+  // result is the promoted type of the two operands.
+  const conforms = (t: Type): boolean => t.kind === "int" || t.kind === "float";
+  if (!conforms(leftType) || !conforms(rightType)) {
+    const offending = !conforms(leftType) ? leftType : rightType;
+    return err({
+      kind: "TypeMismatch",
+      name: value.operator,
+      expected: "number",
+      actual: typeToString(offending),
+      position: value.position,
+    });
+  }
+  const promoted = promote(leftType, rightType);
+  if (!promoted) {
+    // No concrete type can hold both operands (e.g. `u64 + i64`).
+    return err({
+      kind: "TypeMismatch",
+      name: value.operator,
+      expected: typeToString(leftType),
+      actual: typeToString(rightType),
+      position: value.position,
+    });
+  }
+  return ok(promoted);
+}
+
+/** Check a comparison (`==`, `!=`, ordering): operands comparable, result `Bool`. */
+function checkComparison(
+  value: ValueBinary,
+  leftType: Type,
+  rightType: Type,
+): Result<Type, EvalError> {
+  if (value.operator === "==" || value.operator === "!=") {
+    // Equality is subtype-aware: `1 == 1U8` compares an `Int` against a
+    // `u8` (the `u8` is a subtype of `Int`).
+    if (!comparableTypes(leftType, rightType)) {
+      return err({
+        kind: "TypeMismatch",
+        name: value.operator,
+        expected: typeToString(leftType),
+        actual: typeToString(rightType),
+        position: value.position,
+      });
+    }
+    return ok({ kind: "bool" });
+  }
+  // Ordering operators compare numerically; bools, integers, and floats
+  // coerce.
+  for (const operand of [leftType, rightType]) {
+    if (operand.kind !== "bool" && operand.kind !== "int" && operand.kind !== "float") {
+      return err({
+        kind: "TypeMismatch",
+        name: value.operator,
+        expected: "number",
+        actual: typeToString(operand),
+        position: value.position,
+      });
+    }
+  }
+  return ok({ kind: "bool" });
+}
 
 /** Check a binary operation's operands: identifiers declared, and no pointer operands to ordering operators. */
 export function checkBinary(
@@ -26,63 +93,9 @@ export function checkBinary(
     return right;
   }
   if (value.operator === "+") {
-    // Arithmetic addition: both operands must be integers or floats; the
-    // result is the promoted type of the two operands.
-    const leftType = left.value;
-    const rightType = right.value;
-    const conforms = (t: Type): boolean => t.kind === "int" || t.kind === "float";
-    if (!conforms(leftType) || !conforms(rightType)) {
-      const offending = !conforms(leftType) ? leftType : rightType;
-      return err({
-        kind: "TypeMismatch",
-        name: value.operator,
-        expected: "number",
-        actual: typeToString(offending),
-        position: value.position,
-      });
-    }
-    const promoted = promote(leftType, rightType);
-    if (!promoted) {
-      // No concrete type can hold both operands (e.g. `u64 + i64`).
-      return err({
-        kind: "TypeMismatch",
-        name: value.operator,
-        expected: typeToString(leftType),
-        actual: typeToString(rightType),
-        position: value.position,
-      });
-    }
-    return ok(promoted);
+    return checkAddition(value, left.value, right.value);
   }
-  if (value.operator === "==" || value.operator === "!=") {
-    // Equality is subtype-aware: `1 == 1U8` compares an `Int` against a
-    // `u8` (the `u8` is a subtype of `Int`).
-    if (!comparableTypes(left.value, right.value)) {
-      return err({
-        kind: "TypeMismatch",
-        name: value.operator,
-        expected: typeToString(left.value),
-        actual: typeToString(right.value),
-        position: value.position,
-      });
-    }
-  } else {
-    // Ordering operators compare numerically; bools, integers, and floats
-    // coerce.
-    for (const operand of [left.value, right.value]) {
-      if (operand.kind !== "bool" && operand.kind !== "int" && operand.kind !== "float") {
-        return err({
-          kind: "TypeMismatch",
-          name: value.operator,
-          expected: "number",
-          actual: typeToString(operand),
-          position: value.position,
-        });
-      }
-    }
-  }
-  // Comparisons yield a `Bool`.
-  return ok({ kind: "bool" });
+  return checkComparison(value, left.value, right.value);
 }
 
 /** Check an array literal: every element is declared and all share one type. */
@@ -145,16 +158,9 @@ export function checkIndex(
     });
   }
   const indexType = index.value;
-  const validIndex =
-    indexType.kind === "int" && (indexType.name === INT_ANY || isUnsignedInt(indexType.name));
-  if (!validIndex) {
-    return err({
-      kind: "TypeMismatch",
-      name: "[",
-      expected: "usize",
-      actual: typeToString(indexType),
-      position: value.index.position,
-    });
+  const validIndex = checkIndexType(indexType, value.index.position);
+  if (!validIndex.ok) {
+    return validIndex;
   }
   return ok(targetType.element);
 }

@@ -5,6 +5,8 @@ import type {
   StatementContinue,
   StatementFor,
   StatementIf,
+  StatementLet,
+  StatementReturn,
   StatementWhile,
   Value,
 } from "../core/ast.js";
@@ -49,6 +51,42 @@ function checkStatements(
     lastType = statement.kind === "expr" ? result.value : { kind: "number" };
   }
   return ok(lastType);
+}
+
+/** Check a `let` statement: the initializer is declared and well-typed. */
+function checkLet(
+  statement: StatementLet,
+  scopes: DeclScopes,
+  block: BlockChecker,
+): Result<Type, EvalError> {
+  const initializer = checkExpression(statement.value, scopes, block);
+  if (!initializer.ok) {
+    return initializer;
+  }
+  const type = initializer.value;
+  scopes[scopes.length - 1].set(statement.name, { type, mutable: statement.mutable });
+  return ok({ kind: "number" });
+}
+
+/** Check a `return` statement: the value is declared and numeric-coercible. */
+function checkReturn(
+  statement: StatementReturn,
+  scopes: DeclScopes,
+  inBlockValue: boolean,
+  block: BlockChecker,
+): Result<Type, EvalError> {
+  if (inBlockValue) {
+    return err({ kind: "ReturnInBlockValue", position: statement.position });
+  }
+  const value = checkExpression(statement.value, scopes, block);
+  if (!value.ok) {
+    return value;
+  }
+  const coercible = checkNumericCoercible(value.value, "return", statement.value.position);
+  if (!coercible.ok) {
+    return coercible;
+  }
+  return ok({ kind: "number" });
 }
 
 /** Check a loop condition: it is a value of type `Bool`. */
@@ -165,13 +203,7 @@ function checkStatement(
   block: BlockChecker,
 ): Result<Type, EvalError> {
   if (statement.kind === "let") {
-    const initializer = checkExpression(statement.value, scopes, block);
-    if (!initializer.ok) {
-      return initializer;
-    }
-    const type = initializer.value;
-    scopes[scopes.length - 1].set(statement.name, { type, mutable: statement.mutable });
-    return ok({ kind: "number" });
+    return checkLet(statement, scopes, block);
   }
 
   if (statement.kind === "assign") {
@@ -183,18 +215,7 @@ function checkStatement(
   }
 
   if (statement.kind === "return") {
-    if (inBlockValue) {
-      return err({ kind: "ReturnInBlockValue", position: statement.position });
-    }
-    const value = checkExpression(statement.value, scopes, block);
-    if (!value.ok) {
-      return value;
-    }
-    const coercible = checkNumericCoercible(value.value, "return", statement.value.position);
-    if (!coercible.ok) {
-      return coercible;
-    }
-    return ok({ kind: "number" });
+    return checkReturn(statement, scopes, inBlockValue, block);
   }
 
   // A bare expression is a value; its numeric-coercibility is enforced only

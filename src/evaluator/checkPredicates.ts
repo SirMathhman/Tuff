@@ -1,6 +1,13 @@
 import type { Statement, Value } from "../core/ast.js";
 import { err, ok, type EvalError, type Result } from "../core/errors.js";
-import { isSubtype, typeToString, type DeclScopes, type Type } from "./types.js";
+import {
+  INT_ANY,
+  isSubtype,
+  isUnsignedInt,
+  typeToString,
+  type DeclScopes,
+  type Type,
+} from "./types.js";
 
 /**
  * A block-statement checker, threaded through the expression checker as an
@@ -65,6 +72,25 @@ export function checkBool(type: Type, name: string, position: number): Result<nu
       name,
       expected: "bool",
       actual: typeToString(type),
+      position,
+    });
+  }
+  return ok(null);
+}
+
+/**
+ * Check that an index expression's type is a valid array index: `Int` or an
+ * unsigned integer type. Shared by `arr[i]` reads and `arr[i] = value` writes.
+ */
+export function checkIndexType(indexType: Type, position: number): Result<null, EvalError> {
+  const validIndex =
+    indexType.kind === "int" && (indexType.name === INT_ANY || isUnsignedInt(indexType.name));
+  if (!validIndex) {
+    return err({
+      kind: "TypeMismatch",
+      name: "[",
+      expected: "usize",
+      actual: typeToString(indexType),
       position,
     });
   }
