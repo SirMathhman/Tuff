@@ -551,6 +551,14 @@ mod tests {
     }
 
     #[test]
+    fn if_expression_branches_can_be_blocks() {
+        assert_eq!(
+            interpret("let x = if (false) { let y = 2; y } else { let y = 3; y }; x"),
+            Ok(3)
+        );
+    }
+
+    #[test]
     fn nested_block_must_end_with_expression_not_assignment() {
         // The inner block ends with an assignment statement, not an
         // expression; its closing `}` is at offset 36.
