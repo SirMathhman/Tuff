@@ -42,6 +42,22 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses `or = expr ('||' expr)*`; `||` binds looser than `+`,
+    /// `-`, and `*`, and yields `1` if either side is non-zero.
+    fn parse_or(&mut self) -> Result<i64, Error> {
+        let mut value = self.parse_expr()?;
+        loop {
+            self.skip_spaces();
+            if self.input[self.pos..].starts_with("||") {
+                self.pos += 2;
+                let rhs = self.parse_expr()?;
+                value = i64::from(value != 0 || rhs != 0);
+            } else {
+                return Ok(value);
+            }
+        }
+    }
+
     /// Parses `expr = term (('+' | '-') term)*`.
     fn parse_expr(&mut self) -> Result<i64, Error> {
         let mut total = self.parse_term()?;
@@ -164,7 +180,7 @@ impl<'a> Parser<'a> {
             value = Some(if last_was_let {
                 self.parse_let()?
             } else {
-                self.parse_expr()?
+                self.parse_or()?
             });
             self.skip_spaces();
             match self.peek() {
@@ -196,7 +212,7 @@ impl<'a> Parser<'a> {
         if self.is_let() {
             return self.parse_let();
         }
-        self.parse_expr()
+        self.parse_or()
     }
 
     /// Parses `let name = expr`, consuming the `let` keyword. The
@@ -210,7 +226,7 @@ impl<'a> Parser<'a> {
             return Err(Error::UnsupportedSyntax { offset: self.pos });
         }
         self.pos += 1;
-        let value = self.parse_expr()?;
+        let value = self.parse_or()?;
         self.env.last_mut().unwrap().push((name, value));
         Ok(0)
     }
@@ -255,7 +271,7 @@ impl<'a> Parser<'a> {
     /// Parses `expr close` after the opening delimiter was consumed;
     /// `close` is the expected matching closing delimiter.
     fn parse_grouped(&mut self, close: u8) -> Result<i64, Error> {
-        let value = self.parse_expr()?;
+        let value = self.parse_or()?;
         self.skip_spaces();
         match self.peek() {
             Some(c) if c == close => {
