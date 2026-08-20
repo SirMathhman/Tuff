@@ -269,6 +269,17 @@ mod tests {
     }
 
     #[test]
+    fn assignment_to_immutable_binding_is_reported() {
+        assert_eq!(
+            interpret("let x = 0; x = 1; x"),
+            Err(Error::AssignmentToImmutable {
+                offset: 11,
+                name: "x".to_string()
+            })
+        );
+    }
+
+    #[test]
     fn multiplication_overflow_is_reported() {
         // 9^20 does not fit in an i64; the 19th `*` is at offset 74.
         let input = "9 * ".repeat(19) + "9";
