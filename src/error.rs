@@ -64,6 +64,17 @@ pub enum Error {
         /// Byte offset of the character where `else` was expected.
         offset: usize,
     },
+    /// An assignment's value has a different kind than the binding.
+    TypeMismatch {
+        /// Byte offset of the assigned value.
+        offset: usize,
+        /// The name of the binding being assigned to.
+        name: String,
+        /// The kind of the binding's current value.
+        expected: String,
+        /// The kind of the assigned value.
+        found: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -133,6 +144,17 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "expected 'else' at offset {offset}: an `if` expression needs an `else` branch"
+                )
+            }
+            Error::TypeMismatch {
+                offset,
+                name,
+                expected,
+                found,
+            } => {
+                write!(
+                    f,
+                    "type mismatch at offset {offset}: cannot assign a {found} to '{name}', which holds a {expected}; assign a value of the same kind"
                 )
             }
         }

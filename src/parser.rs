@@ -28,6 +28,14 @@ impl Value {
             Value::Bool(b) => i64::from(b),
         }
     }
+
+    /// The kind of the value, for error messages.
+    pub(crate) fn kind(self) -> &'static str {
+        match self {
+            Value::Int(_) => "integer",
+            Value::Bool(_) => "boolean",
+        }
+    }
 }
 
 /// Recursive-descent parser over `input`, tracking the byte offset
@@ -350,33 +358,44 @@ impl<'a> Parser<'a> {
             mutable = true;
             self.pos += 4; // skip `mut `
         }
-        let (name, _, value) = self.parse_name_equals_expr()?;
+        let (name, _, _, value) = self.parse_name_equals_expr()?;
         self.env.last_mut().unwrap().push((name, mutable, value));
         Ok(Value::Int(0))
     }
 
-    /// Parses `name = expr`, returning the name, its offset, and the
-    /// value of the right-hand side.
-    fn parse_name_equals_expr(&mut self) -> Result<(String, usize, Value), Error> {
+    /// Parses `name = expr`, returning the name, its offset, the
+    /// offset of the right-hand side, and the value of the right-hand
+    /// side.
+    fn parse_name_equals_expr(&mut self) -> Result<(String, usize, usize, Value), Error> {
         let (name, offset) = self.parse_identifier_name()?;
         self.skip_spaces();
         if self.peek() != Some(b'=') {
             return Err(Error::ExpectedEquals { offset: self.pos });
         }
         self.pos += 1;
+        self.skip_spaces();
+        let value_offset = self.pos;
         let value = self.parse_or()?;
-        Ok((name, offset, value))
+        Ok((name, offset, value_offset, value))
     }
 
     /// Parses `name = expr`: the right-hand side is evaluated and the
     /// binding is updated; the statement evaluates to the assigned
     /// value. Only bindings declared `mut` may be assigned.
     fn parse_assignment(&mut self) -> Result<Value, Error> {
-        let (name, offset, value) = self.parse_name_equals_expr()?;
+        let (name, offset, value_offset, value) = self.parse_name_equals_expr()?;
         for scope in self.env.iter_mut().rev() {
             if let Some((_, mutable, stored)) = scope.iter_mut().find(|(n, _, _)| *n == name) {
                 if !*mutable {
                     return Err(Error::AssignmentToImmutable { offset, name });
+                }
+                if stored.kind() != value.kind() {
+                    return Err(Error::TypeMismatch {
+                        offset: value_offset,
+                        name,
+                        expected: stored.kind().to_string(),
+                        found: value.kind().to_string(),
+                    });
                 }
                 *stored = value;
                 return Ok(value);
@@ -555,6 +574,20 @@ mod tests {
         assert_eq!(
             interpret("let x = if (false) { let y = 2; y } else { let y = 3; y }; x"),
             Ok(3)
+        );
+    }
+
+    #[test]
+    fn assignment_of_different_kind_is_reported() {
+        // `1` starts at offset 22; `x` holds a boolean.
+        assert_eq!(
+            interpret("let mut x = true; x = 1;"),
+            Err(Error::TypeMismatch {
+                offset: 22,
+                name: "x".to_string(),
+                expected: "boolean".to_string(),
+                found: "integer".to_string(),
+            })
         );
     }
 
