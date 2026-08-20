@@ -8,6 +8,10 @@
       {
         "type": "command",
         "command": "cmd /c \"cargo fmt 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      },
+      {
+        "type": "command",
+        "command": "cmd /c \"pmd cpd --dir src --language rust --minimum-tokens 50 --ignore-identifiers --ignore-literals 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
