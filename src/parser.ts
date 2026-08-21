@@ -211,6 +211,10 @@ function parseFactor(state: ParserState): Result<number, EvalError> {
     return { ok: true, value: statements.value };
   }
   if (t === undefined) return state.fail("unexpected end of input");
+  if (t === "true") {
+    state.pos++;
+    return { ok: true, value: 1 };
+  }
   if (t in state.env) {
     state.pos++;
     const bound = state.env[t];

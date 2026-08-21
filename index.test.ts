@@ -146,6 +146,13 @@ test('evaluate("let y = { let x = 0; x }; x") => invalid_input error', () => {
   expectInvalidInput("let y = { let x = 0; x }; x");
 });
 
+test('evaluate("let x = true; x") => 1', () => {
+  const r = evaluate("let x = true; x");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(1);
+});
+
 function expectDivisionByZero(input: string) {
   const r = evaluate(input);
   if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
