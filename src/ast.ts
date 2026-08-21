@@ -1,7 +1,7 @@
 export type Span = { start: number; end: number };
 
 export type Node =
-  | { type: "number"; value: number; span: Span }
+  | { type: "number"; value: number; kind: "int" | "float"; span: Span }
   | { type: "bool"; value: boolean; span: Span }
   | { type: "var"; name: string; span: Span }
   | {

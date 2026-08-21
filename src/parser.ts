@@ -297,7 +297,15 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
   if (!Number.isFinite(n)) return state.fail(`not a number: ${t}`);
   const span = currentSpan(state);
   state.pos++;
-  return { ok: true, value: { type: "number", value: n, span } };
+  return {
+    ok: true,
+    value: {
+      type: "number",
+      value: n,
+      kind: t.includes(".") ? "float" : "int",
+      span,
+    },
+  };
 }
 
 export function parse(input: string): Result<Node[], EvalError> {

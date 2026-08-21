@@ -2,7 +2,7 @@ import type { Node } from "./ast.ts";
 import { invalidInput, type EvalError } from "./errors.ts";
 import type { Result } from "./result.ts";
 
-type Type = "number" | "bool" | "unknown";
+type Type = "int" | "float" | "bool" | "unknown";
 
 type Scope = { types: Record<string, Type>; mutable: Set<string> };
 
@@ -17,7 +17,7 @@ function checkNode(
   });
   switch (node.type) {
     case "number":
-      return { ok: true, value: "number" };
+      return { ok: true, value: node.kind };
     case "bool":
       return { ok: true, value: "bool" };
     case "var": {
@@ -34,20 +34,20 @@ function checkNode(
       if (!r.ok) return r;
       return {
         ok: true,
-        value: node.type === "binary" ? "number" : "bool",
+        value: node.type === "binary" ? "float" : "bool",
       };
     }
     case "unary": {
       const operand = checkNode(node.operand, scope, input);
       if (!operand.ok) return operand;
-      return { ok: true, value: node.op === "!" ? "bool" : "number" };
+      return { ok: true, value: node.op === "!" ? "bool" : "float" };
     }
     case "let": {
       const value = checkNode(node.value, scope, input);
       if (!value.ok) return value;
       scope.types[node.name] = value.value;
       if (node.mutable) scope.mutable.add(node.name);
-      return { ok: true, value: "number" };
+      return { ok: true, value: "float" };
     }
     case "assign": {
       if (!scope.mutable.has(node.name))
@@ -59,12 +59,13 @@ function checkNode(
         existing !== undefined &&
         existing !== "unknown" &&
         value.value !== "unknown" &&
-        existing !== value.value
+        existing !== value.value &&
+        !(existing === "float" && value.value === "int")
       )
         return fail(
           `type mismatch: cannot assign ${value.value} to ${existing} variable: ${node.name}`,
         );
-      return { ok: true, value: "number" };
+      return { ok: true, value: "float" };
     }
     case "if": {
       const cond = checkNode(node.cond, scope, input);
@@ -83,7 +84,7 @@ function checkNode(
         types: { ...scope.types },
         mutable: new Set(scope.mutable),
       };
-      let value: Type = "number";
+      let value: Type = "float";
       for (const statement of node.statements) {
         const s = checkNode(statement, child, input);
         if (!s.ok) return s;
