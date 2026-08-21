@@ -241,6 +241,9 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
     if (!statements.ok) return statements;
     if (state.tokens[state.pos]?.text !== "}") return state.fail("expected }");
     state.pos++;
+    const last = statements.value[statements.value.length - 1];
+    if (last && last.type === "let")
+      return state.fail("block must end with an expression");
     return {
       ok: true,
       value: {

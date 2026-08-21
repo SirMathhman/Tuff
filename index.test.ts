@@ -205,6 +205,10 @@ test('evaluate("true == false") => 0', () => {
   expect(r.value).toBe(0);
 });
 
+test('evaluate("let x = { let y = 100; }; x") => invalid_input error', () => {
+  expectInvalidInput("let x = { let y = 100; }; x");
+});
+
 test('evaluate("let y = if (false) { let mut x = 0; x = true; 0 } else 0; y") => invalid_input error', () => {
   expectInvalidInput(
     "let y = if (false) { let mut x = 0; x = true; 0 } else 0; y",
