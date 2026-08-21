@@ -218,6 +218,12 @@ function evalNode(
     case "let":
     case "assign":
       return evalBinding(node, env, input);
+    case "if": {
+      const cond = evalNode(node.cond, env, input);
+      if (!cond.ok) return cond;
+      const branch = toNumber(cond.value) !== 0 ? node.then : node.else;
+      return evalNode(branch, env, input);
+    }
     case "block": {
       const child: Env = {
         values: { ...env.values },

@@ -14,4 +14,5 @@ export type Node =
   | { type: "and"; lhs: Node; rhs: Node }
   | { type: "let"; mutable: boolean; name: string; value: Node }
   | { type: "assign"; name: string; value: Node }
-  | { type: "block"; statements: Node[] };
+  | { type: "block"; statements: Node[] }
+  | { type: "if"; cond: Node; then: Node; else: Node };

@@ -199,6 +199,25 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
     };
   }
   if (t === undefined) return state.fail("unexpected end of input");
+  if (t === "if") {
+    state.pos++;
+    if (state.tokens[state.pos] !== "(") return state.fail("expected (");
+    state.pos++;
+    const cond = parseExpr(state);
+    if (!cond.ok) return cond;
+    if (state.tokens[state.pos] !== ")") return state.fail("expected )");
+    state.pos++;
+    const then = parseExpr(state);
+    if (!then.ok) return then;
+    if (state.tokens[state.pos] !== "else") return state.fail("expected else");
+    state.pos++;
+    const els = parseExpr(state);
+    if (!els.ok) return els;
+    return {
+      ok: true,
+      value: { type: "if", cond: cond.value, then: then.value, else: els.value },
+    };
+  }
   if (t === "true") {
     state.pos++;
     return { ok: true, value: { type: "bool", value: true } };

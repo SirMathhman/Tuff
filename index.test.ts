@@ -230,6 +230,13 @@ test('evaluate("let x = 0; let y = 1; x != y") => 1', () => {
   expect(r.value).toBe(1);
 });
 
+test('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
+  const r = evaluate("let x = if (false) 2 else 3; x");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(3);
+});
+
 test('evaluate("let x = 100; -x") => -100', () => {
   const r = evaluate("let x = 100; -x");
   if (!r.ok)
