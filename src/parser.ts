@@ -53,7 +53,8 @@ function parseComparison(state: ParserState): Result<Node, EvalError> {
   while (
     state.tokens[state.pos] === "==" ||
     state.tokens[state.pos] === ">" ||
-    state.tokens[state.pos] === ">="
+    state.tokens[state.pos] === ">=" ||
+    state.tokens[state.pos] === "<"
   ) {
     const op = state.tokens[state.pos];
     state.pos++;
@@ -64,7 +65,9 @@ function parseComparison(state: ParserState): Result<Node, EvalError> {
         ? { type: "compare", lhs: node, rhs: rhs.value }
         : op === ">"
           ? { type: "greater", lhs: node, rhs: rhs.value }
-          : { type: "greaterEq", lhs: node, rhs: rhs.value };
+          : op === ">="
+            ? { type: "greaterEq", lhs: node, rhs: rhs.value }
+            : { type: "less", lhs: node, rhs: rhs.value };
   }
   return { ok: true, value: node };
 }
