@@ -215,6 +215,10 @@ function parseFactor(state: ParserState): Result<number, EvalError> {
     state.pos++;
     return { ok: true, value: 1 };
   }
+  if (t === "false") {
+    state.pos++;
+    return { ok: true, value: 0 };
+  }
   if (t in state.env) {
     state.pos++;
     const bound = state.env[t];
