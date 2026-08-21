@@ -136,15 +136,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `term = postfix ('*' postfix)*`.
+    /// Parses `term = unary ('*' unary)*`.
     fn parse_term(&mut self, ctx: Context) -> Result<Value, Error> {
-        let mut term = self.parse_postfix(ctx)?;
+        let mut term = self.parse_unary(ctx)?;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
                 let offset = self.pos;
                 self.pos += 1;
-                let rhs = self.parse_postfix(ctx)?.as_i64();
+                let rhs = self.parse_unary(ctx)?.as_i64();
                 term = Value::Int(
                     term.as_i64()
                         .checked_mul(rhs)
@@ -154,6 +154,23 @@ impl<'a> Parser<'a> {
                 return Ok(term);
             }
         }
+    }
+
+    /// Parses `unary = '-' unary | postfix`: a unary minus negates a
+    /// factor, binding tighter than `*`.
+    fn parse_unary(&mut self, ctx: Context) -> Result<Value, Error> {
+        self.skip_spaces();
+        if self.peek() == Some(b'-') {
+            let offset = self.pos;
+            self.pos += 1;
+            let value = self.parse_unary(ctx)?.as_i64();
+            return Ok(Value::Int(
+                value
+                    .checked_neg()
+                    .ok_or(Error::Overflow { offset })?,
+            ));
+        }
+        self.parse_postfix(ctx)
     }
 
     /// Parses `postfix = factor ('[' expr ']' | '.' digit)*`: an
@@ -912,6 +929,11 @@ mod tests {
         // grouping: `(2, 3)` is a tuple (value `0`), so the result is
         // `1 + 0` times `2`.
         assert_eq!(interpret("(1 + (2, 3)) * 2"), Ok(2));
+    }
+
+    #[test]
+    fn unary_minus_negates_a_binding() {
+        assert_eq!(interpret("let x = 100; -x"), Ok(-100));
     }
 
     #[test]
