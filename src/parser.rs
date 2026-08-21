@@ -446,12 +446,22 @@ impl<'a> Parser<'a> {
                     offset: self.pos - 1,
                 });
             }
-            // Save the position so the final statement can be re-parsed
-            // in the block's context: a block's value-producing statement
-            // must be an expression when the block is one.
-            let saved = self.pos;
-            last_was_statement = self.is_let() || self.is_assignment();
-            value = Some(self.parse_statement()?);
+            // A statement is parsed as a statement; an expression is
+            // parsed in the block's own context so that a nested block
+            // or `if` inherits whether this block is an expression.
+            // Parsing the final statement exactly once avoids
+            // double-evaluating its side effects.
+            let is_statement = self.is_let()
+                || self.is_assignment()
+                || self.is_deref_assignment()
+                || self.is_while();
+            if is_statement {
+                value = Some(self.parse_statement()?);
+                last_was_statement = true;
+            } else {
+                value = Some(self.parse_or(as_expression)?);
+                last_was_statement = false;
+            }
             self.skip_spaces();
             match self.peek() {
                 Some(b';') => {
@@ -463,10 +473,6 @@ impl<'a> Parser<'a> {
                         return Err(Error::BlockMustEndWithExpression {
                             offset: self.pos - 1,
                         });
-                    }
-                    if as_expression {
-                        self.pos = saved;
-                        value = Some(self.parse_or(as_expression)?);
                     }
                     self.pos += 1;
                     return Ok(value.unwrap());
@@ -698,9 +704,7 @@ impl<'a> Parser<'a> {
     fn parse_assignment(&mut self) -> Result<Value, Error> {
         let (name, offset) = self.parse_identifier_name()?;
         self.skip_spaces();
-        if self.peek() == Some(b'+')
-            && self.input.as_bytes().get(self.pos + 1) == Some(&b'=')
-        {
+        if self.peek() == Some(b'+') && self.input.as_bytes().get(self.pos + 1) == Some(&b'=') {
             let op_offset = self.pos;
             self.pos += 2; // skip `+=`
             self.skip_spaces();
@@ -953,7 +957,40 @@ mod tests {
 
     #[test]
     fn while_loop_with_compound_assignment() {
-        assert_eq!(interpret("let mut x = 0; while (x < 4) { x += 1; } x"), Ok(4));
+        assert_eq!(
+            interpret("let mut x = 0; while (x < 4) { x += 1; } x"),
+            Ok(4)
+        );
+    }
+
+    #[test]
+    fn block_final_if_side_effect_runs_once() {
+        // The `if` is the block's final expression; its side effect on
+        // the outer `x` must run exactly once, not be double-evaluated.
+        assert_eq!(
+            interpret("let mut x = 0; let y = { if (true) { x += 1; 2 } else 3 }; x"),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn block_final_deref_assignment_is_reported() {
+        // A dereference assignment is a statement, so it cannot end an
+        // expression block; its closing `}` is at offset 49.
+        assert_eq!(
+            interpret("let mut x = 0; let y = &mut x; let z = { *y = 5; }"),
+            Err(Error::BlockMustEndWithExpression { offset: 49 })
+        );
+    }
+
+    #[test]
+    fn block_final_while_is_reported() {
+        // A `while` loop is a statement, so it cannot end an expression
+        // block; its closing `}` is at offset 51.
+        assert_eq!(
+            interpret("let mut x = 0; let z = { while (x < 1) { x += 1; } }"),
+            Err(Error::BlockMustEndWithExpression { offset: 51 })
+        );
     }
 
     #[test]
