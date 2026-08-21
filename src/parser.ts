@@ -170,10 +170,17 @@ function parseFactor(state: ParserState): Result<number, EvalError> {
   }
   if (t === "{") {
     state.pos++;
-    const statements = parseStatements(state);
+    const block: ParserState = {
+      tokens: state.tokens,
+      pos: state.pos,
+      env: { ...state.env },
+      mutable: new Set(state.mutable),
+      fail: state.fail,
+    };
+    const statements = parseStatements(block);
     if (!statements.ok) return statements;
-    if (state.tokens[state.pos] !== "}") return state.fail("expected }");
-    state.pos++;
+    if (block.tokens[block.pos] !== "}") return block.fail("expected }");
+    state.pos = block.pos + 1;
     return { ok: true, value: statements.value };
   }
   if (t === undefined) return state.fail("unexpected end of input");

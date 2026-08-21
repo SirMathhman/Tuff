@@ -141,3 +141,7 @@ test('evaluate("abc") => invalid_input error', () => {
 test('evaluate("undefinedIdentifier") => invalid_input error', () => {
   expectInvalidInput("undefinedIdentifier");
 });
+
+test('evaluate("let y = { let x = 0; x }; x") => invalid_input error', () => {
+  expectInvalidInput("let y = { let x = 0; x }; x");
+});
