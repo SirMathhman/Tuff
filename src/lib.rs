@@ -1,5 +1,6 @@
 mod error;
 mod parser;
+mod value;
 
 pub use error::Error;
 
