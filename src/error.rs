@@ -69,6 +69,11 @@ pub enum Error {
         /// Byte offset of the `.` that opened the field access.
         offset: usize,
     },
+    /// A value was dereferenced that is not a reference.
+    NotAReference {
+        /// Byte offset of the `*` that opened the dereference.
+        offset: usize,
+    },
     /// An array index was out of range.
     IndexOutOfBounds {
         /// Byte offset of the `[` that opened the index.
@@ -166,6 +171,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "not a tuple at offset {offset}: only tuple values have fields; build a tuple with `(expr, ...)` first"
+                )
+            }
+            Error::NotAReference { offset } => {
+                write!(
+                    f,
+                    "not a reference at offset {offset}: only reference values can be dereferenced; build one with `&name` first"
                 )
             }
             Error::TypeMismatch {

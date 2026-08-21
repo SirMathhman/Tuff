@@ -1,16 +1,17 @@
 use crate::Error;
 
 /// A value produced by an expression: an integer, a boolean, an
-/// array, or a tuple. Booleans are distinct from integers — `==`
-/// only yields `true` for two values of the same kind — but
-/// arithmetic treats a boolean as its numeric value (`true` is `1`,
-/// `false` is `0`).
+/// array, a tuple, or a reference to a binding. Booleans are
+/// distinct from integers — `==` only yields `true` for two values
+/// of the same kind — but arithmetic treats a boolean as its numeric
+/// value (`true` is `1`, `false` is `0`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value {
     Int(i64),
     Bool(bool),
     Array(Vec<Value>),
     Tuple(Vec<Value>),
+    Ref(String),
 }
 
 impl Value {
@@ -22,6 +23,7 @@ impl Value {
             Value::Bool(b) => *b,
             Value::Array(_) => true,
             Value::Tuple(_) => true,
+            Value::Ref(_) => true,
         }
     }
 
@@ -33,6 +35,7 @@ impl Value {
             Value::Bool(b) => i64::from(*b),
             Value::Array(_) => 0,
             Value::Tuple(_) => 0,
+            Value::Ref(_) => 0,
         }
     }
 
@@ -43,6 +46,7 @@ impl Value {
             Value::Bool(_) => "boolean",
             Value::Array(_) => "array",
             Value::Tuple(_) => "tuple",
+            Value::Ref(_) => "reference",
         }
     }
 
@@ -71,6 +75,29 @@ impl Value {
                 Ok(items[field as usize].clone())
             }
             _ => Err(Error::NotATuple { offset }),
+        }
+    }
+
+    /// The value the reference points to, looked up in the
+    /// environment, innermost scope first.
+    pub(crate) fn deref(
+        &self,
+        env: &[Vec<(String, bool, Value)>],
+        offset: usize,
+    ) -> Result<Value, Error> {
+        match self {
+            Value::Ref(name) => {
+                for scope in env.iter().rev() {
+                    if let Some((_, _, value)) = scope.iter().find(|(n, _, _)| *n == *name) {
+                        return Ok(value.clone());
+                    }
+                }
+                Err(Error::UndefinedVariable {
+                    offset,
+                    name: name.clone(),
+                })
+            }
+            _ => Err(Error::NotAReference { offset }),
         }
     }
 }
@@ -244,11 +271,26 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `factor = number | boolean | identifier | '(' expr ')'
-    /// | block | if`. When `as_expression` is false, a block may end
-    /// in a statement and an `if` takes statement branches.
+    /// Parses `factor = '&' identifier | '*' factor | number |
+    /// boolean | identifier | '(' expr ')' | block | if`: `&name` is
+    /// a reference to the binding `name`, and `*value` dereferences a
+    /// reference. The prefix operators bind tighter than `*`, `+`,
+    /// and `-`. When `as_expression` is false, a block may end in a
+    /// statement and an `if` takes statement branches.
     fn parse_factor(&mut self, as_expression: bool) -> Result<Value, Error> {
         self.skip_spaces();
+        if self.peek() == Some(b'&') {
+            self.pos += 1;
+            self.skip_spaces();
+            let (name, _) = self.parse_identifier_name()?;
+            return Ok(Value::Ref(name));
+        }
+        if self.peek() == Some(b'*') {
+            let offset = self.pos;
+            self.pos += 1;
+            let value = self.parse_factor(as_expression)?;
+            return value.deref(&self.env, offset);
+        }
         match self.peek() {
             Some(b'(') => {
                 if self.has_tuple_comma() {
@@ -810,6 +852,11 @@ mod tests {
             interpret("let tuple = (0, 0); tuple.2"),
             Err(Error::IndexOutOfBounds { offset: 25 })
         );
+    }
+
+    #[test]
+    fn reference_and_dereference() {
+        assert_eq!(interpret("let x = 1; let y = &x; *y"), Ok(1));
     }
 
     #[test]
