@@ -56,7 +56,7 @@ function evalArithmetic(
       ok: true,
       value: {
         type: "number",
-        value: Math.trunc(toNumber(lhs.value) / toNumber(rhs.value)),
+        value: toNumber(lhs.value) / toNumber(rhs.value),
       },
     };
   }
