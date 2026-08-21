@@ -23,7 +23,7 @@ function tokenize(input: string): string[] {
       i = j;
       continue;
     }
-    if ("+-*()".includes(c)) {
+    if ("+-*/()".includes(c)) {
       tokens.push(c);
       i++;
       continue;
@@ -63,9 +63,10 @@ export function evaluate(input: string): Result<number, EvalError> {
   };
   const parseTerm = (): number => {
     let value = parseFactor();
-    while (peek() === "*") {
-      pos++;
-      value *= parseFactor();
+    while (peek() === "*" || peek() === "/") {
+      const op = tokens[pos++];
+      const rhs = parseFactor();
+      value = op === "/" ? Math.trunc(value / rhs) : value * rhs;
     }
     return value;
   };
