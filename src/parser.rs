@@ -1,14 +1,16 @@
 use crate::Error;
 
-/// A value produced by an expression: an integer, a boolean, or an
-/// array. Booleans are distinct from integers — `==` only yields
-/// `true` for two values of the same kind — but arithmetic treats a
-/// boolean as its numeric value (`true` is `1`, `false` is `0`).
+/// A value produced by an expression: an integer, a boolean, an
+/// array, or a tuple. Booleans are distinct from integers — `==`
+/// only yields `true` for two values of the same kind — but
+/// arithmetic treats a boolean as its numeric value (`true` is `1`,
+/// `false` is `0`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value {
     Int(i64),
     Bool(bool),
     Array(Vec<Value>),
+    Tuple(Vec<Value>),
 }
 
 impl Value {
@@ -19,6 +21,7 @@ impl Value {
             Value::Int(n) => *n != 0,
             Value::Bool(b) => *b,
             Value::Array(_) => true,
+            Value::Tuple(_) => true,
         }
     }
 
@@ -29,6 +32,7 @@ impl Value {
             Value::Int(n) => *n,
             Value::Bool(b) => i64::from(*b),
             Value::Array(_) => 0,
+            Value::Tuple(_) => 0,
         }
     }
 
@@ -38,6 +42,7 @@ impl Value {
             Value::Int(_) => "integer",
             Value::Bool(_) => "boolean",
             Value::Array(_) => "array",
+            Value::Tuple(_) => "tuple",
         }
     }
 
@@ -52,6 +57,20 @@ impl Value {
                 Ok(items[index as usize].clone())
             }
             _ => Err(Error::NotAnArray { offset }),
+        }
+    }
+
+    /// The element at `field`, if the value is a tuple and the field
+    /// is in range.
+    pub(crate) fn field(&self, field: i64, offset: usize) -> Result<Value, Error> {
+        match self {
+            Value::Tuple(items) => {
+                if field < 0 || (field as usize) >= items.len() {
+                    return Err(Error::IndexOutOfBounds { offset });
+                }
+                Ok(items[field as usize].clone())
+            }
+            _ => Err(Error::NotATuple { offset }),
         }
     }
 }
@@ -109,7 +128,6 @@ impl<'a> Parser<'a> {
                 self.pos += 2;
                 let rhs = self.parse_eq(as_expression)?;
                 value = Value::Bool(value.is_truthy() || rhs.is_truthy());
-
             } else {
                 return Ok(value);
             }
@@ -149,7 +167,6 @@ impl<'a> Parser<'a> {
                             .checked_add(rhs)
                             .ok_or(Error::Overflow { offset })?,
                     );
-
                 }
                 Some(b'-') => {
                     let offset = self.pos;
@@ -161,7 +178,6 @@ impl<'a> Parser<'a> {
                             .checked_sub(rhs)
                             .ok_or(Error::Overflow { offset })?,
                     );
-
                 }
                 _ => return Ok(total),
             }
@@ -188,27 +204,42 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `postfix = factor ('[' expr ']')*`: an array index
-    /// applied to a factor, binding tighter than `*`, `+`, and `-`.
+    /// Parses `postfix = factor ('[' expr ']' | '.' digit)*`: an
+    /// array index or a tuple field applied to a factor, binding
+    /// tighter than `*`, `+`, and `-`.
     fn parse_postfix(&mut self, as_expression: bool) -> Result<Value, Error> {
         let mut value = self.parse_factor(as_expression)?;
         loop {
             self.skip_spaces();
-            if self.peek() == Some(b'[') {
-                let offset = self.pos;
-                self.pos += 1;
-                let index = self.parse_or(true)?.as_i64();
-                self.skip_spaces();
-                if self.peek() != Some(b']') {
-                    return Err(Error::ExpectedClosingDelimiter {
-                        offset: self.pos,
-                        expected: b']',
-                    });
+            match self.peek() {
+                Some(b'[') => {
+                    let offset = self.pos;
+                    self.pos += 1;
+                    let index = self.parse_or(true)?.as_i64();
+                    self.skip_spaces();
+                    if self.peek() != Some(b']') {
+                        return Err(Error::ExpectedClosingDelimiter {
+                            offset: self.pos,
+                            expected: b']',
+                        });
+                    }
+                    self.pos += 1;
+                    value = value.index(index, offset)?;
                 }
-                self.pos += 1;
-                value = value.index(index, offset)?;
-            } else {
-                return Ok(value);
+                Some(b'.') => {
+                    let offset = self.pos;
+                    self.pos += 1;
+                    let Some(d) = self.peek().filter(|c| c.is_ascii_digit()) else {
+                        return Err(Error::UnexpectedToken {
+                            offset: self.pos,
+                            found: self.peek(),
+                        });
+                    };
+                    let field = i64::from(d - b'0');
+                    self.pos += 1;
+                    value = value.field(field, offset)?;
+                }
+                _ => return Ok(value),
             }
         }
     }
@@ -220,8 +251,12 @@ impl<'a> Parser<'a> {
         self.skip_spaces();
         match self.peek() {
             Some(b'(') => {
-                self.pos += 1;
-                self.parse_grouped(b')', as_expression)
+                if self.has_tuple_comma() {
+                    self.parse_tuple()
+                } else {
+                    self.pos += 1;
+                    self.parse_grouped(b')', as_expression)
+                }
             }
             Some(b'{') => {
                 self.pos += 1;
@@ -329,6 +364,51 @@ impl<'a> Parser<'a> {
                     return Err(Error::ExpectedClosingDelimiter {
                         offset: self.pos,
                         expected: b']',
+                    });
+                }
+            }
+        }
+    }
+
+    /// Whether the `(` at the current position opens a tuple literal:
+    /// a `,` appears before the matching `)`.
+    fn has_tuple_comma(&self) -> bool {
+        let mut i = self.pos + 1;
+        while i < self.input.len() {
+            match self.input.as_bytes()[i] {
+                b',' => return true,
+                b')' => return false,
+                _ => i += 1,
+            }
+        }
+        false
+    }
+
+    /// Parses a tuple literal `(expr, expr, ...)` after the opening
+    /// `(` was consumed; the value is a tuple of the element values.
+    fn parse_tuple(&mut self) -> Result<Value, Error> {
+        self.pos += 1; // skip `(`
+        let mut items = Vec::new();
+        loop {
+            self.skip_spaces();
+            if self.peek() == Some(b')') {
+                self.pos += 1;
+                return Ok(Value::Tuple(items));
+            }
+            items.push(self.parse_or(true)?);
+            self.skip_spaces();
+            match self.peek() {
+                Some(b',') => {
+                    self.pos += 1;
+                }
+                Some(b')') => {
+                    self.pos += 1;
+                    return Ok(Value::Tuple(items));
+                }
+                _ => {
+                    return Err(Error::ExpectedClosingDelimiter {
+                        offset: self.pos,
+                        expected: b')',
                     });
                 }
             }
@@ -717,6 +797,11 @@ mod tests {
             interpret("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
             Ok(6)
         );
+    }
+
+    #[test]
+    fn tuple_literal_and_field_access() {
+        assert_eq!(interpret("let tuple = (3, 4); tuple.0 + tuple.1"), Ok(7));
     }
 
     #[test]

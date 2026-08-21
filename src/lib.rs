@@ -31,6 +31,7 @@ use parser::Parser;
 /// `if`'s branches may be statements (so a block branch may end in a
 /// statement); `[expr, ...]` builds an array and `value[index]` reads
 /// an element (indexing binds tighter than `*`, `+`, and `-`);
+/// `(expr, ...)` builds a tuple and `value.N` reads its `N`th field;
 /// anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {

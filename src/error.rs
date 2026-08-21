@@ -64,6 +64,11 @@ pub enum Error {
         /// Byte offset of the `[` that opened the index.
         offset: usize,
     },
+    /// A field was read from a value that is not a tuple.
+    NotATuple {
+        /// Byte offset of the `.` that opened the field access.
+        offset: usize,
+    },
     /// An array index was out of range.
     IndexOutOfBounds {
         /// Byte offset of the `[` that opened the index.
@@ -155,6 +160,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "index out of bounds at offset {offset}: the index is negative or past the end of the array"
+                )
+            }
+            Error::NotATuple { offset } => {
+                write!(
+                    f,
+                    "not a tuple at offset {offset}: only tuple values have fields; build a tuple with `(expr, ...)` first"
                 )
             }
             Error::TypeMismatch {
