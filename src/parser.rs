@@ -994,6 +994,17 @@ mod tests {
     }
 
     #[test]
+    fn if_expression_branch_ending_in_let_is_reported() {
+        // The `if` is an expression (the right-hand side of a `let`),
+        // so each branch must end with an expression. The chosen
+        // branch's closing `}` is at offset 34.
+        assert_eq!(
+            interpret("let x = { if (false) { let y = 1; } else { let y = 2; } };"),
+            Err(Error::BlockMustEndWithExpression { offset: 34 })
+        );
+    }
+
+    #[test]
     fn field_access_on_non_tuple_is_reported() {
         // `(0)` has no comma, so it is a grouped expression: `tuple`
         // is the integer 0, and `tuple.1` is not a tuple field.
