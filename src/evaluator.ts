@@ -145,6 +145,11 @@ function evalBinding(
     return fail(`cannot reassign immutable: ${node.name}`);
   const value = evalNode(node.value, env, input);
   if (!value.ok) return value;
+  const existing = env.values[node.name];
+  if (existing !== undefined && existing.type !== value.value.type)
+    return fail(
+      `type mismatch: cannot assign ${value.value.type} to ${existing.type} variable: ${node.name}`,
+    );
   env.values[node.name] = value.value;
   if (node.type === "let" && node.mutable) env.mutable.add(node.name);
   return { ok: true, value: { type: "number", value: 0 } };

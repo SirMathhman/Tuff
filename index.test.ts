@@ -154,6 +154,10 @@ test('evaluate("let y = { let x = 0; x }; x") => invalid_input error', () => {
   expectInvalidInput("let y = { let x = 0; x }; x");
 });
 
+test('evaluate("let mut x = 0; x = true;") => invalid_input error', () => {
+  expectInvalidInput("let mut x = 0; x = true;");
+});
+
 test('evaluate("let x = true; x") => 1', () => {
   const r = evaluate("let x = true; x");
   if (!r.ok)
@@ -253,7 +257,9 @@ test('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => 
 });
 
 test('evaluate("let x = if (false) { let y = 2; y } else { let y = 3; y }; x") => 3', () => {
-  const r = evaluate("let x = if (false) { let y = 2; y } else { let y = 3; y }; x");
+  const r = evaluate(
+    "let x = if (false) { let y = 2; y } else { let y = 3; y }; x",
+  );
   if (!r.ok)
     throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
   expect(r.value).toBe(3);
