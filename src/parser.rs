@@ -805,6 +805,14 @@ mod tests {
     }
 
     #[test]
+    fn tuple_field_out_of_bounds_is_reported() {
+        assert_eq!(
+            interpret("let tuple = (0, 0); tuple.2"),
+            Err(Error::IndexOutOfBounds { offset: 25 })
+        );
+    }
+
+    #[test]
     fn if_statement_branches_may_be_blocks_ending_in_assignments() {
         // As a statement, the branches are statements, so the blocks
         // may end in assignments; the chosen (else) branch assigns 2.
