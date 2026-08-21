@@ -40,7 +40,9 @@ function checkNode(
         node.op !== "!=" &&
         (l.value === "bool" || r.value === "bool")
       )
-        return fail("relational comparison requires numeric operands, got bool");
+        return fail(
+          "relational comparison requires numeric operands, got bool",
+        );
       return {
         ok: true,
         value: node.type === "binary" ? "float" : "bool",
