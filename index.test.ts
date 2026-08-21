@@ -145,3 +145,24 @@ test('evaluate("undefinedIdentifier") => invalid_input error', () => {
 test('evaluate("let y = { let x = 0; x }; x") => invalid_input error', () => {
   expectInvalidInput("let y = { let x = 0; x }; x");
 });
+
+function expectDivisionByZero(input: string) {
+  const r = evaluate(input);
+  if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
+  if (r.error.kind !== "division_by_zero")
+    throw new Error(
+      `expected kind "division_by_zero", got: ${JSON.stringify(r.error)}`,
+    );
+}
+
+test('evaluate("1 / 0") => division_by_zero error', () => {
+  expectDivisionByZero("1 / 0");
+});
+
+test('evaluate("0 / 0") => division_by_zero error', () => {
+  expectDivisionByZero("0 / 0");
+});
+
+test('evaluate("10 / (1 - 1)") => division_by_zero error', () => {
+  expectDivisionByZero("10 / (1 - 1)");
+});

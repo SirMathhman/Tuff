@@ -1,9 +1,16 @@
-export type EvalError = {
-  kind: "invalid_input";
-  input: string;
-  reason: string;
-  hint: string;
-};
+export type EvalError =
+  | {
+      kind: "invalid_input";
+      input: string;
+      reason: string;
+      hint: string;
+    }
+  | {
+      kind: "division_by_zero";
+      input: string;
+      reason: string;
+      hint: string;
+    };
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
@@ -46,6 +53,7 @@ type ParserState = {
   env: Record<string, number>;
   mutable: Set<string>;
   fail: (reason: string) => Result<number, EvalError>;
+  failDivisionByZero: (reason: string) => Result<number, EvalError>;
 };
 
 function makeFail(input: string) {
@@ -60,6 +68,18 @@ function makeFail(input: string) {
   });
 }
 
+function makeFailDivisionByZero(input: string) {
+  return (reason: string): Result<number, EvalError> => ({
+    ok: false,
+    error: {
+      kind: "division_by_zero",
+      input,
+      reason,
+      hint: "the divisor evaluates to 0; check the right-hand side of /",
+    },
+  });
+}
+
 function makeState(input: string, tokens: string[]): ParserState {
   return {
     tokens,
@@ -67,6 +87,7 @@ function makeState(input: string, tokens: string[]): ParserState {
     env: {},
     mutable: new Set<string>(),
     fail: makeFail(input),
+    failDivisionByZero: makeFailDivisionByZero(input),
   };
 }
 
@@ -153,7 +174,12 @@ function parseTerm(state: ParserState): Result<number, EvalError> {
     const op = state.tokens[state.pos++];
     const rhs = parseFactor(state);
     if (!rhs.ok) return rhs;
-    value = op === "/" ? Math.trunc(value / rhs.value) : value * rhs.value;
+    if (op === "/") {
+      if (rhs.value === 0) return state.failDivisionByZero("division by zero");
+      value = Math.trunc(value / rhs.value);
+    } else {
+      value = value * rhs.value;
+    }
   }
   return { ok: true, value };
 }
@@ -176,6 +202,7 @@ function parseFactor(state: ParserState): Result<number, EvalError> {
       env: { ...state.env },
       mutable: new Set(state.mutable),
       fail: state.fail,
+      failDivisionByZero: state.failDivisionByZero,
     };
     const statements = parseStatements(block);
     if (!statements.ok) return statements;
