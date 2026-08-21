@@ -20,6 +20,13 @@ test('evaluate("1") => 1', () => {
   expect(r.value).toBe(1);
 });
 
+test('evaluate("1 + 2") => 3', () => {
+  const r = evaluate("1 + 2");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(3);
+});
+
 test('evaluate("abc") => invalid_input error', () => {
   const r = evaluate("abc");
   if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
