@@ -23,5 +23,6 @@ test('evaluate("1") => 1', () => {
 test('evaluate("abc") => invalid_input error', () => {
   const r = evaluate("abc");
   if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
-  expect(r.error.kind).toBe("invalid_input");
+  if (r.error.kind !== "invalid_input")
+    throw new Error(`expected kind "invalid_input", got: ${JSON.stringify(r.error)}`);
 });
