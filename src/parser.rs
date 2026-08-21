@@ -832,10 +832,16 @@ impl<'a> Parser<'a> {
         let value: i64 = digits
             .parse::<i64>()
             .map_err(|_| Error::Overflow { offset: start })?;
-        if let Some(max) = Self::type_max(&suffix) {
-            if value > max {
-                return Err(Error::Overflow { offset: start });
+        match Self::type_max(&suffix) {
+            Some(max) if value > max => return Err(Error::Overflow { offset: start }),
+            Some(_) => {}
+            None if !suffix.is_empty() => {
+                return Err(Error::InvalidTypeSuffix {
+                    offset: suffix_start,
+                    suffix,
+                })
             }
+            None => {}
         }
         Ok(Value::Int(value))
     }
@@ -914,6 +920,31 @@ mod tests {
     fn integer_literal_exceeding_type_range_is_reported() {
         // `256` does not fit in a `u8` (max 255).
         assert_eq!(interpret("256U8"), Err(Error::Overflow { offset: 0 }));
+    }
+
+    #[test]
+    fn unrecognized_type_suffix_is_reported() {
+        // `FOO` is not a recognized integer type, so the suffix is an
+        // error at its start (offset 3), not silently ignored.
+        assert_eq!(
+            interpret("123FOO"),
+            Err(Error::InvalidTypeSuffix {
+                offset: 3,
+                suffix: "FOO".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn incomplete_type_suffix_is_reported() {
+        // `U` with no bit width is not a recognized integer type.
+        assert_eq!(
+            interpret("123U"),
+            Err(Error::InvalidTypeSuffix {
+                offset: 3,
+                suffix: "U".to_string()
+            })
+        );
     }
 
     #[test]

@@ -90,6 +90,14 @@ pub enum Error {
         /// The kind of the assigned value.
         found: String,
     },
+    /// An integer literal carried a type suffix that is not a
+    /// recognized unsigned integer type.
+    InvalidTypeSuffix {
+        /// Byte offset of the start of the suffix.
+        offset: usize,
+        /// The unrecognized suffix.
+        suffix: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -188,6 +196,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "type mismatch at offset {offset}: cannot assign a {found} to '{name}', which holds a {expected}; assign a value of the same kind"
+                )
+            }
+            Error::InvalidTypeSuffix { offset, suffix } => {
+                write!(
+                    f,
+                    "invalid type suffix '{suffix}' at offset {offset}: integer literal suffixes must be `U8`, `U16`, `U32`, or `U64`; remove the suffix to use a plain integer"
                 )
             }
         }
