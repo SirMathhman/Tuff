@@ -23,7 +23,7 @@ function tokenize(input: string): string[] {
       i = j;
       continue;
     }
-    if ("+-*/()".includes(c)) {
+    if ("+-*/(){}".includes(c)) {
       tokens.push(c);
       i++;
       continue;
@@ -72,10 +72,11 @@ export function evaluate(input: string): Result<number, EvalError> {
   };
   const parseFactor = (): number => {
     const t = peek();
-    if (t === "(") {
+    if (t === "(" || t === "{") {
       pos++;
       const value = parseExpr();
-      if (peek() !== ")") throw new Error("expected )");
+      const close = t === "(" ? ")" : "}";
+      if (peek() !== close) throw new Error(`expected ${close}`);
       pos++;
       return value;
     }
