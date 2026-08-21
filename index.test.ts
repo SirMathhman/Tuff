@@ -18,6 +18,10 @@ describe("evaluate", () => {
     expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
   });
 
+  test('evaluate("2 + 3 - 4") => 1', () => {
+    expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
