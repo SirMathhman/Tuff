@@ -14,6 +14,10 @@ describe("evaluate", () => {
     expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
   });
 
+  test('evaluate("1 + 2 + 3") => 6', () => {
+    expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
