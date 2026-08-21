@@ -10,3 +10,8 @@ bunx biome check .
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
+
+bunx eslint .
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
