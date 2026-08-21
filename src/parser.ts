@@ -12,9 +12,8 @@ export type EvalError =
       hint: string;
     };
 
+import type { Result } from "./result.ts";
 import { tokenize } from "./tokenizer.ts";
-
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
 type Value =
   | { type: "number"; value: number }

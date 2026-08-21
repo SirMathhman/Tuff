@@ -1,4 +1,4 @@
-import type { Result } from "./parser.ts";
+import type { Result } from "./result.ts";
 
 export function tokenize(input: string): Result<string[], { reason: string }> {
   const tokens: string[] = [];

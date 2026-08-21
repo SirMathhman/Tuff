@@ -7,6 +7,7 @@
     "@biomejs/biome": "^2.5.10",
     "@types/bun": "latest",
     "eslint": "^10.9.0",
+    "madge": "^8.0.0",
     "prettier": "^3.9.6",
     "typescript-eslint": "^8.67.0"
   },
