@@ -1,4 +1,4 @@
-import type { Node } from "./ast.ts";
+import type { Node, Span } from "./ast.ts";
 import type { EvalError } from "./errors.ts";
 import type { Result } from "./result.ts";
 
@@ -20,7 +20,7 @@ type Env = {
   mutable: Set<string>;
 };
 
-function makeFail(input: string) {
+function makeFail(input: string, span: Span) {
   return (reason: string): Result<Value, EvalError> => ({
     ok: false,
     error: {
@@ -28,11 +28,12 @@ function makeFail(input: string) {
       input,
       reason,
       hint: 'pass a valid arithmetic expression, e.g. "1 + 2 * 3"',
+      span,
     },
   });
 }
 
-function makeFailDivisionByZero(input: string) {
+function makeFailDivisionByZero(input: string, span: Span) {
   return (reason: string): Result<Value, EvalError> => ({
     ok: false,
     error: {
@@ -40,6 +41,7 @@ function makeFailDivisionByZero(input: string) {
       input,
       reason,
       hint: "the divisor evaluates to 0; check the right-hand side of /",
+      span,
     },
   });
 }
@@ -66,7 +68,7 @@ function evalArithmetic(
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
-  const failDivisionByZero = makeFailDivisionByZero(input);
+  const failDivisionByZero = makeFailDivisionByZero(input, node.span);
   const lhs = evalNode(node.lhs, env, input);
   if (!lhs.ok) return lhs;
   const rhs = evalNode(node.rhs, env, input);
@@ -138,7 +140,7 @@ function evalBinding(
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
-  const fail = makeFail(input);
+  const fail = makeFail(input, node.span);
   if (node.type === "assign" && !env.mutable.has(node.name))
     return fail(`cannot reassign immutable: ${node.name}`);
   const value = evalNode(node.value, env, input);
@@ -153,7 +155,7 @@ function evalNode(
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
-  const fail = makeFail(input);
+  const fail = makeFail(input, node.span);
   switch (node.type) {
     case "number":
       return { ok: true, value: { type: "number", value: node.value } };

@@ -125,6 +125,13 @@ test('evaluate("10 / 3 / 2") => 1', () => {
   expect(r.value).toBe(1);
 });
 
+function expectSpan(span: { start: number; end: number }) {
+  expect(typeof span.start).toBe("number");
+  expect(typeof span.end).toBe("number");
+  expect(span.start).toBeGreaterThanOrEqual(0);
+  expect(span.end).toBeGreaterThan(span.start);
+}
+
 function expectInvalidInput(input: string) {
   const r = evaluate(input);
   if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
@@ -132,6 +139,7 @@ function expectInvalidInput(input: string) {
     throw new Error(
       `expected kind "invalid_input", got: ${JSON.stringify(r.error)}`,
     );
+  expectSpan(r.error.span);
 }
 
 test('evaluate("abc") => invalid_input error', () => {
@@ -258,6 +266,7 @@ function expectDivisionByZero(input: string) {
     throw new Error(
       `expected kind "division_by_zero", got: ${JSON.stringify(r.error)}`,
     );
+  expectSpan(r.error.span);
 }
 
 test('evaluate("1 / 0") => division_by_zero error', () => {

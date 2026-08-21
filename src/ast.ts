@@ -1,18 +1,26 @@
+export type Span = { start: number; end: number };
+
 export type Node =
-  | { type: "number"; value: number }
-  | { type: "bool"; value: boolean }
-  | { type: "var"; name: string }
-  | { type: "binary"; op: "+" | "-" | "*" | "/"; lhs: Node; rhs: Node }
-  | { type: "unary"; op: "-" | "!"; operand: Node }
-  | { type: "compare"; lhs: Node; rhs: Node }
-  | { type: "greater"; lhs: Node; rhs: Node }
-  | { type: "greaterEq"; lhs: Node; rhs: Node }
-  | { type: "less"; lhs: Node; rhs: Node }
-  | { type: "lessEq"; lhs: Node; rhs: Node }
-  | { type: "notEqual"; lhs: Node; rhs: Node }
-  | { type: "or"; lhs: Node; rhs: Node }
-  | { type: "and"; lhs: Node; rhs: Node }
-  | { type: "let"; mutable: boolean; name: string; value: Node }
-  | { type: "assign"; name: string; value: Node }
-  | { type: "block"; statements: Node[] }
-  | { type: "if"; cond: Node; then: Node; else: Node };
+  | { type: "number"; value: number; span: Span }
+  | { type: "bool"; value: boolean; span: Span }
+  | { type: "var"; name: string; span: Span }
+  | {
+      type: "binary";
+      op: "+" | "-" | "*" | "/";
+      lhs: Node;
+      rhs: Node;
+      span: Span;
+    }
+  | { type: "unary"; op: "-" | "!"; operand: Node; span: Span }
+  | { type: "compare"; lhs: Node; rhs: Node; span: Span }
+  | { type: "greater"; lhs: Node; rhs: Node; span: Span }
+  | { type: "greaterEq"; lhs: Node; rhs: Node; span: Span }
+  | { type: "less"; lhs: Node; rhs: Node; span: Span }
+  | { type: "lessEq"; lhs: Node; rhs: Node; span: Span }
+  | { type: "notEqual"; lhs: Node; rhs: Node; span: Span }
+  | { type: "or"; lhs: Node; rhs: Node; span: Span }
+  | { type: "and"; lhs: Node; rhs: Node; span: Span }
+  | { type: "let"; mutable: boolean; name: string; value: Node; span: Span }
+  | { type: "assign"; name: string; value: Node; span: Span }
+  | { type: "block"; statements: Node[]; span: Span }
+  | { type: "if"; cond: Node; then: Node; else: Node; span: Span };
