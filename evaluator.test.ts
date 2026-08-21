@@ -56,6 +56,13 @@ describe("evaluate", () => {
     expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
   });
 
+  test('evaluate("let y = { let x = 1; };") => error', () => {
+    expect(evaluate("let y = { let x = 1; };")).toEqual({
+      ok: false,
+      error: { kind: "invalid-token", index: 21, token: "}" },
+    });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
