@@ -56,6 +56,20 @@ describe("evaluate", () => {
     expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
   });
 
+  test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
+    expect(evaluate("let mut x = 0; x = 1; x")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
+
+  test('evaluate("let x = 0; x = 1; x") => immutable-variable error', () => {
+    expect(evaluate("let x = 0; x = 1; x")).toEqual({
+      ok: false,
+      error: { kind: "immutable-variable", index: 11, name: "x" },
+    });
+  });
+
   test('evaluate("let y = { let x = 1; };") => error', () => {
     expect(evaluate("let y = { let x = 1; };")).toEqual({
       ok: false,

@@ -9,7 +9,7 @@ export type ParserState = {
   inputLength: number;
 };
 
-type LetDecl = { name: string; value: AstNode; index: number };
+type LetDecl = { name: string; mut: boolean; value: AstNode; index: number };
 
 function wrapDecls(decls: LetDecl[], body: AstNode): AstNode {
   let node: AstNode = body;
@@ -19,6 +19,7 @@ function wrapDecls(decls: LetDecl[], body: AstNode): AstNode {
     node = {
       kind: "let",
       name: d.name,
+      mut: d.mut,
       value: d.value,
       body: node,
       index: d.index,
@@ -27,15 +28,22 @@ function wrapDecls(decls: LetDecl[], body: AstNode): AstNode {
   return node;
 }
 
-// letDecl := "let" ident "=" expr ";"
+// letDecl := "let" "mut"? ident "=" expr ";"
 function parseLetDecl(state: ParserState): Result<LetDecl, EvalError> {
   const letTok = state.tokens[state.pos];
   state.pos++; // consume "let" (checked by caller)
+  let mut = false;
+  const mutTok = state.tokens[state.pos];
+  if (mutTok !== undefined && mutTok.value === "mut") {
+    mut = true;
+    state.pos++;
+  }
   const name = state.tokens[state.pos];
   if (
     name === undefined ||
     !IDENT_RE.test(name.value) ||
-    name.value === "let"
+    name.value === "let" ||
+    name.value === "mut"
   ) {
     return {
       ok: false,
@@ -77,8 +85,51 @@ function parseLetDecl(state: ParserState): Result<LetDecl, EvalError> {
     ok: true,
     value: {
       name: name.value,
+      mut,
       value: v.value,
       index: letTok?.index ?? name.index,
+    },
+  };
+}
+
+// assignStmt := ident "=" expr ";"
+function parseAssignStmt(state: ParserState): Result<AstNode, EvalError> {
+  const nameTok = state.tokens[state.pos];
+  state.pos++; // consume ident (checked by caller)
+  const eq = state.tokens[state.pos];
+  if (eq === undefined || eq.value !== "=") {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-token",
+        index: eq?.index ?? nameTok?.index ?? state.inputLength,
+        token: eq?.value ?? "",
+      },
+    };
+  }
+  state.pos++;
+  const v = parseExpr(state);
+  if (!v.ok) return v;
+  const semi = state.tokens[state.pos];
+  if (semi === undefined || semi.value !== ";") {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-token",
+        index: semi?.index ?? eq.index,
+        token: semi?.value ?? "",
+      },
+    };
+  }
+  state.pos++;
+  return {
+    ok: true,
+    value: {
+      kind: "assign",
+      name: nameTok?.value ?? "",
+      value: v.value,
+      body: { kind: "num", value: 0, index: state.inputLength },
+      index: nameTok?.index ?? state.inputLength,
     },
   };
 }
@@ -157,7 +208,7 @@ function parseFactor(state: ParserState): Result<AstNode, EvalError> {
     if (!block.ok) return block;
     node = block.value;
   } else if (IDENT_RE.test(token.value)) {
-    if (token.value === "let") {
+    if (token.value === "let" || token.value === "mut") {
       return {
         ok: false,
         error: {
@@ -234,13 +285,26 @@ function parseExpr(state: ParserState): Result<AstNode, EvalError> {
   return result;
 }
 
-// program := (letDecl)* expr
+// program := (letDecl | assignStmt)* expr
 export function parse(state: ParserState): Result<AstNode, EvalError> {
   const decls: LetDecl[] = [];
-  while (state.tokens[state.pos]?.value === "let") {
-    const d = parseLetDecl(state);
-    if (!d.ok) return d;
-    decls.push(d.value);
+  const assigns: AstNode[] = [];
+  for (;;) {
+    const t = state.tokens[state.pos];
+    if (t === undefined) break;
+    if (t.value === "let") {
+      const d = parseLetDecl(state);
+      if (!d.ok) return d;
+      decls.push(d.value);
+    } else if (IDENT_RE.test(t.value) && t.value !== "mut") {
+      const next = state.tokens[state.pos + 1];
+      if (next === undefined || next.value !== "=") break;
+      const a = parseAssignStmt(state);
+      if (!a.ok) return a;
+      assigns.push(a.value);
+    } else {
+      break;
+    }
   }
   const body: Result<AstNode, EvalError> =
     state.tokens[state.pos] === undefined
@@ -258,5 +322,11 @@ export function parse(state: ParserState): Result<AstNode, EvalError> {
       },
     };
   }
-  return { ok: true, value: wrapDecls(decls, body.value) };
+  let node: AstNode = body.value;
+  for (let i = assigns.length - 1; i >= 0; i--) {
+    const a = assigns[i];
+    if (a === undefined) continue;
+    node = { ...a, body: node };
+  }
+  return { ok: true, value: wrapDecls(decls, node) };
 }

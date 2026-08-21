@@ -2,7 +2,8 @@ import { tokenize } from "./lexer.ts";
 import { parse, type ParserState } from "./parser.ts";
 import type { AstNode, EvalError, Result } from "./types.ts";
 
-type Env = Map<string, number>[];
+type Binding = { value: number; mut: boolean };
+type Env = Map<string, Binding>[];
 
 function lookup(
   env: Env,
@@ -10,8 +11,35 @@ function lookup(
   index: number,
 ): Result<number, EvalError> {
   for (let s = env.length - 1; s >= 0; s--) {
-    const value = env[s]?.get(name);
-    if (value !== undefined) return { ok: true, value };
+    const binding = env[s]?.get(name);
+    if (binding !== undefined) return { ok: true, value: binding.value };
+  }
+  return {
+    ok: false,
+    error: { kind: "unknown-variable", index, name },
+  };
+}
+
+function assign(
+  env: Env,
+  name: string,
+  value: number,
+  index: number,
+): Result<void, EvalError> {
+  for (let s = env.length - 1; s >= 0; s--) {
+    const frame = env[s];
+    if (frame === undefined) continue;
+    const binding = frame.get(name);
+    if (binding !== undefined) {
+      if (!binding.mut) {
+        return {
+          ok: false,
+          error: { kind: "immutable-variable", index, name },
+        };
+      }
+      binding.value = value;
+      return { ok: true, value: undefined };
+    }
   }
   return {
     ok: false,
@@ -46,10 +74,17 @@ function evalNode(node: AstNode, env: Env): Result<number, EvalError> {
     case "let": {
       const v = evalNode(node.value, env);
       if (!v.ok) return v;
-      env.push(new Map([[node.name, v.value]]));
+      env.push(new Map([[node.name, { value: v.value, mut: node.mut }]]));
       const body = evalNode(node.body, env);
       env.pop();
       return body;
+    }
+    case "assign": {
+      const v = evalNode(node.value, env);
+      if (!v.ok) return v;
+      const a = assign(env, node.name, v.value, node.index);
+      if (!a.ok) return a;
+      return evalNode(node.body, env);
     }
     case "block": {
       env.push(new Map());

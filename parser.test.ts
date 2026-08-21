@@ -71,8 +71,29 @@ describe("parse", () => {
       value: {
         kind: "let",
         name: "x",
+        mut: false,
         value: { kind: "num", value: 1, index: 8 },
         body: { kind: "var", name: "x", index: 11 },
+        index: 0,
+      },
+    });
+  });
+
+  test('parse("let mut x = 0; x = 1; x") => let + assign nodes', () => {
+    expect(parseInput("let mut x = 0; x = 1; x")).toEqual({
+      ok: true,
+      value: {
+        kind: "let",
+        name: "x",
+        mut: true,
+        value: { kind: "num", value: 0, index: 12 },
+        body: {
+          kind: "assign",
+          name: "x",
+          value: { kind: "num", value: 1, index: 19 },
+          body: { kind: "var", name: "x", index: 22 },
+          index: 15,
+        },
         index: 0,
       },
     });
