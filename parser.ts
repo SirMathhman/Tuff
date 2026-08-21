@@ -242,7 +242,10 @@ export function parse(state: ParserState): Result<AstNode, EvalError> {
     if (!d.ok) return d;
     decls.push(d.value);
   }
-  const body = parseExpr(state);
+  const body: Result<AstNode, EvalError> =
+    state.tokens[state.pos] === undefined
+      ? { ok: true, value: { kind: "num", value: 0, index: state.inputLength } }
+      : parseExpr(state);
   if (!body.ok) return body;
   const leftover = state.tokens[state.pos];
   if (leftover !== undefined) {

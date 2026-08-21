@@ -52,6 +52,10 @@ describe("evaluate", () => {
     });
   });
 
+  test('evaluate("let x = 1;") => 0', () => {
+    expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
