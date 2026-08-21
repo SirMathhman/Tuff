@@ -69,6 +69,20 @@ export function evaluate(input: string): Result<number, EvalError> {
     }
     return value;
   };
+  const parseLetBindings = (): void => {
+    while (peek() === "let") {
+      pos++;
+      const name = peek();
+      if (name === undefined || name === ";")
+        throw new Error("expected identifier");
+      pos++;
+      if (peek() !== "=") throw new Error("expected =");
+      pos++;
+      env[name] = parseExpr();
+      if (peek() !== ";") throw new Error("expected ;");
+      pos++;
+    }
+  };
   const parseTerm = (): number => {
     let value = parseFactor();
     while (peek() === "*" || peek() === "/") {
@@ -89,18 +103,7 @@ export function evaluate(input: string): Result<number, EvalError> {
     }
     if (t === "{") {
       pos++;
-      while (peek() === "let") {
-        pos++;
-        const name = peek();
-        if (name === undefined || name === ";")
-          throw new Error("expected identifier");
-        pos++;
-        if (peek() !== "=") throw new Error("expected =");
-        pos++;
-        env[name] = parseExpr();
-        if (peek() !== ";") throw new Error("expected ;");
-        pos++;
-      }
+      parseLetBindings();
       const value = parseExpr();
       if (peek() !== "}") throw new Error("expected }");
       pos++;
@@ -119,6 +122,7 @@ export function evaluate(input: string): Result<number, EvalError> {
     return n;
   };
   try {
+    parseLetBindings();
     const value = parseExpr();
     if (pos < tokens.length) return fail(`unexpected token: ${tokens[pos]}`);
     return { ok: true, value };
