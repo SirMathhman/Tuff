@@ -35,8 +35,11 @@ use parser::Parser;
 /// `(expr, ...)` builds a tuple and `value.N` reads its `N`th field;
 /// `&name` is a reference to the binding `name`, `&mut name` is a
 /// mutable reference, `*value` dereferences a reference, and
-/// `*ref = expr` assigns through a mutable reference; anything else
-/// is not yet supported.
+/// `*ref = expr` assigns through a mutable reference; `<` compares
+/// values numerically; `name += expr` adds to a mutable binding;
+/// `while (cond) { ... }` repeats the body while the condition is
+/// truthy (the body is checked but not evaluated once the condition
+/// is false); anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);

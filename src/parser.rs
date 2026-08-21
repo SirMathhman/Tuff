@@ -60,17 +60,34 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `eq = expr ('==' expr)*`; `==` binds looser than `+`,
+    /// Parses `eq = cmp ('==' cmp)*`; `==` binds looser than `<`, `+`,
     /// `-`, and `*`, and yields `true` only if both sides are the same
     /// kind and equal.
     fn parse_eq(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut value = self.parse_expr(as_expression)?;
+        let mut value = self.parse_cmp(as_expression)?;
         loop {
             self.skip_spaces();
             if self.input[self.pos..].starts_with("==") {
                 self.pos += 2;
-                let rhs = self.parse_expr(as_expression)?;
+                let rhs = self.parse_cmp(as_expression)?;
                 value = Value::Bool(value == rhs);
+            } else {
+                return Ok(value);
+            }
+        }
+    }
+
+    /// Parses `cmp = expr ('<' expr)*`; `<` binds looser than `+`, `-`,
+    /// and `*`, and yields `true` only if the left side is less than
+    /// the right side.
+    fn parse_cmp(&mut self, as_expression: bool) -> Result<Value, Error> {
+        let mut value = self.parse_expr(as_expression)?;
+        loop {
+            self.skip_spaces();
+            if self.peek() == Some(b'<') {
+                self.pos += 1;
+                let rhs = self.parse_expr(as_expression)?;
+                value = Value::Bool(value.as_i64() < rhs.as_i64());
             } else {
                 return Ok(value);
             }
@@ -235,16 +252,10 @@ impl<'a> Parser<'a> {
     /// `as_expression` is false the branches are statements (so a
     /// block branch may end in a statement), otherwise they are
     /// expressions.
-    fn parse_if(&mut self, as_expression: bool) -> Result<Value, Error> {
-        self.pos += 3; // skip `if`
-        self.skip_spaces();
-        if self.peek() != Some(b'(') {
-            return Err(Error::ExpectedClosingDelimiter {
-                offset: self.pos,
-                expected: b'(',
-            });
-        }
-        self.pos += 1;
+    /// Parses the body of a parenthesized condition: the expression
+    /// itself, then the closing `)`. Assumes the opening `(` has
+    /// already been consumed.
+    fn parse_condition_body(&mut self) -> Result<Value, Error> {
         let cond = self.parse_or(true)?;
         self.skip_spaces();
         if self.peek() != Some(b')') {
@@ -255,6 +266,20 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1;
         self.skip_spaces();
+        Ok(cond)
+    }
+
+    fn parse_if(&mut self, as_expression: bool) -> Result<Value, Error> {
+        self.pos += 3; // skip `if`
+        self.skip_spaces();
+        if self.peek() != Some(b'(') {
+            return Err(Error::ExpectedClosingDelimiter {
+                offset: self.pos,
+                expected: b'(',
+            });
+        }
+        self.pos += 1;
+        let cond = self.parse_condition_body()?;
         // Both branches are checked (parsed and evaluated) so that
         // errors in either are reported. The chosen branch runs in
         // the live environment so its side effects persist; the
@@ -474,12 +499,20 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         self.skip_spaces();
-        // A single `=` starts an assignment; `==` is the equality
-        // operator, not an assignment.
-        let is_assignment =
-            self.peek() == Some(b'=') && self.input.as_bytes().get(self.pos + 1) != Some(&b'=');
+        // `=` starts an assignment; `==` is the equality operator, not
+        // an assignment. `+=` is a compound assignment.
+        let is_assignment = match self.peek() {
+            Some(b'=') => self.input.as_bytes().get(self.pos + 1) != Some(&b'='),
+            Some(b'+') => self.input.as_bytes().get(self.pos + 1) == Some(&b'='),
+            _ => false,
+        };
         self.pos = start;
         is_assignment
+    }
+
+    /// Whether the next statement is a `while` loop.
+    fn is_while(&self) -> bool {
+        self.peek() == Some(b'w') && self.input[self.pos..].starts_with("while ")
     }
 
     /// Whether the next statement is a dereference assignment: a
@@ -502,7 +535,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a statement: `let [mut] name = expr`, `name = expr`,
-    /// `*ref = expr`, or an expression.
+    /// `name += expr`, `*ref = expr`, `while (cond) { ... }`, or an
+    /// expression.
     fn parse_statement(&mut self) -> Result<Value, Error> {
         self.skip_spaces();
         if self.is_let() {
@@ -514,7 +548,58 @@ impl<'a> Parser<'a> {
         if self.is_deref_assignment() {
             return self.parse_deref_assignment();
         }
+        if self.is_while() {
+            return self.parse_while();
+        }
         self.parse_or(false)
+    }
+
+    /// Parses `while (cond) { ... }`: the body is re-evaluated while
+    /// the condition is truthy; the loop evaluates to `0`. The
+    /// condition is a single expression in the source, re-parsed from
+    /// its saved range on every iteration.
+    fn parse_while(&mut self) -> Result<Value, Error> {
+        self.pos += 6; // skip `while `
+        if self.peek() != Some(b'(') {
+            return Err(Error::ExpectedClosingDelimiter {
+                offset: self.pos,
+                expected: b'(',
+            });
+        }
+        self.pos += 1;
+        let cond_start = self.pos;
+        // Parse the condition once to validate it and locate `)`.
+        let _ = self.parse_condition_body()?;
+        if self.peek() != Some(b'{') {
+            return Err(Error::ExpectedClosingDelimiter {
+                offset: self.pos,
+                expected: b'{',
+            });
+        }
+        loop {
+            // Re-evaluate the condition from its source range.
+            self.pos = cond_start;
+            let cond = self.parse_condition_body()?;
+            if self.peek() != Some(b'{') {
+                return Err(Error::ExpectedClosingDelimiter {
+                    offset: self.pos,
+                    expected: b'{',
+                });
+            }
+            self.pos += 1; // skip `{`
+            if cond.is_truthy() {
+                self.parse_block(b'}', false)?;
+            } else {
+                // The body is checked (parsed) but not evaluated, so
+                // its side effects do not persist.
+                let env = self.env.clone();
+                self.parse_block(b'}', false)?;
+                self.env = env;
+                break;
+            }
+            self.skip_spaces();
+        }
+        Ok(Value::Int(0))
     }
 
     /// Parses `*ref = expr`: the reference is dereferenced to the
@@ -606,24 +691,53 @@ impl<'a> Parser<'a> {
         Err(Error::UndefinedVariable { offset, name })
     }
 
-    /// Parses `name = expr`: the right-hand side is evaluated and the
-    /// binding is updated; the statement evaluates to the assigned
-    /// value. Only bindings declared `mut` may be assigned.
+    /// Parses `name = expr` or `name += expr`: the right-hand side is
+    /// evaluated and the binding is updated (for `+=`, by adding it to
+    /// the binding's current value); the statement evaluates to the
+    /// assigned value. Only bindings declared `mut` may be assigned.
     fn parse_assignment(&mut self) -> Result<Value, Error> {
-        let (name, offset, value_offset, value) = self.parse_name_equals_expr()?;
+        let (name, offset) = self.parse_identifier_name()?;
+        self.skip_spaces();
+        if self.peek() == Some(b'+')
+            && self.input.as_bytes().get(self.pos + 1) == Some(&b'=')
+        {
+            let op_offset = self.pos;
+            self.pos += 2; // skip `+=`
+            self.skip_spaces();
+            let value_offset = self.pos;
+            let rhs = self.parse_or(true)?;
+            let current = self.lookup_binding(&name, offset)?;
+            let new_value = Value::Int(
+                current
+                    .as_i64()
+                    .checked_add(rhs.as_i64())
+                    .ok_or(Error::Overflow { offset: op_offset })?,
+            );
+            return self.assign_to_binding(name, offset, value_offset, new_value);
+        }
+        let (value_offset, value) = self.parse_equals_expr()?;
         self.assign_to_binding(name, offset, value_offset, value)
+    }
+
+    /// Looks up the value bound to `name` in the environment,
+    /// innermost scope first.
+    fn lookup_binding(&self, name: &str, offset: usize) -> Result<Value, Error> {
+        for scope in self.env.iter().rev() {
+            if let Some((_, _, value)) = scope.iter().find(|(n, _, _)| *n == name) {
+                return Ok(value.clone());
+            }
+        }
+        Err(Error::UndefinedVariable {
+            offset,
+            name: name.to_string(),
+        })
     }
 
     /// Parses an identifier and looks up its binding in the
     /// environment, innermost scope first.
     fn parse_identifier(&mut self) -> Result<Value, Error> {
         let (name, offset) = self.parse_identifier_name()?;
-        for scope in self.env.iter().rev() {
-            if let Some((_, _, value)) = scope.iter().find(|(n, _, _)| *n == name) {
-                return Ok(value.clone());
-            }
-        }
-        Err(Error::UndefinedVariable { offset, name })
+        self.lookup_binding(&name, offset)
     }
 
     /// Parses an identifier name starting at the current position,
@@ -835,6 +949,11 @@ mod tests {
     #[test]
     fn assignment_through_mutable_reference() {
         assert_eq!(interpret("let mut x = 0; let y = &mut x; *y = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn while_loop_with_compound_assignment() {
+        assert_eq!(interpret("let mut x = 0; while (x < 4) { x += 1; } x"), Ok(4));
     }
 
     #[test]
