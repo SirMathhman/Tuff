@@ -87,7 +87,7 @@ function checkNode(
     case "block": {
       const child: Scope = {
         types: { ...scope.types },
-        mutable: new Set(scope.mutable),
+        mutable: new Set(scope.mutable),    
         loopDepth: scope.loopDepth,
       };
       let value: Type = "float";

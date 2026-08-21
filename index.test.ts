@@ -224,6 +224,13 @@ test('evaluate("break 1;") => invalid_input error', () => {
   expectInvalidInput("break 1;");
 });
 
+test('evaluate("let x = loop { { break 9; } }; x") => 9', () => {
+  const r = evaluate("let x = loop { { break 9; } }; x");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(9);
+});
+
 test('evaluate("let y = if (false) { let mut x = 0; x = true; 0 } else 0; y") => invalid_input error', () => {
   expectInvalidInput(
     "let y = if (false) { let mut x = 0; x = true; 0 } else 0; y",

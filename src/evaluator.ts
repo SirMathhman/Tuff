@@ -20,8 +20,10 @@ type Env = {
   mutable: Set<string>;
 };
 
-class BreakSignal {
-  constructor(public readonly value: Value) {}
+type EvalOutcome = Result<Value, EvalError> | { break: Value };
+
+function isBreak(o: EvalOutcome): o is { break: Value } {
+  return "break" in o;
 }
 
 function evalBinaryBool(
@@ -30,10 +32,12 @@ function evalBinaryBool(
   env: Env,
   input: string,
   combine: (a: Value, b: Value) => boolean,
-): Result<Value, EvalError> {
+): EvalOutcome {
   const l = evalNode(lhs, env, input);
+  if (isBreak(l)) return l;
   if (!l.ok) return l;
   const r = evalNode(rhs, env, input);
+  if (isBreak(r)) return r;
   if (!r.ok) return r;
   return {
     ok: true,
@@ -45,10 +49,12 @@ function evalArithmetic(
   node: Extract<Node, { type: "binary" }>,
   env: Env,
   input: string,
-): Result<Value, EvalError> {
+): EvalOutcome {
   const lhs = evalNode(node.lhs, env, input);
+  if (isBreak(lhs)) return lhs;
   if (!lhs.ok) return lhs;
   const rhs = evalNode(node.rhs, env, input);
+  if (isBreak(rhs)) return rhs;
   if (!rhs.ok) return rhs;
   if (node.op === "/") {
     if (toNumber(rhs.value) === 0)
@@ -74,8 +80,9 @@ function evalUnary(
   node: Extract<Node, { type: "unary" }>,
   env: Env,
   input: string,
-): Result<Value, EvalError> {
+): EvalOutcome {
   const operand = evalNode(node.operand, env, input);
+  if (isBreak(operand)) return operand;
   if (!operand.ok) return operand;
   if (node.op === "!")
     return {
@@ -104,8 +111,9 @@ function evalShortCircuit(
   node: Extract<Node, { type: "logical" }>,
   env: Env,
   input: string,
-): Result<Value, EvalError> {
+): EvalOutcome {
   const lhs = evalNode(node.lhs, env, input);
+  if (isBreak(lhs)) return lhs;
   if (!lhs.ok) return lhs;
   const truthy = toNumber(lhs.value) !== 0;
   if (node.op === "||" && truthy)
@@ -113,6 +121,7 @@ function evalShortCircuit(
   if (node.op === "&&" && !truthy)
     return { ok: true, value: { type: "bool", value: false } };
   const rhs = evalNode(node.rhs, env, input);
+  if (isBreak(rhs)) return rhs;
   if (!rhs.ok) return rhs;
   return {
     ok: true,
@@ -124,7 +133,7 @@ function evalBinding(
   node: Extract<Node, { type: "let" | "assign" }>,
   env: Env,
   input: string,
-): Result<Value, EvalError> {
+): EvalOutcome {
   const fail = (reason: string): Result<Value, EvalError> => ({
     ok: false,
     error: invalidInput(input, reason, node.span),
@@ -132,6 +141,7 @@ function evalBinding(
   if (node.type === "assign" && !env.mutable.has(node.name))
     return fail(`cannot reassign immutable: ${node.name}`);
   const value = evalNode(node.value, env, input);
+  if (isBreak(value)) return value;
   if (!value.ok) return value;
   const existing = env.values[node.name];
   if (existing !== undefined && existing.type !== value.value.type)
@@ -143,11 +153,7 @@ function evalBinding(
   return { ok: true, value: { type: "number", value: 0 } };
 }
 
-function evalNode(
-  node: Node,
-  env: Env,
-  input: string,
-): Result<Value, EvalError> {
+function evalNode(node: Node, env: Env, input: string): EvalOutcome {
   const fail = (reason: string): Result<Value, EvalError> => ({
     ok: false,
     error: invalidInput(input, reason, node.span),
@@ -181,6 +187,7 @@ function evalNode(
       return evalBinding(node, env, input);
     case "if": {
       const cond = evalNode(node.cond, env, input);
+      if (isBreak(cond)) return cond;
       if (!cond.ok) return cond;
       const branch = toNumber(cond.value) !== 0 ? node.then : node.else;
       return evalNode(branch, env, input);
@@ -193,6 +200,7 @@ function evalNode(
       let value: Value = { type: "number", value: 0 };
       for (const statement of node.statements) {
         const s = evalNode(statement, child, input);
+        if (isBreak(s)) return s;
         if (!s.ok) return s;
         value = s.value;
       }
@@ -200,20 +208,16 @@ function evalNode(
     }
     case "loop": {
       while (true) {
-        try {
-          const s = evalNode(node.body, env, input);
-          if (!s.ok) return s;
-        } catch (e) {
-          if (e instanceof BreakSignal)
-            return { ok: true, value: e.value };
-          throw e;
-        }
+        const s = evalNode(node.body, env, input);
+        if (isBreak(s)) return { ok: true, value: s.break };
+        if (!s.ok) return s;
       }
     }
     case "break": {
       const value = evalNode(node.value, env, input);
+      if (isBreak(value)) return value;
       if (!value.ok) return value;
-      throw new BreakSignal(value.value);
+      return { break: value.value };
     }
   }
 }
@@ -226,6 +230,11 @@ export function evaluateAst(
   let value: Value = { type: "number", value: 0 };
   for (const statement of statements) {
     const s = evalNode(statement, env, input);
+    if (isBreak(s))
+      return {
+        ok: false,
+        error: invalidInput(input, "break outside of a loop", statement.span),
+      };
     if (!s.ok) return s;
     value = s.value;
   }
