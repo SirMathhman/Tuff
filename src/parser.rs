@@ -12,6 +12,15 @@ pub(crate) struct Parser<'a> {
     pub(crate) env: Vec<Vec<(String, bool, Value)>>,
 }
 
+/// Whether the current parse position is in an expression context
+/// (a value is expected) or a statement context (a statement is
+/// allowed).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Context {
+    Expression,
+    Statement,
+}
+
 impl<'a> Parser<'a> {
     /// Parses the top-level program: `;`-separated statements; the
     /// program's value is the value of the last statement.
@@ -44,15 +53,15 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `or = eq ('||' eq)*`; `||` binds looser than `==`, `+`,
-    /// `-`, and `*`, and yields `true` if either side is truthy. When
-    /// `as_expression` is false, a block may end in a statement.
-    fn parse_or(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut value = self.parse_eq(as_expression)?;
+    /// `-`, and `*`, and yields `true` if either side is truthy. In a
+    /// statement context, a block may end in a statement.
+    fn parse_or(&mut self, ctx: Context) -> Result<Value, Error> {
+        let mut value = self.parse_eq(ctx)?;
         loop {
             self.skip_spaces();
             if self.input[self.pos..].starts_with("||") {
                 self.pos += 2;
-                let rhs = self.parse_eq(as_expression)?;
+                let rhs = self.parse_eq(ctx)?;
                 value = Value::Bool(value.is_truthy() || rhs.is_truthy());
             } else {
                 return Ok(value);
@@ -63,13 +72,13 @@ impl<'a> Parser<'a> {
     /// Parses `eq = cmp ('==' cmp)*`; `==` binds looser than `<`, `+`,
     /// `-`, and `*`, and yields `true` only if both sides are the same
     /// kind and equal.
-    fn parse_eq(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut value = self.parse_cmp(as_expression)?;
+    fn parse_eq(&mut self, ctx: Context) -> Result<Value, Error> {
+        let mut value = self.parse_cmp(ctx)?;
         loop {
             self.skip_spaces();
             if self.input[self.pos..].starts_with("==") {
                 self.pos += 2;
-                let rhs = self.parse_cmp(as_expression)?;
+                let rhs = self.parse_cmp(ctx)?;
                 value = Value::Bool(value == rhs);
             } else {
                 return Ok(value);
@@ -80,13 +89,13 @@ impl<'a> Parser<'a> {
     /// Parses `cmp = expr ('<' expr)*`; `<` binds looser than `+`, `-`,
     /// and `*`, and yields `true` only if the left side is less than
     /// the right side.
-    fn parse_cmp(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut value = self.parse_expr(as_expression)?;
+    fn parse_cmp(&mut self, ctx: Context) -> Result<Value, Error> {
+        let mut value = self.parse_expr(ctx)?;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'<') {
                 self.pos += 1;
-                let rhs = self.parse_expr(as_expression)?;
+                let rhs = self.parse_expr(ctx)?;
                 value = Value::Bool(value.as_i64() < rhs.as_i64());
             } else {
                 return Ok(value);
@@ -95,15 +104,15 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `expr = term (('+' | '-') term)*`.
-    fn parse_expr(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut total = self.parse_term(as_expression)?;
+    fn parse_expr(&mut self, ctx: Context) -> Result<Value, Error> {
+        let mut total = self.parse_term(ctx)?;
         loop {
             self.skip_spaces();
             match self.peek() {
                 Some(b'+') => {
                     let offset = self.pos;
                     self.pos += 1;
-                    let rhs = self.parse_term(as_expression)?.as_i64();
+                    let rhs = self.parse_term(ctx)?.as_i64();
                     total = Value::Int(
                         total
                             .as_i64()
@@ -114,7 +123,7 @@ impl<'a> Parser<'a> {
                 Some(b'-') => {
                     let offset = self.pos;
                     self.pos += 1;
-                    let rhs = self.parse_term(as_expression)?.as_i64();
+                    let rhs = self.parse_term(ctx)?.as_i64();
                     total = Value::Int(
                         total
                             .as_i64()
@@ -128,14 +137,14 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `term = postfix ('*' postfix)*`.
-    fn parse_term(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut term = self.parse_postfix(as_expression)?;
+    fn parse_term(&mut self, ctx: Context) -> Result<Value, Error> {
+        let mut term = self.parse_postfix(ctx)?;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
                 let offset = self.pos;
                 self.pos += 1;
-                let rhs = self.parse_postfix(as_expression)?.as_i64();
+                let rhs = self.parse_postfix(ctx)?.as_i64();
                 term = Value::Int(
                     term.as_i64()
                         .checked_mul(rhs)
@@ -150,15 +159,15 @@ impl<'a> Parser<'a> {
     /// Parses `postfix = factor ('[' expr ']' | '.' digit)*`: an
     /// array index or a tuple field applied to a factor, binding
     /// tighter than `*`, `+`, and `-`.
-    fn parse_postfix(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut value = self.parse_factor(as_expression)?;
+    fn parse_postfix(&mut self, ctx: Context) -> Result<Value, Error> {
+        let mut value = self.parse_factor(ctx)?;
         loop {
             self.skip_spaces();
             match self.peek() {
                 Some(b'[') => {
                     let offset = self.pos;
                     self.pos += 1;
-                    let index = self.parse_or(true)?.as_i64();
+                    let index = self.parse_or(Context::Expression)?.as_i64();
                     self.skip_spaces();
                     if self.peek() != Some(b']') {
                         return Err(Error::ExpectedClosingDelimiter {
@@ -191,10 +200,10 @@ impl<'a> Parser<'a> {
     /// | boolean | identifier | '(' expr ')' | block | if`: `&name`
     /// is a reference to the binding `name`, `&mut name` is a mutable
     /// reference, and `*value` dereferences a reference. The prefix
-    /// operators bind tighter than `*`, `+`, and `-`. When
-    /// `as_expression` is false, a block may end in a statement and
-    /// an `if` takes statement branches.
-    fn parse_factor(&mut self, as_expression: bool) -> Result<Value, Error> {
+    /// operators bind tighter than `*`, `+`, and `-`. In a statement
+    /// context, a block may end in a statement and an `if` takes
+    /// statement branches.
+    fn parse_factor(&mut self, ctx: Context) -> Result<Value, Error> {
         self.skip_spaces();
         if self.peek() == Some(b'&') {
             self.pos += 1;
@@ -211,7 +220,7 @@ impl<'a> Parser<'a> {
         if self.peek() == Some(b'*') {
             let offset = self.pos;
             self.pos += 1;
-            let value = self.parse_factor(as_expression)?;
+            let value = self.parse_factor(ctx)?;
             return value.deref(&self.env, offset);
         }
         match self.peek() {
@@ -220,18 +229,18 @@ impl<'a> Parser<'a> {
                     self.parse_tuple()
                 } else {
                     self.pos += 1;
-                    self.parse_grouped(b')', as_expression)
+                    self.parse_grouped(b')', ctx)
                 }
             }
             Some(b'{') => {
                 self.pos += 1;
-                self.parse_block(b'}', as_expression)
+                self.parse_block(b'}', ctx)
             }
             Some(b'[') => self.parse_array(),
             Some(b'0'..=b'9') => self.parse_number(),
             Some(b'a'..=b'z') => {
                 if self.input[self.pos..].starts_with("if ") {
-                    return self.parse_if(as_expression);
+                    return self.parse_if(ctx);
                 }
                 if let Some(value) = self.parse_boolean() {
                     Ok(value)
@@ -248,15 +257,15 @@ impl<'a> Parser<'a> {
 
     /// Parses `if (cond) then else alt`: the condition is a
     /// parenthesized expression; if it is truthy the value is the
-    /// `then` expression, otherwise the `else` expression. When
-    /// `as_expression` is false the branches are statements (so a
-    /// block branch may end in a statement), otherwise they are
+    /// `then` expression, otherwise the `else` expression. In a
+    /// statement context the branches are statements (so a block
+    /// branch may end in a statement), otherwise they are
     /// expressions.
     /// Parses the body of a parenthesized condition: the expression
     /// itself, then the closing `)`. Assumes the opening `(` has
     /// already been consumed.
     fn parse_condition_body(&mut self) -> Result<Value, Error> {
-        let cond = self.parse_or(true)?;
+        let cond = self.parse_or(Context::Expression)?;
         self.skip_spaces();
         if self.peek() != Some(b')') {
             return Err(Error::ExpectedClosingDelimiter {
@@ -269,7 +278,7 @@ impl<'a> Parser<'a> {
         Ok(cond)
     }
 
-    fn parse_if(&mut self, as_expression: bool) -> Result<Value, Error> {
+    fn parse_if(&mut self, ctx: Context) -> Result<Value, Error> {
         self.pos += 3; // skip `if`
         self.skip_spaces();
         if self.peek() != Some(b'(') {
@@ -287,8 +296,8 @@ impl<'a> Parser<'a> {
         // afterward so its side effects do not.
         let chosen = cond.is_truthy();
         let then_env = if chosen { None } else { Some(self.env.clone()) };
-        let then = if as_expression {
-            self.parse_or(true)?
+        let then = if ctx == Context::Expression {
+            self.parse_or(Context::Expression)?
         } else {
             self.parse_statement()?
         };
@@ -301,8 +310,8 @@ impl<'a> Parser<'a> {
         }
         self.pos += 5; // skip `else `
         let alt_env = if chosen { Some(self.env.clone()) } else { None };
-        let alt = if as_expression {
-            self.parse_or(true)?
+        let alt = if ctx == Context::Expression {
+            self.parse_or(Context::Expression)?
         } else {
             self.parse_statement()?
         };
@@ -323,7 +332,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 return Ok(Value::Array(items));
             }
-            items.push(self.parse_or(true)?);
+            items.push(self.parse_or(Context::Expression)?);
             self.skip_spaces();
             match self.peek() {
                 Some(b',') => {
@@ -368,7 +377,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 return Ok(Value::Tuple(items));
             }
-            items.push(self.parse_or(true)?);
+            items.push(self.parse_or(Context::Expression)?);
             self.skip_spaces();
             match self.peek() {
                 Some(b',') => {
@@ -411,28 +420,28 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a block: `let` bindings separated by `;`, ending in an
-    /// expression whose value is the block's value. When
-    /// `as_expression` is false the block may end in a statement.
-    fn parse_block(&mut self, close: u8, as_expression: bool) -> Result<Value, Error> {
+    /// expression whose value is the block's value. In a statement
+    /// context the block may end in a statement.
+    fn parse_block(&mut self, close: u8, ctx: Context) -> Result<Value, Error> {
         self.env.push(Vec::new());
-        let value = self.parse_block_body(close, as_expression);
+        let value = self.parse_block_body(close, ctx);
         self.env.pop();
         value
     }
 
     /// Parses the statements of a block; the opening delimiter has
     /// already been consumed and `close` is the expected closing one.
-    /// When `as_expression` is true a block must end with an
-    /// expression, so a trailing `let` or assignment statement is an
-    /// error; when false a block may end in a statement.
-    fn parse_block_body(&mut self, close: u8, as_expression: bool) -> Result<Value, Error> {
+    /// In an expression context a block must end with an expression,
+    /// so a trailing `let` or assignment statement is an error; in a
+    /// statement context a block may end in a statement.
+    fn parse_block_body(&mut self, close: u8, ctx: Context) -> Result<Value, Error> {
         let mut value: Option<Value> = None;
         let mut last_was_statement = false;
         loop {
             self.skip_spaces();
             if self.peek() == Some(close) {
                 self.pos += 1;
-                if as_expression {
+                if ctx == Context::Expression {
                     if last_was_statement {
                         return Err(Error::BlockMustEndWithExpression {
                             offset: self.pos - 1,
@@ -459,7 +468,7 @@ impl<'a> Parser<'a> {
                 value = Some(self.parse_statement()?);
                 last_was_statement = true;
             } else {
-                value = Some(self.parse_or(as_expression)?);
+                value = Some(self.parse_or(ctx)?);
                 last_was_statement = false;
             }
             self.skip_spaces();
@@ -468,7 +477,7 @@ impl<'a> Parser<'a> {
                     self.pos += 1;
                 }
                 Some(c) if c == close => {
-                    if as_expression && last_was_statement {
+                    if ctx == Context::Expression && last_was_statement {
                         self.pos += 1;
                         return Err(Error::BlockMustEndWithExpression {
                             offset: self.pos - 1,
@@ -522,20 +531,37 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether the next statement is a dereference assignment: a
-    /// `*` reference expression followed by `=`.
+    /// `*` reference expression followed by `=`. This is a pure
+    /// lexical check (no evaluation, no environment mutation); the
+    /// real parse in `parse_deref_assignment` performs full
+    /// validation.
     fn is_deref_assignment(&mut self) -> bool {
         if self.peek() != Some(b'*') {
             return false;
         }
         let start = self.pos;
         self.pos += 1; // skip `*`
-        let is_deref_assignment = match self.parse_factor(false) {
-            Ok(Value::Ref { .. }) => {
+        self.skip_spaces();
+        // The reference is either a `&`/`&mut` reference literal or
+        // an identifier bound to a reference.
+        if self.peek() == Some(b'&') {
+            self.pos += 1; // skip `&`
+            self.skip_spaces();
+            if self.input[self.pos..].starts_with("mut ") {
+                self.pos += 4; // skip `mut `
                 self.skip_spaces();
-                self.peek() == Some(b'=') && self.input.as_bytes().get(self.pos + 1) != Some(&b'=')
             }
-            _ => false,
-        };
+        }
+        if !matches!(self.peek(), Some(b'a'..=b'z')) {
+            self.pos = start;
+            return false;
+        }
+        while matches!(self.peek(), Some(b'a'..=b'z')) {
+            self.pos += 1;
+        }
+        self.skip_spaces();
+        let is_deref_assignment =
+            self.peek() == Some(b'=') && self.input.as_bytes().get(self.pos + 1) != Some(&b'=');
         self.pos = start;
         is_deref_assignment
     }
@@ -557,7 +583,7 @@ impl<'a> Parser<'a> {
         if self.is_while() {
             return self.parse_while();
         }
-        self.parse_or(false)
+        self.parse_or(Context::Statement)
     }
 
     /// Parses `while (cond) { ... }`: the body is re-evaluated while
@@ -594,12 +620,12 @@ impl<'a> Parser<'a> {
             }
             self.pos += 1; // skip `{`
             if cond.is_truthy() {
-                self.parse_block(b'}', false)?;
+                self.parse_block(b'}', Context::Statement)?;
             } else {
                 // The body is checked (parsed) but not evaluated, so
                 // its side effects do not persist.
                 let env = self.env.clone();
-                self.parse_block(b'}', false)?;
+                self.parse_block(b'}', Context::Statement)?;
                 self.env = env;
                 break;
             }
@@ -615,7 +641,7 @@ impl<'a> Parser<'a> {
     fn parse_deref_assignment(&mut self) -> Result<Value, Error> {
         let offset = self.pos; // offset of `*`
         self.pos += 1; // skip `*`
-        let (name, ref_mutable) = match self.parse_factor(false)? {
+        let (name, ref_mutable) = match self.parse_factor(Context::Statement)? {
             Value::Ref { name, mutable } => (name, mutable),
             _ => return Err(Error::NotAReference { offset }),
         };
@@ -664,7 +690,7 @@ impl<'a> Parser<'a> {
         self.pos += 1;
         self.skip_spaces();
         let value_offset = self.pos;
-        let value = self.parse_or(true)?;
+        let value = self.parse_or(Context::Expression)?;
         Ok((value_offset, value))
     }
 
@@ -709,7 +735,7 @@ impl<'a> Parser<'a> {
             self.pos += 2; // skip `+=`
             self.skip_spaces();
             let value_offset = self.pos;
-            let rhs = self.parse_or(true)?;
+            let rhs = self.parse_or(Context::Expression)?;
             let current = self.lookup_binding(&name, offset)?;
             let new_value = Value::Int(
                 current
@@ -782,8 +808,8 @@ impl<'a> Parser<'a> {
 
     /// Parses `expr close` after the opening delimiter was consumed;
     /// `close` is the expected matching closing delimiter.
-    fn parse_grouped(&mut self, close: u8, as_expression: bool) -> Result<Value, Error> {
-        let value = self.parse_or(as_expression)?;
+    fn parse_grouped(&mut self, close: u8, ctx: Context) -> Result<Value, Error> {
+        let value = self.parse_or(ctx)?;
         self.skip_spaces();
         match self.peek() {
             Some(c) if c == close => {
