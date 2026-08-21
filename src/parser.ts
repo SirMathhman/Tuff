@@ -37,6 +37,11 @@ function tokenize(input: string): Result<string[], { reason: string }> {
       i = j;
       continue;
     }
+    if (c === "=" && input.charAt(i + 1) === "=") {
+      tokens.push("==");
+      i += 2;
+      continue;
+    }
     if ("+-*/(){};=".includes(c)) {
       tokens.push(c);
       i++;
@@ -89,6 +94,19 @@ function makeState(input: string, tokens: string[]): ParserState {
     fail: makeFail(input),
     failDivisionByZero: makeFailDivisionByZero(input),
   };
+}
+
+function parseComparison(state: ParserState): Result<number, EvalError> {
+  const lhs = parseExpr(state);
+  if (!lhs.ok) return lhs;
+  let value = lhs.value;
+  while (state.tokens[state.pos] === "==") {
+    state.pos++;
+    const rhs = parseExpr(state);
+    if (!rhs.ok) return rhs;
+    value = value === rhs.value ? 1 : 0;
+  }
+  return { ok: true, value };
 }
 
 function parseExpr(state: ParserState): Result<number, EvalError> {
@@ -150,7 +168,7 @@ function parseStatement(state: ParserState): Result<number, EvalError> {
     state.pos++;
     return { ok: true, value: 0 };
   }
-  return parseExpr(state);
+  return parseComparison(state);
 }
 
 function parseStatements(state: ParserState): Result<number, EvalError> {
