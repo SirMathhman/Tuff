@@ -20,6 +20,7 @@ export type Node =
   | { type: "unary"; op: "-" | "!"; operand: Node }
   | { type: "compare"; lhs: Node; rhs: Node }
   | { type: "greater"; lhs: Node; rhs: Node }
+  | { type: "greaterEq"; lhs: Node; rhs: Node }
   | { type: "or"; lhs: Node; rhs: Node }
   | { type: "and"; lhs: Node; rhs: Node }
   | { type: "let"; mutable: boolean; name: string; value: Node }

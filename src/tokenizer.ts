@@ -38,6 +38,11 @@ export function tokenize(input: string): Result<string[], { reason: string }> {
       i += 2;
       continue;
     }
+    if (c === ">" && input.charAt(i + 1) === "=") {
+      tokens.push(">=");
+      i += 2;
+      continue;
+    }
     if ("+-*/(){};!=>".includes(c)) {
       tokens.push(c);
       i++;

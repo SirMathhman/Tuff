@@ -50,7 +50,11 @@ function parseComparison(state: ParserState): Result<Node, EvalError> {
   const lhs = parseExpr(state);
   if (!lhs.ok) return lhs;
   let node: Node = lhs.value;
-  while (state.tokens[state.pos] === "==" || state.tokens[state.pos] === ">") {
+  while (
+    state.tokens[state.pos] === "==" ||
+    state.tokens[state.pos] === ">" ||
+    state.tokens[state.pos] === ">="
+  ) {
     const op = state.tokens[state.pos];
     state.pos++;
     const rhs = parseExpr(state);
@@ -58,7 +62,9 @@ function parseComparison(state: ParserState): Result<Node, EvalError> {
     node =
       op === "=="
         ? { type: "compare", lhs: node, rhs: rhs.value }
-        : { type: "greater", lhs: node, rhs: rhs.value };
+        : op === ">"
+          ? { type: "greater", lhs: node, rhs: rhs.value }
+          : { type: "greaterEq", lhs: node, rhs: rhs.value };
   }
   return { ok: true, value: node };
 }
