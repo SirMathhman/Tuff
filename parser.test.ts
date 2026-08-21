@@ -14,7 +14,7 @@ function parseInput(
   return parse(state);
 }
 
-describe("parse", () => {
+describe("parse expressions", () => {
   test('parse("1") => num node', () => {
     expect(parseInput("1")).toEqual({
       ok: true,
@@ -64,7 +64,9 @@ describe("parse", () => {
       },
     });
   });
+});
 
+describe("parse bindings and statements", () => {
   test('parse("let x = 1; x") => let node', () => {
     expect(parseInput("let x = 1; x")).toEqual({
       ok: true,
@@ -102,7 +104,9 @@ describe("parse", () => {
       },
     });
   });
+});
 
+describe("parse blocks", () => {
   test('parse("{ 1 }") => block node', () => {
     expect(parseInput("{ 1 }")).toEqual({
       ok: true,
@@ -113,7 +117,9 @@ describe("parse", () => {
       },
     });
   });
+});
 
+describe("parse errors", () => {
   test('parse("1 +") => unexpected-end error', () => {
     expect(parseInput("1 +")).toEqual({
       ok: false,
