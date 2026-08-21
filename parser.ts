@@ -105,8 +105,60 @@ function parseFactor(state: ParserState): Result<number, EvalError> {
   return { ok: true, value: sign * Number(token.value) };
 }
 
+// letDecl := "let" ident "=" expr ";"
+function parseLetDecl(
+  state: ParserState,
+  scope: Map<string, number>,
+): Result<number, EvalError> {
+  const letTok = state.tokens[state.pos];
+  state.pos++; // consume "let" (checked by caller)
+  const name = state.tokens[state.pos];
+  if (
+    name === undefined ||
+    !IDENT_RE.test(name.value) ||
+    name.value === "let"
+  ) {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-token",
+        index: name?.index ?? letTok?.index ?? state.inputLength,
+        token: name?.value ?? "",
+      },
+    };
+  }
+  state.pos++;
+  const eq = state.tokens[state.pos];
+  if (eq === undefined || eq.value !== "=") {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-token",
+        index: eq?.index ?? name.index,
+        token: eq?.value ?? "",
+      },
+    };
+  }
+  state.pos++;
+  const v = parseExpr(state);
+  if (!v.ok) return v;
+  const semi = state.tokens[state.pos];
+  if (semi === undefined || semi.value !== ";") {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-token",
+        index: semi?.index ?? eq.index,
+        token: semi?.value ?? "",
+      },
+    };
+  }
+  state.pos++;
+  scope.set(name.value, v.value);
+  return { ok: true, value: v.value };
+}
+
 // block := "{" (letDecl ";")* expr "}"
-// letDecl := "let" ident "=" expr
 function parseBlock(state: ParserState): Result<number, EvalError> {
   state.pos++; // consume "{" (checked by caller)
   const scope = new Map<string, number>();
@@ -129,50 +181,8 @@ function parseBlock(state: ParserState): Result<number, EvalError> {
       return value;
     }
     if (t.value === "let") {
-      state.pos++;
-      const name = state.tokens[state.pos];
-      if (
-        name === undefined ||
-        !IDENT_RE.test(name.value) ||
-        name.value === "let"
-      ) {
-        return {
-          ok: false,
-          error: {
-            kind: "invalid-token",
-            index: name?.index ?? t.index,
-            token: name?.value ?? "",
-          },
-        };
-      }
-      state.pos++;
-      const eq = state.tokens[state.pos];
-      if (eq === undefined || eq.value !== "=") {
-        return {
-          ok: false,
-          error: {
-            kind: "invalid-token",
-            index: eq?.index ?? name.index,
-            token: eq?.value ?? "",
-          },
-        };
-      }
-      state.pos++;
-      const v = parseExpr(state);
-      if (!v.ok) return v;
-      const semi = state.tokens[state.pos];
-      if (semi === undefined || semi.value !== ";") {
-        return {
-          ok: false,
-          error: {
-            kind: "invalid-token",
-            index: semi?.index ?? eq.index,
-            token: semi?.value ?? "",
-          },
-        };
-      }
-      state.pos++;
-      scope.set(name.value, v.value);
+      const decl = parseLetDecl(state, scope);
+      if (!decl.ok) return decl;
       continue;
     }
     const v = parseExpr(state);
@@ -202,7 +212,13 @@ function parseExpr(state: ParserState): Result<number, EvalError> {
   return result;
 }
 
+// program := (letDecl ";")* expr
 export function parse(state: ParserState): Result<number, EvalError> {
+  const topScope = state.scopes[0] ?? new Map<string, number>();
+  while (state.tokens[state.pos]?.value === "let") {
+    const decl = parseLetDecl(state, topScope);
+    if (!decl.ok) return decl;
+  }
   const result = parseExpr(state);
   if (!result.ok) return result;
 
