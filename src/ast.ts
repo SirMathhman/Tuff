@@ -1,0 +1,23 @@
+export type EvalError =
+  | {
+      kind: "invalid_input";
+      input: string;
+      reason: string;
+      hint: string;
+    }
+  | {
+      kind: "division_by_zero";
+      input: string;
+      reason: string;
+      hint: string;
+    };
+
+export type Node =
+  | { type: "number"; value: number }
+  | { type: "bool"; value: boolean }
+  | { type: "var"; name: string }
+  | { type: "binary"; op: "+" | "-" | "*" | "/"; lhs: Node; rhs: Node }
+  | { type: "compare"; lhs: Node; rhs: Node }
+  | { type: "let"; mutable: boolean; name: string; value: Node }
+  | { type: "assign"; name: string; value: Node }
+  | { type: "block"; statements: Node[] };

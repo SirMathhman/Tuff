@@ -1,39 +1,16 @@
-export type EvalError =
-  | {
-      kind: "invalid_input";
-      input: string;
-      reason: string;
-      hint: string;
-    }
-  | {
-      kind: "division_by_zero";
-      input: string;
-      reason: string;
-      hint: string;
-    };
-
+import type { EvalError, Node } from "./ast.ts";
 import type { Result } from "./result.ts";
+import { evaluateAst } from "./evaluator.ts";
 import { tokenize } from "./tokenizer.ts";
-
-type Value =
-  | { type: "number"; value: number }
-  | { type: "bool"; value: boolean };
-
-function toNumber(v: Value): number {
-  return v.type === "number" ? v.value : v.value ? 1 : 0;
-}
 
 type ParserState = {
   tokens: string[];
   pos: number;
-  env: Record<string, Value>;
-  mutable: Set<string>;
-  fail: (reason: string) => Result<Value, EvalError>;
-  failDivisionByZero: (reason: string) => Result<Value, EvalError>;
+  fail: (reason: string) => Result<never, EvalError>;
 };
 
 function makeFail(input: string) {
-  return (reason: string): Result<Value, EvalError> => ({
+  return (reason: string): Result<never, EvalError> => ({
     ok: false,
     error: {
       kind: "invalid_input",
@@ -44,81 +21,42 @@ function makeFail(input: string) {
   });
 }
 
-function makeFailDivisionByZero(input: string) {
-  return (reason: string): Result<Value, EvalError> => ({
-    ok: false,
-    error: {
-      kind: "division_by_zero",
-      input,
-      reason,
-      hint: "the divisor evaluates to 0; check the right-hand side of /",
-    },
-  });
-}
-
-function makeState(input: string, tokens: string[]): ParserState {
-  return {
-    tokens,
-    pos: 0,
-    env: {},
-    mutable: new Set<string>(),
-    fail: makeFail(input),
-    failDivisionByZero: makeFailDivisionByZero(input),
-  };
-}
-
-function valuesEqual(a: Value, b: Value): boolean {
-  if (a.type !== b.type) return false;
-  if (a.type === "number") return a.value === b.value;
-  return a.value === b.value;
-}
-
-function parseComparison(state: ParserState): Result<Value, EvalError> {
+function parseComparison(state: ParserState): Result<Node, EvalError> {
   const lhs = parseExpr(state);
   if (!lhs.ok) return lhs;
-  let value: Value = lhs.value;
+  let node: Node = lhs.value;
   while (state.tokens[state.pos] === "==") {
     state.pos++;
     const rhs = parseExpr(state);
     if (!rhs.ok) return rhs;
-    value = { type: "bool", value: valuesEqual(value, rhs.value) };
+    node = { type: "compare", lhs: node, rhs: rhs.value };
   }
-  return { ok: true, value };
+  return { ok: true, value: node };
 }
 
-function parseExpr(state: ParserState): Result<Value, EvalError> {
+function parseExpr(state: ParserState): Result<Node, EvalError> {
   const lhs = parseTerm(state);
   if (!lhs.ok) return lhs;
   if (state.tokens[state.pos] !== "+" && state.tokens[state.pos] !== "-")
-    return { ok: true, value: lhs.value };
-  let value = toNumber(lhs.value);
-  while (state.tokens[state.pos] === "+" || state.tokens[state.pos] === "-") {
-    const op = state.tokens[state.pos++];
+    return lhs;
+  let node: Node = lhs.value;
+  while (true) {
+    const op = state.tokens[state.pos];
+    if (op !== "+" && op !== "-") break;
+    state.pos++;
     const rhs = parseTerm(state);
     if (!rhs.ok) return rhs;
-    value =
-      op === "-" ? value - toNumber(rhs.value) : value + toNumber(rhs.value);
+    node = { type: "binary", op, lhs: node, rhs: rhs.value };
   }
-  return { ok: true, value: { type: "number", value } };
+  return { ok: true, value: node };
 }
 
-function parseLetBinding(state: ParserState): Result<Value, EvalError> {
+function parseLetBinding(state: ParserState): Result<Node, EvalError> {
   state.pos++;
+  let mutable = false;
   if (state.tokens[state.pos] === "mut") {
+    mutable = true;
     state.pos++;
-    const name = state.tokens[state.pos];
-    if (name === undefined || name === ";")
-      return state.fail("expected identifier");
-    state.pos++;
-    if (state.tokens[state.pos] !== "=") return state.fail("expected =");
-    state.pos++;
-    const value = parseExpr(state);
-    if (!value.ok) return value;
-    state.env[name] = value.value;
-    state.mutable.add(name);
-    if (state.tokens[state.pos] !== ";") return state.fail("expected ;");
-    state.pos++;
-    return { ok: true, value: { type: "number", value: 0 } };
   }
   const name = state.tokens[state.pos];
   if (name === undefined || name === ";")
@@ -128,88 +66,78 @@ function parseLetBinding(state: ParserState): Result<Value, EvalError> {
   state.pos++;
   const value = parseExpr(state);
   if (!value.ok) return value;
-  state.env[name] = value.value;
   if (state.tokens[state.pos] !== ";") return state.fail("expected ;");
   state.pos++;
-  return { ok: true, value: { type: "number", value: 0 } };
+  return {
+    ok: true,
+    value: { type: "let", mutable, name, value: value.value },
+  };
 }
 
-function parseStatement(state: ParserState): Result<Value, EvalError> {
+function parseStatement(state: ParserState): Result<Node, EvalError> {
   if (state.tokens[state.pos] === "let") return parseLetBinding(state);
   const name = state.tokens[state.pos];
   if (name !== undefined && state.tokens[state.pos + 1] === "=") {
-    if (!state.mutable.has(name))
-      return state.fail(`cannot reassign immutable: ${name}`);
     state.pos += 2;
     const value = parseExpr(state);
     if (!value.ok) return value;
-    state.env[name] = value.value;
     if (state.tokens[state.pos] !== ";") return state.fail("expected ;");
     state.pos++;
-    return { ok: true, value: { type: "number", value: 0 } };
+    return { ok: true, value: { type: "assign", name, value: value.value } };
   }
   return parseComparison(state);
 }
 
-function parseStatements(state: ParserState): Result<Value, EvalError> {
-  let value: Value = { type: "number", value: 0 };
+function parseStatements(state: ParserState): Result<Node[], EvalError> {
+  const statements: Node[] = [];
   while (
     state.tokens[state.pos] !== undefined &&
     state.tokens[state.pos] !== "}"
   ) {
     const s = parseStatement(state);
     if (!s.ok) return s;
-    value = s.value;
+    statements.push(s.value);
   }
-  return { ok: true, value };
+  return { ok: true, value: statements };
 }
 
-function parseTerm(state: ParserState): Result<Value, EvalError> {
+function parseTerm(state: ParserState): Result<Node, EvalError> {
   const lhs = parseFactor(state);
   if (!lhs.ok) return lhs;
   if (state.tokens[state.pos] !== "*" && state.tokens[state.pos] !== "/")
-    return { ok: true, value: lhs.value };
-  let value = toNumber(lhs.value);
-  while (state.tokens[state.pos] === "*" || state.tokens[state.pos] === "/") {
-    const op = state.tokens[state.pos++];
+    return lhs;
+  let node: Node = lhs.value;
+  while (true) {
+    const op = state.tokens[state.pos];
+    if (op !== "*" && op !== "/") break;
+    state.pos++;
     const rhs = parseFactor(state);
     if (!rhs.ok) return rhs;
-    if (op === "/") {
-      if (toNumber(rhs.value) === 0)
-        return state.failDivisionByZero("division by zero");
-      value = Math.trunc(value / toNumber(rhs.value));
-    } else {
-      value = value * toNumber(rhs.value);
-    }
+    node = { type: "binary", op, lhs: node, rhs: rhs.value };
   }
-  return { ok: true, value: { type: "number", value } };
+  return { ok: true, value: node };
 }
 
-function parseFactor(state: ParserState): Result<Value, EvalError> {
+function parseFactor(state: ParserState): Result<Node, EvalError> {
   const t = state.tokens[state.pos];
   if (t === "(") {
     state.pos++;
-    const value = parseExpr(state);
-    if (!value.ok) return value;
+    const node = parseExpr(state);
+    if (!node.ok) return node;
     if (state.tokens[state.pos] !== ")") return state.fail("expected )");
     state.pos++;
-    return { ok: true, value: value.value };
+    return node;
   }
   if (t === "{") {
     state.pos++;
-    const block: ParserState = {
-      tokens: state.tokens,
-      pos: state.pos,
-      env: { ...state.env },
-      mutable: new Set(state.mutable),
-      fail: state.fail,
-      failDivisionByZero: state.failDivisionByZero,
-    };
-    const statements = parseStatements(block);
+    const statements = parseStatements(state);
     if (!statements.ok) return statements;
-    if (block.tokens[block.pos] !== "}") return block.fail("expected }");
-    state.pos = block.pos + 1;
-    return { ok: true, value: statements.value };
+    if (state.tokens[state.pos] !== "}") return state.fail("expected }");
+    state.pos++;
+    return {
+      ok: true,
+      value: { type: "block", statements: statements.value },
+    };
   }
   if (t === undefined) return state.fail("unexpected end of input");
   if (t === "true") {
@@ -220,11 +148,9 @@ function parseFactor(state: ParserState): Result<Value, EvalError> {
     state.pos++;
     return { ok: true, value: { type: "bool", value: false } };
   }
-  if (t in state.env) {
+  if (/^[A-Za-z_]/.test(t)) {
     state.pos++;
-    const bound = state.env[t];
-    if (bound === undefined) return state.fail(`unbound variable: ${t}`);
-    return { ok: true, value: bound };
+    return { ok: true, value: { type: "var", name: t } };
   }
   const n = Number(t);
   if (!Number.isFinite(n)) return state.fail(`not a number: ${t}`);
@@ -233,22 +159,14 @@ function parseFactor(state: ParserState): Result<Value, EvalError> {
 }
 
 export function evaluate(input: string): Result<number, EvalError> {
-  const fail = (reason: string): Result<number, EvalError> => ({
-    ok: false,
-    error: {
-      kind: "invalid_input",
-      input,
-      reason,
-      hint: 'pass a valid arithmetic expression, e.g. "1 + 2 * 3"',
-    },
-  });
+  const fail = makeFail(input);
   if (input.trim() === "") return { ok: true, value: 0 };
   const tokenized = tokenize(input);
   if (!tokenized.ok) return fail(tokenized.error.reason);
-  const state = makeState(input, tokenized.value);
+  const state: ParserState = { tokens: tokenized.value, pos: 0, fail };
   const statements = parseStatements(state);
   if (!statements.ok) return statements;
   if (state.pos < state.tokens.length)
     return fail(`unexpected token: ${state.tokens[state.pos] ?? ""}`);
-  return { ok: true, value: toNumber(statements.value) };
+  return evaluateAst(statements.value, input);
 }
