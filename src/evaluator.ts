@@ -164,6 +164,16 @@ function evalNode(
         },
       };
     }
+    case "notEqual": {
+      const lhs = evalNode(node.lhs, env, input);
+      if (!lhs.ok) return lhs;
+      const rhs = evalNode(node.rhs, env, input);
+      if (!rhs.ok) return rhs;
+      return {
+        ok: true,
+        value: { type: "bool", value: !valuesEqual(lhs.value, rhs.value) },
+      };
+    }
     case "or": {
       const lhs = evalNode(node.lhs, env, input);
       if (!lhs.ok) return lhs;

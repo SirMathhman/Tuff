@@ -9,6 +9,7 @@ export type Node =
   | { type: "greaterEq"; lhs: Node; rhs: Node }
   | { type: "less"; lhs: Node; rhs: Node }
   | { type: "lessEq"; lhs: Node; rhs: Node }
+  | { type: "notEqual"; lhs: Node; rhs: Node }
   | { type: "or"; lhs: Node; rhs: Node }
   | { type: "and"; lhs: Node; rhs: Node }
   | { type: "let"; mutable: boolean; name: string; value: Node }
