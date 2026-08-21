@@ -144,13 +144,14 @@ function parseTerm(state: ParserState): Result<Node, EvalError> {
 }
 
 function parseUnary(state: ParserState): Result<Node, EvalError> {
-  if (state.tokens[state.pos] === "-") {
+  const t = state.tokens[state.pos];
+  if (t === "-" || t === "!") {
     state.pos++;
     const operand = parseUnary(state);
     if (!operand.ok) return operand;
     return {
       ok: true,
-      value: { type: "unary", op: "-", operand: operand.value },
+      value: { type: "unary", op: t, operand: operand.value },
     };
   }
   return parseFactor(state);

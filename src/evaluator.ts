@@ -91,6 +91,11 @@ function evalNode(
     case "unary": {
       const operand = evalNode(node.operand, env, input);
       if (!operand.ok) return operand;
+      if (node.op === "!")
+        return {
+          ok: true,
+          value: { type: "bool", value: toNumber(operand.value) === 0 },
+        };
       return {
         ok: true,
         value: { type: "number", value: -toNumber(operand.value) },

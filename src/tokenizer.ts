@@ -38,7 +38,7 @@ export function tokenize(input: string): Result<string[], { reason: string }> {
       i += 2;
       continue;
     }
-    if ("+-*/(){};=".includes(c)) {
+    if ("+-*/(){};!=".includes(c)) {
       tokens.push(c);
       i++;
       continue;

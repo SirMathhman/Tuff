@@ -202,6 +202,13 @@ test('evaluate("let x = 100; -x") => -100', () => {
   expect(r.value).toBe(-100);
 });
 
+test('evaluate("let x = false; !x") => 1', () => {
+  const r = evaluate("let x = false; !x");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(1);
+});
+
 function expectDivisionByZero(input: string) {
   const r = evaluate(input);
   if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
