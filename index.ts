@@ -72,6 +72,7 @@ export function evaluate(input: string): Result<number, EvalError> {
   const parseLetBindings = (): Result<number, EvalError> => {
     while (peek() === "let") {
       pos++;
+      if (peek() === "mut") pos++;
       const name = peek();
       if (name === undefined || name === ";")
         return fail("expected identifier");

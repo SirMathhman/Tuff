@@ -97,6 +97,13 @@ test('evaluate("let x = 100;") => 0', () => {
   expect(r.value).toBe(0);
 });
 
+test('evaluate("let mut x = 1; x") => 1', () => {
+  const r = evaluate("let mut x = 1; x");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(1);
+});
+
 test('evaluate("10 / 3") => 3', () => {
   const r = evaluate("10 / 3");
   if (!r.ok)
