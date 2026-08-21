@@ -180,7 +180,10 @@ function parseStatement(state: ParserState): Result<Node, EvalError> {
       },
     };
   }
-  return parseOr(state);
+  const expr = parseOr(state);
+  if (!expr.ok) return expr;
+  if (expr.value.type === "block") expr.value.inExpression = false;
+  return expr;
 }
 
 function parseStatements(state: ParserState): Result<Node[], EvalError> {
@@ -194,6 +197,27 @@ function parseStatements(state: ParserState): Result<Node[], EvalError> {
     statements.push(s.value);
   }
   return { ok: true, value: statements };
+}
+
+function parseBlock(
+  state: ParserState,
+  inExpression: boolean,
+): Result<Node, EvalError> {
+  const start = state.pos;
+  state.pos++;
+  const statements = parseStatements(state);
+  if (!statements.ok) return statements;
+  if (state.tokens[state.pos]?.text !== "}") return state.fail("expected }");
+  state.pos++;
+  return {
+    ok: true,
+    value: {
+      type: "block",
+      inExpression,
+      statements: statements.value,
+      span: spanOf(state, start),
+    },
+  };
 }
 
 function parseTerm(state: ParserState): Result<Node, EvalError> {
@@ -254,6 +278,7 @@ function parseLoop(state: ParserState): Result<Node, EvalError> {
   state.pos++;
   const body: Node = {
     type: "block",
+    inExpression: false,
     statements: statements.value,
     span: spanOf(state, bodyStart),
   };
@@ -277,25 +302,7 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
     state.pos++;
     return node;
   }
-  if (t === "{") {
-    const start = state.pos;
-    state.pos++;
-    const statements = parseStatements(state);
-    if (!statements.ok) return statements;
-    if (state.tokens[state.pos]?.text !== "}") return state.fail("expected }");
-    state.pos++;
-    const last = statements.value[statements.value.length - 1];
-    if (last && (last.type === "let" || last.type === "assign"))
-      return state.fail("block must end with an expression");
-    return {
-      ok: true,
-      value: {
-        type: "block",
-        statements: statements.value,
-        span: spanOf(state, start),
-      },
-    };
-  }
+  if (t === "{") return parseBlock(state, true);
   if (t === undefined) return state.fail("unexpected end of input");
   if (t === "loop") return parseLoop(state);
   if (t === "if") {

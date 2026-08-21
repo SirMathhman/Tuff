@@ -85,11 +85,18 @@ function checkNode(
     case "if":
       return checkIf(node, scope, input);
     case "block": {
-      const child: Scope = {
-        types: { ...scope.types },
-        mutable: new Set(scope.mutable),    
-        loopDepth: scope.loopDepth,
-      };
+      if (node.inExpression) {
+        const last = node.statements[node.statements.length - 1];
+        if (last && (last.type === "let" || last.type === "assign"))
+          return fail("block must end with an expression");
+      }
+      const child: Scope = node.inExpression
+        ? {
+            types: { ...scope.types },
+            mutable: new Set(scope.mutable),
+            loopDepth: scope.loopDepth,
+          }
+        : scope;
       let value: Type = "float";
       for (const statement of node.statements) {
         const s = checkNode(statement, child, input);

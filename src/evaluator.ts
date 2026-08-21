@@ -193,13 +193,12 @@ function evalNode(node: Node, env: Env, input: string): EvalOutcome {
       return evalNode(branch, env, input);
     }
     case "block": {
-      const child: Env = {
-        values: { ...env.values },
-        mutable: new Set(env.mutable),
-      };
+      const scope: Env = node.inExpression
+        ? { values: { ...env.values }, mutable: new Set(env.mutable) }
+        : env;
       let value: Value = { type: "number", value: 0 };
       for (const statement of node.statements) {
-        const s = evalNode(statement, child, input);
+        const s = evalNode(statement, scope, input);
         if (isBreak(s)) return s;
         if (!s.ok) return s;
         value = s.value;
