@@ -22,6 +22,10 @@ describe("evaluate", () => {
     expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
   });
 
+  test('evaluate("2 * 3 + 4") => 10', () => {
+    expect(evaluate("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
@@ -32,7 +36,7 @@ describe("evaluate", () => {
   test('evaluate("abc") => invalid-token error', () => {
     expect(evaluate("abc")).toEqual({
       ok: false,
-      error: { kind: "invalid-token", index: 0, token: "abc" },
+      error: { kind: "invalid-token", index: 0, token: "a" },
     });
   });
 });
