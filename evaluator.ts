@@ -51,7 +51,7 @@ export function evaluate(input: string): Result<number, EvalError> {
     return left;
   }
 
-  // factor := ("-" | "+")? (number | "(" expr ")")
+  // factor := ("-" | "+")? (number | "(" expr ")" | "{" expr "}")
   function parseFactor(): Result<number, EvalError> {
     let sign = 1;
     const signToken = tokens[pos];
@@ -69,12 +69,12 @@ export function evaluate(input: string): Result<number, EvalError> {
         error: { kind: "unexpected-end", index: input.trimEnd().length },
       };
     }
-    if (token.value === "(") {
+    if (token.value === "(" || token.value === "{") {
       pos++;
       const inner = parseExpr();
       if (!inner.ok) return inner;
       const close = tokens[pos];
-      if (close === undefined || close.value !== ")") {
+      if (close === undefined || (close.value !== ")" && close.value !== "}")) {
         return {
           ok: false,
           error: { kind: "unbalanced-paren", index: token.index },
