@@ -123,6 +123,7 @@ export function evaluate(input: string): Result<number, EvalError> {
   };
   try {
     parseLetBindings();
+    if (peek() === undefined) return { ok: true, value: 0 };
     const value = parseExpr();
     if (pos < tokens.length) return fail(`unexpected token: ${tokens[pos]}`);
     return { ok: true, value };
