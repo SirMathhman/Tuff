@@ -813,6 +813,16 @@ mod tests {
     }
 
     #[test]
+    fn field_access_on_non_tuple_is_reported() {
+        // `(0)` has no comma, so it is a grouped expression: `tuple`
+        // is the integer 0, and `tuple.1` is not a tuple field.
+        assert_eq!(
+            interpret("let tuple = (0); if (false) let x = tuple.1;"),
+            Err(Error::NotATuple { offset: 41 })
+        );
+    }
+
+    #[test]
     fn if_statement_branches_may_be_blocks_ending_in_assignments() {
         // As a statement, the branches are statements, so the blocks
         // may end in assignments; the chosen (else) branch assigns 2.
