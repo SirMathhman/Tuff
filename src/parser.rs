@@ -1,39 +1,57 @@
 use crate::Error;
 
-/// A value produced by an expression: an integer or a boolean.
-/// Booleans are distinct from integers — `==` only yields `true`
-/// for two values of the same kind — but arithmetic treats a
+/// A value produced by an expression: an integer, a boolean, or an
+/// array. Booleans are distinct from integers — `==` only yields
+/// `true` for two values of the same kind — but arithmetic treats a
 /// boolean as its numeric value (`true` is `1`, `false` is `0`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value {
     Int(i64),
     Bool(bool),
+    Array(Vec<Value>),
 }
 
 impl Value {
     /// Whether the value is truthy: non-zero for integers, the
-    /// stored value for booleans.
-    pub(crate) fn is_truthy(self) -> bool {
+    /// stored value for booleans, and `true` for arrays.
+    pub(crate) fn is_truthy(&self) -> bool {
         match self {
-            Value::Int(n) => n != 0,
-            Value::Bool(b) => b,
+            Value::Int(n) => *n != 0,
+            Value::Bool(b) => *b,
+            Value::Array(_) => true,
         }
     }
 
     /// The numeric value of the value (`true` is `1`, `false` is
     /// `0`).
-    pub(crate) fn as_i64(self) -> i64 {
+    pub(crate) fn as_i64(&self) -> i64 {
         match self {
-            Value::Int(n) => n,
-            Value::Bool(b) => i64::from(b),
+            Value::Int(n) => *n,
+            Value::Bool(b) => i64::from(*b),
+            Value::Array(_) => 0,
         }
     }
 
     /// The kind of the value, for error messages.
-    pub(crate) fn kind(self) -> &'static str {
+    pub(crate) fn kind(&self) -> &'static str {
         match self {
             Value::Int(_) => "integer",
             Value::Bool(_) => "boolean",
+            Value::Array(_) => "array",
+        }
+    }
+
+    /// The element at `index`, if the value is an array and the index
+    /// is in range.
+    pub(crate) fn index(&self, index: i64, offset: usize) -> Result<Value, Error> {
+        match self {
+            Value::Array(items) => {
+                if index < 0 || (index as usize) >= items.len() {
+                    return Err(Error::IndexOutOfBounds { offset });
+                }
+                Ok(items[index as usize].clone())
+            }
+            _ => Err(Error::NotAnArray { offset }),
         }
     }
 }
@@ -91,6 +109,7 @@ impl<'a> Parser<'a> {
                 self.pos += 2;
                 let rhs = self.parse_eq(as_expression)?;
                 value = Value::Bool(value.is_truthy() || rhs.is_truthy());
+
             } else {
                 return Ok(value);
             }
@@ -130,6 +149,7 @@ impl<'a> Parser<'a> {
                             .checked_add(rhs)
                             .ok_or(Error::Overflow { offset })?,
                     );
+
                 }
                 Some(b'-') => {
                     let offset = self.pos;
@@ -141,21 +161,22 @@ impl<'a> Parser<'a> {
                             .checked_sub(rhs)
                             .ok_or(Error::Overflow { offset })?,
                     );
+
                 }
                 _ => return Ok(total),
             }
         }
     }
 
-    /// Parses `term = factor ('*' factor)*`.
+    /// Parses `term = postfix ('*' postfix)*`.
     fn parse_term(&mut self, as_expression: bool) -> Result<Value, Error> {
-        let mut term = self.parse_factor(as_expression)?;
+        let mut term = self.parse_postfix(as_expression)?;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
                 let offset = self.pos;
                 self.pos += 1;
-                let rhs = self.parse_factor(as_expression)?.as_i64();
+                let rhs = self.parse_postfix(as_expression)?.as_i64();
                 term = Value::Int(
                     term.as_i64()
                         .checked_mul(rhs)
@@ -163,6 +184,31 @@ impl<'a> Parser<'a> {
                 );
             } else {
                 return Ok(term);
+            }
+        }
+    }
+
+    /// Parses `postfix = factor ('[' expr ']')*`: an array index
+    /// applied to a factor, binding tighter than `*`, `+`, and `-`.
+    fn parse_postfix(&mut self, as_expression: bool) -> Result<Value, Error> {
+        let mut value = self.parse_factor(as_expression)?;
+        loop {
+            self.skip_spaces();
+            if self.peek() == Some(b'[') {
+                let offset = self.pos;
+                self.pos += 1;
+                let index = self.parse_or(true)?.as_i64();
+                self.skip_spaces();
+                if self.peek() != Some(b']') {
+                    return Err(Error::ExpectedClosingDelimiter {
+                        offset: self.pos,
+                        expected: b']',
+                    });
+                }
+                self.pos += 1;
+                value = value.index(index, offset)?;
+            } else {
+                return Ok(value);
             }
         }
     }
@@ -181,6 +227,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 self.parse_block(b'}', as_expression)
             }
+            Some(b'[') => self.parse_array(),
             Some(b'0'..=b'9') => self.parse_number(),
             Some(b'a'..=b'z') => {
                 if self.input[self.pos..].starts_with("if ") {
@@ -255,6 +302,37 @@ impl<'a> Parser<'a> {
             self.env = env;
         }
         Ok(if chosen { then } else { alt })
+    }
+
+    /// Parses an array literal `[expr, expr, ...]` after the opening
+    /// `[` was consumed; the value is an array of the element values.
+    fn parse_array(&mut self) -> Result<Value, Error> {
+        self.pos += 1; // skip `[`
+        let mut items = Vec::new();
+        loop {
+            self.skip_spaces();
+            if self.peek() == Some(b']') {
+                self.pos += 1;
+                return Ok(Value::Array(items));
+            }
+            items.push(self.parse_or(true)?);
+            self.skip_spaces();
+            match self.peek() {
+                Some(b',') => {
+                    self.pos += 1;
+                }
+                Some(b']') => {
+                    self.pos += 1;
+                    return Ok(Value::Array(items));
+                }
+                _ => {
+                    return Err(Error::ExpectedClosingDelimiter {
+                        offset: self.pos,
+                        expected: b']',
+                    });
+                }
+            }
+        }
     }
 
     /// Parses a boolean literal if the current position starts one;
@@ -439,7 +517,7 @@ impl<'a> Parser<'a> {
                         found: value.kind().to_string(),
                     });
                 }
-                *stored = value;
+                *stored = value.clone();
                 return Ok(value);
             }
         }
@@ -452,7 +530,7 @@ impl<'a> Parser<'a> {
         let (name, offset) = self.parse_identifier_name()?;
         for scope in self.env.iter().rev() {
             if let Some((_, _, value)) = scope.iter().find(|(n, _, _)| *n == name) {
-                return Ok(*value);
+                return Ok(value.clone());
             }
         }
         Err(Error::UndefinedVariable { offset, name })
@@ -630,6 +708,14 @@ mod tests {
                 expected: "boolean".to_string(),
                 found: "integer".to_string(),
             })
+        );
+    }
+
+    #[test]
+    fn array_literal_and_index_access() {
+        assert_eq!(
+            interpret("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
+            Ok(6)
         );
     }
 

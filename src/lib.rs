@@ -29,7 +29,9 @@ use parser::Parser;
 /// `cond` is truthy and `b` otherwise; both branches are checked, but
 /// only the chosen branch's side effects persist; as a statement, an
 /// `if`'s branches may be statements (so a block branch may end in a
-/// statement); anything else is not yet supported.
+/// statement); `[expr, ...]` builds an array and `value[index]` reads
+/// an element (indexing binds tighter than `*`, `+`, and `-`);
+/// anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);

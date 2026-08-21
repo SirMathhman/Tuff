@@ -59,6 +59,16 @@ pub enum Error {
         /// Byte offset of the character where `else` was expected.
         offset: usize,
     },
+    /// An index was applied to a value that is not an array.
+    NotAnArray {
+        /// Byte offset of the `[` that opened the index.
+        offset: usize,
+    },
+    /// An array index was out of range.
+    IndexOutOfBounds {
+        /// Byte offset of the `[` that opened the index.
+        offset: usize,
+    },
     /// An assignment's value has a different kind than the binding.
     TypeMismatch {
         /// Byte offset of the assigned value.
@@ -133,6 +143,18 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "expected 'else' at offset {offset}: an `if` expression needs an `else` branch"
+                )
+            }
+            Error::NotAnArray { offset } => {
+                write!(
+                    f,
+                    "not an array at offset {offset}: only array values can be indexed with `[...]`; build an array with `[...]` first"
+                )
+            }
+            Error::IndexOutOfBounds { offset } => {
+                write!(
+                    f,
+                    "index out of bounds at offset {offset}: the index is negative or past the end of the array"
                 )
             }
             Error::TypeMismatch {
