@@ -1,5 +1,5 @@
-import type { Node, Span } from "./ast.ts";
-import type { EvalError } from "./errors.ts";
+import type { Node } from "./ast.ts";
+import { divisionByZero, invalidInput, type EvalError } from "./errors.ts";
 import type { Result } from "./result.ts";
 
 type Value =
@@ -19,32 +19,6 @@ type Env = {
   values: Record<string, Value>;
   mutable: Set<string>;
 };
-
-function makeFail(input: string, span: Span) {
-  return (reason: string): Result<Value, EvalError> => ({
-    ok: false,
-    error: {
-      kind: "invalid_input",
-      input,
-      reason,
-      hint: 'pass a valid arithmetic expression, e.g. "1 + 2 * 3"',
-      span,
-    },
-  });
-}
-
-function makeFailDivisionByZero(input: string, span: Span) {
-  return (reason: string): Result<Value, EvalError> => ({
-    ok: false,
-    error: {
-      kind: "division_by_zero",
-      input,
-      reason,
-      hint: "the divisor evaluates to 0; check the right-hand side of /",
-      span,
-    },
-  });
-}
 
 function evalBinaryBool(
   lhs: Node,
@@ -68,14 +42,16 @@ function evalArithmetic(
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
-  const failDivisionByZero = makeFailDivisionByZero(input, node.span);
   const lhs = evalNode(node.lhs, env, input);
   if (!lhs.ok) return lhs;
   const rhs = evalNode(node.rhs, env, input);
   if (!rhs.ok) return rhs;
   if (node.op === "/") {
     if (toNumber(rhs.value) === 0)
-      return failDivisionByZero("division by zero");
+      return {
+        ok: false,
+        error: divisionByZero(input, "division by zero", node.span),
+      };
     return {
       ok: true,
       value: {
@@ -87,13 +63,7 @@ function evalArithmetic(
   const a = toNumber(lhs.value);
   const b = toNumber(rhs.value);
   const value =
-    node.op === "+"
-      ? a + b
-      : node.op === "-"
-        ? a - b
-        : node.op === "*"
-          ? a * b
-          : a / b;
+    node.op === "+" ? a + b : node.op === "-" ? a - b : a * b;
   return { ok: true, value: { type: "number", value } };
 }
 
@@ -140,7 +110,10 @@ function evalBinding(
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
-  const fail = makeFail(input, node.span);
+  const fail = (reason: string): Result<Value, EvalError> => ({
+    ok: false,
+    error: invalidInput(input, reason, node.span),
+  });
   if (node.type === "assign" && !env.mutable.has(node.name))
     return fail(`cannot reassign immutable: ${node.name}`);
   const value = evalNode(node.value, env, input);
@@ -160,7 +133,10 @@ function evalNode(
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
-  const fail = makeFail(input, node.span);
+  const fail = (reason: string): Result<Value, EvalError> => ({
+    ok: false,
+    error: invalidInput(input, reason, node.span),
+  });
   switch (node.type) {
     case "number":
       return { ok: true, value: { type: "number", value: node.value } };

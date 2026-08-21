@@ -1,5 +1,5 @@
 import type { Node, Span } from "./ast.ts";
-import type { EvalError } from "./errors.ts";
+import { invalidInput, type EvalError } from "./errors.ts";
 import type { Result } from "./result.ts";
 import { tokenize, type Token } from "./tokenizer.ts";
 
@@ -8,19 +8,6 @@ type ParserState = {
   pos: number;
   fail: (reason: string) => Result<never, EvalError>;
 };
-
-function makeFail(input: string, span: Span) {
-  return (reason: string): Result<never, EvalError> => ({
-    ok: false,
-    error: {
-      kind: "invalid_input",
-      input,
-      reason,
-      hint: 'pass a valid arithmetic expression, e.g. "1 + 2 * 3"',
-      span,
-    },
-  });
-}
 
 function currentSpan(state: ParserState): Span {
   const t = state.tokens[state.pos];
@@ -324,14 +311,20 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
 export function parse(input: string): Result<Node[], EvalError> {
   const tokenized = tokenize(input);
   if (!tokenized.ok)
-    return makeFail(input, {
-      start: tokenized.error.offset,
-      end: tokenized.error.offset + 1,
-    })(tokenized.error.reason);
+    return {
+      ok: false,
+      error: invalidInput(input, tokenized.error.reason, {
+        start: tokenized.error.offset,
+        end: tokenized.error.offset + 1,
+      }),
+    };
   const state: ParserState = {
     tokens: tokenized.value,
     pos: 0,
-    fail: (reason) => makeFail(input, currentSpan(state))(reason),
+    fail: (reason) => ({
+      ok: false,
+      error: invalidInput(input, reason, currentSpan(state)),
+    }),
   };
   const statements = parseStatements(state);
   if (!statements.ok) return statements;
