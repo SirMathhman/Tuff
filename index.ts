@@ -7,7 +7,7 @@ export type EvalError = {
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
-function tokenize(input: string): string[] {
+function tokenize(input: string): Result<string[], { reason: string }> {
   const tokens: string[] = [];
   let i = 0;
   while (i < input.length) {
@@ -35,9 +35,9 @@ function tokenize(input: string): string[] {
       i++;
       continue;
     }
-    throw new Error(`unexpected character: ${c}`);
+    return { ok: false, error: { reason: `unexpected character: ${c}` } };
   }
-  return tokens;
+  return { ok: true, value: tokens };
 }
 
 export function evaluate(input: string): Result<number, EvalError> {
@@ -51,83 +51,91 @@ export function evaluate(input: string): Result<number, EvalError> {
     },
   });
   if (input.trim() === "") return { ok: true, value: 0 };
-  let tokens: string[];
-  try {
-    tokens = tokenize(input);
-  } catch (e) {
-    return fail((e as Error).message);
-  }
+  const tokenized = tokenize(input);
+  if (!tokenized.ok) return fail(tokenized.error.reason);
+  const tokens = tokenized.value;
   let pos = 0;
   const env: Record<string, number> = {};
   const peek = (): string | undefined => tokens[pos];
-  const parseExpr = (): number => {
-    let value = parseTerm();
+  const parseExpr = (): Result<number, EvalError> => {
+    const lhs = parseTerm();
+    if (!lhs.ok) return lhs;
+    let value = lhs.value;
     while (peek() === "+" || peek() === "-") {
       const op = tokens[pos++];
       const rhs = parseTerm();
-      value = op === "-" ? value - rhs : value + rhs;
+      if (!rhs.ok) return rhs;
+      value = op === "-" ? value - rhs.value : value + rhs.value;
     }
-    return value;
+    return { ok: true, value };
   };
-  const parseLetBindings = (): void => {
+  const parseLetBindings = (): Result<number, EvalError> => {
     while (peek() === "let") {
       pos++;
       const name = peek();
       if (name === undefined || name === ";")
-        throw new Error("expected identifier");
+        return fail("expected identifier");
       pos++;
-      if (peek() !== "=") throw new Error("expected =");
+      if (peek() !== "=") return fail("expected =");
       pos++;
-      env[name] = parseExpr();
-      if (peek() !== ";") throw new Error("expected ;");
+      const value = parseExpr();
+      if (!value.ok) return value;
+      env[name] = value.value;
+      if (peek() !== ";") return fail("expected ;");
       pos++;
     }
+    return { ok: true, value: 0 };
   };
-  const parseTerm = (): number => {
-    let value = parseFactor();
+  const parseTerm = (): Result<number, EvalError> => {
+    const lhs = parseFactor();
+    if (!lhs.ok) return lhs;
+    let value = lhs.value;
     while (peek() === "*" || peek() === "/") {
       const op = tokens[pos++];
       const rhs = parseFactor();
-      value = op === "/" ? Math.trunc(value / rhs) : value * rhs;
+      if (!rhs.ok) return rhs;
+      value = op === "/" ? Math.trunc(value / rhs.value) : value * rhs.value;
     }
-    return value;
+    return { ok: true, value };
   };
-  const parseFactor = (): number => {
+  const parseFactor = (): Result<number, EvalError> => {
     const t = peek();
     if (t === "(") {
       pos++;
       const value = parseExpr();
-      if (peek() !== ")") throw new Error("expected )");
+      if (!value.ok) return value;
+      if (peek() !== ")") return fail("expected )");
       pos++;
-      return value;
+      return { ok: true, value: value.value };
     }
     if (t === "{") {
       pos++;
-      parseLetBindings();
+      const bindings = parseLetBindings();
+      if (!bindings.ok) return bindings;
       const value = parseExpr();
-      if (peek() !== "}") throw new Error("expected }");
+      if (!value.ok) return value;
+      if (peek() !== "}") return fail("expected }");
       pos++;
-      return value;
+      return { ok: true, value: value.value };
     }
-    if (t === undefined) throw new Error("unexpected end of input");
+    if (t === undefined) return fail("unexpected end of input");
     if (t in env) {
       pos++;
       const bound = env[t];
-      if (bound === undefined) throw new Error(`unbound variable: ${t}`);
-      return bound;
+      if (bound === undefined) return fail(`unbound variable: ${t}`);
+      return { ok: true, value: bound };
     }
     const n = Number(t);
-    if (!Number.isFinite(n)) throw new Error(`not a number: ${t}`);
+    if (!Number.isFinite(n)) return fail(`not a number: ${t}`);
     pos++;
-    return n;
+    return { ok: true, value: n };
   };
-  try {
-    parseLetBindings();
-    if (peek() === undefined) return { ok: true, value: 0 };
-    const value = parseExpr();
-    if (pos < tokens.length) return fail(`unexpected token: ${tokens[pos]}`);
-    return { ok: true, value };
-  } catch (e) {
-    return fail((e as Error).message);
-  }
+  const bindings = parseLetBindings();
+  if (!bindings.ok) return bindings;
+  if (peek() === undefined) return { ok: true, value: 0 };
+  const value = parseExpr();
+  if (!value.ok) return value;
+  if (pos < tokens.length)
+    return fail(`unexpected token: ${tokens[pos] ?? ""}`);
+  return { ok: true, value: value.value };
 }
