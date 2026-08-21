@@ -4,10 +4,14 @@
   "type": "module",
   "private": true,
   "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
     "@types/bun": "latest",
     "prettier": "^3.9.6"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "scripts": {
+    "lint": "biome check ."
   }
 }
