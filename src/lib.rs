@@ -32,8 +32,10 @@ use parser::Parser;
 /// statement); `[expr, ...]` builds an array and `value[index]` reads
 /// an element (indexing binds tighter than `*`, `+`, and `-`);
 /// `(expr, ...)` builds a tuple and `value.N` reads its `N`th field;
-/// `&name` is a reference to the binding `name` and `*value`
-/// dereferences a reference; anything else is not yet supported.
+/// `&name` is a reference to the binding `name`, `&mut name` is a
+/// mutable reference, `*value` dereferences a reference, and
+/// `*ref = expr` assigns through a mutable reference; anything else
+/// is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);

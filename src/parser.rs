@@ -11,7 +11,7 @@ pub(crate) enum Value {
     Bool(bool),
     Array(Vec<Value>),
     Tuple(Vec<Value>),
-    Ref(String),
+    Ref { name: String, mutable: bool },
 }
 
 impl Value {
@@ -23,7 +23,7 @@ impl Value {
             Value::Bool(b) => *b,
             Value::Array(_) => true,
             Value::Tuple(_) => true,
-            Value::Ref(_) => true,
+            Value::Ref { .. } => true,
         }
     }
 
@@ -35,7 +35,7 @@ impl Value {
             Value::Bool(b) => i64::from(*b),
             Value::Array(_) => 0,
             Value::Tuple(_) => 0,
-            Value::Ref(_) => 0,
+            Value::Ref { .. } => 0,
         }
     }
 
@@ -46,7 +46,7 @@ impl Value {
             Value::Bool(_) => "boolean",
             Value::Array(_) => "array",
             Value::Tuple(_) => "tuple",
-            Value::Ref(_) => "reference",
+            Value::Ref { .. } => "reference",
         }
     }
 
@@ -86,7 +86,7 @@ impl Value {
         offset: usize,
     ) -> Result<Value, Error> {
         match self {
-            Value::Ref(name) => {
+            Value::Ref { name, .. } => {
                 for scope in env.iter().rev() {
                     if let Some((_, _, value)) = scope.iter().find(|(n, _, _)| *n == *name) {
                         return Ok(value.clone());
@@ -271,19 +271,26 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses `factor = '&' identifier | '*' factor | number |
-    /// boolean | identifier | '(' expr ')' | block | if`: `&name` is
-    /// a reference to the binding `name`, and `*value` dereferences a
-    /// reference. The prefix operators bind tighter than `*`, `+`,
-    /// and `-`. When `as_expression` is false, a block may end in a
-    /// statement and an `if` takes statement branches.
+    /// Parses `factor = '&' ['mut'] identifier | '*' factor | number
+    /// | boolean | identifier | '(' expr ')' | block | if`: `&name`
+    /// is a reference to the binding `name`, `&mut name` is a mutable
+    /// reference, and `*value` dereferences a reference. The prefix
+    /// operators bind tighter than `*`, `+`, and `-`. When
+    /// `as_expression` is false, a block may end in a statement and
+    /// an `if` takes statement branches.
     fn parse_factor(&mut self, as_expression: bool) -> Result<Value, Error> {
         self.skip_spaces();
         if self.peek() == Some(b'&') {
             self.pos += 1;
             self.skip_spaces();
+            let mut mutable = false;
+            if self.input[self.pos..].starts_with("mut ") {
+                mutable = true;
+                self.pos += 4; // skip `mut `
+                self.skip_spaces();
+            }
             let (name, _) = self.parse_identifier_name()?;
-            return Ok(Value::Ref(name));
+            return Ok(Value::Ref { name, mutable });
         }
         if self.peek() == Some(b'*') {
             let offset = self.pos;
@@ -576,8 +583,27 @@ impl<'a> Parser<'a> {
         is_assignment
     }
 
-    /// Parses a statement: `let [mut] name = expr`, `name = expr`, or
-    /// an expression.
+    /// Whether the next statement is a dereference assignment: a
+    /// `*` reference expression followed by `=`.
+    fn is_deref_assignment(&mut self) -> bool {
+        if self.peek() != Some(b'*') {
+            return false;
+        }
+        let start = self.pos;
+        self.pos += 1; // skip `*`
+        let is_deref_assignment = match self.parse_factor(false) {
+            Ok(Value::Ref { .. }) => {
+                self.skip_spaces();
+                self.peek() == Some(b'=') && self.input.as_bytes().get(self.pos + 1) != Some(&b'=')
+            }
+            _ => false,
+        };
+        self.pos = start;
+        is_deref_assignment
+    }
+
+    /// Parses a statement: `let [mut] name = expr`, `name = expr`,
+    /// `*ref = expr`, or an expression.
     fn parse_statement(&mut self) -> Result<Value, Error> {
         self.skip_spaces();
         if self.is_let() {
@@ -586,7 +612,31 @@ impl<'a> Parser<'a> {
         if self.is_assignment() {
             return self.parse_assignment();
         }
+        if self.is_deref_assignment() {
+            return self.parse_deref_assignment();
+        }
         self.parse_or(false)
+    }
+
+    /// Parses `*ref = expr`: the reference is dereferenced to the
+    /// binding it points to, which is updated with the right-hand
+    /// side's value; the statement evaluates to the assigned value.
+    /// Only mutable references may be assigned through.
+    fn parse_deref_assignment(&mut self) -> Result<Value, Error> {
+        let offset = self.pos; // offset of `*`
+        self.pos += 1; // skip `*`
+        let (name, ref_mutable) = match self.parse_factor(false)? {
+            Value::Ref { name, mutable } => (name, mutable),
+            _ => return Err(Error::NotAReference { offset }),
+        };
+        if !ref_mutable {
+            return Err(Error::AssignmentToImmutable {
+                offset,
+                name: name.clone(),
+            });
+        }
+        let (value_offset, value) = self.parse_equals_expr()?;
+        self.assign_to_binding(name, offset, value_offset, value)
     }
 
     /// Parses `let [mut] name = expr`, consuming the `let` keyword.
@@ -610,6 +660,13 @@ impl<'a> Parser<'a> {
     /// side.
     fn parse_name_equals_expr(&mut self) -> Result<(String, usize, usize, Value), Error> {
         let (name, offset) = self.parse_identifier_name()?;
+        let (value_offset, value) = self.parse_equals_expr()?;
+        Ok((name, offset, value_offset, value))
+    }
+
+    /// Parses `= expr`, returning the offset of the right-hand side
+    /// and its value.
+    fn parse_equals_expr(&mut self) -> Result<(usize, Value), Error> {
         self.skip_spaces();
         if self.peek() != Some(b'=') {
             return Err(Error::ExpectedEquals { offset: self.pos });
@@ -618,14 +675,18 @@ impl<'a> Parser<'a> {
         self.skip_spaces();
         let value_offset = self.pos;
         let value = self.parse_or(true)?;
-        Ok((name, offset, value_offset, value))
+        Ok((value_offset, value))
     }
 
-    /// Parses `name = expr`: the right-hand side is evaluated and the
-    /// binding is updated; the statement evaluates to the assigned
-    /// value. Only bindings declared `mut` may be assigned.
-    fn parse_assignment(&mut self) -> Result<Value, Error> {
-        let (name, offset, value_offset, value) = self.parse_name_equals_expr()?;
+    /// Updates the binding `name` with `value`, enforcing mutability
+    /// and kind; returns the assigned value.
+    fn assign_to_binding(
+        &mut self,
+        name: String,
+        offset: usize,
+        value_offset: usize,
+        value: Value,
+    ) -> Result<Value, Error> {
         for scope in self.env.iter_mut().rev() {
             if let Some((_, mutable, stored)) = scope.iter_mut().find(|(n, _, _)| *n == name) {
                 if !*mutable {
@@ -644,6 +705,14 @@ impl<'a> Parser<'a> {
             }
         }
         Err(Error::UndefinedVariable { offset, name })
+    }
+
+    /// Parses `name = expr`: the right-hand side is evaluated and the
+    /// binding is updated; the statement evaluates to the assigned
+    /// value. Only bindings declared `mut` may be assigned.
+    fn parse_assignment(&mut self) -> Result<Value, Error> {
+        let (name, offset, value_offset, value) = self.parse_name_equals_expr()?;
+        self.assign_to_binding(name, offset, value_offset, value)
     }
 
     /// Parses an identifier and looks up its binding in the
@@ -862,6 +931,11 @@ mod tests {
     #[test]
     fn double_reference_double_dereference() {
         assert_eq!(interpret("let x = 1; let y = &x; let z = &y; **z"), Ok(1));
+    }
+
+    #[test]
+    fn assignment_through_mutable_reference() {
+        assert_eq!(interpret("let mut x = 0; let y = &mut x; *y = 1; x"), Ok(1));
     }
 
     #[test]
