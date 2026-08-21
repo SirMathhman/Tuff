@@ -34,7 +34,8 @@ function parseOr(state: ParserState): Result<Node, EvalError> {
     const rhs = parseAnd(state);
     if (!rhs.ok) return rhs;
     node = {
-      type: "or",
+      type: "logical",
+      op: "||",
       lhs: node,
       rhs: rhs.value,
       span: spanFrom(node.span.start, rhs.value.span.end),
@@ -52,7 +53,8 @@ function parseAnd(state: ParserState): Result<Node, EvalError> {
     const rhs = parseComparison(state);
     if (!rhs.ok) return rhs;
     node = {
-      type: "and",
+      type: "logical",
+      op: "&&",
       lhs: node,
       rhs: rhs.value,
       span: spanFrom(node.span.start, rhs.value.span.end),

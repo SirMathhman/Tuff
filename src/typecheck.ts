@@ -27,8 +27,7 @@ function checkNode(
     }
     case "binary":
     case "compare":
-    case "or":
-    case "and": {
+    case "logical": {
       const l = checkNode(node.lhs, scope, input);
       if (!l.ok) return l;
       const r = checkNode(node.rhs, scope, input);

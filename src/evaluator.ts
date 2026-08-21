@@ -97,16 +97,16 @@ const compareOps: Record<
 };
 
 function evalShortCircuit(
-  node: Extract<Node, { type: "or" | "and" }>,
+  node: Extract<Node, { type: "logical" }>,
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
   const lhs = evalNode(node.lhs, env, input);
   if (!lhs.ok) return lhs;
   const truthy = toNumber(lhs.value) !== 0;
-  if (node.type === "or" && truthy)
+  if (node.op === "||" && truthy)
     return { ok: true, value: { type: "bool", value: true } };
-  if (node.type === "and" && !truthy)
+  if (node.op === "&&" && !truthy)
     return { ok: true, value: { type: "bool", value: false } };
   const rhs = evalNode(node.rhs, env, input);
   if (!rhs.ok) return rhs;
@@ -170,8 +170,7 @@ function evalNode(
         input,
         compareOps[node.op],
       );
-    case "or":
-    case "and":
+    case "logical":
       return evalShortCircuit(node, env, input);
     case "let":
     case "assign":

@@ -19,8 +19,7 @@ export type Node =
       rhs: Node;
       span: Span;
     }
-  | { type: "or"; lhs: Node; rhs: Node; span: Span }
-  | { type: "and"; lhs: Node; rhs: Node; span: Span }
+  | { type: "logical"; op: "||" | "&&"; lhs: Node; rhs: Node; span: Span }
   | { type: "let"; mutable: boolean; name: string; value: Node; span: Span }
   | { type: "assign"; name: string; value: Node; span: Span }
   | { type: "block"; statements: Node[]; span: Span }
