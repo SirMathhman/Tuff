@@ -39,7 +39,10 @@ describe("evaluate", () => {
   });
 
   test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
-    expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+    expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({
+      ok: true,
+      value: 20,
+    });
   });
 
   test('evaluate("1 +") => unexpected-end error', () => {
