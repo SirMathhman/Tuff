@@ -38,6 +38,10 @@ describe("evaluate", () => {
     expect(evaluate("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
   });
 
+  test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
+    expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,
@@ -45,10 +49,10 @@ describe("evaluate", () => {
     });
   });
 
-  test('evaluate("abc") => invalid-token error', () => {
+  test('evaluate("abc") => unknown-variable error', () => {
     expect(evaluate("abc")).toEqual({
       ok: false,
-      error: { kind: "invalid-token", index: 0, token: "a" },
+      error: { kind: "unknown-variable", index: 0, name: "abc" },
     });
   });
 });
