@@ -1,6 +1,5 @@
 import type { EvalError, Node } from "./ast.ts";
 import type { Result } from "./result.ts";
-import { evaluateAst } from "./evaluator.ts";
 import { tokenize } from "./tokenizer.ts";
 
 type ParserState = {
@@ -158,9 +157,8 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
   return { ok: true, value: { type: "number", value: n } };
 }
 
-export function evaluate(input: string): Result<number, EvalError> {
+export function parse(input: string): Result<Node[], EvalError> {
   const fail = makeFail(input);
-  if (input.trim() === "") return { ok: true, value: 0 };
   const tokenized = tokenize(input);
   if (!tokenized.ok) return fail(tokenized.error.reason);
   const state: ParserState = { tokens: tokenized.value, pos: 0, fail };
@@ -168,5 +166,5 @@ export function evaluate(input: string): Result<number, EvalError> {
   if (!statements.ok) return statements;
   if (state.pos < state.tokens.length)
     return fail(`unexpected token: ${state.tokens[state.pos] ?? ""}`);
-  return evaluateAst(statements.value, input);
+  return statements;
 }
