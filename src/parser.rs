@@ -787,23 +787,45 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a non-negative integer literal starting at the current
-    /// position, reporting overflow if it does not fit in an `i64`.
+    /// position, reporting overflow if it does not fit in an `i64` or
+    /// in the type named by a trailing suffix (e.g. `256U8`).
     fn parse_number(&mut self) -> Result<Value, Error> {
         let start = self.pos;
         while matches!(self.peek(), Some(b'0'..=b'9')) {
             self.pos += 1;
         }
         let digits = self.input[start..self.pos].to_string();
-        // A trailing type suffix (e.g. `U8`) is ignored.
-        while matches!(
-            self.peek(),
-            Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')
-        ) {
+        // A trailing type suffix (e.g. `U8`) names the literal's type.
+        let suffix_start = self.pos;
+        while matches!(self.peek(), Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')) {
             self.pos += 1;
         }
-        digits.parse::<i64>()
-            .map(Value::Int)
-            .map_err(|_| Error::Overflow { offset: start })
+        let suffix = self.input[suffix_start..self.pos].to_string();
+        let value: i64 = digits
+            .parse::<i64>()
+            .map_err(|_| Error::Overflow { offset: start })?;
+        if let Some(max) = Self::type_max(&suffix) {
+            if value > max {
+                return Err(Error::Overflow { offset: start });
+            }
+        }
+        Ok(Value::Int(value))
+    }
+
+    /// The maximum value for an unsigned integer type suffix (e.g.
+    /// `U8` -> 255), or `None` if the suffix is not a recognized
+    /// integer type.
+    fn type_max(suffix: &str) -> Option<i64> {
+        let bits_str = suffix.strip_prefix('U')?;
+        let bits: u32 = bits_str.parse().ok()?;
+        if bits == 0 {
+            return None;
+        }
+        Some(if bits >= 64 {
+            i64::MAX
+        } else {
+            (1i64 << bits) - 1
+        })
     }
 
     /// Parses `expr close` after the opening delimiter was consumed;
@@ -858,6 +880,15 @@ mod tests {
     #[test]
     fn integer_literal_with_type_suffix() {
         assert_eq!(interpret("100U8"), Ok(100));
+    }
+
+    #[test]
+    fn integer_literal_exceeding_type_range_is_reported() {
+        // `256` does not fit in a `u8` (max 255).
+        assert_eq!(
+            interpret("256U8"),
+            Err(Error::Overflow { offset: 0 })
+        );
     }
 
     #[test]
