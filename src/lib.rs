@@ -14,8 +14,9 @@ use parser::Parser;
 /// binding tighter than `+`/`-`; parentheses group subexpressions;
 /// curly braces delimit blocks of `let` bindings ending in an
 /// expression, whose value is the block's value; the top level is a
-/// sequence of `;`-separated statements whose value is the value of
-/// the last statement; a `let` statement evaluates to `0`; booleans
+/// sequence of statements (optionally separated by `;`) whose value
+/// is the value of the last statement; a `let` statement evaluates to
+/// `0`; booleans
 /// are distinct from integers, so `==` yields `1` only for two
 /// values of the same kind (e.g. `true == 1` is `0`), while
 /// arithmetic treats `true` as `1` and `false` as `0`; `==` binds
@@ -26,8 +27,9 @@ use parser::Parser;
 /// binding or a value of a different kind is an error; `if (cond) a
 /// else b` evaluates to `a` when
 /// `cond` is truthy and `b` otherwise; both branches are checked, but
-/// only the chosen branch's side effects persist; anything else is
-/// not yet supported.
+/// only the chosen branch's side effects persist; as a statement, an
+/// `if`'s branches may be statements (so a block branch may end in a
+/// statement); anything else is not yet supported.
 pub fn interpret(input: &str) -> Result<i64, Error> {
     if input.is_empty() {
         return Ok(0);

@@ -9,11 +9,6 @@ pub enum Error {
         /// Byte offset of the end of the input.
         offset: usize,
     },
-    /// A statement was not followed by `;` or the end of the input.
-    ExpectedSemicolon {
-        /// Byte offset of the character where `;` was expected.
-        offset: usize,
-    },
     /// A block's last statement was a `let` binding instead of an
     /// expression.
     BlockMustEndWithExpression {
@@ -84,12 +79,6 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "empty program at offset {offset}: the input must contain at least one statement"
-                )
-            }
-            Error::ExpectedSemicolon { offset } => {
-                write!(
-                    f,
-                    "expected ';' at offset {offset}: separate top-level statements with ';', or remove the trailing expression"
                 )
             }
             Error::BlockMustEndWithExpression { offset } => {
