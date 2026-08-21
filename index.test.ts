@@ -7,9 +7,19 @@ test("index runs without throwing", async () => {
 });
 
 test('evaluate("") => 0', () => {
-  expect(evaluate("")).toBe(0);
+  const r = evaluate("");
+  expect(r.ok).toBe(true);
+  if (r.ok) expect(r.value).toBe(0);
 });
 
 test('evaluate("1") => 1', () => {
-  expect(evaluate("1")).toBe(1);
+  const r = evaluate("1");
+  expect(r.ok).toBe(true);
+  if (r.ok) expect(r.value).toBe(1);
+});
+
+test('evaluate("abc") => invalid_input error', () => {
+  const r = evaluate("abc");
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.kind).toBe("invalid_input");
 });
