@@ -1,0 +1,104 @@
+import type { Node } from "./ast.ts";
+import { invalidInput, type EvalError } from "./errors.ts";
+import type { Result } from "./result.ts";
+
+type Type = "number" | "bool" | "unknown";
+
+type Scope = Record<string, Type>;
+
+function checkNode(
+  node: Node,
+  scope: Scope,
+  input: string,
+): Result<Type, EvalError> {
+  const fail = (reason: string): Result<Type, EvalError> => ({
+    ok: false,
+    error: invalidInput(input, reason, node.span),
+  });
+  switch (node.type) {
+    case "number":
+      return { ok: true, value: "number" };
+    case "bool":
+      return { ok: true, value: "bool" };
+    case "var":
+      return { ok: true, value: scope[node.name] ?? "unknown" };
+    case "binary":
+    case "compare":
+    case "greater":
+    case "greaterEq":
+    case "less":
+    case "lessEq":
+    case "notEqual":
+    case "or":
+    case "and": {
+      const l = checkNode(node.lhs, scope, input);
+      if (!l.ok) return l;
+      const r = checkNode(node.rhs, scope, input);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        value: node.type === "binary" ? "number" : "bool",
+      };
+    }
+    case "unary": {
+      const operand = checkNode(node.operand, scope, input);
+      if (!operand.ok) return operand;
+      return { ok: true, value: node.op === "!" ? "bool" : "number" };
+    }
+    case "let": {
+      const value = checkNode(node.value, scope, input);
+      if (!value.ok) return value;
+      scope[node.name] = value.value;
+      return { ok: true, value: "number" };
+    }
+    case "assign": {
+      const value = checkNode(node.value, scope, input);
+      if (!value.ok) return value;
+      const existing = scope[node.name];
+      if (
+        existing !== undefined &&
+        existing !== "unknown" &&
+        value.value !== "unknown" &&
+        existing !== value.value
+      )
+        return fail(
+          `type mismatch: cannot assign ${value.value} to ${existing} variable: ${node.name}`,
+        );
+      return { ok: true, value: "number" };
+    }
+    case "if": {
+      const cond = checkNode(node.cond, scope, input);
+      if (!cond.ok) return cond;
+      const then = checkNode(node.then, scope, input);
+      if (!then.ok) return then;
+      const els = checkNode(node.else, scope, input);
+      if (!els.ok) return els;
+      return {
+        ok: true,
+        value: then.value === els.value ? then.value : "unknown",
+      };
+    }
+    case "block": {
+      const child: Scope = { ...scope };
+      let value: Type = "number";
+      for (const statement of node.statements) {
+        const s = checkNode(statement, child, input);
+        if (!s.ok) return s;
+        value = s.value;
+      }
+      return { ok: true, value };
+    }
+  }
+}
+
+export function typecheck(
+  statements: Node[],
+  input: string,
+): Result<true, EvalError> {
+  const scope: Scope = {};
+  for (const statement of statements) {
+    const s = checkNode(statement, scope, input);
+    if (!s.ok) return s;
+  }
+  return { ok: true, value: true };
+}

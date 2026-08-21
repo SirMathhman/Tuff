@@ -62,8 +62,7 @@ function evalArithmetic(
   }
   const a = toNumber(lhs.value);
   const b = toNumber(rhs.value);
-  const value =
-    node.op === "+" ? a + b : node.op === "-" ? a - b : a * b;
+  const value = node.op === "+" ? a + b : node.op === "-" ? a - b : a * b;
   return { ok: true, value: { type: "number", value } };
 }
 

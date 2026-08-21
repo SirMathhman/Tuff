@@ -158,6 +158,12 @@ test('evaluate("let mut x = 0; x = true;") => invalid_input error', () => {
   expectInvalidInput("let mut x = 0; x = true;");
 });
 
+test('evaluate("let y = if (false) { let mut x = 0; x = true; 0 } else 0; y") => invalid_input error', () => {
+  expectInvalidInput(
+    "let y = if (false) { let mut x = 0; x = true; 0 } else 0; y",
+  );
+});
+
 test('evaluate("let x = true; x") => 1', () => {
   const r = evaluate("let x = true; x");
   if (!r.ok)
