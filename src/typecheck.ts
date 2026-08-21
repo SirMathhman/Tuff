@@ -4,7 +4,11 @@ import type { Result } from "./result.ts";
 
 type Type = "int" | "float" | "bool" | "unknown";
 
-type Scope = { types: Record<string, Type>; mutable: Set<string> };
+type Scope = {
+  types: Record<string, Type>;
+  mutable: Set<string>;
+  loopDepth: number;
+};
 
 function checkNode(
   node: Node,
@@ -78,22 +82,13 @@ function checkNode(
         );
       return { ok: true, value: "float" };
     }
-    case "if": {
-      const cond = checkNode(node.cond, scope, input);
-      if (!cond.ok) return cond;
-      const then = checkNode(node.then, scope, input);
-      if (!then.ok) return then;
-      const els = checkNode(node.else, scope, input);
-      if (!els.ok) return els;
-      return {
-        ok: true,
-        value: then.value === els.value ? then.value : "unknown",
-      };
-    }
+    case "if":
+      return checkIf(node, scope, input);
     case "block": {
       const child: Scope = {
         types: { ...scope.types },
         mutable: new Set(scope.mutable),
+        loopDepth: scope.loopDepth,
       };
       let value: Type = "float";
       for (const statement of node.statements) {
@@ -103,14 +98,60 @@ function checkNode(
       }
       return { ok: true, value };
     }
+    case "loop":
+    case "break":
+      return checkLoopOrBreak(node, scope, input, fail);
   }
+}
+
+function checkIf(
+  node: Extract<Node, { type: "if" }>,
+  scope: Scope,
+  input: string,
+): Result<Type, EvalError> {
+  const cond = checkNode(node.cond, scope, input);
+  if (!cond.ok) return cond;
+  const then = checkNode(node.then, scope, input);
+  if (!then.ok) return then;
+  const els = checkNode(node.else, scope, input);
+  if (!els.ok) return els;
+  return {
+    ok: true,
+    value: then.value === els.value ? then.value : "unknown",
+  };
+}
+
+function checkLoopOrBreak(
+  node: Extract<Node, { type: "loop" | "break" }>,
+  scope: Scope,
+  input: string,
+  fail: (reason: string) => Result<Type, EvalError>,
+): Result<Type, EvalError> {
+  if (node.type === "break") {
+    if (scope.loopDepth === 0) return fail("break outside of a loop");
+    const value = checkNode(node.value, scope, input);
+    if (!value.ok) return value;
+    return { ok: true, value: value.value };
+  }
+  const child: Scope = {
+    types: { ...scope.types },
+    mutable: new Set(scope.mutable),
+    loopDepth: scope.loopDepth + 1,
+  };
+  const body = checkNode(node.body, child, input);
+  if (!body.ok) return body;
+  return { ok: true, value: body.value };
 }
 
 export function typecheck(
   statements: Node[],
   input: string,
 ): Result<true, EvalError> {
-  const scope: Scope = { types: {}, mutable: new Set<string>() };
+  const scope: Scope = {
+    types: {},
+    mutable: new Set<string>(),
+    loopDepth: 0,
+  };
   for (const statement of statements) {
     const s = checkNode(statement, scope, input);
     if (!s.ok) return s;

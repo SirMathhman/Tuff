@@ -20,6 +20,10 @@ type Env = {
   mutable: Set<string>;
 };
 
+class BreakSignal {
+  constructor(public readonly value: Value) {}
+}
+
 function evalBinaryBool(
   lhs: Node,
   rhs: Node,
@@ -193,6 +197,23 @@ function evalNode(
         value = s.value;
       }
       return { ok: true, value };
+    }
+    case "loop": {
+      while (true) {
+        try {
+          const s = evalNode(node.body, env, input);
+          if (!s.ok) return s;
+        } catch (e) {
+          if (e instanceof BreakSignal)
+            return { ok: true, value: e.value };
+          throw e;
+        }
+      }
+    }
+    case "break": {
+      const value = evalNode(node.value, env, input);
+      if (!value.ok) return value;
+      throw new BreakSignal(value.value);
     }
   }
 }

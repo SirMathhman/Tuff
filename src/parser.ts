@@ -142,8 +142,26 @@ function parseLetBinding(state: ParserState): Result<Node, EvalError> {
   };
 }
 
+function parseBreak(state: ParserState): Result<Node, EvalError> {
+  const start = state.pos;
+  state.pos++;
+  const value = parseExpr(state);
+  if (!value.ok) return value;
+  if (state.tokens[state.pos]?.text !== ";") return state.fail("expected ;");
+  state.pos++;
+  return {
+    ok: true,
+    value: {
+      type: "break",
+      value: value.value,
+      span: spanOf(state, start),
+    },
+  };
+}
+
 function parseStatement(state: ParserState): Result<Node, EvalError> {
   if (state.tokens[state.pos]?.text === "let") return parseLetBinding(state);
+  if (state.tokens[state.pos]?.text === "break") return parseBreak(state);
   const name = state.tokens[state.pos]?.text;
   if (name !== undefined && state.tokens[state.pos + 1]?.text === "=") {
     const start = state.pos;
@@ -224,6 +242,31 @@ function parseUnary(state: ParserState): Result<Node, EvalError> {
   return parseFactor(state);
 }
 
+function parseLoop(state: ParserState): Result<Node, EvalError> {
+  const start = state.pos;
+  state.pos++;
+  if (state.tokens[state.pos]?.text !== "{") return state.fail("expected {");
+  const bodyStart = state.pos;
+  state.pos++;
+  const statements = parseStatements(state);
+  if (!statements.ok) return statements;
+  if (state.tokens[state.pos]?.text !== "}") return state.fail("expected }");
+  state.pos++;
+  const body: Node = {
+    type: "block",
+    statements: statements.value,
+    span: spanOf(state, bodyStart),
+  };
+  return {
+    ok: true,
+    value: {
+      type: "loop",
+      body,
+      span: spanOf(state, start),
+    },
+  };
+}
+
 function parseFactor(state: ParserState): Result<Node, EvalError> {
   const t = state.tokens[state.pos]?.text;
   if (t === "(") {
@@ -254,6 +297,7 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
     };
   }
   if (t === undefined) return state.fail("unexpected end of input");
+  if (t === "loop") return parseLoop(state);
   if (t === "if") {
     const start = state.pos;
     state.pos++;
