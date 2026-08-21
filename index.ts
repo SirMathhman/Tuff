@@ -89,8 +89,7 @@ export function evaluate(input: string): Result<number, EvalError> {
     }
     if (t === "{") {
       pos++;
-      let value: number;
-      if (peek() === "let") {
+      while (peek() === "let") {
         pos++;
         const name = peek();
         if (name === undefined || name === ";")
@@ -101,10 +100,8 @@ export function evaluate(input: string): Result<number, EvalError> {
         env[name] = parseExpr();
         if (peek() !== ";") throw new Error("expected ;");
         pos++;
-        value = parseExpr();
-      } else {
-        value = parseExpr();
       }
+      const value = parseExpr();
       if (peek() !== "}") throw new Error("expected }");
       pos++;
       return value;
