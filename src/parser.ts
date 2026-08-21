@@ -20,6 +20,19 @@ function makeFail(input: string) {
   });
 }
 
+function parseOr(state: ParserState): Result<Node, EvalError> {
+  const lhs = parseComparison(state);
+  if (!lhs.ok) return lhs;
+  let node: Node = lhs.value;
+  while (state.tokens[state.pos] === "||") {
+    state.pos++;
+    const rhs = parseComparison(state);
+    if (!rhs.ok) return rhs;
+    node = { type: "or", lhs: node, rhs: rhs.value };
+  }
+  return { ok: true, value: node };
+}
+
 function parseComparison(state: ParserState): Result<Node, EvalError> {
   const lhs = parseExpr(state);
   if (!lhs.ok) return lhs;
@@ -84,7 +97,7 @@ function parseStatement(state: ParserState): Result<Node, EvalError> {
     state.pos++;
     return { ok: true, value: { type: "assign", name, value: value.value } };
   }
-  return parseComparison(state);
+  return parseOr(state);
 }
 
 function parseStatements(state: ParserState): Result<Node[], EvalError> {

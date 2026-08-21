@@ -18,6 +18,7 @@ export type Node =
   | { type: "var"; name: string }
   | { type: "binary"; op: "+" | "-" | "*" | "/"; lhs: Node; rhs: Node }
   | { type: "compare"; lhs: Node; rhs: Node }
+  | { type: "or"; lhs: Node; rhs: Node }
   | { type: "let"; mutable: boolean; name: string; value: Node }
   | { type: "assign"; name: string; value: Node }
   | { type: "block"; statements: Node[] };

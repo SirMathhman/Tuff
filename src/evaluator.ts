@@ -98,6 +98,18 @@ function evalNode(
         value: { type: "bool", value: valuesEqual(lhs.value, rhs.value) },
       };
     }
+    case "or": {
+      const lhs = evalNode(node.lhs, env, input);
+      if (!lhs.ok) return lhs;
+      if (toNumber(lhs.value) !== 0)
+        return { ok: true, value: { type: "bool", value: true } };
+      const rhs = evalNode(node.rhs, env, input);
+      if (!rhs.ok) return rhs;
+      return {
+        ok: true,
+        value: { type: "bool", value: toNumber(rhs.value) !== 0 },
+      };
+    }
     case "let": {
       const value = evalNode(node.value, env, input);
       if (!value.ok) return value;
