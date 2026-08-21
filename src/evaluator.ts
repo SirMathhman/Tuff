@@ -44,13 +44,116 @@ function makeFailDivisionByZero(input: string) {
   });
 }
 
+function evalBinaryBool(
+  lhs: Node,
+  rhs: Node,
+  env: Env,
+  input: string,
+  combine: (a: Value, b: Value) => boolean,
+): Result<Value, EvalError> {
+  const l = evalNode(lhs, env, input);
+  if (!l.ok) return l;
+  const r = evalNode(rhs, env, input);
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    value: { type: "bool", value: combine(l.value, r.value) },
+  };
+}
+
+function evalArithmetic(
+  node: Extract<Node, { type: "binary" }>,
+  env: Env,
+  input: string,
+): Result<Value, EvalError> {
+  const failDivisionByZero = makeFailDivisionByZero(input);
+  const lhs = evalNode(node.lhs, env, input);
+  if (!lhs.ok) return lhs;
+  const rhs = evalNode(node.rhs, env, input);
+  if (!rhs.ok) return rhs;
+  if (node.op === "/") {
+    if (toNumber(rhs.value) === 0)
+      return failDivisionByZero("division by zero");
+    return {
+      ok: true,
+      value: {
+        type: "number",
+        value: Math.trunc(toNumber(lhs.value) / toNumber(rhs.value)),
+      },
+    };
+  }
+  const a = toNumber(lhs.value);
+  const b = toNumber(rhs.value);
+  const value =
+    node.op === "+"
+      ? a + b
+      : node.op === "-"
+        ? a - b
+        : node.op === "*"
+          ? a * b
+          : a / b;
+  return { ok: true, value: { type: "number", value } };
+}
+
+function evalUnary(
+  node: Extract<Node, { type: "unary" }>,
+  env: Env,
+  input: string,
+): Result<Value, EvalError> {
+  const operand = evalNode(node.operand, env, input);
+  if (!operand.ok) return operand;
+  if (node.op === "!")
+    return {
+      ok: true,
+      value: { type: "bool", value: toNumber(operand.value) === 0 },
+    };
+  return {
+    ok: true,
+    value: { type: "number", value: -toNumber(operand.value) },
+  };
+}
+
+function evalShortCircuit(
+  node: Extract<Node, { type: "or" | "and" }>,
+  env: Env,
+  input: string,
+): Result<Value, EvalError> {
+  const lhs = evalNode(node.lhs, env, input);
+  if (!lhs.ok) return lhs;
+  const truthy = toNumber(lhs.value) !== 0;
+  if (node.type === "or" && truthy)
+    return { ok: true, value: { type: "bool", value: true } };
+  if (node.type === "and" && !truthy)
+    return { ok: true, value: { type: "bool", value: false } };
+  const rhs = evalNode(node.rhs, env, input);
+  if (!rhs.ok) return rhs;
+  return {
+    ok: true,
+    value: { type: "bool", value: toNumber(rhs.value) !== 0 },
+  };
+}
+
+function evalBinding(
+  node: Extract<Node, { type: "let" | "assign" }>,
+  env: Env,
+  input: string,
+): Result<Value, EvalError> {
+  const fail = makeFail(input);
+  if (node.type === "assign" && !env.mutable.has(node.name))
+    return fail(`cannot reassign immutable: ${node.name}`);
+  const value = evalNode(node.value, env, input);
+  if (!value.ok) return value;
+  env.values[node.name] = value.value;
+  if (node.type === "let" && node.mutable) env.mutable.add(node.name);
+  return { ok: true, value: { type: "number", value: 0 } };
+}
+
 function evalNode(
   node: Node,
   env: Env,
   input: string,
 ): Result<Value, EvalError> {
   const fail = makeFail(input);
-  const failDivisionByZero = makeFailDivisionByZero(input);
   switch (node.type) {
     case "number":
       return { ok: true, value: { type: "number", value: node.value } };
@@ -61,158 +164,60 @@ function evalNode(
       if (bound === undefined) return fail(`unbound variable: ${node.name}`);
       return { ok: true, value: bound };
     }
-    case "binary": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      if (node.op === "/") {
-        if (toNumber(rhs.value) === 0)
-          return failDivisionByZero("division by zero");
-        return {
-          ok: true,
-          value: {
-            type: "number",
-            value: Math.trunc(toNumber(lhs.value) / toNumber(rhs.value)),
-          },
-        };
-      }
-      const a = toNumber(lhs.value);
-      const b = toNumber(rhs.value);
-      const value =
-        node.op === "+"
-          ? a + b
-          : node.op === "-"
-            ? a - b
-            : node.op === "*"
-              ? a * b
-              : a / b;
-      return { ok: true, value: { type: "number", value } };
-    }
-    case "unary": {
-      const operand = evalNode(node.operand, env, input);
-      if (!operand.ok) return operand;
-      if (node.op === "!")
-        return {
-          ok: true,
-          value: { type: "bool", value: toNumber(operand.value) === 0 },
-        };
-      return {
-        ok: true,
-        value: { type: "number", value: -toNumber(operand.value) },
-      };
-    }
-    case "compare": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: { type: "bool", value: valuesEqual(lhs.value, rhs.value) },
-      };
-    }
-    case "greater": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: {
-          type: "bool",
-          value: toNumber(lhs.value) > toNumber(rhs.value),
-        },
-      };
-    }
-    case "greaterEq": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: {
-          type: "bool",
-          value: toNumber(lhs.value) >= toNumber(rhs.value),
-        },
-      };
-    }
-    case "less": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: {
-          type: "bool",
-          value: toNumber(lhs.value) < toNumber(rhs.value),
-        },
-      };
-    }
-    case "lessEq": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: {
-          type: "bool",
-          value: toNumber(lhs.value) <= toNumber(rhs.value),
-        },
-      };
-    }
-    case "notEqual": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: { type: "bool", value: !valuesEqual(lhs.value, rhs.value) },
-      };
-    }
-    case "or": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      if (toNumber(lhs.value) !== 0)
-        return { ok: true, value: { type: "bool", value: true } };
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: { type: "bool", value: toNumber(rhs.value) !== 0 },
-      };
-    }
-    case "and": {
-      const lhs = evalNode(node.lhs, env, input);
-      if (!lhs.ok) return lhs;
-      if (toNumber(lhs.value) === 0)
-        return { ok: true, value: { type: "bool", value: false } };
-      const rhs = evalNode(node.rhs, env, input);
-      if (!rhs.ok) return rhs;
-      return {
-        ok: true,
-        value: { type: "bool", value: toNumber(rhs.value) !== 0 },
-      };
-    }
-    case "let": {
-      const value = evalNode(node.value, env, input);
-      if (!value.ok) return value;
-      env.values[node.name] = value.value;
-      if (node.mutable) env.mutable.add(node.name);
-      return { ok: true, value: { type: "number", value: 0 } };
-    }
-    case "assign": {
-      if (!env.mutable.has(node.name))
-        return fail(`cannot reassign immutable: ${node.name}`);
-      const value = evalNode(node.value, env, input);
-      if (!value.ok) return value;
-      env.values[node.name] = value.value;
-      return { ok: true, value: { type: "number", value: 0 } };
-    }
+    case "binary":
+      return evalArithmetic(node, env, input);
+    case "unary":
+      return evalUnary(node, env, input);
+    case "compare":
+      return evalBinaryBool(node.lhs, node.rhs, env, input, (a, b) =>
+        valuesEqual(a, b),
+      );
+    case "greater":
+      return evalBinaryBool(
+        node.lhs,
+        node.rhs,
+        env,
+        input,
+        (a, b) => toNumber(a) > toNumber(b),
+      );
+    case "greaterEq":
+      return evalBinaryBool(
+        node.lhs,
+        node.rhs,
+        env,
+        input,
+        (a, b) => toNumber(a) >= toNumber(b),
+      );
+    case "less":
+      return evalBinaryBool(
+        node.lhs,
+        node.rhs,
+        env,
+        input,
+        (a, b) => toNumber(a) < toNumber(b),
+      );
+    case "lessEq":
+      return evalBinaryBool(
+        node.lhs,
+        node.rhs,
+        env,
+        input,
+        (a, b) => toNumber(a) <= toNumber(b),
+      );
+    case "notEqual":
+      return evalBinaryBool(
+        node.lhs,
+        node.rhs,
+        env,
+        input,
+        (a, b) => !valuesEqual(a, b),
+      );
+    case "or":
+    case "and":
+      return evalShortCircuit(node, env, input);
+    case "let":
+    case "assign":
+      return evalBinding(node, env, input);
     case "block": {
       const child: Env = {
         values: { ...env.values },
