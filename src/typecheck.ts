@@ -32,6 +32,8 @@ function checkNode(
       if (!l.ok) return l;
       const r = checkNode(node.rhs, scope, input);
       if (!r.ok) return r;
+      if (node.type === "binary" && (l.value === "bool" || r.value === "bool"))
+        return fail("arithmetic requires numeric operands, got bool");
       return {
         ok: true,
         value: node.type === "binary" ? "float" : "bool",
