@@ -860,6 +860,11 @@ mod tests {
     }
 
     #[test]
+    fn double_reference_double_dereference() {
+        assert_eq!(interpret("let x = 1; let y = &x; let z = &y; **z"), Ok(1));
+    }
+
+    #[test]
     fn field_access_on_non_tuple_is_reported() {
         // `(0)` has no comma, so it is a grouped expression: `tuple`
         // is the integer 0, and `tuple.1` is not a tuple field.
