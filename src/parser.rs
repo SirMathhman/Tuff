@@ -21,6 +21,15 @@ pub(crate) enum Context {
     Statement,
 }
 
+/// The result of parsing a factor: the value, and, if the factor was
+/// a typed integer literal, the maximum of the type named by its
+/// suffix (e.g. `U8` -> 255). A negated or otherwise derived value
+/// carries no type, so `type_max` is `None`.
+pub(crate) struct Factor {
+    pub(crate) value: Value,
+    pub(crate) type_max: Option<i64>,
+}
+
 impl<'a> Parser<'a> {
     /// Parses the top-level program: `;`-separated statements; the
     /// program's value is the value of the last statement.
@@ -138,13 +147,13 @@ impl<'a> Parser<'a> {
 
     /// Parses `term = unary ('*' unary)*`.
     fn parse_term(&mut self, ctx: Context) -> Result<Value, Error> {
-        let mut term = self.parse_unary(ctx)?.0;
+        let mut term = self.parse_unary(ctx)?.value;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
                 let offset = self.pos;
                 self.pos += 1;
-                let rhs = self.parse_unary(ctx)?.0.as_i64();
+                let rhs = self.parse_unary(ctx)?.value.as_i64();
                 term = Value::Int(
                     term.as_i64()
                         .checked_mul(rhs)
@@ -157,35 +166,38 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `unary = '-' unary | postfix`: a unary minus negates a
-    /// factor, binding tighter than `*`. Returns the value and, if it
-    /// is a typed integer literal, the type's maximum.
-    fn parse_unary(&mut self, ctx: Context) -> Result<(Value, Option<i64>), Error> {
+    /// factor, binding tighter than `*`.
+    fn parse_unary(&mut self, ctx: Context) -> Result<Factor, Error> {
         self.skip_spaces();
         if self.peek() == Some(b'-') {
             let offset = self.pos;
             self.pos += 1;
-            let (value, type_max) = self.parse_unary(ctx)?;
-            let negated = value
+            let factor = self.parse_unary(ctx)?;
+            let negated = factor
+                .value
                 .as_i64()
                 .checked_neg()
                 .ok_or(Error::Overflow { offset })?;
-            if let Some(max) = type_max {
+            if let Some(max) = factor.type_max {
                 if negated < 0 || negated > max {
                     return Err(Error::Overflow { offset });
                 }
             }
             // A negated value is a plain integer, not a typed literal.
-            return Ok((Value::Int(negated), None));
+            return Ok(Factor {
+                value: Value::Int(negated),
+                type_max: None,
+            });
         }
         self.parse_postfix(ctx)
     }
 
     /// Parses `postfix = factor ('[' expr ']' | '.' digit)*`: an
     /// array index or a tuple field applied to a factor, binding
-    /// tighter than `*`, `+`, and `-`. Returns the value and, if it
-    /// is a typed integer literal, the type's maximum.
-    fn parse_postfix(&mut self, ctx: Context) -> Result<(Value, Option<i64>), Error> {
-        let (mut value, mut type_max) = self.parse_factor(ctx)?;
+    /// tighter than `*`, `+`, and `-`. Indexing and field access
+    /// yield a plain value, so the result carries no type.
+    fn parse_postfix(&mut self, ctx: Context) -> Result<Factor, Error> {
+        let mut factor = self.parse_factor(ctx)?;
         loop {
             self.skip_spaces();
             match self.peek() {
@@ -201,8 +213,8 @@ impl<'a> Parser<'a> {
                         });
                     }
                     self.pos += 1;
-                    value = value.index(index, offset)?;
-                    type_max = None;
+                    factor.value = factor.value.index(index, offset)?;
+                    factor.type_max = None;
                 }
                 Some(b'.') => {
                     let offset = self.pos;
@@ -215,10 +227,10 @@ impl<'a> Parser<'a> {
                     };
                     let field = i64::from(d - b'0');
                     self.pos += 1;
-                    value = value.field(field, offset)?;
-                    type_max = None;
+                    factor.value = factor.value.field(field, offset)?;
+                    factor.type_max = None;
                 }
-                _ => return Ok((value, type_max)),
+                _ => return Ok(factor),
             }
         }
     }
@@ -229,9 +241,9 @@ impl<'a> Parser<'a> {
     /// reference, and `*value` dereferences a reference. The prefix
     /// operators bind tighter than `*`, `+`, and `-`. In a statement
     /// context, a block may end in a statement and an `if` takes
-    /// statement branches. Returns the value and, if it is a typed
-    /// integer literal, the type's maximum.
-    fn parse_factor(&mut self, ctx: Context) -> Result<(Value, Option<i64>), Error> {
+    /// statement branches. Only a typed integer literal carries a
+    /// type; every other factor yields a plain value.
+    fn parse_factor(&mut self, ctx: Context) -> Result<Factor, Error> {
         self.skip_spaces();
         if self.peek() == Some(b'&') {
             self.pos += 1;
@@ -243,43 +255,59 @@ impl<'a> Parser<'a> {
                 self.skip_spaces();
             }
             let (name, _) = self.parse_identifier_name()?;
-            return Ok((Value::Ref { name, mutable }, None));
+            return Ok(Factor {
+                value: Value::Ref { name, mutable },
+                type_max: None,
+            });
         }
         if self.peek() == Some(b'*') {
             let offset = self.pos;
             self.pos += 1;
-            let (value, _) = self.parse_factor(ctx)?;
-            return value.deref(&self.env, offset).map(|v| (v, None));
+            let value = self.parse_factor(ctx)?.value;
+            return value
+                .deref(&self.env, offset)
+                .map(|v| Factor {
+                    value: v,
+                    type_max: None,
+                });
         }
         match self.peek() {
             Some(b'(') => {
                 if self.has_tuple_comma() {
-                    self.parse_tuple().map(|v| (v, None))
+                    self.parse_tuple().map(Self::plain_factor)
                 } else {
                     self.pos += 1;
-                    self.parse_grouped(b')', ctx).map(|v| (v, None))
+                    self.parse_grouped(b')', ctx).map(Self::plain_factor)
                 }
             }
             Some(b'{') => {
                 self.pos += 1;
-                self.parse_block(b'}', ctx).map(|v| (v, None))
+                self.parse_block(b'}', ctx).map(Self::plain_factor)
             }
-            Some(b'[') => self.parse_array().map(|v| (v, None)),
+            Some(b'[') => self.parse_array().map(Self::plain_factor),
             Some(b'0'..=b'9') => self.parse_number(),
             Some(b'a'..=b'z') => {
                 if self.input[self.pos..].starts_with("if ") {
-                    return self.parse_if(ctx).map(|v| (v, None));
+                    return self.parse_if(ctx).map(Self::plain_factor);
                 }
                 if let Some(value) = self.parse_boolean() {
-                    Ok((value, None))
+                    Ok(Self::plain_factor(value))
                 } else {
-                    self.parse_identifier().map(|v| (v, None))
+                    self.parse_identifier().map(Self::plain_factor)
                 }
             }
             _ => Err(Error::UnexpectedToken {
                 offset: self.pos,
                 found: self.peek(),
             }),
+        }
+    }
+
+    /// Wraps a plain value in a `Factor` with no type.
+    fn plain_factor(value: Value) -> Factor {
+        Factor {
+            value,
+            type_max: None,
         }
     }
 
@@ -680,7 +708,7 @@ impl<'a> Parser<'a> {
     fn parse_deref_assignment(&mut self) -> Result<Value, Error> {
         let offset = self.pos; // offset of `*`
         self.pos += 1; // skip `*`
-        let (name, ref_mutable) = match self.parse_factor(Context::Statement)?.0 {
+        let (name, ref_mutable) = match self.parse_factor(Context::Statement)?.value {
             Value::Ref { name, mutable } => (name, mutable),
             _ => return Err(Error::NotAReference { offset }),
         };
@@ -827,10 +855,9 @@ impl<'a> Parser<'a> {
 
     /// Parses a non-negative integer literal starting at the current
     /// position, reporting overflow if it does not fit in an `i64` or
-    /// in the type named by a trailing suffix (e.g. `256U8`). Returns
-    /// the value and, if a type suffix was present, the type's
-    /// maximum.
-    fn parse_number(&mut self) -> Result<(Value, Option<i64>), Error> {
+    /// in the type named by a trailing suffix (e.g. `256U8`). A typed
+    /// literal carries the type's maximum; a plain literal does not.
+    fn parse_number(&mut self) -> Result<Factor, Error> {
         let start = self.pos;
         while matches!(self.peek(), Some(b'0'..=b'9')) {
             self.pos += 1;
@@ -847,14 +874,17 @@ impl<'a> Parser<'a> {
             .map_err(|_| Error::Overflow { offset: start })?;
         match Self::type_max(&suffix) {
             Some(max) if value > max => return Err(Error::Overflow { offset: start }),
-            Some(max) => Ok((Value::Int(value), Some(max))),
+            Some(max) => Ok(Factor {
+                value: Value::Int(value),
+                type_max: Some(max),
+            }),
             None if !suffix.is_empty() => {
                 Err(Error::InvalidTypeSuffix {
                     offset: suffix_start,
                     suffix,
                 })
             }
-            None => Ok((Value::Int(value), None)),
+            None => Ok(Self::plain_factor(Value::Int(value))),
         }
     }
 
