@@ -84,7 +84,12 @@ function evalNode(node: AstNode, env: Env): Result<number, EvalError> {
       if (!v.ok) return v;
       const a = assign(env, node.name, v.value, node.index);
       if (!a.ok) return a;
-      return evalNode(node.body, env);
+      return { ok: true, value: 0 };
+    }
+    case "seq": {
+      const first = evalNode(node.first, env);
+      if (!first.ok) return first;
+      return evalNode(node.rest, env);
     }
     case "block": {
       env.push(new Map());

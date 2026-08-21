@@ -128,24 +128,53 @@ function parseAssignStmt(state: ParserState): Result<AstNode, EvalError> {
       kind: "assign",
       name: nameTok?.value ?? "",
       value: v.value,
-      body: { kind: "num", value: 0, index: state.inputLength },
       index: nameTok?.index ?? state.inputLength,
     },
   };
 }
 
-// block := "{" (letDecl)* expr "}"
+// blockContents := (letDecl | assignStmt)*
+function parseBlockContents(
+  state: ParserState,
+): Result<{ decls: LetDecl[]; assigns: AstNode[] }, EvalError> {
+  const decls: LetDecl[] = [];
+  const assigns: AstNode[] = [];
+  for (;;) {
+    const t = state.tokens[state.pos];
+    if (t === undefined || t.value === "}") break;
+    if (t.value === "let") {
+      const d = parseLetDecl(state);
+      if (!d.ok) return d;
+      decls.push(d.value);
+    } else if (IDENT_RE.test(t.value) && t.value !== "mut") {
+      const next = state.tokens[state.pos + 1];
+      if (next === undefined || next.value !== "=") break;
+      const a = parseAssignStmt(state);
+      if (!a.ok) return a;
+      assigns.push(a.value);
+    } else {
+      break;
+    }
+  }
+  return { ok: true, value: { decls, assigns } };
+}
+
+function chainStmts(stmts: AstNode[], body: AstNode): AstNode {
+  let node: AstNode = body;
+  for (let i = stmts.length - 1; i >= 0; i--) {
+    const s = stmts[i];
+    if (s === undefined) continue;
+    node = { kind: "seq", first: s, rest: node, index: s.index };
+  }
+  return node;
+}
+
+// blockExpr := "{" (letDecl | assignStmt)* expr "}"
 function parseBlock(state: ParserState): Result<AstNode, EvalError> {
   const open = state.tokens[state.pos];
   state.pos++; // consume "{" (checked by caller)
-  const decls: LetDecl[] = [];
-  for (;;) {
-    const t = state.tokens[state.pos];
-    if (t === undefined || t.value === "}" || t.value !== "let") break;
-    const d = parseLetDecl(state);
-    if (!d.ok) return d;
-    decls.push(d.value);
-  }
+  const contents = parseBlockContents(state);
+  if (!contents.ok) return contents;
   const body = parseExpr(state);
   if (!body.ok) return body;
   const close = state.tokens[state.pos];
@@ -163,7 +192,41 @@ function parseBlock(state: ParserState): Result<AstNode, EvalError> {
     ok: true,
     value: {
       kind: "block",
-      body: wrapDecls(decls, body.value),
+      body: wrapDecls(
+        contents.value.decls,
+        chainStmts(contents.value.assigns, body.value),
+      ),
+      index: open?.index ?? state.inputLength,
+    },
+  };
+}
+
+// blockStmt := "{" (letDecl | assignStmt)* "}"  (no body expr; evaluates to 0)
+function parseBlockStmt(state: ParserState): Result<AstNode, EvalError> {
+  const open = state.tokens[state.pos];
+  state.pos++; // consume "{" (checked by caller)
+  const contents = parseBlockContents(state);
+  if (!contents.ok) return contents;
+  const close = state.tokens[state.pos];
+  if (close === undefined || close.value !== "}") {
+    return {
+      ok: false,
+      error: {
+        kind: "unbalanced-paren",
+        index: open?.index ?? state.inputLength,
+      },
+    };
+  }
+  state.pos++;
+  const body: AstNode = { kind: "num", value: 0, index: state.inputLength };
+  return {
+    ok: true,
+    value: {
+      kind: "block",
+      body: wrapDecls(
+        contents.value.decls,
+        chainStmts(contents.value.assigns, body),
+      ),
       index: open?.index ?? state.inputLength,
     },
   };
@@ -302,6 +365,16 @@ export function parse(state: ParserState): Result<AstNode, EvalError> {
       const a = parseAssignStmt(state);
       if (!a.ok) return a;
       assigns.push(a.value);
+    } else if (t.value === "{") {
+      const saved = state.pos;
+      const b = parseBlockStmt(state);
+      if (!b.ok) {
+        // Not a statements-only block; it's a block expression. Backtrack and
+        // let the trailing expression parse handle it.
+        state.pos = saved;
+        break;
+      }
+      assigns.push(b.value);
     } else {
       break;
     }
@@ -322,11 +395,5 @@ export function parse(state: ParserState): Result<AstNode, EvalError> {
       },
     };
   }
-  let node: AstNode = body.value;
-  for (let i = assigns.length - 1; i >= 0; i--) {
-    const a = assigns[i];
-    if (a === undefined) continue;
-    node = { ...a, body: node };
-  }
-  return { ok: true, value: wrapDecls(decls, node) };
+  return { ok: true, value: wrapDecls(decls, chainStmts(assigns, body.value)) };
 }

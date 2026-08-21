@@ -28,11 +28,6 @@ export type AstNode =
       body: AstNode;
       index: number;
     }
-  | {
-      kind: "assign";
-      name: string;
-      value: AstNode;
-      body: AstNode;
-      index: number;
-    }
+  | { kind: "assign"; name: string; value: AstNode; index: number }
+  | { kind: "seq"; first: AstNode; rest: AstNode; index: number }
   | { kind: "block"; body: AstNode; index: number };

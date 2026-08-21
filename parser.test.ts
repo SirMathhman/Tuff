@@ -88,10 +88,14 @@ describe("parse", () => {
         mut: true,
         value: { kind: "num", value: 0, index: 12 },
         body: {
-          kind: "assign",
-          name: "x",
-          value: { kind: "num", value: 1, index: 19 },
-          body: { kind: "var", name: "x", index: 22 },
+          kind: "seq",
+          first: {
+            kind: "assign",
+            name: "x",
+            value: { kind: "num", value: 1, index: 19 },
+            index: 15,
+          },
+          rest: { kind: "var", name: "x", index: 22 },
           index: 15,
         },
         index: 0,
