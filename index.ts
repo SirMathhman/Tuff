@@ -23,7 +23,14 @@ function tokenize(input: string): string[] {
       i = j;
       continue;
     }
-    if ("+-*/(){}".includes(c)) {
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i;
+      while (j < input.length && /[A-Za-z0-9_]/.test(input.charAt(j))) j++;
+      tokens.push(input.slice(i, j));
+      i = j;
+      continue;
+    }
+    if ("+-*/(){};=".includes(c)) {
       tokens.push(c);
       i++;
       continue;
@@ -51,6 +58,7 @@ export function evaluate(input: string): Result<number, EvalError> {
     return fail((e as Error).message);
   }
   let pos = 0;
+  const env: Record<string, number> = {};
   const peek = (): string | undefined => tokens[pos];
   const parseExpr = (): number => {
     let value = parseTerm();
@@ -72,15 +80,42 @@ export function evaluate(input: string): Result<number, EvalError> {
   };
   const parseFactor = (): number => {
     const t = peek();
-    if (t === "(" || t === "{") {
+    if (t === "(") {
       pos++;
       const value = parseExpr();
-      const close = t === "(" ? ")" : "}";
-      if (peek() !== close) throw new Error(`expected ${close}`);
+      if (peek() !== ")") throw new Error("expected )");
+      pos++;
+      return value;
+    }
+    if (t === "{") {
+      pos++;
+      let value: number;
+      if (peek() === "let") {
+        pos++;
+        const name = peek();
+        if (name === undefined || name === ";")
+          throw new Error("expected identifier");
+        pos++;
+        if (peek() !== "=") throw new Error("expected =");
+        pos++;
+        env[name] = parseExpr();
+        if (peek() !== ";") throw new Error("expected ;");
+        pos++;
+        value = parseExpr();
+      } else {
+        value = parseExpr();
+      }
+      if (peek() !== "}") throw new Error("expected }");
       pos++;
       return value;
     }
     if (t === undefined) throw new Error("unexpected end of input");
+    if (t in env) {
+      pos++;
+      const bound = env[t];
+      if (bound === undefined) throw new Error(`unbound variable: ${t}`);
+      return bound;
+    }
     const n = Number(t);
     if (!Number.isFinite(n)) throw new Error(`not a number: ${t}`);
     pos++;
