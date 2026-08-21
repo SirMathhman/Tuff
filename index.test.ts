@@ -245,6 +245,13 @@ test('evaluate("let x = if (false) 2 else 3; x") => 3', () => {
   expect(r.value).toBe(3);
 });
 
+test('evaluate("let x = if (false) 2 else if (false) 3 else 4; x") => 4', () => {
+  const r = evaluate("let x = if (false) 2 else if (false) 3 else 4; x");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(4);
+});
+
 test('evaluate("let x = 100; -x") => -100', () => {
   const r = evaluate("let x = 100; -x");
   if (!r.ok)
