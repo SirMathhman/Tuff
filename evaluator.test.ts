@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evaluate } from "./index.ts";
+import { evaluate } from "./evaluator.ts";
 
 describe("evaluate", () => {
   test('evaluate("") => 0', () => {
