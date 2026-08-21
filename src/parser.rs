@@ -138,13 +138,13 @@ impl<'a> Parser<'a> {
 
     /// Parses `term = unary ('*' unary)*`.
     fn parse_term(&mut self, ctx: Context) -> Result<Value, Error> {
-        let mut term = self.parse_unary(ctx)?;
+        let mut term = self.parse_unary(ctx)?.0;
         loop {
             self.skip_spaces();
             if self.peek() == Some(b'*') {
                 let offset = self.pos;
                 self.pos += 1;
-                let rhs = self.parse_unary(ctx)?.as_i64();
+                let rhs = self.parse_unary(ctx)?.0.as_i64();
                 term = Value::Int(
                     term.as_i64()
                         .checked_mul(rhs)
@@ -157,27 +157,35 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses `unary = '-' unary | postfix`: a unary minus negates a
-    /// factor, binding tighter than `*`.
-    fn parse_unary(&mut self, ctx: Context) -> Result<Value, Error> {
+    /// factor, binding tighter than `*`. Returns the value and, if it
+    /// is a typed integer literal, the type's maximum.
+    fn parse_unary(&mut self, ctx: Context) -> Result<(Value, Option<i64>), Error> {
         self.skip_spaces();
         if self.peek() == Some(b'-') {
             let offset = self.pos;
             self.pos += 1;
-            let value = self.parse_unary(ctx)?.as_i64();
-            return Ok(Value::Int(
-                value
-                    .checked_neg()
-                    .ok_or(Error::Overflow { offset })?,
-            ));
+            let (value, type_max) = self.parse_unary(ctx)?;
+            let negated = value
+                .as_i64()
+                .checked_neg()
+                .ok_or(Error::Overflow { offset })?;
+            if let Some(max) = type_max {
+                if negated < 0 || negated > max {
+                    return Err(Error::Overflow { offset });
+                }
+            }
+            // A negated value is a plain integer, not a typed literal.
+            return Ok((Value::Int(negated), None));
         }
         self.parse_postfix(ctx)
     }
 
     /// Parses `postfix = factor ('[' expr ']' | '.' digit)*`: an
     /// array index or a tuple field applied to a factor, binding
-    /// tighter than `*`, `+`, and `-`.
-    fn parse_postfix(&mut self, ctx: Context) -> Result<Value, Error> {
-        let mut value = self.parse_factor(ctx)?;
+    /// tighter than `*`, `+`, and `-`. Returns the value and, if it
+    /// is a typed integer literal, the type's maximum.
+    fn parse_postfix(&mut self, ctx: Context) -> Result<(Value, Option<i64>), Error> {
+        let (mut value, mut type_max) = self.parse_factor(ctx)?;
         loop {
             self.skip_spaces();
             match self.peek() {
@@ -194,6 +202,7 @@ impl<'a> Parser<'a> {
                     }
                     self.pos += 1;
                     value = value.index(index, offset)?;
+                    type_max = None;
                 }
                 Some(b'.') => {
                     let offset = self.pos;
@@ -207,8 +216,9 @@ impl<'a> Parser<'a> {
                     let field = i64::from(d - b'0');
                     self.pos += 1;
                     value = value.field(field, offset)?;
+                    type_max = None;
                 }
-                _ => return Ok(value),
+                _ => return Ok((value, type_max)),
             }
         }
     }
@@ -219,8 +229,9 @@ impl<'a> Parser<'a> {
     /// reference, and `*value` dereferences a reference. The prefix
     /// operators bind tighter than `*`, `+`, and `-`. In a statement
     /// context, a block may end in a statement and an `if` takes
-    /// statement branches.
-    fn parse_factor(&mut self, ctx: Context) -> Result<Value, Error> {
+    /// statement branches. Returns the value and, if it is a typed
+    /// integer literal, the type's maximum.
+    fn parse_factor(&mut self, ctx: Context) -> Result<(Value, Option<i64>), Error> {
         self.skip_spaces();
         if self.peek() == Some(b'&') {
             self.pos += 1;
@@ -232,37 +243,37 @@ impl<'a> Parser<'a> {
                 self.skip_spaces();
             }
             let (name, _) = self.parse_identifier_name()?;
-            return Ok(Value::Ref { name, mutable });
+            return Ok((Value::Ref { name, mutable }, None));
         }
         if self.peek() == Some(b'*') {
             let offset = self.pos;
             self.pos += 1;
-            let value = self.parse_factor(ctx)?;
-            return value.deref(&self.env, offset);
+            let (value, _) = self.parse_factor(ctx)?;
+            return value.deref(&self.env, offset).map(|v| (v, None));
         }
         match self.peek() {
             Some(b'(') => {
                 if self.has_tuple_comma() {
-                    self.parse_tuple()
+                    self.parse_tuple().map(|v| (v, None))
                 } else {
                     self.pos += 1;
-                    self.parse_grouped(b')', ctx)
+                    self.parse_grouped(b')', ctx).map(|v| (v, None))
                 }
             }
             Some(b'{') => {
                 self.pos += 1;
-                self.parse_block(b'}', ctx)
+                self.parse_block(b'}', ctx).map(|v| (v, None))
             }
-            Some(b'[') => self.parse_array(),
+            Some(b'[') => self.parse_array().map(|v| (v, None)),
             Some(b'0'..=b'9') => self.parse_number(),
             Some(b'a'..=b'z') => {
                 if self.input[self.pos..].starts_with("if ") {
-                    return self.parse_if(ctx);
+                    return self.parse_if(ctx).map(|v| (v, None));
                 }
                 if let Some(value) = self.parse_boolean() {
-                    Ok(value)
+                    Ok((value, None))
                 } else {
-                    self.parse_identifier()
+                    self.parse_identifier().map(|v| (v, None))
                 }
             }
             _ => Err(Error::UnexpectedToken {
@@ -669,7 +680,7 @@ impl<'a> Parser<'a> {
     fn parse_deref_assignment(&mut self) -> Result<Value, Error> {
         let offset = self.pos; // offset of `*`
         self.pos += 1; // skip `*`
-        let (name, ref_mutable) = match self.parse_factor(Context::Statement)? {
+        let (name, ref_mutable) = match self.parse_factor(Context::Statement)?.0 {
             Value::Ref { name, mutable } => (name, mutable),
             _ => return Err(Error::NotAReference { offset }),
         };
@@ -816,8 +827,10 @@ impl<'a> Parser<'a> {
 
     /// Parses a non-negative integer literal starting at the current
     /// position, reporting overflow if it does not fit in an `i64` or
-    /// in the type named by a trailing suffix (e.g. `256U8`).
-    fn parse_number(&mut self) -> Result<Value, Error> {
+    /// in the type named by a trailing suffix (e.g. `256U8`). Returns
+    /// the value and, if a type suffix was present, the type's
+    /// maximum.
+    fn parse_number(&mut self) -> Result<(Value, Option<i64>), Error> {
         let start = self.pos;
         while matches!(self.peek(), Some(b'0'..=b'9')) {
             self.pos += 1;
@@ -834,16 +847,15 @@ impl<'a> Parser<'a> {
             .map_err(|_| Error::Overflow { offset: start })?;
         match Self::type_max(&suffix) {
             Some(max) if value > max => return Err(Error::Overflow { offset: start }),
-            Some(_) => {}
+            Some(max) => Ok((Value::Int(value), Some(max))),
             None if !suffix.is_empty() => {
-                return Err(Error::InvalidTypeSuffix {
+                Err(Error::InvalidTypeSuffix {
                     offset: suffix_start,
                     suffix,
                 })
             }
-            None => {}
+            None => Ok((Value::Int(value), None)),
         }
-        Ok(Value::Int(value))
     }
 
     /// The maximum value for an unsigned integer type suffix (e.g.
@@ -965,6 +977,13 @@ mod tests {
     #[test]
     fn unary_minus_negates_a_binding() {
         assert_eq!(interpret("let x = 100; -x"), Ok(-100));
+    }
+
+    #[test]
+    fn unary_minus_on_typed_literal_is_reported() {
+        // `100U8` is a `u8` (range 0..=255); negating it yields -100,
+        // which does not fit an unsigned type.
+        assert_eq!(interpret("-100U8"), Err(Error::Overflow { offset: 0 }));
     }
 
     #[test]

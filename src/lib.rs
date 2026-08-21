@@ -15,7 +15,9 @@ use parser::Parser;
 /// `false` are `1` and `0`; a chain of literals joined by `+`,
 /// `-`, or `*` (optional surrounding spaces) is evaluated with `*`
 /// binding tighter than `+`/`-`; a leading `-` negates a factor
-/// (binding tighter than `*`); parentheses group subexpressions;
+/// (binding tighter than `*`), and negating a typed integer literal
+/// is an error if the result does not fit the type; parentheses group
+/// subexpressions;
 /// curly braces delimit blocks of `let` bindings ending in an
 /// expression, whose value is the block's value; the top level is a
 /// sequence of statements (optionally separated by `;`) whose value
