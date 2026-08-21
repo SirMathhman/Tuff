@@ -1,4 +1,5 @@
-import type { EvalError, Node } from "./ast.ts";
+import type { Node } from "./ast.ts";
+import type { EvalError } from "./errors.ts";
 import type { Result } from "./result.ts";
 
 type Value =

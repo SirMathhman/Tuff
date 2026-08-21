@@ -1,4 +1,4 @@
-import type { EvalError } from "./ast.ts";
+import type { EvalError } from "./errors.ts";
 import type { Result } from "./result.ts";
 import { evaluateAst } from "./evaluator.ts";
 import { parse } from "./parser.ts";

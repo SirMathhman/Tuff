@@ -1,17 +1,3 @@
-export type EvalError =
-  | {
-      kind: "invalid_input";
-      input: string;
-      reason: string;
-      hint: string;
-    }
-  | {
-      kind: "division_by_zero";
-      input: string;
-      reason: string;
-      hint: string;
-    };
-
 export type Node =
   | { type: "number"; value: number }
   | { type: "bool"; value: boolean }
