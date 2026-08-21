@@ -150,6 +150,19 @@ function evalNode(
         },
       };
     }
+    case "lessEq": {
+      const lhs = evalNode(node.lhs, env, input);
+      if (!lhs.ok) return lhs;
+      const rhs = evalNode(node.rhs, env, input);
+      if (!rhs.ok) return rhs;
+      return {
+        ok: true,
+        value: {
+          type: "bool",
+          value: toNumber(lhs.value) <= toNumber(rhs.value),
+        },
+      };
+    }
     case "or": {
       const lhs = evalNode(node.lhs, env, input);
       if (!lhs.ok) return lhs;
