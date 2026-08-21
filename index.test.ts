@@ -125,20 +125,19 @@ test('evaluate("10 / 3 / 2") => 1', () => {
   expect(r.value).toBe(1);
 });
 
-test('evaluate("abc") => invalid_input error', () => {
-  const r = evaluate("abc");
+function expectInvalidInput(input: string) {
+  const r = evaluate(input);
   if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
   if (r.error.kind !== "invalid_input")
     throw new Error(
       `expected kind "invalid_input", got: ${JSON.stringify(r.error)}`,
     );
+}
+
+test('evaluate("abc") => invalid_input error', () => {
+  expectInvalidInput("abc");
 });
 
 test('evaluate("undefinedIdentifier") => invalid_input error', () => {
-  const r = evaluate("undefinedIdentifier");
-  if (r.ok) throw new Error(`expected error, got ok: ${r.value}`);
-  if (r.error.kind !== "invalid_input")
-    throw new Error(
-      `expected kind "invalid_input", got: ${JSON.stringify(r.error)}`,
-    );
+  expectInvalidInput("undefinedIdentifier");
 });
