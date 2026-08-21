@@ -12,12 +12,13 @@ export type Node =
       span: Span;
     }
   | { type: "unary"; op: "-" | "!"; operand: Node; span: Span }
-  | { type: "compare"; lhs: Node; rhs: Node; span: Span }
-  | { type: "greater"; lhs: Node; rhs: Node; span: Span }
-  | { type: "greaterEq"; lhs: Node; rhs: Node; span: Span }
-  | { type: "less"; lhs: Node; rhs: Node; span: Span }
-  | { type: "lessEq"; lhs: Node; rhs: Node; span: Span }
-  | { type: "notEqual"; lhs: Node; rhs: Node; span: Span }
+  | {
+      type: "compare";
+      op: "==" | "!=" | ">" | ">=" | "<" | "<=";
+      lhs: Node;
+      rhs: Node;
+      span: Span;
+    }
   | { type: "or"; lhs: Node; rhs: Node; span: Span }
   | { type: "and"; lhs: Node; rhs: Node; span: Span }
   | { type: "let"; mutable: boolean; name: string; value: Node; span: Span }

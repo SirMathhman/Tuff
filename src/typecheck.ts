@@ -27,11 +27,6 @@ function checkNode(
     }
     case "binary":
     case "compare":
-    case "greater":
-    case "greaterEq":
-    case "less":
-    case "lessEq":
-    case "notEqual":
     case "or":
     case "and": {
       const l = checkNode(node.lhs, scope, input);

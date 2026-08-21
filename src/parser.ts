@@ -73,23 +73,13 @@ function parseComparison(state: ParserState): Result<Node, EvalError> {
     state.tokens[state.pos]?.text === "<=" ||
     state.tokens[state.pos]?.text === "!="
   ) {
-    const op = state.tokens[state.pos]?.text;
+    const op = state.tokens[state.pos]?.text as
+      "==" | "!=" | ">" | ">=" | "<" | "<=";
     state.pos++;
     const rhs = parseExpr(state);
     if (!rhs.ok) return rhs;
     const span = spanFrom(node.span.start, rhs.value.span.end);
-    node =
-      op === "=="
-        ? { type: "compare", lhs: node, rhs: rhs.value, span }
-        : op === ">"
-          ? { type: "greater", lhs: node, rhs: rhs.value, span }
-          : op === ">="
-            ? { type: "greaterEq", lhs: node, rhs: rhs.value, span }
-            : op === "<"
-              ? { type: "less", lhs: node, rhs: rhs.value, span }
-              : op === "<="
-                ? { type: "lessEq", lhs: node, rhs: rhs.value, span }
-                : { type: "notEqual", lhs: node, rhs: rhs.value, span };
+    node = { type: "compare", op, lhs: node, rhs: rhs.value, span };
   }
   return { ok: true, value: node };
 }

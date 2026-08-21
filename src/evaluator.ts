@@ -84,6 +84,18 @@ function evalUnary(
   };
 }
 
+const compareOps: Record<
+  Extract<Node, { type: "compare" }>["op"],
+  (a: Value, b: Value) => boolean
+> = {
+  "==": (a, b) => valuesEqual(a, b),
+  "!=": (a, b) => !valuesEqual(a, b),
+  ">": (a, b) => toNumber(a) > toNumber(b),
+  ">=": (a, b) => toNumber(a) >= toNumber(b),
+  "<": (a, b) => toNumber(a) < toNumber(b),
+  "<=": (a, b) => toNumber(a) <= toNumber(b),
+};
+
 function evalShortCircuit(
   node: Extract<Node, { type: "or" | "and" }>,
   env: Env,
@@ -151,48 +163,12 @@ function evalNode(
     case "unary":
       return evalUnary(node, env, input);
     case "compare":
-      return evalBinaryBool(node.lhs, node.rhs, env, input, (a, b) =>
-        valuesEqual(a, b),
-      );
-    case "greater":
       return evalBinaryBool(
         node.lhs,
         node.rhs,
         env,
         input,
-        (a, b) => toNumber(a) > toNumber(b),
-      );
-    case "greaterEq":
-      return evalBinaryBool(
-        node.lhs,
-        node.rhs,
-        env,
-        input,
-        (a, b) => toNumber(a) >= toNumber(b),
-      );
-    case "less":
-      return evalBinaryBool(
-        node.lhs,
-        node.rhs,
-        env,
-        input,
-        (a, b) => toNumber(a) < toNumber(b),
-      );
-    case "lessEq":
-      return evalBinaryBool(
-        node.lhs,
-        node.rhs,
-        env,
-        input,
-        (a, b) => toNumber(a) <= toNumber(b),
-      );
-    case "notEqual":
-      return evalBinaryBool(
-        node.lhs,
-        node.rhs,
-        env,
-        input,
-        (a, b) => !valuesEqual(a, b),
+        compareOps[node.op],
       );
     case "or":
     case "and":
