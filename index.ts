@@ -56,6 +56,7 @@ export function evaluate(input: string): Result<number, EvalError> {
   const tokens = tokenized.value;
   let pos = 0;
   const env: Record<string, number> = {};
+  const mutable = new Set<string>();
   const peek = (): string | undefined => tokens[pos];
   const parseExpr = (): Result<number, EvalError> => {
     const lhs = parseTerm();
@@ -69,10 +70,10 @@ export function evaluate(input: string): Result<number, EvalError> {
     }
     return { ok: true, value };
   };
-  const parseLetBindings = (): Result<number, EvalError> => {
-    while (peek() === "let") {
+  const parseLetBinding = (): Result<number, EvalError> => {
+    pos++;
+    if (peek() === "mut") {
       pos++;
-      if (peek() === "mut") pos++;
       const name = peek();
       if (name === undefined || name === ";")
         return fail("expected identifier");
@@ -82,10 +83,46 @@ export function evaluate(input: string): Result<number, EvalError> {
       const value = parseExpr();
       if (!value.ok) return value;
       env[name] = value.value;
+      mutable.add(name);
       if (peek() !== ";") return fail("expected ;");
       pos++;
+      return { ok: true, value: 0 };
     }
+    const name = peek();
+    if (name === undefined || name === ";") return fail("expected identifier");
+    pos++;
+    if (peek() !== "=") return fail("expected =");
+    pos++;
+    const value = parseExpr();
+    if (!value.ok) return value;
+    env[name] = value.value;
+    if (peek() !== ";") return fail("expected ;");
+    pos++;
     return { ok: true, value: 0 };
+  };
+  const parseStatement = (): Result<number, EvalError> => {
+    if (peek() === "let") return parseLetBinding();
+    const name = peek();
+    if (name !== undefined && tokens[pos + 1] === "=") {
+      if (!mutable.has(name)) return fail(`cannot reassign immutable: ${name}`);
+      pos += 2;
+      const value = parseExpr();
+      if (!value.ok) return value;
+      env[name] = value.value;
+      if (peek() !== ";") return fail("expected ;");
+      pos++;
+      return { ok: true, value: 0 };
+    }
+    return parseExpr();
+  };
+  const parseStatements = (): Result<number, EvalError> => {
+    let value = 0;
+    while (peek() !== undefined && peek() !== "}") {
+      const s = parseStatement();
+      if (!s.ok) return s;
+      value = s.value;
+    }
+    return { ok: true, value };
   };
   const parseTerm = (): Result<number, EvalError> => {
     const lhs = parseFactor();
@@ -111,13 +148,11 @@ export function evaluate(input: string): Result<number, EvalError> {
     }
     if (t === "{") {
       pos++;
-      const bindings = parseLetBindings();
-      if (!bindings.ok) return bindings;
-      const value = parseExpr();
-      if (!value.ok) return value;
+      const statements = parseStatements();
+      if (!statements.ok) return statements;
       if (peek() !== "}") return fail("expected }");
       pos++;
-      return { ok: true, value: value.value };
+      return { ok: true, value: statements.value };
     }
     if (t === undefined) return fail("unexpected end of input");
     if (t in env) {
@@ -131,12 +166,9 @@ export function evaluate(input: string): Result<number, EvalError> {
     pos++;
     return { ok: true, value: n };
   };
-  const bindings = parseLetBindings();
-  if (!bindings.ok) return bindings;
-  if (peek() === undefined) return { ok: true, value: 0 };
-  const value = parseExpr();
-  if (!value.ok) return value;
+  const statements = parseStatements();
+  if (!statements.ok) return statements;
   if (pos < tokens.length)
     return fail(`unexpected token: ${tokens[pos] ?? ""}`);
-  return { ok: true, value: value.value };
+  return { ok: true, value: statements.value };
 }
