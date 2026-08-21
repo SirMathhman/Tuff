@@ -27,6 +27,13 @@ test('evaluate("5.5") => 5', () => {
   expect(r.value).toBe(5);
 });
 
+test('evaluate("1.5 + 1.5") => 3', () => {
+  const r = evaluate("1.5 + 1.5");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(3);
+});
+
 test('evaluate("1 + 2") => 3', () => {
   const r = evaluate("1 + 2");
   if (!r.ok)

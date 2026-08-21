@@ -233,5 +233,5 @@ export function evaluateAst(
     if (!s.ok) return s;
     value = s.value;
   }
-  return { ok: true, value: toNumber(value) };
+  return { ok: true, value: Math.trunc(toNumber(value)) };
 }
