@@ -4,7 +4,7 @@ import type { Result } from "./result.ts";
 
 type Type = "number" | "bool" | "unknown";
 
-type Scope = Record<string, Type>;
+type Scope = { types: Record<string, Type>; mutable: Set<string> };
 
 function checkNode(
   node: Node,
@@ -20,8 +20,11 @@ function checkNode(
       return { ok: true, value: "number" };
     case "bool":
       return { ok: true, value: "bool" };
-    case "var":
-      return { ok: true, value: scope[node.name] ?? "unknown" };
+    case "var": {
+      const bound = scope.types[node.name];
+      if (bound === undefined) return fail(`unbound variable: ${node.name}`);
+      return { ok: true, value: bound };
+    }
     case "binary":
     case "compare":
     case "greater":
@@ -48,13 +51,16 @@ function checkNode(
     case "let": {
       const value = checkNode(node.value, scope, input);
       if (!value.ok) return value;
-      scope[node.name] = value.value;
+      scope.types[node.name] = value.value;
+      if (node.mutable) scope.mutable.add(node.name);
       return { ok: true, value: "number" };
     }
     case "assign": {
+      if (!scope.mutable.has(node.name))
+        return fail(`cannot reassign immutable: ${node.name}`);
       const value = checkNode(node.value, scope, input);
       if (!value.ok) return value;
-      const existing = scope[node.name];
+      const existing = scope.types[node.name];
       if (
         existing !== undefined &&
         existing !== "unknown" &&
@@ -79,7 +85,10 @@ function checkNode(
       };
     }
     case "block": {
-      const child: Scope = { ...scope };
+      const child: Scope = {
+        types: { ...scope.types },
+        mutable: new Set(scope.mutable),
+      };
       let value: Type = "number";
       for (const statement of node.statements) {
         const s = checkNode(statement, child, input);
@@ -95,7 +104,7 @@ export function typecheck(
   statements: Node[],
   input: string,
 ): Result<true, EvalError> {
-  const scope: Scope = {};
+  const scope: Scope = { types: {}, mutable: new Set<string>() };
   for (const statement of statements) {
     const s = checkNode(statement, scope, input);
     if (!s.ok) return s;
