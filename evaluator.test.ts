@@ -30,6 +30,10 @@ describe("evaluate", () => {
     expect(evaluate("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
   });
 
+  test('evaluate("(2 + 3) * 4") => 20', () => {
+    expect(evaluate("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
+  });
+
   test('evaluate("1 +") => unexpected-end error', () => {
     expect(evaluate("1 +")).toEqual({
       ok: false,

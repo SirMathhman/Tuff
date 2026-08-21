@@ -2,7 +2,8 @@ export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
 export type EvalError =
   | { kind: "invalid-token"; index: number; token: string }
-  | { kind: "unexpected-end"; index: number };
+  | { kind: "unexpected-end"; index: number }
+  | { kind: "unbalanced-paren"; index: number };
 
 const NUMBER_RE = /^\d+(\.\d+)?$/;
 
@@ -50,7 +51,7 @@ export function evaluate(input: string): Result<number, EvalError> {
     return left;
   }
 
-  // factor := ("-" | "+")? number
+  // factor := ("-" | "+")? (number | "(" expr ")")
   function parseFactor(): Result<number, EvalError> {
     let sign = 1;
     const signToken = tokens[pos];
@@ -68,6 +69,20 @@ export function evaluate(input: string): Result<number, EvalError> {
         error: { kind: "unexpected-end", index: input.trimEnd().length },
       };
     }
+    if (token.value === "(") {
+      pos++;
+      const inner = parseExpr();
+      if (!inner.ok) return inner;
+      const close = tokens[pos];
+      if (close === undefined || close.value !== ")") {
+        return {
+          ok: false,
+          error: { kind: "unbalanced-paren", index: token.index },
+        };
+      }
+      pos++;
+      return { ok: true, value: sign * inner.value };
+    }
     if (!NUMBER_RE.test(token.value)) {
       return {
         ok: false,
@@ -83,19 +98,25 @@ export function evaluate(input: string): Result<number, EvalError> {
   }
 
   // expr := term (("+" | "-") term)*
-  let result = parseTerm();
-  if (!result.ok) return result;
-  while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
-    const op = tokens[pos]?.value;
-    pos++;
-    const right = parseTerm();
-    if (!right.ok) return right;
-    result = {
-      ok: true,
-      value:
-        op === "+" ? result.value + right.value : result.value - right.value,
-    };
+  function parseExpr(): Result<number, EvalError> {
+    let result = parseTerm();
+    if (!result.ok) return result;
+    while (tokens[pos]?.value === "+" || tokens[pos]?.value === "-") {
+      const op = tokens[pos]?.value;
+      pos++;
+      const right = parseTerm();
+      if (!right.ok) return right;
+      result = {
+        ok: true,
+        value:
+          op === "+" ? result.value + right.value : result.value - right.value,
+      };
+    }
+    return result;
   }
+
+  const result = parseExpr();
+  if (!result.ok) return result;
 
   const leftover = tokens[pos];
   if (leftover !== undefined) {
