@@ -12,51 +12,16 @@ export type EvalError =
       hint: string;
     };
 
+import { tokenize } from "./tokenizer.ts";
+
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
 type Value =
-  { type: "number"; value: number } | { type: "bool"; value: boolean };
+  | { type: "number"; value: number }
+  | { type: "bool"; value: boolean };
 
 function toNumber(v: Value): number {
   return v.type === "number" ? v.value : v.value ? 1 : 0;
-}
-
-function tokenize(input: string): Result<string[], { reason: string }> {
-  const tokens: string[] = [];
-  let i = 0;
-  while (i < input.length) {
-    const c = input.charAt(i);
-    if (/\s/.test(c)) {
-      i++;
-      continue;
-    }
-    if (/[0-9.]/.test(c)) {
-      let j = i;
-      while (j < input.length && /[0-9.]/.test(input.charAt(j))) j++;
-      tokens.push(input.slice(i, j));
-      i = j;
-      continue;
-    }
-    if (/[A-Za-z_]/.test(c)) {
-      let j = i;
-      while (j < input.length && /[A-Za-z0-9_]/.test(input.charAt(j))) j++;
-      tokens.push(input.slice(i, j));
-      i = j;
-      continue;
-    }
-    if (c === "=" && input.charAt(i + 1) === "=") {
-      tokens.push("==");
-      i += 2;
-      continue;
-    }
-    if ("+-*/(){};=".includes(c)) {
-      tokens.push(c);
-      i++;
-      continue;
-    }
-    return { ok: false, error: { reason: `unexpected character: ${c}` } };
-  }
-  return { ok: true, value: tokens };
 }
 
 type ParserState = {
