@@ -1,5 +1,3 @@
-console.log("Hello via Bun!");
-
 export function evaluate(input: string): number {
   if (input === "") return 0;
   throw new Error("not implemented");
