@@ -264,12 +264,10 @@ impl<'a> Parser<'a> {
             let offset = self.pos;
             self.pos += 1;
             let value = self.parse_factor(ctx)?.value;
-            return value
-                .deref(&self.env, offset)
-                .map(|v| Factor {
-                    value: v,
-                    type_max: None,
-                });
+            return value.deref(&self.env, offset).map(|v| Factor {
+                value: v,
+                type_max: None,
+            });
         }
         match self.peek() {
             Some(b'(') => {
@@ -722,9 +720,10 @@ impl<'a> Parser<'a> {
         self.assign_to_binding(name, offset, value_offset, value)
     }
 
-    /// Parses `let [mut] name = expr`, consuming the `let` keyword.
-    /// The binding is recorded in the current scope; the statement
-    /// itself evaluates to `0`.
+    /// Parses `let [mut] name [: TYPE] = expr`, consuming the `let`
+    /// keyword. The binding is recorded in the current scope; the
+    /// statement itself evaluates to `0`. An optional `: TYPE`
+    /// annotation names the binding's type.
     fn parse_let(&mut self) -> Result<Value, Error> {
         self.pos += 4; // skip `let`
         self.skip_spaces();
@@ -733,18 +732,20 @@ impl<'a> Parser<'a> {
             mutable = true;
             self.pos += 4; // skip `mut `
         }
-        let (name, _, _, value) = self.parse_name_equals_expr()?;
+        let (name, _) = self.parse_identifier_name()?;
+        self.skip_spaces();
+        // An optional `: TYPE` annotation names the binding's type.
+        if self.peek() == Some(b':') {
+            self.pos += 1; // skip `:`
+            self.skip_spaces();
+            while matches!(self.peek(), Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')) {
+                self.pos += 1;
+            }
+            self.skip_spaces();
+        }
+        let (_, value) = self.parse_equals_expr()?;
         self.env.last_mut().unwrap().push((name, mutable, value));
         Ok(Value::Int(0))
-    }
-
-    /// Parses `name = expr`, returning the name, its offset, the
-    /// offset of the right-hand side, and the value of the right-hand
-    /// side.
-    fn parse_name_equals_expr(&mut self) -> Result<(String, usize, usize, Value), Error> {
-        let (name, offset) = self.parse_identifier_name()?;
-        let (value_offset, value) = self.parse_equals_expr()?;
-        Ok((name, offset, value_offset, value))
     }
 
     /// Parses `= expr`, returning the offset of the right-hand side
@@ -878,12 +879,10 @@ impl<'a> Parser<'a> {
                 value: Value::Int(value),
                 type_max: Some(max),
             }),
-            None if !suffix.is_empty() => {
-                Err(Error::InvalidTypeSuffix {
-                    offset: suffix_start,
-                    suffix,
-                })
-            }
+            None if !suffix.is_empty() => Err(Error::InvalidTypeSuffix {
+                offset: suffix_start,
+                suffix,
+            }),
             None => Ok(Self::plain_factor(Value::Int(value))),
         }
     }
@@ -1014,6 +1013,11 @@ mod tests {
         // `100U8` is a `u8` (range 0..=255); negating it yields -100,
         // which does not fit an unsigned type.
         assert_eq!(interpret("-100U8"), Err(Error::Overflow { offset: 0 }));
+    }
+
+    #[test]
+    fn let_binding_with_type_annotation() {
+        assert_eq!(interpret("let x : U8 = 100U8; x"), Ok(100));
     }
 
     #[test]

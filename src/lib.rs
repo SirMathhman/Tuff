@@ -22,7 +22,8 @@ use parser::Parser;
 /// expression, whose value is the block's value; the top level is a
 /// sequence of statements (optionally separated by `;`) whose value
 /// is the value of the last statement; a `let` statement evaluates to
-/// `0`; booleans
+/// `0` and may name the binding's type with an optional `: TYPE`
+/// annotation (e.g. `let x : U8 = 100U8`); booleans
 /// are distinct from integers, so `==` yields `1` only for two
 /// values of the same kind (e.g. `true == 1` is `0`), while
 /// arithmetic treats `true` as `1` and `false` as `0`; `==` binds
