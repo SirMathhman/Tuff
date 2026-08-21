@@ -127,7 +127,7 @@ function parseStatements(state: ParserState): Result<Node[], EvalError> {
 }
 
 function parseTerm(state: ParserState): Result<Node, EvalError> {
-  const lhs = parseFactor(state);
+  const lhs = parseUnary(state);
   if (!lhs.ok) return lhs;
   if (state.tokens[state.pos] !== "*" && state.tokens[state.pos] !== "/")
     return lhs;
@@ -136,11 +136,24 @@ function parseTerm(state: ParserState): Result<Node, EvalError> {
     const op = state.tokens[state.pos];
     if (op !== "*" && op !== "/") break;
     state.pos++;
-    const rhs = parseFactor(state);
+    const rhs = parseUnary(state);
     if (!rhs.ok) return rhs;
     node = { type: "binary", op, lhs: node, rhs: rhs.value };
   }
   return { ok: true, value: node };
+}
+
+function parseUnary(state: ParserState): Result<Node, EvalError> {
+  if (state.tokens[state.pos] === "-") {
+    state.pos++;
+    const operand = parseUnary(state);
+    if (!operand.ok) return operand;
+    return {
+      ok: true,
+      value: { type: "unary", op: "-", operand: operand.value },
+    };
+  }
+  return parseFactor(state);
 }
 
 function parseFactor(state: ParserState): Result<Node, EvalError> {

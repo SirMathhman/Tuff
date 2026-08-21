@@ -17,6 +17,7 @@ export type Node =
   | { type: "bool"; value: boolean }
   | { type: "var"; name: string }
   | { type: "binary"; op: "+" | "-" | "*" | "/"; lhs: Node; rhs: Node }
+  | { type: "unary"; op: "-"; operand: Node }
   | { type: "compare"; lhs: Node; rhs: Node }
   | { type: "or"; lhs: Node; rhs: Node }
   | { type: "and"; lhs: Node; rhs: Node }

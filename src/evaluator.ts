@@ -88,6 +88,14 @@ function evalNode(
               : a / b;
       return { ok: true, value: { type: "number", value } };
     }
+    case "unary": {
+      const operand = evalNode(node.operand, env, input);
+      if (!operand.ok) return operand;
+      return {
+        ok: true,
+        value: { type: "number", value: -toNumber(operand.value) },
+      };
+    }
     case "compare": {
       const lhs = evalNode(node.lhs, env, input);
       if (!lhs.ok) return lhs;
