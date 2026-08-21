@@ -353,15 +353,26 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether the `(` at the current position opens a tuple literal:
-    /// a `,` appears before the matching `)`.
+    /// a `,` appears at the top level of the group, before the
+    /// matching `)`. Commas inside nested `(...)` or `[...]` do not
+    /// count.
     fn has_tuple_comma(&self) -> bool {
+        // We start just inside the opening `(`, so depth is 1.
+        let mut depth = 1usize;
         let mut i = self.pos + 1;
         while i < self.input.len() {
             match self.input.as_bytes()[i] {
-                b',' => return true,
-                b')' => return false,
-                _ => i += 1,
+                b'(' | b'[' => depth += 1,
+                b')' | b']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return false;
+                    }
+                }
+                b',' if depth == 1 => return true,
+                _ => {}
             }
+            i += 1;
         }
         false
     }
@@ -885,10 +896,22 @@ mod tests {
     #[test]
     fn integer_literal_exceeding_type_range_is_reported() {
         // `256` does not fit in a `u8` (max 255).
-        assert_eq!(
-            interpret("256U8"),
-            Err(Error::Overflow { offset: 0 })
-        );
+        assert_eq!(interpret("256U8"), Err(Error::Overflow { offset: 0 }));
+    }
+
+    #[test]
+    fn parenthesized_array_is_not_a_tuple() {
+        // The comma is inside the array, so `([1, 2])` is a grouped
+        // array, not a 1-element tuple.
+        assert_eq!(interpret("let a = ([1, 2]); a[1]"), Ok(2));
+    }
+
+    #[test]
+    fn parenthesized_expression_with_inner_tuple_is_grouped() {
+        // The comma is inside the inner tuple, so the outer `(` is a
+        // grouping: `(2, 3)` is a tuple (value `0`), so the result is
+        // `1 + 0` times `2`.
+        assert_eq!(interpret("(1 + (2, 3)) * 2"), Ok(2));
     }
 
     #[test]
