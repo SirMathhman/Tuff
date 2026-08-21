@@ -665,16 +665,10 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1;
         let cond_start = self.pos;
-        // Parse the condition once to validate it and locate `)`.
-        let _ = self.parse_condition_body()?;
-        if self.peek() != Some(b'{') {
-            return Err(Error::ExpectedClosingDelimiter {
-                offset: self.pos,
-                expected: b'{',
-            });
-        }
         loop {
-            // Re-evaluate the condition from its source range.
+            // Parse the condition from its source range; the first
+            // pass is the validation, and its side effects belong to
+            // iteration 1, not a phantom pre-loop pass.
             self.pos = cond_start;
             let cond = self.parse_condition_body()?;
             if self.peek() != Some(b'{') {
@@ -1158,6 +1152,19 @@ mod tests {
         assert_eq!(
             interpret("let mut x = 0; while (x < 4) { x += 1; } x"),
             Ok(4)
+        );
+    }
+
+    #[test]
+    fn while_condition_side_effect_runs_once_per_iteration() {
+        // The condition's side effect on `c` must run exactly once per
+        // iteration (3 times), not an extra time in a phantom pre-loop
+        // validation pass.
+        assert_eq!(
+            interpret(
+                "let mut i = 0; let mut c = 0; while (if (i < 3) { c += 1; true } else false) { i += 1; } c"
+            ),
+            Ok(3)
         );
     }
 
