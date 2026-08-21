@@ -8,14 +8,16 @@ test("index runs without throwing", async () => {
 
 test('evaluate("") => 0', () => {
   const r = evaluate("");
-  expect(r.ok).toBe(true);
-  if (r.ok) expect(r.value).toBe(0);
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(0);
 });
 
 test('evaluate("1") => 1', () => {
   const r = evaluate("1");
-  expect(r.ok).toBe(true);
-  if (r.ok) expect(r.value).toBe(1);
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(1);
 });
 
 test('evaluate("abc") => invalid_input error', () => {
