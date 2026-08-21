@@ -9,7 +9,8 @@ use parser::Parser;
 /// Interprets `input` and returns its value.
 ///
 /// The bare minimum for now: an empty string is `0`; a non-negative
-/// integer literal is its value; the boolean literals `true` and
+/// integer literal is its value (a trailing type suffix such as
+/// `U8` is ignored); the boolean literals `true` and
 /// `false` are `1` and `0`; a chain of literals joined by `+`,
 /// `-`, or `*` (optional surrounding spaces) is evaluated with `*`
 /// binding tighter than `+`/`-`; parentheses group subexpressions;

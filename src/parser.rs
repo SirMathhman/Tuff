@@ -767,8 +767,15 @@ impl<'a> Parser<'a> {
         while matches!(self.peek(), Some(b'0'..=b'9')) {
             self.pos += 1;
         }
-        self.input[start..self.pos]
-            .parse::<i64>()
+        let digits = self.input[start..self.pos].to_string();
+        // A trailing type suffix (e.g. `U8`) is ignored.
+        while matches!(
+            self.peek(),
+            Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')
+        ) {
+            self.pos += 1;
+        }
+        digits.parse::<i64>()
             .map(Value::Int)
             .map_err(|_| Error::Overflow { offset: start })
     }
@@ -820,6 +827,11 @@ mod tests {
     #[test]
     fn multi_digit_number() {
         assert_eq!(interpret("20"), Ok(20));
+    }
+
+    #[test]
+    fn integer_literal_with_type_suffix() {
+        assert_eq!(interpret("100U8"), Ok(100));
     }
 
     #[test]
