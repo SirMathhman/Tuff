@@ -74,10 +74,11 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 pos += 1;
             }
             let digits: String = chars[start..pos].iter().collect();
-            let value = digits.parse().map_err(|_| crate::TuffError::Lex {
-                span: Span { start, end: pos },
-                message: "number out of range".to_string(),
-            })?;
+            let value = digits
+                .parse()
+                .map_err(|_| crate::TuffError::NumberOutOfRange {
+                    span: Span { start, end: pos },
+                })?;
             tokens.push(Token::Num(value, Span { start, end: pos }));
         } else if c == '=' && chars.get(pos + 1) == Some(&'=') {
             tokens.push(Token::EqEq(Span {
@@ -122,12 +123,12 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             tokens.push(token);
             pos += advance;
         } else {
-            return Err(crate::TuffError::Lex {
+            return Err(crate::TuffError::UnexpectedChar {
                 span: Span {
                     start: pos,
                     end: pos + 1,
                 },
-                message: format!("unexpected character '{c}'"),
+                ch: c,
             });
         }
     }
@@ -224,9 +225,9 @@ mod tests {
     fn rejects_unexpected_character() {
         assert_eq!(
             lex("1 @"),
-            Err(crate::TuffError::Lex {
+            Err(crate::TuffError::UnexpectedChar {
                 span: Span { start: 2, end: 3 },
-                message: "unexpected character '@'".to_string(),
+                ch: '@',
             })
         );
     }

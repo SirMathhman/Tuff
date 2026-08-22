@@ -75,27 +75,25 @@ impl Env {
             if let Some((v, mutable)) = scope.get_mut(name) {
                 if *mutable {
                     if !Self::types_compatible(v, &value) {
-                        return Err(crate::TuffError::Eval {
+                        return Err(crate::TuffError::TypeMismatch {
                             span,
-                            message: format!(
-                                "type mismatch: cannot assign {} to {} variable '{name}'",
-                                Self::type_name(&value),
-                                Self::type_name(v)
-                            ),
+                            found: Self::type_name(&value),
+                            expected: Self::type_name(v),
+                            name: name.to_string(),
                         });
                     }
                     *v = value;
                     return Ok(());
                 }
-                return Err(crate::TuffError::Eval {
+                return Err(crate::TuffError::ImmutableAssignment {
                     span,
-                    message: format!("cannot assign to immutable variable '{name}'"),
+                    name: name.to_string(),
                 });
             }
         }
-        Err(crate::TuffError::Eval {
+        Err(crate::TuffError::UndefinedVariable {
             span,
-            message: format!("undefined variable '{name}'"),
+            name: name.to_string(),
         })
     }
 
@@ -110,44 +108,36 @@ impl Env {
         for scope in self.scopes.iter_mut().rev() {
             if let Some((v, mutable)) = scope.get_mut(name) {
                 if !*mutable {
-                    return Err(crate::TuffError::Eval {
+                    return Err(crate::TuffError::ImmutableAssignment {
                         span,
-                        message: format!("cannot assign to immutable variable '{name}'"),
+                        name: name.to_string(),
                     });
                 }
                 let Value::Array(items) = v else {
-                    return Err(crate::TuffError::Eval {
-                        span,
-                        message: "expected an array".to_string(),
-                    });
+                    return Err(crate::TuffError::NotAnArray { span });
                 };
                 let i = index.try_into().unwrap_or(usize::MAX);
                 let Some(current) = items.get(i) else {
-                    return Err(crate::TuffError::Eval {
+                    return Err(crate::TuffError::IndexOutOfBounds {
                         span,
-                        message: format!(
-                            "index {index} out of bounds for array of length {}",
-                            items.len()
-                        ),
+                        index,
+                        len: items.len(),
                     });
                 };
                 if !Self::types_compatible(current, &value) {
-                    return Err(crate::TuffError::Eval {
+                    return Err(crate::TuffError::ElementTypeMismatch {
                         span,
-                        message: format!(
-                            "type mismatch: cannot assign {} to {} element",
-                            Self::type_name(&value),
-                            Self::type_name(current)
-                        ),
+                        found: Self::type_name(&value),
+                        expected: Self::type_name(current),
                     });
                 }
                 items[i] = value;
                 return Ok(());
             }
         }
-        Err(crate::TuffError::Eval {
+        Err(crate::TuffError::UndefinedVariable {
             span,
-            message: format!("undefined variable '{name}'"),
+            name: name.to_string(),
         })
     }
 
@@ -206,21 +196,24 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
             let index = eval_expr(index, env)?;
             eval_index(base, index, *span)
         }
-        Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Eval {
-            span: *span,
-            message: format!("undefined variable '{name}'"),
-        }),
+        Expr::Ident(name, span) => {
+            env.get(name)
+                .ok_or_else(|| crate::TuffError::UndefinedVariable {
+                    span: *span,
+                    name: name.clone(),
+                })
+        }
         Expr::Ref(inner, mutable, span) => {
             let Expr::Ident(name, _) = inner.as_ref() else {
-                return Err(crate::TuffError::Eval {
+                return Err(crate::TuffError::ExpectedVariableName {
                     span: *span,
-                    message: "expected a variable name after '&'".to_string(),
+                    after: "&",
                 });
             };
             if env.get(name).is_none() {
-                return Err(crate::TuffError::Eval {
+                return Err(crate::TuffError::UndefinedVariable {
                     span: *span,
-                    message: format!("undefined variable '{name}'"),
+                    name: name.clone(),
                 });
             }
             if *mutable {
@@ -231,23 +224,20 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
         }
         Expr::Deref(inner, span) => {
             let Expr::Ident(name, _) = inner.as_ref() else {
-                return Err(crate::TuffError::Eval {
+                return Err(crate::TuffError::ExpectedVariableName {
                     span: *span,
-                    message: "expected a variable name after '*'".to_string(),
+                    after: "*",
                 });
             };
             let target = deref_target(name, env, *span)?;
-            env.get(&target).ok_or_else(|| crate::TuffError::Eval {
+            env.get(&target).ok_or(crate::TuffError::UndefinedVariable {
                 span: *span,
-                message: format!("undefined variable '{target}'"),
+                name: target,
             })
         }
         Expr::If(cond, then, otherwise, span) => {
             let Value::Bool(b) = eval_expr(cond, env)? else {
-                return Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: "expected a boolean condition".to_string(),
-                });
+                return Err(crate::TuffError::ExpectedBooleanCondition { span: *span });
             };
             // Both branches are evaluated; the condition picks the result.
             let then_value = eval_expr(then, env)?;
@@ -260,10 +250,7 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
 
 /// Evaluate a binary operation on already-evaluated operands.
 fn eval_bin(op: BinOp, l: Value, r: Value, span: Span) -> Result<Value, crate::TuffError> {
-    let expected_integer = || crate::TuffError::Eval {
-        span,
-        message: "expected an integer".to_string(),
-    };
+    let expected_integer = || crate::TuffError::ExpectedInteger { span };
     match op {
         BinOp::Eq => Ok(Value::Bool(l == r)),
         BinOp::Ne => Ok(Value::Bool(l != r)),
@@ -302,26 +289,18 @@ fn eval_bin(op: BinOp, l: Value, r: Value, span: Span) -> Result<Value, crate::T
 /// Evaluate an index expression on already-evaluated operands.
 fn eval_index(base: Value, index: Value, span: Span) -> Result<Value, crate::TuffError> {
     let Value::Int(i) = index else {
-        return Err(crate::TuffError::Eval {
-            span,
-            message: "expected an integer index".to_string(),
-        });
+        return Err(crate::TuffError::ExpectedIntegerIndex { span });
     };
     let Value::Array(items) = base else {
-        return Err(crate::TuffError::Eval {
-            span,
-            message: "expected an array".to_string(),
-        });
+        return Err(crate::TuffError::NotAnArray { span });
     };
     items
         .get(i.try_into().unwrap_or(usize::MAX))
         .cloned()
-        .ok_or_else(|| crate::TuffError::Eval {
+        .ok_or(crate::TuffError::IndexOutOfBounds {
             span,
-            message: format!(
-                "index {i} out of bounds for array of length {}",
-                items.len()
-            ),
+            index: i,
+            len: items.len(),
         })
 }
 
@@ -330,14 +309,14 @@ fn deref_target(name: &str, env: &Env, span: Span) -> Result<String, crate::Tuff
     match env.get(name) {
         Some(Value::Ref(target)) | Some(Value::MutRef(target)) => Ok(target),
         Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) => {
-            Err(crate::TuffError::Eval {
+            Err(crate::TuffError::NotAReference {
                 span,
-                message: format!("'{name}' is not a reference"),
+                name: name.to_string(),
             })
         }
-        None => Err(crate::TuffError::Eval {
+        None => Err(crate::TuffError::UndefinedVariable {
             span,
-            message: format!("undefined variable '{name}'"),
+            name: name.to_string(),
         }),
     }
 }
@@ -358,34 +337,25 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                     Expr::Ident(name, _) => name.clone(),
                     Expr::Deref(inner, _) => {
                         let Expr::Ident(name, _) = inner.as_ref() else {
-                            return Err(crate::TuffError::Eval {
+                            return Err(crate::TuffError::ExpectedVariableName {
                                 span: *span,
-                                message: "expected a variable name after '*'".to_string(),
+                                after: "*",
                             });
                         };
                         // Assign through the reference to the variable it points at.
                         if matches!(env.get(name), Some(Value::Ref(_))) {
-                            return Err(crate::TuffError::Eval {
+                            return Err(crate::TuffError::CannotAssignThroughSharedReference {
                                 span: *span,
-                                message: "cannot assign through a shared reference".to_string(),
                             });
                         }
                         deref_target(name, env, *span)?
                     }
                     Expr::Index(base, index, _) => {
                         let Expr::Ident(name, _) = base.as_ref() else {
-                            return Err(crate::TuffError::Eval {
-                                span: *span,
-                                message:
-                                    "expected a variable name as the base of an indexed assignment"
-                                        .to_string(),
-                            });
+                            return Err(crate::TuffError::InvalidAssignmentTarget { span: *span });
                         };
                         let Value::Int(i) = eval_expr(index, env)? else {
-                            return Err(crate::TuffError::Eval {
-                                span: *span,
-                                message: "expected an integer index".to_string(),
-                            });
+                            return Err(crate::TuffError::ExpectedIntegerIndex { span: *span });
                         };
                         let v = eval_expr(value, env)?;
                         env.set_index(name, i, v, *span)?;
@@ -393,11 +363,7 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                         continue;
                     }
                     _ => {
-                        return Err(crate::TuffError::Eval {
-                            span: *span,
-                            message: "expected a variable name or dereference as assignment target"
-                                .to_string(),
-                        });
+                        return Err(crate::TuffError::InvalidAssignmentTarget { span: *span });
                     }
                 };
                 let v = eval_expr(value, env)?;
@@ -411,10 +377,7 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
     }
     env.pop_scope();
     // The block's value is the value of its last expression statement.
-    last_value.ok_or_else(|| crate::TuffError::Eval {
-        span,
-        message: "block has no value".to_string(),
-    })
+    last_value.ok_or(crate::TuffError::BlockHasNoValue { span })
 }
 
 #[cfg(test)]

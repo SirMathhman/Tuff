@@ -4,6 +4,8 @@
 pub mod ast;
 /// Orchestrates the compiler pipeline.
 pub mod driver;
+/// Errors produced while compiling or evaluating a Tuff program.
+pub mod error;
 /// The tree-walking interpreter.
 pub mod eval;
 /// Converts source text into a flat list of tokens.
@@ -11,7 +13,8 @@ pub mod lexer;
 /// Converts a token stream into an AST.
 pub mod parser;
 
-use std::fmt;
+/// The error type for the Tuff compiler.
+pub use error::TuffError;
 
 /// A span of character offsets into the input source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,52 +23,6 @@ pub struct Span {
     pub start: usize,
     /// The last character offset (exclusive).
     pub end: usize,
-}
-
-/// Errors produced while evaluating a Tuff expression.
-#[derive(Debug, PartialEq, Eq)]
-pub enum TuffError {
-    /// The input could not be lexed at the given span.
-    Lex {
-        /// Where in the source the failure occurred.
-        span: Span,
-        /// What went wrong and why.
-        message: String,
-    },
-    /// The input could not be parsed at the given span.
-    Parse {
-        /// Where in the source the failure occurred.
-        span: Span,
-        /// What went wrong and why.
-        message: String,
-    },
-    /// The input failed to evaluate at the given span.
-    Eval {
-        /// Where in the source the failure occurred.
-        span: Span,
-        /// What went wrong and why.
-        message: String,
-    },
-}
-
-impl fmt::Display for TuffError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TuffError::Lex { span, message } => {
-                write!(f, "lex error at {}..{}: {}", span.start, span.end, message)
-            }
-            TuffError::Parse { span, message } => {
-                write!(
-                    f,
-                    "parse error at {}..{}: {}",
-                    span.start, span.end, message
-                )
-            }
-            TuffError::Eval { span, message } => {
-                write!(f, "eval error at {}..{}: {}", span.start, span.end, message)
-            }
-        }
-    }
 }
 
 /// Evaluate a Tuff expression and return its value.
@@ -81,9 +38,8 @@ mod tests {
     fn empty_string_is_a_parse_error() {
         assert_eq!(
             evaluate(""),
-            Err(TuffError::Parse {
+            Err(TuffError::UnexpectedEndOfInput {
                 span: Span { start: 0, end: 0 },
-                message: "unexpected end of input".to_string(),
             })
         );
     }
@@ -166,9 +122,11 @@ mod tests {
     fn assigning_boolean_to_integer_variable_is_an_eval_error() {
         assert_eq!(
             evaluate("let mut x = 1; x = true;"),
-            Err(TuffError::Eval {
+            Err(TuffError::TypeMismatch {
                 span: Span { start: 15, end: 16 },
-                message: "type mismatch: cannot assign boolean to integer variable 'x'".to_string(),
+                found: "boolean",
+                expected: "integer",
+                name: "x".into(),
             })
         );
     }
@@ -307,9 +265,11 @@ mod tests {
             evaluate(
                 "let x = if (false) { let y = 2; y } else { let mut a = 0; a = true; let y = 3; y }; x"
             ),
-            Err(TuffError::Eval {
+            Err(TuffError::TypeMismatch {
                 span: Span { start: 58, end: 59 },
-                message: "type mismatch: cannot assign boolean to integer variable 'a'".to_string(),
+                found: "boolean",
+                expected: "integer",
+                name: "a".into(),
             })
         );
     }
@@ -320,9 +280,11 @@ mod tests {
             evaluate(
                 "let x = if (false) { let mut a = 0; a = true; let y = 2; y } else { let y = 3; y }; x"
             ),
-            Err(TuffError::Eval {
+            Err(TuffError::TypeMismatch {
                 span: Span { start: 36, end: 37 },
-                message: "type mismatch: cannot assign boolean to integer variable 'a'".to_string(),
+                found: "boolean",
+                expected: "integer",
+                name: "a".into(),
             })
         );
     }
@@ -352,9 +314,9 @@ mod tests {
     fn assignment_to_outer_scope_immutable_variable_is_an_eval_error() {
         assert_eq!(
             evaluate("let x = 0; { x = 5; x }"),
-            Err(TuffError::Eval {
+            Err(TuffError::ImmutableAssignment {
                 span: Span { start: 13, end: 14 },
-                message: "cannot assign to immutable variable 'x'".to_string(),
+                name: "x".into(),
             })
         );
     }
@@ -363,9 +325,9 @@ mod tests {
     fn undefined_variable_in_nested_block_is_an_eval_error() {
         assert_eq!(
             evaluate("{ { x } }"),
-            Err(TuffError::Eval {
+            Err(TuffError::UndefinedVariable {
                 span: Span { start: 4, end: 5 },
-                message: "undefined variable 'x'".to_string(),
+                name: "x".into(),
             })
         );
     }
@@ -374,9 +336,9 @@ mod tests {
     fn undefined_variable_is_an_eval_error() {
         assert_eq!(
             evaluate("x"),
-            Err(TuffError::Eval {
+            Err(TuffError::UndefinedVariable {
                 span: Span { start: 0, end: 1 },
-                message: "undefined variable 'x'".to_string(),
+                name: "x".into(),
             })
         );
     }
@@ -385,9 +347,8 @@ mod tests {
     fn dangling_operator_is_a_parse_error() {
         assert_eq!(
             evaluate("1 +"),
-            Err(TuffError::Parse {
+            Err(TuffError::UnexpectedEndOfInput {
                 span: Span { start: 2, end: 3 },
-                message: "unexpected end of input".to_string(),
             })
         );
     }
@@ -396,9 +357,8 @@ mod tests {
     fn unexpected_closing_paren_is_a_parse_error() {
         assert_eq!(
             evaluate("1 + )"),
-            Err(TuffError::Parse {
+            Err(TuffError::UnexpectedToken {
                 span: Span { start: 4, end: 5 },
-                message: "unexpected token".to_string(),
             })
         );
     }

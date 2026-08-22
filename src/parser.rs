@@ -6,9 +6,8 @@ use crate::lexer::Token;
 pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
     let mut parser = Parser { tokens, pos: 0 };
     if parser.tokens.is_empty() {
-        return Err(crate::TuffError::Parse {
+        return Err(crate::TuffError::UnexpectedEndOfInput {
             span: Span { start: 0, end: 0 },
-            message: "unexpected end of input".to_string(),
         });
     }
     let mut stmts = Vec::new();
@@ -132,9 +131,9 @@ impl Parser {
                     expr = Expr::Index(Box::new(expr), Box::new(index), close);
                 }
                 other => {
-                    return Err(crate::TuffError::Parse {
+                    return Err(crate::TuffError::Expected {
                         span: other.map(|t| t.span()).unwrap_or(span),
-                        message: "expected ']'".to_string(),
+                        expected: "]",
                     });
                 }
             }
@@ -157,7 +156,7 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Ident(name, span))
             }
-            Some(Token::LParen(span)) => self.parse_group(span, ')', Token::RParen),
+            Some(Token::LParen(span)) => self.parse_group(span, ")", Token::RParen),
             Some(Token::LBrace(span)) => self.parse_block(span),
             Some(Token::LBracket(span)) => self.parse_array(span),
             Some(Token::Ref(span)) => {
@@ -176,17 +175,13 @@ impl Parser {
                 Ok(Expr::Deref(Box::new(inner), span))
             }
             Some(Token::If(span)) => self.parse_if(span),
-            Some(token) => Err(crate::TuffError::Parse {
-                span: token.span(),
-                message: "unexpected token".to_string(),
-            }),
-            None => Err(crate::TuffError::Parse {
+            Some(token) => Err(crate::TuffError::UnexpectedToken { span: token.span() }),
+            None => Err(crate::TuffError::UnexpectedEndOfInput {
                 span: self
                     .tokens
                     .last()
                     .map(|t| t.span())
                     .unwrap_or(Span { start: 0, end: 0 }),
-                message: "unexpected end of input".to_string(),
             }),
         }
     }
@@ -195,7 +190,7 @@ impl Parser {
     fn parse_group(
         &mut self,
         open: Span,
-        close_char: char,
+        close: &'static str,
         make_close: fn(Span) -> Token,
     ) -> Result<Expr, crate::TuffError> {
         self.pos += 1;
@@ -205,9 +200,9 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Group(Box::new(expr), open, close.span()))
             }
-            other => Err(crate::TuffError::Parse {
+            other => Err(crate::TuffError::Expected {
                 span: other.map(|t| t.span()).unwrap_or(open),
-                message: format!("expected '{close_char}'"),
+                expected: close,
             }),
         }
     }
@@ -228,9 +223,9 @@ impl Parser {
                         return Ok(Expr::Array(elements, close));
                     }
                     other => {
-                        return Err(crate::TuffError::Parse {
+                        return Err(crate::TuffError::Expected {
                             span: other.map(|t| t.span()).unwrap_or(open),
-                            message: "expected ',' or ']' in array".to_string(),
+                            expected: ", or ] in array",
                         });
                     }
                 }
@@ -241,9 +236,9 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Array(elements, close))
             }
-            _ => Err(crate::TuffError::Parse {
+            _ => Err(crate::TuffError::Expected {
                 span: open,
-                message: "expected ']'".to_string(),
+                expected: "]",
             }),
         }
     }
@@ -254,9 +249,9 @@ impl Parser {
         let mut stmts = Vec::new();
         while !matches!(self.peek(), Some(Token::RBrace(_))) {
             if self.peek().is_none() {
-                return Err(crate::TuffError::Parse {
+                return Err(crate::TuffError::Expected {
                     span: open,
-                    message: "expected '}'".to_string(),
+                    expected: "}",
                 });
             }
             stmts.push(self.parse_stmt()?);
@@ -266,9 +261,9 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Block(stmts, open, span))
             }
-            _ => Err(crate::TuffError::Parse {
+            _ => Err(crate::TuffError::Expected {
                 span: open,
-                message: "expected '}'".to_string(),
+                expected: "}",
             }),
         }
     }
@@ -281,9 +276,9 @@ impl Parser {
         match self.peek() {
             Some(Token::Else(_)) => {}
             other => {
-                return Err(crate::TuffError::Parse {
+                return Err(crate::TuffError::Expected {
                     span: other.map(|t| t.span()).unwrap_or(if_span),
-                    message: "expected 'else' after 'if'".to_string(),
+                    expected: "else after if",
                 });
             }
         }
@@ -308,9 +303,9 @@ impl Parser {
         let (name, name_span) = match self.peek() {
             Some(Token::Ident(name, span)) => (name, span),
             other => {
-                return Err(crate::TuffError::Parse {
+                return Err(crate::TuffError::Expected {
                     span: other.map(|t| t.span()).unwrap_or(let_span),
-                    message: "expected a variable name after 'let'".to_string(),
+                    expected: "a variable name after let",
                 });
             }
         };
@@ -324,9 +319,9 @@ impl Parser {
         match self.peek() {
             Some(Token::Eq(_)) => self.pos += 1,
             other => {
-                return Err(crate::TuffError::Parse {
+                return Err(crate::TuffError::Expected {
                     span: other.map(|t| t.span()).unwrap_or(name_span),
-                    message: "expected '=' after variable name".to_string(),
+                    expected: "= after variable name",
                 });
             }
         }
@@ -334,9 +329,9 @@ impl Parser {
         match self.peek() {
             Some(Token::Semi(_)) => self.pos += 1,
             other => {
-                return Err(crate::TuffError::Parse {
+                return Err(crate::TuffError::Expected {
                     span: other.map(|t| t.span()).unwrap_or(name_span),
-                    message: "expected ';' after statement".to_string(),
+                    expected: "; after statement",
                 });
             }
         }
@@ -422,9 +417,8 @@ mod tests {
     fn rejects_empty_input() {
         assert_eq!(
             parse(lex("").unwrap()),
-            Err(crate::TuffError::Parse {
+            Err(crate::TuffError::UnexpectedEndOfInput {
                 span: Span { start: 0, end: 0 },
-                message: "unexpected end of input".to_string(),
             })
         );
     }
