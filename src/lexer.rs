@@ -27,6 +27,8 @@ pub enum Token {
     Mut(Span),
     /// `=`
     Eq(Span),
+    /// `==`
+    EqEq(Span),
     /// `;`
     Semi(Span),
     /// `&`
@@ -57,6 +59,12 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 message: "number out of range".to_string(),
             })?;
             tokens.push(Token::Num(value, Span { start, end: pos }));
+        } else if c == '=' && chars.get(pos + 1) == Some(&'=') {
+            tokens.push(Token::EqEq(Span {
+                start: pos,
+                end: pos + 2,
+            }));
+            pos += 2;
         } else if let Some(token) = single_char_token(
             c,
             Span {

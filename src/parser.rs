@@ -52,8 +52,19 @@ impl Parser {
         self.tokens.get(self.pos).cloned()
     }
 
-    /// Parse an additive expression (`+`, `-`).
+    /// Parse a comparison expression (`==`).
     fn parse_expr(&mut self) -> Result<Expr, crate::TuffError> {
+        let mut left = self.parse_additive()?;
+        while let Some(Token::EqEq(span)) = self.peek() {
+            self.pos += 1;
+            let right = self.parse_additive()?;
+            left = Expr::Bin(BinOp::Eq, Box::new(left), Box::new(right), span);
+        }
+        Ok(left)
+    }
+
+    /// Parse an additive expression (`+`, `-`).
+    fn parse_additive(&mut self) -> Result<Expr, crate::TuffError> {
         let mut left = self.parse_term()?;
         loop {
             match self.peek() {
@@ -268,6 +279,7 @@ impl Token {
             | Token::Semi(span)
             | Token::Ref(span)
             | Token::MutRef(span)
+            | Token::EqEq(span)
             | Token::Bool(_, span) => *span,
         }
     }

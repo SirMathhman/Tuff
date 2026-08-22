@@ -9,6 +9,8 @@ pub enum BinOp {
     Sub,
     /// Multiplication.
     Mul,
+    /// Equality comparison.
+    Eq,
 }
 
 /// An expression in the Tuff AST.

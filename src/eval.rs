@@ -111,6 +111,7 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
+                BinOp::Eq => i64::from(l == r),
             }))
         }
         Expr::Group(inner, _, _) => eval_expr(inner, env),

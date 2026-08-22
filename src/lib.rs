@@ -192,6 +192,14 @@ mod tests {
     }
 
     #[test]
+    fn equality_of_different_values_evaluates_to_zero() {
+        assert_eq!(
+            evaluate("let x = 1; let y = 2; x == y"),
+            Ok(eval::Value::Int(0))
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
