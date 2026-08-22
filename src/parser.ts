@@ -182,8 +182,17 @@ function parseStatement(state: ParserState): Result<Node, EvalError> {
   }
   const expr = parseOr(state);
   if (!expr.ok) return expr;
-  if (expr.value.type === "block") expr.value.inExpression = false;
+  markStatementPosition(expr.value);
   return expr;
+}
+
+function markStatementPosition(node: Node): void {
+  if (node.type === "block") {
+    node.inExpression = false;
+  } else if (node.type === "if") {
+    markStatementPosition(node.then);
+    markStatementPosition(node.else);
+  }
 }
 
 function parseStatements(state: ParserState): Result<Node[], EvalError> {
