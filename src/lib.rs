@@ -294,6 +294,14 @@ mod tests {
     }
 
     #[test]
+    fn if_else_with_block_branches_evaluates_to_else_branch() {
+        assert_eq!(
+            evaluate("let x = if (false) { let y = 2; y } else { let y = 3; y }; x"),
+            Ok(eval::Value::Int(3))
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
