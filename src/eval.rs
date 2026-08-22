@@ -91,6 +91,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
 fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
     match expr {
         Expr::Num(value, _) => Ok(Value::Int(*value)),
+        Expr::Bool(value, _) => Ok(Value::Int(i64::from(*value))),
         Expr::Bin(op, left, right, span) => {
             let l = eval_expr(left, env)?;
             let r = eval_expr(right, env)?;

@@ -91,6 +91,10 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Num(value, span))
             }
+            Some(Token::Bool(value, span)) => {
+                self.pos += 1;
+                Ok(Expr::Bool(value, span))
+            }
             Some(Token::Ident(name, span)) => {
                 self.pos += 1;
                 Ok(Expr::Ident(name, span))
@@ -263,7 +267,8 @@ impl Token {
             | Token::Eq(span)
             | Token::Semi(span)
             | Token::Ref(span)
-            | Token::MutRef(span) => *span,
+            | Token::MutRef(span)
+            | Token::Bool(_, span) => *span,
         }
     }
 }

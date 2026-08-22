@@ -16,6 +16,8 @@ pub enum BinOp {
 pub enum Expr {
     /// An integer literal.
     Num(i64, Span),
+    /// A boolean literal.
+    Bool(bool, Span),
     /// A binary operation.
     Bin(BinOp, Box<Expr>, Box<Expr>, Span),
     /// A parenthesized or braced grouping.

@@ -33,6 +33,8 @@ pub enum Token {
     Ref(Span),
     /// `&mut`
     MutRef(Span),
+    /// A boolean literal (`true` or `false`).
+    Bool(bool, Span),
 }
 
 /// Convert source text into a flat list of tokens.
@@ -111,6 +113,8 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             tokens.push(match word.as_str() {
                 "let" => Token::Let(span),
                 "mut" => Token::Mut(span),
+                "true" => Token::Bool(true, span),
+                "false" => Token::Bool(false, span),
                 _ => Token::Ident(word, span),
             });
         } else if c == '=' {

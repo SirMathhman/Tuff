@@ -182,6 +182,11 @@ mod tests {
     }
 
     #[test]
+    fn true_literal_evaluates_to_one() {
+        assert_eq!(evaluate("let x = true; x"), Ok(eval::Value::Int(1)));
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
