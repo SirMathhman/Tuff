@@ -110,6 +110,11 @@ mod tests {
     }
 
     #[test]
+    fn top_level_let_binding_evaluates_to_twenty() {
+        assert_eq!(evaluate("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
+    }
+
+    #[test]
     fn dangling_operator_is_a_parse_error() {
         assert_eq!(
             evaluate("1 +"),

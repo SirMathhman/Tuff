@@ -5,15 +5,22 @@ use crate::lexer::Token;
 /// Parse a token stream into an expression AST.
 pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
     let mut parser = Parser { tokens, pos: 0 };
-    let expr = parser.parse_expr()?;
-    if parser.pos < parser.tokens.len() {
-        let span = parser.tokens[parser.pos].span();
+    if parser.tokens.is_empty() {
         return Err(crate::TuffError::Parse {
-            span,
-            message: "unexpected token after end of expression".to_string(),
+            span: Span { start: 0, end: 0 },
+            message: "unexpected end of input".to_string(),
         });
     }
-    Ok(expr)
+    let mut stmts = Vec::new();
+    while let Some(token) = parser.peek() {
+        stmts.push(match token {
+            Token::Let(span) => parser.parse_let_stmt(span)?,
+            _ => Stmt::Expr(Box::new(parser.parse_expr()?)),
+        });
+    }
+    let start = parser.tokens.first().map(|t| t.span()).unwrap().start;
+    let end = parser.tokens.last().map(|t| t.span()).unwrap().end;
+    Ok(Expr::Block(stmts, Span { start, end }, Span { start, end }))
 }
 
 struct Parser {
@@ -114,39 +121,7 @@ impl Parser {
                         message: "expected '}'".to_string(),
                     });
                 }
-                Some(Token::Let(span)) => {
-                    self.pos += 1;
-                    let (name, name_span) = match self.peek() {
-                        Some(Token::Ident(name, span)) => (name, span),
-                        other => {
-                            return Err(crate::TuffError::Parse {
-                                span: other.map(|t| t.span()).unwrap_or(span),
-                                message: "expected a variable name after 'let'".to_string(),
-                            });
-                        }
-                    };
-                    self.pos += 1;
-                    match self.peek() {
-                        Some(Token::Eq(_)) => self.pos += 1,
-                        other => {
-                            return Err(crate::TuffError::Parse {
-                                span: other.map(|t| t.span()).unwrap_or(name_span),
-                                message: "expected '=' after variable name".to_string(),
-                            });
-                        }
-                    }
-                    let value = self.parse_expr()?;
-                    match self.peek() {
-                        Some(Token::Semi(_)) => self.pos += 1,
-                        other => {
-                            return Err(crate::TuffError::Parse {
-                                span: other.map(|t| t.span()).unwrap_or(name_span),
-                                message: "expected ';' after let statement".to_string(),
-                            });
-                        }
-                    }
-                    stmts.push(Stmt::Let(name, Box::new(value), span));
-                }
+                Some(Token::Let(span)) => stmts.push(self.parse_let_stmt(span)?),
                 Some(_) => {
                     let expr = self.parse_expr()?;
                     if matches!(self.peek(), Some(Token::Semi(_))) {
@@ -166,6 +141,40 @@ impl Parser {
                 message: "expected '}'".to_string(),
             }),
         }
+    }
+
+    fn parse_let_stmt(&mut self, let_span: Span) -> Result<Stmt, crate::TuffError> {
+        self.pos += 1;
+        let (name, name_span) = match self.peek() {
+            Some(Token::Ident(name, span)) => (name, span),
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(let_span),
+                    message: "expected a variable name after 'let'".to_string(),
+                });
+            }
+        };
+        self.pos += 1;
+        match self.peek() {
+            Some(Token::Eq(_)) => self.pos += 1,
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(name_span),
+                    message: "expected '=' after variable name".to_string(),
+                });
+            }
+        }
+        let value = self.parse_expr()?;
+        match self.peek() {
+            Some(Token::Semi(_)) => self.pos += 1,
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(name_span),
+                    message: "expected ';' after let statement".to_string(),
+                });
+            }
+        }
+        Ok(Stmt::Let(name, Box::new(value), let_span))
     }
 }
 
@@ -197,7 +206,14 @@ mod tests {
     fn parses_number() {
         assert_eq!(
             parse(lex("1").unwrap()),
-            Ok(Expr::Num(1, Span { start: 0, end: 1 }))
+            Ok(Expr::Block(
+                vec![Stmt::Expr(Box::new(Expr::Num(
+                    1,
+                    Span { start: 0, end: 1 }
+                )))],
+                Span { start: 0, end: 1 },
+                Span { start: 0, end: 1 }
+            ))
         );
     }
 
@@ -205,7 +221,13 @@ mod tests {
     fn parses_precedence() {
         // 2 * 3 + 4 => Bin(Add, Bin(Mul, 2, 3), 4)
         let expr = parse(lex("2 * 3 + 4").unwrap()).unwrap();
-        match &expr {
+        let Expr::Block(stmts, _, _) = &expr else {
+            panic!("expected a top-level block");
+        };
+        let Stmt::Expr(e) = &stmts[0] else {
+            panic!("expected an expression statement");
+        };
+        match e.as_ref() {
             Expr::Bin(BinOp::Add, left, right, _) => {
                 assert!(matches!(&**left, Expr::Bin(BinOp::Mul, _, _, _)));
                 assert!(matches!(&**right, Expr::Num(4, _)));
