@@ -125,6 +125,38 @@ mod tests {
     }
 
     #[test]
+    fn nested_block_reads_outer_binding() {
+        assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(2));
+    }
+
+    #[test]
+    fn assignment_to_outer_scope_mut_variable_evaluates() {
+        assert_eq!(evaluate("let mut x = 0; { x = 5; x }"), Ok(5));
+    }
+
+    #[test]
+    fn assignment_to_outer_scope_immutable_variable_is_an_eval_error() {
+        assert_eq!(
+            evaluate("let x = 0; { x = 5; x }"),
+            Err(TuffError::Eval {
+                span: Span { start: 13, end: 14 },
+                message: "cannot assign to immutable variable 'x'".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn undefined_variable_in_nested_block_is_an_eval_error() {
+        assert_eq!(
+            evaluate("{ { x } }"),
+            Err(TuffError::Eval {
+                span: Span { start: 3, end: 4 },
+                message: "undefined variable 'x'".to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn undefined_variable_is_an_eval_error() {
         assert_eq!(
             evaluate("x"),

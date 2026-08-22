@@ -3,15 +3,28 @@ use std::collections::HashMap;
 use crate::Span;
 use crate::ast::{BinOp, Expr, Stmt};
 
-/// A binding environment mapping variable names to (value, mutable).
-#[derive(Debug, Default)]
+/// A binding environment mapping variable names to (value, mutable),
+/// with an optional parent scope for lexical scoping.
+#[derive(Debug, Default, Clone)]
 pub struct Env {
     vars: HashMap<String, (i64, bool)>,
+    parent: Option<Box<Env>>,
 }
 
 impl Env {
+    /// Create a child scope whose parent is the given environment.
+    fn child(parent: Env) -> Env {
+        Env {
+            vars: HashMap::new(),
+            parent: Some(Box::new(parent)),
+        }
+    }
+
     fn get(&self, name: &str) -> Option<i64> {
-        self.vars.get(name).map(|(v, _)| *v)
+        if let Some((v, _)) = self.vars.get(name) {
+            return Some(*v);
+        }
+        self.parent.as_deref().and_then(|p| p.get(name))
     }
 
     fn insert(&mut self, name: String, value: i64, mutable: bool) {
@@ -19,20 +32,23 @@ impl Env {
     }
 
     fn set(&mut self, name: &str, value: i64, span: Span) -> Result<(), crate::TuffError> {
-        match self.vars.get_mut(name) {
-            Some((v, true)) => {
+        if let Some((v, mutable)) = self.vars.get_mut(name) {
+            if *mutable {
                 *v = value;
-                Ok(())
+                return Ok(());
             }
-            Some((_, false)) => Err(crate::TuffError::Eval {
+            return Err(crate::TuffError::Eval {
                 span,
                 message: format!("cannot assign to immutable variable '{name}'"),
-            }),
-            None => Err(crate::TuffError::Eval {
-                span,
-                message: format!("undefined variable '{name}'"),
-            }),
+            });
         }
+        if let Some(parent) = &mut self.parent {
+            return parent.set(name, value, span);
+        }
+        Err(crate::TuffError::Eval {
+            span,
+            message: format!("undefined variable '{name}'"),
+        })
     }
 }
 
@@ -55,7 +71,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
             message: format!("undefined variable '{name}'"),
         }),
         Expr::Block(stmts, span, _) => {
-            let mut local = Env::default();
+            let mut local = Env::child(env.clone());
             let mut last_value = None;
             for stmt in stmts {
                 match stmt {
