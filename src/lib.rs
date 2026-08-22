@@ -45,7 +45,7 @@ impl fmt::Display for TuffError {
 }
 
 /// Evaluate a Tuff expression and return its value.
-pub fn evaluate(input: &str) -> Result<i64, TuffError> {
+pub fn evaluate(input: &str) -> Result<eval::Value, TuffError> {
     driver::run(input)
 }
 
@@ -66,77 +66,100 @@ mod tests {
 
     #[test]
     fn one_evaluates_to_one() {
-        assert_eq!(evaluate("1"), Ok(1));
+        assert_eq!(evaluate("1"), Ok(eval::Value::Int(1)));
     }
 
     #[test]
     fn one_plus_two_evaluates_to_three() {
-        assert_eq!(evaluate("1 + 2"), Ok(3));
+        assert_eq!(evaluate("1 + 2"), Ok(eval::Value::Int(3)));
     }
 
     #[test]
     fn one_plus_two_plus_three_evaluates_to_six() {
-        assert_eq!(evaluate("1 + 2 + 3"), Ok(6));
+        assert_eq!(evaluate("1 + 2 + 3"), Ok(eval::Value::Int(6)));
     }
 
     #[test]
     fn two_plus_three_minus_four_evaluates_to_one() {
-        assert_eq!(evaluate("2 + 3 - 4"), Ok(1));
+        assert_eq!(evaluate("2 + 3 - 4"), Ok(eval::Value::Int(1)));
     }
 
     #[test]
     fn two_times_three_plus_four_evaluates_to_ten() {
-        assert_eq!(evaluate("2 * 3 + 4"), Ok(10));
+        assert_eq!(evaluate("2 * 3 + 4"), Ok(eval::Value::Int(10)));
     }
 
     #[test]
     fn two_plus_three_times_four_evaluates_to_fourteen() {
-        assert_eq!(evaluate("2 + 3 * 4"), Ok(14));
+        assert_eq!(evaluate("2 + 3 * 4"), Ok(eval::Value::Int(14)));
     }
 
     #[test]
     fn parenthesized_two_plus_three_times_four_evaluates_to_twenty() {
-        assert_eq!(evaluate("(2 + 3) * 4"), Ok(20));
+        assert_eq!(evaluate("(2 + 3) * 4"), Ok(eval::Value::Int(20)));
     }
 
     #[test]
     fn braced_two_plus_three_times_four_evaluates_to_twenty() {
-        assert_eq!(evaluate("{ 2 + 3 } * 4"), Ok(20));
+        assert_eq!(evaluate("{ 2 + 3 } * 4"), Ok(eval::Value::Int(20)));
     }
 
     #[test]
     fn let_binding_in_block_times_four_evaluates_to_twenty() {
-        assert_eq!(evaluate("{ let x = 2 + 3; x } * 4"), Ok(20));
+        assert_eq!(
+            evaluate("{ let x = 2 + 3; x } * 4"),
+            Ok(eval::Value::Int(20))
+        );
     }
 
     #[test]
     fn chained_let_bindings_in_block_times_four_evaluates_to_twenty() {
-        assert_eq!(evaluate("{ let x = 2 + 3; let y = x; y } * 4"), Ok(20));
+        assert_eq!(
+            evaluate("{ let x = 2 + 3; let y = x; y } * 4"),
+            Ok(eval::Value::Int(20))
+        );
     }
 
     #[test]
     fn top_level_let_binding_evaluates_to_twenty() {
-        assert_eq!(evaluate("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
+        assert_eq!(
+            evaluate("let y = { let x = 2 + 3; x } * 4; y"),
+            Ok(eval::Value::Int(20))
+        );
     }
 
     #[test]
     fn mutable_let_binding_with_assignment_evaluates_to_one() {
-        assert_eq!(evaluate("let mut x = 0; x = 1; x"), Ok(1));
+        assert_eq!(evaluate("let mut x = 0; x = 1; x"), Ok(eval::Value::Int(1)));
     }
 
     #[test]
     fn reference_and_dereference_evaluates_to_one() {
-        assert_eq!(evaluate("let x = 1; let y = &x; *y"), Ok(1));
+        assert_eq!(
+            evaluate("let x = 1; let y = &x; *y"),
+            Ok(eval::Value::Int(1))
+        );
+    }
+
+    #[test]
+    fn reference_value_is_not_an_integer() {
+        assert_eq!(
+            evaluate("let x = 1; let y = &x; y"),
+            Ok(eval::Value::Ref("x".into()))
+        );
     }
 
     #[test]
     fn nested_block_reads_outer_binding() {
-        assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(2));
+        assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
 
     #[test]
     fn assignment_to_outer_scope_mut_variable_evaluates() {
-        assert_eq!(evaluate("let mut x = 0; { x = 5; x }"), Ok(5));
+        assert_eq!(
+            evaluate("let mut x = 0; { x = 5; x }"),
+            Ok(eval::Value::Int(5))
+        );
     }
 
     #[test]

@@ -1,14 +1,30 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use crate::Span;
 use crate::ast::{BinOp, Expr, Stmt};
+
+/// A runtime value produced by evaluation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Value {
+    Int(i64),
+    Ref(String),
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Int(v) => write!(f, "{v}"),
+            Value::Ref(name) => write!(f, "&{name}"),
+        }
+    }
+}
 
 /// A binding environment mapping variable names to (value, mutable),
 /// with an optional parent scope for lexical scoping.
 #[derive(Debug, Default, Clone)]
 pub struct Env {
-    vars: HashMap<String, (i64, bool)>,
-    refs: HashMap<String, String>,
+    vars: HashMap<String, (Value, bool)>,
     parent: Option<Box<Env>>,
 }
 
@@ -17,34 +33,22 @@ impl Env {
     fn child(parent: Env) -> Env {
         Env {
             vars: HashMap::new(),
-            refs: HashMap::new(),
             parent: Some(Box::new(parent)),
         }
     }
 
-    fn get(&self, name: &str) -> Option<i64> {
+    fn get(&self, name: &str) -> Option<Value> {
         if let Some((v, _)) = self.vars.get(name) {
-            return Some(*v);
+            return Some(v.clone());
         }
         self.parent.as_deref().and_then(|p| p.get(name))
     }
 
-    fn get_ref(&self, name: &str) -> Option<&str> {
-        if let Some(target) = self.refs.get(name) {
-            return Some(target);
-        }
-        self.parent.as_deref().and_then(|p| p.get_ref(name))
-    }
-
-    fn insert(&mut self, name: String, value: i64, mutable: bool) {
+    fn insert(&mut self, name: String, value: Value, mutable: bool) {
         self.vars.insert(name, (value, mutable));
     }
 
-    fn insert_ref(&mut self, name: String, target: String) {
-        self.refs.insert(name, target);
-    }
-
-    fn set(&mut self, name: &str, value: i64, span: Span) -> Result<(), crate::TuffError> {
+    fn set(&mut self, name: &str, value: Value, span: Span) -> Result<(), crate::TuffError> {
         if let Some((v, mutable)) = self.vars.get_mut(name) {
             if *mutable {
                 *v = value;
@@ -66,17 +70,29 @@ impl Env {
 }
 
 /// Evaluate an expression AST to its value in the given environment.
-pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
+pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
     match expr {
-        Expr::Num(value, _) => Ok(*value),
-        Expr::Bin(op, left, right, _) => {
+        Expr::Num(value, _) => Ok(Value::Int(*value)),
+        Expr::Bin(op, left, right, span) => {
             let l = eval(left, env)?;
             let r = eval(right, env)?;
-            Ok(match op {
+            let Value::Int(l) = l else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected an integer".to_string(),
+                });
+            };
+            let Value::Int(r) = r else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected an integer".to_string(),
+                });
+            };
+            Ok(Value::Int(match op {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
-            })
+            }))
         }
         Expr::Group(inner, _, _) => eval(inner, env),
         Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Eval {
@@ -96,8 +112,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
                     message: format!("undefined variable '{name}'"),
                 });
             }
-            env.insert_ref(name.clone(), name.clone());
-            Ok(0)
+            Ok(Value::Ref(name.clone()))
         }
         Expr::Deref(inner, span) => {
             let Expr::Ident(name, _) = inner.as_ref() else {
@@ -106,14 +121,20 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
                     message: "expected a variable name after '*'".to_string(),
                 });
             };
-            match env.get_ref(name) {
-                Some(target) => env.get(target).ok_or_else(|| crate::TuffError::Eval {
+            match env.get(name) {
+                Some(Value::Ref(target)) => {
+                    env.get(&target).ok_or_else(|| crate::TuffError::Eval {
+                        span: *span,
+                        message: format!("undefined variable '{target}'"),
+                    })
+                }
+                Some(Value::Int(_)) => Err(crate::TuffError::Eval {
                     span: *span,
-                    message: format!("undefined variable '{target}'"),
+                    message: format!("'{name}' is not a reference"),
                 }),
                 None => Err(crate::TuffError::Eval {
                     span: *span,
-                    message: format!("'{name}' is not a reference"),
+                    message: format!("undefined variable '{name}'"),
                 }),
             }
         }
@@ -155,7 +176,7 @@ mod tests {
         let mut env = Env::default();
         assert_eq!(
             eval(&Expr::Num(5, Span { start: 0, end: 1 }), &mut env),
-            Ok(5)
+            Ok(Value::Int(5))
         );
     }
 
@@ -168,6 +189,6 @@ mod tests {
             Span { start: 0, end: 1 },
         );
         let mut env = Env::default();
-        assert_eq!(eval(&expr, &mut env), Ok(6));
+        assert_eq!(eval(&expr, &mut env), Ok(Value::Int(6)));
     }
 }
