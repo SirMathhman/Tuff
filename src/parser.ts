@@ -325,18 +325,27 @@ function parseFactor(state: ParserState): Result<Node, EvalError> {
     state.pos++;
     const then = parseExpr(state);
     if (!then.ok) return then;
-    if (state.tokens[state.pos]?.text !== "else")
-      return state.fail("expected else");
-    state.pos++;
-    const els = parseExpr(state);
-    if (!els.ok) return els;
+    let els: Node;
+    if (state.tokens[state.pos]?.text === "else") {
+      state.pos++;
+      const parsed = parseExpr(state);
+      if (!parsed.ok) return parsed;
+      els = parsed.value;
+    } else {
+      els = {
+        type: "number",
+        value: 0,
+        kind: "int",
+        span: { start: state.tokens[state.pos]?.start ?? 0, end: 0 },
+      };
+    }
     return {
       ok: true,
       value: {
         type: "if",
         cond: cond.value,
         then: then.value,
-        else: els.value,
+        else: els,
         span: spanOf(state, start),
       },
     };
