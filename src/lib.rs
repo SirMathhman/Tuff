@@ -187,6 +187,11 @@ mod tests {
     }
 
     #[test]
+    fn false_literal_evaluates_to_zero() {
+        assert_eq!(evaluate("let x = false; x"), Ok(eval::Value::Int(0)));
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
