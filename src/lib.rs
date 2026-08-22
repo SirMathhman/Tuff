@@ -283,6 +283,14 @@ mod tests {
     }
 
     #[test]
+    fn assignment_to_outer_scope_mut_variable_persists_after_block() {
+        assert_eq!(
+            evaluate("let mut x = 0; { x = 5; } x"),
+            Ok(eval::Value::Int(5))
+        );
+    }
+
+    #[test]
     fn assignment_to_outer_scope_immutable_variable_is_an_eval_error() {
         assert_eq!(
             evaluate("let x = 0; { x = 5; x }"),

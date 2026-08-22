@@ -28,62 +28,64 @@ impl fmt::Display for Value {
     }
 }
 
-/// A binding environment mapping variable names to (value, mutable),
-/// with an optional parent scope for lexical scoping.
-#[derive(Debug, Default, Clone)]
+/// A binding environment: a stack of scopes, each mapping variable names
+/// to (value, mutable). Outer scopes are shared, never cloned.
+#[derive(Debug, Default)]
 pub struct Env {
-    /// Bindings in this scope: name -> (value, mutable).
-    vars: HashMap<String, (Value, bool)>,
-    /// The enclosing scope, if any.
-    parent: Option<Box<Env>>,
+    /// The scope stack, innermost scope last.
+    scopes: Vec<HashMap<String, (Value, bool)>>,
 }
 
 impl Env {
-    /// Create a child scope whose parent is the given environment.
-    fn child(parent: Env) -> Env {
-        Env {
-            vars: HashMap::new(),
-            parent: Some(Box::new(parent)),
-        }
+    /// Push a new empty scope.
+    fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
     }
 
-    /// Look up a binding by name, walking up the scope chain.
+    /// Pop the innermost scope.
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    /// Look up a binding by name, walking the scope chain from innermost out.
     fn get(&self, name: &str) -> Option<Value> {
-        if let Some((v, _)) = self.vars.get(name) {
-            return Some(v.clone());
-        }
-        self.parent.as_deref().and_then(|p| p.get(name))
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).map(|(v, _)| v.clone()))
     }
 
-    /// Bind a name in this scope.
+    /// Bind a name in the innermost scope.
     fn insert(&mut self, name: String, value: Value, mutable: bool) {
-        self.vars.insert(name, (value, mutable));
+        self.scopes
+            .last_mut()
+            .expect("a scope is always present")
+            .insert(name, (value, mutable));
     }
 
-    /// Assign a value to an existing mutable binding, walking up the scope chain.
+    /// Assign a value to an existing mutable binding, walking the scope chain.
     fn set(&mut self, name: &str, value: Value, span: Span) -> Result<(), crate::TuffError> {
-        if let Some((v, mutable)) = self.vars.get_mut(name) {
-            if *mutable {
-                if !Self::types_compatible(v, &value) {
-                    return Err(crate::TuffError::Eval {
-                        span,
-                        message: format!(
-                            "type mismatch: cannot assign {} to {} variable '{name}'",
-                            Self::type_name(&value),
-                            Self::type_name(v)
-                        ),
-                    });
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some((v, mutable)) = scope.get_mut(name) {
+                if *mutable {
+                    if !Self::types_compatible(v, &value) {
+                        return Err(crate::TuffError::Eval {
+                            span,
+                            message: format!(
+                                "type mismatch: cannot assign {} to {} variable '{name}'",
+                                Self::type_name(&value),
+                                Self::type_name(v)
+                            ),
+                        });
+                    }
+                    *v = value;
+                    return Ok(());
                 }
-                *v = value;
-                return Ok(());
+                return Err(crate::TuffError::Eval {
+                    span,
+                    message: format!("cannot assign to immutable variable '{name}'"),
+                });
             }
-            return Err(crate::TuffError::Eval {
-                span,
-                message: format!("cannot assign to immutable variable '{name}'"),
-            });
-        }
-        if let Some(parent) = &mut self.parent {
-            return parent.set(name, value, span);
         }
         Err(crate::TuffError::Eval {
             span,
@@ -228,16 +230,16 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
     }
 }
 
-/// Execute a block's statements in a child scope, returning the value of
+/// Execute a block's statements in a new scope, returning the value of
 /// the last expression statement.
 fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate::TuffError> {
-    let mut local = Env::child(env.clone());
+    env.push_scope();
     let mut last_value = None;
     for stmt in stmts {
         match stmt {
             Stmt::Let(name, mutable, value, _) => {
-                let v = eval_expr(value, &mut local)?;
-                local.insert(name.clone(), v, *mutable);
+                let v = eval_expr(value, env)?;
+                env.insert(name.clone(), v, *mutable);
             }
             Stmt::Assign(target, value, span) => {
                 let name = match target.as_ref() {
@@ -250,7 +252,7 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                             });
                         };
                         // Assign through the reference to the variable it points at.
-                        match local.get(name) {
+                        match env.get(name) {
                             Some(Value::MutRef(target)) => target,
                             Some(Value::Ref(_)) => {
                                 return Err(crate::TuffError::Eval {
@@ -280,15 +282,16 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                         });
                     }
                 };
-                let v = eval_expr(value, &mut local)?;
-                local.set(&name, v, *span)?;
+                let v = eval_expr(value, env)?;
+                env.set(&name, v, *span)?;
                 last_value = Some(Value::Int(0));
             }
             Stmt::Expr(e) => {
-                last_value = Some(eval_expr(e, &mut local)?);
+                last_value = Some(eval_expr(e, env)?);
             }
         }
     }
+    env.pop_scope();
     // The block's value is the value of its last expression statement.
     last_value.ok_or_else(|| crate::TuffError::Eval {
         span,
