@@ -148,23 +148,7 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
     match expr {
         Expr::Num(value, span) => Ok(TypedExpr::Num(*value, *span)),
         Expr::Bool(value, span) => Ok(TypedExpr::Bool(*value, *span)),
-        Expr::Bin(op, left, right, span) => {
-            let l = analyze(left, env)?;
-            let r = analyze(right, env)?;
-            let ty = match op {
-                BinOp::Eq | BinOp::Ne => Type::Bool,
-                _ => {
-                    if l.ty() != Type::Int || r.ty() != Type::Int {
-                        return Err(crate::TuffError::ExpectedInteger { span: *span });
-                    }
-                    match op {
-                        BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => Type::Bool,
-                        _ => Type::Int,
-                    }
-                }
-            };
-            Ok(TypedExpr::Bin(*op, Box::new(l), Box::new(r), ty, *span))
-        }
+        Expr::Bin(op, left, right, span) => analyze_bin(*op, left, right, env, *span),
         Expr::Group(inner, span, _) => {
             let inner = analyze(inner, env)?;
             Ok(TypedExpr::Group(Box::new(inner), *span))
@@ -176,17 +160,7 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
             }
             Ok(TypedExpr::Array(items, *span))
         }
-        Expr::Index(base, index, span) => {
-            let b = analyze(base, env)?;
-            let i = analyze(index, env)?;
-            if i.ty() != Type::Int {
-                return Err(crate::TuffError::ExpectedIntegerIndex { span: *span });
-            }
-            if b.ty() != Type::Array {
-                return Err(crate::TuffError::NotAnArray { span: *span });
-            }
-            Ok(TypedExpr::Index(Box::new(b), Box::new(i), *span))
-        }
+        Expr::Index(base, index, span) => analyze_index(base, index, env, *span),
         Expr::Ident(name, span) => match env.get(name) {
             Some((ty, _)) => Ok(TypedExpr::Ident(name.clone(), ty, *span)),
             None => Err(crate::TuffError::UndefinedVariable {
@@ -194,89 +168,160 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
                 name: name.clone(),
             }),
         },
-        Expr::Ref(inner, mutable, span) => {
-            let Expr::Ident(name, _) = inner.as_ref() else {
-                return Err(crate::TuffError::ExpectedVariableName {
-                    span: *span,
-                    after: "&",
-                });
-            };
-            match env.get(name) {
-                Some((_, _)) => Ok(TypedExpr::Ref(name.clone(), *mutable, *span)),
-                None => Err(crate::TuffError::UndefinedVariable {
-                    span: *span,
-                    name: name.clone(),
-                }),
-            }
-        }
-        Expr::Deref(inner, span) => {
-            let Expr::Ident(name, _) = inner.as_ref() else {
-                return Err(crate::TuffError::ExpectedVariableName {
-                    span: *span,
-                    after: "*",
-                });
-            };
-            match env.get(name) {
-                Some((Type::Ref, _)) | Some((Type::MutRef, _)) => {
-                    let target = env.targets.get(name).cloned().unwrap_or_default();
-                    match env.get(&target) {
-                        Some((ty, _)) => Ok(TypedExpr::Deref(target, ty, *span)),
-                        None => Err(crate::TuffError::UndefinedVariable {
-                            span: *span,
-                            name: target,
-                        }),
-                    }
-                }
-                Some((_, _)) => Err(crate::TuffError::NotAReference {
-                    span: *span,
-                    name: name.clone(),
-                }),
-                None => Err(crate::TuffError::UndefinedVariable {
-                    span: *span,
-                    name: name.clone(),
-                }),
-            }
-        }
-        Expr::If(cond, then, otherwise, span) => {
-            let c = analyze(cond, env)?;
-            if c.ty() != Type::Bool {
-                return Err(crate::TuffError::ExpectedBooleanCondition { span: *span });
-            }
-            // Both branches are analyzed; the taken branch is evaluated later.
-            let then_t = analyze(then, env)?;
-            let otherwise_t = analyze(otherwise, env)?;
-            let then_ty = then_t.ty();
-            let otherwise_ty = otherwise_t.ty();
-            if then_ty != otherwise_ty {
-                return Err(crate::TuffError::TypeMismatch {
-                    span: *span,
-                    found: otherwise_ty.name(),
-                    expected: then_ty.name(),
-                    name: "if".into(),
-                });
-            }
-            Ok(TypedExpr::If(
-                Box::new(c),
-                Box::new(then_t),
-                Box::new(otherwise_t),
-                then_ty,
-                *span,
-            ))
-        }
-        Expr::Block(stmts, span, _) => {
-            env.push_scope();
-            let mut typed = Vec::with_capacity(stmts.len());
-            for stmt in stmts {
-                typed.push(analyze_stmt(stmt, env)?);
-            }
-            env.pop_scope();
-            let ty = typed
-                .last()
-                .and_then(|s| s.ty())
-                .ok_or(crate::TuffError::BlockHasNoValue { span: *span })?;
-            Ok(TypedExpr::Block(typed, ty, *span))
-        }
+        Expr::Ref(inner, mutable, span) => analyze_ref(inner, *mutable, env, *span),
+        Expr::Deref(inner, span) => analyze_deref(inner, env, *span),
+        Expr::If(cond, then, otherwise, span) => analyze_if(cond, then, otherwise, env, *span),
+        Expr::Block(stmts, span, _) => analyze_block(stmts, env, *span),
     }
+}
+
+/// Analyze a binary operation, checking operand types against the operator.
+fn analyze_bin(
+    op: BinOp,
+    left: &Expr,
+    right: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
+    let l = analyze(left, env)?;
+    let r = analyze(right, env)?;
+    let ty = match op {
+        BinOp::Eq | BinOp::Ne => Type::Bool,
+        _ => {
+            if l.ty() != Type::Int || r.ty() != Type::Int {
+                return Err(crate::TuffError::ExpectedInteger { span });
+            }
+            match op {
+                BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => Type::Bool,
+                _ => Type::Int,
+            }
+        }
+    };
+    Ok(TypedExpr::Bin(op, Box::new(l), Box::new(r), ty, span))
+}
+
+/// Analyze an index expression, checking the base is an array and the index
+/// an integer.
+fn analyze_index(
+    base: &Expr,
+    index: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
+    let b = analyze(base, env)?;
+    let i = analyze(index, env)?;
+    if i.ty() != Type::Int {
+        return Err(crate::TuffError::ExpectedIntegerIndex { span });
+    }
+    if b.ty() != Type::Array {
+        return Err(crate::TuffError::NotAnArray { span });
+    }
+    Ok(TypedExpr::Index(Box::new(b), Box::new(i), span))
+}
+
+/// Analyze a reference expression, checking the inner is a defined variable.
+fn analyze_ref(
+    inner: &Expr,
+    mutable: bool,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
+    let Expr::Ident(name, _) = inner else {
+        return Err(crate::TuffError::ExpectedVariableName {
+            span,
+            after: "&",
+        });
+    };
+    match env.get(name) {
+        Some((_, _)) => Ok(TypedExpr::Ref(name.clone(), mutable, span)),
+        None => Err(crate::TuffError::UndefinedVariable {
+            span,
+            name: name.clone(),
+        }),
+    }
+}
+
+/// Analyze a dereference expression, resolving the referenced variable's type.
+fn analyze_deref(inner: &Expr, env: &mut TypeEnv, span: Span) -> Result<TypedExpr, crate::TuffError> {
+    let Expr::Ident(name, _) = inner else {
+        return Err(crate::TuffError::ExpectedVariableName {
+            span,
+            after: "*",
+        });
+    };
+    match env.get(name) {
+        Some((Type::Ref, _)) | Some((Type::MutRef, _)) => {
+            let target = env.targets.get(name).cloned().unwrap_or_default();
+            match env.get(&target) {
+                Some((ty, _)) => Ok(TypedExpr::Deref(target, ty, span)),
+                None => Err(crate::TuffError::UndefinedVariable {
+                    span,
+                    name: target,
+                }),
+            }
+        }
+        Some((_, _)) => Err(crate::TuffError::NotAReference {
+            span,
+            name: name.clone(),
+        }),
+        None => Err(crate::TuffError::UndefinedVariable {
+            span,
+            name: name.clone(),
+        }),
+    }
+}
+
+/// Analyze a conditional, checking the condition is boolean and both branches
+/// share a type. Both branches are analyzed; the taken branch is evaluated later.
+fn analyze_if(
+    cond: &Expr,
+    then: &Expr,
+    otherwise: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
+    let c = analyze(cond, env)?;
+    if c.ty() != Type::Bool {
+        return Err(crate::TuffError::ExpectedBooleanCondition { span });
+    }
+    let then_t = analyze(then, env)?;
+    let otherwise_t = analyze(otherwise, env)?;
+    let then_ty = then_t.ty();
+    let otherwise_ty = otherwise_t.ty();
+    if then_ty != otherwise_ty {
+        return Err(crate::TuffError::TypeMismatch {
+            span,
+            found: otherwise_ty.name(),
+            expected: then_ty.name(),
+            name: "if".into(),
+        });
+    }
+    Ok(TypedExpr::If(
+        Box::new(c),
+        Box::new(then_t),
+        Box::new(otherwise_t),
+        then_ty,
+        span,
+    ))
+}
+
+/// Analyze a block in a fresh scope, returning its value type.
+fn analyze_block(
+    stmts: &[Stmt],
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
+    env.push_scope();
+    let mut typed = Vec::with_capacity(stmts.len());
+    for stmt in stmts {
+        typed.push(analyze_stmt(stmt, env)?);
+    }
+    env.pop_scope();
+    let ty = typed
+        .last()
+        .and_then(|s| s.ty())
+        .ok_or(crate::TuffError::BlockHasNoValue { span })?;
+    Ok(TypedExpr::Block(typed, ty, span))
 }
 
 /// The static type of a typed expression.
@@ -321,114 +366,136 @@ impl TypedStmt {
 /// Analyze a statement, producing a type-annotated statement.
 fn analyze_stmt(stmt: &Stmt, env: &mut TypeEnv) -> Result<TypedStmt, crate::TuffError> {
     match stmt {
-        Stmt::Let(name, mutable, value, span) => {
-            let value_t = analyze(value, env)?;
-            let ty = value_t.ty();
-            if let Expr::Ref(inner, _, _) = value.as_ref()
-                && let Expr::Ident(target, _) = inner.as_ref()
-            {
-                env.targets.insert(name.clone(), target.clone());
-            }
-            env.insert(name.clone(), ty, *mutable);
-            Ok(TypedStmt::Let(
-                name.clone(),
-                *mutable,
-                Box::new(value_t),
-                ty,
-                *span,
-            ))
-        }
-        Stmt::Assign(target, value, span) => {
-            let ty = analyze(value, env)?.ty();
-            match target.as_ref() {
-                Expr::Ident(name, _) => {
-                    env.set(name, ty, *span)?;
-                }
-                Expr::Deref(inner, _) => {
-                    let Expr::Ident(name, _) = inner.as_ref() else {
-                        return Err(crate::TuffError::ExpectedVariableName {
-                            span: *span,
-                            after: "*",
-                        });
-                    };
-                    match env.get(name) {
-                        Some((Type::Ref, _)) => {
-                            return Err(crate::TuffError::CannotAssignThroughSharedReference {
-                                span: *span,
-                            });
-                        }
-                        Some((Type::MutRef, _)) => {
-                            let target = env.targets.get(name).cloned().unwrap_or_default();
-                            match env.get(&target) {
-                                Some((t, _)) => {
-                                    if !t.compatible(ty) {
-                                        return Err(crate::TuffError::TypeMismatch {
-                                            span: *span,
-                                            found: ty.name(),
-                                            expected: t.name(),
-                                            name: target,
-                                        });
-                                    }
-                                }
-                                None => {
-                                    return Err(crate::TuffError::UndefinedVariable {
-                                        span: *span,
-                                        name: target,
-                                    });
-                                }
-                            }
-                        }
-                        Some((_, _)) => {
-                            return Err(crate::TuffError::NotAReference {
-                                span: *span,
-                                name: name.clone(),
-                            });
-                        }
-                        None => {
-                            return Err(crate::TuffError::UndefinedVariable {
-                                span: *span,
-                                name: name.clone(),
-                            });
-                        }
-                    }
-                }
-                Expr::Index(base, index, _) => {
-                    let Expr::Ident(name, _) = base.as_ref() else {
-                        return Err(crate::TuffError::InvalidAssignmentTarget { span: *span });
-                    };
-                    let i = analyze(index, env)?;
-                    if i.ty() != Type::Int {
-                        return Err(crate::TuffError::ExpectedIntegerIndex { span: *span });
-                    }
-                    match env.get(name) {
-                        Some((Type::Array, true)) => {}
-                        Some((Type::Array, false)) => {
-                            return Err(crate::TuffError::ImmutableAssignment {
-                                span: *span,
-                                name: name.clone(),
-                            });
-                        }
-                        Some((_, _)) => {
-                            return Err(crate::TuffError::NotAnArray { span: *span });
-                        }
-                        None => {
-                            return Err(crate::TuffError::UndefinedVariable {
-                                span: *span,
-                                name: name.clone(),
-                            });
-                        }
-                    }
-                }
-                _ => {
-                    return Err(crate::TuffError::InvalidAssignmentTarget { span: *span });
-                }
-            }
-            Ok(TypedStmt::Assign(
-                Box::new(analyze(target, env)?),
-                Box::new(analyze(value, env)?),
-                *span,
-            ))
-        }
+        Stmt::Let(name, mutable, value, span) => analyze_let(name, *mutable, value, env, *span),
+        Stmt::Assign(target, value, span) => analyze_assign(target, value, env, *span),
         Stmt::Expr(e) => Ok(TypedStmt::Expr(Box::new(analyze(e, env)?))),
+    }
+}
+
+/// Analyze a `let` binding, recording reference targets and inserting the
+/// binding into the environment.
+fn analyze_let(
+    name: &str,
+    mutable: bool,
+    value: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedStmt, crate::TuffError> {
+    let value_t = analyze(value, env)?;
+    let ty = value_t.ty();
+    if let Expr::Ref(inner, _, _) = value
+        && let Expr::Ident(target, _) = inner.as_ref()
+    {
+        env.targets.insert(name.to_string(), target.clone());
+    }
+    env.insert(name.to_string(), ty, mutable);
+    Ok(TypedStmt::Let(
+        name.to_string(),
+        mutable,
+        Box::new(value_t),
+        ty,
+        span,
+    ))
+}
+
+/// Analyze an assignment, checking the target is a valid, mutable, type-
+/// compatible assignment target.
+fn analyze_assign(
+    target: &Expr,
+    value: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedStmt, crate::TuffError> {
+    let ty = analyze(value, env)?.ty();
+    match target {
+        Expr::Ident(name, _) => env.set(name, ty, span)?,
+        Expr::Deref(inner, _) => check_deref_target(inner, ty, env, span)?,
+        Expr::Index(base, index, _) => check_index_target(base, index, env, span)?,
+        _ => {
+            return Err(crate::TuffError::InvalidAssignmentTarget { span });
+        }
+    }
+    Ok(TypedStmt::Assign(
+        Box::new(analyze(target, env)?),
+        Box::new(analyze(value, env)?),
+        span,
+    ))
+}
+
+/// Check that a dereference assignment target is a mutable reference to a
+/// variable of a compatible type.
+fn check_deref_target(
+    inner: &Expr,
+    ty: Type,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<(), crate::TuffError> {
+    let Expr::Ident(name, _) = inner else {
+        return Err(crate::TuffError::ExpectedVariableName {
+            span,
+            after: "*",
+        });
+    };
+    match env.get(name) {
+        Some((Type::Ref, _)) => Err(crate::TuffError::CannotAssignThroughSharedReference {
+            span,
+        }),
+        Some((Type::MutRef, _)) => {
+            let target = env.targets.get(name).cloned().unwrap_or_default();
+            match env.get(&target) {
+                Some((t, _)) => {
+                    if !t.compatible(ty) {
+                        return Err(crate::TuffError::TypeMismatch {
+                            span,
+                            found: ty.name(),
+                            expected: t.name(),
+                            name: target,
+                        });
+                    }
+                    Ok(())
+                }
+                None => Err(crate::TuffError::UndefinedVariable {
+                    span,
+                    name: target,
+                }),
+            }
+        }
+        Some((_, _)) => Err(crate::TuffError::NotAReference {
+            span,
+            name: name.clone(),
+        }),
+        None => Err(crate::TuffError::UndefinedVariable {
+            span,
+            name: name.clone(),
+        }),
+    }
+}
+
+/// Check that an index assignment target is a mutable array with an integer
+/// index.
+fn check_index_target(
+    base: &Expr,
+    index: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<(), crate::TuffError> {
+    let Expr::Ident(name, _) = base else {
+        return Err(crate::TuffError::InvalidAssignmentTarget { span });
+    };
+    let i = analyze(index, env)?;
+    if i.ty() != Type::Int {
+        return Err(crate::TuffError::ExpectedIntegerIndex { span });
+    }
+    match env.get(name) {
+        Some((Type::Array, true)) => Ok(()),
+        Some((Type::Array, false)) => Err(crate::TuffError::ImmutableAssignment {
+            span,
+            name: name.clone(),
+        }),
+        Some((_, _)) => Err(crate::TuffError::NotAnArray { span }),
+        None => Err(crate::TuffError::UndefinedVariable {
+            span,
+            name: name.clone(),
+        }),
     }
 }
