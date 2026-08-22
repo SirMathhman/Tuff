@@ -126,28 +126,9 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             }));
             pos += 1;
         } else if c == '&' {
-            let span = Span {
-                start: pos,
-                end: pos + 1,
-            };
-            // Look ahead for 'mut' to form a mutable reference token.
-            let mut_end = pos + 1;
-            let is_mut = chars.get(mut_end) == Some(&'m')
-                && chars.get(mut_end + 1) == Some(&'u')
-                && chars.get(mut_end + 2) == Some(&'t')
-                && chars
-                    .get(mut_end + 3)
-                    .is_none_or(|c| !c.is_alphanumeric() && *c != '_');
-            if is_mut {
-                tokens.push(Token::MutRef(Span {
-                    start: pos,
-                    end: pos + 4,
-                }));
-                pos += 4;
-            } else {
-                tokens.push(Token::Ref(span));
-                pos += 1;
-            }
+            let (token, advance) = lex_ref(&chars, pos);
+            tokens.push(token);
+            pos += advance;
         } else {
             return Err(crate::TuffError::Lex {
                 span: Span {
@@ -159,6 +140,35 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
         }
     }
     Ok(tokens)
+}
+
+/// Lex a `&` or `&mut` reference token at the given position,
+/// returning the token and how many characters to advance.
+fn lex_ref(chars: &[char], pos: usize) -> (Token, usize) {
+    let mut_end = pos + 1;
+    let is_mut = chars.get(mut_end) == Some(&'m')
+        && chars.get(mut_end + 1) == Some(&'u')
+        && chars.get(mut_end + 2) == Some(&'t')
+        && chars
+            .get(mut_end + 3)
+            .is_none_or(|c| !c.is_alphanumeric() && *c != '_');
+    if is_mut {
+        (
+            Token::MutRef(Span {
+                start: pos,
+                end: pos + 4,
+            }),
+            4,
+        )
+    } else {
+        (
+            Token::Ref(Span {
+                start: pos,
+                end: pos + 1,
+            }),
+            1,
+        )
+    }
 }
 
 #[cfg(test)]

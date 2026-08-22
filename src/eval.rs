@@ -82,10 +82,18 @@ impl Env {
 /// Evaluate an expression AST to its value in the given environment.
 pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
     match expr {
+        Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
+        _ => eval_expr(expr, env),
+    }
+}
+
+/// Evaluate a non-block expression to its value in the given environment.
+fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
+    match expr {
         Expr::Num(value, _) => Ok(Value::Int(*value)),
         Expr::Bin(op, left, right, span) => {
-            let l = eval(left, env)?;
-            let r = eval(right, env)?;
+            let l = eval_expr(left, env)?;
+            let r = eval_expr(right, env)?;
             let Value::Int(l) = l else {
                 return Err(crate::TuffError::Eval {
                     span: *span,
@@ -104,7 +112,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 BinOp::Mul => l * r,
             }))
         }
-        Expr::Group(inner, _, _) => eval(inner, env),
+        Expr::Group(inner, _, _) => eval_expr(inner, env),
         Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Eval {
             span: *span,
             message: format!("undefined variable '{name}'"),
@@ -152,49 +160,54 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 }),
             }
         }
-        Expr::Block(stmts, span, _) => {
-            let mut local = Env::child(env.clone());
-            let mut last_value = None;
-            for stmt in stmts {
-                match stmt {
-                    Stmt::Let(name, mutable, value, _) => {
-                        let v = eval(value, &mut local)?;
-                        local.insert(name.clone(), v, *mutable);
-                    }
-                    Stmt::Assign(target, value, span) => {
-                        let name = match target.as_ref() {
-                            Expr::Ident(name, _) => name.clone(),
-                            Expr::Deref(inner, _) => match inner.as_ref() {
-                                Expr::Ident(name, _) => name.clone(),
-                                _ => {
-                                    return Err(crate::TuffError::Eval {
-                                        span: *span,
-                                        message: "expected a variable name after '*'".to_string(),
-                                    });
-                                }
-                            },
-                            _ => return Err(crate::TuffError::Eval {
-                                span: *span,
-                                message:
-                                    "expected a variable name or dereference as assignment target"
-                                        .to_string(),
-                            }),
-                        };
-                        let v = eval(value, &mut local)?;
-                        local.set(&name, v, *span)?;
-                    }
-                    Stmt::Expr(e) => {
-                        last_value = Some(eval(e, &mut local)?);
-                    }
-                }
+        Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
+    }
+}
+
+/// Execute a block's statements in a child scope, returning the value of
+/// the last expression statement.
+fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate::TuffError> {
+    let mut local = Env::child(env.clone());
+    let mut last_value = None;
+    for stmt in stmts {
+        match stmt {
+            Stmt::Let(name, mutable, value, _) => {
+                let v = eval_expr(value, &mut local)?;
+                local.insert(name.clone(), v, *mutable);
             }
-            // The block's value is the value of its last expression statement.
-            last_value.ok_or_else(|| crate::TuffError::Eval {
-                span: *span,
-                message: "block has no value".to_string(),
-            })
+            Stmt::Assign(target, value, span) => {
+                let name = match target.as_ref() {
+                    Expr::Ident(name, _) => name.clone(),
+                    Expr::Deref(inner, _) => match inner.as_ref() {
+                        Expr::Ident(name, _) => name.clone(),
+                        _ => {
+                            return Err(crate::TuffError::Eval {
+                                span: *span,
+                                message: "expected a variable name after '*'".to_string(),
+                            });
+                        }
+                    },
+                    _ => {
+                        return Err(crate::TuffError::Eval {
+                            span: *span,
+                            message: "expected a variable name or dereference as assignment target"
+                                .to_string(),
+                        });
+                    }
+                };
+                let v = eval_expr(value, &mut local)?;
+                local.set(&name, v, *span)?;
+            }
+            Stmt::Expr(e) => {
+                last_value = Some(eval_expr(e, &mut local)?);
+            }
         }
     }
+    // The block's value is the value of its last expression statement.
+    last_value.ok_or_else(|| crate::TuffError::Eval {
+        span,
+        message: "block has no value".to_string(),
+    })
 }
 
 #[cfg(test)]
