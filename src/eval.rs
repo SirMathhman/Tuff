@@ -139,52 +139,7 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
         Expr::Bin(op, left, right, span) => {
             let l = eval_expr(left, env)?;
             let r = eval_expr(right, env)?;
-            if matches!(op, BinOp::Eq | BinOp::Ne) {
-                return Ok(Value::Bool(match op {
-                    BinOp::Eq => l == r,
-                    BinOp::Ne => l != r,
-                    _ => unreachable!(),
-                }));
-            }
-            if matches!(op, BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq) {
-                let Value::Int(l) = l else {
-                    return Err(crate::TuffError::Eval {
-                        span: *span,
-                        message: "expected an integer".to_string(),
-                    });
-                };
-                let Value::Int(r) = r else {
-                    return Err(crate::TuffError::Eval {
-                        span: *span,
-                        message: "expected an integer".to_string(),
-                    });
-                };
-                return Ok(Value::Bool(match op {
-                    BinOp::Lt => l < r,
-                    BinOp::LtEq => l <= r,
-                    BinOp::Gt => l > r,
-                    BinOp::GtEq => l >= r,
-                    _ => unreachable!(),
-                }));
-            }
-            let Value::Int(l) = l else {
-                return Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: "expected an integer".to_string(),
-                });
-            };
-            let Value::Int(r) = r else {
-                return Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: "expected an integer".to_string(),
-                });
-            };
-            Ok(Value::Int(match op {
-                BinOp::Add => l + r,
-                BinOp::Sub => l - r,
-                BinOp::Mul => l * r,
-                BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => 0,
-            }))
+            eval_bin(*op, l, r, *span)
         }
         Expr::Group(inner, _, _) => eval_expr(inner, env),
         Expr::Array(elements, _) => {
@@ -196,28 +151,8 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
         }
         Expr::Index(base, index, span) => {
             let base = eval_expr(base, env)?;
-            let Value::Int(i) = eval_expr(index, env)? else {
-                return Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: "expected an integer index".to_string(),
-                });
-            };
-            let Value::Array(items) = base else {
-                return Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: "expected an array".to_string(),
-                });
-            };
-            items
-                .get(i.try_into().unwrap_or(usize::MAX))
-                .cloned()
-                .ok_or_else(|| crate::TuffError::Eval {
-                    span: *span,
-                    message: format!(
-                        "index {i} out of bounds for array of length {}",
-                        items.len()
-                    ),
-                })
+            let index = eval_expr(index, env)?;
+            eval_index(base, index, *span)
         }
         Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Eval {
             span: *span,
@@ -249,26 +184,94 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                     message: "expected a variable name after '*'".to_string(),
                 });
             };
-            match env.get(name) {
-                Some(Value::Ref(target)) | Some(Value::MutRef(target)) => {
-                    env.get(&target).ok_or_else(|| crate::TuffError::Eval {
-                        span: *span,
-                        message: format!("undefined variable '{target}'"),
-                    })
-                }
-                Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) => {
-                    Err(crate::TuffError::Eval {
-                        span: *span,
-                        message: format!("'{name}' is not a reference"),
-                    })
-                }
-                None => Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: format!("undefined variable '{name}'"),
-                }),
-            }
+            let target = deref_target(name, env, *span)?;
+            env.get(&target).ok_or_else(|| crate::TuffError::Eval {
+                span: *span,
+                message: format!("undefined variable '{target}'"),
+            })
         }
         Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
+    }
+}
+
+/// Evaluate a binary operation on already-evaluated operands.
+fn eval_bin(op: BinOp, l: Value, r: Value, span: Span) -> Result<Value, crate::TuffError> {
+    let expected_integer = || crate::TuffError::Eval {
+        span,
+        message: "expected an integer".to_string(),
+    };
+    match op {
+        BinOp::Eq => Ok(Value::Bool(l == r)),
+        BinOp::Ne => Ok(Value::Bool(l != r)),
+        BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
+            let Value::Int(l) = l else {
+                return Err(expected_integer());
+            };
+            let Value::Int(r) = r else {
+                return Err(expected_integer());
+            };
+            Ok(Value::Bool(match op {
+                BinOp::Lt => l < r,
+                BinOp::LtEq => l <= r,
+                BinOp::Gt => l > r,
+                BinOp::GtEq => l >= r,
+                _ => unreachable!(),
+            }))
+        }
+        BinOp::Add | BinOp::Sub | BinOp::Mul => {
+            let Value::Int(l) = l else {
+                return Err(expected_integer());
+            };
+            let Value::Int(r) = r else {
+                return Err(expected_integer());
+            };
+            Ok(Value::Int(match op {
+                BinOp::Add => l + r,
+                BinOp::Sub => l - r,
+                BinOp::Mul => l * r,
+                _ => unreachable!(),
+            }))
+        }
+    }
+}
+
+/// Evaluate an index expression on already-evaluated operands.
+fn eval_index(base: Value, index: Value, span: Span) -> Result<Value, crate::TuffError> {
+    let Value::Int(i) = index else {
+        return Err(crate::TuffError::Eval {
+            span,
+            message: "expected an integer index".to_string(),
+        });
+    };
+    let Value::Array(items) = base else {
+        return Err(crate::TuffError::Eval {
+            span,
+            message: "expected an array".to_string(),
+        });
+    };
+    items
+        .get(i.try_into().unwrap_or(usize::MAX))
+        .cloned()
+        .ok_or_else(|| crate::TuffError::Eval {
+            span,
+            message: format!("index {i} out of bounds for array of length {}", items.len()),
+        })
+}
+
+/// Resolve a reference variable to the name of the variable it points at.
+fn deref_target(name: &str, env: &Env, span: Span) -> Result<String, crate::TuffError> {
+    match env.get(name) {
+        Some(Value::Ref(target)) | Some(Value::MutRef(target)) => Ok(target),
+        Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) => {
+            Err(crate::TuffError::Eval {
+                span,
+                message: format!("'{name}' is not a reference"),
+            })
+        }
+        None => Err(crate::TuffError::Eval {
+            span,
+            message: format!("undefined variable '{name}'"),
+        }),
     }
 }
 
@@ -294,28 +297,13 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                             });
                         };
                         // Assign through the reference to the variable it points at.
-                        match env.get(name) {
-                            Some(Value::MutRef(target)) => target,
-                            Some(Value::Ref(_)) => {
-                                return Err(crate::TuffError::Eval {
-                                    span: *span,
-                                    message: "cannot assign through a shared reference".to_string(),
-                                });
-                            }
-                            Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) =>
-                            {
-                                return Err(crate::TuffError::Eval {
-                                    span: *span,
-                                    message: format!("'{name}' is not a reference"),
-                                });
-                            }
-                            None => {
-                                return Err(crate::TuffError::Eval {
-                                    span: *span,
-                                    message: format!("undefined variable '{name}'"),
-                                });
-                            }
+                        if matches!(env.get(name), Some(Value::Ref(_))) {
+                            return Err(crate::TuffError::Eval {
+                                span: *span,
+                                message: "cannot assign through a shared reference".to_string(),
+                            });
                         }
+                        deref_target(name, env, *span)?
                     }
                     _ => {
                         return Err(crate::TuffError::Eval {
