@@ -13,6 +13,7 @@ pub enum Token {
     RBrace(Span),
     Ident(String, Span),
     Let(Span),
+    Mut(Span),
     Eq(Span),
     Semi(Span),
 }
@@ -90,10 +91,10 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             }
             let word: String = chars[start..pos].iter().collect();
             let span = Span { start, end: pos };
-            tokens.push(if word == "let" {
-                Token::Let(span)
-            } else {
-                Token::Ident(word, span)
+            tokens.push(match word.as_str() {
+                "let" => Token::Let(span),
+                "mut" => Token::Mut(span),
+                _ => Token::Ident(word, span),
             });
         } else if c == '=' {
             tokens.push(Token::Eq(Span {

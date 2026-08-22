@@ -1,20 +1,38 @@
 use std::collections::HashMap;
 
+use crate::Span;
 use crate::ast::{BinOp, Expr, Stmt};
 
-/// A binding environment mapping variable names to values.
+/// A binding environment mapping variable names to (value, mutable).
 #[derive(Debug, Default)]
 pub struct Env {
-    vars: HashMap<String, i64>,
+    vars: HashMap<String, (i64, bool)>,
 }
 
 impl Env {
     fn get(&self, name: &str) -> Option<i64> {
-        self.vars.get(name).copied()
+        self.vars.get(name).map(|(v, _)| *v)
     }
 
-    fn insert(&mut self, name: String, value: i64) {
-        self.vars.insert(name, value);
+    fn insert(&mut self, name: String, value: i64, mutable: bool) {
+        self.vars.insert(name, (value, mutable));
+    }
+
+    fn set(&mut self, name: &str, value: i64, span: Span) -> Result<(), crate::TuffError> {
+        match self.vars.get_mut(name) {
+            Some((v, true)) => {
+                *v = value;
+                Ok(())
+            }
+            Some((_, false)) => Err(crate::TuffError::Eval {
+                span,
+                message: format!("cannot assign to immutable variable '{name}'"),
+            }),
+            None => Err(crate::TuffError::Eval {
+                span,
+                message: format!("undefined variable '{name}'"),
+            }),
+        }
     }
 }
 
@@ -41,9 +59,13 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
             let mut last_value = None;
             for stmt in stmts {
                 match stmt {
-                    Stmt::Let(name, value, _) => {
+                    Stmt::Let(name, mutable, value, _) => {
                         let v = eval(value, &mut local)?;
-                        local.insert(name.clone(), v);
+                        local.insert(name.clone(), v, *mutable);
+                    }
+                    Stmt::Assign(name, value, span) => {
+                        let v = eval(value, &mut local)?;
+                        local.set(name, v, *span)?;
                     }
                     Stmt::Expr(e) => {
                         last_value = Some(eval(e, &mut local)?);

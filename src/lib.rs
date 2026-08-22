@@ -120,6 +120,11 @@ mod tests {
     }
 
     #[test]
+    fn mutable_let_binding_with_assignment_evaluates_to_one() {
+        assert_eq!(evaluate("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
     fn undefined_variable_is_an_eval_error() {
         assert_eq!(
             evaluate("x"),

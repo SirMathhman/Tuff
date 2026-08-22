@@ -15,6 +15,11 @@ pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
     while let Some(token) = parser.peek() {
         stmts.push(match token {
             Token::Let(span) => parser.parse_let_stmt(span)?,
+            Token::Ident(_, span)
+                if matches!(parser.tokens.get(parser.pos + 1), Some(Token::Eq(_))) =>
+            {
+                parser.parse_assign_stmt(span)?
+            }
             _ => Stmt::Expr(Box::new(parser.parse_expr()?)),
         });
     }
@@ -122,6 +127,11 @@ impl Parser {
                     });
                 }
                 Some(Token::Let(span)) => stmts.push(self.parse_let_stmt(span)?),
+                Some(Token::Ident(_, span))
+                    if matches!(self.tokens.get(self.pos + 1), Some(Token::Eq(_))) =>
+                {
+                    stmts.push(self.parse_assign_stmt(span)?);
+                }
                 Some(_) => {
                     let expr = self.parse_expr()?;
                     if matches!(self.peek(), Some(Token::Semi(_))) {
@@ -145,6 +155,11 @@ impl Parser {
 
     fn parse_let_stmt(&mut self, let_span: Span) -> Result<Stmt, crate::TuffError> {
         self.pos += 1;
+        let mut mutable = false;
+        if matches!(self.peek(), Some(Token::Mut(_))) {
+            mutable = true;
+            self.pos += 1;
+        }
         let (name, name_span) = match self.peek() {
             Some(Token::Ident(name, span)) => (name, span),
             other => {
@@ -155,6 +170,27 @@ impl Parser {
             }
         };
         self.pos += 1;
+        let value = self.parse_assign_value(name_span)?;
+        Ok(Stmt::Let(name, mutable, value, let_span))
+    }
+
+    fn parse_assign_stmt(&mut self, name_span: Span) -> Result<Stmt, crate::TuffError> {
+        let name = match self.peek() {
+            Some(Token::Ident(name, _)) => name,
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(name_span),
+                    message: "expected a variable name before '='".to_string(),
+                });
+            }
+        };
+        self.pos += 1;
+        let value = self.parse_assign_value(name_span)?;
+        Ok(Stmt::Assign(name, value, name_span))
+    }
+
+    /// Parse the `= expr ;` tail shared by let and assignment statements.
+    fn parse_assign_value(&mut self, name_span: Span) -> Result<Box<Expr>, crate::TuffError> {
         match self.peek() {
             Some(Token::Eq(_)) => self.pos += 1,
             other => {
@@ -170,11 +206,11 @@ impl Parser {
             other => {
                 return Err(crate::TuffError::Parse {
                     span: other.map(|t| t.span()).unwrap_or(name_span),
-                    message: "expected ';' after let statement".to_string(),
+                    message: "expected ';' after statement".to_string(),
                 });
             }
         }
-        Ok(Stmt::Let(name, Box::new(value), let_span))
+        Ok(Box::new(value))
     }
 }
 
@@ -191,6 +227,7 @@ impl Token {
             | Token::RBrace(span)
             | Token::Ident(_, span)
             | Token::Let(span)
+            | Token::Mut(span)
             | Token::Eq(span)
             | Token::Semi(span) => *span,
         }

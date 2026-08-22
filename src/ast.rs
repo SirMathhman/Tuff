@@ -21,6 +21,7 @@ pub enum Expr {
 /// A statement in a block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
-    Let(String, Box<Expr>, Span),
+    Let(String, bool, Box<Expr>, Span),
+    Assign(String, Box<Expr>, Span),
     Expr(Box<Expr>),
 }
