@@ -9,6 +9,8 @@ use crate::ast::{BinOp, Expr, Stmt};
 pub enum Value {
     /// An integer.
     Int(i64),
+    /// A boolean.
+    Bool(bool),
     /// A shared reference to a variable.
     Ref(String),
     /// A mutable reference to a variable.
@@ -19,6 +21,7 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Int(v) => write!(f, "{v}"),
+            Value::Bool(v) => write!(f, "{}", i64::from(*v)),
             Value::Ref(name) => write!(f, "&{name}"),
             Value::MutRef(name) => write!(f, "&mut {name}"),
         }
@@ -91,10 +94,13 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
 fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
     match expr {
         Expr::Num(value, _) => Ok(Value::Int(*value)),
-        Expr::Bool(value, _) => Ok(Value::Int(i64::from(*value))),
+        Expr::Bool(value, _) => Ok(Value::Bool(*value)),
         Expr::Bin(op, left, right, span) => {
             let l = eval_expr(left, env)?;
             let r = eval_expr(right, env)?;
+            if matches!(op, BinOp::Eq) {
+                return Ok(Value::Bool(l == r));
+            }
             let Value::Int(l) = l else {
                 return Err(crate::TuffError::Eval {
                     span: *span,
@@ -111,7 +117,7 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
-                BinOp::Eq => i64::from(l == r),
+                BinOp::Eq => 0,
             }))
         }
         Expr::Group(inner, _, _) => eval_expr(inner, env),
@@ -152,7 +158,7 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                         message: format!("undefined variable '{target}'"),
                     })
                 }
-                Some(Value::Int(_)) => Err(crate::TuffError::Eval {
+                Some(Value::Int(_)) | Some(Value::Bool(_)) => Err(crate::TuffError::Eval {
                     span: *span,
                     message: format!("'{name}' is not a reference"),
                 }),
@@ -196,7 +202,7 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                                     message: "cannot assign through a shared reference".to_string(),
                                 });
                             }
-                            Some(Value::Int(_)) => {
+                            Some(Value::Int(_)) | Some(Value::Bool(_)) => {
                                 return Err(crate::TuffError::Eval {
                                     span: *span,
                                     message: format!("'{name}' is not a reference"),

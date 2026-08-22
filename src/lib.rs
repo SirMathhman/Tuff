@@ -183,19 +183,27 @@ mod tests {
 
     #[test]
     fn true_literal_evaluates_to_one() {
-        assert_eq!(evaluate("let x = true; x"), Ok(eval::Value::Int(1)));
+        assert_eq!(evaluate("let x = true; x"), Ok(eval::Value::Bool(true)));
     }
 
     #[test]
     fn false_literal_evaluates_to_zero() {
-        assert_eq!(evaluate("let x = false; x"), Ok(eval::Value::Int(0)));
+        assert_eq!(evaluate("let x = false; x"), Ok(eval::Value::Bool(false)));
     }
 
     #[test]
     fn equality_of_different_values_evaluates_to_zero() {
         assert_eq!(
             evaluate("let x = 1; let y = 2; x == y"),
-            Ok(eval::Value::Int(0))
+            Ok(eval::Value::Bool(false))
+        );
+    }
+
+    #[test]
+    fn equality_of_int_and_bool_evaluates_to_zero() {
+        assert_eq!(
+            evaluate("let x = 1; let y = true; x == y"),
+            Ok(eval::Value::Bool(false))
         );
     }
 
