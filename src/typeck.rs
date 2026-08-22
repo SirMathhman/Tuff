@@ -142,22 +142,21 @@ pub enum TypedStmt {
 }
 
 /// Analyze an expression AST, checking types without executing. Returns a
-/// type-annotated tree that the evaluator consumes. Both branches of an `if`
-/// are analyzed; only the taken branch is later evaluated.
+/// type-annotated tree the evaluator consumes; both `if` branches are analyzed.
 pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffError> {
     match expr {
         Expr::Num(value, span) => Ok(TypedExpr::Num(*value, *span)),
         Expr::Bool(value, span) => Ok(TypedExpr::Bool(*value, *span)),
         Expr::Bin(op, left, right, span) => analyze_bin(*op, left, right, env, *span),
-        Expr::Group(inner, span, _) => {
-            let inner = analyze(inner, env)?;
-            Ok(TypedExpr::Group(Box::new(inner), *span))
-        }
+        Expr::Group(inner, span, _) => Ok(TypedExpr::Group(
+            Box::new(analyze(inner, env)?),
+            *span,
+        )),
         Expr::Array(elements, span) => {
-            let mut items = Vec::with_capacity(elements.len());
-            for element in elements {
-                items.push(analyze(element, env)?);
-            }
+            let items = elements
+                .iter()
+                .map(|e| analyze(e, env))
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(TypedExpr::Array(items, *span))
         }
         Expr::Index(base, index, span) => analyze_index(base, index, env, *span),
