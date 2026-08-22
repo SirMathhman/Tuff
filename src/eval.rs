@@ -36,8 +36,9 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
             span: *span,
             message: format!("undefined variable '{name}'"),
         }),
-        Expr::Block(stmts, _, _) => {
+        Expr::Block(stmts, span, _) => {
             let mut local = Env::default();
+            let mut last_value = None;
             for stmt in stmts {
                 match stmt {
                     Stmt::Let(name, value, _) => {
@@ -45,21 +46,15 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
                         local.insert(name.clone(), v);
                     }
                     Stmt::Expr(e) => {
-                        let _ = eval(e, &mut local)?;
+                        last_value = Some(eval(e, &mut local)?);
                     }
                 }
             }
             // The block's value is the value of its last expression statement.
-            match stmts.iter().rev().find_map(|s| match s {
-                Stmt::Expr(e) => Some(e),
-                Stmt::Let(..) => None,
-            }) {
-                Some(e) => eval(e, &mut local),
-                None => Err(crate::TuffError::Parse {
-                    span: crate::Span { start: 0, end: 0 },
-                    message: "block has no value".to_string(),
-                }),
-            }
+            last_value.ok_or_else(|| crate::TuffError::Parse {
+                span: *span,
+                message: "block has no value".to_string(),
+            })
         }
     }
 }
