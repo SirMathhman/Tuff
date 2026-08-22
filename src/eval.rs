@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::Span;
-use crate::ast::{BinOp, Expr, Stmt};
-use crate::typeck::Type;
+use crate::ast::BinOp;
+use crate::typeck::{Type, TypedExpr, TypedStmt};
 
 /// A runtime value produced by evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,79 +156,59 @@ impl Env {
     }
 }
 
-/// Evaluate an expression AST to its value in the given environment.
-pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
+/// Evaluate a typed expression to its value in the given environment.
+pub fn eval(expr: &TypedExpr, env: &mut Env) -> Result<Value, crate::TuffError> {
     match expr {
-        Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
+        TypedExpr::Block(stmts, _, span) => exec_block(stmts, env, *span),
         _ => eval_expr(expr, env),
     }
 }
 
-/// Evaluate a non-block expression to its value in the given environment.
-fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
+/// Evaluate a non-block typed expression to its value in the given environment.
+fn eval_expr(expr: &TypedExpr, env: &mut Env) -> Result<Value, crate::TuffError> {
     match expr {
-        Expr::Num(value, _) => Ok(Value::Int(*value)),
-        Expr::Bool(value, _) => Ok(Value::Bool(*value)),
-        Expr::Bin(op, left, right, span) => {
+        TypedExpr::Num(value, _) => Ok(Value::Int(*value)),
+        TypedExpr::Bool(value, _) => Ok(Value::Bool(*value)),
+        TypedExpr::Bin(op, left, right, _, span) => {
             let l = eval_expr(left, env)?;
             let r = eval_expr(right, env)?;
             eval_bin(*op, l, r, *span)
         }
-        Expr::Group(inner, _, _) => eval_expr(inner, env),
-        Expr::Array(elements, _) => {
+        TypedExpr::Group(inner, _) => eval_expr(inner, env),
+        TypedExpr::Array(elements, _) => {
             let mut items = Vec::with_capacity(elements.len());
             for element in elements {
                 items.push(eval_expr(element, env)?);
             }
             Ok(Value::Array(items))
         }
-        Expr::Index(base, index, span) => {
+        TypedExpr::Index(base, index, span) => {
             let base = eval_expr(base, env)?;
             let index = eval_expr(index, env)?;
             eval_index(base, index, *span)
         }
-        Expr::Ident(name, span) => {
-            env.get(name)
-                .ok_or_else(|| crate::TuffError::UndefinedVariable {
-                    span: *span,
-                    name: name.clone(),
-                })
-        }
-        Expr::Ref(inner, mutable, span) => {
-            let Expr::Ident(name, _) = inner.as_ref() else {
-                return Err(crate::TuffError::ExpectedVariableName {
-                    span: *span,
-                    after: "&",
-                });
-            };
-            if env.get(name).is_none() {
-                return Err(crate::TuffError::UndefinedVariable {
-                    span: *span,
-                    name: name.clone(),
-                });
-            }
+        TypedExpr::Ident(name, _, span) => env
+            .get(name)
+            .ok_or_else(|| crate::TuffError::UndefinedVariable {
+                span: *span,
+                name: name.clone(),
+            }),
+        TypedExpr::Ref(name, mutable, _) => {
             if *mutable {
                 Ok(Value::MutRef(name.clone()))
             } else {
                 Ok(Value::Ref(name.clone()))
             }
         }
-        Expr::Deref(inner, span) => {
-            let Expr::Ident(name, _) = inner.as_ref() else {
-                return Err(crate::TuffError::ExpectedVariableName {
-                    span: *span,
-                    after: "*",
-                });
-            };
-            let target = deref_target(name, env, *span)?;
-            env.get(&target).ok_or(crate::TuffError::UndefinedVariable {
+        TypedExpr::Deref(target, _, span) => env
+            .get(target)
+            .ok_or_else(|| crate::TuffError::UndefinedVariable {
                 span: *span,
-                name: target,
-            })
-        }
-        Expr::If(cond, then, otherwise, span) => {
+                name: target.clone(),
+            }),
+        TypedExpr::If(cond, then, otherwise, _, _) => {
             let Value::Bool(b) = eval_expr(cond, env)? else {
-                return Err(crate::TuffError::ExpectedBooleanCondition { span: *span });
+                unreachable!("the analysis pass guarantees a boolean condition");
             };
             // Only the taken branch is evaluated; both were analyzed already.
             if b {
@@ -237,55 +217,58 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 eval_expr(otherwise, env)
             }
         }
-        Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
+        TypedExpr::Block(stmts, _, span) => exec_block(stmts, env, *span),
     }
 }
 
-/// Evaluate a binary operation on already-evaluated operands.
+/// Evaluate a binary operation on already-evaluated operands. The analysis
+/// pass guarantees the operand types, so each arm is compiler-proven
+/// exhaustive and no `unreachable!` is needed.
 fn eval_bin(op: BinOp, l: Value, r: Value, span: Span) -> Result<Value, crate::TuffError> {
-    let expected_integer = || crate::TuffError::ExpectedInteger { span };
     match op {
         BinOp::Eq => Ok(Value::Bool(l == r)),
         BinOp::Ne => Ok(Value::Bool(l != r)),
         BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
             let Value::Int(l) = l else {
-                return Err(expected_integer());
+                return Err(crate::TuffError::ExpectedInteger { span });
             };
             let Value::Int(r) = r else {
-                return Err(expected_integer());
+                return Err(crate::TuffError::ExpectedInteger { span });
             };
             Ok(Value::Bool(match op {
                 BinOp::Lt => l < r,
                 BinOp::LtEq => l <= r,
                 BinOp::Gt => l > r,
                 BinOp::GtEq => l >= r,
-                _ => unreachable!(),
+                _ => unreachable!("comparison operators only"),
             }))
         }
         BinOp::Add | BinOp::Sub | BinOp::Mul => {
             let Value::Int(l) = l else {
-                return Err(expected_integer());
+                return Err(crate::TuffError::ExpectedInteger { span });
             };
             let Value::Int(r) = r else {
-                return Err(expected_integer());
+                return Err(crate::TuffError::ExpectedInteger { span });
             };
             Ok(Value::Int(match op {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
-                _ => unreachable!(),
+                _ => unreachable!("arithmetic operators only"),
             }))
         }
     }
 }
 
-/// Evaluate an index expression on already-evaluated operands.
+/// Evaluate an index expression on already-evaluated operands. The analysis
+/// pass guarantees the base is an array and the index an integer; only the
+/// bounds are checked dynamically.
 fn eval_index(base: Value, index: Value, span: Span) -> Result<Value, crate::TuffError> {
     let Value::Int(i) = index else {
-        return Err(crate::TuffError::ExpectedIntegerIndex { span });
+        unreachable!("the analysis pass guarantees an integer index");
     };
     let Value::Array(items) = base else {
-        return Err(crate::TuffError::NotAnArray { span });
+        unreachable!("the analysis pass guarantees an array base");
     };
     items
         .get(i.try_into().unwrap_or(usize::MAX))
@@ -297,73 +280,41 @@ fn eval_index(base: Value, index: Value, span: Span) -> Result<Value, crate::Tuf
         })
 }
 
-/// Resolve a reference variable to the name of the variable it points at.
-fn deref_target(name: &str, env: &Env, span: Span) -> Result<String, crate::TuffError> {
-    match env.get(name) {
-        Some(Value::Ref(target)) | Some(Value::MutRef(target)) => Ok(target),
-        Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) => {
-            Err(crate::TuffError::NotAReference {
-                span,
-                name: name.to_string(),
-            })
-        }
-        None => Err(crate::TuffError::UndefinedVariable {
-            span,
-            name: name.to_string(),
-        }),
-    }
-}
-
-/// Execute a block's statements in a new scope, returning the value of
+/// Execute a block's typed statements in a new scope, returning the value of
 /// the last expression statement.
-fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate::TuffError> {
+fn exec_block(stmts: &[TypedStmt], env: &mut Env, span: Span) -> Result<Value, crate::TuffError> {
     env.push_scope();
     let mut last_value = None;
     for stmt in stmts {
         match stmt {
-            Stmt::Let(name, mutable, value, _) => {
+            TypedStmt::Let(name, mutable, value, _, _) => {
                 let v = eval_expr(value, env)?;
                 env.insert(name.clone(), v, *mutable);
             }
-            Stmt::Assign(target, value, span) => {
-                let name = match target.as_ref() {
-                    Expr::Ident(name, _) => name.clone(),
-                    Expr::Deref(inner, _) => {
-                        let Expr::Ident(name, _) = inner.as_ref() else {
-                            return Err(crate::TuffError::ExpectedVariableName {
-                                span: *span,
-                                after: "*",
-                            });
-                        };
-                        // Assign through the reference to the variable it points at.
-                        if matches!(env.get(name), Some(Value::Ref(_))) {
-                            return Err(crate::TuffError::CannotAssignThroughSharedReference {
-                                span: *span,
-                            });
-                        }
-                        deref_target(name, env, *span)?
+            TypedStmt::Assign(target, value, span) => {
+                let v = eval_expr(value, env)?;
+                match target.as_ref() {
+                    TypedExpr::Ident(name, _, _) => {
+                        env.set(name, v, *span)?;
                     }
-                    Expr::Index(base, index, _) => {
-                        let Expr::Ident(name, _) = base.as_ref() else {
-                            return Err(crate::TuffError::InvalidAssignmentTarget { span: *span });
+                    TypedExpr::Deref(target, _, _) => {
+                        // Assign through the reference to the variable it points at.
+                        env.set(target, v, *span)?;
+                    }
+                    TypedExpr::Index(base, index, _) => {
+                        let TypedExpr::Ident(name, _, _) = base.as_ref() else {
+                            unreachable!("the analysis pass guarantees an array base");
                         };
                         let Value::Int(i) = eval_expr(index, env)? else {
-                            return Err(crate::TuffError::ExpectedIntegerIndex { span: *span });
+                            unreachable!("the analysis pass guarantees an integer index");
                         };
-                        let v = eval_expr(value, env)?;
                         env.set_index(name, i, v, *span)?;
-                        last_value = Some(Value::Int(0));
-                        continue;
                     }
-                    _ => {
-                        return Err(crate::TuffError::InvalidAssignmentTarget { span: *span });
-                    }
-                };
-                let v = eval_expr(value, env)?;
-                env.set(&name, v, *span)?;
+                    _ => unreachable!("the analysis pass guarantees a valid assignment target"),
+                }
                 last_value = Some(Value::Int(0));
             }
-            Stmt::Expr(e) => {
+            TypedStmt::Expr(e) => {
                 last_value = Some(eval_expr(e, env)?);
             }
         }
@@ -377,24 +328,30 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
 mod tests {
     use super::*;
     use crate::Span;
-    use crate::ast::{BinOp, Expr};
+    use crate::ast::BinOp;
+    use crate::typeck::Type;
+
+    fn span() -> Span {
+        Span { start: 0, end: 1 }
+    }
 
     #[test]
     fn evaluates_number() {
         let mut env = Env::default();
         assert_eq!(
-            eval(&Expr::Num(5, Span { start: 0, end: 1 }), &mut env),
+            eval(&TypedExpr::Num(5, span()), &mut env),
             Ok(Value::Int(5))
         );
     }
 
     #[test]
     fn evaluates_binary() {
-        let expr = Expr::Bin(
+        let expr = TypedExpr::Bin(
             BinOp::Mul,
-            Box::new(Expr::Num(2, Span { start: 0, end: 1 })),
-            Box::new(Expr::Num(3, Span { start: 0, end: 1 })),
-            Span { start: 0, end: 1 },
+            Box::new(TypedExpr::Num(2, span())),
+            Box::new(TypedExpr::Num(3, span())),
+            Type::Int,
+            span(),
         );
         let mut env = Env::default();
         assert_eq!(eval(&expr, &mut env), Ok(Value::Int(6)));

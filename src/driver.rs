@@ -10,7 +10,7 @@ pub fn run(input: &str) -> Result<eval::Value, crate::TuffError> {
     let tokens = lexer::lex(input)?;
     let ast = parser::parse(tokens)?;
     let mut type_env = typeck::TypeEnv::default();
-    typeck::analyze(&ast, &mut type_env)?;
+    let typed = typeck::analyze(&ast, &mut type_env)?;
     let mut env = eval::Env::default();
-    eval::eval(&ast, &mut env)
+    eval::eval(&typed, &mut env)
 }
