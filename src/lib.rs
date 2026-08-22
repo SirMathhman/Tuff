@@ -80,6 +80,11 @@ mod tests {
     }
 
     #[test]
+    fn two_plus_three_times_four_evaluates_to_fourteen() {
+        assert_eq!(evaluate("2 + 3 * 4"), Ok(14));
+    }
+
+    #[test]
     fn dangling_operator_is_a_parse_error() {
         assert_eq!(
             evaluate("1 +"),
