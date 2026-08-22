@@ -57,47 +57,14 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 message: "number out of range".to_string(),
             })?;
             tokens.push(Token::Num(value, Span { start, end: pos }));
-        } else if c == '+' || c == '-' || c == '*' {
-            tokens.push(match c {
-                '+' => Token::Plus(Span {
-                    start: pos,
-                    end: pos + 1,
-                }),
-                '-' => Token::Minus(Span {
-                    start: pos,
-                    end: pos + 1,
-                }),
-                _ => Token::Star(Span {
-                    start: pos,
-                    end: pos + 1,
-                }),
-            });
-            pos += 1;
-        } else if c == '(' || c == ')' {
-            tokens.push(if c == '(' {
-                Token::LParen(Span {
-                    start: pos,
-                    end: pos + 1,
-                })
-            } else {
-                Token::RParen(Span {
-                    start: pos,
-                    end: pos + 1,
-                })
-            });
-            pos += 1;
-        } else if c == '{' || c == '}' {
-            tokens.push(if c == '{' {
-                Token::LBrace(Span {
-                    start: pos,
-                    end: pos + 1,
-                })
-            } else {
-                Token::RBrace(Span {
-                    start: pos,
-                    end: pos + 1,
-                })
-            });
+        } else if let Some(token) = single_char_token(
+            c,
+            Span {
+                start: pos,
+                end: pos + 1,
+            },
+        ) {
+            tokens.push(token);
             pos += 1;
         } else if c.is_ascii_alphabetic() || c == '_' {
             let start = pos;
@@ -117,18 +84,6 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 "false" => Token::Bool(false, span),
                 _ => Token::Ident(word, span),
             });
-        } else if c == '=' {
-            tokens.push(Token::Eq(Span {
-                start: pos,
-                end: pos + 1,
-            }));
-            pos += 1;
-        } else if c == ';' {
-            tokens.push(Token::Semi(Span {
-                start: pos,
-                end: pos + 1,
-            }));
-            pos += 1;
         } else if c == '&' {
             let (token, advance) = lex_ref(&chars, pos);
             tokens.push(token);
@@ -144,6 +99,22 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
         }
     }
     Ok(tokens)
+}
+
+/// The token for a single-character operator or delimiter, if any.
+fn single_char_token(c: char, span: Span) -> Option<Token> {
+    Some(match c {
+        '+' => Token::Plus(span),
+        '-' => Token::Minus(span),
+        '*' => Token::Star(span),
+        '(' => Token::LParen(span),
+        ')' => Token::RParen(span),
+        '{' => Token::LBrace(span),
+        '}' => Token::RBrace(span),
+        '=' => Token::Eq(span),
+        ';' => Token::Semi(span),
+        _ => return None,
+    })
 }
 
 /// Lex a `&` or `&mut` reference token at the given position,
