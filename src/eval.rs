@@ -15,6 +15,8 @@ pub enum Value {
     Ref(String),
     /// A mutable reference to a variable.
     MutRef(String),
+    /// An array of values.
+    Array(Vec<Value>),
 }
 
 impl fmt::Display for Value {
@@ -24,6 +26,10 @@ impl fmt::Display for Value {
             Value::Bool(v) => write!(f, "{v}"),
             Value::Ref(name) => write!(f, "&{name}"),
             Value::MutRef(name) => write!(f, "&mut {name}"),
+            Value::Array(items) => {
+                let inner: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+                write!(f, "[{}]", inner.join(", "))
+            }
         }
     }
 }
@@ -101,6 +107,7 @@ impl Env {
                 | (Value::Bool(_), Value::Bool(_))
                 | (Value::Ref(_), Value::Ref(_))
                 | (Value::MutRef(_), Value::MutRef(_))
+                | (Value::Array(_), Value::Array(_))
         )
     }
 
@@ -111,6 +118,7 @@ impl Env {
             Value::Bool(_) => "boolean",
             Value::Ref(_) => "shared reference",
             Value::MutRef(_) => "mutable reference",
+            Value::Array(_) => "array",
         }
     }
 }
@@ -179,6 +187,38 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
             }))
         }
         Expr::Group(inner, _, _) => eval_expr(inner, env),
+        Expr::Array(elements, _) => {
+            let mut items = Vec::with_capacity(elements.len());
+            for element in elements {
+                items.push(eval_expr(element, env)?);
+            }
+            Ok(Value::Array(items))
+        }
+        Expr::Index(base, index, span) => {
+            let base = eval_expr(base, env)?;
+            let Value::Int(i) = eval_expr(index, env)? else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected an integer index".to_string(),
+                });
+            };
+            let Value::Array(items) = base else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected an array".to_string(),
+                });
+            };
+            items
+                .get(i.try_into().unwrap_or(usize::MAX))
+                .cloned()
+                .ok_or_else(|| crate::TuffError::Eval {
+                    span: *span,
+                    message: format!(
+                        "index {i} out of bounds for array of length {}",
+                        items.len()
+                    ),
+                })
+        }
         Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Eval {
             span: *span,
             message: format!("undefined variable '{name}'"),
@@ -216,10 +256,12 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                         message: format!("undefined variable '{target}'"),
                     })
                 }
-                Some(Value::Int(_)) | Some(Value::Bool(_)) => Err(crate::TuffError::Eval {
-                    span: *span,
-                    message: format!("'{name}' is not a reference"),
-                }),
+                Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) => {
+                    Err(crate::TuffError::Eval {
+                        span: *span,
+                        message: format!("'{name}' is not a reference"),
+                    })
+                }
                 None => Err(crate::TuffError::Eval {
                     span: *span,
                     message: format!("undefined variable '{name}'"),
@@ -260,7 +302,8 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                                     message: "cannot assign through a shared reference".to_string(),
                                 });
                             }
-                            Some(Value::Int(_)) | Some(Value::Bool(_)) => {
+                            Some(Value::Int(_)) | Some(Value::Bool(_)) | Some(Value::Array(_)) =>
+                            {
                                 return Err(crate::TuffError::Eval {
                                     span: *span,
                                     message: format!("'{name}' is not a reference"),

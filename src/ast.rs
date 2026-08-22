@@ -40,6 +40,10 @@ pub enum Expr {
     Ref(Box<Expr>, bool, Span),
     /// A dereference (`*x`).
     Deref(Box<Expr>, Span),
+    /// An array literal.
+    Array(Vec<Expr>, Span),
+    /// An index expression (`base[index]`).
+    Index(Box<Expr>, Box<Expr>, Span),
     /// A braced block of statements.
     Block(Vec<Stmt>, Span, Span),
 }

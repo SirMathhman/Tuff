@@ -39,6 +39,12 @@ pub enum Token {
     Gt(Span),
     /// `>=`
     GtEq(Span),
+    /// `[`
+    LBracket(Span),
+    /// `]`
+    RBracket(Span),
+    /// `,`
+    Comma(Span),
     /// `;`
     Semi(Span),
     /// `&`
@@ -135,6 +141,9 @@ fn single_char_token(c: char, span: Span) -> Option<Token> {
         '=' => Token::Eq(span),
         '<' => Token::Lt(span),
         '>' => Token::Gt(span),
+        '[' => Token::LBracket(span),
+        ']' => Token::RBracket(span),
+        ',' => Token::Comma(span),
         ';' => Token::Semi(span),
         _ => return None,
     })

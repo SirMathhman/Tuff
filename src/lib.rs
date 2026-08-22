@@ -270,6 +270,14 @@ mod tests {
     }
 
     #[test]
+    fn array_index_sum_evaluates_to_six() {
+        assert_eq!(
+            evaluate("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
+            Ok(eval::Value::Int(6))
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }

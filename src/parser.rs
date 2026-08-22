@@ -106,13 +106,35 @@ impl Parser {
 
     /// Parse a multiplicative expression (`*`).
     fn parse_term(&mut self) -> Result<Expr, crate::TuffError> {
-        let mut left = self.parse_primary()?;
+        let mut left = self.parse_postfix()?;
         while let Some(Token::Star(span)) = self.peek() {
             self.pos += 1;
-            let right = self.parse_primary()?;
+            let right = self.parse_postfix()?;
             left = Expr::Bin(BinOp::Mul, Box::new(left), Box::new(right), span);
         }
         Ok(left)
+    }
+
+    /// Parse a primary followed by any index expressions (`[…]`).
+    fn parse_postfix(&mut self) -> Result<Expr, crate::TuffError> {
+        let mut expr = self.parse_primary()?;
+        while let Some(Token::LBracket(span)) = self.peek() {
+            self.pos += 1;
+            let index = self.parse_expr()?;
+            match self.peek() {
+                Some(Token::RBracket(close)) => {
+                    self.pos += 1;
+                    expr = Expr::Index(Box::new(expr), Box::new(index), close);
+                }
+                other => {
+                    return Err(crate::TuffError::Parse {
+                        span: other.map(|t| t.span()).unwrap_or(span),
+                        message: "expected ']'".to_string(),
+                    });
+                }
+            }
+        }
+        Ok(expr)
     }
 
     /// Parse a primary: literal, identifier, group, block, or reference.
@@ -132,6 +154,7 @@ impl Parser {
             }
             Some(Token::LParen(span)) => self.parse_group(span, ')', Token::RParen),
             Some(Token::LBrace(span)) => self.parse_block(span),
+            Some(Token::LBracket(span)) => self.parse_array(span),
             Some(Token::Ref(span)) => {
                 self.pos += 1;
                 let inner = self.parse_primary()?;
@@ -179,6 +202,42 @@ impl Parser {
             other => Err(crate::TuffError::Parse {
                 span: other.map(|t| t.span()).unwrap_or(open),
                 message: format!("expected '{close_char}'"),
+            }),
+        }
+    }
+
+    /// Parse an array literal (`[expr, expr, …]`).
+    fn parse_array(&mut self, open: Span) -> Result<Expr, crate::TuffError> {
+        self.pos += 1;
+        let mut elements = Vec::new();
+        if matches!(self.peek(), Some(Token::RBracket(_))) {
+            // Empty array.
+        } else {
+            loop {
+                elements.push(self.parse_expr()?);
+                match self.peek() {
+                    Some(Token::Comma(_)) => self.pos += 1,
+                    Some(Token::RBracket(close)) => {
+                        self.pos += 1;
+                        return Ok(Expr::Array(elements, close));
+                    }
+                    other => {
+                        return Err(crate::TuffError::Parse {
+                            span: other.map(|t| t.span()).unwrap_or(open),
+                            message: "expected ',' or ']' in array".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+        match self.peek() {
+            Some(Token::RBracket(close)) => {
+                self.pos += 1;
+                Ok(Expr::Array(elements, close))
+            }
+            _ => Err(crate::TuffError::Parse {
+                span: open,
+                message: "expected ']'".to_string(),
             }),
         }
     }
@@ -305,6 +364,9 @@ impl Token {
             | Token::LtEq(span)
             | Token::Gt(span)
             | Token::GtEq(span)
+            | Token::LBracket(span)
+            | Token::RBracket(span)
+            | Token::Comma(span)
             | Token::Bool(_, span) => *span,
         }
     }
