@@ -74,7 +74,7 @@ impl Parser {
                 matches!(self.tokens.get(self.pos + 1), Some(Token::LBracket(_)))
                     && self
                         .find_closing_bracket(self.pos + 1)
-                        .map_or(false, |close| {
+                        .is_some_and(|close| {
                             matches!(self.tokens.get(close + 1), Some(Token::Eq(_)))
                         })
             }
