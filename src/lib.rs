@@ -20,6 +20,8 @@ pub enum TuffError {
     Lex { span: Span, message: String },
     /// The input could not be parsed at the given span.
     Parse { span: Span, message: String },
+    /// The input failed to evaluate at the given span.
+    Eval { span: Span, message: String },
 }
 
 impl fmt::Display for TuffError {
@@ -34,6 +36,9 @@ impl fmt::Display for TuffError {
                     "parse error at {}..{}: {}",
                     span.start, span.end, message
                 )
+            }
+            TuffError::Eval { span, message } => {
+                write!(f, "eval error at {}..{}: {}", span.start, span.end, message)
             }
         }
     }
@@ -112,6 +117,17 @@ mod tests {
     #[test]
     fn top_level_let_binding_evaluates_to_twenty() {
         assert_eq!(evaluate("let y = { let x = 2 + 3; x } * 4; y"), Ok(20));
+    }
+
+    #[test]
+    fn undefined_variable_is_an_eval_error() {
+        assert_eq!(
+            evaluate("x"),
+            Err(TuffError::Eval {
+                span: Span { start: 0, end: 1 },
+                message: "undefined variable 'x'".to_string(),
+            })
+        );
     }
 
     #[test]

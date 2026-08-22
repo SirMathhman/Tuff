@@ -32,7 +32,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
             })
         }
         Expr::Group(inner, _, _) => eval(inner, env),
-        Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Parse {
+        Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Eval {
             span: *span,
             message: format!("undefined variable '{name}'"),
         }),
@@ -51,7 +51,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
                 }
             }
             // The block's value is the value of its last expression statement.
-            last_value.ok_or_else(|| crate::TuffError::Parse {
+            last_value.ok_or_else(|| crate::TuffError::Eval {
                 span: *span,
                 message: "block has no value".to_string(),
             })
