@@ -63,13 +63,18 @@ impl Parser {
         }
     }
 
-    /// Parse a comparison expression (`==`).
+    /// Parse a comparison expression (`==`, `<`).
     fn parse_expr(&mut self) -> Result<Expr, crate::TuffError> {
         let mut left = self.parse_additive()?;
-        while let Some(Token::EqEq(span)) = self.peek() {
+        loop {
+            let (op, span) = match self.peek() {
+                Some(Token::EqEq(span)) => (BinOp::Eq, span),
+                Some(Token::Lt(span)) => (BinOp::Lt, span),
+                _ => break,
+            };
             self.pos += 1;
             let right = self.parse_additive()?;
-            left = Expr::Bin(BinOp::Eq, Box::new(left), Box::new(right), span);
+            left = Expr::Bin(op, Box::new(left), Box::new(right), span);
         }
         Ok(left)
     }
@@ -291,6 +296,7 @@ impl Token {
             | Token::Ref(span)
             | Token::MutRef(span)
             | Token::EqEq(span)
+            | Token::Lt(span)
             | Token::Bool(_, span) => *span,
         }
     }

@@ -132,6 +132,21 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
             if matches!(op, BinOp::Eq) {
                 return Ok(Value::Bool(l == r));
             }
+            if matches!(op, BinOp::Lt) {
+                let Value::Int(l) = l else {
+                    return Err(crate::TuffError::Eval {
+                        span: *span,
+                        message: "expected an integer".to_string(),
+                    });
+                };
+                let Value::Int(r) = r else {
+                    return Err(crate::TuffError::Eval {
+                        span: *span,
+                        message: "expected an integer".to_string(),
+                    });
+                };
+                return Ok(Value::Bool(l < r));
+            }
             let Value::Int(l) = l else {
                 return Err(crate::TuffError::Eval {
                     span: *span,
@@ -148,7 +163,7 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
-                BinOp::Eq => 0,
+                BinOp::Eq | BinOp::Lt => 0,
             }))
         }
         Expr::Group(inner, _, _) => eval_expr(inner, env),

@@ -29,6 +29,8 @@ pub enum Token {
     Eq(Span),
     /// `==`
     EqEq(Span),
+    /// `<`
+    Lt(Span),
     /// `;`
     Semi(Span),
     /// `&`
@@ -120,6 +122,7 @@ fn single_char_token(c: char, span: Span) -> Option<Token> {
         '{' => Token::LBrace(span),
         '}' => Token::RBrace(span),
         '=' => Token::Eq(span),
+        '<' => Token::Lt(span),
         ';' => Token::Semi(span),
         _ => return None,
     })

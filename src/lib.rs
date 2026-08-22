@@ -168,8 +168,7 @@ mod tests {
             evaluate("let mut x = 1; x = true;"),
             Err(TuffError::Eval {
                 span: Span { start: 15, end: 16 },
-                message: "type mismatch: cannot assign boolean to integer variable 'x'"
-                    .to_string(),
+                message: "type mismatch: cannot assign boolean to integer variable 'x'".to_string(),
             })
         );
     }
@@ -201,6 +200,11 @@ mod tests {
     #[test]
     fn true_literal_evaluates_to_one() {
         assert_eq!(evaluate("let x = true; x"), Ok(eval::Value::Bool(true)));
+    }
+
+    #[test]
+    fn less_than_of_smaller_integer_evaluates_to_one() {
+        assert_eq!(evaluate("let x = 1; let y = 2; x < y"), Ok(eval::Value::Bool(true)));
     }
 
     #[test]
