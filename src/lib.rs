@@ -158,6 +158,11 @@ mod tests {
     }
 
     #[test]
+    fn mutable_let_binding_with_trailing_assignment_evaluates_to_zero() {
+        assert_eq!(evaluate("let mut x = 1; x = 2;"), Ok(eval::Value::Int(0)));
+    }
+
+    #[test]
     fn reference_and_dereference_evaluates_to_one() {
         assert_eq!(
             evaluate("let x = 1; let y = &x; *y"),

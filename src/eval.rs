@@ -226,6 +226,7 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                 };
                 let v = eval_expr(value, &mut local)?;
                 local.set(&name, v, *span)?;
+                last_value = Some(Value::Int(0));
             }
             Stmt::Expr(e) => {
                 last_value = Some(eval_expr(e, &mut local)?);
