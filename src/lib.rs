@@ -1,3 +1,9 @@
+pub mod ast;
+pub mod driver;
+pub mod eval;
+pub mod lexer;
+pub mod parser;
+
 use std::fmt;
 
 /// A span of character offsets into the input source.
@@ -20,7 +26,7 @@ impl fmt::Display for TuffError {
             TuffError::Parse { span, message } => {
                 write!(
                     f,
-                    "parse error at {}..{}: {} (expected a number)",
+                    "parse error at {}..{}: {}",
                     span.start, span.end, message
                 )
             }
@@ -30,99 +36,7 @@ impl fmt::Display for TuffError {
 
 /// Evaluate a Tuff expression and return its value.
 pub fn evaluate(input: &str) -> Result<i64, TuffError> {
-    let mut parser = Parser::new(input);
-    let value = parser.parse_expr()?;
-    parser.skip_whitespace();
-    if let Some(c) = parser.peek() {
-        return Err(TuffError::Parse {
-            span: Span {
-                start: parser.pos,
-                end: parser.pos + 1,
-            },
-            message: format!("unexpected character '{c}'"),
-        });
-    }
-    Ok(value)
-}
-
-struct Parser {
-    chars: Vec<char>,
-    pos: usize,
-}
-
-impl Parser {
-    fn new(input: &str) -> Self {
-        Self {
-            chars: input.chars().collect(),
-            pos: 0,
-        }
-    }
-
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
-    }
-
-    fn skip_whitespace(&mut self) {
-        while matches!(self.peek(), Some(c) if c.is_whitespace()) {
-            self.pos += 1;
-        }
-    }
-
-    fn parse_expr(&mut self) -> Result<i64, TuffError> {
-        let mut value = self.parse_term()?;
-        loop {
-            self.skip_whitespace();
-            match self.peek() {
-                Some('+') => {
-                    self.pos += 1;
-                    value += self.parse_term()?;
-                }
-                Some('-') => {
-                    self.pos += 1;
-                    value -= self.parse_term()?;
-                }
-                _ => break,
-            }
-        }
-        Ok(value)
-    }
-
-    fn parse_term(&mut self) -> Result<i64, TuffError> {
-        let mut value = self.parse_number()?;
-        loop {
-            self.skip_whitespace();
-            if self.peek() == Some('*') {
-                self.pos += 1;
-                value *= self.parse_number()?;
-            } else {
-                break;
-            }
-        }
-        Ok(value)
-    }
-
-    fn parse_number(&mut self) -> Result<i64, TuffError> {
-        self.skip_whitespace();
-        let start = self.pos;
-        while matches!(self.peek(), Some(c) if c.is_ascii_digit()) {
-            self.pos += 1;
-        }
-        if start == self.pos {
-            let end = (self.pos + 1).min(self.chars.len());
-            return Err(TuffError::Parse {
-                span: Span { start, end },
-                message: "no number found".to_string(),
-            });
-        }
-        let digits: String = self.chars[start..self.pos].iter().collect();
-        digits.parse().map_err(|_| TuffError::Parse {
-            span: Span {
-                start,
-                end: self.pos,
-            },
-            message: "number out of range".to_string(),
-        })
-    }
+    driver::run(input)
 }
 
 #[cfg(test)]
@@ -135,7 +49,7 @@ mod tests {
             evaluate(""),
             Err(TuffError::Parse {
                 span: Span { start: 0, end: 0 },
-                message: "no number found".to_string(),
+                message: "expected a number".to_string(),
             })
         );
     }
@@ -170,8 +84,8 @@ mod tests {
         assert_eq!(
             evaluate("1 +"),
             Err(TuffError::Parse {
-                span: Span { start: 3, end: 3 },
-                message: "no number found".to_string(),
+                span: Span { start: 2, end: 3 },
+                message: "expected a number".to_string(),
             })
         );
     }
