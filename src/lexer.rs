@@ -16,6 +16,7 @@ pub enum Token {
     Mut(Span),
     Eq(Span),
     Semi(Span),
+    Ref(Span),
 }
 
 /// Convert source text into a flat list of tokens.
@@ -104,6 +105,12 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             pos += 1;
         } else if c == ';' {
             tokens.push(Token::Semi(Span {
+                start: pos,
+                end: pos + 1,
+            }));
+            pos += 1;
+        } else if c == '&' {
+            tokens.push(Token::Ref(Span {
                 start: pos,
                 end: pos + 1,
             }));

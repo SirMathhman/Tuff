@@ -80,6 +80,16 @@ impl Parser {
             }
             Some(Token::LParen(span)) => self.parse_group(span, ')', Token::RParen),
             Some(Token::LBrace(span)) => self.parse_block(span),
+            Some(Token::Ref(span)) => {
+                self.pos += 1;
+                let inner = self.parse_primary()?;
+                Ok(Expr::Ref(Box::new(inner), span))
+            }
+            Some(Token::Star(span)) => {
+                self.pos += 1;
+                let inner = self.parse_primary()?;
+                Ok(Expr::Deref(Box::new(inner), span))
+            }
             Some(token) => Err(crate::TuffError::Parse {
                 span: token.span(),
                 message: "unexpected token".to_string(),
@@ -229,7 +239,8 @@ impl Token {
             | Token::Let(span)
             | Token::Mut(span)
             | Token::Eq(span)
-            | Token::Semi(span) => *span,
+            | Token::Semi(span)
+            | Token::Ref(span) => *span,
         }
     }
 }

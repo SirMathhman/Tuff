@@ -8,6 +8,7 @@ use crate::ast::{BinOp, Expr, Stmt};
 #[derive(Debug, Default, Clone)]
 pub struct Env {
     vars: HashMap<String, (i64, bool)>,
+    refs: HashMap<String, String>,
     parent: Option<Box<Env>>,
 }
 
@@ -16,6 +17,7 @@ impl Env {
     fn child(parent: Env) -> Env {
         Env {
             vars: HashMap::new(),
+            refs: HashMap::new(),
             parent: Some(Box::new(parent)),
         }
     }
@@ -27,8 +29,19 @@ impl Env {
         self.parent.as_deref().and_then(|p| p.get(name))
     }
 
+    fn get_ref(&self, name: &str) -> Option<&str> {
+        if let Some(target) = self.refs.get(name) {
+            return Some(target);
+        }
+        self.parent.as_deref().and_then(|p| p.get_ref(name))
+    }
+
     fn insert(&mut self, name: String, value: i64, mutable: bool) {
         self.vars.insert(name, (value, mutable));
+    }
+
+    fn insert_ref(&mut self, name: String, target: String) {
+        self.refs.insert(name, target);
     }
 
     fn set(&mut self, name: &str, value: i64, span: Span) -> Result<(), crate::TuffError> {
@@ -70,6 +83,40 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
             span: *span,
             message: format!("undefined variable '{name}'"),
         }),
+        Expr::Ref(inner, span) => {
+            let Expr::Ident(name, _) = inner.as_ref() else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected a variable name after '&'".to_string(),
+                });
+            };
+            if env.get(name).is_none() {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: format!("undefined variable '{name}'"),
+                });
+            }
+            env.insert_ref(name.clone(), name.clone());
+            Ok(0)
+        }
+        Expr::Deref(inner, span) => {
+            let Expr::Ident(name, _) = inner.as_ref() else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected a variable name after '*'".to_string(),
+                });
+            };
+            match env.get_ref(name) {
+                Some(target) => env.get(target).ok_or_else(|| crate::TuffError::Eval {
+                    span: *span,
+                    message: format!("undefined variable '{target}'"),
+                }),
+                None => Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: format!("'{name}' is not a reference"),
+                }),
+            }
+        }
         Expr::Block(stmts, span, _) => {
             let mut local = Env::child(env.clone());
             let mut last_value = None;

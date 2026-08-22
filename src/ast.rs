@@ -15,6 +15,8 @@ pub enum Expr {
     Bin(BinOp, Box<Expr>, Box<Expr>, Span),
     Group(Box<Expr>, Span, Span),
     Ident(String, Span),
+    Ref(Box<Expr>, Span),
+    Deref(Box<Expr>, Span),
     Block(Vec<Stmt>, Span, Span),
 }
 

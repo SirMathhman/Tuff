@@ -125,6 +125,11 @@ mod tests {
     }
 
     #[test]
+    fn reference_and_dereference_evaluates_to_one() {
+        assert_eq!(evaluate("let x = 1; let y = &x; *y"), Ok(1));
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(2));
     }
