@@ -302,6 +302,19 @@ mod tests {
     }
 
     #[test]
+    fn if_else_with_type_mismatch_in_else_branch_is_an_eval_error() {
+        assert_eq!(
+            evaluate(
+                "let x = if (false) { let y = 2; y } else { let mut a = 0; a = true; let y = 3; y }; x"
+            ),
+            Err(TuffError::Eval {
+                span: Span { start: 58, end: 59 },
+                message: "type mismatch: cannot assign boolean to integer variable 'a'".to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
