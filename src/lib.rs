@@ -211,6 +211,38 @@ mod tests {
     }
 
     #[test]
+    fn less_than_or_equal_of_equal_integers_evaluates_to_true() {
+        assert_eq!(
+            evaluate("let x = 2; let y = 2; x <= y"),
+            Ok(eval::Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn greater_than_of_larger_integer_evaluates_to_true() {
+        assert_eq!(
+            evaluate("let x = 2; let y = 1; x > y"),
+            Ok(eval::Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn greater_than_or_equal_of_equal_integers_evaluates_to_true() {
+        assert_eq!(
+            evaluate("let x = 2; let y = 2; x >= y"),
+            Ok(eval::Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn inequality_of_different_values_evaluates_to_true() {
+        assert_eq!(
+            evaluate("let x = 1; let y = 2; x != y"),
+            Ok(eval::Value::Bool(true))
+        );
+    }
+
+    #[test]
     fn false_literal_evaluates_to_false() {
         assert_eq!(evaluate("let x = false; x"), Ok(eval::Value::Bool(false)));
     }

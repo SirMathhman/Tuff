@@ -11,8 +11,16 @@ pub enum BinOp {
     Mul,
     /// Equality comparison.
     Eq,
+    /// Inequality comparison.
+    Ne,
     /// Less-than comparison.
     Lt,
+    /// Less-than-or-equal comparison.
+    LtEq,
+    /// Greater-than comparison.
+    Gt,
+    /// Greater-than-or-equal comparison.
+    GtEq,
 }
 
 /// An expression in the Tuff AST.

@@ -29,8 +29,16 @@ pub enum Token {
     Eq(Span),
     /// `==`
     EqEq(Span),
+    /// `!=`
+    Ne(Span),
     /// `<`
     Lt(Span),
+    /// `<=`
+    LtEq(Span),
+    /// `>`
+    Gt(Span),
+    /// `>=`
+    GtEq(Span),
     /// `;`
     Semi(Span),
     /// `&`
@@ -67,6 +75,9 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 end: pos + 2,
             }));
             pos += 2;
+        } else if let Some((token, advance)) = two_char_comparison(c, chars.get(pos + 1), pos) {
+            tokens.push(token);
+            pos += advance;
         } else if let Some(token) = single_char_token(
             c,
             Span {
@@ -123,7 +134,23 @@ fn single_char_token(c: char, span: Span) -> Option<Token> {
         '}' => Token::RBrace(span),
         '=' => Token::Eq(span),
         '<' => Token::Lt(span),
+        '>' => Token::Gt(span),
         ';' => Token::Semi(span),
+        _ => return None,
+    })
+}
+
+/// The token for a two-character comparison operator (`<=`, `>=`, `!=`),
+/// if the given characters form one.
+fn two_char_comparison(c: char, next: Option<&char>, pos: usize) -> Option<(Token, usize)> {
+    let span = Span {
+        start: pos,
+        end: pos + 2,
+    };
+    Some(match (c, next) {
+        ('<', Some('=')) => (Token::LtEq(span), 2),
+        ('>', Some('=')) => (Token::GtEq(span), 2),
+        ('!', Some('=')) => (Token::Ne(span), 2),
         _ => return None,
     })
 }
