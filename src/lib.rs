@@ -132,6 +132,11 @@ mod tests {
     }
 
     #[test]
+    fn one_plus_two_plus_three_evaluates_to_six() {
+        assert_eq!(evaluate("1 + 2 + 3"), Ok(6));
+    }
+
+    #[test]
     fn dangling_operator_is_a_parse_error() {
         assert_eq!(
             evaluate("1 +"),
