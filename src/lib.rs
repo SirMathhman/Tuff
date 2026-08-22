@@ -72,11 +72,16 @@ impl Parser {
         let mut value = self.parse_number()?;
         loop {
             self.skip_whitespace();
-            if self.peek() == Some('+') {
-                self.pos += 1;
-                value += self.parse_number()?;
-            } else {
-                break;
+            match self.peek() {
+                Some('+') => {
+                    self.pos += 1;
+                    value += self.parse_number()?;
+                }
+                Some('-') => {
+                    self.pos += 1;
+                    value -= self.parse_number()?;
+                }
+                _ => break,
             }
         }
         Ok(value)
@@ -134,6 +139,11 @@ mod tests {
     #[test]
     fn one_plus_two_plus_three_evaluates_to_six() {
         assert_eq!(evaluate("1 + 2 + 3"), Ok(6));
+    }
+
+    #[test]
+    fn two_plus_three_minus_four_evaluates_to_one() {
+        assert_eq!(evaluate("2 + 3 - 4"), Ok(1));
     }
 
     #[test]
