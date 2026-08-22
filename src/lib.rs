@@ -54,7 +54,7 @@ mod tests {
             evaluate(""),
             Err(TuffError::Parse {
                 span: Span { start: 0, end: 0 },
-                message: "expected a number".to_string(),
+                message: "unexpected end of input".to_string(),
             })
         );
     }
@@ -105,7 +105,18 @@ mod tests {
             evaluate("1 +"),
             Err(TuffError::Parse {
                 span: Span { start: 2, end: 3 },
-                message: "expected a number".to_string(),
+                message: "unexpected end of input".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn unexpected_closing_paren_is_a_parse_error() {
+        assert_eq!(
+            evaluate("1 + )"),
+            Err(TuffError::Parse {
+                span: Span { start: 4, end: 5 },
+                message: "unexpected token".to_string(),
             })
         );
     }

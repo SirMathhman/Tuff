@@ -66,7 +66,7 @@ impl Parser {
             Some(Token::LBrace(span)) => self.parse_group(span, '}', Token::RBrace),
             Some(token) => Err(crate::TuffError::Parse {
                 span: token.span(),
-                message: "expected a number".to_string(),
+                message: "unexpected token".to_string(),
             }),
             None => Err(crate::TuffError::Parse {
                 span: self
@@ -74,7 +74,7 @@ impl Parser {
                     .last()
                     .map(|t| t.span())
                     .unwrap_or(Span { start: 0, end: 0 }),
-                message: "expected a number".to_string(),
+                message: "unexpected end of input".to_string(),
             }),
         }
     }
@@ -147,7 +147,7 @@ mod tests {
             parse(lex("").unwrap()),
             Err(crate::TuffError::Parse {
                 span: Span { start: 0, end: 0 },
-                message: "expected a number".to_string(),
+                message: "unexpected end of input".to_string(),
             })
         );
     }
