@@ -14,4 +14,13 @@ pub enum Expr {
     Num(i64, Span),
     Bin(BinOp, Box<Expr>, Box<Expr>, Span),
     Group(Box<Expr>, Span, Span),
+    Ident(String, Span),
+    Block(Vec<Stmt>, Span, Span),
+}
+
+/// A statement in a block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stmt {
+    Let(String, Box<Expr>, Span),
+    Expr(Box<Expr>),
 }

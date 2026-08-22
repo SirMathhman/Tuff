@@ -1,19 +1,66 @@
-use crate::ast::{BinOp, Expr};
+use std::collections::HashMap;
 
-/// Evaluate an expression AST to its value.
-pub fn eval(expr: &Expr) -> Result<i64, crate::TuffError> {
+use crate::ast::{BinOp, Expr, Stmt};
+
+/// A binding environment mapping variable names to values.
+#[derive(Debug, Default)]
+pub struct Env {
+    vars: HashMap<String, i64>,
+}
+
+impl Env {
+    fn get(&self, name: &str) -> Option<i64> {
+        self.vars.get(name).copied()
+    }
+
+    fn insert(&mut self, name: String, value: i64) {
+        self.vars.insert(name, value);
+    }
+}
+
+/// Evaluate an expression AST to its value in the given environment.
+pub fn eval(expr: &Expr, env: &mut Env) -> Result<i64, crate::TuffError> {
     match expr {
         Expr::Num(value, _) => Ok(*value),
         Expr::Bin(op, left, right, _) => {
-            let l = eval(left)?;
-            let r = eval(right)?;
+            let l = eval(left, env)?;
+            let r = eval(right, env)?;
             Ok(match op {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
             })
         }
-        Expr::Group(inner, _, _) => eval(inner),
+        Expr::Group(inner, _, _) => eval(inner, env),
+        Expr::Ident(name, span) => env.get(name).ok_or_else(|| crate::TuffError::Parse {
+            span: *span,
+            message: format!("undefined variable '{name}'"),
+        }),
+        Expr::Block(stmts, _, _) => {
+            let mut local = Env::default();
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let(name, value, _) => {
+                        let v = eval(value, &mut local)?;
+                        local.insert(name.clone(), v);
+                    }
+                    Stmt::Expr(e) => {
+                        let _ = eval(e, &mut local)?;
+                    }
+                }
+            }
+            // The block's value is the value of its last expression statement.
+            match stmts.iter().rev().find_map(|s| match s {
+                Stmt::Expr(e) => Some(e),
+                Stmt::Let(..) => None,
+            }) {
+                Some(e) => eval(e, &mut local),
+                None => Err(crate::TuffError::Parse {
+                    span: crate::Span { start: 0, end: 0 },
+                    message: "block has no value".to_string(),
+                }),
+            }
+        }
     }
 }
 
@@ -25,7 +72,11 @@ mod tests {
 
     #[test]
     fn evaluates_number() {
-        assert_eq!(eval(&Expr::Num(5, Span { start: 0, end: 1 })), Ok(5));
+        let mut env = Env::default();
+        assert_eq!(
+            eval(&Expr::Num(5, Span { start: 0, end: 1 }), &mut env),
+            Ok(5)
+        );
     }
 
     #[test]
@@ -36,6 +87,7 @@ mod tests {
             Box::new(Expr::Num(3, Span { start: 0, end: 1 })),
             Span { start: 0, end: 1 },
         );
-        assert_eq!(eval(&expr), Ok(6));
+        let mut env = Env::default();
+        assert_eq!(eval(&expr, &mut env), Ok(6));
     }
 }

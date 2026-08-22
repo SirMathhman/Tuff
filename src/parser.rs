@@ -1,5 +1,5 @@
 use crate::Span;
-use crate::ast::{BinOp, Expr};
+use crate::ast::{BinOp, Expr, Stmt};
 use crate::lexer::Token;
 
 /// Parse a token stream into an expression AST.
@@ -23,7 +23,7 @@ struct Parser {
 
 impl Parser {
     fn peek(&self) -> Option<Token> {
-        self.tokens.get(self.pos).copied()
+        self.tokens.get(self.pos).cloned()
     }
 
     fn parse_expr(&mut self) -> Result<Expr, crate::TuffError> {
@@ -62,8 +62,12 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Num(value, span))
             }
+            Some(Token::Ident(name, span)) => {
+                self.pos += 1;
+                Ok(Expr::Ident(name, span))
+            }
             Some(Token::LParen(span)) => self.parse_group(span, ')', Token::RParen),
-            Some(Token::LBrace(span)) => self.parse_group(span, '}', Token::RBrace),
+            Some(Token::LBrace(span)) => self.parse_block(span),
             Some(token) => Err(crate::TuffError::Parse {
                 span: token.span(),
                 message: "unexpected token".to_string(),
@@ -98,6 +102,71 @@ impl Parser {
             }),
         }
     }
+
+    fn parse_block(&mut self, open: Span) -> Result<Expr, crate::TuffError> {
+        self.pos += 1;
+        let mut stmts = Vec::new();
+        while !matches!(self.peek(), Some(Token::RBrace(_))) {
+            match self.peek() {
+                None => {
+                    return Err(crate::TuffError::Parse {
+                        span: open,
+                        message: "expected '}'".to_string(),
+                    });
+                }
+                Some(Token::Let(span)) => {
+                    self.pos += 1;
+                    let (name, name_span) = match self.peek() {
+                        Some(Token::Ident(name, span)) => (name, span),
+                        other => {
+                            return Err(crate::TuffError::Parse {
+                                span: other.map(|t| t.span()).unwrap_or(span),
+                                message: "expected a variable name after 'let'".to_string(),
+                            });
+                        }
+                    };
+                    self.pos += 1;
+                    match self.peek() {
+                        Some(Token::Eq(_)) => self.pos += 1,
+                        other => {
+                            return Err(crate::TuffError::Parse {
+                                span: other.map(|t| t.span()).unwrap_or(name_span),
+                                message: "expected '=' after variable name".to_string(),
+                            });
+                        }
+                    }
+                    let value = self.parse_expr()?;
+                    match self.peek() {
+                        Some(Token::Semi(_)) => self.pos += 1,
+                        other => {
+                            return Err(crate::TuffError::Parse {
+                                span: other.map(|t| t.span()).unwrap_or(name_span),
+                                message: "expected ';' after let statement".to_string(),
+                            });
+                        }
+                    }
+                    stmts.push(Stmt::Let(name, Box::new(value), span));
+                }
+                Some(_) => {
+                    let expr = self.parse_expr()?;
+                    if matches!(self.peek(), Some(Token::Semi(_))) {
+                        self.pos += 1;
+                    }
+                    stmts.push(Stmt::Expr(Box::new(expr)));
+                }
+            }
+        }
+        match self.peek() {
+            Some(Token::RBrace(span)) => {
+                self.pos += 1;
+                Ok(Expr::Block(stmts, open, span))
+            }
+            _ => Err(crate::TuffError::Parse {
+                span: open,
+                message: "expected '}'".to_string(),
+            }),
+        }
+    }
 }
 
 impl Token {
@@ -110,7 +179,11 @@ impl Token {
             | Token::LParen(span)
             | Token::RParen(span)
             | Token::LBrace(span)
-            | Token::RBrace(span) => *span,
+            | Token::RBrace(span)
+            | Token::Ident(_, span)
+            | Token::Let(span)
+            | Token::Eq(span)
+            | Token::Semi(span) => *span,
         }
     }
 }

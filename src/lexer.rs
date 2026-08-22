@@ -1,7 +1,7 @@
 use crate::Span;
 
 /// A lexical token with its source span.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Num(i64, Span),
     Plus(Span),
@@ -11,6 +11,10 @@ pub enum Token {
     RParen(Span),
     LBrace(Span),
     RBrace(Span),
+    Ident(String, Span),
+    Let(Span),
+    Eq(Span),
+    Semi(Span),
 }
 
 /// Convert source text into a flat list of tokens.
@@ -75,6 +79,34 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 })
             });
             pos += 1;
+        } else if c.is_ascii_alphabetic() || c == '_' {
+            let start = pos;
+            while pos < chars.len()
+                && (chars[pos].is_ascii_alphabetic()
+                    || chars[pos].is_ascii_digit()
+                    || chars[pos] == '_')
+            {
+                pos += 1;
+            }
+            let word: String = chars[start..pos].iter().collect();
+            let span = Span { start, end: pos };
+            tokens.push(if word == "let" {
+                Token::Let(span)
+            } else {
+                Token::Ident(word, span)
+            });
+        } else if c == '=' {
+            tokens.push(Token::Eq(Span {
+                start: pos,
+                end: pos + 1,
+            }));
+            pos += 1;
+        } else if c == ';' {
+            tokens.push(Token::Semi(Span {
+                start: pos,
+                end: pos + 1,
+            }));
+            pos += 1;
         } else {
             return Err(crate::TuffError::Lex {
                 span: Span {
@@ -112,11 +144,25 @@ mod tests {
     #[test]
     fn rejects_unexpected_character() {
         assert_eq!(
-            lex("1 x"),
+            lex("1 @"),
             Err(crate::TuffError::Lex {
                 span: Span { start: 2, end: 3 },
-                message: "unexpected character 'x'".to_string(),
+                message: "unexpected character '@'".to_string(),
             })
+        );
+    }
+
+    #[test]
+    fn lexes_let_binding() {
+        assert_eq!(
+            lex("let x = 1;"),
+            Ok(vec![
+                Token::Let(Span { start: 0, end: 3 }),
+                Token::Ident("x".to_string(), Span { start: 4, end: 5 }),
+                Token::Eq(Span { start: 6, end: 7 }),
+                Token::Num(1, Span { start: 8, end: 9 }),
+                Token::Semi(Span { start: 9, end: 10 }),
+            ])
         );
     }
 }

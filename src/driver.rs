@@ -6,5 +6,6 @@ use crate::parser;
 pub fn run(input: &str) -> Result<i64, crate::TuffError> {
     let tokens = lexer::lex(input)?;
     let ast = parser::parse(tokens)?;
-    eval::eval(&ast)
+    let mut env = eval::Env::default();
+    eval::eval(&ast, &mut env)
 }

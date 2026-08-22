@@ -100,6 +100,11 @@ mod tests {
     }
 
     #[test]
+    fn let_binding_in_block_times_four_evaluates_to_twenty() {
+        assert_eq!(evaluate("{ let x = 2 + 3; x } * 4"), Ok(20));
+    }
+
+    #[test]
     fn dangling_operator_is_a_parse_error() {
         assert_eq!(
             evaluate("1 +"),
