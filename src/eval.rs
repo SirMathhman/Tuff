@@ -249,11 +249,10 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                     message: "expected a boolean condition".to_string(),
                 });
             };
-            if b {
-                eval_expr(then, env)
-            } else {
-                eval_expr(otherwise, env)
-            }
+            // Both branches are evaluated; the condition picks the result.
+            let then_value = eval_expr(then, env)?;
+            let otherwise_value = eval_expr(otherwise, env)?;
+            Ok(if b { then_value } else { otherwise_value })
         }
         Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
     }
