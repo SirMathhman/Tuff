@@ -286,6 +286,14 @@ mod tests {
     }
 
     #[test]
+    fn if_else_with_false_condition_evaluates_to_else_branch() {
+        assert_eq!(
+            evaluate("let x = if (false) 2 else 3; x"),
+            Ok(eval::Value::Int(3))
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }

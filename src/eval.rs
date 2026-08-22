@@ -242,6 +242,19 @@ fn eval_expr(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 message: format!("undefined variable '{target}'"),
             })
         }
+        Expr::If(cond, then, otherwise, span) => {
+            let Value::Bool(b) = eval_expr(cond, env)? else {
+                return Err(crate::TuffError::Eval {
+                    span: *span,
+                    message: "expected a boolean condition".to_string(),
+                });
+            };
+            if b {
+                eval_expr(then, env)
+            } else {
+                eval_expr(otherwise, env)
+            }
+        }
         Expr::Block(stmts, span, _) => exec_block(stmts, env, *span),
     }
 }
@@ -364,8 +377,9 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                         let Expr::Ident(name, _) = base.as_ref() else {
                             return Err(crate::TuffError::Eval {
                                 span: *span,
-                                message: "expected a variable name as the base of an indexed assignment"
-                                    .to_string(),
+                                message:
+                                    "expected a variable name as the base of an indexed assignment"
+                                        .to_string(),
                             });
                         };
                         let Value::Int(i) = eval_expr(index, env)? else {

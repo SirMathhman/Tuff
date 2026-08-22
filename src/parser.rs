@@ -210,6 +210,7 @@ impl Parser {
                 let inner = self.parse_primary()?;
                 Ok(Expr::Deref(Box::new(inner), span))
             }
+            Some(Token::If(span)) => self.parse_if(span),
             Some(token) => Err(crate::TuffError::Parse {
                 span: token.span(),
                 message: "unexpected token".to_string(),
@@ -322,6 +323,30 @@ impl Parser {
                 message: "expected '}'".to_string(),
             }),
         }
+    }
+
+    /// Parse an `if cond then else` expression.
+    fn parse_if(&mut self, if_span: Span) -> Result<Expr, crate::TuffError> {
+        self.pos += 1;
+        let cond = self.parse_expr()?;
+        let then = self.parse_expr()?;
+        match self.peek() {
+            Some(Token::Else(_)) => {}
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(if_span),
+                    message: "expected 'else' after 'if'".to_string(),
+                });
+            }
+        }
+        self.pos += 1;
+        let otherwise = self.parse_expr()?;
+        Ok(Expr::If(
+            Box::new(cond),
+            Box::new(then),
+            Box::new(otherwise),
+            if_span,
+        ))
     }
 
     /// Parse a `let [mut] name = expr ;` statement.
@@ -452,6 +477,8 @@ impl Token {
             | Token::LBracket(span)
             | Token::RBracket(span)
             | Token::Comma(span)
+            | Token::If(span)
+            | Token::Else(span)
             | Token::Bool(_, span) => *span,
         }
     }

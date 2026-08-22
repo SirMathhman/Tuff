@@ -44,6 +44,8 @@ pub enum Expr {
     Array(Vec<Expr>, Span),
     /// An index expression (`base[index]`).
     Index(Box<Expr>, Box<Expr>, Span),
+    /// An `if cond then else` expression.
+    If(Box<Expr>, Box<Expr>, Box<Expr>, Span),
     /// A braced block of statements.
     Block(Vec<Stmt>, Span, Span),
 }
