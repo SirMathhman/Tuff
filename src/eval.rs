@@ -21,7 +21,7 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Int(v) => write!(f, "{v}"),
-            Value::Bool(v) => write!(f, "{}", i64::from(*v)),
+            Value::Bool(v) => write!(f, "{v}"),
             Value::Ref(name) => write!(f, "&{name}"),
             Value::MutRef(name) => write!(f, "&mut {name}"),
         }

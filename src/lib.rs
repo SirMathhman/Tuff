@@ -198,18 +198,27 @@ mod tests {
     }
 
     #[test]
-    fn true_literal_evaluates_to_one() {
+    fn true_literal_evaluates_to_true() {
         assert_eq!(evaluate("let x = true; x"), Ok(eval::Value::Bool(true)));
     }
 
     #[test]
     fn less_than_of_smaller_integer_evaluates_to_one() {
-        assert_eq!(evaluate("let x = 1; let y = 2; x < y"), Ok(eval::Value::Bool(true)));
+        assert_eq!(
+            evaluate("let x = 1; let y = 2; x < y"),
+            Ok(eval::Value::Bool(true))
+        );
     }
 
     #[test]
-    fn false_literal_evaluates_to_zero() {
+    fn false_literal_evaluates_to_false() {
         assert_eq!(evaluate("let x = false; x"), Ok(eval::Value::Bool(false)));
+    }
+
+    #[test]
+    fn boolean_displays_as_true_or_false() {
+        assert_eq!(evaluate("true").unwrap().to_string(), "true");
+        assert_eq!(evaluate("false").unwrap().to_string(), "false");
     }
 
     #[test]
