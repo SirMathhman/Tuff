@@ -163,6 +163,18 @@ mod tests {
     }
 
     #[test]
+    fn assigning_boolean_to_integer_variable_is_an_eval_error() {
+        assert_eq!(
+            evaluate("let mut x = 1; x = true;"),
+            Err(TuffError::Eval {
+                span: Span { start: 15, end: 16 },
+                message: "type mismatch: cannot assign boolean to integer variable 'x'"
+                    .to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn reference_and_dereference_evaluates_to_one() {
         assert_eq!(
             evaluate("let x = 1; let y = &x; *y"),

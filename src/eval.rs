@@ -64,6 +64,16 @@ impl Env {
     fn set(&mut self, name: &str, value: Value, span: Span) -> Result<(), crate::TuffError> {
         if let Some((v, mutable)) = self.vars.get_mut(name) {
             if *mutable {
+                if !Self::types_compatible(v, &value) {
+                    return Err(crate::TuffError::Eval {
+                        span,
+                        message: format!(
+                            "type mismatch: cannot assign {} to {} variable '{name}'",
+                            Self::type_name(&value),
+                            Self::type_name(v)
+                        ),
+                    });
+                }
                 *v = value;
                 return Ok(());
             }
@@ -79,6 +89,27 @@ impl Env {
             span,
             message: format!("undefined variable '{name}'"),
         })
+    }
+
+    /// Whether `value` may be assigned to a binding currently holding `current`.
+    fn types_compatible(current: &Value, value: &Value) -> bool {
+        matches!(
+            (current, value),
+            (Value::Int(_), Value::Int(_))
+                | (Value::Bool(_), Value::Bool(_))
+                | (Value::Ref(_), Value::Ref(_))
+                | (Value::MutRef(_), Value::MutRef(_))
+        )
+    }
+
+    /// The name of a value's type, for error messages.
+    fn type_name(value: &Value) -> &'static str {
+        match value {
+            Value::Int(_) => "integer",
+            Value::Bool(_) => "boolean",
+            Value::Ref(_) => "shared reference",
+            Value::MutRef(_) => "mutable reference",
+        }
     }
 }
 
