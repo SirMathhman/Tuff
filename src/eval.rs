@@ -7,8 +7,12 @@ use crate::ast::{BinOp, Expr, Stmt};
 /// A runtime value produced by evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
+    /// An integer.
     Int(i64),
+    /// A shared reference to a variable.
     Ref(String),
+    /// A mutable reference to a variable.
+    MutRef(String),
 }
 
 impl fmt::Display for Value {
@@ -16,6 +20,7 @@ impl fmt::Display for Value {
         match self {
             Value::Int(v) => write!(f, "{v}"),
             Value::Ref(name) => write!(f, "&{name}"),
+            Value::MutRef(name) => write!(f, "&mut {name}"),
         }
     }
 }
@@ -24,7 +29,9 @@ impl fmt::Display for Value {
 /// with an optional parent scope for lexical scoping.
 #[derive(Debug, Default, Clone)]
 pub struct Env {
+    /// Bindings in this scope: name -> (value, mutable).
     vars: HashMap<String, (Value, bool)>,
+    /// The enclosing scope, if any.
     parent: Option<Box<Env>>,
 }
 
@@ -37,6 +44,7 @@ impl Env {
         }
     }
 
+    /// Look up a binding by name, walking up the scope chain.
     fn get(&self, name: &str) -> Option<Value> {
         if let Some((v, _)) = self.vars.get(name) {
             return Some(v.clone());
@@ -44,10 +52,12 @@ impl Env {
         self.parent.as_deref().and_then(|p| p.get(name))
     }
 
+    /// Bind a name in this scope.
     fn insert(&mut self, name: String, value: Value, mutable: bool) {
         self.vars.insert(name, (value, mutable));
     }
 
+    /// Assign a value to an existing mutable binding, walking up the scope chain.
     fn set(&mut self, name: &str, value: Value, span: Span) -> Result<(), crate::TuffError> {
         if let Some((v, mutable)) = self.vars.get_mut(name) {
             if *mutable {
@@ -99,7 +109,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
             span: *span,
             message: format!("undefined variable '{name}'"),
         }),
-        Expr::Ref(inner, span) => {
+        Expr::Ref(inner, mutable, span) => {
             let Expr::Ident(name, _) = inner.as_ref() else {
                 return Err(crate::TuffError::Eval {
                     span: *span,
@@ -112,7 +122,11 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                     message: format!("undefined variable '{name}'"),
                 });
             }
-            Ok(Value::Ref(name.clone()))
+            if *mutable {
+                Ok(Value::MutRef(name.clone()))
+            } else {
+                Ok(Value::Ref(name.clone()))
+            }
         }
         Expr::Deref(inner, span) => {
             let Expr::Ident(name, _) = inner.as_ref() else {
@@ -122,7 +136,7 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                 });
             };
             match env.get(name) {
-                Some(Value::Ref(target)) => {
+                Some(Value::Ref(target)) | Some(Value::MutRef(target)) => {
                     env.get(&target).ok_or_else(|| crate::TuffError::Eval {
                         span: *span,
                         message: format!("undefined variable '{target}'"),
@@ -147,9 +161,27 @@ pub fn eval(expr: &Expr, env: &mut Env) -> Result<Value, crate::TuffError> {
                         let v = eval(value, &mut local)?;
                         local.insert(name.clone(), v, *mutable);
                     }
-                    Stmt::Assign(name, value, span) => {
+                    Stmt::Assign(target, value, span) => {
+                        let name = match target.as_ref() {
+                            Expr::Ident(name, _) => name.clone(),
+                            Expr::Deref(inner, _) => match inner.as_ref() {
+                                Expr::Ident(name, _) => name.clone(),
+                                _ => {
+                                    return Err(crate::TuffError::Eval {
+                                        span: *span,
+                                        message: "expected a variable name after '*'".to_string(),
+                                    });
+                                }
+                            },
+                            _ => return Err(crate::TuffError::Eval {
+                                span: *span,
+                                message:
+                                    "expected a variable name or dereference as assignment target"
+                                        .to_string(),
+                            }),
+                        };
                         let v = eval(value, &mut local)?;
-                        local.set(name, v, *span)?;
+                        local.set(&name, v, *span)?;
                     }
                     Stmt::Expr(e) => {
                         last_value = Some(eval(e, &mut local)?);

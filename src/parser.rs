@@ -15,7 +15,7 @@ pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
     while let Some(token) = parser.peek() {
         stmts.push(match token {
             Token::Let(span) => parser.parse_let_stmt(span)?,
-            Token::Ident(_, span)
+            Token::Ident(_, span) | Token::Star(span)
                 if matches!(parser.tokens.get(parser.pos + 1), Some(Token::Eq(_))) =>
             {
                 parser.parse_assign_stmt(span)?
@@ -23,21 +23,36 @@ pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
             _ => Stmt::Expr(Box::new(parser.parse_expr()?)),
         });
     }
-    let start = parser.tokens.first().map(|t| t.span()).unwrap().start;
-    let end = parser.tokens.last().map(|t| t.span()).unwrap().end;
+    let start = parser
+        .tokens
+        .first()
+        .map(|t| t.span())
+        .unwrap_or(Span { start: 0, end: 0 })
+        .start;
+    let end = parser
+        .tokens
+        .last()
+        .map(|t| t.span())
+        .unwrap_or(Span { start: 0, end: 0 })
+        .end;
     Ok(Expr::Block(stmts, Span { start, end }, Span { start, end }))
 }
 
+/// A recursive-descent parser over a token stream.
 struct Parser {
+    /// The tokens being parsed.
     tokens: Vec<Token>,
+    /// The index of the next token to consume.
     pos: usize,
 }
 
 impl Parser {
+    /// The next token without consuming it.
     fn peek(&self) -> Option<Token> {
         self.tokens.get(self.pos).cloned()
     }
 
+    /// Parse an additive expression (`+`, `-`).
     fn parse_expr(&mut self) -> Result<Expr, crate::TuffError> {
         let mut left = self.parse_term()?;
         loop {
@@ -58,6 +73,7 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parse a multiplicative expression (`*`).
     fn parse_term(&mut self) -> Result<Expr, crate::TuffError> {
         let mut left = self.parse_primary()?;
         while let Some(Token::Star(span)) = self.peek() {
@@ -68,6 +84,7 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parse a primary: literal, identifier, group, block, or reference.
     fn parse_primary(&mut self) -> Result<Expr, crate::TuffError> {
         match self.peek() {
             Some(Token::Num(value, span)) => {
@@ -83,7 +100,12 @@ impl Parser {
             Some(Token::Ref(span)) => {
                 self.pos += 1;
                 let inner = self.parse_primary()?;
-                Ok(Expr::Ref(Box::new(inner), span))
+                Ok(Expr::Ref(Box::new(inner), false, span))
+            }
+            Some(Token::MutRef(span)) => {
+                self.pos += 1;
+                let inner = self.parse_primary()?;
+                Ok(Expr::Ref(Box::new(inner), true, span))
             }
             Some(Token::Star(span)) => {
                 self.pos += 1;
@@ -105,6 +127,7 @@ impl Parser {
         }
     }
 
+    /// Parse a parenthesized group.
     fn parse_group(
         &mut self,
         open: Span,
@@ -125,6 +148,7 @@ impl Parser {
         }
     }
 
+    /// Parse a braced block of statements.
     fn parse_block(&mut self, open: Span) -> Result<Expr, crate::TuffError> {
         self.pos += 1;
         let mut stmts = Vec::new();
@@ -137,7 +161,7 @@ impl Parser {
                     });
                 }
                 Some(Token::Let(span)) => stmts.push(self.parse_let_stmt(span)?),
-                Some(Token::Ident(_, span))
+                Some(Token::Ident(_, span)) | Some(Token::Star(span))
                     if matches!(self.tokens.get(self.pos + 1), Some(Token::Eq(_))) =>
                 {
                     stmts.push(self.parse_assign_stmt(span)?);
@@ -163,6 +187,7 @@ impl Parser {
         }
     }
 
+    /// Parse a `let [mut] name = expr ;` statement.
     fn parse_let_stmt(&mut self, let_span: Span) -> Result<Stmt, crate::TuffError> {
         self.pos += 1;
         let mut mutable = false;
@@ -184,19 +209,15 @@ impl Parser {
         Ok(Stmt::Let(name, mutable, value, let_span))
     }
 
+    /// Parse an assignment statement (`name = expr ;` or `*name = expr ;`).
     fn parse_assign_stmt(&mut self, name_span: Span) -> Result<Stmt, crate::TuffError> {
-        let name = match self.peek() {
-            Some(Token::Ident(name, _)) => name,
-            other => {
-                return Err(crate::TuffError::Parse {
-                    span: other.map(|t| t.span()).unwrap_or(name_span),
-                    message: "expected a variable name before '='".to_string(),
-                });
-            }
+        let target = self.parse_expr()?;
+        let span = match &target {
+            Expr::Ident(_, span) | Expr::Deref(_, span) => *span,
+            _ => name_span,
         };
-        self.pos += 1;
-        let value = self.parse_assign_value(name_span)?;
-        Ok(Stmt::Assign(name, value, name_span))
+        let value = self.parse_assign_value(span)?;
+        Ok(Stmt::Assign(Box::new(target), value, span))
     }
 
     /// Parse the `= expr ;` tail shared by let and assignment statements.
@@ -225,6 +246,7 @@ impl Parser {
 }
 
 impl Token {
+    /// The source span of the token.
     fn span(&self) -> Span {
         match self {
             Token::Num(_, span)
@@ -240,7 +262,8 @@ impl Token {
             | Token::Mut(span)
             | Token::Eq(span)
             | Token::Semi(span)
-            | Token::Ref(span) => *span,
+            | Token::Ref(span)
+            | Token::MutRef(span) => *span,
         }
     }
 }

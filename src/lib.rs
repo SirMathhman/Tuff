@@ -1,7 +1,14 @@
+//! The Tuff language compiler: lex, parse, and evaluate Tuff source.
+
+/// The AST data types for Tuff expressions and statements.
 pub mod ast;
+/// Orchestrates the compiler pipeline.
 pub mod driver;
+/// The tree-walking interpreter.
 pub mod eval;
+/// Converts source text into a flat list of tokens.
 pub mod lexer;
+/// Converts a token stream into an AST.
 pub mod parser;
 
 use std::fmt;
@@ -9,7 +16,9 @@ use std::fmt;
 /// A span of character offsets into the input source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
+    /// The first character offset (inclusive).
     pub start: usize,
+    /// The last character offset (exclusive).
     pub end: usize,
 }
 
@@ -17,11 +26,26 @@ pub struct Span {
 #[derive(Debug, PartialEq, Eq)]
 pub enum TuffError {
     /// The input could not be lexed at the given span.
-    Lex { span: Span, message: String },
+    Lex {
+        /// Where in the source the failure occurred.
+        span: Span,
+        /// What went wrong and why.
+        message: String,
+    },
     /// The input could not be parsed at the given span.
-    Parse { span: Span, message: String },
+    Parse {
+        /// Where in the source the failure occurred.
+        span: Span,
+        /// What went wrong and why.
+        message: String,
+    },
     /// The input failed to evaluate at the given span.
-    Eval { span: Span, message: String },
+    Eval {
+        /// Where in the source the failure occurred.
+        span: Span,
+        /// What went wrong and why.
+        message: String,
+    },
 }
 
 impl fmt::Display for TuffError {
@@ -146,6 +170,14 @@ mod tests {
         assert_eq!(
             evaluate("let x = 1; let y = &x; y"),
             Ok(eval::Value::Ref("x".into()))
+        );
+    }
+
+    #[test]
+    fn mutable_reference_assignment_evaluates_to_one() {
+        assert_eq!(
+            evaluate("let mut x = 0; let y = &mut x; *y = 1; x"),
+            Ok(eval::Value::Int(1))
         );
     }
 

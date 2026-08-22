@@ -3,20 +3,36 @@ use crate::Span;
 /// A lexical token with its source span.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
+    /// An integer literal.
     Num(i64, Span),
+    /// `+`
     Plus(Span),
+    /// `-`
     Minus(Span),
+    /// `*`
     Star(Span),
+    /// `(`
     LParen(Span),
+    /// `)`
     RParen(Span),
+    /// `{`
     LBrace(Span),
+    /// `}`
     RBrace(Span),
+    /// A variable name.
     Ident(String, Span),
+    /// The `let` keyword.
     Let(Span),
+    /// The `mut` keyword.
     Mut(Span),
+    /// `=`
     Eq(Span),
+    /// `;`
     Semi(Span),
+    /// `&`
     Ref(Span),
+    /// `&mut`
+    MutRef(Span),
 }
 
 /// Convert source text into a flat list of tokens.
@@ -110,11 +126,28 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             }));
             pos += 1;
         } else if c == '&' {
-            tokens.push(Token::Ref(Span {
+            let span = Span {
                 start: pos,
                 end: pos + 1,
-            }));
-            pos += 1;
+            };
+            // Look ahead for 'mut' to form a mutable reference token.
+            let mut_end = pos + 1;
+            let is_mut = chars.get(mut_end) == Some(&'m')
+                && chars.get(mut_end + 1) == Some(&'u')
+                && chars.get(mut_end + 2) == Some(&'t')
+                && chars
+                    .get(mut_end + 3)
+                    .is_none_or(|c| !c.is_alphanumeric() && *c != '_');
+            if is_mut {
+                tokens.push(Token::MutRef(Span {
+                    start: pos,
+                    end: pos + 4,
+                }));
+                pos += 4;
+            } else {
+                tokens.push(Token::Ref(span));
+                pos += 1;
+            }
         } else {
             return Err(crate::TuffError::Lex {
                 span: Span {

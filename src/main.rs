@@ -1,3 +1,5 @@
+//! The `tuffc` binary: evaluates a Tuff expression given as an argument.
+
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
