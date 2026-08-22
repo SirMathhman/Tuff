@@ -12,6 +12,8 @@ pub mod eval;
 pub mod lexer;
 /// Converts a token stream into an AST.
 pub mod parser;
+/// The static analysis (type-checking) pass.
+pub mod typeck;
 
 /// The error type for the Tuff compiler.
 pub use error::TuffError;
