@@ -16,6 +16,8 @@ pub struct Span {
 /// Errors produced while evaluating a Tuff expression.
 #[derive(Debug, PartialEq, Eq)]
 pub enum TuffError {
+    /// The input could not be lexed at the given span.
+    Lex { span: Span, message: String },
     /// The input could not be parsed at the given span.
     Parse { span: Span, message: String },
 }
@@ -23,6 +25,9 @@ pub enum TuffError {
 impl fmt::Display for TuffError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            TuffError::Lex { span, message } => {
+                write!(f, "lex error at {}..{}: {}", span.start, span.end, message)
+            }
             TuffError::Parse { span, message } => {
                 write!(
                     f,

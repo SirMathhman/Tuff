@@ -26,7 +26,7 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 pos += 1;
             }
             let digits: String = chars[start..pos].iter().collect();
-            let value = digits.parse().map_err(|_| crate::TuffError::Parse {
+            let value = digits.parse().map_err(|_| crate::TuffError::Lex {
                 span: Span { start, end: pos },
                 message: "number out of range".to_string(),
             })?;
@@ -61,7 +61,7 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
             });
             pos += 1;
         } else {
-            return Err(crate::TuffError::Parse {
+            return Err(crate::TuffError::Lex {
                 span: Span {
                     start: pos,
                     end: pos + 1,
@@ -98,7 +98,7 @@ mod tests {
     fn rejects_unexpected_character() {
         assert_eq!(
             lex("1 x"),
-            Err(crate::TuffError::Parse {
+            Err(crate::TuffError::Lex {
                 span: Span { start: 2, end: 3 },
                 message: "unexpected character 'x'".to_string(),
             })
