@@ -69,19 +69,33 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<i64, TuffError> {
-        let mut value = self.parse_number()?;
+        let mut value = self.parse_term()?;
         loop {
             self.skip_whitespace();
             match self.peek() {
                 Some('+') => {
                     self.pos += 1;
-                    value += self.parse_number()?;
+                    value += self.parse_term()?;
                 }
                 Some('-') => {
                     self.pos += 1;
-                    value -= self.parse_number()?;
+                    value -= self.parse_term()?;
                 }
                 _ => break,
+            }
+        }
+        Ok(value)
+    }
+
+    fn parse_term(&mut self) -> Result<i64, TuffError> {
+        let mut value = self.parse_number()?;
+        loop {
+            self.skip_whitespace();
+            if self.peek() == Some('*') {
+                self.pos += 1;
+                value *= self.parse_number()?;
+            } else {
+                break;
             }
         }
         Ok(value)
@@ -144,6 +158,11 @@ mod tests {
     #[test]
     fn two_plus_three_minus_four_evaluates_to_one() {
         assert_eq!(evaluate("2 + 3 - 4"), Ok(1));
+    }
+
+    #[test]
+    fn two_times_three_plus_four_evaluates_to_ten() {
+        assert_eq!(evaluate("2 * 3 + 4"), Ok(10));
     }
 
     #[test]
