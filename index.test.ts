@@ -238,6 +238,24 @@ test('evaluate("let mut x = 0; { x = 1; } x") => 1', () => {
   expect(r.value).toBe(1);
 });
 
+test('evaluate("let x = loop { let y = 1; break y; }; y") => invalid_input error', () => {
+  expectInvalidInput("let x = loop { let y = 1; break y; }; y");
+});
+
+test('evaluate("let mut i = 0; loop { let i = 10; break i; } i") => 0', () => {
+  const r = evaluate("let mut i = 0; loop { let i = 10; break i; } i");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(0);
+});
+
+test('evaluate("let mut i = 0.0; loop { i = i + 1; break i; } i") => 1', () => {
+  const r = evaluate("let mut i = 0.0; loop { i = i + 1; break i; } i");
+  if (!r.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(r.error)}`);
+  expect(r.value).toBe(1);
+});
+
 test('evaluate("let y = if (false) { let mut x = 0; x = true; 0 } else 0; y") => invalid_input error', () => {
   expectInvalidInput(
     "let y = if (false) { let mut x = 0; x = true; 0 } else 0; y",

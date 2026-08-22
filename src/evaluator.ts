@@ -18,12 +18,41 @@ function valuesEqual(a: Value, b: Value): boolean {
 type Env = {
   values: Record<string, Value>;
   mutable: Set<string>;
+  parent?: Env;
 };
 
 type EvalOutcome = Result<Value, EvalError> | { break: Value };
 
 function isBreak(o: EvalOutcome): o is { break: Value } {
   return "break" in o;
+}
+
+function lookup(env: Env, name: string): Value | undefined {
+  let frame: Env | undefined = env;
+  while (frame !== undefined) {
+    const bound = frame.values[name];
+    if (bound !== undefined) return bound;
+    frame = frame.parent;
+  }
+  return undefined;
+}
+
+function isMutable(env: Env, name: string): boolean {
+  let frame: Env | undefined = env;
+  while (frame !== undefined) {
+    if (frame.mutable.has(name)) return true;
+    frame = frame.parent;
+  }
+  return false;
+}
+
+function assignFrame(env: Env, name: string): Env | undefined {
+  let frame: Env | undefined = env;
+  while (frame !== undefined) {
+    if (name in frame.values) return frame;
+    frame = frame.parent;
+  }
+  return undefined;
 }
 
 function evalBinaryBool(
@@ -138,18 +167,20 @@ function evalBinding(
     ok: false,
     error: invalidInput(input, reason, node.span),
   });
-  if (node.type === "assign" && !env.mutable.has(node.name))
+  if (node.type === "assign" && !isMutable(env, node.name))
     return fail(`cannot reassign immutable: ${node.name}`);
   const value = evalNode(node.value, env, input);
   if (isBreak(value)) return value;
   if (!value.ok) return value;
-  const existing = env.values[node.name];
+  const existing = lookup(env, node.name);
   if (existing !== undefined && existing.type !== value.value.type)
     return fail(
       `type mismatch: cannot assign ${value.value.type} to ${existing.type} variable: ${node.name}`,
     );
-  env.values[node.name] = value.value;
-  if (node.type === "let" && node.mutable) env.mutable.add(node.name);
+  const frame =
+    node.type === "let" ? env : (assignFrame(env, node.name) ?? env);
+  frame.values[node.name] = value.value;
+  if (node.type === "let" && node.mutable) frame.mutable.add(node.name);
   return { ok: true, value: { type: "number", value: 0 } };
 }
 
@@ -164,7 +195,7 @@ function evalNode(node: Node, env: Env, input: string): EvalOutcome {
     case "bool":
       return { ok: true, value: { type: "bool", value: node.value } };
     case "var": {
-      const bound = env.values[node.name];
+      const bound = lookup(env, node.name);
       if (bound === undefined) return fail(`unbound variable: ${node.name}`);
       return { ok: true, value: bound };
     }
@@ -206,8 +237,9 @@ function evalNode(node: Node, env: Env, input: string): EvalOutcome {
       return { ok: true, value };
     }
     case "loop": {
+      const body: Env = { values: {}, mutable: new Set(), parent: env };
       while (true) {
-        const s = evalNode(node.body, env, input);
+        const s = evalNode(node.body, body, input);
         if (isBreak(s)) return { ok: true, value: s.break };
         if (!s.ok) return s;
       }
