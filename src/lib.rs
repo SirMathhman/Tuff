@@ -290,6 +290,14 @@ mod tests {
     }
 
     #[test]
+    fn if_else_untaken_branch_side_effects_do_not_leak() {
+        assert_eq!(
+            evaluate("let mut signal = 0; let y = if (false) { signal = 1; 2 } else 3; signal"),
+            Ok(eval::Value::Int(0))
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }
