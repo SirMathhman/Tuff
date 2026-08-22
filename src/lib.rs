@@ -228,7 +228,7 @@ mod tests {
         assert_eq!(
             evaluate("{ { x } }"),
             Err(TuffError::Eval {
-                span: Span { start: 3, end: 4 },
+                span: Span { start: 4, end: 5 },
                 message: "undefined variable 'x'".to_string(),
             })
         );

@@ -180,15 +180,36 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
             Stmt::Assign(target, value, span) => {
                 let name = match target.as_ref() {
                     Expr::Ident(name, _) => name.clone(),
-                    Expr::Deref(inner, _) => match inner.as_ref() {
-                        Expr::Ident(name, _) => name.clone(),
-                        _ => {
+                    Expr::Deref(inner, _) => {
+                        let Expr::Ident(name, _) = inner.as_ref() else {
                             return Err(crate::TuffError::Eval {
                                 span: *span,
                                 message: "expected a variable name after '*'".to_string(),
                             });
+                        };
+                        // Assign through the reference to the variable it points at.
+                        match local.get(name) {
+                            Some(Value::MutRef(target)) => target,
+                            Some(Value::Ref(_)) => {
+                                return Err(crate::TuffError::Eval {
+                                    span: *span,
+                                    message: "cannot assign through a shared reference".to_string(),
+                                });
+                            }
+                            Some(Value::Int(_)) => {
+                                return Err(crate::TuffError::Eval {
+                                    span: *span,
+                                    message: format!("'{name}' is not a reference"),
+                                });
+                            }
+                            None => {
+                                return Err(crate::TuffError::Eval {
+                                    span: *span,
+                                    message: format!("undefined variable '{name}'"),
+                                });
+                            }
                         }
-                    },
+                    }
                     _ => {
                         return Err(crate::TuffError::Eval {
                             span: *span,

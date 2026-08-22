@@ -15,9 +15,7 @@ pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
     while let Some(token) = parser.peek() {
         stmts.push(match token {
             Token::Let(span) => parser.parse_let_stmt(span)?,
-            Token::Ident(_, span) | Token::Star(span)
-                if matches!(parser.tokens.get(parser.pos + 1), Some(Token::Eq(_))) =>
-            {
+            Token::Ident(_, span) | Token::Star(span) if parser.is_assign_target() => {
                 parser.parse_assign_stmt(span)?
             }
             _ => Stmt::Expr(Box::new(parser.parse_expr()?)),
@@ -50,6 +48,19 @@ impl Parser {
     /// The next token without consuming it.
     fn peek(&self) -> Option<Token> {
         self.tokens.get(self.pos).cloned()
+    }
+
+    /// Whether the tokens at the current position begin an assignment
+    /// statement: `name = …` or `*name = …`.
+    fn is_assign_target(&self) -> bool {
+        match self.tokens.get(self.pos) {
+            Some(Token::Ident(_, _)) => matches!(self.tokens.get(self.pos + 1), Some(Token::Eq(_))),
+            Some(Token::Star(_)) => matches!(
+                (self.tokens.get(self.pos + 1), self.tokens.get(self.pos + 2)),
+                (Some(Token::Ident(_, _)), Some(Token::Eq(_)))
+            ),
+            _ => false,
+        }
     }
 
     /// Parse a comparison expression (`==`).
@@ -177,7 +188,7 @@ impl Parser {
                 }
                 Some(Token::Let(span)) => stmts.push(self.parse_let_stmt(span)?),
                 Some(Token::Ident(_, span)) | Some(Token::Star(span))
-                    if matches!(self.tokens.get(self.pos + 1), Some(Token::Eq(_))) =>
+                    if self.is_assign_target() =>
                 {
                     stmts.push(self.parse_assign_stmt(span)?);
                 }
