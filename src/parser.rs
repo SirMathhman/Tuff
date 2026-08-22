@@ -62,20 +62,8 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Num(value, span))
             }
-            Some(Token::LParen(span)) => {
-                self.pos += 1;
-                let expr = self.parse_expr()?;
-                match self.peek() {
-                    Some(Token::RParen(close)) => {
-                        self.pos += 1;
-                        Ok(Expr::Group(Box::new(expr), span, close))
-                    }
-                    other => Err(crate::TuffError::Parse {
-                        span: other.map(|t| t.span()).unwrap_or(span),
-                        message: "expected ')'".to_string(),
-                    }),
-                }
-            }
+            Some(Token::LParen(span)) => self.parse_group(span, ')', Token::RParen),
+            Some(Token::LBrace(span)) => self.parse_group(span, '}', Token::RBrace),
             Some(token) => Err(crate::TuffError::Parse {
                 span: token.span(),
                 message: "expected a number".to_string(),
@@ -90,6 +78,26 @@ impl Parser {
             }),
         }
     }
+
+    fn parse_group(
+        &mut self,
+        open: Span,
+        close_char: char,
+        make_close: fn(Span) -> Token,
+    ) -> Result<Expr, crate::TuffError> {
+        self.pos += 1;
+        let expr = self.parse_expr()?;
+        match self.peek() {
+            Some(close) if close == make_close(close.span()) => {
+                self.pos += 1;
+                Ok(Expr::Group(Box::new(expr), open, close.span()))
+            }
+            other => Err(crate::TuffError::Parse {
+                span: other.map(|t| t.span()).unwrap_or(open),
+                message: format!("expected '{close_char}'"),
+            }),
+        }
+    }
 }
 
 impl Token {
@@ -100,7 +108,9 @@ impl Token {
             | Token::Minus(span)
             | Token::Star(span)
             | Token::LParen(span)
-            | Token::RParen(span) => *span,
+            | Token::RParen(span)
+            | Token::LBrace(span)
+            | Token::RBrace(span) => *span,
         }
     }
 }
