@@ -99,6 +99,58 @@ impl Env {
         })
     }
 
+    /// Assign a value to an element of an array binding, walking the scope chain.
+    fn set_index(
+        &mut self,
+        name: &str,
+        index: i64,
+        value: Value,
+        span: Span,
+    ) -> Result<(), crate::TuffError> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some((v, mutable)) = scope.get_mut(name) {
+                if !*mutable {
+                    return Err(crate::TuffError::Eval {
+                        span,
+                        message: format!("cannot assign to immutable variable '{name}'"),
+                    });
+                }
+                let Value::Array(items) = v else {
+                    return Err(crate::TuffError::Eval {
+                        span,
+                        message: "expected an array".to_string(),
+                    });
+                };
+                let i = index.try_into().unwrap_or(usize::MAX);
+                let Some(current) = items.get(i) else {
+                    return Err(crate::TuffError::Eval {
+                        span,
+                        message: format!(
+                            "index {index} out of bounds for array of length {}",
+                            items.len()
+                        ),
+                    });
+                };
+                if !Self::types_compatible(current, &value) {
+                    return Err(crate::TuffError::Eval {
+                        span,
+                        message: format!(
+                            "type mismatch: cannot assign {} to {} element",
+                            Self::type_name(&value),
+                            Self::type_name(current)
+                        ),
+                    });
+                }
+                items[i] = value;
+                return Ok(());
+            }
+        }
+        Err(crate::TuffError::Eval {
+            span,
+            message: format!("undefined variable '{name}'"),
+        })
+    }
+
     /// Whether `value` may be assigned to a binding currently holding `current`.
     fn types_compatible(current: &Value, value: &Value) -> bool {
         matches!(
@@ -254,7 +306,10 @@ fn eval_index(base: Value, index: Value, span: Span) -> Result<Value, crate::Tuf
         .cloned()
         .ok_or_else(|| crate::TuffError::Eval {
             span,
-            message: format!("index {i} out of bounds for array of length {}", items.len()),
+            message: format!(
+                "index {i} out of bounds for array of length {}",
+                items.len()
+            ),
         })
 }
 
@@ -304,6 +359,25 @@ fn exec_block(stmts: &[Stmt], env: &mut Env, span: Span) -> Result<Value, crate:
                             });
                         }
                         deref_target(name, env, *span)?
+                    }
+                    Expr::Index(base, index, _) => {
+                        let Expr::Ident(name, _) = base.as_ref() else {
+                            return Err(crate::TuffError::Eval {
+                                span: *span,
+                                message: "expected a variable name as the base of an indexed assignment"
+                                    .to_string(),
+                            });
+                        };
+                        let Value::Int(i) = eval_expr(index, env)? else {
+                            return Err(crate::TuffError::Eval {
+                                span: *span,
+                                message: "expected an integer index".to_string(),
+                            });
+                        };
+                        let v = eval_expr(value, env)?;
+                        env.set_index(name, i, v, *span)?;
+                        last_value = Some(Value::Int(0));
+                        continue;
                     }
                     _ => {
                         return Err(crate::TuffError::Eval {

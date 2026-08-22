@@ -278,6 +278,14 @@ mod tests {
     }
 
     #[test]
+    fn mutable_array_index_assignment_evaluates_to_one() {
+        assert_eq!(
+            evaluate("let mut array = [0]; array[0] = 1; array[0]"),
+            Ok(eval::Value::Int(1))
+        );
+    }
+
+    #[test]
     fn nested_block_reads_outer_binding() {
         assert_eq!(evaluate("{ let x = 2; { x } }"), Ok(eval::Value::Int(2)));
     }

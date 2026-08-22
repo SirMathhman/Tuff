@@ -18,6 +18,9 @@ pub fn parse(tokens: Vec<Token>) -> Result<Expr, crate::TuffError> {
             Token::Ident(_, span) | Token::Star(span) if parser.is_assign_target() => {
                 parser.parse_assign_stmt(span)?
             }
+            Token::Ident(_, span) if parser.is_indexed_assign_target() => {
+                parser.parse_indexed_assign_stmt(span)?
+            }
             _ => Stmt::Expr(Box::new(parser.parse_expr()?)),
         });
     }
@@ -61,6 +64,43 @@ impl Parser {
             ),
             _ => false,
         }
+    }
+
+    /// Whether the tokens at the current position begin an indexed
+    /// assignment statement: `name[expr] = …`.
+    fn is_indexed_assign_target(&self) -> bool {
+        match self.tokens.get(self.pos) {
+            Some(Token::Ident(_, _)) => {
+                matches!(self.tokens.get(self.pos + 1), Some(Token::LBracket(_)))
+                    && self
+                        .find_closing_bracket(self.pos + 1)
+                        .map_or(false, |close| {
+                            matches!(self.tokens.get(close + 1), Some(Token::Eq(_)))
+                        })
+            }
+            _ => false,
+        }
+    }
+
+    /// Find the index of the `]` matching the `[` at `open_pos`, or `None`
+    /// if the brackets are unbalanced.
+    fn find_closing_bracket(&self, open_pos: usize) -> Option<usize> {
+        let mut depth = 0;
+        let mut i = open_pos;
+        while let Some(token) = self.tokens.get(i) {
+            match token {
+                Token::LBracket(_) => depth += 1,
+                Token::RBracket(_) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        None
     }
 
     /// Parse a comparison expression (`==`, `!=`, `<`, `<=`, `>`, `>=`).
@@ -260,6 +300,9 @@ impl Parser {
                 {
                     stmts.push(self.parse_assign_stmt(span)?);
                 }
+                Some(Token::Ident(_, span)) if self.is_indexed_assign_target() => {
+                    stmts.push(self.parse_indexed_assign_stmt(span)?);
+                }
                 Some(_) => {
                     let expr = self.parse_expr()?;
                     if matches!(self.peek(), Some(Token::Semi(_))) {
@@ -312,6 +355,48 @@ impl Parser {
         };
         let value = self.parse_assign_value(span)?;
         Ok(Stmt::Assign(Box::new(target), value, span))
+    }
+
+    /// Parse an indexed assignment statement (`name[expr] = expr ;`).
+    fn parse_indexed_assign_stmt(&mut self, name_span: Span) -> Result<Stmt, crate::TuffError> {
+        let (name, _) = match self.peek() {
+            Some(Token::Ident(name, span)) => (name, span),
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(name_span),
+                    message: "expected a variable name".to_string(),
+                });
+            }
+        };
+        self.pos += 1;
+        let open = match self.peek() {
+            Some(Token::LBracket(span)) => span,
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(name_span),
+                    message: "expected '['".to_string(),
+                });
+            }
+        };
+        self.pos += 1;
+        let index = self.parse_expr()?;
+        let close = match self.peek() {
+            Some(Token::RBracket(span)) => span,
+            other => {
+                return Err(crate::TuffError::Parse {
+                    span: other.map(|t| t.span()).unwrap_or(open),
+                    message: "expected ']'".to_string(),
+                });
+            }
+        };
+        self.pos += 1;
+        let target = Expr::Index(
+            Box::new(Expr::Ident(name, name_span)),
+            Box::new(index),
+            close,
+        );
+        let value = self.parse_assign_value(close)?;
+        Ok(Stmt::Assign(Box::new(target), value, close))
     }
 
     /// Parse the `= expr ;` tail shared by let and assignment statements.
