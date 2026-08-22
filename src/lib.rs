@@ -85,6 +85,11 @@ mod tests {
     }
 
     #[test]
+    fn parenthesized_two_plus_three_times_four_evaluates_to_twenty() {
+        assert_eq!(evaluate("(2 + 3) * 4"), Ok(20));
+    }
+
+    #[test]
     fn dangling_operator_is_a_parse_error() {
         assert_eq!(
             evaluate("1 +"),

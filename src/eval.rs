@@ -13,6 +13,7 @@ pub fn eval(expr: &Expr) -> Result<i64, crate::TuffError> {
                 BinOp::Mul => l * r,
             })
         }
+        Expr::Group(inner, _, _) => eval(inner),
     }
 }
 

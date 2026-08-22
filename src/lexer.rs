@@ -7,6 +7,8 @@ pub enum Token {
     Plus(Span),
     Minus(Span),
     Star(Span),
+    LParen(Span),
+    RParen(Span),
 }
 
 /// Convert source text into a flat list of tokens.
@@ -43,6 +45,19 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                     start: pos,
                     end: pos + 1,
                 }),
+            });
+            pos += 1;
+        } else if c == '(' || c == ')' {
+            tokens.push(if c == '(' {
+                Token::LParen(Span {
+                    start: pos,
+                    end: pos + 1,
+                })
+            } else {
+                Token::RParen(Span {
+                    start: pos,
+                    end: pos + 1,
+                })
             });
             pos += 1;
         } else {

@@ -62,12 +62,30 @@ impl Parser {
                 self.pos += 1;
                 Ok(Expr::Num(value, span))
             }
+            Some(Token::LParen(span)) => {
+                self.pos += 1;
+                let expr = self.parse_expr()?;
+                match self.peek() {
+                    Some(Token::RParen(close)) => {
+                        self.pos += 1;
+                        Ok(Expr::Group(Box::new(expr), span, close))
+                    }
+                    other => Err(crate::TuffError::Parse {
+                        span: other.map(|t| t.span()).unwrap_or(span),
+                        message: "expected ')'".to_string(),
+                    }),
+                }
+            }
             Some(token) => Err(crate::TuffError::Parse {
                 span: token.span(),
                 message: "expected a number".to_string(),
             }),
             None => Err(crate::TuffError::Parse {
-                span: Span { start: 0, end: 0 },
+                span: self
+                    .tokens
+                    .last()
+                    .map(|t| t.span())
+                    .unwrap_or(Span { start: 0, end: 0 }),
                 message: "expected a number".to_string(),
             }),
         }
@@ -77,9 +95,12 @@ impl Parser {
 impl Token {
     fn span(&self) -> Span {
         match self {
-            Token::Num(_, span) | Token::Plus(span) | Token::Minus(span) | Token::Star(span) => {
-                *span
-            }
+            Token::Num(_, span)
+            | Token::Plus(span)
+            | Token::Minus(span)
+            | Token::Star(span)
+            | Token::LParen(span)
+            | Token::RParen(span) => *span,
         }
     }
 }

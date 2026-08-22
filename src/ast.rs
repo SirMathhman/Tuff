@@ -13,4 +13,5 @@ pub enum BinOp {
 pub enum Expr {
     Num(i64, Span),
     Bin(BinOp, Box<Expr>, Box<Expr>, Span),
+    Group(Box<Expr>, Span, Span),
 }
