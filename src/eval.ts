@@ -70,7 +70,8 @@ function checkMutability(
         if (!elseResult.ok) return elseResult;
       }
     } else if (stmt.type === "return") {
-      // No assignment target; nothing to check.
+      const value = inferValue(stmt.value, env);
+      if (!value.ok) return value;
     } else {
       const unhandled: never = stmt;
       return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
@@ -131,22 +132,39 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       }
       return Ok(binding.value);
     }
-    case "unary":
+    case "unary": {
+      const operand = inferValue(expr.operand, env);
+      if (!operand.ok) return operand;
       return Ok({ kind: "number", value: 0 });
-    case "ref":
+    }
+    case "ref": {
       if (expr.operand.type !== "identifier") return Ok(null);
+      const target = env.get(expr.operand.name);
+      if (!target) {
+        return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
+      }
       return Ok({ kind: "ref", target: expr.operand.name, mutable: expr.mutable });
+    }
     case "deref": {
       if (expr.operand.type !== "identifier") return Ok(null);
+      const binding = env.get(expr.operand.name);
+      if (!binding) {
+        return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
+      }
       const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
-      return Ok(resolved ? resolved.binding.value : null);
+      if (!resolved) {
+        return Err(
+          err("runtime", `Reference target "${expr.operand.name}" is undefined`, expr.position),
+        );
+      }
+      return Ok(resolved.binding.value);
     }
     case "binary": {
-      if (expr.op === "<") return Ok({ kind: "boolean", value: false });
       const l = inferValue(expr.left, env);
       if (!l.ok) return l;
       const r = inferValue(expr.right, env);
       if (!r.ok) return r;
+      if (expr.op === "<") return Ok({ kind: "boolean", value: false });
       if (l.value?.kind !== "number" || r.value?.kind !== "number") return Ok(null);
       return Ok({ kind: "number", value: 0 });
     }

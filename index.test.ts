@@ -55,7 +55,7 @@ describe("evaluate: bindings & expressions", () => {
   });
 });
 
-describe("evaluate: references & control flow", () => {
+describe("evaluate: references", () => {
   test('evaluate("let x = 1; let y = &x; return *y;") => 1', () => {
     expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
   });
@@ -85,7 +85,9 @@ describe("evaluate: references & control flow", () => {
     const r = evaluate("let mut x = &mut x; *x = 1;");
     expect(r.ok).toBe(false);
   });
+});
 
+describe("evaluate: dead code", () => {
   test('evaluate("if (false) { *y = 1; }") => Err (dead-code mutability)', () => {
     const r = evaluate("let x = 0; let y = &x; if (false) { *y = 1; }");
     expect(r.ok).toBe(false);
@@ -135,6 +137,44 @@ describe("evaluate: references & control flow", () => {
     }
   });
 
+  test('evaluate("if (false) { return z; }") => Err (dead-code return of undefined)', () => {
+    const r = evaluate("if (false) { return z; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("z");
+    }
+  });
+
+  test('evaluate("if (false) { let y = &z; }") => Err (dead-code ref to undefined)', () => {
+    const r = evaluate("if (false) { let y = &z; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("z");
+    }
+  });
+
+  test('evaluate("if (1 < z) {}") => Err (undefined in condition operand)', () => {
+    const r = evaluate("if (1 < z) {}");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("z");
+    }
+  });
+
+  test('evaluate("if (false) { return -x; }") => Err (undefined in unary operand)', () => {
+    const r = evaluate("if (false) { return -x; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("x");
+    }
+  });
+});
+
+describe("evaluate: values & shadowing", () => {
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });
