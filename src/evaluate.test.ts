@@ -60,7 +60,9 @@ describe("evaluate: bindings & expressions", () => {
   test('evaluate("return 10 / 3;") => 3 (truncated)', () => {
     expect(evaluate("return 10 / 3;")).toEqual({ ok: true, value: 3 });
   });
+});
 
+describe("evaluate: integer suffixes", () => {
   test('evaluate("return 100U8;") => 100', () => {
     expect(evaluate("return 100U8;")).toEqual({ ok: true, value: 100 });
   });
@@ -83,6 +85,17 @@ describe("evaluate: bindings & expressions", () => {
     }
   });
 
+  test('evaluate("return 255U8 + 1U8;") => Err (overflow for U8)', () => {
+    const r = evaluate("return 255U8 + 1U8;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("U8");
+    }
+  });
+});
+
+describe("evaluate: arrays", () => {
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
   });

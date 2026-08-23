@@ -146,6 +146,37 @@ function isKnownZero(expr: Expr, env: Map<string, Binding>): boolean {
   return constFold(expr, env) === 0;
 }
 
+function inferIntType(expr: Expr, env: Map<string, Binding>): string | null {
+  switch (expr.type) {
+    case "number":
+      return expr.suffix ?? null;
+    case "identifier":
+      return null;
+    case "unary":
+      return inferIntType(expr.operand, env);
+    case "binary": {
+      const l = inferIntType(expr.left, env);
+      const r = inferIntType(expr.right, env);
+      return l !== null && l === r ? l : null;
+    }
+    default:
+      return null;
+  }
+}
+
+function checkOverflow(expr: Expr, env: Map<string, Binding>): Result<null, EvalError> {
+  const type = inferIntType(expr, env);
+  if (!type) return Ok(null);
+  const value = constFold(expr, env);
+  if (value === null) return Ok(null);
+  const range = INT_RANGES[type];
+  if (!range) return Ok(null);
+  if (value < range.min || value > range.max) {
+    return Err(err("semantic", `${value} does not fit in ${type}`, expr.position));
+  }
+  return Ok(null);
+}
+
 function constFold(expr: Expr, env: Map<string, Binding>): number | null {
   switch (expr.type) {
     case "number":
@@ -239,6 +270,8 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       if ((expr.op === "/" || expr.op === "%") && isKnownZero(expr.right, env)) {
         return Err(err("runtime", "Division by zero", expr.right.position));
       }
+      const overflow = checkOverflow(expr, env);
+      if (!overflow.ok) return overflow;
       return Ok({ kind: "number", value: 0 });
     }
     case "array": {
