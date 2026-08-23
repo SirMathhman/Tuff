@@ -74,8 +74,18 @@ function checkMutability(
         const elseResult = checkMutability(stmt.else, env);
         if (!elseResult.ok) return elseResult;
       }
+    } else if (stmt.type === "return") {
+      // No assignment target; nothing to check.
+    } else {
+      const unhandled: never = stmt;
+      return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
     }
   }
+  restoreShadowed(env, shadowed);
+  return Ok(null);
+}
+
+function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>): void {
   for (const [name, previous] of shadowed) {
     if (previous === null) {
       env.delete(name);
@@ -83,7 +93,6 @@ function checkMutability(
       env.set(name, previous);
     }
   }
-  return Ok(null);
 }
 
 function bindingInfo(binding: Binding): BindingInfo {
@@ -196,13 +205,7 @@ function evalStatements(
       return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
     }
   }
-  for (const [name, previous] of shadowed) {
-    if (previous === null) {
-      env.delete(name);
-    } else {
-      env.set(name, previous);
-    }
-  }
+  restoreShadowed(env, shadowed);
   return Ok(null);
 }
 
