@@ -51,6 +51,7 @@ function evalStatements(
     } else if (stmt.type === "block") {
       const inner = evalStatements(stmt.statements, env);
       if (!inner.ok) return inner;
+      if (inner.value !== null) return inner;
     } else if (stmt.type === "if") {
       const cond = evalExpr(stmt.condition, env);
       if (!cond.ok) return cond;
@@ -61,6 +62,7 @@ function evalStatements(
       if (branch) {
         const inner = evalStatements(branch, env);
         if (!inner.ok) return inner;
+        if (inner.value !== null) return inner;
       }
     } else {
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
