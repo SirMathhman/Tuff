@@ -110,6 +110,14 @@ describe("evaluate: references & control flow", () => {
     }
   });
 
+  test('evaluate("if (false) { let y = &(1 + 2); }") => Err', () => {
+    const r = evaluate("if (false) { let y = &(1 + 2); }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+    }
+  });
+
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });

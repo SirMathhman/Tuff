@@ -36,8 +36,12 @@ function checkMutability(
       if (!shadowed.has(stmt.name)) {
         shadowed.set(stmt.name, env.get(stmt.name) ?? null);
       }
-      const value = inferValue(stmt.value, env) ?? { kind: "number", value: 0 };
-      env.set(stmt.name, { value, mutable: stmt.mutable });
+      const value = inferValue(stmt.value, env);
+      if (!value.ok) return value;
+      env.set(stmt.name, {
+        value: value.value ?? { kind: "number", value: 0 },
+        mutable: stmt.mutable,
+      });
     } else if (stmt.type === "assign") {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
@@ -55,7 +59,8 @@ function checkMutability(
       if (!inner.ok) return inner;
     } else if (stmt.type === "if") {
       const cond = inferValue(stmt.condition, env);
-      if (cond && cond.kind !== "boolean") {
+      if (!cond.ok) return cond;
+      if (cond.value && cond.value.kind !== "boolean") {
         return Err(err("semantic", "if condition must be a boolean", stmt.position));
       }
       const then = checkMutability(stmt.then, env);
@@ -85,33 +90,37 @@ function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>
   }
 }
 
-function inferValue(expr: Expr, env: Map<string, Binding>): Value | null {
+function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null, EvalError> {
   switch (expr.type) {
     case "number":
-      return { kind: "number", value: 0 };
+      return Ok({ kind: "number", value: 0 });
     case "boolean":
-      return { kind: "boolean", value: false };
+      return Ok({ kind: "boolean", value: false });
     case "identifier":
-      return env.get(expr.name)?.value ?? null;
+      return Ok(env.get(expr.name)?.value ?? null);
     case "unary":
-      return { kind: "number", value: 0 };
-    case "ref":
-      return {
-        kind: "ref",
-        target: expr.operand.type === "identifier" ? expr.operand.name : "",
-        mutable: expr.mutable,
-      };
+      return Ok({ kind: "number", value: 0 });
+    case "ref": {
+      if (expr.operand.type !== "identifier") {
+        return Err(err("semantic", "Can only take a reference to a variable", expr.position));
+      }
+      return Ok({ kind: "ref", target: expr.operand.name, mutable: expr.mutable });
+    }
     case "deref": {
-      if (expr.operand.type !== "identifier") return null;
+      if (expr.operand.type !== "identifier") {
+        return Err(err("semantic", "Can only dereference a variable", expr.position));
+      }
       const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
-      return resolved ? resolved.binding.value : null;
+      return Ok(resolved ? resolved.binding.value : null);
     }
     case "binary": {
-      if (expr.op === "<") return { kind: "boolean", value: false };
+      if (expr.op === "<") return Ok({ kind: "boolean", value: false });
       const l = inferValue(expr.left, env);
+      if (!l.ok) return l;
       const r = inferValue(expr.right, env);
-      if (l?.kind !== "number" || r?.kind !== "number") return null;
-      return { kind: "number", value: 0 };
+      if (!r.ok) return r;
+      if (l.value?.kind !== "number" || r.value?.kind !== "number") return Ok(null);
+      return Ok({ kind: "number", value: 0 });
     }
   }
 }
