@@ -90,7 +90,35 @@ function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>
   }
 }
 
+function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalError> {
+  switch (expr.type) {
+    case "number":
+    case "boolean":
+    case "identifier":
+    case "unary":
+    case "binary":
+      return Ok(null);
+    case "ref":
+      if (expr.operand.type !== "identifier") {
+        return Err(err("semantic", "Can only take a reference to a variable", expr.position));
+      }
+      return Ok(null);
+    case "deref": {
+      if (expr.operand.type !== "identifier") {
+        return Err(err("semantic", "Can only dereference a variable", expr.position));
+      }
+      const binding = env.get(expr.operand.name);
+      if (binding && binding.value.kind !== "ref") {
+        return Err(err("semantic", `"${expr.operand.name}" is not a reference`, expr.position));
+      }
+      return Ok(null);
+    }
+  }
+}
+
 function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null, EvalError> {
+  const validation = validateExpr(expr, env);
+  if (!validation.ok) return validation;
   switch (expr.type) {
     case "number":
       return Ok({ kind: "number", value: 0 });
@@ -100,16 +128,11 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       return Ok(env.get(expr.name)?.value ?? null);
     case "unary":
       return Ok({ kind: "number", value: 0 });
-    case "ref": {
-      if (expr.operand.type !== "identifier") {
-        return Err(err("semantic", "Can only take a reference to a variable", expr.position));
-      }
+    case "ref":
+      if (expr.operand.type !== "identifier") return Ok(null);
       return Ok({ kind: "ref", target: expr.operand.name, mutable: expr.mutable });
-    }
     case "deref": {
-      if (expr.operand.type !== "identifier") {
-        return Err(err("semantic", "Can only dereference a variable", expr.position));
-      }
+      if (expr.operand.type !== "identifier") return Ok(null);
       const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
       return Ok(resolved ? resolved.binding.value : null);
     }
@@ -244,6 +267,8 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
 }
 
 function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalError> {
+  const validation = validateExpr(expr, env);
+  if (!validation.ok) return validation;
   switch (expr.type) {
     case "number":
       return Ok({ kind: "number", value: expr.value });
@@ -261,31 +286,24 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
         andThen(toNumber(v, expr.position), (n) => Ok({ kind: "number", value: -n })),
       );
     case "ref": {
-      if (expr.operand.type !== "identifier") {
-        return Err(err("semantic", "Can only take a reference to a variable", expr.position));
-      }
-      const target = env.get(expr.operand.name);
+      // Operand is an identifier (validated by validateExpr).
+      const name = expr.operand.type === "identifier" ? expr.operand.name : "";
+      const target = env.get(name);
       if (!target) {
-        return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
+        return Err(err("runtime", `Undefined variable "${name}"`, expr.position));
       }
-      return Ok({ kind: "ref", target: expr.operand.name, mutable: expr.mutable });
+      return Ok({ kind: "ref", target: name, mutable: expr.mutable });
     }
     case "deref": {
-      if (expr.operand.type !== "identifier") {
-        return Err(err("semantic", "Can only dereference a variable", expr.position));
-      }
-      const binding = env.get(expr.operand.name);
+      // Operand is an identifier and, if bound, a reference (validated by validateExpr).
+      const name = expr.operand.type === "identifier" ? expr.operand.name : "";
+      const binding = env.get(name);
       if (!binding) {
-        return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
+        return Err(err("runtime", `Undefined variable "${name}"`, expr.position));
       }
-      if (binding.value.kind !== "ref") {
-        return Err(err("semantic", `"${expr.operand.name}" is not a reference`, expr.position));
-      }
-      const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
+      const resolved = resolveRefChain(name, (n) => env.get(n));
       if (!resolved) {
-        return Err(
-          err("runtime", `Reference target "${expr.operand.name}" is undefined`, expr.position),
-        );
+        return Err(err("runtime", `Reference target "${name}" is undefined`, expr.position));
       }
       return Ok(resolved.binding.value);
     }
