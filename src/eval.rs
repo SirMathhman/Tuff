@@ -28,7 +28,10 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::Ref(_, _) => Type::Ref,
             Value::MutRef(_, _) => Type::MutRef,
-            Value::Array(_) => Type::Array,
+            Value::Array(items) => {
+                let element = items.first().map(|v| v.type_of()).unwrap_or(Type::Int);
+                Type::Array(Box::new(element))
+            }
         }
     }
 }
@@ -107,11 +110,13 @@ impl Env {
         for scope in self.scopes.iter_mut().rev() {
             if let Some((v, mutable)) = scope.get_mut(&id) {
                 if *mutable {
-                    if !v.type_of().compatible(value.type_of()) {
+                    let found = value.type_of();
+                    let expected = v.type_of();
+                    if !expected.compatible(&found) {
                         return Err(crate::TuffError::TypeMismatch {
                             span,
-                            found: value.type_of().name(),
-                            expected: v.type_of().name(),
+                            found: found.name(),
+                            expected: expected.name(),
                             name,
                         });
                     }
@@ -142,18 +147,11 @@ impl Env {
                     return Err(crate::TuffError::NotAnArray { span });
                 };
                 let i = index.try_into().unwrap_or(usize::MAX);
-                let Some(current) = items.get(i) else {
+                if i >= items.len() {
                     return Err(crate::TuffError::IndexOutOfBounds {
                         span,
                         index,
                         len: items.len(),
-                    });
-                };
-                if !current.type_of().compatible(value.type_of()) {
-                    return Err(crate::TuffError::ElementTypeMismatch {
-                        span,
-                        found: value.type_of().name(),
-                        expected: current.type_of().name(),
                     });
                 }
                 items[i] = value;

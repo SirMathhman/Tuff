@@ -251,6 +251,30 @@ mod tests {
     }
 
     #[test]
+    fn array_element_assignment_type_mismatch_is_an_error() {
+        assert_eq!(
+            evaluate("let mut a = [1, 2]; a[0] = true;"),
+            Err(TuffError::ElementTypeMismatch {
+                span: Span { start: 23, end: 24 },
+                found: "boolean",
+                expected: "integer",
+            })
+        );
+    }
+
+    #[test]
+    fn mixed_type_array_literal_is_an_error() {
+        assert_eq!(
+            evaluate("[1, true]"),
+            Err(TuffError::ElementTypeMismatch {
+                span: Span { start: 4, end: 8 },
+                found: "boolean",
+                expected: "integer",
+            })
+        );
+    }
+
+    #[test]
     fn if_else_with_false_condition_evaluates_to_else_branch() {
         assert_eq!(
             evaluate("let x = if (false) 2 else 3; x"),

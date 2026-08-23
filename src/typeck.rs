@@ -4,7 +4,7 @@ use crate::Span;
 use crate::ast::{BinOp, Expr, Stmt};
 
 /// A static type, as determined by the analysis pass.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     /// An integer.
     Int,
@@ -14,24 +14,27 @@ pub enum Type {
     Ref,
     /// A mutable reference.
     MutRef,
-    /// An array.
-    Array,
+    /// An array of a known element type.
+    Array(Box<Type>),
 }
 
 impl Type {
     /// Whether `other` may be assigned to a binding of this type.
-    pub fn compatible(self, other: Type) -> bool {
-        self == other
+    pub fn compatible(&self, other: &Type) -> bool {
+        match (self, other) {
+            (Type::Array(a), Type::Array(b)) => a.compatible(b),
+            _ => self == other,
+        }
     }
 
     /// The name of this type, for error messages.
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             Type::Int => "integer",
             Type::Bool => "boolean",
             Type::Ref => "shared reference",
             Type::MutRef => "mutable reference",
-            Type::Array => "array",
+            Type::Array(_) => "array",
         }
     }
 }
@@ -81,7 +84,7 @@ impl TypeEnv {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(&id).map(|(n, t, m)| (n.clone(), *t, *m)))
+            .find_map(|scope| scope.get(&id).map(|(n, t, m)| (n.clone(), t.clone(), *m)))
     }
 
     /// Bind a new variable in the innermost scope, assigning it a fresh ID.
@@ -112,7 +115,7 @@ impl TypeEnv {
         for scope in self.scopes.iter().rev() {
             for (id, (bound, ty, mutable)) in scope {
                 if bound == name {
-                    return Some((*id, *ty, *mutable));
+                    return Some((*id, ty.clone(), *mutable));
                 }
             }
         }
@@ -127,7 +130,7 @@ impl TypeEnv {
                 if !*mutable {
                     return Err(crate::TuffError::ImmutableAssignment { span, name });
                 }
-                if !current.compatible(ty) {
+                if !current.compatible(&ty) {
                     return Err(crate::TuffError::TypeMismatch {
                         span,
                         found: ty.name(),
@@ -190,13 +193,7 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
         Expr::Bool(value, span) => Ok(TypedExpr::Bool(*value, *span)),
         Expr::Bin(op, left, right, span) => analyze_bin(*op, left, right, env, *span),
         Expr::Group(inner, span, _) => Ok(TypedExpr::Group(Box::new(analyze(inner, env)?), *span)),
-        Expr::Array(elements, span) => {
-            let items = elements
-                .iter()
-                .map(|e| analyze(e, env))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(TypedExpr::Array(items, *span))
-        }
+        Expr::Array(elements, span) => analyze_array(elements, env, *span),
         Expr::Index(base, index, span) => analyze_index(base, index, env, *span),
         Expr::Ident(name, span) => match env.resolve(name, *span) {
             Some((id, ty, _)) => Ok(TypedExpr::Ident(id, ty, *span)),
@@ -257,10 +254,39 @@ fn analyze_index(
     if i.ty() != Type::Int {
         return Err(crate::TuffError::ExpectedIntegerIndex { span });
     }
-    if b.ty() != Type::Array {
+    let Type::Array(_) = b.ty() else {
         return Err(crate::TuffError::NotAnArray { span });
-    }
+    };
     Ok(TypedExpr::Index(Box::new(b), Box::new(i), span))
+}
+
+/// Analyze an array literal, inferring the element type from the first
+/// element and checking the rest against it.
+fn analyze_array(
+    elements: &[Expr],
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
+    let mut items = Vec::with_capacity(elements.len());
+    let mut element_ty = None;
+    for element in elements {
+        let item = analyze(element, env)?;
+        let ty = item.ty();
+        match &element_ty {
+            None => element_ty = Some(ty),
+            Some(expected) => {
+                if !expected.compatible(&ty) {
+                    return Err(crate::TuffError::ElementTypeMismatch {
+                        span: element.span(),
+                        found: ty.name(),
+                        expected: expected.name(),
+                    });
+                }
+            }
+        }
+        items.push(item);
+    }
+    Ok(TypedExpr::Array(items, span))
 }
 
 /// Analyze a reference expression, checking the inner is a defined variable.
@@ -378,11 +404,19 @@ impl TypedExpr {
         match self {
             TypedExpr::Num(_, _) => Type::Int,
             TypedExpr::Bool(_, _) => Type::Bool,
-            TypedExpr::Bin(_, _, _, ty, _) => *ty,
+            TypedExpr::Bin(_, _, _, ty, _) => ty.clone(),
             TypedExpr::Group(inner, _) => inner.ty(),
-            TypedExpr::Array(_, _) => Type::Array,
-            TypedExpr::Index(_, _, _) => Type::Int,
-            TypedExpr::Ident(_, ty, _) => *ty,
+            TypedExpr::Array(items, _) => {
+                let element = items.first().map(|i| i.ty()).unwrap_or(Type::Int);
+                Type::Array(Box::new(element))
+            }
+            TypedExpr::Index(base, _, _) => {
+                let Type::Array(element) = base.ty() else {
+                    return Type::Int;
+                };
+                *element
+            }
+            TypedExpr::Ident(_, ty, _) => ty.clone(),
             TypedExpr::Ref(_, mutable, _) => {
                 if *mutable {
                     Type::MutRef
@@ -390,9 +424,9 @@ impl TypedExpr {
                     Type::Ref
                 }
             }
-            TypedExpr::Deref(_, ty, _) => *ty,
-            TypedExpr::If(_, _, _, ty, _) => *ty,
-            TypedExpr::Block(_, ty, _) => *ty,
+            TypedExpr::Deref(_, ty, _) => ty.clone(),
+            TypedExpr::If(_, _, _, ty, _) => ty.clone(),
+            TypedExpr::Block(_, ty, _) => ty.clone(),
         }
     }
 }
@@ -402,7 +436,7 @@ impl TypedStmt {
     /// The static type of this statement, if it produces a value.
     fn ty(&self) -> Option<Type> {
         match self {
-            TypedStmt::Let(_, _, _, ty, _) => Some(*ty),
+            TypedStmt::Let(_, _, _, ty, _) => Some(ty.clone()),
             // An assignment statement evaluates to the unit integer `0`.
             TypedStmt::Assign(_, _, _) => Some(Type::Int),
             TypedStmt::Expr(e) => Some(e.ty()),
@@ -430,7 +464,7 @@ fn analyze_let(
 ) -> Result<TypedStmt, crate::TuffError> {
     let value_t = analyze(value, env)?;
     let ty = value_t.ty();
-    let id = env.insert(name.to_string(), ty, mutable);
+    let id = env.insert(name.to_string(), ty.clone(), mutable);
     if let Expr::Ref(inner, _, _) = value
         && let Expr::Ident(target, _) = inner.as_ref()
         && let Some((target_id, _, _)) = env.resolve(target, span)
@@ -460,7 +494,7 @@ fn analyze_assign(
             env.set(id, ty, span)?;
         }
         Expr::Deref(inner, _) => check_deref_target(inner, ty, env, span)?,
-        Expr::Index(base, index, _) => check_index_target(base, index, env, span)?,
+        Expr::Index(base, index, _) => check_index_target(base, index, ty, env, span)?,
         _ => {
             return Err(crate::TuffError::InvalidAssignmentTarget { span });
         }
@@ -496,7 +530,7 @@ fn check_deref_target(
             })?;
             match env.get(target) {
                 Some((target_name, t, _)) => {
-                    if !t.compatible(ty) {
+                    if !t.compatible(&ty) {
                         return Err(crate::TuffError::TypeMismatch {
                             span,
                             found: ty.name(),
@@ -524,10 +558,11 @@ fn check_deref_target(
 }
 
 /// Check that an index assignment target is a mutable array with an integer
-/// index.
+/// index and a value compatible with the element type.
 fn check_index_target(
     base: &Expr,
     index: &Expr,
+    ty: Type,
     env: &mut TypeEnv,
     span: Span,
 ) -> Result<(), crate::TuffError> {
@@ -539,8 +574,17 @@ fn check_index_target(
         return Err(crate::TuffError::ExpectedIntegerIndex { span });
     }
     match env.resolve(name, span) {
-        Some((_, Type::Array, true)) => Ok(()),
-        Some((_, Type::Array, false)) => Err(crate::TuffError::ImmutableAssignment {
+        Some((_, Type::Array(element), true)) => {
+            if !element.compatible(&ty) {
+                return Err(crate::TuffError::ElementTypeMismatch {
+                    span,
+                    found: ty.name(),
+                    expected: element.name(),
+                });
+            }
+            Ok(())
+        }
+        Some((_, Type::Array(_), false)) => Err(crate::TuffError::ImmutableAssignment {
             span,
             name: name.clone(),
         }),

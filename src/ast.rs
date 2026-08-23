@@ -52,6 +52,25 @@ pub enum Expr {
     Block(Vec<Stmt>, Span, Span),
 }
 
+impl Expr {
+    /// The source span of this expression.
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Num(_, span)
+            | Expr::Bool(_, span)
+            | Expr::Bin(_, _, _, span)
+            | Expr::Ident(_, span)
+            | Expr::Ref(_, _, span)
+            | Expr::Deref(_, span)
+            | Expr::Array(_, span)
+            | Expr::Index(_, _, span)
+            | Expr::If(_, _, _, span)
+            | Expr::Block(_, span, _) => *span,
+            Expr::Group(_, open, _) => *open,
+        }
+    }
+}
+
 /// A statement in a block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
