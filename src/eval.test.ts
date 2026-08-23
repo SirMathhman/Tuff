@@ -1,68 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { evaluateProgram } from "./eval.ts";
-import type { Expr, Program, Statement } from "./parser.ts";
-
-const pos = { line: 1, column: 1 };
-
-function num(value: number): Expr {
-  return { type: "number", value, position: pos };
-}
-
-function bool(value: boolean): Expr {
-  return { type: "boolean", value, position: pos };
-}
-
-function ident(name: string): Expr {
-  return { type: "identifier", name, position: pos };
-}
-
-function bin(op: string, left: Expr, right: Expr): Expr {
-  return { type: "binary", op, left, right, position: pos };
-}
-
-function ref(operand: Expr, mutable = false): Expr {
-  return { type: "ref", mutable, operand, position: pos };
-}
-
-function deref(operand: Expr): Expr {
-  return { type: "deref", operand, position: pos };
-}
-
-function array(elements: readonly Expr[]): Expr {
-  return { type: "array", elements, position: pos };
-}
-
-function index(arr: Expr, idx: Expr): Expr {
-  return { type: "index", array: arr, index: idx, position: pos };
-}
-
-function letStmt(name: string, value: Expr, mutable = false): Statement {
-  return { type: "let", mutable, name, value, position: pos };
-}
-
-function assignStmt(target: Expr, value: Expr): Statement {
-  return { type: "assign", target, value, position: pos };
-}
-
-function returnStmt(value: Expr): Statement {
-  return { type: "return", value, position: pos };
-}
-
-function ifStmt(
-  condition: Expr,
-  then: readonly Statement[],
-  elseBranch: readonly Statement[] | null = null,
-): Statement {
-  return { type: "if", condition, then, else: elseBranch, position: pos };
-}
-
-function whileStmt(condition: Expr, body: readonly Statement[]): Statement {
-  return { type: "while", condition, body, position: pos };
-}
-
-function prog(statements: readonly Statement[]): Program {
-  return { statements };
-}
+import {
+  array,
+  assignStmt,
+  bin,
+  bool,
+  deref,
+  ident,
+  ifStmt,
+  index,
+  letStmt,
+  num,
+  pos,
+  prog,
+  ref,
+  returnStmt,
+  whileStmt,
+} from "./testAst.ts";
 
 describe("evaluateProgram: values & errors", () => {
   test("empty program returns 0", () => {

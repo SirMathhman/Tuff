@@ -1,44 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { checkProgram } from "./check.ts";
-import type { Expr, Program, Statement } from "./parser.ts";
-
-const pos = { line: 1, column: 1 };
-
-function num(value: number, suffix?: string): Expr {
-  return { type: "number", value, suffix, position: pos };
-}
-
-function ident(name: string): Expr {
-  return { type: "identifier", name, position: pos };
-}
-
-function bin(op: string, left: Expr, right: Expr): Expr {
-  return { type: "binary", op, left, right, position: pos };
-}
-
-function letStmt(name: string, value: Expr, mutable = false): Statement {
-  return { type: "let", mutable, name, value, position: pos };
-}
-
-function assignStmt(target: Expr, value: Expr): Statement {
-  return { type: "assign", target, value, position: pos };
-}
-
-function returnStmt(value: Expr): Statement {
-  return { type: "return", value, position: pos };
-}
-
-function ifStmt(
-  condition: Expr,
-  then: readonly Statement[],
-  elseBranch: readonly Statement[] | null = null,
-): Statement {
-  return { type: "if", condition, then, else: elseBranch, position: pos };
-}
-
-function prog(statements: readonly Statement[]): Program {
-  return { statements };
-}
+import { assignStmt, bin, ident, ifStmt, letStmt, num, pos, prog, returnStmt } from "./testAst.ts";
 
 describe("checkProgram: bindings & undefined variables", () => {
   test("valid program passes", () => {
