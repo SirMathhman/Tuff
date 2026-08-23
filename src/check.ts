@@ -119,6 +119,29 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
   }
 }
 
+const INT_RANGES: Record<string, { min: number; max: number }> = {
+  U8: { min: 0, max: 255 },
+  U16: { min: 0, max: 65535 },
+  U32: { min: 0, max: 4294967295 },
+  U64: { min: 0, max: 9007199254740991 },
+  I8: { min: -128, max: 127 },
+  I16: { min: -32768, max: 32767 },
+  I32: { min: -2147483648, max: 2147483647 },
+  I64: { min: -9007199254740991, max: 9007199254740991 },
+  USize: { min: 0, max: 9007199254740991 },
+  ISize: { min: -9007199254740991, max: 9007199254740991 },
+};
+
+function checkIntRange(expr: Expr): Result<null, EvalError> {
+  if (expr.type !== "number" || !expr.suffix) return Ok(null);
+  const range = INT_RANGES[expr.suffix];
+  if (!range) return Ok(null);
+  if (expr.value < range.min || expr.value > range.max) {
+    return Err(err("semantic", `${expr.value} does not fit in ${expr.suffix}`, expr.position));
+  }
+  return Ok(null);
+}
+
 function isKnownZero(expr: Expr, env: Map<string, Binding>): boolean {
   return constFold(expr, env) === 0;
 }
@@ -165,8 +188,11 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
   const validation = validateExpr(expr, env);
   if (!validation.ok) return validation;
   switch (expr.type) {
-    case "number":
+    case "number": {
+      const range = checkIntRange(expr);
+      if (!range.ok) return range;
       return Ok({ kind: "number", value: 0 });
+    }
     case "boolean":
       return Ok({ kind: "boolean", value: false });
     case "identifier": {

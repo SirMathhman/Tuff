@@ -74,6 +74,15 @@ describe("evaluate: bindings & expressions", () => {
     }
   });
 
+  test('evaluate("return 256U8;") => Err (out of range for U8)', () => {
+    const r = evaluate("return 256U8;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("U8");
+    }
+  });
+
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
   });

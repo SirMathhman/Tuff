@@ -4,7 +4,12 @@ import { Err, Ok, andThen, map } from "./result.ts";
 import type { Result } from "./result.ts";
 
 export type Expr =
-  | { readonly type: "number"; readonly value: number; readonly position: Position }
+  | {
+      readonly type: "number";
+      readonly value: number;
+      readonly suffix?: string;
+      readonly position: Position;
+    }
   | { readonly type: "boolean"; readonly value: boolean; readonly position: Position }
   | { readonly type: "identifier"; readonly name: string; readonly position: Position }
   | {
@@ -398,8 +403,10 @@ class Parser {
     const t = this.peek();
     if (t.kind === "number") {
       this.advance();
-      const digits = t.value.replace(/[UI](8|16|32|64|Size)$/, "");
-      return Ok({ type: "number", value: Number(digits), position: t.position });
+      const suffixMatch = t.value.match(/[UI](8|16|32|64|Size)$/);
+      const suffix = suffixMatch ? suffixMatch[0] : undefined;
+      const digits = suffix ? t.value.slice(0, -suffix.length) : t.value;
+      return Ok({ type: "number", value: Number(digits), suffix, position: t.position });
     }
     if (t.kind === "keyword" && (t.value === "true" || t.value === "false")) {
       this.advance();
