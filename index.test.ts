@@ -57,6 +57,13 @@ describe("evaluate: bindings & expressions", () => {
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
   });
+
+  test('evaluate("let array = [1, 2, 3]; return array[0] + array[1] + array[2];") => 6', () => {
+    expect(evaluate("let array = [1, 2, 3]; return array[0] + array[1] + array[2];")).toEqual({
+      ok: true,
+      value: 6,
+    });
+  });
 });
 
 describe("evaluate: references", () => {
@@ -297,6 +304,15 @@ describe("evaluate errors", () => {
     if (!r.ok) {
       expect(r.error.kind).toBe("semantic");
       expect(r.error.message).toContain("boolean");
+    }
+  });
+
+  test('evaluate("let array = [1, 2, 3]; return array[3];") => Err (index out of range)', () => {
+    const r = evaluate("let array = [1, 2, 3]; return array[3];");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("out of range");
     }
   });
 });

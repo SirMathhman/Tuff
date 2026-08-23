@@ -108,6 +108,7 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
     case "unary":
     case "binary":
     case "array":
+    case "index":
       return Ok(null);
     case "ref":
       if (expr.operand.type !== "identifier") {
@@ -186,6 +187,19 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
         elements.push(v.value ?? { kind: "number", value: 0 });
       }
       return Ok({ kind: "array", elements });
+    }
+    case "index": {
+      const arr = inferValue(expr.array, env);
+      if (!arr.ok) return arr;
+      const idx = inferValue(expr.index, env);
+      if (!idx.ok) return idx;
+      if (idx.value && idx.value.kind !== "number") {
+        return Err(err("semantic", "Array index must be a number", expr.index.position));
+      }
+      if (arr.value && arr.value.kind !== "array") {
+        return Err(err("semantic", "Cannot index a non-array value", expr.array.position));
+      }
+      return Ok(null);
     }
   }
 }
@@ -384,6 +398,25 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
         elements.push(v.value);
       }
       return Ok({ kind: "array", elements });
+    }
+    case "index": {
+      // The static pass guarantees an array value and a number index.
+      const arr = evalExpr(expr.array, env);
+      if (!arr.ok) return arr;
+      const idx = evalExpr(expr.index, env);
+      if (!idx.ok) return idx;
+      const n = idx.value.kind === "number" ? idx.value.value : 0;
+      const elements = arr.value.kind === "array" ? arr.value.elements : [];
+      if (!Number.isInteger(n) || n < 0 || n >= elements.length) {
+        return Err(
+          err(
+            "runtime",
+            `Index ${n} out of range for array of length ${elements.length}`,
+            expr.index.position,
+          ),
+        );
+      }
+      return Ok(elements[n]!);
     }
   }
 }

@@ -31,6 +31,12 @@ export type Expr =
       readonly type: "array";
       readonly elements: readonly Expr[];
       readonly position: Position;
+    }
+  | {
+      readonly type: "index";
+      readonly array: Expr;
+      readonly index: Expr;
+      readonly position: Position;
     };
 
 export type Statement =
@@ -367,7 +373,25 @@ class Parser {
         Ok({ type: "deref", operand, position: t.position }),
       );
     }
-    return this.parsePrimary();
+    return this.parsePostfix();
+  }
+
+  private parsePostfix(): Result<Expr, EvalError> {
+    let base = this.parsePrimary();
+    while (base.ok) {
+      const t = this.peek();
+      if (t.kind === "lbracket") {
+        this.advance();
+        const index = this.parseExpr();
+        if (!index.ok) return index;
+        const close = this.expect("rbracket", "']'");
+        if (!close.ok) return close;
+        base = Ok({ type: "index", array: base.value, index: index.value, position: t.position });
+      } else {
+        break;
+      }
+    }
+    return base;
   }
 
   private parsePrimary(): Result<Expr, EvalError> {
