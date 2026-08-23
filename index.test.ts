@@ -49,4 +49,8 @@ describe("evaluate", () => {
   test('evaluate("return 1 + 2 * 3;") => 7', () => {
     expect(evaluate("return 1 + 2 * 3;")).toEqual({ ok: true, value: 7 });
   });
+
+  test('evaluate("let x = 1; let y = &x; return *y;") => 1', () => {
+    expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
+  });
 });

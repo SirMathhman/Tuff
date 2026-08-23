@@ -11,7 +11,7 @@ export interface Token {
 }
 
 const KEYWORDS = new Set(["let", "mut", "return"]);
-const OPERATORS = new Set(["=", "+", "-", "*", "/", "%"]);
+const OPERATORS = new Set(["=", "+", "-", "*", "/", "%", "&"]);
 
 export function lex(source: string): Token[] {
   const tokens: Token[] = [];

@@ -11,6 +11,8 @@ export type Expr =
       readonly operand: Expr;
       readonly position: Position;
     }
+  | { readonly type: "ref"; readonly operand: Expr; readonly position: Position }
+  | { readonly type: "deref"; readonly operand: Expr; readonly position: Position }
   | {
       readonly type: "binary";
       readonly op: string;
@@ -143,6 +145,16 @@ class Parser {
       this.advance();
       const operand = this.parseUnary();
       return { type: "unary", op: "-", operand, position: t.position };
+    }
+    if (t.kind === "operator" && t.value === "&") {
+      this.advance();
+      const operand = this.parseUnary();
+      return { type: "ref", operand, position: t.position };
+    }
+    if (t.kind === "operator" && t.value === "*") {
+      this.advance();
+      const operand = this.parseUnary();
+      return { type: "deref", operand, position: t.position };
     }
     return this.parsePrimary();
   }

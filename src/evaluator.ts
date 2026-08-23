@@ -1,8 +1,13 @@
 import { TuffError } from "./errors.ts";
+import type { Position } from "./errors.ts";
 import type { Expr, Program } from "./parser.ts";
 
+type Value =
+  | { readonly kind: "number"; readonly value: number }
+  | { readonly kind: "ref"; readonly target: string };
+
 interface Binding {
-  value: number;
+  value: Value;
   mutable: boolean;
 }
 
@@ -28,7 +33,7 @@ export function evaluateProgram(program: Program): number {
       }
       binding.value = evalExpr(stmt.value, env);
     } else {
-      return evalExpr(stmt.value, env);
+      return toNumber(evalExpr(stmt.value, env), stmt.position);
     }
   }
   throw new TuffError("runtime", "Program does not end with a return statement", {
@@ -37,10 +42,19 @@ export function evaluateProgram(program: Program): number {
   });
 }
 
-function evalExpr(expr: Expr, env: Map<string, Binding>): number {
+function toNumber(value: Value, position: Position): number {
+  if (value.kind === "number") return value.value;
+  throw new TuffError(
+    "runtime",
+    `Expected a number but found a reference to "${value.target}"`,
+    position,
+  );
+}
+
+function evalExpr(expr: Expr, env: Map<string, Binding>): Value {
   switch (expr.type) {
     case "number":
-      return expr.value;
+      return { kind: "number", value: expr.value };
     case "identifier": {
       const binding = env.get(expr.name);
       if (!binding) {
@@ -49,21 +63,52 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): number {
       return binding.value;
     }
     case "unary":
-      return -evalExpr(expr.operand, env);
+      return { kind: "number", value: -toNumber(evalExpr(expr.operand, env), expr.position) };
+    case "ref": {
+      if (expr.operand.type !== "identifier") {
+        throw new TuffError("syntax", "Can only take a reference to a variable", expr.position);
+      }
+      const target = env.get(expr.operand.name);
+      if (!target) {
+        throw new TuffError("runtime", `Undefined variable "${expr.operand.name}"`, expr.position);
+      }
+      return { kind: "ref", target: expr.operand.name };
+    }
+    case "deref": {
+      if (expr.operand.type !== "identifier") {
+        throw new TuffError("syntax", "Can only dereference a variable", expr.position);
+      }
+      const binding = env.get(expr.operand.name);
+      if (!binding) {
+        throw new TuffError("runtime", `Undefined variable "${expr.operand.name}"`, expr.position);
+      }
+      if (binding.value.kind !== "ref") {
+        throw new TuffError("runtime", `"${expr.operand.name}" is not a reference`, expr.position);
+      }
+      const target = env.get(binding.value.target);
+      if (!target) {
+        throw new TuffError(
+          "runtime",
+          `Reference target "${binding.value.target}" is undefined`,
+          expr.position,
+        );
+      }
+      return target.value;
+    }
     case "binary": {
-      const l = evalExpr(expr.left, env);
-      const r = evalExpr(expr.right, env);
+      const l = toNumber(evalExpr(expr.left, env), expr.position);
+      const r = toNumber(evalExpr(expr.right, env), expr.position);
       switch (expr.op) {
         case "+":
-          return l + r;
+          return { kind: "number", value: l + r };
         case "-":
-          return l - r;
+          return { kind: "number", value: l - r };
         case "*":
-          return l * r;
+          return { kind: "number", value: l * r };
         case "/":
-          return l / r;
+          return { kind: "number", value: l / r };
         case "%":
-          return l % r;
+          return { kind: "number", value: l % r };
         default:
           throw new TuffError("runtime", `Unknown operator "${expr.op}"`, expr.position);
       }
