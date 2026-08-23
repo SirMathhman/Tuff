@@ -11,6 +11,6 @@ pub fn run(input: &str) -> Result<eval::Value, crate::TuffError> {
     let ast = parser::parse(tokens)?;
     let mut type_env = typeck::TypeEnv::default();
     let typed = typeck::analyze(&ast, &mut type_env)?;
-    let mut env = eval::Env::default();
+    let mut env = eval::Env::with_names(type_env.names().clone());
     eval::eval(&typed, &mut env)
 }

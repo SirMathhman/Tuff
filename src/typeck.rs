@@ -36,14 +36,32 @@ impl Type {
     }
 }
 
-/// The type environment: a stack of scopes mapping names to (type, mutable).
-/// Used by the analysis pass to check types without executing.
+/// A unique identifier for a variable binding, assigned at `let` time.
+/// References and dereferences carry the target's ID, so they are robust to
+/// shadowing and scope exit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VarId(usize);
+
+impl VarId {
+    /// A new variable ID with the given index.
+    pub fn new(index: usize) -> Self {
+        VarId(index)
+    }
+}
+
+/// The type environment: a stack of scopes mapping variable IDs to
+/// (name, type, mutable). Used by the analysis pass to check types without
+/// executing.
 #[derive(Debug, Default)]
 pub struct TypeEnv {
     /// The scope stack, innermost scope last.
-    scopes: Vec<HashMap<String, (Type, bool)>>,
-    /// Reference variable names mapped to the variable they point at.
-    targets: HashMap<String, String>,
+    scopes: Vec<HashMap<VarId, (String, Type, bool)>>,
+    /// The next variable ID to assign.
+    next_id: usize,
+    /// Variable IDs mapped to their source names, for diagnostics.
+    names: HashMap<VarId, String>,
+    /// Reference variable IDs mapped to the variable they point at.
+    targets: HashMap<VarId, VarId>,
 }
 
 impl TypeEnv {
@@ -57,48 +75,71 @@ impl TypeEnv {
         self.scopes.pop();
     }
 
-    /// Look up a binding by name, walking the scope chain from innermost out.
-    fn get(&self, name: &str) -> Option<(Type, bool)> {
+    /// Look up a binding by variable ID, walking the scope chain from
+    /// innermost out.
+    fn get(&self, id: VarId) -> Option<(String, Type, bool)> {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).copied())
+            .find_map(|scope| scope.get(&id).map(|(n, t, m)| (n.clone(), *t, *m)))
     }
 
-    /// Bind a name in the innermost scope.
-    fn insert(&mut self, name: String, ty: Type, mutable: bool) {
+    /// Bind a new variable in the innermost scope, assigning it a fresh ID.
+    fn insert(&mut self, name: String, ty: Type, mutable: bool) -> VarId {
+        let id = VarId::new(self.next_id);
+        self.next_id += 1;
+        self.names.insert(id, name.clone());
         self.scopes
             .last_mut()
             .expect("a scope is always present")
-            .insert(name, (ty, mutable));
+            .insert(id, (name, ty, mutable));
+        id
+    }
+
+    /// The source name of a variable, for diagnostics.
+    fn name(&self, id: VarId) -> String {
+        self.names.get(&id).cloned().unwrap_or_default()
+    }
+
+    /// The variable name table, for seeding the evaluator's environment.
+    pub fn names(&self) -> &HashMap<VarId, String> {
+        &self.names
+    }
+
+    /// Resolve a source name to its variable ID and binding, walking the
+    /// scope chain from innermost out.
+    fn resolve(&self, name: &str, _span: Span) -> Option<(VarId, Type, bool)> {
+        for scope in self.scopes.iter().rev() {
+            for (id, (bound, ty, mutable)) in scope {
+                if bound == name {
+                    return Some((*id, *ty, *mutable));
+                }
+            }
+        }
+        None
     }
 
     /// Assign a type to an existing mutable binding, walking the scope chain.
-    fn set(&mut self, name: &str, ty: Type, span: Span) -> Result<(), crate::TuffError> {
+    fn set(&mut self, id: VarId, ty: Type, span: Span) -> Result<(), crate::TuffError> {
+        let name = self.name(id);
         for scope in self.scopes.iter_mut().rev() {
-            if let Some((current, mutable)) = scope.get_mut(name) {
+            if let Some((_, current, mutable)) = scope.get_mut(&id) {
                 if !*mutable {
-                    return Err(crate::TuffError::ImmutableAssignment {
-                        span,
-                        name: name.to_string(),
-                    });
+                    return Err(crate::TuffError::ImmutableAssignment { span, name });
                 }
                 if !current.compatible(ty) {
                     return Err(crate::TuffError::TypeMismatch {
                         span,
                         found: ty.name(),
                         expected: current.name(),
-                        name: name.to_string(),
+                        name,
                     });
                 }
                 *current = ty;
                 return Ok(());
             }
         }
-        Err(crate::TuffError::UndefinedVariable {
-            span,
-            name: name.to_string(),
-        })
+        Err(crate::TuffError::UndefinedVariable { span, name })
     }
 }
 
@@ -119,11 +160,11 @@ pub enum TypedExpr {
     /// An array index; the base is known to be an array and the index an int.
     Index(Box<TypedExpr>, Box<TypedExpr>, Span),
     /// A variable reference with a known type.
-    Ident(String, Type, Span),
+    Ident(VarId, Type, Span),
     /// A reference to a variable.
-    Ref(String, bool, Span),
+    Ref(VarId, bool, Span),
     /// A dereference of a reference variable, with the resolved target type.
-    Deref(String, Type, Span),
+    Deref(VarId, Type, Span),
     /// A conditional; both branches share a known type.
     If(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>, Type, Span),
     /// A block of statements with a known value type.
@@ -134,7 +175,7 @@ pub enum TypedExpr {
 #[derive(Debug)]
 pub enum TypedStmt {
     /// A `let` binding with a known type.
-    Let(String, bool, Box<TypedExpr>, Type, Span),
+    Let(VarId, bool, Box<TypedExpr>, Type, Span),
     /// An assignment to a known-valid target.
     Assign(Box<TypedExpr>, Box<TypedExpr>, Span),
     /// An expression statement.
@@ -157,8 +198,8 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
             Ok(TypedExpr::Array(items, *span))
         }
         Expr::Index(base, index, span) => analyze_index(base, index, env, *span),
-        Expr::Ident(name, span) => match env.get(name) {
-            Some((ty, _)) => Ok(TypedExpr::Ident(name.clone(), ty, *span)),
+        Expr::Ident(name, span) => match env.resolve(name, *span) {
+            Some((id, ty, _)) => Ok(TypedExpr::Ident(id, ty, *span)),
             None => Err(crate::TuffError::UndefinedVariable {
                 span: *span,
                 name: name.clone(),
@@ -232,8 +273,8 @@ fn analyze_ref(
     let Expr::Ident(name, _) = inner else {
         return Err(crate::TuffError::ExpectedVariableName { span, after: "&" });
     };
-    match env.get(name) {
-        Some((_, _)) => Ok(TypedExpr::Ref(name.clone(), mutable, span)),
+    match env.resolve(name, span) {
+        Some((id, _, _)) => Ok(TypedExpr::Ref(id, mutable, span)),
         None => Err(crate::TuffError::UndefinedVariable {
             span,
             name: name.clone(),
@@ -250,15 +291,23 @@ fn analyze_deref(
     let Expr::Ident(name, _) = inner else {
         return Err(crate::TuffError::ExpectedVariableName { span, after: "*" });
     };
-    match env.get(name) {
-        Some((Type::Ref, _)) | Some((Type::MutRef, _)) => {
-            let target = env.targets.get(name).cloned().unwrap_or_default();
-            match env.get(&target) {
-                Some((ty, _)) => Ok(TypedExpr::Deref(target, ty, span)),
-                None => Err(crate::TuffError::UndefinedVariable { span, name: target }),
+    match env.resolve(name, span) {
+        Some((id, Type::Ref, _)) | Some((id, Type::MutRef, _)) => {
+            let target = env.targets.get(&id).copied().ok_or_else(|| {
+                crate::TuffError::UndefinedVariable {
+                    span,
+                    name: env.name(id),
+                }
+            })?;
+            match env.get(target) {
+                Some((_, ty, _)) => Ok(TypedExpr::Deref(target, ty, span)),
+                None => Err(crate::TuffError::UndefinedVariable {
+                    span,
+                    name: env.name(target),
+                }),
             }
         }
-        Some((_, _)) => Err(crate::TuffError::NotAReference {
+        Some((_, _, _)) => Err(crate::TuffError::NotAReference {
             span,
             name: name.clone(),
         }),
@@ -381,19 +430,14 @@ fn analyze_let(
 ) -> Result<TypedStmt, crate::TuffError> {
     let value_t = analyze(value, env)?;
     let ty = value_t.ty();
+    let id = env.insert(name.to_string(), ty, mutable);
     if let Expr::Ref(inner, _, _) = value
         && let Expr::Ident(target, _) = inner.as_ref()
+        && let Some((target_id, _, _)) = env.resolve(target, span)
     {
-        env.targets.insert(name.to_string(), target.clone());
+        env.targets.insert(id, target_id);
     }
-    env.insert(name.to_string(), ty, mutable);
-    Ok(TypedStmt::Let(
-        name.to_string(),
-        mutable,
-        Box::new(value_t),
-        ty,
-        span,
-    ))
+    Ok(TypedStmt::Let(id, mutable, Box::new(value_t), ty, span))
 }
 
 /// Analyze an assignment, checking the target is a valid, mutable, type-
@@ -406,7 +450,15 @@ fn analyze_assign(
 ) -> Result<TypedStmt, crate::TuffError> {
     let ty = analyze(value, env)?.ty();
     match target {
-        Expr::Ident(name, _) => env.set(name, ty, span)?,
+        Expr::Ident(name, _) => {
+            let (id, _, _) =
+                env.resolve(name, span)
+                    .ok_or_else(|| crate::TuffError::UndefinedVariable {
+                        span,
+                        name: name.clone(),
+                    })?;
+            env.set(id, ty, span)?;
+        }
         Expr::Deref(inner, _) => check_deref_target(inner, ty, env, span)?,
         Expr::Index(base, index, _) => check_index_target(base, index, env, span)?,
         _ => {
@@ -431,26 +483,36 @@ fn check_deref_target(
     let Expr::Ident(name, _) = inner else {
         return Err(crate::TuffError::ExpectedVariableName { span, after: "*" });
     };
-    match env.get(name) {
-        Some((Type::Ref, _)) => Err(crate::TuffError::CannotAssignThroughSharedReference { span }),
-        Some((Type::MutRef, _)) => {
-            let target = env.targets.get(name).cloned().unwrap_or_default();
-            match env.get(&target) {
-                Some((t, _)) => {
+    match env.resolve(name, span) {
+        Some((_, Type::Ref, _)) => {
+            Err(crate::TuffError::CannotAssignThroughSharedReference { span })
+        }
+        Some((id, Type::MutRef, _)) => {
+            let target = env.targets.get(&id).copied().ok_or_else(|| {
+                crate::TuffError::UndefinedVariable {
+                    span,
+                    name: env.name(id),
+                }
+            })?;
+            match env.get(target) {
+                Some((target_name, t, _)) => {
                     if !t.compatible(ty) {
                         return Err(crate::TuffError::TypeMismatch {
                             span,
                             found: ty.name(),
                             expected: t.name(),
-                            name: target,
+                            name: target_name,
                         });
                     }
                     Ok(())
                 }
-                None => Err(crate::TuffError::UndefinedVariable { span, name: target }),
+                None => Err(crate::TuffError::UndefinedVariable {
+                    span,
+                    name: env.name(target),
+                }),
             }
         }
-        Some((_, _)) => Err(crate::TuffError::NotAReference {
+        Some((_, _, _)) => Err(crate::TuffError::NotAReference {
             span,
             name: name.clone(),
         }),
@@ -476,13 +538,13 @@ fn check_index_target(
     if i.ty() != Type::Int {
         return Err(crate::TuffError::ExpectedIntegerIndex { span });
     }
-    match env.get(name) {
-        Some((Type::Array, true)) => Ok(()),
-        Some((Type::Array, false)) => Err(crate::TuffError::ImmutableAssignment {
+    match env.resolve(name, span) {
+        Some((_, Type::Array, true)) => Ok(()),
+        Some((_, Type::Array, false)) => Err(crate::TuffError::ImmutableAssignment {
             span,
             name: name.clone(),
         }),
-        Some((_, _)) => Err(crate::TuffError::NotAnArray { span }),
+        Some((_, _, _)) => Err(crate::TuffError::NotAnArray { span }),
         None => Err(crate::TuffError::UndefinedVariable {
             span,
             name: name.clone(),

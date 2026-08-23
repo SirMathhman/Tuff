@@ -150,7 +150,7 @@ mod tests {
     fn reference_value_is_not_an_integer() {
         assert_eq!(
             evaluate("let x = 1; let y = &x; y"),
-            Ok(eval::Value::Ref("x".into()))
+            Ok(eval::Value::Ref(typeck::VarId::new(0), "x".into()))
         );
     }
 

@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::Span;
 use crate::ast::BinOp;
-use crate::typeck::{Type, TypedExpr, TypedStmt};
+use crate::typeck::{Type, TypedExpr, TypedStmt, VarId};
 
 /// A runtime value produced by evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,10 +12,10 @@ pub enum Value {
     Int(i64),
     /// A boolean.
     Bool(bool),
-    /// A shared reference to a variable.
-    Ref(String),
-    /// A mutable reference to a variable.
-    MutRef(String),
+    /// A shared reference: the referenced variable's ID and source name.
+    Ref(VarId, String),
+    /// A mutable reference: the referenced variable's ID and source name.
+    MutRef(VarId, String),
     /// An array of values.
     Array(Vec<Value>),
 }
@@ -26,8 +26,8 @@ impl Value {
         match self {
             Value::Int(_) => Type::Int,
             Value::Bool(_) => Type::Bool,
-            Value::Ref(_) => Type::Ref,
-            Value::MutRef(_) => Type::MutRef,
+            Value::Ref(_, _) => Type::Ref,
+            Value::MutRef(_, _) => Type::MutRef,
             Value::Array(_) => Type::Array,
         }
     }
@@ -38,8 +38,8 @@ impl fmt::Display for Value {
         match self {
             Value::Int(v) => write!(f, "{v}"),
             Value::Bool(v) => write!(f, "{v}"),
-            Value::Ref(name) => write!(f, "&{name}"),
-            Value::MutRef(name) => write!(f, "&mut {name}"),
+            Value::Ref(_, name) => write!(f, "&{name}"),
+            Value::MutRef(_, name) => write!(f, "&mut {name}"),
             Value::Array(items) => {
                 let inner: Vec<String> = items.iter().map(|v| v.to_string()).collect();
                 write!(f, "[{}]", inner.join(", "))
@@ -48,15 +48,26 @@ impl fmt::Display for Value {
     }
 }
 
-/// A binding environment: a stack of scopes, each mapping variable names
-/// to (value, mutable). Outer scopes are shared, never cloned.
+/// A binding environment: a stack of scopes, each mapping variable IDs to
+/// (value, mutable). Outer scopes are shared, never cloned.
 #[derive(Debug, Default)]
 pub struct Env {
     /// The scope stack, innermost scope last.
-    scopes: Vec<HashMap<String, (Value, bool)>>,
+    scopes: Vec<HashMap<VarId, (Value, bool)>>,
+    /// Variable IDs mapped to their source names, for diagnostics.
+    names: HashMap<VarId, String>,
 }
 
 impl Env {
+    /// A new environment seeded with the variable name table from the
+    /// analysis pass.
+    pub fn with_names(names: HashMap<VarId, String>) -> Self {
+        Env {
+            scopes: Vec::new(),
+            names,
+        }
+    }
+
     /// Push a new empty scope.
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
@@ -67,65 +78,65 @@ impl Env {
         self.scopes.pop();
     }
 
-    /// Look up a binding by name, walking the scope chain from innermost out.
-    fn get(&self, name: &str) -> Option<Value> {
+    /// Look up a binding by variable ID, walking the scope chain from
+    /// innermost out.
+    fn get(&self, id: VarId) -> Option<Value> {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).map(|(v, _)| v.clone()))
+            .find_map(|scope| scope.get(&id).map(|(v, _)| v.clone()))
     }
 
-    /// Bind a name in the innermost scope.
-    fn insert(&mut self, name: String, value: Value, mutable: bool) {
+    /// The source name of a variable, for diagnostics.
+    fn name(&self, id: VarId) -> String {
+        self.names.get(&id).cloned().unwrap_or_default()
+    }
+
+    /// Bind a variable in the innermost scope.
+    fn insert(&mut self, id: VarId, name: String, value: Value, mutable: bool) {
+        self.names.insert(id, name.clone());
         self.scopes
             .last_mut()
             .expect("a scope is always present")
-            .insert(name, (value, mutable));
+            .insert(id, (value, mutable));
     }
 
     /// Assign a value to an existing mutable binding, walking the scope chain.
-    fn set(&mut self, name: &str, value: Value, span: Span) -> Result<(), crate::TuffError> {
+    fn set(&mut self, id: VarId, value: Value, span: Span) -> Result<(), crate::TuffError> {
+        let name = self.name(id);
         for scope in self.scopes.iter_mut().rev() {
-            if let Some((v, mutable)) = scope.get_mut(name) {
+            if let Some((v, mutable)) = scope.get_mut(&id) {
                 if *mutable {
                     if !v.type_of().compatible(value.type_of()) {
                         return Err(crate::TuffError::TypeMismatch {
                             span,
                             found: value.type_of().name(),
                             expected: v.type_of().name(),
-                            name: name.to_string(),
+                            name,
                         });
                     }
                     *v = value;
                     return Ok(());
                 }
-                return Err(crate::TuffError::ImmutableAssignment {
-                    span,
-                    name: name.to_string(),
-                });
+                return Err(crate::TuffError::ImmutableAssignment { span, name });
             }
         }
-        Err(crate::TuffError::UndefinedVariable {
-            span,
-            name: name.to_string(),
-        })
+        Err(crate::TuffError::UndefinedVariable { span, name })
     }
 
     /// Assign a value to an element of an array binding, walking the scope chain.
     fn set_index(
         &mut self,
-        name: &str,
+        id: VarId,
         index: i64,
         value: Value,
         span: Span,
     ) -> Result<(), crate::TuffError> {
+        let name = self.name(id);
         for scope in self.scopes.iter_mut().rev() {
-            if let Some((v, mutable)) = scope.get_mut(name) {
+            if let Some((v, mutable)) = scope.get_mut(&id) {
                 if !*mutable {
-                    return Err(crate::TuffError::ImmutableAssignment {
-                        span,
-                        name: name.to_string(),
-                    });
+                    return Err(crate::TuffError::ImmutableAssignment { span, name });
                 }
                 let Value::Array(items) = v else {
                     return Err(crate::TuffError::NotAnArray { span });
@@ -149,10 +160,7 @@ impl Env {
                 return Ok(());
             }
         }
-        Err(crate::TuffError::UndefinedVariable {
-            span,
-            name: name.to_string(),
-        })
+        Err(crate::TuffError::UndefinedVariable { span, name })
     }
 }
 
@@ -187,25 +195,27 @@ fn eval_expr(expr: &TypedExpr, env: &mut Env) -> Result<Value, crate::TuffError>
             let index = eval_expr(index, env)?;
             eval_index(base, index, *span)
         }
-        TypedExpr::Ident(name, _, span) => {
-            env.get(name)
+        TypedExpr::Ident(id, _, span) => {
+            env.get(*id)
                 .ok_or_else(|| crate::TuffError::UndefinedVariable {
                     span: *span,
-                    name: name.clone(),
+                    name: env.name(*id),
                 })
         }
-        TypedExpr::Ref(name, mutable, _) => {
+        TypedExpr::Ref(id, mutable, _) => {
+            // The reference's value is the target's ID and name.
+            let name = env.name(*id);
             if *mutable {
-                Ok(Value::MutRef(name.clone()))
+                Ok(Value::MutRef(*id, name))
             } else {
-                Ok(Value::Ref(name.clone()))
+                Ok(Value::Ref(*id, name))
             }
         }
         TypedExpr::Deref(target, _, span) => {
-            env.get(target)
+            env.get(*target)
                 .ok_or_else(|| crate::TuffError::UndefinedVariable {
                     span: *span,
-                    name: target.clone(),
+                    name: env.name(*target),
                 })
         }
         TypedExpr::If(cond, then, otherwise, _, _) => {
@@ -293,28 +303,28 @@ fn exec_block(stmts: &[TypedStmt], env: &mut Env, span: Span) -> Result<Value, c
     let mut last_value = None;
     for stmt in stmts {
         match stmt {
-            TypedStmt::Let(name, mutable, value, _, _) => {
+            TypedStmt::Let(id, mutable, value, _, _) => {
                 let v = eval_expr(value, env)?;
-                env.insert(name.clone(), v, *mutable);
+                env.insert(*id, env.name(*id), v, *mutable);
             }
             TypedStmt::Assign(target, value, span) => {
                 let v = eval_expr(value, env)?;
                 match target.as_ref() {
-                    TypedExpr::Ident(name, _, _) => {
-                        env.set(name, v, *span)?;
+                    TypedExpr::Ident(id, _, _) => {
+                        env.set(*id, v, *span)?;
                     }
                     TypedExpr::Deref(target, _, _) => {
                         // Assign through the reference to the variable it points at.
-                        env.set(target, v, *span)?;
+                        env.set(*target, v, *span)?;
                     }
                     TypedExpr::Index(base, index, _) => {
-                        let TypedExpr::Ident(name, _, _) = base.as_ref() else {
+                        let TypedExpr::Ident(id, _, _) = base.as_ref() else {
                             unreachable!("the analysis pass guarantees an array base");
                         };
                         let Value::Int(i) = eval_expr(index, env)? else {
                             unreachable!("the analysis pass guarantees an integer index");
                         };
-                        env.set_index(name, i, v, *span)?;
+                        env.set_index(*id, i, v, *span)?;
                     }
                     _ => unreachable!("the analysis pass guarantees a valid assignment target"),
                 }
