@@ -314,7 +314,9 @@ describe("evaluate errors", () => {
       expect(r.error.message).toContain("boolean");
     }
   });
+});
 
+describe("evaluate errors: runtime", () => {
   test('evaluate("let array = [1, 2, 3]; return array[3];") => Err (index out of range)', () => {
     const r = evaluate("let array = [1, 2, 3]; return array[3];");
     expect(r.ok).toBe(false);
