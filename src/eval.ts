@@ -6,7 +6,8 @@ import type { Result } from "./result.ts";
 type Value =
   | { readonly kind: "number"; readonly value: number }
   | { readonly kind: "boolean"; readonly value: boolean }
-  | { readonly kind: "ref"; readonly target: string; readonly mutable: boolean };
+  | { readonly kind: "ref"; readonly target: string; readonly mutable: boolean }
+  | { readonly kind: "array"; readonly elements: readonly Value[] };
 
 interface Binding {
   value: Value;
@@ -106,6 +107,7 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
     case "identifier":
     case "unary":
     case "binary":
+    case "array":
       return Ok(null);
     case "ref":
       if (expr.operand.type !== "identifier") {
@@ -175,6 +177,15 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       if (expr.op === "<") return Ok({ kind: "boolean", value: false });
       if (l.value?.kind !== "number" || r.value?.kind !== "number") return Ok(null);
       return Ok({ kind: "number", value: 0 });
+    }
+    case "array": {
+      const elements: Value[] = [];
+      for (const el of expr.elements) {
+        const v = inferValue(el, env);
+        if (!v.ok) return v;
+        elements.push(v.value ?? { kind: "number", value: 0 });
+      }
+      return Ok({ kind: "array", elements });
     }
   }
 }
@@ -308,9 +319,12 @@ function assignTargetName(target: Expr, get: (name: string) => Binding | undefin
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
   if (value.kind === "number") return Ok(value.value);
   if (value.kind === "boolean") return Ok(value.value ? 1 : 0);
-  return Err(
-    err("semantic", `Expected a number but found a reference to "${value.target}"`, position),
-  );
+  if (value.kind === "ref") {
+    return Err(
+      err("semantic", `Expected a number but found a reference to "${value.target}"`, position),
+    );
+  }
+  return Err(err("semantic", "Expected a number but found an array", position));
 }
 
 function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalError> {
@@ -361,6 +375,15 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
         default:
           return Err(err("runtime", `Unknown operator "${expr.op}"`, expr.position));
       }
+    }
+    case "array": {
+      const elements: Value[] = [];
+      for (const el of expr.elements) {
+        const v = evalExpr(el, env);
+        if (!v.ok) return v;
+        elements.push(v.value);
+      }
+      return Ok({ kind: "array", elements });
     }
   }
 }

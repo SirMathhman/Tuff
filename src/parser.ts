@@ -26,6 +26,11 @@ export type Expr =
       readonly left: Expr;
       readonly right: Expr;
       readonly position: Position;
+    }
+  | {
+      readonly type: "array";
+      readonly elements: readonly Expr[];
+      readonly position: Position;
     };
 
 export type Statement =
@@ -385,9 +390,34 @@ class Parser {
         andThen(this.expect("rparen", "')'"), () => Ok(inner)),
       );
     }
+    if (t.kind === "lbracket") {
+      this.advance();
+      return this.parseArrayLiteral(t);
+    }
     return Err(
       err("syntax", `Expected an expression but found "${t.value || "end of input"}"`, t.position),
     );
+  }
+
+  private parseArrayLiteral(t: Token): Result<Expr, EvalError> {
+    const elements: Expr[] = [];
+    for (;;) {
+      if (this.peek().kind === "rbracket") {
+        this.advance();
+        return Ok({ type: "array", elements, position: t.position });
+      }
+      const el = this.parseExpr();
+      if (!el.ok) return el;
+      elements.push(el.value);
+      const sep = this.peek();
+      if (sep.kind === "rbracket") continue;
+      if (sep.kind !== "comma") {
+        return Err(
+          err("syntax", `Expected "," but found "${sep.value || "end of input"}"`, sep.position),
+        );
+      }
+      this.advance();
+    }
   }
 }
 

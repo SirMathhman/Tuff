@@ -11,6 +11,9 @@ export type TokenKind =
   | "rparen"
   | "lbrace"
   | "rbrace"
+  | "lbracket"
+  | "rbracket"
+  | "comma"
   | "semicolon"
   | "eof";
 
@@ -32,6 +35,9 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "<": "operator",
   "(": "lparen",
   ")": "rparen",
+  "[": "lbracket",
+  "]": "rbracket",
+  ",": "comma",
   ";": "semicolon",
   "{": "lbrace",
   "}": "rbrace",
