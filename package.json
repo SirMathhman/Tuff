@@ -7,8 +7,13 @@
     "lint": "bun run scripts/check-size-limits.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
-    "madge": "^8.0.0"
+    "eslint": "^10.9.0",
+    "globals": "^17.11.0",
+    "jiti": "^2.7.0",
+    "madge": "^8.0.0",
+    "typescript-eslint": "^8.67.0"
   },
   "peerDependencies": {
     "typescript": "^5"
