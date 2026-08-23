@@ -43,10 +43,14 @@ impl Parser {
         self.tokens.get(self.pos).cloned()
     }
 
-    /// Parse a statement: a `let` binding, an assignment, or an expression.
+    /// Parse a statement: a `let` binding, a `break`, an assignment, or an
+    /// expression.
     fn parse_stmt(&mut self) -> Result<Stmt, crate::TuffError> {
         if let Some(Token::Let(span)) = self.peek() {
             return self.parse_let_stmt(span);
+        }
+        if let Some(Token::Break(span)) = self.peek() {
+            return self.parse_break_stmt(span);
         }
         let target = self.parse_expr()?;
         if matches!(self.peek(), Some(Token::Eq(_))) {
@@ -185,6 +189,7 @@ impl Parser {
                 Ok(Expr::Deref(Box::new(inner), span))
             }
             Some(Token::If(span)) => self.parse_if(span),
+            Some(Token::Loop(span)) => self.parse_loop(span),
             Some(token) => Err(crate::TuffError::UnexpectedToken { span: token.span() }),
             None => Err(crate::TuffError::UnexpectedEndOfInput {
                 span: self
@@ -256,16 +261,7 @@ impl Parser {
     /// Parse a braced block of statements.
     fn parse_block(&mut self, open: Span) -> Result<Expr, crate::TuffError> {
         self.pos += 1;
-        let mut stmts = Vec::new();
-        while !matches!(self.peek(), Some(Token::RBrace(_))) {
-            if self.peek().is_none() {
-                return Err(crate::TuffError::Expected {
-                    span: open,
-                    expected: "}",
-                });
-            }
-            stmts.push(self.parse_stmt()?);
-        }
+        let stmts = self.parse_block_stmts(open)?;
         match self.peek() {
             Some(Token::RBrace(span)) => {
                 self.pos += 1;
@@ -276,6 +272,22 @@ impl Parser {
                 expected: "}",
             }),
         }
+    }
+
+    /// Parse the statements of a braced block, up to (not including) the
+    /// closing brace.
+    fn parse_block_stmts(&mut self, open: Span) -> Result<Vec<Stmt>, crate::TuffError> {
+        let mut stmts = Vec::new();
+        while !matches!(self.peek(), Some(Token::RBrace(_))) {
+            if self.peek().is_none() {
+                return Err(crate::TuffError::Expected {
+                    span: open,
+                    expected: "}",
+                });
+            }
+            stmts.push(self.parse_stmt()?);
+        }
+        Ok(stmts)
     }
 
     /// Parse an `if cond then else` expression.
@@ -300,6 +312,47 @@ impl Parser {
             Box::new(otherwise),
             if_span,
         ))
+    }
+
+    /// Parse a `loop { … }` expression.
+    fn parse_loop(&mut self, loop_span: Span) -> Result<Expr, crate::TuffError> {
+        self.pos += 1;
+        match self.peek() {
+            Some(Token::LBrace(_)) => self.pos += 1,
+            other => {
+                return Err(crate::TuffError::Expected {
+                    span: other.map(|t| t.span()).unwrap_or(loop_span),
+                    expected: "{ after loop",
+                });
+            }
+        }
+        let stmts = self.parse_block_stmts(loop_span)?;
+        match self.peek() {
+            Some(Token::RBrace(_)) => {
+                self.pos += 1;
+                Ok(Expr::Loop(stmts, loop_span))
+            }
+            _ => Err(crate::TuffError::Expected {
+                span: loop_span,
+                expected: "}",
+            }),
+        }
+    }
+
+    /// Parse a `break expr ;` statement.
+    fn parse_break_stmt(&mut self, break_span: Span) -> Result<Stmt, crate::TuffError> {
+        self.pos += 1;
+        let value = self.parse_expr()?;
+        match self.peek() {
+            Some(Token::Semi(_)) => self.pos += 1,
+            other => {
+                return Err(crate::TuffError::Expected {
+                    span: other.map(|t| t.span()).unwrap_or(break_span),
+                    expected: "; after break value",
+                });
+            }
+        }
+        Ok(Stmt::Break(Box::new(value), break_span))
     }
 
     /// Parse a `let [mut] name = expr ;` statement.
@@ -380,6 +433,8 @@ impl Token {
             | Token::Comma(span)
             | Token::If(span)
             | Token::Else(span)
+            | Token::Loop(span)
+            | Token::Break(span)
             | Token::Bool(_, span) => *span,
         }
     }

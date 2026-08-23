@@ -227,7 +227,22 @@ fn eval_expr(expr: &TypedExpr, env: &mut Env) -> Result<Value, crate::TuffError>
                 eval_expr(otherwise, env)
             }
         }
+        TypedExpr::Loop(stmts, _, span) => eval_loop(stmts, env, *span),
         TypedExpr::Block(stmts, _, span) => exec_block(stmts, env, *span),
+    }
+}
+
+/// Evaluate a `loop` expression by re-running its body until a `break`
+/// carries a value out. The analysis pass guarantees the body contains a
+/// `break`; a body that completes without taking one is re-run.
+fn eval_loop(stmts: &[TypedStmt], env: &mut Env, span: Span) -> Result<Value, crate::TuffError> {
+    loop {
+        match exec_block(stmts, env, span) {
+            // The body completed without breaking; run it again.
+            Ok(_) => {}
+            Err(crate::TuffError::BreakSignal { value }) => return Ok(value),
+            Err(err) => return Err(err),
+        }
     }
 }
 
@@ -295,9 +310,22 @@ fn eval_index(base: Value, index: Value, span: Span) -> Result<Value, crate::Tuf
 }
 
 /// Execute a block's typed statements in a new scope, returning the value of
-/// the last expression statement.
+/// the last expression statement. The scope is always popped, even when a
+/// `break` signal unwinds through the block.
 fn exec_block(stmts: &[TypedStmt], env: &mut Env, span: Span) -> Result<Value, crate::TuffError> {
     env.push_scope();
+    let result = exec_block_inner(stmts, env, span);
+    env.pop_scope();
+    result
+}
+
+/// Run a block's statements in the current scope, returning the value of the
+/// last expression statement or a `break` signal.
+fn exec_block_inner(
+    stmts: &[TypedStmt],
+    env: &mut Env,
+    span: Span,
+) -> Result<Value, crate::TuffError> {
     let mut last_value = None;
     for stmt in stmts {
         match stmt {
@@ -328,12 +356,17 @@ fn exec_block(stmts: &[TypedStmt], env: &mut Env, span: Span) -> Result<Value, c
                 }
                 last_value = Some(Value::Int(0));
             }
+            TypedStmt::Break(value, _) => {
+                // Propagate the break value to the enclosing loop.
+                return Err(crate::TuffError::BreakSignal {
+                    value: eval_expr(value, env)?,
+                });
+            }
             TypedStmt::Expr(e) => {
                 last_value = Some(eval_expr(e, env)?);
             }
         }
     }
-    env.pop_scope();
     // The block's value is the value of its last expression statement.
     last_value.ok_or(crate::TuffError::BlockHasNoValue { span })
 }

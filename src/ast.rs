@@ -48,6 +48,8 @@ pub enum Expr {
     Index(Box<Expr>, Box<Expr>, Span),
     /// An `if cond then else` expression.
     If(Box<Expr>, Box<Expr>, Box<Expr>, Span),
+    /// A `loop` expression; its value is carried by a `break`.
+    Loop(Vec<Stmt>, Span),
     /// A braced block of statements.
     Block(Vec<Stmt>, Span, Span),
 }
@@ -65,6 +67,7 @@ impl Expr {
             | Expr::Array(_, span)
             | Expr::Index(_, _, span)
             | Expr::If(_, _, _, span)
+            | Expr::Loop(_, span)
             | Expr::Block(_, span, _) => *span,
             Expr::Group(_, open, _) => *open,
         }
@@ -78,6 +81,8 @@ pub enum Stmt {
     Let(String, bool, Box<Expr>, Span),
     /// An assignment to a variable or dereference.
     Assign(Box<Expr>, Box<Expr>, Span),
+    /// A `break` carrying the loop's value.
+    Break(Box<Expr>, Span),
     /// An expression statement.
     Expr(Box<Expr>),
 }

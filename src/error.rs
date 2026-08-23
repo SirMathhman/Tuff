@@ -131,6 +131,32 @@ pub enum TuffError {
         /// Where in the source the failure occurred.
         span: Span,
     },
+    /// A `break` appeared outside a `loop`.
+    BreakOutsideLoop {
+        /// Where in the source the failure occurred.
+        span: Span,
+    },
+    /// A `loop` body contained no `break` and can never produce a value.
+    LoopHasNoBreak {
+        /// Where in the source the failure occurred.
+        span: Span,
+    },
+    /// A `break` value had a different type from the loop's type.
+    BreakTypeMismatch {
+        /// Where in the source the failure occurred.
+        span: Span,
+        /// The type of the break value.
+        found: &'static str,
+        /// The type of the loop, from its first break.
+        expected: &'static str,
+    },
+    /// An internal control-flow signal carrying a `break` value up to the
+    /// enclosing `loop`. Never reaches the user; the loop catches it.
+    #[doc(hidden)]
+    BreakSignal {
+        /// The value carried by the `break`.
+        value: crate::eval::Value,
+    },
 }
 
 impl fmt::Display for TuffError {
@@ -219,6 +245,21 @@ impl TuffError {
             TuffError::DivisionByZero { span } => {
                 format!("{}division by zero", span_header("eval", *span))
             }
+            TuffError::BreakOutsideLoop { span } => {
+                format!("{}break outside a loop", span_header("typeck", *span))
+            }
+            TuffError::LoopHasNoBreak { span } => {
+                format!("{}loop has no break", span_header("typeck", *span))
+            }
+            TuffError::BreakTypeMismatch {
+                span,
+                found,
+                expected,
+            } => format!(
+                "{}type mismatch: break value is {found}, loop is {expected}",
+                span_header("typeck", *span)
+            ),
+            TuffError::BreakSignal { .. } => "internal break signal".to_string(),
         }
     }
 }

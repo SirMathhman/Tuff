@@ -342,6 +342,14 @@ mod tests {
     }
 
     #[test]
+    fn loop_with_break_evaluates_to_break_value() {
+        assert_eq!(
+            evaluate("let x = loop { break 3; }; x"),
+            Ok(eval::Value::Int(3))
+        );
+    }
+
+    #[test]
     fn if_else_untaken_branch_side_effects_do_not_leak() {
         assert_eq!(
             evaluate("let mut signal = 0; let y = if (false) { signal = 1; 2 } else 3; signal"),

@@ -57,6 +57,10 @@ pub enum Token {
     If(Span),
     /// The `else` keyword.
     Else(Span),
+    /// The `loop` keyword.
+    Loop(Span),
+    /// The `break` keyword.
+    Break(Span),
     /// A boolean literal (`true` or `false`).
     Bool(bool, Span),
 }
@@ -116,6 +120,8 @@ pub fn lex(input: &str) -> Result<Vec<Token>, crate::TuffError> {
                 "mut" => Token::Mut(span),
                 "if" => Token::If(span),
                 "else" => Token::Else(span),
+                "loop" => Token::Loop(span),
+                "break" => Token::Break(span),
                 "true" => Token::Bool(true, span),
                 "false" => Token::Bool(false, span),
                 _ => Token::Ident(word, span),

@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use crate::Span;
 use crate::ast::{BinOp, Expr, Stmt};
 
+/// Statement analysis: `let`, assignment, `break`, and target checks.
+mod stmt;
+
 /// A static type, as determined by the analysis pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
@@ -65,6 +68,10 @@ pub struct TypeEnv {
     names: HashMap<VarId, String>,
     /// Reference variable IDs mapped to the variable they point at.
     targets: HashMap<VarId, VarId>,
+    /// One collector per enclosing `loop`, innermost last. Each holds the
+    /// (type, span) of the `break`s in that loop's body, used to infer the
+    /// loop's type and check break consistency.
+    break_collectors: Vec<Vec<(Type, Span)>>,
 }
 
 impl TypeEnv {
@@ -170,6 +177,8 @@ pub enum TypedExpr {
     Deref(VarId, Type, Span),
     /// A conditional; both branches share a known type.
     If(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>, Type, Span),
+    /// A `loop` expression; its value type is carried by its `break`s.
+    Loop(Vec<TypedStmt>, Type, Span),
     /// A block of statements with a known value type.
     Block(Vec<TypedStmt>, Type, Span),
 }
@@ -181,6 +190,8 @@ pub enum TypedStmt {
     Let(VarId, bool, Box<TypedExpr>, Type, Span),
     /// An assignment to a known-valid target.
     Assign(Box<TypedExpr>, Box<TypedExpr>, Span),
+    /// A `break` carrying a value of the enclosing loop's type.
+    Break(Box<TypedExpr>, Span),
     /// An expression statement.
     Expr(Box<TypedExpr>),
 }
@@ -205,6 +216,7 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
         Expr::Ref(inner, mutable, span) => analyze_ref(inner, *mutable, env, *span),
         Expr::Deref(inner, span) => analyze_deref(inner, env, *span),
         Expr::If(cond, then, otherwise, span) => analyze_if(cond, then, otherwise, env, *span),
+        Expr::Loop(body, span) => analyze_loop(body, env, *span),
         Expr::Block(stmts, span, _) => analyze_block(stmts, env, *span),
     }
 }
@@ -387,7 +399,7 @@ fn analyze_block(
     env.push_scope();
     let mut typed = Vec::with_capacity(stmts.len());
     for stmt in stmts {
-        typed.push(analyze_stmt(stmt, env)?);
+        typed.push(stmt::analyze_stmt(stmt, env)?);
     }
     env.pop_scope();
     let ty = typed
@@ -426,6 +438,7 @@ impl TypedExpr {
             }
             TypedExpr::Deref(_, ty, _) => ty.clone(),
             TypedExpr::If(_, _, _, ty, _) => ty.clone(),
+            TypedExpr::Loop(_, ty, _) => ty.clone(),
             TypedExpr::Block(_, ty, _) => ty.clone(),
         }
     }
@@ -439,159 +452,43 @@ impl TypedStmt {
             TypedStmt::Let(_, _, _, ty, _) => Some(ty.clone()),
             // An assignment statement evaluates to the unit integer `0`.
             TypedStmt::Assign(_, _, _) => Some(Type::Int),
+            // A `break` carries the loop's value, not the block's.
+            TypedStmt::Break(_, _) => None,
             TypedStmt::Expr(e) => Some(e.ty()),
         }
     }
 }
 
-/// Analyze a statement, producing a type-annotated statement.
-fn analyze_stmt(stmt: &Stmt, env: &mut TypeEnv) -> Result<TypedStmt, crate::TuffError> {
-    match stmt {
-        Stmt::Let(name, mutable, value, span) => analyze_let(name, *mutable, value, env, *span),
-        Stmt::Assign(target, value, span) => analyze_assign(target, value, env, *span),
-        Stmt::Expr(e) => Ok(TypedStmt::Expr(Box::new(analyze(e, env)?))),
-    }
-}
-
-/// Analyze a `let` binding, recording reference targets and inserting the
-/// binding into the environment.
-fn analyze_let(
-    name: &str,
-    mutable: bool,
-    value: &Expr,
+/// Analyze a `loop` expression: the body runs in a fresh scope and the loop's
+/// type is inferred from its `break`s.
+fn analyze_loop(
+    body: &[Stmt],
     env: &mut TypeEnv,
     span: Span,
-) -> Result<TypedStmt, crate::TuffError> {
-    let value_t = analyze(value, env)?;
-    let ty = value_t.ty();
-    let id = env.insert(name.to_string(), ty.clone(), mutable);
-    if let Expr::Ref(inner, _, _) = value
-        && let Expr::Ident(target, _) = inner.as_ref()
-        && let Some((target_id, _, _)) = env.resolve(target, span)
-    {
-        env.targets.insert(id, target_id);
+) -> Result<TypedExpr, crate::TuffError> {
+    env.break_collectors.push(Vec::new());
+    env.push_scope();
+    let mut typed = Vec::with_capacity(body.len());
+    for stmt in body {
+        typed.push(stmt::analyze_stmt(stmt, env)?);
     }
-    Ok(TypedStmt::Let(id, mutable, Box::new(value_t), ty, span))
-}
-
-/// Analyze an assignment, checking the target is a valid, mutable, type-
-/// compatible assignment target.
-fn analyze_assign(
-    target: &Expr,
-    value: &Expr,
-    env: &mut TypeEnv,
-    span: Span,
-) -> Result<TypedStmt, crate::TuffError> {
-    let ty = analyze(value, env)?.ty();
-    match target {
-        Expr::Ident(name, _) => {
-            let (id, _, _) =
-                env.resolve(name, span)
-                    .ok_or_else(|| crate::TuffError::UndefinedVariable {
-                        span,
-                        name: name.clone(),
-                    })?;
-            env.set(id, ty, span)?;
-        }
-        Expr::Deref(inner, _) => check_deref_target(inner, ty, env, span)?,
-        Expr::Index(base, index, _) => check_index_target(base, index, ty, env, span)?,
-        _ => {
-            return Err(crate::TuffError::InvalidAssignmentTarget { span });
+    env.pop_scope();
+    let breaks = env
+        .break_collectors
+        .pop()
+        .expect("a break collector was pushed");
+    if breaks.is_empty() {
+        return Err(crate::TuffError::LoopHasNoBreak { span });
+    }
+    let (ty, _) = &breaks[0];
+    for (break_ty, break_span) in &breaks[1..] {
+        if !ty.compatible(break_ty) {
+            return Err(crate::TuffError::BreakTypeMismatch {
+                span: *break_span,
+                found: break_ty.name(),
+                expected: ty.name(),
+            });
         }
     }
-    Ok(TypedStmt::Assign(
-        Box::new(analyze(target, env)?),
-        Box::new(analyze(value, env)?),
-        span,
-    ))
-}
-
-/// Check that a dereference assignment target is a mutable reference to a
-/// variable of a compatible type.
-fn check_deref_target(
-    inner: &Expr,
-    ty: Type,
-    env: &mut TypeEnv,
-    span: Span,
-) -> Result<(), crate::TuffError> {
-    let Expr::Ident(name, _) = inner else {
-        return Err(crate::TuffError::ExpectedVariableName { span, after: "*" });
-    };
-    match env.resolve(name, span) {
-        Some((_, Type::Ref, _)) => {
-            Err(crate::TuffError::CannotAssignThroughSharedReference { span })
-        }
-        Some((id, Type::MutRef, _)) => {
-            let target = env.targets.get(&id).copied().ok_or_else(|| {
-                crate::TuffError::UndefinedVariable {
-                    span,
-                    name: env.name(id),
-                }
-            })?;
-            match env.get(target) {
-                Some((target_name, t, _)) => {
-                    if !t.compatible(&ty) {
-                        return Err(crate::TuffError::TypeMismatch {
-                            span,
-                            found: ty.name(),
-                            expected: t.name(),
-                            name: target_name,
-                        });
-                    }
-                    Ok(())
-                }
-                None => Err(crate::TuffError::UndefinedVariable {
-                    span,
-                    name: env.name(target),
-                }),
-            }
-        }
-        Some((_, _, _)) => Err(crate::TuffError::NotAReference {
-            span,
-            name: name.clone(),
-        }),
-        None => Err(crate::TuffError::UndefinedVariable {
-            span,
-            name: name.clone(),
-        }),
-    }
-}
-
-/// Check that an index assignment target is a mutable array with an integer
-/// index and a value compatible with the element type.
-fn check_index_target(
-    base: &Expr,
-    index: &Expr,
-    ty: Type,
-    env: &mut TypeEnv,
-    span: Span,
-) -> Result<(), crate::TuffError> {
-    let Expr::Ident(name, _) = base else {
-        return Err(crate::TuffError::InvalidAssignmentTarget { span });
-    };
-    let i = analyze(index, env)?;
-    if i.ty() != Type::Int {
-        return Err(crate::TuffError::ExpectedIntegerIndex { span });
-    }
-    match env.resolve(name, span) {
-        Some((_, Type::Array(element), true)) => {
-            if !element.compatible(&ty) {
-                return Err(crate::TuffError::ElementTypeMismatch {
-                    span,
-                    found: ty.name(),
-                    expected: element.name(),
-                });
-            }
-            Ok(())
-        }
-        Some((_, Type::Array(_), false)) => Err(crate::TuffError::ImmutableAssignment {
-            span,
-            name: name.clone(),
-        }),
-        Some((_, _, _)) => Err(crate::TuffError::NotAnArray { span }),
-        None => Err(crate::TuffError::UndefinedVariable {
-            span,
-            name: name.clone(),
-        }),
-    }
+    Ok(TypedExpr::Loop(typed, ty.clone(), span))
 }
