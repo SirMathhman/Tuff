@@ -5,6 +5,7 @@ import type { Result } from "./result.ts";
 
 export type Expr =
   | { readonly type: "number"; readonly value: number; readonly position: Position }
+  | { readonly type: "boolean"; readonly value: boolean; readonly position: Position }
   | { readonly type: "identifier"; readonly name: string; readonly position: Position }
   | {
       readonly type: "unary";
@@ -247,6 +248,10 @@ class Parser {
     if (t.kind === "number") {
       this.advance();
       return Ok({ type: "number", value: Number(t.value), position: t.position });
+    }
+    if (t.kind === "keyword" && (t.value === "true" || t.value === "false")) {
+      this.advance();
+      return Ok({ type: "boolean", value: t.value === "true", position: t.position });
     }
     if (t.kind === "identifier") {
       this.advance();

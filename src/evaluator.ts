@@ -5,6 +5,7 @@ import type { Result } from "./result.ts";
 
 type Value =
   | { readonly kind: "number"; readonly value: number }
+  | { readonly kind: "boolean"; readonly value: boolean }
   | { readonly kind: "ref"; readonly target: string; readonly mutable: boolean };
 
 interface Binding {
@@ -100,6 +101,7 @@ function resolveAssignTarget(
 
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
   if (value.kind === "number") return Ok(value.value);
+  if (value.kind === "boolean") return Ok(value.value ? 1 : 0);
   return Err(
     err("runtime", `Expected a number but found a reference to "${value.target}"`, position),
   );
@@ -109,6 +111,8 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
   switch (expr.type) {
     case "number":
       return Ok({ kind: "number", value: expr.value });
+    case "boolean":
+      return Ok({ kind: "boolean", value: expr.value });
     case "identifier": {
       const binding = env.get(expr.name);
       if (!binding) {

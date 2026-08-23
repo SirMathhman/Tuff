@@ -11,7 +11,7 @@ export interface Token {
   readonly position: Position;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return"]);
+const KEYWORDS = new Set(["let", "mut", "return", "true", "false"]);
 const OPERATORS = new Set(["=", "+", "-", "*", "/", "%", "&"]);
 
 export function lex(source: string): Result<Token[], EvalError> {

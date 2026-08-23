@@ -60,4 +60,8 @@ describe("evaluate", () => {
       value: 1,
     });
   });
+
+  test('evaluate("let x = true; return x;") => 1', () => {
+    expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
+  });
 });
