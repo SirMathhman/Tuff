@@ -18,10 +18,129 @@ function err(kind: EvalError["kind"], message: string, position: Position): Eval
 }
 
 export function evaluateProgram(program: Program): Result<number, EvalError> {
+  const staticResult = checkMutability(program.statements, new Map());
+  if (!staticResult.ok) return staticResult;
   const env = new Map<string, Binding>();
   const result = evalStatements(program.statements, env);
   if (!result.ok) return result;
   return Ok(result.value ?? 0);
+}
+
+interface BindingInfo {
+  mutable: boolean;
+  isRef: boolean;
+  refTarget: string | null;
+  refMutable: boolean;
+}
+
+function checkMutability(
+  statements: readonly Statement[],
+  env: Map<string, BindingInfo>,
+): Result<null, EvalError> {
+  const shadowed = new Map<string, BindingInfo | null>();
+  for (const stmt of statements) {
+    if (stmt.type === "let") {
+      if (!shadowed.has(stmt.name)) {
+        shadowed.set(stmt.name, env.get(stmt.name) ?? null);
+      }
+      const isRef = stmt.value.type === "ref";
+      const refTarget =
+        isRef && stmt.value.operand.type === "identifier" ? stmt.value.operand.name : null;
+      env.set(stmt.name, {
+        mutable: stmt.mutable,
+        isRef,
+        refTarget,
+        refMutable: isRef && stmt.value.type === "ref" ? stmt.value.mutable : false,
+      });
+    } else if (stmt.type === "assign") {
+      const target = resolveTarget(stmt.target, (name) => env.get(name));
+      if (!target.ok) return target;
+      if (!target.value.binding.mutable) {
+        return Err(
+          err(
+            "mutability",
+            `Cannot reassign immutable binding "${target.value.name}"`,
+            stmt.position,
+          ),
+        );
+      }
+    } else if (stmt.type === "block") {
+      const inner = checkMutability(stmt.statements, env);
+      if (!inner.ok) return inner;
+    } else if (stmt.type === "if") {
+      const then = checkMutability(stmt.then, env);
+      if (!then.ok) return then;
+      if (stmt.else) {
+        const elseResult = checkMutability(stmt.else, env);
+        if (!elseResult.ok) return elseResult;
+      }
+    }
+  }
+  for (const [name, previous] of shadowed) {
+    if (previous === null) {
+      env.delete(name);
+    } else {
+      env.set(name, previous);
+    }
+  }
+  return Ok(null);
+}
+
+function bindingInfo(binding: Binding): BindingInfo {
+  const isRef = binding.value.kind === "ref";
+  return {
+    mutable: binding.mutable,
+    isRef,
+    refTarget: isRef && binding.value.kind === "ref" ? binding.value.target : null,
+    refMutable: isRef && binding.value.kind === "ref" ? binding.value.mutable : false,
+  };
+}
+
+function resolveTarget<T extends BindingInfo>(
+  target: Expr,
+  get: (name: string) => T | undefined,
+): Result<{ name: string; binding: T }, EvalError> {
+  if (target.type === "identifier") {
+    const binding = get(target.name);
+    if (!binding) {
+      return Err(err("runtime", `Undefined variable "${target.name}"`, target.position));
+    }
+    return Ok({ name: target.name, binding });
+  }
+  if (target.type === "deref") {
+    if (target.operand.type !== "identifier") {
+      return Err(
+        err("semantic", "Can only assign through a reference to a variable", target.position),
+      );
+    }
+    const refBinding = get(target.operand.name);
+    if (!refBinding) {
+      return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
+    }
+    if (!refBinding.isRef) {
+      return Err(err("semantic", `"${target.operand.name}" is not a reference`, target.position));
+    }
+    if (!refBinding.refMutable) {
+      return Err(
+        err(
+          "mutability",
+          `Cannot assign through immutable reference "${target.operand.name}"`,
+          target.position,
+        ),
+      );
+    }
+    if (!refBinding.refTarget) {
+      return Err(err("semantic", "Invalid reference target", target.position));
+    }
+    const targetBinding = get(refBinding.refTarget);
+    if (!targetBinding) {
+      return Err(
+        err("runtime", `Reference target "${refBinding.refTarget}" is undefined`, target.position),
+      );
+    }
+    return Ok({ name: refBinding.refTarget, binding: targetBinding });
+  }
+  return Err(err("semantic", "Invalid assignment target", target.position));
 }
 
 function evalStatements(
@@ -38,7 +157,10 @@ function evalStatements(
       }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
     } else if (stmt.type === "assign") {
-      const target = resolveAssignTarget(stmt.target, env);
+      const target = resolveTarget(stmt.target, (name) => {
+        const b = env.get(name);
+        return b ? bindingInfo(b) : undefined;
+      });
       if (!target.ok) return target;
       const { name, binding } = target.value;
       if (!binding.mutable) {
@@ -46,7 +168,11 @@ function evalStatements(
       }
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
-      binding.value = value.value;
+      const live = env.get(name);
+      if (!live) {
+        return Err(err("runtime", `Undefined variable "${name}"`, stmt.position));
+      }
+      live.value = value.value;
     } else if (stmt.type === "block") {
       const inner = evalStatements(stmt.statements, env);
       if (!inner.ok) return inner;
@@ -78,59 +204,6 @@ function evalStatements(
     }
   }
   return Ok(null);
-}
-
-interface NamedBinding {
-  name: string;
-  binding: Binding;
-}
-
-function resolveAssignTarget(
-  target: Expr,
-  env: Map<string, Binding>,
-): Result<NamedBinding, EvalError> {
-  if (target.type === "identifier") {
-    const binding = env.get(target.name);
-    if (!binding) {
-      return Err(err("runtime", `Undefined variable "${target.name}"`, target.position));
-    }
-    return Ok({ name: target.name, binding });
-  }
-  if (target.type === "deref") {
-    if (target.operand.type !== "identifier") {
-      return Err(
-        err("semantic", "Can only assign through a reference to a variable", target.position),
-      );
-    }
-    const refBinding = env.get(target.operand.name);
-    if (!refBinding) {
-      return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
-    }
-    if (refBinding.value.kind !== "ref") {
-      return Err(err("semantic", `"${target.operand.name}" is not a reference`, target.position));
-    }
-    if (!refBinding.value.mutable) {
-      return Err(
-        err(
-          "mutability",
-          `Cannot assign through immutable reference "${target.operand.name}"`,
-          target.position,
-        ),
-      );
-    }
-    const targetBinding = env.get(refBinding.value.target);
-    if (!targetBinding) {
-      return Err(
-        err(
-          "runtime",
-          `Reference target "${refBinding.value.target}" is undefined`,
-          target.position,
-        ),
-      );
-    }
-    return Ok({ name: refBinding.value.target, binding: targetBinding });
-  }
-  return Err(err("semantic", "Invalid assignment target", target.position));
 }
 
 function toNumber(value: Value, position: Position): Result<number, EvalError> {

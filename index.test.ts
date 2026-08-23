@@ -112,6 +112,15 @@ describe("evaluate control flow", () => {
 });
 
 describe("evaluate errors", () => {
+  test('evaluate("let x = 0; if (false) { let y = 1; y = 2; } return x;") => Err', () => {
+    const r = evaluate("let x = 0; if (false) { let y = 1; y = 2; } return x;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("mutability");
+      expect(r.error.message).toContain("y");
+    }
+  });
+
   test('evaluate("let x = &1; return 0;") => Err (invalid reference target)', () => {
     const r = evaluate("let x = &1; return 0;");
     expect(r.ok).toBe(false);
