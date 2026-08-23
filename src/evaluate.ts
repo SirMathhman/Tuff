@@ -1,3 +1,4 @@
+import { checkProgram } from "./check.ts";
 import { lex } from "./lexer.ts";
 import { parse } from "./parser.ts";
 import { evaluateProgram } from "./eval.ts";
@@ -12,7 +13,9 @@ function withSnippet(error: EvalError, source: string): EvalError {
 export function evaluate(input: string): Result<number, EvalError> {
   if (input.trim() === "") return Ok(0);
   const result = andThen(lex(input), (tokens) =>
-    andThen(parse(tokens), (program) => evaluateProgram(program)),
+    andThen(parse(tokens), (program) =>
+      andThen(checkProgram(program), () => evaluateProgram(program)),
+    ),
   );
   if (result.ok) return result;
   return Err(withSnippet(result.error, input));
