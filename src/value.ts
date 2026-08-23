@@ -7,7 +7,8 @@ export type Value =
   | { readonly kind: "number"; readonly value: number }
   | { readonly kind: "boolean"; readonly value: boolean }
   | { readonly kind: "ref"; readonly target: string; readonly mutable: boolean }
-  | { readonly kind: "array"; readonly elements: readonly Value[] };
+  | { readonly kind: "array"; readonly elements: readonly Value[] }
+  | { readonly kind: "unknown" };
 
 export interface Binding {
   value: Value;
