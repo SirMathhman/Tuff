@@ -135,14 +135,46 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
   }
 }
 
-function isZeroLiteral(expr: Expr): boolean {
-  return expr.type === "number" && expr.value === 0;
+function isKnownZero(expr: Expr, env: Map<string, Binding>): boolean {
+  return constFold(expr, env) === 0;
 }
 
-function isKnownZero(expr: Expr, env: Map<string, Binding>): boolean {
-  if (isZeroLiteral(expr)) return true;
-  if (expr.type === "identifier") return env.get(expr.name)?.literal === 0;
-  return false;
+function constFold(expr: Expr, env: Map<string, Binding>): number | null {
+  switch (expr.type) {
+    case "number":
+      return expr.value;
+    case "identifier":
+      return env.get(expr.name)?.literal ?? null;
+    case "unary": {
+      const v = constFold(expr.operand, env);
+      return v === null ? null : -v;
+    }
+    case "binary": {
+      const l = constFold(expr.left, env);
+      const r = constFold(expr.right, env);
+      if (l === null || r === null) return null;
+      switch (expr.op) {
+        case "+":
+          return l + r;
+        case "-":
+          return l - r;
+        case "*":
+          return l * r;
+        case "/":
+          return r === 0 ? null : Math.trunc(l / r);
+        case "%":
+          return r === 0 ? null : l % r;
+        default:
+          return null;
+      }
+    }
+    case "boolean":
+    case "ref":
+    case "deref":
+    case "array":
+    case "index":
+      return null;
+  }
 }
 
 function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null, EvalError> {
