@@ -1,6 +1,6 @@
 console.log("Hello via Bun!");
 
 export function evaluate(input: string): number {
-  // TODO: implement
-  return 0;
+  if (input.trim() === "") return 0;
+  return new Function(`return (function() { ${input} })();`)();
 }
