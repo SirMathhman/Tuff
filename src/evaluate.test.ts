@@ -360,4 +360,13 @@ describe("evaluate errors: runtime", () => {
       expect(r.error.message).toContain("zero");
     }
   });
+
+  test('evaluate("if (false) { let y = 0; let x = 10 / y; }") => Err (division by zero via binding)', () => {
+    const r = evaluate("if (false) { let y = 0; let x = 10 / y; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("zero");
+    }
+  });
 });

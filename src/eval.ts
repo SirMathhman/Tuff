@@ -12,6 +12,8 @@ type Value =
 interface Binding {
   value: Value;
   mutable: boolean;
+  /** Known numeric literal (static pass only); invalidated on reassignment. */
+  literal?: number;
 }
 
 function err(kind: EvalError["kind"], message: string, position: Position): EvalError {
@@ -39,10 +41,12 @@ function checkMutability(
       }
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
-      env.set(stmt.name, {
+      const binding: Binding = {
         value: value.value ?? { kind: "number", value: 0 },
         mutable: stmt.mutable,
-      });
+      };
+      if (stmt.value.type === "number") binding.literal = stmt.value.value;
+      env.set(stmt.name, binding);
     } else if (stmt.type === "assign") {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
@@ -55,6 +59,7 @@ function checkMutability(
           ),
         );
       }
+      delete target.value.binding.literal;
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
     } else if (stmt.type === "block") {
@@ -134,6 +139,12 @@ function isZeroLiteral(expr: Expr): boolean {
   return expr.type === "number" && expr.value === 0;
 }
 
+function isKnownZero(expr: Expr, env: Map<string, Binding>): boolean {
+  if (isZeroLiteral(expr)) return true;
+  if (expr.type === "identifier") return env.get(expr.name)?.literal === 0;
+  return false;
+}
+
 function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null, EvalError> {
   const validation = validateExpr(expr, env);
   if (!validation.ok) return validation;
@@ -183,7 +194,7 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       if (!r.ok) return r;
       if (expr.op === "<") return Ok({ kind: "boolean", value: false });
       if (l.value?.kind !== "number" || r.value?.kind !== "number") return Ok(null);
-      if ((expr.op === "/" || expr.op === "%") && isZeroLiteral(expr.right)) {
+      if ((expr.op === "/" || expr.op === "%") && isKnownZero(expr.right, env)) {
         return Err(err("runtime", "Division by zero", expr.right.position));
       }
       return Ok({ kind: "number", value: 0 });
