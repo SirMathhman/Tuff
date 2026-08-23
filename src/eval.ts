@@ -124,8 +124,13 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       return Ok({ kind: "number", value: 0 });
     case "boolean":
       return Ok({ kind: "boolean", value: false });
-    case "identifier":
-      return Ok(env.get(expr.name)?.value ?? null);
+    case "identifier": {
+      const binding = env.get(expr.name);
+      if (!binding) {
+        return Err(err("runtime", `Undefined variable "${expr.name}"`, expr.position));
+      }
+      return Ok(binding.value);
+    }
     case "unary":
       return Ok({ kind: "number", value: 0 });
     case "ref":

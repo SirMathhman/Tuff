@@ -126,6 +126,15 @@ describe("evaluate: references & control flow", () => {
     }
   });
 
+  test('evaluate("if (false) { let y = undefinedIdentifier; }") => Err', () => {
+    const r = evaluate("if (false) { let y = undefinedIdentifier; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("undefinedIdentifier");
+    }
+  });
+
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });
