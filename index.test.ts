@@ -92,6 +92,13 @@ describe("evaluate", () => {
       value: 0,
     });
   });
+
+  test('evaluate("let mut x = 0; if (false) x = 1; else x = 2; return x;") => 2', () => {
+    expect(evaluate("let mut x = 0; if (false) x = 1; else x = 2; return x;")).toEqual({
+      ok: true,
+      value: 2,
+    });
+  });
 });
 
 describe("evaluate errors", () => {

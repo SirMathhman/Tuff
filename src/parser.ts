@@ -144,12 +144,12 @@ class Parser {
     return andThen(this.expect("lparen", "'('"), () =>
       andThen(this.parseExpr(), (condition) =>
         andThen(this.expect("rparen", "')'"), () =>
-          andThen(this.parseBlock(this.peek()), (then) =>
+          andThen(this.parseIfBody(), (then) =>
             andThen(this.parseElse(), (elseBranch) =>
               Ok({
                 type: "if",
                 condition,
-                then: then.statements,
+                then,
                 else: elseBranch,
                 position: t.position,
               }),
@@ -160,10 +160,17 @@ class Parser {
     );
   }
 
+  private parseIfBody(): Result<readonly Statement[], EvalError> {
+    if (this.peek().kind === "lbrace") {
+      return map(this.parseBlock(this.peek()), (block) => block.statements);
+    }
+    return map(this.parseStatement(), (stmt) => [stmt]);
+  }
+
   private parseElse(): Result<readonly Statement[] | null, EvalError> {
     if (this.peek().kind === "keyword" && this.peek().value === "else") {
       this.advance();
-      return map(this.parseBlock(this.peek()), (block) => block.statements);
+      return this.parseIfBody();
     }
     return Ok(null);
   }
