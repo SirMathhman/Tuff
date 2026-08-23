@@ -398,7 +398,8 @@ class Parser {
     const t = this.peek();
     if (t.kind === "number") {
       this.advance();
-      return Ok({ type: "number", value: Number(t.value), position: t.position });
+      const digits = t.value.replace(/[UI](8|16|32|64|Size)$/, "");
+      return Ok({ type: "number", value: Number(digits), position: t.position });
     }
     if (t.kind === "keyword" && (t.value === "true" || t.value === "false")) {
       this.advance();

@@ -24,6 +24,18 @@ export interface Token {
 }
 
 const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else", "while"]);
+const INT_SUFFIXES = new Set([
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "USize",
+  "ISize",
+]);
 const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "=": "operator",
   "+": "operator",
@@ -79,6 +91,19 @@ export function lex(source: string): Result<Token[], EvalError> {
           position: start,
           snippet: "",
         });
+      }
+      const next = source.charAt(i);
+      if (next === "U" || next === "I") {
+        let j = i;
+        while (j < source.length && /[A-Za-z0-9]/.test(source.charAt(j))) {
+          j++;
+        }
+        const suffix = source.slice(i, j);
+        if (INT_SUFFIXES.has(suffix)) {
+          num += suffix;
+          i = j;
+          column += suffix.length;
+        }
       }
       tokens.push({ kind: "number", value: num, position: start });
       continue;
