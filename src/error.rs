@@ -135,156 +135,143 @@ pub enum TuffError {
 
 impl fmt::Display for TuffError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message())
+    }
+}
+
+impl TuffError {
+    /// The human-readable message for this error.
+    fn message(&self) -> String {
         match self {
             TuffError::UnexpectedChar { span, ch } => {
-                write!(
-                    f,
-                    "lex error at {}..{}: unexpected character '{ch}'",
-                    span.start, span.end
-                )
+                format!("{}unexpected character '{ch}'", span_header("lex", *span))
             }
             TuffError::NumberOutOfRange { span } => {
-                write!(
-                    f,
-                    "lex error at {}..{}: number out of range",
-                    span.start, span.end
-                )
+                format!("{}number out of range", span_header("lex", *span))
             }
             TuffError::UnexpectedEndOfInput { span } => {
-                write!(
-                    f,
-                    "parse error at {}..{}: unexpected end of input",
-                    span.start, span.end
-                )
+                format!("{}unexpected end of input", span_header("parse", *span))
             }
             TuffError::UnexpectedToken { span } => {
-                write!(
-                    f,
-                    "parse error at {}..{}: unexpected token",
-                    span.start, span.end
-                )
+                format!("{}unexpected token", span_header("parse", *span))
             }
             TuffError::Expected { span, expected } => {
-                write!(
-                    f,
-                    "parse error at {}..{}: expected '{expected}'",
-                    span.start, span.end
-                )
+                format!("{}expected '{expected}'", span_header("parse", *span))
             }
             TuffError::UndefinedVariable { span, name } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: undefined variable '{name}'",
-                    span.start, span.end
-                )
+                format!("{}undefined variable '{name}'", span_header("eval", *span))
             }
             TuffError::TypeMismatch {
                 span,
                 found,
                 expected,
                 name,
-            } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: type mismatch: cannot assign {found} to {expected} variable '{name}'",
-                    span.start, span.end
-                )
-            }
+            } => format!(
+                "{}type mismatch: cannot assign {found} to {expected} variable '{name}'",
+                span_header("eval", *span)
+            ),
             TuffError::ElementTypeMismatch {
                 span,
                 found,
                 expected,
-            } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: type mismatch: cannot assign {found} to {expected} element",
-                    span.start, span.end
-                )
-            }
-            TuffError::ImmutableAssignment { span, name } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: cannot assign to immutable variable '{name}'",
-                    span.start, span.end
-                )
-            }
-            TuffError::IndexOutOfBounds { span, index, len } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: index {index} out of bounds for array of length {len}",
-                    span.start, span.end
-                )
-            }
+            } => format!(
+                "{}type mismatch: cannot assign {found} to {expected} element",
+                span_header("eval", *span)
+            ),
+            TuffError::ImmutableAssignment { span, name } => format!(
+                "{}cannot assign to immutable variable '{name}'",
+                span_header("eval", *span)
+            ),
+            TuffError::IndexOutOfBounds { span, index, len } => format!(
+                "{}index {index} out of bounds for array of length {len}",
+                span_header("eval", *span)
+            ),
             TuffError::NotAnArray { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: expected an array",
-                    span.start, span.end
-                )
+                format!("{}expected an array", span_header("eval", *span))
             }
             TuffError::NotAReference { span, name } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: '{name}' is not a reference",
-                    span.start, span.end
-                )
+                format!("{}'{name}' is not a reference", span_header("eval", *span))
             }
             TuffError::ExpectedBooleanCondition { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: expected a boolean condition",
-                    span.start, span.end
-                )
+                format!("{}expected a boolean condition", span_header("eval", *span))
             }
             TuffError::ExpectedInteger { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: expected an integer",
-                    span.start, span.end
-                )
+                format!("{}expected an integer", span_header("eval", *span))
             }
             TuffError::ExpectedIntegerIndex { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: expected an integer index",
-                    span.start, span.end
-                )
+                format!("{}expected an integer index", span_header("eval", *span))
             }
-            TuffError::ExpectedVariableName { span, after } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: expected a variable name after '{after}'",
-                    span.start, span.end
-                )
-            }
-            TuffError::CannotAssignThroughSharedReference { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: cannot assign through a shared reference",
-                    span.start, span.end
-                )
-            }
-            TuffError::InvalidAssignmentTarget { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: expected a variable name or dereference as assignment target",
-                    span.start, span.end
-                )
-            }
+            TuffError::ExpectedVariableName { span, after } => format!(
+                "{}expected a variable name after '{after}'",
+                span_header("eval", *span)
+            ),
+            TuffError::CannotAssignThroughSharedReference { span } => format!(
+                "{}cannot assign through a shared reference",
+                span_header("eval", *span)
+            ),
+            TuffError::InvalidAssignmentTarget { span } => format!(
+                "{}expected a variable name or dereference as assignment target",
+                span_header("eval", *span)
+            ),
             TuffError::BlockHasNoValue { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: block has no value",
-                    span.start, span.end
-                )
+                format!("{}block has no value", span_header("eval", *span))
             }
             TuffError::DivisionByZero { span } => {
-                write!(
-                    f,
-                    "eval error at {}..{}: division by zero",
-                    span.start, span.end
-                )
+                format!("{}division by zero", span_header("eval", *span))
             }
         }
+    }
+}
+
+/// The shared prefix of an error message: the pipeline stage and source span.
+fn span_header(stage: &str, span: Span) -> String {
+    format!("{stage} error at {}..{}: ", span.start, span.end)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn span() -> Span {
+        Span { start: 0, end: 1 }
+    }
+
+    #[test]
+    fn displays_unexpected_character() {
+        let err = TuffError::UnexpectedChar {
+            span: span(),
+            ch: '@',
+        };
+        assert_eq!(
+            err.to_string(),
+            "lex error at 0..1: unexpected character '@'"
+        );
+    }
+
+    #[test]
+    fn displays_expected_token() {
+        let err = TuffError::Expected {
+            span: span(),
+            expected: "]",
+        };
+        assert_eq!(err.to_string(), "parse error at 0..1: expected ']'");
+    }
+
+    #[test]
+    fn displays_undefined_variable() {
+        let err = TuffError::UndefinedVariable {
+            span: span(),
+            name: "x".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "eval error at 0..1: undefined variable 'x'"
+        );
+    }
+
+    #[test]
+    fn displays_division_by_zero() {
+        let err = TuffError::DivisionByZero { span: span() };
+        assert_eq!(err.to_string(), "eval error at 0..1: division by zero");
     }
 }
