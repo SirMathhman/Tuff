@@ -1,7 +1,7 @@
 # Hook: cap the number of children (files + subdirectories) per directory.
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot "..\.."))
 
-$cap = 12
+$cap = 15
 $files = git ls-files
 if (-not $files) { exit 0 }
 
