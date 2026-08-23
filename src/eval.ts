@@ -63,8 +63,11 @@ function evalStatements(
         if (!inner.ok) return inner;
         if (inner.value !== null) return inner;
       }
-    } else {
+    } else if (stmt.type === "return") {
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
+    } else {
+      const unhandled: never = stmt;
+      return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
     }
   }
   for (const [name, previous] of shadowed) {
