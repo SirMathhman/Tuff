@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evaluate } from "./index.ts";
-import type { EvalError } from "./src/errors.ts";
+import { evaluate } from "./evaluate.ts";
 
 describe("evaluate: bindings & expressions", () => {
   test('evaluate("") => 0', () => {
