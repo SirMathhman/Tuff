@@ -438,4 +438,12 @@ mod tests {
             Ok(eval::Value::Int(1))
         );
     }
+
+    #[test]
+    fn assignment_in_else_branch_is_visible_outside() {
+        assert_eq!(
+            evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } x"),
+            Ok(eval::Value::Int(2))
+        );
+    }
 }
