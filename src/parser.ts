@@ -205,12 +205,21 @@ class Parser {
   private parseAssign(t: Token): Result<Statement, EvalError> {
     this.advance();
     const target: Expr = { type: "identifier", name: t.value, position: t.position };
-    return andThen(this.expect("operator", "'='"), () =>
-      andThen(this.parseExpr(), (value) =>
-        andThen(this.expect("semicolon", "';'"), () =>
-          Ok({ type: "assign", target, value, position: t.position }),
-        ),
-      ),
+    const opTok = this.peek();
+    if (opTok.kind !== "operator" || (opTok.value !== "=" && opTok.value !== "+=")) {
+      return Err(
+        err("syntax", `Expected "=" but found "${opTok.value || "end of input"}"`, opTok.position),
+      );
+    }
+    this.advance();
+    const isCompound = opTok.value === "+=";
+    return andThen(this.parseExpr(), (rhs) =>
+      andThen(this.expect("semicolon", "';'"), () => {
+        const value: Expr = isCompound
+          ? { type: "binary", op: "+", left: target, right: rhs, position: t.position }
+          : rhs;
+        return Ok({ type: "assign", target, value, position: t.position });
+      }),
     );
   }
 

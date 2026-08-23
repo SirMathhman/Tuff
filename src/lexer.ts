@@ -93,6 +93,13 @@ export function lex(source: string): Result<Token[], EvalError> {
       continue;
     }
 
+    if (ch === "+" && source.charAt(i + 1) === "=") {
+      tokens.push({ kind: "operator", value: "+=", position: start });
+      i += 2;
+      column += 2;
+      continue;
+    }
+
     const single = SINGLE_CHAR_TOKENS[ch];
     if (single !== undefined) {
       tokens.push({ kind: single, value: ch, position: start });

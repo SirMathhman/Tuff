@@ -19,6 +19,10 @@ describe("evaluate", () => {
     expect(evaluate("let mut x = 0; x = 1; return x;")).toEqual({ ok: true, value: 1 });
   });
 
+  test('evaluate("let mut x = 1; x += 2; return x;") => 3', () => {
+    expect(evaluate("let mut x = 1; x += 2; return x;")).toEqual({ ok: true, value: 3 });
+  });
+
   test('evaluate("let x = 0; x = 1; return x;") => Err', () => {
     const r = evaluate("let x = 0; x = 1; return x;");
     expect(r.ok).toBe(false);

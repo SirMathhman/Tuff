@@ -12,12 +12,12 @@ $parents = $files | ForEach-Object {
 }
 
 $violations = $parents |
-    Group-Object |
-    Where-Object { $_.Count -gt $cap } |
-    ForEach-Object {
-        $dir = if ($_.Name) { $_.Name } else { "(repo root)" }
-        "$dir has $($_.Count) children (cap: $cap)"
-    }
+Group-Object |
+Where-Object { $_.Count -gt $cap } |
+ForEach-Object {
+    $dir = if ($_.Name) { $_.Name } else { "(repo root)" }
+    "$dir has $($_.Count) children (cap: $cap)"
+}
 
 if ($violations) {
     $violations | ForEach-Object { Write-Host $_ }
