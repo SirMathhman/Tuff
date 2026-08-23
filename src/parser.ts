@@ -220,15 +220,21 @@ class Parser {
       this.advance();
       mutable = true;
     }
-    return andThen(this.expect("identifier", "a variable name"), (nameTok) =>
-      andThen(this.expect("operator", "'='"), () =>
-        andThen(this.parseExpr(), (value) =>
-          andThen(this.expect("semicolon", "';'"), () =>
-            Ok({ type: "let", mutable, name: nameTok.value, value, position: t.position }),
+    return andThen(this.expect("identifier", "a variable name"), (nameTok) => {
+      const afterName =
+        this.peek().kind === "colon"
+          ? andThen(Ok(this.advance()), () => this.expect("identifier", "a type name"))
+          : Ok(this.peek());
+      return andThen(afterName, () =>
+        andThen(this.expect("operator", "'='"), () =>
+          andThen(this.parseExpr(), (value) =>
+            andThen(this.expect("semicolon", "';'"), () =>
+              Ok({ type: "let", mutable, name: nameTok.value, value, position: t.position }),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   private parseReturn(t: Token): Result<Statement, EvalError> {

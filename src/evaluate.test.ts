@@ -93,6 +93,10 @@ describe("evaluate: integer suffixes", () => {
       expect(r.error.message).toContain("U8");
     }
   });
+
+  test('evaluate("let x : U8 = 100U8; return x;") => 100', () => {
+    expect(evaluate("let x : U8 = 100U8; return x;")).toEqual({ ok: true, value: 100 });
+  });
 });
 
 describe("evaluate: arrays", () => {

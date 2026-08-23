@@ -15,6 +15,7 @@ export type TokenKind =
   | "rbracket"
   | "comma"
   | "semicolon"
+  | "colon"
   | "eof";
 
 export interface Token {
@@ -51,6 +52,7 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "]": "rbracket",
   ",": "comma",
   ";": "semicolon",
+  ":": "colon",
   "{": "lbrace",
   "}": "rbrace",
 };
