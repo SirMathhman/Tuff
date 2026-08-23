@@ -308,6 +308,16 @@ mod tests {
     }
 
     #[test]
+    fn if_else_with_literal_division_by_zero_in_untaken_then_branch_is_an_error() {
+        assert_eq!(
+            evaluate("let x = if (false) { 1 / 0 } else { let y = 3; y }; x"),
+            Err(TuffError::DivisionByZero {
+                span: Span { start: 23, end: 24 }
+            })
+        );
+    }
+
+    #[test]
     fn if_else_untaken_branch_side_effects_do_not_leak() {
         assert_eq!(
             evaluate("let mut signal = 0; let y = if (false) { signal = 1; 2 } else 3; signal"),

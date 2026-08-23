@@ -179,6 +179,13 @@ fn analyze_bin(
     env: &mut TypeEnv,
     span: Span,
 ) -> Result<TypedExpr, crate::TuffError> {
+    // A literal zero divisor is a compile-time error; a runtime zero
+    // (e.g. through a variable) is still caught dynamically by eval.
+    if op == BinOp::Div
+        && let Expr::Num(0, _) = right
+    {
+        return Err(crate::TuffError::DivisionByZero { span });
+    }
     let l = analyze(left, env)?;
     let r = analyze(right, env)?;
     let ty = match op {
