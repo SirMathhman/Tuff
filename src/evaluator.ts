@@ -1,5 +1,5 @@
 import type { EvalError, Position } from "./errors.ts";
-import type { Expr, Program } from "./parser.ts";
+import type { Expr, Program, Statement } from "./parser.ts";
 import { Err, Ok, andThen } from "./result.ts";
 import type { Result } from "./result.ts";
 
@@ -19,7 +19,21 @@ function err(kind: EvalError["kind"], message: string, position: Position): Eval
 
 export function evaluateProgram(program: Program): Result<number, EvalError> {
   const env = new Map<string, Binding>();
-  for (const stmt of program.statements) {
+  const result = evalStatements(program.statements, env);
+  if (!result.ok) return result;
+  if (result.value === null) {
+    return Err(
+      err("runtime", "Program does not end with a return statement", { line: 1, column: 1 }),
+    );
+  }
+  return Ok(result.value);
+}
+
+function evalStatements(
+  statements: readonly Statement[],
+  env: Map<string, Binding>,
+): Result<number | null, EvalError> {
+  for (const stmt of statements) {
     if (stmt.type === "let") {
       if (env.has(stmt.name)) {
         return Err(err("semantic", `Duplicate binding "${stmt.name}"`, stmt.position));
@@ -37,13 +51,14 @@ export function evaluateProgram(program: Program): Result<number, EvalError> {
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
       binding.value = value.value;
+    } else if (stmt.type === "block") {
+      const inner = evalStatements(stmt.statements, env);
+      if (!inner.ok) return inner;
     } else {
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
     }
   }
-  return Err(
-    err("runtime", "Program does not end with a return statement", { line: 1, column: 1 }),
-  );
+  return Ok(null);
 }
 
 interface NamedBinding {

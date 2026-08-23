@@ -81,4 +81,8 @@ describe("evaluate", () => {
       expect(r.error.kind).toBe("semantic");
     }
   });
+
+  test('evaluate("let mut x = 0; { x = 1; } return x;") => 1', () => {
+    expect(evaluate("let mut x = 0; { x = 1; } return x;")).toEqual({ ok: true, value: 1 });
+  });
 });

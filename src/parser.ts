@@ -1,6 +1,6 @@
 import type { EvalError, Position } from "./errors.ts";
 import type { Token, TokenKind } from "./lexer.ts";
-import { Err, Ok, andThen } from "./result.ts";
+import { Err, Ok, andThen, map } from "./result.ts";
 import type { Result } from "./result.ts";
 
 export type Expr =
@@ -42,7 +42,12 @@ export type Statement =
       readonly value: Expr;
       readonly position: Position;
     }
-  | { readonly type: "return"; readonly value: Expr; readonly position: Position };
+  | { readonly type: "return"; readonly value: Expr; readonly position: Position }
+  | {
+      readonly type: "block";
+      readonly statements: readonly Statement[];
+      readonly position: Position;
+    };
 
 export interface Program {
   readonly statements: readonly Statement[];
@@ -103,7 +108,25 @@ class Parser {
     if (t.kind === "operator" && t.value === "*") {
       return this.parseDerefAssign(t);
     }
+    if (t.kind === "lbrace") {
+      return this.parseBlock(t);
+    }
     return Err(err("syntax", `Unexpected token "${t.value || "end of input"}"`, t.position));
+  }
+
+  private parseBlock(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    const statements: Statement[] = [];
+    while (this.peek().kind !== "rbrace" && this.peek().kind !== "eof") {
+      const stmt = this.parseStatement();
+      if (!stmt.ok) return stmt;
+      statements.push(stmt.value);
+    }
+    return map(this.expect("rbrace", "'}'"), () => ({
+      type: "block",
+      statements,
+      position: t.position,
+    }));
   }
 
   private parseLet(t: Token): Result<Statement, EvalError> {

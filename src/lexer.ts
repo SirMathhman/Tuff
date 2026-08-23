@@ -3,7 +3,16 @@ import { Err, Ok } from "./result.ts";
 import type { Result } from "./result.ts";
 
 export type TokenKind =
-  "number" | "identifier" | "keyword" | "operator" | "lparen" | "rparen" | "semicolon" | "eof";
+  | "number"
+  | "identifier"
+  | "keyword"
+  | "operator"
+  | "lparen"
+  | "rparen"
+  | "lbrace"
+  | "rbrace"
+  | "semicolon"
+  | "eof";
 
 export interface Token {
   readonly kind: TokenKind;
@@ -12,7 +21,20 @@ export interface Token {
 }
 
 const KEYWORDS = new Set(["let", "mut", "return", "true", "false"]);
-const OPERATORS = new Set(["=", "+", "-", "*", "/", "%", "&"]);
+const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
+  "=": "operator",
+  "+": "operator",
+  "-": "operator",
+  "*": "operator",
+  "/": "operator",
+  "%": "operator",
+  "&": "operator",
+  "(": "lparen",
+  ")": "rparen",
+  ";": "semicolon",
+  "{": "lbrace",
+  "}": "rbrace",
+};
 
 export function lex(source: string): Result<Token[], EvalError> {
   const tokens: Token[] = [];
@@ -70,27 +92,9 @@ export function lex(source: string): Result<Token[], EvalError> {
       continue;
     }
 
-    if (OPERATORS.has(ch)) {
-      tokens.push({ kind: "operator", value: ch, position: start });
-      i++;
-      column++;
-      continue;
-    }
-
-    if (ch === "(") {
-      tokens.push({ kind: "lparen", value: ch, position: start });
-      i++;
-      column++;
-      continue;
-    }
-    if (ch === ")") {
-      tokens.push({ kind: "rparen", value: ch, position: start });
-      i++;
-      column++;
-      continue;
-    }
-    if (ch === ";") {
-      tokens.push({ kind: "semicolon", value: ch, position: start });
+    const single = SINGLE_CHAR_TOKENS[ch];
+    if (single !== undefined) {
+      tokens.push({ kind: single, value: ch, position: start });
       i++;
       column++;
       continue;
