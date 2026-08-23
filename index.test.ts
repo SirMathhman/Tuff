@@ -223,6 +223,13 @@ describe("evaluate control flow", () => {
       value: 5,
     });
   });
+
+  test('evaluate("let mut x = 0; while (x < 4) { x += 1; } return x;") => 4', () => {
+    expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } return x;")).toEqual({
+      ok: true,
+      value: 4,
+    });
+  });
 });
 
 describe("evaluate errors", () => {

@@ -54,6 +54,12 @@ export type Statement =
       readonly then: readonly Statement[];
       readonly else: readonly Statement[] | null;
       readonly position: Position;
+    }
+  | {
+      readonly type: "while";
+      readonly condition: Expr;
+      readonly body: readonly Statement[];
+      readonly position: Position;
     };
 
 export interface Program {
@@ -112,6 +118,9 @@ class Parser {
     if (t.kind === "keyword" && t.value === "if") {
       return this.parseIf(t);
     }
+    if (t.kind === "keyword" && t.value === "while") {
+      return this.parseWhile(t);
+    }
     if (t.kind === "identifier") {
       return this.parseAssign(t);
     }
@@ -154,6 +163,19 @@ class Parser {
                 position: t.position,
               }),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  private parseWhile(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    return andThen(this.expect("lparen", "'('"), () =>
+      andThen(this.parseExpr(), (condition) =>
+        andThen(this.expect("rparen", "')'"), () =>
+          andThen(this.parseIfBody(), (body) =>
+            Ok({ type: "while", condition, body, position: t.position }),
           ),
         ),
       ),

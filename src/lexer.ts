@@ -20,7 +20,7 @@ export interface Token {
   readonly position: Position;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else"]);
+const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else", "while"]);
 const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "=": "operator",
   "+": "operator",

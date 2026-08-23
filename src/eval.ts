@@ -72,6 +72,14 @@ function checkMutability(
     } else if (stmt.type === "return") {
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
+    } else if (stmt.type === "while") {
+      const cond = inferValue(stmt.condition, env);
+      if (!cond.ok) return cond;
+      if (cond.value && cond.value.kind !== "boolean") {
+        return Err(err("semantic", "while condition must be a boolean", stmt.position));
+      }
+      const body = checkMutability(stmt.body, env);
+      if (!body.ok) return body;
     } else {
       const unhandled: never = stmt;
       return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
@@ -269,6 +277,16 @@ function evalStatements(
       }
     } else if (stmt.type === "return") {
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
+    } else if (stmt.type === "while") {
+      // The static pass already checked the condition is a boolean.
+      for (;;) {
+        const cond = evalExpr(stmt.condition, env);
+        if (!cond.ok) return cond;
+        if (!(cond.value.kind === "boolean" && cond.value.value)) break;
+        const inner = evalStatements(stmt.body, env);
+        if (!inner.ok) return inner;
+        if (inner.value !== null) return inner;
+      }
     } else {
       const unhandled: never = stmt;
       return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
