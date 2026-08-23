@@ -120,10 +120,13 @@ function resolveRefChain(
   name: string,
   get: (name: string) => Binding | undefined,
 ): { name: string; binding: Binding } | null {
+  const visited = new Set<string>();
   let currentName = name;
   let current = get(currentName);
   while (current && current.value.kind === "ref") {
     currentName = current.value.target;
+    if (visited.has(currentName)) return null;
+    visited.add(currentName);
     const next = get(currentName);
     if (!next) return null;
     current = next;
@@ -269,13 +272,13 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       if (binding.value.kind !== "ref") {
         return Err(err("semantic", `"${expr.operand.name}" is not a reference`, expr.position));
       }
-      const target = env.get(binding.value.target);
-      if (!target) {
+      const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
+      if (!resolved) {
         return Err(
-          err("runtime", `Reference target "${binding.value.target}" is undefined`, expr.position),
+          err("runtime", `Reference target "${expr.operand.name}" is undefined`, expr.position),
         );
       }
-      return Ok(target.value);
+      return Ok(resolved.binding.value);
     }
     case "binary": {
       const l = evalExpr(expr.left, env);

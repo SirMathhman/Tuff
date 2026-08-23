@@ -74,6 +74,18 @@ describe("evaluate: references & control flow", () => {
     });
   });
 
+  test('evaluate("let x = 5; let a = &x; let b = &a; return *b;") => 5', () => {
+    expect(evaluate("let x = 5; let a = &x; let b = &a; return *b;")).toEqual({
+      ok: true,
+      value: 5,
+    });
+  });
+
+  test('evaluate("let mut x = &mut x; *x = 1;") => Err (ref cycle)', () => {
+    const r = evaluate("let mut x = &mut x; *x = 1;");
+    expect(r.ok).toBe(false);
+  });
+
   test('evaluate("if (false) { *y = 1; }") => Err (dead-code mutability)', () => {
     const r = evaluate("let x = 0; let y = &x; if (false) { *y = 1; }");
     expect(r.ok).toBe(false);
