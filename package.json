@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "lint": "bun run scripts/check-size-limits.ts"
+    "lint": "tsc --noEmit && eslint . --fix && bun run scripts/check-size-limits.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
