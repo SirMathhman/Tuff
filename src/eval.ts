@@ -247,9 +247,8 @@ function evalStatements(
       }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
     } else if (stmt.type === "assign") {
-      const target = resolveTarget(stmt.target, (name) => env.get(name));
-      if (!target.ok) return target;
-      const { name, binding } = target.value;
+      // The static pass already validated the target and its mutability.
+      const name = assignTargetName(stmt.target, (n) => env.get(n));
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
       const live = env.get(name);
@@ -259,12 +258,10 @@ function evalStatements(
       if (!inner.ok) return inner;
       if (inner.value !== null) return inner;
     } else if (stmt.type === "if") {
+      // The static pass already checked the condition is a boolean.
       const cond = evalExpr(stmt.condition, env);
       if (!cond.ok) return cond;
-      if (cond.value.kind !== "boolean") {
-        return Err(err("semantic", "if condition must be a boolean", stmt.position));
-      }
-      const branch = cond.value.value ? stmt.then : stmt.else;
+      const branch = cond.value.kind === "boolean" && cond.value.value ? stmt.then : stmt.else;
       if (branch) {
         const inner = evalStatements(branch, env);
         if (!inner.ok) return inner;
@@ -281,6 +278,15 @@ function evalStatements(
   return Ok(null);
 }
 
+function assignTargetName(target: Expr, get: (name: string) => Binding | undefined): string {
+  if (target.type === "identifier") return target.name;
+  if (target.type === "deref" && target.operand.type === "identifier") {
+    // The static pass guarantees a bound, mutable reference chain.
+    return resolveRefChain(target.operand.name, get)!.name;
+  }
+  return "";
+}
+
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
   if (value.kind === "number") return Ok(value.value);
   if (value.kind === "boolean") return Ok(value.value ? 1 : 0);
@@ -290,45 +296,26 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
 }
 
 function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalError> {
-  const validation = validateExpr(expr, env);
-  if (!validation.ok) return validation;
+  // Semantic checks (operand shape, binding existence, reference kinds) are
+  // performed by the static pass; this pass only computes values.
   switch (expr.type) {
     case "number":
       return Ok({ kind: "number", value: expr.value });
     case "boolean":
       return Ok({ kind: "boolean", value: expr.value });
-    case "identifier": {
-      const binding = env.get(expr.name);
-      if (!binding) {
-        return Err(err("runtime", `Undefined variable "${expr.name}"`, expr.position));
-      }
-      return Ok(binding.value);
-    }
+    case "identifier":
+      return Ok(env.get(expr.name)!.value);
     case "unary":
       return andThen(evalExpr(expr.operand, env), (v) =>
         andThen(toNumber(v, expr.position), (n) => Ok({ kind: "number", value: -n })),
       );
     case "ref": {
-      // Operand is an identifier (validated by validateExpr).
       const name = expr.operand.type === "identifier" ? expr.operand.name : "";
-      const target = env.get(name);
-      if (!target) {
-        return Err(err("runtime", `Undefined variable "${name}"`, expr.position));
-      }
       return Ok({ kind: "ref", target: name, mutable: expr.mutable });
     }
     case "deref": {
-      // Operand is an identifier and, if bound, a reference (validated by validateExpr).
       const name = expr.operand.type === "identifier" ? expr.operand.name : "";
-      const binding = env.get(name);
-      if (!binding) {
-        return Err(err("runtime", `Undefined variable "${name}"`, expr.position));
-      }
-      const resolved = resolveRefChain(name, (n) => env.get(n));
-      if (!resolved) {
-        return Err(err("runtime", `Reference target "${name}" is undefined`, expr.position));
-      }
-      return Ok(resolved.binding.value);
+      return Ok(resolveRefChain(name, (n) => env.get(n))!.binding.value);
     }
     case "binary": {
       const l = evalExpr(expr.left, env);
