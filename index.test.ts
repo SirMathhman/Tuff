@@ -350,4 +350,13 @@ describe("evaluate errors", () => {
       expect(r.error.message).toContain("zero");
     }
   });
+
+  test('evaluate("if (false) { let x = 10 / 0; }") => Err (division by zero in dead code)', () => {
+    const r = evaluate("if (false) { let x = 10 / 0; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("zero");
+    }
+  });
 });

@@ -130,6 +130,10 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
   }
 }
 
+function isZeroLiteral(expr: Expr): boolean {
+  return expr.type === "number" && expr.value === 0;
+}
+
 function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null, EvalError> {
   const validation = validateExpr(expr, env);
   if (!validation.ok) return validation;
@@ -179,6 +183,9 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       if (!r.ok) return r;
       if (expr.op === "<") return Ok({ kind: "boolean", value: false });
       if (l.value?.kind !== "number" || r.value?.kind !== "number") return Ok(null);
+      if ((expr.op === "/" || expr.op === "%") && isZeroLiteral(expr.right)) {
+        return Err(err("runtime", "Division by zero", expr.right.position));
+      }
       return Ok({ kind: "number", value: 0 });
     }
     case "array": {
