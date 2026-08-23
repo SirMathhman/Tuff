@@ -65,6 +65,15 @@ describe("evaluate: bindings & expressions", () => {
     expect(evaluate("return 100U8;")).toEqual({ ok: true, value: 100 });
   });
 
+  test('evaluate("return 100u8;") => Err (lowercase suffix)', () => {
+    const r = evaluate("return 100u8;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("syntax");
+      expect(r.error.message).toContain("u8");
+    }
+  });
+
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
   });
