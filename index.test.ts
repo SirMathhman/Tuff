@@ -65,6 +65,21 @@ describe("evaluate", () => {
     });
   });
 
+  test('evaluate("let mut x = 0; let a = &mut x; let b = &mut a; *b = 1; return x;") => 1', () => {
+    expect(evaluate("let mut x = 0; let a = &mut x; let b = &mut a; *b = 1; return x;")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
+
+  test('evaluate("if (false) { *y = 1; }") => Err (dead-code mutability)', () => {
+    const r = evaluate("let x = 0; let y = &x; if (false) { *y = 1; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("mutability");
+    }
+  });
+
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });

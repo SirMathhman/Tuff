@@ -26,18 +26,11 @@ export function evaluateProgram(program: Program): Result<number, EvalError> {
   return Ok(result.value ?? 0);
 }
 
-interface BindingInfo {
-  mutable: boolean;
-  isRef: boolean;
-  refTarget: string | null;
-  refMutable: boolean;
-}
-
 function checkMutability(
   statements: readonly Statement[],
-  env: Map<string, BindingInfo>,
+  env: Map<string, Binding>,
 ): Result<null, EvalError> {
-  const shadowed = new Map<string, BindingInfo | null>();
+  const shadowed = new Map<string, Binding | null>();
   for (const stmt of statements) {
     if (stmt.type === "let") {
       if (!shadowed.has(stmt.name)) {
@@ -47,10 +40,10 @@ function checkMutability(
       const refTarget =
         isRef && stmt.value.operand.type === "identifier" ? stmt.value.operand.name : null;
       env.set(stmt.name, {
+        value: isRef
+          ? { kind: "ref", target: refTarget ?? "", mutable: stmt.value.mutable }
+          : { kind: "number", value: 0 },
         mutable: stmt.mutable,
-        isRef,
-        refTarget,
-        refMutable: isRef && stmt.value.type === "ref" ? stmt.value.mutable : false,
       });
     } else if (stmt.type === "assign") {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
@@ -95,20 +88,25 @@ function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>
   }
 }
 
-function bindingInfo(binding: Binding): BindingInfo {
-  const isRef = binding.value.kind === "ref";
-  return {
-    mutable: binding.mutable,
-    isRef,
-    refTarget: isRef && binding.value.kind === "ref" ? binding.value.target : null,
-    refMutable: isRef && binding.value.kind === "ref" ? binding.value.mutable : false,
-  };
+function resolveRefChain(
+  name: string,
+  get: (name: string) => Binding | undefined,
+): { name: string; binding: Binding } | null {
+  let currentName = name;
+  let current = get(currentName);
+  while (current && current.value.kind === "ref") {
+    currentName = current.value.target;
+    const next = get(currentName);
+    if (!next) return null;
+    current = next;
+  }
+  return current ? { name: currentName, binding: current } : null;
 }
 
-function resolveTarget<T extends BindingInfo>(
+function resolveTarget(
   target: Expr,
-  get: (name: string) => T | undefined,
-): Result<{ name: string; binding: T }, EvalError> {
+  get: (name: string) => Binding | undefined,
+): Result<{ name: string; binding: Binding }, EvalError> {
   if (target.type === "identifier") {
     const binding = get(target.name);
     if (!binding) {
@@ -126,10 +124,10 @@ function resolveTarget<T extends BindingInfo>(
     if (!refBinding) {
       return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
     }
-    if (!refBinding.isRef) {
+    if (refBinding.value.kind !== "ref") {
       return Err(err("semantic", `"${target.operand.name}" is not a reference`, target.position));
     }
-    if (!refBinding.refMutable) {
+    if (!refBinding.value.mutable) {
       return Err(
         err(
           "mutability",
@@ -138,16 +136,13 @@ function resolveTarget<T extends BindingInfo>(
         ),
       );
     }
-    if (!refBinding.refTarget) {
-      return Err(err("semantic", "Invalid reference target", target.position));
-    }
-    const targetBinding = get(refBinding.refTarget);
-    if (!targetBinding) {
+    const resolved = resolveRefChain(target.operand.name, get);
+    if (!resolved) {
       return Err(
-        err("runtime", `Reference target "${refBinding.refTarget}" is undefined`, target.position),
+        err("runtime", `Reference target "${target.operand.name}" is undefined`, target.position),
       );
     }
-    return Ok({ name: refBinding.refTarget, binding: targetBinding });
+    return Ok(resolved);
   }
   return Err(err("semantic", "Invalid assignment target", target.position));
 }
@@ -166,10 +161,7 @@ function evalStatements(
       }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
     } else if (stmt.type === "assign") {
-      const target = resolveTarget(stmt.target, (name) => {
-        const b = env.get(name);
-        return b ? bindingInfo(b) : undefined;
-      });
+      const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
       const { name, binding } = target.value;
       if (!binding.mutable) {
