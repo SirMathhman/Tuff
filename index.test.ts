@@ -29,22 +29,12 @@ describe("evaluate", () => {
     }
   });
 
-  test('evaluate("let x = 1;") => Err (no return)', () => {
-    const r = evaluate("let x = 1;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
-      expect(r.error.position).toEqual({ line: 1, column: 1 });
-    }
+  test('evaluate("let x = 1;") => 0 (no return)', () => {
+    expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
   });
 
-  test('evaluate("let x = 1;\\nlet y = 2;") => Err (no return, last statement)', () => {
-    const r = evaluate("let x = 1;\nlet y = 2;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
-      expect(r.error.position).toEqual({ line: 2, column: 1 });
-    }
+  test('evaluate("let x = 100;") => 0', () => {
+    expect(evaluate("let x = 100;")).toEqual({ ok: true, value: 0 });
   });
 
   test('evaluate("let x = 1; return y;") => Err (undefined variable)', () => {
