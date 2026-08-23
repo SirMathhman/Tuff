@@ -64,4 +64,21 @@ describe("evaluate", () => {
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });
+
+  test('evaluate("let x = 1; let x = 2; return x;") => Err (duplicate binding)', () => {
+    const r = evaluate("let x = 1; let x = 2; return x;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("x");
+    }
+  });
+
+  test('evaluate("let x = &1; return 0;") => Err (invalid reference target)', () => {
+    const r = evaluate("let x = &1; return 0;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+    }
+  });
 });

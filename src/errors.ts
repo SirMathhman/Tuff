@@ -11,6 +11,12 @@ export type EvalError =
       readonly snippet: string;
     }
   | {
+      readonly kind: "semantic";
+      readonly message: string;
+      readonly position: Position;
+      readonly snippet: string;
+    }
+  | {
       readonly kind: "mutability";
       readonly message: string;
       readonly position: Position;

@@ -22,7 +22,7 @@ export function evaluateProgram(program: Program): Result<number, EvalError> {
   for (const stmt of program.statements) {
     if (stmt.type === "let") {
       if (env.has(stmt.name)) {
-        return Err(err("syntax", `Duplicate binding "${stmt.name}"`, stmt.position));
+        return Err(err("semantic", `Duplicate binding "${stmt.name}"`, stmt.position));
       }
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
@@ -65,7 +65,7 @@ function resolveAssignTarget(
   if (target.type === "deref") {
     if (target.operand.type !== "identifier") {
       return Err(
-        err("syntax", "Can only assign through a reference to a variable", target.position),
+        err("semantic", "Can only assign through a reference to a variable", target.position),
       );
     }
     const refBinding = env.get(target.operand.name);
@@ -96,7 +96,7 @@ function resolveAssignTarget(
     }
     return Ok({ name: refBinding.value.target, binding: targetBinding });
   }
-  return Err(err("syntax", "Invalid assignment target", target.position));
+  return Err(err("semantic", "Invalid assignment target", target.position));
 }
 
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
@@ -126,7 +126,7 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       );
     case "ref": {
       if (expr.operand.type !== "identifier") {
-        return Err(err("syntax", "Can only take a reference to a variable", expr.position));
+        return Err(err("semantic", "Can only take a reference to a variable", expr.position));
       }
       const target = env.get(expr.operand.name);
       if (!target) {
@@ -136,7 +136,7 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
     }
     case "deref": {
       if (expr.operand.type !== "identifier") {
-        return Err(err("syntax", "Can only dereference a variable", expr.position));
+        return Err(err("semantic", "Can only dereference a variable", expr.position));
       }
       const binding = env.get(expr.operand.name);
       if (!binding) {
