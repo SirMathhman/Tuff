@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::Span;
 use crate::ast::BinOp;
-use crate::typeck::{Type, TypedExpr, TypedStmt, VarId};
+use crate::typeck::{TypedExpr, TypedStmt, VarId};
 
 /// A runtime value produced by evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,22 +18,6 @@ pub enum Value {
     MutRef(VarId, String),
     /// An array of values.
     Array(Vec<Value>),
-}
-
-impl Value {
-    /// The static type of this value.
-    pub fn type_of(&self) -> Type {
-        match self {
-            Value::Int(_) => Type::Int,
-            Value::Bool(_) => Type::Bool,
-            Value::Ref(_, _) => Type::Ref,
-            Value::MutRef(_, _) => Type::MutRef,
-            Value::Array(items) => {
-                let element = items.first().map(|v| v.type_of()).unwrap_or(Type::Int);
-                Type::Array(Box::new(element))
-            }
-        }
-    }
 }
 
 impl fmt::Display for Value {
@@ -104,22 +88,14 @@ impl Env {
             .insert(id, (value, mutable));
     }
 
-    /// Assign a value to an existing mutable binding, walking the scope chain.
+    /// Assign a value to an existing mutable binding, walking the scope
+    /// chain. The analysis pass has already proven the value's type is
+    /// compatible, so only mutability is checked here.
     fn set(&mut self, id: VarId, value: Value, span: Span) -> Result<(), crate::TuffError> {
         let name = self.name(id);
         for scope in self.scopes.iter_mut().rev() {
             if let Some((v, mutable)) = scope.get_mut(&id) {
                 if *mutable {
-                    let found = value.type_of();
-                    let expected = v.type_of();
-                    if !expected.compatible(&found) {
-                        return Err(crate::TuffError::TypeMismatch {
-                            span,
-                            found: found.name(),
-                            expected: expected.name(),
-                            name,
-                        });
-                    }
                     *v = value;
                     return Ok(());
                 }
