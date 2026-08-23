@@ -54,6 +54,10 @@ describe("evaluate: bindings & expressions", () => {
     expect(evaluate("return 1 + 2 * 3;")).toEqual({ ok: true, value: 7 });
   });
 
+  test('evaluate("return 10 / 2;") => 5', () => {
+    expect(evaluate("return 10 / 2;")).toEqual({ ok: true, value: 5 });
+  });
+
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
   });
