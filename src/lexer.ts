@@ -1,5 +1,6 @@
-import { TuffError } from "./errors.ts";
-import type { Position } from "./errors.ts";
+import type { EvalError, Position } from "./errors.ts";
+import { Err, Ok } from "./result.ts";
+import type { Result } from "./result.ts";
 
 export type TokenKind =
   "number" | "identifier" | "keyword" | "operator" | "lparen" | "rparen" | "semicolon" | "eof";
@@ -13,7 +14,7 @@ export interface Token {
 const KEYWORDS = new Set(["let", "mut", "return"]);
 const OPERATORS = new Set(["=", "+", "-", "*", "/", "%", "&"]);
 
-export function lex(source: string): Token[] {
+export function lex(source: string): Result<Token[], EvalError> {
   const tokens: Token[] = [];
   let i = 0;
   let line = 1;
@@ -43,7 +44,12 @@ export function lex(source: string): Token[] {
         column++;
       }
       if ((num.match(/\./g) ?? []).length > 1) {
-        throw new TuffError("syntax", `Invalid number literal "${num}"`, start);
+        return Err({
+          kind: "syntax",
+          message: `Invalid number literal "${num}"`,
+          position: start,
+          snippet: "",
+        });
       }
       tokens.push({ kind: "number", value: num, position: start });
       continue;
@@ -90,9 +96,14 @@ export function lex(source: string): Token[] {
       continue;
     }
 
-    throw new TuffError("syntax", `Unexpected character "${ch}"`, start);
+    return Err({
+      kind: "syntax",
+      message: `Unexpected character "${ch}"`,
+      position: start,
+      snippet: "",
+    });
   }
 
   tokens.push({ kind: "eof", value: "", position: { line, column } });
-  return tokens;
+  return Ok(tokens);
 }

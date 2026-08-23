@@ -22,25 +22,3 @@ export type EvalError =
       readonly position: Position;
       readonly snippet: string;
     };
-
-/** Internal error carrying a position; converted to an EvalError by evaluate. */
-export class TuffError extends Error {
-  constructor(
-    readonly kind: EvalError["kind"],
-    message: string,
-    readonly position: Position,
-  ) {
-    super(message);
-    this.name = "TuffError";
-  }
-}
-
-export function toEvalError(e: TuffError, source: string): EvalError {
-  const snippet = source.split("\n")[e.position.line - 1] ?? "";
-  return {
-    kind: e.kind,
-    message: e.message,
-    position: e.position,
-    snippet,
-  };
-}
