@@ -191,7 +191,29 @@ class Parser {
   }
 
   private parseExpr(): Result<Expr, EvalError> {
-    return this.parseAdditive();
+    return this.parseComparison();
+  }
+
+  private parseComparison(): Result<Expr, EvalError> {
+    let left = this.parseAdditive();
+    while (left.ok) {
+      const t = this.peek();
+      if (t.kind === "operator" && t.value === "<") {
+        this.advance();
+        const right = this.parseAdditive();
+        if (!right.ok) return right;
+        left = Ok({
+          type: "binary",
+          op: t.value,
+          left: left.value,
+          right: right.value,
+          position: left.value.position,
+        });
+      } else {
+        break;
+      }
+    }
+    return left;
   }
 
   private parseAdditive(): Result<Expr, EvalError> {

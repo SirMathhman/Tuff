@@ -29,6 +29,7 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "/": "operator",
   "%": "operator",
   "&": "operator",
+  "<": "operator",
   "(": "lparen",
   ")": "rparen",
   ";": "semicolon",

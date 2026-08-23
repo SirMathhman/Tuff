@@ -186,6 +186,9 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       if (!ln.ok) return ln;
       const rn = toNumber(r.value, expr.position);
       if (!rn.ok) return rn;
+      if (expr.op === "<") {
+        return Ok({ kind: "boolean", value: ln.value < rn.value });
+      }
       switch (expr.op) {
         case "+":
           return Ok({ kind: "number", value: ln.value + rn.value });
