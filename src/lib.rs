@@ -292,6 +292,17 @@ mod tests {
     }
 
     #[test]
+    fn if_else_with_immutable_assignment_in_untaken_then_branch_is_an_eval_error() {
+        assert_eq!(
+            evaluate("let x = if (false) { let z = 0; z = 1; z } else { let y = 3; y }; x"),
+            Err(TuffError::ImmutableAssignment {
+                span: Span { start: 32, end: 33 },
+                name: "z".into(),
+            })
+        );
+    }
+
+    #[test]
     fn if_else_untaken_branch_side_effects_do_not_leak() {
         assert_eq!(
             evaluate("let mut signal = 0; let y = if (false) { signal = 1; 2 } else 3; signal"),
