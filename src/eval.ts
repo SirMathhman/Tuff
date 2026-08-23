@@ -28,16 +28,15 @@ function evalStatements(
   statements: readonly Statement[],
   env: Map<string, Binding>,
 ): Result<number | null, EvalError> {
-  const declared: string[] = [];
+  const shadowed = new Map<string, Binding | null>();
   for (const stmt of statements) {
     if (stmt.type === "let") {
-      if (env.has(stmt.name)) {
-        return Err(err("semantic", `Duplicate binding "${stmt.name}"`, stmt.position));
-      }
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
+      if (!shadowed.has(stmt.name)) {
+        shadowed.set(stmt.name, env.get(stmt.name) ?? null);
+      }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
-      declared.push(stmt.name);
     } else if (stmt.type === "assign") {
       const target = resolveAssignTarget(stmt.target, env);
       if (!target.ok) return target;
@@ -68,8 +67,12 @@ function evalStatements(
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
     }
   }
-  for (const name of declared) {
-    env.delete(name);
+  for (const [name, previous] of shadowed) {
+    if (previous === null) {
+      env.delete(name);
+    } else {
+      env.set(name, previous);
+    }
   }
   return Ok(null);
 }

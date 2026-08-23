@@ -68,6 +68,10 @@ describe("evaluate", () => {
   test('evaluate("let x = 0; let y = 1; return x < y;") => 1', () => {
     expect(evaluate("let x = 0; let y = 1; return x < y;")).toEqual({ ok: true, value: 1 });
   });
+
+  test('evaluate("let x = 0; let x = 1; return x;") => 1', () => {
+    expect(evaluate("let x = 0; let x = 1; return x;")).toEqual({ ok: true, value: 1 });
+  });
 });
 
 describe("evaluate control flow", () => {
@@ -108,15 +112,6 @@ describe("evaluate control flow", () => {
 });
 
 describe("evaluate errors", () => {
-  test('evaluate("let x = 1; let x = 2; return x;") => Err (duplicate binding)', () => {
-    const r = evaluate("let x = 1; let x = 2; return x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
-      expect(r.error.message).toContain("x");
-    }
-  });
-
   test('evaluate("let x = &1; return 0;") => Err (invalid reference target)', () => {
     const r = evaluate("let x = &1; return 0;");
     expect(r.ok).toBe(false);
