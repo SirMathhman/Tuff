@@ -446,4 +446,14 @@ mod tests {
             Ok(eval::Value::Int(2))
         );
     }
+
+    #[test]
+    fn block_with_no_value_statement_is_an_error() {
+        assert_eq!(
+            evaluate("let x = { let y = 0; }; x"),
+            Err(TuffError::BlockHasNoValue {
+                span: Span { start: 8, end: 9 },
+            })
+        );
+    }
 }
