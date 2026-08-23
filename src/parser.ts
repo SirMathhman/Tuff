@@ -47,6 +47,13 @@ export type Statement =
       readonly type: "block";
       readonly statements: readonly Statement[];
       readonly position: Position;
+    }
+  | {
+      readonly type: "if";
+      readonly condition: Expr;
+      readonly then: readonly Statement[];
+      readonly else: readonly Statement[] | null;
+      readonly position: Position;
     };
 
 export interface Program {
@@ -102,6 +109,9 @@ class Parser {
     if (t.kind === "keyword" && t.value === "return") {
       return this.parseReturn(t);
     }
+    if (t.kind === "keyword" && t.value === "if") {
+      return this.parseIf(t);
+    }
     if (t.kind === "identifier") {
       return this.parseAssign(t);
     }
@@ -109,12 +119,16 @@ class Parser {
       return this.parseDerefAssign(t);
     }
     if (t.kind === "lbrace") {
-      return this.parseBlock(t);
+      return map(this.parseBlock(t), (block) => ({
+        type: "block" as const,
+        statements: block.statements,
+        position: block.position,
+      }));
     }
     return Err(err("syntax", `Unexpected token "${t.value || "end of input"}"`, t.position));
   }
 
-  private parseBlock(t: Token): Result<Statement, EvalError> {
+  private parseBlock(t: Token): Result<{ statements: Statement[]; position: Position }, EvalError> {
     this.advance();
     const statements: Statement[] = [];
     while (this.peek().kind !== "rbrace" && this.peek().kind !== "eof") {
@@ -122,11 +136,36 @@ class Parser {
       if (!stmt.ok) return stmt;
       statements.push(stmt.value);
     }
-    return map(this.expect("rbrace", "'}'"), () => ({
-      type: "block",
-      statements,
-      position: t.position,
-    }));
+    return map(this.expect("rbrace", "'}'"), () => ({ statements, position: t.position }));
+  }
+
+  private parseIf(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    return andThen(this.expect("lparen", "'('"), () =>
+      andThen(this.parseExpr(), (condition) =>
+        andThen(this.expect("rparen", "')'"), () =>
+          andThen(this.parseBlock(this.peek()), (then) =>
+            andThen(this.parseElse(), (elseBranch) =>
+              Ok({
+                type: "if",
+                condition,
+                then: then.statements,
+                else: elseBranch,
+                position: t.position,
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  private parseElse(): Result<readonly Statement[] | null, EvalError> {
+    if (this.peek().kind === "keyword" && this.peek().value === "else") {
+      this.advance();
+      return map(this.parseBlock(this.peek()), (block) => block.statements);
+    }
+    return Ok(null);
   }
 
   private parseLet(t: Token): Result<Statement, EvalError> {

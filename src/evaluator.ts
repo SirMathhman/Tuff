@@ -58,6 +58,17 @@ function evalStatements(
     } else if (stmt.type === "block") {
       const inner = evalStatements(stmt.statements, env);
       if (!inner.ok) return inner;
+    } else if (stmt.type === "if") {
+      const cond = evalExpr(stmt.condition, env);
+      if (!cond.ok) return cond;
+      if (cond.value.kind !== "boolean") {
+        return Err(err("semantic", "if condition must be a boolean", stmt.position));
+      }
+      const branch = cond.value.value ? stmt.then : stmt.else;
+      if (branch) {
+        const inner = evalStatements(branch, env);
+        if (!inner.ok) return inner;
+      }
     } else {
       return andThen(evalExpr(stmt.value, env), (v) =>
         andThen(toNumber(v, stmt.position), (n) => Ok({ value: n, lastPosition: stmt.position })),
