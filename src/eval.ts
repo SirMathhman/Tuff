@@ -36,15 +36,8 @@ function checkMutability(
       if (!shadowed.has(stmt.name)) {
         shadowed.set(stmt.name, env.get(stmt.name) ?? null);
       }
-      const isRef = stmt.value.type === "ref";
-      const refTarget =
-        isRef && stmt.value.operand.type === "identifier" ? stmt.value.operand.name : null;
-      env.set(stmt.name, {
-        value: isRef
-          ? { kind: "ref", target: refTarget ?? "", mutable: stmt.value.mutable }
-          : { kind: "number", value: 0 },
-        mutable: stmt.mutable,
-      });
+      const value = inferValue(stmt.value, env) ?? { kind: "number", value: 0 };
+      env.set(stmt.name, { value, mutable: stmt.mutable });
     } else if (stmt.type === "assign") {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
@@ -61,6 +54,10 @@ function checkMutability(
       const inner = checkMutability(stmt.statements, env);
       if (!inner.ok) return inner;
     } else if (stmt.type === "if") {
+      const cond = inferValue(stmt.condition, env);
+      if (cond && cond.kind !== "boolean") {
+        return Err(err("semantic", "if condition must be a boolean", stmt.position));
+      }
       const then = checkMutability(stmt.then, env);
       if (!then.ok) return then;
       if (stmt.else) {
@@ -84,6 +81,37 @@ function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>
       env.delete(name);
     } else {
       env.set(name, previous);
+    }
+  }
+}
+
+function inferValue(expr: Expr, env: Map<string, Binding>): Value | null {
+  switch (expr.type) {
+    case "number":
+      return { kind: "number", value: 0 };
+    case "boolean":
+      return { kind: "boolean", value: false };
+    case "identifier":
+      return env.get(expr.name)?.value ?? null;
+    case "unary":
+      return { kind: "number", value: 0 };
+    case "ref":
+      return {
+        kind: "ref",
+        target: expr.operand.type === "identifier" ? expr.operand.name : "",
+        mutable: expr.mutable,
+      };
+    case "deref": {
+      if (expr.operand.type !== "identifier") return null;
+      const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
+      return resolved ? resolved.binding.value : null;
+    }
+    case "binary": {
+      if (expr.op === "<") return { kind: "boolean", value: false };
+      const l = inferValue(expr.left, env);
+      const r = inferValue(expr.right, env);
+      if (l?.kind !== "number" || r?.kind !== "number") return null;
+      return { kind: "number", value: 0 };
     }
   }
 }
@@ -164,16 +192,10 @@ function evalStatements(
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
       const { name, binding } = target.value;
-      if (!binding.mutable) {
-        return Err(err("mutability", `Cannot reassign immutable binding "${name}"`, stmt.position));
-      }
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
       const live = env.get(name);
-      if (!live) {
-        return Err(err("runtime", `Undefined variable "${name}"`, stmt.position));
-      }
-      live.value = value.value;
+      if (live) live.value = value.value;
     } else if (stmt.type === "block") {
       const inner = evalStatements(stmt.statements, env);
       if (!inner.ok) return inner;

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
 import type { EvalError } from "./src/errors.ts";
 
-describe("evaluate", () => {
+describe("evaluate: bindings & expressions", () => {
   test('evaluate("") => 0', () => {
     expect(evaluate("")).toEqual({ ok: true, value: 0 });
   });
@@ -53,7 +53,9 @@ describe("evaluate", () => {
   test('evaluate("return 1 + 2 * 3;") => 7', () => {
     expect(evaluate("return 1 + 2 * 3;")).toEqual({ ok: true, value: 7 });
   });
+});
 
+describe("evaluate: references & control flow", () => {
   test('evaluate("let x = 1; let y = &x; return *y;") => 1', () => {
     expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
   });
@@ -85,6 +87,14 @@ describe("evaluate", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.kind).toBe("mutability");
+    }
+  });
+
+  test('evaluate("if (false) { if (1) {}}") => Err', () => {
+    const r = evaluate("if (false) { if (1) {}}");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
     }
   });
 
