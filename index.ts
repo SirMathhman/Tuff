@@ -1,24 +1,29 @@
-console.log("Hello via Bun!");
+import { lex } from "./src/lexer.ts";
+import { parse } from "./src/parser.ts";
+import { evaluateProgram } from "./src/evaluator.ts";
+import { TuffError, toEvalError } from "./src/errors.ts";
+import { Err, Ok } from "./src/result.ts";
+import type { Result } from "./src/result.ts";
+import type { EvalError } from "./src/errors.ts";
 
-export type Result<T, E = Error> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: E };
+export type { Result } from "./src/result.ts";
+export { Ok, Err } from "./src/result.ts";
+export type { EvalError } from "./src/errors.ts";
 
-export function Ok<T>(value: T): Result<T, never> {
-  return { ok: true, value };
-}
-
-export function Err<E>(error: E): Result<never, E> {
-  return { ok: false, error };
-}
-
-export function evaluate(input: string): Result<number, Error> {
+export function evaluate(input: string): Result<number, EvalError> {
   if (input.trim() === "") return Ok(0);
-  const js = input.replace(/\blet\b(\s+mut\b)?/g, (m, mut) => (mut ? "let" : "const"));
   try {
-    const value = new Function(`return (function() { ${js} })();`)();
-    return Ok(value);
+    const program = parse(lex(input));
+    return Ok(evaluateProgram(program));
   } catch (e) {
-    return Err(e instanceof Error ? e : new Error(String(e)));
+    if (e instanceof TuffError) {
+      return Err(toEvalError(e, input));
+    }
+    return Err({
+      kind: "runtime",
+      message: e instanceof Error ? e.message : String(e),
+      position: { line: 1, column: 1 },
+      snippet: input,
+    });
   }
 }

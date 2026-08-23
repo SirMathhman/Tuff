@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
+import type { EvalError } from "./src/errors.ts";
 
 describe("evaluate", () => {
   test('evaluate("") => 0', () => {
@@ -21,5 +22,31 @@ describe("evaluate", () => {
   test('evaluate("let x = 0; x = 1; return x;") => Err', () => {
     const r = evaluate("let x = 0; x = 1; return x;");
     expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("mutability");
+      expect(r.error.position).toEqual({ line: 1, column: 12 });
+      expect(r.error.snippet).toBe("let x = 0; x = 1; return x;");
+    }
+  });
+
+  test('evaluate("let x = 1;") => Err (no return)', () => {
+    const r = evaluate("let x = 1;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+    }
+  });
+
+  test('evaluate("let x = 1; return y;") => Err (undefined variable)', () => {
+    const r = evaluate("let x = 1; return y;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("y");
+    }
+  });
+
+  test('evaluate("return 1 + 2 * 3;") => 7', () => {
+    expect(evaluate("return 1 + 2 * 3;")).toEqual({ ok: true, value: 7 });
   });
 });
