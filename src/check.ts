@@ -206,9 +206,13 @@ function constFold(expr: Expr, env: Map<string, Binding>): number | null {
           return null;
       }
     }
+    case "deref": {
+      if (expr.operand.type !== "identifier") return null;
+      const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
+      return resolved?.binding.literal ?? null;
+    }
     case "boolean":
     case "ref":
-    case "deref":
     case "array":
     case "index":
       return null;

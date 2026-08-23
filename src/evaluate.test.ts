@@ -423,6 +423,15 @@ describe("evaluate errors: runtime", () => {
     }
   });
 
+  test('evaluate("if (false) { let x = 0; let y = &x; let z = 10 / *y; }") => Err (division by zero via reference)', () => {
+    const r = evaluate("if (false) { let x = 0; let y = &x; let z = 10 / *y; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("zero");
+    }
+  });
+
   test('evaluate("return true + 1;") => Err (boolean arithmetic operand)', () => {
     const r = evaluate("return true + 1;");
     expect(r.ok).toBe(false);
