@@ -245,17 +245,21 @@ fn eval_bin(op: BinOp, l: Value, r: Value, span: Span) -> Result<Value, crate::T
                 _ => unreachable!("comparison operators only"),
             }))
         }
-        BinOp::Add | BinOp::Sub | BinOp::Mul => {
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
             let Value::Int(l) = l else {
                 return Err(crate::TuffError::ExpectedInteger { span });
             };
             let Value::Int(r) = r else {
                 return Err(crate::TuffError::ExpectedInteger { span });
             };
+            if op == BinOp::Div && r == 0 {
+                return Err(crate::TuffError::DivisionByZero { span });
+            }
             Ok(Value::Int(match op {
                 BinOp::Add => l + r,
                 BinOp::Sub => l - r,
                 BinOp::Mul => l * r,
+                BinOp::Div => l / r,
                 _ => unreachable!("arithmetic operators only"),
             }))
         }

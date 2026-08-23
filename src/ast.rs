@@ -9,6 +9,8 @@ pub enum BinOp {
     Sub,
     /// Multiplication.
     Mul,
+    /// Integer division.
+    Div,
     /// Equality comparison.
     Eq,
     /// Inequality comparison.

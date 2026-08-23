@@ -77,6 +77,11 @@ mod tests {
     }
 
     #[test]
+    fn ten_divided_by_five_evaluates_to_two() {
+        assert_eq!(evaluate("10 / 5"), Ok(eval::Value::Int(2)));
+    }
+
+    #[test]
     fn parenthesized_two_plus_three_times_four_evaluates_to_twenty() {
         assert_eq!(evaluate("(2 + 3) * 4"), Ok(eval::Value::Int(20)));
     }

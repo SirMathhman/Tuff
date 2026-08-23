@@ -108,13 +108,23 @@ impl Parser {
         Ok(left)
     }
 
-    /// Parse a multiplicative expression (`*`).
+    /// Parse a multiplicative expression (`*`, `/`).
     fn parse_term(&mut self) -> Result<Expr, crate::TuffError> {
         let mut left = self.parse_postfix()?;
-        while let Some(Token::Star(span)) = self.peek() {
-            self.pos += 1;
-            let right = self.parse_postfix()?;
-            left = Expr::Bin(BinOp::Mul, Box::new(left), Box::new(right), span);
+        loop {
+            match self.peek() {
+                Some(Token::Star(span)) => {
+                    self.pos += 1;
+                    let right = self.parse_postfix()?;
+                    left = Expr::Bin(BinOp::Mul, Box::new(left), Box::new(right), span);
+                }
+                Some(Token::Slash(span)) => {
+                    self.pos += 1;
+                    let right = self.parse_postfix()?;
+                    left = Expr::Bin(BinOp::Div, Box::new(left), Box::new(right), span);
+                }
+                _ => break,
+            }
         }
         Ok(left)
     }
@@ -347,6 +357,7 @@ impl Token {
             | Token::Plus(span)
             | Token::Minus(span)
             | Token::Star(span)
+            | Token::Slash(span)
             | Token::LParen(span)
             | Token::RParen(span)
             | Token::LBrace(span)

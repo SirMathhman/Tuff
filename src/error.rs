@@ -126,6 +126,11 @@ pub enum TuffError {
         /// Where in the source the failure occurred.
         span: Span,
     },
+    /// An integer division had a zero divisor.
+    DivisionByZero {
+        /// Where in the source the failure occurred.
+        span: Span,
+    },
 }
 
 impl fmt::Display for TuffError {
@@ -270,6 +275,13 @@ impl fmt::Display for TuffError {
                 write!(
                     f,
                     "eval error at {}..{}: block has no value",
+                    span.start, span.end
+                )
+            }
+            TuffError::DivisionByZero { span } => {
+                write!(
+                    f,
+                    "eval error at {}..{}: division by zero",
                     span.start, span.end
                 )
             }

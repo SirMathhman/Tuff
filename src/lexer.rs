@@ -11,6 +11,8 @@ pub enum Token {
     Minus(Span),
     /// `*`
     Star(Span),
+    /// `/`
+    Slash(Span),
     /// `(`
     LParen(Span),
     /// `)`
@@ -141,6 +143,7 @@ fn single_char_token(c: char, span: Span) -> Option<Token> {
         '+' => Token::Plus(span),
         '-' => Token::Minus(span),
         '*' => Token::Star(span),
+        '/' => Token::Slash(span),
         '(' => Token::LParen(span),
         ')' => Token::RParen(span),
         '{' => Token::LBrace(span),
