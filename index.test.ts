@@ -286,4 +286,13 @@ describe("evaluate errors", () => {
       expect(r.error.kind).toBe("semantic");
     }
   });
+
+  test('evaluate("while(1) {}") => Err (non-boolean condition)', () => {
+    const r = evaluate("while(1) {}");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("boolean");
+    }
+  });
 });
