@@ -80,6 +80,14 @@ describe("evaluate", () => {
     }
   });
 
+  test('evaluate("let mut x = 0; let y = &x; if (false) *y = 1; return x;") => Err', () => {
+    const r = evaluate("let mut x = 0; let y = &x; if (false) *y = 1; return x;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("mutability");
+    }
+  });
+
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });
