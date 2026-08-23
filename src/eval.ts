@@ -420,6 +420,10 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       if (!l.ok) return l;
       const r = evalExpr(expr.right, env);
       if (!r.ok) return r;
+      if (l.value.kind !== "number" || r.value.kind !== "number") {
+        const bad = l.value.kind !== "number" ? expr.left : expr.right;
+        return Err(err("semantic", "Arithmetic operands must be numbers", bad.position));
+      }
       const ln = toNumber(l.value, expr.position);
       if (!ln.ok) return ln;
       const rn = toNumber(r.value, expr.position);

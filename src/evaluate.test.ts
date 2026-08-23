@@ -378,4 +378,22 @@ describe("evaluate errors: runtime", () => {
       expect(r.error.message).toContain("zero");
     }
   });
+
+  test('evaluate("return true + 1;") => Err (boolean arithmetic operand)', () => {
+    const r = evaluate("return true + 1;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("numbers");
+    }
+  });
+
+  test('evaluate("return 1 + true;") => Err (boolean arithmetic operand)', () => {
+    const r = evaluate("return 1 + true;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("numbers");
+    }
+  });
 });
