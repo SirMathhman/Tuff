@@ -1,6 +1,6 @@
 import { lex } from "./lexer.ts";
 import { parse } from "./parser.ts";
-import { evaluateProgram } from "./evaluator.ts";
+import { evaluateProgram } from "./eval.ts";
 import { Err, Ok, andThen } from "./result.ts";
 import type { Result } from "./result.ts";
 import type { EvalError } from "./errors.ts";
