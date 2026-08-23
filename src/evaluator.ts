@@ -5,7 +5,7 @@ import type { Result } from "./result.ts";
 
 type Value =
   | { readonly kind: "number"; readonly value: number }
-  | { readonly kind: "ref"; readonly target: string };
+  | { readonly kind: "ref"; readonly target: string; readonly mutable: boolean };
 
 interface Binding {
   value: Value;
@@ -27,14 +27,11 @@ export function evaluateProgram(program: Program): Result<number, EvalError> {
       if (!value.ok) return value;
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
     } else if (stmt.type === "assign") {
-      const binding = env.get(stmt.name);
-      if (!binding) {
-        return Err(err("runtime", `Undefined variable "${stmt.name}"`, stmt.position));
-      }
+      const target = resolveAssignTarget(stmt.target, env);
+      if (!target.ok) return target;
+      const { name, binding } = target.value;
       if (!binding.mutable) {
-        return Err(
-          err("mutability", `Cannot reassign immutable binding "${stmt.name}"`, stmt.position),
-        );
+        return Err(err("mutability", `Cannot reassign immutable binding "${name}"`, stmt.position));
       }
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
@@ -46,6 +43,59 @@ export function evaluateProgram(program: Program): Result<number, EvalError> {
   return Err(
     err("runtime", "Program does not end with a return statement", { line: 1, column: 1 }),
   );
+}
+
+interface NamedBinding {
+  name: string;
+  binding: Binding;
+}
+
+function resolveAssignTarget(
+  target: Expr,
+  env: Map<string, Binding>,
+): Result<NamedBinding, EvalError> {
+  if (target.type === "identifier") {
+    const binding = env.get(target.name);
+    if (!binding) {
+      return Err(err("runtime", `Undefined variable "${target.name}"`, target.position));
+    }
+    return Ok({ name: target.name, binding });
+  }
+  if (target.type === "deref") {
+    if (target.operand.type !== "identifier") {
+      return Err(
+        err("syntax", "Can only assign through a reference to a variable", target.position),
+      );
+    }
+    const refBinding = env.get(target.operand.name);
+    if (!refBinding) {
+      return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
+    }
+    if (refBinding.value.kind !== "ref") {
+      return Err(err("runtime", `"${target.operand.name}" is not a reference`, target.position));
+    }
+    if (!refBinding.value.mutable) {
+      return Err(
+        err(
+          "mutability",
+          `Cannot assign through immutable reference "${target.operand.name}"`,
+          target.position,
+        ),
+      );
+    }
+    const targetBinding = env.get(refBinding.value.target);
+    if (!targetBinding) {
+      return Err(
+        err(
+          "runtime",
+          `Reference target "${refBinding.value.target}" is undefined`,
+          target.position,
+        ),
+      );
+    }
+    return Ok({ name: refBinding.value.target, binding: targetBinding });
+  }
+  return Err(err("syntax", "Invalid assignment target", target.position));
 }
 
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
@@ -78,7 +128,7 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       if (!target) {
         return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
       }
-      return Ok({ kind: "ref", target: expr.operand.name });
+      return Ok({ kind: "ref", target: expr.operand.name, mutable: expr.mutable });
     }
     case "deref": {
       if (expr.operand.type !== "identifier") {

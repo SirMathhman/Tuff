@@ -12,7 +12,12 @@ export type Expr =
       readonly operand: Expr;
       readonly position: Position;
     }
-  | { readonly type: "ref"; readonly operand: Expr; readonly position: Position }
+  | {
+      readonly type: "ref";
+      readonly mutable: boolean;
+      readonly operand: Expr;
+      readonly position: Position;
+    }
   | { readonly type: "deref"; readonly operand: Expr; readonly position: Position }
   | {
       readonly type: "binary";
@@ -32,7 +37,7 @@ export type Statement =
     }
   | {
       readonly type: "assign";
-      readonly name: string;
+      readonly target: Expr;
       readonly value: Expr;
       readonly position: Position;
     }
@@ -96,7 +101,14 @@ export function parse(tokens: readonly Token[]): Result<Program, EvalError> {
     }
     if (t.kind === "operator" && t.value === "&") {
       advance();
-      return andThen(parseUnary(), (operand) => Ok({ type: "ref", operand, position: t.position }));
+      let mutable = false;
+      if (peek().kind === "keyword" && peek().value === "mut") {
+        advance();
+        mutable = true;
+      }
+      return andThen(parseUnary(), (operand) =>
+        Ok({ type: "ref", mutable, operand, position: t.position }),
+      );
     }
     if (t.kind === "operator" && t.value === "*") {
       advance();
@@ -182,10 +194,32 @@ export function parse(tokens: readonly Token[]): Result<Program, EvalError> {
     }
     if (t.kind === "identifier") {
       advance();
+      const target: Expr = { type: "identifier", name: t.value, position: t.position };
       return andThen(expect("operator", "'='"), () =>
         andThen(parseExpr(), (value) =>
           andThen(expect("semicolon", "';'"), () =>
-            Ok({ type: "assign", name: t.value, value, position: t.position }),
+            Ok({ type: "assign", target, value, position: t.position }),
+          ),
+        ),
+      );
+    }
+    if (t.kind === "operator" && t.value === "*") {
+      advance();
+      return andThen(expect("identifier", "a variable name"), (nameTok) =>
+        andThen(expect("operator", "'='"), () =>
+          andThen(parseExpr(), (value) =>
+            andThen(expect("semicolon", "';'"), () =>
+              Ok({
+                type: "assign",
+                target: {
+                  type: "deref",
+                  operand: { type: "identifier", name: nameTok.value, position: nameTok.position },
+                  position: t.position,
+                },
+                value,
+                position: t.position,
+              }),
+            ),
           ),
         ),
       );

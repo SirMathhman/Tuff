@@ -53,4 +53,11 @@ describe("evaluate", () => {
   test('evaluate("let x = 1; let y = &x; return *y;") => 1', () => {
     expect(evaluate("let x = 1; let y = &x; return *y;")).toEqual({ ok: true, value: 1 });
   });
+
+  test('evaluate("let mut x = 0; let y = &mut x; *y = 1; return x;") => 1', () => {
+    expect(evaluate("let mut x = 0; let y = &mut x; *y = 1; return x;")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
 });
