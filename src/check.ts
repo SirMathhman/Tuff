@@ -1,13 +1,10 @@
+import { err } from "./errors.ts";
 import type { EvalError, Position } from "./errors.ts";
 import type { Expr, Program, Statement } from "./parser.ts";
 import { Err, Ok } from "./result.ts";
 import type { Result } from "./result.ts";
 import type { Binding, Value } from "./value.ts";
-import { resolveRefChain } from "./value.ts";
-
-function err(kind: EvalError["kind"], message: string, position: Position): EvalError {
-  return { kind, message, position, snippet: "" };
-}
+import { resolveRefChain, validateDerefBinding } from "./value.ts";
 
 export function checkProgram(program: Program): Result<null, EvalError> {
   return checkMutability(program.statements, new Map());
@@ -29,12 +26,16 @@ function checkMutability(
         value: value.value ?? { kind: "number", value: 0 },
         mutable: stmt.mutable,
       };
+      if (value.value === null) binding.unknown = true;
       if (stmt.value.type === "number") binding.literal = stmt.value.value;
       env.set(stmt.name, binding);
     } else if (stmt.type === "assign") {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
-      if (!target.value.binding.mutable) {
+      // For deref targets the reference's mutability is validated by
+      // resolveTarget (known kind) or the dynamic pass (unknown kind); only a
+      // direct identifier reassignment is gated on the binding's own mutability.
+      if (stmt.target.type === "identifier" && !target.value.binding.mutable) {
         return Err(
           err(
             "mutability",
@@ -44,6 +45,7 @@ function checkMutability(
         );
       }
       delete target.value.binding.literal;
+      delete target.value.binding.unknown;
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
     } else if (stmt.type === "block") {
@@ -111,7 +113,7 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
         return Err(err("semantic", "Can only dereference a variable", expr.position));
       }
       const binding = env.get(expr.operand.name);
-      if (binding && binding.value.kind !== "ref") {
+      if (binding && !binding.unknown && binding.value.kind !== "ref") {
         return Err(err("semantic", `"${expr.operand.name}" is not a reference`, expr.position));
       }
       return Ok(null);
@@ -324,25 +326,11 @@ function resolveTarget(
     if (!refBinding) {
       return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
     }
-    if (refBinding.value.kind !== "ref") {
-      return Err(err("semantic", `"${target.operand.name}" is not a reference`, target.position));
+    if (refBinding.unknown) {
+      // Kind undecidable statically; the dynamic pass validates the target.
+      return Ok({ name: target.operand.name, binding: refBinding });
     }
-    if (!refBinding.value.mutable) {
-      return Err(
-        err(
-          "mutability",
-          `Cannot assign through immutable reference "${target.operand.name}"`,
-          target.position,
-        ),
-      );
-    }
-    const resolved = resolveRefChain(target.operand.name, get);
-    if (!resolved) {
-      return Err(
-        err("runtime", `Reference target "${target.operand.name}" is undefined`, target.position),
-      );
-    }
-    return Ok(resolved);
+    return validateDerefBinding(refBinding, target.operand.name, get, target.position);
   }
   return Err(err("semantic", "Invalid assignment target", target.position));
 }

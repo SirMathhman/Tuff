@@ -1,13 +1,10 @@
+import { err } from "./errors.ts";
 import type { EvalError, Position } from "./errors.ts";
 import type { Expr, Program, Statement } from "./parser.ts";
 import { Err, Ok, andThen } from "./result.ts";
 import type { Result } from "./result.ts";
 import type { Binding, Value } from "./value.ts";
-import { resolveRefChain } from "./value.ts";
-
-function err(kind: EvalError["kind"], message: string, position: Position): EvalError {
-  return { kind, message, position, snippet: "" };
-}
+import { resolveRefChain, validateDerefBinding } from "./value.ts";
 
 export function evaluateProgram(program: Program): Result<number, EvalError> {
   const env = new Map<string, Binding>();
@@ -40,11 +37,13 @@ function evalStatements(
       }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
     } else if (stmt.type === "assign") {
-      // The static pass already validated the target and its mutability.
-      const name = assignTargetName(stmt.target, (n) => env.get(n));
+      // The static pass validates targets it can decide; unknown-kind targets
+      // are deferred here, so ref-kind and mutability are re-checked at runtime.
+      const target = resolveAssignTarget(stmt.target, (n) => env.get(n), stmt.position);
+      if (!target.ok) return target;
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
-      const live = env.get(name);
+      const live = env.get(target.value);
       if (live) live.value = value.value;
     } else if (stmt.type === "block") {
       const inner = evalStatements(stmt.statements, env);
@@ -81,13 +80,23 @@ function evalStatements(
   return Ok(null);
 }
 
-function assignTargetName(target: Expr, get: (name: string) => Binding | undefined): string {
-  if (target.type === "identifier") return target.name;
+function resolveAssignTarget(
+  target: Expr,
+  get: (name: string) => Binding | undefined,
+  position: Position,
+): Result<string, EvalError> {
+  if (target.type === "identifier") return Ok(target.name);
   if (target.type === "deref" && target.operand.type === "identifier") {
-    // The static pass guarantees a bound, mutable reference chain.
-    return resolveRefChain(target.operand.name, get)!.name;
+    const refBinding = get(target.operand.name);
+    if (!refBinding) {
+      return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
+    }
+    return andThen(
+      validateDerefBinding(refBinding, target.operand.name, get, target.position),
+      (resolved) => Ok(resolved.name),
+    );
   }
-  return "";
+  return Err(err("semantic", "Invalid assignment target", position));
 }
 
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
@@ -99,6 +108,24 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
     );
   }
   return Err(err("semantic", "Expected a number but found an array", position));
+}
+
+function evalDeref(
+  expr: Extract<Expr, { type: "deref" }>,
+  env: Map<string, Binding>,
+): Result<Value, EvalError> {
+  const name = expr.operand.type === "identifier" ? expr.operand.name : "";
+  // The static pass validates known-kind operands; unknown-kind operands are
+  // deferred here, so the reference kind is re-checked at runtime.
+  const operandBinding = env.get(name);
+  if (operandBinding && operandBinding.value.kind !== "ref") {
+    return Err(err("semantic", `"${name}" is not a reference`, expr.position));
+  }
+  const resolved = resolveRefChain(name, (n) => env.get(n));
+  if (!resolved) {
+    return Err(err("runtime", `Reference target "${name}" is undefined`, expr.position));
+  }
+  return Ok(resolved.binding.value);
 }
 
 function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalError> {
@@ -119,10 +146,8 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       const name = expr.operand.type === "identifier" ? expr.operand.name : "";
       return Ok({ kind: "ref", target: name, mutable: expr.mutable });
     }
-    case "deref": {
-      const name = expr.operand.type === "identifier" ? expr.operand.name : "";
-      return Ok(resolveRefChain(name, (n) => env.get(n))!.binding.value);
-    }
+    case "deref":
+      return evalDeref(expr, env);
     case "binary": {
       const l = evalExpr(expr.left, env);
       if (!l.ok) return l;
@@ -167,13 +192,20 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       return Ok({ kind: "array", elements });
     }
     case "index": {
-      // The static pass guarantees an array value and a number index.
+      // The static pass validates what it can decide; unknown-kind operands
+      // are deferred here, so the array and number-index kinds are re-checked.
       const arr = evalExpr(expr.array, env);
       if (!arr.ok) return arr;
       const idx = evalExpr(expr.index, env);
       if (!idx.ok) return idx;
-      const n = idx.value.kind === "number" ? idx.value.value : 0;
-      const elements = arr.value.kind === "array" ? arr.value.elements : [];
+      if (idx.value.kind !== "number") {
+        return Err(err("semantic", "Array index must be a number", expr.index.position));
+      }
+      if (arr.value.kind !== "array") {
+        return Err(err("semantic", "Cannot index a non-array value", expr.array.position));
+      }
+      const n = idx.value.value;
+      const elements = arr.value.elements;
       if (!Number.isInteger(n) || n < 0 || n >= elements.length) {
         return Err(
           err(

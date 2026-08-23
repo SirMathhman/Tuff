@@ -138,6 +138,13 @@ describe("evaluate: references", () => {
     const r = evaluate("let mut x = &mut x; *x = 1;");
     expect(r.ok).toBe(false);
   });
+
+  test('evaluate("let mut x = 0; let a = [&mut x]; let y = a[0]; *y = 1; return x;") => 1 (assign through unknown-kind ref)', () => {
+    expect(evaluate("let mut x = 0; let a = [&mut x]; let y = a[0]; *y = 1; return x;")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
 });
 
 describe("evaluate: dead code", () => {
@@ -366,6 +373,15 @@ describe("evaluate errors: runtime", () => {
     if (!r.ok) {
       expect(r.error.kind).toBe("runtime");
       expect(r.error.message).toContain("out of range");
+    }
+  });
+
+  test('evaluate("let a = [1, 2]; let b = [true]; return a[b[0]];") => Err (non-number index)', () => {
+    const r = evaluate("let a = [1, 2]; let b = [true]; return a[b[0]];");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+      expect(r.error.message).toContain("number");
     }
   });
 

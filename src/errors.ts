@@ -28,3 +28,6 @@ export type EvalError =
       readonly position: Position;
       readonly snippet: string;
     };
+export function err(kind: EvalError["kind"], message: string, position: Position): EvalError {
+  return { kind, message, position, snippet: "" };
+}
