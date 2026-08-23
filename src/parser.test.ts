@@ -466,4 +466,13 @@ describe("parse: errors", () => {
       expect(r.error.message).toBe("Expected '}' but found \"end of input\"");
     }
   });
+
+  test("fractional number literal is a syntax error", () => {
+    const r = parseTokens([tok("keyword", "return"), tok("number", "1.5"), tok("semicolon", ";")]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("syntax");
+      expect(r.error.message).toBe("Fractional number literals are not supported");
+    }
+  });
 });

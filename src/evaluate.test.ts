@@ -286,6 +286,15 @@ describe("evaluate control flow", () => {
 });
 
 describe("evaluate errors", () => {
+  test('evaluate("return 1.5;") => Err (fractional literal)', () => {
+    const r = evaluate("return 1.5;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("syntax");
+      expect(r.error.message).toContain("Fractional");
+    }
+  });
+
   test('evaluate("let x = 0; if (false) { let y = 1; y = 2; } return x;") => Err', () => {
     const r = evaluate("let x = 0; if (false) { let y = 1; y = 2; } return x;");
     expect(r.ok).toBe(false);

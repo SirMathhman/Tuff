@@ -406,6 +406,9 @@ class Parser {
       const suffixMatch = t.value.match(/[UI](8|16|32|64|Size)$/);
       const suffix = suffixMatch ? suffixMatch[0] : undefined;
       const digits = suffix ? t.value.slice(0, -suffix.length) : t.value;
+      if (digits.includes(".")) {
+        return Err(err("syntax", "Fractional number literals are not supported", t.position));
+      }
       return Ok({ type: "number", value: Number(digits), suffix, position: t.position });
     }
     if (t.kind === "keyword" && (t.value === "true" || t.value === "false")) {
