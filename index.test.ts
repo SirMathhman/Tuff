@@ -34,6 +34,16 @@ describe("evaluate", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.kind).toBe("runtime");
+      expect(r.error.position).toEqual({ line: 1, column: 1 });
+    }
+  });
+
+  test('evaluate("let x = 1;\\nlet y = 2;") => Err (no return, last statement)', () => {
+    const r = evaluate("let x = 1;\nlet y = 2;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.position).toEqual({ line: 2, column: 1 });
     }
   });
 
@@ -64,7 +74,9 @@ describe("evaluate", () => {
   test('evaluate("let x = true; return x;") => 1', () => {
     expect(evaluate("let x = true; return x;")).toEqual({ ok: true, value: 1 });
   });
+});
 
+describe("evaluate errors", () => {
   test('evaluate("let x = 1; let x = 2; return x;") => Err (duplicate binding)', () => {
     const r = evaluate("let x = 1; let x = 2; return x;");
     expect(r.ok).toBe(false);

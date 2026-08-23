@@ -21,20 +21,22 @@ export function evaluateProgram(program: Program): Result<number, EvalError> {
   const env = new Map<string, Binding>();
   const result = evalStatements(program.statements, env);
   if (!result.ok) return result;
-  if (result.value === null) {
+  if (result.value.value === null) {
     return Err(
-      err("runtime", "Program does not end with a return statement", { line: 1, column: 1 }),
+      err("runtime", "Program does not end with a return statement", result.value.lastPosition),
     );
   }
-  return Ok(result.value);
+  return Ok(result.value.value);
 }
 
 function evalStatements(
   statements: readonly Statement[],
   env: Map<string, Binding>,
-): Result<number | null, EvalError> {
+): Result<{ value: number | null; lastPosition: Position }, EvalError> {
   const declared: string[] = [];
+  let lastPosition: Position = { line: 1, column: 1 };
   for (const stmt of statements) {
+    lastPosition = stmt.position;
     if (stmt.type === "let") {
       if (env.has(stmt.name)) {
         return Err(err("semantic", `Duplicate binding "${stmt.name}"`, stmt.position));
@@ -57,13 +59,15 @@ function evalStatements(
       const inner = evalStatements(stmt.statements, env);
       if (!inner.ok) return inner;
     } else {
-      return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
+      return andThen(evalExpr(stmt.value, env), (v) =>
+        andThen(toNumber(v, stmt.position), (n) => Ok({ value: n, lastPosition: stmt.position })),
+      );
     }
   }
   for (const name of declared) {
     env.delete(name);
   }
-  return Ok(null);
+  return Ok({ value: null, lastPosition });
 }
 
 interface NamedBinding {
