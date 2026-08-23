@@ -58,6 +58,10 @@ describe("evaluate: bindings & expressions", () => {
     expect(evaluate("return 10 / 2;")).toEqual({ ok: true, value: 5 });
   });
 
+  test('evaluate("return 10 / 3;") => 3 (truncated)', () => {
+    expect(evaluate("return 10 / 3;")).toEqual({ ok: true, value: 3 });
+  });
+
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
   });

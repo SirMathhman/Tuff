@@ -385,7 +385,7 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
         case "*":
           return Ok({ kind: "number", value: ln.value * rn.value });
         case "/":
-          return Ok({ kind: "number", value: ln.value / rn.value });
+          return Ok({ kind: "number", value: Math.trunc(ln.value / rn.value) });
         case "%":
           return Ok({ kind: "number", value: ln.value % rn.value });
         default:
