@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "lint": "bun run scripts/check-size-limits.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "madge": "^8.0.0"

@@ -53,185 +53,217 @@ function err(kind: EvalError["kind"], message: string, position: Position): Eval
   return { kind, message, position, snippet: "" };
 }
 
-export function parse(tokens: readonly Token[]): Result<Program, EvalError> {
-  let i = 0;
+class Parser {
+  private i = 0;
 
-  const peek = (): Token => tokens[i] ?? EOF;
-  const advance = (): Token => {
-    const t = peek();
-    i++;
+  constructor(private readonly tokens: readonly Token[]) {}
+
+  private peek(): Token {
+    return this.tokens[this.i] ?? EOF;
+  }
+
+  private advance(): Token {
+    const t = this.peek();
+    this.i++;
     return t;
-  };
-  const expect = (kind: TokenKind, what: string): Result<Token, EvalError> => {
-    const t = peek();
+  }
+
+  private expect(kind: TokenKind, what: string): Result<Token, EvalError> {
+    const t = this.peek();
     if (t.kind !== kind) {
       return Err(
         err("syntax", `Expected ${what} but found "${t.value || "end of input"}"`, t.position),
       );
     }
-    return Ok(advance());
-  };
+    return Ok(this.advance());
+  }
 
-  const parsePrimary = (): Result<Expr, EvalError> => {
-    const t = peek();
-    if (t.kind === "number") {
-      advance();
-      return Ok({ type: "number", value: Number(t.value), position: t.position });
+  parse(): Result<Program, EvalError> {
+    const statements: Statement[] = [];
+    while (this.peek().kind !== "eof") {
+      const stmt = this.parseStatement();
+      if (!stmt.ok) return Err(stmt.error);
+      statements.push(stmt.value);
+    }
+    return Ok({ statements });
+  }
+
+  private parseStatement(): Result<Statement, EvalError> {
+    const t = this.peek();
+    if (t.kind === "keyword" && t.value === "let") {
+      return this.parseLet(t);
+    }
+    if (t.kind === "keyword" && t.value === "return") {
+      return this.parseReturn(t);
     }
     if (t.kind === "identifier") {
-      advance();
-      return Ok({ type: "identifier", name: t.value, position: t.position });
+      return this.parseAssign(t);
     }
-    if (t.kind === "lparen") {
-      advance();
-      return andThen(parseExpr(), (inner) => andThen(expect("rparen", "')'"), () => Ok(inner)));
+    if (t.kind === "operator" && t.value === "*") {
+      return this.parseDerefAssign(t);
     }
-    return Err(
-      err("syntax", `Expected an expression but found "${t.value || "end of input"}"`, t.position),
-    );
-  };
+    return Err(err("syntax", `Unexpected token "${t.value || "end of input"}"`, t.position));
+  }
 
-  const parseUnary = (): Result<Expr, EvalError> => {
-    const t = peek();
+  private parseLet(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    let mutable = false;
+    if (this.peek().kind === "keyword" && this.peek().value === "mut") {
+      this.advance();
+      mutable = true;
+    }
+    return andThen(this.expect("identifier", "a variable name"), (nameTok) =>
+      andThen(this.expect("operator", "'='"), () =>
+        andThen(this.parseExpr(), (value) =>
+          andThen(this.expect("semicolon", "';'"), () =>
+            Ok({ type: "let", mutable, name: nameTok.value, value, position: t.position }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  private parseReturn(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    return andThen(this.parseExpr(), (value) =>
+      andThen(this.expect("semicolon", "';'"), () =>
+        Ok({ type: "return", value, position: t.position }),
+      ),
+    );
+  }
+
+  private parseAssign(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    const target: Expr = { type: "identifier", name: t.value, position: t.position };
+    return andThen(this.expect("operator", "'='"), () =>
+      andThen(this.parseExpr(), (value) =>
+        andThen(this.expect("semicolon", "';'"), () =>
+          Ok({ type: "assign", target, value, position: t.position }),
+        ),
+      ),
+    );
+  }
+
+  private parseDerefAssign(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    return andThen(this.expect("identifier", "a variable name"), (nameTok) =>
+      andThen(this.expect("operator", "'='"), () =>
+        andThen(this.parseExpr(), (value) =>
+          andThen(this.expect("semicolon", "';'"), () =>
+            Ok({
+              type: "assign",
+              target: {
+                type: "deref",
+                operand: { type: "identifier", name: nameTok.value, position: nameTok.position },
+                position: t.position,
+              },
+              value,
+              position: t.position,
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  private parseExpr(): Result<Expr, EvalError> {
+    return this.parseAdditive();
+  }
+
+  private parseAdditive(): Result<Expr, EvalError> {
+    let left = this.parseMultiplicative();
+    while (left.ok) {
+      const t = this.peek();
+      if (t.kind === "operator" && (t.value === "+" || t.value === "-")) {
+        this.advance();
+        const right = this.parseMultiplicative();
+        if (!right.ok) return right;
+        left = Ok({
+          type: "binary",
+          op: t.value,
+          left: left.value,
+          right: right.value,
+          position: left.value.position,
+        });
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private parseMultiplicative(): Result<Expr, EvalError> {
+    let left = this.parseUnary();
+    while (left.ok) {
+      const t = this.peek();
+      if (t.kind === "operator" && (t.value === "*" || t.value === "/" || t.value === "%")) {
+        this.advance();
+        const right = this.parseUnary();
+        if (!right.ok) return right;
+        left = Ok({
+          type: "binary",
+          op: t.value,
+          left: left.value,
+          right: right.value,
+          position: left.value.position,
+        });
+      } else {
+        break;
+      }
+    }
+    return left;
+  }
+
+  private parseUnary(): Result<Expr, EvalError> {
+    const t = this.peek();
     if (t.kind === "operator" && t.value === "-") {
-      advance();
-      return andThen(parseUnary(), (operand) =>
+      this.advance();
+      return andThen(this.parseUnary(), (operand) =>
         Ok({ type: "unary", op: "-", operand, position: t.position }),
       );
     }
     if (t.kind === "operator" && t.value === "&") {
-      advance();
+      this.advance();
       let mutable = false;
-      if (peek().kind === "keyword" && peek().value === "mut") {
-        advance();
+      if (this.peek().kind === "keyword" && this.peek().value === "mut") {
+        this.advance();
         mutable = true;
       }
-      return andThen(parseUnary(), (operand) =>
+      return andThen(this.parseUnary(), (operand) =>
         Ok({ type: "ref", mutable, operand, position: t.position }),
       );
     }
     if (t.kind === "operator" && t.value === "*") {
-      advance();
-      return andThen(parseUnary(), (operand) =>
+      this.advance();
+      return andThen(this.parseUnary(), (operand) =>
         Ok({ type: "deref", operand, position: t.position }),
       );
     }
-    return parsePrimary();
-  };
+    return this.parsePrimary();
+  }
 
-  const parseMultiplicative = (): Result<Expr, EvalError> => {
-    let left = parseUnary();
-    while (left.ok) {
-      const t = peek();
-      if (t.kind === "operator" && (t.value === "*" || t.value === "/" || t.value === "%")) {
-        advance();
-        const right = parseUnary();
-        if (!right.ok) return right;
-        left = Ok({
-          type: "binary",
-          op: t.value,
-          left: left.value,
-          right: right.value,
-          position: left.value.position,
-        });
-      } else {
-        break;
-      }
-    }
-    return left;
-  };
-
-  const parseAdditive = (): Result<Expr, EvalError> => {
-    let left = parseMultiplicative();
-    while (left.ok) {
-      const t = peek();
-      if (t.kind === "operator" && (t.value === "+" || t.value === "-")) {
-        advance();
-        const right = parseMultiplicative();
-        if (!right.ok) return right;
-        left = Ok({
-          type: "binary",
-          op: t.value,
-          left: left.value,
-          right: right.value,
-          position: left.value.position,
-        });
-      } else {
-        break;
-      }
-    }
-    return left;
-  };
-
-  const parseExpr = (): Result<Expr, EvalError> => parseAdditive();
-
-  const parseStatement = (): Result<Statement, EvalError> => {
-    const t = peek();
-    if (t.kind === "keyword" && t.value === "let") {
-      advance();
-      let mutable = false;
-      if (peek().kind === "keyword" && peek().value === "mut") {
-        advance();
-        mutable = true;
-      }
-      return andThen(expect("identifier", "a variable name"), (nameTok) =>
-        andThen(expect("operator", "'='"), () =>
-          andThen(parseExpr(), (value) =>
-            andThen(expect("semicolon", "';'"), () =>
-              Ok({ type: "let", mutable, name: nameTok.value, value, position: t.position }),
-            ),
-          ),
-        ),
-      );
-    }
-    if (t.kind === "keyword" && t.value === "return") {
-      advance();
-      return andThen(parseExpr(), (value) =>
-        andThen(expect("semicolon", "';'"), () =>
-          Ok({ type: "return", value, position: t.position }),
-        ),
-      );
+  private parsePrimary(): Result<Expr, EvalError> {
+    const t = this.peek();
+    if (t.kind === "number") {
+      this.advance();
+      return Ok({ type: "number", value: Number(t.value), position: t.position });
     }
     if (t.kind === "identifier") {
-      advance();
-      const target: Expr = { type: "identifier", name: t.value, position: t.position };
-      return andThen(expect("operator", "'='"), () =>
-        andThen(parseExpr(), (value) =>
-          andThen(expect("semicolon", "';'"), () =>
-            Ok({ type: "assign", target, value, position: t.position }),
-          ),
-        ),
+      this.advance();
+      return Ok({ type: "identifier", name: t.value, position: t.position });
+    }
+    if (t.kind === "lparen") {
+      this.advance();
+      return andThen(this.parseExpr(), (inner) =>
+        andThen(this.expect("rparen", "')'"), () => Ok(inner)),
       );
     }
-    if (t.kind === "operator" && t.value === "*") {
-      advance();
-      return andThen(expect("identifier", "a variable name"), (nameTok) =>
-        andThen(expect("operator", "'='"), () =>
-          andThen(parseExpr(), (value) =>
-            andThen(expect("semicolon", "';'"), () =>
-              Ok({
-                type: "assign",
-                target: {
-                  type: "deref",
-                  operand: { type: "identifier", name: nameTok.value, position: nameTok.position },
-                  position: t.position,
-                },
-                value,
-                position: t.position,
-              }),
-            ),
-          ),
-        ),
-      );
-    }
-    return Err(err("syntax", `Unexpected token "${t.value || "end of input"}"`, t.position));
-  };
-
-  const statements: Statement[] = [];
-  while (peek().kind !== "eof") {
-    const stmt = parseStatement();
-    if (!stmt.ok) return Err(stmt.error);
-    statements.push(stmt.value);
+    return Err(
+      err("syntax", `Expected an expression but found "${t.value || "end of input"}"`, t.position),
+    );
   }
-  return Ok({ statements });
+}
+
+export function parse(tokens: readonly Token[]): Result<Program, EvalError> {
+  return new Parser(tokens).parse();
 }
