@@ -117,4 +117,28 @@ describe("evaluate errors", () => {
       expect(r.error.message).toContain("x");
     }
   });
+
+  test('evaluate("let x = 1; return *x;") => Err (deref of non-reference)', () => {
+    const r = evaluate("let x = 1; return *x;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+    }
+  });
+
+  test('evaluate("let x = 1; *x = 2; return x;") => Err (assign through non-reference)', () => {
+    const r = evaluate("let x = 1; *x = 2; return x;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+    }
+  });
+
+  test('evaluate("let x = 1; let y = &x; return y;") => Err (return a reference)', () => {
+    const r = evaluate("let x = 1; let y = &x; return y;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("semantic");
+    }
+  });
 });

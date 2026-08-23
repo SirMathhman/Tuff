@@ -108,7 +108,7 @@ function resolveAssignTarget(
       return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
     }
     if (refBinding.value.kind !== "ref") {
-      return Err(err("runtime", `"${target.operand.name}" is not a reference`, target.position));
+      return Err(err("semantic", `"${target.operand.name}" is not a reference`, target.position));
     }
     if (!refBinding.value.mutable) {
       return Err(
@@ -138,7 +138,7 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
   if (value.kind === "number") return Ok(value.value);
   if (value.kind === "boolean") return Ok(value.value ? 1 : 0);
   return Err(
-    err("runtime", `Expected a number but found a reference to "${value.target}"`, position),
+    err("semantic", `Expected a number but found a reference to "${value.target}"`, position),
   );
 }
 
@@ -178,7 +178,7 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
         return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
       }
       if (binding.value.kind !== "ref") {
-        return Err(err("runtime", `"${expr.operand.name}" is not a reference`, expr.position));
+        return Err(err("semantic", `"${expr.operand.name}" is not a reference`, expr.position));
       }
       const target = env.get(binding.value.target);
       if (!target) {
