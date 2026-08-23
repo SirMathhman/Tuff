@@ -33,6 +33,7 @@ function evalStatements(
   statements: readonly Statement[],
   env: Map<string, Binding>,
 ): Result<number | null, EvalError> {
+  const declared: string[] = [];
   for (const stmt of statements) {
     if (stmt.type === "let") {
       if (env.has(stmt.name)) {
@@ -41,6 +42,7 @@ function evalStatements(
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
+      declared.push(stmt.name);
     } else if (stmt.type === "assign") {
       const target = resolveAssignTarget(stmt.target, env);
       if (!target.ok) return target;
@@ -57,6 +59,9 @@ function evalStatements(
     } else {
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
     }
+  }
+  for (const name of declared) {
+    env.delete(name);
   }
   return Ok(null);
 }

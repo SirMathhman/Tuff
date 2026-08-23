@@ -85,4 +85,13 @@ describe("evaluate", () => {
   test('evaluate("let mut x = 0; { x = 1; } return x;") => 1', () => {
     expect(evaluate("let mut x = 0; { x = 1; } return x;")).toEqual({ ok: true, value: 1 });
   });
+
+  test('evaluate("{ let x = 0; } return x;") => Err (block-scoped binding)', () => {
+    const r = evaluate("{ let x = 0; } return x;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("x");
+    }
+  });
 });
