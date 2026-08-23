@@ -430,4 +430,12 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn assignment_in_nested_block_is_visible_outside() {
+        assert_eq!(
+            evaluate("let mut x = 0; { x = 1; } x"),
+            Ok(eval::Value::Int(1))
+        );
+    }
 }
