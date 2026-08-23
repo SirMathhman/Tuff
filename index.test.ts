@@ -332,4 +332,22 @@ describe("evaluate errors", () => {
       expect(r.error.message).toContain("y");
     }
   });
+
+  test('evaluate("return 1 / 0;") => Err (division by zero)', () => {
+    const r = evaluate("return 1 / 0;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("zero");
+    }
+  });
+
+  test('evaluate("return 1 % 0;") => Err (modulo by zero)', () => {
+    const r = evaluate("return 1 % 0;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("zero");
+    }
+  });
 });
