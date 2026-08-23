@@ -148,10 +148,7 @@ pub fn analyze(expr: &Expr, env: &mut TypeEnv) -> Result<TypedExpr, crate::TuffE
         Expr::Num(value, span) => Ok(TypedExpr::Num(*value, *span)),
         Expr::Bool(value, span) => Ok(TypedExpr::Bool(*value, *span)),
         Expr::Bin(op, left, right, span) => analyze_bin(*op, left, right, env, *span),
-        Expr::Group(inner, span, _) => Ok(TypedExpr::Group(
-            Box::new(analyze(inner, env)?),
-            *span,
-        )),
+        Expr::Group(inner, span, _) => Ok(TypedExpr::Group(Box::new(analyze(inner, env)?), *span)),
         Expr::Array(elements, span) => {
             let items = elements
                 .iter()
@@ -226,10 +223,7 @@ fn analyze_ref(
     span: Span,
 ) -> Result<TypedExpr, crate::TuffError> {
     let Expr::Ident(name, _) = inner else {
-        return Err(crate::TuffError::ExpectedVariableName {
-            span,
-            after: "&",
-        });
+        return Err(crate::TuffError::ExpectedVariableName { span, after: "&" });
     };
     match env.get(name) {
         Some((_, _)) => Ok(TypedExpr::Ref(name.clone(), mutable, span)),
@@ -241,22 +235,20 @@ fn analyze_ref(
 }
 
 /// Analyze a dereference expression, resolving the referenced variable's type.
-fn analyze_deref(inner: &Expr, env: &mut TypeEnv, span: Span) -> Result<TypedExpr, crate::TuffError> {
+fn analyze_deref(
+    inner: &Expr,
+    env: &mut TypeEnv,
+    span: Span,
+) -> Result<TypedExpr, crate::TuffError> {
     let Expr::Ident(name, _) = inner else {
-        return Err(crate::TuffError::ExpectedVariableName {
-            span,
-            after: "*",
-        });
+        return Err(crate::TuffError::ExpectedVariableName { span, after: "*" });
     };
     match env.get(name) {
         Some((Type::Ref, _)) | Some((Type::MutRef, _)) => {
             let target = env.targets.get(name).cloned().unwrap_or_default();
             match env.get(&target) {
                 Some((ty, _)) => Ok(TypedExpr::Deref(target, ty, span)),
-                None => Err(crate::TuffError::UndefinedVariable {
-                    span,
-                    name: target,
-                }),
+                None => Err(crate::TuffError::UndefinedVariable { span, name: target }),
             }
         }
         Some((_, _)) => Err(crate::TuffError::NotAReference {
@@ -430,15 +422,10 @@ fn check_deref_target(
     span: Span,
 ) -> Result<(), crate::TuffError> {
     let Expr::Ident(name, _) = inner else {
-        return Err(crate::TuffError::ExpectedVariableName {
-            span,
-            after: "*",
-        });
+        return Err(crate::TuffError::ExpectedVariableName { span, after: "*" });
     };
     match env.get(name) {
-        Some((Type::Ref, _)) => Err(crate::TuffError::CannotAssignThroughSharedReference {
-            span,
-        }),
+        Some((Type::Ref, _)) => Err(crate::TuffError::CannotAssignThroughSharedReference { span }),
         Some((Type::MutRef, _)) => {
             let target = env.targets.get(name).cloned().unwrap_or_default();
             match env.get(&target) {
@@ -453,10 +440,7 @@ fn check_deref_target(
                     }
                     Ok(())
                 }
-                None => Err(crate::TuffError::UndefinedVariable {
-                    span,
-                    name: target,
-                }),
+                None => Err(crate::TuffError::UndefinedVariable { span, name: target }),
             }
         }
         Some((_, _)) => Err(crate::TuffError::NotAReference {

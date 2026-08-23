@@ -187,12 +187,13 @@ fn eval_expr(expr: &TypedExpr, env: &mut Env) -> Result<Value, crate::TuffError>
             let index = eval_expr(index, env)?;
             eval_index(base, index, *span)
         }
-        TypedExpr::Ident(name, _, span) => env
-            .get(name)
-            .ok_or_else(|| crate::TuffError::UndefinedVariable {
-                span: *span,
-                name: name.clone(),
-            }),
+        TypedExpr::Ident(name, _, span) => {
+            env.get(name)
+                .ok_or_else(|| crate::TuffError::UndefinedVariable {
+                    span: *span,
+                    name: name.clone(),
+                })
+        }
         TypedExpr::Ref(name, mutable, _) => {
             if *mutable {
                 Ok(Value::MutRef(name.clone()))
@@ -200,12 +201,13 @@ fn eval_expr(expr: &TypedExpr, env: &mut Env) -> Result<Value, crate::TuffError>
                 Ok(Value::Ref(name.clone()))
             }
         }
-        TypedExpr::Deref(target, _, span) => env
-            .get(target)
-            .ok_or_else(|| crate::TuffError::UndefinedVariable {
-                span: *span,
-                name: target.clone(),
-            }),
+        TypedExpr::Deref(target, _, span) => {
+            env.get(target)
+                .ok_or_else(|| crate::TuffError::UndefinedVariable {
+                    span: *span,
+                    name: target.clone(),
+                })
+        }
         TypedExpr::If(cond, then, otherwise, _, _) => {
             let Value::Bool(b) = eval_expr(cond, env)? else {
                 unreachable!("the analysis pass guarantees a boolean condition");
