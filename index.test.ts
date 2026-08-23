@@ -315,4 +315,13 @@ describe("evaluate errors", () => {
       expect(r.error.message).toContain("out of range");
     }
   });
+
+  test('evaluate("let mut x = 0; x = y;") => Err (undefined variable in assignment value)', () => {
+    const r = evaluate("let mut x = 0; x = y;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("runtime");
+      expect(r.error.message).toContain("y");
+    }
+  });
 });

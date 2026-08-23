@@ -55,6 +55,8 @@ function checkMutability(
           ),
         );
       }
+      const value = inferValue(stmt.value, env);
+      if (!value.ok) return value;
     } else if (stmt.type === "block") {
       const inner = checkMutability(stmt.statements, env);
       if (!inner.ok) return inner;
