@@ -88,6 +88,8 @@ int main(void)
     check_ok("let x = true; return x;", 1);
     check_ok("return true;", 1);
     check_ok("let x = false; return x;", 0);
+    check_ok("let x = true; let y = false; return x || y;", 1);
+    check_ok("let x = false; let y = false; return x || y;", 0);
 
     /* A program that returns 0 is a success, not an error. */
     check_ok("return 0;", 0);

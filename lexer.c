@@ -83,7 +83,7 @@ tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
             continue;
         }
         if (*p == '=' || *p == ';' || *p == '&' || *p == '*' ||
-            *p == '{' || *p == '}')
+            *p == '{' || *p == '}' || *p == '|')
         {
             tuff_tok_type type;
             if (*p == '=')
@@ -96,14 +96,20 @@ tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
                 type = TOK_STAR;
             else if (*p == '{')
                 type = TOK_LBRACE;
+            else if (*p == '|')
+            {
+                if (p[1] != '|')
+                    return tuff_err_at(ERR_UNRECOGNIZED_CHAR, (tuff_pos){line, col});
+                type = TOK_OR;
+            }
             else
                 type = TOK_RBRACE;
             toks[n].type = type;
             toks[n].pos.line = line;
             toks[n].pos.col = col;
             n++;
-            p++;
-            col++;
+            p += (type == TOK_OR) ? 2 : 1;
+            col += (type == TOK_OR) ? 2 : 1;
             continue;
         }
         if (isalpha((unsigned char)*p) || *p == '_')

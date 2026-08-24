@@ -148,6 +148,67 @@ static tuff_error parse_assign(pctx *c, tuff_program *prog)
     return parse_eq_value(c, &nd->value);
 }
 
+/* Parses a binary operand (literal or variable) into the given fields. */
+static tuff_error parse_binop_operand(pctx *c, tuff_opknd *kind, long *value,
+                                      char *name)
+{
+    if (has_more(c) && cur(c)->type == TOK_INT)
+    {
+        *kind = OPKND_LITERAL;
+        *value = cur(c)->value;
+        advance(c);
+        return tuff_err_at(ERR_OK, cur(c)->pos);
+    }
+    if (has_more(c) && cur(c)->type == TOK_KEYWORD &&
+        (cur(c)->kw == KW_TRUE || cur(c)->kw == KW_FALSE))
+    {
+        *kind = OPKND_LITERAL;
+        *value = (cur(c)->kw == KW_TRUE) ? 1 : 0;
+        advance(c);
+        return tuff_err_at(ERR_OK, cur(c)->pos);
+    }
+    if (has_more(c) && cur(c)->type == TOK_IDENT)
+    {
+        *kind = OPKND_VAR;
+        tuff_error e = copy_ident(c, name);
+        if (e.code != ERR_OK)
+            return e;
+        return tuff_err_at(ERR_OK, cur(c)->pos);
+    }
+    return tuff_err_at(ERR_BINOP_OPERAND, cur(c)->pos);
+}
+
+/* Parses the value of a return statement into nd (literal, variable, or
+ * dereferenced variable). Literals and variables are recorded in the op1
+ * fields so a following binary operator can reuse them. */
+static tuff_error parse_return_value(pctx *c, tuff_node *nd)
+{
+    if (has_more(c) && cur(c)->type == TOK_STAR)
+    {
+        advance(c);
+        nd->use_var = 1;
+        nd->deref = 1;
+        tuff_error e = copy_ident(c, nd->name);
+        if (e.code != ERR_OK)
+            return e;
+        return tuff_err_at(ERR_OK, cur(c)->pos);
+    }
+    tuff_error e = parse_binop_operand(c, &nd->op1_kind, &nd->op1_value,
+                                       nd->op1_name);
+    if (e.code != ERR_OK)
+        return e;
+    if (nd->op1_kind == OPKND_VAR)
+    {
+        nd->use_var = 1;
+        memcpy(nd->name, nd->op1_name, strlen(nd->op1_name) + 1);
+    }
+    else
+    {
+        nd->value = nd->op1_value;
+    }
+    return tuff_err_at(ERR_OK, cur(c)->pos);
+}
+
 static tuff_error parse_return(pctx *c, tuff_program *prog)
 {
     tuff_node *nd = &prog->stmts[prog->count];
@@ -156,36 +217,20 @@ static tuff_error parse_return(pctx *c, tuff_program *prog)
     nd->pos = cur(c)->pos;
 
     advance(c); /* return */
-    if (has_more(c) && cur(c)->type == TOK_INT)
+    tuff_error e = parse_return_value(c, nd);
+    if (e.code != ERR_OK)
+        return e;
+    if (has_more(c) && cur(c)->type == TOK_OR)
     {
-        nd->value = cur(c)->value;
+        if (nd->deref)
+            return tuff_err_at(ERR_BINOP_OPERAND, cur(c)->pos);
+        /* The left operand was already recorded in the op1 fields. */
         advance(c);
-    }
-    else if (has_more(c) && cur(c)->type == TOK_KEYWORD &&
-             (cur(c)->kw == KW_TRUE || cur(c)->kw == KW_FALSE))
-    {
-        nd->value = (cur(c)->kw == KW_TRUE) ? 1 : 0;
-        advance(c);
-    }
-    else if (has_more(c) && cur(c)->type == TOK_STAR)
-    {
-        advance(c);
-        nd->use_var = 1;
-        nd->deref = 1;
-        tuff_error e = copy_ident(c, nd->name);
+        nd->binop = 1;
+        nd->op = TUFF_OP_OR;
+        e = parse_binop_operand(c, &nd->op2_kind, &nd->op2_value, nd->op2_name);
         if (e.code != ERR_OK)
             return e;
-    }
-    else if (has_more(c) && cur(c)->type == TOK_IDENT)
-    {
-        nd->use_var = 1;
-        tuff_error e = copy_ident(c, nd->name);
-        if (e.code != ERR_OK)
-            return e;
-    }
-    else
-    {
-        return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
     }
     return expect(c, TOK_SEMI);
 }

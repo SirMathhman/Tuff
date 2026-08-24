@@ -16,6 +16,7 @@ typedef enum
     ERR_INT_OVERFLOW,      /* an integer literal does not fit in a long */
     ERR_NOT_A_REF,         /* a reference was used where a value was required */
     ERR_REF_NOT_MUT,       /* assignment through a non-mut reference */
+    ERR_BINOP_OPERAND,     /* a binary operand was not a literal or variable */
     ERR_UNRECOGNIZED_CHAR, /* a character is not part of the grammar */
     ERR_SOURCE_TOO_LONG,   /* the token buffer is exhausted */
     ERR_NAME_TOO_LONG,     /* an identifier or literal exceeds the buffer */
@@ -68,6 +69,8 @@ static inline const char *tuff_err_msg(tuff_err code)
         return "value is a reference; dereference it with '*'";
     case ERR_REF_NOT_MUT:
         return "assignment through non-mut reference (declare it with '&mut')";
+    case ERR_BINOP_OPERAND:
+        return "binary operand must be a literal or variable";
     case ERR_UNRECOGNIZED_CHAR:
         return "unrecognized character";
     case ERR_SOURCE_TOO_LONG:

@@ -109,11 +109,39 @@ static tuff_err eval_assign(var *vars, int nvars, const tuff_node *nd,
     return ERR_OK;
 }
 
+/* Resolves a binary operand to its value; on failure records the error in r
+ * and returns 0. */
+static long operand_value(const var *vars, int nvars, tuff_opknd kind,
+                          long value, const char *name, tuff_pos pos,
+                          tuff_result *r)
+{
+    if (kind == OPKND_LITERAL)
+        return value;
+    const var *v = find_var_or_err(vars, nvars, name, pos, r);
+    if (v == NULL)
+        return 0;
+    return v->value;
+}
+
 /* Evaluates a NODE_RETURN statement. On success sets r->ok and r->value and
  * returns ERR_OK; on failure records the error in r and returns the code. */
 static tuff_err eval_return(const var *vars, int nvars, const tuff_node *nd,
                             tuff_result *r)
 {
+    if (nd->binop)
+    {
+        long a = operand_value(vars, nvars, nd->op1_kind, nd->op1_value,
+                               nd->op1_name, nd->pos, r);
+        if (r->error.code != ERR_OK)
+            return r->error.code;
+        long b = operand_value(vars, nvars, nd->op2_kind, nd->op2_value,
+                               nd->op2_name, nd->pos, r);
+        if (r->error.code != ERR_OK)
+            return r->error.code;
+        r->value = (nd->op == TUFF_OP_OR) ? (a != 0 || b != 0) : 0;
+        r->ok = 1;
+        return ERR_OK;
+    }
     if (nd->use_var)
     {
         const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, r);
