@@ -10,6 +10,10 @@ test('evaluateTuff("return 1;") returns ok with value 1', () => {
   expect(evaluateTuff("return 1;")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluateTuff("let x = 1; return x;") returns ok with value 1', () => {
+  expect(evaluateTuff("let x = 1; return x;")).toEqual({ ok: true, value: 1 });
+});
+
 test("evaluateTuff with a syntax error returns a structured SyntaxError", () => {
   const result = evaluateTuff("return 1 +;");
   expect(result.ok).toBe(false);
