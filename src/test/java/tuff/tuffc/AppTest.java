@@ -20,4 +20,9 @@ class AppTest {
 	void evaluateReturnZeroShouldReturnZero() {
 		assertEquals(0, App.evaluate("return 0;"));
 	}
+
+	@Test
+	void evaluateReturnOneShouldReturnOne() {
+		assertEquals(1, App.evaluate("return 1;"));
+	}
 }
