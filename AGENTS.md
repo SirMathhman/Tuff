@@ -1,6 +1,6 @@
 # Tuff
 
-A small TypeScript (Bun) library that evaluates a Rust-like source subset into a process exit code. The subset: `let` / `let mut` bindings (optional type annotations), `=` / `+=` assignment, `if` / `else`, `while`, blocks, `&` / `&mut` references, `*` dereference (including `*x = v`), array literals and indexing, integer literals with suffixes (`U8`…`I64`, `USize`, `ISize`), comparison and arithmetic expressions, and a trailing `return`.
+A small TypeScript (Bun) library that evaluates a Rust-like source subset into a process exit code. The subset: `let` / `let mut` bindings (optional type annotations), `=` / `+=` assignment, `if` / `else`, `while`, blocks, `&` / `&mut` references, `*` dereference (including `*x = v`), array literals and indexing, function declarations/calls (`fn name(p : I32) : I32 => { ... }` — see `check/fn.ts`), struct declarations/literals (`struct` — see `check/struct.ts`, `parser/struct.ts`), integer literals with suffixes (`U8`…`I64`, `USize`, `ISize`), comparison and arithmetic expressions, and a trailing `return`.
 
 ## Commands
 
@@ -14,11 +14,13 @@ A small TypeScript (Bun) library that evaluates a Rust-like source subset into a
 | Circular deps                                    | `bunx madge --circular --extensions ts <files>`              |
 | Copy-paste detection                             | `pmd cpd --minimum-tokens 100 --language typescript <files>` |
 
-These are also wired as hooks in `.github/hooks/` (`lint`, `test`, `format`, `cap-children-per-directory`, `find-circular-files`, `find-circular-packages`, `pmd-cpd`). Run the relevant hook after changes. Note `bun run lint` runs `eslint . --fix`, which auto-modifies files.
+These are also wired as hooks in `.github/hooks/` (PowerShell scripts: `lint.ps1`, `test.ps1`, `format.ps1`, `cap-children-per-directory.ps1`, `find-circular-files.ps1`, `find-circular-packages.ps1`, `pmd-cpd.ps1`). Run the relevant hook after changes. Note `bun run lint` runs `eslint . --fix`, which auto-modifies files.
 
 ## Architecture
 
-Pipeline: `lex → parse → check → evaluate`. The public API is `evaluate(input: string): Result<number, EvalError>` — it returns the exit code, not the evaluator's internal value.
+Pipeline: `lex → parse → check → evaluate`. The public API is `evaluate(input: string): Result<number, EvalError>` — it returns the exit code, not the evaluator's internal value. `index.ts` also re-exports the `Result` combinators (`Ok`, `Err`, `map`, `andThen`, `unwrapOr`) and the `Result`/`EvalError` types. Empty input evaluates to `Ok(0)`.
+
+⚠️ **Known convention violations in `src/evaluate.ts`:** `executeTuff(input, args)` uses `new Function(...)` (banned — see Pitfalls) and `compileTuffToJS(input)` generates host JS source. Both are experimental leftovers, not part of the supported pipeline. Do not use or extend them; treat them as candidates for removal, and never add new code paths that generate host code.
 
 Module layout (dependency direction is acyclic — enforce with `madge --circular`). Each stage lives in its own subdirectory with an `index.ts` barrel:
 
@@ -46,7 +48,9 @@ Two-pass design: `check` is the static semantic gate (whole-AST, including dead 
 - **Size limits** (enforced by linter/hooks): max 100 lines/function, 500 lines/file, 15 children/directory.
 - **Tests** are colocated (`*.test.ts`) and depend only on the module under test. Use `bun:test`. Parser tests build token arrays directly with a `tok()` helper (bypassing the lexer); `src/ast/testAst.ts` provides AST constructors for check/eval tests; `evaluate.test.ts` is the end-to-end suite.
 - **Formatting:** Prettier — double quotes, semicolons, 2-space indent, 100-char width.
-- **Types:** named interfaces and string enums only — eslint bans inline type literals (`TSTypeLiteral`) and literal-typed properties (the `ok` discriminant in `src/result.ts` is the sole waiver).
+- **Types:** named interfaces and string enums only — eslint bans inline type literals (`TSTypeLiteral`) and literal-typed properties (the `ok` discriminant in `src/result.ts` is the sole waiver). `src/result.ts` is also fully waived from the size limits.
+- **TypeScript config:** strict mode with `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, and `allowImportingTsExtensions` — imports use explicit `.ts` extensions; bundler resolution, ESNext target, Bun types.
+- **Size-limit details:** eslint enforces 100 lines/function and 500 lines/file as _warnings_ (blank/comment lines skipped); `scripts/check-size-limits.ts` re-enforces them as errors in `bun run lint` counting raw lines. The 15-children/directory limit comes from the hook, not the script.
 
 ## Adding a language feature
 
