@@ -7,7 +7,7 @@ typedef enum
 {
     ERR_OK = 0,
     ERR_EXPECTED_TOKEN,    /* a required token was missing or unexpected */
-    ERR_EXPECTED_INT,      /* an integer literal was required */
+    ERR_EXPECTED_INT,      /* a value literal (int or bool) was required */
     ERR_EXPECTED_IDENT,    /* an identifier was required */
     ERR_EXPECTED_RETURN,   /* the program must end with a return statement */
     ERR_DUPLICATE_VAR,     /* a variable was declared twice */
@@ -51,7 +51,7 @@ static inline const char *tuff_err_msg(tuff_err code)
     case ERR_EXPECTED_TOKEN:
         return "expected token";
     case ERR_EXPECTED_INT:
-        return "expected integer literal";
+        return "expected value literal (integer or boolean)";
     case ERR_EXPECTED_IDENT:
         return "expected identifier";
     case ERR_EXPECTED_RETURN:

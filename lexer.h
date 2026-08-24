@@ -22,7 +22,9 @@ typedef enum
     KW_NONE = 0,
     KW_LET,
     KW_MUT,
-    KW_RETURN
+    KW_RETURN,
+    KW_TRUE,
+    KW_FALSE
 } tuff_kw;
 
 typedef struct

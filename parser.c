@@ -46,16 +46,36 @@ static tuff_error copy_ident(pctx *c, char *out)
     return tuff_err_at(ERR_OK, cur(c)->pos);
 }
 
-/* Parses `= <int> ;` and stores the value. */
-static tuff_error parse_eq_int(pctx *c, long *value)
+/* Parses a value literal (int or bool) and stores it in *value. */
+static tuff_error parse_value(pctx *c, long *value)
+{
+    if (!has_more(c))
+        return tuff_err_at(ERR_EXPECTED_INT, cur(c)->pos);
+    if (cur(c)->type == TOK_INT)
+    {
+        *value = cur(c)->value;
+        advance(c);
+        return tuff_err_at(ERR_OK, cur(c)->pos);
+    }
+    if (cur(c)->type == TOK_KEYWORD &&
+        (cur(c)->kw == KW_TRUE || cur(c)->kw == KW_FALSE))
+    {
+        *value = (cur(c)->kw == KW_TRUE) ? 1 : 0;
+        advance(c);
+        return tuff_err_at(ERR_OK, cur(c)->pos);
+    }
+    return tuff_err_at(ERR_EXPECTED_INT, cur(c)->pos);
+}
+
+/* Parses `= <value> ;` and stores the value. */
+static tuff_error parse_eq_value(pctx *c, long *value)
 {
     tuff_error e = expect(c, TOK_EQ);
     if (e.code != ERR_OK)
         return e;
-    if (!has_more(c) || cur(c)->type != TOK_INT)
-        return tuff_err_at(ERR_EXPECTED_INT, cur(c)->pos);
-    *value = cur(c)->value;
-    advance(c);
+    e = parse_value(c, value);
+    if (e.code != ERR_OK)
+        return e;
     return expect(c, TOK_SEMI);
 }
 
@@ -103,7 +123,7 @@ static tuff_error parse_let(pctx *c, tuff_program *prog)
         nd->is_ref = 1;
         return parse_eq_ref(c, nd->ref_name, &nd->ref_mut);
     }
-    return parse_eq_int(c, &nd->value);
+    return parse_eq_value(c, &nd->value);
 }
 
 static tuff_error parse_assign(pctx *c, tuff_program *prog)
@@ -120,12 +140,12 @@ static tuff_error parse_assign(pctx *c, tuff_program *prog)
         tuff_error e = copy_ident(c, nd->name);
         if (e.code != ERR_OK)
             return e;
-        return parse_eq_int(c, &nd->value);
+        return parse_eq_value(c, &nd->value);
     }
     tuff_error e = copy_ident(c, nd->name);
     if (e.code != ERR_OK)
         return e;
-    return parse_eq_int(c, &nd->value);
+    return parse_eq_value(c, &nd->value);
 }
 
 static tuff_error parse_return(pctx *c, tuff_program *prog)
@@ -139,6 +159,12 @@ static tuff_error parse_return(pctx *c, tuff_program *prog)
     if (has_more(c) && cur(c)->type == TOK_INT)
     {
         nd->value = cur(c)->value;
+        advance(c);
+    }
+    else if (has_more(c) && cur(c)->type == TOK_KEYWORD &&
+             (cur(c)->kw == KW_TRUE || cur(c)->kw == KW_FALSE))
+    {
+        nd->value = (cur(c)->kw == KW_TRUE) ? 1 : 0;
         advance(c);
     }
     else if (has_more(c) && cur(c)->type == TOK_STAR)

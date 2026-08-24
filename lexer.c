@@ -18,6 +18,10 @@ static tuff_kw keyword_for(const char *text, size_t len)
         return KW_MUT;
     if (len == 6 && strncmp(text, "return", 6) == 0)
         return KW_RETURN;
+    if (len == 4 && strncmp(text, "true", 4) == 0)
+        return KW_TRUE;
+    if (len == 5 && strncmp(text, "false", 5) == 0)
+        return KW_FALSE;
     return KW_NONE;
 }
 

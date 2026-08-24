@@ -85,6 +85,9 @@ int main(void)
     check_ok("let mut x = 0; { x = 1; return x; }", 1);
     /* Statements after a block that returns are unreachable. */
     check_ok("let mut x = 0; { x = 1; return x; } x = 2;", 1);
+    check_ok("let x = true; return x;", 1);
+    check_ok("return true;", 1);
+    check_ok("let x = false; return x;", 0);
 
     /* A program that returns 0 is a success, not an error. */
     check_ok("return 0;", 0);
