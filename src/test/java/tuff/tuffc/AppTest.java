@@ -10,4 +10,9 @@ class AppTest {
     void greetingShouldReturnExpectedValue() {
         assertEquals("Hello, Maven!", App.greeting());
     }
+
+    @Test
+    void evaluateEmptyStringShouldReturnZero() {
+        assertEquals(0, App.evaluate(""));
+    }
 }
