@@ -1,20 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
 
+function unwrap(result: ReturnType<typeof evaluate>): unknown {
+  if (!result.ok) throw new Error(`expected ok, got error: ${JSON.stringify(result.error)}`);
+  return result.value;
+}
+
 describe("evaluate", () => {
   test("empty string evaluates to 0", () => {
-    expect(evaluate("")).toBe(0);
+    expect(unwrap(evaluate(""))).toBe(0);
   });
 
   test('evaluates "return 1;" to 1', () => {
-    expect(evaluate("return 1;")).toBe(1);
+    expect(unwrap(evaluate("return 1;"))).toBe(1);
   });
 
   test('evaluates "let x = 1; return x;" to 1', () => {
-    expect(evaluate("let x = 1; return x;")).toBe(1);
+    expect(unwrap(evaluate("let x = 1; return x;"))).toBe(1);
   });
 
   test('evaluates "let mut x = 0; x = 1; return x;" to 1', () => {
-    expect(evaluate("let mut x = 0; x = 1; return x;")).toBe(1);
+    expect(unwrap(evaluate("let mut x = 0; x = 1; return x;"))).toBe(1);
+  });
+
+  test("throwing input yields EvaluationFailed with cause", () => {
+    const result = evaluate("throw new Error('boom');");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("EvaluationFailed");
+      expect(result.error.cause).toBeInstanceOf(Error);
+    }
   });
 });
