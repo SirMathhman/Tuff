@@ -12,14 +12,15 @@
 static int evaluate_source(const char *src, long *out)
 {
     tuff_tok toks[TUFF_MAX_TOKENS];
-    int n = tuff_lex(src, toks);
-    if (n < 0)
+    int n;
+    tuff_error e = tuff_lex(src, toks, &n);
+    if (e.code != ERR_OK)
     {
-        printf("error: source too long\n");
+        printf("error at %d:%d: %s\n", e.pos.line, e.pos.col, tuff_err_msg(e.code));
         return 1;
     }
     tuff_program prog;
-    tuff_error e = tuff_parse(toks, n, &prog);
+    e = tuff_parse(toks, n, &prog);
     if (e.code != ERR_OK)
     {
         printf("error at %d:%d: %s\n", e.pos.line, e.pos.col, tuff_err_msg(e.code));

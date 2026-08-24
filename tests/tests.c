@@ -12,15 +12,17 @@ static int failures = 0;
 static int check_ok(const char *src, long expected)
 {
     tuff_tok toks[TUFF_MAX_TOKENS];
-    int n = tuff_lex(src, toks);
-    if (n < 0)
+    int n;
+    tuff_error e = tuff_lex(src, toks, &n);
+    if (e.code != ERR_OK)
     {
-        printf("FAIL: %s => lex error, expected %ld\n", src, expected);
+        printf("FAIL: %s => lex error (%s), expected %ld\n", src,
+               tuff_err_msg(e.code), expected);
         failures++;
         return 0;
     }
     tuff_program prog;
-    tuff_error e = tuff_parse(toks, n, &prog);
+    e = tuff_parse(toks, n, &prog);
     if (e.code != ERR_OK)
     {
         printf("FAIL: %s => parse error (%s), expected %ld\n", src,
@@ -43,22 +45,24 @@ static int check_ok(const char *src, long expected)
 static int check_err(const char *src, tuff_err expected)
 {
     tuff_tok toks[TUFF_MAX_TOKENS];
-    int n = tuff_lex(src, toks);
-    if (n < 0)
-        return 1; /* lex failure counts as an error */
-    tuff_program prog;
-    tuff_error e = tuff_parse(toks, n, &prog);
+    int n;
+    tuff_error e = tuff_lex(src, toks, &n);
     if (e.code == ERR_OK)
     {
-        tuff_result r = tuff_eval(&prog);
-        if (r.ok)
+        tuff_program prog;
+        e = tuff_parse(toks, n, &prog);
+        if (e.code == ERR_OK)
         {
-            printf("FAIL: %s => ok (%ld), expected error %s\n", src, r.value,
-                   tuff_err_msg(expected));
-            failures++;
-            return 0;
+            tuff_result r = tuff_eval(&prog);
+            if (r.ok)
+            {
+                printf("FAIL: %s => ok (%ld), expected error %s\n", src, r.value,
+                       tuff_err_msg(expected));
+                failures++;
+                return 0;
+            }
+            e = r.error;
         }
-        e = r.error;
     }
     if (e.code != expected)
     {
@@ -91,6 +95,16 @@ int main(void)
     check_err("let x = a; return x;", ERR_EXPECTED_INT);
     check_err("let x = 1; let y = &mut x; return *y;", ERR_REF_NOT_MUT);
     check_err("let x = 1; let y = &x; *y = 2; return x;", ERR_REF_NOT_MUT);
+
+    /* Lexer errors. */
+    check_err("return @;", ERR_UNRECOGNIZED_CHAR);
+    check_err("let x = 99999999999999999999999999; return x;", ERR_INT_OVERFLOW);
+    check_err("let aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = 1; return x;",
+             ERR_NAME_TOO_LONG);
+    char long_src[1024];
+    for (int i = 0; i < 300; i++)
+        sprintf(long_src + i * 2, "1 ");
+    check_err(long_src, ERR_SOURCE_TOO_LONG);
 
     if (failures == 0)
         printf("All tests passed\n");

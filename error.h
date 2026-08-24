@@ -15,7 +15,10 @@ typedef enum
     ERR_ASSIGN_IMMUTABLE, /* a non-mut variable was reassigned */
     ERR_INT_OVERFLOW,     /* an integer literal does not fit in a long */
     ERR_NOT_A_REF,        /* a reference was used where a value was required */
-    ERR_REF_NOT_MUT       /* assignment through a non-mut reference */
+    ERR_REF_NOT_MUT,      /* assignment through a non-mut reference */
+    ERR_UNRECOGNIZED_CHAR,/* a character is not part of the grammar */
+    ERR_SOURCE_TOO_LONG,  /* the token buffer is exhausted */
+    ERR_NAME_TOO_LONG     /* an identifier or literal exceeds the buffer */
 } tuff_err;
 
 typedef struct
@@ -64,6 +67,12 @@ static inline const char *tuff_err_msg(tuff_err code)
         return "value is a reference; dereference it with '*'";
     case ERR_REF_NOT_MUT:
         return "assignment through non-mut reference (declare it with '&mut')";
+    case ERR_UNRECOGNIZED_CHAR:
+        return "unrecognized character";
+    case ERR_SOURCE_TOO_LONG:
+        return "source too long (token limit exceeded)";
+    case ERR_NAME_TOO_LONG:
+        return "identifier or literal too long";
     }
     return "unknown error";
 }

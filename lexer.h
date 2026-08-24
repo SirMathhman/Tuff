@@ -34,8 +34,8 @@ typedef struct
 
 #define TUFF_MAX_TOKENS 256
 
-/* Tokenizes src into toks (up to TUFF_MAX_TOKENS). Returns the token count,
- * or -1 if the token buffer is too small. */
-int tuff_lex(const char *src, tuff_tok *toks);
+/* Tokenizes src into toks (up to TUFF_MAX_TOKENS) and stores the token
+ * count in *count. Returns a structured error on failure. */
+tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count);
 
 #endif /* TUFF_LEXER_H */

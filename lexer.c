@@ -34,8 +34,9 @@ static int is_digit_char(unsigned char c)
 }
 
 /* Scans a run of characters matching pred, stores it in tok->text, and
- * advances p/col. Returns 0 on success, -1 if the run is empty or too long. */
-static int scan_run(const char **pp, int *colp, tuff_tok *tok, char_pred pred)
+ * advances p/col. Returns ERR_OK on success, ERR_NAME_TOO_LONG if the run
+ * is empty or too long. */
+static tuff_err scan_run(const char **pp, int *colp, tuff_tok *tok, char_pred pred)
 {
     const char *p = *pp;
     const char *start = p;
@@ -46,14 +47,14 @@ static int scan_run(const char **pp, int *colp, tuff_tok *tok, char_pred pred)
     }
     size_t len = (size_t)(p - start);
     if (len == 0 || len >= sizeof(tok->text))
-        return -1;
+        return ERR_NAME_TOO_LONG;
     memcpy(tok->text, start, len);
     tok->text[len] = '\0';
     *pp = p;
-    return 0;
+    return ERR_OK;
 }
 
-int tuff_lex(const char *src, tuff_tok *toks)
+tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
 {
     int n = 0;
     int line = 1;
@@ -63,7 +64,7 @@ int tuff_lex(const char *src, tuff_tok *toks)
     while (*p != '\0')
     {
         if (n >= TUFF_MAX_TOKENS)
-            return -1;
+            return tuff_err_at(ERR_SOURCE_TOO_LONG, (tuff_pos){line, col});
         if (is_space(*p))
         {
             p++;
@@ -98,8 +99,10 @@ int tuff_lex(const char *src, tuff_tok *toks)
         }
         if (isalpha((unsigned char)*p) || *p == '_')
         {
-            if (scan_run(&p, &col, &toks[n], is_word_char) != 0)
-                return -1;
+            int start_col = col;
+            tuff_err err = scan_run(&p, &col, &toks[n], is_word_char);
+            if (err != ERR_OK)
+                return tuff_err_at(err, (tuff_pos){line, start_col});
             size_t len = strlen(toks[n].text);
             toks[n].kw = keyword_for(toks[n].text, len);
             toks[n].type = toks[n].kw != KW_NONE ? TOK_KEYWORD : TOK_IDENT;
@@ -110,12 +113,14 @@ int tuff_lex(const char *src, tuff_tok *toks)
         }
         if (isdigit((unsigned char)*p))
         {
-            if (scan_run(&p, &col, &toks[n], is_digit_char) != 0)
-                return -1;
+            int start_col = col;
+            tuff_err err = scan_run(&p, &col, &toks[n], is_digit_char);
+            if (err != ERR_OK)
+                return tuff_err_at(err, (tuff_pos){line, start_col});
             errno = 0;
             long v = strtol(toks[n].text, NULL, 10);
             if (errno == ERANGE)
-                return -1;
+                return tuff_err_at(ERR_INT_OVERFLOW, (tuff_pos){line, start_col});
             toks[n].type = TOK_INT;
             toks[n].value = v;
             toks[n].pos.line = line;
@@ -123,14 +128,15 @@ int tuff_lex(const char *src, tuff_tok *toks)
             n++;
             continue;
         }
-        return -1; /* unrecognized character */
+        return tuff_err_at(ERR_UNRECOGNIZED_CHAR, (tuff_pos){line, col});
     }
 
     if (n >= TUFF_MAX_TOKENS)
-        return -1;
+        return tuff_err_at(ERR_SOURCE_TOO_LONG, (tuff_pos){line, col});
     toks[n].type = TOK_EOF;
     toks[n].pos.line = line;
     toks[n].pos.col = col;
     n++;
-    return n;
+    *count = n;
+    return tuff_err_at(ERR_OK, (tuff_pos){line, col});
 }
