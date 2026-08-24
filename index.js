@@ -1,3 +1,3 @@
-export function evaluateTuff(_input) {
-  return 0;
+export function evaluateTuff(input) {
+  return Number(input);
 }
