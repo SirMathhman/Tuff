@@ -4,7 +4,11 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "latest",
+    "eslint": "^10.9.0",
+    "madge": "^8.0.0",
+    "prettier": "^3.9.6"
   },
   "peerDependencies": {
     "typescript": "^5"
