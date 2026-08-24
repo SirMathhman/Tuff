@@ -104,7 +104,15 @@ describe("evaluate: integer suffixes", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.kind).toBe(ErrorKind.Semantic);
-      expect(r.error.message).toContain("U8");
+      expect(r.error.message).toContain("U16");
+    }
+  });
+
+  test('evaluate("let mut x = 0U8; x = 100U16;") => Err (assignment type mismatch)', () => {
+    const r = evaluate("let mut x = 0U8; x = 100U16;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("U16");
     }
   });

@@ -43,6 +43,8 @@ export interface Binding {
   mutable: boolean;
   /** Known numeric literal (static pass only); invalidated on reassignment. */
   literal?: number;
+  /** Integer type (suffix or annotation) the binding is declared with. */
+  intType?: string;
 }
 
 export function resolveRefChain(

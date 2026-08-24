@@ -30,8 +30,8 @@ function checkMutability(
         mutable: stmt.mutable,
       };
       if (stmt.value.type === ExprType.Number) binding.literal = stmt.value.value;
+      const initType = inferIntType(stmt.value, env);
       if (stmt.annotation) {
-        const initType = inferIntType(stmt.value, env);
         if (initType !== null && initType !== stmt.annotation) {
           return Err(
             err(
@@ -41,6 +41,9 @@ function checkMutability(
             ),
           );
         }
+        binding.intType = stmt.annotation;
+      } else if (initType !== null) {
+        binding.intType = initType;
       }
       env.set(stmt.name, binding);
     } else if (stmt.type === StatementType.Assign) {
@@ -61,6 +64,20 @@ function checkMutability(
       delete target.value.binding.literal;
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
+      const rhsType = inferIntType(stmt.value, env);
+      if (
+        target.value.binding.intType &&
+        rhsType !== null &&
+        rhsType !== target.value.binding.intType
+      ) {
+        return Err(
+          err(
+            ErrorKind.Semantic,
+            `Cannot assign "${rhsType}" value to "${target.value.binding.intType}" binding "${target.value.name}"`,
+            stmt.value.position,
+          ),
+        );
+      }
     } else if (stmt.type === StatementType.Block) {
       const inner = checkMutability(stmt.statements, env);
       if (!inner.ok) return inner;
