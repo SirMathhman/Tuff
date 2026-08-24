@@ -1,9 +1,11 @@
 export const EvaluateErrorKind = {
   EmptyInput: "EmptyInput",
   EvaluationFailed: "EvaluationFailed",
+  ImmutableReassignment: "ImmutableReassignment",
 } as const;
 
-export type EvaluateErrorKind = (typeof EvaluateErrorKind)[keyof typeof EvaluateErrorKind];
+export type EvaluateErrorKind =
+  (typeof EvaluateErrorKind)[keyof typeof EvaluateErrorKind];
 
 export type EvaluateError = {
   kind: EvaluateErrorKind;

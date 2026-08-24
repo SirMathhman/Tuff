@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
 
 function unwrap(result: ReturnType<typeof evaluate>): unknown {
-  if (!result.ok) throw new Error(`expected ok, got error: ${JSON.stringify(result.error)}`);
+  if (!result.ok)
+    throw new Error(`expected ok, got error: ${JSON.stringify(result.error)}`);
   return result.value;
 }
 
@@ -29,6 +30,14 @@ describe("evaluate", () => {
     if (!result.ok) {
       expect(result.error.kind).toBe("EvaluationFailed");
       expect(result.error.cause).toBeInstanceOf(Error);
+    }
+  });
+
+  test("reassigning an immutable variable yields ImmutableReassignment", () => {
+    const result = evaluate("let x = 0; x = 1; return x;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("ImmutableReassignment");
     }
   });
 });
