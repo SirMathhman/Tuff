@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent)
 
-$srcs = @("main.c", "lexer.c", "parser.c", "eval.c")
+$srcs = @("main.c", "pipeline.c", "lexer.c", "parser.c", "eval.c")
 $exe = Join-Path (Get-Location) "main.exe"
 
 & clang -Wall -Wextra -o $exe $srcs
@@ -11,7 +11,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$testSrcs = @("tests\tests.c", "lexer.c", "parser.c", "eval.c")
+$testSrcs = @("tests\tests.c", "pipeline.c", "lexer.c", "parser.c", "eval.c")
 $testExe = Join-Path (Get-Location) "tests\tests.exe"
 
 & clang -Wall -Wextra -o $testExe $testSrcs

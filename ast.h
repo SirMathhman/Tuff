@@ -24,7 +24,7 @@ typedef enum
 typedef enum
 {
     OPKND_LITERAL,
-    OPKND_VAR
+    OPKND_VAR   
 } tuff_opknd;
 
 /* Payload for a NODE_LET statement. */

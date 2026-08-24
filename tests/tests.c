@@ -1,40 +1,19 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../eval.h"
 #include "../error.h"
-#include "../lexer.h"
-#include "../parser.h"
+#include "../pipeline.h"
 
 static int failures = 0;
 
 /* Evaluates src; returns 1 if it succeeds with the expected value. */
 static int check_ok(const char *src, long expected)
 {
-    tuff_tok toks[TUFF_MAX_TOKENS];
-    int n;
-    tuff_error e = tuff_lex(src, toks, &n);
-    if (e.code != ERR_OK)
-    {
-        printf("FAIL: %s => lex error (%s), expected %ld\n", src,
-               tuff_err_msg(e.code), expected);
-        failures++;
-        return 0;
-    }
-    tuff_program prog;
-    e = tuff_parse(toks, n, &prog);
-    if (e.code != ERR_OK)
-    {
-        printf("FAIL: %s => parse error (%s), expected %ld\n", src,
-               tuff_err_msg(e.code), expected);
-        failures++;
-        return 0;
-    }
-    tuff_result r = tuff_eval(&prog);
+    tuff_run_result r = tuff_run(src);
     if (!r.ok || r.value != expected)
     {
         printf("FAIL: %s => %s, expected %ld\n", src,
-               r.ok ? "wrong value" : "eval error", expected);
+               r.ok ? "wrong value" : tuff_err_msg(r.error.code), expected);
         failures++;
         return 0;
     }
@@ -44,30 +23,18 @@ static int check_ok(const char *src, long expected)
 /* Evaluates src; returns 1 if it fails with the expected error code. */
 static int check_err(const char *src, tuff_err expected)
 {
-    tuff_tok toks[TUFF_MAX_TOKENS];
-    int n;
-    tuff_error e = tuff_lex(src, toks, &n);
-    if (e.code == ERR_OK)
+    tuff_run_result r = tuff_run(src);
+    if (r.ok)
     {
-        tuff_program prog;
-        e = tuff_parse(toks, n, &prog);
-        if (e.code == ERR_OK)
-        {
-            tuff_result r = tuff_eval(&prog);
-            if (r.ok)
-            {
-                printf("FAIL: %s => ok (%ld), expected error %s\n", src, r.value,
-                       tuff_err_msg(expected));
-                failures++;
-                return 0;
-            }
-            e = r.error;
-        }
-    }
-    if (e.code != expected)
-    {
-        printf("FAIL: %s => error %s, expected %s\n", src, tuff_err_msg(e.code),
+        printf("FAIL: %s => ok (%ld), expected error %s\n", src, r.value,
                tuff_err_msg(expected));
+        failures++;
+        return 0;
+    }
+    if (r.error.code != expected)
+    {
+        printf("FAIL: %s => error %s, expected %s\n", src,
+               tuff_err_msg(r.error.code), tuff_err_msg(expected));
         failures++;
         return 0;
     }

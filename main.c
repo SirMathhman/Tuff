@@ -1,32 +1,15 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "eval.h"
 #include "error.h"
-#include "lexer.h"
-#include "parser.h"
+#include "pipeline.h"
 
 /* CLI entry: read source from argv[1] (or stdin), evaluate, print the
  * result value or a structured error. */
 
 static int evaluate_source(const char *src, long *out)
 {
-    tuff_tok toks[TUFF_MAX_TOKENS];
-    int n;
-    tuff_error e = tuff_lex(src, toks, &n);
-    if (e.code != ERR_OK)
-    {
-        printf("error at %d:%d: %s\n", e.pos.line, e.pos.col, tuff_err_msg(e.code));
-        return 1;
-    }
-    tuff_program prog;
-    e = tuff_parse(toks, n, &prog);
-    if (e.code != ERR_OK)
-    {
-        printf("error at %d:%d: %s\n", e.pos.line, e.pos.col, tuff_err_msg(e.code));
-        return 1;
-    }
-    tuff_result r = tuff_eval(&prog);
+    tuff_run_result r = tuff_run(src);
     if (!r.ok)
     {
         printf("error at %d:%d: %s\n", r.error.pos.line, r.error.pos.col,
