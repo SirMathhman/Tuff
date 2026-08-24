@@ -16,7 +16,8 @@ typedef enum
 
 typedef enum
 {
-    TUFF_OP_OR
+    TUFF_OP_OR,
+    TUFF_OP_AND
 } tuff_op;
 
 typedef enum

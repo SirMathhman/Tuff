@@ -91,7 +91,12 @@ tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
             else if (*p == ';')
                 type = TOK_SEMI;
             else if (*p == '&')
-                type = TOK_AMP;
+            {
+                if (p[1] == '&')
+                    type = TOK_AND;
+                else
+                    type = TOK_AMP;
+            }
             else if (*p == '*')
                 type = TOK_STAR;
             else if (*p == '{')
@@ -108,8 +113,9 @@ tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
             toks[n].pos.line = line;
             toks[n].pos.col = col;
             n++;
-            p += (type == TOK_OR) ? 2 : 1;
-            col += (type == TOK_OR) ? 2 : 1;
+            int adv = (type == TOK_OR || type == TOK_AND) ? 2 : 1;
+            p += adv;
+            col += adv;
             continue;
         }
         if (isalpha((unsigned char)*p) || *p == '_')

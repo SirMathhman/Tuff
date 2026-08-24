@@ -15,7 +15,8 @@ typedef enum
     TOK_STAR,   /* * */
     TOK_LBRACE, /* { */
     TOK_RBRACE, /* } */
-    TOK_OR      /* || */
+    TOK_OR,     /* || */
+    TOK_AND     /* && */
 } tuff_tok_type;
 
 typedef enum

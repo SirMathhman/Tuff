@@ -138,7 +138,10 @@ static tuff_err eval_return(const var *vars, int nvars, const tuff_node *nd,
                                nd->op2_name, nd->pos, r);
         if (r->error.code != ERR_OK)
             return r->error.code;
-        r->value = (nd->op == TUFF_OP_OR) ? (a != 0 || b != 0) : 0;
+        if (nd->op == TUFF_OP_OR)
+            r->value = (a != 0 || b != 0);
+        else
+            r->value = (a != 0 && b != 0);
         r->ok = 1;
         return ERR_OK;
     }
