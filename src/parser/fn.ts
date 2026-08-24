@@ -1,13 +1,21 @@
 import { ErrorKind } from "../errors.ts";
 import type { EvalError, Position } from "../errors.ts";
-import type { Token } from "../lexer/index.ts";
+import type { Token, TokenKind } from "../lexer/index.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
 import { StatementType } from "../ast/index.ts";
 import type { FnParam, ParsedBlock, Statement } from "../ast/index.ts";
-import type { Parser } from "./parser.ts";
 
-export function parseFnDecl(parser: Parser, t: Token): Result<Statement, EvalError> {
+/** The slice of the parser that fn parsing needs (avoids a type cycle). */
+interface FnParser {
+  peek(): Token;
+  advance(): Token;
+  expect(kind: TokenKind, what: string): Result<Token, EvalError>;
+  parseBlock(t: Token): Result<ParsedBlock, EvalError>;
+  commaError(sep: Token): Result<never, EvalError>;
+}
+
+export function parseFnDecl(parser: FnParser, t: Token): Result<Statement, EvalError> {
   parser.advance();
   const nameTok = parser.expect("identifier", "a function name");
   if (!nameTok.ok) return nameTok;
@@ -41,7 +49,7 @@ export function parseFnDecl(parser: Parser, t: Token): Result<Statement, EvalErr
   });
 }
 
-function parseFnParams(parser: Parser): Result<FnParam[], EvalError> {
+function parseFnParams(parser: FnParser): Result<FnParam[], EvalError> {
   const params: FnParam[] = [];
   if (parser.peek().kind === "rparen") {
     parser.advance();
