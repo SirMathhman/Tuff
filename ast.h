@@ -10,7 +10,8 @@ typedef enum
 {
     NODE_LET,
     NODE_ASSIGN,
-    NODE_RETURN
+    NODE_RETURN,
+    NODE_BLOCK
 } tuff_node_kind;
 
 typedef struct
@@ -24,6 +25,9 @@ typedef struct
     int ref_mut; /* NODE_LET: reference is &mut */
     char ref_name[TUFF_MAX_NAME];
     int deref; /* NODE_RETURN: value is *name; NODE_ASSIGN: target is *name */
+    int block_first; /* NODE_BLOCK: index of first statement in the block */
+    int block_count; /* NODE_BLOCK: number of statements in the block */
+    int block_ret;   /* NODE_BLOCK: index of the block's return, or -1 */
     tuff_pos pos;
 } tuff_node;
 

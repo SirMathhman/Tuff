@@ -12,7 +12,9 @@ typedef enum
     TOK_EQ,   /* = */
     TOK_SEMI, /* ; */
     TOK_AMP,  /* & */
-    TOK_STAR  /* * */
+    TOK_STAR, /* * */
+    TOK_LBRACE, /* { */
+    TOK_RBRACE  /* } */
 } tuff_tok_type;
 
 typedef enum

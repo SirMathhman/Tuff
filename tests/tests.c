@@ -81,6 +81,7 @@ int main(void)
     check_ok("let mut x = 0; x = 1; return x;", 1);
     check_ok("let x = 1; let y = &x; return *y;", 1);
     check_ok("let mut x = 0; let y = &mut x; *y = 1; return x;", 1);
+    check_ok("let mut x = 0; { x = 1; } return x;", 1);
 
     /* A program that returns 0 is a success, not an error. */
     check_ok("return 0;", 0);
@@ -100,7 +101,7 @@ int main(void)
     check_err("return @;", ERR_UNRECOGNIZED_CHAR);
     check_err("let x = 99999999999999999999999999; return x;", ERR_INT_OVERFLOW);
     check_err("let aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = 1; return x;",
-             ERR_NAME_TOO_LONG);
+              ERR_NAME_TOO_LONG);
     char long_src[1024];
     for (int i = 0; i < 300; i++)
         sprintf(long_src + i * 2, "1 ");

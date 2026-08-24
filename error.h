@@ -6,19 +6,20 @@
 typedef enum
 {
     ERR_OK = 0,
-    ERR_EXPECTED_TOKEN,   /* a required token was missing or unexpected */
-    ERR_EXPECTED_INT,     /* an integer literal was required */
-    ERR_EXPECTED_IDENT,   /* an identifier was required */
-    ERR_EXPECTED_RETURN,  /* the program must end with a return statement */
-    ERR_DUPLICATE_VAR,    /* a variable was declared twice */
-    ERR_UNDECLARED_VAR,   /* a variable was used before being declared */
-    ERR_ASSIGN_IMMUTABLE, /* a non-mut variable was reassigned */
-    ERR_INT_OVERFLOW,     /* an integer literal does not fit in a long */
-    ERR_NOT_A_REF,        /* a reference was used where a value was required */
-    ERR_REF_NOT_MUT,      /* assignment through a non-mut reference */
-    ERR_UNRECOGNIZED_CHAR,/* a character is not part of the grammar */
-    ERR_SOURCE_TOO_LONG,  /* the token buffer is exhausted */
-    ERR_NAME_TOO_LONG     /* an identifier or literal exceeds the buffer */
+    ERR_EXPECTED_TOKEN,    /* a required token was missing or unexpected */
+    ERR_EXPECTED_INT,      /* an integer literal was required */
+    ERR_EXPECTED_IDENT,    /* an identifier was required */
+    ERR_EXPECTED_RETURN,   /* the program must end with a return statement */
+    ERR_DUPLICATE_VAR,     /* a variable was declared twice */
+    ERR_UNDECLARED_VAR,    /* a variable was used before being declared */
+    ERR_ASSIGN_IMMUTABLE,  /* a non-mut variable was reassigned */
+    ERR_INT_OVERFLOW,      /* an integer literal does not fit in a long */
+    ERR_NOT_A_REF,         /* a reference was used where a value was required */
+    ERR_REF_NOT_MUT,       /* assignment through a non-mut reference */
+    ERR_UNRECOGNIZED_CHAR, /* a character is not part of the grammar */
+    ERR_SOURCE_TOO_LONG,   /* the token buffer is exhausted */
+    ERR_NAME_TOO_LONG,    /* an identifier or literal exceeds the buffer */
+    ERR_PROGRAM_TOO_LONG  /* the statement buffer is exhausted */
 } tuff_err;
 
 typedef struct
@@ -73,6 +74,8 @@ static inline const char *tuff_err_msg(tuff_err code)
         return "source too long (token limit exceeded)";
     case ERR_NAME_TOO_LONG:
         return "identifier or literal too long";
+    case ERR_PROGRAM_TOO_LONG:
+        return "program too long (statement limit exceeded)";
     }
     return "unknown error";
 }

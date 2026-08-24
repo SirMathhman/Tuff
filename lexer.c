@@ -78,7 +78,8 @@ tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
             col = 1;
             continue;
         }
-        if (*p == '=' || *p == ';' || *p == '&' || *p == '*')
+        if (*p == '=' || *p == ';' || *p == '&' || *p == '*' ||
+            *p == '{' || *p == '}')
         {
             tuff_tok_type type;
             if (*p == '=')
@@ -87,8 +88,12 @@ tuff_error tuff_lex(const char *src, tuff_tok *toks, int *count)
                 type = TOK_SEMI;
             else if (*p == '&')
                 type = TOK_AMP;
-            else
+            else if (*p == '*')
                 type = TOK_STAR;
+            else if (*p == '{')
+                type = TOK_LBRACE;
+            else
+                type = TOK_RBRACE;
             toks[n].type = type;
             toks[n].pos.line = line;
             toks[n].pos.col = col;

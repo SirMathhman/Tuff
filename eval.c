@@ -165,6 +165,16 @@ tuff_result tuff_eval(const tuff_program *prog)
             r.ok = 1;
             return r;
         }
+        else if (nd->kind == NODE_BLOCK)
+        {
+            /* A block that returns terminates the program there; otherwise
+             * execution continues after the block. */
+            if (nd->block_ret != -1)
+            {
+                i = nd->block_ret;
+                continue;
+            }
+        }
     }
 
     r.error = tuff_err_at(ERR_EXPECTED_RETURN, (tuff_pos){0, 0});

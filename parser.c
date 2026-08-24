@@ -164,6 +164,71 @@ static tuff_error parse_return(pctx *c, tuff_program *prog)
     return expect(c, TOK_SEMI);
 }
 
+/* Parses `{ stmt* }` as a NODE_BLOCK. */
+static tuff_error parse_block(pctx *c, tuff_program *prog);
+
+/* Parses a single statement (let, assign, return, or block) into prog. */
+static tuff_error parse_stmt(pctx *c, tuff_program *prog)
+{
+    if (prog->count >= TUFF_MAX_STMTS)
+        return tuff_err_at(ERR_PROGRAM_TOO_LONG, cur(c)->pos);
+    if (cur(c)->type == TOK_KEYWORD && cur(c)->kw == KW_LET)
+    {
+        return parse_let(c, prog);
+    }
+    else if (cur(c)->type == TOK_KEYWORD && cur(c)->kw == KW_RETURN)
+    {
+        if (prog->ret_idx != -1)
+            return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
+        tuff_error e = parse_return(c, prog);
+        if (e.code != ERR_OK)
+            return e;
+        prog->ret_idx = prog->count;
+        return e;
+    }
+    else if (cur(c)->type == TOK_IDENT || cur(c)->type == TOK_STAR)
+    {
+        return parse_assign(c, prog);
+    }
+    else if (cur(c)->type == TOK_LBRACE)
+    {
+        return parse_block(c, prog);
+    }
+    else
+    {
+        return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
+    }
+}
+
+/* Parses `{ stmt* }` as a NODE_BLOCK. Statements are flattened into prog;
+ * the block node records their range and any return inside. */
+static tuff_error parse_block(pctx *c, tuff_program *prog)
+{
+    if (prog->count >= TUFF_MAX_STMTS)
+        return tuff_err_at(ERR_PROGRAM_TOO_LONG, cur(c)->pos);
+    tuff_node *nd = &prog->stmts[prog->count];
+    memset(nd, 0, sizeof(*nd));
+    nd->kind = NODE_BLOCK;
+    nd->pos = cur(c)->pos;
+    advance(c); /* { */
+    nd->block_first = prog->count + 1;
+    nd->block_ret = -1;
+    while (has_more(c) && cur(c)->type != TOK_RBRACE)
+    {
+        tuff_error e = parse_stmt(c, prog);
+        if (e.code != ERR_OK)
+            return e;
+        prog->count++;
+        if (prog->stmts[prog->count - 1].kind == NODE_RETURN)
+            nd->block_ret = prog->count - 1;
+    }
+    if (!has_more(c) || cur(c)->type != TOK_RBRACE)
+        return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
+    advance(c); /* } */
+    nd->block_count = prog->count - nd->block_first;
+    return tuff_err_at(ERR_OK, cur(c)->pos);
+}
+
 tuff_error tuff_parse(const tuff_tok *toks, int count, tuff_program *prog)
 {
     pctx c = {toks, count, 0};
@@ -172,33 +237,9 @@ tuff_error tuff_parse(const tuff_tok *toks, int count, tuff_program *prog)
 
     while (has_more(&c))
     {
-        if (prog->count >= TUFF_MAX_STMTS)
-            return tuff_err_at(ERR_EXPECTED_TOKEN, cur(&c)->pos);
-        if (cur(&c)->type == TOK_KEYWORD && cur(&c)->kw == KW_LET)
-        {
-            tuff_error e = parse_let(&c, prog);
-            if (e.code != ERR_OK)
-                return e;
-        }
-        else if (cur(&c)->type == TOK_KEYWORD && cur(&c)->kw == KW_RETURN)
-        {
-            if (prog->ret_idx != -1)
-                return tuff_err_at(ERR_EXPECTED_TOKEN, cur(&c)->pos);
-            tuff_error e = parse_return(&c, prog);
-            if (e.code != ERR_OK)
-                return e;
-            prog->ret_idx = prog->count;
-        }
-        else if (cur(&c)->type == TOK_IDENT || cur(&c)->type == TOK_STAR)
-        {
-            tuff_error e = parse_assign(&c, prog);
-            if (e.code != ERR_OK)
-                return e;
-        }
-        else
-        {
-            return tuff_err_at(ERR_EXPECTED_TOKEN, cur(&c)->pos);
-        }
+        tuff_error e = parse_stmt(&c, prog);
+        if (e.code != ERR_OK)
+            return e;
         prog->count++;
     }
 
