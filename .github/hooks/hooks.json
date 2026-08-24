@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "cmd /c \"pwsh ./.github/hooks/test.ps1 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      },
+      {
+        "type": "command",
+        "command": "cmd /c \"pwsh ./.github/hooks/pmd-cpd.ps1 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Duplications found. Setup: PMD is on the PATH.\"; exit 2 }"
+      }
+    ]
+  }
+}
