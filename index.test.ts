@@ -72,4 +72,28 @@ describe("evaluate", () => {
       }
     }
   });
+
+  test("malformed number literal yields InvalidNumberLiteral with position", () => {
+    const result = evaluate("return 1.2.3;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("InvalidNumberLiteral");
+      if (result.error.kind === "InvalidNumberLiteral") {
+        expect(result.error.literal).toBe("1.2.3");
+        expect(result.error.position).toBe(7);
+      }
+    }
+  });
+
+  test("trailing-dot number literal yields InvalidNumberLiteral", () => {
+    const result = evaluate("let x = 1.; return x;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("InvalidNumberLiteral");
+      if (result.error.kind === "InvalidNumberLiteral") {
+        expect(result.error.literal).toBe("1.");
+        expect(result.error.position).toBe(8);
+      }
+    }
+  });
 });

@@ -2,7 +2,11 @@ import type { EvaluateError, Result } from "./errors.ts";
 
 type Binding = { mutable: boolean; value: unknown };
 
-type Token = { value: string; position: number };
+type TokenKind = "number" | "identifier" | "keyword" | "punctuation";
+
+type Token = { value: string; kind: TokenKind; position: number };
+
+const KEYWORDS = new Set(["let", "mut", "return", "true", "false"]);
 
 function fail<T>(error: EvaluateError): Result<T> {
   return { ok: false, error };
@@ -18,18 +22,23 @@ function tokenize(input: string): Result<Token[]> {
     } else if (/[A-Za-z_]/.test(ch)) {
       let j = i;
       while (j < input.length && /\w/.test(input.charAt(j))) j++;
-      tokens.push({ value: input.slice(i, j), position: i });
+      const value = input.slice(i, j);
+      const kind: TokenKind = KEYWORDS.has(value) ? "keyword" : "identifier";
+      tokens.push({ value, kind, position: i });
       i = j;
     } else if (/[0-9]/.test(ch)) {
       let j = i;
       while (j < input.length && /[\d.]/.test(input.charAt(j))) j++;
-      tokens.push({ value: input.slice(i, j), position: i });
+      const value = input.slice(i, j);
+      if (!/^\d+(\.\d+)?$/.test(value))
+        return fail({ kind: "InvalidNumberLiteral", literal: value, position: i });
+      tokens.push({ value, kind: "number", position: i });
       i = j;
     } else if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
-      tokens.push({ value: ch, position: i });
+      tokens.push({ value: ch, kind: "punctuation", position: i });
       i++;
     } else if (ch === "|" && input.charAt(i + 1) === "|") {
-      tokens.push({ value: "||", position: i });
+      tokens.push({ value: "||", kind: "punctuation", position: i });
       i += 2;
     } else {
       return fail({ kind: "UnexpectedCharacter", ch, position: i });
@@ -90,10 +99,14 @@ function evalOperand(
   token: Token,
   bindings: Map<string, Binding>,
 ): Result<unknown> {
-  if (/^\d+(\.\d+)?$/.test(token.value))
-    return { ok: true, value: Number(token.value) };
-  if (token.value === "true") return { ok: true, value: 1 };
-  if (token.value === "false") return { ok: true, value: 0 };
+  if (token.kind === "number") return { ok: true, value: Number(token.value) };
+  if (token.kind === "keyword") {
+    if (token.value === "true") return { ok: true, value: 1 };
+    if (token.value === "false") return { ok: true, value: 0 };
+    return fail({ kind: "UnsupportedExpression", position: token.position });
+  }
+  if (token.kind !== "identifier")
+    return fail({ kind: "UnsupportedExpression", position: token.position });
   const binding = bindings.get(token.value);
   if (!binding)
     return fail({

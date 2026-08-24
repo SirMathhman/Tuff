@@ -10,6 +10,7 @@ export const EvaluateErrorKind = {
   CodeAfterReturn: "CodeAfterReturn",
   ImmutableReassignment: "ImmutableReassignment",
   UnbalancedBrace: "UnbalancedBrace",
+  InvalidNumberLiteral: "InvalidNumberLiteral",
 } as const;
 
 export type EvaluateErrorKind =
@@ -21,12 +22,18 @@ export type EvaluateError =
   | { kind: "UnsupportedExpression"; position: number }
   | { kind: "UndeclaredVariable"; name: string; position: number }
   | { kind: "DuplicateDeclaration"; name: string; position: number }
-  | { kind: "ExpectedToken"; expected: string; found?: string; position: number }
+  | {
+      kind: "ExpectedToken";
+      expected: string;
+      found?: string;
+      position: number;
+    }
   | { kind: "EmptyStatement"; position: number }
   | { kind: "MissingTerminator"; position: number }
   | { kind: "CodeAfterReturn"; position: number }
   | { kind: "ImmutableReassignment"; name: string; position: number }
-  | { kind: "UnbalancedBrace"; position: number };
+  | { kind: "UnbalancedBrace"; position: number }
+  | { kind: "InvalidNumberLiteral"; literal: string; position: number };
 
 export type Result<T> =
   | { ok: true; value: T }
