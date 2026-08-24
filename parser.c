@@ -218,13 +218,19 @@ static tuff_error parse_return(pctx *c, tuff_program *prog)
     tuff_error e = parse_return_value(c, nd);
     if (e.code != ERR_OK)
         return e;
-    if (has_more(c) && (cur(c)->type == TOK_OR || cur(c)->type == TOK_AND))
+    if (has_more(c) && (cur(c)->type == TOK_OR || cur(c)->type == TOK_AND ||
+                        cur(c)->type == TOK_EQEQ))
     {
         if (nd->as.ret.deref)
             return tuff_err_at(ERR_BINOP_OPERAND, cur(c)->pos);
         /* The left operand was already recorded in the op1 fields. */
         nd->as.ret.binop = 1;
-        nd->as.ret.op = (cur(c)->type == TOK_AND) ? TUFF_OP_AND : TUFF_OP_OR;
+        if (cur(c)->type == TOK_AND)
+            nd->as.ret.op = TUFF_OP_AND;
+        else if (cur(c)->type == TOK_EQEQ)
+            nd->as.ret.op = TUFF_OP_EQEQ;
+        else
+            nd->as.ret.op = TUFF_OP_OR;
         advance(c);
         e = parse_binop_operand(c, &nd->as.ret.op2.kind, &nd->as.ret.op2.value,
                                 nd->as.ret.op2.name);

@@ -92,6 +92,8 @@ int main(void)
     check_ok("let x = false; let y = false; return x || y;", 0);
     check_ok("let x = true; let y = false; return x && y;", 0);
     check_ok("let x = true; let y = true; return x && y;", 1);
+    check_ok("let x = 0; let y = 1; return x == y;", 0);
+    check_ok("let x = 2; let y = 2; return x == y;", 1);
 
     /* A program that returns 0 is a success, not an error. */
     check_ok("return 0;", 0);

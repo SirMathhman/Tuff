@@ -10,6 +10,7 @@ typedef enum
     TOK_IDENT,
     TOK_INT,
     TOK_EQ,     /* = */
+    TOK_EQEQ,   /* == */
     TOK_SEMI,   /* ; */
     TOK_AMP,    /* & */
     TOK_STAR,   /* * */
