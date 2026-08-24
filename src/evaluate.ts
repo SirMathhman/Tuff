@@ -2,12 +2,14 @@ import type { EvaluateError, Result } from "./errors.ts";
 
 type Binding = { mutable: boolean; value: unknown };
 
+type Token = { value: string; position: number };
+
 function fail<T>(error: EvaluateError): Result<T> {
   return { ok: false, error };
 }
 
-function tokenize(input: string): Result<string[]> {
-  const tokens: string[] = [];
+function tokenize(input: string): Result<Token[]> {
+  const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {
     const ch = input.charAt(i);
@@ -16,15 +18,15 @@ function tokenize(input: string): Result<string[]> {
     } else if (/[A-Za-z_]/.test(ch)) {
       let j = i;
       while (j < input.length && /\w/.test(input.charAt(j))) j++;
-      tokens.push(input.slice(i, j));
+      tokens.push({ value: input.slice(i, j), position: i });
       i = j;
     } else if (/[0-9]/.test(ch)) {
       let j = i;
       while (j < input.length && /[\d.]/.test(input.charAt(j))) j++;
-      tokens.push(input.slice(i, j));
+      tokens.push({ value: input.slice(i, j), position: i });
       i = j;
     } else if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
-      tokens.push(ch);
+      tokens.push({ value: ch, position: i });
       i++;
     } else {
       return fail({ kind: "UnexpectedCharacter", ch, position: i });
@@ -33,98 +35,143 @@ function tokenize(input: string): Result<string[]> {
   return { ok: true, value: tokens };
 }
 
-type Statement = { block: Statement[] } | { stmt: string[] };
+type Statement =
+  | { block: Statement[]; position: number }
+  | { stmt: Token[]; position: number };
 
-function groupStatements(tokens: string[]): Result<Statement[]> {
+function groupStatements(tokens: Token[]): Result<Statement[]> {
   const statements: Statement[] = [];
-  let current: string[] = [];
+  let current: Token[] = [];
   let depth = 0;
   for (const token of tokens) {
-    if (token === "{") {
-      if (current.length !== 0) return fail({ kind: "UnbalancedBrace" });
+    if (token.value === "{") {
+      if (current.length !== 0)
+        return fail({ kind: "UnbalancedBrace", position: token.position });
       depth++;
-      statements.push({ block: [] });
-    } else if (token === "}") {
+      statements.push({ block: [], position: token.position });
+    } else if (token.value === "}") {
       depth--;
-      if (depth < 0) return fail({ kind: "UnbalancedBrace" });
-    } else if (token === ";") {
-      if (current.length === 0) return fail({ kind: "EmptyStatement" });
+      if (depth < 0)
+        return fail({ kind: "UnbalancedBrace", position: token.position });
+    } else if (token.value === ";") {
+      if (current.length === 0)
+        return fail({ kind: "EmptyStatement", position: token.position });
       if (depth === 0) {
-        statements.push({ stmt: current });
+        statements.push({ stmt: current, position: current[0]!.position });
         current = [];
       } else {
         const block = statements[statements.length - 1];
-        if (!block || "stmt" in block) return fail({ kind: "UnbalancedBrace" });
-        block.block.push({ stmt: current });
+        if (!block || "stmt" in block)
+          return fail({ kind: "UnbalancedBrace", position: token.position });
+        block.block.push({ stmt: current, position: current[0]!.position });
         current = [];
       }
     } else {
       current.push(token);
     }
   }
-  if (depth !== 0) return fail({ kind: "UnbalancedBrace" });
-  if (current.length !== 0) return fail({ kind: "MissingTerminator" });
+  if (depth !== 0)
+    return fail({
+      kind: "UnbalancedBrace",
+      position: tokens[tokens.length - 1]?.position ?? 0,
+    });
+  if (current.length !== 0)
+    return fail({
+      kind: "MissingTerminator",
+      position: current[current.length - 1]!.position,
+    });
   return { ok: true, value: statements };
 }
 
 function evalExpr(
-  tokens: string[],
+  tokens: Token[],
   bindings: Map<string, Binding>,
 ): Result<unknown> {
-  if (tokens.length !== 1) return fail({ kind: "UnsupportedExpression" });
+  if (tokens.length !== 1)
+    return fail({ kind: "UnsupportedExpression", position: tokens[0]?.position ?? 0 });
   const token = tokens[0];
-  if (token === undefined) return fail({ kind: "UnsupportedExpression" });
-  if (/^\d+(\.\d+)?$/.test(token)) return { ok: true, value: Number(token) };
-  if (token === "true") return { ok: true, value: 1 };
-  if (token === "false") return { ok: true, value: 0 };
-  const binding = bindings.get(token);
-  if (!binding) return fail({ kind: "UndeclaredVariable", name: token });
+  if (token === undefined)
+    return fail({ kind: "UnsupportedExpression", position: 0 });
+  if (/^\d+(\.\d+)?$/.test(token.value))
+    return { ok: true, value: Number(token.value) };
+  if (token.value === "true") return { ok: true, value: 1 };
+  if (token.value === "false") return { ok: true, value: 0 };
+  const binding = bindings.get(token.value);
+  if (!binding)
+    return fail({
+      kind: "UndeclaredVariable",
+      name: token.value,
+      position: token.position,
+    });
   return { ok: true, value: binding.value };
 }
 
 function execStatement(
-  stmt: string[],
+  stmt: Token[],
+  position: number,
   bindings: Map<string, Binding>,
   state: { returnValue: unknown; returned: boolean },
 ): Result<unknown> {
-  if (state.returned) return fail({ kind: "CodeAfterReturn" });
-  if (stmt[0] === "let") {
+  if (state.returned) return fail({ kind: "CodeAfterReturn", position });
+  if (stmt[0]?.value === "let") {
     let idx = 1;
     let mutable = false;
-    if (stmt[idx] === "mut") {
+    if (stmt[idx]?.value === "mut") {
       mutable = true;
       idx++;
     }
-    const name = stmt[idx];
-    if (!name || ["let", "mut", "return", "true", "false"].includes(name))
+    const nameToken = stmt[idx];
+    if (!nameToken || ["let", "mut", "return", "true", "false"].includes(nameToken.value))
       return fail({
         kind: "ExpectedToken",
         expected: "variable name",
-        found: name,
+        found: nameToken?.value,
+        position: nameToken?.position ?? position,
       });
-    if (stmt[idx + 1] !== "=")
+    if (stmt[idx + 1]?.value !== "=")
       return fail({
         kind: "ExpectedToken",
         expected: "'='",
-        found: stmt[idx + 1],
+        found: stmt[idx + 1]?.value,
+        position: stmt[idx + 1]?.position ?? position,
       });
     const value = evalExpr(stmt.slice(idx + 2), bindings);
     if (!value.ok) return value;
-    if (bindings.has(name)) return fail({ kind: "DuplicateDeclaration", name });
-    bindings.set(name, { mutable, value: value.value });
-  } else if (stmt[0] === "return") {
+    if (bindings.has(nameToken.value))
+      return fail({
+        kind: "DuplicateDeclaration",
+        name: nameToken.value,
+        position: nameToken.position,
+      });
+    bindings.set(nameToken.value, { mutable, value: value.value });
+  } else if (stmt[0]?.value === "return") {
     const value = evalExpr(stmt.slice(1), bindings);
     if (!value.ok) return value;
     state.returnValue = value.value;
     state.returned = true;
   } else {
-    const name = stmt[0];
-    if (name === undefined) return fail({ kind: "EmptyStatement" });
-    if (stmt[1] !== "=")
-      return fail({ kind: "ExpectedToken", expected: "'='", found: stmt[1] });
-    const binding = bindings.get(name);
-    if (!binding) return fail({ kind: "UndeclaredVariable", name });
-    if (!binding.mutable) return fail({ kind: "ImmutableReassignment", name });
+    const nameToken = stmt[0];
+    if (nameToken === undefined) return fail({ kind: "EmptyStatement", position });
+    if (stmt[1]?.value !== "=")
+      return fail({
+        kind: "ExpectedToken",
+        expected: "'='",
+        found: stmt[1]?.value,
+        position: stmt[1]?.position ?? position,
+      });
+    const binding = bindings.get(nameToken.value);
+    if (!binding)
+      return fail({
+        kind: "UndeclaredVariable",
+        name: nameToken.value,
+        position: nameToken.position,
+      });
+    if (!binding.mutable)
+      return fail({
+        kind: "ImmutableReassignment",
+        name: nameToken.value,
+        position: nameToken.position,
+      });
     const value = evalExpr(stmt.slice(2), bindings);
     if (!value.ok) return value;
     binding.value = value.value;
@@ -142,7 +189,7 @@ function execStatements(
       const result = execStatements(item.block, bindings, state);
       if (!result.ok) return result;
     } else {
-      const result = execStatement(item.stmt, bindings, state);
+      const result = execStatement(item.stmt, item.position, bindings, state);
       if (!result.ok) return result;
     }
   }

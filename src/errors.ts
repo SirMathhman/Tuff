@@ -16,17 +16,17 @@ export type EvaluateErrorKind =
   (typeof EvaluateErrorKind)[keyof typeof EvaluateErrorKind];
 
 export type EvaluateError =
-  | { kind: "EmptyInput" }
+  | { kind: "EmptyInput"; position: number }
   | { kind: "UnexpectedCharacter"; ch: string; position: number }
-  | { kind: "UnsupportedExpression" }
-  | { kind: "UndeclaredVariable"; name: string }
-  | { kind: "DuplicateDeclaration"; name: string }
-  | { kind: "ExpectedToken"; expected: string; found?: string }
-  | { kind: "EmptyStatement" }
-  | { kind: "MissingTerminator" }
-  | { kind: "CodeAfterReturn" }
-  | { kind: "ImmutableReassignment"; name: string }
-  | { kind: "UnbalancedBrace" };
+  | { kind: "UnsupportedExpression"; position: number }
+  | { kind: "UndeclaredVariable"; name: string; position: number }
+  | { kind: "DuplicateDeclaration"; name: string; position: number }
+  | { kind: "ExpectedToken"; expected: string; found?: string; position: number }
+  | { kind: "EmptyStatement"; position: number }
+  | { kind: "MissingTerminator"; position: number }
+  | { kind: "CodeAfterReturn"; position: number }
+  | { kind: "ImmutableReassignment"; name: string; position: number }
+  | { kind: "UnbalancedBrace"; position: number };
 
 export type Result<T> =
   | { ok: true; value: T }

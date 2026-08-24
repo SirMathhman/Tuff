@@ -32,22 +32,38 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let x = true; return x;"))).toBe(1);
   });
 
-  test("unsupported input yields a structured error", () => {
+  test("unsupported input yields a structured error with position", () => {
     const result = evaluate("throw new Error('boom');");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.kind).toBe("UnexpectedCharacter");
       if (result.error.kind === "UnexpectedCharacter") {
         expect(result.error.ch).toBe("(");
+        expect(result.error.position).toBe(15);
       }
     }
   });
 
-  test("reassigning an immutable variable yields ImmutableReassignment", () => {
+  test("reassigning an immutable variable yields ImmutableReassignment with position", () => {
     const result = evaluate("let x = 0; x = 1; return x;");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.kind).toBe("ImmutableReassignment");
+      if (result.error.kind === "ImmutableReassignment") {
+        expect(result.error.name).toBe("x");
+        expect(result.error.position).toBe(11);
+      }
+    }
+  });
+
+  test("unbalanced brace yields UnbalancedBrace with position", () => {
+    const result = evaluate("let x = 1; { return x;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("UnbalancedBrace");
+      if (result.error.kind === "UnbalancedBrace") {
+        expect(result.error.position).toBe(21);
+      }
     }
   });
 });
