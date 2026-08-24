@@ -21,13 +21,18 @@ public class App {
 	 *
 	 * @param expression the expression to evaluate
 	 * @return the numeric value of the expression
-	 * @throws UnsupportedOperationException for non-empty expressions (not yet
-	 *                                       implemented)
+	 * @throws UnsupportedOperationException for expressions that are not a
+	 *                                       {@code return <int>;} statement
 	 */
 	public static int evaluate(String expression) {
 		if (expression == null || expression.isEmpty()) {
 			return 0;
 		}
-		throw new UnsupportedOperationException("evaluate is not implemented for non-empty expressions");
+		String trimmed = expression.trim();
+		if (trimmed.startsWith("return ") && trimmed.endsWith(";")) {
+			String value = trimmed.substring("return ".length(), trimmed.length() - 1).trim();
+			return Integer.parseInt(value);
+		}
+		throw new UnsupportedOperationException("evaluate is not implemented for: " + expression);
 	}
 }

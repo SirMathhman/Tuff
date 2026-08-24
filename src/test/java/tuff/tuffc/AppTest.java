@@ -15,4 +15,9 @@ class AppTest {
 	void evaluateEmptyStringShouldReturnZero() {
 		assertEquals(0, App.evaluate(""));
 	}
+
+	@Test
+	void evaluateReturnZeroShouldReturnZero() {
+		assertEquals(0, App.evaluate("return 0;"));
+	}
 }
