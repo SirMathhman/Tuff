@@ -6,6 +6,7 @@
   "scripts": {
     "test": "bun test",
     "lint": "eslint .",
+    "callgraph": "bun tools/callgraph.ts",
     "pmd:cpd": "pmd cpd index.ts index.test.ts --dir ./src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {

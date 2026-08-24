@@ -12,6 +12,10 @@
       {
         "type": "command",
         "command": "cmd /c \"bun run pmd:cpd 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      },
+      {
+        "type": "command",
+        "command": "cmd /c \"bun run ./tools/callgraph.ts 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
