@@ -145,7 +145,7 @@ export class Parser {
     return andThen(this.expect("identifier", "a variable name"), (nameTok) => {
       const afterName =
         this.peek().kind === "colon"
-          ? andThen(Ok(this.advance()), () => this.expect("identifier", "a type name"))
+          ? andThen(Ok(this.advance()), () => this.parseTypeAnnotation())
           : Ok(null as Token | null);
       return andThen(afterName, (annotationTok) =>
         andThen(this.expect("operator", "'='"), () =>
@@ -164,6 +164,17 @@ export class Parser {
         ),
       );
     });
+  }
+
+  private parseTypeAnnotation(): Result<Token, EvalError> {
+    if (this.peek().kind === "operator" && this.peek().value === "&") {
+      this.advance();
+      return map(this.expect("identifier", "a type name after '&'"), (inner) => ({
+        ...inner,
+        value: `&${inner.value}`,
+      }));
+    }
+    return this.expect("identifier", "a type name");
   }
 
   private parseReturn(t: Token): Result<Statement, EvalError> {

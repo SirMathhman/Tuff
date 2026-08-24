@@ -39,7 +39,10 @@ function checkMutability(
       };
       if (stmt.value.type === ExprType.Number) binding.literal = stmt.value.value;
       const initType = inferIntType(stmt.value, env);
-      if (stmt.annotation && initType !== null && initType !== stmt.annotation) {
+      if (stmt.annotation && stmt.annotation.startsWith("&")) {
+        const annCheck = checkRefAnnotation(stmt.annotation, stmt.value, env);
+        if (!annCheck.ok) return annCheck;
+      } else if (stmt.annotation && initType !== null && initType !== stmt.annotation) {
         return Err(
           err(
             ErrorKind.Semantic,
@@ -111,6 +114,29 @@ function checkMutability(
   }
   restoreShadowed(env, shadowed);
   return Ok(null);
+}
+
+function checkRefAnnotation(
+  annotation: string,
+  value: Expr,
+  env: Map<string, Binding>,
+): Result<null, EvalError> {
+  const inner = annotation.slice(1);
+  if (inner === "Str") {
+    const v = inferValue(value, env);
+    if (!v.ok) return v;
+    if (v.value.kind !== ValueKind.String) {
+      return Err(
+        err(
+          ErrorKind.Semantic,
+          `Annotation "&Str" expects a string but got a different kind`,
+          value.position,
+        ),
+      );
+    }
+    return Ok(null);
+  }
+  return Err(err(ErrorKind.Semantic, `Unknown reference type "${annotation}"`, value.position));
 }
 
 function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>): void {
