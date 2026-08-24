@@ -167,13 +167,10 @@ tuff_result tuff_eval(const tuff_program *prog)
         }
         else if (nd->kind == NODE_BLOCK)
         {
-            /* A block that returns terminates the program there; otherwise
-             * execution continues after the block. */
-            if (nd->block_ret != -1)
-            {
-                i = nd->block_ret;
-                continue;
-            }
+            /* No-op: a block's statements are flattened into program order,
+             * so the main loop executes them in order. An inner return
+             * terminates the program naturally, making everything after it
+             * unreachable. */
         }
     }
 

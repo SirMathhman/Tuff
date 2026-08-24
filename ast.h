@@ -24,7 +24,7 @@ typedef struct
     int is_ref;  /* NODE_LET: initializer is &ref_name */
     int ref_mut; /* NODE_LET: reference is &mut */
     char ref_name[TUFF_MAX_NAME];
-    int deref; /* NODE_RETURN: value is *name; NODE_ASSIGN: target is *name */
+    int deref;       /* NODE_RETURN: value is *name; NODE_ASSIGN: target is *name */
     int block_first; /* NODE_BLOCK: index of first statement in the block */
     int block_count; /* NODE_BLOCK: number of statements in the block */
     int block_ret;   /* NODE_BLOCK: index of the block's return, or -1 */

@@ -18,8 +18,8 @@ typedef enum
     ERR_REF_NOT_MUT,       /* assignment through a non-mut reference */
     ERR_UNRECOGNIZED_CHAR, /* a character is not part of the grammar */
     ERR_SOURCE_TOO_LONG,   /* the token buffer is exhausted */
-    ERR_NAME_TOO_LONG,    /* an identifier or literal exceeds the buffer */
-    ERR_PROGRAM_TOO_LONG  /* the statement buffer is exhausted */
+    ERR_NAME_TOO_LONG,     /* an identifier or literal exceeds the buffer */
+    ERR_PROGRAM_TOO_LONG   /* the statement buffer is exhausted */
 } tuff_err;
 
 typedef struct
