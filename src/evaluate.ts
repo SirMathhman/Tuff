@@ -28,6 +28,9 @@ function tokenize(input: string): Result<Token[]> {
     } else if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
       tokens.push({ value: ch, position: i });
       i++;
+    } else if (ch === "|" && input.charAt(i + 1) === "|") {
+      tokens.push({ value: "||", position: i });
+      i += 2;
     } else {
       return fail({ kind: "UnexpectedCharacter", ch, position: i });
     }
@@ -83,15 +86,10 @@ function groupStatements(tokens: Token[]): Result<Statement[]> {
   return { ok: true, value: statements };
 }
 
-function evalExpr(
-  tokens: Token[],
+function evalOperand(
+  token: Token,
   bindings: Map<string, Binding>,
 ): Result<unknown> {
-  if (tokens.length !== 1)
-    return fail({ kind: "UnsupportedExpression", position: tokens[0]?.position ?? 0 });
-  const token = tokens[0];
-  if (token === undefined)
-    return fail({ kind: "UnsupportedExpression", position: 0 });
   if (/^\d+(\.\d+)?$/.test(token.value))
     return { ok: true, value: Number(token.value) };
   if (token.value === "true") return { ok: true, value: 1 };
@@ -104,6 +102,29 @@ function evalExpr(
       position: token.position,
     });
   return { ok: true, value: binding.value };
+}
+
+function evalExpr(
+  tokens: Token[],
+  bindings: Map<string, Binding>,
+): Result<unknown> {
+  if (tokens.length === 0)
+    return fail({ kind: "UnsupportedExpression", position: 0 });
+  if (tokens.length === 1) {
+    const token = tokens[0]!;
+    return evalOperand(token, bindings);
+  }
+  if (tokens.length === 3 && tokens[1]?.value === "||") {
+    const left = evalOperand(tokens[0]!, bindings);
+    if (!left.ok) return left;
+    const right = evalOperand(tokens[2]!, bindings);
+    if (!right.ok) return right;
+    return {
+      ok: true,
+      value: left.value === 1 || right.value === 1 ? 1 : 0,
+    };
+  }
+  return fail({ kind: "UnsupportedExpression", position: tokens[0]!.position });
 }
 
 function execStatement(
@@ -121,7 +142,10 @@ function execStatement(
       idx++;
     }
     const nameToken = stmt[idx];
-    if (!nameToken || ["let", "mut", "return", "true", "false"].includes(nameToken.value))
+    if (
+      !nameToken ||
+      ["let", "mut", "return", "true", "false"].includes(nameToken.value)
+    )
       return fail({
         kind: "ExpectedToken",
         expected: "variable name",
@@ -151,7 +175,8 @@ function execStatement(
     state.returned = true;
   } else {
     const nameToken = stmt[0];
-    if (nameToken === undefined) return fail({ kind: "EmptyStatement", position });
+    if (nameToken === undefined)
+      return fail({ kind: "EmptyStatement", position });
     if (stmt[1]?.value !== "=")
       return fail({
         kind: "ExpectedToken",
