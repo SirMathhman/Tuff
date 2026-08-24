@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-$raw = bunx madge . --json --extensions js, mjs, cjs, ts
+$raw = bunx madge . --json --extensions js,mjs,cjs,ts
 if ($LASTEXITCODE -ne 0) {
     Write-Error 'madge failed while building the dependency graph.'
     exit 2
