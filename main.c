@@ -1,156 +1,66 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
-int evaluate_tuff(const char *s)
+#include "eval.h"
+#include "error.h"
+#include "lexer.h"
+#include "parser.h"
+
+/* CLI entry: read source from argv[1] (or stdin), evaluate, print the
+ * result value or a structured error. */
+
+static int evaluate_source(const char *src, long *out)
 {
-    const char *p = s;
-    while (*p == ' ' || *p == '\t')
-        p++;
-
-    int hasVar = 0;
-    int hasMut = 0;
-    char varName[64];
-    size_t varNameLen = 0;
-    long varVal = 0;
-
-    if (strncmp(p, "let", 3) == 0 && (p[3] == ' ' || p[3] == '\t'))
+    tuff_tok toks[TUFF_MAX_TOKENS];
+    int n = tuff_lex(src, toks);
+    if (n < 0)
     {
-        p += 3;
-        while (*p == ' ' || *p == '\t')
-            p++;
-        if (strncmp(p, "mut", 3) == 0 && (p[3] == ' ' || p[3] == '\t'))
-        {
-            p += 3;
-            while (*p == ' ' || *p == '\t')
-                p++;
-            hasMut = 1;
-        }
-        const char *name = p;
-        while (*p != ' ' && *p != '\t' && *p != '=')
-            p++;
-        varNameLen = (size_t)(p - name);
-        if (varNameLen == 0 || varNameLen >= sizeof(varName))
-            return 0;
-        memcpy(varName, name, varNameLen);
-        while (*p == ' ' || *p == '\t')
-            p++;
-        if (*p != '=')
-            return 0;
-        p++;
-        while (*p == ' ' || *p == '\t')
-            p++;
-        char *end;
-        varVal = strtol(p, &end, 10);
-        while (*end == ' ' || *end == '\t')
-            end++;
-        if (*end != ';')
-            return 0;
-        p = end + 1;
-        while (*p == ' ' || *p == '\t')
-            p++;
-        hasVar = 1;
+        printf("error: source too long\n");
+        return 1;
     }
-
-    while (hasVar && hasMut)
+    tuff_program prog;
+    tuff_error e = tuff_parse(toks, n, &prog);
+    if (e.code != ERR_OK)
     {
-        const char *q = p;
-        while (*q != ' ' && *q != '\t' && *q != ';')
-            q++;
-        size_t nLen = (size_t)(q - p);
-        if (nLen != varNameLen || strncmp(p, varName, nLen) != 0)
-            break;
-        q++;
-        while (*q == ' ' || *q == '\t')
-            q++;
-        if (*q != '=')
-            break;
-        q++;
-        while (*q == ' ' || *q == '\t')
-            q++;
-        char *end;
-        long nv = strtol(q, &end, 10);
-        while (*end == ' ' || *end == '\t')
-            end++;
-        if (*end != ';')
-            break;
-        varVal = nv;
-        p = end + 1;
-        while (*p == ' ' || *p == '\t')
-            p++;
+        printf("error at %d:%d: %s\n", e.pos.line, e.pos.col, tuff_err_msg(e.code));
+        return 1;
     }
-
-    if (strncmp(p, "return", 6) != 0)
-        return 0;
-    p += 6;
-    while (*p == ' ' || *p == '\t')
-        p++;
-
-    long v;
-    if (*p >= '0' && *p <= '9')
+    tuff_result r = tuff_eval(&prog);
+    if (!r.ok)
     {
-        char *end;
-        v = strtol(p, &end, 10);
-        while (*end == ' ' || *end == '\t')
-            end++;
-        if (*end != ';')
-            return 0;
-        end++;
-        while (*end == ' ' || *end == '\t')
-            end++;
-        if (*end != '\0')
-            return 0;
+        printf("error at %d:%d: %s\n", r.error.pos.line, r.error.pos.col,
+               tuff_err_msg(r.error.code));
+        return 1;
+    }
+    *out = r.value;
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    char buf[4096];
+    const char *src;
+
+    if (argc > 1)
+    {
+        src = argv[1];
     }
     else
     {
-        const char *name = p;
-        while (*name != ' ' && *name != '\t' && *name != ';')
-            name++;
-        size_t nameLen = (size_t)(name - p);
-        if (!hasVar || nameLen != varNameLen || strncmp(p, varName, nameLen) != 0)
-            return 0;
-        if (p[nameLen] != ';')
-            return 0;
-        name += 1;
-        while (*name == ' ' || *name == '\t')
-            name++;
-        if (*name != '\0')
-            return 0;
-        v = varVal;
-    }
-    return (int)v;
-}
-
-int main()
-{
-    int failures = 0;
-
-    if (evaluate_tuff("") != 0)
-    {
-        printf("FAIL: evaluate_tuff(\"\") => %d, expected 0\n", evaluate_tuff(""));
-        failures++;
+        if (fgets(buf, sizeof(buf), stdin) == NULL)
+        {
+            printf("error: no input\n");
+            return 1;
+        }
+        size_t len = strlen(buf);
+        if (len > 0 && buf[len - 1] == '\n')
+            buf[len - 1] = '\0';
+        src = buf;
     }
 
-    if (evaluate_tuff("return 1;") != 1)
-    {
-        printf("FAIL: evaluate_tuff(\"return 1;\") => %d, expected 1\n", evaluate_tuff("return 1;"));
-        failures++;
-    }
-
-    if (evaluate_tuff("let x = 1; return x;") != 1)
-    {
-        printf("FAIL: evaluate_tuff(\"let x = 1; return x;\") => %d, expected 1\n", evaluate_tuff("let x = 1; return x;"));
-        failures++;
-    }
-
-    if (evaluate_tuff("let mut x = 0; x = 1; return x;") != 1)
-    {
-        printf("FAIL: evaluate_tuff(\"let mut x = 0; x = 1; return x;\") => %d, expected 1\n", evaluate_tuff("let mut x = 0; x = 1; return x;"));
-        failures++;
-    }
-
-    if (failures == 0)
-        printf("All tests passed\n");
-
-    return failures != 0;
+    long value;
+    if (evaluate_source(src, &value) != 0)
+        return 1;
+    printf("%ld\n", value);
+    return 0;
 }
