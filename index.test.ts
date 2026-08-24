@@ -7,6 +7,22 @@ function unwrap(result: ReturnType<typeof evaluate>): unknown {
   return result.value;
 }
 
+function expectInvalidNumberLiteral(
+  input: string,
+  literal: string,
+  position: number,
+): void {
+  const result = evaluate(input);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.kind).toBe("InvalidNumberLiteral");
+    if (result.error.kind === "InvalidNumberLiteral") {
+      expect(result.error.literal).toBe(literal);
+      expect(result.error.position).toBe(position);
+    }
+  }
+}
+
 describe("evaluate", () => {
   test("empty string evaluates to 0", () => {
     expect(unwrap(evaluate(""))).toBe(0);
@@ -74,26 +90,10 @@ describe("evaluate", () => {
   });
 
   test("malformed number literal yields InvalidNumberLiteral with position", () => {
-    const result = evaluate("return 1.2.3;");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe("InvalidNumberLiteral");
-      if (result.error.kind === "InvalidNumberLiteral") {
-        expect(result.error.literal).toBe("1.2.3");
-        expect(result.error.position).toBe(7);
-      }
-    }
+    expectInvalidNumberLiteral("return 1.2.3;", "1.2.3", 7);
   });
 
   test("trailing-dot number literal yields InvalidNumberLiteral", () => {
-    const result = evaluate("let x = 1.; return x;");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe("InvalidNumberLiteral");
-      if (result.error.kind === "InvalidNumberLiteral") {
-        expect(result.error.literal).toBe("1.");
-        expect(result.error.position).toBe(8);
-      }
-    }
+    expectInvalidNumberLiteral("let x = 1.; return x;", "1.", 8);
   });
 });
