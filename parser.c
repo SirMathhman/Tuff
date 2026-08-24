@@ -59,8 +59,9 @@ static tuff_error parse_eq_int(pctx *c, long *value)
     return expect(c, TOK_SEMI);
 }
 
-/* Parses `= &<ident> ;` and stores the referenced name. */
-static tuff_error parse_eq_ref(pctx *c, char *ref_name)
+/* Parses `= & [mut] <ident> ;` and stores the referenced name and
+ * mutability. */
+static tuff_error parse_eq_ref(pctx *c, char *ref_name, int *ref_mut)
 {
     tuff_error e = expect(c, TOK_EQ);
     if (e.code != ERR_OK)
@@ -68,6 +69,12 @@ static tuff_error parse_eq_ref(pctx *c, char *ref_name)
     if (!has_more(c) || cur(c)->type != TOK_AMP)
         return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
     advance(c);
+    *ref_mut = 0;
+    if (has_more(c) && cur(c)->type == TOK_KEYWORD && cur(c)->kw == KW_MUT)
+    {
+        *ref_mut = 1;
+        advance(c);
+    }
     e = copy_ident(c, ref_name);
     if (e.code != ERR_OK)
         return e;
@@ -94,7 +101,7 @@ static tuff_error parse_let(pctx *c, tuff_program *prog)
         c->toks[c->i + 1].type == TOK_AMP)
     {
         nd->is_ref = 1;
-        return parse_eq_ref(c, nd->ref_name);
+        return parse_eq_ref(c, nd->ref_name, &nd->ref_mut);
     }
     return parse_eq_int(c, &nd->value);
 }
@@ -106,6 +113,15 @@ static tuff_error parse_assign(pctx *c, tuff_program *prog)
     nd->kind = NODE_ASSIGN;
     nd->pos = cur(c)->pos;
 
+    if (has_more(c) && cur(c)->type == TOK_STAR)
+    {
+        advance(c);
+        nd->deref = 1;
+        tuff_error e = copy_ident(c, nd->name);
+        if (e.code != ERR_OK)
+            return e;
+        return parse_eq_int(c, &nd->value);
+    }
     tuff_error e = copy_ident(c, nd->name);
     if (e.code != ERR_OK)
         return e;
@@ -173,7 +189,7 @@ tuff_error tuff_parse(const tuff_tok *toks, int count, tuff_program *prog)
                 return e;
             prog->ret_idx = prog->count;
         }
-        else if (cur(&c)->type == TOK_IDENT)
+        else if (cur(&c)->type == TOK_IDENT || cur(&c)->type == TOK_STAR)
         {
             tuff_error e = parse_assign(&c, prog);
             if (e.code != ERR_OK)

@@ -76,6 +76,7 @@ int main(void)
     check_ok("let x = 1; return x;", 1);
     check_ok("let mut x = 0; x = 1; return x;", 1);
     check_ok("let x = 1; let y = &x; return *y;", 1);
+    check_ok("let mut x = 0; let y = &mut x; *y = 1; return x;", 1);
 
     /* A program that returns 0 is a success, not an error. */
     check_ok("return 0;", 0);
@@ -88,6 +89,8 @@ int main(void)
     check_err("let x = 1; x = 2; return x;", ERR_ASSIGN_IMMUTABLE);
     check_err("let x = 1; return y;", ERR_UNDECLARED_VAR);
     check_err("let x = a; return x;", ERR_EXPECTED_INT);
+    check_err("let x = 1; let y = &mut x; return *y;", ERR_REF_NOT_MUT);
+    check_err("let x = 1; let y = &x; *y = 2; return x;", ERR_REF_NOT_MUT);
 
     if (failures == 0)
         printf("All tests passed\n");

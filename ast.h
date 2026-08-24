@@ -21,8 +21,9 @@ typedef struct
     long value;  /* NODE_LET: initializer; NODE_RETURN: literal value */
     int use_var; /* NODE_RETURN: value is a variable reference */
     int is_ref;  /* NODE_LET: initializer is &ref_name */
+    int ref_mut; /* NODE_LET: reference is &mut */
     char ref_name[TUFF_MAX_NAME];
-    int deref; /* NODE_RETURN: value is *name */
+    int deref; /* NODE_RETURN: value is *name; NODE_ASSIGN: target is *name */
     tuff_pos pos;
 } tuff_node;
 

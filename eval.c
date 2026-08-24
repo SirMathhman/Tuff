@@ -8,6 +8,7 @@ typedef struct
     int is_mut;
     long value;
     int is_ref;  /* variable is a reference */
+    int ref_mut; /* reference is &mut */
     int ref_idx; /* index of the referenced variable */
     tuff_pos pos;
 } var;
@@ -18,6 +19,32 @@ static const var *find_var(const var *vars, int n, const char *name)
         if (strcmp(vars[i].name, name) == 0)
             return &vars[i];
     return NULL;
+}
+
+/* Looks up name; on failure records ERR_UNDECLARED_VAR in r and returns NULL. */
+static const var *find_var_or_err(const var *vars, int n, const char *name,
+                                  tuff_pos pos, tuff_result *r)
+{
+    const var *v = find_var(vars, n, name);
+    if (v == NULL)
+    {
+        r->error = tuff_err_at(ERR_UNDECLARED_VAR, pos);
+        return NULL;
+    }
+    return v;
+}
+
+/* Reads the current value of a dereferenced reference; on failure records
+ * an error in r and returns 0. */
+static long deref_value(const var *vars, const var *v, tuff_pos pos,
+                        tuff_result *r)
+{
+    if (!v->is_ref)
+    {
+        r->error = tuff_err_at(ERR_NOT_A_REF, pos);
+        return 0;
+    }
+    return vars[v->ref_idx].value;
 }
 
 tuff_result tuff_eval(const tuff_program *prog)
@@ -45,6 +72,7 @@ tuff_result tuff_eval(const tuff_program *prog)
             vars[nvars].is_mut = nd->is_mut;
             vars[nvars].value = nd->value;
             vars[nvars].is_ref = 0;
+            vars[nvars].ref_mut = 0;
             vars[nvars].ref_idx = -1;
             vars[nvars].pos = nd->pos;
             if (nd->is_ref)
@@ -55,51 +83,70 @@ tuff_result tuff_eval(const tuff_program *prog)
                     r.error = tuff_err_at(ERR_UNDECLARED_VAR, nd->pos);
                     return r;
                 }
+                if (nd->ref_mut && !ref->is_mut)
+                {
+                    r.error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos);
+                    return r;
+                }
                 vars[nvars].is_ref = 1;
+                vars[nvars].ref_mut = nd->ref_mut;
                 vars[nvars].ref_idx = (int)(ref - vars);
             }
             nvars++;
         }
         else if (nd->kind == NODE_ASSIGN)
         {
-            const var *v = find_var(vars, nvars, nd->name);
+            const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, &r);
             if (v == NULL)
-            {
-                r.error = tuff_err_at(ERR_UNDECLARED_VAR, nd->pos);
                 return r;
-            }
-            if (v->is_ref)
+            if (nd->deref)
             {
-                r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
-                return r;
+                if (!v->is_ref)
+                {
+                    r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
+                    return r;
+                }
+                if (!v->ref_mut)
+                {
+                    r.error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos);
+                    return r;
+                }
+                if (!vars[v->ref_idx].is_mut)
+                {
+                    r.error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos);
+                    return r;
+                }
+                vars[v->ref_idx].value = nd->value;
             }
-            if (!v->is_mut)
+            else
             {
-                r.error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos);
-                return r;
+                if (v->is_ref)
+                {
+                    r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
+                    return r;
+                }
+                if (!v->is_mut)
+                {
+                    r.error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos);
+                    return r;
+                }
+                for (int j = 0; j < nvars; j++)
+                    if (vars[j].name[0] != '\0' && strcmp(vars[j].name, nd->name) == 0)
+                        vars[j].value = nd->value;
             }
-            for (int j = 0; j < nvars; j++)
-                if (vars[j].name[0] != '\0' && strcmp(vars[j].name, nd->name) == 0)
-                    vars[j].value = nd->value;
         }
         else if (nd->kind == NODE_RETURN)
         {
             if (nd->use_var)
             {
-                const var *v = find_var(vars, nvars, nd->name);
+                const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, &r);
                 if (v == NULL)
-                {
-                    r.error = tuff_err_at(ERR_UNDECLARED_VAR, nd->pos);
                     return r;
-                }
                 if (nd->deref)
                 {
-                    if (!v->is_ref)
-                    {
-                        r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
+                    r.value = deref_value(vars, v, nd->pos, &r);
+                    if (r.error.code != ERR_OK)
                         return r;
-                    }
-                    r.value = vars[v->ref_idx].value;
                 }
                 else
                 {
