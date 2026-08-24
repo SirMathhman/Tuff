@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ErrorKind } from "./errors.ts";
 import { evaluate } from "./evaluate.ts";
 
 describe("evaluate: bindings & expressions", () => {
@@ -26,7 +27,7 @@ describe("evaluate: bindings & expressions", () => {
     const r = evaluate("let x = 0; x = 1; return x;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("mutability");
+      expect(r.error.kind).toBe(ErrorKind.Mutability);
       expect(r.error.position).toEqual({ line: 1, column: 12 });
       expect(r.error.snippet).toBe("let x = 0; x = 1; return x;");
     }
@@ -44,7 +45,7 @@ describe("evaluate: bindings & expressions", () => {
     const r = evaluate("let x = 1; return y;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("y");
     }
   });
@@ -71,7 +72,7 @@ describe("evaluate: integer suffixes", () => {
     const r = evaluate("return 100u8;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toContain("u8");
     }
   });
@@ -80,7 +81,7 @@ describe("evaluate: integer suffixes", () => {
     const r = evaluate("return 256U8;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("U8");
     }
   });
@@ -89,7 +90,7 @@ describe("evaluate: integer suffixes", () => {
     const r = evaluate("return 255U8 + 1U8;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("U8");
     }
   });
@@ -156,7 +157,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("let x = 0; let y = &x; if (false) { *y = 1; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("mutability");
+      expect(r.error.kind).toBe(ErrorKind.Mutability);
     }
   });
 
@@ -164,7 +165,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("let mut x = 0; let y = &x; if (false) *y = 1; return x;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("mutability");
+      expect(r.error.kind).toBe(ErrorKind.Mutability);
     }
   });
 
@@ -172,7 +173,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { if (1) {}}");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -180,7 +181,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { let y = &(1 + 2); }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -188,7 +189,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { let x = 1; let y = *x; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -196,7 +197,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { let y = undefinedIdentifier; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("undefinedIdentifier");
     }
   });
@@ -205,7 +206,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { return z; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("z");
     }
   });
@@ -214,7 +215,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { let y = &z; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("z");
     }
   });
@@ -223,7 +224,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (1 < z) {}");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("z");
     }
   });
@@ -232,7 +233,7 @@ describe("evaluate: dead code", () => {
     const r = evaluate("if (false) { return -x; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("x");
     }
   });
@@ -301,7 +302,7 @@ describe("evaluate errors", () => {
     const r = evaluate("return 1.5;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toContain("Fractional");
     }
   });
@@ -310,7 +311,7 @@ describe("evaluate errors", () => {
     const r = evaluate("let x = 0; if (false) { let y = 1; y = 2; } return x;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("mutability");
+      expect(r.error.kind).toBe(ErrorKind.Mutability);
       expect(r.error.message).toContain("y");
     }
   });
@@ -319,7 +320,7 @@ describe("evaluate errors", () => {
     const r = evaluate("let x = &1; return 0;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -331,7 +332,7 @@ describe("evaluate errors", () => {
     const r = evaluate("{ let x = 0; } return x;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("x");
     }
   });
@@ -340,7 +341,7 @@ describe("evaluate errors", () => {
     const r = evaluate("let x = 1; return *x;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -348,7 +349,7 @@ describe("evaluate errors", () => {
     const r = evaluate("let x = 1; *x = 2; return x;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -356,7 +357,7 @@ describe("evaluate errors", () => {
     const r = evaluate("let x = 1; let y = &x; return y;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
     }
   });
 
@@ -364,7 +365,7 @@ describe("evaluate errors", () => {
     const r = evaluate("while(1) {}");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("boolean");
     }
   });
@@ -375,7 +376,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("let array = [1, 2, 3]; return array[3];");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("out of range");
     }
   });
@@ -384,7 +385,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("let a = [1, 2]; let b = [true]; return a[b[0]];");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("number");
     }
   });
@@ -393,7 +394,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("let mut x = 0; x = y;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("y");
     }
   });
@@ -402,7 +403,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("return 1 / 0;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -411,7 +412,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("return 1 % 0;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -420,7 +421,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("if (false) { let x = 10 / 0; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -429,7 +430,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("if (false) { let y = 0; let x = 10 / y; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -438,7 +439,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("if (false) { let x = 10 / (1 - 1); }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -447,7 +448,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("if (false) { let x = 0; let y = &x; let z = 10 / *y; }");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -456,7 +457,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("return true + 1;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("numbers");
     }
   });
@@ -465,7 +466,7 @@ describe("evaluate errors: runtime", () => {
     const r = evaluate("return 1 + true;");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("numbers");
     }
   });

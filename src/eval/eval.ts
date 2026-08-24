@@ -1,8 +1,11 @@
-import { err } from "./errors.ts";
-import type { EvalError, Position } from "./errors.ts";
-import type { Expr, Program, Statement } from "./parser.ts";
-import { Err, Ok, andThen } from "./result.ts";
-import type { Result } from "./result.ts";
+import { err } from "../errors.ts";
+import { ErrorKind } from "../errors.ts";
+import type { EvalError, Position } from "../errors.ts";
+import { ExprType, StatementType } from "../ast/index.ts";
+import type { DerefExpr, Expr, Program, Statement } from "../ast/index.ts";
+import { Err, Ok, andThen } from "../result.ts";
+import type { Result } from "../result.ts";
+import { ValueKind } from "./value.ts";
 import type { Binding, Value } from "./value.ts";
 import { resolveRefChain, validateDerefBinding } from "./value.ts";
 
@@ -29,14 +32,14 @@ function evalStatements(
 ): Result<number | null, EvalError> {
   const shadowed = new Map<string, Binding | null>();
   for (const stmt of statements) {
-    if (stmt.type === "let") {
+    if (stmt.type === StatementType.Let) {
       const value = evalExpr(stmt.value, env);
       if (!value.ok) return value;
       if (!shadowed.has(stmt.name)) {
         shadowed.set(stmt.name, env.get(stmt.name) ?? null);
       }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
-    } else if (stmt.type === "assign") {
+    } else if (stmt.type === StatementType.Assign) {
       // The static pass validates targets it can decide; unknown-kind targets
       // are deferred here, so ref-kind and mutability are re-checked at runtime.
       const target = resolveAssignTarget(stmt.target, (n) => env.get(n), stmt.position);
@@ -45,35 +48,38 @@ function evalStatements(
       if (!value.ok) return value;
       const live = env.get(target.value);
       if (live) live.value = value.value;
-    } else if (stmt.type === "block") {
+    } else if (stmt.type === StatementType.Block) {
       const inner = evalStatements(stmt.statements, env);
       if (!inner.ok) return inner;
       if (inner.value !== null) return inner;
-    } else if (stmt.type === "if") {
+    } else if (stmt.type === StatementType.If) {
       // The static pass already checked the condition is a boolean.
       const cond = evalExpr(stmt.condition, env);
       if (!cond.ok) return cond;
-      const branch = cond.value.kind === "boolean" && cond.value.value ? stmt.then : stmt.else;
+      const branch =
+        cond.value.kind === ValueKind.Boolean && cond.value.value ? stmt.then : stmt.else;
       if (branch) {
         const inner = evalStatements(branch, env);
         if (!inner.ok) return inner;
         if (inner.value !== null) return inner;
       }
-    } else if (stmt.type === "return") {
+    } else if (stmt.type === StatementType.Return) {
       return andThen(evalExpr(stmt.value, env), (v) => toNumber(v, stmt.position));
-    } else if (stmt.type === "while") {
+    } else if (stmt.type === StatementType.While) {
       // The static pass already checked the condition is a boolean.
       for (;;) {
         const cond = evalExpr(stmt.condition, env);
         if (!cond.ok) return cond;
-        if (!(cond.value.kind === "boolean" && cond.value.value)) break;
+        if (!(cond.value.kind === ValueKind.Boolean && cond.value.value)) break;
         const inner = evalStatements(stmt.body, env);
         if (!inner.ok) return inner;
         if (inner.value !== null) return inner;
       }
     } else {
       const unhandled: never = stmt;
-      return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
+      return Err(
+        err(ErrorKind.Semantic, `Unhandled statement type`, (unhandled as Statement).position),
+      );
     }
   }
   restoreShadowed(env, shadowed);
@@ -85,45 +91,48 @@ function resolveAssignTarget(
   get: (name: string) => Binding | undefined,
   position: Position,
 ): Result<string, EvalError> {
-  if (target.type === "identifier") return Ok(target.name);
-  if (target.type === "deref" && target.operand.type === "identifier") {
+  if (target.type === ExprType.Identifier) return Ok(target.name);
+  if (target.type === ExprType.Deref && target.operand.type === ExprType.Identifier) {
     const refBinding = get(target.operand.name);
     if (!refBinding) {
-      return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
+      return Err(
+        err(ErrorKind.Runtime, `Undefined variable "${target.operand.name}"`, target.position),
+      );
     }
     return andThen(
       validateDerefBinding(refBinding, target.operand.name, get, target.position),
       (resolved) => Ok(resolved.name),
     );
   }
-  return Err(err("semantic", "Invalid assignment target", position));
+  return Err(err(ErrorKind.Semantic, "Invalid assignment target", position));
 }
 
 function toNumber(value: Value, position: Position): Result<number, EvalError> {
-  if (value.kind === "number") return Ok(value.value);
-  if (value.kind === "boolean") return Ok(value.value ? 1 : 0);
-  if (value.kind === "ref") {
+  if (value.kind === ValueKind.Number) return Ok(value.value);
+  if (value.kind === ValueKind.Boolean) return Ok(value.value ? 1 : 0);
+  if (value.kind === ValueKind.Ref) {
     return Err(
-      err("semantic", `Expected a number but found a reference to "${value.target}"`, position),
+      err(
+        ErrorKind.Semantic,
+        `Expected a number but found a reference to "${value.target}"`,
+        position,
+      ),
     );
   }
-  return Err(err("semantic", "Expected a number but found an array", position));
+  return Err(err(ErrorKind.Semantic, "Expected a number but found an array", position));
 }
 
-function evalDeref(
-  expr: Extract<Expr, { type: "deref" }>,
-  env: Map<string, Binding>,
-): Result<Value, EvalError> {
-  const name = expr.operand.type === "identifier" ? expr.operand.name : "";
+function evalDeref(expr: DerefExpr, env: Map<string, Binding>): Result<Value, EvalError> {
+  const name = expr.operand.type === ExprType.Identifier ? expr.operand.name : "";
   // The static pass validates known-kind operands; unknown-kind operands are
   // deferred here, so the reference kind is re-checked at runtime.
   const operandBinding = env.get(name);
-  if (operandBinding && operandBinding.value.kind !== "ref") {
-    return Err(err("semantic", `"${name}" is not a reference`, expr.position));
+  if (operandBinding && operandBinding.value.kind !== ValueKind.Ref) {
+    return Err(err(ErrorKind.Semantic, `"${name}" is not a reference`, expr.position));
   }
   const resolved = resolveRefChain(name, (n) => env.get(n));
   if (!resolved) {
-    return Err(err("runtime", `Reference target "${name}" is undefined`, expr.position));
+    return Err(err(ErrorKind.Runtime, `Reference target "${name}" is undefined`, expr.position));
   }
   return Ok(resolved.binding.value);
 }
@@ -132,84 +141,84 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
   // Semantic checks (operand shape, binding existence, reference kinds) are
   // performed by the static pass; this pass only computes values.
   switch (expr.type) {
-    case "number":
-      return Ok({ kind: "number", value: expr.value });
-    case "boolean":
-      return Ok({ kind: "boolean", value: expr.value });
-    case "identifier":
+    case ExprType.Number:
+      return Ok({ kind: ValueKind.Number, value: expr.value });
+    case ExprType.Boolean:
+      return Ok({ kind: ValueKind.Boolean, value: expr.value });
+    case ExprType.Identifier:
       return Ok(env.get(expr.name)!.value);
-    case "unary":
+    case ExprType.Unary:
       return andThen(evalExpr(expr.operand, env), (v) =>
-        andThen(toNumber(v, expr.position), (n) => Ok({ kind: "number", value: -n })),
+        andThen(toNumber(v, expr.position), (n) => Ok({ kind: ValueKind.Number, value: -n })),
       );
-    case "ref": {
-      const name = expr.operand.type === "identifier" ? expr.operand.name : "";
-      return Ok({ kind: "ref", target: name, mutable: expr.mutable });
+    case ExprType.Ref: {
+      const name = expr.operand.type === ExprType.Identifier ? expr.operand.name : "";
+      return Ok({ kind: ValueKind.Ref, target: name, mutable: expr.mutable });
     }
-    case "deref":
+    case ExprType.Deref:
       return evalDeref(expr, env);
-    case "binary": {
+    case ExprType.Binary: {
       const l = evalExpr(expr.left, env);
       if (!l.ok) return l;
       const r = evalExpr(expr.right, env);
       if (!r.ok) return r;
-      if (l.value.kind !== "number" || r.value.kind !== "number") {
-        const bad = l.value.kind !== "number" ? expr.left : expr.right;
-        return Err(err("semantic", "Arithmetic operands must be numbers", bad.position));
+      if (l.value.kind !== ValueKind.Number || r.value.kind !== ValueKind.Number) {
+        const bad = l.value.kind !== ValueKind.Number ? expr.left : expr.right;
+        return Err(err(ErrorKind.Semantic, "Arithmetic operands must be numbers", bad.position));
       }
       const ln = toNumber(l.value, expr.position);
       if (!ln.ok) return ln;
       const rn = toNumber(r.value, expr.position);
       if (!rn.ok) return rn;
       if ((expr.op === "/" || expr.op === "%") && rn.value === 0) {
-        return Err(err("runtime", "Division by zero", expr.right.position));
+        return Err(err(ErrorKind.Runtime, "Division by zero", expr.right.position));
       }
       if (expr.op === "<") {
-        return Ok({ kind: "boolean", value: ln.value < rn.value });
+        return Ok({ kind: ValueKind.Boolean, value: ln.value < rn.value });
       }
       switch (expr.op) {
         case "+":
-          return Ok({ kind: "number", value: ln.value + rn.value });
+          return Ok({ kind: ValueKind.Number, value: ln.value + rn.value });
         case "-":
-          return Ok({ kind: "number", value: ln.value - rn.value });
+          return Ok({ kind: ValueKind.Number, value: ln.value - rn.value });
         case "*":
-          return Ok({ kind: "number", value: ln.value * rn.value });
+          return Ok({ kind: ValueKind.Number, value: ln.value * rn.value });
         case "/":
-          return Ok({ kind: "number", value: Math.trunc(ln.value / rn.value) });
+          return Ok({ kind: ValueKind.Number, value: Math.trunc(ln.value / rn.value) });
         case "%":
-          return Ok({ kind: "number", value: ln.value % rn.value });
+          return Ok({ kind: ValueKind.Number, value: ln.value % rn.value });
         default:
-          return Err(err("runtime", `Unknown operator "${expr.op}"`, expr.position));
+          return Err(err(ErrorKind.Runtime, `Unknown operator "${expr.op}"`, expr.position));
       }
     }
-    case "array": {
+    case ExprType.Array: {
       const elements: Value[] = [];
       for (const el of expr.elements) {
         const v = evalExpr(el, env);
         if (!v.ok) return v;
         elements.push(v.value);
       }
-      return Ok({ kind: "array", elements });
+      return Ok({ kind: ValueKind.Array, elements });
     }
-    case "index": {
+    case ExprType.Index: {
       // The static pass validates what it can decide; unknown-kind operands
       // are deferred here, so the array and number-index kinds are re-checked.
       const arr = evalExpr(expr.array, env);
       if (!arr.ok) return arr;
       const idx = evalExpr(expr.index, env);
       if (!idx.ok) return idx;
-      if (idx.value.kind !== "number") {
-        return Err(err("semantic", "Array index must be a number", expr.index.position));
+      if (idx.value.kind !== ValueKind.Number) {
+        return Err(err(ErrorKind.Semantic, "Array index must be a number", expr.index.position));
       }
-      if (arr.value.kind !== "array") {
-        return Err(err("semantic", "Cannot index a non-array value", expr.array.position));
+      if (arr.value.kind !== ValueKind.Array) {
+        return Err(err(ErrorKind.Semantic, "Cannot index a non-array value", expr.array.position));
       }
       const n = idx.value.value;
       const elements = arr.value.elements;
       if (!Number.isInteger(n) || n < 0 || n >= elements.length) {
         return Err(
           err(
-            "runtime",
+            ErrorKind.Runtime,
             `Index ${n} out of range for array of length ${elements.length}`,
             expr.index.position,
           ),

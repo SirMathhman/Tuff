@@ -1,7 +1,7 @@
-import { checkProgram } from "./check.ts";
-import { lex } from "./lexer.ts";
-import { parse } from "./parser.ts";
-import { evaluateProgram } from "./eval.ts";
+import { checkProgram } from "./check/index.ts";
+import { lex } from "./lexer/index.ts";
+import { parse } from "./parser/index.ts";
+import { evaluateProgram } from "./eval/index.ts";
 import { Err, Ok, andThen } from "./result.ts";
 import type { Result } from "./result.ts";
 import type { EvalError } from "./errors.ts";

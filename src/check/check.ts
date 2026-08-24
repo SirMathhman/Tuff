@@ -1,10 +1,13 @@
-import { err } from "./errors.ts";
-import type { EvalError, Position } from "./errors.ts";
-import type { Expr, Program, Statement } from "./parser.ts";
-import { Err, Ok } from "./result.ts";
-import type { Result } from "./result.ts";
-import type { Binding, Value } from "./value.ts";
-import { resolveRefChain, validateDerefBinding } from "./value.ts";
+import { err } from "../errors.ts";
+import { ErrorKind } from "../errors.ts";
+import type { EvalError } from "../errors.ts";
+import { ExprType, StatementType } from "../ast/index.ts";
+import type { Expr, Program, Statement } from "../ast/index.ts";
+import { Err, Ok } from "../result.ts";
+import type { Result } from "../result.ts";
+import { ValueKind } from "../eval/value.ts";
+import type { Binding, ResolvedTarget, Value } from "../eval/value.ts";
+import { resolveRefChain, validateDerefBinding } from "../eval/value.ts";
 
 export function checkProgram(program: Program): Result<null, EvalError> {
   return checkMutability(program.statements, new Map());
@@ -16,29 +19,29 @@ function checkMutability(
 ): Result<null, EvalError> {
   const shadowed = new Map<string, Binding | null>();
   for (const stmt of statements) {
-    if (stmt.type === "let") {
+    if (stmt.type === StatementType.Let) {
       if (!shadowed.has(stmt.name)) {
         shadowed.set(stmt.name, env.get(stmt.name) ?? null);
       }
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
       const binding: Binding = {
-        value: value.value ?? { kind: "number", value: 0 },
+        value: value.value ?? { kind: ValueKind.Number, value: 0 },
         mutable: stmt.mutable,
       };
       if (value.value === null) binding.unknown = true;
-      if (stmt.value.type === "number") binding.literal = stmt.value.value;
+      if (stmt.value.type === ExprType.Number) binding.literal = stmt.value.value;
       env.set(stmt.name, binding);
-    } else if (stmt.type === "assign") {
+    } else if (stmt.type === StatementType.Assign) {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
       // For deref targets the reference's mutability is validated by
       // resolveTarget (known kind) or the dynamic pass (unknown kind); only a
       // direct identifier reassignment is gated on the binding's own mutability.
-      if (stmt.target.type === "identifier" && !target.value.binding.mutable) {
+      if (stmt.target.type === ExprType.Identifier && !target.value.binding.mutable) {
         return Err(
           err(
-            "mutability",
+            ErrorKind.Mutability,
             `Cannot reassign immutable binding "${target.value.name}"`,
             stmt.position,
           ),
@@ -48,14 +51,14 @@ function checkMutability(
       delete target.value.binding.unknown;
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
-    } else if (stmt.type === "block") {
+    } else if (stmt.type === StatementType.Block) {
       const inner = checkMutability(stmt.statements, env);
       if (!inner.ok) return inner;
-    } else if (stmt.type === "if") {
+    } else if (stmt.type === StatementType.If) {
       const cond = inferValue(stmt.condition, env);
       if (!cond.ok) return cond;
-      if (cond.value && cond.value.kind !== "boolean") {
-        return Err(err("semantic", "if condition must be a boolean", stmt.position));
+      if (cond.value && cond.value.kind !== ValueKind.Boolean) {
+        return Err(err(ErrorKind.Semantic, "if condition must be a boolean", stmt.position));
       }
       const then = checkMutability(stmt.then, env);
       if (!then.ok) return then;
@@ -63,20 +66,22 @@ function checkMutability(
         const elseResult = checkMutability(stmt.else, env);
         if (!elseResult.ok) return elseResult;
       }
-    } else if (stmt.type === "return") {
+    } else if (stmt.type === StatementType.Return) {
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
-    } else if (stmt.type === "while") {
+    } else if (stmt.type === StatementType.While) {
       const cond = inferValue(stmt.condition, env);
       if (!cond.ok) return cond;
-      if (cond.value && cond.value.kind !== "boolean") {
-        return Err(err("semantic", "while condition must be a boolean", stmt.position));
+      if (cond.value && cond.value.kind !== ValueKind.Boolean) {
+        return Err(err(ErrorKind.Semantic, "while condition must be a boolean", stmt.position));
       }
       const body = checkMutability(stmt.body, env);
       if (!body.ok) return body;
     } else {
       const unhandled: never = stmt;
-      return Err(err("semantic", `Unhandled statement type`, (unhandled as Statement).position));
+      return Err(
+        err(ErrorKind.Semantic, `Unhandled statement type`, (unhandled as Statement).position),
+      );
     }
   }
   restoreShadowed(env, shadowed);
@@ -95,33 +100,42 @@ function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>
 
 function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalError> {
   switch (expr.type) {
-    case "number":
-    case "boolean":
-    case "identifier":
-    case "unary":
-    case "binary":
-    case "array":
-    case "index":
+    case ExprType.Number:
+    case ExprType.Boolean:
+    case ExprType.Identifier:
+    case ExprType.Unary:
+    case ExprType.Binary:
+    case ExprType.Array:
+    case ExprType.Index:
       return Ok(null);
-    case "ref":
-      if (expr.operand.type !== "identifier") {
-        return Err(err("semantic", "Can only take a reference to a variable", expr.position));
+    case ExprType.Ref:
+      if (expr.operand.type !== ExprType.Identifier) {
+        return Err(
+          err(ErrorKind.Semantic, "Can only take a reference to a variable", expr.position),
+        );
       }
       return Ok(null);
-    case "deref": {
-      if (expr.operand.type !== "identifier") {
-        return Err(err("semantic", "Can only dereference a variable", expr.position));
+    case ExprType.Deref: {
+      if (expr.operand.type !== ExprType.Identifier) {
+        return Err(err(ErrorKind.Semantic, "Can only dereference a variable", expr.position));
       }
       const binding = env.get(expr.operand.name);
-      if (binding && !binding.unknown && binding.value.kind !== "ref") {
-        return Err(err("semantic", `"${expr.operand.name}" is not a reference`, expr.position));
+      if (binding && !binding.unknown && binding.value.kind !== ValueKind.Ref) {
+        return Err(
+          err(ErrorKind.Semantic, `"${expr.operand.name}" is not a reference`, expr.position),
+        );
       }
       return Ok(null);
     }
   }
 }
 
-const INT_RANGES: Record<string, { min: number; max: number }> = {
+export interface IntRange {
+  readonly min: number;
+  readonly max: number;
+}
+
+const INT_RANGES: Record<string, IntRange> = {
   U8: { min: 0, max: 255 },
   U16: { min: 0, max: 65535 },
   U32: { min: 0, max: 4294967295 },
@@ -135,11 +149,13 @@ const INT_RANGES: Record<string, { min: number; max: number }> = {
 };
 
 function checkIntRange(expr: Expr): Result<null, EvalError> {
-  if (expr.type !== "number" || !expr.suffix) return Ok(null);
+  if (expr.type !== ExprType.Number || !expr.suffix) return Ok(null);
   const range = INT_RANGES[expr.suffix];
   if (!range) return Ok(null);
   if (expr.value < range.min || expr.value > range.max) {
-    return Err(err("semantic", `${expr.value} does not fit in ${expr.suffix}`, expr.position));
+    return Err(
+      err(ErrorKind.Semantic, `${expr.value} does not fit in ${expr.suffix}`, expr.position),
+    );
   }
   return Ok(null);
 }
@@ -150,13 +166,13 @@ function isKnownZero(expr: Expr, env: Map<string, Binding>): boolean {
 
 function inferIntType(expr: Expr, env: Map<string, Binding>): string | null {
   switch (expr.type) {
-    case "number":
+    case ExprType.Number:
       return expr.suffix ?? null;
-    case "identifier":
+    case ExprType.Identifier:
       return null;
-    case "unary":
+    case ExprType.Unary:
       return inferIntType(expr.operand, env);
-    case "binary": {
+    case ExprType.Binary: {
       const l = inferIntType(expr.left, env);
       const r = inferIntType(expr.right, env);
       return l !== null && l === r ? l : null;
@@ -174,22 +190,22 @@ function checkOverflow(expr: Expr, env: Map<string, Binding>): Result<null, Eval
   const range = INT_RANGES[type];
   if (!range) return Ok(null);
   if (value < range.min || value > range.max) {
-    return Err(err("semantic", `${value} does not fit in ${type}`, expr.position));
+    return Err(err(ErrorKind.Semantic, `${value} does not fit in ${type}`, expr.position));
   }
   return Ok(null);
 }
 
 function constFold(expr: Expr, env: Map<string, Binding>): number | null {
   switch (expr.type) {
-    case "number":
+    case ExprType.Number:
       return expr.value;
-    case "identifier":
+    case ExprType.Identifier:
       return env.get(expr.name)?.literal ?? null;
-    case "unary": {
+    case ExprType.Unary: {
       const v = constFold(expr.operand, env);
       return v === null ? null : -v;
     }
-    case "binary": {
+    case ExprType.Binary: {
       const l = constFold(expr.left, env);
       const r = constFold(expr.right, env);
       if (l === null || r === null) return null;
@@ -208,15 +224,15 @@ function constFold(expr: Expr, env: Map<string, Binding>): number | null {
           return null;
       }
     }
-    case "deref": {
-      if (expr.operand.type !== "identifier") return null;
+    case ExprType.Deref: {
+      if (expr.operand.type !== ExprType.Identifier) return null;
       const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
       return resolved?.binding.literal ?? null;
     }
-    case "boolean":
-    case "ref":
-    case "array":
-    case "index":
+    case ExprType.Boolean:
+    case ExprType.Ref:
+    case ExprType.Array:
+    case ExprType.Index:
       return null;
   }
 }
@@ -225,80 +241,88 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
   const validation = validateExpr(expr, env);
   if (!validation.ok) return validation;
   switch (expr.type) {
-    case "number": {
+    case ExprType.Number: {
       const range = checkIntRange(expr);
       if (!range.ok) return range;
-      return Ok({ kind: "number", value: 0 });
+      return Ok({ kind: ValueKind.Number, value: 0 });
     }
-    case "boolean":
-      return Ok({ kind: "boolean", value: false });
-    case "identifier": {
+    case ExprType.Boolean:
+      return Ok({ kind: ValueKind.Boolean, value: false });
+    case ExprType.Identifier: {
       const binding = env.get(expr.name);
       if (!binding) {
-        return Err(err("runtime", `Undefined variable "${expr.name}"`, expr.position));
+        return Err(err(ErrorKind.Runtime, `Undefined variable "${expr.name}"`, expr.position));
       }
       return Ok(binding.value);
     }
-    case "unary": {
+    case ExprType.Unary: {
       const operand = inferValue(expr.operand, env);
       if (!operand.ok) return operand;
-      return Ok({ kind: "number", value: 0 });
+      return Ok({ kind: ValueKind.Number, value: 0 });
     }
-    case "ref": {
-      if (expr.operand.type !== "identifier") return Ok(null);
+    case ExprType.Ref: {
+      if (expr.operand.type !== ExprType.Identifier) return Ok(null);
       const target = env.get(expr.operand.name);
       if (!target) {
-        return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
+        return Err(
+          err(ErrorKind.Runtime, `Undefined variable "${expr.operand.name}"`, expr.position),
+        );
       }
-      return Ok({ kind: "ref", target: expr.operand.name, mutable: expr.mutable });
+      return Ok({ kind: ValueKind.Ref, target: expr.operand.name, mutable: expr.mutable });
     }
-    case "deref": {
-      if (expr.operand.type !== "identifier") return Ok(null);
+    case ExprType.Deref: {
+      if (expr.operand.type !== ExprType.Identifier) return Ok(null);
       const binding = env.get(expr.operand.name);
       if (!binding) {
-        return Err(err("runtime", `Undefined variable "${expr.operand.name}"`, expr.position));
+        return Err(
+          err(ErrorKind.Runtime, `Undefined variable "${expr.operand.name}"`, expr.position),
+        );
       }
       const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
       if (!resolved) {
         return Err(
-          err("runtime", `Reference target "${expr.operand.name}" is undefined`, expr.position),
+          err(
+            ErrorKind.Runtime,
+            `Reference target "${expr.operand.name}" is undefined`,
+            expr.position,
+          ),
         );
       }
       return Ok(resolved.binding.value);
     }
-    case "binary": {
+    case ExprType.Binary: {
       const l = inferValue(expr.left, env);
       if (!l.ok) return l;
       const r = inferValue(expr.right, env);
       if (!r.ok) return r;
-      if (expr.op === "<") return Ok({ kind: "boolean", value: false });
-      if (l.value?.kind !== "number" || r.value?.kind !== "number") return Ok(null);
+      if (expr.op === "<") return Ok({ kind: ValueKind.Boolean, value: false });
+      if (l.value?.kind !== ValueKind.Number || r.value?.kind !== ValueKind.Number) return Ok(null);
       if ((expr.op === "/" || expr.op === "%") && isKnownZero(expr.right, env)) {
-        return Err(err("runtime", "Division by zero", expr.right.position));
+        return Err(err(ErrorKind.Runtime, "Division by zero", expr.right.position));
       }
       const overflow = checkOverflow(expr, env);
       if (!overflow.ok) return overflow;
-      return Ok({ kind: "number", value: 0 });
+      return Ok({ kind: ValueKind.Number, value: 0 });
     }
-    case "array": {
+    case ExprType.Array: {
       const elements: Value[] = [];
       for (const el of expr.elements) {
         const v = inferValue(el, env);
         if (!v.ok) return v;
-        elements.push(v.value ?? { kind: "number", value: 0 });
+        elements.push(v.value ?? { kind: ValueKind.Number, value: 0 });
       }
-      return Ok({ kind: "array", elements });
+      return Ok({ kind: ValueKind.Array, elements });
     }
-    case "index": {
+    case ExprType.Index: {
       const arr = inferValue(expr.array, env);
       if (!arr.ok) return arr;
       const idx = inferValue(expr.index, env);
       if (!idx.ok) return idx;
-      if (idx.value && idx.value.kind !== "number") {
-        return Err(err("semantic", "Array index must be a number", expr.index.position));
+      if (idx.value && idx.value.kind !== ValueKind.Number) {
+        return Err(err(ErrorKind.Semantic, "Array index must be a number", expr.index.position));
       }
-      if (arr.value && arr.value.kind !== "array") {
-        return Err(err("semantic", "Cannot index a non-array value", expr.array.position));
+      if (arr.value && arr.value.kind !== ValueKind.Array) {
+        return Err(err(ErrorKind.Semantic, "Cannot index a non-array value", expr.array.position));
       }
       return Ok(null);
     }
@@ -308,23 +332,29 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
 function resolveTarget(
   target: Expr,
   get: (name: string) => Binding | undefined,
-): Result<{ name: string; binding: Binding }, EvalError> {
-  if (target.type === "identifier") {
+): Result<ResolvedTarget, EvalError> {
+  if (target.type === ExprType.Identifier) {
     const binding = get(target.name);
     if (!binding) {
-      return Err(err("runtime", `Undefined variable "${target.name}"`, target.position));
+      return Err(err(ErrorKind.Runtime, `Undefined variable "${target.name}"`, target.position));
     }
     return Ok({ name: target.name, binding });
   }
-  if (target.type === "deref") {
-    if (target.operand.type !== "identifier") {
+  if (target.type === ExprType.Deref) {
+    if (target.operand.type !== ExprType.Identifier) {
       return Err(
-        err("semantic", "Can only assign through a reference to a variable", target.position),
+        err(
+          ErrorKind.Semantic,
+          "Can only assign through a reference to a variable",
+          target.position,
+        ),
       );
     }
     const refBinding = get(target.operand.name);
     if (!refBinding) {
-      return Err(err("runtime", `Undefined variable "${target.operand.name}"`, target.position));
+      return Err(
+        err(ErrorKind.Runtime, `Undefined variable "${target.operand.name}"`, target.position),
+      );
     }
     if (refBinding.unknown) {
       // Kind undecidable statically; the dynamic pass validates the target.
@@ -332,5 +362,5 @@ function resolveTarget(
     }
     return validateDerefBinding(refBinding, target.operand.name, get, target.position);
   }
-  return Err(err("semantic", "Invalid assignment target", target.position));
+  return Err(err(ErrorKind.Semantic, "Invalid assignment target", target.position));
 }

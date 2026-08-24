@@ -18,21 +18,23 @@ These are also wired as hooks in `.github/hooks/` (`lint`, `test`, `format`, `ca
 
 ## Architecture
 
-Pipeline: `lex → parse → evaluate`. The public API is `evaluate(input: string): Result<number, EvalError>` — it returns the exit code, not the evaluator's internal value.
+Pipeline: `lex → parse → check → evaluate`. The public API is `evaluate(input: string): Result<number, EvalError>` — it returns the exit code, not the evaluator's internal value.
 
-Module layout (dependency direction is acyclic — enforce with `madge --circular`):
+Module layout (dependency direction is acyclic — enforce with `madge --circular`). Each stage lives in its own subdirectory with an `index.ts` barrel:
 
 ```
-index.ts          — public API: re-exports only, zero side effects
-src/evaluate.ts   — composes lex → parse → evaluate; enriches errors with source snippets
-src/result.ts     — Result monad + combinators (map, andThen, unwrapOr)
-src/errors.ts     — EvalError discriminated union (leaf)
-src/lexer.ts      — source → tokens with source positions
-src/parser.ts     — tokens → AST
-src/eval.ts       — AST → Result<number, EvalError>; semantic checks during evaluation
+index.ts              — public API: re-exports only, zero side effects
+src/evaluate.ts       — composes lex → parse → check → evaluate; enriches errors with source snippets
+src/result.ts         — Result monad + combinators (map, andThen, unwrapOr)
+src/errors.ts         — EvalError discriminated union (leaf)
+src/ast/              — AST node types (expr.ts, statement.ts) + testAst.ts constructors
+src/lexer/            — source → tokens with source positions
+src/parser/           — tokens → AST
+src/check/            — static semantic checks on the AST
+src/eval/             — AST → Result<number, EvalError>; value.ts holds Value/Binding + ref resolution
 ```
 
-Dependency direction: `index → evaluate → eval → parser → lexer → {errors, result}`. `errors` and `result` are leaf modules. No module depends on `index`.
+Dependency direction: `index → evaluate → {check, eval} → parser → lexer → {errors, result}`, with `ast` and `eval/value` as shared type/leaf modules. `errors` and `result` are leaf modules. No module depends on `index`.
 
 ## Conventions
 

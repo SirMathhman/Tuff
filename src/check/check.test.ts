@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { ErrorKind } from "../errors.ts";
 import { checkProgram } from "./check.ts";
-import { assignStmt, bin, ident, ifStmt, letStmt, num, pos, prog, returnStmt } from "./testAst.ts";
+import { ExprType, StatementType } from "../ast/index.ts";
+import {
+  assignStmt,
+  bin,
+  ident,
+  ifStmt,
+  letStmt,
+  num,
+  pos,
+  prog,
+  returnStmt,
+} from "../ast/testAst.ts";
 
 describe("checkProgram: bindings & undefined variables", () => {
   test("valid program passes", () => {
@@ -12,7 +24,7 @@ describe("checkProgram: bindings & undefined variables", () => {
     const r = checkProgram(prog([letStmt("x", num(1)), assignStmt(ident("x"), num(2))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("mutability");
+      expect(r.error.kind).toBe(ErrorKind.Mutability);
       expect(r.error.message).toContain("x");
     }
   });
@@ -26,18 +38,20 @@ describe("checkProgram: bindings & undefined variables", () => {
     const r = checkProgram(prog([returnStmt(ident("y"))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("y");
     }
   });
 
   test("undefined variable in dead code is still reported", () => {
     const r = checkProgram(
-      prog([ifStmt({ type: "boolean", value: false, position: pos }, [letStmt("y", ident("z"))])]),
+      prog([
+        ifStmt({ type: ExprType.Boolean, value: false, position: pos }, [letStmt("y", ident("z"))]),
+      ]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("z");
     }
   });
@@ -48,7 +62,7 @@ describe("checkProgram: conditions, references & division", () => {
     const r = checkProgram(prog([ifStmt(num(1), [])]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("boolean");
     }
   });
@@ -57,23 +71,23 @@ describe("checkProgram: conditions, references & division", () => {
     const r = checkProgram(
       prog([
         letStmt("x", num(1)),
-        letStmt("y", { type: "deref", operand: ident("x"), position: pos }),
+        letStmt("y", { type: ExprType.Deref, operand: ident("x"), position: pos }),
       ]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("not a reference");
     }
   });
 
   test("reference to a non-identifier operand is a semantic error", () => {
     const r = checkProgram(
-      prog([letStmt("y", { type: "ref", mutable: false, operand: num(1), position: pos })]),
+      prog([letStmt("y", { type: ExprType.Ref, mutable: false, operand: num(1), position: pos })]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("reference");
     }
   });
@@ -84,7 +98,7 @@ describe("checkProgram: division & integer ranges", () => {
     const r = checkProgram(prog([returnStmt(bin("/", num(10), num(0)))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -93,7 +107,7 @@ describe("checkProgram: division & integer ranges", () => {
     const r = checkProgram(prog([returnStmt(bin("/", num(10), bin("-", num(1), num(1))))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -102,7 +116,7 @@ describe("checkProgram: division & integer ranges", () => {
     const r = checkProgram(prog([letStmt("y", num(0)), returnStmt(bin("/", num(10), ident("y")))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -111,7 +125,7 @@ describe("checkProgram: division & integer ranges", () => {
     const r = checkProgram(prog([returnStmt(num(256, "U8"))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("U8");
     }
   });
@@ -125,7 +139,7 @@ describe("checkProgram: division & integer ranges", () => {
     const r = checkProgram(prog([returnStmt(num(-1, "U8"))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("U8");
     }
   });
@@ -134,12 +148,12 @@ describe("checkProgram: division & integer ranges", () => {
     const r = checkProgram(
       prog([
         letStmt("x", num(1)),
-        returnStmt({ type: "index", array: ident("x"), index: num(0), position: pos }),
+        returnStmt({ type: ExprType.Index, array: ident("x"), index: num(0), position: pos }),
       ]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("non-array");
     }
   });
@@ -147,18 +161,18 @@ describe("checkProgram: division & integer ranges", () => {
   test("non-number array index is a semantic error", () => {
     const r = checkProgram(
       prog([
-        letStmt("a", { type: "array", elements: [num(1)], position: pos }),
+        letStmt("a", { type: ExprType.Array, elements: [num(1)], position: pos }),
         returnStmt({
-          type: "index",
+          type: ExprType.Index,
           array: ident("a"),
-          index: { type: "boolean", value: true, position: pos },
+          index: { type: ExprType.Boolean, value: true, position: pos },
           position: pos,
         }),
       ]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("number");
     }
   });
@@ -169,7 +183,7 @@ describe("checkProgram: ranges, indexing & assignment", () => {
     const r = checkProgram(prog([assignStmt(ident("x"), num(1))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("x");
     }
   });
@@ -178,13 +192,13 @@ describe("checkProgram: ranges, indexing & assignment", () => {
     const r = checkProgram(
       prog([
         letStmt("x", num(1), true),
-        letStmt("y", { type: "ref", mutable: false, operand: ident("x"), position: pos }),
-        assignStmt({ type: "deref", operand: ident("y"), position: pos }, num(2)),
+        letStmt("y", { type: ExprType.Ref, mutable: false, operand: ident("x"), position: pos }),
+        assignStmt({ type: ExprType.Deref, operand: ident("y"), position: pos }, num(2)),
       ]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("mutability");
+      expect(r.error.kind).toBe(ErrorKind.Mutability);
       expect(r.error.message).toContain("immutable reference");
     }
   });
@@ -192,13 +206,13 @@ describe("checkProgram: ranges, indexing & assignment", () => {
   test("block-scoped bindings do not leak", () => {
     const r = checkProgram(
       prog([
-        { type: "block", statements: [letStmt("x", num(1))], position: pos },
+        { type: StatementType.Block, statements: [letStmt("x", num(1))], position: pos },
         returnStmt(ident("x")),
       ]),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("x");
     }
   });

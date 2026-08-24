@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ErrorKind } from "../errors.ts";
 import { lex } from "./lexer.ts";
 
 describe("lex: tokens", () => {
@@ -130,7 +131,7 @@ describe("lex: errors", () => {
     const r = lex("1 @ 2");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe('Unexpected character "@"');
       expect(r.error.position).toEqual({ line: 1, column: 3 });
     }
@@ -140,7 +141,7 @@ describe("lex: errors", () => {
     const r = lex("1.2.3");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe('Invalid number literal "1.2.3"');
       expect(r.error.position).toEqual({ line: 1, column: 1 });
     }

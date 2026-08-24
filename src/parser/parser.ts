@@ -1,90 +1,14 @@
-import type { EvalError, Position } from "./errors.ts";
-import type { Token, TokenKind } from "./lexer.ts";
-import { Err, Ok, andThen, map } from "./result.ts";
-import type { Result } from "./result.ts";
-
-export type Expr =
-  | {
-      readonly type: "number";
-      readonly value: number;
-      readonly suffix?: string;
-      readonly position: Position;
-    }
-  | { readonly type: "boolean"; readonly value: boolean; readonly position: Position }
-  | { readonly type: "identifier"; readonly name: string; readonly position: Position }
-  | {
-      readonly type: "unary";
-      readonly op: string;
-      readonly operand: Expr;
-      readonly position: Position;
-    }
-  | {
-      readonly type: "ref";
-      readonly mutable: boolean;
-      readonly operand: Expr;
-      readonly position: Position;
-    }
-  | { readonly type: "deref"; readonly operand: Expr; readonly position: Position }
-  | {
-      readonly type: "binary";
-      readonly op: string;
-      readonly left: Expr;
-      readonly right: Expr;
-      readonly position: Position;
-    }
-  | {
-      readonly type: "array";
-      readonly elements: readonly Expr[];
-      readonly position: Position;
-    }
-  | {
-      readonly type: "index";
-      readonly array: Expr;
-      readonly index: Expr;
-      readonly position: Position;
-    };
-
-export type Statement =
-  | {
-      readonly type: "let";
-      readonly mutable: boolean;
-      readonly name: string;
-      readonly value: Expr;
-      readonly position: Position;
-    }
-  | {
-      readonly type: "assign";
-      readonly target: Expr;
-      readonly value: Expr;
-      readonly position: Position;
-    }
-  | { readonly type: "return"; readonly value: Expr; readonly position: Position }
-  | {
-      readonly type: "block";
-      readonly statements: readonly Statement[];
-      readonly position: Position;
-    }
-  | {
-      readonly type: "if";
-      readonly condition: Expr;
-      readonly then: readonly Statement[];
-      readonly else: readonly Statement[] | null;
-      readonly position: Position;
-    }
-  | {
-      readonly type: "while";
-      readonly condition: Expr;
-      readonly body: readonly Statement[];
-      readonly position: Position;
-    };
-
-export interface Program {
-  readonly statements: readonly Statement[];
-}
+import { ErrorKind } from "../errors.ts";
+import type { EvalError, Position } from "../errors.ts";
+import type { Token, TokenKind } from "../lexer/index.ts";
+import { Err, Ok, andThen, map } from "../result.ts";
+import type { Result } from "../result.ts";
+import { ExprType, StatementType } from "../ast/index.ts";
+import type { Expr, ParsedBlock, Program, Statement } from "../ast/index.ts";
 
 const EOF: Token = { kind: "eof", value: "", position: { line: 0, column: 0 } };
 
-function err(kind: EvalError["kind"], message: string, position: Position): EvalError {
+function err(kind: ErrorKind, message: string, position: Position): EvalError {
   return { kind, message, position, snippet: "" };
 }
 
@@ -107,7 +31,11 @@ class Parser {
     const t = this.peek();
     if (t.kind !== kind) {
       return Err(
-        err("syntax", `Expected ${what} but found "${t.value || "end of input"}"`, t.position),
+        err(
+          ErrorKind.Syntax,
+          `Expected ${what} but found "${t.value || "end of input"}"`,
+          t.position,
+        ),
       );
     }
     return Ok(this.advance());
@@ -145,15 +73,17 @@ class Parser {
     }
     if (t.kind === "lbrace") {
       return map(this.parseBlock(t), (block) => ({
-        type: "block" as const,
+        type: StatementType.Block,
         statements: block.statements,
         position: block.position,
       }));
     }
-    return Err(err("syntax", `Unexpected token "${t.value || "end of input"}"`, t.position));
+    return Err(
+      err(ErrorKind.Syntax, `Unexpected token "${t.value || "end of input"}"`, t.position),
+    );
   }
 
-  private parseBlock(t: Token): Result<{ statements: Statement[]; position: Position }, EvalError> {
+  private parseBlock(t: Token): Result<ParsedBlock, EvalError> {
     this.advance();
     const statements: Statement[] = [];
     while (this.peek().kind !== "rbrace" && this.peek().kind !== "eof") {
@@ -172,7 +102,7 @@ class Parser {
           andThen(this.parseIfBody(), (then) =>
             andThen(this.parseElse(), (elseBranch) =>
               Ok({
-                type: "if",
+                type: StatementType.If,
                 condition,
                 then,
                 else: elseBranch,
@@ -191,7 +121,7 @@ class Parser {
       andThen(this.parseExpr(), (condition) =>
         andThen(this.expect("rparen", "')'"), () =>
           andThen(this.parseIfBody(), (body) =>
-            Ok({ type: "while", condition, body, position: t.position }),
+            Ok({ type: StatementType.While, condition, body, position: t.position }),
           ),
         ),
       ),
@@ -229,7 +159,13 @@ class Parser {
         andThen(this.expect("operator", "'='"), () =>
           andThen(this.parseExpr(), (value) =>
             andThen(this.expect("semicolon", "';'"), () =>
-              Ok({ type: "let", mutable, name: nameTok.value, value, position: t.position }),
+              Ok({
+                type: StatementType.Let,
+                mutable,
+                name: nameTok.value,
+                value,
+                position: t.position,
+              }),
             ),
           ),
         ),
@@ -241,18 +177,22 @@ class Parser {
     this.advance();
     return andThen(this.parseExpr(), (value) =>
       andThen(this.expect("semicolon", "';'"), () =>
-        Ok({ type: "return", value, position: t.position }),
+        Ok({ type: StatementType.Return, value, position: t.position }),
       ),
     );
   }
 
   private parseAssign(t: Token): Result<Statement, EvalError> {
     this.advance();
-    const target: Expr = { type: "identifier", name: t.value, position: t.position };
+    const target: Expr = { type: ExprType.Identifier, name: t.value, position: t.position };
     const opTok = this.peek();
     if (opTok.kind !== "operator" || (opTok.value !== "=" && opTok.value !== "+=")) {
       return Err(
-        err("syntax", `Expected "=" but found "${opTok.value || "end of input"}"`, opTok.position),
+        err(
+          ErrorKind.Syntax,
+          `Expected "=" but found "${opTok.value || "end of input"}"`,
+          opTok.position,
+        ),
       );
     }
     this.advance();
@@ -260,9 +200,9 @@ class Parser {
     return andThen(this.parseExpr(), (rhs) =>
       andThen(this.expect("semicolon", "';'"), () => {
         const value: Expr = isCompound
-          ? { type: "binary", op: "+", left: target, right: rhs, position: t.position }
+          ? { type: ExprType.Binary, op: "+", left: target, right: rhs, position: t.position }
           : rhs;
-        return Ok({ type: "assign", target, value, position: t.position });
+        return Ok({ type: StatementType.Assign, target, value, position: t.position });
       }),
     );
   }
@@ -274,10 +214,14 @@ class Parser {
         andThen(this.parseExpr(), (value) =>
           andThen(this.expect("semicolon", "';'"), () =>
             Ok({
-              type: "assign",
+              type: StatementType.Assign,
               target: {
-                type: "deref",
-                operand: { type: "identifier", name: nameTok.value, position: nameTok.position },
+                type: ExprType.Deref,
+                operand: {
+                  type: ExprType.Identifier,
+                  name: nameTok.value,
+                  position: nameTok.position,
+                },
                 position: t.position,
               },
               value,
@@ -302,7 +246,7 @@ class Parser {
         const right = this.parseAdditive();
         if (!right.ok) return right;
         left = Ok({
-          type: "binary",
+          type: ExprType.Binary,
           op: t.value,
           left: left.value,
           right: right.value,
@@ -324,7 +268,7 @@ class Parser {
         const right = this.parseMultiplicative();
         if (!right.ok) return right;
         left = Ok({
-          type: "binary",
+          type: ExprType.Binary,
           op: t.value,
           left: left.value,
           right: right.value,
@@ -346,7 +290,7 @@ class Parser {
         const right = this.parseUnary();
         if (!right.ok) return right;
         left = Ok({
-          type: "binary",
+          type: ExprType.Binary,
           op: t.value,
           left: left.value,
           right: right.value,
@@ -364,7 +308,7 @@ class Parser {
     if (t.kind === "operator" && t.value === "-") {
       this.advance();
       return andThen(this.parseUnary(), (operand) =>
-        Ok({ type: "unary", op: "-", operand, position: t.position }),
+        Ok({ type: ExprType.Unary, op: "-", operand, position: t.position }),
       );
     }
     if (t.kind === "operator" && t.value === "&") {
@@ -375,13 +319,13 @@ class Parser {
         mutable = true;
       }
       return andThen(this.parseUnary(), (operand) =>
-        Ok({ type: "ref", mutable, operand, position: t.position }),
+        Ok({ type: ExprType.Ref, mutable, operand, position: t.position }),
       );
     }
     if (t.kind === "operator" && t.value === "*") {
       this.advance();
       return andThen(this.parseUnary(), (operand) =>
-        Ok({ type: "deref", operand, position: t.position }),
+        Ok({ type: ExprType.Deref, operand, position: t.position }),
       );
     }
     return this.parsePostfix();
@@ -397,7 +341,12 @@ class Parser {
         if (!index.ok) return index;
         const close = this.expect("rbracket", "']'");
         if (!close.ok) return close;
-        base = Ok({ type: "index", array: base.value, index: index.value, position: t.position });
+        base = Ok({
+          type: ExprType.Index,
+          array: base.value,
+          index: index.value,
+          position: t.position,
+        });
       } else {
         break;
       }
@@ -413,17 +362,19 @@ class Parser {
       const suffix = suffixMatch ? suffixMatch[0] : undefined;
       const digits = suffix ? t.value.slice(0, -suffix.length) : t.value;
       if (digits.includes(".")) {
-        return Err(err("syntax", "Fractional number literals are not supported", t.position));
+        return Err(
+          err(ErrorKind.Syntax, "Fractional number literals are not supported", t.position),
+        );
       }
-      return Ok({ type: "number", value: Number(digits), suffix, position: t.position });
+      return Ok({ type: ExprType.Number, value: Number(digits), suffix, position: t.position });
     }
     if (t.kind === "keyword" && (t.value === "true" || t.value === "false")) {
       this.advance();
-      return Ok({ type: "boolean", value: t.value === "true", position: t.position });
+      return Ok({ type: ExprType.Boolean, value: t.value === "true", position: t.position });
     }
     if (t.kind === "identifier") {
       this.advance();
-      return Ok({ type: "identifier", name: t.value, position: t.position });
+      return Ok({ type: ExprType.Identifier, name: t.value, position: t.position });
     }
     if (t.kind === "lparen") {
       this.advance();
@@ -436,7 +387,11 @@ class Parser {
       return this.parseArrayLiteral(t);
     }
     return Err(
-      err("syntax", `Expected an expression but found "${t.value || "end of input"}"`, t.position),
+      err(
+        ErrorKind.Syntax,
+        `Expected an expression but found "${t.value || "end of input"}"`,
+        t.position,
+      ),
     );
   }
 
@@ -445,7 +400,7 @@ class Parser {
     for (;;) {
       if (this.peek().kind === "rbracket") {
         this.advance();
-        return Ok({ type: "array", elements, position: t.position });
+        return Ok({ type: ExprType.Array, elements, position: t.position });
       }
       const el = this.parseExpr();
       if (!el.ok) return el;
@@ -454,7 +409,11 @@ class Parser {
       if (sep.kind === "rbracket") continue;
       if (sep.kind !== "comma") {
         return Err(
-          err("syntax", `Expected "," but found "${sep.value || "end of input"}"`, sep.position),
+          err(
+            ErrorKind.Syntax,
+            `Expected "," but found "${sep.value || "end of input"}"`,
+            sep.position,
+          ),
         );
       }
       this.advance();

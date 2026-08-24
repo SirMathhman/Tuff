@@ -44,4 +44,13 @@ export default defineConfig([
     },
   },
   tseslint.configs.recommended,
+  {
+    // Result's discriminant is a boolean literal (`ok: true` / `ok: false`);
+    // TypeScript does not allow boolean-valued enum members, so the
+    // named-interface / enum rules are waived for this module only.
+    files: ["src/result.ts"],
+    rules: {
+      "no-restricted-syntax": "off",
+    },
+  },
 ]);

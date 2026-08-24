@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { ErrorKind } from "../errors.ts";
 import { parse } from "./parser.ts";
-import type { Token, TokenKind } from "./lexer.ts";
+import { ExprType, StatementType } from "../ast/index.ts";
+import type { Token, TokenKind } from "../lexer/index.ts";
 
 function tok(kind: TokenKind, value: string): Token {
   return { kind, value, position: { line: 1, column: 1 } };
@@ -23,10 +25,10 @@ describe("parse: statements", () => {
     if (r.ok) {
       expect(r.value.statements).toEqual([
         {
-          type: "let",
+          type: StatementType.Let,
           mutable: false,
           name: "x",
-          value: { type: "number", value: 1, position: { line: 1, column: 1 } },
+          value: { type: ExprType.Number, value: 1, position: { line: 1, column: 1 } },
           position: { line: 1, column: 1 },
         },
       ]);
@@ -403,7 +405,7 @@ describe("parse: errors", () => {
     const r = parseTokens([tok("semicolon", ";")]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe('Unexpected token ";"');
     }
   });
@@ -417,7 +419,7 @@ describe("parse: errors", () => {
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe("Expected ';' but found \"end of input\"");
     }
   });
@@ -432,7 +434,7 @@ describe("parse: errors", () => {
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe("Expected ')' but found \"{\"");
     }
   });
@@ -448,7 +450,7 @@ describe("parse: errors", () => {
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe('Expected "," but found "2"');
     }
   });
@@ -462,7 +464,7 @@ describe("parse: errors", () => {
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe("Expected '}' but found \"end of input\"");
     }
   });
@@ -471,7 +473,7 @@ describe("parse: errors", () => {
     const r = parseTokens([tok("keyword", "return"), tok("number", "1.5"), tok("semicolon", ";")]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("syntax");
+      expect(r.error.kind).toBe(ErrorKind.Syntax);
       expect(r.error.message).toBe("Fractional number literals are not supported");
     }
   });

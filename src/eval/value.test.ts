@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { ValueKind } from "./value.ts";
 import { resolveRefChain } from "./value.ts";
 import type { Binding } from "./value.ts";
 
 function numBinding(value: number): Binding {
-  return { value: { kind: "number", value }, mutable: false };
+  return { value: { kind: ValueKind.Number, value }, mutable: false };
 }
 
 function refBinding(target: string, mutable = false): Binding {
-  return { value: { kind: "ref", target, mutable }, mutable: false };
+  return { value: { kind: ValueKind.Ref, target, mutable }, mutable: false };
 }
 
 describe("resolveRefChain", () => {
@@ -17,7 +18,7 @@ describe("resolveRefChain", () => {
     expect(r).not.toBeNull();
     if (r) {
       expect(r.name).toBe("x");
-      expect(r.binding.value).toEqual({ kind: "number", value: 5 });
+      expect(r.binding.value).toEqual({ kind: ValueKind.Number, value: 5 });
     }
   });
 
@@ -30,7 +31,7 @@ describe("resolveRefChain", () => {
     expect(r).not.toBeNull();
     if (r) {
       expect(r.name).toBe("x");
-      expect(r.binding.value).toEqual({ kind: "number", value: 7 });
+      expect(r.binding.value).toEqual({ kind: ValueKind.Number, value: 7 });
     }
   });
 
@@ -44,7 +45,7 @@ describe("resolveRefChain", () => {
     expect(r).not.toBeNull();
     if (r) {
       expect(r.name).toBe("c");
-      expect(r.binding.value).toEqual({ kind: "number", value: 3 });
+      expect(r.binding.value).toEqual({ kind: ValueKind.Number, value: 3 });
     }
   });
 

@@ -1,6 +1,7 @@
-import type { EvalError, Position } from "./errors.ts";
-import { Err, Ok } from "./result.ts";
-import type { Result } from "./result.ts";
+import { ErrorKind } from "../errors.ts";
+import type { EvalError, Position } from "../errors.ts";
+import { Err, Ok } from "../result.ts";
+import type { Result } from "../result.ts";
 
 export type TokenKind =
   | "number"
@@ -88,7 +89,7 @@ export function lex(source: string): Result<Token[], EvalError> {
       }
       if ((num.match(/\./g) ?? []).length > 1) {
         return Err({
-          kind: "syntax",
+          kind: ErrorKind.Syntax,
           message: `Invalid number literal "${num}"`,
           position: start,
           snippet: "",
@@ -142,7 +143,7 @@ export function lex(source: string): Result<Token[], EvalError> {
     }
 
     return Err({
-      kind: "syntax",
+      kind: ErrorKind.Syntax,
       message: `Unexpected character "${ch}"`,
       position: start,
       snippet: "",

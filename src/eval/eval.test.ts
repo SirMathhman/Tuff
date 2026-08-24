@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { ErrorKind } from "../errors.ts";
 import { evaluateProgram } from "./eval.ts";
+import { ExprType } from "../ast/index.ts";
 import {
   array,
   assignStmt,
@@ -16,7 +18,7 @@ import {
   ref,
   returnStmt,
   whileStmt,
-} from "./testAst.ts";
+} from "../ast/testAst.ts";
 
 describe("evaluateProgram: values & errors", () => {
   test("empty program returns 0", () => {
@@ -43,7 +45,7 @@ describe("evaluateProgram: values & errors", () => {
     const r = evaluateProgram(prog([returnStmt(bin("/", num(10), bin("-", num(1), num(1))))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("zero");
     }
   });
@@ -59,7 +61,7 @@ describe("evaluateProgram: values & errors", () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("reference");
     }
   });
@@ -68,7 +70,7 @@ describe("evaluateProgram: values & errors", () => {
     const r = evaluateProgram(prog([returnStmt(array([num(1)]))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("array");
     }
   });
@@ -77,7 +79,7 @@ describe("evaluateProgram: values & errors", () => {
     const r = evaluateProgram(prog([returnStmt(bin("+", bool(true), num(1)))]));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("semantic");
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("numbers");
     }
   });
@@ -124,7 +126,7 @@ describe("evaluateProgram: references, arrays & control flow", () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.kind).toBe("runtime");
+      expect(r.error.kind).toBe(ErrorKind.Runtime);
       expect(r.error.message).toContain("out of range");
     }
   });
@@ -162,7 +164,7 @@ describe("evaluateProgram: references, arrays & control flow", () => {
 
   test("unary minus", () => {
     const r = evaluateProgram(
-      prog([returnStmt({ type: "unary", op: "-", operand: num(5), position: pos })]),
+      prog([returnStmt({ type: ExprType.Unary, op: "-", operand: num(5), position: pos })]),
     );
     expect(r).toEqual({ ok: true, value: -5 });
   });
