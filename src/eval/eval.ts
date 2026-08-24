@@ -6,8 +6,8 @@ import type { DerefExpr, Expr, Program, Statement } from "../ast/index.ts";
 import { Err, Ok, andThen } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ValueKind } from "./value.ts";
-import type { Binding, Value } from "./value.ts";
-import { resolveRefChain, validateDerefBinding } from "./value.ts";
+import type { ArrayValue, Binding, NumberValue, Value } from "./value.ts";
+import { resolveRefChain } from "./value.ts";
 
 export function evaluateProgram(program: Program): Result<number, EvalError> {
   const env = new Map<string, Binding>();
@@ -40,8 +40,7 @@ function evalStatements(
       }
       env.set(stmt.name, { value: value.value, mutable: stmt.mutable });
     } else if (stmt.type === StatementType.Assign) {
-      // The static pass validates targets it can decide; unknown-kind targets
-      // are deferred here, so ref-kind and mutability are re-checked at runtime.
+      // The static pass validates all assignment targets.
       const target = resolveAssignTarget(stmt.target, (n) => env.get(n), stmt.position);
       if (!target.ok) return target;
       const value = evalExpr(stmt.value, env);
@@ -93,16 +92,19 @@ function resolveAssignTarget(
 ): Result<string, EvalError> {
   if (target.type === ExprType.Identifier) return Ok(target.name);
   if (target.type === ExprType.Deref && target.operand.type === ExprType.Identifier) {
-    const refBinding = get(target.operand.name);
-    if (!refBinding) {
+    // The static pass validates the reference kind and mutability; here we
+    // only resolve the chain to find the binding to update.
+    const resolved = resolveRefChain(target.operand.name, get);
+    if (!resolved) {
       return Err(
-        err(ErrorKind.Runtime, `Undefined variable "${target.operand.name}"`, target.position),
+        err(
+          ErrorKind.Runtime,
+          `Reference target "${target.operand.name}" is undefined`,
+          target.position,
+        ),
       );
     }
-    return andThen(
-      validateDerefBinding(refBinding, target.operand.name, get, target.position),
-      (resolved) => Ok(resolved.name),
-    );
+    return Ok(resolved.name);
   }
   return Err(err(ErrorKind.Semantic, "Invalid assignment target", position));
 }
@@ -124,12 +126,7 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
 
 function evalDeref(expr: DerefExpr, env: Map<string, Binding>): Result<Value, EvalError> {
   const name = expr.operand.type === ExprType.Identifier ? expr.operand.name : "";
-  // The static pass validates known-kind operands; unknown-kind operands are
-  // deferred here, so the reference kind is re-checked at runtime.
-  const operandBinding = env.get(name);
-  if (operandBinding && operandBinding.value.kind !== ValueKind.Ref) {
-    return Err(err(ErrorKind.Semantic, `"${name}" is not a reference`, expr.position));
-  }
+  // The static pass validates the reference kind.
   const resolved = resolveRefChain(name, (n) => env.get(n));
   if (!resolved) {
     return Err(err(ErrorKind.Runtime, `Reference target "${name}" is undefined`, expr.position));
@@ -162,10 +159,7 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       if (!l.ok) return l;
       const r = evalExpr(expr.right, env);
       if (!r.ok) return r;
-      if (l.value.kind !== ValueKind.Number || r.value.kind !== ValueKind.Number) {
-        const bad = l.value.kind !== ValueKind.Number ? expr.left : expr.right;
-        return Err(err(ErrorKind.Semantic, "Arithmetic operands must be numbers", bad.position));
-      }
+      // The static pass validates operand kinds.
       const ln = toNumber(l.value, expr.position);
       if (!ln.ok) return ln;
       const rn = toNumber(r.value, expr.position);
@@ -201,20 +195,14 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       return Ok({ kind: ValueKind.Array, elements });
     }
     case ExprType.Index: {
-      // The static pass validates what it can decide; unknown-kind operands
-      // are deferred here, so the array and number-index kinds are re-checked.
+      // The static pass validates the array and index kinds; only the
+      // out-of-range check is genuinely dynamic.
       const arr = evalExpr(expr.array, env);
       if (!arr.ok) return arr;
       const idx = evalExpr(expr.index, env);
       if (!idx.ok) return idx;
-      if (idx.value.kind !== ValueKind.Number) {
-        return Err(err(ErrorKind.Semantic, "Array index must be a number", expr.index.position));
-      }
-      if (arr.value.kind !== ValueKind.Array) {
-        return Err(err(ErrorKind.Semantic, "Cannot index a non-array value", expr.array.position));
-      }
-      const n = idx.value.value;
-      const elements = arr.value.elements;
+      const n = (idx.value as NumberValue).value;
+      const elements = (arr.value as ArrayValue).elements;
       if (!Number.isInteger(n) || n < 0 || n >= elements.length) {
         return Err(
           err(

@@ -2,7 +2,7 @@ import { err } from "../errors.ts";
 import { ErrorKind } from "../errors.ts";
 import type { EvalError } from "../errors.ts";
 import { ExprType, StatementType } from "../ast/index.ts";
-import type { Expr, Program, Statement } from "../ast/index.ts";
+import type { Expr, IdentifierExpr, Program, Statement } from "../ast/index.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ValueKind } from "../eval/value.ts";
@@ -26,10 +26,9 @@ function checkMutability(
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
       const binding: Binding = {
-        value: value.value ?? { kind: ValueKind.Number, value: 0 },
+        value: value.value,
         mutable: stmt.mutable,
       };
-      if (value.value === null) binding.unknown = true;
       if (stmt.value.type === ExprType.Number) binding.literal = stmt.value.value;
       if (stmt.annotation) {
         const initType = inferIntType(stmt.value, env);
@@ -47,9 +46,9 @@ function checkMutability(
     } else if (stmt.type === StatementType.Assign) {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
       if (!target.ok) return target;
-      // For deref targets the reference's mutability is validated by
-      // resolveTarget (known kind) or the dynamic pass (unknown kind); only a
-      // direct identifier reassignment is gated on the binding's own mutability.
+      // The static pass validates all assignment targets; only a direct
+      // identifier reassignment is additionally gated on the binding's own
+      // mutability.
       if (stmt.target.type === ExprType.Identifier && !target.value.binding.mutable) {
         return Err(
           err(
@@ -60,7 +59,6 @@ function checkMutability(
         );
       }
       delete target.value.binding.literal;
-      delete target.value.binding.unknown;
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
     } else if (stmt.type === StatementType.Block) {
@@ -132,7 +130,7 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
         return Err(err(ErrorKind.Semantic, "Can only dereference a variable", expr.position));
       }
       const binding = env.get(expr.operand.name);
-      if (binding && !binding.unknown && binding.value.kind !== ValueKind.Ref) {
+      if (binding && binding.value.kind !== ValueKind.Ref) {
         return Err(
           err(ErrorKind.Semantic, `"${expr.operand.name}" is not a reference`, expr.position),
         );
@@ -249,7 +247,7 @@ function constFold(expr: Expr, env: Map<string, Binding>): number | null {
   }
 }
 
-function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null, EvalError> {
+function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value, EvalError> {
   const validation = validateExpr(expr, env);
   if (!validation.ok) return validation;
   switch (expr.type) {
@@ -273,31 +271,25 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       return Ok({ kind: ValueKind.Number, value: 0 });
     }
     case ExprType.Ref: {
-      if (expr.operand.type !== ExprType.Identifier) return Ok(null);
-      const target = env.get(expr.operand.name);
+      // validateExpr guarantees the operand is an identifier.
+      const name = (expr.operand as IdentifierExpr).name;
+      const target = env.get(name);
       if (!target) {
-        return Err(
-          err(ErrorKind.Runtime, `Undefined variable "${expr.operand.name}"`, expr.position),
-        );
+        return Err(err(ErrorKind.Runtime, `Undefined variable "${name}"`, expr.position));
       }
-      return Ok({ kind: ValueKind.Ref, target: expr.operand.name, mutable: expr.mutable });
+      return Ok({ kind: ValueKind.Ref, target: name, mutable: expr.mutable });
     }
     case ExprType.Deref: {
-      if (expr.operand.type !== ExprType.Identifier) return Ok(null);
-      const binding = env.get(expr.operand.name);
+      // validateExpr guarantees the operand is an identifier.
+      const name = (expr.operand as IdentifierExpr).name;
+      const binding = env.get(name);
       if (!binding) {
-        return Err(
-          err(ErrorKind.Runtime, `Undefined variable "${expr.operand.name}"`, expr.position),
-        );
+        return Err(err(ErrorKind.Runtime, `Undefined variable "${name}"`, expr.position));
       }
-      const resolved = resolveRefChain(expr.operand.name, (name) => env.get(name));
+      const resolved = resolveRefChain(name, (n) => env.get(n));
       if (!resolved) {
         return Err(
-          err(
-            ErrorKind.Runtime,
-            `Reference target "${expr.operand.name}" is undefined`,
-            expr.position,
-          ),
+          err(ErrorKind.Runtime, `Reference target "${name}" is undefined`, expr.position),
         );
       }
       return Ok(resolved.binding.value);
@@ -308,7 +300,10 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       const r = inferValue(expr.right, env);
       if (!r.ok) return r;
       if (expr.op === "<") return Ok({ kind: ValueKind.Boolean, value: false });
-      if (l.value?.kind !== ValueKind.Number || r.value?.kind !== ValueKind.Number) return Ok(null);
+      if (l.value.kind !== ValueKind.Number || r.value.kind !== ValueKind.Number) {
+        const bad = l.value.kind !== ValueKind.Number ? expr.left : expr.right;
+        return Err(err(ErrorKind.Semantic, "Arithmetic operands must be numbers", bad.position));
+      }
       if ((expr.op === "/" || expr.op === "%") && isKnownZero(expr.right, env)) {
         return Err(err(ErrorKind.Runtime, "Division by zero", expr.right.position));
       }
@@ -333,10 +328,12 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value | null,
       if (idx.value && idx.value.kind !== ValueKind.Number) {
         return Err(err(ErrorKind.Semantic, "Array index must be a number", expr.index.position));
       }
-      if (arr.value && arr.value.kind !== ValueKind.Array) {
+      if (arr.value.kind !== ValueKind.Array) {
         return Err(err(ErrorKind.Semantic, "Cannot index a non-array value", expr.array.position));
       }
-      return Ok(null);
+      // Empty arrays have no element kind; a number placeholder keeps the
+      // inference total (accessing them is a runtime out-of-range error).
+      return Ok(arr.value.elements[0] ?? { kind: ValueKind.Number, value: 0 });
     }
   }
 }
@@ -367,10 +364,6 @@ function resolveTarget(
       return Err(
         err(ErrorKind.Runtime, `Undefined variable "${target.operand.name}"`, target.position),
       );
-    }
-    if (refBinding.unknown) {
-      // Kind undecidable statically; the dynamic pass validates the target.
-      return Ok({ name: target.operand.name, binding: refBinding });
     }
     return validateDerefBinding(refBinding, target.operand.name, get, target.position);
   }

@@ -195,6 +195,14 @@ describe("evaluate: dead code", () => {
     }
   });
 
+  test('evaluate("if (false) { let a = [true]; return a[0] + 1; }") => Err (dead-code element kind)', () => {
+    const r = evaluate("if (false) { let a = [true]; return a[0] + 1; }");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
+    }
+  });
+
   test('evaluate("if (false) { let x = 1; let y = *x; }") => Err (dead-code deref of non-ref)', () => {
     const r = evaluate("if (false) { let x = 1; let y = *x; }");
     expect(r.ok).toBe(false);

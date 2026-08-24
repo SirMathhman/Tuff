@@ -8,7 +8,6 @@ export enum ValueKind {
   Boolean = "boolean",
   Ref = "ref",
   Array = "array",
-  Unknown = "unknown",
 }
 
 export interface NumberValue {
@@ -32,11 +31,7 @@ export interface ArrayValue {
   readonly elements: readonly Value[];
 }
 
-export interface UnknownValue {
-  readonly kind: ValueKind.Unknown;
-}
-
-export type Value = NumberValue | BooleanValue | RefValue | ArrayValue | UnknownValue;
+export type Value = NumberValue | BooleanValue | RefValue | ArrayValue;
 
 export interface ResolvedTarget {
   readonly name: string;
@@ -48,8 +43,6 @@ export interface Binding {
   mutable: boolean;
   /** Known numeric literal (static pass only); invalidated on reassignment. */
   literal?: number;
-  /** Static pass could not determine the value's kind. */
-  unknown?: boolean;
 }
 
 export function resolveRefChain(

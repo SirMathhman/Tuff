@@ -5,6 +5,7 @@ import { ExprType, StatementType } from "../ast/index.ts";
 import {
   assignStmt,
   bin,
+  bool,
   ident,
   ifStmt,
   letStmt,
@@ -141,6 +142,15 @@ describe("checkProgram: division & integer ranges", () => {
     if (!r.ok) {
       expect(r.error.kind).toBe(ErrorKind.Semantic);
       expect(r.error.message).toContain("U8");
+    }
+  });
+
+  test("boolean arithmetic operand is a semantic error", () => {
+    const r = checkProgram(prog([returnStmt(bin("+", bool(true), num(1)))]));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
+      expect(r.error.message).toContain("numbers");
     }
   });
 

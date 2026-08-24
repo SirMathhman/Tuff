@@ -74,15 +74,6 @@ describe("evaluateProgram: values & errors", () => {
       expect(r.error.message).toContain("array");
     }
   });
-
-  test("boolean arithmetic operand is a semantic error", () => {
-    const r = evaluateProgram(prog([returnStmt(bin("+", bool(true), num(1)))]));
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-      expect(r.error.message).toContain("numbers");
-    }
-  });
 });
 
 describe("evaluateProgram: references, arrays & control flow", () => {
