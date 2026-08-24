@@ -2,20 +2,20 @@ import { err } from "../errors.ts";
 import { ErrorKind } from "../errors.ts";
 import type { EvalError } from "../errors.ts";
 import { ExprType, StatementType } from "../ast/index.ts";
-import type {
-  CallExpr,
-  Expr,
-  FnDeclStmt,
-  IdentifierExpr,
-  Program,
-  Statement,
-} from "../ast/index.ts";
+import type { CallExpr, Expr, IdentifierExpr, Program, Statement } from "../ast/index.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ValueKind } from "../eval/value.ts";
 import type { Binding, FnValue, ResolvedTarget, Value } from "../eval/value.ts";
 import { resolveRefChain, validateDerefBinding } from "../eval/value.ts";
-import { checkFnReturns, hasUnconditionalReturn } from "./fn.ts";
+import { checkFnDecl } from "./fn.ts";
+import {
+  checkStructDecl,
+  inferFieldValue,
+  inferFieldType,
+  inferStructValue,
+  validateField,
+} from "./struct.ts";
 
 export function checkProgram(program: Program): Result<null, EvalError> {
   return checkMutability(program.statements, new Map());
@@ -39,20 +39,16 @@ function checkMutability(
       };
       if (stmt.value.type === ExprType.Number) binding.literal = stmt.value.value;
       const initType = inferIntType(stmt.value, env);
-      if (stmt.annotation) {
-        if (initType !== null && initType !== stmt.annotation) {
-          return Err(
-            err(
-              ErrorKind.Semantic,
-              `Initializer type "${initType}" does not match annotation "${stmt.annotation}"`,
-              stmt.value.position,
-            ),
-          );
-        }
-        binding.intType = stmt.annotation;
-      } else if (initType !== null) {
-        binding.intType = initType;
+      if (stmt.annotation && initType !== null && initType !== stmt.annotation) {
+        return Err(
+          err(
+            ErrorKind.Semantic,
+            `Initializer type "${initType}" does not match annotation "${stmt.annotation}"`,
+            stmt.value.position,
+          ),
+        );
       }
+      binding.intType = stmt.annotation ?? (initType !== null ? initType : undefined);
       env.set(stmt.name, binding);
     } else if (stmt.type === StatementType.Assign) {
       const target = resolveTarget(stmt.target, (name) => env.get(name));
@@ -101,8 +97,11 @@ function checkMutability(
       const body = checkMutability(stmt.body, env);
       if (!body.ok) return body;
     } else if (stmt.type === StatementType.FnDecl) {
-      const fnResult = checkFnDecl(stmt, env, shadowed);
+      const fnResult = checkFnDecl(stmt, env, shadowed, checkMutability, inferIntType);
       if (!fnResult.ok) return fnResult;
+    } else if (stmt.type === StatementType.StructDecl) {
+      const structResult = checkStructDecl(stmt, env, shadowed);
+      if (!structResult.ok) return structResult;
     } else {
       const unhandled: never = stmt;
       return Err(
@@ -116,53 +115,9 @@ function checkMutability(
 
 function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>): void {
   for (const [name, previous] of shadowed) {
-    if (previous === null) {
-      env.delete(name);
-    } else {
-      env.set(name, previous);
-    }
+    if (previous === null) env.delete(name);
+    else env.set(name, previous);
   }
-}
-
-function checkFnDecl(
-  stmt: FnDeclStmt,
-  env: Map<string, Binding>,
-  shadowed: Map<string, Binding | null>,
-): Result<null, EvalError> {
-  const bodyEnv = new Map<string, Binding>();
-  for (const param of stmt.params) {
-    bodyEnv.set(param.name, {
-      value: { kind: ValueKind.Number, value: 0 },
-      mutable: false,
-      intType: param.type,
-    });
-  }
-  const body = checkMutability(stmt.body, bodyEnv);
-  if (!body.ok) return body;
-  const returns = checkFnReturns(stmt.body, stmt.returnType, bodyEnv, inferIntType);
-  if (!returns.ok) return returns;
-  if (!hasUnconditionalReturn(stmt.body)) {
-    return Err(
-      err(
-        ErrorKind.Semantic,
-        `Function "${stmt.name}" must return a value on all paths`,
-        stmt.position,
-      ),
-    );
-  }
-  if (!shadowed.has(stmt.name)) {
-    shadowed.set(stmt.name, env.get(stmt.name) ?? null);
-  }
-  env.set(stmt.name, {
-    value: {
-      kind: ValueKind.Fn,
-      params: stmt.params,
-      returnType: stmt.returnType,
-      body: stmt.body,
-    },
-    mutable: false,
-  });
-  return Ok(null);
 }
 
 function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalError> {
@@ -175,7 +130,10 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
     case ExprType.Array:
     case ExprType.Index:
     case ExprType.Call:
+    case ExprType.Struct:
       return Ok(null);
+    case ExprType.Field:
+      return validateField(expr, env, inferValue);
     case ExprType.Ref:
       if (expr.operand.type !== ExprType.Identifier) {
         return Err(
@@ -250,6 +208,8 @@ function inferIntType(expr: Expr, env: Map<string, Binding>): string | null {
       if (!fn || fn.value.kind !== ValueKind.Fn) return null;
       return fn.value.returnType;
     }
+    case ExprType.Field:
+      return inferFieldType(expr, env, inferValue);
     default:
       return null;
   }
@@ -307,6 +267,8 @@ function constFold(expr: Expr, env: Map<string, Binding>): number | null {
     case ExprType.Array:
     case ExprType.Index:
     case ExprType.Call:
+    case ExprType.Struct:
+    case ExprType.Field:
       return null;
   }
 }
@@ -401,6 +363,10 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value, EvalEr
     }
     case ExprType.Call:
       return inferCallValue(expr, env);
+    case ExprType.Struct:
+      return inferStructValue(expr, env, inferValue, inferIntType);
+    case ExprType.Field:
+      return inferFieldValue(expr, env, inferValue);
   }
 }
 

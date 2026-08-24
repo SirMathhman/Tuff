@@ -2,7 +2,7 @@ import { err, ErrorKind } from "../errors.ts";
 import type { EvalError, Position } from "../errors.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
-import type { FnInfo } from "../ast/index.ts";
+import type { FnInfo, StructField } from "../ast/index.ts";
 
 export enum ValueKind {
   Number = "number",
@@ -10,6 +10,7 @@ export enum ValueKind {
   Ref = "ref",
   Array = "array",
   Fn = "fn",
+  Struct = "struct",
 }
 
 export interface NumberValue {
@@ -37,7 +38,14 @@ export interface FnValue extends FnInfo {
   readonly kind: ValueKind.Fn;
 }
 
-export type Value = NumberValue | BooleanValue | RefValue | ArrayValue | FnValue;
+export interface StructValue {
+  readonly kind: ValueKind.Struct;
+  readonly structName: string;
+  readonly fields: readonly StructField[];
+  readonly values: readonly Value[];
+}
+
+export type Value = NumberValue | BooleanValue | RefValue | ArrayValue | FnValue | StructValue;
 
 export interface ResolvedTarget {
   readonly name: string;

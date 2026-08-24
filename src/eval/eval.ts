@@ -2,11 +2,19 @@ import { err } from "../errors.ts";
 import { ErrorKind } from "../errors.ts";
 import type { EvalError, Position } from "../errors.ts";
 import { ExprType, StatementType } from "../ast/index.ts";
-import type { DerefExpr, Expr, Program, Statement } from "../ast/index.ts";
+import type {
+  BinaryExpr,
+  DerefExpr,
+  Expr,
+  FieldExpr,
+  Program,
+  Statement,
+  StructExpr,
+} from "../ast/index.ts";
 import { Err, Ok, andThen } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ValueKind } from "./value.ts";
-import type { ArrayValue, Binding, FnValue, NumberValue, Value } from "./value.ts";
+import type { ArrayValue, Binding, FnValue, NumberValue, StructValue, Value } from "./value.ts";
 import { resolveRefChain } from "./value.ts";
 
 export function evaluateProgram(program: Program): Result<number, EvalError> {
@@ -87,6 +95,14 @@ function evalStatements(
         },
         mutable: false,
       });
+    } else if (stmt.type === StatementType.StructDecl) {
+      if (!shadowed.has(stmt.name)) {
+        shadowed.set(stmt.name, env.get(stmt.name) ?? null);
+      }
+      env.set(stmt.name, {
+        value: { kind: ValueKind.Struct, structName: stmt.name, fields: stmt.fields, values: [] },
+        mutable: false,
+      });
     } else {
       const unhandled: never = stmt;
       return Err(
@@ -134,6 +150,9 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
       ),
     );
   }
+  if (value.kind === ValueKind.Struct) {
+    return Err(err(ErrorKind.Semantic, "Expected a number but found a struct", position));
+  }
   return Err(err(ErrorKind.Semantic, "Expected a number but found an array", position));
 }
 
@@ -167,37 +186,8 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
     }
     case ExprType.Deref:
       return evalDeref(expr, env);
-    case ExprType.Binary: {
-      const l = evalExpr(expr.left, env);
-      if (!l.ok) return l;
-      const r = evalExpr(expr.right, env);
-      if (!r.ok) return r;
-      // The static pass validates operand kinds.
-      const ln = toNumber(l.value, expr.position);
-      if (!ln.ok) return ln;
-      const rn = toNumber(r.value, expr.position);
-      if (!rn.ok) return rn;
-      if ((expr.op === "/" || expr.op === "%") && rn.value === 0) {
-        return Err(err(ErrorKind.Runtime, "Division by zero", expr.right.position));
-      }
-      if (expr.op === "<") {
-        return Ok({ kind: ValueKind.Boolean, value: ln.value < rn.value });
-      }
-      switch (expr.op) {
-        case "+":
-          return Ok({ kind: ValueKind.Number, value: ln.value + rn.value });
-        case "-":
-          return Ok({ kind: ValueKind.Number, value: ln.value - rn.value });
-        case "*":
-          return Ok({ kind: ValueKind.Number, value: ln.value * rn.value });
-        case "/":
-          return Ok({ kind: ValueKind.Number, value: Math.trunc(ln.value / rn.value) });
-        case "%":
-          return Ok({ kind: ValueKind.Number, value: ln.value % rn.value });
-        default:
-          return Err(err(ErrorKind.Runtime, `Unknown operator "${expr.op}"`, expr.position));
-      }
-    }
+    case ExprType.Binary:
+      return evalBinary(expr, env);
     case ExprType.Array: {
       const elements: Value[] = [];
       for (const el of expr.elements) {
@@ -244,5 +234,85 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       if (!body.ok) return body;
       return Ok({ kind: ValueKind.Number, value: body.value ?? 0 });
     }
+    case ExprType.Struct:
+      return evalStruct(expr, env);
+    case ExprType.Field:
+      return evalField(expr, env);
   }
+}
+
+function evalBinary(expr: BinaryExpr, env: Map<string, Binding>): Result<Value, EvalError> {
+  const l = evalExpr(expr.left, env);
+  if (!l.ok) return l;
+  const r = evalExpr(expr.right, env);
+  if (!r.ok) return r;
+  // The static pass validates operand kinds.
+  const ln = toNumber(l.value, expr.position);
+  if (!ln.ok) return ln;
+  const rn = toNumber(r.value, expr.position);
+  if (!rn.ok) return rn;
+  if ((expr.op === "/" || expr.op === "%") && rn.value === 0) {
+    return Err(err(ErrorKind.Runtime, "Division by zero", expr.right.position));
+  }
+  if (expr.op === "<") {
+    return Ok({ kind: ValueKind.Boolean, value: ln.value < rn.value });
+  }
+  switch (expr.op) {
+    case "+":
+      return Ok({ kind: ValueKind.Number, value: ln.value + rn.value });
+    case "-":
+      return Ok({ kind: ValueKind.Number, value: ln.value - rn.value });
+    case "*":
+      return Ok({ kind: ValueKind.Number, value: ln.value * rn.value });
+    case "/":
+      return Ok({ kind: ValueKind.Number, value: Math.trunc(ln.value / rn.value) });
+    case "%":
+      return Ok({ kind: ValueKind.Number, value: ln.value % rn.value });
+    default:
+      return Err(err(ErrorKind.Runtime, `Unknown operator "${expr.op}"`, expr.position));
+  }
+}
+
+function evalStruct(expr: StructExpr, env: Map<string, Binding>): Result<Value, EvalError> {
+  // The static pass validates the struct name, field names, and types.
+  const decl = env.get(expr.structName);
+  if (!decl || decl.value.kind !== ValueKind.Struct) {
+    return Err(err(ErrorKind.Semantic, `Undefined struct "${expr.structName}"`, expr.position));
+  }
+  const values: Value[] = [];
+  for (const init of expr.fields) {
+    const v = evalExpr(init.value, env);
+    if (!v.ok) return v;
+    values.push(v.value);
+  }
+  return Ok({
+    kind: ValueKind.Struct,
+    structName: expr.structName,
+    fields: (decl.value as StructValue).fields,
+    values,
+  });
+}
+
+function evalField(expr: FieldExpr, env: Map<string, Binding>): Result<Value, EvalError> {
+  // The static pass validates the object kind and field existence.
+  const obj = evalExpr(expr.object, env);
+  if (!obj.ok) return obj;
+  if (obj.value.kind !== ValueKind.Struct) {
+    return Err(
+      err(ErrorKind.Semantic, "Cannot access a field of a non-struct value", expr.position),
+    );
+  }
+  const structValue = obj.value as StructValue;
+  const idx = structValue.fields.findIndex((f) => f.name === expr.field);
+  const value = structValue.values[idx];
+  if (value === undefined) {
+    return Err(
+      err(
+        ErrorKind.Semantic,
+        `Struct "${structValue.structName}" has no field "${expr.field}"`,
+        expr.position,
+      ),
+    );
+  }
+  return Ok(value);
 }

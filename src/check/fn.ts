@@ -2,12 +2,60 @@ import { err } from "../errors.ts";
 import { ErrorKind } from "../errors.ts";
 import type { EvalError } from "../errors.ts";
 import { StatementType } from "../ast/index.ts";
-import type { Expr, Statement } from "../ast/index.ts";
+import type { Expr, FnDeclStmt, Statement } from "../ast/index.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
+import { ValueKind } from "../eval/value.ts";
 import type { Binding } from "../eval/value.ts";
 
 type IntTypeInfer = (expr: Expr, env: Map<string, Binding>) => string | null;
+type CheckMutabilityFn = (
+  statements: readonly Statement[],
+  env: Map<string, Binding>,
+) => Result<null, EvalError>;
+
+export function checkFnDecl(
+  stmt: FnDeclStmt,
+  env: Map<string, Binding>,
+  shadowed: Map<string, Binding | null>,
+  checkMutability: CheckMutabilityFn,
+  inferType: IntTypeInfer,
+): Result<null, EvalError> {
+  const bodyEnv = new Map<string, Binding>();
+  for (const param of stmt.params) {
+    bodyEnv.set(param.name, {
+      value: { kind: ValueKind.Number, value: 0 },
+      mutable: false,
+      intType: param.type,
+    });
+  }
+  const body = checkMutability(stmt.body, bodyEnv);
+  if (!body.ok) return body;
+  const returns = checkFnReturns(stmt.body, stmt.returnType, bodyEnv, inferType);
+  if (!returns.ok) return returns;
+  if (!hasUnconditionalReturn(stmt.body)) {
+    return Err(
+      err(
+        ErrorKind.Semantic,
+        `Function "${stmt.name}" must return a value on all paths`,
+        stmt.position,
+      ),
+    );
+  }
+  if (!shadowed.has(stmt.name)) {
+    shadowed.set(stmt.name, env.get(stmt.name) ?? null);
+  }
+  env.set(stmt.name, {
+    value: {
+      kind: ValueKind.Fn,
+      params: stmt.params,
+      returnType: stmt.returnType,
+      body: stmt.body,
+    },
+    mutable: false,
+  });
+  return Ok(null);
+}
 
 export function checkFnReturns(
   statements: readonly Statement[],
@@ -66,6 +114,7 @@ function guaranteedToReturn(stmt: Statement): boolean {
     case StatementType.Assign:
     case StatementType.While:
     case StatementType.FnDecl:
+    case StatementType.StructDecl:
       return false;
   }
 }

@@ -9,9 +9,15 @@ export enum StatementType {
   If = "if",
   While = "while",
   FnDecl = "fn",
+  StructDecl = "struct",
 }
 
 export interface FnParam {
+  readonly name: string;
+  readonly type: string;
+}
+
+export interface StructField {
   readonly name: string;
   readonly type: string;
 }
@@ -74,8 +80,15 @@ export interface FnInfo {
   readonly body: readonly Statement[];
 }
 
+export interface StructDeclStmt {
+  readonly type: StatementType.StructDecl;
+  readonly name: string;
+  readonly fields: readonly StructField[];
+  readonly position: Position;
+}
+
 export type Statement =
-  LetStmt | AssignStmt | ReturnStmt | BlockStmt | IfStmt | WhileStmt | FnDeclStmt;
+  LetStmt | AssignStmt | ReturnStmt | BlockStmt | IfStmt | WhileStmt | FnDeclStmt | StructDeclStmt;
 
 export interface ParsedBlock {
   readonly statements: Statement[];

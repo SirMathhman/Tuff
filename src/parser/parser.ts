@@ -12,6 +12,7 @@ import type {
   Program,
   Statement,
 } from "../ast/index.ts";
+import { parseStructDecl, parseStructLiteral } from "./struct.ts";
 
 const EOF: Token = { kind: "eof", value: "", position: { line: 0, column: 0 } };
 
@@ -19,22 +20,22 @@ function err(kind: ErrorKind, message: string, position: Position): EvalError {
   return { kind, message, position, snippet: "" };
 }
 
-class Parser {
+export class Parser {
   private i = 0;
 
   constructor(private readonly tokens: readonly Token[]) {}
 
-  private peek(): Token {
+  peek(): Token {
     return this.tokens[this.i] ?? EOF;
   }
 
-  private advance(): Token {
+  advance(): Token {
     const t = this.peek();
     this.i++;
     return t;
   }
 
-  private expect(kind: TokenKind, what: string): Result<Token, EvalError> {
+  expect(kind: TokenKind, what: string): Result<Token, EvalError> {
     const t = this.peek();
     if (t.kind !== kind) {
       return Err(
@@ -60,27 +61,14 @@ class Parser {
 
   private parseStatement(): Result<Statement, EvalError> {
     const t = this.peek();
-    if (t.kind === "keyword" && t.value === "let") {
-      return this.parseLet(t);
-    }
-    if (t.kind === "keyword" && t.value === "return") {
-      return this.parseReturn(t);
-    }
-    if (t.kind === "keyword" && t.value === "if") {
-      return this.parseIf(t);
-    }
-    if (t.kind === "keyword" && t.value === "while") {
-      return this.parseWhile(t);
-    }
-    if (t.kind === "keyword" && t.value === "fn") {
-      return this.parseFnDecl(t);
-    }
-    if (t.kind === "identifier") {
-      return this.parseAssign(t);
-    }
-    if (t.kind === "operator" && t.value === "*") {
-      return this.parseDerefAssign(t);
-    }
+    if (t.kind === "keyword" && t.value === "let") return this.parseLet(t);
+    if (t.kind === "keyword" && t.value === "return") return this.parseReturn(t);
+    if (t.kind === "keyword" && t.value === "if") return this.parseIf(t);
+    if (t.kind === "keyword" && t.value === "while") return this.parseWhile(t);
+    if (t.kind === "keyword" && t.value === "fn") return this.parseFnDecl(t);
+    if (t.kind === "keyword" && t.value === "struct") return parseStructDecl(this, t);
+    if (t.kind === "identifier") return this.parseAssign(t);
+    if (t.kind === "operator" && t.value === "*") return this.parseDerefAssign(t);
     if (t.kind === "lbrace") {
       return map(this.parseBlock(t), (block) => ({
         type: StatementType.Block,
@@ -228,7 +216,7 @@ class Parser {
     });
   }
 
-  private commaError(sep: Token): Result<never, EvalError> {
+  commaError(sep: Token): Result<never, EvalError> {
     return Err(
       err(
         ErrorKind.Syntax,
@@ -311,7 +299,7 @@ class Parser {
     return Ok({ type: StatementType.Assign, target, value: value.value, position: t.position });
   }
 
-  private parseExpr(): Result<Expr, EvalError> {
+  parseExpr(): Result<Expr, EvalError> {
     return this.parseComparison();
   }
 
@@ -402,6 +390,16 @@ class Parser {
         }
         const callee = (base.value as IdentifierExpr).name;
         base = this.parseCallArgs(callee, t.position);
+      } else if (t.kind === "dot") {
+        this.advance();
+        const fieldTok = this.expect("identifier", "a field name");
+        if (!fieldTok.ok) return fieldTok;
+        base = Ok({
+          type: ExprType.Field,
+          object: base.value,
+          field: fieldTok.value.value,
+          position: t.position,
+        });
       } else {
         break;
       }
@@ -452,6 +450,9 @@ class Parser {
     }
     if (t.kind === "identifier") {
       this.advance();
+      if (this.peek().kind === "lbrace") {
+        return parseStructLiteral(this, t.value, t.position);
+      }
       return Ok({ type: ExprType.Identifier, name: t.value, position: t.position });
     }
     if (t.kind === "lparen") {

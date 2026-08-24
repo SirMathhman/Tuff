@@ -1,5 +1,5 @@
 import { ExprType, StatementType } from "./index.ts";
-import type { Expr, FnParam, Program, Statement } from "./index.ts";
+import type { Expr, FnParam, Program, Statement, StructField, StructFieldInit } from "./index.ts";
 
 export const pos = { line: 1, column: 1 };
 
@@ -39,6 +39,14 @@ export function call(callee: string, args: readonly Expr[]): Expr {
   return { type: ExprType.Call, callee, args, position: pos };
 }
 
+export function structLit(structName: string, fields: readonly StructFieldInit[]): Expr {
+  return { type: ExprType.Struct, structName, fields, position: pos };
+}
+
+export function field(object: Expr, fieldName: string): Expr {
+  return { type: ExprType.Field, object, field: fieldName, position: pos };
+}
+
 export function letStmt(
   name: string,
   value: Expr,
@@ -75,6 +83,10 @@ export function fnDecl(
   body: readonly Statement[],
 ): Statement {
   return { type: StatementType.FnDecl, name, params, returnType, body, position: pos };
+}
+
+export function structDecl(name: string, fields: readonly StructField[]): Statement {
+  return { type: StatementType.StructDecl, name, fields, position: pos };
 }
 
 export function prog(statements: readonly Statement[]): Program {

@@ -11,6 +11,8 @@ export enum ExprType {
   Array = "array",
   Index = "index",
   Call = "call",
+  Struct = "struct",
+  Field = "field",
 }
 
 export interface NumberExpr {
@@ -80,6 +82,25 @@ export interface CallExpr {
   readonly position: Position;
 }
 
+export interface StructFieldInit {
+  readonly name: string;
+  readonly value: Expr;
+}
+
+export interface StructExpr {
+  readonly type: ExprType.Struct;
+  readonly structName: string;
+  readonly fields: readonly StructFieldInit[];
+  readonly position: Position;
+}
+
+export interface FieldExpr {
+  readonly type: ExprType.Field;
+  readonly object: Expr;
+  readonly field: string;
+  readonly position: Position;
+}
+
 export type Expr =
   | NumberExpr
   | BooleanExpr
@@ -90,4 +111,6 @@ export type Expr =
   | BinaryExpr
   | ArrayExpr
   | IndexExpr
-  | CallExpr;
+  | CallExpr
+  | StructExpr
+  | FieldExpr;

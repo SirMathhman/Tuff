@@ -17,6 +17,7 @@ export type TokenKind =
   | "comma"
   | "semicolon"
   | "colon"
+  | "dot"
   | "eof";
 
 export interface Token {
@@ -25,7 +26,18 @@ export interface Token {
   readonly position: Position;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else", "while", "fn"]);
+const KEYWORDS = new Set([
+  "let",
+  "mut",
+  "return",
+  "true",
+  "false",
+  "if",
+  "else",
+  "while",
+  "fn",
+  "struct",
+]);
 const INT_SUFFIXES = new Set([
   "U8",
   "U16",
@@ -55,6 +67,7 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   ",": "comma",
   ";": "semicolon",
   ":": "colon",
+  ".": "dot",
   "{": "lbrace",
   "}": "rbrace",
 };
