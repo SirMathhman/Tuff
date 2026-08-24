@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "pmd:cpd": "pmd cpd index.ts index.test.ts --dir ./src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

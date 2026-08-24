@@ -38,3 +38,7 @@ export type EvaluateError =
 export type Result<T> =
   | { ok: true; value: T }
   | { ok: false; error: EvaluateError };
+
+export function fail<T>(error: EvaluateError): Result<T> {
+  return { ok: false, error };
+}
