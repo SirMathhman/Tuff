@@ -9,6 +9,7 @@ export const EvaluateErrorKind = {
   MissingTerminator: "MissingTerminator",
   CodeAfterReturn: "CodeAfterReturn",
   ImmutableReassignment: "ImmutableReassignment",
+  UnbalancedBrace: "UnbalancedBrace",
 } as const;
 
 export type EvaluateErrorKind =
@@ -24,7 +25,8 @@ export type EvaluateError =
   | { kind: "EmptyStatement" }
   | { kind: "MissingTerminator" }
   | { kind: "CodeAfterReturn" }
-  | { kind: "ImmutableReassignment"; name: string };
+  | { kind: "ImmutableReassignment"; name: string }
+  | { kind: "UnbalancedBrace" };
 
 export type Result<T> =
   | { ok: true; value: T }

@@ -24,6 +24,10 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let mut x = 0; x = 1; return x;"))).toBe(1);
   });
 
+  test('evaluates "let mut x = 0; { x = 1; } return x;" to 1', () => {
+    expect(unwrap(evaluate("let mut x = 0; { x = 1; } return x;"))).toBe(1);
+  });
+
   test("unsupported input yields a structured error", () => {
     const result = evaluate("throw new Error('boom');");
     expect(result.ok).toBe(false);
