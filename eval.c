@@ -47,6 +47,99 @@ static long deref_value(const var *vars, const var *v, tuff_pos pos,
     return vars[v->ref_idx].value;
 }
 
+/* Evaluates a NODE_LET statement. On failure records the error in r and
+ * returns the error code; on success returns ERR_OK. */
+static tuff_err eval_let(var *vars, int *nvars, const tuff_node *nd,
+                         tuff_result *r)
+{
+    if (find_var(vars, *nvars, nd->name) != NULL)
+        return (r->error = tuff_err_at(ERR_DUPLICATE_VAR, nd->pos)).code;
+
+    vars[*nvars].name[0] = '\0';
+    memcpy(vars[*nvars].name, nd->name, strlen(nd->name) + 1);
+    vars[*nvars].is_mut = nd->is_mut;
+    vars[*nvars].value = nd->value;
+    vars[*nvars].is_ref = 0;
+    vars[*nvars].ref_mut = 0;
+    vars[*nvars].ref_idx = -1;
+    vars[*nvars].pos = nd->pos;
+    if (nd->is_ref)
+    {
+        const var *ref = find_var(vars, *nvars, nd->ref_name);
+        if (ref == NULL)
+            return (r->error = tuff_err_at(ERR_UNDECLARED_VAR, nd->pos)).code;
+        if (nd->ref_mut && !ref->is_mut)
+            return (r->error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos)).code;
+        vars[*nvars].is_ref = 1;
+        vars[*nvars].ref_mut = nd->ref_mut;
+        vars[*nvars].ref_idx = (int)(ref - vars);
+    }
+    (*nvars)++;
+    return ERR_OK;
+}
+
+/* Evaluates a NODE_ASSIGN statement. On failure records the error in r and
+ * returns the error code; on success returns ERR_OK. */
+static tuff_err eval_assign(var *vars, int nvars, const tuff_node *nd,
+                            tuff_result *r)
+{
+    const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, r);
+    if (v == NULL)
+        return r->error.code;
+    if (nd->deref)
+    {
+        if (!v->is_ref)
+            return (r->error = tuff_err_at(ERR_NOT_A_REF, nd->pos)).code;
+        if (!v->ref_mut)
+            return (r->error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos)).code;
+        if (!vars[v->ref_idx].is_mut)
+            return (r->error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos)).code;
+        vars[v->ref_idx].value = nd->value;
+    }
+    else
+    {
+        if (v->is_ref)
+            return (r->error = tuff_err_at(ERR_NOT_A_REF, nd->pos)).code;
+        if (!v->is_mut)
+            return (r->error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos)).code;
+        for (int j = 0; j < nvars; j++)
+            if (vars[j].name[0] != '\0' && strcmp(vars[j].name, nd->name) == 0)
+                vars[j].value = nd->value;
+    }
+    return ERR_OK;
+}
+
+/* Evaluates a NODE_RETURN statement. On success sets r->ok and r->value and
+ * returns ERR_OK; on failure records the error in r and returns the code. */
+static tuff_err eval_return(const var *vars, int nvars, const tuff_node *nd,
+                            tuff_result *r)
+{
+    if (nd->use_var)
+    {
+        const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, r);
+        if (v == NULL)
+            return r->error.code;
+        if (nd->deref)
+        {
+            r->value = deref_value(vars, v, nd->pos, r);
+            if (r->error.code != ERR_OK)
+                return r->error.code;
+        }
+        else
+        {
+            if (v->is_ref)
+                return (r->error = tuff_err_at(ERR_NOT_A_REF, nd->pos)).code;
+            r->value = v->value;
+        }
+    }
+    else
+    {
+        r->value = nd->value;
+    }
+    r->ok = 1;
+    return ERR_OK;
+}
+
 tuff_result tuff_eval(const tuff_program *prog)
 {
     tuff_result r;
@@ -60,118 +153,26 @@ tuff_result tuff_eval(const tuff_program *prog)
     for (int i = 0; i < prog->count; i++)
     {
         const tuff_node *nd = &prog->stmts[i];
+        tuff_err code;
         if (nd->kind == NODE_LET)
-        {
-            if (find_var(vars, nvars, nd->name) != NULL)
-            {
-                r.error = tuff_err_at(ERR_DUPLICATE_VAR, nd->pos);
-                return r;
-            }
-            vars[nvars].name[0] = '\0';
-            memcpy(vars[nvars].name, nd->name, strlen(nd->name) + 1);
-            vars[nvars].is_mut = nd->is_mut;
-            vars[nvars].value = nd->value;
-            vars[nvars].is_ref = 0;
-            vars[nvars].ref_mut = 0;
-            vars[nvars].ref_idx = -1;
-            vars[nvars].pos = nd->pos;
-            if (nd->is_ref)
-            {
-                const var *ref = find_var(vars, nvars, nd->ref_name);
-                if (ref == NULL)
-                {
-                    r.error = tuff_err_at(ERR_UNDECLARED_VAR, nd->pos);
-                    return r;
-                }
-                if (nd->ref_mut && !ref->is_mut)
-                {
-                    r.error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos);
-                    return r;
-                }
-                vars[nvars].is_ref = 1;
-                vars[nvars].ref_mut = nd->ref_mut;
-                vars[nvars].ref_idx = (int)(ref - vars);
-            }
-            nvars++;
-        }
+            code = eval_let(vars, &nvars, nd, &r);
         else if (nd->kind == NODE_ASSIGN)
-        {
-            const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, &r);
-            if (v == NULL)
-                return r;
-            if (nd->deref)
-            {
-                if (!v->is_ref)
-                {
-                    r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
-                    return r;
-                }
-                if (!v->ref_mut)
-                {
-                    r.error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos);
-                    return r;
-                }
-                if (!vars[v->ref_idx].is_mut)
-                {
-                    r.error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos);
-                    return r;
-                }
-                vars[v->ref_idx].value = nd->value;
-            }
-            else
-            {
-                if (v->is_ref)
-                {
-                    r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
-                    return r;
-                }
-                if (!v->is_mut)
-                {
-                    r.error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos);
-                    return r;
-                }
-                for (int j = 0; j < nvars; j++)
-                    if (vars[j].name[0] != '\0' && strcmp(vars[j].name, nd->name) == 0)
-                        vars[j].value = nd->value;
-            }
-        }
+            code = eval_assign(vars, nvars, nd, &r);
         else if (nd->kind == NODE_RETURN)
         {
-            if (nd->use_var)
-            {
-                const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, &r);
-                if (v == NULL)
-                    return r;
-                if (nd->deref)
-                {
-                    r.value = deref_value(vars, v, nd->pos, &r);
-                    if (r.error.code != ERR_OK)
-                        return r;
-                }
-                else
-                {
-                    if (v->is_ref)
-                    {
-                        r.error = tuff_err_at(ERR_NOT_A_REF, nd->pos);
-                        return r;
-                    }
-                    r.value = v->value;
-                }
-            }
-            else
-            {
-                r.value = nd->value;
-            }
-            r.ok = 1;
+            code = eval_return(vars, nvars, nd, &r);
             return r;
         }
-        else if (nd->kind == NODE_BLOCK)
+        else /* NODE_BLOCK */
         {
             /* No-op: a block's statements are flattened into program order,
              * so the main loop executes them in order. An inner return
              * terminates the program naturally, making everything after it
              * unreachable. */
+            continue;
         }
+        if (code != ERR_OK)
+            return r;
     }
 
     r.error = tuff_err_at(ERR_EXPECTED_RETURN, (tuff_pos){0, 0});
