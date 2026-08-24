@@ -3,6 +3,10 @@
   "module": "index.js",
   "type": "module",
   "private": true,
+  "scripts": {
+    "test": "bun test",
+    "lint": "eslint ."
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
