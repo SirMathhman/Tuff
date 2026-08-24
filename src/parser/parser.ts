@@ -4,15 +4,9 @@ import type { Token, TokenKind } from "../lexer/index.ts";
 import { Err, Ok, andThen, map } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ExprType, StatementType } from "../ast/index.ts";
-import type {
-  Expr,
-  FnParam,
-  IdentifierExpr,
-  ParsedBlock,
-  Program,
-  Statement,
-} from "../ast/index.ts";
+import type { Expr, IdentifierExpr, ParsedBlock, Program, Statement } from "../ast/index.ts";
 import { parseStructDecl, parseStructLiteral } from "./struct.ts";
+import { parseFnDecl } from "./fn.ts";
 
 const EOF: Token = { kind: "eof", value: "", position: { line: 0, column: 0 } };
 
@@ -65,7 +59,7 @@ export class Parser {
     if (t.kind === "keyword" && t.value === "return") return this.parseReturn(t);
     if (t.kind === "keyword" && t.value === "if") return this.parseIf(t);
     if (t.kind === "keyword" && t.value === "while") return this.parseWhile(t);
-    if (t.kind === "keyword" && t.value === "fn") return this.parseFnDecl(t);
+    if (t.kind === "keyword" && t.value === "fn") return parseFnDecl(this, t);
     if (t.kind === "keyword" && t.value === "struct") return parseStructDecl(this, t);
     if (t.kind === "identifier") return this.parseAssign(t);
     if (t.kind === "operator" && t.value === "*") return this.parseDerefAssign(t);
@@ -81,7 +75,7 @@ export class Parser {
     );
   }
 
-  private parseBlock(t: Token): Result<ParsedBlock, EvalError> {
+  parseBlock(t: Token): Result<ParsedBlock, EvalError> {
     this.advance();
     const statements: Statement[] = [];
     while (this.peek().kind !== "rbrace" && this.peek().kind !== "eof") {
@@ -181,41 +175,6 @@ export class Parser {
     );
   }
 
-  private parseFnDecl(t: Token): Result<Statement, EvalError> {
-    this.advance();
-    const nameTok = this.expect("identifier", "a function name");
-    if (!nameTok.ok) return nameTok;
-    const lparen = this.expect("lparen", "'('");
-    if (!lparen.ok) return lparen;
-    const paramsResult = this.parseFnParams();
-    if (!paramsResult.ok) return paramsResult;
-    const colon = this.expect("colon", "':'");
-    if (!colon.ok) return colon;
-    const retTok = this.expect("identifier", "a return type");
-    if (!retTok.ok) return retTok;
-    const arrow = this.expect("operator", "'=>'");
-    if (!arrow.ok) return arrow;
-    if (this.peek().kind !== "lbrace") {
-      return Err(
-        err(
-          ErrorKind.Syntax,
-          `Expected '{' but found "${this.peek().value || "end of input"}"`,
-          this.peek().position,
-        ),
-      );
-    }
-    const block = this.parseBlock(this.peek());
-    if (!block.ok) return block;
-    return Ok({
-      type: StatementType.FnDecl,
-      name: nameTok.value.value,
-      params: paramsResult.value,
-      returnType: retTok.value.value,
-      body: block.value.statements,
-      position: t.position,
-    });
-  }
-
   commaError(sep: Token): Result<never, EvalError> {
     return Err(
       err(
@@ -224,32 +183,6 @@ export class Parser {
         sep.position,
       ),
     );
-  }
-
-  private parseFnParams(): Result<FnParam[], EvalError> {
-    const params: FnParam[] = [];
-    if (this.peek().kind === "rparen") {
-      this.advance();
-      return Ok(params);
-    }
-    for (;;) {
-      const nameTok = this.expect("identifier", "a parameter name");
-      if (!nameTok.ok) return nameTok;
-      const colon = this.expect("colon", "':'");
-      if (!colon.ok) return colon;
-      const typeTok = this.expect("identifier", "a parameter type");
-      if (!typeTok.ok) return typeTok;
-      params.push({ name: nameTok.value.value, type: typeTok.value.value });
-      const sep = this.peek();
-      if (sep.kind === "rparen") {
-        this.advance();
-        return Ok(params);
-      }
-      if (sep.kind !== "comma") {
-        return this.commaError(sep);
-      }
-      this.advance();
-    }
   }
 
   private parseAssign(t: Token): Result<Statement, EvalError> {

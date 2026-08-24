@@ -32,6 +32,33 @@ interface StringLexResult {
   readonly next: number;
 }
 
+interface NumberLexResult {
+  readonly value: string;
+  readonly next: number;
+}
+
+function lexNumber(source: string, start: number): NumberLexResult {
+  let i = start;
+  let num = "";
+  while (i < source.length && /[0-9.]/.test(source.charAt(i))) {
+    num += source.charAt(i);
+    i++;
+  }
+  const next = source.charAt(i);
+  if (next === "U" || next === "I") {
+    let j = i;
+    while (j < source.length && /[A-Za-z0-9]/.test(source.charAt(j))) {
+      j++;
+    }
+    const suffix = source.slice(i, j);
+    if (INT_SUFFIXES.has(suffix)) {
+      num += suffix;
+      i = j;
+    }
+  }
+  return { value: num, next: i };
+}
+
 const KEYWORDS = new Set([
   "let",
   "mut",
@@ -132,12 +159,8 @@ export function lex(source: string): Result<Token[], EvalError> {
     const start: Position = { line, column };
 
     if (/[0-9]/.test(ch) || (ch === "." && /[0-9]/.test(source.charAt(i + 1)))) {
-      let num = "";
-      while (i < source.length && /[0-9.]/.test(source.charAt(i))) {
-        num += source.charAt(i);
-        i++;
-        column++;
-      }
+      const r = lexNumber(source, i);
+      const num = r.value;
       if ((num.match(/\./g) ?? []).length > 1) {
         return Err({
           kind: ErrorKind.Syntax,
@@ -146,19 +169,8 @@ export function lex(source: string): Result<Token[], EvalError> {
           snippet: "",
         });
       }
-      const next = source.charAt(i);
-      if (next === "U" || next === "I") {
-        let j = i;
-        while (j < source.length && /[A-Za-z0-9]/.test(source.charAt(j))) {
-          j++;
-        }
-        const suffix = source.slice(i, j);
-        if (INT_SUFFIXES.has(suffix)) {
-          num += suffix;
-          i = j;
-          column += suffix.length;
-        }
-      }
+      column += r.next - i;
+      i = r.next;
       tokens.push({ kind: "number", value: num, position: start });
       continue;
     }
