@@ -118,6 +118,16 @@ describe("evaluate: integer suffixes", () => {
   });
 });
 
+describe("evaluate: functions", () => {
+  test("fn add(first : I32, second : I32) => 7", () => {
+    expect(
+      evaluate(
+        "fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);",
+      ),
+    ).toEqual({ ok: true, value: 7 });
+  });
+});
+
 describe("evaluate: arrays", () => {
   test('evaluate("let array = [1, 2, 3];") => 0', () => {
     expect(evaluate("let array = [1, 2, 3];")).toEqual({ ok: true, value: 0 });
@@ -174,49 +184,37 @@ describe("evaluate: dead code", () => {
   test('evaluate("if (false) { *y = 1; }") => Err (dead-code mutability)', () => {
     const r = evaluate("let x = 0; let y = &x; if (false) { *y = 1; }");
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Mutability);
-    }
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Mutability);
   });
 
   test('evaluate("let mut x = 0; let y = &x; if (false) *y = 1; return x;") => Err', () => {
     const r = evaluate("let mut x = 0; let y = &x; if (false) *y = 1; return x;");
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Mutability);
-    }
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Mutability);
   });
 
   test('evaluate("if (false) { if (1) {}}") => Err', () => {
     const r = evaluate("if (false) { if (1) {}}");
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let y = &(1 + 2); }") => Err', () => {
     const r = evaluate("if (false) { let y = &(1 + 2); }");
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let a = [true]; return a[0] + 1; }") => Err (dead-code element kind)', () => {
     const r = evaluate("if (false) { let a = [true]; return a[0] + 1; }");
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let x = 1; let y = *x; }") => Err (dead-code deref of non-ref)', () => {
     const r = evaluate("if (false) { let x = 1; let y = *x; }");
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let y = undefinedIdentifier; }") => Err', () => {

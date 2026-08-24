@@ -4,7 +4,14 @@ import type { Token, TokenKind } from "../lexer/index.ts";
 import { Err, Ok, andThen, map } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ExprType, StatementType } from "../ast/index.ts";
-import type { Expr, ParsedBlock, Program, Statement } from "../ast/index.ts";
+import type {
+  Expr,
+  FnParam,
+  IdentifierExpr,
+  ParsedBlock,
+  Program,
+  Statement,
+} from "../ast/index.ts";
 
 const EOF: Token = { kind: "eof", value: "", position: { line: 0, column: 0 } };
 
@@ -64,6 +71,9 @@ class Parser {
     }
     if (t.kind === "keyword" && t.value === "while") {
       return this.parseWhile(t);
+    }
+    if (t.kind === "keyword" && t.value === "fn") {
+      return this.parseFnDecl(t);
     }
     if (t.kind === "identifier") {
       return this.parseAssign(t);
@@ -183,6 +193,77 @@ class Parser {
     );
   }
 
+  private parseFnDecl(t: Token): Result<Statement, EvalError> {
+    this.advance();
+    const nameTok = this.expect("identifier", "a function name");
+    if (!nameTok.ok) return nameTok;
+    const lparen = this.expect("lparen", "'('");
+    if (!lparen.ok) return lparen;
+    const paramsResult = this.parseFnParams();
+    if (!paramsResult.ok) return paramsResult;
+    const colon = this.expect("colon", "':'");
+    if (!colon.ok) return colon;
+    const retTok = this.expect("identifier", "a return type");
+    if (!retTok.ok) return retTok;
+    const arrow = this.expect("operator", "'=>'");
+    if (!arrow.ok) return arrow;
+    if (this.peek().kind !== "lbrace") {
+      return Err(
+        err(
+          ErrorKind.Syntax,
+          `Expected '{' but found "${this.peek().value || "end of input"}"`,
+          this.peek().position,
+        ),
+      );
+    }
+    const block = this.parseBlock(this.peek());
+    if (!block.ok) return block;
+    return Ok({
+      type: StatementType.FnDecl,
+      name: nameTok.value.value,
+      params: paramsResult.value,
+      returnType: retTok.value.value,
+      body: block.value.statements,
+      position: t.position,
+    });
+  }
+
+  private commaError(sep: Token): Result<never, EvalError> {
+    return Err(
+      err(
+        ErrorKind.Syntax,
+        `Expected "," but found "${sep.value || "end of input"}"`,
+        sep.position,
+      ),
+    );
+  }
+
+  private parseFnParams(): Result<FnParam[], EvalError> {
+    const params: FnParam[] = [];
+    if (this.peek().kind === "rparen") {
+      this.advance();
+      return Ok(params);
+    }
+    for (;;) {
+      const nameTok = this.expect("identifier", "a parameter name");
+      if (!nameTok.ok) return nameTok;
+      const colon = this.expect("colon", "':'");
+      if (!colon.ok) return colon;
+      const typeTok = this.expect("identifier", "a parameter type");
+      if (!typeTok.ok) return typeTok;
+      params.push({ name: nameTok.value.value, type: typeTok.value.value });
+      const sep = this.peek();
+      if (sep.kind === "rparen") {
+        this.advance();
+        return Ok(params);
+      }
+      if (sep.kind !== "comma") {
+        return this.commaError(sep);
+      }
+      this.advance();
+    }
+  }
+
   private parseAssign(t: Token): Result<Statement, EvalError> {
     this.advance();
     const target: Expr = { type: ExprType.Identifier, name: t.value, position: t.position };
@@ -210,28 +291,24 @@ class Parser {
 
   private parseDerefAssign(t: Token): Result<Statement, EvalError> {
     this.advance();
-    return andThen(this.expect("identifier", "a variable name"), (nameTok) =>
-      andThen(this.expect("operator", "'='"), () =>
-        andThen(this.parseExpr(), (value) =>
-          andThen(this.expect("semicolon", "';'"), () =>
-            Ok({
-              type: StatementType.Assign,
-              target: {
-                type: ExprType.Deref,
-                operand: {
-                  type: ExprType.Identifier,
-                  name: nameTok.value,
-                  position: nameTok.position,
-                },
-                position: t.position,
-              },
-              value,
-              position: t.position,
-            }),
-          ),
-        ),
-      ),
-    );
+    const nameTok = this.expect("identifier", "a variable name");
+    if (!nameTok.ok) return nameTok;
+    const eq = this.expect("operator", "'='");
+    if (!eq.ok) return eq;
+    const value = this.parseExpr();
+    if (!value.ok) return value;
+    const semi = this.expect("semicolon", "';'");
+    if (!semi.ok) return semi;
+    const target: Expr = {
+      type: ExprType.Deref,
+      operand: {
+        type: ExprType.Identifier,
+        name: nameTok.value.value,
+        position: nameTok.value.position,
+      },
+      position: t.position,
+    };
+    return Ok({ type: StatementType.Assign, target, value: value.value, position: t.position });
   }
 
   private parseExpr(): Result<Expr, EvalError> {
@@ -239,56 +316,27 @@ class Parser {
   }
 
   private parseComparison(): Result<Expr, EvalError> {
-    let left = this.parseAdditive();
-    while (left.ok) {
-      const t = this.peek();
-      if (t.kind === "operator" && t.value === "<") {
-        this.advance();
-        const right = this.parseAdditive();
-        if (!right.ok) return right;
-        left = Ok({
-          type: ExprType.Binary,
-          op: t.value,
-          left: left.value,
-          right: right.value,
-          position: left.value.position,
-        });
-      } else {
-        break;
-      }
-    }
-    return left;
+    return this.parseBinaryLevel(["<"], () => this.parseAdditive());
   }
 
   private parseAdditive(): Result<Expr, EvalError> {
-    let left = this.parseMultiplicative();
-    while (left.ok) {
-      const t = this.peek();
-      if (t.kind === "operator" && (t.value === "+" || t.value === "-")) {
-        this.advance();
-        const right = this.parseMultiplicative();
-        if (!right.ok) return right;
-        left = Ok({
-          type: ExprType.Binary,
-          op: t.value,
-          left: left.value,
-          right: right.value,
-          position: left.value.position,
-        });
-      } else {
-        break;
-      }
-    }
-    return left;
+    return this.parseBinaryLevel(["+", "-"], () => this.parseMultiplicative());
   }
 
   private parseMultiplicative(): Result<Expr, EvalError> {
-    let left = this.parseUnary();
+    return this.parseBinaryLevel(["*", "/", "%"], () => this.parseUnary());
+  }
+
+  private parseBinaryLevel(
+    ops: readonly string[],
+    lower: () => Result<Expr, EvalError>,
+  ): Result<Expr, EvalError> {
+    let left = lower();
     while (left.ok) {
       const t = this.peek();
-      if (t.kind === "operator" && (t.value === "*" || t.value === "/" || t.value === "%")) {
+      if (t.kind === "operator" && ops.includes(t.value)) {
         this.advance();
-        const right = this.parseUnary();
+        const right = lower();
         if (!right.ok) return right;
         left = Ok({
           type: ExprType.Binary,
@@ -348,11 +396,40 @@ class Parser {
           index: index.value,
           position: t.position,
         });
+      } else if (t.kind === "lparen") {
+        if (base.value.type !== ExprType.Identifier) {
+          return Err(err(ErrorKind.Syntax, "Can only call a function name", t.position));
+        }
+        const callee = (base.value as IdentifierExpr).name;
+        base = this.parseCallArgs(callee, t.position);
       } else {
         break;
       }
     }
     return base;
+  }
+
+  private parseCallArgs(callee: string, position: Position): Result<Expr, EvalError> {
+    this.advance();
+    const args: Expr[] = [];
+    if (this.peek().kind === "rparen") {
+      this.advance();
+      return Ok({ type: ExprType.Call, callee, args, position });
+    }
+    for (;;) {
+      const arg = this.parseExpr();
+      if (!arg.ok) return arg;
+      args.push(arg.value);
+      const sep = this.peek();
+      if (sep.kind === "rparen") {
+        this.advance();
+        return Ok({ type: ExprType.Call, callee, args, position });
+      }
+      if (sep.kind !== "comma") {
+        return this.commaError(sep);
+      }
+      this.advance();
+    }
   }
 
   private parsePrimary(): Result<Expr, EvalError> {
@@ -409,13 +486,7 @@ class Parser {
       const sep = this.peek();
       if (sep.kind === "rbracket") continue;
       if (sep.kind !== "comma") {
-        return Err(
-          err(
-            ErrorKind.Syntax,
-            `Expected "," but found "${sep.value || "end of input"}"`,
-            sep.position,
-          ),
-        );
+        return this.commaError(sep);
       }
       this.advance();
     }

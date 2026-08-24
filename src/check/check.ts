@@ -2,11 +2,18 @@ import { err } from "../errors.ts";
 import { ErrorKind } from "../errors.ts";
 import type { EvalError } from "../errors.ts";
 import { ExprType, StatementType } from "../ast/index.ts";
-import type { Expr, IdentifierExpr, Program, Statement } from "../ast/index.ts";
+import type {
+  CallExpr,
+  Expr,
+  FnDeclStmt,
+  IdentifierExpr,
+  Program,
+  Statement,
+} from "../ast/index.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ValueKind } from "../eval/value.ts";
-import type { Binding, ResolvedTarget, Value } from "../eval/value.ts";
+import type { Binding, FnValue, ResolvedTarget, Value } from "../eval/value.ts";
 import { resolveRefChain, validateDerefBinding } from "../eval/value.ts";
 
 export function checkProgram(program: Program): Result<null, EvalError> {
@@ -92,6 +99,9 @@ function checkMutability(
       }
       const body = checkMutability(stmt.body, env);
       if (!body.ok) return body;
+    } else if (stmt.type === StatementType.FnDecl) {
+      const fnResult = checkFnDecl(stmt, env, shadowed);
+      if (!fnResult.ok) return fnResult;
     } else {
       const unhandled: never = stmt;
       return Err(
@@ -113,6 +123,36 @@ function restoreShadowed<T>(env: Map<string, T>, shadowed: Map<string, T | null>
   }
 }
 
+function checkFnDecl(
+  stmt: FnDeclStmt,
+  env: Map<string, Binding>,
+  shadowed: Map<string, Binding | null>,
+): Result<null, EvalError> {
+  const bodyEnv = new Map<string, Binding>();
+  for (const param of stmt.params) {
+    bodyEnv.set(param.name, {
+      value: { kind: ValueKind.Number, value: 0 },
+      mutable: false,
+      intType: param.type,
+    });
+  }
+  const body = checkMutability(stmt.body, bodyEnv);
+  if (!body.ok) return body;
+  if (!shadowed.has(stmt.name)) {
+    shadowed.set(stmt.name, env.get(stmt.name) ?? null);
+  }
+  env.set(stmt.name, {
+    value: {
+      kind: ValueKind.Fn,
+      params: stmt.params,
+      returnType: stmt.returnType,
+      body: stmt.body,
+    },
+    mutable: false,
+  });
+  return Ok(null);
+}
+
 function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalError> {
   switch (expr.type) {
     case ExprType.Number:
@@ -122,6 +162,7 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
     case ExprType.Binary:
     case ExprType.Array:
     case ExprType.Index:
+    case ExprType.Call:
       return Ok(null);
     case ExprType.Ref:
       if (expr.operand.type !== ExprType.Identifier) {
@@ -192,6 +233,11 @@ function inferIntType(expr: Expr, env: Map<string, Binding>): string | null {
       const r = inferIntType(expr.right, env);
       return l !== null && l === r ? l : null;
     }
+    case ExprType.Call: {
+      const fn = env.get(expr.callee);
+      if (!fn || fn.value.kind !== ValueKind.Fn) return null;
+      return fn.value.returnType;
+    }
     default:
       return null;
   }
@@ -248,6 +294,7 @@ function constFold(expr: Expr, env: Map<string, Binding>): number | null {
     case ExprType.Ref:
     case ExprType.Array:
     case ExprType.Index:
+    case ExprType.Call:
       return null;
   }
 }
@@ -340,7 +387,45 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value, EvalEr
       // inference total (accessing them is a runtime out-of-range error).
       return Ok(arr.value.elements[0] ?? { kind: ValueKind.Number, value: 0 });
     }
+    case ExprType.Call:
+      return inferCallValue(expr, env);
   }
+}
+
+function inferCallValue(expr: CallExpr, env: Map<string, Binding>): Result<Value, EvalError> {
+  const fn = env.get(expr.callee);
+  if (!fn || fn.value.kind !== ValueKind.Fn) {
+    return Err(err(ErrorKind.Semantic, `"${expr.callee}" is not a function`, expr.position));
+  }
+  const fnValue = fn.value as FnValue;
+  if (fnValue.params.length !== expr.args.length) {
+    return Err(
+      err(
+        ErrorKind.Semantic,
+        `Function "${expr.callee}" expects ${fnValue.params.length} arguments but ${expr.args.length} were provided`,
+        expr.position,
+      ),
+    );
+  }
+  for (let i = 0; i < expr.args.length; i++) {
+    const argExpr = expr.args[i];
+    if (argExpr === undefined) continue;
+    const arg = inferValue(argExpr, env);
+    if (!arg.ok) return arg;
+    const param = fnValue.params[i];
+    if (param === undefined) continue;
+    const argType = inferIntType(argExpr, env);
+    if (argType !== null && argType !== param.type) {
+      return Err(
+        err(
+          ErrorKind.Semantic,
+          `Argument ${i + 1} of "${expr.callee}" expects "${param.type}" but got "${argType}"`,
+          argExpr.position,
+        ),
+      );
+    }
+  }
+  return Ok({ kind: ValueKind.Number, value: 0 });
 }
 
 function resolveTarget(

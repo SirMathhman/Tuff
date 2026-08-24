@@ -6,7 +6,7 @@ import type { DerefExpr, Expr, Program, Statement } from "../ast/index.ts";
 import { Err, Ok, andThen } from "../result.ts";
 import type { Result } from "../result.ts";
 import { ValueKind } from "./value.ts";
-import type { ArrayValue, Binding, NumberValue, Value } from "./value.ts";
+import type { ArrayValue, Binding, FnValue, NumberValue, Value } from "./value.ts";
 import { resolveRefChain } from "./value.ts";
 
 export function evaluateProgram(program: Program): Result<number, EvalError> {
@@ -74,6 +74,19 @@ function evalStatements(
         if (!inner.ok) return inner;
         if (inner.value !== null) return inner;
       }
+    } else if (stmt.type === StatementType.FnDecl) {
+      if (!shadowed.has(stmt.name)) {
+        shadowed.set(stmt.name, env.get(stmt.name) ?? null);
+      }
+      env.set(stmt.name, {
+        value: {
+          kind: ValueKind.Fn,
+          params: stmt.params,
+          returnType: stmt.returnType,
+          body: stmt.body,
+        },
+        mutable: false,
+      });
     } else {
       const unhandled: never = stmt;
       return Err(
@@ -213,6 +226,23 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
         );
       }
       return Ok(elements[n]!);
+    }
+    case ExprType.Call: {
+      // The static pass validates the callee, arity, and argument types.
+      const fn = env.get(expr.callee);
+      if (!fn || fn.value.kind !== ValueKind.Fn) {
+        return Err(err(ErrorKind.Semantic, `"${expr.callee}" is not a function`, expr.position));
+      }
+      const fnValue = fn.value as FnValue;
+      const callEnv = new Map<string, Binding>();
+      for (let i = 0; i < fnValue.params.length; i++) {
+        const arg = evalExpr(expr.args[i]!, env);
+        if (!arg.ok) return arg;
+        callEnv.set(fnValue.params[i]!.name, { value: arg.value, mutable: false });
+      }
+      const body = evalStatements(fnValue.body, callEnv);
+      if (!body.ok) return body;
+      return Ok({ kind: ValueKind.Number, value: body.value ?? 0 });
     }
   }
 }

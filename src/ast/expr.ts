@@ -10,6 +10,7 @@ export enum ExprType {
   Binary = "binary",
   Array = "array",
   Index = "index",
+  Call = "call",
 }
 
 export interface NumberExpr {
@@ -72,6 +73,13 @@ export interface IndexExpr {
   readonly position: Position;
 }
 
+export interface CallExpr {
+  readonly type: ExprType.Call;
+  readonly callee: string;
+  readonly args: readonly Expr[];
+  readonly position: Position;
+}
+
 export type Expr =
   | NumberExpr
   | BooleanExpr
@@ -81,4 +89,5 @@ export type Expr =
   | DerefExpr
   | BinaryExpr
   | ArrayExpr
-  | IndexExpr;
+  | IndexExpr
+  | CallExpr;

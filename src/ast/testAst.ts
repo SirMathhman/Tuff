@@ -1,5 +1,5 @@
 import { ExprType, StatementType } from "./index.ts";
-import type { Expr, Program, Statement } from "./index.ts";
+import type { Expr, FnParam, Program, Statement } from "./index.ts";
 
 export const pos = { line: 1, column: 1 };
 
@@ -35,6 +35,10 @@ export function index(arr: Expr, idx: Expr): Expr {
   return { type: ExprType.Index, array: arr, index: idx, position: pos };
 }
 
+export function call(callee: string, args: readonly Expr[]): Expr {
+  return { type: ExprType.Call, callee, args, position: pos };
+}
+
 export function letStmt(
   name: string,
   value: Expr,
@@ -62,6 +66,15 @@ export function ifStmt(
 
 export function whileStmt(condition: Expr, body: readonly Statement[]): Statement {
   return { type: StatementType.While, condition, body, position: pos };
+}
+
+export function fnDecl(
+  name: string,
+  params: readonly FnParam[],
+  returnType: string,
+  body: readonly Statement[],
+): Statement {
+  return { type: StatementType.FnDecl, name, params, returnType, body, position: pos };
 }
 
 export function prog(statements: readonly Statement[]): Program {

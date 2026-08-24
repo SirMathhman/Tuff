@@ -25,7 +25,7 @@ export interface Token {
   readonly position: Position;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else", "while"]);
+const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else", "while", "fn"]);
 const INT_SUFFIXES = new Set([
   "U8",
   "U16",
@@ -38,6 +38,7 @@ const INT_SUFFIXES = new Set([
   "USize",
   "ISize",
 ]);
+const TWO_CHAR_OPERATORS: Record<string, string> = { "+=": "+=", "=>": "=>" };
 const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "=": "operator",
   "+": "operator",
@@ -127,8 +128,9 @@ export function lex(source: string): Result<Token[], EvalError> {
       continue;
     }
 
-    if (ch === "+" && source.charAt(i + 1) === "=") {
-      tokens.push({ kind: "operator", value: "+=", position: start });
+    const twoChar = TWO_CHAR_OPERATORS[ch + source.charAt(i + 1)];
+    if (twoChar !== undefined) {
+      tokens.push({ kind: "operator", value: twoChar, position: start });
       i += 2;
       column += 2;
       continue;

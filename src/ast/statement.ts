@@ -8,6 +8,12 @@ export enum StatementType {
   Block = "block",
   If = "if",
   While = "while",
+  FnDecl = "fn",
+}
+
+export interface FnParam {
+  readonly name: string;
+  readonly type: string;
 }
 
 export interface LetStmt {
@@ -53,7 +59,23 @@ export interface WhileStmt {
   readonly position: Position;
 }
 
-export type Statement = LetStmt | AssignStmt | ReturnStmt | BlockStmt | IfStmt | WhileStmt;
+export interface FnDeclStmt {
+  readonly type: StatementType.FnDecl;
+  readonly name: string;
+  readonly params: readonly FnParam[];
+  readonly returnType: string;
+  readonly body: readonly Statement[];
+  readonly position: Position;
+}
+
+export interface FnInfo {
+  readonly params: readonly FnParam[];
+  readonly returnType: string;
+  readonly body: readonly Statement[];
+}
+
+export type Statement =
+  LetStmt | AssignStmt | ReturnStmt | BlockStmt | IfStmt | WhileStmt | FnDeclStmt;
 
 export interface ParsedBlock {
   readonly statements: Statement[];

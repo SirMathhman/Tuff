@@ -2,12 +2,14 @@ import { err, ErrorKind } from "../errors.ts";
 import type { EvalError, Position } from "../errors.ts";
 import { Err, Ok } from "../result.ts";
 import type { Result } from "../result.ts";
+import type { FnInfo } from "../ast/index.ts";
 
 export enum ValueKind {
   Number = "number",
   Boolean = "boolean",
   Ref = "ref",
   Array = "array",
+  Fn = "fn",
 }
 
 export interface NumberValue {
@@ -31,7 +33,11 @@ export interface ArrayValue {
   readonly elements: readonly Value[];
 }
 
-export type Value = NumberValue | BooleanValue | RefValue | ArrayValue;
+export interface FnValue extends FnInfo {
+  readonly kind: ValueKind.Fn;
+}
+
+export type Value = NumberValue | BooleanValue | RefValue | ArrayValue | FnValue;
 
 export interface ResolvedTarget {
   readonly name: string;
