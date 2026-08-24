@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-$files = Get-ChildItem -Recurse -File -Include *.js,*.mjs,*.cjs,*.ts | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
+$files = Get-ChildItem -Recurse -File -Include *.js, *.mjs, *.cjs, *.ts | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
 $before = ($files | ForEach-Object { $_.LastWriteTimeUtc } | Measure-Object -Maximum).Maximum
 bunx eslint . --fix
 if ($LASTEXITCODE -ne 0) {
