@@ -6,13 +6,13 @@ import org.junit.jupiter.api.Test;
 
 class AppTest {
 
-    @Test
-    void greetingShouldReturnExpectedValue() {
-        assertEquals("Hello, Maven!", App.greeting());
-    }
+	@Test
+	void greetingShouldReturnExpectedValue() {
+		assertEquals("Hello, Maven!", App.greeting());
+	}
 
-    @Test
-    void evaluateEmptyStringShouldReturnZero() {
-        assertEquals(0, App.evaluate(""));
-    }
+	@Test
+	void evaluateEmptyStringShouldReturnZero() {
+		assertEquals(0, App.evaluate(""));
+	}
 }
