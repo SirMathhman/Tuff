@@ -24,12 +24,14 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let mut x = 0; x = 1; return x;"))).toBe(1);
   });
 
-  test("throwing input yields EvaluationFailed with cause", () => {
+  test("unsupported input yields a structured error", () => {
     const result = evaluate("throw new Error('boom');");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.kind).toBe("EvaluationFailed");
-      expect(result.error.cause).toBeInstanceOf(Error);
+      expect(result.error.kind).toBe("UnexpectedCharacter");
+      if (result.error.kind === "UnexpectedCharacter") {
+        expect(result.error.ch).toBe("(");
+      }
     }
   });
 
