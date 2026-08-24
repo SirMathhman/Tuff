@@ -5,7 +5,15 @@ export type TokenKind = "number" | "identifier" | "keyword" | "punctuation";
 
 export type Token = { value: string; kind: TokenKind; position: number };
 
-const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else"]);
+const KEYWORDS = new Set([
+  "let",
+  "mut",
+  "return",
+  "true",
+  "false",
+  "if",
+  "else",
+]);
 
 export function tokenize(input: string): Result<Token[]> {
   const tokens: Token[] = [];

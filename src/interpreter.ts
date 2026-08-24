@@ -65,7 +65,8 @@ function execStatement(
   bindings: Map<string, Binding>,
   state: State,
 ): Result<unknown> {
-  if (state.returned) return fail({ kind: "CodeAfterReturn", position: item.position });
+  if (state.returned)
+    return fail({ kind: "CodeAfterReturn", position: item.position });
   if ("declaration" in item) {
     const { name, mutable, expr } = item.declaration;
     const value = evalExpr(expr, bindings);

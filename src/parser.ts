@@ -26,15 +26,7 @@ export type Statement =
   | { return: Return; position: number }
   | { if: IfStatement; position: number };
 
-const NAME_KEYWORDS = [
-  "let",
-  "mut",
-  "return",
-  "true",
-  "false",
-  "if",
-  "else",
-];
+const NAME_KEYWORDS = ["let", "mut", "return", "true", "false", "if", "else"];
 
 type ParsedStatements = { statements: Statement[]; next: number };
 
@@ -83,9 +75,7 @@ function parseStatements(
   return { ok: true, value: { statements, next: i } };
 }
 
-function parsePlainStatement(
-  stmtTokens: Token[],
-): Result<Statement> {
+function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
   if (stmtTokens.length === 0)
     return fail({ kind: "EmptyStatement", position: 0 });
   const first = stmtTokens[0]!;
