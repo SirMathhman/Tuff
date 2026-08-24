@@ -25,4 +25,9 @@ class AppTest {
 	void evaluateReturnOneShouldReturnOne() {
 		assertEquals(1, App.evaluate("return 1;"));
 	}
+
+	@Test
+	void evaluateLetThenReturnVariableShouldReturnValue() {
+		assertEquals(1, App.evaluate("let x = 1; return x;"));
+	}
 }
