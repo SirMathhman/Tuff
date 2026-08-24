@@ -1,6 +1,0 @@
----
-Checks: '-*,readability-function-size'
-CheckOptions:
-  readability-function-size.Threshold: 100
-  readability-function-size.IgnoreOneLineFunctions: true
-...
