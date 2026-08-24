@@ -4,7 +4,7 @@ import { parse } from "./parser/index.ts";
 import { evaluateProgram } from "./eval/index.ts";
 import { Err, Ok, andThen } from "./result.ts";
 import type { Result } from "./result.ts";
-import { err, type EvalError } from "./errors.ts";
+import type { EvalError } from "./errors.ts";
 
 function withSnippet(error: EvalError, source: string): EvalError {
   return { ...error, snippet: source.split("\n")[error.position.line - 1] ?? "" };
@@ -33,7 +33,7 @@ export function executeTuff(input: string, args: string[] = []): Result<number, 
   if (!output.ok) return Err(output.error);
 
   let exitCode = 0;
-  let process = {
+  const process = {
     exit(code: number) {
       exitCode = code;
     },

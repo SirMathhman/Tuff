@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ErrorKind } from "./errors.ts";
+import { ErrorKind, type EvalError } from "./errors.ts";
 import { evaluateTuff, executeTuff } from "./evaluate.ts";
 import { Err, Ok, type Result } from "./result.ts";
 
@@ -10,12 +10,8 @@ function evaluateAndExecuteTuff(source: string, args: string[] = []): Result<num
   const executedExitCode = executeTuff(source, args);
   if (!executedExitCode.ok) return Err(executedExitCode.error);
 
-  if (evaluatedExitCode.value === executedExitCode.value) {
-    return evaluatedExitCode.value;
-  } else {
-    expect(evaluatedExitCode.value).toBe(executedExitCode.value);
-    return Ok(0);
-  }
+  expect(evaluatedExitCode.value).toBe(executedExitCode.value);
+  return Ok(evaluatedExitCode.value);
 }
 
 describe("evaluate: bindings & expressions", () => {
