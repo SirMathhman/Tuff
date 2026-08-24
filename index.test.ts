@@ -54,6 +54,12 @@ describe("evaluate", () => {
     );
   });
 
+  test('evaluates "let x = true; let y = true; return x && y;" to 1', () => {
+    expect(unwrap(evaluate("let x = true; let y = true; return x && y;"))).toBe(
+      1,
+    );
+  });
+
   test("unsupported input yields a structured error with position", () => {
     const result = evaluate("throw new Error('boom');");
     expect(result.ok).toBe(false);

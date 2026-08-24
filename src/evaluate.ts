@@ -31,7 +31,11 @@ function tokenize(input: string): Result<Token[]> {
       while (j < input.length && /[\d.]/.test(input.charAt(j))) j++;
       const value = input.slice(i, j);
       if (!/^\d+(\.\d+)?$/.test(value))
-        return fail({ kind: "InvalidNumberLiteral", literal: value, position: i });
+        return fail({
+          kind: "InvalidNumberLiteral",
+          literal: value,
+          position: i,
+        });
       tokens.push({ value, kind: "number", position: i });
       i = j;
     } else if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
@@ -39,6 +43,9 @@ function tokenize(input: string): Result<Token[]> {
       i++;
     } else if (ch === "|" && input.charAt(i + 1) === "|") {
       tokens.push({ value: "||", kind: "punctuation", position: i });
+      i += 2;
+    } else if (ch === "&" && input.charAt(i + 1) === "&") {
+      tokens.push({ value: "&&", kind: "punctuation", position: i });
       i += 2;
     } else {
       return fail({ kind: "UnexpectedCharacter", ch, position: i });
@@ -127,15 +134,20 @@ function evalExpr(
     const token = tokens[0]!;
     return evalOperand(token, bindings);
   }
-  if (tokens.length === 3 && tokens[1]?.value === "||") {
+  if (tokens.length === 3 && (tokens[1]?.value === "||" || tokens[1]?.value === "&&")) {
     const left = evalOperand(tokens[0]!, bindings);
     if (!left.ok) return left;
     const right = evalOperand(tokens[2]!, bindings);
     if (!right.ok) return right;
-    return {
-      ok: true,
-      value: left.value === 1 || right.value === 1 ? 1 : 0,
-    };
+    const value =
+      tokens[1]!.value === "||"
+        ? left.value === 1 || right.value === 1
+          ? 1
+          : 0
+        : left.value === 1 && right.value === 1
+          ? 1
+          : 0;
+    return { ok: true, value };
   }
   return fail({ kind: "UnsupportedExpression", position: tokens[0]!.position });
 }
