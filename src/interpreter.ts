@@ -84,7 +84,7 @@ function execStatement(
     state.returnValue = value.value;
     state.returned = true;
   } else if ("assignment" in item) {
-    const { name, expr } = item.assignment;
+    const { name, op, expr } = item.assignment;
     const binding = bindings.get(name);
     if (!binding)
       return fail({
@@ -100,7 +100,10 @@ function execStatement(
       });
     const value = evalExpr(expr, bindings);
     if (!value.ok) return value;
-    binding.value = value.value;
+    binding.value =
+      op === "+="
+        ? (binding.value as number) + (value.value as number)
+        : value.value;
   } else {
     return fail({ kind: "UnsupportedExpression", position: item.position });
   }

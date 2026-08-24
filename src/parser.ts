@@ -15,7 +15,12 @@ export type Declaration = {
   position: number;
 };
 
-export type Assignment = { name: string; expr: Token[]; position: number };
+export type Assignment = {
+  name: string;
+  op: "=" | "+=";
+  expr: Token[];
+  position: number;
+};
 
 export type Return = { expr: Token[]; position: number };
 
@@ -130,11 +135,12 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
       found: first.value,
       position: first.position,
     });
-  if (stmtTokens[1]?.value !== "=")
+  const op = stmtTokens[1]?.value;
+  if (op !== "=" && op !== "+=")
     return fail({
       kind: "ExpectedToken",
       expected: "'='",
-      found: stmtTokens[1]?.value,
+      found: op,
       position: stmtTokens[1]?.position ?? first.position,
     });
   return {
@@ -142,6 +148,7 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
     value: {
       assignment: {
         name: first.value,
+        op: op as "=" | "+=",
         expr: stmtTokens.slice(2),
         position: first.position,
       },

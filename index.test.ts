@@ -40,6 +40,10 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let mut x = 0; x = 1; return x;"))).toBe(1);
   });
 
+  test('evaluates "let mut x = 1; x += 2; return x;" to 3', () => {
+    expect(unwrap(evaluate("let mut x = 1; x += 2; return x;"))).toBe(3);
+  });
+
   test('evaluates "let mut x = 0; { x = 1; } return x;" to 1', () => {
     expect(unwrap(evaluate("let mut x = 0; { x = 1; } return x;"))).toBe(1);
   });
