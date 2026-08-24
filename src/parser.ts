@@ -8,10 +8,33 @@ export type IfStatement = {
   elseBlock?: Statement[];
 };
 
+export type Declaration = {
+  name: string;
+  mutable: boolean;
+  expr: Token[];
+  position: number;
+};
+
+export type Assignment = { name: string; expr: Token[]; position: number };
+
+export type Return = { expr: Token[]; position: number };
+
 export type Statement =
   | { block: Statement[]; position: number }
-  | { stmt: Token[]; position: number }
+  | { declaration: Declaration; position: number }
+  | { assignment: Assignment; position: number }
+  | { return: Return; position: number }
   | { if: IfStatement; position: number };
+
+const NAME_KEYWORDS = [
+  "let",
+  "mut",
+  "return",
+  "true",
+  "false",
+  "if",
+  "else",
+];
 
 type ParsedStatements = { statements: Statement[]; next: number };
 
@@ -52,12 +75,89 @@ function parseStatements(
     if (j >= tokens.length)
       return fail({ kind: "MissingTerminator", position: token.position });
     const stmtTokens = tokens.slice(i, j);
-    if (stmtTokens.length === 0)
-      return fail({ kind: "EmptyStatement", position: token.position });
-    statements.push({ stmt: stmtTokens, position: token.position });
+    const parsed = parsePlainStatement(stmtTokens);
+    if (!parsed.ok) return parsed;
+    statements.push(parsed.value);
     i = j + 1;
   }
   return { ok: true, value: { statements, next: i } };
+}
+
+function parsePlainStatement(
+  stmtTokens: Token[],
+): Result<Statement> {
+  if (stmtTokens.length === 0)
+    return fail({ kind: "EmptyStatement", position: 0 });
+  const first = stmtTokens[0]!;
+  if (first.value === "let") {
+    let idx = 1;
+    let mutable = false;
+    if (stmtTokens[idx]?.value === "mut") {
+      mutable = true;
+      idx++;
+    }
+    const nameToken = stmtTokens[idx];
+    if (!nameToken || NAME_KEYWORDS.includes(nameToken.value))
+      return fail({
+        kind: "ExpectedToken",
+        expected: "variable name",
+        found: nameToken?.value,
+        position: nameToken?.position ?? first.position,
+      });
+    if (stmtTokens[idx + 1]?.value !== "=")
+      return fail({
+        kind: "ExpectedToken",
+        expected: "'='",
+        found: stmtTokens[idx + 1]?.value,
+        position: stmtTokens[idx + 1]?.position ?? first.position,
+      });
+    return {
+      ok: true,
+      value: {
+        declaration: {
+          name: nameToken.value,
+          mutable,
+          expr: stmtTokens.slice(idx + 2),
+          position: first.position,
+        },
+        position: first.position,
+      },
+    };
+  }
+  if (first.value === "return") {
+    return {
+      ok: true,
+      value: {
+        return: { expr: stmtTokens.slice(1), position: first.position },
+        position: first.position,
+      },
+    };
+  }
+  if (first.kind === "keyword")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "statement",
+      found: first.value,
+      position: first.position,
+    });
+  if (stmtTokens[1]?.value !== "=")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'='",
+      found: stmtTokens[1]?.value,
+      position: stmtTokens[1]?.position ?? first.position,
+    });
+  return {
+    ok: true,
+    value: {
+      assignment: {
+        name: first.value,
+        expr: stmtTokens.slice(2),
+        position: first.position,
+      },
+      position: first.position,
+    },
+  };
 }
 
 function parseIf(

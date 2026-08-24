@@ -61,80 +61,47 @@ function evalExpr(
 }
 
 function execStatement(
-  stmt: Token[],
-  position: number,
+  item: Statement,
   bindings: Map<string, Binding>,
   state: State,
 ): Result<unknown> {
-  if (state.returned) return fail({ kind: "CodeAfterReturn", position });
-  if (stmt[0]?.value === "let") {
-    let idx = 1;
-    let mutable = false;
-    if (stmt[idx]?.value === "mut") {
-      mutable = true;
-      idx++;
-    }
-    const nameToken = stmt[idx];
-    if (
-      !nameToken ||
-      ["let", "mut", "return", "true", "false", "if", "else"].includes(
-        nameToken.value,
-      )
-    )
-      return fail({
-        kind: "ExpectedToken",
-        expected: "variable name",
-        found: nameToken?.value,
-        position: nameToken?.position ?? position,
-      });
-    if (stmt[idx + 1]?.value !== "=")
-      return fail({
-        kind: "ExpectedToken",
-        expected: "'='",
-        found: stmt[idx + 1]?.value,
-        position: stmt[idx + 1]?.position ?? position,
-      });
-    const value = evalExpr(stmt.slice(idx + 2), bindings);
+  if (state.returned) return fail({ kind: "CodeAfterReturn", position: item.position });
+  if ("declaration" in item) {
+    const { name, mutable, expr } = item.declaration;
+    const value = evalExpr(expr, bindings);
     if (!value.ok) return value;
-    if (bindings.has(nameToken.value))
+    if (bindings.has(name))
       return fail({
         kind: "DuplicateDeclaration",
-        name: nameToken.value,
-        position: nameToken.position,
+        name,
+        position: item.declaration.position,
       });
-    bindings.set(nameToken.value, { mutable, value: value.value });
-  } else if (stmt[0]?.value === "return") {
-    const value = evalExpr(stmt.slice(1), bindings);
+    bindings.set(name, { mutable, value: value.value });
+  } else if ("return" in item) {
+    const value = evalExpr(item.return.expr, bindings);
     if (!value.ok) return value;
     state.returnValue = value.value;
     state.returned = true;
-  } else {
-    const nameToken = stmt[0];
-    if (nameToken === undefined)
-      return fail({ kind: "EmptyStatement", position });
-    if (stmt[1]?.value !== "=")
-      return fail({
-        kind: "ExpectedToken",
-        expected: "'='",
-        found: stmt[1]?.value,
-        position: stmt[1]?.position ?? position,
-      });
-    const binding = bindings.get(nameToken.value);
+  } else if ("assignment" in item) {
+    const { name, expr } = item.assignment;
+    const binding = bindings.get(name);
     if (!binding)
       return fail({
         kind: "UndeclaredVariable",
-        name: nameToken.value,
-        position: nameToken.position,
+        name,
+        position: item.assignment.position,
       });
     if (!binding.mutable)
       return fail({
         kind: "ImmutableReassignment",
-        name: nameToken.value,
-        position: nameToken.position,
+        name,
+        position: item.assignment.position,
       });
-    const value = evalExpr(stmt.slice(2), bindings);
+    const value = evalExpr(expr, bindings);
     if (!value.ok) return value;
     binding.value = value.value;
+  } else {
+    return fail({ kind: "UnsupportedExpression", position: item.position });
   }
   return { ok: true, value: undefined };
 }
@@ -160,7 +127,7 @@ function execStatements(
         if (!result.ok) return result;
       }
     } else {
-      const result = execStatement(item.stmt, item.position, bindings, state);
+      const result = execStatement(item, bindings, state);
       if (!result.ok) return result;
     }
   }

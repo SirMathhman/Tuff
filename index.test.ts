@@ -94,6 +94,19 @@ describe("evaluate", () => {
     }
   });
 
+  test("declaration without a name yields ExpectedToken with position", () => {
+    const result = evaluate("let = 1;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("ExpectedToken");
+      if (result.error.kind === "ExpectedToken") {
+        expect(result.error.expected).toBe("'='");
+        expect(result.error.found).toBe("1");
+        expect(result.error.position).toBe(6);
+      }
+    }
+  });
+
   test("unbalanced brace yields UnbalancedBrace with position", () => {
     const result = evaluate("let x = 1; { return x;");
     expect(result.ok).toBe(false);
