@@ -13,4 +13,8 @@ describe("evaluate", () => {
   test('evaluates "let x = 1; return x;" to 1', () => {
     expect(evaluate("let x = 1; return x;")).toBe(1);
   });
+
+  test('evaluates "let mut x = 0; x = 1; return x;" to 1', () => {
+    expect(evaluate("let mut x = 0; x = 1; return x;")).toBe(1);
+  });
 });
