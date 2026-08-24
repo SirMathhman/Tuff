@@ -77,7 +77,9 @@ function execStatement(
     const nameToken = stmt[idx];
     if (
       !nameToken ||
-      ["let", "mut", "return", "true", "false"].includes(nameToken.value)
+      ["let", "mut", "return", "true", "false", "if", "else"].includes(
+        nameToken.value,
+      )
     )
       return fail({
         kind: "ExpectedToken",
@@ -108,7 +110,8 @@ function execStatement(
     state.returned = true;
   } else {
     const nameToken = stmt[0];
-    if (nameToken === undefined) return fail({ kind: "EmptyStatement", position });
+    if (nameToken === undefined)
+      return fail({ kind: "EmptyStatement", position });
     if (stmt[1]?.value !== "=")
       return fail({
         kind: "ExpectedToken",
@@ -145,6 +148,17 @@ function execStatements(
     if ("block" in item) {
       const result = execStatements(item.block, bindings, state);
       if (!result.ok) return result;
+    } else if ("if" in item) {
+      if (state.returned)
+        return fail({ kind: "CodeAfterReturn", position: item.position });
+      const condition = evalExpr(item.if.condition, bindings);
+      if (!condition.ok) return condition;
+      const branch =
+        condition.value === 1 ? item.if.thenBlock : item.if.elseBlock;
+      if (branch) {
+        const result = execStatements(branch, bindings, state);
+        if (!result.ok) return result;
+      }
     } else {
       const result = execStatement(item.stmt, item.position, bindings, state);
       if (!result.ok) return result;

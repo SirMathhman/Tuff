@@ -5,7 +5,7 @@ export type TokenKind = "number" | "identifier" | "keyword" | "punctuation";
 
 export type Token = { value: string; kind: TokenKind; position: number };
 
-const KEYWORDS = new Set(["let", "mut", "return", "true", "false"]);
+const KEYWORDS = new Set(["let", "mut", "return", "true", "false", "if", "else"]);
 
 export function tokenize(input: string): Result<Token[]> {
   const tokens: Token[] = [];
@@ -33,7 +33,14 @@ export function tokenize(input: string): Result<Token[]> {
         });
       tokens.push({ value, kind: "number", position: i });
       i = j;
-    } else if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
+    } else if (
+      ch === "=" ||
+      ch === ";" ||
+      ch === "{" ||
+      ch === "}" ||
+      ch === "(" ||
+      ch === ")"
+    ) {
       tokens.push({ value: ch, kind: "punctuation", position: i });
       i++;
     } else if (ch === "|" && input.charAt(i + 1) === "|") {

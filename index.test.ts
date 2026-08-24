@@ -44,6 +44,16 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let mut x = 0; { x = 1; } return x;"))).toBe(1);
   });
 
+  test('evaluates "let mut x = 0; if (true) { x = 1; } else { x = 2; } return x;" to 1', () => {
+    expect(
+      unwrap(
+        evaluate(
+          "let mut x = 0; if (true) { x = 1; } else { x = 2; } return x;",
+        ),
+      ),
+    ).toBe(1);
+  });
+
   test('evaluates "let x = true; return x;" to 1', () => {
     expect(unwrap(evaluate("let x = true; return x;"))).toBe(1);
   });
@@ -66,8 +76,8 @@ describe("evaluate", () => {
     if (!result.ok) {
       expect(result.error.kind).toBe("UnexpectedCharacter");
       if (result.error.kind === "UnexpectedCharacter") {
-        expect(result.error.ch).toBe("(");
-        expect(result.error.position).toBe(15);
+        expect(result.error.ch).toBe("'");
+        expect(result.error.position).toBe(16);
       }
     }
   });
