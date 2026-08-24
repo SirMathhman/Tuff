@@ -14,6 +14,15 @@ function evaluateAndExecuteTuff(source: string, args: string[] = []): Result<num
   return Ok(evaluatedExitCode.value);
 }
 
+function expectErr(source: string, kind: ErrorKind, messageIncludes?: string) {
+  const r = evaluateAndExecuteTuff(source);
+  expect(r.ok).toBe(false);
+  if (!r.ok) {
+    expect(r.error.kind).toBe(kind);
+    if (messageIncludes) expect(r.error.message).toContain(messageIncludes);
+  }
+}
+
 describe("evaluate: bindings & expressions", () => {
   test('evaluate("") => 0', () => {
     expect(evaluateAndExecuteTuff("")).toEqual({ ok: true, value: 0 });
@@ -60,9 +69,7 @@ describe("evaluate: bindings & expressions", () => {
   });
 
   test('evaluate("let x = 1; return y;") => Err (undefined variable)', () => {
-    const r = evaluateAndExecuteTuff("let x = 1; return y;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Runtime);
+    expectErr("let x = 1; return y;", ErrorKind.Runtime);
   });
 
   test('evaluate("return 1 + 2 * 3;") => 7', () => {
@@ -84,21 +91,15 @@ describe("evaluate: integer suffixes", () => {
   });
 
   test('evaluate("return 100u8;") => Err (lowercase suffix)', () => {
-    const r = evaluateAndExecuteTuff("return 100u8;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Syntax);
+    expectErr("return 100u8;", ErrorKind.Syntax);
   });
 
   test('evaluate("return 256U8;") => Err (out of range for U8)', () => {
-    const r = evaluateAndExecuteTuff("return 256U8;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("return 256U8;", ErrorKind.Semantic);
   });
 
   test('evaluate("return 255U8 + 1U8;") => Err (overflow for U8)', () => {
-    const r = evaluateAndExecuteTuff("return 255U8 + 1U8;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("return 255U8 + 1U8;", ErrorKind.Semantic);
   });
 
   test('evaluate("let x : U8 = 100U8; return x;") => 100', () => {
@@ -109,15 +110,11 @@ describe("evaluate: integer suffixes", () => {
   });
 
   test('evaluate("let x : U8 = 100U16;") => Err (annotation mismatch)', () => {
-    const r = evaluateAndExecuteTuff("let x : U8 = 100U16;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("let x : U8 = 100U16;", ErrorKind.Semantic);
   });
 
   test('evaluate("let mut x = 0U8; x = 100U16;") => Err (assignment type mismatch)', () => {
-    const r = evaluateAndExecuteTuff("let mut x = 0U8; x = 100U16;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("let mut x = 0U8; x = 100U16;", ErrorKind.Semantic);
   });
 });
 
@@ -129,23 +126,18 @@ describe("evaluate: functions", () => {
   });
 
   test("fn returning wrong type => Err (return type mismatch)", () => {
-    const r = evaluateAndExecuteTuff("fn f() : I32 => { return 1U8; } return f();");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("fn f() : I32 => { return 1U8; } return f();", ErrorKind.Semantic);
   });
 
   test("fn with no return => Err (missing return)", () => {
-    const r = evaluateAndExecuteTuff("fn f() : I32 => { let x = 1; } return f();");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("fn f() : I32 => { let x = 1; } return f();", ErrorKind.Semantic);
   });
 
   test("fn with conditional return only => Err (missing return)", () => {
-    const r = evaluateAndExecuteTuff(
+    expectErr(
       "fn f(x : I32) : I32 => { if (x < 1) { return 1; } } return f(0);",
+      ErrorKind.Semantic,
     );
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
   });
 
   test("fn with if/else returns => 1", () => {
@@ -163,21 +155,15 @@ describe("evaluate: structs", () => {
   });
 
   test("struct literal with wrong field type => Err", () => {
-    const r = evaluateAndExecuteTuff("struct P { x : I32 } let p = P { x : 1U8 }; return p.x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("struct P { x : I32 } let p = P { x : 1U8 }; return p.x;", ErrorKind.Semantic);
   });
 
   test("struct literal with unknown field => Err", () => {
-    const r = evaluateAndExecuteTuff("struct P { x : I32 } let p = P { y : 1 }; return p.x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("struct P { x : I32 } let p = P { y : 1 }; return p.x;", ErrorKind.Semantic);
   });
 
   test("field access on non-struct => Err", () => {
-    const r = evaluateAndExecuteTuff("let x = 1; return x.y;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("let x = 1; return x.y;", ErrorKind.Semantic);
   });
 });
 
@@ -228,69 +214,47 @@ describe("evaluate: references", () => {
 
 describe("evaluate: dead code", () => {
   test('evaluate("if (false) { *y = 1; }") => Err (dead-code mutability)', () => {
-    const r = evaluateAndExecuteTuff("let x = 0; let y = &x; if (false) { *y = 1; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Mutability);
+    expectErr("let x = 0; let y = &x; if (false) { *y = 1; }", ErrorKind.Mutability);
   });
 
   test('evaluate("let mut x = 0; let y = &x; if (false) *y = 1; return x;") => Err', () => {
-    const r = evaluateAndExecuteTuff("let mut x = 0; let y = &x; if (false) *y = 1; return x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Mutability);
+    expectErr("let mut x = 0; let y = &x; if (false) *y = 1; return x;", ErrorKind.Mutability);
   });
 
   test('evaluate("if (false) { if (1) {}}") => Err', () => {
-    const r = evaluateAndExecuteTuff("if (false) { if (1) {}}");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("if (false) { if (1) {}}", ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let y = &(1 + 2); }") => Err', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let y = &(1 + 2); }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("if (false) { let y = &(1 + 2); }", ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let a = [true]; return a[0] + 1; }") => Err (dead-code element kind)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let a = [true]; return a[0] + 1; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("if (false) { let a = [true]; return a[0] + 1; }", ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let x = 1; let y = *x; }") => Err (dead-code deref of non-ref)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let x = 1; let y = *x; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+    expectErr("if (false) { let x = 1; let y = *x; }", ErrorKind.Semantic);
   });
 
   test('evaluate("if (false) { let y = undefinedIdentifier; }") => Err', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let y = undefinedIdentifier; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Runtime);
+    expectErr("if (false) { let y = undefinedIdentifier; }", ErrorKind.Runtime);
   });
 
   test('evaluate("if (false) { return z; }") => Err (dead-code return of undefined)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { return z; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Runtime);
+    expectErr("if (false) { return z; }", ErrorKind.Runtime);
   });
 
   test('evaluate("if (false) { let y = &z; }") => Err (dead-code ref to undefined)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let y = &z; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Runtime);
+    expectErr("if (false) { let y = &z; }", ErrorKind.Runtime);
   });
 
   test('evaluate("if (1 < z) {}") => Err (undefined in condition operand)', () => {
-    const r = evaluateAndExecuteTuff("if (1 < z) {}");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Runtime);
+    expectErr("if (1 < z) {}", ErrorKind.Runtime);
   });
 
   test('evaluate("if (false) { return -x; }") => Err (undefined in unary operand)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { return -x; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Runtime);
+    expectErr("if (false) { return -x; }", ErrorKind.Runtime);
   });
 });
 
@@ -348,26 +312,15 @@ describe("evaluate control flow", () => {
 
 describe("evaluate errors", () => {
   test('evaluate("return 1.5;") => Err (fractional literal)', () => {
-    const r = evaluateAndExecuteTuff("return 1.5;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Syntax);
+    expectErr("return 1.5;", ErrorKind.Syntax);
   });
 
   test('evaluate("let x = 0; if (false) { let y = 1; y = 2; } return x;") => Err', () => {
-    const r = evaluateAndExecuteTuff("let x = 0; if (false) { let y = 1; y = 2; } return x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Mutability);
-      expect(r.error.message).toContain("y");
-    }
+    expectErr("let x = 0; if (false) { let y = 1; y = 2; } return x;", ErrorKind.Mutability, "y");
   });
 
   test('evaluate("let x = &1; return 0;") => Err (invalid reference target)', () => {
-    const r = evaluateAndExecuteTuff("let x = &1; return 0;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    expectErr("let x = &1; return 0;", ErrorKind.Semantic);
   });
 
   test('evaluate("let mut x = 0; { x = 1; } return x;") => 1', () => {
@@ -378,145 +331,68 @@ describe("evaluate errors", () => {
   });
 
   test('evaluate("{ let x = 0; } return x;") => Err (block-scoped binding)', () => {
-    const r = evaluateAndExecuteTuff("{ let x = 0; } return x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("x");
-    }
+    expectErr("{ let x = 0; } return x;", ErrorKind.Runtime, "x");
   });
 
   test('evaluate("let x = 1; return *x;") => Err (deref of non-reference)', () => {
-    const r = evaluateAndExecuteTuff("let x = 1; return *x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    expectErr("let x = 1; return *x;", ErrorKind.Semantic);
   });
 
   test('evaluate("let x = 1; *x = 2; return x;") => Err (assign through non-reference)', () => {
-    const r = evaluateAndExecuteTuff("let x = 1; *x = 2; return x;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    expectErr("let x = 1; *x = 2; return x;", ErrorKind.Semantic);
   });
 
   test('evaluate("let x = 1; let y = &x; return y;") => Err (return a reference)', () => {
-    const r = evaluateAndExecuteTuff("let x = 1; let y = &x; return y;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-    }
+    expectErr("let x = 1; let y = &x; return y;", ErrorKind.Semantic);
   });
 
   test('evaluate("while(1) {}") => Err (non-boolean condition)', () => {
-    const r = evaluateAndExecuteTuff("while(1) {}");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-      expect(r.error.message).toContain("boolean");
-    }
+    expectErr("while(1) {}", ErrorKind.Semantic, "boolean");
   });
 });
 
 describe("evaluate errors: runtime", () => {
   test('evaluate("let array = [1, 2, 3]; return array[3];") => Err (index out of range)', () => {
-    const r = evaluateAndExecuteTuff("let array = [1, 2, 3]; return array[3];");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("out of range");
-    }
+    expectErr("let array = [1, 2, 3]; return array[3];", ErrorKind.Runtime, "out of range");
   });
 
   test('evaluate("let a = [1, 2]; let b = [true]; return a[b[0]];") => Err (non-number index)', () => {
-    const r = evaluateAndExecuteTuff("let a = [1, 2]; let b = [true]; return a[b[0]];");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-      expect(r.error.message).toContain("number");
-    }
+    expectErr("let a = [1, 2]; let b = [true]; return a[b[0]];", ErrorKind.Semantic, "number");
   });
 
   test('evaluate("let mut x = 0; x = y;") => Err (undefined variable in assignment value)', () => {
-    const r = evaluateAndExecuteTuff("let mut x = 0; x = y;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("y");
-    }
+    expectErr("let mut x = 0; x = y;", ErrorKind.Runtime, "y");
   });
 
   test('evaluate("return 1 / 0;") => Err (division by zero)', () => {
-    const r = evaluateAndExecuteTuff("return 1 / 0;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("zero");
-    }
+    expectErr("return 1 / 0;", ErrorKind.Runtime, "zero");
   });
 
   test('evaluate("return 1 % 0;") => Err (modulo by zero)', () => {
-    const r = evaluateAndExecuteTuff("return 1 % 0;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("zero");
-    }
+    expectErr("return 1 % 0;", ErrorKind.Runtime, "zero");
   });
 
   test('evaluate("if (false) { let x = 10 / 0; }") => Err (division by zero in dead code)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let x = 10 / 0; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("zero");
-    }
+    expectErr("if (false) { let x = 10 / 0; }", ErrorKind.Runtime, "zero");
   });
 
   test('evaluate("if (false) { let y = 0; let x = 10 / y; }") => Err (division by zero via binding)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let y = 0; let x = 10 / y; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("zero");
-    }
+    expectErr("if (false) { let y = 0; let x = 10 / y; }", ErrorKind.Runtime, "zero");
   });
 
   test('evaluate("if (false) { let x = 10 / (1 - 1); }") => Err (division by zero via constant folding)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let x = 10 / (1 - 1); }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("zero");
-    }
+    expectErr("if (false) { let x = 10 / (1 - 1); }", ErrorKind.Runtime, "zero");
   });
 
   test('evaluate("if (false) { let x = 0; let y = &x; let z = 10 / *y; }") => Err (division by zero via reference)', () => {
-    const r = evaluateAndExecuteTuff("if (false) { let x = 0; let y = &x; let z = 10 / *y; }");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Runtime);
-      expect(r.error.message).toContain("zero");
-    }
+    expectErr("if (false) { let x = 0; let y = &x; let z = 10 / *y; }", ErrorKind.Runtime, "zero");
   });
 
   test('evaluate("return true + 1;") => Err (boolean arithmetic operand)', () => {
-    const r = evaluateAndExecuteTuff("return true + 1;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-      expect(r.error.message).toContain("numbers");
-    }
+    expectErr("return true + 1;", ErrorKind.Semantic, "numbers");
   });
 
   test('evaluate("return 1 + true;") => Err (boolean arithmetic operand)', () => {
-    const r = evaluateAndExecuteTuff("return 1 + true;");
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe(ErrorKind.Semantic);
-      expect(r.error.message).toContain("numbers");
-    }
+    expectErr("return 1 + true;", ErrorKind.Semantic, "numbers");
   });
 });
