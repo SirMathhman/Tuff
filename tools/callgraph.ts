@@ -2,7 +2,7 @@
 // Usage: bun tools/callgraph.ts
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import path, { join, relative } from "node:path";
+import { join, relative } from "node:path";
 import * as ts from "typescript";
 
 const root = join(import.meta.dir, "..");
@@ -11,14 +11,17 @@ function collectTsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectTsFiles(full));
-    else if (entry.name.endsWith(".ts")) out.push(full);
+    if (entry.isDirectory()) {
+      if (entry.name === "tools") continue;
+      out.push(...collectTsFiles(join(dir, entry.name)));
+    } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      out.push(join(dir, entry.name));
+    }
   }
   return out;
 }
 
-const files = collectTsFiles(path.join(root, "src"));
+const files = collectTsFiles(root);
 
 // name -> file(s) defining a function with that name
 const defs = new Map<string, Set<string>>();
@@ -36,7 +39,7 @@ for (const file of files) {
   const functions: { name: string; node: ts.FunctionLikeDeclaration }[] = [];
 
   function visit(node: ts.Node): void {
-    if (ts.isFunctionDeclaration(node)) {
+    if (ts.isFunctionDeclaration(node) && node.name) {
       functions.push({ name: node.name.text, node });
     } else if (
       (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
