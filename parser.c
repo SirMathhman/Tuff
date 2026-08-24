@@ -59,6 +59,21 @@ static tuff_error parse_eq_int(pctx *c, long *value)
     return expect(c, TOK_SEMI);
 }
 
+/* Parses `= &<ident> ;` and stores the referenced name. */
+static tuff_error parse_eq_ref(pctx *c, char *ref_name)
+{
+    tuff_error e = expect(c, TOK_EQ);
+    if (e.code != ERR_OK)
+        return e;
+    if (!has_more(c) || cur(c)->type != TOK_AMP)
+        return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
+    advance(c);
+    e = copy_ident(c, ref_name);
+    if (e.code != ERR_OK)
+        return e;
+    return expect(c, TOK_SEMI);
+}
+
 static tuff_error parse_let(pctx *c, tuff_program *prog)
 {
     tuff_node *nd = &prog->stmts[prog->count];
@@ -75,6 +90,12 @@ static tuff_error parse_let(pctx *c, tuff_program *prog)
     tuff_error e = copy_ident(c, nd->name);
     if (e.code != ERR_OK)
         return e;
+    if (has_more(c) && cur(c)->type == TOK_EQ && c->i + 1 < c->count &&
+        c->toks[c->i + 1].type == TOK_AMP)
+    {
+        nd->is_ref = 1;
+        return parse_eq_ref(c, nd->ref_name);
+    }
     return parse_eq_int(c, &nd->value);
 }
 
@@ -103,6 +124,15 @@ static tuff_error parse_return(pctx *c, tuff_program *prog)
     {
         nd->value = cur(c)->value;
         advance(c);
+    }
+    else if (has_more(c) && cur(c)->type == TOK_STAR)
+    {
+        advance(c);
+        nd->use_var = 1;
+        nd->deref = 1;
+        tuff_error e = copy_ident(c, nd->name);
+        if (e.code != ERR_OK)
+            return e;
     }
     else if (has_more(c) && cur(c)->type == TOK_IDENT)
     {

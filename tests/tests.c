@@ -75,6 +75,7 @@ int main(void)
     check_ok("return 1;", 1);
     check_ok("let x = 1; return x;", 1);
     check_ok("let mut x = 0; x = 1; return x;", 1);
+    check_ok("let x = 1; let y = &x; return *y;", 1);
 
     /* A program that returns 0 is a success, not an error. */
     check_ok("return 0;", 0);

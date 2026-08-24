@@ -9,8 +9,10 @@ typedef enum
     TOK_KEYWORD, /* .kw is one of KW_* */
     TOK_IDENT,
     TOK_INT,
-    TOK_EQ,  /* = */
-    TOK_SEMI /* ; */
+    TOK_EQ,   /* = */
+    TOK_SEMI, /* ; */
+    TOK_AMP,  /* & */
+    TOK_STAR  /* * */
 } tuff_tok_type;
 
 typedef enum

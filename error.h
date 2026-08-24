@@ -13,7 +13,8 @@ typedef enum
     ERR_DUPLICATE_VAR,    /* a variable was declared twice */
     ERR_UNDECLARED_VAR,   /* a variable was used before being declared */
     ERR_ASSIGN_IMMUTABLE, /* a non-mut variable was reassigned */
-    ERR_INT_OVERFLOW      /* an integer literal does not fit in a long */
+    ERR_INT_OVERFLOW,     /* an integer literal does not fit in a long */
+    ERR_NOT_A_REF         /* a reference was used where a value was required */
 } tuff_err;
 
 typedef struct
@@ -58,6 +59,8 @@ static inline const char *tuff_err_msg(tuff_err code)
         return "assignment to immutable variable (declare it with 'let mut')";
     case ERR_INT_OVERFLOW:
         return "integer literal out of range";
+    case ERR_NOT_A_REF:
+        return "value is a reference; dereference it with '*'";
     }
     return "unknown error";
 }
