@@ -79,9 +79,28 @@ const lines: string[] = [
   '  edge [color="#64748b"];',
 ];
 
-for (const [id] of calls) {
-  const [file, name] = id.split("::");
-  lines.push(`  "${esc(id)}" [label="${esc(name)}\\n${esc(file)}"];`);
+// Group nodes by file so each file is drawn as a labeled cluster box.
+const byFile = new Map<string, string[]>();
+for (const id of calls.keys()) {
+  const file = id.split("::")[0]!;
+  const list = byFile.get(file) ?? [];
+  list.push(id);
+  byFile.set(file, list);
+}
+
+for (const [file, ids] of [...byFile.entries()].sort()) {
+  const cluster = `cluster_${file.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+  lines.push(`  subgraph "${cluster}" {`);
+  lines.push(`    style="rounded";`);
+  lines.push(`    color="#94a3b8";`);
+  lines.push(`    fontname="Consolas";`);
+  lines.push(`    fontsize=12;`);
+  lines.push(`    label="${esc(file)}";`);
+  for (const id of ids) {
+    const name = id.split("::")[1]!;
+    lines.push(`    "${esc(id)}" [label="${esc(name)}"];`);
+  }
+  lines.push("  }");
 }
 
 const seenEdges = new Set<string>();

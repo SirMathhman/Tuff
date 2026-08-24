@@ -3,18 +3,53 @@ digraph tuff {
   splines=ortho;
   node [shape=box, style="rounded,filled", fillcolor="#eef2ff", fontname="Consolas"];
   edge [color="#64748b"];
-  "src\\errors.ts::fail" [label="fail\nsrc\\errors.ts"];
-  "src\\evaluate.ts::evaluate" [label="evaluate\nsrc\\evaluate.ts"];
-  "src\\interpreter.ts::evalOperand" [label="evalOperand\nsrc\\interpreter.ts"];
-  "src\\interpreter.ts::evalExpr" [label="evalExpr\nsrc\\interpreter.ts"];
-  "src\\interpreter.ts::execStatement" [label="execStatement\nsrc\\interpreter.ts"];
-  "src\\interpreter.ts::execStatements" [label="execStatements\nsrc\\interpreter.ts"];
-  "src\\interpreter.ts::interpret" [label="interpret\nsrc\\interpreter.ts"];
-  "src\\lexer.ts::tokenize" [label="tokenize\nsrc\\lexer.ts"];
-  "src\\parser.ts::parseStatements" [label="parseStatements\nsrc\\parser.ts"];
-  "src\\parser.ts::parsePlainStatement" [label="parsePlainStatement\nsrc\\parser.ts"];
-  "src\\parser.ts::parseIf" [label="parseIf\nsrc\\parser.ts"];
-  "src\\parser.ts::groupStatements" [label="groupStatements\nsrc\\parser.ts"];
+  subgraph "cluster_src_errors_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\errors.ts";
+    "src\\errors.ts::fail" [label="fail"];
+  }
+  subgraph "cluster_src_evaluate_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\evaluate.ts";
+    "src\\evaluate.ts::evaluate" [label="evaluate"];
+  }
+  subgraph "cluster_src_interpreter_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\interpreter.ts";
+    "src\\interpreter.ts::evalOperand" [label="evalOperand"];
+    "src\\interpreter.ts::evalExpr" [label="evalExpr"];
+    "src\\interpreter.ts::execStatement" [label="execStatement"];
+    "src\\interpreter.ts::execStatements" [label="execStatements"];
+    "src\\interpreter.ts::interpret" [label="interpret"];
+  }
+  subgraph "cluster_src_lexer_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\lexer.ts";
+    "src\\lexer.ts::tokenize" [label="tokenize"];
+  }
+  subgraph "cluster_src_parser_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\parser.ts";
+    "src\\parser.ts::parseStatements" [label="parseStatements"];
+    "src\\parser.ts::parsePlainStatement" [label="parsePlainStatement"];
+    "src\\parser.ts::parseIf" [label="parseIf"];
+    "src\\parser.ts::groupStatements" [label="groupStatements"];
+  }
   "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize";
   "src\\evaluate.ts::evaluate" -> "src\\parser.ts::groupStatements";
   "src\\evaluate.ts::evaluate" -> "src\\interpreter.ts::interpret";
