@@ -10,7 +10,7 @@ function withSnippet(error: EvalError, source: string): EvalError {
   return { ...error, snippet: source.split("\n")[error.position.line - 1] ?? "" };
 }
 
-export function evaluateTuff(input: string): Result<number, EvalError> {
+export function evaluateTuff(input: string, args: string[] = []): Result<number, EvalError> {
   if (input.trim() === "") return Ok(0);
   const result = andThen(lex(input), (tokens) =>
     andThen(parse(tokens), (program) =>
@@ -23,7 +23,8 @@ export function evaluateTuff(input: string): Result<number, EvalError> {
 
 export function compileTuffToJS(input: string): Result<string, EvalError> {
   // Naive impl
-  const evaluated = evaluateTuff(input);
+  // Args is deliberately empty here
+  const evaluated = evaluateTuff(input, []);
   if (!evaluated.ok) return Err(evaluated.error);
   return Ok("process.exit(" + evaluated.value + ");");
 }
