@@ -14,6 +14,7 @@ export interface LetStmt {
   readonly type: StatementType.Let;
   readonly mutable: boolean;
   readonly name: string;
+  readonly annotation: string | null;
   readonly value: Expr;
   readonly position: Position;
 }

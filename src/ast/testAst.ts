@@ -35,8 +35,13 @@ export function index(arr: Expr, idx: Expr): Expr {
   return { type: ExprType.Index, array: arr, index: idx, position: pos };
 }
 
-export function letStmt(name: string, value: Expr, mutable = false): Statement {
-  return { type: StatementType.Let, mutable, name, value, position: pos };
+export function letStmt(
+  name: string,
+  value: Expr,
+  mutable = false,
+  annotation: string | null = null,
+): Statement {
+  return { type: StatementType.Let, mutable, name, annotation, value, position: pos };
 }
 
 export function assignStmt(target: Expr, value: Expr): Statement {

@@ -31,6 +31,18 @@ function checkMutability(
       };
       if (value.value === null) binding.unknown = true;
       if (stmt.value.type === ExprType.Number) binding.literal = stmt.value.value;
+      if (stmt.annotation) {
+        const initType = inferIntType(stmt.value, env);
+        if (initType !== null && initType !== stmt.annotation) {
+          return Err(
+            err(
+              ErrorKind.Semantic,
+              `Initializer type "${initType}" does not match annotation "${stmt.annotation}"`,
+              stmt.value.position,
+            ),
+          );
+        }
+      }
       env.set(stmt.name, binding);
     } else if (stmt.type === StatementType.Assign) {
       const target = resolveTarget(stmt.target, (name) => env.get(name));

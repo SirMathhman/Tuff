@@ -98,6 +98,16 @@ describe("evaluate: integer suffixes", () => {
   test('evaluate("let x : U8 = 100U8; return x;") => 100', () => {
     expect(evaluate("let x : U8 = 100U8; return x;")).toEqual({ ok: true, value: 100 });
   });
+
+  test('evaluate("let x : U8 = 100U16;") => Err (annotation mismatch)', () => {
+    const r = evaluate("let x : U8 = 100U16;");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe(ErrorKind.Semantic);
+      expect(r.error.message).toContain("U8");
+      expect(r.error.message).toContain("U16");
+    }
+  });
 });
 
 describe("evaluate: arrays", () => {

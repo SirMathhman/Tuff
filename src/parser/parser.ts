@@ -154,8 +154,8 @@ class Parser {
       const afterName =
         this.peek().kind === "colon"
           ? andThen(Ok(this.advance()), () => this.expect("identifier", "a type name"))
-          : Ok(this.peek());
-      return andThen(afterName, () =>
+          : Ok(null as Token | null);
+      return andThen(afterName, (annotationTok) =>
         andThen(this.expect("operator", "'='"), () =>
           andThen(this.parseExpr(), (value) =>
             andThen(this.expect("semicolon", "';'"), () =>
@@ -163,6 +163,7 @@ class Parser {
                 type: StatementType.Let,
                 mutable,
                 name: nameTok.value,
+                annotation: annotationTok ? annotationTok.value : null,
                 value,
                 position: t.position,
               }),

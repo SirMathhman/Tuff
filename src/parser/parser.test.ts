@@ -28,6 +28,7 @@ describe("parse: statements", () => {
           type: StatementType.Let,
           mutable: false,
           name: "x",
+          annotation: null,
           value: { type: ExprType.Number, value: 1, position: { line: 1, column: 1 } },
           position: { line: 1, column: 1 },
         },
