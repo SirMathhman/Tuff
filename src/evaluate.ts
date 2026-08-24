@@ -75,6 +75,8 @@ function evalExpr(
   const token = tokens[0];
   if (token === undefined) return fail({ kind: "UnsupportedExpression" });
   if (/^\d+(\.\d+)?$/.test(token)) return { ok: true, value: Number(token) };
+  if (token === "true") return { ok: true, value: 1 };
+  if (token === "false") return { ok: true, value: 0 };
   const binding = bindings.get(token);
   if (!binding) return fail({ kind: "UndeclaredVariable", name: token });
   return { ok: true, value: binding.value };
@@ -94,7 +96,7 @@ function execStatement(
       idx++;
     }
     const name = stmt[idx];
-    if (!name || ["let", "mut", "return"].includes(name))
+    if (!name || ["let", "mut", "return", "true", "false"].includes(name))
       return fail({
         kind: "ExpectedToken",
         expected: "variable name",
