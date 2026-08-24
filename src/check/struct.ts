@@ -32,6 +32,12 @@ export function validateField(
 ): Result<null, EvalError> {
   const obj = inferValue(expr.object, env);
   if (!obj.ok) return obj;
+  if (obj.value.kind === ValueKind.String) {
+    if (expr.field !== "length") {
+      return Err(err(ErrorKind.Semantic, `String has no field "${expr.field}"`, expr.position));
+    }
+    return Ok(null);
+  }
   if (obj.value.kind !== ValueKind.Struct) {
     return Err(
       err(ErrorKind.Semantic, "Cannot access a field of a non-struct value", expr.position),
@@ -46,7 +52,11 @@ export function inferFieldType(
   inferValue: InferValueFn,
 ): string | null {
   const obj = inferValue(expr.object, env);
-  if (!obj.ok || obj.value.kind !== ValueKind.Struct) return null;
+  if (!obj.ok) return null;
+  if (obj.value.kind === ValueKind.String) {
+    return expr.field === "length" ? "USize" : null;
+  }
+  if (obj.value.kind !== ValueKind.Struct) return null;
   const field = (obj.value as StructValue).fields.find((f) => f.name === expr.field);
   return field ? field.type : null;
 }
@@ -109,6 +119,10 @@ export function inferFieldValue(
 ): Result<Value, EvalError> {
   const obj = inferValue(expr.object, env);
   if (!obj.ok) return obj;
+  if (obj.value.kind === ValueKind.String) {
+    // validateField guarantees the only valid string field is "length".
+    return Ok({ kind: ValueKind.Number, value: 0 });
+  }
   if (obj.value.kind !== ValueKind.Struct) {
     return Err(
       err(ErrorKind.Semantic, "Cannot access a field of a non-struct value", expr.position),

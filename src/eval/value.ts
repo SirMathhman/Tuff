@@ -7,6 +7,7 @@ import type { FnInfo, StructField } from "../ast/index.ts";
 export enum ValueKind {
   Number = "number",
   Boolean = "boolean",
+  String = "string",
   Ref = "ref",
   Array = "array",
   Fn = "fn",
@@ -21,6 +22,11 @@ export interface NumberValue {
 export interface BooleanValue {
   readonly kind: ValueKind.Boolean;
   readonly value: boolean;
+}
+
+export interface StringValue {
+  readonly kind: ValueKind.String;
+  readonly value: string;
 }
 
 export interface RefValue {
@@ -45,7 +51,8 @@ export interface StructValue {
   readonly values: readonly Value[];
 }
 
-export type Value = NumberValue | BooleanValue | RefValue | ArrayValue | FnValue | StructValue;
+export type Value =
+  NumberValue | BooleanValue | StringValue | RefValue | ArrayValue | FnValue | StructValue;
 
 export interface ResolvedTarget {
   readonly name: string;

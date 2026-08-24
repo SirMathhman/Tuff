@@ -11,6 +11,10 @@ export function bool(value: boolean): Expr {
   return { type: ExprType.Boolean, value, position: pos };
 }
 
+export function str(value: string): Expr {
+  return { type: ExprType.String, value, position: pos };
+}
+
 export function ident(name: string): Expr {
   return { type: ExprType.Identifier, name, position: pos };
 }

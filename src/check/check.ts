@@ -124,6 +124,7 @@ function validateExpr(expr: Expr, env: Map<string, Binding>): Result<null, EvalE
   switch (expr.type) {
     case ExprType.Number:
     case ExprType.Boolean:
+    case ExprType.String:
     case ExprType.Identifier:
     case ExprType.Unary:
     case ExprType.Binary:
@@ -263,6 +264,7 @@ function constFold(expr: Expr, env: Map<string, Binding>): number | null {
       return resolved?.binding.literal ?? null;
     }
     case ExprType.Boolean:
+    case ExprType.String:
     case ExprType.Ref:
     case ExprType.Array:
     case ExprType.Index:
@@ -284,6 +286,8 @@ function inferValue(expr: Expr, env: Map<string, Binding>): Result<Value, EvalEr
     }
     case ExprType.Boolean:
       return Ok({ kind: ValueKind.Boolean, value: false });
+    case ExprType.String:
+      return Ok({ kind: ValueKind.String, value: "" });
     case ExprType.Identifier: {
       const binding = env.get(expr.name);
       if (!binding) {

@@ -448,6 +448,10 @@ export class Parser {
       this.advance();
       return Ok({ type: ExprType.Boolean, value: t.value === "true", position: t.position });
     }
+    if (t.kind === "string") {
+      this.advance();
+      return Ok({ type: ExprType.String, value: t.value, position: t.position });
+    }
     if (t.kind === "identifier") {
       this.advance();
       if (this.peek().kind === "lbrace") {

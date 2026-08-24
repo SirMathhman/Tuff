@@ -5,6 +5,7 @@ import type { Result } from "../result.ts";
 
 export type TokenKind =
   | "number"
+  | "string"
   | "identifier"
   | "keyword"
   | "operator"
@@ -24,6 +25,11 @@ export interface Token {
   readonly kind: TokenKind;
   readonly value: string;
   readonly position: Position;
+}
+
+interface StringLexResult {
+  readonly token: Token;
+  readonly next: number;
 }
 
 const KEYWORDS = new Set([
@@ -71,6 +77,37 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenKind> = {
   "{": "lbrace",
   "}": "rbrace",
 };
+
+function lexString(
+  source: string,
+  start: number,
+  position: Position,
+): Result<StringLexResult, EvalError> {
+  let i = start + 1;
+  let str = "";
+  while (i < source.length && source.charAt(i) !== '"') {
+    if (source.charAt(i) === "\n") {
+      return Err({
+        kind: ErrorKind.Syntax,
+        message: "Unterminated string literal",
+        position,
+        snippet: "",
+      });
+    }
+    str += source.charAt(i);
+    i++;
+  }
+  if (i >= source.length) {
+    return Err({
+      kind: ErrorKind.Syntax,
+      message: "Unterminated string literal",
+      position,
+      snippet: "",
+    });
+  }
+  i++;
+  return Ok({ token: { kind: "string", value: str, position }, next: i });
+}
 
 export function lex(source: string): Result<Token[], EvalError> {
   const tokens: Token[] = [];
@@ -123,6 +160,15 @@ export function lex(source: string): Result<Token[], EvalError> {
         }
       }
       tokens.push({ kind: "number", value: num, position: start });
+      continue;
+    }
+
+    if (ch === '"') {
+      const r = lexString(source, i, start);
+      if (!r.ok) return r;
+      column += r.value.next - i;
+      i = r.value.next;
+      tokens.push(r.value.token);
       continue;
     }
 

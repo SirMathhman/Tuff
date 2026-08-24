@@ -153,6 +153,9 @@ function toNumber(value: Value, position: Position): Result<number, EvalError> {
   if (value.kind === ValueKind.Struct) {
     return Err(err(ErrorKind.Semantic, "Expected a number but found a struct", position));
   }
+  if (value.kind === ValueKind.String) {
+    return Err(err(ErrorKind.Semantic, "Expected a number but found a string", position));
+  }
   return Err(err(ErrorKind.Semantic, "Expected a number but found an array", position));
 }
 
@@ -174,6 +177,8 @@ function evalExpr(expr: Expr, env: Map<string, Binding>): Result<Value, EvalErro
       return Ok({ kind: ValueKind.Number, value: expr.value });
     case ExprType.Boolean:
       return Ok({ kind: ValueKind.Boolean, value: expr.value });
+    case ExprType.String:
+      return Ok({ kind: ValueKind.String, value: expr.value });
     case ExprType.Identifier:
       return Ok(env.get(expr.name)!.value);
     case ExprType.Unary:
@@ -297,6 +302,10 @@ function evalField(expr: FieldExpr, env: Map<string, Binding>): Result<Value, Ev
   // The static pass validates the object kind and field existence.
   const obj = evalExpr(expr.object, env);
   if (!obj.ok) return obj;
+  if (obj.value.kind === ValueKind.String) {
+    // The static pass guarantees the only valid string field is "length".
+    return Ok({ kind: ValueKind.Number, value: obj.value.value.length });
+  }
   if (obj.value.kind !== ValueKind.Struct) {
     return Err(
       err(ErrorKind.Semantic, "Cannot access a field of a non-struct value", expr.position),

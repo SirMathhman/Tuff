@@ -3,6 +3,7 @@ import type { Position } from "../errors.ts";
 export enum ExprType {
   Number = "number",
   Boolean = "boolean",
+  String = "string",
   Identifier = "identifier",
   Unary = "unary",
   Ref = "ref",
@@ -25,6 +26,12 @@ export interface NumberExpr {
 export interface BooleanExpr {
   readonly type: ExprType.Boolean;
   readonly value: boolean;
+  readonly position: Position;
+}
+
+export interface StringExpr {
+  readonly type: ExprType.String;
+  readonly value: string;
   readonly position: Position;
 }
 
@@ -104,6 +111,7 @@ export interface FieldExpr {
 export type Expr =
   | NumberExpr
   | BooleanExpr
+  | StringExpr
   | IdentifierExpr
   | UnaryExpr
   | RefExpr

@@ -36,6 +36,13 @@ describe("evaluate: bindings & expressions", () => {
     expect(evaluateAndExecuteTuff("let x = 1; return x;")).toEqual({ ok: true, value: 1 });
   });
 
+  test('evaluate("let x = \\"foo\\"; return x.length;") => 3', () => {
+    expect(evaluateAndExecuteTuff('let x = "foo"; return x.length;')).toEqual({
+      ok: true,
+      value: 3,
+    });
+  });
+
   test('evaluate("let mut x = 0; x = 1; return x;") => 1', () => {
     expect(evaluateAndExecuteTuff("let mut x = 0; x = 1; return x;")).toEqual({
       ok: true,
