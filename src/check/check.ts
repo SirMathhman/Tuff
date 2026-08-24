@@ -64,20 +64,8 @@ function checkMutability(
       delete target.value.binding.literal;
       const value = inferValue(stmt.value, env);
       if (!value.ok) return value;
-      const rhsType = inferIntType(stmt.value, env);
-      if (
-        target.value.binding.intType &&
-        rhsType !== null &&
-        rhsType !== target.value.binding.intType
-      ) {
-        return Err(
-          err(
-            ErrorKind.Semantic,
-            `Cannot assign "${rhsType}" value to "${target.value.binding.intType}" binding "${target.value.name}"`,
-            stmt.value.position,
-          ),
-        );
-      }
+      const typeCheck = checkAssignType(stmt.value, target.value, env);
+      if (!typeCheck.ok) return typeCheck;
     } else if (stmt.type === StatementType.Block) {
       const inner = checkMutability(stmt.statements, env);
       if (!inner.ok) return inner;
@@ -385,4 +373,23 @@ function resolveTarget(
     return validateDerefBinding(refBinding, target.operand.name, get, target.position);
   }
   return Err(err(ErrorKind.Semantic, "Invalid assignment target", target.position));
+}
+
+function checkAssignType(
+  value: Expr,
+  target: ResolvedTarget,
+  env: Map<string, Binding>,
+): Result<null, EvalError> {
+  const rhsType = inferIntType(value, env);
+  const bindingType = target.binding.intType;
+  if (bindingType && rhsType !== null && rhsType !== bindingType) {
+    return Err(
+      err(
+        ErrorKind.Semantic,
+        `Cannot assign "${rhsType}" value to "${bindingType}" binding "${target.name}"`,
+        value.position,
+      ),
+    );
+  }
+  return Ok(null);
 }
