@@ -79,12 +79,21 @@ export function evaluate(input: string): Result<unknown> {
       }
       const name = stmt[idx];
       if (!name || ["let", "mut", "return"].includes(name))
-        return fail({ kind: "ExpectedToken", expected: "variable name", found: name });
+        return fail({
+          kind: "ExpectedToken",
+          expected: "variable name",
+          found: name,
+        });
       if (stmt[idx + 1] !== "=")
-        return fail({ kind: "ExpectedToken", expected: "'='", found: stmt[idx + 1] });
+        return fail({
+          kind: "ExpectedToken",
+          expected: "'='",
+          found: stmt[idx + 1],
+        });
       const value = evalExpr(stmt.slice(idx + 2), bindings);
       if (!value.ok) return value;
-      if (bindings.has(name)) return fail({ kind: "DuplicateDeclaration", name });
+      if (bindings.has(name))
+        return fail({ kind: "DuplicateDeclaration", name });
       bindings.set(name, { mutable, value: value.value });
     } else if (stmt[0] === "return") {
       const value = evalExpr(stmt.slice(1), bindings);
@@ -98,7 +107,8 @@ export function evaluate(input: string): Result<unknown> {
         return fail({ kind: "ExpectedToken", expected: "'='", found: stmt[1] });
       const binding = bindings.get(name);
       if (!binding) return fail({ kind: "UndeclaredVariable", name });
-      if (!binding.mutable) return fail({ kind: "ImmutableReassignment", name });
+      if (!binding.mutable)
+        return fail({ kind: "ImmutableReassignment", name });
       const value = evalExpr(stmt.slice(2), bindings);
       if (!value.ok) return value;
       binding.value = value.value;
