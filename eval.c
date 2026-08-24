@@ -52,26 +52,27 @@ static long deref_value(const var *vars, const var *v, tuff_pos pos,
 static tuff_err eval_let(var *vars, int *nvars, const tuff_node *nd,
                          tuff_result *r)
 {
-    if (find_var(vars, *nvars, nd->name) != NULL)
+    const tuff_let *l = &nd->as.let;
+    if (find_var(vars, *nvars, l->name) != NULL)
         return (r->error = tuff_err_at(ERR_DUPLICATE_VAR, nd->pos)).code;
 
     vars[*nvars].name[0] = '\0';
-    memcpy(vars[*nvars].name, nd->name, strlen(nd->name) + 1);
-    vars[*nvars].is_mut = nd->is_mut;
-    vars[*nvars].value = nd->value;
+    memcpy(vars[*nvars].name, l->name, strlen(l->name) + 1);
+    vars[*nvars].is_mut = l->is_mut;
+    vars[*nvars].value = l->value;
     vars[*nvars].is_ref = 0;
     vars[*nvars].ref_mut = 0;
     vars[*nvars].ref_idx = -1;
     vars[*nvars].pos = nd->pos;
-    if (nd->is_ref)
+    if (l->is_ref)
     {
-        const var *ref = find_var(vars, *nvars, nd->ref_name);
+        const var *ref = find_var(vars, *nvars, l->ref_name);
         if (ref == NULL)
             return (r->error = tuff_err_at(ERR_UNDECLARED_VAR, nd->pos)).code;
-        if (nd->ref_mut && !ref->is_mut)
+        if (l->ref_mut && !ref->is_mut)
             return (r->error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos)).code;
         vars[*nvars].is_ref = 1;
-        vars[*nvars].ref_mut = nd->ref_mut;
+        vars[*nvars].ref_mut = l->ref_mut;
         vars[*nvars].ref_idx = (int)(ref - vars);
     }
     (*nvars)++;
@@ -83,10 +84,11 @@ static tuff_err eval_let(var *vars, int *nvars, const tuff_node *nd,
 static tuff_err eval_assign(var *vars, int nvars, const tuff_node *nd,
                             tuff_result *r)
 {
-    const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, r);
+    const tuff_assign *a = &nd->as.assign;
+    const var *v = find_var_or_err(vars, nvars, a->name, nd->pos, r);
     if (v == NULL)
         return r->error.code;
-    if (nd->deref)
+    if (a->deref)
     {
         if (!v->is_ref)
             return (r->error = tuff_err_at(ERR_NOT_A_REF, nd->pos)).code;
@@ -94,7 +96,7 @@ static tuff_err eval_assign(var *vars, int nvars, const tuff_node *nd,
             return (r->error = tuff_err_at(ERR_REF_NOT_MUT, nd->pos)).code;
         if (!vars[v->ref_idx].is_mut)
             return (r->error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos)).code;
-        vars[v->ref_idx].value = nd->value;
+        vars[v->ref_idx].value = a->value;
     }
     else
     {
@@ -103,8 +105,8 @@ static tuff_err eval_assign(var *vars, int nvars, const tuff_node *nd,
         if (!v->is_mut)
             return (r->error = tuff_err_at(ERR_ASSIGN_IMMUTABLE, nd->pos)).code;
         for (int j = 0; j < nvars; j++)
-            if (vars[j].name[0] != '\0' && strcmp(vars[j].name, nd->name) == 0)
-                vars[j].value = nd->value;
+            if (vars[j].name[0] != '\0' && strcmp(vars[j].name, a->name) == 0)
+                vars[j].value = a->value;
     }
     return ERR_OK;
 }
@@ -128,29 +130,30 @@ static long operand_value(const var *vars, int nvars, tuff_opknd kind,
 static tuff_err eval_return(const var *vars, int nvars, const tuff_node *nd,
                             tuff_result *r)
 {
-    if (nd->binop)
+    const tuff_return *rt = &nd->as.ret;
+    if (rt->binop)
     {
-        long a = operand_value(vars, nvars, nd->op1_kind, nd->op1_value,
-                               nd->op1_name, nd->pos, r);
+        long a = operand_value(vars, nvars, rt->op1.kind, rt->op1.value,
+                               rt->op1.name, nd->pos, r);
         if (r->error.code != ERR_OK)
             return r->error.code;
-        long b = operand_value(vars, nvars, nd->op2_kind, nd->op2_value,
-                               nd->op2_name, nd->pos, r);
+        long b = operand_value(vars, nvars, rt->op2.kind, rt->op2.value,
+                               rt->op2.name, nd->pos, r);
         if (r->error.code != ERR_OK)
             return r->error.code;
-        if (nd->op == TUFF_OP_OR)
+        if (rt->op == TUFF_OP_OR)
             r->value = (a != 0 || b != 0);
         else
             r->value = (a != 0 && b != 0);
         r->ok = 1;
         return ERR_OK;
     }
-    if (nd->use_var)
+    if (rt->is_var)
     {
-        const var *v = find_var_or_err(vars, nvars, nd->name, nd->pos, r);
+        const var *v = find_var_or_err(vars, nvars, rt->name, nd->pos, r);
         if (v == NULL)
             return r->error.code;
-        if (nd->deref)
+        if (rt->deref)
         {
             r->value = deref_value(vars, v, nd->pos, r);
             if (r->error.code != ERR_OK)
@@ -165,7 +168,7 @@ static tuff_err eval_return(const var *vars, int nvars, const tuff_node *nd,
     }
     else
     {
-        r->value = nd->value;
+        r->value = rt->op1.value;
     }
     r->ok = 1;
     return ERR_OK;

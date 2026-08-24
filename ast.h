@@ -26,28 +26,64 @@ typedef enum
     OPKND_VAR
 } tuff_opknd;
 
+/* Payload for a NODE_LET statement. */
+typedef struct
+{
+    char name[TUFF_MAX_NAME];
+    int is_mut;
+    long value;
+    int is_ref;
+    int ref_mut;
+    char ref_name[TUFF_MAX_NAME];
+} tuff_let;
+
+/* Payload for a NODE_ASSIGN statement. */
+typedef struct
+{
+    char name[TUFF_MAX_NAME];
+    int deref;
+    long value;
+} tuff_assign;
+
+/* An operand of a binary expression: a literal or a variable. */
+typedef struct
+{
+    tuff_opknd kind;
+    long value;
+    char name[TUFF_MAX_NAME];
+} tuff_operand;
+
+/* Payload for a NODE_RETURN statement. A simple value uses is_var/deref/name
+ * (with the literal value in op1); a binary expression uses binop/op/op1/op2. */
+typedef struct
+{
+    int is_var;
+    int deref;
+    char name[TUFF_MAX_NAME];
+    int binop;
+    tuff_op op;
+    tuff_operand op1;
+    tuff_operand op2;
+} tuff_return;
+
+/* Payload for a NODE_BLOCK statement. */
+typedef struct
+{
+    int first; /* index of first statement in the block */
+    int count; /* number of statements in the block */
+    int ret;   /* index of the block's return, or -1 */
+} tuff_block;
+
 typedef struct
 {
     tuff_node_kind kind;
-    char name[TUFF_MAX_NAME];
-    int is_mut;
-    long value;  /* NODE_LET: initializer; NODE_RETURN: literal value */
-    int use_var; /* NODE_RETURN: value is a variable reference */
-    int is_ref;  /* NODE_LET: initializer is &ref_name */
-    int ref_mut; /* NODE_LET: reference is &mut */
-    char ref_name[TUFF_MAX_NAME];
-    int deref;                    /* NODE_RETURN: value is *name; NODE_ASSIGN: target is *name */
-    int binop;                    /* NODE_RETURN: value is a binary expression */
-    tuff_op op;                   /* NODE_RETURN: binary operator */
-    tuff_opknd op1_kind;          /* NODE_RETURN: kind of the left operand */
-    long op1_value;               /* NODE_RETURN: left operand literal value */
-    char op1_name[TUFF_MAX_NAME]; /* NODE_RETURN: left operand variable name */
-    tuff_opknd op2_kind;          /* NODE_RETURN: kind of the right operand */
-    long op2_value;               /* NODE_RETURN: right operand literal value */
-    char op2_name[TUFF_MAX_NAME]; /* NODE_RETURN: right operand variable name */
-    int block_first;              /* NODE_BLOCK: index of first statement in the block */
-    int block_count;              /* NODE_BLOCK: number of statements in the block */
-    int block_ret;                /* NODE_BLOCK: index of the block's return, or -1 */
+    union
+    {
+        tuff_let let;
+        tuff_assign assign;
+        tuff_return ret;
+        tuff_block block;
+    } as;
     tuff_pos pos;
 } tuff_node;
 

@@ -111,19 +111,19 @@ static tuff_error parse_let(pctx *c, tuff_program *prog)
     advance(c); /* let */
     if (has_more(c) && cur(c)->type == TOK_KEYWORD && cur(c)->kw == KW_MUT)
     {
-        nd->is_mut = 1;
+        nd->as.let.is_mut = 1;
         advance(c);
     }
-    tuff_error e = copy_ident(c, nd->name);
+    tuff_error e = copy_ident(c, nd->as.let.name);
     if (e.code != ERR_OK)
         return e;
     if (has_more(c) && cur(c)->type == TOK_EQ && c->i + 1 < c->count &&
         c->toks[c->i + 1].type == TOK_AMP)
     {
-        nd->is_ref = 1;
-        return parse_eq_ref(c, nd->ref_name, &nd->ref_mut);
+        nd->as.let.is_ref = 1;
+        return parse_eq_ref(c, nd->as.let.ref_name, &nd->as.let.ref_mut);
     }
-    return parse_eq_value(c, &nd->value);
+    return parse_eq_value(c, &nd->as.let.value);
 }
 
 static tuff_error parse_assign(pctx *c, tuff_program *prog)
@@ -136,16 +136,16 @@ static tuff_error parse_assign(pctx *c, tuff_program *prog)
     if (has_more(c) && cur(c)->type == TOK_STAR)
     {
         advance(c);
-        nd->deref = 1;
-        tuff_error e = copy_ident(c, nd->name);
+        nd->as.assign.deref = 1;
+        tuff_error e = copy_ident(c, nd->as.assign.name);
         if (e.code != ERR_OK)
             return e;
-        return parse_eq_value(c, &nd->value);
+        return parse_eq_value(c, &nd->as.assign.value);
     }
-    tuff_error e = copy_ident(c, nd->name);
+    tuff_error e = copy_ident(c, nd->as.assign.name);
     if (e.code != ERR_OK)
         return e;
-    return parse_eq_value(c, &nd->value);
+    return parse_eq_value(c, &nd->as.assign.value);
 }
 
 /* Parses a binary operand (literal or variable) into the given fields. */
@@ -186,25 +186,23 @@ static tuff_error parse_return_value(pctx *c, tuff_node *nd)
     if (has_more(c) && cur(c)->type == TOK_STAR)
     {
         advance(c);
-        nd->use_var = 1;
-        nd->deref = 1;
-        tuff_error e = copy_ident(c, nd->name);
+        nd->as.ret.is_var = 1;
+        nd->as.ret.deref = 1;
+        tuff_error e = copy_ident(c, nd->as.ret.name);
         if (e.code != ERR_OK)
             return e;
         return tuff_err_at(ERR_OK, cur(c)->pos);
     }
-    tuff_error e = parse_binop_operand(c, &nd->op1_kind, &nd->op1_value,
-                                       nd->op1_name);
+    tuff_error e = parse_binop_operand(c, &nd->as.ret.op1.kind,
+                                       &nd->as.ret.op1.value,
+                                       nd->as.ret.op1.name);
     if (e.code != ERR_OK)
         return e;
-    if (nd->op1_kind == OPKND_VAR)
+    if (nd->as.ret.op1.kind == OPKND_VAR)
     {
-        nd->use_var = 1;
-        memcpy(nd->name, nd->op1_name, strlen(nd->op1_name) + 1);
-    }
-    else
-    {
-        nd->value = nd->op1_value;
+        nd->as.ret.is_var = 1;
+        memcpy(nd->as.ret.name, nd->as.ret.op1.name,
+               strlen(nd->as.ret.op1.name) + 1);
     }
     return tuff_err_at(ERR_OK, cur(c)->pos);
 }
@@ -222,13 +220,14 @@ static tuff_error parse_return(pctx *c, tuff_program *prog)
         return e;
     if (has_more(c) && (cur(c)->type == TOK_OR || cur(c)->type == TOK_AND))
     {
-        if (nd->deref)
+        if (nd->as.ret.deref)
             return tuff_err_at(ERR_BINOP_OPERAND, cur(c)->pos);
         /* The left operand was already recorded in the op1 fields. */
-        nd->binop = 1;
-        nd->op = (cur(c)->type == TOK_AND) ? TUFF_OP_AND : TUFF_OP_OR;
+        nd->as.ret.binop = 1;
+        nd->as.ret.op = (cur(c)->type == TOK_AND) ? TUFF_OP_AND : TUFF_OP_OR;
         advance(c);
-        e = parse_binop_operand(c, &nd->op2_kind, &nd->op2_value, nd->op2_name);
+        e = parse_binop_operand(c, &nd->as.ret.op2.kind, &nd->as.ret.op2.value,
+                                nd->as.ret.op2.name);
         if (e.code != ERR_OK)
             return e;
     }
@@ -282,8 +281,8 @@ static tuff_error parse_block(pctx *c, tuff_program *prog)
     nd->kind = NODE_BLOCK;
     nd->pos = cur(c)->pos;
     advance(c); /* { */
-    nd->block_first = prog->count + 1;
-    nd->block_ret = -1;
+    nd->as.block.first = prog->count + 1;
+    nd->as.block.ret = -1;
     while (has_more(c) && cur(c)->type != TOK_RBRACE)
     {
         tuff_error e = parse_stmt(c, prog);
@@ -291,12 +290,12 @@ static tuff_error parse_block(pctx *c, tuff_program *prog)
             return e;
         prog->count++;
         if (prog->stmts[prog->count - 1].kind == NODE_RETURN)
-            nd->block_ret = prog->count - 1;
+            nd->as.block.ret = prog->count - 1;
     }
     if (!has_more(c) || cur(c)->type != TOK_RBRACE)
         return tuff_err_at(ERR_EXPECTED_TOKEN, cur(c)->pos);
     advance(c); /* } */
-    nd->block_count = prog->count - nd->block_first;
+    nd->as.block.count = prog->count - nd->as.block.first;
     return tuff_err_at(ERR_OK, cur(c)->pos);
 }
 
