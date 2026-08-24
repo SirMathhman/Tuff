@@ -15,6 +15,7 @@ import type { Result } from "../result.ts";
 import { ValueKind } from "../eval/value.ts";
 import type { Binding, FnValue, ResolvedTarget, Value } from "../eval/value.ts";
 import { resolveRefChain, validateDerefBinding } from "../eval/value.ts";
+import { checkFnReturns, hasUnconditionalReturn } from "./fn.ts";
 
 export function checkProgram(program: Program): Result<null, EvalError> {
   return checkMutability(program.statements, new Map());
@@ -138,6 +139,17 @@ function checkFnDecl(
   }
   const body = checkMutability(stmt.body, bodyEnv);
   if (!body.ok) return body;
+  const returns = checkFnReturns(stmt.body, stmt.returnType, bodyEnv, inferIntType);
+  if (!returns.ok) return returns;
+  if (!hasUnconditionalReturn(stmt.body)) {
+    return Err(
+      err(
+        ErrorKind.Semantic,
+        `Function "${stmt.name}" must return a value on all paths`,
+        stmt.position,
+      ),
+    );
+  }
   if (!shadowed.has(stmt.name)) {
     shadowed.set(stmt.name, env.get(stmt.name) ?? null);
   }

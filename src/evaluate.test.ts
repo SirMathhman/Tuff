@@ -120,11 +120,33 @@ describe("evaluate: integer suffixes", () => {
 
 describe("evaluate: functions", () => {
   test("fn add(first : I32, second : I32) => 7", () => {
-    expect(
-      evaluate(
-        "fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);",
-      ),
-    ).toEqual({ ok: true, value: 7 });
+    const src =
+      "fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);";
+    expect(evaluate(src)).toEqual({ ok: true, value: 7 });
+  });
+
+  test("fn returning wrong type => Err (return type mismatch)", () => {
+    const r = evaluate("fn f() : I32 => { return 1U8; } return f();");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+  });
+
+  test("fn with no return => Err (missing return)", () => {
+    const r = evaluate("fn f() : I32 => { let x = 1; } return f();");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+  });
+
+  test("fn with conditional return only => Err (missing return)", () => {
+    const r = evaluate("fn f(x : I32) : I32 => { if (x < 1) { return 1; } } return f(0);");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe(ErrorKind.Semantic);
+  });
+
+  test("fn with if/else returns => 1", () => {
+    const src =
+      "fn f(x : I32) : I32 => { if (x < 1) { return 1; } else { return 2; } } return f(0);";
+    expect(evaluate(src)).toEqual({ ok: true, value: 1 });
   });
 });
 
@@ -134,10 +156,8 @@ describe("evaluate: arrays", () => {
   });
 
   test('evaluate("let array = [1, 2, 3]; return array[0] + array[1] + array[2];") => 6', () => {
-    expect(evaluate("let array = [1, 2, 3]; return array[0] + array[1] + array[2];")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    const src = "let array = [1, 2, 3]; return array[0] + array[1] + array[2];";
+    expect(evaluate(src)).toEqual({ ok: true, value: 6 });
   });
 });
 
@@ -147,24 +167,18 @@ describe("evaluate: references", () => {
   });
 
   test('evaluate("let mut x = 0; let y = &mut x; *y = 1; return x;") => 1', () => {
-    expect(evaluate("let mut x = 0; let y = &mut x; *y = 1; return x;")).toEqual({
-      ok: true,
-      value: 1,
-    });
+    const src = "let mut x = 0; let y = &mut x; *y = 1; return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 1 });
   });
 
   test('evaluate("let mut x = 0; let a = &mut x; let b = &mut a; *b = 1; return x;") => 1', () => {
-    expect(evaluate("let mut x = 0; let a = &mut x; let b = &mut a; *b = 1; return x;")).toEqual({
-      ok: true,
-      value: 1,
-    });
+    const src = "let mut x = 0; let a = &mut x; let b = &mut a; *b = 1; return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 1 });
   });
 
   test('evaluate("let x = 5; let a = &x; let b = &a; return *b;") => 5', () => {
-    expect(evaluate("let x = 5; let a = &x; let b = &a; return *b;")).toEqual({
-      ok: true,
-      value: 5,
-    });
+    const src = "let x = 5; let a = &x; let b = &a; return *b;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 5 });
   });
 
   test('evaluate("let mut x = &mut x; *x = 1;") => Err (ref cycle)', () => {
@@ -173,10 +187,8 @@ describe("evaluate: references", () => {
   });
 
   test('evaluate("let mut x = 0; let a = [&mut x]; let y = a[0]; *y = 1; return x;") => 1 (assign through unknown-kind ref)', () => {
-    expect(evaluate("let mut x = 0; let a = [&mut x]; let y = a[0]; *y = 1; return x;")).toEqual({
-      ok: true,
-      value: 1,
-    });
+    const src = "let mut x = 0; let a = [&mut x]; let y = a[0]; *y = 1; return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 1 });
   });
 });
 
@@ -279,45 +291,33 @@ describe("evaluate: values & shadowing", () => {
 
 describe("evaluate control flow", () => {
   test('evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;") => 2', () => {
-    expect(evaluate("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;")).toEqual({
-      ok: true,
-      value: 2,
-    });
+    const src = "let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 2 });
   });
 
   test('evaluate("let mut x = 0; if (false) { x = 1; } return x;") => 0', () => {
-    expect(evaluate("let mut x = 0; if (false) { x = 1; } return x;")).toEqual({
-      ok: true,
-      value: 0,
-    });
+    const src = "let mut x = 0; if (false) { x = 1; } return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 0 });
   });
 
   test('evaluate("let mut x = 0; if (false) x = 1; else x = 2; return x;") => 2', () => {
-    expect(evaluate("let mut x = 0; if (false) x = 1; else x = 2; return x;")).toEqual({
-      ok: true,
-      value: 2,
-    });
+    const src = "let mut x = 0; if (false) x = 1; else x = 2; return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 2 });
   });
 
   test('evaluate("let mut x = 0; return 1; x = 2; return x;") => 1', () => {
-    expect(evaluate("let mut x = 0; return 1; x = 2; return x;")).toEqual({
-      ok: true,
-      value: 1,
-    });
+    const src = "let mut x = 0; return 1; x = 2; return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 1 });
   });
 
   test('evaluate("let mut x = 0; { return 5; x = 1; } return x;") => 5', () => {
-    expect(evaluate("let mut x = 0; { return 5; x = 1; } return x;")).toEqual({
-      ok: true,
-      value: 5,
-    });
+    const src = "let mut x = 0; { return 5; x = 1; } return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 5 });
   });
 
   test('evaluate("let mut x = 0; while (x < 4) { x += 1; } return x;") => 4', () => {
-    expect(evaluate("let mut x = 0; while (x < 4) { x += 1; } return x;")).toEqual({
-      ok: true,
-      value: 4,
-    });
+    const src = "let mut x = 0; while (x < 4) { x += 1; } return x;";
+    expect(evaluate(src)).toEqual({ ok: true, value: 4 });
   });
 });
 
