@@ -20,6 +20,6 @@ export function unhandledInput(input: string): UnhandledInputError {
     kind: "unhandled_input",
     input,
     reason: `The expression ${JSON.stringify(input)} is not yet supported.`,
-    fix: "Use a supported expression form (e.g. \"return 1;\").",
+    fix: 'Use a supported expression form (e.g. "return 1;").',
   };
 }
