@@ -8,14 +8,20 @@ Guidance for AI coding agents working in this repository.
 
 ## Commands
 
-| Task                   | Command                  |
-| ---------------------- | ------------------------ |
-| Install dependencies   | `bun install`            |
-| Run the app            | `bun run index.js`       |
-| Run tests              | `bun test`               |
-| Run a single test file | `bun test index.test.js` |
+| Task                   | Command                 |
+| ---------------------- | ----------------------- |
+| Install dependencies   | `bun install`           |
+| Run the app            | `bun run index.js`      |
+| Run tests              | `bun test`              |
+| Run a single test file | `bun test tuff.test.js` |
 
-Tests use Bun's built-in test runner (`bun:test`); test files live at the repo root next to the code they cover (`index.test.js` ↔ `index.js`).
+Tests use Bun's built-in test runner (`bun:test`); test files live at the repo root next to the code they cover (`tuff.test.js` ↔ `tuff.js`).
+
+## Module layout
+
+- `index.js` — public entry point; pure re-export surface, no logic.
+- `tuff.js` — core: `evaluateTuff(input)` → Result.
+- `errors.js` — error taxonomy (`TuffErrorKind`, `makeError`).
 
 ## Conventions
 

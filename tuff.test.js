@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { evaluateTuff } from "./index.js";
+import { evaluateTuff } from "./tuff.js";
 import { TuffErrorKind } from "./errors.js";
 
 test('evaluateTuff("") returns ok with value 0', () => {
@@ -15,7 +15,10 @@ test('evaluateTuff("let x = 1; return x;") returns ok with value 1', () => {
 });
 
 test('evaluateTuff("let mut x = 0; x = 1; return x;") returns ok with value 1', () => {
-  expect(evaluateTuff("let mut x = 0; x = 1; return x;")).toEqual({ ok: true, value: 1 });
+  expect(evaluateTuff("let mut x = 0; x = 1; return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
 });
 
 test("evaluateTuff with a syntax error returns a structured SyntaxError", () => {
