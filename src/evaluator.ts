@@ -34,9 +34,14 @@ export function evaluateTuff(input: string): Result {
     .map((s) => s.trim())
     .filter(Boolean);
   for (const stmt of stmts) {
-    const decl = /^let\s+(\w+)\s*=\s*(-?\d+(?:\.\d+)?)$/.exec(stmt);
+    const decl = /^let\s+(?:mut\s+)?(\w+)\s*=\s*(-?\d+(?:\.\d+)?)$/.exec(stmt);
     if (decl?.[1] !== undefined && decl[2] !== undefined) {
       vars.set(decl[1], Number(decl[2]));
+      continue;
+    }
+    const assign = /^(\w+)\s*=\s*(-?\d+(?:\.\d+)?)$/.exec(stmt);
+    if (assign?.[1] !== undefined && assign[2] !== undefined) {
+      vars.set(assign[1], Number(assign[2]));
       continue;
     }
     const ret = /^return\s+(.+)$/.exec(stmt);

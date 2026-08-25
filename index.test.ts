@@ -21,6 +21,12 @@ describe("evaluateTuff", () => {
       value: 2,
     });
   });
+  test("mut declaration then assignment", () => {
+    expect(evaluateTuff("let mut x = 0; x = 1; return x;")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
   test("return of unknown identifier returns Err", () => {
     expect(evaluateTuff("return unknownIdentifier;")).toEqual({
       ok: false,
