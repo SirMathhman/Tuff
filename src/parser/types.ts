@@ -39,7 +39,8 @@ export type Statement =
   | { return: Return; position: number }
   | { if: IfStatement; position: number }
   | { while: WhileStatement; position: number }
-  | { break: { position: number }; position: number };
+  | { break: { position: number }; position: number }
+  | { continue: { position: number }; position: number };
 
 export const NAME_KEYWORDS = [
   "let",
@@ -51,6 +52,7 @@ export const NAME_KEYWORDS = [
   "else",
   "while",
   "break",
+  "continue",
 ];
 
 export type Cursor = { tokens: Token[]; i: number };

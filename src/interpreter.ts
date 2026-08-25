@@ -7,6 +7,8 @@ type Binding = { value: Value };
 
 type State = { returnValue: Value | undefined; returned: boolean };
 
+type Signal = "break" | "continue" | undefined;
+
 function evalExpr(expr: Expr, bindings: Map<string, Binding>): Value {
   if ("literal" in expr) return expr.literal;
   if ("identifier" in expr) return bindings.get(expr.identifier)!.value;
@@ -26,8 +28,9 @@ function execStatement(
   item: Statement,
   bindings: Map<string, Binding>,
   state: State,
-): boolean {
-  if ("break" in item) return true;
+): Signal {
+  if ("break" in item) return "break";
+  if ("continue" in item) return "continue";
   if ("declaration" in item) {
     const { name, expr } = item.declaration;
     bindings.set(name, { value: evalExpr(expr, bindings) });
@@ -42,34 +45,41 @@ function execStatement(
       binding.value = (binding.value as number) + (value as number);
     else binding.value = value;
   }
-  return false;
+  return undefined;
 }
 
 function execStatements(
   statements: Statement[],
   bindings: Map<string, Binding>,
   state: State,
-): boolean {
+): Signal {
   for (const item of statements) {
-    if (state.returned) return false;
+    if (state.returned) return undefined;
     if ("block" in item) {
-      execStatements(item.block, new Map(bindings), state);
+      const signal = execStatements(item.block, new Map(bindings), state);
+      if (signal) return signal;
     } else if ("if" in item) {
       const condition = evalExpr(item.if.condition, bindings);
       const branch = condition === true ? item.if.thenBlock : item.if.elseBlock;
-      if (branch) execStatements(branch, bindings, state);
+      if (branch) {
+        const signal = execStatements(branch, bindings, state);
+        if (signal) return signal;
+      }
     } else if ("while" in item) {
       while (
         !state.returned &&
         evalExpr(item.while.condition, bindings) === true
       ) {
-        if (execStatements(item.while.body, bindings, state)) break;
+        const signal = execStatements(item.while.body, bindings, state);
+        if (signal === "break") break;
+        if (signal === "continue") continue;
       }
     } else {
-      if (execStatement(item, bindings, state)) return true;
+      const signal = execStatement(item, bindings, state);
+      if (signal) return signal;
     }
   }
-  return false;
+  return undefined;
 }
 
 export function interpret(statements: Statement[]): Result<Value | undefined> {
