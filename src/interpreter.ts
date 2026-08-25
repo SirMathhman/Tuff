@@ -2,15 +2,15 @@ import type { Result } from "./errors.ts";
 import { fail } from "./errors.ts";
 import type { Expr, Statement } from "./parser.ts";
 
-type Binding = { mutable: boolean; value: unknown };
+export type Value = number | boolean;
 
-type State = { returnValue: unknown; returned: boolean };
+type Binding = { mutable: boolean; value: Value };
 
-function evalExpr(expr: Expr, bindings: Map<string, Binding>): Result<unknown> {
+type State = { returnValue: Value | undefined; returned: boolean };
+
+function evalExpr(expr: Expr, bindings: Map<string, Binding>): Result<Value> {
   if ("literal" in expr) {
-    const value =
-      typeof expr.literal === "boolean" ? (expr.literal ? 1 : 0) : expr.literal;
-    return { ok: true, value };
+    return { ok: true, value: expr.literal };
   }
   if ("identifier" in expr) {
     const binding = bindings.get(expr.identifier);
@@ -29,16 +29,10 @@ function evalExpr(expr: Expr, bindings: Map<string, Binding>): Result<unknown> {
   if (!r.ok) return r;
   const value =
     op === "||"
-      ? l.value === 1 || r.value === 1
-        ? 1
-        : 0
+      ? l.value === true || r.value === true
       : op === "&&"
-        ? l.value === 1 && r.value === 1
-          ? 1
-          : 0
-        : (l.value as number) < (r.value as number)
-          ? 1
-          : 0;
+        ? l.value === true && r.value === true
+        : (l.value as number) < (r.value as number);
   return { ok: true, value };
 }
 
@@ -82,10 +76,16 @@ function execStatement(
       });
     const value = evalExpr(expr, bindings);
     if (!value.ok) return value;
-    binding.value =
-      op === "+="
-        ? (binding.value as number) + (value.value as number)
-        : value.value;
+    if (op === "+=") {
+      if (typeof binding.value !== "number" || typeof value.value !== "number")
+        return fail({
+          kind: "UnsupportedExpression",
+          position: item.assignment.position,
+        });
+      binding.value = binding.value + value.value;
+    } else {
+      binding.value = value.value;
+    }
   } else {
     return fail({ kind: "UnsupportedExpression", position: item.position });
   }
@@ -107,7 +107,7 @@ function execStatements(
       const condition = evalExpr(item.if.condition, bindings);
       if (!condition.ok) return condition;
       const branch =
-        condition.value === 1 ? item.if.thenBlock : item.if.elseBlock;
+        condition.value === true ? item.if.thenBlock : item.if.elseBlock;
       if (branch) {
         const result = execStatements(branch, bindings, state);
         if (!result.ok) return result;
@@ -118,7 +118,7 @@ function execStatements(
       while (!state.returned) {
         const condition = evalExpr(item.while.condition, bindings);
         if (!condition.ok) return condition;
-        if (condition.value !== 1) break;
+        if (condition.value !== true) break;
         const result = execStatements(item.while.body, bindings, state);
         if (!result.ok) return result;
       }
@@ -130,7 +130,7 @@ function execStatements(
   return { ok: true, value: undefined };
 }
 
-export function interpret(statements: Statement[]): Result<unknown> {
+export function interpret(statements: Statement[]): Result<Value | undefined> {
   const bindings = new Map<string, Binding>();
   const state: State = { returnValue: undefined, returned: false };
   const result = execStatements(statements, bindings, state);

@@ -64,14 +64,14 @@ describe("evaluate", () => {
     ).toBe(1);
   });
 
-  test('evaluates "let x = true; return x;" to 1', () => {
-    expect(unwrap(evaluate("let x = true; return x;"))).toBe(1);
+  test('evaluates "let x = true; return x;" to true', () => {
+    expect(unwrap(evaluate("let x = true; return x;"))).toBe(true);
   });
 
-  test('evaluates "let x = true; let y = true; return x || y;" to 1', () => {
-    expect(unwrap(evaluate("let x = true; let y = true; return x || y;"))).toBe(
-      1,
-    );
+  test('evaluates "let x = true; let y = true; return x || y;" to true', () => {
+    expect(
+      unwrap(evaluate("let x = true; let y = true; return x || y;")),
+    ).toBe(true);
   });
 
   test('evaluates "let mut x = 0; while (x < 4) { x += 1; } return x;" to 4', () => {
@@ -80,14 +80,14 @@ describe("evaluate", () => {
     ).toBe(4);
   });
 
-  test('evaluates "let x = 0; let y = 1; return x < y;" to 1', () => {
-    expect(unwrap(evaluate("let x = 0; let y = 1; return x < y;"))).toBe(1);
+  test('evaluates "let x = 0; let y = 1; return x < y;" to true', () => {
+    expect(unwrap(evaluate("let x = 0; let y = 1; return x < y;"))).toBe(true);
   });
 
-  test('evaluates "let x = true; let y = true; return x && y;" to 1', () => {
-    expect(unwrap(evaluate("let x = true; let y = true; return x && y;"))).toBe(
-      1,
-    );
+  test('evaluates "let x = true; let y = true; return x && y;" to true', () => {
+    expect(
+      unwrap(evaluate("let x = true; let y = true; return x && y;")),
+    ).toBe(true);
   });
 
   test("unsupported input yields a structured error with position", () => {
