@@ -33,4 +33,14 @@ describe("evaluateTuff", () => {
       error: { type: "UnknownIdentifier", name: "unknownIdentifier" },
     });
   });
+  test("malformed statement returns ParseError", () => {
+    expect(evaluateTuff("let x = ;")).toEqual({
+      ok: false,
+      error: {
+        type: "ParseError",
+        message: "Expected expression, got: ;",
+        position: 8,
+      },
+    });
+  });
 });
