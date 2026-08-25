@@ -31,7 +31,6 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="interpreter.ts";
-    "src\\interpreter.ts::valueType" [label="valueType"];
     "src\\interpreter.ts::evalExpr" [label="evalExpr"];
     "src\\interpreter.ts::execStatement" [label="execStatement"];
     "src\\interpreter.ts::execStatements" [label="execStatements"];
@@ -112,13 +111,9 @@ digraph tuff {
   "src\\evaluate.ts::evaluate" -> "src\\parser\\index.ts::groupStatements";
   "src\\evaluate.ts::evaluate" -> "src\\typecheck.ts::typecheck";
   "src\\evaluate.ts::evaluate" -> "src\\interpreter.ts::interpret";
-  "src\\interpreter.ts::evalExpr" -> "src\\errors.ts::fail";
   "src\\interpreter.ts::evalExpr" -> "src\\interpreter.ts::evalExpr";
-  "src\\interpreter.ts::execStatement" -> "src\\errors.ts::fail";
   "src\\interpreter.ts::execStatement" -> "src\\interpreter.ts::evalExpr";
-  "src\\interpreter.ts::execStatement" -> "src\\interpreter.ts::valueType";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatements";
-  "src\\interpreter.ts::execStatements" -> "src\\errors.ts::fail";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::evalExpr";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatement";
   "src\\interpreter.ts::interpret" -> "src\\interpreter.ts::execStatements";
