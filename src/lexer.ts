@@ -14,6 +14,7 @@ const KEYWORDS = new Set([
   "if",
   "else",
   "while",
+  "break",
 ]);
 
 export function tokenize(input: string): Result<Token[]> {

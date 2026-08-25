@@ -98,6 +98,14 @@ describe("evaluate", () => {
     ).toBe(4);
   });
 
+  test('evaluates "let mut x = 0; while (x < 4) { x += 1; break; } return x;" to 1', () => {
+    expect(
+      unwrap(
+        evaluate("let mut x = 0; while (x < 4) { x += 1; break; } return x;"),
+      ),
+    ).toBe(1);
+  });
+
   test('evaluates "let x = 0; let y = 1; return x == y;" to 0', () => {
     expect(unwrap(evaluate("let x = 0; let y = 1; return x == y;"))).toBe(0);
   });

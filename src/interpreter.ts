@@ -26,7 +26,8 @@ function execStatement(
   item: Statement,
   bindings: Map<string, Binding>,
   state: State,
-): void {
+): boolean {
+  if ("break" in item) return true;
   if ("declaration" in item) {
     const { name, expr } = item.declaration;
     bindings.set(name, { value: evalExpr(expr, bindings) });
@@ -41,15 +42,16 @@ function execStatement(
       binding.value = (binding.value as number) + (value as number);
     else binding.value = value;
   }
+  return false;
 }
 
 function execStatements(
   statements: Statement[],
   bindings: Map<string, Binding>,
   state: State,
-): void {
+): boolean {
   for (const item of statements) {
-    if (state.returned) return;
+    if (state.returned) return false;
     if ("block" in item) {
       execStatements(item.block, new Map(bindings), state);
     } else if ("if" in item) {
@@ -61,12 +63,13 @@ function execStatements(
         !state.returned &&
         evalExpr(item.while.condition, bindings) === true
       ) {
-        execStatements(item.while.body, bindings, state);
+        if (execStatements(item.while.body, bindings, state)) break;
       }
     } else {
-      execStatement(item, bindings, state);
+      if (execStatement(item, bindings, state)) return true;
     }
   }
+  return false;
 }
 
 export function interpret(statements: Statement[]): Result<Value | undefined> {

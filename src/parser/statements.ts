@@ -125,6 +125,16 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
       },
     };
   }
+  if (first.value === "break") {
+    advance(c);
+    if (peek(c)?.value !== ";")
+      return fail({ kind: "MissingTerminator", position: first.position });
+    advance(c);
+    return {
+      ok: true,
+      value: { break: { position: first.position }, position: first.position },
+    };
+  }
   if (first.kind === "keyword")
     return fail({
       kind: "ExpectedToken",
