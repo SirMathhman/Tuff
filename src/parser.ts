@@ -40,6 +40,7 @@ export interface Assign {
   type: "Assign";
   name: string;
   value: Expr;
+  pos: number;
 }
 
 /**
@@ -63,11 +64,49 @@ export interface Program {
 }
 
 /**
+ * A successful parse result.
+ */
+export interface ParseOk {
+  ok: true;
+  program: Program;
+}
+
+/**
+ * A failed parse result.
+ */
+export interface ParseErr {
+  ok: false;
+  error: TuffError;
+}
+
+/**
  * The result of parsing: a program or a structured error.
  */
-export type ParseResult =
-  | { ok: true; program: Program }
-  | { ok: false; error: TuffError };
+export type ParseResult = ParseOk | ParseErr;
+
+/**
+ * A successful tokenize result.
+ */
+interface TokenizeOk {
+  ok: true;
+  tokens: Token[];
+}
+
+/**
+ * A successful statement parse result.
+ */
+interface ParseStmtOk {
+  ok: true;
+  stmt: Stmt;
+}
+
+/**
+ * A successful expression parse result.
+ */
+interface ParseExprOk {
+  ok: true;
+  expr: Expr;
+}
 
 /**
  * A lexical token with its source position.
@@ -99,7 +138,7 @@ function parseError(message: string, position: number): TuffError {
  */
 function tokenize(
   input: string,
-): { ok: true; tokens: Token[] } | { ok: false; error: TuffError } {
+): TokenizeOk | ParseErr {
   const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {
@@ -185,9 +224,7 @@ class Parser {
    *
    * @returns The statement, or a structured parse error.
    */
-  private parseStmt():
-    | { ok: true; stmt: Stmt }
-    | { ok: false; error: TuffError } {
+  private parseStmt(): ParseStmtOk | ParseErr {
     const t = this.peek();
     if (t.kind === "keyword" && t.value === "let") {
       return this.parseLetDecl();
@@ -209,9 +246,7 @@ class Parser {
    *
    * @returns The declaration, or a structured parse error.
    */
-  private parseLetDecl():
-    | { ok: true; stmt: Stmt }
-    | { ok: false; error: TuffError } {
+  private parseLetDecl(): ParseStmtOk | ParseErr {
     this.next();
     let mutable = false;
     const maybeMut = this.peek();
@@ -223,14 +258,20 @@ class Parser {
     if (nameTok?.kind !== "ident") {
       return {
         ok: false,
-        error: parseError("Expected variable name after 'let'", nameTok?.pos ?? 0),
+        error: parseError(
+          "Expected variable name after 'let'",
+          nameTok?.pos ?? 0,
+        ),
       };
     }
     const eq = this.next();
     if (eq?.value !== "=") {
       return {
         ok: false,
-        error: parseError("Expected '=' after variable name", eq?.pos ?? nameTok.pos),
+        error: parseError(
+          "Expected '=' after variable name",
+          eq?.pos ?? nameTok.pos,
+        ),
       };
     }
     const value = this.parseExpr();
@@ -251,9 +292,7 @@ class Parser {
    *
    * @returns The statement, or a structured parse error.
    */
-  private parseReturn():
-    | { ok: true; stmt: Stmt }
-    | { ok: false; error: TuffError } {
+  private parseReturn(): ParseStmtOk | ParseErr {
     this.next();
     const value = this.parseExpr();
     if (!value.ok) return value;
@@ -265,22 +304,28 @@ class Parser {
    *
    * @returns The statement, or a structured parse error.
    */
-  private parseAssign():
-    | { ok: true; stmt: Stmt }
-    | { ok: false; error: TuffError } {
+  private parseAssign(): ParseStmtOk | ParseErr {
     const nameTok = this.next();
     const eq = this.next();
     if (eq?.value !== "=") {
       return {
         ok: false,
-        error: parseError("Expected '=' after identifier", eq?.pos ?? nameTok.pos),
+        error: parseError(
+          "Expected '=' after identifier",
+          eq?.pos ?? nameTok.pos,
+        ),
       };
     }
     const value = this.parseExpr();
     if (!value.ok) return value;
     return {
       ok: true,
-      stmt: { type: "Assign", name: nameTok.value, value: value.expr },
+      stmt: {
+        type: "Assign",
+        name: nameTok.value,
+        value: value.expr,
+        pos: nameTok.pos,
+      },
     };
   }
 
@@ -289,9 +334,7 @@ class Parser {
    *
    * @returns The expression, or a structured parse error.
    */
-  private parseExpr():
-    | { ok: true; expr: Expr }
-    | { ok: false; error: TuffError } {
+  private parseExpr(): ParseExprOk | ParseErr {
     const t = this.peek();
     if (t.kind === "number") {
       this.next();

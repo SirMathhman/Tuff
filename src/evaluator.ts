@@ -24,6 +24,14 @@ export interface Err {
 export type Result = Ok | Err;
 
 /**
+ * A variable binding: its value and whether it is mutable.
+ */
+interface Binding {
+  value: number;
+  mutable: boolean;
+}
+
+/**
  * Evaluate an expression node against the current variable scope.
  *
  * @param expr - The expression to evaluate.
@@ -32,11 +40,11 @@ export type Result = Ok | Err;
  */
 function evalExpr(
   expr: Expr,
-  vars: Map<string, number>,
-): { ok: true; value: number } | { ok: false; error: TuffError } {
+  vars: Map<string, Binding>,
+): Result {
   if (expr.type === "Number") return { ok: true, value: expr.value };
-  const val = vars.get(expr.name);
-  if (val !== undefined) return { ok: true, value: val };
+  const binding = vars.get(expr.name);
+  if (binding !== undefined) return { ok: true, value: binding.value };
   return { ok: false, error: { type: "UnknownIdentifier", name: expr.name } };
 }
 
@@ -48,13 +56,34 @@ function evalExpr(
  */
 function exec(
   stmts: readonly Stmt[],
-): { ok: true; value: number } | { ok: false; error: TuffError } {
-  const vars = new Map<string, number>();
+): Result {
+  const vars = new Map<string, Binding>();
   for (const stmt of stmts) {
     const value = evalExpr(stmt.value, vars);
     if (!value.ok) return value;
     if (stmt.type === "Return") return value;
-    vars.set(stmt.name, value.value);
+    if (stmt.type === "Assign") {
+      const binding = vars.get(stmt.name);
+      if (binding === undefined) {
+        return {
+          ok: false,
+          error: { type: "UnknownIdentifier", name: stmt.name },
+        };
+      }
+      if (!binding.mutable) {
+        return {
+          ok: false,
+          error: {
+            type: "ImmutableAssignment",
+            name: stmt.name,
+            position: stmt.pos,
+          },
+        };
+      }
+      binding.value = value.value;
+      continue;
+    }
+    vars.set(stmt.name, { value: value.value, mutable: stmt.mutable });
   }
   return { ok: true, value: 0 };
 }

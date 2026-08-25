@@ -34,11 +34,19 @@ function defId(file: string, name: string): string {
   return `${relative(root, file)}::${name}`;
 }
 
+/**
+ * A function definition found in a source file.
+ */
+interface FunctionDef {
+  name: string;
+  node: ts.FunctionLikeDeclaration;
+}
+
 for (const file of files) {
   const source = readFileSync(file, "utf8");
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
 
-  const functions: { name: string; node: ts.FunctionLikeDeclaration }[] = [];
+  const functions: FunctionDef[] = [];
 
   function visit(node: ts.Node): void {
     if (ts.isFunctionDeclaration(node) && node.name) {
@@ -97,11 +105,11 @@ for (const id of calls.keys()) {
 
 // Build a directory tree so nested folders (e.g. src > parser) render as
 // nested clusters, each labeled with just its own name rather than the path.
-type DirNode = {
+interface DirNode {
   name: string; // basename; "" for the repo root
   files: string[]; // full relative paths of files directly in this dir
   dirs: Map<string, DirNode>;
-};
+}
 
 const rootDir: DirNode = { name: "", files: [], dirs: new Map() };
 for (const file of byFile.keys()) {

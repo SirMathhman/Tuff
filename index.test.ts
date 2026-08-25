@@ -33,6 +33,12 @@ describe("evaluateTuff", () => {
       error: { type: "UnknownIdentifier", name: "unknownIdentifier" },
     });
   });
+  test("assignment to immutable binding returns Err", () => {
+    expect(evaluateTuff("let x = 0; x = 1; return x;")).toEqual({
+      ok: false,
+      error: { type: "ImmutableAssignment", name: "x", position: 11 },
+    });
+  });
   test("malformed statement returns ParseError", () => {
     expect(evaluateTuff("let x = ;")).toEqual({
       ok: false,
