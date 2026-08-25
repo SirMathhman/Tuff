@@ -75,6 +75,7 @@ Two types: `number` and `boolean`.
 | `<`      | less-than (numbers) | boolean     |
 | `==`     | equality            | boolean     |
 | `+`      | addition (numbers)  | number      |
+| `-`      | subtraction (numbers) | number    |
 
 Operators chain and nest.
 

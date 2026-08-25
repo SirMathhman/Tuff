@@ -23,7 +23,9 @@ function evalExpr(expr: Expr, bindings: Map<string, Binding>): Value {
         ? (l as number) < (r as number)
         : op === "+"
           ? (l as number) + (r as number)
-          : l === r;
+          : op === "-"
+            ? (l as number) - (r as number)
+            : l === r;
 }
 
 function execStatement(
