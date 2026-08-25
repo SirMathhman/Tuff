@@ -139,6 +139,7 @@ digraph tuff {
   "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\types.ts::peek";
   "src\\parser\\expressions.ts::parseOperand" -> "src\\errors.ts::fail";
   "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\types.ts::advance";
+  "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\expressions.ts::parseExpr";
   "src\\parser\\index.ts::groupStatements" -> "src\\parser\\statements.ts::parseStatements";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\types.ts::advance";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseStatements";
@@ -171,9 +172,10 @@ digraph tuff {
   "src\\parser\\statements.ts::parseIf" -> "src\\errors.ts::fail";
   "src\\parser\\statements.ts::parseWhile" -> "src\\parser\\types.ts::advance";
   "src\\parser\\statements.ts::parseWhile" -> "src\\parser\\statements.ts::parseConditionBlock";
-  "src\\typecheck.ts::checkExpr" -> "src\\errors.ts::fail";
   "src\\typecheck.ts::checkExpr" -> "src\\typecheck.ts::checkExpr";
+  "src\\typecheck.ts::checkExpr" -> "src\\errors.ts::fail";
   "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::literalType";
+  "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::exprType";
   "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkExpr";
   "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::exprType";
   "src\\typecheck.ts::checkStatements" -> "src\\errors.ts::fail";

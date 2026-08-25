@@ -48,6 +48,7 @@ Two types: `number` and `boolean`.
 
 - **number literals**: `0`, `1.5` (integers and decimals; malformed literals like `1.2.3` or `1.` are rejected).
 - **boolean literals**: `true`, `false`.
+- **parenthesized expressions**: `( <expr> )` — group an expression to override precedence.
 
 ### Variables
 
@@ -68,15 +69,15 @@ Two types: `number` and `boolean`.
 
 ### Operators
 
-| Operator | Meaning               | Result type |
-| -------- | --------------------- | ----------- |
-| `\|\|`   | logical or            | boolean     |
-| `&&`     | logical and           | boolean     |
-| `<`      | less-than (numbers)   | boolean     |
-| `==`     | equality              | boolean     |
-| `+`      | addition (numbers)    | number      |
-| `-`      | subtraction (numbers) | number      |
-| `*`      | multiplication (numbers) | number  |
+| Operator | Meaning                  | Result type |
+| -------- | ------------------------ | ----------- |
+| `\|\|`   | logical or               | boolean     |
+| `&&`     | logical and              | boolean     |
+| `<`      | less-than (numbers)      | boolean     |
+| `==`     | equality                 | boolean     |
+| `+`      | addition (numbers)       | number      |
+| `-`      | subtraction (numbers)    | number      |
+| `*`      | multiplication (numbers) | number      |
 
 Operators chain and nest.
 

@@ -11,6 +11,7 @@ type Signal = "break" | "continue" | undefined;
 
 function evalExpr(expr: Expr, bindings: Map<string, Binding>): Value {
   if ("literal" in expr) return expr.literal;
+  if ("grouped" in expr) return evalExpr(expr.grouped, bindings);
   if ("identifier" in expr) return bindings.get(expr.identifier)!.value;
   const { op, left, right } = expr.binary;
   const l = evalExpr(left, bindings);

@@ -128,6 +128,10 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("return 2 * 3 + 4;"))).toBe(10);
   });
 
+  test('evaluates "return 2 * (3 + 4);" to 14', () => {
+    expect(unwrap(evaluate("return 2 * (3 + 4);"))).toBe(14);
+  });
+
   test('evaluates "let x = 0; let y = 1; return x == y;" to 0', () => {
     expect(unwrap(evaluate("let x = 0; let y = 1; return x == y;"))).toBe(0);
   });

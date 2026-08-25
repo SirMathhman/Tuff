@@ -14,6 +14,7 @@ function literalType(value: number | boolean): ValueType {
 
 function checkExpr(expr: Expr, env: Env): Result<void> {
   if ("literal" in expr) return { ok: true, value: undefined };
+  if ("grouped" in expr) return checkExpr(expr.grouped, env);
   if ("identifier" in expr) {
     if (!env.has(expr.identifier))
       return fail({
@@ -30,6 +31,7 @@ function checkExpr(expr: Expr, env: Env): Result<void> {
 
 function exprType(expr: Expr, env: Env): ValueType | undefined {
   if ("literal" in expr) return literalType(expr.literal);
+  if ("grouped" in expr) return exprType(expr.grouped, env);
   if ("identifier" in expr) return env.get(expr.identifier)?.type;
   return expr.binary.op === "+" ||
     expr.binary.op === "-" ||

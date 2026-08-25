@@ -10,7 +10,8 @@ export type Expr =
         right: Expr;
       };
       position: number;
-    };
+    }
+  | { grouped: Expr; position: number };
 
 export type IfStatement = {
   condition: Expr;

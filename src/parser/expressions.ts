@@ -112,6 +112,21 @@ function parseMultiplication(c: Cursor): Result<Expr> {
 function parseOperand(c: Cursor): Result<Expr> {
   const token = peek(c);
   if (!token) return fail({ kind: "UnsupportedExpression", position: 0 });
+  if (token.value === "(") {
+    const open = advance(c);
+    const inner = parseExpr(c);
+    if (!inner.ok) return inner;
+    if (peek(c)?.value !== ")")
+      return fail({
+        kind: "UnbalancedParen",
+        position: c.tokens[c.tokens.length - 1]?.position ?? open.position,
+      });
+    advance(c);
+    return {
+      ok: true,
+      value: { grouped: inner.value, position: open.position },
+    };
+  }
   if (token.kind === "number") {
     advance(c);
     return {
