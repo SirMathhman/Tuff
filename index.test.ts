@@ -15,6 +15,12 @@ describe("evaluateTuff", () => {
       value: 1,
     });
   });
+  test("redeclaration shadows previous value", () => {
+    expect(evaluateTuff("let x = 1; let x = 2; return x;")).toEqual({
+      ok: true,
+      value: 2,
+    });
+  });
   test("return of unknown identifier returns Err", () => {
     expect(evaluateTuff("return unknownIdentifier;")).toEqual({
       ok: false,
