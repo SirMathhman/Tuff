@@ -68,14 +68,15 @@ Two types: `number` and `boolean`.
 
 ### Operators
 
-| Operator | Meaning             | Result type |
-| -------- | ------------------- | ----------- |
-| `\|\|`   | logical or          | boolean     |
-| `&&`     | logical and         | boolean     |
-| `<`      | less-than (numbers) | boolean     |
-| `==`     | equality            | boolean     |
-| `+`      | addition (numbers)  | number      |
-| `-`      | subtraction (numbers) | number    |
+| Operator | Meaning               | Result type |
+| -------- | --------------------- | ----------- |
+| `\|\|`   | logical or            | boolean     |
+| `&&`     | logical and           | boolean     |
+| `<`      | less-than (numbers)   | boolean     |
+| `==`     | equality              | boolean     |
+| `+`      | addition (numbers)    | number      |
+| `-`      | subtraction (numbers) | number      |
+| `*`      | multiplication (numbers) | number  |
 
 Operators chain and nest.
 

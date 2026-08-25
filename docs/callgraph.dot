@@ -73,6 +73,7 @@ digraph tuff {
     "src\\parser\\expressions.ts::parseAnd" [label="parseAnd"];
     "src\\parser\\expressions.ts::parseComparison" [label="parseComparison"];
     "src\\parser\\expressions.ts::parseAddition" [label="parseAddition"];
+    "src\\parser\\expressions.ts::parseMultiplication" [label="parseMultiplication"];
     "src\\parser\\expressions.ts::parseOperand" [label="parseOperand"];
   }
   subgraph "cluster_src_parser_index_ts" {
@@ -129,9 +130,12 @@ digraph tuff {
   "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\expressions.ts::parseAddition";
   "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\types.ts::peek";
   "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\expressions.ts::parseOperand";
+  "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\expressions.ts::parseMultiplication";
   "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\types.ts::peek";
   "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\types.ts::advance";
+  "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\expressions.ts::parseOperand";
+  "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\types.ts::peek";
+  "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\types.ts::advance";
   "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\types.ts::peek";
   "src\\parser\\expressions.ts::parseOperand" -> "src\\errors.ts::fail";
   "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\types.ts::advance";

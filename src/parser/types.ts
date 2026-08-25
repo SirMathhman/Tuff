@@ -4,7 +4,11 @@ export type Expr =
   | { literal: number | boolean; position: number }
   | { identifier: string; position: number }
   | {
-      binary: { op: "||" | "&&" | "<" | "==" | "+" | "-"; left: Expr; right: Expr };
+      binary: {
+        op: "||" | "&&" | "<" | "==" | "+" | "-" | "*";
+        left: Expr;
+        right: Expr;
+      };
       position: number;
     };
 

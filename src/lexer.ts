@@ -61,7 +61,7 @@ export function tokenize(input: string): Result<Token[]> {
     } else if (ch === "+" && input.charAt(i + 1) === "=") {
       tokens.push({ value: "+=", kind: "punctuation", position: i });
       i += 2;
-    } else if (ch === "+" || ch === "-") {
+    } else if (ch === "+" || ch === "-" || ch === "*") {
       tokens.push({ value: ch, kind: "punctuation", position: i });
       i++;
     } else if (ch === "|" && input.charAt(i + 1) === "|") {
