@@ -178,10 +178,7 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
 
 type ParsedConditionBlock = { condition: Expr; body: Statement[] };
 
-function parseConditionBlock(
-  c: Cursor,
-  keyword: Token,
-): Result<ParsedConditionBlock> {
+function parseParenthesizedExpr(c: Cursor, keyword: Token): Result<Expr> {
   if (peek(c)?.value !== "(")
     return fail({
       kind: "ExpectedToken",
@@ -190,14 +187,18 @@ function parseConditionBlock(
       position: peek(c)?.position ?? keyword.position,
     });
   advance(c);
-  const condition = parseExpr(c);
-  if (!condition.ok) return condition;
+  const expr = parseExpr(c);
+  if (!expr.ok) return expr;
   if (peek(c)?.value !== ")")
     return fail({
       kind: "UnbalancedParen",
       position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
     });
   advance(c);
+  return expr;
+}
+
+function parseBlockBody(c: Cursor, keyword: Token): Result<Statement[]> {
   const openBrace = expectOpenBrace(c, keyword);
   if (!openBrace.ok) return openBrace;
   const body = parseStatements(c);
@@ -207,9 +208,20 @@ function parseConditionBlock(
       kind: "UnbalancedBrace",
       position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
     });
+  return { ok: true, value: body.value.statements };
+}
+
+function parseConditionBlock(
+  c: Cursor,
+  keyword: Token,
+): Result<ParsedConditionBlock> {
+  const condition = parseParenthesizedExpr(c, keyword);
+  if (!condition.ok) return condition;
+  const body = parseBlockBody(c, keyword);
+  if (!body.ok) return body;
   return {
     ok: true,
-    value: { condition: condition.value, body: body.value.statements },
+    value: { condition: condition.value, body: body.value },
   };
 }
 
@@ -289,22 +301,8 @@ function parseMatchPattern(c: Cursor): Result<MatchCase["pattern"]> {
 
 function parseMatch(c: Cursor): Result<Statement> {
   const keyword = advance(c);
-  if (peek(c)?.value !== "(")
-    return fail({
-      kind: "ExpectedToken",
-      expected: "'('",
-      found: peek(c)?.value,
-      position: peek(c)?.position ?? keyword.position,
-    });
-  advance(c);
-  const scrutinee = parseExpr(c);
+  const scrutinee = parseParenthesizedExpr(c, keyword);
   if (!scrutinee.ok) return scrutinee;
-  if (peek(c)?.value !== ")")
-    return fail({
-      kind: "UnbalancedParen",
-      position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
-    });
-  advance(c);
   const openBrace = expectOpenBrace(c, keyword);
   if (!openBrace.ok) return openBrace;
   const cases: MatchCase[] = [];
@@ -327,22 +325,15 @@ function parseMatch(c: Cursor): Result<Statement> {
         position: peek(c)?.position ?? keyword.position,
       });
     advance(c);
-    const caseBrace = expectOpenBrace(c, keyword);
-    if (!caseBrace.ok) return caseBrace;
-    const body = parseStatements(c);
+    const body = parseBlockBody(c, keyword);
     if (!body.ok) return body;
-    if (!body.value.closed)
-      return fail({
-        kind: "UnbalancedBrace",
-        position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
-      });
     if (peek(c)?.value !== ";")
       return fail({
         kind: "MissingTerminator",
         position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
       });
     advance(c);
-    cases.push({ pattern: pattern.value, block: body.value.statements });
+    cases.push({ pattern: pattern.value, block: body.value });
   }
   advance(c);
   return {

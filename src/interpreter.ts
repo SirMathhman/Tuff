@@ -77,7 +77,11 @@ function execStatements(
         !state.returned &&
         evalExpr(item.while.condition, bindings) === true
       ) {
-        const signal = execStatements(item.while.body, new Map(bindings), state);
+        const signal = execStatements(
+          item.while.body,
+          new Map(bindings),
+          state,
+        );
         if (signal === "break") break;
         if (signal === "continue") continue;
       }
@@ -89,7 +93,11 @@ function execStatements(
             ? true
             : matchCase.pattern.value === scrutinee;
         if (matched) {
-          const signal = execStatements(matchCase.block, new Map(bindings), state);
+          const signal = execStatements(
+            matchCase.block,
+            new Map(bindings),
+            state,
+          );
           if (signal) return signal;
           break;
         }

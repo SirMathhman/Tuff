@@ -232,17 +232,25 @@ describe("evaluate", () => {
   });
 
   test("variable declared in an if body is not visible outside it", () => {
-    expectError("if (true) { let x = 1; } return x;", "UndeclaredVariable", (error) => {
-      expect(error.name).toBe("x");
-      expect(error.position).toBe(32);
-    });
+    expectError(
+      "if (true) { let x = 1; } return x;",
+      "UndeclaredVariable",
+      (error) => {
+        expect(error.name).toBe("x");
+        expect(error.position).toBe(32);
+      },
+    );
   });
 
   test("variable declared in a while body is not visible outside it", () => {
-    expectError("while (false) { let y = 2; } return y;", "UndeclaredVariable", (error) => {
-      expect(error.name).toBe("y");
-      expect(error.position).toBe(36);
-    });
+    expectError(
+      "while (false) { let y = 2; } return y;",
+      "UndeclaredVariable",
+      (error) => {
+        expect(error.name).toBe("y");
+        expect(error.position).toBe(36);
+      },
+    );
   });
 
   test("variable declared in a match case body is not visible outside it", () => {
