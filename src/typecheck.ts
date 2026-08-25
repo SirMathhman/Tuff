@@ -1,6 +1,6 @@
 import type { Result } from "./errors.ts";
 import { fail } from "./errors.ts";
-import type { Expr, Statement } from "./parser.ts";
+import type { Expr, Statement } from "./parser/index.ts";
 
 type ValueType = "number" | "boolean";
 

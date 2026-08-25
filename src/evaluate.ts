@@ -1,7 +1,7 @@
 import type { Result } from "./errors.ts";
 import { interpret } from "./interpreter.ts";
 import { tokenize } from "./lexer.ts";
-import { groupStatements } from "./parser.ts";
+import { groupStatements } from "./parser/index.ts";
 import { typecheck } from "./typecheck.ts";
 
 export function evaluate(input: string): Result<number> {

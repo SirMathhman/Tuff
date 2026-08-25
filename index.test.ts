@@ -143,14 +143,17 @@ describe("evaluate", () => {
   test.each([
     ["let mut x = 0; x = true;", 15],
     ["if (false) { let mut x = 0; x = true; }", 28],
-  ])("type mismatch yields TypeMismatch with position (%s)", (input, position) => {
-    expectError(input, "TypeMismatch", (error) => {
-      expect(error.name).toBe("x");
-      expect(error.expected).toBe("number");
-      expect(error.found).toBe("boolean");
-      expect(error.position).toBe(position);
-    });
-  });
+  ])(
+    "type mismatch yields TypeMismatch with position (%s)",
+    (input, position) => {
+      expectError(input, "TypeMismatch", (error) => {
+        expect(error.name).toBe("x");
+        expect(error.expected).toBe("number");
+        expect(error.found).toBe("boolean");
+        expect(error.position).toBe(position);
+      });
+    },
+  );
 
   test("undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
     expectError("if (false) { let x = y; }", "UndeclaredVariable", (error) => {

@@ -1,73 +1,12 @@
-import type { Result } from "./errors.ts";
-import { fail } from "./errors.ts";
-import type { Token } from "./lexer.ts";
-
-export type Expr =
-  | { literal: number | boolean; position: number }
-  | { identifier: string; position: number }
-  | {
-      binary: { op: "||" | "&&" | "<" | "=="; left: Expr; right: Expr };
-      position: number;
-    };
-
-export type IfStatement = {
-  condition: Expr;
-  thenBlock: Statement[];
-  elseBlock?: Statement[];
-};
-
-export type WhileStatement = { condition: Expr; body: Statement[] };
-
-export type Declaration = {
-  name: string;
-  mutable: boolean;
-  expr: Expr;
-  position: number;
-};
-
-export type Assignment = {
-  name: string;
-  op: "=" | "+=";
-  expr: Expr;
-  position: number;
-};
-
-export type Return = { expr: Expr; position: number };
-
-export type Statement =
-  | { block: Statement[]; position: number }
-  | { declaration: Declaration; position: number }
-  | { assignment: Assignment; position: number }
-  | { return: Return; position: number }
-  | { if: IfStatement; position: number }
-  | { while: WhileStatement; position: number };
-
-const NAME_KEYWORDS = [
-  "let",
-  "mut",
-  "return",
-  "true",
-  "false",
-  "if",
-  "else",
-  "while",
-];
-
-type Cursor = { tokens: Token[]; i: number };
-
-function peek(c: Cursor): Token | undefined {
-  return c.tokens[c.i];
-}
-
-function advance(c: Cursor): Token {
-  const t = c.tokens[c.i]!;
-  c.i++;
-  return t;
-}
+import type { Result } from "../errors.ts";
+import { fail } from "../errors.ts";
+import { parseExpr } from "./expressions.ts";
+import { advance, NAME_KEYWORDS, peek } from "./types.ts";
+import type { Cursor, Expr, Statement, Token } from "./types.ts";
 
 type ParsedStatements = { statements: Statement[]; closed: boolean };
 
-function parseStatements(c: Cursor): Result<ParsedStatements> {
+export function parseStatements(c: Cursor): Result<ParsedStatements> {
   const statements: Statement[] = [];
   while (c.i < c.tokens.length) {
     const token = c.tokens[c.i]!;
@@ -218,99 +157,6 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
   };
 }
 
-function parseOperand(c: Cursor): Result<Expr> {
-  const token = peek(c);
-  if (!token) return fail({ kind: "UnsupportedExpression", position: 0 });
-  if (token.kind === "number") {
-    advance(c);
-    return {
-      ok: true,
-      value: { literal: Number(token.value), position: token.position },
-    };
-  }
-  if (token.kind === "keyword") {
-    if (token.value === "true") {
-      advance(c);
-      return { ok: true, value: { literal: true, position: token.position } };
-    }
-    if (token.value === "false") {
-      advance(c);
-      return { ok: true, value: { literal: false, position: token.position } };
-    }
-    return fail({ kind: "UnsupportedExpression", position: token.position });
-  }
-  if (token.kind === "identifier") {
-    advance(c);
-    return {
-      ok: true,
-      value: { identifier: token.value, position: token.position },
-    };
-  }
-  return fail({ kind: "UnsupportedExpression", position: token.position });
-}
-
-function parseExpr(c: Cursor): Result<Expr> {
-  return parseOr(c);
-}
-
-function parseOr(c: Cursor): Result<Expr> {
-  let left = parseAnd(c);
-  if (!left.ok) return left;
-  while (peek(c)?.value === "||") {
-    advance(c);
-    const right = parseAnd(c);
-    if (!right.ok) return right;
-    left = {
-      ok: true,
-      value: {
-        binary: { op: "||", left: left.value, right: right.value },
-        position: left.value.position,
-      },
-    };
-  }
-  return left;
-}
-
-function parseAnd(c: Cursor): Result<Expr> {
-  let left = parseComparison(c);
-  if (!left.ok) return left;
-  while (peek(c)?.value === "&&") {
-    advance(c);
-    const right = parseComparison(c);
-    if (!right.ok) return right;
-    left = {
-      ok: true,
-      value: {
-        binary: { op: "&&", left: left.value, right: right.value },
-        position: left.value.position,
-      },
-    };
-  }
-  return left;
-}
-
-function parseComparison(c: Cursor): Result<Expr> {
-  let left = parseOperand(c);
-  if (!left.ok) return left;
-  while (peek(c)?.value === "<" || peek(c)?.value === "==") {
-    const op = advance(c);
-    const right = parseOperand(c);
-    if (!right.ok) return right;
-    left = {
-      ok: true,
-      value: {
-        binary: {
-          op: op.value as "<" | "==",
-          left: left.value,
-          right: right.value,
-        },
-        position: left.value.position,
-      },
-    };
-  }
-  return left;
-}
-
 type ParsedConditionBlock = { condition: Expr; body: Statement[] };
 
 function parseConditionBlock(
@@ -385,11 +231,4 @@ function parseWhile(c: Cursor): Result<Statement> {
     ok: true,
     value: { while: { condition, body }, position: keyword.position },
   };
-}
-
-export function groupStatements(tokens: Token[]): Result<Statement[]> {
-  const c: Cursor = { tokens, i: 0 };
-  const result = parseStatements(c);
-  if (!result.ok) return result;
-  return { ok: true, value: result.value.statements };
 }
