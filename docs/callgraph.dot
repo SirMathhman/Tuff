@@ -3,6 +3,12 @@ digraph tuff {
   splines=ortho;
   node [shape=box, style="rounded,filled", fillcolor="#eef2ff", fontname="Consolas"];
   edge [color="#64748b"];
+  subgraph "cluster_dir_src" {
+    style="rounded";
+    color="#64748b";
+    fontname="Consolas";
+    fontsize=13;
+    label="src";
   subgraph "cluster_src_errors_ts" {
     style="rounded";
     color="#94a3b8";
@@ -39,6 +45,25 @@ digraph tuff {
     label="src\\lexer.ts";
     "src\\lexer.ts::tokenize" [label="tokenize"];
   }
+  subgraph "cluster_src_typecheck_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\typecheck.ts";
+    "src\\typecheck.ts::literalType" [label="literalType"];
+    "src\\typecheck.ts::checkExpr" [label="checkExpr"];
+    "src\\typecheck.ts::exprType" [label="exprType"];
+    "src\\typecheck.ts::checkStatements" [label="checkStatements"];
+    "src\\typecheck.ts::typecheck" [label="typecheck"];
+  }
+  }
+  subgraph "cluster_dir_src_parser" {
+    style="rounded";
+    color="#64748b";
+    fontname="Consolas";
+    fontsize=13;
+    label="src/parser";
   subgraph "cluster_src_parser_expressions_ts" {
     style="rounded";
     color="#94a3b8";
@@ -82,17 +107,6 @@ digraph tuff {
     "src\\parser\\types.ts::peek" [label="peek"];
     "src\\parser\\types.ts::advance" [label="advance"];
   }
-  subgraph "cluster_src_typecheck_ts" {
-    style="rounded";
-    color="#94a3b8";
-    fontname="Consolas";
-    fontsize=12;
-    label="src\\typecheck.ts";
-    "src\\typecheck.ts::literalType" [label="literalType"];
-    "src\\typecheck.ts::checkExpr" [label="checkExpr"];
-    "src\\typecheck.ts::exprType" [label="exprType"];
-    "src\\typecheck.ts::checkStatements" [label="checkStatements"];
-    "src\\typecheck.ts::typecheck" [label="typecheck"];
   }
   "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize";
   "src\\evaluate.ts::evaluate" -> "src\\parser\\index.ts::groupStatements";

@@ -91,18 +91,48 @@ for (const id of calls.keys()) {
   byFile.set(file, list);
 }
 
-for (const [file, ids] of [...byFile.entries()].sort()) {
+// Group files by directory so multi-file directories get their own box.
+const byDir = new Map<string, string[]>();
+for (const file of byFile.keys()) {
+  const normalized = file.replace(/\\/g, "/");
+  const dir = normalized.includes("/")
+    ? normalized.slice(0, normalized.lastIndexOf("/"))
+    : ".";
+  const list = byDir.get(dir) ?? [];
+  list.push(file);
+  byDir.set(dir, list);
+}
+
+function fileCluster(file: string, ids: string[]): string[] {
   const cluster = `cluster_${file.replace(/[^a-zA-Z0-9]+/g, "_")}`;
-  lines.push(`  subgraph "${cluster}" {`);
-  lines.push(`    style="rounded";`);
-  lines.push(`    color="#94a3b8";`);
-  lines.push(`    fontname="Consolas";`);
-  lines.push(`    fontsize=12;`);
-  lines.push(`    label="${esc(file)}";`);
+  const out = [`  subgraph "${cluster}" {`];
+  out.push(`    style="rounded";`);
+  out.push(`    color="#94a3b8";`);
+  out.push(`    fontname="Consolas";`);
+  out.push(`    fontsize=12;`);
+  out.push(`    label="${esc(file)}";`);
   for (const id of ids) {
     const name = id.split("::")[1]!;
-    lines.push(`    "${esc(id)}" [label="${esc(name)}"];`);
+    out.push(`    "${esc(id)}" [label="${esc(name)}"];`);
   }
+  out.push("  }");
+  return out;
+}
+
+for (const [dir, files] of [...byDir.entries()].sort()) {
+  if (files.length < 2) {
+    for (const file of files)
+      lines.push(...fileCluster(file, byFile.get(file)!));
+    continue;
+  }
+  const cluster = `cluster_dir_${dir.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+  lines.push(`  subgraph "${cluster}" {`);
+  lines.push(`    style="rounded";`);
+  lines.push(`    color="#64748b";`);
+  lines.push(`    fontname="Consolas";`);
+  lines.push(`    fontsize=13;`);
+  lines.push(`    label="${esc(dir)}";`);
+  for (const file of files) lines.push(...fileCluster(file, byFile.get(file)!));
   lines.push("  }");
 }
 

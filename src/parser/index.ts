@@ -1,7 +1,7 @@
 import type { Result } from "../errors.ts";
 import type { Token } from "../lexer.ts";
 import { parseStatements } from "./statements.ts";
-import type { Cursor } from "./types.ts";
+import type { Cursor, Statement } from "./types.ts";
 
 export type {
   Assignment,

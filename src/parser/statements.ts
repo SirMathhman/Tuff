@@ -1,8 +1,9 @@
 import type { Result } from "../errors.ts";
 import { fail } from "../errors.ts";
+import type { Token } from "../lexer.ts";
 import { parseExpr } from "./expressions.ts";
 import { advance, NAME_KEYWORDS, peek } from "./types.ts";
-import type { Cursor, Expr, Statement, Token } from "./types.ts";
+import type { Cursor, Expr, Statement } from "./types.ts";
 
 type ParsedStatements = { statements: Statement[]; closed: boolean };
 

@@ -18,7 +18,7 @@ function expectError<K extends EvaluateError["kind"]>(
   if (!result.ok) {
     expect(result.error.kind).toBe(kind);
     if (result.error.kind === kind) {
-      assert(result.error);
+      assert(result.error as Extract<EvaluateError, { kind: K }>);
     }
   }
 }
