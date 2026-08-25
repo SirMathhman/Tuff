@@ -231,6 +231,31 @@ describe("evaluate", () => {
     });
   });
 
+  test("variable declared in an if body is not visible outside it", () => {
+    expectError("if (true) { let x = 1; } return x;", "UndeclaredVariable", (error) => {
+      expect(error.name).toBe("x");
+      expect(error.position).toBe(32);
+    });
+  });
+
+  test("variable declared in a while body is not visible outside it", () => {
+    expectError("while (false) { let y = 2; } return y;", "UndeclaredVariable", (error) => {
+      expect(error.name).toBe("y");
+      expect(error.position).toBe(36);
+    });
+  });
+
+  test("variable declared in a match case body is not visible outside it", () => {
+    expectError(
+      "match (1) { case 1 => { let z = 3; }; } return z;",
+      "UndeclaredVariable",
+      (error) => {
+        expect(error.name).toBe("z");
+        expect(error.position).toBe(47);
+      },
+    );
+  });
+
   test("undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
     expectError("if (false) { let x = y; }", "UndeclaredVariable", (error) => {
       expect(error.name).toBe("y");

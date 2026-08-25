@@ -96,22 +96,22 @@ function checkStatements(statements: Statement[], env: Env): Result<unknown> {
     } else if ("if" in item) {
       const condition = checkExpr(item.if.condition, env);
       if (!condition.ok) return condition;
-      const then = checkStatements(item.if.thenBlock, env);
+      const then = checkStatements(item.if.thenBlock, new Map(env));
       if (!then.ok) return then;
       if (item.if.elseBlock) {
-        const els = checkStatements(item.if.elseBlock, env);
+        const els = checkStatements(item.if.elseBlock, new Map(env));
         if (!els.ok) return els;
       }
     } else if ("while" in item) {
       const condition = checkExpr(item.while.condition, env);
       if (!condition.ok) return condition;
-      const result = checkStatements(item.while.body, env);
+      const result = checkStatements(item.while.body, new Map(env));
       if (!result.ok) return result;
     } else if ("match" in item) {
       const scrutinee = checkExpr(item.match.scrutinee, env);
       if (!scrutinee.ok) return scrutinee;
       for (const matchCase of item.match.cases) {
-        const result = checkStatements(matchCase.block, env);
+        const result = checkStatements(matchCase.block, new Map(env));
         if (!result.ok) return result;
       }
     }

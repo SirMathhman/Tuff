@@ -69,7 +69,7 @@ function execStatements(
       const condition = evalExpr(item.if.condition, bindings);
       const branch = condition === true ? item.if.thenBlock : item.if.elseBlock;
       if (branch) {
-        const signal = execStatements(branch, bindings, state);
+        const signal = execStatements(branch, new Map(bindings), state);
         if (signal) return signal;
       }
     } else if ("while" in item) {
@@ -77,7 +77,7 @@ function execStatements(
         !state.returned &&
         evalExpr(item.while.condition, bindings) === true
       ) {
-        const signal = execStatements(item.while.body, bindings, state);
+        const signal = execStatements(item.while.body, new Map(bindings), state);
         if (signal === "break") break;
         if (signal === "continue") continue;
       }
@@ -89,7 +89,7 @@ function execStatements(
             ? true
             : matchCase.pattern.value === scrutinee;
         if (matched) {
-          const signal = execStatements(matchCase.block, bindings, state);
+          const signal = execStatements(matchCase.block, new Map(bindings), state);
           if (signal) return signal;
           break;
         }
