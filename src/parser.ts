@@ -136,9 +136,7 @@ function parseError(message: string, position: number): TuffError {
  * @param input - The source text.
  * @returns The tokens, or a structured parse error.
  */
-function tokenize(
-  input: string,
-): TokenizeOk | ParseErr {
+function tokenize(input: string): TokenizeOk | ParseErr {
   const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {
@@ -183,192 +181,215 @@ function tokenize(
 }
 
 /**
- * Recursive-descent parser over a token list.
+ * Mutable parser state: the token list and the current cursor.
  */
-class Parser {
-  private idx = 0;
+interface ParserState {
+  tokens: Token[];
+  idx: number;
+}
 
-  constructor(private readonly tokens: Token[]) {}
+/**
+ * Peek at the current token without advancing.
+ *
+ * @param state - The parser state.
+ * @returns The current token.
+ */
+function peek(state: ParserState): Token {
+  return state.tokens[state.idx] as Token;
+}
 
-  /**
-   * Parse the full program: statements separated by `;`.
-   *
-   * @returns The program, or a structured parse error.
-   */
-  parseProgram(): ParseResult {
-    const stmts: Stmt[] = [];
-    while (!this.atEnd()) {
-      const t = this.peek();
-      if (t.value === ";") {
-        this.next();
-        continue;
-      }
-      const r = this.parseStmt();
-      if (!r.ok) return r;
-      stmts.push(r.stmt);
-      if (!this.atEnd()) {
-        const sep = this.next();
-        if (sep.value !== ";") {
-          return {
-            ok: false,
-            error: parseError("Expected ';' after statement", sep.pos),
-          };
-        }
+/**
+ * Consume and return the current token.
+ *
+ * @param state - The parser state.
+ * @returns The consumed token.
+ */
+function next(state: ParserState): Token {
+  const t = state.tokens[state.idx] as Token;
+  state.idx++;
+  return t;
+}
+
+/**
+ * Whether the cursor has reached the end of the token list.
+ *
+ * @param state - The parser state.
+ * @returns True when no tokens remain.
+ */
+function atEnd(state: ParserState): boolean {
+  return state.idx >= state.tokens.length;
+}
+
+/**
+ * Parse the full program: statements separated by `;`.
+ *
+ * @param state - The parser state.
+ * @returns The program, or a structured parse error.
+ */
+function parseProgram(state: ParserState): ParseResult {
+  const stmts: Stmt[] = [];
+  while (!atEnd(state)) {
+    const t = peek(state);
+    if (t.value === ";") {
+      next(state);
+      continue;
+    }
+    const r = parseStmt(state);
+    if (!r.ok) return r;
+    stmts.push(r.stmt);
+    if (!atEnd(state)) {
+      const sep = next(state);
+      if (sep.value !== ";") {
+        return {
+          ok: false,
+          error: parseError("Expected ';' after statement", sep.pos),
+        };
       }
     }
-    return { ok: true, program: { stmts } };
   }
+  return { ok: true, program: { stmts } };
+}
 
-  /**
-   * Parse a single statement.
-   *
-   * @returns The statement, or a structured parse error.
-   */
-  private parseStmt(): ParseStmtOk | ParseErr {
-    const t = this.peek();
-    if (t.kind === "keyword" && t.value === "let") {
-      return this.parseLetDecl();
-    }
-    if (t.kind === "keyword" && t.value === "return") {
-      return this.parseReturn();
-    }
-    if (t.kind === "ident") {
-      return this.parseAssign();
-    }
+/**
+ * Parse a single statement.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseStmt(state: ParserState): ParseStmtOk | ParseErr {
+  const t = peek(state);
+  if (t.kind === "keyword" && t.value === "let") {
+    return parseLetDecl(state);
+  }
+  if (t.kind === "keyword" && t.value === "return") {
+    return parseReturn(state);
+  }
+  if (t.kind === "ident") {
+    return parseAssign(state);
+  }
+  return {
+    ok: false,
+    error: parseError(`Unexpected token: ${t.value}`, t.pos),
+  };
+}
+
+/**
+ * Parse a `let` (optionally `mut`) declaration.
+ *
+ * @param state - The parser state.
+ * @returns The declaration, or a structured parse error.
+ */
+function parseLetDecl(state: ParserState): ParseStmtOk | ParseErr {
+  next(state);
+  let mutable = false;
+  const maybeMut = peek(state);
+  if (maybeMut.kind === "keyword" && maybeMut.value === "mut") {
+    next(state);
+    mutable = true;
+  }
+  const nameTok = next(state);
+  if (nameTok?.kind !== "ident") {
     return {
       ok: false,
-      error: parseError(`Unexpected token: ${t.value}`, t.pos),
+      error: parseError(
+        "Expected variable name after 'let'",
+        nameTok?.pos ?? 0,
+      ),
     };
   }
-
-  /**
-   * Parse a `let` (optionally `mut`) declaration.
-   *
-   * @returns The declaration, or a structured parse error.
-   */
-  private parseLetDecl(): ParseStmtOk | ParseErr {
-    this.next();
-    let mutable = false;
-    const maybeMut = this.peek();
-    if (maybeMut.kind === "keyword" && maybeMut.value === "mut") {
-      this.next();
-      mutable = true;
-    }
-    const nameTok = this.next();
-    if (nameTok?.kind !== "ident") {
-      return {
-        ok: false,
-        error: parseError(
-          "Expected variable name after 'let'",
-          nameTok?.pos ?? 0,
-        ),
-      };
-    }
-    const eq = this.next();
-    if (eq?.value !== "=") {
-      return {
-        ok: false,
-        error: parseError(
-          "Expected '=' after variable name",
-          eq?.pos ?? nameTok.pos,
-        ),
-      };
-    }
-    const value = this.parseExpr();
-    if (!value.ok) return value;
-    return {
-      ok: true,
-      stmt: {
-        type: "LetDecl",
-        mutable,
-        name: nameTok.value,
-        value: value.expr,
-      },
-    };
-  }
-
-  /**
-   * Parse a `return` statement.
-   *
-   * @returns The statement, or a structured parse error.
-   */
-  private parseReturn(): ParseStmtOk | ParseErr {
-    this.next();
-    const value = this.parseExpr();
-    if (!value.ok) return value;
-    return { ok: true, stmt: { type: "Return", value: value.expr } };
-  }
-
-  /**
-   * Parse an assignment statement.
-   *
-   * @returns The statement, or a structured parse error.
-   */
-  private parseAssign(): ParseStmtOk | ParseErr {
-    const nameTok = this.next();
-    const eq = this.next();
-    if (eq?.value !== "=") {
-      return {
-        ok: false,
-        error: parseError(
-          "Expected '=' after identifier",
-          eq?.pos ?? nameTok.pos,
-        ),
-      };
-    }
-    const value = this.parseExpr();
-    if (!value.ok) return value;
-    return {
-      ok: true,
-      stmt: {
-        type: "Assign",
-        name: nameTok.value,
-        value: value.expr,
-        pos: nameTok.pos,
-      },
-    };
-  }
-
-  /**
-   * Parse an expression: a number literal or an identifier.
-   *
-   * @returns The expression, or a structured parse error.
-   */
-  private parseExpr(): ParseExprOk | ParseErr {
-    const t = this.peek();
-    if (t.kind === "number") {
-      this.next();
-      return {
-        ok: true,
-        expr: { type: "Number", value: Number(t.value), pos: t.pos },
-      };
-    }
-    if (t.kind === "ident") {
-      this.next();
-      return {
-        ok: true,
-        expr: { type: "Identifier", name: t.value, pos: t.pos },
-      };
-    }
+  const eq = next(state);
+  if (eq?.value !== "=") {
     return {
       ok: false,
-      error: parseError(`Expected expression, got: ${t.value}`, t.pos),
+      error: parseError(
+        "Expected '=' after variable name",
+        eq?.pos ?? nameTok.pos,
+      ),
     };
   }
+  const value = parseExpr(state);
+  if (!value.ok) return value;
+  return {
+    ok: true,
+    stmt: {
+      type: "LetDecl",
+      mutable,
+      name: nameTok.value,
+      value: value.expr,
+    },
+  };
+}
 
-  private peek(): Token {
-    return this.tokens[this.idx] as Token;
-  }
+/**
+ * Parse a `return` statement.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseReturn(state: ParserState): ParseStmtOk | ParseErr {
+  next(state);
+  const value = parseExpr(state);
+  if (!value.ok) return value;
+  return { ok: true, stmt: { type: "Return", value: value.expr } };
+}
 
-  private next(): Token {
-    const t = this.tokens[this.idx] as Token;
-    this.idx++;
-    return t;
+/**
+ * Parse an assignment statement.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseAssign(state: ParserState): ParseStmtOk | ParseErr {
+  const nameTok = next(state);
+  const eq = next(state);
+  if (eq?.value !== "=") {
+    return {
+      ok: false,
+      error: parseError(
+        "Expected '=' after identifier",
+        eq?.pos ?? nameTok.pos,
+      ),
+    };
   }
+  const value = parseExpr(state);
+  if (!value.ok) return value;
+  return {
+    ok: true,
+    stmt: {
+      type: "Assign",
+      name: nameTok.value,
+      value: value.expr,
+      pos: nameTok.pos,
+    },
+  };
+}
 
-  private atEnd(): boolean {
-    return this.idx >= this.tokens.length;
+/**
+ * Parse an expression: a number literal or an identifier.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseExpr(state: ParserState): ParseExprOk | ParseErr {
+  const t = peek(state);
+  if (t.kind === "number") {
+    next(state);
+    return {
+      ok: true,
+      expr: { type: "Number", value: Number(t.value), pos: t.pos },
+    };
   }
+  if (t.kind === "ident") {
+    next(state);
+    return {
+      ok: true,
+      expr: { type: "Identifier", name: t.value, pos: t.pos },
+    };
+  }
+  return {
+    ok: false,
+    error: parseError(`Expected expression, got: ${t.value}`, t.pos),
+  };
 }
 
 /**
@@ -380,5 +401,5 @@ class Parser {
 export function parse(input: string): ParseResult {
   const tok = tokenize(input);
   if (!tok.ok) return tok;
-  return new Parser(tok.tokens).parseProgram();
+  return parseProgram({ tokens: tok.tokens, idx: 0 });
 }
