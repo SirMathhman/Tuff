@@ -107,6 +107,15 @@ function checkStatements(statements: Statement[], env: Env): Result<unknown> {
       if (!condition.ok) return condition;
       const result = checkStatements(item.while.body, new Map(env));
       if (!result.ok) return result;
+    } else if ("for" in item) {
+      const start = checkExpr(item.for.range.start, env);
+      if (!start.ok) return start;
+      const end = checkExpr(item.for.range.end, env);
+      if (!end.ok) return end;
+      const loopEnv = new Map(env);
+      loopEnv.set(item.for.variable, { type: "number", mutable: true });
+      const result = checkStatements(item.for.body, loopEnv);
+      if (!result.ok) return result;
     } else if ("match" in item) {
       const scrutinee = checkExpr(item.match.scrutinee, env);
       if (!scrutinee.ok) return scrutinee;

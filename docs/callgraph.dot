@@ -99,6 +99,7 @@ digraph tuff {
     "src\\parser\\statements.ts::parseConditionBlock" [label="parseConditionBlock"];
     "src\\parser\\statements.ts::parseIf" [label="parseIf"];
     "src\\parser\\statements.ts::parseWhile" [label="parseWhile"];
+    "src\\parser\\statements.ts::parseFor" [label="parseFor"];
     "src\\parser\\statements.ts::parseMatchPattern" [label="parseMatchPattern"];
     "src\\parser\\statements.ts::parseMatch" [label="parseMatch"];
   }
@@ -150,6 +151,7 @@ digraph tuff {
   "src\\parser\\statements.ts::parseStatements" -> "src\\errors.ts::fail";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseIf";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseWhile";
+  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseFor";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseMatch";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parsePlainStatement";
   "src\\parser\\statements.ts::parseExprAndSemicolon" -> "src\\parser\\expressions.ts::parseExpr";
@@ -180,6 +182,11 @@ digraph tuff {
   "src\\parser\\statements.ts::parseIf" -> "src\\errors.ts::fail";
   "src\\parser\\statements.ts::parseWhile" -> "src\\parser\\types.ts::advance";
   "src\\parser\\statements.ts::parseWhile" -> "src\\parser\\statements.ts::parseConditionBlock";
+  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\types.ts::advance";
+  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\types.ts::peek";
+  "src\\parser\\statements.ts::parseFor" -> "src\\errors.ts::fail";
+  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\expressions.ts::parseExpr";
+  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\statements.ts::parseBlockBody";
   "src\\parser\\statements.ts::parseMatchPattern" -> "src\\parser\\types.ts::peek";
   "src\\parser\\statements.ts::parseMatchPattern" -> "src\\errors.ts::fail";
   "src\\parser\\statements.ts::parseMatchPattern" -> "src\\parser\\types.ts::advance";

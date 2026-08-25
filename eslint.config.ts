@@ -21,6 +21,14 @@ export default defineConfig([
           skipComments: true,
         },
       ],
+      "max-lines-per-function": [
+        "warn",
+        {
+          max: 100,
+          skipBlankLines: true,
+          skipComments: true,
+        },
+      ],
       "jsdoc/check-syntax": "error",
     },
   },

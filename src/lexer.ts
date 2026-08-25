@@ -18,6 +18,8 @@ const KEYWORDS = new Set([
   "continue",
   "match",
   "case",
+  "for",
+  "in",
 ]);
 
 export function tokenize(input: string): Result<Token[]> {
@@ -36,7 +38,10 @@ export function tokenize(input: string): Result<Token[]> {
       i = j;
     } else if (/[0-9]/.test(ch)) {
       let j = i;
-      while (j < input.length && /[\d.]/.test(input.charAt(j))) j++;
+      while (j < input.length && /[\d.]/.test(input.charAt(j))) {
+        if (input.charAt(j) === "." && input.charAt(j + 1) === ".") break;
+        j++;
+      }
       const value = input.slice(i, j);
       if (!/^\d+(\.\d+)?$/.test(value))
         return fail({
@@ -46,6 +51,9 @@ export function tokenize(input: string): Result<Token[]> {
         });
       tokens.push({ value, kind: "number", position: i });
       i = j;
+    } else if (ch === "." && input.charAt(i + 1) === ".") {
+      tokens.push({ value: "..", kind: "punctuation", position: i });
+      i += 2;
     } else if (ch === "=" && input.charAt(i + 1) === "=") {
       tokens.push({ value: "==", kind: "punctuation", position: i });
       i += 2;

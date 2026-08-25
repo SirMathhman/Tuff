@@ -21,6 +21,12 @@ export type IfStatement = {
 
 export type WhileStatement = { condition: Expr; body: Statement[] };
 
+export type ForStatement = {
+  variable: string;
+  range: { start: Expr; end: Expr };
+  body: Statement[];
+};
+
 export type MatchCase = {
   pattern: { kind: "literal"; value: number | boolean } | { kind: "wildcard" };
   block: Statement[];
@@ -51,6 +57,7 @@ export type Statement =
   | { return: Return; position: number }
   | { if: IfStatement; position: number }
   | { while: WhileStatement; position: number }
+  | { for: ForStatement; position: number }
   | { match: MatchStatement; position: number }
   | { break: { position: number }; position: number }
   | { continue: { position: number }; position: number };
@@ -68,6 +75,8 @@ export const NAME_KEYWORDS = [
   "continue",
   "match",
   "case",
+  "for",
+  "in",
 ];
 
 export type Cursor = { tokens: Token[]; i: number };

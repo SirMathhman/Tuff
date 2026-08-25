@@ -42,6 +42,12 @@ export function parseStatements(c: Cursor): Result<ParsedStatements> {
       statements.push(parsed.value);
       continue;
     }
+    if (token.value === "for") {
+      const parsed = parseFor(c);
+      if (!parsed.ok) return parsed;
+      statements.push(parsed.value);
+      continue;
+    }
     if (token.value === "match") {
       const parsed = parseMatch(c);
       if (!parsed.ok) return parsed;
@@ -261,6 +267,66 @@ function parseWhile(c: Cursor): Result<Statement> {
   return {
     ok: true,
     value: { while: { condition, body }, position: keyword.position },
+  };
+}
+
+function parseFor(c: Cursor): Result<Statement> {
+  const keyword = advance(c);
+  if (peek(c)?.value !== "(")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'('",
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? keyword.position,
+    });
+  advance(c);
+  const nameToken = peek(c);
+  if (!nameToken || nameToken.kind !== "identifier")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "variable name",
+      found: nameToken?.value,
+      position: nameToken?.position ?? keyword.position,
+    });
+  advance(c);
+  if (peek(c)?.value !== "in")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'in'",
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? keyword.position,
+    });
+  advance(c);
+  const start = parseExpr(c);
+  if (!start.ok) return start;
+  if (peek(c)?.value !== "..")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'..'",
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? keyword.position,
+    });
+  advance(c);
+  const end = parseExpr(c);
+  if (!end.ok) return end;
+  if (peek(c)?.value !== ")")
+    return fail({
+      kind: "UnbalancedParen",
+      position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
+    });
+  advance(c);
+  const body = parseBlockBody(c, keyword);
+  if (!body.ok) return body;
+  return {
+    ok: true,
+    value: {
+      for: {
+        variable: nameToken.value,
+        range: { start: start.value, end: end.value },
+        body: body.value,
+      },
+      position: keyword.position,
+    },
   };
 }
 

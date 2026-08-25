@@ -85,6 +85,17 @@ function execStatements(
         if (signal === "break") break;
         if (signal === "continue") continue;
       }
+    } else if ("for" in item) {
+      const start = evalExpr(item.for.range.start, bindings);
+      const end = evalExpr(item.for.range.end, bindings);
+      for (let i = start as number; i < (end as number); i++) {
+        if (state.returned) break;
+        const loopBindings = new Map(bindings);
+        loopBindings.set(item.for.variable, { value: i });
+        const signal = execStatements(item.for.body, loopBindings, state);
+        if (signal === "break") break;
+        if (signal === "continue") continue;
+      }
     } else if ("match" in item) {
       const scrutinee = evalExpr(item.match.scrutinee, bindings);
       for (const matchCase of item.match.cases) {
