@@ -12,6 +12,7 @@ export const EvaluateErrorKind = {
   UnbalancedBrace: "UnbalancedBrace",
   UnbalancedParen: "UnbalancedParen",
   InvalidNumberLiteral: "InvalidNumberLiteral",
+  TypeMismatch: "TypeMismatch",
 } as const;
 
 export type EvaluateErrorKind =
@@ -35,7 +36,14 @@ export type EvaluateError =
   | { kind: "ImmutableReassignment"; name: string; position: number }
   | { kind: "UnbalancedBrace"; position: number }
   | { kind: "UnbalancedParen"; position: number }
-  | { kind: "InvalidNumberLiteral"; literal: string; position: number };
+  | { kind: "InvalidNumberLiteral"; literal: string; position: number }
+  | {
+      kind: "TypeMismatch";
+      name: string;
+      expected: "number" | "boolean";
+      found: "number" | "boolean";
+      position: number;
+    };
 
 export type Result<T> =
   | { ok: true; value: T }

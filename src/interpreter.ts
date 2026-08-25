@@ -4,7 +4,13 @@ import type { Expr, Statement } from "./parser.ts";
 
 export type Value = number | boolean;
 
-type Binding = { mutable: boolean; value: Value };
+type ValueType = "number" | "boolean";
+
+function valueType(value: Value): ValueType {
+  return typeof value === "boolean" ? "boolean" : "number";
+}
+
+type Binding = { mutable: boolean; type: ValueType; value: Value };
 
 type State = { returnValue: Value | undefined; returned: boolean };
 
@@ -55,7 +61,11 @@ function execStatement(
         name,
         position: item.declaration.position,
       });
-    bindings.set(name, { mutable, value: value.value });
+    bindings.set(name, {
+      mutable,
+      type: valueType(value.value),
+      value: value.value,
+    });
   } else if ("return" in item) {
     const value = evalExpr(item.return.expr, bindings);
     if (!value.ok) return value;
@@ -86,6 +96,14 @@ function execStatement(
         });
       binding.value = binding.value + value.value;
     } else {
+      if (binding.type !== valueType(value.value))
+        return fail({
+          kind: "TypeMismatch",
+          name,
+          expected: binding.type,
+          found: valueType(value.value),
+          position: item.assignment.position,
+        });
       binding.value = value.value;
     }
   } else {

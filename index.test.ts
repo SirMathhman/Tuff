@@ -136,6 +136,20 @@ describe("evaluate", () => {
     }
   });
 
+  test("reassigning a number variable to a boolean yields TypeMismatch with position", () => {
+    const result = evaluate("let mut x = 0; x = true;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("TypeMismatch");
+      if (result.error.kind === "TypeMismatch") {
+        expect(result.error.name).toBe("x");
+        expect(result.error.expected).toBe("number");
+        expect(result.error.found).toBe("boolean");
+        expect(result.error.position).toBe(15);
+      }
+    }
+  });
+
   test("declaration without a name yields ExpectedToken with position", () => {
     const result = evaluate("let = 1;");
     expect(result.ok).toBe(false);
