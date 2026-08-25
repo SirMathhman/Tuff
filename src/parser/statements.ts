@@ -184,7 +184,7 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
 
 type ParsedConditionBlock = { condition: Expr; body: Statement[] };
 
-function parseParenthesizedExpr(c: Cursor, keyword: Token): Result<Expr> {
+function expectOpenParen(c: Cursor, keyword: Token): Result<void> {
   if (peek(c)?.value !== "(")
     return fail({
       kind: "ExpectedToken",
@@ -193,14 +193,26 @@ function parseParenthesizedExpr(c: Cursor, keyword: Token): Result<Expr> {
       position: peek(c)?.position ?? keyword.position,
     });
   advance(c);
-  const expr = parseExpr(c);
-  if (!expr.ok) return expr;
+  return { ok: true, value: undefined };
+}
+
+function expectCloseParen(c: Cursor, keyword: Token): Result<void> {
   if (peek(c)?.value !== ")")
     return fail({
       kind: "UnbalancedParen",
       position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
     });
   advance(c);
+  return { ok: true, value: undefined };
+}
+
+function parseParenthesizedExpr(c: Cursor, keyword: Token): Result<Expr> {
+  const open = expectOpenParen(c, keyword);
+  if (!open.ok) return open;
+  const expr = parseExpr(c);
+  if (!expr.ok) return expr;
+  const close = expectCloseParen(c, keyword);
+  if (!close.ok) return close;
   return expr;
 }
 
@@ -272,14 +284,8 @@ function parseWhile(c: Cursor): Result<Statement> {
 
 function parseFor(c: Cursor): Result<Statement> {
   const keyword = advance(c);
-  if (peek(c)?.value !== "(")
-    return fail({
-      kind: "ExpectedToken",
-      expected: "'('",
-      found: peek(c)?.value,
-      position: peek(c)?.position ?? keyword.position,
-    });
-  advance(c);
+  const open = expectOpenParen(c, keyword);
+  if (!open.ok) return open;
   const nameToken = peek(c);
   if (!nameToken || nameToken.kind !== "identifier")
     return fail({
@@ -309,12 +315,8 @@ function parseFor(c: Cursor): Result<Statement> {
   advance(c);
   const end = parseExpr(c);
   if (!end.ok) return end;
-  if (peek(c)?.value !== ")")
-    return fail({
-      kind: "UnbalancedParen",
-      position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
-    });
-  advance(c);
+  const close = expectCloseParen(c, keyword);
+  if (!close.ok) return close;
   const body = parseBlockBody(c, keyword);
   if (!body.ok) return body;
   return {
