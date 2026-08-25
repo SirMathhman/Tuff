@@ -18,7 +18,7 @@ describe("evaluateTuff", () => {
   test("return of unknown identifier returns Err", () => {
     expect(evaluateTuff("return unknownIdentifier;")).toEqual({
       ok: false,
-      error: "Unknown identifier: unknownIdentifier",
+      error: { type: "UnknownIdentifier", name: "unknownIdentifier" },
     });
   });
 });
