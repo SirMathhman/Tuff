@@ -8,6 +8,22 @@ function literalType(value: number | boolean): ValueType {
   return typeof value === "boolean" ? "boolean" : "number";
 }
 
+function checkExpr(expr: Expr, env: Map<string, ValueType>): Result<void> {
+  if ("literal" in expr) return { ok: true, value: undefined };
+  if ("identifier" in expr) {
+    if (!env.has(expr.identifier))
+      return fail({
+        kind: "UndeclaredVariable",
+        name: expr.identifier,
+        position: expr.position,
+      });
+    return { ok: true, value: undefined };
+  }
+  const left = checkExpr(expr.binary.left, env);
+  if (!left.ok) return left;
+  return checkExpr(expr.binary.right, env);
+}
+
 function exprType(
   expr: Expr,
   env: Map<string, ValueType>,
@@ -23,9 +39,13 @@ function checkStatements(
 ): Result<unknown> {
   for (const item of statements) {
     if ("declaration" in item) {
+      const expr = checkExpr(item.declaration.expr, env);
+      if (!expr.ok) return expr;
       const type = exprType(item.declaration.expr, env);
       if (type) env.set(item.declaration.name, type);
     } else if ("assignment" in item) {
+      const expr = checkExpr(item.assignment.expr, env);
+      if (!expr.ok) return expr;
       if (item.assignment.op === "=") {
         const known = env.get(item.assignment.name);
         const found = exprType(item.assignment.expr, env);
@@ -38,10 +58,15 @@ function checkStatements(
             position: item.assignment.position,
           });
       }
+    } else if ("return" in item) {
+      const expr = checkExpr(item.return.expr, env);
+      if (!expr.ok) return expr;
     } else if ("block" in item) {
       const result = checkStatements(item.block, env);
       if (!result.ok) return result;
     } else if ("if" in item) {
+      const condition = checkExpr(item.if.condition, env);
+      if (!condition.ok) return condition;
       const then = checkStatements(item.if.thenBlock, env);
       if (!then.ok) return then;
       if (item.if.elseBlock) {
@@ -49,6 +74,8 @@ function checkStatements(
         if (!els.ok) return els;
       }
     } else if ("while" in item) {
+      const condition = checkExpr(item.while.condition, env);
+      if (!condition.ok) return condition;
       const result = checkStatements(item.while.body, env);
       if (!result.ok) return result;
     }

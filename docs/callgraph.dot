@@ -61,8 +61,21 @@ digraph tuff {
     "src\\parser.ts::parseWhile" [label="parseWhile"];
     "src\\parser.ts::groupStatements" [label="groupStatements"];
   }
+  subgraph "cluster_src_typecheck_ts" {
+    style="rounded";
+    color="#94a3b8";
+    fontname="Consolas";
+    fontsize=12;
+    label="src\\typecheck.ts";
+    "src\\typecheck.ts::literalType" [label="literalType"];
+    "src\\typecheck.ts::checkExpr" [label="checkExpr"];
+    "src\\typecheck.ts::exprType" [label="exprType"];
+    "src\\typecheck.ts::checkStatements" [label="checkStatements"];
+    "src\\typecheck.ts::typecheck" [label="typecheck"];
+  }
   "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize";
   "src\\evaluate.ts::evaluate" -> "src\\parser.ts::groupStatements";
+  "src\\evaluate.ts::evaluate" -> "src\\typecheck.ts::typecheck";
   "src\\evaluate.ts::evaluate" -> "src\\interpreter.ts::interpret";
   "src\\interpreter.ts::evalExpr" -> "src\\errors.ts::fail";
   "src\\interpreter.ts::evalExpr" -> "src\\interpreter.ts::evalExpr";
@@ -120,4 +133,12 @@ digraph tuff {
   "src\\parser.ts::parseWhile" -> "src\\parser.ts::advance";
   "src\\parser.ts::parseWhile" -> "src\\parser.ts::parseConditionBlock";
   "src\\parser.ts::groupStatements" -> "src\\parser.ts::parseStatements";
+  "src\\typecheck.ts::checkExpr" -> "src\\errors.ts::fail";
+  "src\\typecheck.ts::checkExpr" -> "src\\typecheck.ts::checkExpr";
+  "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::literalType";
+  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkExpr";
+  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::exprType";
+  "src\\typecheck.ts::checkStatements" -> "src\\errors.ts::fail";
+  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkStatements";
+  "src\\typecheck.ts::typecheck" -> "src\\typecheck.ts::checkStatements";
 }

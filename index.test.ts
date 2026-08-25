@@ -176,6 +176,18 @@ describe("evaluate", () => {
     );
   });
 
+  test("undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
+    const result = evaluate("if (false) { let x = y; }");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("UndeclaredVariable");
+      if (result.error.kind === "UndeclaredVariable") {
+        expect(result.error.name).toBe("y");
+        expect(result.error.position).toBe(21);
+      }
+    }
+  });
+
   test("declaration without a name yields ExpectedToken with position", () => {
     const result = evaluate("let = 1;");
     expect(result.ok).toBe(false);
