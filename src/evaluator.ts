@@ -38,10 +38,7 @@ interface Binding {
  * @param vars - The current variable scope.
  * @returns The numeric value, or a structured error.
  */
-function evalExpr(
-  expr: Expr,
-  vars: Map<string, Binding>,
-): Result {
+function evalExpr(expr: Expr, vars: Map<string, Binding>): Result {
   if (expr.type === "Number") return { ok: true, value: expr.value };
   const binding = vars.get(expr.name);
   if (binding !== undefined) return { ok: true, value: binding.value };
@@ -54,9 +51,7 @@ function evalExpr(
  * @param stmts - The statements to execute.
  * @returns The return value (or 0 if none), or a structured error.
  */
-function exec(
-  stmts: readonly Stmt[],
-): Result {
+function exec(stmts: readonly Stmt[]): Result {
   const vars = new Map<string, Binding>();
   for (const stmt of stmts) {
     const value = evalExpr(stmt.value, vars);

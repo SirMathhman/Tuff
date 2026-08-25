@@ -16,7 +16,7 @@ export default defineConfig([
       "max-lines": [
         "warn",
         {
-          max: 500,
+          max: 300,
           skipBlankLines: true,
           skipComments: true,
         },
@@ -30,6 +30,17 @@ export default defineConfig([
         },
       ],
       "jsdoc/check-syntax": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TSTypeLiteral",
+          message: "Use a named interface.",
+        },
+        {
+          selector: "ClassDeclaration",
+          message: "Use plain functions.",
+        },
+      ],
     },
   },
   tseslint.configs.recommended,
