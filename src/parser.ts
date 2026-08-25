@@ -53,73 +53,74 @@ const NAME_KEYWORDS = [
   "while",
 ];
 
-type ParsedStatements = { statements: Statement[]; next: number };
+type Cursor = { tokens: Token[]; i: number };
 
-function parseStatements(
-  tokens: Token[],
-  start: number,
-): Result<ParsedStatements> {
+function peek(c: Cursor): Token | undefined {
+  return c.tokens[c.i];
+}
+
+function advance(c: Cursor): Token {
+  const t = c.tokens[c.i]!;
+  c.i++;
+  return t;
+}
+
+type ParsedStatements = { statements: Statement[]; closed: boolean };
+
+function parseStatements(c: Cursor): Result<ParsedStatements> {
   const statements: Statement[] = [];
-  let i = start;
-  while (i < tokens.length) {
-    const token = tokens[i]!;
+  while (c.i < c.tokens.length) {
+    const token = c.tokens[c.i]!;
     if (token.value === "}") {
-      return { ok: true, value: { statements, next: i + 1 } };
+      advance(c);
+      return { ok: true, value: { statements, closed: true } };
     }
     if (token.value === "{") {
-      const inner = parseStatements(tokens, i + 1);
+      const open = advance(c);
+      const inner = parseStatements(c);
       if (!inner.ok) return inner;
-      const { statements: innerStatements, next } = inner.value;
-      if (tokens[next - 1]?.value !== "}")
+      if (!inner.value.closed)
         return fail({
           kind: "UnbalancedBrace",
-          position: tokens[next - 1]?.position ?? token.position,
+          position: c.tokens[c.tokens.length - 1]?.position ?? open.position,
         });
-      statements.push({ block: innerStatements, position: token.position });
-      i = next;
+      statements.push({
+        block: inner.value.statements,
+        position: open.position,
+      });
       continue;
     }
     if (token.value === "if") {
-      const parsed = parseIf(tokens, i);
+      const parsed = parseIf(c);
       if (!parsed.ok) return parsed;
-      const { ifStatement, next } = parsed.value;
-      statements.push({ if: ifStatement, position: token.position });
-      i = next;
+      statements.push(parsed.value);
       continue;
     }
     if (token.value === "while") {
-      const parsed = parseWhile(tokens, i);
+      const parsed = parseWhile(c);
       if (!parsed.ok) return parsed;
-      const { whileStatement, next } = parsed.value;
-      statements.push({ while: whileStatement, position: token.position });
-      i = next;
+      statements.push(parsed.value);
       continue;
     }
-    let j = i;
-    while (j < tokens.length && tokens[j]!.value !== ";") j++;
-    if (j >= tokens.length)
-      return fail({ kind: "MissingTerminator", position: token.position });
-    const stmtTokens = tokens.slice(i, j);
-    const parsed = parsePlainStatement(stmtTokens);
-    if (!parsed.ok) return parsed;
-    statements.push(parsed.value);
-    i = j + 1;
+    const stmt = parsePlainStatement(c);
+    if (!stmt.ok) return stmt;
+    statements.push(stmt.value);
   }
-  return { ok: true, value: { statements, next: i } };
+  return { ok: true, value: { statements, closed: false } };
 }
 
-function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
-  if (stmtTokens.length === 0)
-    return fail({ kind: "EmptyStatement", position: 0 });
-  const first = stmtTokens[0]!;
+function parsePlainStatement(c: Cursor): Result<Statement> {
+  const first = peek(c)!;
+  if (first.value === ";")
+    return fail({ kind: "EmptyStatement", position: first.position });
   if (first.value === "let") {
-    let idx = 1;
+    advance(c);
     let mutable = false;
-    if (stmtTokens[idx]?.value === "mut") {
+    if (peek(c)?.value === "mut") {
       mutable = true;
-      idx++;
+      advance(c);
     }
-    const nameToken = stmtTokens[idx];
+    const nameToken = peek(c);
     if (!nameToken || NAME_KEYWORDS.includes(nameToken.value))
       return fail({
         kind: "ExpectedToken",
@@ -127,15 +128,20 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
         found: nameToken?.value,
         position: nameToken?.position ?? first.position,
       });
-    if (stmtTokens[idx + 1]?.value !== "=")
+    advance(c);
+    if (peek(c)?.value !== "=")
       return fail({
         kind: "ExpectedToken",
         expected: "'='",
-        found: stmtTokens[idx + 1]?.value,
-        position: stmtTokens[idx + 1]?.position ?? first.position,
+        found: peek(c)?.value,
+        position: peek(c)?.position ?? first.position,
       });
-    const expr = parseExpr(stmtTokens.slice(idx + 2));
+    advance(c);
+    const expr = parseExpr(c);
     if (!expr.ok) return expr;
+    if (peek(c)?.value !== ";")
+      return fail({ kind: "MissingTerminator", position: first.position });
+    advance(c);
     return {
       ok: true,
       value: {
@@ -150,8 +156,12 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
     };
   }
   if (first.value === "return") {
-    const expr = parseExpr(stmtTokens.slice(1));
+    advance(c);
+    const expr = parseExpr(c);
     if (!expr.ok) return expr;
+    if (peek(c)?.value !== ";")
+      return fail({ kind: "MissingTerminator", position: first.position });
+    advance(c);
     return {
       ok: true,
       value: {
@@ -167,182 +177,219 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
       found: first.value,
       position: first.position,
     });
-  const op = stmtTokens[1]?.value;
-  if (op !== "=" && op !== "+=")
+  const name = advance(c);
+  const opToken = peek(c);
+  if (opToken?.value !== "=" && opToken?.value !== "+=")
     return fail({
       kind: "ExpectedToken",
       expected: "'='",
-      found: op,
-      position: stmtTokens[1]?.position ?? first.position,
+      found: opToken?.value,
+      position: opToken?.position ?? name.position,
     });
-  const expr = parseExpr(stmtTokens.slice(2));
+  advance(c);
+  const expr = parseExpr(c);
   if (!expr.ok) return expr;
+  if (peek(c)?.value !== ";")
+    return fail({ kind: "MissingTerminator", position: name.position });
+  advance(c);
   return {
     ok: true,
     value: {
       assignment: {
-        name: first.value,
-        op: op as "=" | "+=",
+        name: name.value,
+        op: opToken.value as "=" | "+=",
         expr: expr.value,
-        position: first.position,
+        position: name.position,
       },
-      position: first.position,
+      position: name.position,
     },
   };
 }
 
-function parseOperand(token: Token): Result<Expr> {
-  if (token.kind === "number")
+function parseOperand(c: Cursor): Result<Expr> {
+  const token = peek(c);
+  if (!token) return fail({ kind: "UnsupportedExpression", position: 0 });
+  if (token.kind === "number") {
+    advance(c);
     return {
       ok: true,
       value: { literal: Number(token.value), position: token.position },
     };
+  }
   if (token.kind === "keyword") {
-    if (token.value === "true")
+    if (token.value === "true") {
+      advance(c);
       return { ok: true, value: { literal: true, position: token.position } };
-    if (token.value === "false")
+    }
+    if (token.value === "false") {
+      advance(c);
       return { ok: true, value: { literal: false, position: token.position } };
+    }
     return fail({ kind: "UnsupportedExpression", position: token.position });
   }
-  if (token.kind === "identifier")
+  if (token.kind === "identifier") {
+    advance(c);
     return {
       ok: true,
       value: { identifier: token.value, position: token.position },
     };
+  }
   return fail({ kind: "UnsupportedExpression", position: token.position });
 }
 
-function parseExpr(tokens: Token[]): Result<Expr> {
-  if (tokens.length === 0)
-    return fail({ kind: "UnsupportedExpression", position: 0 });
-  if (tokens.length === 1) return parseOperand(tokens[0]!);
-  if (
-    tokens.length === 3 &&
-    (tokens[1]?.value === "||" ||
-      tokens[1]?.value === "&&" ||
-      tokens[1]?.value === "<" ||
-      tokens[1]?.value === "==")
-  ) {
-    const left = parseOperand(tokens[0]!);
-    if (!left.ok) return left;
-    const right = parseOperand(tokens[2]!);
+function parseExpr(c: Cursor): Result<Expr> {
+  return parseOr(c);
+}
+
+function parseOr(c: Cursor): Result<Expr> {
+  let left = parseAnd(c);
+  if (!left.ok) return left;
+  while (peek(c)?.value === "||") {
+    advance(c);
+    const right = parseAnd(c);
     if (!right.ok) return right;
-    return {
+    left = {
       ok: true,
       value: {
-        binary: {
-          op: tokens[1]!.value as "||" | "&&" | "<" | "==",
-          left: left.value,
-          right: right.value,
-        },
-        position: tokens[0]!.position,
+        binary: { op: "||", left: left.value, right: right.value },
+        position: left.value.position,
       },
     };
   }
-  return fail({ kind: "UnsupportedExpression", position: tokens[0]!.position });
+  return left;
 }
 
-type ParsedConditionBlock = {
-  condition: Expr;
-  body: Statement[];
-  next: number;
-};
+function parseAnd(c: Cursor): Result<Expr> {
+  let left = parseComparison(c);
+  if (!left.ok) return left;
+  while (peek(c)?.value === "&&") {
+    advance(c);
+    const right = parseComparison(c);
+    if (!right.ok) return right;
+    left = {
+      ok: true,
+      value: {
+        binary: { op: "&&", left: left.value, right: right.value },
+        position: left.value.position,
+      },
+    };
+  }
+  return left;
+}
+
+function parseComparison(c: Cursor): Result<Expr> {
+  let left = parseOperand(c);
+  if (!left.ok) return left;
+  while (peek(c)?.value === "<" || peek(c)?.value === "==") {
+    const op = advance(c);
+    const right = parseOperand(c);
+    if (!right.ok) return right;
+    left = {
+      ok: true,
+      value: {
+        binary: {
+          op: op.value as "<" | "==",
+          left: left.value,
+          right: right.value,
+        },
+        position: left.value.position,
+      },
+    };
+  }
+  return left;
+}
+
+type ParsedConditionBlock = { condition: Expr; body: Statement[] };
 
 function parseConditionBlock(
-  tokens: Token[],
-  start: number,
+  c: Cursor,
+  keyword: Token,
 ): Result<ParsedConditionBlock> {
-  const keywordToken = tokens[start]!;
-  if (tokens[start + 1]?.value !== "(")
+  if (peek(c)?.value !== "(")
     return fail({
       kind: "ExpectedToken",
       expected: "'('",
-      found: tokens[start + 1]?.value,
-      position: tokens[start + 1]?.position ?? keywordToken.position,
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? keyword.position,
     });
-  let k = start + 2;
-  let parenDepth = 1;
-  while (k < tokens.length && parenDepth > 0) {
-    if (tokens[k]!.value === "(") parenDepth++;
-    else if (tokens[k]!.value === ")") parenDepth--;
-    k++;
-  }
-  if (parenDepth !== 0)
+  advance(c);
+  const condition = parseExpr(c);
+  if (!condition.ok) return condition;
+  if (peek(c)?.value !== ")")
     return fail({
       kind: "UnbalancedParen",
-      position: tokens[tokens.length - 1]?.position ?? keywordToken.position,
+      position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
     });
-  const condition = parseExpr(tokens.slice(start + 2, k - 1));
-  if (!condition.ok) return condition;
-  if (tokens[k]?.value !== "{")
+  advance(c);
+  if (peek(c)?.value !== "{")
     return fail({
       kind: "ExpectedToken",
       expected: "'{'",
-      found: tokens[k]?.value,
-      position: tokens[k]?.position ?? keywordToken.position,
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? keyword.position,
     });
-  const bodyResult = parseStatements(tokens, k + 1);
-  if (!bodyResult.ok) return bodyResult;
+  advance(c);
+  const body = parseStatements(c);
+  if (!body.ok) return body;
+  if (!body.value.closed)
+    return fail({
+      kind: "UnbalancedBrace",
+      position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
+    });
   return {
     ok: true,
-    value: {
-      condition: condition.value,
-      body: bodyResult.value.statements,
-      next: bodyResult.value.next,
-    },
+    value: { condition: condition.value, body: body.value.statements },
   };
 }
 
-function parseIf(
-  tokens: Token[],
-  start: number,
-): Result<{ ifStatement: IfStatement; next: number }> {
-  const parsed = parseConditionBlock(tokens, start);
+function parseIf(c: Cursor): Result<Statement> {
+  const keyword = advance(c);
+  const parsed = parseConditionBlock(c, keyword);
   if (!parsed.ok) return parsed;
-  const { condition, body: thenBlock, next: afterThen } = parsed.value;
+  const { condition, body: thenBlock } = parsed.value;
   let elseBlock: Statement[] | undefined;
-  let next = afterThen;
-  if (tokens[afterThen]?.value === "else") {
-    if (tokens[afterThen + 1]?.value !== "{")
+  if (peek(c)?.value === "else") {
+    const elseToken = advance(c);
+    if (peek(c)?.value !== "{")
       return fail({
         kind: "ExpectedToken",
         expected: "'{'",
-        found: tokens[afterThen + 1]?.value,
-        position:
-          tokens[afterThen + 1]?.position ?? tokens[afterThen]!.position,
+        found: peek(c)?.value,
+        position: peek(c)?.position ?? elseToken.position,
       });
-    const elseResult = parseStatements(tokens, afterThen + 2);
+    advance(c);
+    const elseResult = parseStatements(c);
     if (!elseResult.ok) return elseResult;
+    if (!elseResult.value.closed)
+      return fail({
+        kind: "UnbalancedBrace",
+        position: c.tokens[c.tokens.length - 1]?.position ?? elseToken.position,
+      });
     elseBlock = elseResult.value.statements;
-    next = elseResult.value.next;
   }
   return {
     ok: true,
     value: {
-      ifStatement: { condition, thenBlock, elseBlock },
-      next,
+      if: { condition, thenBlock, elseBlock },
+      position: keyword.position,
     },
   };
 }
 
-function parseWhile(
-  tokens: Token[],
-  start: number,
-): Result<{ whileStatement: WhileStatement; next: number }> {
-  const parsed = parseConditionBlock(tokens, start);
+function parseWhile(c: Cursor): Result<Statement> {
+  const keyword = advance(c);
+  const parsed = parseConditionBlock(c, keyword);
   if (!parsed.ok) return parsed;
-  const { condition, body, next } = parsed.value;
+  const { condition, body } = parsed.value;
   return {
     ok: true,
-    value: {
-      whileStatement: { condition, body },
-      next,
-    },
+    value: { while: { condition, body }, position: keyword.position },
   };
 }
 
 export function groupStatements(tokens: Token[]): Result<Statement[]> {
-  const result = parseStatements(tokens, 0);
+  const c: Cursor = { tokens, i: 0 };
+  const result = parseStatements(c);
   if (!result.ok) return result;
   return { ok: true, value: result.value.statements };
 }
