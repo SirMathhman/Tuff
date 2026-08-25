@@ -132,6 +132,17 @@ describe("evaluate", () => {
     }
   });
 
+  test("unbalanced paren in if condition yields UnbalancedParen with position", () => {
+    const result = evaluate("if (x { return 1; }");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("UnbalancedParen");
+      if (result.error.kind === "UnbalancedParen") {
+        expect(result.error.position).toBe(18);
+      }
+    }
+  });
+
   test("malformed number literal yields InvalidNumberLiteral with position", () => {
     expectInvalidNumberLiteral("return 1.2.3;", "1.2.3", 7);
   });

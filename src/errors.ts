@@ -10,6 +10,7 @@ export const EvaluateErrorKind = {
   CodeAfterReturn: "CodeAfterReturn",
   ImmutableReassignment: "ImmutableReassignment",
   UnbalancedBrace: "UnbalancedBrace",
+  UnbalancedParen: "UnbalancedParen",
   InvalidNumberLiteral: "InvalidNumberLiteral",
 } as const;
 
@@ -33,6 +34,7 @@ export type EvaluateError =
   | { kind: "CodeAfterReturn"; position: number }
   | { kind: "ImmutableReassignment"; name: string; position: number }
   | { kind: "UnbalancedBrace"; position: number }
+  | { kind: "UnbalancedParen"; position: number }
   | { kind: "InvalidNumberLiteral"; literal: string; position: number };
 
 export type Result<T> =

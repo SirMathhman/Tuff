@@ -5,7 +5,10 @@ import type { Token } from "./lexer.ts";
 export type Expr =
   | { literal: number | boolean; position: number }
   | { identifier: string; position: number }
-  | { binary: { op: "||" | "&&" | "<"; left: Expr; right: Expr }; position: number };
+  | {
+      binary: { op: "||" | "&&" | "<"; left: Expr; right: Expr };
+      position: number;
+    };
 
 export type IfStatement = {
   condition: Expr;
@@ -239,7 +242,7 @@ function parseIf(
   }
   if (parenDepth !== 0)
     return fail({
-      kind: "UnbalancedBrace",
+      kind: "UnbalancedParen",
       position: tokens[tokens.length - 1]?.position ?? ifToken.position,
     });
   const condition = parseExpr(tokens.slice(start + 2, k - 1));
