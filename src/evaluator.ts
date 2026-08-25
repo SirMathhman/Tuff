@@ -46,14 +46,19 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Result {
 }
 
 /**
- * Execute a parsed program against a fresh variable scope.
+ * Execute a sequence of statements against a variable scope.
  *
  * @param stmts - The statements to execute.
+ * @param vars - The variable scope, shared with enclosing blocks.
  * @returns The return value (or 0 if none), or a structured error.
  */
-function exec(stmts: readonly Stmt[]): Result {
-  const vars = new Map<string, Binding>();
+function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
   for (const stmt of stmts) {
+    if (stmt.type === "Block") {
+      const r = exec(stmt.stmts, vars);
+      if (!r.ok) return r;
+      continue;
+    }
     const value = evalExpr(stmt.value, vars);
     if (!value.ok) return value;
     if (stmt.type === "Return") return value;
@@ -92,5 +97,5 @@ function exec(stmts: readonly Stmt[]): Result {
 export function evaluateTuff(input: string): Result {
   const parsed = parse(input);
   if (!parsed.ok) return parsed;
-  return exec(parsed.program.stmts);
+  return exec(parsed.program.stmts, new Map());
 }

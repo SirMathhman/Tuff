@@ -52,9 +52,17 @@ export interface Return {
 }
 
 /**
+ * A block of statements delimited by braces.
+ */
+export interface Block {
+  type: "Block";
+  stmts: Stmt[];
+}
+
+/**
  * A statement in the program.
  */
-export type Stmt = LetDecl | Assign | Return;
+export type Stmt = LetDecl | Assign | Return | Block;
 
 /**
  * A parsed program: an ordered list of statements.
@@ -170,7 +178,7 @@ function tokenize(input: string): TokenizeOk | ParseErr {
       i = j;
       continue;
     }
-    if (ch === "=" || ch === ";") {
+    if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
       tokens.push({ kind: "punct", value: ch, pos: i });
       i++;
       continue;
@@ -238,8 +246,18 @@ function parseProgram(state: ParserState): ParseResult {
     if (!r.ok) return r;
     stmts.push(r.stmt);
     if (!atEnd(state)) {
-      const sep = next(state);
-      if (sep.value !== ";") {
+      const sep = peek(state);
+      if (sep.value === ";") {
+        next(state);
+        continue;
+      }
+      if (sep.value === "}") {
+        return {
+          ok: false,
+          error: parseError("Unexpected '}'", sep.pos),
+        };
+      }
+      if (r.stmt.type !== "Block") {
         return {
           ok: false,
           error: parseError("Expected ';' after statement", sep.pos),
@@ -267,10 +285,62 @@ function parseStmt(state: ParserState): ParseStmtOk | ParseErr {
   if (t.kind === "ident") {
     return parseAssign(state);
   }
+  if (t.value === "{") {
+    return parseBlock(state);
+  }
   return {
     ok: false,
     error: parseError(`Unexpected token: ${t.value}`, t.pos),
   };
+}
+
+/**
+ * Parse a block: statements delimited by `{` and `}`.
+ *
+ * @param state - The parser state.
+ * @returns The block, or a structured parse error.
+ */
+function parseBlock(state: ParserState): ParseStmtOk | ParseErr {
+  next(state);
+  const stmts: Stmt[] = [];
+  while (!atEnd(state) && peek(state).value !== "}") {
+    const t = peek(state);
+    if (t.value === ";") {
+      next(state);
+      continue;
+    }
+    const r = parseStmt(state);
+    if (!r.ok) return r;
+    stmts.push(r.stmt);
+    if (!atEnd(state)) {
+      const sep = peek(state);
+      if (sep.value === ";") {
+        next(state);
+        continue;
+      }
+      if (sep.value === "}") {
+        if (r.stmt.type !== "Block") {
+          return {
+            ok: false,
+            error: parseError("Expected ';' after statement", sep.pos),
+          };
+        }
+        continue;
+      }
+      return {
+        ok: false,
+        error: parseError("Expected ';' after statement", sep.pos),
+      };
+    }
+  }
+  if (atEnd(state)) {
+    return {
+      ok: false,
+      error: parseError("Expected '}' to close block", state.tokens.length),
+    };
+  }
+  next(state);
+  return { ok: true, stmt: { type: "Block", stmts } };
 }
 
 /**

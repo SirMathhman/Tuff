@@ -33,6 +33,12 @@ describe("evaluateTuff", () => {
       error: { type: "UnknownIdentifier", name: "unknownIdentifier" },
     });
   });
+  test("block statement assigns to outer scope", () => {
+    expect(evaluateTuff("let mut x = 0; { x = 1; } return x;")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
   test("assignment to immutable binding returns Err", () => {
     expect(evaluateTuff("let x = 0; x = 1; return x;")).toEqual({
       ok: false,
