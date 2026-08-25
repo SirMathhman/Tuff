@@ -1,63 +1,48 @@
 import type { Result } from "./errors.ts";
 import { fail } from "./errors.ts";
-import type { Token } from "./lexer.ts";
-import type { Statement } from "./parser.ts";
+import type { Expr, Statement } from "./parser.ts";
 
 type Binding = { mutable: boolean; value: unknown };
 
 type State = { returnValue: unknown; returned: boolean };
 
-function evalOperand(
-  token: Token,
-  bindings: Map<string, Binding>,
-): Result<unknown> {
-  if (token.kind === "number") return { ok: true, value: Number(token.value) };
-  if (token.kind === "keyword") {
-    if (token.value === "true") return { ok: true, value: 1 };
-    if (token.value === "false") return { ok: true, value: 0 };
-    return fail({ kind: "UnsupportedExpression", position: token.position });
-  }
-  if (token.kind !== "identifier")
-    return fail({ kind: "UnsupportedExpression", position: token.position });
-  const binding = bindings.get(token.value);
-  if (!binding)
-    return fail({
-      kind: "UndeclaredVariable",
-      name: token.value,
-      position: token.position,
-    });
-  return { ok: true, value: binding.value };
-}
-
 function evalExpr(
-  tokens: Token[],
+  expr: Expr,
   bindings: Map<string, Binding>,
 ): Result<unknown> {
-  if (tokens.length === 0)
-    return fail({ kind: "UnsupportedExpression", position: 0 });
-  if (tokens.length === 1) {
-    const token = tokens[0]!;
-    return evalOperand(token, bindings);
-  }
-  if (
-    tokens.length === 3 &&
-    (tokens[1]?.value === "||" || tokens[1]?.value === "&&")
-  ) {
-    const left = evalOperand(tokens[0]!, bindings);
-    if (!left.ok) return left;
-    const right = evalOperand(tokens[2]!, bindings);
-    if (!right.ok) return right;
+  if ("literal" in expr) {
     const value =
-      tokens[1]!.value === "||"
-        ? left.value === 1 || right.value === 1
+      typeof expr.literal === "boolean"
+        ? expr.literal
           ? 1
           : 0
-        : left.value === 1 && right.value === 1
-          ? 1
-          : 0;
+        : expr.literal;
     return { ok: true, value };
   }
-  return fail({ kind: "UnsupportedExpression", position: tokens[0]!.position });
+  if ("identifier" in expr) {
+    const binding = bindings.get(expr.identifier);
+    if (!binding)
+      return fail({
+        kind: "UndeclaredVariable",
+        name: expr.identifier,
+        position: expr.position,
+      });
+    return { ok: true, value: binding.value };
+  }
+  const { op, left, right } = expr.binary;
+  const l = evalExpr(left, bindings);
+  if (!l.ok) return l;
+  const r = evalExpr(right, bindings);
+  if (!r.ok) return r;
+  const value =
+    op === "||"
+      ? l.value === 1 || r.value === 1
+        ? 1
+        : 0
+      : l.value === 1 && r.value === 1
+        ? 1
+        : 0;
+  return { ok: true, value };
 }
 
 function execStatement(

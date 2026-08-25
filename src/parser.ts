@@ -2,8 +2,13 @@ import type { Result } from "./errors.ts";
 import { fail } from "./errors.ts";
 import type { Token } from "./lexer.ts";
 
+export type Expr =
+  | { literal: number | boolean; position: number }
+  | { identifier: string; position: number }
+  | { binary: { op: "||" | "&&"; left: Expr; right: Expr }; position: number };
+
 export type IfStatement = {
-  condition: Token[];
+  condition: Expr;
   thenBlock: Statement[];
   elseBlock?: Statement[];
 };
@@ -11,18 +16,18 @@ export type IfStatement = {
 export type Declaration = {
   name: string;
   mutable: boolean;
-  expr: Token[];
+  expr: Expr;
   position: number;
 };
 
 export type Assignment = {
   name: string;
   op: "=" | "+=";
-  expr: Token[];
+  expr: Expr;
   position: number;
 };
 
-export type Return = { expr: Token[]; position: number };
+export type Return = { expr: Expr; position: number };
 
 export type Statement =
   | { block: Statement[]; position: number }
@@ -106,13 +111,15 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
         found: stmtTokens[idx + 1]?.value,
         position: stmtTokens[idx + 1]?.position ?? first.position,
       });
+    const expr = parseExpr(stmtTokens.slice(idx + 2));
+    if (!expr.ok) return expr;
     return {
       ok: true,
       value: {
         declaration: {
           name: nameToken.value,
           mutable,
-          expr: stmtTokens.slice(idx + 2),
+          expr: expr.value,
           position: first.position,
         },
         position: first.position,
@@ -120,10 +127,12 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
     };
   }
   if (first.value === "return") {
+    const expr = parseExpr(stmtTokens.slice(1));
+    if (!expr.ok) return expr;
     return {
       ok: true,
       value: {
-        return: { expr: stmtTokens.slice(1), position: first.position },
+        return: { expr: expr.value, position: first.position },
         position: first.position,
       },
     };
@@ -143,18 +152,68 @@ function parsePlainStatement(stmtTokens: Token[]): Result<Statement> {
       found: op,
       position: stmtTokens[1]?.position ?? first.position,
     });
+  const expr = parseExpr(stmtTokens.slice(2));
+  if (!expr.ok) return expr;
   return {
     ok: true,
     value: {
       assignment: {
         name: first.value,
         op: op as "=" | "+=",
-        expr: stmtTokens.slice(2),
+        expr: expr.value,
         position: first.position,
       },
       position: first.position,
     },
   };
+}
+
+function parseOperand(token: Token): Result<Expr> {
+  if (token.kind === "number")
+    return {
+      ok: true,
+      value: { literal: Number(token.value), position: token.position },
+    };
+  if (token.kind === "keyword") {
+    if (token.value === "true")
+      return { ok: true, value: { literal: true, position: token.position } };
+    if (token.value === "false")
+      return { ok: true, value: { literal: false, position: token.position } };
+    return fail({ kind: "UnsupportedExpression", position: token.position });
+  }
+  if (token.kind === "identifier")
+    return {
+      ok: true,
+      value: { identifier: token.value, position: token.position },
+    };
+  return fail({ kind: "UnsupportedExpression", position: token.position });
+}
+
+function parseExpr(tokens: Token[]): Result<Expr> {
+  if (tokens.length === 0)
+    return fail({ kind: "UnsupportedExpression", position: 0 });
+  if (tokens.length === 1) return parseOperand(tokens[0]!);
+  if (
+    tokens.length === 3 &&
+    (tokens[1]?.value === "||" || tokens[1]?.value === "&&")
+  ) {
+    const left = parseOperand(tokens[0]!);
+    if (!left.ok) return left;
+    const right = parseOperand(tokens[2]!);
+    if (!right.ok) return right;
+    return {
+      ok: true,
+      value: {
+        binary: {
+          op: tokens[1]!.value as "||" | "&&",
+          left: left.value,
+          right: right.value,
+        },
+        position: tokens[0]!.position,
+      },
+    };
+  }
+  return fail({ kind: "UnsupportedExpression", position: tokens[0]!.position });
 }
 
 function parseIf(
@@ -181,7 +240,8 @@ function parseIf(
       kind: "UnbalancedBrace",
       position: tokens[tokens.length - 1]?.position ?? ifToken.position,
     });
-  const condition = tokens.slice(start + 2, k - 1);
+  const condition = parseExpr(tokens.slice(start + 2, k - 1));
+  if (!condition.ok) return condition;
   if (tokens[k]?.value !== "{")
     return fail({
       kind: "ExpectedToken",
@@ -210,7 +270,10 @@ function parseIf(
   }
   return {
     ok: true,
-    value: { ifStatement: { condition, thenBlock, elseBlock }, next },
+    value: {
+      ifStatement: { condition: condition.value, thenBlock, elseBlock },
+      next,
+    },
   };
 }
 
