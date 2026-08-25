@@ -18,6 +18,8 @@ function collectTsFiles(dir: string): string[] {
       out.push(join(dir, entry.name));
     }
   }
+
+  console.log(out);
   return out;
 }
 

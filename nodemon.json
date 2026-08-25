@@ -1,5 +1,5 @@
 {
-  "watch": ["src/**/*.ts", "index.ts", "index.test.ts"],
+  "watch": ["src/**/*.ts", "tools/callgraph.ts", "index.ts", "index.test.ts"],
   "ext": "ts",
   "exec": "bun tools/callgraph.ts"
 }
