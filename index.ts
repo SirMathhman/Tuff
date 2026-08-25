@@ -1,10 +1,31 @@
 /**
+ * A successful evaluation result.
+ */
+export interface Ok {
+  ok: true;
+  value: number;
+}
+
+/**
+ * A failed evaluation result.
+ */
+export interface Err {
+  ok: false;
+  error: string;
+}
+
+/**
+ * The result of an evaluation: either a numeric value or an error.
+ */
+export type Result = Ok | Err;
+
+/**
  * Evaluate the tuffness of a string.
  *
  * @param input - The string to evaluate.
- * @returns The tuffness score.
+ * @returns The tuffness score or an error.
  */
-export function evaluateTuff(input: string): number {
+export function evaluateTuff(input: string): Result {
   const vars = new Map<string, number>();
   const stmts = input
     .split(";")
@@ -20,9 +41,11 @@ export function evaluateTuff(input: string): number {
     if (ret?.[1] !== undefined) {
       const expr = ret[1].trim();
       const num = /^-?\d+(?:\.\d+)?$/.exec(expr);
-      if (num) return Number(num);
-      return vars.get(expr) ?? 0;
+      if (num) return { ok: true, value: Number(num) };
+      const val = vars.get(expr);
+      if (val !== undefined) return { ok: true, value: val };
+      return { ok: false, error: `Unknown identifier: ${expr}` };
     }
   }
-  return 0;
+  return { ok: true, value: 0 };
 }
