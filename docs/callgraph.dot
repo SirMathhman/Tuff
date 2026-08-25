@@ -15,6 +15,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="errors.ts";
+    "src\\errors.ts" [label="errors.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\errors.ts::fail" [label="fail"];
   }
   subgraph "cluster_src_evaluate_ts" {
@@ -23,6 +24,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="evaluate.ts";
+    "src\\evaluate.ts" [label="evaluate.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\evaluate.ts::evaluate" [label="evaluate"];
   }
   subgraph "cluster_src_interpreter_ts" {
@@ -31,6 +33,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="interpreter.ts";
+    "src\\interpreter.ts" [label="interpreter.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\interpreter.ts::evalExpr" [label="evalExpr"];
     "src\\interpreter.ts::execStatement" [label="execStatement"];
     "src\\interpreter.ts::execStatements" [label="execStatements"];
@@ -42,6 +45,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="lexer.ts";
+    "src\\lexer.ts" [label="lexer.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\lexer.ts::tokenize" [label="tokenize"];
   }
   subgraph "cluster_src_typecheck_ts" {
@@ -50,9 +54,11 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="typecheck.ts";
+    "src\\typecheck.ts" [label="typecheck.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\typecheck.ts::literalType" [label="literalType"];
     "src\\typecheck.ts::checkExpr" [label="checkExpr"];
     "src\\typecheck.ts::exprType" [label="exprType"];
+    "src\\typecheck.ts::checkFor" [label="checkFor"];
     "src\\typecheck.ts::checkStatements" [label="checkStatements"];
     "src\\typecheck.ts::typecheck" [label="typecheck"];
   }
@@ -68,6 +74,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="expressions.ts";
+    "src\\parser\\expressions.ts" [label="expressions.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\parser\\expressions.ts::parseExpr" [label="parseExpr"];
     "src\\parser\\expressions.ts::parseRange" [label="parseRange"];
     "src\\parser\\expressions.ts::parseOr" [label="parseOr"];
@@ -83,6 +90,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="index.ts";
+    "src\\parser\\index.ts" [label="index.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\parser\\index.ts::groupStatements" [label="groupStatements"];
   }
   subgraph "cluster_src_parser_statements_ts" {
@@ -91,6 +99,7 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="statements.ts";
+    "src\\parser\\statements.ts" [label="statements.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\parser\\statements.ts::parseStatements" [label="parseStatements"];
     "src\\parser\\statements.ts::parseExprAndSemicolon" [label="parseExprAndSemicolon"];
     "src\\parser\\statements.ts::expectOpenBrace" [label="expectOpenBrace"];
@@ -112,111 +121,26 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="types.ts";
+    "src\\parser\\types.ts" [label="types.ts", shape=folder, fillcolor="#e2e8f0"];
     "src\\parser\\types.ts::peek" [label="peek"];
     "src\\parser\\types.ts::advance" [label="advance"];
   }
   }
   }
-  "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize";
-  "src\\evaluate.ts::evaluate" -> "src\\parser\\index.ts::groupStatements";
-  "src\\evaluate.ts::evaluate" -> "src\\typecheck.ts::typecheck";
-  "src\\evaluate.ts::evaluate" -> "src\\interpreter.ts::interpret";
-  "src\\interpreter.ts::evalExpr" -> "src\\interpreter.ts::evalExpr";
-  "src\\interpreter.ts::execStatement" -> "src\\interpreter.ts::evalExpr";
-  "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatements";
-  "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::evalExpr";
-  "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatement";
-  "src\\interpreter.ts::interpret" -> "src\\interpreter.ts::execStatements";
-  "src\\lexer.ts::tokenize" -> "src\\errors.ts::fail";
-  "src\\parser\\expressions.ts::parseExpr" -> "src\\parser\\expressions.ts::parseRange";
-  "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\expressions.ts::parseOr";
-  "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\expressions.ts::parseAnd";
-  "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseAnd" -> "src\\parser\\expressions.ts::parseComparison";
-  "src\\parser\\expressions.ts::parseAnd" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseAnd" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\expressions.ts::parseAddition";
-  "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\expressions.ts::parseMultiplication";
-  "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\expressions.ts::parseOperand";
-  "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\expressions.ts::parseOperand" -> "src\\errors.ts::fail";
-  "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\expressions.ts::parseExpr";
-  "src\\parser\\index.ts::groupStatements" -> "src\\parser\\statements.ts::parseStatements";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseStatements";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseIf";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseWhile";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseFor";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseMatch";
-  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parsePlainStatement";
-  "src\\parser\\statements.ts::parseExprAndSemicolon" -> "src\\parser\\expressions.ts::parseExpr";
-  "src\\parser\\statements.ts::parseExprAndSemicolon" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::parseExprAndSemicolon" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseExprAndSemicolon" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::expectOpenBrace" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::expectOpenBrace" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::expectOpenBrace" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parsePlainStatement" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::parsePlainStatement" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parsePlainStatement" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parsePlainStatement" -> "src\\parser\\statements.ts::parseExprAndSemicolon";
-  "src\\parser\\statements.ts::expectOpenParen" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::expectOpenParen" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::expectOpenParen" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::expectCloseParen" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::expectCloseParen" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::expectCloseParen" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseParenthesizedExpr" -> "src\\parser\\statements.ts::expectOpenParen";
-  "src\\parser\\statements.ts::parseParenthesizedExpr" -> "src\\parser\\expressions.ts::parseExpr";
-  "src\\parser\\statements.ts::parseParenthesizedExpr" -> "src\\parser\\statements.ts::expectCloseParen";
-  "src\\parser\\statements.ts::parseBlockBody" -> "src\\parser\\statements.ts::expectOpenBrace";
-  "src\\parser\\statements.ts::parseBlockBody" -> "src\\parser\\statements.ts::parseStatements";
-  "src\\parser\\statements.ts::parseBlockBody" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseConditionBlock" -> "src\\parser\\statements.ts::parseParenthesizedExpr";
-  "src\\parser\\statements.ts::parseConditionBlock" -> "src\\parser\\statements.ts::parseBlockBody";
-  "src\\parser\\statements.ts::parseIf" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseIf" -> "src\\parser\\statements.ts::parseConditionBlock";
-  "src\\parser\\statements.ts::parseIf" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::parseIf" -> "src\\parser\\statements.ts::expectOpenBrace";
-  "src\\parser\\statements.ts::parseIf" -> "src\\parser\\statements.ts::parseStatements";
-  "src\\parser\\statements.ts::parseIf" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseWhile" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseWhile" -> "src\\parser\\statements.ts::parseConditionBlock";
-  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\statements.ts::expectOpenParen";
-  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::parseFor" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\expressions.ts::parseExpr";
-  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\statements.ts::expectCloseParen";
-  "src\\parser\\statements.ts::parseFor" -> "src\\parser\\statements.ts::parseBlockBody";
-  "src\\parser\\statements.ts::parseMatchPattern" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::parseMatchPattern" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseMatchPattern" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\types.ts::advance";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\statements.ts::parseParenthesizedExpr";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\statements.ts::expectOpenBrace";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\types.ts::peek";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\errors.ts::fail";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\statements.ts::parseMatchPattern";
-  "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\statements.ts::parseBlockBody";
-  "src\\typecheck.ts::checkExpr" -> "src\\typecheck.ts::checkExpr";
-  "src\\typecheck.ts::checkExpr" -> "src\\errors.ts::fail";
-  "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::literalType";
-  "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::exprType";
-  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkExpr";
-  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::exprType";
-  "src\\typecheck.ts::checkStatements" -> "src\\errors.ts::fail";
-  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkStatements";
-  "src\\typecheck.ts::typecheck" -> "src\\typecheck.ts::checkStatements";
+  "src\\evaluate.ts" -> "C:\\Projects\\Tuff\\src\\lexer.ts";
+  "src\\evaluate.ts" -> "C:\\Projects\\Tuff\\src\\parser\\index.ts";
+  "src\\evaluate.ts" -> "C:\\Projects\\Tuff\\src\\typecheck.ts";
+  "src\\evaluate.ts" -> "C:\\Projects\\Tuff\\src\\interpreter.ts";
+  "src\\interpreter.ts" -> "C:\\Projects\\Tuff\\src\\interpreter.ts";
+  "src\\lexer.ts" -> "C:\\Projects\\Tuff\\src\\errors.ts";
+  "src\\parser\\expressions.ts" -> "C:\\Projects\\Tuff\\src\\parser\\expressions.ts";
+  "src\\parser\\expressions.ts" -> "C:\\Projects\\Tuff\\src\\parser\\types.ts";
+  "src\\parser\\expressions.ts" -> "C:\\Projects\\Tuff\\src\\errors.ts";
+  "src\\parser\\index.ts" -> "C:\\Projects\\Tuff\\src\\parser\\statements.ts";
+  "src\\parser\\statements.ts" -> "C:\\Projects\\Tuff\\src\\parser\\types.ts";
+  "src\\parser\\statements.ts" -> "C:\\Projects\\Tuff\\src\\parser\\statements.ts";
+  "src\\parser\\statements.ts" -> "C:\\Projects\\Tuff\\src\\errors.ts";
+  "src\\parser\\statements.ts" -> "C:\\Projects\\Tuff\\src\\parser\\expressions.ts";
+  "src\\typecheck.ts" -> "C:\\Projects\\Tuff\\src\\typecheck.ts";
+  "src\\typecheck.ts" -> "C:\\Projects\\Tuff\\src\\errors.ts";
 }

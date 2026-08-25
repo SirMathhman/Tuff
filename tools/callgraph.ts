@@ -124,6 +124,8 @@ function fileCluster(file: string, ids: string[]): string[] {
   out.push(`    fontname="Consolas";`);
   out.push(`    fontsize=12;`);
   out.push(`    label="${esc(label)}";`);
+  // A node representing the file itself, so cross-file edges can target it.
+  out.push(`    "${esc(file)}" [label="${esc(label)}", shape=folder, fillcolor="#e2e8f0"];`);
   for (const id of ids) {
     const name = id.split("::")[1]!;
     out.push(`    "${esc(id)}" [label="${esc(name)}"];`);
@@ -168,17 +170,28 @@ function renderDir(node: DirNode, relPath: string, isRoot = false): string[] {
 
 lines.push(...renderDir(rootDir, "", true));
 
+// Intra-file calls stay function-level; cross-file calls are collapsed into a
+// single file -> file edge to avoid a tangle of parallel lines between files.
 const seenEdges = new Set<string>();
+const seenFileEdges = new Set<string>();
 for (const [id, called] of calls) {
+  const fromFile = id.split("::")[0]!;
   for (const callee of called) {
     const targets = defs.get(callee);
     if (!targets) continue; // not a function in this repo
     for (const targetFile of targets) {
-      const targetId = defId(targetFile, callee);
-      const key = `${id}->${targetId}`;
-      if (seenEdges.has(key)) continue;
-      seenEdges.add(key);
-      lines.push(`  "${esc(id)}" -> "${esc(targetId)}";`);
+      if (targetFile === fromFile) {
+        const targetId = defId(targetFile, callee);
+        const key = `${id}->${targetId}`;
+        if (seenEdges.has(key)) continue;
+        seenEdges.add(key);
+        lines.push(`  "${esc(id)}" -> "${esc(targetId)}";`);
+      } else {
+        const key = `${fromFile}->${targetFile}`;
+        if (seenFileEdges.has(key)) continue;
+        seenFileEdges.add(key);
+        lines.push(`  "${esc(fromFile)}" -> "${esc(targetFile)}";`);
+      }
     }
   }
 }
