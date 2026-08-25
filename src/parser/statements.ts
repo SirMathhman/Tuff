@@ -130,13 +130,12 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
     if (peek(c)?.value !== ";")
       return fail({ kind: "MissingTerminator", position: first.position });
     advance(c);
-    return {
-      ok: true,
-      value: {
-        [first.value]: { position: first.position },
-        position: first.position,
-      },
-    };
+    const position = first.position;
+    const value =
+      first.value === "break"
+        ? { break: { position }, position }
+        : { continue: { position }, position };
+    return { ok: true, value };
   }
   if (first.kind === "keyword")
     return fail({
