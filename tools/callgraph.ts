@@ -117,10 +117,23 @@ for (const file of byFile.keys()) {
   node.files.push(file);
 }
 
+function clusterOf(file: string): string {
+  return `cluster_${file.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+}
+
+function dirClusterOf(relPath: string): string {
+  return `cluster_dir_${(relPath || "root").replace(/[^a-zA-Z0-9]+/g, "_")}`;
+}
+
+// A cross-file edge needs a concrete node at each end; any function in the file
+// works, since ltail/lhead clip the drawn edge back to the cluster border.
+function anchorOf(file: string): string {
+  return byFile.get(file)![0]!;
+}
+
 function fileCluster(file: string, ids: string[]): string[] {
   const label = file.replace(/\\/g, "/").split("/").pop()!;
-  const cluster = `cluster_${file.replace(/[^a-zA-Z0-9]+/g, "_")}`;
-  const out = [`  subgraph "${cluster}" {`];
+  const out = [`  subgraph "${clusterOf(file)}" {`];
   out.push(`    style="rounded";`);
   out.push(`    color="#94a3b8";`);
   out.push(`    fontname="Consolas";`);
@@ -152,8 +165,7 @@ function renderDir(node: DirNode, relPath: string, isRoot = false): string[] {
       out.push(...fileCluster(file, byFile.get(file)!));
     return out;
   }
-  const cluster = `cluster_dir_${(relPath || "root").replace(/[^a-zA-Z0-9]+/g, "_")}`;
-  out.push(`  subgraph "${cluster}" {`);
+  out.push(`  subgraph "${dirClusterOf(relPath)}" {`);
   out.push(`    style="rounded";`);
   out.push(`    color="#64748b";`);
   out.push(`    fontname="Consolas";`);
@@ -170,10 +182,28 @@ function renderDir(node: DirNode, relPath: string, isRoot = false): string[] {
 
 lines.push(...renderDir(rootDir, "", true));
 
+// For each file, the boxes enclosing it from outermost to innermost, ending in
+// its own file box. Follows renderDir's rules so it only names drawn clusters.
+const chains = new Map<string, string[]>();
+function recordChains(
+  node: DirNode,
+  relPath: string,
+  ancestors: string[],
+  isRoot = false,
+): void {
+  const boxed = !isRoot && (node.files.length >= 2 || node.dirs.size > 0);
+  const here = boxed ? [...ancestors, dirClusterOf(relPath)] : ancestors;
+  for (const file of node.files) chains.set(file, [...here, clusterOf(file)]);
+  for (const [name, child] of node.dirs) {
+    recordChains(child, relPath ? `${relPath}/${name}` : name, here);
+  }
+}
+recordChains(rootDir, "", [], true);
+
 // Intra-file calls stay function-level; cross-file calls are collapsed into a
-// single file -> file edge to avoid a tangle of parallel lines between files.
+// single box -> box edge to avoid a tangle of parallel lines between files.
 const seenEdges = new Set<string>();
-const seenFileEdges = new Set<string>();
+const seenBoxEdges = new Set<string>();
 for (const [id, called] of calls) {
   const fromFile = id.split("::")[0]!;
   for (const callee of called) {
@@ -187,13 +217,24 @@ for (const [id, called] of calls) {
         seenEdges.add(key);
         lines.push(`  "${esc(id)}" -> "${esc(targetId)}";`);
       } else {
-        const key = `${fromFile}->${targetFile}`;
-        if (seenFileEdges.has(key)) continue;
-        seenFileEdges.add(key);
-        // Edges target the file's cluster, so the arrow hooks into the box.
-        const cluster = `cluster_${fromFile.replace(/[^a-zA-Z0-9]+/g, "_")}`;
-        const targetCluster = `cluster_${targetFile.replace(/[^a-zA-Z0-9]+/g, "_")}`;
-        lines.push(`  "${cluster}" -> "${targetCluster}";`);
+        // Attach the edge to the outermost box holding one file but not the
+        // other, so a call leaving a directory is drawn as the directory's
+        // arrow rather than one escaping from a file nested inside it.
+        const fromChain = chains.get(fromFile)!;
+        const targetChain = chains.get(targetFile)!;
+        let depth = 0;
+        while (fromChain[depth] === targetChain[depth]) depth++;
+        const tail = fromChain[depth]!;
+        const head = targetChain[depth]!;
+        const key = `${tail}->${head}`;
+        if (seenBoxEdges.has(key)) continue;
+        seenBoxEdges.add(key);
+        // Graphviz has no cluster endpoints: the edge runs between a real node
+        // in each file, and ltail/lhead clip it back to the cluster borders.
+        lines.push(
+          `  "${esc(anchorOf(fromFile))}" -> "${esc(anchorOf(targetFile))}" ` +
+            `[ltail="${tail}", lhead="${head}"];`,
+        );
       }
     }
   }

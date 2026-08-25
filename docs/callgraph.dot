@@ -119,37 +119,36 @@ digraph tuff {
   }
   }
   }
-  "cluster_src_evaluate_ts" -> "cluster_src_lexer_ts";
-  "cluster_src_evaluate_ts" -> "cluster_src_parser_index_ts";
-  "cluster_src_evaluate_ts" -> "cluster_src_typecheck_ts";
-  "cluster_src_evaluate_ts" -> "cluster_src_interpreter_ts";
+  "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize" [ltail="cluster_src_evaluate_ts", lhead="cluster_src_lexer_ts"];
+  "src\\evaluate.ts::evaluate" -> "src\\parser\\index.ts::groupStatements" [ltail="cluster_src_evaluate_ts", lhead="cluster_dir_src_parser"];
+  "src\\evaluate.ts::evaluate" -> "src\\typecheck.ts::literalType" [ltail="cluster_src_evaluate_ts", lhead="cluster_src_typecheck_ts"];
+  "src\\evaluate.ts::evaluate" -> "src\\interpreter.ts::evalExpr" [ltail="cluster_src_evaluate_ts", lhead="cluster_src_interpreter_ts"];
   "src\\interpreter.ts::evalExpr" -> "src\\interpreter.ts::evalExpr";
   "src\\interpreter.ts::execStatement" -> "src\\interpreter.ts::evalExpr";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatements";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::evalExpr";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatement";
   "src\\interpreter.ts::interpret" -> "src\\interpreter.ts::execStatements";
-  "cluster_src_lexer_ts" -> "cluster_src_errors_ts";
+  "src\\lexer.ts::tokenize" -> "src\\errors.ts::fail" [ltail="cluster_src_lexer_ts", lhead="cluster_src_errors_ts"];
   "src\\parser\\expressions.ts::parseExpr" -> "src\\parser\\expressions.ts::parseRange";
   "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\expressions.ts::parseOr";
-  "cluster_src_parser_expressions_ts" -> "cluster_src_parser_types_ts";
+  "src\\parser\\expressions.ts::parseExpr" -> "src\\parser\\types.ts::peek" [ltail="cluster_src_parser_expressions_ts", lhead="cluster_src_parser_types_ts"];
   "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\expressions.ts::parseAnd";
   "src\\parser\\expressions.ts::parseAnd" -> "src\\parser\\expressions.ts::parseComparison";
   "src\\parser\\expressions.ts::parseComparison" -> "src\\parser\\expressions.ts::parseAddition";
   "src\\parser\\expressions.ts::parseAddition" -> "src\\parser\\expressions.ts::parseMultiplication";
   "src\\parser\\expressions.ts::parseMultiplication" -> "src\\parser\\expressions.ts::parseOperand";
-  "cluster_src_parser_expressions_ts" -> "cluster_src_errors_ts";
+  "src\\parser\\expressions.ts::parseExpr" -> "src\\errors.ts::fail" [ltail="cluster_dir_src_parser", lhead="cluster_src_errors_ts"];
   "src\\parser\\expressions.ts::parseOperand" -> "src\\parser\\expressions.ts::parseExpr";
-  "cluster_src_parser_index_ts" -> "cluster_src_parser_statements_ts";
-  "cluster_src_parser_statements_ts" -> "cluster_src_parser_types_ts";
+  "src\\parser\\index.ts::groupStatements" -> "src\\parser\\statements.ts::parseStatements" [ltail="cluster_src_parser_index_ts", lhead="cluster_src_parser_statements_ts"];
+  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\types.ts::peek" [ltail="cluster_src_parser_statements_ts", lhead="cluster_src_parser_types_ts"];
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseStatements";
-  "cluster_src_parser_statements_ts" -> "cluster_src_errors_ts";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseIf";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseWhile";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseFor";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parseMatch";
   "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\statements.ts::parsePlainStatement";
-  "cluster_src_parser_statements_ts" -> "cluster_src_parser_expressions_ts";
+  "src\\parser\\statements.ts::parseStatements" -> "src\\parser\\expressions.ts::parseExpr" [ltail="cluster_src_parser_statements_ts", lhead="cluster_src_parser_expressions_ts"];
   "src\\parser\\statements.ts::parsePlainStatement" -> "src\\parser\\statements.ts::parseExprAndSemicolon";
   "src\\parser\\statements.ts::parseParenthesizedExpr" -> "src\\parser\\statements.ts::expectOpenParen";
   "src\\parser\\statements.ts::parseParenthesizedExpr" -> "src\\parser\\statements.ts::expectCloseParen";
@@ -169,7 +168,7 @@ digraph tuff {
   "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\statements.ts::parseMatchPattern";
   "src\\parser\\statements.ts::parseMatch" -> "src\\parser\\statements.ts::parseBlockBody";
   "src\\typecheck.ts::checkExpr" -> "src\\typecheck.ts::checkExpr";
-  "cluster_src_typecheck_ts" -> "cluster_src_errors_ts";
+  "src\\typecheck.ts::literalType" -> "src\\errors.ts::fail" [ltail="cluster_src_typecheck_ts", lhead="cluster_src_errors_ts"];
   "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::literalType";
   "src\\typecheck.ts::exprType" -> "src\\typecheck.ts::exprType";
   "src\\typecheck.ts::checkFor" -> "src\\typecheck.ts::checkExpr";
