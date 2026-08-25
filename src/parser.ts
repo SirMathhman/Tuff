@@ -241,17 +241,23 @@ function parseExpr(tokens: Token[]): Result<Expr> {
   return fail({ kind: "UnsupportedExpression", position: tokens[0]!.position });
 }
 
-function parseIf(
+type ParsedConditionBlock = {
+  condition: Expr;
+  body: Statement[];
+  next: number;
+};
+
+function parseConditionBlock(
   tokens: Token[],
   start: number,
-): Result<{ ifStatement: IfStatement; next: number }> {
-  const ifToken = tokens[start]!;
+): Result<ParsedConditionBlock> {
+  const keywordToken = tokens[start]!;
   if (tokens[start + 1]?.value !== "(")
     return fail({
       kind: "ExpectedToken",
       expected: "'('",
       found: tokens[start + 1]?.value,
-      position: tokens[start + 1]?.position ?? ifToken.position,
+      position: tokens[start + 1]?.position ?? keywordToken.position,
     });
   let k = start + 2;
   let parenDepth = 1;
@@ -263,7 +269,7 @@ function parseIf(
   if (parenDepth !== 0)
     return fail({
       kind: "UnbalancedParen",
-      position: tokens[tokens.length - 1]?.position ?? ifToken.position,
+      position: tokens[tokens.length - 1]?.position ?? keywordToken.position,
     });
   const condition = parseExpr(tokens.slice(start + 2, k - 1));
   if (!condition.ok) return condition;
@@ -272,11 +278,27 @@ function parseIf(
       kind: "ExpectedToken",
       expected: "'{'",
       found: tokens[k]?.value,
-      position: tokens[k]?.position ?? ifToken.position,
+      position: tokens[k]?.position ?? keywordToken.position,
     });
-  const thenResult = parseStatements(tokens, k + 1);
-  if (!thenResult.ok) return thenResult;
-  const { statements: thenBlock, next: afterThen } = thenResult.value;
+  const bodyResult = parseStatements(tokens, k + 1);
+  if (!bodyResult.ok) return bodyResult;
+  return {
+    ok: true,
+    value: {
+      condition: condition.value,
+      body: bodyResult.value.statements,
+      next: bodyResult.value.next,
+    },
+  };
+}
+
+function parseIf(
+  tokens: Token[],
+  start: number,
+): Result<{ ifStatement: IfStatement; next: number }> {
+  const parsed = parseConditionBlock(tokens, start);
+  if (!parsed.ok) return parsed;
+  const { condition, body: thenBlock, next: afterThen } = parsed.value;
   let elseBlock: Statement[] | undefined;
   let next = afterThen;
   if (tokens[afterThen]?.value === "else") {
@@ -296,7 +318,7 @@ function parseIf(
   return {
     ok: true,
     value: {
-      ifStatement: { condition: condition.value, thenBlock, elseBlock },
+      ifStatement: { condition, thenBlock, elseBlock },
       next,
     },
   };
@@ -306,45 +328,14 @@ function parseWhile(
   tokens: Token[],
   start: number,
 ): Result<{ whileStatement: WhileStatement; next: number }> {
-  const whileToken = tokens[start]!;
-  if (tokens[start + 1]?.value !== "(")
-    return fail({
-      kind: "ExpectedToken",
-      expected: "'('",
-      found: tokens[start + 1]?.value,
-      position: tokens[start + 1]?.position ?? whileToken.position,
-    });
-  let k = start + 2;
-  let parenDepth = 1;
-  while (k < tokens.length && parenDepth > 0) {
-    if (tokens[k]!.value === "(") parenDepth++;
-    else if (tokens[k]!.value === ")") parenDepth--;
-    k++;
-  }
-  if (parenDepth !== 0)
-    return fail({
-      kind: "UnbalancedParen",
-      position: tokens[tokens.length - 1]?.position ?? whileToken.position,
-    });
-  const condition = parseExpr(tokens.slice(start + 2, k - 1));
-  if (!condition.ok) return condition;
-  if (tokens[k]?.value !== "{")
-    return fail({
-      kind: "ExpectedToken",
-      expected: "'{'",
-      found: tokens[k]?.value,
-      position: tokens[k]?.position ?? whileToken.position,
-    });
-  const bodyResult = parseStatements(tokens, k + 1);
-  if (!bodyResult.ok) return bodyResult;
+  const parsed = parseConditionBlock(tokens, start);
+  if (!parsed.ok) return parsed;
+  const { condition, body, next } = parsed.value;
   return {
     ok: true,
     value: {
-      whileStatement: {
-        condition: condition.value,
-        body: bodyResult.value.statements,
-      },
-      next: bodyResult.value.next,
+      whileStatement: { condition, body },
+      next,
     },
   };
 }
