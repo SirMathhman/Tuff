@@ -53,8 +53,9 @@ for (const file of files) {
   visit(sf);
 
   for (const { name, node } of functions) {
+    const relFile = relative(root, file);
     const set = defs.get(name) ?? new Set();
-    set.add(file);
+    set.add(relFile);
     defs.set(name, set);
     const id = defId(file, name);
     const called = calls.get(id) ?? new Set<string>();
@@ -125,7 +126,9 @@ function fileCluster(file: string, ids: string[]): string[] {
   out.push(`    fontsize=12;`);
   out.push(`    label="${esc(label)}";`);
   // A node representing the file itself, so cross-file edges can target it.
-  out.push(`    "${esc(file)}" [label="${esc(label)}", shape=folder, fillcolor="#e2e8f0"];`);
+  out.push(
+    `    "${esc(file)}" [label="${esc(label)}", shape=folder, fillcolor="#e2e8f0"];`,
+  );
   for (const id of ids) {
     const name = id.split("::")[1]!;
     out.push(`    "${esc(id)}" [label="${esc(name)}"];`);
