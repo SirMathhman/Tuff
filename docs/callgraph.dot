@@ -14,7 +14,7 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\errors.ts";
+    label="errors.ts";
     "src\\errors.ts::fail" [label="fail"];
   }
   subgraph "cluster_src_evaluate_ts" {
@@ -22,7 +22,7 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\evaluate.ts";
+    label="evaluate.ts";
     "src\\evaluate.ts::evaluate" [label="evaluate"];
   }
   subgraph "cluster_src_interpreter_ts" {
@@ -30,7 +30,7 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\interpreter.ts";
+    label="interpreter.ts";
     "src\\interpreter.ts::valueType" [label="valueType"];
     "src\\interpreter.ts::evalExpr" [label="evalExpr"];
     "src\\interpreter.ts::execStatement" [label="execStatement"];
@@ -42,7 +42,7 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\lexer.ts";
+    label="lexer.ts";
     "src\\lexer.ts::tokenize" [label="tokenize"];
   }
   subgraph "cluster_src_typecheck_ts" {
@@ -50,26 +50,25 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\typecheck.ts";
+    label="typecheck.ts";
     "src\\typecheck.ts::literalType" [label="literalType"];
     "src\\typecheck.ts::checkExpr" [label="checkExpr"];
     "src\\typecheck.ts::exprType" [label="exprType"];
     "src\\typecheck.ts::checkStatements" [label="checkStatements"];
     "src\\typecheck.ts::typecheck" [label="typecheck"];
   }
-  }
   subgraph "cluster_dir_src_parser" {
     style="rounded";
     color="#64748b";
     fontname="Consolas";
     fontsize=13;
-    label="src/parser";
+    label="parser";
   subgraph "cluster_src_parser_expressions_ts" {
     style="rounded";
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\parser\\expressions.ts";
+    label="expressions.ts";
     "src\\parser\\expressions.ts::parseExpr" [label="parseExpr"];
     "src\\parser\\expressions.ts::parseOr" [label="parseOr"];
     "src\\parser\\expressions.ts::parseAnd" [label="parseAnd"];
@@ -81,7 +80,7 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\parser\\index.ts";
+    label="index.ts";
     "src\\parser\\index.ts::groupStatements" [label="groupStatements"];
   }
   subgraph "cluster_src_parser_statements_ts" {
@@ -89,7 +88,7 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\parser\\statements.ts";
+    label="statements.ts";
     "src\\parser\\statements.ts::parseStatements" [label="parseStatements"];
     "src\\parser\\statements.ts::parseExprAndSemicolon" [label="parseExprAndSemicolon"];
     "src\\parser\\statements.ts::expectOpenBrace" [label="expectOpenBrace"];
@@ -103,9 +102,10 @@ digraph tuff {
     color="#94a3b8";
     fontname="Consolas";
     fontsize=12;
-    label="src\\parser\\types.ts";
+    label="types.ts";
     "src\\parser\\types.ts::peek" [label="peek"];
     "src\\parser\\types.ts::advance" [label="advance"];
+  }
   }
   }
   "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize";

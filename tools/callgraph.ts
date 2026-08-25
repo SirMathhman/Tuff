@@ -91,26 +91,39 @@ for (const id of calls.keys()) {
   byFile.set(file, list);
 }
 
-// Group files by directory so multi-file directories get their own box.
-const byDir = new Map<string, string[]>();
+// Build a directory tree so nested folders (e.g. src > parser) render as
+// nested clusters, each labeled with just its own name rather than the path.
+type DirNode = {
+  name: string; // basename; "" for the repo root
+  files: string[]; // full relative paths of files directly in this dir
+  dirs: Map<string, DirNode>;
+};
+
+const rootDir: DirNode = { name: "", files: [], dirs: new Map() };
 for (const file of byFile.keys()) {
-  const normalized = file.replace(/\\/g, "/");
-  const dir = normalized.includes("/")
-    ? normalized.slice(0, normalized.lastIndexOf("/"))
-    : ".";
-  const list = byDir.get(dir) ?? [];
-  list.push(file);
-  byDir.set(dir, list);
+  const segments = file.replace(/\\/g, "/").split("/");
+  let node = rootDir;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const seg = segments[i]!;
+    let child = node.dirs.get(seg);
+    if (!child) {
+      child = { name: seg, files: [], dirs: new Map() };
+      node.dirs.set(seg, child);
+    }
+    node = child;
+  }
+  node.files.push(file);
 }
 
 function fileCluster(file: string, ids: string[]): string[] {
+  const label = file.replace(/\\/g, "/").split("/").pop()!;
   const cluster = `cluster_${file.replace(/[^a-zA-Z0-9]+/g, "_")}`;
   const out = [`  subgraph "${cluster}" {`];
   out.push(`    style="rounded";`);
   out.push(`    color="#94a3b8";`);
   out.push(`    fontname="Consolas";`);
   out.push(`    fontsize=12;`);
-  out.push(`    label="${esc(file)}";`);
+  out.push(`    label="${esc(label)}";`);
   for (const id of ids) {
     const name = id.split("::")[1]!;
     out.push(`    "${esc(id)}" [label="${esc(name)}"];`);
@@ -119,22 +132,41 @@ function fileCluster(file: string, ids: string[]): string[] {
   return out;
 }
 
-for (const [dir, files] of [...byDir.entries()].sort()) {
-  if (files.length < 2) {
-    for (const file of files)
-      lines.push(...fileCluster(file, byFile.get(file)!));
-    continue;
+// Render a directory's contents. A dir gets its own labeled box when it holds
+// more than one file or contains subdirectories; otherwise its single file is
+// emitted directly into the parent.
+function renderDir(node: DirNode, relPath: string, isRoot = false): string[] {
+  const out: string[] = [];
+  if (isRoot) {
+    for (const file of node.files)
+      out.push(...fileCluster(file, byFile.get(file)!));
+    for (const [name, child] of [...node.dirs.entries()].sort()) {
+      out.push(...renderDir(child, name));
+    }
+    return out;
   }
-  const cluster = `cluster_dir_${dir.replace(/[^a-zA-Z0-9]+/g, "_")}`;
-  lines.push(`  subgraph "${cluster}" {`);
-  lines.push(`    style="rounded";`);
-  lines.push(`    color="#64748b";`);
-  lines.push(`    fontname="Consolas";`);
-  lines.push(`    fontsize=13;`);
-  lines.push(`    label="${esc(dir)}";`);
-  for (const file of files) lines.push(...fileCluster(file, byFile.get(file)!));
-  lines.push("  }");
+  if (node.files.length < 2 && node.dirs.size === 0) {
+    for (const file of node.files)
+      out.push(...fileCluster(file, byFile.get(file)!));
+    return out;
+  }
+  const cluster = `cluster_dir_${(relPath || "root").replace(/[^a-zA-Z0-9]+/g, "_")}`;
+  out.push(`  subgraph "${cluster}" {`);
+  out.push(`    style="rounded";`);
+  out.push(`    color="#64748b";`);
+  out.push(`    fontname="Consolas";`);
+  out.push(`    fontsize=13;`);
+  out.push(`    label="${esc(node.name || ".")}";`);
+  for (const file of node.files)
+    out.push(...fileCluster(file, byFile.get(file)!));
+  for (const [name, child] of [...node.dirs.entries()].sort()) {
+    out.push(...renderDir(child, relPath ? `${relPath}/${name}` : name));
+  }
+  out.push("  }");
+  return out;
 }
+
+lines.push(...renderDir(rootDir, "", true));
 
 const seenEdges = new Set<string>();
 for (const [id, called] of calls) {

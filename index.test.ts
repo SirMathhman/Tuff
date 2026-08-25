@@ -155,6 +155,31 @@ describe("evaluate", () => {
     },
   );
 
+  test.each([
+    ["let mut x = true; x += 1;", 18],
+    ["let mut x = 0; x += true;", 15],
+  ])(
+    "compound assignment type mismatch yields TypeMismatch with position (%s)",
+    (input, position) => {
+      expectError(input, "TypeMismatch", (error) => {
+        expect(error.name).toBe("x");
+        expect(error.expected).toBe("number");
+        expect(error.position).toBe(position);
+      });
+    },
+  );
+
+  test("compound assignment to an immutable variable yields ImmutableReassignment with position", () => {
+    expectError("let x = 0; x += 1;", "ImmutableReassignment", (error) => {
+      expect(error.name).toBe("x");
+      expect(error.position).toBe(11);
+    });
+  });
+
+  test("code after a return is ignored", () => {
+    expect(unwrap(evaluate("return 1; let x = 2;"))).toBe(1);
+  });
+
   test("undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
     expectError("if (false) { let x = y; }", "UndeclaredVariable", (error) => {
       expect(error.name).toBe("y");

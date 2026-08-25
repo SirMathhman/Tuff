@@ -60,7 +60,7 @@ Two types: `number` and `boolean`.
 ### Statements
 
 - **Assignment**: `x = <expr>;` and `x += <expr>;` (`+=` requires number operands).
-- **Return**: `return <expr>;` — the first `return` produces the result; code after a `return` is an error (`CodeAfterReturn`).
+- **Return**: `return <expr>;` — the first `return` produces the result; execution stops there.
 - **Block**: `{ <statements> }`.
 - **If**: `if (<expr>) { <statements> } else { <statements> }` (the `else` is optional).
 - **While**: `while (<expr>) { <statements> }`.
@@ -84,7 +84,7 @@ Blocks share a single flat binding environment: a `let` inside a block is visibl
 
 `EvaluateError` is a closed set. Every variant identifies the cause in the source via a `position` (character offset) plus a relevant field:
 
-`EmptyInput`, `UnexpectedCharacter`, `UnsupportedExpression`, `UndeclaredVariable`, `ExpectedToken`, `EmptyStatement`, `MissingTerminator`, `CodeAfterReturn`, `ImmutableReassignment`, `UnbalancedBrace`, `UnbalancedParen`, `InvalidNumberLiteral`, `TypeMismatch`.
+`EmptyInput`, `UnexpectedCharacter`, `UnsupportedExpression`, `UndeclaredVariable`, `ExpectedToken`, `EmptyStatement`, `MissingTerminator`, `ImmutableReassignment`, `UnbalancedBrace`, `UnbalancedParen`, `InvalidNumberLiteral`, `TypeMismatch`.
 
 ## Pipeline
 

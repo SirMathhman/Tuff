@@ -4,11 +4,15 @@ import type { Expr, Statement } from "./parser/index.ts";
 
 type ValueType = "number" | "boolean";
 
+type Binding = { type: ValueType; mutable: boolean };
+
+type Env = Map<string, Binding>;
+
 function literalType(value: number | boolean): ValueType {
   return typeof value === "boolean" ? "boolean" : "number";
 }
 
-function checkExpr(expr: Expr, env: Map<string, ValueType>): Result<void> {
+function checkExpr(expr: Expr, env: Env): Result<void> {
   if ("literal" in expr) return { ok: true, value: undefined };
   if ("identifier" in expr) {
     if (!env.has(expr.identifier))
@@ -24,43 +28,56 @@ function checkExpr(expr: Expr, env: Map<string, ValueType>): Result<void> {
   return checkExpr(expr.binary.right, env);
 }
 
-function exprType(
-  expr: Expr,
-  env: Map<string, ValueType>,
-): ValueType | undefined {
+function exprType(expr: Expr, env: Env): ValueType | undefined {
   if ("literal" in expr) return literalType(expr.literal);
-  if ("identifier" in expr) return env.get(expr.identifier);
+  if ("identifier" in expr) return env.get(expr.identifier)?.type;
   return "boolean";
 }
 
-function checkStatements(
-  statements: Statement[],
-  env: Map<string, ValueType>,
-): Result<unknown> {
+function checkStatements(statements: Statement[], env: Env): Result<unknown> {
   for (const item of statements) {
     if ("declaration" in item) {
       const expr = checkExpr(item.declaration.expr, env);
       if (!expr.ok) return expr;
       const type = exprType(item.declaration.expr, env);
-      if (type) env.set(item.declaration.name, type);
+      if (type)
+        env.set(item.declaration.name, {
+          type,
+          mutable: item.declaration.mutable,
+        });
     } else if ("assignment" in item) {
-      if (!env.has(item.assignment.name))
+      const binding = env.get(item.assignment.name);
+      if (!binding)
         return fail({
           kind: "UndeclaredVariable",
           name: item.assignment.name,
           position: item.assignment.position,
         });
+      if (!binding.mutable)
+        return fail({
+          kind: "ImmutableReassignment",
+          name: item.assignment.name,
+          position: item.assignment.position,
+        });
       const expr = checkExpr(item.assignment.expr, env);
       if (!expr.ok) return expr;
+      const found = exprType(item.assignment.expr, env);
       if (item.assignment.op === "=") {
-        const known = env.get(item.assignment.name);
-        const found = exprType(item.assignment.expr, env);
-        if (known && found && known !== found)
+        if (binding.type !== found)
           return fail({
             kind: "TypeMismatch",
             name: item.assignment.name,
-            expected: known,
-            found,
+            expected: binding.type,
+            found: found!,
+            position: item.assignment.position,
+          });
+      } else {
+        if (binding.type !== "number" || found !== "number")
+          return fail({
+            kind: "TypeMismatch",
+            name: item.assignment.name,
+            expected: "number",
+            found: found ?? binding.type,
             position: item.assignment.position,
           });
       }
@@ -90,5 +107,5 @@ function checkStatements(
 }
 
 export function typecheck(statements: Statement[]): Result<unknown> {
-  return checkStatements(statements, new Map());
+  return checkStatements(statements, new Map<string, Binding>());
 }
