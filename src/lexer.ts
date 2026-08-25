@@ -42,6 +42,9 @@ export function tokenize(input: string): Result<Token[]> {
         });
       tokens.push({ value, kind: "number", position: i });
       i = j;
+    } else if (ch === "=" && input.charAt(i + 1) === "=") {
+      tokens.push({ value: "==", kind: "punctuation", position: i });
+      i += 2;
     } else if (
       ch === "=" ||
       ch === ";" ||

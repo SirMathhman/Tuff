@@ -69,9 +69,9 @@ describe("evaluate", () => {
   });
 
   test('evaluates "let x = true; let y = true; return x || y;" to true', () => {
-    expect(
-      unwrap(evaluate("let x = true; let y = true; return x || y;")),
-    ).toBe(true);
+    expect(unwrap(evaluate("let x = true; let y = true; return x || y;"))).toBe(
+      true,
+    );
   });
 
   test('evaluates "let mut x = 0; while (x < 4) { x += 1; } return x;" to 4', () => {
@@ -80,14 +80,18 @@ describe("evaluate", () => {
     ).toBe(4);
   });
 
+  test('evaluates "let x = 0; let y = 1; return x == y;" to 0', () => {
+    expect(unwrap(evaluate("let x = 0; let y = 1; return x == y;"))).toBe(0);
+  });
+
   test('evaluates "let x = 0; let y = 1; return x < y;" to true', () => {
     expect(unwrap(evaluate("let x = 0; let y = 1; return x < y;"))).toBe(true);
   });
 
   test('evaluates "let x = true; let y = true; return x && y;" to true', () => {
-    expect(
-      unwrap(evaluate("let x = true; let y = true; return x && y;")),
-    ).toBe(true);
+    expect(unwrap(evaluate("let x = true; let y = true; return x && y;"))).toBe(
+      true,
+    );
   });
 
   test("unsupported input yields a structured error with position", () => {

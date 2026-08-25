@@ -6,7 +6,7 @@ export type Expr =
   | { literal: number | boolean; position: number }
   | { identifier: string; position: number }
   | {
-      binary: { op: "||" | "&&" | "<"; left: Expr; right: Expr };
+      binary: { op: "||" | "&&" | "<" | "=="; left: Expr; right: Expr };
       position: number;
     };
 
@@ -220,7 +220,8 @@ function parseExpr(tokens: Token[]): Result<Expr> {
     tokens.length === 3 &&
     (tokens[1]?.value === "||" ||
       tokens[1]?.value === "&&" ||
-      tokens[1]?.value === "<")
+      tokens[1]?.value === "<" ||
+      tokens[1]?.value === "==")
   ) {
     const left = parseOperand(tokens[0]!);
     if (!left.ok) return left;
@@ -230,7 +231,7 @@ function parseExpr(tokens: Token[]): Result<Expr> {
       ok: true,
       value: {
         binary: {
-          op: tokens[1]!.value as "||" | "&&" | "<",
+          op: tokens[1]!.value as "||" | "&&" | "<" | "==",
           left: left.value,
           right: right.value,
         },
