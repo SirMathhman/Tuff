@@ -337,7 +337,14 @@ function parseMatchPattern(c: Cursor): Result<MatchCase["pattern"]> {
   }
   if (token.kind === "number") {
     advance(c);
-    return { ok: true, value: { kind: "literal", value: Number(token.value) } };
+    return {
+      ok: true,
+      value: {
+        kind: "literal",
+        value: Number(token.value),
+        numericKind: token.value.includes(".") ? "float" : "int",
+      },
+    };
   }
   if (
     token.kind === "keyword" &&

@@ -9,6 +9,7 @@ export type {
   Expr,
   ForStatement,
   IfStatement,
+  LiteralValue,
   Return,
   Statement,
   WhileStatement,

@@ -1,7 +1,13 @@
 import type { Token } from "../lexer.ts";
 
+export type LiteralValue = number | boolean;
+
 export type Expr =
-  | { literal: number | boolean; position: number }
+  | {
+      literal: LiteralValue;
+      kind?: "int" | "float";
+      position: number;
+    }
   | { identifier: string; position: number }
   | {
       binary: {
@@ -29,7 +35,13 @@ export type ForStatement = {
 };
 
 export type MatchCase = {
-  pattern: { kind: "literal"; value: number | boolean } | { kind: "wildcard" };
+  pattern:
+    | {
+        kind: "literal";
+        value: number | boolean;
+        numericKind?: "int" | "float";
+      }
+    | { kind: "wildcard" };
   block: Statement[];
 };
 

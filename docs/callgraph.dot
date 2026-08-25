@@ -55,6 +55,7 @@ digraph tuff {
     "src\\typecheck.ts::checkExpr" [label="checkExpr"];
     "src\\typecheck.ts::exprType" [label="exprType"];
     "src\\typecheck.ts::checkFor" [label="checkFor"];
+    "src\\typecheck.ts::checkAssignment" [label="checkAssignment"];
     "src\\typecheck.ts::checkStatements" [label="checkStatements"];
     "src\\typecheck.ts::typecheck" [label="typecheck"];
   }
@@ -174,8 +175,11 @@ digraph tuff {
   "src\\typecheck.ts::checkFor" -> "src\\typecheck.ts::checkExpr";
   "src\\typecheck.ts::checkFor" -> "src\\typecheck.ts::exprType";
   "src\\typecheck.ts::checkFor" -> "src\\typecheck.ts::checkStatements";
+  "src\\typecheck.ts::checkAssignment" -> "src\\typecheck.ts::checkExpr";
+  "src\\typecheck.ts::checkAssignment" -> "src\\typecheck.ts::exprType";
   "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkExpr";
   "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::exprType";
+  "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkAssignment";
   "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkStatements";
   "src\\typecheck.ts::checkStatements" -> "src\\typecheck.ts::checkFor";
   "src\\typecheck.ts::typecheck" -> "src\\typecheck.ts::checkStatements";

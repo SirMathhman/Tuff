@@ -36,8 +36,8 @@ export type EvaluateError =
   | {
       kind: "TypeMismatch";
       name: string;
-      expected: "number" | "boolean" | "range";
-      found: "number" | "boolean" | "range";
+      expected: "int" | "float" | "boolean" | "range";
+      found: "int" | "float" | "boolean" | "range";
       position: number;
     };
 

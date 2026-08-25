@@ -44,9 +44,10 @@ Consumers should not assume a general-purpose evaluator: only the constructs bel
 
 ### Types
 
-Three types: `number`, `boolean`, and `range`.
+Four types: `int`, `float`, `boolean`, and `range`.
 
-- **number literals**: `0`, `1.5` (integers and decimals; malformed literals like `1.2.3` or `1.` are rejected).
+- **int literals**: `0`, `1` (integers).
+- **float literals**: `1.5` (decimals; malformed literals like `1.2.3` or `1.` are rejected).
 - **boolean literals**: `true`, `false`.
 - **parenthesized expressions**: `( <expr> )` — group an expression to override precedence.
 - **ranges**: `<expr>..<expr>` — a first-class value of type `range` (e.g. `0..4`). Ranges can be stored in variables and used as the iterable in a `for` loop.
@@ -57,11 +58,11 @@ Three types: `number`, `boolean`, and `range`.
 - `let mut x = <expr>;` — declare a mutable binding.
 - Re-declaring a name rebinds it to the new value and mutability (e.g. `let x = 0; let x = 1;` yields `1`).
 - Assigning to an immutable binding is an error (`ImmutableReassignment`).
-- Reassigning a binding to a value of a different type is an error (`TypeMismatch`).
+- Reassigning a binding to a value of a different type is an error (`TypeMismatch`). An `int` value may be assigned to a `float` binding (it is coerced), but a `float` value may not be assigned to an `int` binding.
 
 ### Statements
 
-- **Assignment**: `x = <expr>;` and `x += <expr>;` (`+=` requires number operands).
+- **Assignment**: `x = <expr>;` and `x += <expr>;` (`+=` requires numeric operands).
 - **Return**: `return <expr>;` — the first `return` produces the result; execution stops there.
 - **Block**: `{ <statements> }`.
 - **If**: `if (<expr>) { <statements> } else { <statements> }` (the `else` is optional).
@@ -73,15 +74,15 @@ Three types: `number`, `boolean`, and `range`.
 
 ### Operators
 
-| Operator | Meaning                  | Result type |
-| -------- | ------------------------ | ----------- |
-| `\|\|`   | logical or               | boolean     |
-| `&&`     | logical and              | boolean     |
-| `<`      | less-than (numbers)      | boolean     |
-| `==`     | equality                 | boolean     |
-| `+`      | addition (numbers)       | number      |
-| `-`      | subtraction (numbers)    | number      |
-| `*`      | multiplication (numbers) | number      |
+| Operator | Meaning                  | Result type                                     |
+| -------- | ------------------------ | ----------------------------------------------- |
+| `\|\|`   | logical or               | boolean                                         |
+| `&&`     | logical and              | boolean                                         |
+| `<`      | less-than (numbers)      | boolean                                         |
+| `==`     | equality                 | boolean                                         |
+| `+`      | addition (numbers)       | int or float (float if either operand is float) |
+| `-`      | subtraction (numbers)    | int or float (float if either operand is float) |
+| `*`      | multiplication (numbers) | int or float (float if either operand is float) |
 
 Operators chain and nest.
 

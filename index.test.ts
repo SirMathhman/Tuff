@@ -210,7 +210,7 @@ describe("evaluate", () => {
     (input, position) => {
       expectError(input, "TypeMismatch", (error) => {
         expect(error.name).toBe("x");
-        expect(error.expected).toBe("number");
+        expect(error.expected).toBe("int");
         expect(error.found).toBe("boolean");
         expect(error.position).toBe(position);
       });
@@ -218,18 +218,32 @@ describe("evaluate", () => {
   );
 
   test.each([
-    ["let mut x = true; x += 1;", 18],
-    ["let mut x = 0; x += true;", 15],
-  ])(
+    ["let mut x = true; x += 1;", 18, "boolean", "int"],
+    ["let mut x = 0; x += true;", 15, "int", "boolean"],
+  ] as const)(
     "compound assignment type mismatch yields TypeMismatch with position (%s)",
-    (input, position) => {
+    (input, position, expected, found) => {
       expectError(input, "TypeMismatch", (error) => {
         expect(error.name).toBe("x");
-        expect(error.expected).toBe("number");
+        expect(error.expected).toBe(expected);
+        expect(error.found).toBe(found);
         expect(error.position).toBe(position);
       });
     },
   );
+
+  test("assigning a float to an int variable yields TypeMismatch", () => {
+    expectError("let mut x = 0; x = 0.0;", "TypeMismatch", (error) => {
+      expect(error.name).toBe("x");
+      expect(error.expected).toBe("int");
+      expect(error.found).toBe("float");
+      expect(error.position).toBe(15);
+    });
+  });
+
+  test('evaluates "let mut x = 0.0; x = 0;" to 0', () => {
+    expect(unwrap(evaluate("let mut x = 0.0; x = 0;"))).toBe(0);
+  });
 
   test("compound assignment to an immutable variable yields ImmutableReassignment with position", () => {
     expectError("let x = 0; x += 1;", "ImmutableReassignment", (error) => {

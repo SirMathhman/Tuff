@@ -149,7 +149,11 @@ function parseOperand(c: Cursor): Result<Expr> {
     advance(c);
     return {
       ok: true,
-      value: { literal: Number(token.value), position: token.position },
+      value: {
+        literal: Number(token.value),
+        kind: token.value.includes(".") ? "float" : "int",
+        position: token.position,
+      },
     };
   }
   if (token.kind === "keyword") {
