@@ -6,7 +6,10 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("")).toBe(0);
   });
 
-  test('return statement returns the number', () => {
+  test("return statement returns the number", () => {
     expect(evaluateTuff("return 1;")).toBe(1);
+  });
+  test("let declaration then return variable", () => {
+    expect(evaluateTuff("let x = 1; return x;")).toBe(1);
   });
 });
