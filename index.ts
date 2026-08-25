@@ -5,7 +5,6 @@
  * @returns The tuffness score.
  */
 export function evaluateTuff(input: string): number {
-  // TODO: implement
-  void input;
-  return 0;
+  const match = /^return\s+(-?\d+(?:\.\d+)?)\s*;?$/.exec(input);
+  return match ? Number(match[1]) : 0;
 }
