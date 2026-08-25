@@ -32,9 +32,13 @@ function evalExpr(expr: Expr, bindings: Map<string, Binding>): Result<unknown> {
       ? l.value === 1 || r.value === 1
         ? 1
         : 0
-      : l.value === 1 && r.value === 1
-        ? 1
-        : 0;
+      : op === "&&"
+        ? l.value === 1 && r.value === 1
+          ? 1
+          : 0
+        : (l.value as number) < (r.value as number)
+          ? 1
+          : 0;
   return { ok: true, value };
 }
 

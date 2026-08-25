@@ -74,6 +74,10 @@ describe("evaluate", () => {
     );
   });
 
+  test('evaluates "let x = 0; let y = 1; return x < y;" to 1', () => {
+    expect(unwrap(evaluate("let x = 0; let y = 1; return x < y;"))).toBe(1);
+  });
+
   test('evaluates "let x = true; let y = true; return x && y;" to 1', () => {
     expect(unwrap(evaluate("let x = true; let y = true; return x && y;"))).toBe(
       1,

@@ -47,7 +47,8 @@ export function tokenize(input: string): Result<Token[]> {
       ch === "{" ||
       ch === "}" ||
       ch === "(" ||
-      ch === ")"
+      ch === ")" ||
+      ch === "<"
     ) {
       tokens.push({ value: ch, kind: "punctuation", position: i });
       i++;
