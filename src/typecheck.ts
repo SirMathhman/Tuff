@@ -85,7 +85,7 @@ function checkStatements(statements: Statement[], env: Env): Result<unknown> {
       const expr = checkExpr(item.return.expr, env);
       if (!expr.ok) return expr;
     } else if ("block" in item) {
-      const result = checkStatements(item.block, env);
+      const result = checkStatements(item.block, new Map(env));
       if (!result.ok) return result;
     } else if ("if" in item) {
       const condition = checkExpr(item.if.condition, env);

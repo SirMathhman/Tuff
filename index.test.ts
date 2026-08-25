@@ -180,6 +180,13 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("return 1; let x = 2;"))).toBe(1);
   });
 
+  test("variable declared in a block is not visible outside it", () => {
+    expectError("{ let x = 0; } return x;", "UndeclaredVariable", (error) => {
+      expect(error.name).toBe("x");
+      expect(error.position).toBe(22);
+    });
+  });
+
   test("undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
     expectError("if (false) { let x = y; }", "UndeclaredVariable", (error) => {
       expect(error.name).toBe("y");

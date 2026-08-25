@@ -51,7 +51,7 @@ function execStatements(
   for (const item of statements) {
     if (state.returned) return;
     if ("block" in item) {
-      execStatements(item.block, bindings, state);
+      execStatements(item.block, new Map(bindings), state);
     } else if ("if" in item) {
       const condition = evalExpr(item.if.condition, bindings);
       const branch = condition === true ? item.if.thenBlock : item.if.elseBlock;
