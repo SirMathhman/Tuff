@@ -6,5 +6,6 @@
  */
 export function evaluateTuff(input: string): number {
   // TODO: implement
+  void input;
   return 0;
 }
