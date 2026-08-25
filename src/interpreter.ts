@@ -34,9 +34,7 @@ function evalExpr(expr: Expr, bindings: Map<string, Binding>): Result<Value> {
         ? l.value === true && r.value === true
         : op === "<"
           ? (l.value as number) < (r.value as number)
-          : l.value === r.value
-            ? 1
-            : 0;
+          : l.value === r.value;
   return { ok: true, value };
 }
 

@@ -64,13 +64,13 @@ describe("evaluate", () => {
     ).toBe(1);
   });
 
-  test('evaluates "let x = true; return x;" to true', () => {
-    expect(unwrap(evaluate("let x = true; return x;"))).toBe(true);
+  test('evaluates "let x = true; return x;" to 1', () => {
+    expect(unwrap(evaluate("let x = true; return x;"))).toBe(1);
   });
 
-  test('evaluates "let x = true; let y = true; return x || y;" to true', () => {
+  test('evaluates "let x = true; let y = true; return x || y;" to 1', () => {
     expect(unwrap(evaluate("let x = true; let y = true; return x || y;"))).toBe(
-      true,
+      1,
     );
   });
 
@@ -84,13 +84,13 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let x = 0; let y = 1; return x == y;"))).toBe(0);
   });
 
-  test('evaluates "let x = 0; let y = 1; return x < y;" to true', () => {
-    expect(unwrap(evaluate("let x = 0; let y = 1; return x < y;"))).toBe(true);
+  test('evaluates "let x = 0; let y = 1; return x < y;" to 1', () => {
+    expect(unwrap(evaluate("let x = 0; let y = 1; return x < y;"))).toBe(1);
   });
 
-  test('evaluates "let x = true; let y = true; return x && y;" to true', () => {
+  test('evaluates "let x = true; let y = true; return x && y;" to 1', () => {
     expect(unwrap(evaluate("let x = true; let y = true; return x && y;"))).toBe(
-      true,
+      1,
     );
   });
 

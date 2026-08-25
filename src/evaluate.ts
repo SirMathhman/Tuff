@@ -3,11 +3,18 @@ import { interpret } from "./interpreter.ts";
 import { tokenize } from "./lexer.ts";
 import { groupStatements } from "./parser.ts";
 
-export function evaluate(input: string): Result<unknown> {
+export function evaluate(input: string): Result<number> {
   if (input === "") return { ok: true, value: 0 };
   const tokensResult = tokenize(input);
   if (!tokensResult.ok) return tokensResult;
   const statementsResult = groupStatements(tokensResult.value);
   if (!statementsResult.ok) return statementsResult;
-  return interpret(statementsResult.value);
+  const result = interpret(statementsResult.value);
+  if (!result.ok) return result;
+  const value = result.value;
+  if (value === undefined) return { ok: true, value: 0 };
+  return {
+    ok: true,
+    value: typeof value === "boolean" ? (value ? 1 : 0) : value,
+  };
 }
