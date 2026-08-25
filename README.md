@@ -66,6 +66,8 @@ Two types: `number` and `boolean`.
 - **If**: `if (<expr>) { <statements> } else { <statements> }` (the `else` is optional).
 - **While**: `while (<expr>) { <statements> }`.
 - **Break**: `break;` — exits the innermost `while` loop.
+- **Continue**: `continue;` — skips to the next iteration of the innermost `while` loop.
+- **Match**: `match (<expr>) { case <pattern> => { <statements> }; ... }` — evaluates the scrutinee and executes the first case whose pattern matches. Patterns are literals (`1`, `true`, `false`) or the wildcard `_`.
 
 ### Operators
 

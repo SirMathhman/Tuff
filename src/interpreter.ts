@@ -81,6 +81,19 @@ function execStatements(
         if (signal === "break") break;
         if (signal === "continue") continue;
       }
+    } else if ("match" in item) {
+      const scrutinee = evalExpr(item.match.scrutinee, bindings);
+      for (const matchCase of item.match.cases) {
+        const matched =
+          matchCase.pattern.kind === "wildcard"
+            ? true
+            : matchCase.pattern.value === scrutinee;
+        if (matched) {
+          const signal = execStatements(matchCase.block, bindings, state);
+          if (signal) return signal;
+          break;
+        }
+      }
     } else {
       const signal = execStatement(item, bindings, state);
       if (signal) return signal;

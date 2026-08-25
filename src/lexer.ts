@@ -16,6 +16,8 @@ const KEYWORDS = new Set([
   "while",
   "break",
   "continue",
+  "match",
+  "case",
 ]);
 
 export function tokenize(input: string): Result<Token[]> {
@@ -46,6 +48,9 @@ export function tokenize(input: string): Result<Token[]> {
       i = j;
     } else if (ch === "=" && input.charAt(i + 1) === "=") {
       tokens.push({ value: "==", kind: "punctuation", position: i });
+      i += 2;
+    } else if (ch === "=" && input.charAt(i + 1) === ">") {
+      tokens.push({ value: "=>", kind: "punctuation", position: i });
       i += 2;
     } else if (
       ch === "=" ||

@@ -107,6 +107,13 @@ function checkStatements(statements: Statement[], env: Env): Result<unknown> {
       if (!condition.ok) return condition;
       const result = checkStatements(item.while.body, env);
       if (!result.ok) return result;
+    } else if ("match" in item) {
+      const scrutinee = checkExpr(item.match.scrutinee, env);
+      if (!scrutinee.ok) return scrutinee;
+      for (const matchCase of item.match.cases) {
+        const result = checkStatements(matchCase.block, env);
+        if (!result.ok) return result;
+      }
     }
   }
   return { ok: true, value: undefined };

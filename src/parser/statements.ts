@@ -3,7 +3,7 @@ import { fail } from "../errors.ts";
 import type { Token } from "../lexer.ts";
 import { parseExpr } from "./expressions.ts";
 import { advance, NAME_KEYWORDS, peek } from "./types.ts";
-import type { Cursor, Expr, Statement } from "./types.ts";
+import type { Cursor, Expr, MatchCase, Statement } from "./types.ts";
 
 type ParsedStatements = { statements: Statement[]; closed: boolean };
 
@@ -38,6 +38,12 @@ export function parseStatements(c: Cursor): Result<ParsedStatements> {
     }
     if (token.value === "while") {
       const parsed = parseWhile(c);
+      if (!parsed.ok) return parsed;
+      statements.push(parsed.value);
+      continue;
+    }
+    if (token.value === "match") {
+      const parsed = parseMatch(c);
       if (!parsed.ok) return parsed;
       statements.push(parsed.value);
       continue;
@@ -243,5 +249,107 @@ function parseWhile(c: Cursor): Result<Statement> {
   return {
     ok: true,
     value: { while: { condition, body }, position: keyword.position },
+  };
+}
+
+function parseMatchPattern(c: Cursor): Result<MatchCase["pattern"]> {
+  const token = peek(c);
+  if (!token)
+    return fail({
+      kind: "ExpectedToken",
+      expected: "pattern",
+      found: undefined,
+      position: c.tokens[c.tokens.length - 1]?.position ?? 0,
+    });
+  if (token.value === "_") {
+    advance(c);
+    return { ok: true, value: { kind: "wildcard" } };
+  }
+  if (token.kind === "number") {
+    advance(c);
+    return { ok: true, value: { kind: "literal", value: Number(token.value) } };
+  }
+  if (
+    token.kind === "keyword" &&
+    (token.value === "true" || token.value === "false")
+  ) {
+    advance(c);
+    return {
+      ok: true,
+      value: { kind: "literal", value: token.value === "true" },
+    };
+  }
+  return fail({
+    kind: "ExpectedToken",
+    expected: "pattern",
+    found: token.value,
+    position: token.position,
+  });
+}
+
+function parseMatch(c: Cursor): Result<Statement> {
+  const keyword = advance(c);
+  if (peek(c)?.value !== "(")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'('",
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? keyword.position,
+    });
+  advance(c);
+  const scrutinee = parseExpr(c);
+  if (!scrutinee.ok) return scrutinee;
+  if (peek(c)?.value !== ")")
+    return fail({
+      kind: "UnbalancedParen",
+      position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
+    });
+  advance(c);
+  const openBrace = expectOpenBrace(c, keyword);
+  if (!openBrace.ok) return openBrace;
+  const cases: MatchCase[] = [];
+  while (peek(c)?.value !== "}") {
+    if (peek(c)?.value !== "case")
+      return fail({
+        kind: "ExpectedToken",
+        expected: "'case'",
+        found: peek(c)?.value,
+        position: peek(c)?.position ?? keyword.position,
+      });
+    advance(c);
+    const pattern = parseMatchPattern(c);
+    if (!pattern.ok) return pattern;
+    if (peek(c)?.value !== "=>")
+      return fail({
+        kind: "ExpectedToken",
+        expected: "'=>'",
+        found: peek(c)?.value,
+        position: peek(c)?.position ?? keyword.position,
+      });
+    advance(c);
+    const caseBrace = expectOpenBrace(c, keyword);
+    if (!caseBrace.ok) return caseBrace;
+    const body = parseStatements(c);
+    if (!body.ok) return body;
+    if (!body.value.closed)
+      return fail({
+        kind: "UnbalancedBrace",
+        position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
+      });
+    if (peek(c)?.value !== ";")
+      return fail({
+        kind: "MissingTerminator",
+        position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
+      });
+    advance(c);
+    cases.push({ pattern: pattern.value, block: body.value.statements });
+  }
+  advance(c);
+  return {
+    ok: true,
+    value: {
+      match: { scrutinee: scrutinee.value, cases },
+      position: keyword.position,
+    },
   };
 }
