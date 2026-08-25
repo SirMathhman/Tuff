@@ -116,6 +116,10 @@ describe("evaluate", () => {
     ).toBe(4);
   });
 
+  test('evaluates "return 1 + 2;" to 3', () => {
+    expect(unwrap(evaluate("return 1 + 2;"))).toBe(3);
+  });
+
   test('evaluates "let x = 0; let y = 1; return x == y;" to 0', () => {
     expect(unwrap(evaluate("let x = 0; let y = 1; return x == y;"))).toBe(0);
   });

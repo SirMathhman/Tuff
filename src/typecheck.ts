@@ -31,7 +31,7 @@ function checkExpr(expr: Expr, env: Env): Result<void> {
 function exprType(expr: Expr, env: Env): ValueType | undefined {
   if ("literal" in expr) return literalType(expr.literal);
   if ("identifier" in expr) return env.get(expr.identifier)?.type;
-  return "boolean";
+  return expr.binary.op === "+" ? "number" : "boolean";
 }
 
 function checkStatements(statements: Statement[], env: Env): Result<unknown> {

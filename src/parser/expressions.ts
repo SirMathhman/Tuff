@@ -44,11 +44,11 @@ function parseAnd(c: Cursor): Result<Expr> {
 }
 
 function parseComparison(c: Cursor): Result<Expr> {
-  let left = parseOperand(c);
+  let left = parseAddition(c);
   if (!left.ok) return left;
   while (peek(c)?.value === "<" || peek(c)?.value === "==") {
     const op = advance(c);
-    const right = parseOperand(c);
+    const right = parseAddition(c);
     if (!right.ok) return right;
     left = {
       ok: true,
@@ -58,6 +58,24 @@ function parseComparison(c: Cursor): Result<Expr> {
           left: left.value,
           right: right.value,
         },
+        position: left.value.position,
+      },
+    };
+  }
+  return left;
+}
+
+function parseAddition(c: Cursor): Result<Expr> {
+  let left = parseOperand(c);
+  if (!left.ok) return left;
+  while (peek(c)?.value === "+") {
+    advance(c);
+    const right = parseOperand(c);
+    if (!right.ok) return right;
+    left = {
+      ok: true,
+      value: {
+        binary: { op: "+", left: left.value, right: right.value },
         position: left.value.position,
       },
     };
