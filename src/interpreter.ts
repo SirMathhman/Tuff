@@ -6,17 +6,10 @@ type Binding = { mutable: boolean; value: unknown };
 
 type State = { returnValue: unknown; returned: boolean };
 
-function evalExpr(
-  expr: Expr,
-  bindings: Map<string, Binding>,
-): Result<unknown> {
+function evalExpr(expr: Expr, bindings: Map<string, Binding>): Result<unknown> {
   if ("literal" in expr) {
     const value =
-      typeof expr.literal === "boolean"
-        ? expr.literal
-          ? 1
-          : 0
-        : expr.literal;
+      typeof expr.literal === "boolean" ? (expr.literal ? 1 : 0) : expr.literal;
     return { ok: true, value };
   }
   if ("identifier" in expr) {

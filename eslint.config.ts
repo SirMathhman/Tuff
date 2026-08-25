@@ -12,6 +12,14 @@ export default defineConfig([
     rules: {
       "no-new-func": "error",
       "no-eval": "error",
+      "max-lines": [
+        "warn",
+        {
+          max: 500,
+          skipBlankLines: true,
+          skipComments: true,
+        },
+      ],
     },
   },
   tseslint.configs.recommended,

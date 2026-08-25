@@ -7,7 +7,8 @@
     "test": "bun test",
     "lint": "eslint .",
     "callgraph": "bun tools/callgraph.ts",
-    "pmd:cpd": "pmd cpd index.ts index.test.ts --dir ./src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals"
+    "pmd:cpd": "pmd cpd index.ts index.test.ts --dir ./src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "madge:circular": "madge ./src --circular --extensions ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -15,6 +16,7 @@
     "eslint": "^10.9.1",
     "globals": "^17.11.0",
     "jiti": "^2.7.0",
+    "madge": "^8.0.0",
     "typescript-eslint": "^8.68.0"
   },
   "peerDependencies": {

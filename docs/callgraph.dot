@@ -25,7 +25,6 @@ digraph tuff {
     fontname="Consolas";
     fontsize=12;
     label="src\\interpreter.ts";
-    "src\\interpreter.ts::evalOperand" [label="evalOperand"];
     "src\\interpreter.ts::evalExpr" [label="evalExpr"];
     "src\\interpreter.ts::execStatement" [label="execStatement"];
     "src\\interpreter.ts::execStatements" [label="execStatements"];
@@ -47,15 +46,16 @@ digraph tuff {
     label="src\\parser.ts";
     "src\\parser.ts::parseStatements" [label="parseStatements"];
     "src\\parser.ts::parsePlainStatement" [label="parsePlainStatement"];
+    "src\\parser.ts::parseOperand" [label="parseOperand"];
+    "src\\parser.ts::parseExpr" [label="parseExpr"];
     "src\\parser.ts::parseIf" [label="parseIf"];
     "src\\parser.ts::groupStatements" [label="groupStatements"];
   }
   "src\\evaluate.ts::evaluate" -> "src\\lexer.ts::tokenize";
   "src\\evaluate.ts::evaluate" -> "src\\parser.ts::groupStatements";
   "src\\evaluate.ts::evaluate" -> "src\\interpreter.ts::interpret";
-  "src\\interpreter.ts::evalOperand" -> "src\\errors.ts::fail";
   "src\\interpreter.ts::evalExpr" -> "src\\errors.ts::fail";
-  "src\\interpreter.ts::evalExpr" -> "src\\interpreter.ts::evalOperand";
+  "src\\interpreter.ts::evalExpr" -> "src\\interpreter.ts::evalExpr";
   "src\\interpreter.ts::execStatement" -> "src\\errors.ts::fail";
   "src\\interpreter.ts::execStatement" -> "src\\interpreter.ts::evalExpr";
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatements";
@@ -69,7 +69,12 @@ digraph tuff {
   "src\\parser.ts::parseStatements" -> "src\\parser.ts::parseIf";
   "src\\parser.ts::parseStatements" -> "src\\parser.ts::parsePlainStatement";
   "src\\parser.ts::parsePlainStatement" -> "src\\errors.ts::fail";
+  "src\\parser.ts::parsePlainStatement" -> "src\\parser.ts::parseExpr";
+  "src\\parser.ts::parseOperand" -> "src\\errors.ts::fail";
+  "src\\parser.ts::parseExpr" -> "src\\errors.ts::fail";
+  "src\\parser.ts::parseExpr" -> "src\\parser.ts::parseOperand";
   "src\\parser.ts::parseIf" -> "src\\errors.ts::fail";
+  "src\\parser.ts::parseIf" -> "src\\parser.ts::parseExpr";
   "src\\parser.ts::parseIf" -> "src\\parser.ts::parseStatements";
   "src\\parser.ts::groupStatements" -> "src\\parser.ts::parseStatements";
 }
