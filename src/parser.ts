@@ -16,6 +16,8 @@ export type IfStatement = {
   elseBlock?: Statement[];
 };
 
+export type WhileStatement = { condition: Expr; body: Statement[] };
+
 export type Declaration = {
   name: string;
   mutable: boolean;
@@ -37,9 +39,19 @@ export type Statement =
   | { declaration: Declaration; position: number }
   | { assignment: Assignment; position: number }
   | { return: Return; position: number }
-  | { if: IfStatement; position: number };
+  | { if: IfStatement; position: number }
+  | { while: WhileStatement; position: number };
 
-const NAME_KEYWORDS = ["let", "mut", "return", "true", "false", "if", "else"];
+const NAME_KEYWORDS = [
+  "let",
+  "mut",
+  "return",
+  "true",
+  "false",
+  "if",
+  "else",
+  "while",
+];
 
 type ParsedStatements = { statements: Statement[]; next: number };
 
@@ -72,6 +84,14 @@ function parseStatements(
       if (!parsed.ok) return parsed;
       const { ifStatement, next } = parsed.value;
       statements.push({ if: ifStatement, position: token.position });
+      i = next;
+      continue;
+    }
+    if (token.value === "while") {
+      const parsed = parseWhile(tokens, i);
+      if (!parsed.ok) return parsed;
+      const { whileStatement, next } = parsed.value;
+      statements.push({ while: whileStatement, position: token.position });
       i = next;
       continue;
     }
@@ -278,6 +298,53 @@ function parseIf(
     value: {
       ifStatement: { condition: condition.value, thenBlock, elseBlock },
       next,
+    },
+  };
+}
+
+function parseWhile(
+  tokens: Token[],
+  start: number,
+): Result<{ whileStatement: WhileStatement; next: number }> {
+  const whileToken = tokens[start]!;
+  if (tokens[start + 1]?.value !== "(")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'('",
+      found: tokens[start + 1]?.value,
+      position: tokens[start + 1]?.position ?? whileToken.position,
+    });
+  let k = start + 2;
+  let parenDepth = 1;
+  while (k < tokens.length && parenDepth > 0) {
+    if (tokens[k]!.value === "(") parenDepth++;
+    else if (tokens[k]!.value === ")") parenDepth--;
+    k++;
+  }
+  if (parenDepth !== 0)
+    return fail({
+      kind: "UnbalancedParen",
+      position: tokens[tokens.length - 1]?.position ?? whileToken.position,
+    });
+  const condition = parseExpr(tokens.slice(start + 2, k - 1));
+  if (!condition.ok) return condition;
+  if (tokens[k]?.value !== "{")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'{'",
+      found: tokens[k]?.value,
+      position: tokens[k]?.position ?? whileToken.position,
+    });
+  const bodyResult = parseStatements(tokens, k + 1);
+  if (!bodyResult.ok) return bodyResult;
+  return {
+    ok: true,
+    value: {
+      whileStatement: {
+        condition: condition.value,
+        body: bodyResult.value.statements,
+      },
+      next: bodyResult.value.next,
     },
   };
 }

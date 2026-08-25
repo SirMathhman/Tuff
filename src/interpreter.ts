@@ -112,6 +112,16 @@ function execStatements(
         const result = execStatements(branch, bindings, state);
         if (!result.ok) return result;
       }
+    } else if ("while" in item) {
+      if (state.returned)
+        return fail({ kind: "CodeAfterReturn", position: item.position });
+      while (!state.returned) {
+        const condition = evalExpr(item.while.condition, bindings);
+        if (!condition.ok) return condition;
+        if (condition.value !== 1) break;
+        const result = execStatements(item.while.body, bindings, state);
+        if (!result.ok) return result;
+      }
     } else {
       const result = execStatement(item, bindings, state);
       if (!result.ok) return result;
