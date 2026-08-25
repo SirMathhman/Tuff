@@ -78,6 +78,7 @@ function esc(s: string): string {
 const lines: string[] = [
   "digraph tuff {",
   "  rankdir=TB;",
+  "  compound=true;",
   "  splines=ortho;",
   '  node [shape=box, style="rounded,filled", fillcolor="#eef2ff", fontname="Consolas"];',
   '  edge [color="#64748b"];',
@@ -125,10 +126,6 @@ function fileCluster(file: string, ids: string[]): string[] {
   out.push(`    fontname="Consolas";`);
   out.push(`    fontsize=12;`);
   out.push(`    label="${esc(label)}";`);
-  // A node representing the file itself, so cross-file edges can target it.
-  out.push(
-    `    "${esc(file)}" [label="${esc(label)}", shape=folder, fillcolor="#e2e8f0"];`,
-  );
   for (const id of ids) {
     const name = id.split("::")[1]!;
     out.push(`    "${esc(id)}" [label="${esc(name)}"];`);
@@ -193,7 +190,10 @@ for (const [id, called] of calls) {
         const key = `${fromFile}->${targetFile}`;
         if (seenFileEdges.has(key)) continue;
         seenFileEdges.add(key);
-        lines.push(`  "${esc(fromFile)}" -> "${esc(targetFile)}";`);
+        // Edges target the file's cluster, so the arrow hooks into the box.
+        const cluster = `cluster_${fromFile.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+        const targetCluster = `cluster_${targetFile.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+        lines.push(`  "${cluster}" -> "${targetCluster}";`);
       }
     }
   }
