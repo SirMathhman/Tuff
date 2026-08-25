@@ -1,12 +1,13 @@
 import js from "@eslint/js";
 import globals from "globals";
+import jsdoc from "eslint-plugin-jsdoc";
 import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
-    plugins: { js },
+    plugins: { js, jsdoc },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
@@ -20,6 +21,7 @@ export default defineConfig([
           skipComments: true,
         },
       ],
+      "jsdoc/check-syntax": "error",
     },
   },
   tseslint.configs.recommended,

@@ -23,6 +23,26 @@ function expectInvalidNumberLiteral(
   }
 }
 
+function expectTypeMismatch(
+  input: string,
+  name: string,
+  expected: "number" | "boolean",
+  found: "number" | "boolean",
+  position: number,
+): void {
+  const result = evaluate(input);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.kind).toBe("TypeMismatch");
+    if (result.error.kind === "TypeMismatch") {
+      expect(result.error.name).toBe(name);
+      expect(result.error.expected).toBe(expected);
+      expect(result.error.found).toBe(found);
+      expect(result.error.position).toBe(position);
+    }
+  }
+}
+
 describe("evaluate", () => {
   test("empty string evaluates to 0", () => {
     expect(unwrap(evaluate(""))).toBe(0);
@@ -137,17 +157,23 @@ describe("evaluate", () => {
   });
 
   test("reassigning a number variable to a boolean yields TypeMismatch with position", () => {
-    const result = evaluate("let mut x = 0; x = true;");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe("TypeMismatch");
-      if (result.error.kind === "TypeMismatch") {
-        expect(result.error.name).toBe("x");
-        expect(result.error.expected).toBe("number");
-        expect(result.error.found).toBe("boolean");
-        expect(result.error.position).toBe(15);
-      }
-    }
+    expectTypeMismatch(
+      "let mut x = 0; x = true;",
+      "x",
+      "number",
+      "boolean",
+      15,
+    );
+  });
+
+  test("type mismatch in an unexecuted branch yields TypeMismatch with position", () => {
+    expectTypeMismatch(
+      "if (false) { let mut x = 0; x = true; }",
+      "x",
+      "number",
+      "boolean",
+      28,
+    );
   });
 
   test("declaration without a name yields ExpectedToken with position", () => {
