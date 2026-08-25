@@ -44,6 +44,12 @@ function checkStatements(
       const type = exprType(item.declaration.expr, env);
       if (type) env.set(item.declaration.name, type);
     } else if ("assignment" in item) {
+      if (!env.has(item.assignment.name))
+        return fail({
+          kind: "UndeclaredVariable",
+          name: item.assignment.name,
+          position: item.assignment.position,
+        });
       const expr = checkExpr(item.assignment.expr, env);
       if (!expr.ok) return expr;
       if (item.assignment.op === "=") {

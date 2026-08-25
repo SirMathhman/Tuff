@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
+import type { EvaluateError } from "./src/errors.ts";
 
 function unwrap(result: ReturnType<typeof evaluate>): unknown {
   if (!result.ok)
@@ -7,38 +8,17 @@ function unwrap(result: ReturnType<typeof evaluate>): unknown {
   return result.value;
 }
 
-function expectInvalidNumberLiteral(
+function expectError<K extends EvaluateError["kind"]>(
   input: string,
-  literal: string,
-  position: number,
+  kind: K,
+  assert: (error: Extract<EvaluateError, { kind: K }>) => void,
 ): void {
   const result = evaluate(input);
   expect(result.ok).toBe(false);
   if (!result.ok) {
-    expect(result.error.kind).toBe("InvalidNumberLiteral");
-    if (result.error.kind === "InvalidNumberLiteral") {
-      expect(result.error.literal).toBe(literal);
-      expect(result.error.position).toBe(position);
-    }
-  }
-}
-
-function expectTypeMismatch(
-  input: string,
-  name: string,
-  expected: "number" | "boolean",
-  found: "number" | "boolean",
-  position: number,
-): void {
-  const result = evaluate(input);
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.error.kind).toBe("TypeMismatch");
-    if (result.error.kind === "TypeMismatch") {
-      expect(result.error.name).toBe(name);
-      expect(result.error.expected).toBe(expected);
-      expect(result.error.found).toBe(found);
-      expect(result.error.position).toBe(position);
+    expect(result.error.kind).toBe(kind);
+    if (result.error.kind === kind) {
+      assert(result.error);
     }
   }
 }
@@ -160,36 +140,30 @@ describe("evaluate", () => {
     }
   });
 
-  test("reassigning a number variable to a boolean yields TypeMismatch with position", () => {
-    expectTypeMismatch(
-      "let mut x = 0; x = true;",
-      "x",
-      "number",
-      "boolean",
-      15,
-    );
-  });
-
-  test("type mismatch in an unexecuted branch yields TypeMismatch with position", () => {
-    expectTypeMismatch(
-      "if (false) { let mut x = 0; x = true; }",
-      "x",
-      "number",
-      "boolean",
-      28,
-    );
+  test.each([
+    ["let mut x = 0; x = true;", 15],
+    ["if (false) { let mut x = 0; x = true; }", 28],
+  ])("type mismatch yields TypeMismatch with position (%s)", (input, position) => {
+    expectError(input, "TypeMismatch", (error) => {
+      expect(error.name).toBe("x");
+      expect(error.expected).toBe("number");
+      expect(error.found).toBe("boolean");
+      expect(error.position).toBe(position);
+    });
   });
 
   test("undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
-    const result = evaluate("if (false) { let x = y; }");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe("UndeclaredVariable");
-      if (result.error.kind === "UndeclaredVariable") {
-        expect(result.error.name).toBe("y");
-        expect(result.error.position).toBe(21);
-      }
-    }
+    expectError("if (false) { let x = y; }", "UndeclaredVariable", (error) => {
+      expect(error.name).toBe("y");
+      expect(error.position).toBe(21);
+    });
+  });
+
+  test("assignment to an undeclared variable in an unexecuted branch yields UndeclaredVariable with position", () => {
+    expectError("if (false) { x = 5; }", "UndeclaredVariable", (error) => {
+      expect(error.name).toBe("x");
+      expect(error.position).toBe(13);
+    });
   });
 
   test("declaration without a name yields ExpectedToken with position", () => {
@@ -228,10 +202,16 @@ describe("evaluate", () => {
   });
 
   test("malformed number literal yields InvalidNumberLiteral with position", () => {
-    expectInvalidNumberLiteral("return 1.2.3;", "1.2.3", 7);
+    expectError("return 1.2.3;", "InvalidNumberLiteral", (error) => {
+      expect(error.literal).toBe("1.2.3");
+      expect(error.position).toBe(7);
+    });
   });
 
   test("trailing-dot number literal yields InvalidNumberLiteral", () => {
-    expectInvalidNumberLiteral("let x = 1.; return x;", "1.", 8);
+    expectError("let x = 1.; return x;", "InvalidNumberLiteral", (error) => {
+      expect(error.literal).toBe("1.");
+      expect(error.position).toBe(8);
+    });
   });
 });
