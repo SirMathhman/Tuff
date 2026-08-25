@@ -150,6 +150,16 @@ describe("evaluate", () => {
     ).toBe(6);
   });
 
+  test('evaluates "let mut sum = 0; let range = 0..4; for (i in range) { sum += i; } return sum;" to 6', () => {
+    expect(
+      unwrap(
+        evaluate(
+          "let mut sum = 0; let range = 0..4; for (i in range) { sum += i; } return sum;",
+        ),
+      ),
+    ).toBe(6);
+  });
+
   test('evaluates "let x = 0; let y = 1; return x == y;" to 0', () => {
     expect(unwrap(evaluate("let x = 0; let y = 1; return x == y;"))).toBe(0);
   });

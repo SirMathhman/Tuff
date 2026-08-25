@@ -16,8 +16,9 @@ export function evaluate(input: string): Result<number> {
   if (!result.ok) return result;
   const value = result.value;
   if (value === undefined) return { ok: true, value: 0 };
+  // Typecheck rejects returning a range, so the value is number | boolean here.
   return {
     ok: true,
-    value: typeof value === "boolean" ? (value ? 1 : 0) : value,
+    value: typeof value === "boolean" ? (value ? 1 : 0) : (value as number),
   };
 }

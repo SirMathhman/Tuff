@@ -7,6 +7,7 @@ export type {
   Assignment,
   Declaration,
   Expr,
+  ForStatement,
   IfStatement,
   Return,
   Statement,

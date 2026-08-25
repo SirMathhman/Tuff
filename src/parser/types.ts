@@ -11,7 +11,8 @@ export type Expr =
       };
       position: number;
     }
-  | { grouped: Expr; position: number };
+  | { grouped: Expr; position: number }
+  | { range: { start: Expr; end: Expr }; position: number };
 
 export type IfStatement = {
   condition: Expr;
@@ -23,7 +24,7 @@ export type WhileStatement = { condition: Expr; body: Statement[] };
 
 export type ForStatement = {
   variable: string;
-  range: { start: Expr; end: Expr };
+  range: Expr;
   body: Statement[];
 };
 

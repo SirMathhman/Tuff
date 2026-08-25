@@ -303,18 +303,8 @@ function parseFor(c: Cursor): Result<Statement> {
       position: peek(c)?.position ?? keyword.position,
     });
   advance(c);
-  const start = parseExpr(c);
-  if (!start.ok) return start;
-  if (peek(c)?.value !== "..")
-    return fail({
-      kind: "ExpectedToken",
-      expected: "'..'",
-      found: peek(c)?.value,
-      position: peek(c)?.position ?? keyword.position,
-    });
-  advance(c);
-  const end = parseExpr(c);
-  if (!end.ok) return end;
+  const range = parseExpr(c);
+  if (!range.ok) return range;
   const close = expectCloseParen(c, keyword);
   if (!close.ok) return close;
   const body = parseBlockBody(c, keyword);
@@ -324,7 +314,7 @@ function parseFor(c: Cursor): Result<Statement> {
     value: {
       for: {
         variable: nameToken.value,
-        range: { start: start.value, end: end.value },
+        range: range.value,
         body: body.value,
       },
       position: keyword.position,

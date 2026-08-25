@@ -4,7 +4,25 @@ import { advance, peek } from "./types.ts";
 import type { Cursor, Expr } from "./types.ts";
 
 export function parseExpr(c: Cursor): Result<Expr> {
-  return parseOr(c);
+  return parseRange(c);
+}
+
+function parseRange(c: Cursor): Result<Expr> {
+  let left = parseOr(c);
+  if (!left.ok) return left;
+  while (peek(c)?.value === "..") {
+    advance(c);
+    const right = parseOr(c);
+    if (!right.ok) return right;
+    left = {
+      ok: true,
+      value: {
+        range: { start: left.value, end: right.value },
+        position: left.value.position,
+      },
+    };
+  }
+  return left;
 }
 
 function parseOr(c: Cursor): Result<Expr> {

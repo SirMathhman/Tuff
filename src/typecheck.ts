@@ -1,8 +1,8 @@
 import type { Result } from "./errors.ts";
 import { fail } from "./errors.ts";
-import type { Expr, Statement } from "./parser/index.ts";
+import type { Expr, ForStatement, Statement } from "./parser/index.ts";
 
-type ValueType = "number" | "boolean";
+type ValueType = "number" | "boolean" | "range";
 
 type Binding = { type: ValueType; mutable: boolean };
 
@@ -24,6 +24,11 @@ function checkExpr(expr: Expr, env: Env): Result<void> {
       });
     return { ok: true, value: undefined };
   }
+  if ("range" in expr) {
+    const start = checkExpr(expr.range.start, env);
+    if (!start.ok) return start;
+    return checkExpr(expr.range.end, env);
+  }
   const left = checkExpr(expr.binary.left, env);
   if (!left.ok) return left;
   return checkExpr(expr.binary.right, env);
@@ -33,11 +38,32 @@ function exprType(expr: Expr, env: Env): ValueType | undefined {
   if ("literal" in expr) return literalType(expr.literal);
   if ("grouped" in expr) return exprType(expr.grouped, env);
   if ("identifier" in expr) return env.get(expr.identifier)?.type;
+  if ("range" in expr) return "range";
   return expr.binary.op === "+" ||
     expr.binary.op === "-" ||
     expr.binary.op === "*"
     ? "number"
     : "boolean";
+}
+
+function checkFor(
+  item: Extract<Statement, { for: ForStatement }>,
+  env: Env,
+): Result<unknown> {
+  const range = checkExpr(item.for.range, env);
+  if (!range.ok) return range;
+  const rangeType = exprType(item.for.range, env);
+  if (rangeType !== "range")
+    return fail({
+      kind: "TypeMismatch",
+      name: item.for.variable,
+      expected: "range",
+      found: rangeType ?? "number",
+      position: item.position,
+    });
+  const loopEnv = new Map(env);
+  loopEnv.set(item.for.variable, { type: "number", mutable: true });
+  return checkStatements(item.for.body, loopEnv);
 }
 
 function checkStatements(statements: Statement[], env: Env): Result<unknown> {
@@ -90,6 +116,15 @@ function checkStatements(statements: Statement[], env: Env): Result<unknown> {
     } else if ("return" in item) {
       const expr = checkExpr(item.return.expr, env);
       if (!expr.ok) return expr;
+      const type = exprType(item.return.expr, env);
+      if (type === "range")
+        return fail({
+          kind: "TypeMismatch",
+          name: "return",
+          expected: "number",
+          found: "range",
+          position: item.return.position,
+        });
     } else if ("block" in item) {
       const result = checkStatements(item.block, new Map(env));
       if (!result.ok) return result;
@@ -108,13 +143,7 @@ function checkStatements(statements: Statement[], env: Env): Result<unknown> {
       const result = checkStatements(item.while.body, new Map(env));
       if (!result.ok) return result;
     } else if ("for" in item) {
-      const start = checkExpr(item.for.range.start, env);
-      if (!start.ok) return start;
-      const end = checkExpr(item.for.range.end, env);
-      if (!end.ok) return end;
-      const loopEnv = new Map(env);
-      loopEnv.set(item.for.variable, { type: "number", mutable: true });
-      const result = checkStatements(item.for.body, loopEnv);
+      const result = checkFor(item, env);
       if (!result.ok) return result;
     } else if ("match" in item) {
       const scrutinee = checkExpr(item.match.scrutinee, env);

@@ -27,7 +27,7 @@ function evaluate(input: string): Result<number>;
 
 ### The `Result<number>` boundary
 
-Internally the value model is `number | boolean`. Booleans are coerced to `0`/`1` **only at the `evaluate` boundary** — the single point where a boolean becomes a number. This keeps the internal value model honest while the public API stays numeric:
+Internally the value model is `number | boolean | range`. Booleans are coerced to `0`/`1` **only at the `evaluate` boundary** — the single point where a boolean becomes a number. Ranges are never returned across the boundary (they are only consumed by `for` loops). This keeps the internal value model honest while the public API stays numeric:
 
 ```ts
 evaluate("return true;"); // { ok: true, value: 1 }
@@ -44,11 +44,12 @@ Consumers should not assume a general-purpose evaluator: only the constructs bel
 
 ### Types
 
-Two types: `number` and `boolean`.
+Three types: `number`, `boolean`, and `range`.
 
 - **number literals**: `0`, `1.5` (integers and decimals; malformed literals like `1.2.3` or `1.` are rejected).
 - **boolean literals**: `true`, `false`.
 - **parenthesized expressions**: `( <expr> )` — group an expression to override precedence.
+- **ranges**: `<expr>..<expr>` — a first-class value of type `range` (e.g. `0..4`). Ranges can be stored in variables and used as the iterable in a `for` loop.
 
 ### Variables
 
@@ -65,7 +66,7 @@ Two types: `number` and `boolean`.
 - **Block**: `{ <statements> }`.
 - **If**: `if (<expr>) { <statements> } else { <statements> }` (the `else` is optional).
 - **While**: `while (<expr>) { <statements> }`.
-- **For**: `for (<name> in <expr>..<expr>) { <statements> }` — iterates `<name>` over the integer range `[start, end)`; the loop variable is a fresh mutable number binding per iteration.
+- **For**: `for (<name> in <range>) { <statements> }` — iterates `<name>` over the integer range `[start, end)`; `<range>` is any expression of type `range` (e.g. `0..4` or a variable holding a range); the loop variable is a fresh mutable number binding per iteration.
 - **Break**: `break;` — exits the innermost `while` or `for` loop.
 - **Continue**: `continue;` — skips to the next iteration of the innermost `while` or `for` loop.
 - **Match**: `match (<expr>) { case <pattern> => { <statements> }; ... }` — evaluates the scrutinee and executes the first case whose pattern matches. Patterns are literals (`1`, `true`, `false`) or the wildcard `_`.

@@ -1,7 +1,9 @@
 import type { Result } from "./errors.ts";
 import type { Expr, Statement } from "./parser/index.ts";
 
-export type Value = number | boolean;
+export type RangeValue = { start: number; end: number };
+
+export type Value = number | boolean | RangeValue;
 
 type Binding = { value: Value };
 
@@ -13,6 +15,11 @@ function evalExpr(expr: Expr, bindings: Map<string, Binding>): Value {
   if ("literal" in expr) return expr.literal;
   if ("grouped" in expr) return evalExpr(expr.grouped, bindings);
   if ("identifier" in expr) return bindings.get(expr.identifier)!.value;
+  if ("range" in expr) {
+    const start = evalExpr(expr.range.start, bindings);
+    const end = evalExpr(expr.range.end, bindings);
+    return { start: start as number, end: end as number };
+  }
   const { op, left, right } = expr.binary;
   const l = evalExpr(left, bindings);
   const r = evalExpr(right, bindings);
@@ -86,9 +93,8 @@ function execStatements(
         if (signal === "continue") continue;
       }
     } else if ("for" in item) {
-      const start = evalExpr(item.for.range.start, bindings);
-      const end = evalExpr(item.for.range.end, bindings);
-      for (let i = start as number; i < (end as number); i++) {
+      const range = evalExpr(item.for.range, bindings) as RangeValue;
+      for (let i = range.start; i < range.end; i++) {
         if (state.returned) break;
         const loopBindings = new Map(bindings);
         loopBindings.set(item.for.variable, { value: i });

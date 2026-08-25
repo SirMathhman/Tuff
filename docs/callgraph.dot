@@ -69,6 +69,7 @@ digraph tuff {
     fontsize=12;
     label="expressions.ts";
     "src\\parser\\expressions.ts::parseExpr" [label="parseExpr"];
+    "src\\parser\\expressions.ts::parseRange" [label="parseRange"];
     "src\\parser\\expressions.ts::parseOr" [label="parseOr"];
     "src\\parser\\expressions.ts::parseAnd" [label="parseAnd"];
     "src\\parser\\expressions.ts::parseComparison" [label="parseComparison"];
@@ -127,7 +128,10 @@ digraph tuff {
   "src\\interpreter.ts::execStatements" -> "src\\interpreter.ts::execStatement";
   "src\\interpreter.ts::interpret" -> "src\\interpreter.ts::execStatements";
   "src\\lexer.ts::tokenize" -> "src\\errors.ts::fail";
-  "src\\parser\\expressions.ts::parseExpr" -> "src\\parser\\expressions.ts::parseOr";
+  "src\\parser\\expressions.ts::parseExpr" -> "src\\parser\\expressions.ts::parseRange";
+  "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\expressions.ts::parseOr";
+  "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\types.ts::peek";
+  "src\\parser\\expressions.ts::parseRange" -> "src\\parser\\types.ts::advance";
   "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\expressions.ts::parseAnd";
   "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\types.ts::peek";
   "src\\parser\\expressions.ts::parseOr" -> "src\\parser\\types.ts::advance";
