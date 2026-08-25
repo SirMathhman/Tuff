@@ -30,8 +30,8 @@ function evaluate(input: string): Result<number>;
 Internally the value model is `number | boolean`. Booleans are coerced to `0`/`1` **only at the `evaluate` boundary** — the single point where a boolean becomes a number. This keeps the internal value model honest while the public API stays numeric:
 
 ```ts
-evaluate("return true;")   // { ok: true, value: 1 }
-evaluate("return false;")  // { ok: true, value: 0 }
+evaluate("return true;"); // { ok: true, value: 1 }
+evaluate("return false;"); // { ok: true, value: 0 }
 ```
 
 ## Trust model
@@ -53,7 +53,7 @@ Two types: `number` and `boolean`.
 
 - `let x = <expr>;` — declare an immutable binding.
 - `let mut x = <expr>;` — declare a mutable binding.
-- Re-declaring a name is an error (`DuplicateDeclaration`).
+- Re-declaring a name rebinds it to the new value and mutability (e.g. `let x = 0; let x = 1;` yields `1`).
 - Assigning to an immutable binding is an error (`ImmutableReassignment`).
 - Reassigning a binding to a value of a different type is an error (`TypeMismatch`).
 
@@ -67,24 +67,24 @@ Two types: `number` and `boolean`.
 
 ### Operators
 
-| Operator | Meaning | Result type |
-| --- | --- | --- |
-| `||` | logical or | boolean |
-| `&&` | logical and | boolean |
-| `<` | less-than (numbers) | boolean |
-| `==` | equality | boolean |
+| Operator | Meaning             | Result type |
+| -------- | ------------------- | ----------- |
+| `\|\|`   | logical or          | boolean     |
+| `&&`     | logical and         | boolean     |
+| `<`      | less-than (numbers) | boolean     |
+| `==`     | equality            | boolean     |
 
 Operators chain and nest; expressions may be parenthesized.
 
 ### Scoping
 
-Blocks share a single flat binding environment: a `let` inside a block is visible (and duplicate-checked) outside it. There is no block scoping.
+Blocks share a single flat binding environment: a `let` inside a block is visible outside it. There is no block scoping.
 
 ## Error variants
 
 `EvaluateError` is a closed set. Every variant identifies the cause in the source via a `position` (character offset) plus a relevant field:
 
-`EmptyInput`, `UnexpectedCharacter`, `UnsupportedExpression`, `UndeclaredVariable`, `DuplicateDeclaration`, `ExpectedToken`, `EmptyStatement`, `MissingTerminator`, `CodeAfterReturn`, `ImmutableReassignment`, `UnbalancedBrace`, `UnbalancedParen`, `InvalidNumberLiteral`, `TypeMismatch`.
+`EmptyInput`, `UnexpectedCharacter`, `UnsupportedExpression`, `UndeclaredVariable`, `ExpectedToken`, `EmptyStatement`, `MissingTerminator`, `CodeAfterReturn`, `ImmutableReassignment`, `UnbalancedBrace`, `UnbalancedParen`, `InvalidNumberLiteral`, `TypeMismatch`.
 
 ## Pipeline
 

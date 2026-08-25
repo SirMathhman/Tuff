@@ -55,12 +55,6 @@ function execStatement(
     const { name, mutable, expr } = item.declaration;
     const value = evalExpr(expr, bindings);
     if (!value.ok) return value;
-    if (bindings.has(name))
-      return fail({
-        kind: "DuplicateDeclaration",
-        name,
-        position: item.declaration.position,
-      });
     bindings.set(name, {
       mutable,
       type: valueType(value.value),

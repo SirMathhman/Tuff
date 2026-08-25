@@ -3,7 +3,6 @@ export const EvaluateErrorKind = {
   UnexpectedCharacter: "UnexpectedCharacter",
   UnsupportedExpression: "UnsupportedExpression",
   UndeclaredVariable: "UndeclaredVariable",
-  DuplicateDeclaration: "DuplicateDeclaration",
   ExpectedToken: "ExpectedToken",
   EmptyStatement: "EmptyStatement",
   MissingTerminator: "MissingTerminator",
@@ -23,7 +22,6 @@ export type EvaluateError =
   | { kind: "UnexpectedCharacter"; ch: string; position: number }
   | { kind: "UnsupportedExpression"; position: number }
   | { kind: "UndeclaredVariable"; name: string; position: number }
-  | { kind: "DuplicateDeclaration"; name: string; position: number }
   | {
       kind: "ExpectedToken";
       expected: string;

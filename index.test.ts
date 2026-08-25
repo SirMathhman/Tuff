@@ -56,6 +56,10 @@ describe("evaluate", () => {
     expect(unwrap(evaluate("let mut x = 0; x = 1;"))).toBe(0);
   });
 
+  test('evaluates "let x = 0; let x = 1; return x;" to 1', () => {
+    expect(unwrap(evaluate("let x = 0; let x = 1; return x;"))).toBe(1);
+  });
+
   test('evaluates "return 1;" to 1', () => {
     expect(unwrap(evaluate("return 1;"))).toBe(1);
   });
