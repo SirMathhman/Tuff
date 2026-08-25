@@ -109,6 +109,27 @@ function parseStatements(c: Cursor): Result<ParsedStatements> {
   return { ok: true, value: { statements, closed: false } };
 }
 
+function parseExprAndSemicolon(c: Cursor, position: number): Result<Expr> {
+  const expr = parseExpr(c);
+  if (!expr.ok) return expr;
+  if (peek(c)?.value !== ";")
+    return fail({ kind: "MissingTerminator", position });
+  advance(c);
+  return expr;
+}
+
+function expectOpenBrace(c: Cursor, refToken: Token): Result<void> {
+  if (peek(c)?.value !== "{")
+    return fail({
+      kind: "ExpectedToken",
+      expected: "'{'",
+      found: peek(c)?.value,
+      position: peek(c)?.position ?? refToken.position,
+    });
+  advance(c);
+  return { ok: true, value: undefined };
+}
+
 function parsePlainStatement(c: Cursor): Result<Statement> {
   const first = peek(c)!;
   if (first.value === ";")
@@ -137,11 +158,8 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
         position: peek(c)?.position ?? first.position,
       });
     advance(c);
-    const expr = parseExpr(c);
+    const expr = parseExprAndSemicolon(c, first.position);
     if (!expr.ok) return expr;
-    if (peek(c)?.value !== ";")
-      return fail({ kind: "MissingTerminator", position: first.position });
-    advance(c);
     return {
       ok: true,
       value: {
@@ -157,11 +175,8 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
   }
   if (first.value === "return") {
     advance(c);
-    const expr = parseExpr(c);
+    const expr = parseExprAndSemicolon(c, first.position);
     if (!expr.ok) return expr;
-    if (peek(c)?.value !== ";")
-      return fail({ kind: "MissingTerminator", position: first.position });
-    advance(c);
     return {
       ok: true,
       value: {
@@ -187,11 +202,8 @@ function parsePlainStatement(c: Cursor): Result<Statement> {
       position: opToken?.position ?? name.position,
     });
   advance(c);
-  const expr = parseExpr(c);
+  const expr = parseExprAndSemicolon(c, name.position);
   if (!expr.ok) return expr;
-  if (peek(c)?.value !== ";")
-    return fail({ kind: "MissingTerminator", position: name.position });
-  advance(c);
   return {
     ok: true,
     value: {
@@ -321,14 +333,8 @@ function parseConditionBlock(
       position: c.tokens[c.tokens.length - 1]?.position ?? keyword.position,
     });
   advance(c);
-  if (peek(c)?.value !== "{")
-    return fail({
-      kind: "ExpectedToken",
-      expected: "'{'",
-      found: peek(c)?.value,
-      position: peek(c)?.position ?? keyword.position,
-    });
-  advance(c);
+  const openBrace = expectOpenBrace(c, keyword);
+  if (!openBrace.ok) return openBrace;
   const body = parseStatements(c);
   if (!body.ok) return body;
   if (!body.value.closed)
@@ -350,14 +356,8 @@ function parseIf(c: Cursor): Result<Statement> {
   let elseBlock: Statement[] | undefined;
   if (peek(c)?.value === "else") {
     const elseToken = advance(c);
-    if (peek(c)?.value !== "{")
-      return fail({
-        kind: "ExpectedToken",
-        expected: "'{'",
-        found: peek(c)?.value,
-        position: peek(c)?.position ?? elseToken.position,
-      });
-    advance(c);
+    const openBrace = expectOpenBrace(c, elseToken);
+    if (!openBrace.ok) return openBrace;
     const elseResult = parseStatements(c);
     if (!elseResult.ok) return elseResult;
     if (!elseResult.value.closed)
