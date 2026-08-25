@@ -64,6 +64,7 @@ Two types: `number` and `boolean`.
 - **Block**: `{ <statements> }`.
 - **If**: `if (<expr>) { <statements> } else { <statements> }` (the `else` is optional).
 - **While**: `while (<expr>) { <statements> }`.
+- **Break**: `break;` — exits the innermost `while` loop.
 
 ### Operators
 
@@ -74,11 +75,11 @@ Two types: `number` and `boolean`.
 | `<`      | less-than (numbers) | boolean     |
 | `==`     | equality            | boolean     |
 
-Operators chain and nest; expressions may be parenthesized.
+Operators chain and nest.
 
 ### Scoping
 
-Blocks share a single flat binding environment: a `let` inside a block is visible outside it. There is no block scoping.
+Blocks introduce a new scope: a `let` inside a block is not visible outside it.
 
 ## Error variants
 
