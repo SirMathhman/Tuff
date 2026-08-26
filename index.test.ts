@@ -54,4 +54,8 @@ describe("evaluateTuff", () => {
       });
     }
   });
+
+  test('evaluateTuff("let x = 100;") => 0', () => {
+    expect(evaluateTuff("let x = 100;")).toEqual({ ok: true, value: 0 });
+  });
 });
