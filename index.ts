@@ -45,50 +45,89 @@ export interface Binding {
  */
 export function evaluateTuff(s: string): TuffResult {
   const env = new Map<string, Binding>();
-  const statements = s
-    .split(";")
-    .map((st) => st.trim())
-    .filter(Boolean);
+  const result = executeStatements(splitStatements(s), env, 1);
+  return result ?? { ok: true, value: 0 };
+}
+
+function executeStatements(
+  statements: string[],
+  env: Map<string, Binding>,
+  baseLine: number,
+): TuffResult | undefined {
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (!stmt) continue;
-    const line = i + 1;
-    const [, letMut, letName, letValue] =
-      stmt.match(/^let\s+(mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];
-    if (letName && letValue) {
-      const value = resolveOrError(letValue, env, line);
-      if (typeof value !== "number") return { ok: false, error: value };
-      env.set(letName, { value, mut: Boolean(letMut) });
-      continue;
+    const result = executeStatement(stmt, env, baseLine + i);
+    if (result) return result;
+  }
+  return undefined;
+}
+
+function executeStatement(
+  stmt: string,
+  env: Map<string, Binding>,
+  line: number,
+): TuffResult | undefined {
+  const [, blockBody] = stmt.match(/^\{([\s\S]*)\}$/) ?? [];
+  if (blockBody !== undefined) {
+    return executeStatements(splitStatements(blockBody), env, line);
+  }
+  const [, letMut, letName, letValue] =
+    stmt.match(/^let\s+(mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];
+  if (letName && letValue) {
+    const value = resolveOrError(letValue, env, line);
+    if (typeof value !== "number") return { ok: false, error: value };
+    env.set(letName, { value, mut: Boolean(letMut) });
+    return undefined;
+  }
+  const [, returnValue] = stmt.match(/^return\s+(.+)$/) ?? [];
+  if (returnValue) {
+    const value = resolveOrError(returnValue, env, line);
+    if (typeof value !== "number") return { ok: false, error: value };
+    return { ok: true, value };
+  }
+  const [, assignName, assignValue] = stmt.match(/^(\w+)\s*=\s*(.+)$/) ?? [];
+  if (assignName && assignValue) {
+    const binding = env.get(assignName);
+    if (!binding) {
+      return {
+        ok: false,
+        error: { kind: "UnidentifiedIdentifier", name: assignName, line },
+      };
     }
-    const [, returnValue] = stmt.match(/^return\s+(.+)$/) ?? [];
-    if (returnValue) {
-      const value = resolveOrError(returnValue, env, line);
-      if (typeof value !== "number") return { ok: false, error: value };
-      return { ok: true, value };
+    if (!binding.mut) {
+      return {
+        ok: false,
+        error: { kind: "ImmutableAssignment", name: assignName, line },
+      };
     }
-    const [, assignName, assignValue] = stmt.match(/^(\w+)\s*=\s*(.+)$/) ?? [];
-    if (assignName && assignValue) {
-      const binding = env.get(assignName);
-      if (!binding) {
-        return {
-          ok: false,
-          error: { kind: "UnidentifiedIdentifier", name: assignName, line },
-        };
-      }
-      if (!binding.mut) {
-        return {
-          ok: false,
-          error: { kind: "ImmutableAssignment", name: assignName, line },
-        };
-      }
-      const value = resolveOrError(assignValue, env, line);
-      if (typeof value !== "number") return { ok: false, error: value };
-      env.set(assignName, { ...binding, value });
-      continue;
+    const value = resolveOrError(assignValue, env, line);
+    if (typeof value !== "number") return { ok: false, error: value };
+    env.set(assignName, { ...binding, value });
+    return undefined;
+  }
+  return undefined;
+}
+
+function splitStatements(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of s) {
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    if (ch === ";" && depth === 0) {
+      out.push(current);
+      current = "";
+    } else if (ch === "}" && depth === 0) {
+      out.push(current + ch);
+      current = "";
+    } else {
+      current += ch;
     }
   }
-  return { ok: true, value: 0 };
+  out.push(current);
+  return out.map((st) => st.trim()).filter(Boolean);
 }
 
 function resolveOrError(

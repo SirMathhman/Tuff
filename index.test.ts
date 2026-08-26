@@ -99,3 +99,10 @@ test('evaluateTuff("unidentifiedIdentifier = 1;") => Err', () => {
     1,
   );
 });
+
+test('evaluateTuff("let mut x = 0; { x = 1; } return x;") => 1', () => {
+  expect(evaluateTuff("let mut x = 0; { x = 1; } return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
