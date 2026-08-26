@@ -239,7 +239,8 @@ function parseTerm(state: ParserState): ParseExprResult {
 }
 
 /**
- * Parse a primary expression, including postfix `.index` field access.
+ * Parse a primary expression, including postfix `.index` field access
+ * and `[index]` array access.
  *
  * @param state - The parser state.
  * @returns The expression, or a structured parse error.
@@ -248,23 +249,48 @@ function parsePrimary(state: ParserState): ParseExprResult {
   const first = parseAtom(state);
   if (!first.ok) return first;
   let expr = first.expr;
-  while (!atEnd(state) && peek(state).value === ".") {
-    const dot = next(state);
-    const idxTok = next(state);
-    if (idxTok?.kind !== "number" || !/^\d+$/.test(idxTok.value)) {
+  while (!atEnd(state) && (peek(state).value === "." || peek(state).value === "[")) {
+    if (peek(state).value === ".") {
+      const dot = next(state);
+      const idxTok = next(state);
+      if (idxTok?.kind !== "number" || !/^\d+$/.test(idxTok.value)) {
+        return {
+          ok: false,
+          error: parseError(
+            "Expected tuple index after '.'",
+            idxTok?.pos ?? dot.pos,
+          ),
+        };
+      }
+      expr = {
+        type: "FieldAccess",
+        object: expr,
+        index: Number(idxTok.value),
+        pos: dot.pos,
+      };
+      continue;
+    }
+    const open = next(state);
+    const idx = parseExpr(state);
+    if (!idx.ok) return idx;
+    if (idx.expr.type !== "Number" || !Number.isInteger(idx.expr.value)) {
       return {
         ok: false,
-        error: parseError(
-          "Expected tuple index after '.'",
-          idxTok?.pos ?? dot.pos,
-        ),
+        error: parseError("Expected integer index in '[]'", idx.expr.pos),
+      };
+    }
+    const close = next(state);
+    if (close.value !== "]") {
+      return {
+        ok: false,
+        error: parseError("Expected ']' after index", close.pos),
       };
     }
     expr = {
       type: "FieldAccess",
       object: expr,
-      index: Number(idxTok.value),
-      pos: dot.pos,
+      index: idx.expr.value,
+      pos: open.pos,
     };
   }
   return { ok: true, expr };
@@ -302,6 +328,9 @@ function parseAtom(state: ParserState): ParseExprResult {
   if (t.value === "(") {
     return parseTuple(state);
   }
+  if (t.value === "[") {
+    return parseArray(state);
+  }
   return {
     ok: false,
     error: parseError(`Expected expression, got: ${t.value}`, t.pos),
@@ -330,6 +359,33 @@ function parseTuple(state: ParserState): ParseExprResult {
     return {
       ok: false,
       error: parseError("Expected ')' after tuple", close.pos),
+    };
+  }
+  return { ok: true, expr: { type: "Tuple", elements, pos: open.pos } };
+}
+
+/**
+ * Parse an array literal: a comma-separated list of expressions in brackets.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseArray(state: ParserState): ParseExprResult {
+  const open = next(state);
+  const first = parseExpr(state);
+  if (!first.ok) return first;
+  const elements = [first.expr];
+  while (!atEnd(state) && peek(state).value === ",") {
+    next(state);
+    const el = parseExpr(state);
+    if (!el.ok) return el;
+    elements.push(el.expr);
+  }
+  const close = next(state);
+  if (close.value !== "]") {
+    return {
+      ok: false,
+      error: parseError("Expected ']' after array", close.pos),
     };
   }
   return { ok: true, expr: { type: "Tuple", elements, pos: open.pos } };
