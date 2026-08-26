@@ -222,7 +222,7 @@ test('evaluateTuff("let x = 1; x;") => Err', () => {
   if (!result.ok) {
     expect(result.error).toEqual({
       kind: "InvalidStatement",
-      statement: "let x = 1; x;",
+      token: "Semicolon",
       line: 2,
     });
   }
@@ -234,7 +234,7 @@ test('evaluateTuff("return 1; 2;") => Err', () => {
   if (!result.ok) {
     expect(result.error).toEqual({
       kind: "InvalidStatement",
-      statement: "return 1; 2;",
+      token: "2",
       line: 2,
     });
   }

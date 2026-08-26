@@ -2,6 +2,7 @@ import type { TuffResult } from "./errors.ts";
 import { executeStatements } from "./evaluator.ts";
 import { parseProgram } from "./parser.ts";
 import { createEnvironment } from "./scopes.ts";
+import { tokenize } from "./tokenizer.ts";
 
 export type {
   TuffError,
@@ -38,7 +39,11 @@ export type { Binding, Environment } from "./scopes.ts";
  * @returns The tuffness score, or an error if an identifier is not defined.
  */
 export function evaluateTuff(s: string): TuffResult {
-  const program = parseProgram(s, 1);
+  const tokens = tokenize(s);
+  if (!Array.isArray(tokens)) {
+    return { ok: false, error: { kind: "InvalidStatement", token: "", line: 1 } };
+  }
+  const program = parseProgram(tokens, 1);
   if (!Array.isArray(program)) {
     return { ok: false, error: program };
   }

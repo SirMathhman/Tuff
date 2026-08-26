@@ -15,7 +15,7 @@ export interface InvalidExpressionError {
 /** An error for a statement that is not a recognized statement form. */
 export interface InvalidStatementError {
   kind: "InvalidStatement";
-  statement: string;
+  token: string;
   line: number;
 }
 

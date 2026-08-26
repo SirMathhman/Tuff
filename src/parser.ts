@@ -1,5 +1,5 @@
 import type { TuffError } from "./errors.ts";
-import { tokenize, type TuffToken } from "./tokenizer.ts";
+import type { TuffToken } from "./tokenizer.ts";
 
 /** A literal expression node (number or boolean). */
 export interface LiteralNode {
@@ -221,6 +221,18 @@ function parseLevel(
 }
 
 /**
+ * Render a token as a short detail string for error messages.
+ * @param token {TuffToken | undefined} - The token to render.
+ * @returns {string} The identifier name, number value, or token kind.
+ */
+function tokenDetail(token: TuffToken | undefined): string {
+  if (!token) return "";
+  if (token.kind === "Ident") return token.name;
+  if (token.kind === "Number") return String(token.value);
+  return token.kind;
+}
+
+/**
  * Parse the `= expr` tail of a declaration or assignment.
  * @param tokens {TuffToken[]} - The token list; the name already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the value.
@@ -233,7 +245,11 @@ function parseValue(
   line: number,
 ): TuffExpr | TuffError {
   if (tokens[pos.i]?.kind !== "Assign") {
-    return { kind: "InvalidStatement", statement: "", line };
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
   }
   pos.i++;
   const value = parseLevel(tokens, pos, line, 0);
@@ -261,12 +277,32 @@ function parseLet(
   }
   const nameTok = tokens[pos.i];
   if (nameTok?.kind !== "Ident") {
-    return { kind: "InvalidStatement", statement: "", line };
+    return { kind: "InvalidStatement", token: tokenDetail(nameTok), line };
   }
   pos.i++;
   const value = parseValue(tokens, pos, line);
   if (!isExpr(value)) return value;
   return { kind: "Let", mut, name: nameTok.name, value };
+}
+
+/**
+ * Parse one statement and append it to the list.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @param statements {TuffStatement[]} - The list to append the statement to.
+ * @returns {TuffStatement | TuffError} The parsed statement, or a TuffError.
+ */
+function parseAndCollect(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  statements: TuffStatement[],
+): TuffStatement | TuffError {
+  const stmt = parseStatement(tokens, pos, line);
+  if (!isStatement(stmt)) return stmt;
+  statements.push(stmt);
+  return stmt;
 }
 
 /**
@@ -285,20 +321,19 @@ function parseBlock(
   for (;;) {
     const next = tokens[pos.i];
     if (!next || next.kind === "RBrace") break;
-    const stmt = parseStatement(tokens, pos, line + statements.length);
+    const stmt = parseAndCollect(tokens, pos, line + statements.length, statements);
     if (!isStatement(stmt)) return stmt;
-    statements.push(stmt);
     const sep = tokens[pos.i];
     if (sep?.kind === "Semicolon") {
       pos.i++;
       continue;
     }
     if (sep?.kind === "RBrace") break;
-    return { kind: "InvalidStatement", statement: "", line };
+    return { kind: "InvalidStatement", token: tokenDetail(sep), line };
   }
   const close = tokens[pos.i];
   if (close?.kind !== "RBrace") {
-    return { kind: "InvalidStatement", statement: "", line };
+    return { kind: "InvalidStatement", token: tokenDetail(close), line };
   }
   pos.i++;
   return { kind: "Block", statements };
@@ -317,7 +352,7 @@ function parseStatement(
   line: number,
 ): TuffStatement | TuffError {
   const token = tokens[pos.i];
-  if (!token) return { kind: "InvalidStatement", statement: "", line };
+  if (!token) return { kind: "InvalidStatement", token: "", line };
   if (token.kind === "LBrace") {
     pos.i++;
     return parseBlock(tokens, pos, line);
@@ -350,7 +385,7 @@ function parseStatement(
     if (!isExpr(value)) return value;
     return { kind: "Assign", target, value };
   }
-  return { kind: "InvalidStatement", statement: "", line };
+  return { kind: "InvalidStatement", token: tokenDetail(token), line };
 }
 
 /**
@@ -370,37 +405,23 @@ export function isStatement(
 }
 
 /**
- * Parse a full program string into a list of statement ASTs.
- * @param text {string} - The program text.
+ * Parse a token list into a list of statement ASTs.
+ * @param tokens {TuffToken[]} - The program tokens.
  * @param line {number} - The 1-based line number of the first statement.
  * @returns {TuffStatement[] | TuffError} The statements, or a TuffError.
  */
 export function parseProgram(
-  text: string,
+  tokens: TuffToken[],
   line: number,
 ): TuffStatement[] | TuffError {
-  const tokens = tokenize(text);
-  if (!Array.isArray(tokens)) {
-    return { kind: "InvalidStatement", statement: text.trim(), line };
-  }
   const pos: Pos = { i: 0 };
   const statements: TuffStatement[] = [];
   for (;;) {
     const next = tokens[pos.i];
     if (!next) break;
     const stmtLine = line + statements.length;
-    const stmt = parseStatement(tokens, pos, stmtLine);
-    if (!isStatement(stmt)) {
-      if (stmt.kind === "InvalidStatement") {
-        return {
-          kind: "InvalidStatement",
-          statement: text.trim(),
-          line: stmtLine,
-        };
-      }
-      return stmt;
-    }
-    statements.push(stmt);
+    const stmt = parseAndCollect(tokens, pos, stmtLine, statements);
+    if (!isStatement(stmt)) return stmt;
     const sep = tokens[pos.i];
     if (sep?.kind === "Semicolon") {
       pos.i++;
@@ -408,11 +429,7 @@ export function parseProgram(
     }
     if (!sep) break;
     if (stmt.kind !== "Block") {
-      return {
-        kind: "InvalidStatement",
-        statement: text.trim(),
-        line: stmtLine,
-      };
+      return { kind: "InvalidStatement", token: tokenDetail(sep), line: stmtLine };
     }
   }
   return statements;
