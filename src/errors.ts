@@ -32,13 +32,21 @@ export interface InvalidDerefError {
   line: number;
 }
 
+/** An error for a character the tokenizer does not recognize. */
+export interface UnexpectedCharacterError {
+  kind: "UnexpectedCharacter";
+  character: string;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
   | InvalidExpressionError
   | InvalidStatementError
   | ImmutableAssignmentError
-  | InvalidDerefError;
+  | InvalidDerefError
+  | UnexpectedCharacterError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

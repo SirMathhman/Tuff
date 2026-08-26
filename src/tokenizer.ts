@@ -104,7 +104,8 @@ interface ReadToken {
 /** A tokenization failure: an unrecognized character. */
 export interface TokenizeError {
   kind: "error";
-  message: string;
+  character: string;
+  line: number;
 }
 
 /** The result of tokenizing: the token list, or a tokenization error. */
@@ -167,7 +168,8 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
   }
   return {
     kind: "error",
-    message: `Unexpected character ${JSON.stringify(ch)} in ${JSON.stringify(text)}`,
+    character: ch,
+    line: 1 + (text.slice(0, j).match(/\n/g) ?? []).length,
   };
 }
 

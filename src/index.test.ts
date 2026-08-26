@@ -240,6 +240,18 @@ test('evaluateTuff("return 1; 2;") => Err', () => {
   }
 });
 
+test('evaluateTuff("let x = 1;\nlet y = @") => Err', () => {
+  const result = evaluateTuff("let x = 1;\nlet y = @");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "UnexpectedCharacter",
+      character: "@",
+      line: 2,
+    });
+  }
+});
+
 test('evaluateTuff("let x = 1; let y = &x; return *y;") => 1', () => {
   expect(evaluateTuff("let x = 1; let y = &x; return *y;")).toEqual({
     ok: true,

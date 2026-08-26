@@ -14,6 +14,7 @@ export type {
   InvalidStatementError,
   ImmutableAssignmentError,
   InvalidDerefError,
+  UnexpectedCharacterError,
 } from "./errors.ts";
 export type {
   TuffExpr,
@@ -41,7 +42,14 @@ export type { Binding, Environment } from "./scopes.ts";
 export function evaluateTuff(s: string): TuffResult {
   const tokens = tokenize(s);
   if (!Array.isArray(tokens)) {
-    return { ok: false, error: { kind: "InvalidStatement", token: "", line: 1 } };
+    return {
+      ok: false,
+      error: {
+        kind: "UnexpectedCharacter",
+        character: tokens.character,
+        line: tokens.line,
+      },
+    };
   }
   const program = parseProgram(tokens, 1);
   if (!Array.isArray(program)) {

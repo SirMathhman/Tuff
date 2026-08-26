@@ -321,7 +321,12 @@ function parseBlock(
   for (;;) {
     const next = tokens[pos.i];
     if (!next || next.kind === "RBrace") break;
-    const stmt = parseAndCollect(tokens, pos, line + statements.length, statements);
+    const stmt = parseAndCollect(
+      tokens,
+      pos,
+      line + statements.length,
+      statements,
+    );
     if (!isStatement(stmt)) return stmt;
     const sep = tokens[pos.i];
     if (sep?.kind === "Semicolon") {
@@ -429,7 +434,11 @@ export function parseProgram(
     }
     if (!sep) break;
     if (stmt.kind !== "Block") {
-      return { kind: "InvalidStatement", token: tokenDetail(sep), line: stmtLine };
+      return {
+        kind: "InvalidStatement",
+        token: tokenDetail(sep),
+        line: stmtLine,
+      };
     }
   }
   return statements;
