@@ -366,24 +366,7 @@ function parseAtom(state: ParserState): ParseExprResult {
  * @returns The expression, or a structured parse error.
  */
 function parseTuple(state: ParserState): ParseExprResult {
-  const open = next(state);
-  const first = parseExpr(state);
-  if (!first.ok) return first;
-  const elements = [first.expr];
-  while (!atEnd(state) && peek(state).value === ",") {
-    next(state);
-    const el = parseExpr(state);
-    if (!el.ok) return el;
-    elements.push(el.expr);
-  }
-  const close = next(state);
-  if (close.value !== ")") {
-    return {
-      ok: false,
-      error: parseError("Expected ')' after tuple", close.pos),
-    };
-  }
-  return { ok: true, expr: { type: "Tuple", elements, pos: open.pos } };
+  return parseDelimitedList(state, ")", "tuple");
 }
 
 /**
@@ -393,6 +376,23 @@ function parseTuple(state: ParserState): ParseExprResult {
  * @returns The expression, or a structured parse error.
  */
 function parseArray(state: ParserState): ParseExprResult {
+  return parseDelimitedList(state, "]", "array");
+}
+
+/**
+ * Parse a comma-separated list of expressions delimited by a matching pair
+ * of brackets, producing a tuple expression.
+ *
+ * @param state - The parser state, positioned at the opening bracket.
+ * @param closeValue - The value of the expected closing bracket token.
+ * @param name - The literal's name, for error messages.
+ * @returns The expression, or a structured parse error.
+ */
+function parseDelimitedList(
+  state: ParserState,
+  closeValue: string,
+  name: string,
+): ParseExprResult {
   const open = next(state);
   const first = parseExpr(state);
   if (!first.ok) return first;
@@ -404,10 +404,10 @@ function parseArray(state: ParserState): ParseExprResult {
     elements.push(el.expr);
   }
   const close = next(state);
-  if (close.value !== "]") {
+  if (close.value !== closeValue) {
     return {
       ok: false,
-      error: parseError("Expected ']' after array", close.pos),
+      error: parseError(`Expected '${closeValue}' after ${name}`, close.pos),
     };
   }
   return { ok: true, expr: { type: "Tuple", elements, pos: open.pos } };
