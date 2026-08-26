@@ -46,6 +46,28 @@ export interface Binding {
   mut: boolean;
 }
 
+/** A literal expression node (number or boolean). */
+export interface LiteralNode {
+  kind: "Literal";
+  value: number;
+}
+
+/** An identifier expression node. */
+export interface IdentifierNode {
+  kind: "Identifier";
+  name: string;
+}
+
+/** A binary `||` expression node. */
+export interface OrNode {
+  kind: "Or";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
+/** A parsed tuff expression. */
+export type TuffExpr = LiteralNode | IdentifierNode | OrNode;
+
 /**
  * Evaluate the tuffness of a string.
  * @param s - The string to evaluate.
@@ -211,6 +233,133 @@ function splitStatements(s: string): string[] {
   return out.map((st) => st.trim()).filter(Boolean);
 }
 
+/** A mutable parse position over an expression string. */
+interface Pos {
+  i: number;
+}
+
+/**
+ * Type guard distinguishing a parsed expression node from an error.
+ * @param value {TuffExpr | TuffError} - The value to test.
+ * @returns {boolean} True if the value is an expression node.
+ */
+function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
+  return (
+    value.kind === "Literal" ||
+    value.kind === "Identifier" ||
+    value.kind === "Or"
+  );
+}
+
+/**
+ * Advance the position past any whitespace.
+ * @param text {string} - The expression text.
+ * @param pos {Pos} - The mutable parse position.
+ * @returns {void} No return value.
+ */
+function skipSpaces(text: string, pos: Pos): void {
+  while (pos.i < text.length && /\s/.test(text[pos.i] ?? "")) pos.i++;
+}
+
+/**
+ * Parse a single operand: a number, a boolean, or an identifier.
+ * @param text {string} - The expression text.
+ * @param pos {Pos} - The mutable parse position, advanced past the operand.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
+ */
+function parseOperand(
+  text: string,
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  skipSpaces(text, pos);
+  const rest = text.slice(pos.i);
+  const num = rest.match(/^-?\d+(\.\d+)?/);
+  if (num) {
+    pos.i += num[0].length;
+    return { kind: "Literal", value: Number(num[0]) };
+  }
+  if (/^true\b/.test(rest)) {
+    pos.i += 4;
+    return { kind: "Literal", value: 1 };
+  }
+  if (/^false\b/.test(rest)) {
+    pos.i += 5;
+    return { kind: "Literal", value: 0 };
+  }
+  const ident = rest.match(/^\w+/);
+  if (ident) {
+    pos.i += ident[0].length;
+    return { kind: "Identifier", name: ident[0] };
+  }
+  return { kind: "InvalidExpression", expression: text.trim(), line };
+}
+
+/**
+ * Parse an expression, right-associative over `||`.
+ * @param text {string} - The expression text.
+ * @param pos {Pos} - The mutable parse position, advanced past the expression.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
+ */
+function parseExpr(text: string, pos: Pos, line: number): TuffExpr | TuffError {
+  const left = parseOperand(text, pos, line);
+  if (!isExpr(left)) return left;
+  skipSpaces(text, pos);
+  if (text.startsWith("||", pos.i)) {
+    pos.i += 2;
+    const right = parseExpr(text, pos, line);
+    if (!isExpr(right)) return right;
+    return { kind: "Or", left, right };
+  }
+  return left;
+}
+
+/**
+ * Parse a full expression string into an AST.
+ * @param expr {string} - The expression text.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The parsed expression, or a TuffError.
+ */
+function parseExpression(expr: string, line: number): TuffExpr | TuffError {
+  const pos: Pos = { i: 0 };
+  skipSpaces(expr, pos);
+  const node = parseExpr(expr, pos, line);
+  if (!isExpr(node)) return node;
+  skipSpaces(expr, pos);
+  if (pos.i !== expr.length) {
+    return { kind: "InvalidExpression", expression: expr.trim(), line };
+  }
+  return node;
+}
+
+/**
+ * Evaluate a parsed expression to a number, or a structured error.
+ * @param node {TuffExpr} - The expression node.
+ * @param scopes {Map<string, Binding>[]} - The scope chain.
+ * @param line {number} - The 1-based line number.
+ * @returns {number | TuffError} The numeric value, or a TuffError.
+ */
+function evalExpr(
+  node: TuffExpr,
+  scopes: Map<string, Binding>[],
+  line: number,
+): number | TuffError {
+  if (node.kind === "Literal") return node.value;
+  if (node.kind === "Identifier") {
+    const binding = findBinding(scopes, node.name);
+    if (binding) return binding.value;
+    return { kind: "UnidentifiedIdentifier", name: node.name, line };
+  }
+  const left = evalExpr(node.left, scopes, line);
+  if (typeof left !== "number") return left;
+  if (left !== 0) return 1;
+  const right = evalExpr(node.right, scopes, line);
+  if (typeof right !== "number") return right;
+  return right !== 0 ? 1 : 0;
+}
+
 /**
  * Resolve an expression to a number, or a structured error.
  * @param expr {string} - The expression text.
@@ -223,23 +372,7 @@ function resolveOrError(
   scopes: Map<string, Binding>[],
   line: number,
 ): number | TuffError {
-  const trimmed = expr.trim();
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
-  if (trimmed === "true") return 1;
-  if (trimmed === "false") return 0;
-  const [, orLeft, orRight] = trimmed.match(/^(.+?)\s*\|\|\s*(.+)$/) ?? [];
-  if (orLeft && orRight) {
-    const left = resolveOrError(orLeft, scopes, line);
-    if (typeof left !== "number") return left;
-    if (left !== 0) return 1;
-    const right = resolveOrError(orRight, scopes, line);
-    if (typeof right !== "number") return right;
-    return right !== 0 ? 1 : 0;
-  }
-  if (/^\w+$/.test(trimmed)) {
-    const binding = findBinding(scopes, trimmed);
-    if (binding) return binding.value;
-    return { kind: "UnidentifiedIdentifier", name: trimmed, line };
-  }
-  return { kind: "InvalidExpression", expression: trimmed, line };
+  const node = parseExpression(expr, line);
+  if (!isExpr(node)) return node;
+  return evalExpr(node, scopes, line);
 }
