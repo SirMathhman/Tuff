@@ -31,6 +31,24 @@ test("equality of number and boolean is 0", () => {
     value: 0,
   });
 });
+test("less-than of numbers", () => {
+  expect(evaluateTuff("let x = 1; let y = 2; return x < y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test("less-than of equal numbers is 0", () => {
+  expect(evaluateTuff("let x = 2; let y = 2; return x < y;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+test("less-than of number and boolean is 0", () => {
+  expect(evaluateTuff("let x = 1; let y = true; return x < y;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
 test("addition of numbers", () => {
   expect(evaluateTuff("return 1 + 2;")).toEqual({
     ok: true,

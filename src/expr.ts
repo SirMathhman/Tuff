@@ -34,7 +34,7 @@ export interface BooleanExpr {
  */
 export interface BinaryExpr {
   type: "Binary";
-  op: "||" | "==" | "+" | "-" | "*";
+  op: "||" | "==" | "<" | "+" | "-" | "*";
   left: Expr;
   right: Expr;
   pos: number;
@@ -133,7 +133,7 @@ export function parseExpr(state: ParserState): ParseExprResult {
 }
 
 /**
- * Parse an `==` comparison expression.
+ * Parse a comparison expression: `==` or `<`.
  *
  * @param state - The parser state.
  * @returns The expression, or a structured parse error.
@@ -142,13 +142,16 @@ function parseEquality(state: ParserState): ParseExprResult {
   const first = parseAddition(state);
   if (!first.ok) return first;
   let expr = first.expr;
-  while (!atEnd(state) && peek(state).value === "==") {
+  while (
+    !atEnd(state) &&
+    (peek(state).value === "==" || peek(state).value === "<")
+  ) {
     const opTok = next(state);
     const right = parseAddition(state);
     if (!right.ok) return right;
     expr = {
       type: "Binary",
-      op: "==",
+      op: opTok.value as "==" | "<",
       left: expr,
       right: right.expr,
       pos: opTok.pos,

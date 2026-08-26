@@ -87,6 +87,11 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
         left.kind === right.kind && left.value === right.value ? 1 : 0;
       return { value: equal, kind: "boolean" };
     }
+    if (expr.op === "<") {
+      const less =
+        left.kind === right.kind && left.value < right.value ? 1 : 0;
+      return { value: less, kind: "boolean" };
+    }
     return { value: right.value !== 0 ? 1 : 0, kind: "boolean" };
   }
   const binding = vars.get(expr.name);
