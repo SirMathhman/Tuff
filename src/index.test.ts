@@ -184,3 +184,10 @@ test('evaluateTuff("return false && (true || false);") => 0', () => {
     value: 0,
   });
 });
+
+test('evaluateTuff("return 1 + 2;") => 3', () => {
+  expect(evaluateTuff("return 1 + 2;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});

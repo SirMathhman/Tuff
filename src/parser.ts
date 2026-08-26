@@ -27,8 +27,20 @@ export interface AndNode {
   right: TuffExpr;
 }
 
+/** A binary `+` expression node. */
+export interface AddNode {
+  kind: "Add";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
 /** A parsed tuff expression. */
-export type TuffExpr = LiteralNode | IdentifierNode | OrNode | AndNode;
+export type TuffExpr =
+  | LiteralNode
+  | IdentifierNode
+  | OrNode
+  | AndNode
+  | AddNode;
 
 /** A mutable parse position over a token list. */
 interface Pos {
@@ -45,7 +57,8 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "Literal" ||
     value.kind === "Identifier" ||
     value.kind === "Or" ||
-    value.kind === "And"
+    value.kind === "And" ||
+    value.kind === "Add"
   );
 }
 
@@ -120,13 +133,37 @@ function parseAnd(
   pos: Pos,
   line: number,
 ): TuffExpr | TuffError {
-  const left = parseOperand(tokens, pos, line);
+  const left = parseAdd(tokens, pos, line);
   if (!isExpr(left)) return left;
   if (tokens[pos.i]?.kind === "And") {
     pos.i++;
     const right = parseAnd(tokens, pos, line);
     if (!isExpr(right)) return right;
     return { kind: "And", left, right };
+  }
+  return left;
+}
+
+/**
+ * Parse an expression at the `+` level, left-associative.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the expression.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
+ */
+function parseAdd(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  const first = parseOperand(tokens, pos, line);
+  if (!isExpr(first)) return first;
+  let left: TuffExpr = first;
+  while (tokens[pos.i]?.kind === "Plus") {
+    pos.i++;
+    const right = parseOperand(tokens, pos, line);
+    if (!isExpr(right)) return right;
+    left = { kind: "Add", left, right };
   }
   return left;
 }

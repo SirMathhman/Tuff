@@ -181,6 +181,11 @@ function evalExpr(
   }
   const left = evalExpr(node.left, scopes, line);
   if (typeof left !== "number") return left;
+  if (node.kind === "Add") {
+    const right = evalExpr(node.right, scopes, line);
+    if (typeof right !== "number") return right;
+    return left + right;
+  }
   if (node.kind === "Or") {
     if (left !== 0) return 1;
     const right = evalExpr(node.right, scopes, line);
