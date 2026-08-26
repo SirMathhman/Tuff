@@ -84,6 +84,18 @@ test("unknown identifier in unexecuted if branch returns Err", () => {
     error: { type: "UnknownIdentifier", name: "unknownIdentifier" },
   });
 });
+test("unknown identifier in if condition returns Err", () => {
+  expect(evaluateTuff("if (undeclared) {}")).toEqual({
+    ok: false,
+    error: { type: "UnknownIdentifier", name: "undeclared" },
+  });
+});
+test("assignment to undeclared variable returns Err", () => {
+  expect(evaluateTuff("x = 5;")).toEqual({
+    ok: false,
+    error: { type: "UnknownIdentifier", name: "x" },
+  });
+});
 test("malformed statement returns ParseError", () => {
   expect(evaluateTuff("let x = ;")).toEqual({
     ok: false,
