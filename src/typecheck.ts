@@ -144,7 +144,10 @@ interface ExprKind {
  * @param types - The kinds of declared variables, for identifier resolution.
  * @returns The kind of the value the expression produces, or a structured error.
  */
-function exprKind(expr: Expr, types: Map<string, TypeInfo>): ExprKind | CheckErr {
+function exprKind(
+  expr: Expr,
+  types: Map<string, TypeInfo>,
+): ExprKind | CheckErr {
   if (expr.type === "Number") return { ok: true, kind: "number" };
   if (expr.type === "Boolean") return { ok: true, kind: "boolean" };
   if (expr.type === "Identifier") {

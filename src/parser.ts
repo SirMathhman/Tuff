@@ -1,7 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import { parseError } from "./errors.ts";
 import { atEnd, next, parseExpr, peek } from "./expr.ts";
-import type { Expr, ParserState } from "./expr.ts";
+import type { Expr, ParseExprResult, ParserState } from "./expr.ts";
 import { tokenize } from "./tokenizer.ts";
 
 /**
@@ -319,18 +319,18 @@ function parseReturn(state: ParserState): ParseStmtOk | ParseErr {
 }
 
 /**
- * Parse an `if` statement: `if (cond) { ... } [else { ... }]`.
+ * Parse a parenthesized condition: `(expr)`.
  *
  * @param state - The parser state.
- * @returns The statement, or a structured parse error.
+ * @param keyword - The keyword the condition follows, for error messages.
+ * @returns The condition expression, or a structured parse error.
  */
-function parseIf(state: ParserState): ParseStmtOk | ParseErr {
-  next(state);
+function parseCond(state: ParserState, keyword: string): ParseExprResult {
   const open = next(state);
   if (open.value !== "(") {
     return {
       ok: false,
-      error: parseError("Expected '(' after 'if'", open.pos),
+      error: parseError(`Expected '(' after '${keyword}'`, open.pos),
     };
   }
   const cond = parseExpr(state);
@@ -342,6 +342,19 @@ function parseIf(state: ParserState): ParseStmtOk | ParseErr {
       error: parseError("Expected ')' after condition", close.pos),
     };
   }
+  return cond;
+}
+
+/**
+ * Parse an `if` statement: `if (cond) { ... } [else { ... }]`.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseIf(state: ParserState): ParseStmtOk | ParseErr {
+  next(state);
+  const cond = parseCond(state, "if");
+  if (!cond.ok) return cond;
   const thenBlock = parseBlock(state);
   if (!thenBlock.ok) return thenBlock;
   let elseStmts: Stmt[] = [];
@@ -370,22 +383,8 @@ function parseIf(state: ParserState): ParseStmtOk | ParseErr {
  */
 function parseWhile(state: ParserState): ParseStmtOk | ParseErr {
   next(state);
-  const open = next(state);
-  if (open.value !== "(") {
-    return {
-      ok: false,
-      error: parseError("Expected '(' after 'while'", open.pos),
-    };
-  }
-  const cond = parseExpr(state);
+  const cond = parseCond(state, "while");
   if (!cond.ok) return cond;
-  const close = next(state);
-  if (close.value !== ")") {
-    return {
-      ok: false,
-      error: parseError("Expected ')' after condition", close.pos),
-    };
-  }
   const body = parseBlock(state);
   if (!body.ok) return body;
   return {
