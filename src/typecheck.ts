@@ -96,6 +96,17 @@ export function typeCheck(
     }
     const r = exprType(stmt.value, types);
     if (!r.ok) return r;
+    if (stmt.type === "Return" && r.type.kind === "tuple") {
+      return {
+        ok: false,
+        error: {
+          type: "OperandTypeMismatch",
+          position: stmt.value.pos,
+          expected: "number | boolean",
+          actual: "tuple",
+        },
+      };
+    }
     if (stmt.type === "Assign") {
       const err = checkAssign(stmt, r.type, types);
       if (!err.ok) return err;

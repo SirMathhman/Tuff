@@ -69,6 +69,17 @@ test("tuple field access", () => {
     { ok: true, value: 7 },
   );
 });
+test("returning a tuple returns Err", () => {
+  expect(evaluateTuff("return (1, 2);")).toEqual({
+    ok: false,
+    error: {
+      type: "OperandTypeMismatch",
+      position: 7,
+      expected: "number | boolean",
+      actual: "tuple",
+    },
+  });
+});
 test("assignment to immutable binding returns Err", () => {
   expect(evaluateTuff("let x = 0; x = 1; return x;")).toEqual({
     ok: false,
