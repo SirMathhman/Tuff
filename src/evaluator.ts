@@ -1,51 +1,33 @@
 import type { TuffError, TuffResult } from "./errors.ts";
 import type { TuffExpr, TuffStatement } from "./parser.ts";
-import { findBinding, type Binding } from "./scopes.ts";
-
-/** A per-evaluation registry mapping reference ids to their bindings. */
-export interface RefRegistry {
-  next: number;
-  refs: Map<number, Binding>;
-}
-
-/**
- * Create an empty reference registry.
- * @returns {RefRegistry} A fresh registry with no references.
- */
-export function createRefRegistry(): RefRegistry {
-  return { next: 1, refs: new Map() };
-}
+import { findBinding, type Environment } from "./scopes.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
   statements: TuffStatement[],
-  scopes: Map<string, Binding>[],
   baseLine: number,
-  refs: RefRegistry,
+  env: Environment,
 ) => TuffResult | undefined;
 
 /**
  * Execute a list of statements in order.
  * @param statements - The statements to execute.
- * @param scopes - The scope chain.
  * @param baseLine - The 1-based line of the first statement.
- * @param refs - The reference registry.
+ * @param env - The evaluation environment.
  * @returns A result if a return or error is hit, else undefined.
  */
 export function executeStatements(
   statements: TuffStatement[],
-  scopes: Map<string, Binding>[],
   baseLine: number,
-  refs: RefRegistry,
+  env: Environment,
 ): TuffResult | undefined {
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (!stmt) continue;
     const result = executeStatement(
       stmt,
-      scopes,
       baseLine + i,
-      refs,
+      env,
       executeStatements,
     );
     if (result) return result;
@@ -56,59 +38,55 @@ export function executeStatements(
 /**
  * Execute a single statement node.
  * @param stmt - The statement to execute.
- * @param scopes - The scope chain.
  * @param line - The 1-based line number.
- * @param refs - The reference registry.
+ * @param env - The evaluation environment.
  * @param executeList - The list executor, for block statements.
  * @returns A result if the statement terminates, else undefined.
  */
 function executeStatement(
   stmt: TuffStatement,
-  scopes: Map<string, Binding>[],
   line: number,
-  refs: RefRegistry,
+  env: Environment,
   executeList: ExecuteList,
 ): TuffResult | undefined {
   if (stmt.kind === "Block") {
-    scopes.push(new Map());
+    env.scopes.push(new Map());
     try {
-      return executeList(stmt.statements, scopes, line, refs);
+      return executeList(stmt.statements, line, env);
     } finally {
-      scopes.pop();
+      env.scopes.pop();
     }
   }
   if (stmt.kind === "Let") {
-    const value = evalOrError(stmt.value, scopes, line, refs);
+    const value = evalOrError(stmt.value, line, env);
     if (!value.ok) return value;
-    const scope = scopes[scopes.length - 1];
+    const scope = env.scopes[env.scopes.length - 1];
     if (scope) scope.set(stmt.name, { value: value.value, mut: stmt.mut });
     return undefined;
   }
   if (stmt.kind === "Return") {
-    const value = evalOrError(stmt.value, scopes, line, refs);
+    const value = evalOrError(stmt.value, line, env);
     if (!value.ok) return value;
     return value;
   }
-  return executeAssignment(stmt.name, stmt.value, scopes, line, refs);
+  return executeAssignment(stmt.name, stmt.value, line, env);
 }
 
 /**
  * Execute an assignment statement.
  * @param name {string} - The variable being assigned.
  * @param value {TuffExpr} - The expression to assign.
- * @param scopes {Map<string, Binding>[]} - The scope chain.
  * @param line {number} - The 1-based line number.
- * @param refs {RefRegistry} - The reference registry.
+ * @param env {Environment} - The evaluation environment.
  * @returns {TuffResult | undefined} A result if the statement terminates, else undefined.
  */
 function executeAssignment(
   name: string,
   value: TuffExpr,
-  scopes: Map<string, Binding>[],
   line: number,
-  refs: RefRegistry,
+  env: Environment,
 ): TuffResult | undefined {
-  const binding = findBinding(scopes, name);
+  const binding = findBinding(env.scopes, name);
   if (!binding) {
     return {
       ok: false,
@@ -121,7 +99,7 @@ function executeAssignment(
       error: { kind: "ImmutableAssignment", name, line },
     };
   }
-  const result = evalOrError(value, scopes, line, refs);
+  const result = evalOrError(value, line, env);
   if (!result.ok) return result;
   binding.value = result.value;
   return undefined;
@@ -130,18 +108,16 @@ function executeAssignment(
 /**
  * Evaluate an expression node to a result, wrapping errors.
  * @param node {TuffExpr} - The expression to evaluate.
- * @param scopes {Map<string, Binding>[]} - The scope chain.
  * @param line {number} - The 1-based line number.
- * @param refs {RefRegistry} - The reference registry.
+ * @param env {Environment} - The evaluation environment.
  * @returns {TuffResult} The numeric value, or a TuffErr.
  */
 function evalOrError(
   node: TuffExpr,
-  scopes: Map<string, Binding>[],
   line: number,
-  refs: RefRegistry,
+  env: Environment,
 ): TuffResult {
-  const value = evalExpr(node, scopes, line, refs);
+  const value = evalExpr(node, line, env);
   if (typeof value !== "number") return { ok: false, error: value };
   return { ok: true, value };
 }
@@ -188,47 +164,45 @@ const BINARY_RULES: Record<"Or" | "And" | "Add" | "Equal", BinaryRule> = {
 /**
  * Evaluate a parsed expression to a number, or a structured error.
  * @param node {TuffExpr} - The expression node.
- * @param scopes {Map<string, Binding>[]} - The scope chain.
  * @param line {number} - The 1-based line number.
- * @param refs {RefRegistry} - The reference registry.
+ * @param env {Environment} - The evaluation environment.
  * @returns {number | TuffError} The numeric value, or a TuffError.
  */
 function evalExpr(
   node: TuffExpr,
-  scopes: Map<string, Binding>[],
   line: number,
-  refs: RefRegistry,
+  env: Environment,
 ): number | TuffError {
   if (node.kind === "Literal") return node.value;
   if (node.kind === "Identifier") {
-    const binding = findBinding(scopes, node.name);
+    const binding = findBinding(env.scopes, node.name);
     if (binding) return binding.value;
     return { kind: "UnidentifiedIdentifier", name: node.name, line };
   }
   if (node.kind === "Ref") {
     if (node.operand.kind !== "Identifier") return { kind: "InvalidDeref", line };
-    const binding = findBinding(scopes, node.operand.name);
+    const binding = findBinding(env.scopes, node.operand.name);
     if (!binding) {
       return { kind: "UnidentifiedIdentifier", name: node.operand.name, line };
     }
-    const id = refs.next;
-    refs.next++;
-    refs.refs.set(id, binding);
+    const id = env.refs.next;
+    env.refs.next++;
+    env.refs.refs.set(id, binding);
     return id;
   }
   if (node.kind === "Deref") {
-    const operand = evalExpr(node.operand, scopes, line, refs);
+    const operand = evalExpr(node.operand, line, env);
     if (typeof operand !== "number") return operand;
-    const binding = refs.refs.get(operand);
+    const binding = env.refs.refs.get(operand);
     if (!binding) return { kind: "InvalidDeref", line };
     return binding.value;
   }
   const rule = BINARY_RULES[node.kind];
-  const left = evalExpr(node.left, scopes, line, refs);
+  const left = evalExpr(node.left, line, env);
   if (typeof left !== "number") return left;
   const shortcut = rule.shortCircuit(left);
   if (shortcut !== null) return shortcut;
-  const right = evalExpr(node.right, scopes, line, refs);
+  const right = evalExpr(node.right, line, env);
   if (typeof right !== "number") return right;
   return rule.combine(left, right);
 }
