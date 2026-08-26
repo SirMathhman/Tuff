@@ -28,4 +28,10 @@ describe("evaluateTuff expressions", () => {
       value: 0,
     });
   });
+  test("equality of number and boolean is 0", () => {
+    expect(evaluateTuff("let x = 1; let y = true; return x == y;")).toEqual({
+      ok: true,
+      value: 0,
+    });
+  });
 });

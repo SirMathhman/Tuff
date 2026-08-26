@@ -25,10 +25,31 @@ export interface Err {
 export type Result = Ok | Err;
 
 /**
+ * A runtime value: its numeric representation and its type kind.
+ */
+interface Value {
+  value: number;
+  kind: "number" | "boolean";
+}
+
+/**
+ * A successful expression evaluation result.
+ */
+interface EvalOk {
+  ok: true;
+  value: Value;
+}
+
+/**
+ * The result of evaluating an expression: a typed value or a structured error.
+ */
+type EvalResult = EvalOk | Err;
+
+/**
  * A variable binding: its value and whether it is mutable.
  */
 interface Binding {
-  value: number;
+  value: Value;
   mutable: boolean;
 }
 
@@ -37,23 +58,32 @@ interface Binding {
  *
  * @param expr - The expression to evaluate.
  * @param vars - The current variable scope.
- * @returns The numeric value, or a structured error.
+ * @returns The typed value, or a structured error.
  */
-function evalExpr(expr: Expr, vars: Map<string, Binding>): Result {
-  if (expr.type === "Number") return { ok: true, value: expr.value };
+function evalExpr(expr: Expr, vars: Map<string, Binding>): EvalResult {
+  if (expr.type === "Number") {
+    return { ok: true, value: { value: expr.value, kind: "number" } };
+  }
   if (expr.type === "Boolean") {
-    return { ok: true, value: expr.value ? 1 : 0 };
+    return { ok: true, value: { value: expr.value ? 1 : 0, kind: "boolean" } };
   }
   if (expr.type === "Binary") {
     const left = evalExpr(expr.left, vars);
     if (!left.ok) return left;
-    if (expr.op === "||" && left.value !== 0) return { ok: true, value: 1 };
+    if (expr.op === "||" && left.value.value !== 0) {
+      return { ok: true, value: { value: 1, kind: "boolean" } };
+    }
     const right = evalExpr(expr.right, vars);
     if (!right.ok) return right;
     if (expr.op === "==") {
-      return { ok: true, value: left.value === right.value ? 1 : 0 };
+      const equal =
+        left.value.kind === right.value.kind &&
+        left.value.value === right.value.value
+          ? 1
+          : 0;
+      return { ok: true, value: { value: equal, kind: "boolean" } };
     }
-    return { ok: true, value: right.value !== 0 ? 1 : 0 };
+    return { ok: true, value: { value: right.value.value !== 0 ? 1 : 0, kind: "boolean" } };
   }
   const binding = vars.get(expr.name);
   if (binding !== undefined) return { ok: true, value: binding.value };
@@ -76,7 +106,7 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
     }
     const value = evalExpr(stmt.value, vars);
     if (!value.ok) return value;
-    if (stmt.type === "Return") return value;
+    if (stmt.type === "Return") return { ok: true, value: value.value.value };
     if (stmt.type === "Assign") {
       const binding = vars.get(stmt.name);
       if (binding === undefined) {
